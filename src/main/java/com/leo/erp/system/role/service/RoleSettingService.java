@@ -7,6 +7,7 @@ import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.service.AbstractCrudService;
+import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.security.permission.PermissionService;
 import com.leo.erp.security.permission.ResourcePermissionCatalog;
@@ -41,7 +42,7 @@ public class RoleSettingService extends AbstractCrudService<RoleSetting, RoleSet
 
     private static final Set<String> ALLOWED_ROLE_TYPES = Set.of("平台角色", "系统角色", "业务角色", "财务角色");
     private static final Set<String> ALLOWED_DATA_SCOPES = Set.of("全部数据", "全部", "本部门", "本人");
-    private static final Set<String> ALLOWED_STATUS = Set.of("正常", "禁用");
+    private static final Set<String> ALLOWED_STATUS = StatusConstants.ALLOWED_ACTIVE_STATUS;
 
     private final RoleSettingRepository repository;
     private final RolePermissionRepository rolePermissionRepository;

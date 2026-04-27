@@ -2,6 +2,7 @@ package com.leo.erp.system.database.service;
 
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
+import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.system.database.config.DatabaseBackupProperties;
 import com.leo.erp.system.database.domain.entity.DatabaseExportTask;
@@ -32,7 +33,7 @@ public class DatabaseExportTaskService {
     private static final Logger log = LoggerFactory.getLogger(DatabaseExportTaskService.class);
     private static final String STATUS_PENDING = "排队中";
     private static final String STATUS_RUNNING = "执行中";
-    private static final String STATUS_SUCCESS = "已完成";
+    private static final String STATUS_SUCCESS = StatusConstants.COMPLETED;
     private static final String STATUS_FAILED = "失败";
     private static final String STATUS_EXPIRED = "已过期";
     private static final Set<String> ACTIVE_STATUSES = Set.of(STATUS_PENDING, STATUS_RUNNING);

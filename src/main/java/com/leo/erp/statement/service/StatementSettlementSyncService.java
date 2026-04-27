@@ -1,5 +1,6 @@
 package com.leo.erp.statement.service;
 
+import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.finance.payment.repository.PaymentRepository;
 import com.leo.erp.finance.receipt.repository.ReceiptRepository;
 import com.leo.erp.statement.customer.domain.entity.CustomerStatement;
@@ -16,8 +17,8 @@ import java.math.BigDecimal;
 @Service
 public class StatementSettlementSyncService {
 
-    public static final String PAYMENT_STATUS_SETTLED = "已付款";
-    public static final String RECEIPT_STATUS_SETTLED = "已收款";
+    public static final String PAYMENT_STATUS_SETTLED = StatusConstants.PAID;
+    public static final String RECEIPT_STATUS_SETTLED = StatusConstants.RECEIVED;
 
     private final SupplierStatementRepository supplierStatementRepository;
     private final CustomerStatementRepository customerStatementRepository;

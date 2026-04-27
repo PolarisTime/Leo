@@ -6,6 +6,7 @@ import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.service.AbstractCrudService;
 import com.leo.erp.common.support.ManagedEntityItemSupport;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
+import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.support.TradeItemCalculator;
 import com.leo.erp.contract.sales.domain.entity.SalesContract;
 import com.leo.erp.contract.sales.domain.entity.SalesContractItem;
@@ -111,7 +112,7 @@ public class SalesContractService extends AbstractCrudService<SalesContract, Sal
 
     @Override
     protected void apply(SalesContract entity, SalesContractRequest request) {
-        String nextStatus = (request.status() == null || request.status().isBlank()) ? "草稿" : request.status();
+        String nextStatus = (request.status() == null || request.status().isBlank()) ? StatusConstants.DRAFT : request.status();
         workflowTransitionGuard.assertAuditPermissionForProtectedValue(
                 "sales-contracts",
                 entity.getStatus(),

@@ -10,6 +10,7 @@ import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.service.AbstractCrudService;
 import com.leo.erp.common.support.ManagedEntityItemSupport;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
+import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.support.TradeItemCalculator;
 import com.leo.erp.security.permission.DataScopeContext;
 import com.leo.erp.security.permission.WorkflowTransitionGuard;
@@ -135,7 +136,7 @@ public class FreightStatementService extends AbstractCrudService<FreightStatemen
                 "freight-statements",
                 entity.getStatus(),
                 nextStatus,
-                "已审核"
+                StatusConstants.AUDITED
         );
         workflowTransitionGuard.assertAuditPermissionForProtectedValue(
                 "freight-statements",

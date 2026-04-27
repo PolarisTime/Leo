@@ -8,6 +8,7 @@ import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.support.ModuleCatalog;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
+import com.leo.erp.common.support.StatusConstants;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -62,7 +63,7 @@ public class UploadRuleService implements PageUploadRuleQueryService {
 
     @Transactional(readOnly = true)
     public boolean isPageUploadEnabled(String moduleKey) {
-        return "正常".equals(resolveRuleView(moduleKey).getStatus());
+        return StatusConstants.NORMAL.equals(resolveRuleView(moduleKey).getStatus());
     }
 
     @Transactional(readOnly = true)
@@ -124,7 +125,7 @@ public class UploadRuleService implements PageUploadRuleQueryService {
         entity.setRuleCode(buildRuleCode(moduleKey));
         entity.setRuleName(resolveModuleName(moduleKey) + "上传命名规则");
         entity.setRenamePattern(resolveDefaultRenamePattern());
-        entity.setStatus("正常");
+        entity.setStatus(StatusConstants.NORMAL);
         entity.setRemark(resolveDefaultRemark(moduleKey));
         return entity;
     }
@@ -167,7 +168,7 @@ public class UploadRuleService implements PageUploadRuleQueryService {
     }
 
     private String normalizeStatus(String status) {
-        if ("正常".equals(status) || "禁用".equals(status)) {
+        if (StatusConstants.NORMAL.equals(status) || StatusConstants.DISABLED.equals(status)) {
             return status;
         }
         throw new BusinessException(ErrorCode.VALIDATION_ERROR, "上传规则状态不合法");
