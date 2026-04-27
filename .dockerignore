@@ -1,0 +1,5 @@
+target/
+.codex
+.vscode
+leo.zip
+scripts/__pycache__/

@@ -1,0 +1,6 @@
+CREATE TABLE IF NOT EXISTS sys_bootstrap_marker (
+    id BIGINT PRIMARY KEY,
+    marker_code VARCHAR(64) NOT NULL,
+    marker_name VARCHAR(128) NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);

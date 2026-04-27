@@ -1,0 +1,236 @@
+# Web 服务基础配置
+server:
+  # 后端 HTTP 监听端口
+  port: 11211
+  servlet:
+    # 统一接口前缀
+    context-path: /api
+
+# Spring 基础能力配置
+spring:
+  application:
+    # 应用名称，用于日志和监控标识
+    name: leo
+
+  autoconfigure:
+    exclude:
+      # 不使用 Spring 默认登录页和默认内存用户
+      - org.springframework.boot.autoconfigure.security.servlet.UserDetailsServiceAutoConfiguration
+
+  datasource:
+    # PostgreSQL 连接地址
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://${SPRING_DATASOURCE_HOST:localhost}:${SPRING_DATASOURCE_PORT:5432}/${SPRING_DATASOURCE_DB:leo}}
+    # 数据库用户名
+    username: ${SPRING_DATASOURCE_USERNAME:leo}
+    # 数据库密码，优先取环境变量
+    password: ${SPRING_DATASOURCE_PASSWORD:}
+    # JDBC 驱动
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      # 保持少量空闲连接，减少低流量时的建连开销
+      minimum-idle: 5
+      # 控制数据库最大并发连接数，避免连接池无限放大
+      maximum-pool-size: 20
+      # 统一由 Spring 事务提交，避免隐式自动提交
+      auto-commit: false
+      # 显式指定默认事务隔离级别，和 PostgreSQL 常用配置保持一致
+      transaction-isolation: TRANSACTION_READ_COMMITTED
+
+  jpa:
+    hibernate:
+      # 禁止 Hibernate 自动改表，表结构统一交给 Flyway 管理
+      ddl-auto: none
+    # 是否输出 SQL 到日志
+    show-sql: false
+    # 关闭 Open Session In View，避免请求结束后继续访问懒加载
+    open-in-view: false
+    properties:
+      hibernate:
+        # 打印更易读的 SQL 格式
+        format_sql: true
+
+  flyway:
+    # 启用数据库迁移
+    enabled: true
+    # 对已有库允许以基线模式接入迁移管理
+    baseline-on-migrate: true
+    # 禁止执行危险的 clean 操作
+    clean-disabled: true
+    # 迁移脚本目录
+    locations: classpath:db/migration
+
+  data:
+    redis:
+      # Redis 主机
+      host: ${SPRING_DATA_REDIS_HOST:127.0.0.1}
+      # Redis 端口
+      port: ${SPRING_DATA_REDIS_PORT:16379}
+      # Redis 密码
+      password: ${SPRING_DATA_REDIS_PASSWORD:}
+      # 使用的逻辑库编号
+      database: ${SPRING_DATA_REDIS_DATABASE:3}
+      repositories:
+        # 不启用 Spring Data Redis Repository 模式
+        enabled: false
+
+  servlet:
+    multipart:
+      # 单文件上传大小限制
+      max-file-size: 20MB
+      # 单次请求总上传大小限制
+      max-request-size: 25MB
+
+# 业务自定义配置
+leo:
+  attachment:
+    # 业务层额外限制的附件大小
+    max-file-size: 20MB
+    storage:
+      # 附件存储类型：local / s3
+      type: ${LEO_ATTACHMENT_STORAGE_TYPE:local}
+      # 对象存储统一前缀
+      key-prefix: ${LEO_ATTACHMENT_KEY_PREFIX:attachments}
+      local:
+        # 本地存储目录
+        path: ${LEO_ATTACHMENT_LOCAL_PATH:/tmp/leo/uploads}
+      s3:
+        # S3 兼容存储接入点
+        endpoint: ${LEO_ATTACHMENT_S3_ENDPOINT:}
+        # S3 区域
+        region: ${LEO_ATTACHMENT_S3_REGION:us-east-1}
+        # S3 桶名
+        bucket: ${LEO_ATTACHMENT_S3_BUCKET:}
+        # S3 Access Key
+        access-key: ${LEO_ATTACHMENT_S3_ACCESS_KEY:}
+        # S3 Secret Key
+        secret-key: ${LEO_ATTACHMENT_S3_SECRET_KEY:}
+        # 是否使用路径风格地址
+        path-style-access: ${LEO_ATTACHMENT_S3_PATH_STYLE:true}
+        # 连接超时
+        connect-timeout: 10s
+        # 读取超时
+        read-timeout: 30s
+  database:
+    # 数据库是否只读，开启后应限制写操作
+    read-only: false
+    backup:
+      # 导入前是否自动备份数据库
+      auto-backup-before-import: true
+      # 后台导出备份文件保存目录
+      storage-path: ${LEO_DATABASE_BACKUP_STORAGE_PATH:/tmp/leo/database-backups}
+      # 导出下载链接有效天数
+      download-expire-days: 7
+      # pg_dump 可执行文件路径
+      pg-dump-command: ${LEO_DATABASE_BACKUP_PG_DUMP_COMMAND:/usr/pgsql-18/bin/pg_dump}
+      # psql 可执行文件路径
+      psql-command: ${LEO_DATABASE_BACKUP_PSQL_COMMAND:/usr/pgsql-18/bin/psql}
+  company:
+    bootstrap:
+      # 是否启用公司主体 OOBE 初始化；启用后启动时按配置写入公司信息
+      enabled: ${LEO_COMPANY_BOOTSTRAP_ENABLED:false}
+      company-name: ${LEO_COMPANY_BOOTSTRAP_COMPANY_NAME:}
+      tax-no: ${LEO_COMPANY_BOOTSTRAP_TAX_NO:}
+      bank-name: ${LEO_COMPANY_BOOTSTRAP_BANK_NAME:}
+      bank-account: ${LEO_COMPANY_BOOTSTRAP_BANK_ACCOUNT:}
+      tax-rate: ${LEO_COMPANY_BOOTSTRAP_TAX_RATE:0.1300}
+      status: ${LEO_COMPANY_BOOTSTRAP_STATUS:正常}
+      remark: ${LEO_COMPANY_BOOTSTRAP_REMARK:}
+  auth:
+    bootstrap:
+      # 是否启用启动时管理员引导创建
+      enabled: ${LEO_AUTH_BOOTSTRAP_ENABLED:false}
+      # 引导账号登录名
+      login-name: ${LEO_AUTH_BOOTSTRAP_LOGIN_NAME:}
+      # 引导账号密码
+      password: ${LEO_AUTH_BOOTSTRAP_PASSWORD:}
+      # 引导账号用户姓名
+      user-name: ${LEO_AUTH_BOOTSTRAP_USER_NAME:}
+      # 引导账号手机号
+      mobile: ${LEO_AUTH_BOOTSTRAP_MOBILE:}
+      # 引导账号数据范围
+      data-scope: ${LEO_AUTH_BOOTSTRAP_DATA_SCOPE:}
+      # 引导账号备注
+      remark: ${LEO_AUTH_BOOTSTRAP_REMARK:}
+      # 引导账号绑定角色编码
+      role-code: ${LEO_AUTH_BOOTSTRAP_ROLE_CODE:}
+    user:
+      # 新建用户默认密码
+      default-password: ${LEO_AUTH_DEFAULT_PASSWORD:}
+    login-protection:
+      # 是否启用登录失败次数保护
+      enabled: ${LEO_AUTH_LOGIN_PROTECTION_ENABLED:true}
+      # 在统计窗口内允许的最大失败次数
+      max-failures: ${LEO_AUTH_LOGIN_PROTECTION_MAX_FAILURES:5}
+      # 失败次数统计窗口，单位秒
+      failure-window-seconds: ${LEO_AUTH_LOGIN_PROTECTION_FAILURE_WINDOW_SECONDS:900}
+      # 触发保护后的锁定时长，单位秒
+      lock-duration-seconds: ${LEO_AUTH_LOGIN_PROTECTION_LOCK_DURATION_SECONDS:900}
+    cookie:
+      # Refresh Token Cookie 名称
+      refresh-token-name: ${LEO_AUTH_REFRESH_COOKIE_NAME:leo_refresh_token}
+      # Refresh Token Cookie 路径
+      refresh-token-path: ${LEO_AUTH_REFRESH_COOKIE_PATH:/api/auth}
+      # 是否只通过 HTTPS 发送 Cookie
+      secure: ${LEO_AUTH_REFRESH_COOKIE_SECURE:false}
+      # SameSite 策略
+      same-site: ${LEO_AUTH_REFRESH_COOKIE_SAME_SITE:Lax}
+  health:
+    page:
+      # 是否启用公开健康检查页面
+      enabled: ${LEO_HEALTH_PAGE_ENABLED:true}
+  surface:
+    health:
+      # 是否允许匿名访问健康检查页；生产环境建议关闭，仅保留登录后访问
+      public-access-enabled: ${LEO_HEALTH_PAGE_PUBLIC_ACCESS_ENABLED:true}
+    docs:
+      # 是否允许匿名访问 OpenAPI / Swagger 文档；默认仅管理员可访问
+      public-access-enabled: ${LEO_DOCS_PUBLIC_ACCESS_ENABLED:false}
+  security:
+    web:
+      cors:
+        # 允许跨域访问后端 API 的前端来源；本地默认放行 Aries 开发端口
+        allowed-origins: ${LEO_CORS_ALLOWED_ORIGINS:http://localhost:3100,http://127.0.0.1:3100}
+        # 是否允许携带 Cookie / 凭证
+        allow-credentials: ${LEO_CORS_ALLOW_CREDENTIALS:true}
+        # 预检请求缓存时长，单位秒
+        max-age-seconds: ${LEO_CORS_MAX_AGE_SECONDS:3600}
+      headers:
+        # 是否启用 HSTS；仅在 HTTPS 已正确部署时开启
+        hsts-enabled: ${LEO_SECURITY_HSTS_ENABLED:false}
+    jwt:
+      # JWT 签发者
+      issuer: leo-erp
+      # JWT 启动主密钥；执行系统设置中的 JWT 轮转后，运行时优先使用数据库托管密钥
+      secret: ${LEO_JWT_SECRET:}
+      # Access Token 有效期，单位毫秒
+      access-expiration-ms: 1800000
+      # Refresh Token 有效期，单位毫秒
+      refresh-expiration-ms: 604800000
+    totp:
+      # 2FA 显示给认证器的签发方名称
+      issuer: LeoERP
+      # 启动兜底 2FA 主密钥；执行系统设置中的 2FA 轮转后，运行时优先使用数据库托管密钥
+      encryption-key: ${TOTP_ENCRYPTION_KEY:}
+
+  id:
+    # 雪花 ID 机器标识，范围 0-1023，多实例部署时必须确保唯一
+    machine-id: ${LEO_MACHINE_ID:0}
+
+# OpenAPI / Swagger 文档配置
+springdoc:
+  api-docs:
+    # 是否启用 OpenAPI JSON 文档
+    enabled: ${SPRINGDOC_API_DOCS_ENABLED:false}
+    # OpenAPI JSON 访问路径
+    path: /api-docs
+  swagger-ui:
+    # 是否启用 Swagger UI 页面
+    enabled: ${SPRINGDOC_SWAGGER_UI_ENABLED:false}
+    # Swagger UI 访问路径
+    path: /doc
+
+# 日志级别配置
+logging:
+  level:
+    # 健康检查页面单独开 DEBUG，便于排查探活请求
+    com.leo.erp.system.web.HealthPageController: DEBUG
