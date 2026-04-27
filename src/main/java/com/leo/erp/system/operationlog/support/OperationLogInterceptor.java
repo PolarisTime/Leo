@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leo.erp.common.api.ApiResponse;
+import com.leo.erp.common.support.IpResolutionService;
 import com.leo.erp.common.support.ModuleCatalog;
 import com.leo.erp.security.permission.RequiresPermission;
 import com.leo.erp.security.permission.ResourcePermissionCatalog;
@@ -38,15 +39,18 @@ public class OperationLogInterceptor implements HandlerInterceptor {
     private final ObjectMapper objectMapper;
     private final ModuleCatalog moduleCatalog;
     private final SystemSwitchService systemSwitchService;
+    private final IpResolutionService ipResolutionService;
 
     public OperationLogInterceptor(OperationLogService operationLogService,
                                    ObjectMapper objectMapper,
                                    ModuleCatalog moduleCatalog,
-                                   SystemSwitchService systemSwitchService) {
+                                   SystemSwitchService systemSwitchService,
+                                   IpResolutionService ipResolutionService) {
         this.operationLogService = operationLogService;
         this.objectMapper = objectMapper;
         this.moduleCatalog = moduleCatalog;
         this.systemSwitchService = systemSwitchService;
+        this.ipResolutionService = ipResolutionService;
     }
 
     @Override
@@ -322,11 +326,7 @@ public class OperationLogInterceptor implements HandlerInterceptor {
     }
 
     private String resolveIp(HttpServletRequest request) {
-        String forwarded = request.getHeader("X-Forwarded-For");
-        if (forwarded != null && !forwarded.isBlank()) {
-            return forwarded.split(",")[0].trim();
-        }
-        return request.getRemoteAddr();
+        return ipResolutionService.resolveClientIpOrUnknown(request);
     }
 
     private record AutoLogAction(String key, String moduleName, String actionType) {

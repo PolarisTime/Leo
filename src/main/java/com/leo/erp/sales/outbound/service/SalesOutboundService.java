@@ -64,6 +64,13 @@ public class SalesOutboundService extends AbstractCrudService<SalesOutbound, Sal
         return page(query, spec, repository);
     }
 
+    private static final String[] OUTBOUND_SEARCH_FIELDS = {"outboundNo", "salesOrderNo", "customerName"};
+
+    @Transactional(readOnly = true)
+    public java.util.List<SalesOutboundResponse> search(String keyword, int maxSize) {
+        return search(keyword, OUTBOUND_SEARCH_FIELDS, maxSize, Specs.notDeleted(), repository);
+    }
+
     @Override
     protected SalesOutboundResponse toDetailResponse(SalesOutbound entity) {
         SalesOutboundResponse response = salesOutboundMapper.toResponse(entity);

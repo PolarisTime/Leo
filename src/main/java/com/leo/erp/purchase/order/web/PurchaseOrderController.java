@@ -31,6 +31,15 @@ public class PurchaseOrderController {
         this.purchaseOrderService = purchaseOrderService;
     }
 
+    @GetMapping("/search")
+    @RequiresPermission(resource = "purchase-order", action = "read")
+    public ApiResponse<java.util.List<PurchaseOrderResponse>> search(
+            @RequestParam(required = false) String keyword,
+            @RequestParam(defaultValue = "100") int limit
+    ) {
+        return ApiResponse.success(purchaseOrderService.search(keyword != null ? keyword : "", Math.min(limit, 500)));
+    }
+
     @GetMapping
     @RequiresPermission(resource = "purchase-order", action = "read")
     public ApiResponse<PageResponse<PurchaseOrderResponse>> page(

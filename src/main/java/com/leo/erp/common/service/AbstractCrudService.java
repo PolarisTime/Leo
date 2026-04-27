@@ -13,6 +13,7 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
 import java.util.Optional;
 
 public abstract class AbstractCrudService<E extends AuditableEntity, Req, Res> {
@@ -64,6 +65,20 @@ public abstract class AbstractCrudService<E extends AuditableEntity, Req, Res> {
     protected final Page<Res> page(PageQuery query, Specification<E> specification, JpaSpecificationExecutor<E> repository) {
         return repository.findAll(DataScopeContext.apply(specification), query.toPageable("id"))
                 .map(this::toResponse);
+    }
+
+    /**
+     * Lightweight keyword search for dropdowns, selectors, and parent lookups.
+     * Returns at most {@code maxSize} rows. Applies data-scope filtering just like
+     * {@link #page} — users with SELF/DEPARTMENT scope only see their own data.
+     */
+    protected final List<Res> search(String keyword, String[] searchFields, int maxSize,
+                                      Specification<E> baseSpec, JpaSpecificationExecutor<E> repository) {
+        Specification<E> spec = baseSpec
+                .and(com.leo.erp.common.persistence.Specs.keywordLike(keyword, searchFields));
+        return repository.findAll(DataScopeContext.apply(spec), org.springframework.data.domain.PageRequest.of(0, maxSize))
+                .map(this::toResponse)
+                .toList();
     }
 
     protected final E requireEntity(Long id) {

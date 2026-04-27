@@ -28,7 +28,8 @@ class ControllerRequiresPermissionCoverageTest {
     private static final Map<String, Set<String>> ALLOWED_PUBLIC_ENDPOINTS = Map.of(
             "com.leo.erp.auth.web.AuthController", Set.of("login", "login2fa", "refresh", "logout", "ping"),
             "com.leo.erp.system.menu.web.MenuController", Set.of("tree"),
-            "com.leo.erp.system.web.HealthPageController", Set.of("health")
+            "com.leo.erp.system.web.HealthPageController", Set.of("health"),
+            "com.leo.erp.common.web.HealthController", Set.of("health")
     );
 
     @Test

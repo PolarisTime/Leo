@@ -65,11 +65,20 @@ public class PermissionAspect {
         String dataScope = ResourcePermissionCatalog.isBusinessResource(resource)
                 ? permissionService.getUserDataScope(principal.id(), resource, action)
                 : ResourcePermissionCatalog.SCOPE_ALL;
+        DataScopeContext.Context previous = DataScopeContext.current();
         DataScopeContext.set(principal.id(), resource, dataScope, permissionService.getDataScopeOwnerUserIds(principal.id(), dataScope));
         try {
             return joinPoint.proceed();
         } finally {
-            DataScopeContext.clear();
+            restore(previous);
         }
+    }
+
+    private void restore(DataScopeContext.Context previous) {
+        if (previous == null) {
+            DataScopeContext.clear();
+            return;
+        }
+        DataScopeContext.set(previous.userId(), previous.resource(), previous.scope(), previous.ownerUserIds());
     }
 }

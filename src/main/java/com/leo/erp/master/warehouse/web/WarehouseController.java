@@ -21,6 +21,12 @@ public class WarehouseController {
         this.warehouseService = warehouseService;
     }
 
+    @GetMapping("/options")
+    @RequiresPermission(resource = "warehouse", action = "read")
+    public ApiResponse<java.util.List<com.leo.erp.common.web.OptionResponse>> options() {
+        return ApiResponse.success(warehouseService.listActiveOptions());
+    }
+
     @GetMapping
     @RequiresPermission(resource = "warehouse", action = "read")
     public ApiResponse<PageResponse<WarehouseResponse>> page(

@@ -21,6 +21,12 @@ public class CustomerController {
         this.customerService = customerService;
     }
 
+    @GetMapping("/options")
+    @RequiresPermission(resource = "customer", action = "read")
+    public ApiResponse<java.util.List<com.leo.erp.common.web.OptionResponse>> options() {
+        return ApiResponse.success(customerService.listActiveOptions());
+    }
+
     @GetMapping
     @RequiresPermission(resource = "customer", action = "read")
     public ApiResponse<PageResponse<CustomerResponse>> page(

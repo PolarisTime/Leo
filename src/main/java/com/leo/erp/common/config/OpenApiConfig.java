@@ -17,8 +17,27 @@ public class OpenApiConfig {
         return new OpenAPI()
                 .info(new Info()
                         .title("Leo ERP API")
-                        .description("Leo ERP backend bootstrap API")
-                        .version("v0.1.0")
+                        .description("""
+                                REST API for the Leo ERP system.
+
+                                ## Authentication
+                                - POST /api/auth/login — obtain access token
+                                - Bearer token required for all other endpoints
+
+                                ## Response format
+                                All endpoints return `{ code: 0, message: "...", data: {...}, timestamp: "..." }`.
+                                - code=0: success
+                                - code=4000: validation error
+                                - code=4010: unauthorized
+                                - code=4030: forbidden
+
+                                ## Generating frontend types
+                                ```
+                                npx openapi-typescript http://localhost:11211/api/v3/api-docs \\
+                                  -o src/types/api-schema.ts
+                                ```
+                                """)
+                        .version("v1")
                         .contact(new Contact().name("Leo ERP"))
                         .license(new License().name("Proprietary")));
     }

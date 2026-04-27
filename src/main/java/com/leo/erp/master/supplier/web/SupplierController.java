@@ -29,6 +29,12 @@ public class SupplierController {
         this.supplierService = supplierService;
     }
 
+    @GetMapping("/options")
+    @RequiresPermission(resource = "supplier", action = "read")
+    public ApiResponse<java.util.List<com.leo.erp.common.web.OptionResponse>> options() {
+        return ApiResponse.success(supplierService.listActiveOptions());
+    }
+
     @GetMapping
     @RequiresPermission(resource = "supplier", action = "read")
     public ApiResponse<PageResponse<SupplierResponse>> page(

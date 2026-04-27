@@ -75,15 +75,14 @@ public class LoginService {
             throw invalidCredentials(normalizedLoginName, loginIp, requestPath, requestMethod);
         }
 
-        loginAttemptService.clearFailures(normalizedLoginName);
-
         if (Boolean.TRUE.equals(user.getTotpEnabled()) && user.getTotpSecret() != null) {
             String tempToken = generateTempToken(user.getId());
             return new LoginStep1Response(true, tempToken);
         }
 
+        loginAttemptService.clearFailures(normalizedLoginName);
         user.setLastLoginDate(LocalDateTime.now());
-        TokenResponse response = tokenIssuanceService.issueTokens(user, loginIp, userAgent, null);
+        TokenResponse response = tokenIssuanceService.issueTokens(user, loginIp, userAgent);
         recordLoginSuccess(user, loginIp, requestPath, requestMethod);
         return response;
     }
@@ -111,12 +110,14 @@ public class LoginService {
 
         String secret = totpService.decryptSecret(user.getTotpSecret());
         if (!totpService.verifyCode(secret, totpCode)) {
+            loginAttemptService.recordFailure(user.getLoginName());
             recordAuthenticationLog("登录失败", user, user.getLoginName(), loginIp, requestPath, requestMethod, "失败", "验证码错误或已过期");
             throw new BadCredentialsException("验证码错误或已过期");
         }
 
+        loginAttemptService.clearFailures(user.getLoginName());
         user.setLastLoginDate(LocalDateTime.now());
-        TokenResponse response = tokenIssuanceService.issueTokens(user, loginIp, userAgent, null);
+        TokenResponse response = tokenIssuanceService.issueTokens(user, loginIp, userAgent);
         recordLoginSuccess(user, loginIp, requestPath, requestMethod);
         return response;
     }

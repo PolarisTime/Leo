@@ -1,6 +1,5 @@
 package com.leo.erp.master.customer.service;
 
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
@@ -13,26 +12,18 @@ import com.leo.erp.master.customer.repository.CustomerRepository;
 import com.leo.erp.master.customer.mapper.CustomerMapper;
 import com.leo.erp.master.customer.web.dto.CustomerRequest;
 import com.leo.erp.master.customer.web.dto.CustomerResponse;
-import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.Duration;
-import java.util.Comparator;
-import java.util.List;
-import java.util.Locale;
 import java.util.Optional;
 
 @Service
 public class CustomerService extends AbstractCrudService<Customer, CustomerRequest, CustomerResponse> {
 
     private static final String CUSTOMER_CACHE_KEY = "leo:customer:all";
-    private static final Duration CUSTOMER_CACHE_TTL = Duration.ofMinutes(10);
-    private static final TypeReference<List<CustomerResponse>> CUSTOMER_LIST_TYPE = new TypeReference<>() { };
 
     private final CustomerRepository customerRepository;
     private final CustomerMapper customerMapper;
@@ -53,6 +44,13 @@ public class CustomerService extends AbstractCrudService<Customer, CustomerReque
                            SnowflakeIdGenerator snowflakeIdGenerator,
                            CustomerMapper customerMapper) {
         this(customerRepository, snowflakeIdGenerator, customerMapper, null);
+    }
+
+    @Transactional(readOnly = true)
+    public java.util.List<com.leo.erp.common.web.OptionResponse> listActiveOptions() {
+        return customerRepository.findByDeletedFlagFalseOrderByCustomerCodeAsc().stream()
+                .map(c -> new com.leo.erp.common.web.OptionResponse(c.getCustomerName(), c.getCustomerName()))
+                .toList();
     }
 
     @Transactional(readOnly = true)
@@ -123,58 +121,6 @@ public class CustomerService extends AbstractCrudService<Customer, CustomerReque
         if (customerRepository.existsByCustomerCodeAndDeletedFlagFalse(customerCode)) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "客户编码已存在");
         }
-    }
-
-    private List<CustomerResponse> loadCachedResponses() {
-        if (redisJsonCacheSupport == null) {
-            return customerRepository.findByDeletedFlagFalseOrderByCustomerCodeAsc().stream()
-                    .map(customerMapper::toResponse)
-                    .toList();
-        }
-        return redisJsonCacheSupport.getOrLoad(
-                CUSTOMER_CACHE_KEY,
-                CUSTOMER_CACHE_TTL,
-                CUSTOMER_LIST_TYPE,
-                () -> customerRepository.findByDeletedFlagFalseOrderByCustomerCodeAsc().stream()
-                        .map(customerMapper::toResponse)
-                        .toList()
-        );
-    }
-
-    private boolean matches(CustomerResponse item, String keyword, String status) {
-        if (status != null && !status.isBlank() && !status.trim().equals(item.status())) {
-            return false;
-        }
-        if (keyword == null || keyword.isBlank()) {
-            return true;
-        }
-        String value = keyword.trim().toLowerCase(Locale.ROOT);
-        return contains(item.customerCode(), value)
-                || contains(item.customerName(), value)
-                || contains(item.contactName(), value);
-    }
-
-    private Comparator<CustomerResponse> buildComparator(PageQuery query) {
-        Comparator<CustomerResponse> comparator = switch (query.sortBy() == null ? "" : query.sortBy()) {
-            case "customerCode" -> Comparator.comparing(CustomerResponse::customerCode, Comparator.nullsLast(String::compareToIgnoreCase));
-            case "customerName" -> Comparator.comparing(CustomerResponse::customerName, Comparator.nullsLast(String::compareToIgnoreCase));
-            case "contactName" -> Comparator.comparing(CustomerResponse::contactName, Comparator.nullsLast(String::compareToIgnoreCase));
-            case "city" -> Comparator.comparing(CustomerResponse::city, Comparator.nullsLast(String::compareToIgnoreCase));
-            case "settlementMode" -> Comparator.comparing(CustomerResponse::settlementMode, Comparator.nullsLast(String::compareToIgnoreCase));
-            case "status" -> Comparator.comparing(CustomerResponse::status, Comparator.nullsLast(String::compareToIgnoreCase));
-            default -> Comparator.comparing(CustomerResponse::id, Comparator.nullsLast(Long::compareTo));
-        };
-        return "asc".equalsIgnoreCase(query.direction()) ? comparator : comparator.reversed();
-    }
-
-    private Page<CustomerResponse> toPage(List<CustomerResponse> rows, PageQuery query) {
-        int start = Math.min(query.page() * query.size(), rows.size());
-        int end = Math.min(start + query.size(), rows.size());
-        return new PageImpl<>(rows.subList(start, end), PageRequest.of(query.page(), query.size()), rows.size());
-    }
-
-    private boolean contains(String source, String keyword) {
-        return source != null && source.toLowerCase(Locale.ROOT).contains(keyword);
     }
 
     private void evictCache() {

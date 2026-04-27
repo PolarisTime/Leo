@@ -22,9 +22,9 @@ public record CustomerStatementItemRequest(
         String quantityUnit,
         @NotNull @DecimalMin("0.000") BigDecimal pieceWeightTon,
         @NotNull @Min(0) Integer piecesPerBundle,
-        @NotNull @DecimalMin("0.000") BigDecimal weightTon,
+        BigDecimal weightTon,
         @NotNull @DecimalMin("0.00") BigDecimal unitPrice,
-        @NotNull @DecimalMin("0.00") BigDecimal amount
+        BigDecimal amount
 ) {
     public CustomerStatementItemRequest(String sourceNo,
                                         String materialCode,

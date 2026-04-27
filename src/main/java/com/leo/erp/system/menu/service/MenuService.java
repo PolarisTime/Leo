@@ -3,8 +3,6 @@ package com.leo.erp.system.menu.service;
 import com.leo.erp.security.permission.PermissionService;
 import com.leo.erp.security.permission.ResourcePermissionCatalog;
 import com.leo.erp.system.menu.domain.entity.Menu;
-import com.leo.erp.system.menu.repository.MenuActionRepository;
-import com.leo.erp.system.menu.repository.MenuRepository;
 import com.leo.erp.system.menu.web.dto.MenuTreeResponse;
 import org.springframework.stereotype.Service;
 
@@ -19,9 +17,7 @@ public class MenuService {
 
     private final PermissionService permissionService;
 
-    public MenuService(MenuRepository menuRepository,
-                       MenuActionRepository menuActionRepository,
-                       PermissionService permissionService) {
+    public MenuService(PermissionService permissionService) {
         this.permissionService = permissionService;
     }
 

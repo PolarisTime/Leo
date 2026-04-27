@@ -1,8 +1,7 @@
 package com.leo.erp.report.pendinginvoicereceipt.service;
 
 import com.leo.erp.common.api.PageQuery;
-import com.leo.erp.finance.invoicereceipt.domain.entity.InvoiceReceipt;
-import com.leo.erp.finance.invoicereceipt.domain.entity.InvoiceReceiptItem;
+import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.finance.invoicereceipt.repository.InvoiceReceiptRepository;
 import com.leo.erp.purchase.order.domain.entity.PurchaseOrder;
 import com.leo.erp.purchase.order.domain.entity.PurchaseOrderItem;
@@ -11,6 +10,8 @@ import com.leo.erp.report.pendinginvoicereceipt.web.dto.PendingInvoiceReceiptRep
 import com.leo.erp.security.permission.DataScopeContext;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -42,17 +43,12 @@ public class PendingInvoiceReceiptReportService {
                                                           LocalDate startDate,
                                                           LocalDate endDate) {
         String normalizedKeyword = normalizeKeyword(keyword);
-        Map<Long, InvoiceProgress> progressBySourceItemId = buildProgressBySourceItemId();
+        List<PurchaseOrder> orders = loadAccessibleOrders(supplierName, startDate, endDate);
+        Map<Long, InvoiceProgress> progressBySourceItemId = buildProgressBySourceItemId(collectSourceItemIds(orders));
         List<PendingInvoiceReceiptReportResponse> rows = new ArrayList<>();
         long index = 1L;
 
-        for (PurchaseOrder order : purchaseOrderRepository.findAllByDeletedFlagFalse()) {
-            if (!DataScopeContext.canAccess(order)) {
-                continue;
-            }
-            if (!matchesOrderHeader(order, supplierName, startDate, endDate)) {
-                continue;
-            }
+        for (PurchaseOrder order : orders) {
             for (PurchaseOrderItem item : order.getItems()) {
                 InvoiceProgress progress = progressBySourceItemId.getOrDefault(item.getId(), InvoiceProgress.EMPTY);
                 BigDecimal pendingWeightTon = positiveOrZero(item.getWeightTon().subtract(progress.weightTon()));
@@ -93,31 +89,52 @@ public class PendingInvoiceReceiptReportService {
         return toPage(rows, query);
     }
 
-    private Map<Long, InvoiceProgress> buildProgressBySourceItemId() {
-        Map<Long, InvoiceProgress> progressBySourceItemId = new LinkedHashMap<>();
-        for (InvoiceReceipt receipt : invoiceReceiptRepository.findAllByDeletedFlagFalse()) {
-            for (InvoiceReceiptItem item : receipt.getItems()) {
-                if (item.getSourcePurchaseOrderItemId() == null) {
-                    continue;
-                }
-                progressBySourceItemId.merge(
-                        item.getSourcePurchaseOrderItemId(),
-                        new InvoiceProgress(safe(item.getWeightTon()), safe(item.getAmount())),
-                        InvoiceProgress::merge
-                );
-            }
+    private List<PurchaseOrder> loadAccessibleOrders(String supplierName, LocalDate startDate, LocalDate endDate) {
+        Specification<PurchaseOrder> spec = Specs.<PurchaseOrder>notDeleted()
+                .and(supplierNameSpec(supplierName))
+                .and(startDateSpec(startDate))
+                .and(endDateSpec(endDate));
+        return purchaseOrderRepository.findAll(DataScopeContext.apply(spec), Sort.by(Sort.Direction.ASC, "id"));
+    }
+
+    private List<Long> collectSourceItemIds(List<PurchaseOrder> orders) {
+        return orders.stream()
+                .flatMap(order -> order.getItems().stream())
+                .map(PurchaseOrderItem::getId)
+                .filter(id -> id != null)
+                .distinct()
+                .toList();
+    }
+
+    private Map<Long, InvoiceProgress> buildProgressBySourceItemId(List<Long> sourceItemIds) {
+        if (sourceItemIds.isEmpty()) {
+            return Map.of();
         }
+        Map<Long, InvoiceProgress> progressBySourceItemId = new LinkedHashMap<>();
+        invoiceReceiptRepository.summarizeAllocatedBySourcePurchaseOrderItemIds(sourceItemIds, null)
+                .forEach(summary -> progressBySourceItemId.put(
+                        summary.getSourcePurchaseOrderItemId(),
+                        new InvoiceProgress(safe(summary.getTotalWeightTon()), safe(summary.getTotalAmount()))
+                ));
         return progressBySourceItemId;
     }
 
-    private boolean matchesOrderHeader(PurchaseOrder order, String supplierName, LocalDate startDate, LocalDate endDate) {
-        if (supplierName != null && !supplierName.isBlank() && !supplierName.trim().equals(order.getSupplierName())) {
-            return false;
-        }
-        if (startDate != null && order.getOrderDate().isBefore(startDate)) {
-            return false;
-        }
-        return endDate == null || !order.getOrderDate().isAfter(endDate);
+    private Specification<PurchaseOrder> supplierNameSpec(String supplierName) {
+        return (root, query, criteriaBuilder) -> supplierName == null || supplierName.isBlank()
+                ? criteriaBuilder.conjunction()
+                : criteriaBuilder.equal(root.get("supplierName"), supplierName.trim());
+    }
+
+    private Specification<PurchaseOrder> startDateSpec(LocalDate startDate) {
+        return (root, query, criteriaBuilder) -> startDate == null
+                ? criteriaBuilder.conjunction()
+                : criteriaBuilder.greaterThanOrEqualTo(root.get("orderDate"), startDate);
+    }
+
+    private Specification<PurchaseOrder> endDateSpec(LocalDate endDate) {
+        return (root, query, criteriaBuilder) -> endDate == null
+                ? criteriaBuilder.conjunction()
+                : criteriaBuilder.lessThanOrEqualTo(root.get("orderDate"), endDate);
     }
 
     private boolean matchesKeyword(PendingInvoiceReceiptReportResponse row, String keyword) {
@@ -177,8 +194,5 @@ public class PendingInvoiceReceiptReportService {
     ) {
         private static final InvoiceProgress EMPTY = new InvoiceProgress(BigDecimal.ZERO, BigDecimal.ZERO);
 
-        private InvoiceProgress merge(InvoiceProgress other) {
-            return new InvoiceProgress(weightTon.add(other.weightTon), amount.add(other.amount));
-        }
     }
 }

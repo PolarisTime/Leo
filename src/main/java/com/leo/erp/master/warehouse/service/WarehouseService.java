@@ -35,6 +35,13 @@ public class WarehouseService extends AbstractCrudService<Warehouse, WarehouseRe
         this.warehouseSelectionSupport = warehouseSelectionSupport;
     }
 
+    @org.springframework.transaction.annotation.Transactional(readOnly = true)
+    public java.util.List<com.leo.erp.common.web.OptionResponse> listActiveOptions() {
+        return warehouseRepository.findByDeletedFlagFalseOrderByWarehouseNameAsc().stream()
+                .map(w -> new com.leo.erp.common.web.OptionResponse(w.getWarehouseName(), w.getWarehouseName()))
+                .toList();
+    }
+
     public Page<WarehouseResponse> page(PageQuery query, String keyword, String warehouseType, String status) {
         Specification<Warehouse> spec = Specs.<Warehouse>notDeleted()
                 .and(Specs.keywordLike(keyword, "warehouseCode", "warehouseName", "contactName"))
