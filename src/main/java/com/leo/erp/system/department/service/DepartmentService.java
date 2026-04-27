@@ -7,6 +7,7 @@ import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.service.AbstractCrudService;
+import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.security.permission.PermissionService;
 import com.leo.erp.system.department.domain.entity.Department;
@@ -31,7 +32,7 @@ import java.util.stream.Collectors;
 @Service
 public class DepartmentService extends AbstractCrudService<Department, DepartmentRequest, DepartmentResponse> {
 
-    private static final Set<String> ALLOWED_STATUS = Set.of("正常", "禁用");
+    private static final Set<String> ALLOWED_STATUS = StatusConstants.ALLOWED_ACTIVE_STATUS;
 
     private final DepartmentRepository departmentRepository;
     private final UserAccountRepository userAccountRepository;

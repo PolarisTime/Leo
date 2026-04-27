@@ -5,6 +5,8 @@ import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.service.AbstractCrudService;
+import com.leo.erp.common.support.InvoiceAllocationSupport;
+import com.leo.erp.common.support.InvoiceAllocationSupport.AllocationProgress;
 import com.leo.erp.common.support.ManagedEntityItemSupport;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.TradeItemCalculator;
@@ -158,8 +160,8 @@ public class InvoiceReceiptService extends AbstractCrudService<InvoiceReceipt, I
                 .distinct()
                 .toList();
         Map<Long, PurchaseOrderItem> sourcePurchaseOrderItemMap = loadSourcePurchaseOrderItemMap(sourceItemIds);
-        Map<Long, InvoiceAllocationProgress> allocatedProgressMap = loadAllocatedProgressMap(sourceItemIds, entity.getId());
-        Map<Long, InvoiceAllocationProgress> requestProgressMap = new java.util.HashMap<>();
+        Map<Long, AllocationProgress> allocatedProgressMap = loadAllocatedProgressMap(sourceItemIds, entity.getId());
+        Map<Long, AllocationProgress> requestProgressMap = new java.util.HashMap<>();
         LinkedHashSet<String> sourcePurchaseOrderNos = new LinkedHashSet<>();
         List<InvoiceReceiptItem> items = ManagedEntityItemSupport.syncById(
                 entity.getItems(),
@@ -210,8 +212,8 @@ public class InvoiceReceiptService extends AbstractCrudService<InvoiceReceipt, I
         entity.getItems().sort(java.util.Comparator.comparing(InvoiceReceiptItem::getLineNo));
         entity.setSourcePurchaseOrderNos(String.join(", ", sourcePurchaseOrderNos));
         entity.setAmount(amount);
-        validateDeclaredAmount("收票", request.amount(), amount);
-        entity.setTaxAmount(calculateTaxAmount(amount, request.taxAmount()));
+        InvoiceAllocationSupport.validateDeclaredAmount("收票", request.amount(), amount);
+        entity.setTaxAmount(InvoiceAllocationSupport.calculateTaxAmount(amount, request.taxAmount(), companySettingService));
     }
 
     @Override
@@ -232,14 +234,14 @@ public class InvoiceReceiptService extends AbstractCrudService<InvoiceReceipt, I
                 .collect(java.util.HashMap::new, (map, item) -> map.put(item.getId(), item), java.util.HashMap::putAll);
     }
 
-    private Map<Long, InvoiceAllocationProgress> loadAllocatedProgressMap(List<Long> sourceItemIds, Long currentReceiptId) {
+    private Map<Long, AllocationProgress> loadAllocatedProgressMap(List<Long> sourceItemIds, Long currentReceiptId) {
         if (sourceItemIds.isEmpty()) {
             return Map.of();
         }
         return repository.summarizeAllocatedBySourcePurchaseOrderItemIds(sourceItemIds, currentReceiptId).stream()
                 .collect(java.util.HashMap::new, (map, summary) -> map.put(
                         summary.getSourcePurchaseOrderItemId(),
-                        new InvoiceAllocationProgress(safe(summary.getTotalWeightTon()), safe(summary.getTotalAmount()))
+                        new AllocationProgress(TradeItemCalculator.safeBigDecimal(summary.getTotalWeightTon()), TradeItemCalculator.safeBigDecimal(summary.getTotalAmount()))
                 ), java.util.HashMap::putAll);
     }
 
@@ -247,8 +249,8 @@ public class InvoiceReceiptService extends AbstractCrudService<InvoiceReceipt, I
                                                        int lineNo,
                                                        ResolvedInvoiceReceiptItem resolvedItem,
                                                        Map<Long, PurchaseOrderItem> sourcePurchaseOrderItemMap,
-                                                       Map<Long, InvoiceAllocationProgress> allocatedProgressMap,
-                                                       Map<Long, InvoiceAllocationProgress> requestProgressMap) {
+                                                       Map<Long, AllocationProgress> allocatedProgressMap,
+                                                       Map<Long, AllocationProgress> requestProgressMap) {
         Long sourcePurchaseOrderItemId = source.sourcePurchaseOrderItemId();
         if (sourcePurchaseOrderItemId == null) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行来源采购订单明细不能为空");
@@ -259,64 +261,39 @@ public class InvoiceReceiptService extends AbstractCrudService<InvoiceReceipt, I
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行来源采购订单明细不存在");
         }
 
-        InvoiceAllocationProgress allocatedProgress = allocatedProgressMap.getOrDefault(
+        AllocationProgress allocatedProgress = allocatedProgressMap.getOrDefault(
                 sourcePurchaseOrderItemId,
-                InvoiceAllocationProgress.EMPTY
+                AllocationProgress.EMPTY
         );
-        InvoiceAllocationProgress requestProgress = requestProgressMap.getOrDefault(
+        AllocationProgress requestProgress = requestProgressMap.getOrDefault(
                 sourcePurchaseOrderItemId,
-                InvoiceAllocationProgress.EMPTY
+                AllocationProgress.EMPTY
         );
         BigDecimal nextWeightTon = allocatedProgress.weightTon()
                 .add(requestProgress.weightTon())
                 .add(resolvedItem.weightTon());
-        if (nextWeightTon.compareTo(safe(sourcePurchaseOrderItem.getWeightTon())) > 0) {
+        if (nextWeightTon.compareTo(TradeItemCalculator.safeBigDecimal(sourcePurchaseOrderItem.getWeightTon())) > 0) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行来源采购订单明细可收票吨位不足");
         }
 
         BigDecimal nextAmount = allocatedProgress.amount()
                 .add(requestProgress.amount())
                 .add(resolvedItem.amount());
-        if (nextAmount.compareTo(safe(sourcePurchaseOrderItem.getAmount())) > 0) {
+        if (nextAmount.compareTo(TradeItemCalculator.safeBigDecimal(sourcePurchaseOrderItem.getAmount())) > 0) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行来源采购订单明细可收票金额不足");
         }
 
         requestProgressMap.merge(
                 sourcePurchaseOrderItemId,
-                new InvoiceAllocationProgress(resolvedItem.weightTon(), resolvedItem.amount()),
-                InvoiceAllocationProgress::merge
+                new AllocationProgress(resolvedItem.weightTon(), resolvedItem.amount()),
+                AllocationProgress::merge
         );
     }
 
     private ResolvedInvoiceReceiptItem resolveItem(InvoiceReceiptItemRequest source) {
-        BigDecimal weightTon = resolveWeightTon(source.quantity(), source.pieceWeightTon(), source.weightTon());
+        BigDecimal weightTon = InvoiceAllocationSupport.resolveWeightTon(source.quantity(), source.pieceWeightTon(), source.weightTon());
         BigDecimal amount = TradeItemCalculator.calculateAmount(weightTon, source.unitPrice());
         return new ResolvedInvoiceReceiptItem(weightTon, amount);
-    }
-
-    private BigDecimal resolveWeightTon(Integer quantity, BigDecimal pieceWeightTon, BigDecimal weightTon) {
-        if (weightTon != null && weightTon.compareTo(BigDecimal.ZERO) > 0) {
-            return weightTon.setScale(3, RoundingMode.HALF_UP);
-        }
-        return TradeItemCalculator.calculateWeightTon(quantity, pieceWeightTon);
-    }
-
-    private BigDecimal calculateTaxAmount(BigDecimal amount, BigDecimal requestedTaxAmount) {
-        BigDecimal taxRate = companySettingService.resolveCurrentTaxRate();
-        if (taxRate.compareTo(BigDecimal.ZERO) <= 0) {
-            return requestedTaxAmount == null ? BigDecimal.ZERO : requestedTaxAmount;
-        }
-        return amount.multiply(taxRate).setScale(2, RoundingMode.HALF_UP);
-    }
-
-    private void validateDeclaredAmount(String fieldLabel, BigDecimal requestValue, BigDecimal calculatedValue) {
-        if (requestValue != null && requestValue.compareTo(calculatedValue) != 0) {
-            throw new BusinessException(ErrorCode.VALIDATION_ERROR, fieldLabel + "与明细计算结果不一致");
-        }
-    }
-
-    private BigDecimal safe(BigDecimal value) {
-        return value == null ? BigDecimal.ZERO : value;
     }
 
     private InvoiceReceiptItemResponse toItemResponse(InvoiceReceiptItem item) {
@@ -348,16 +325,5 @@ public class InvoiceReceiptService extends AbstractCrudService<InvoiceReceipt, I
             BigDecimal weightTon,
             BigDecimal amount
     ) {
-    }
-
-    private record InvoiceAllocationProgress(
-            BigDecimal weightTon,
-            BigDecimal amount
-    ) {
-        private static final InvoiceAllocationProgress EMPTY = new InvoiceAllocationProgress(BigDecimal.ZERO, BigDecimal.ZERO);
-
-        private InvoiceAllocationProgress merge(InvoiceAllocationProgress other) {
-            return new InvoiceAllocationProgress(weightTon.add(other.weightTon), amount.add(other.amount));
-        }
     }
 }

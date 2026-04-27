@@ -10,8 +10,15 @@ public final class TradeItemCalculator {
     private TradeItemCalculator() {
     }
 
-    public static String normalizeQuantityUnit(String ignored) {
-        return QUANTITY_UNIT_PIECE;
+    public static String normalizeQuantityUnit(String quantityUnit) {
+        if (quantityUnit == null || quantityUnit.isBlank()) {
+            return QUANTITY_UNIT_PIECE;
+        }
+        return quantityUnit;
+    }
+
+    public static BigDecimal safeBigDecimal(BigDecimal value) {
+        return value == null ? BigDecimal.ZERO : value;
     }
 
     public static BigDecimal calculateWeightTon(Integer quantity, BigDecimal pieceWeightTon) {

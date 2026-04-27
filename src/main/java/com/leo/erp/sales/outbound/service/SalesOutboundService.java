@@ -8,6 +8,7 @@ import com.leo.erp.common.service.AbstractCrudService;
 import com.leo.erp.common.support.ManagedEntityItemSupport;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.TradeItemMaterialSupport;
+import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.support.TradeItemCalculator;
 import com.leo.erp.common.support.WarehouseSelectionSupport;
 import com.leo.erp.master.material.domain.entity.Material;
@@ -125,12 +126,12 @@ public class SalesOutboundService extends AbstractCrudService<SalesOutbound, Sal
 
     @Override
     protected void apply(SalesOutbound entity, SalesOutboundRequest request) {
-        String nextStatus = (request.status() == null || request.status().isBlank()) ? "草稿" : request.status();
+        String nextStatus = (request.status() == null || request.status().isBlank()) ? StatusConstants.DRAFT : request.status();
         workflowTransitionGuard.assertAuditPermissionForProtectedValue(
                 "sales-outbounds",
                 entity.getStatus(),
                 nextStatus,
-                "已审核"
+                StatusConstants.AUDITED
         );
         entity.setOutboundNo(request.outboundNo());
         entity.setSalesOrderNo(request.salesOrderNo());

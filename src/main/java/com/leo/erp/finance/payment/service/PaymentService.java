@@ -6,6 +6,7 @@ import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.service.AbstractCrudService;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
+import com.leo.erp.common.support.TradeItemCalculator;
 import com.leo.erp.finance.payment.domain.entity.Payment;
 import com.leo.erp.finance.payment.repository.PaymentRepository;
 import com.leo.erp.finance.payment.mapper.PaymentMapper;
@@ -177,7 +178,7 @@ public class PaymentService extends AbstractCrudService<Payment, PaymentRequest,
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "付款单往来单位与供应商对账单供应商不一致");
         }
         if (StatementSettlementSyncService.PAYMENT_STATUS_SETTLED.equals(request.status())) {
-            BigDecimal settledAmount = safeAmount(paymentRepository.sumAmountBySourceStatementIdAndStatusExcludingId(
+            BigDecimal settledAmount = TradeItemCalculator.safeBigDecimal(paymentRepository.sumAmountBySourceStatementIdAndStatusExcludingId(
                     statement.getId(),
                     StatementSettlementSyncService.PAYMENT_STATUS_SETTLED,
                     currentPaymentId
@@ -204,7 +205,7 @@ public class PaymentService extends AbstractCrudService<Payment, PaymentRequest,
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "付款单往来单位与物流对账单物流商不一致");
         }
         if (StatementSettlementSyncService.PAYMENT_STATUS_SETTLED.equals(request.status())) {
-            BigDecimal settledAmount = safeAmount(paymentRepository.sumAmountBySourceStatementIdAndStatusExcludingId(
+            BigDecimal settledAmount = TradeItemCalculator.safeBigDecimal(paymentRepository.sumAmountBySourceStatementIdAndStatusExcludingId(
                     statement.getId(),
                     StatementSettlementSyncService.PAYMENT_STATUS_SETTLED,
                     currentPaymentId
@@ -253,7 +254,4 @@ public class PaymentService extends AbstractCrudService<Payment, PaymentRequest,
                 && FREIGHT_PAYMENT_TYPE.equals(originalBusinessType) == FREIGHT_PAYMENT_TYPE.equals(currentBusinessType);
     }
 
-    private BigDecimal safeAmount(BigDecimal amount) {
-        return amount == null ? BigDecimal.ZERO : amount;
-    }
 }

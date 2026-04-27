@@ -5,6 +5,7 @@ import com.leo.erp.auth.repository.UserRoleRepository;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
+import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.system.role.domain.entity.RoleSetting;
 import com.leo.erp.system.role.repository.RoleSettingRepository;
 import org.springframework.security.core.GrantedAuthority;
@@ -24,7 +25,7 @@ import java.util.Objects;
 @Service
 public class UserRoleBindingService {
 
-    private static final String ROLE_STATUS_NORMAL = "正常";
+    private static final String ROLE_STATUS_NORMAL = StatusConstants.NORMAL;
 
     private final UserRoleRepository userRoleRepository;
     private final RoleSettingRepository roleSettingRepository;

@@ -6,6 +6,7 @@ import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.service.AbstractCrudService;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
+import com.leo.erp.common.support.TradeItemCalculator;
 import com.leo.erp.finance.receipt.domain.entity.Receipt;
 import com.leo.erp.finance.receipt.repository.ReceiptRepository;
 import com.leo.erp.finance.receipt.mapper.ReceiptMapper;
@@ -156,7 +157,7 @@ public class ReceiptService extends AbstractCrudService<Receipt, ReceiptRequest,
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "收款单项目与客户对账单项目不一致");
         }
         if (StatementSettlementSyncService.RECEIPT_STATUS_SETTLED.equals(request.status())) {
-            BigDecimal settledAmount = safeAmount(receiptRepository.sumAmountBySourceStatementIdAndStatusExcludingId(
+            BigDecimal settledAmount = TradeItemCalculator.safeBigDecimal(receiptRepository.sumAmountBySourceStatementIdAndStatusExcludingId(
                     statement.getId(),
                     StatementSettlementSyncService.RECEIPT_STATUS_SETTLED,
                     currentReceiptId
@@ -183,7 +184,4 @@ public class ReceiptService extends AbstractCrudService<Receipt, ReceiptRequest,
         }
     }
 
-    private BigDecimal safeAmount(BigDecimal amount) {
-        return amount == null ? BigDecimal.ZERO : amount;
-    }
 }

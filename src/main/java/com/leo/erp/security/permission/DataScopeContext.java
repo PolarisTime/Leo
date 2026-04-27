@@ -13,10 +13,22 @@ public final class DataScopeContext {
 
     private static final ThreadLocal<Context> CURRENT = new ThreadLocal<>();
 
+    @SuppressWarnings("rawtypes")
+    private static volatile DataScopeStrategy strategy = CreatedByScopeStrategy.instance();
+
     private DataScopeContext() {
     }
 
     public record Context(Long userId, String resource, String scope, Set<Long> ownerUserIds) {
+    }
+
+    /**
+     * Override the default {@code createdBy}-based strategy.
+     * Call this during application startup if you need custom ownership fields.
+     */
+    @SuppressWarnings("unchecked")
+    public static <E extends AuditableEntity> void setStrategy(DataScopeStrategy<E> customStrategy) {
+        strategy = customStrategy;
     }
 
     public static void set(Long userId, String resource, String scope) {
@@ -40,16 +52,14 @@ public final class DataScopeContext {
         CURRENT.remove();
     }
 
+    @SuppressWarnings("unchecked")
     public static <E extends AuditableEntity> Specification<E> apply(Specification<E> specification) {
         Context context = current();
         Set<Long> ownerUserIds = allowedOwnerUserIds(context);
         if (ownerUserIds == null) {
             return specification;
         }
-        Specification<E> ownerSpecification = (root, query, criteriaBuilder) ->
-                ownerUserIds.isEmpty()
-                        ? criteriaBuilder.disjunction()
-                        : root.get("createdBy").in(ownerUserIds);
+        Specification<E> ownerSpecification = ((DataScopeStrategy<E>) strategy).toSpecification(ownerUserIds);
         return specification == null ? ownerSpecification : specification.and(ownerSpecification);
     }
 
@@ -59,6 +69,7 @@ public final class DataScopeContext {
         }
     }
 
+    @SuppressWarnings("unchecked")
     public static boolean canAccess(AuditableEntity entity) {
         Context context = current();
         Set<Long> ownerUserIds = allowedOwnerUserIds(context);
@@ -68,7 +79,7 @@ public final class DataScopeContext {
         if (ownerUserIds.isEmpty()) {
             return false;
         }
-        return ownerUserIds.stream().anyMatch(ownerId -> Objects.equals(ownerId, entity.getCreatedBy()));
+        return ((DataScopeStrategy<AuditableEntity>) strategy).canAccess(entity, ownerUserIds);
     }
 
     public static Set<Long> allowedOwnerUserIds() {

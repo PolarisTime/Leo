@@ -7,6 +7,7 @@ import com.leo.erp.auth.repository.UserRoleRepository;
 import com.leo.erp.auth.service.UserRoleBindingService;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
+import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.system.company.service.CompanySettingService;
 import com.leo.erp.system.company.domain.entity.CompanySetting;
@@ -34,7 +35,7 @@ public class InitialSetupService {
 
     private static final String ADMIN_ROLE_CODE = "ADMIN";
     private static final String DEFAULT_ADMIN_SCOPE = "全部数据";
-    private static final String DEFAULT_COMPANY_STATUS = "正常";
+    private static final String DEFAULT_COMPANY_STATUS = StatusConstants.NORMAL;
     private static final String SETUP_REMARK = "网页首次初始化创建";
 
     private final UserAccountRepository userAccountRepository;
@@ -247,7 +248,7 @@ public class InitialSetupService {
             setting.setResetRule("YEARLY");
         }
         setting.setSampleNo(taxRate.setScale(4, java.math.RoundingMode.HALF_UP).toPlainString());
-        setting.setStatus("正常");
+        setting.setStatus(StatusConstants.NORMAL);
         setting.setRemark("用于发票默认税率与税额自动计算");
         noRuleRepository.save(setting);
     }
