@@ -9,6 +9,8 @@ import com.leo.erp.purchase.order.web.dto.PurchaseOrderRequest;
 import com.leo.erp.purchase.order.web.dto.PurchaseOrderResponse;
 import com.leo.erp.security.permission.RequiresPermission;
 import jakarta.validation.Valid;
+import java.time.LocalDate;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -33,9 +35,15 @@ public class PurchaseOrderController {
     @RequiresPermission(resource = "purchase-order", action = "read")
     public ApiResponse<PageResponse<PurchaseOrderResponse>> page(
             @BindPageQuery(sortFieldKey = "purchase-orders") PageQuery query,
-            @RequestParam(required = false) String keyword
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) String supplierName,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate
     ) {
-        return ApiResponse.success(PageResponse.from(purchaseOrderService.page(query, keyword)));
+        return ApiResponse.success(PageResponse.from(
+                purchaseOrderService.page(query, keyword, supplierName, status, startDate, endDate)
+        ));
     }
 
     @GetMapping("/{id}")

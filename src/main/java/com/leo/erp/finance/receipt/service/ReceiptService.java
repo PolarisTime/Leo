@@ -13,6 +13,7 @@ import com.leo.erp.finance.receipt.web.dto.ReceiptRequest;
 import com.leo.erp.finance.receipt.web.dto.ReceiptResponse;
 import com.leo.erp.security.permission.ResourcePermissionCatalog;
 import com.leo.erp.security.permission.ResourceRecordAccessGuard;
+import com.leo.erp.security.permission.WorkflowTransitionGuard;
 import com.leo.erp.statement.customer.domain.entity.CustomerStatement;
 import com.leo.erp.statement.customer.service.CustomerStatementQueryService;
 import com.leo.erp.statement.service.StatementSettlementSyncService;
@@ -21,6 +22,7 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.LinkedHashSet;
 import java.util.Optional;
 import java.util.Set;
@@ -33,24 +35,35 @@ public class ReceiptService extends AbstractCrudService<Receipt, ReceiptRequest,
     private final CustomerStatementQueryService customerStatementQueryService;
     private final StatementSettlementSyncService statementSettlementSyncService;
     private final ResourceRecordAccessGuard resourceRecordAccessGuard;
+    private final WorkflowTransitionGuard workflowTransitionGuard;
 
     public ReceiptService(ReceiptRepository receiptRepository,
                           SnowflakeIdGenerator snowflakeIdGenerator,
                           ReceiptMapper receiptMapper,
                           CustomerStatementQueryService customerStatementQueryService,
                           StatementSettlementSyncService statementSettlementSyncService,
-                          ResourceRecordAccessGuard resourceRecordAccessGuard) {
+                          ResourceRecordAccessGuard resourceRecordAccessGuard,
+                          WorkflowTransitionGuard workflowTransitionGuard) {
         super(snowflakeIdGenerator);
         this.receiptRepository = receiptRepository;
         this.receiptMapper = receiptMapper;
         this.customerStatementQueryService = customerStatementQueryService;
         this.statementSettlementSyncService = statementSettlementSyncService;
         this.resourceRecordAccessGuard = resourceRecordAccessGuard;
+        this.workflowTransitionGuard = workflowTransitionGuard;
     }
 
-    public Page<ReceiptResponse> page(PageQuery query, String keyword) {
+    public Page<ReceiptResponse> page(PageQuery query,
+                                      String keyword,
+                                      String customerName,
+                                      String status,
+                                      LocalDate startDate,
+                                      LocalDate endDate) {
         Specification<Receipt> spec = Specs.<Receipt>notDeleted()
-                .and(Specs.keywordLike(keyword, "receiptNo", "customerName", "projectName"));
+                .and(Specs.keywordLike(keyword, "receiptNo", "customerName", "projectName"))
+                .and(Specs.equalIfPresent("customerName", customerName))
+                .and(Specs.equalIfPresent("status", status))
+                .and(Specs.betweenIfPresent("receiptDate", startDate, endDate));
         return page(query, spec, receiptRepository);
     }
 
@@ -88,6 +101,12 @@ public class ReceiptService extends AbstractCrudService<Receipt, ReceiptRequest,
 
     @Override
     protected void apply(Receipt entity, ReceiptRequest request) {
+        workflowTransitionGuard.assertAuditPermissionForProtectedValue(
+                "receipts",
+                entity.getStatus(),
+                request.status(),
+                StatementSettlementSyncService.RECEIPT_STATUS_SETTLED
+        );
         entity.setReceiptNo(request.receiptNo());
         entity.setCustomerName(request.customerName());
         entity.setProjectName(request.projectName());

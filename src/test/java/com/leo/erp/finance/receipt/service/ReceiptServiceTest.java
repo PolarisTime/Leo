@@ -7,6 +7,7 @@ import com.leo.erp.finance.receipt.repository.ReceiptRepository;
 import com.leo.erp.finance.receipt.mapper.ReceiptMapper;
 import com.leo.erp.finance.receipt.web.dto.ReceiptRequest;
 import com.leo.erp.security.permission.ResourceRecordAccessGuard;
+import com.leo.erp.security.permission.WorkflowTransitionGuard;
 import com.leo.erp.statement.customer.domain.entity.CustomerStatement;
 import com.leo.erp.statement.customer.service.CustomerStatementQueryService;
 import com.leo.erp.statement.service.StatementSettlementSyncService;
@@ -33,7 +34,8 @@ class ReceiptServiceTest {
                 mock(ReceiptMapper.class),
                 mock(CustomerStatementQueryService.class),
                 mock(StatementSettlementSyncService.class),
-                mock(ResourceRecordAccessGuard.class)
+                mock(ResourceRecordAccessGuard.class),
+                mock(WorkflowTransitionGuard.class)
         );
 
         assertThatThrownBy(() -> service.create(buildRequest(null, "客户A", "项目A", new BigDecimal("100.00"), "已收款")))
@@ -65,7 +67,8 @@ class ReceiptServiceTest {
                 mock(ReceiptMapper.class),
                 customerStatementQueryService,
                 mock(StatementSettlementSyncService.class),
-                mock(ResourceRecordAccessGuard.class)
+                mock(ResourceRecordAccessGuard.class),
+                mock(WorkflowTransitionGuard.class)
         );
 
         assertThatThrownBy(() -> service.create(buildRequest(21L, "客户A", "项目A", new BigDecimal("100.00"), "已收款")))
@@ -95,7 +98,8 @@ class ReceiptServiceTest {
                 mock(ReceiptMapper.class),
                 customerStatementQueryService,
                 mock(StatementSettlementSyncService.class),
-                resourceRecordAccessGuard
+                resourceRecordAccessGuard,
+                mock(WorkflowTransitionGuard.class)
         );
 
         assertThatThrownBy(() -> service.create(buildRequest(21L, "客户A", "项目A", new BigDecimal("100.00"), "已收款")))

@@ -9,6 +9,8 @@ import com.leo.erp.sales.outbound.service.SalesOutboundService;
 import com.leo.erp.sales.outbound.web.dto.SalesOutboundRequest;
 import com.leo.erp.sales.outbound.web.dto.SalesOutboundResponse;
 import jakarta.validation.Valid;
+import java.time.LocalDate;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -25,9 +27,15 @@ public class SalesOutboundController {
     @RequiresPermission(resource = "sales-outbound", action = "read")
     public ApiResponse<PageResponse<SalesOutboundResponse>> page(
             @BindPageQuery(sortFieldKey = "sales-outbounds") PageQuery query,
-            @RequestParam(required = false) String keyword
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) String customerName,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate
     ) {
-        return ApiResponse.success(PageResponse.from(service.page(query, keyword)));
+        return ApiResponse.success(PageResponse.from(
+                service.page(query, keyword, customerName, status, startDate, endDate)
+        ));
     }
 
     @GetMapping("/{id}")

@@ -5,6 +5,7 @@ import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.service.AbstractCrudService;
+import com.leo.erp.common.support.ManagedEntityItemSupport;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.TradeItemMaterialSupport;
 import com.leo.erp.common.support.TradeItemCalculator;
@@ -19,13 +20,13 @@ import com.leo.erp.purchase.order.web.dto.PurchaseOrderItemRequest;
 import com.leo.erp.purchase.order.web.dto.PurchaseOrderItemResponse;
 import com.leo.erp.purchase.order.web.dto.PurchaseOrderRequest;
 import com.leo.erp.purchase.order.web.dto.PurchaseOrderResponse;
+import com.leo.erp.security.permission.WorkflowTransitionGuard;
 import org.springframework.data.domain.Page;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -39,25 +40,36 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
     private final TradeItemMaterialSupport tradeItemMaterialSupport;
     private final WarehouseSelectionSupport warehouseSelectionSupport;
     private final PurchaseInboundItemQueryService purchaseInboundItemQueryService;
+    private final WorkflowTransitionGuard workflowTransitionGuard;
 
     public PurchaseOrderService(PurchaseOrderRepository purchaseOrderRepository,
                                 SnowflakeIdGenerator snowflakeIdGenerator,
                                 PurchaseOrderMapper purchaseOrderMapper,
                                 TradeItemMaterialSupport tradeItemMaterialSupport,
                                 WarehouseSelectionSupport warehouseSelectionSupport,
-                                PurchaseInboundItemQueryService purchaseInboundItemQueryService) {
+                                PurchaseInboundItemQueryService purchaseInboundItemQueryService,
+                                WorkflowTransitionGuard workflowTransitionGuard) {
         super(snowflakeIdGenerator);
         this.purchaseOrderRepository = purchaseOrderRepository;
         this.purchaseOrderMapper = purchaseOrderMapper;
         this.tradeItemMaterialSupport = tradeItemMaterialSupport;
         this.warehouseSelectionSupport = warehouseSelectionSupport;
         this.purchaseInboundItemQueryService = purchaseInboundItemQueryService;
+        this.workflowTransitionGuard = workflowTransitionGuard;
     }
 
     @Transactional(readOnly = true)
-    public Page<PurchaseOrderResponse> page(PageQuery query, String keyword) {
+    public Page<PurchaseOrderResponse> page(PageQuery query,
+                                            String keyword,
+                                            String supplierName,
+                                            String status,
+                                            java.time.LocalDate startDate,
+                                            java.time.LocalDate endDate) {
         Specification<PurchaseOrder> spec = Specs.<PurchaseOrder>notDeleted()
-                .and(Specs.keywordLike(keyword, "orderNo", "supplierName"));
+                .and(Specs.keywordLike(keyword, "orderNo", "supplierName"))
+                .and(Specs.equalIfPresent("supplierName", supplierName))
+                .and(Specs.equalIfPresent("status", status))
+                .and(Specs.betweenIfPresent("orderDate", startDate, endDate));
         return page(query, spec, purchaseOrderRepository);
     }
 
@@ -137,26 +149,40 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
 
     @Override
     protected void apply(PurchaseOrder purchaseOrder, PurchaseOrderRequest request) {
+        String nextStatus = (request.status() == null || request.status().isBlank()) ? "草稿" : request.status();
+        workflowTransitionGuard.assertAuditPermissionForProtectedValue(
+                "purchase-orders",
+                purchaseOrder.getStatus(),
+                nextStatus,
+                "已审核",
+                "完成采购"
+        );
         purchaseOrder.setOrderNo(request.orderNo());
         purchaseOrder.setSupplierName(request.supplierName());
         purchaseOrder.setOrderDate(request.orderDate());
         purchaseOrder.setBuyerName(request.buyerName());
-        purchaseOrder.setStatus((request.status() == null || request.status().isBlank()) ? "草稿" : request.status());
+        purchaseOrder.setStatus(nextStatus);
         purchaseOrder.setRemark(request.remark());
 
-        purchaseOrder.getItems().clear();
         BigDecimal totalWeight = BigDecimal.ZERO;
         BigDecimal totalAmount = BigDecimal.ZERO;
-        List<PurchaseOrderItem> items = new ArrayList<>();
         var materialMap = tradeItemMaterialSupport.loadMaterialMap(
                 request.items().stream().map(PurchaseOrderItemRequest::materialCode).toList()
+        );
+        List<PurchaseOrderItem> items = ManagedEntityItemSupport.syncById(
+                purchaseOrder.getItems(),
+                request.items(),
+                PurchaseOrderItem::getId,
+                PurchaseOrderItemRequest::id,
+                PurchaseOrderItem::new,
+                this::nextId,
+                PurchaseOrderItem::setId
         );
 
         for (int index = 0; index < request.items().size(); index++) {
             PurchaseOrderItemRequest itemRequest = request.items().get(index);
             Material material = materialMap.get(itemRequest.materialCode());
-            PurchaseOrderItem item = new PurchaseOrderItem();
-            item.setId(nextId());
+            PurchaseOrderItem item = items.get(index);
             item.setPurchaseOrder(purchaseOrder);
             item.setLineNo(index + 1);
             item.setMaterialCode(itemRequest.materialCode());
@@ -177,13 +203,12 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
             item.setUnitPrice(itemRequest.unitPrice());
             BigDecimal amount = TradeItemCalculator.calculateAmount(weightTon, itemRequest.unitPrice());
             item.setAmount(amount);
-            items.add(item);
 
             totalWeight = totalWeight.add(weightTon);
             totalAmount = totalAmount.add(amount);
         }
 
-        purchaseOrder.getItems().addAll(items);
+        purchaseOrder.getItems().sort(java.util.Comparator.comparing(PurchaseOrderItem::getLineNo));
         purchaseOrder.setTotalWeight(totalWeight);
         purchaseOrder.setTotalAmount(totalAmount);
     }

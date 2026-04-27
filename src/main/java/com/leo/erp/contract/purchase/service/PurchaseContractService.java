@@ -4,6 +4,7 @@ import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.service.AbstractCrudService;
+import com.leo.erp.common.support.ManagedEntityItemSupport;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.TradeItemCalculator;
 import com.leo.erp.contract.purchase.domain.entity.PurchaseContract;
@@ -14,12 +15,12 @@ import com.leo.erp.contract.purchase.web.dto.PurchaseContractRequest;
 import com.leo.erp.contract.purchase.web.dto.PurchaseContractResponse;
 import com.leo.erp.contract.purchase.web.dto.PurchaseContractItemRequest;
 import com.leo.erp.contract.purchase.web.dto.PurchaseContractItemResponse;
+import com.leo.erp.security.permission.WorkflowTransitionGuard;
 import org.springframework.data.domain.Page;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
@@ -28,18 +29,29 @@ public class PurchaseContractService extends AbstractCrudService<PurchaseContrac
 
     private final PurchaseContractRepository repository;
     private final PurchaseContractMapper purchaseContractMapper;
+    private final WorkflowTransitionGuard workflowTransitionGuard;
 
     public PurchaseContractService(PurchaseContractRepository repository,
                                    SnowflakeIdGenerator idGenerator,
-                                   PurchaseContractMapper purchaseContractMapper) {
+                                   PurchaseContractMapper purchaseContractMapper,
+                                   WorkflowTransitionGuard workflowTransitionGuard) {
         super(idGenerator);
         this.repository = repository;
         this.purchaseContractMapper = purchaseContractMapper;
+        this.workflowTransitionGuard = workflowTransitionGuard;
     }
 
-    public Page<PurchaseContractResponse> page(PageQuery query, String keyword) {
+    public Page<PurchaseContractResponse> page(PageQuery query,
+                                               String keyword,
+                                               String supplierName,
+                                               String status,
+                                               java.time.LocalDate startDate,
+                                               java.time.LocalDate endDate) {
         Specification<PurchaseContract> spec = Specs.<PurchaseContract>notDeleted()
-                .and(Specs.keywordLike(keyword, "contractNo", "supplierName", "buyerName"));
+                .and(Specs.keywordLike(keyword, "contractNo", "supplierName", "buyerName"))
+                .and(Specs.equalIfPresent("supplierName", supplierName))
+                .and(Specs.equalIfPresent("status", status))
+                .and(Specs.betweenIfPresent("signDate", startDate, endDate));
         return page(query, spec, repository);
     }
 
@@ -99,24 +111,38 @@ public class PurchaseContractService extends AbstractCrudService<PurchaseContrac
 
     @Override
     protected void apply(PurchaseContract entity, PurchaseContractRequest request) {
+        String nextStatus = (request.status() == null || request.status().isBlank()) ? "草稿" : request.status();
+        workflowTransitionGuard.assertAuditPermissionForProtectedValue(
+                "purchase-contracts",
+                entity.getStatus(),
+                nextStatus,
+                "已签署",
+                "已归档"
+        );
         entity.setContractNo(request.contractNo());
         entity.setSupplierName(request.supplierName());
         entity.setSignDate(request.signDate());
         entity.setEffectiveDate(request.effectiveDate());
         entity.setExpireDate(request.expireDate());
         entity.setBuyerName(request.buyerName());
-        entity.setStatus((request.status() == null || request.status().isBlank()) ? "草稿" : request.status());
+        entity.setStatus(nextStatus);
         entity.setRemark(request.remark());
 
-        entity.getItems().clear();
         BigDecimal totalWeight = BigDecimal.ZERO;
         BigDecimal totalAmount = BigDecimal.ZERO;
-        List<PurchaseContractItem> items = new ArrayList<>();
+        List<PurchaseContractItem> items = ManagedEntityItemSupport.syncById(
+                entity.getItems(),
+                request.items(),
+                PurchaseContractItem::getId,
+                PurchaseContractItemRequest::id,
+                PurchaseContractItem::new,
+                this::nextId,
+                PurchaseContractItem::setId
+        );
 
         for (int i = 0; i < request.items().size(); i++) {
             PurchaseContractItemRequest source = request.items().get(i);
-            PurchaseContractItem item = new PurchaseContractItem();
-            item.setId(nextId());
+            PurchaseContractItem item = items.get(i);
             item.setPurchaseContract(entity);
             item.setLineNo(i + 1);
             item.setMaterialCode(source.materialCode());
@@ -135,13 +161,12 @@ public class PurchaseContractService extends AbstractCrudService<PurchaseContrac
             item.setUnitPrice(source.unitPrice());
             BigDecimal amount = TradeItemCalculator.calculateAmount(weightTon, source.unitPrice());
             item.setAmount(amount);
-            items.add(item);
 
             totalWeight = totalWeight.add(weightTon);
             totalAmount = totalAmount.add(amount);
         }
 
-        entity.getItems().addAll(items);
+        entity.getItems().sort(java.util.Comparator.comparing(PurchaseContractItem::getLineNo));
         entity.setTotalWeight(totalWeight);
         entity.setTotalAmount(totalAmount);
     }

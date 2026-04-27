@@ -87,12 +87,16 @@ public class ReceivablePayableQueryRepository {
         this.jdbcTemplate = jdbcTemplate;
     }
 
-    public Page<ReceivablePayableResponse> page(PageQuery query, String direction, String counterpartyType, String keyword) {
+    public Page<ReceivablePayableResponse> page(PageQuery query,
+                                                String direction,
+                                                String counterpartyType,
+                                                String status,
+                                                String keyword) {
         String normalizedKeyword = normalizeKeyword(keyword);
         MapSqlParameterSource params = new MapSqlParameterSource()
                 .addValue("limit", query.size())
                 .addValue("offset", (long) query.page() * query.size());
-        String whereSql = buildWhereClause(params, direction, counterpartyType, normalizedKeyword);
+        String whereSql = buildWhereClause(params, direction, counterpartyType, status, normalizedKeyword);
 
         Number totalNumber = jdbcTemplate.queryForObject("SELECT COUNT(*) " + UNION_SQL + whereSql, params, Number.class);
         long total = totalNumber == null ? 0L : totalNumber.longValue();
@@ -124,6 +128,7 @@ public class ReceivablePayableQueryRepository {
     private String buildWhereClause(MapSqlParameterSource params,
                                     String direction,
                                     String counterpartyType,
+                                    String status,
                                     String keyword) {
         List<String> clauses = new ArrayList<>();
         addDataScopeClause(params, clauses);
@@ -134,6 +139,10 @@ public class ReceivablePayableQueryRepository {
         if (counterpartyType != null) {
             params.addValue("counterpartyType", counterpartyType);
             clauses.add("rp.counterparty_type = :counterpartyType");
+        }
+        if (status != null) {
+            params.addValue("status", status);
+            clauses.add("rp.status = :status");
         }
         if (keyword != null) {
             params.addValue("keyword", keyword);

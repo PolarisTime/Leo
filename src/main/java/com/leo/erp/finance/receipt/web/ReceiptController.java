@@ -9,6 +9,8 @@ import com.leo.erp.finance.receipt.web.dto.ReceiptRequest;
 import com.leo.erp.finance.receipt.web.dto.ReceiptResponse;
 import com.leo.erp.security.permission.RequiresPermission;
 import jakarta.validation.Valid;
+import java.time.LocalDate;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -25,9 +27,15 @@ public class ReceiptController {
     @RequiresPermission(resource = "receipt", action = "read")
     public ApiResponse<PageResponse<ReceiptResponse>> page(
             @BindPageQuery(sortFieldKey = "receipts") PageQuery query,
-            @RequestParam(required = false) String keyword
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) String customerName,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate
     ) {
-        return ApiResponse.success(PageResponse.from(receiptService.page(query, keyword)));
+        return ApiResponse.success(PageResponse.from(
+                receiptService.page(query, keyword, customerName, status, startDate, endDate)
+        ));
     }
 
     @GetMapping("/{id}")

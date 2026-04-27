@@ -5,8 +5,10 @@ import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.service.AbstractCrudService;
+import com.leo.erp.common.support.ManagedEntityItemSupport;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.TradeItemCalculator;
+import com.leo.erp.security.permission.WorkflowTransitionGuard;
 import com.leo.erp.statement.customer.domain.entity.CustomerStatement;
 import com.leo.erp.statement.customer.domain.entity.CustomerStatementItem;
 import com.leo.erp.statement.customer.repository.CustomerStatementRepository;
@@ -23,7 +25,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
-import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
@@ -34,15 +35,18 @@ public class CustomerStatementService extends AbstractCrudService<CustomerStatem
     private final CustomerStatementRepository repository;
     private final CustomerStatementMapper customerStatementMapper;
     private final StatementSettlementSyncService statementSettlementSyncService;
+    private final WorkflowTransitionGuard workflowTransitionGuard;
 
     public CustomerStatementService(CustomerStatementRepository repository,
                                     SnowflakeIdGenerator idGenerator,
                                     CustomerStatementMapper customerStatementMapper,
-                                    StatementSettlementSyncService statementSettlementSyncService) {
+                                    StatementSettlementSyncService statementSettlementSyncService,
+                                    WorkflowTransitionGuard workflowTransitionGuard) {
         super(idGenerator);
         this.repository = repository;
         this.customerStatementMapper = customerStatementMapper;
         this.statementSettlementSyncService = statementSettlementSyncService;
+        this.workflowTransitionGuard = workflowTransitionGuard;
     }
 
     @Transactional(readOnly = true)
@@ -58,10 +62,7 @@ public class CustomerStatementService extends AbstractCrudService<CustomerStatem
                 .and(Specs.keywordLike(keyword, "statementNo", "customerName", "projectName", "sourceOrderNos"))
                 .and(Specs.equalIfPresent("customerName", customerName))
                 .and(Specs.equalIfPresent("status", status))
-                .and((root, criteriaQuery, criteriaBuilder) ->
-                        periodStart == null ? criteriaBuilder.conjunction() : criteriaBuilder.greaterThanOrEqualTo(root.get("endDate"), periodStart))
-                .and((root, criteriaQuery, criteriaBuilder) ->
-                        periodEnd == null ? criteriaBuilder.conjunction() : criteriaBuilder.lessThanOrEqualTo(root.get("endDate"), periodEnd));
+                .and(Specs.betweenIfPresent("endDate", periodStart, periodEnd));
         return page(query, spec, repository);
     }
 
@@ -127,22 +128,35 @@ public class CustomerStatementService extends AbstractCrudService<CustomerStatem
 
     @Override
     protected void apply(CustomerStatement entity, CustomerStatementRequest request) {
+        String nextStatus = (request.status() == null || request.status().isBlank()) ? "待确认" : request.status();
+        workflowTransitionGuard.assertAuditPermissionForProtectedValue(
+                "customer-statements",
+                entity.getStatus(),
+                nextStatus,
+                "已确认"
+        );
         entity.setStatementNo(request.statementNo());
         entity.setCustomerName(request.customerName());
         entity.setProjectName(request.projectName());
         entity.setStartDate(request.startDate());
         entity.setEndDate(request.endDate());
-        entity.setStatus((request.status() == null || request.status().isBlank()) ? "待确认" : request.status());
+        entity.setStatus(nextStatus);
         entity.setRemark(request.remark());
 
-        entity.getItems().clear();
         BigDecimal salesAmount = BigDecimal.ZERO;
         LinkedHashSet<String> sourceOrderNos = new LinkedHashSet<>();
-        List<CustomerStatementItem> items = new ArrayList<>();
+        List<CustomerStatementItem> items = ManagedEntityItemSupport.syncById(
+                entity.getItems(),
+                request.items(),
+                CustomerStatementItem::getId,
+                CustomerStatementItemRequest::id,
+                CustomerStatementItem::new,
+                this::nextId,
+                CustomerStatementItem::setId
+        );
         for (int i = 0; i < request.items().size(); i++) {
             CustomerStatementItemRequest source = request.items().get(i);
-            CustomerStatementItem item = new CustomerStatementItem();
-            item.setId(nextId());
+            CustomerStatementItem item = items.get(i);
             item.setCustomerStatement(entity);
             item.setLineNo(i + 1);
             item.setSourceNo(source.sourceNo());
@@ -162,11 +176,10 @@ public class CustomerStatementService extends AbstractCrudService<CustomerStatem
             item.setUnitPrice(source.unitPrice());
             BigDecimal amount = TradeItemCalculator.calculateAmount(item.getWeightTon(), source.unitPrice());
             item.setAmount(amount);
-            items.add(item);
             sourceOrderNos.add(source.sourceNo());
             salesAmount = salesAmount.add(amount);
         }
-        entity.getItems().addAll(items);
+        entity.getItems().sort(java.util.Comparator.comparing(CustomerStatementItem::getLineNo));
         entity.setSourceOrderNos(String.join(", ", sourceOrderNos));
         BigDecimal settledReceiptAmount = entity.getReceiptAmount() == null ? BigDecimal.ZERO : entity.getReceiptAmount();
         if (settledReceiptAmount.compareTo(salesAmount) > 0) {

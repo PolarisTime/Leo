@@ -8,6 +8,7 @@ import jakarta.validation.constraints.NotNull;
 import java.math.BigDecimal;
 
 public record InvoiceReceiptItemRequest(
+        Long id,
         @NotBlank(message = "来源采购订单号不能为空")
         String sourceNo,
         Long sourcePurchaseOrderItemId,
@@ -46,4 +47,26 @@ public record InvoiceReceiptItemRequest(
         @DecimalMin(value = "0.00", message = "金额不能小于0")
         BigDecimal amount
 ) {
+    public InvoiceReceiptItemRequest(String sourceNo,
+                                     Long sourcePurchaseOrderItemId,
+                                     String materialCode,
+                                     String brand,
+                                     String category,
+                                     String material,
+                                     String spec,
+                                     String length,
+                                     String unit,
+                                     String warehouseName,
+                                     String batchNo,
+                                     Integer quantity,
+                                     String quantityUnit,
+                                     BigDecimal pieceWeightTon,
+                                     Integer piecesPerBundle,
+                                     BigDecimal weightTon,
+                                     BigDecimal unitPrice,
+                                     BigDecimal amount) {
+        this(null, sourceNo, sourcePurchaseOrderItemId, materialCode, brand, category, material, spec, length, unit,
+                warehouseName, batchNo, quantity, quantityUnit, pieceWeightTon, piecesPerBundle, weightTon, unitPrice,
+                amount);
+    }
 }

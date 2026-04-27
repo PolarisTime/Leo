@@ -5,6 +5,7 @@ import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.service.AbstractCrudService;
+import com.leo.erp.common.support.ManagedEntityItemSupport;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.TradeItemMaterialSupport;
 import com.leo.erp.common.support.TradeItemCalculator;
@@ -17,6 +18,7 @@ import com.leo.erp.sales.order.domain.entity.SalesOrderItem;
 import com.leo.erp.sales.order.repository.SalesOrderItemRepository;
 import com.leo.erp.sales.order.repository.SalesOrderRepository;
 import com.leo.erp.sales.order.mapper.SalesOrderMapper;
+import com.leo.erp.security.permission.WorkflowTransitionGuard;
 import com.leo.erp.sales.order.web.dto.*;
 import org.springframework.data.domain.Page;
 import org.springframework.data.jpa.domain.Specification;
@@ -24,7 +26,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -39,6 +40,7 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
     private final PurchaseInboundItemQueryService purchaseInboundItemQueryService;
     private final SalesOrderItemRepository salesOrderItemRepository;
     private final WarehouseSelectionSupport warehouseSelectionSupport;
+    private final WorkflowTransitionGuard workflowTransitionGuard;
 
     public SalesOrderService(SalesOrderRepository repository,
                              SnowflakeIdGenerator idGenerator,
@@ -46,7 +48,8 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
                              TradeItemMaterialSupport tradeItemMaterialSupport,
                              PurchaseInboundItemQueryService purchaseInboundItemQueryService,
                              SalesOrderItemRepository salesOrderItemRepository,
-                             WarehouseSelectionSupport warehouseSelectionSupport) {
+                             WarehouseSelectionSupport warehouseSelectionSupport,
+                             WorkflowTransitionGuard workflowTransitionGuard) {
         super(idGenerator);
         this.repository = repository;
         this.salesOrderMapper = salesOrderMapper;
@@ -54,12 +57,21 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
         this.purchaseInboundItemQueryService = purchaseInboundItemQueryService;
         this.salesOrderItemRepository = salesOrderItemRepository;
         this.warehouseSelectionSupport = warehouseSelectionSupport;
+        this.workflowTransitionGuard = workflowTransitionGuard;
     }
 
     @Transactional(readOnly = true)
-    public Page<SalesOrderResponse> page(PageQuery query, String keyword) {
+    public Page<SalesOrderResponse> page(PageQuery query,
+                                         String keyword,
+                                         String customerName,
+                                         String status,
+                                         java.time.LocalDate startDate,
+                                         java.time.LocalDate endDate) {
         Specification<SalesOrder> spec = Specs.<SalesOrder>notDeleted()
-                .and(Specs.keywordLike(keyword, "orderNo", "customerName", "projectName"));
+                .and(Specs.keywordLike(keyword, "orderNo", "customerName", "projectName"))
+                .and(Specs.equalIfPresent("customerName", customerName))
+                .and(Specs.equalIfPresent("status", status))
+                .and(Specs.betweenIfPresent("deliveryDate", startDate, endDate));
         return page(query, spec, repository);
     }
 
@@ -118,19 +130,25 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
 
     @Override
     protected void apply(SalesOrder entity, SalesOrderRequest request) {
+        String nextStatus = (request.status() == null || request.status().isBlank()) ? "草稿" : request.status();
+        workflowTransitionGuard.assertAuditPermissionForProtectedValue(
+                "sales-orders",
+                entity.getStatus(),
+                nextStatus,
+                "已审核",
+                "完成销售"
+        );
         entity.setOrderNo(request.orderNo());
         entity.setPurchaseInboundNo(request.purchaseInboundNo());
         entity.setCustomerName(request.customerName());
         entity.setProjectName(request.projectName());
         entity.setDeliveryDate(request.deliveryDate());
         entity.setSalesName(request.salesName());
-        entity.setStatus((request.status() == null || request.status().isBlank()) ? "草稿" : request.status());
+        entity.setStatus(nextStatus);
         entity.setRemark(request.remark());
 
-        entity.getItems().clear();
         BigDecimal totalWeight = BigDecimal.ZERO;
         BigDecimal totalAmount = BigDecimal.ZERO;
-        List<SalesOrderItem> items = new ArrayList<>();
         var materialMap = tradeItemMaterialSupport.loadMaterialMap(
                 request.items().stream().map(SalesOrderItemRequest::materialCode).toList()
         );
@@ -138,11 +156,19 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
         Map<Long, PurchaseInboundItem> sourceInboundItemMap = loadSourceInboundItemMap(sourceInboundItemIds);
         Map<Long, Integer> allocatedQuantityMap = loadAllocatedQuantityMap(sourceInboundItemIds, entity.getId());
         Map<Long, Integer> requestAllocatedQuantityMap = new HashMap<>();
+        List<SalesOrderItem> items = ManagedEntityItemSupport.syncById(
+                entity.getItems(),
+                request.items(),
+                SalesOrderItem::getId,
+                SalesOrderItemRequest::id,
+                SalesOrderItem::new,
+                this::nextId,
+                SalesOrderItem::setId
+        );
         for (int i = 0; i < request.items().size(); i++) {
             SalesOrderItemRequest source = request.items().get(i);
             Material material = materialMap.get(source.materialCode());
-            SalesOrderItem item = new SalesOrderItem();
-            item.setId(nextId());
+            SalesOrderItem item = items.get(i);
             item.setSalesOrder(entity);
             item.setLineNo(i + 1);
             item.setMaterialCode(source.materialCode());
@@ -165,11 +191,10 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
             item.setUnitPrice(source.unitPrice());
             BigDecimal amount = TradeItemCalculator.calculateAmount(weightTon, source.unitPrice());
             item.setAmount(amount);
-            items.add(item);
             totalWeight = totalWeight.add(weightTon);
             totalAmount = totalAmount.add(amount);
         }
-        entity.getItems().addAll(items);
+        entity.getItems().sort(java.util.Comparator.comparing(SalesOrderItem::getLineNo));
         entity.setTotalWeight(totalWeight);
         entity.setTotalAmount(totalAmount);
     }

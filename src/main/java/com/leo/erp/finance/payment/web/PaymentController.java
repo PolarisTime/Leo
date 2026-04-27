@@ -9,6 +9,8 @@ import com.leo.erp.finance.payment.web.dto.PaymentRequest;
 import com.leo.erp.finance.payment.web.dto.PaymentResponse;
 import com.leo.erp.security.permission.RequiresPermission;
 import jakarta.validation.Valid;
+import java.time.LocalDate;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -25,9 +27,15 @@ public class PaymentController {
     @RequiresPermission(resource = "payment", action = "read")
     public ApiResponse<PageResponse<PaymentResponse>> page(
             @BindPageQuery(sortFieldKey = "payments") PageQuery query,
-            @RequestParam(required = false) String keyword
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) String businessType,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate
     ) {
-        return ApiResponse.success(PageResponse.from(paymentService.page(query, keyword)));
+        return ApiResponse.success(PageResponse.from(
+                paymentService.page(query, keyword, businessType, status, startDate, endDate)
+        ));
     }
 
     @GetMapping("/{id}")

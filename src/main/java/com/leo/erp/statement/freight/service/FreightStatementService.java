@@ -8,9 +8,11 @@ import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.service.AbstractCrudService;
+import com.leo.erp.common.support.ManagedEntityItemSupport;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.TradeItemCalculator;
 import com.leo.erp.security.permission.DataScopeContext;
+import com.leo.erp.security.permission.WorkflowTransitionGuard;
 import com.leo.erp.statement.freight.domain.entity.FreightStatement;
 import com.leo.erp.statement.freight.domain.entity.FreightStatementItem;
 import com.leo.erp.statement.freight.repository.FreightStatementRepository;
@@ -40,17 +42,20 @@ public class FreightStatementService extends AbstractCrudService<FreightStatemen
     private final AttachmentService attachmentService;
     private final AttachmentBindingService attachmentBindingService;
     private final StatementSettlementSyncService statementSettlementSyncService;
+    private final WorkflowTransitionGuard workflowTransitionGuard;
 
     public FreightStatementService(FreightStatementRepository repository,
                                    SnowflakeIdGenerator idGenerator,
                                    AttachmentService attachmentService,
                                    AttachmentBindingService attachmentBindingService,
-                                   StatementSettlementSyncService statementSettlementSyncService) {
+                                   StatementSettlementSyncService statementSettlementSyncService,
+                                   WorkflowTransitionGuard workflowTransitionGuard) {
         super(idGenerator);
         this.repository = repository;
         this.attachmentService = attachmentService;
         this.attachmentBindingService = attachmentBindingService;
         this.statementSettlementSyncService = statementSettlementSyncService;
+        this.workflowTransitionGuard = workflowTransitionGuard;
     }
 
     @Transactional(readOnly = true)
@@ -68,10 +73,7 @@ public class FreightStatementService extends AbstractCrudService<FreightStatemen
                 .and(Specs.equalIfPresent("carrierName", carrierName))
                 .and(Specs.equalIfPresent("status", status))
                 .and(Specs.equalIfPresent("signStatus", signStatus))
-                .and((root, criteriaQuery, criteriaBuilder) ->
-                        periodStart == null ? criteriaBuilder.conjunction() : criteriaBuilder.greaterThanOrEqualTo(root.get("endDate"), periodStart))
-                .and((root, criteriaQuery, criteriaBuilder) ->
-                        periodEnd == null ? criteriaBuilder.conjunction() : criteriaBuilder.lessThanOrEqualTo(root.get("endDate"), periodEnd));
+                .and(Specs.betweenIfPresent("endDate", periodStart, periodEnd));
         Page<FreightStatement> entityPage = repository.findAll(DataScopeContext.apply(spec), query.toPageable("id"));
         Map<Long, List<AttachmentView>> attachmentsByStatementId = resolveAttachmentsByStatement(entityPage.getContent());
         List<FreightStatementView> responses = entityPage.getContent().stream()
@@ -127,13 +129,27 @@ public class FreightStatementService extends AbstractCrudService<FreightStatemen
 
     @Override
     protected void apply(FreightStatement entity, FreightStatementCommand command) {
+        String nextStatus = (command.status() == null || command.status().isBlank()) ? "待审核" : command.status();
+        String nextSignStatus = (command.signStatus() == null || command.signStatus().isBlank()) ? "未签署" : command.signStatus();
+        workflowTransitionGuard.assertAuditPermissionForProtectedValue(
+                "freight-statements",
+                entity.getStatus(),
+                nextStatus,
+                "已审核"
+        );
+        workflowTransitionGuard.assertAuditPermissionForProtectedValue(
+                "freight-statements",
+                entity.getSignStatus(),
+                nextSignStatus,
+                "已签署"
+        );
         entity.setStatementNo(command.statementNo());
         entity.setSourceBillNos(command.sourceBillNos());
         entity.setCarrierName(command.carrierName());
         entity.setStartDate(command.startDate());
         entity.setEndDate(command.endDate());
-        entity.setStatus((command.status() == null || command.status().isBlank()) ? "待审核" : command.status());
-        entity.setSignStatus((command.signStatus() == null || command.signStatus().isBlank()) ? "未签署" : command.signStatus());
+        entity.setStatus(nextStatus);
+        entity.setSignStatus(nextSignStatus);
         if (command.attachment() != null) {
             entity.setAttachment(command.attachment());
         }
@@ -145,13 +161,19 @@ public class FreightStatementService extends AbstractCrudService<FreightStatemen
         }
         entity.setRemark(command.remark());
 
-        entity.getItems().clear();
         BigDecimal totalWeight = BigDecimal.ZERO;
-        List<FreightStatementItem> items = new ArrayList<>();
+        List<FreightStatementItem> items = ManagedEntityItemSupport.syncById(
+                entity.getItems(),
+                command.items(),
+                FreightStatementItem::getId,
+                FreightStatementItemCommand::id,
+                FreightStatementItem::new,
+                this::nextId,
+                FreightStatementItem::setId
+        );
         for (int i = 0; i < command.items().size(); i++) {
             FreightStatementItemCommand source = command.items().get(i);
-            FreightStatementItem item = new FreightStatementItem();
-            item.setId(nextId());
+            FreightStatementItem item = items.get(i);
             item.setFreightStatement(entity);
             item.setLineNo(i + 1);
             item.setSourceNo(source.sourceNo());
@@ -172,10 +194,9 @@ public class FreightStatementService extends AbstractCrudService<FreightStatemen
             BigDecimal weightTon = TradeItemCalculator.calculateWeightTon(source.quantity(), source.pieceWeightTon());
             item.setWeightTon(weightTon);
             item.setWarehouseName(source.warehouseName());
-            items.add(item);
             totalWeight = totalWeight.add(weightTon);
         }
-        entity.getItems().addAll(items);
+        entity.getItems().sort(java.util.Comparator.comparing(FreightStatementItem::getLineNo));
         entity.setTotalWeight(totalWeight);
         entity.setTotalFreight(command.totalFreight());
         BigDecimal paidAmount = entity.getPaidAmount() == null ? BigDecimal.ZERO : entity.getPaidAmount();

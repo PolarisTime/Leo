@@ -7,6 +7,7 @@ import com.leo.erp.master.material.domain.entity.Material;
 import com.leo.erp.purchase.inbound.domain.entity.PurchaseInbound;
 import com.leo.erp.purchase.inbound.domain.entity.PurchaseInboundItem;
 import com.leo.erp.purchase.inbound.service.PurchaseInboundItemQueryService;
+import com.leo.erp.security.permission.WorkflowTransitionGuard;
 import com.leo.erp.sales.order.repository.SalesOrderItemRepository;
 import com.leo.erp.sales.order.repository.SalesOrderRepository;
 import com.leo.erp.sales.order.mapper.SalesOrderMapper;
@@ -45,7 +46,8 @@ class SalesOrderServiceTest {
                 materialSupport,
                 purchaseInboundItemQueryService,
                 salesOrderItemRepository,
-                warehouseSelectionSupport
+                warehouseSelectionSupport,
+                mock(WorkflowTransitionGuard.class)
         );
 
         SalesOrderRequest request = new SalesOrderRequest(

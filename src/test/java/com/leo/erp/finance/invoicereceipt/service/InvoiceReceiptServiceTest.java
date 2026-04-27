@@ -10,6 +10,7 @@ import com.leo.erp.finance.invoicereceipt.web.dto.InvoiceReceiptRequest;
 import com.leo.erp.finance.invoicereceipt.web.dto.InvoiceReceiptResponse;
 import com.leo.erp.purchase.order.domain.entity.PurchaseOrderItem;
 import com.leo.erp.purchase.order.service.PurchaseOrderItemQueryService;
+import com.leo.erp.security.permission.WorkflowTransitionGuard;
 import com.leo.erp.system.company.service.CompanySettingService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -48,6 +49,9 @@ class InvoiceReceiptServiceTest {
 
     @Mock
     private CompanySettingService companySettingService;
+
+    @Mock
+    private WorkflowTransitionGuard workflowTransitionGuard;
 
     @InjectMocks
     private InvoiceReceiptService service;

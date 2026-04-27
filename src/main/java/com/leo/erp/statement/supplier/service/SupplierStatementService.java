@@ -5,8 +5,10 @@ import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.service.AbstractCrudService;
+import com.leo.erp.common.support.ManagedEntityItemSupport;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.TradeItemCalculator;
+import com.leo.erp.security.permission.WorkflowTransitionGuard;
 import com.leo.erp.statement.supplier.domain.entity.SupplierStatement;
 import com.leo.erp.statement.supplier.domain.entity.SupplierStatementItem;
 import com.leo.erp.statement.supplier.repository.SupplierStatementRepository;
@@ -23,7 +25,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
-import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
@@ -34,15 +35,18 @@ public class SupplierStatementService extends AbstractCrudService<SupplierStatem
     private final SupplierStatementRepository repository;
     private final SupplierStatementMapper supplierStatementMapper;
     private final StatementSettlementSyncService statementSettlementSyncService;
+    private final WorkflowTransitionGuard workflowTransitionGuard;
 
     public SupplierStatementService(SupplierStatementRepository repository,
                                     SnowflakeIdGenerator idGenerator,
                                     SupplierStatementMapper supplierStatementMapper,
-                                    StatementSettlementSyncService statementSettlementSyncService) {
+                                    StatementSettlementSyncService statementSettlementSyncService,
+                                    WorkflowTransitionGuard workflowTransitionGuard) {
         super(idGenerator);
         this.repository = repository;
         this.supplierStatementMapper = supplierStatementMapper;
         this.statementSettlementSyncService = statementSettlementSyncService;
+        this.workflowTransitionGuard = workflowTransitionGuard;
     }
 
     @Transactional(readOnly = true)
@@ -58,10 +62,7 @@ public class SupplierStatementService extends AbstractCrudService<SupplierStatem
                 .and(Specs.keywordLike(keyword, "statementNo", "supplierName", "sourceInboundNos"))
                 .and(Specs.equalIfPresent("supplierName", supplierName))
                 .and(Specs.equalIfPresent("status", status))
-                .and((root, criteriaQuery, criteriaBuilder) ->
-                        periodStart == null ? criteriaBuilder.conjunction() : criteriaBuilder.greaterThanOrEqualTo(root.get("endDate"), periodStart))
-                .and((root, criteriaQuery, criteriaBuilder) ->
-                        periodEnd == null ? criteriaBuilder.conjunction() : criteriaBuilder.lessThanOrEqualTo(root.get("endDate"), periodEnd));
+                .and(Specs.betweenIfPresent("endDate", periodStart, periodEnd));
         return page(query, spec, repository);
     }
 
@@ -126,21 +127,34 @@ public class SupplierStatementService extends AbstractCrudService<SupplierStatem
 
     @Override
     protected void apply(SupplierStatement entity, SupplierStatementRequest request) {
+        String nextStatus = (request.status() == null || request.status().isBlank()) ? "待确认" : request.status();
+        workflowTransitionGuard.assertAuditPermissionForProtectedValue(
+                "supplier-statements",
+                entity.getStatus(),
+                nextStatus,
+                "已确认"
+        );
         entity.setStatementNo(request.statementNo());
         entity.setSupplierName(request.supplierName());
         entity.setStartDate(request.startDate());
         entity.setEndDate(request.endDate());
-        entity.setStatus((request.status() == null || request.status().isBlank()) ? "待确认" : request.status());
+        entity.setStatus(nextStatus);
         entity.setRemark(request.remark());
 
-        entity.getItems().clear();
         BigDecimal purchaseAmount = BigDecimal.ZERO;
         LinkedHashSet<String> sourceInboundNos = new LinkedHashSet<>();
-        List<SupplierStatementItem> items = new ArrayList<>();
+        List<SupplierStatementItem> items = ManagedEntityItemSupport.syncById(
+                entity.getItems(),
+                request.items(),
+                SupplierStatementItem::getId,
+                SupplierStatementItemRequest::id,
+                SupplierStatementItem::new,
+                this::nextId,
+                SupplierStatementItem::setId
+        );
         for (int i = 0; i < request.items().size(); i++) {
             SupplierStatementItemRequest source = request.items().get(i);
-            SupplierStatementItem item = new SupplierStatementItem();
-            item.setId(nextId());
+            SupplierStatementItem item = items.get(i);
             item.setSupplierStatement(entity);
             item.setLineNo(i + 1);
             item.setSourceNo(source.sourceNo());
@@ -160,11 +174,10 @@ public class SupplierStatementService extends AbstractCrudService<SupplierStatem
             item.setUnitPrice(source.unitPrice());
             BigDecimal amount = TradeItemCalculator.calculateAmount(item.getWeightTon(), source.unitPrice());
             item.setAmount(amount);
-            items.add(item);
             sourceInboundNos.add(source.sourceNo());
             purchaseAmount = purchaseAmount.add(amount);
         }
-        entity.getItems().addAll(items);
+        entity.getItems().sort(java.util.Comparator.comparing(SupplierStatementItem::getLineNo));
         entity.setSourceInboundNos(String.join(", ", sourceInboundNos));
         BigDecimal settledPaymentAmount = entity.getPaymentAmount() == null ? BigDecimal.ZERO : entity.getPaymentAmount();
         if (settledPaymentAmount.compareTo(purchaseAmount) > 0) {

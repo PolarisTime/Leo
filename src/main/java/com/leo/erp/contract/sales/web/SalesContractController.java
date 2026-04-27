@@ -9,6 +9,8 @@ import com.leo.erp.contract.sales.web.dto.SalesContractRequest;
 import com.leo.erp.contract.sales.web.dto.SalesContractResponse;
 import com.leo.erp.security.permission.RequiresPermission;
 import jakarta.validation.Valid;
+import java.time.LocalDate;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -33,9 +35,15 @@ public class SalesContractController {
     @RequiresPermission(resource = "sales-contract", action = "read")
     public ApiResponse<PageResponse<SalesContractResponse>> page(
             @BindPageQuery(sortFieldKey = "sales-contracts") PageQuery query,
-            @RequestParam(required = false) String keyword
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) String customerName,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate
     ) {
-        return ApiResponse.success(PageResponse.from(salesContractService.page(query, keyword)));
+        return ApiResponse.success(PageResponse.from(
+                salesContractService.page(query, keyword, customerName, status, startDate, endDate)
+        ));
     }
 
     @GetMapping("/{id}")

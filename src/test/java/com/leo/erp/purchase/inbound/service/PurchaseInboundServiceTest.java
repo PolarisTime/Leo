@@ -14,6 +14,7 @@ import com.leo.erp.purchase.inbound.web.dto.PurchaseInboundRequest;
 import com.leo.erp.purchase.inbound.web.dto.PurchaseInboundResponse;
 import com.leo.erp.purchase.order.domain.entity.PurchaseOrderItem;
 import com.leo.erp.purchase.order.service.PurchaseOrderItemQueryService;
+import com.leo.erp.security.permission.WorkflowTransitionGuard;
 import com.leo.erp.sales.order.service.SalesOrderItemQueryService;
 import org.junit.jupiter.api.Test;
 
@@ -74,7 +75,8 @@ class PurchaseInboundServiceTest {
                 warehouseSelectionSupport,
                 purchaseInboundItemRepository,
                 purchaseOrderItemQueryService,
-                salesOrderItemQueryService
+                salesOrderItemQueryService,
+                mock(WorkflowTransitionGuard.class)
         );
 
         PurchaseInboundRequest request = request();
@@ -120,7 +122,8 @@ class PurchaseInboundServiceTest {
                 mock(WarehouseSelectionSupport.class),
                 mock(PurchaseInboundItemRepository.class),
                 mock(PurchaseOrderItemQueryService.class),
-                salesOrderItemQueryService
+                salesOrderItemQueryService,
+                mock(WorkflowTransitionGuard.class)
         );
     }
 

@@ -3,6 +3,7 @@ package com.leo.erp.statement.freight.service;
 import java.math.BigDecimal;
 
 public record FreightStatementItemCommand(
+        Long id,
         String sourceNo,
         String customerName,
         String projectName,
