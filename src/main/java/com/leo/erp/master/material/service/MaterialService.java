@@ -64,12 +64,20 @@ public class MaterialService extends AbstractCrudService<Material, MaterialReque
         this.tradeItemMaterialSupport = tradeItemMaterialSupport;
     }
 
+    private static final String[] MATERIAL_SEARCH_FIELDS = {"materialCode", "brand", "spec"};
+
     public Page<MaterialResponse> page(PageQuery query, String keyword, String category, String material) {
         Specification<Material> spec = Specs.<Material>notDeleted()
-                .and(Specs.keywordLike(keyword, "materialCode", "brand", "spec"))
+                .and(Specs.keywordLike(keyword, MATERIAL_SEARCH_FIELDS))
                 .and(Specs.equalIfPresent("category", category))
                 .and(Specs.equalIfPresent("material", material));
         return page(query, spec, materialRepository);
+    }
+
+    @Transactional(readOnly = true)
+    public java.util.List<MaterialResponse> search(String keyword, int maxSize) {
+        return search(keyword, MATERIAL_SEARCH_FIELDS, maxSize,
+                Specs.notDeleted(), materialRepository);
     }
 
     @Override

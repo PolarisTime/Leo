@@ -36,6 +36,15 @@ public class MaterialController {
         this.materialService = materialService;
     }
 
+    @GetMapping("/search")
+    @RequiresPermission(resource = "material", action = "read")
+    public ApiResponse<java.util.List<MaterialResponse>> search(
+            @RequestParam(required = false) String keyword,
+            @RequestParam(defaultValue = "100") int limit
+    ) {
+        return ApiResponse.success(materialService.search(keyword != null ? keyword : "", Math.min(limit, 500)));
+    }
+
     @GetMapping
     @RequiresPermission(resource = "material", action = "read")
     public ApiResponse<PageResponse<MaterialResponse>> page(

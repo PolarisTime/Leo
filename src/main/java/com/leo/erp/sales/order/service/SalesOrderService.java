@@ -75,6 +75,13 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
         return page(query, spec, repository);
     }
 
+    private static final String[] SALES_ORDER_SEARCH_FIELDS = {"orderNo", "customerName", "projectName"};
+
+    @Transactional(readOnly = true)
+    public java.util.List<SalesOrderResponse> search(String keyword, int maxSize) {
+        return search(keyword, SALES_ORDER_SEARCH_FIELDS, maxSize, Specs.notDeleted(), repository);
+    }
+
     @Override
     protected SalesOrderResponse toDetailResponse(SalesOrder entity) {
         SalesOrderResponse response = salesOrderMapper.toResponse(entity);

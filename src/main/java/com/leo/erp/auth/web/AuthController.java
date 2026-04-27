@@ -9,10 +9,13 @@ import com.leo.erp.auth.web.dto.LogoutRequest;
 import com.leo.erp.auth.web.dto.RefreshTokenRequest;
 import com.leo.erp.auth.web.dto.TokenResponse;
 import com.leo.erp.common.api.ApiResponse;
+import com.leo.erp.common.support.IpResolutionService;
 import com.leo.erp.security.jwt.JwtTokenService;
+import com.leo.erp.security.permission.RateLimit;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
+import java.util.concurrent.TimeUnit;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -26,16 +29,20 @@ public class AuthController {
     private final AuthService authService;
     private final AuthTokenCookieService authTokenCookieService;
     private final JwtTokenService jwtTokenService;
+    private final IpResolutionService ipResolutionService;
 
     public AuthController(AuthService authService,
                           AuthTokenCookieService authTokenCookieService,
-                          JwtTokenService jwtTokenService) {
+                          JwtTokenService jwtTokenService,
+                          IpResolutionService ipResolutionService) {
         this.authService = authService;
         this.authTokenCookieService = authTokenCookieService;
         this.jwtTokenService = jwtTokenService;
+        this.ipResolutionService = ipResolutionService;
     }
 
     @PostMapping("/login")
+    @RateLimit(maxRequests = 5, duration = 1, timeUnit = TimeUnit.MINUTES)
     public ApiResponse<LoginResponseBody> login(@Valid @RequestBody LoginRequest request,
                                                 HttpServletRequest httpRequest,
                                                 HttpServletResponse httpResponse) {
@@ -103,11 +110,7 @@ public class AuthController {
     }
 
     private String resolveIp(HttpServletRequest request) {
-        String forwarded = request.getHeader("X-Forwarded-For");
-        if (forwarded != null && !forwarded.isBlank()) {
-            return forwarded.split(",")[0].trim();
-        }
-        return request.getRemoteAddr();
+        return ipResolutionService.resolveClientIpOrUnknown(request);
     }
 
     private LoginResponseBody attachRefreshCookieIfNeeded(LoginResponseBody result, HttpServletResponse response) {

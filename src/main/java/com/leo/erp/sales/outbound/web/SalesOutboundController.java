@@ -23,6 +23,15 @@ public class SalesOutboundController {
         this.service = service;
     }
 
+    @GetMapping("/search")
+    @RequiresPermission(resource = "sales-outbound", action = "read")
+    public ApiResponse<java.util.List<SalesOutboundResponse>> search(
+            @RequestParam(required = false) String keyword,
+            @RequestParam(defaultValue = "100") int limit
+    ) {
+        return ApiResponse.success(service.search(keyword != null ? keyword : "", Math.min(limit, 500)));
+    }
+
     @GetMapping
     @RequiresPermission(resource = "sales-outbound", action = "read")
     public ApiResponse<PageResponse<SalesOutboundResponse>> page(

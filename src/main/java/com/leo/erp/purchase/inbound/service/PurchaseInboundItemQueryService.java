@@ -4,6 +4,7 @@ import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.purchase.inbound.domain.entity.PurchaseInboundItem;
 import com.leo.erp.purchase.inbound.repository.PurchaseInboundItemRepository;
+import com.leo.erp.security.permission.ResourceRecordAccessGuard;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -15,10 +16,15 @@ import java.util.stream.Collectors;
 @Service
 public class PurchaseInboundItemQueryService {
 
-    private final PurchaseInboundItemRepository repository;
+    private static final String PARENT_MODULE_KEY = "purchase-inbound";
 
-    public PurchaseInboundItemQueryService(PurchaseInboundItemRepository repository) {
+    private final PurchaseInboundItemRepository repository;
+    private final ResourceRecordAccessGuard accessGuard;
+
+    public PurchaseInboundItemQueryService(PurchaseInboundItemRepository repository,
+                                            ResourceRecordAccessGuard accessGuard) {
         this.repository = repository;
+        this.accessGuard = accessGuard;
     }
 
     @Transactional(readOnly = true)
@@ -26,7 +32,13 @@ public class PurchaseInboundItemQueryService {
         if (ids == null || ids.isEmpty()) {
             return List.of();
         }
-        return repository.findAllActiveByIdIn(ids);
+        List<PurchaseInboundItem> items = repository.findAllActiveByIdIn(ids);
+        for (PurchaseInboundItem item : items) {
+            if (item.getPurchaseInbound() != null) {
+                accessGuard.assertCurrentUserCanAccess(PARENT_MODULE_KEY, "read", item.getPurchaseInbound());
+            }
+        }
+        return items;
     }
 
     @Transactional(readOnly = true)

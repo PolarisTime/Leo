@@ -79,6 +79,13 @@ public class PurchaseInboundService extends AbstractCrudService<PurchaseInbound,
         return page(query, spec, repository);
     }
 
+    private static final String[] INBOUND_SEARCH_FIELDS = {"inboundNo", "purchaseOrderNo", "supplierName"};
+
+    @Transactional(readOnly = true)
+    public java.util.List<PurchaseInboundResponse> search(String keyword, int maxSize) {
+        return search(keyword, INBOUND_SEARCH_FIELDS, maxSize, Specs.notDeleted(), repository);
+    }
+
     @Override
     protected PurchaseInboundResponse toDetailResponse(PurchaseInbound inbound) {
         Map<Long, Integer> allocatedQuantityMap = loadAllocatedQuantityMap(inbound);

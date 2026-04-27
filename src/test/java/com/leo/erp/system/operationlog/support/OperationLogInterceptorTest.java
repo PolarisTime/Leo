@@ -1,6 +1,7 @@
 package com.leo.erp.system.operationlog.support;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.leo.erp.common.support.IpResolutionService;
 import com.leo.erp.common.support.ModuleCatalog;
 import com.leo.erp.security.permission.RequiresPermission;
 import com.leo.erp.system.norule.service.SystemSwitchService;
@@ -23,7 +24,8 @@ class OperationLogInterceptorTest {
                 new OperationLogService(null, null, null, null),
                 new ObjectMapper(),
                 new ModuleCatalog(),
-                systemSwitchService
+                systemSwitchService,
+                new IpResolutionService("")
         );
         MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/purchase-orders");
 
@@ -46,7 +48,8 @@ class OperationLogInterceptorTest {
                 new OperationLogService(null, null, null, null),
                 new ObjectMapper(),
                 new ModuleCatalog(),
-                systemSwitchService
+                systemSwitchService,
+                new IpResolutionService("")
         );
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/purchase-orders");
 
@@ -68,7 +71,8 @@ class OperationLogInterceptorTest {
                 new OperationLogService(null, null, null, null),
                 new ObjectMapper(),
                 new ModuleCatalog(),
-                systemSwitchService
+                systemSwitchService,
+                new IpResolutionService("")
         );
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/purchase-orders");
 
@@ -93,7 +97,8 @@ class OperationLogInterceptorTest {
                 new OperationLogService(null, null, null, null),
                 new ObjectMapper(),
                 new ModuleCatalog(),
-                systemSwitchService
+                systemSwitchService,
+                new IpResolutionService("")
         );
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/purchase-orders/1");
         request.setAttribute(HandlerMapping.URI_TEMPLATE_VARIABLES_ATTRIBUTE, java.util.Map.of("id", "1"));
@@ -117,7 +122,8 @@ class OperationLogInterceptorTest {
                 new OperationLogService(null, null, null, null),
                 new ObjectMapper(),
                 new ModuleCatalog(),
-                systemSwitchService
+                systemSwitchService,
+                new IpResolutionService("")
         );
         MockHttpServletRequest request = new MockHttpServletRequest("PUT", "/api/purchase-orders/1");
 
@@ -137,7 +143,8 @@ class OperationLogInterceptorTest {
                 new OperationLogService(null, null, null, null),
                 new ObjectMapper(),
                 new ModuleCatalog(),
-                systemSwitchService
+                systemSwitchService,
+                new IpResolutionService("")
         );
         MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/purchase-orders");
 
@@ -157,7 +164,8 @@ class OperationLogInterceptorTest {
                 new OperationLogService(null, null, null, null),
                 new ObjectMapper(),
                 new ModuleCatalog(),
-                systemSwitchService
+                systemSwitchService,
+                new IpResolutionService("")
         );
         MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/manual-log");
 
@@ -181,7 +189,8 @@ class OperationLogInterceptorTest {
                 new OperationLogService(null, null, null, null),
                 new ObjectMapper(),
                 new ModuleCatalog(),
-                systemSwitchService
+                systemSwitchService,
+                new IpResolutionService("")
         );
         MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/role-settings");
 

@@ -1,28 +1,28 @@
 package com.leo.erp.report.inventory.service;
 
 import com.leo.erp.common.api.PageQuery;
-import com.leo.erp.common.error.BusinessException;
+import com.leo.erp.report.inventory.repository.InventoryReportQueryRepository;
 import org.junit.jupiter.api.Test;
+import org.springframework.data.domain.PageImpl;
 
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import java.util.List;
+
+import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 class InventoryReportServiceTest {
 
     @Test
-    void shouldRejectUnknownWarehouseNameFilter() {
-        InventoryReportService service = new InventoryReportService(null);
+    void shouldNormalizeWarehouseNameAndCategoryWithoutRejectingUnknownValues() {
+        InventoryReportQueryRepository repo = mock(InventoryReportQueryRepository.class);
+        PageQuery query = new PageQuery(0, 20, null, null);
+        when(repo.page(query, null, "任意仓库名", "任意类别")).thenReturn(new PageImpl<>(List.of()));
+        InventoryReportService service = new InventoryReportService(repo);
 
-        assertThatThrownBy(() -> service.page(new PageQuery(0, 20, null, null), null, "未知仓库", null))
-                .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("warehouseName 不合法");
-    }
-
-    @Test
-    void shouldRejectUnknownCategoryFilter() {
-        InventoryReportService service = new InventoryReportService(null);
-
-        assertThatThrownBy(() -> service.page(new PageQuery(0, 20, null, null), null, null, "未知类别"))
-                .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("category 不合法");
+        assertThatCode(() -> service.page(query, null, " 任意仓库名 ", " 任意类别 "))
+                .doesNotThrowAnyException();
+        verify(repo).page(query, null, "任意仓库名", "任意类别");
     }
 }

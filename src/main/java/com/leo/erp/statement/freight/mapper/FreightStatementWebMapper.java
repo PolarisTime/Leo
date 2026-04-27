@@ -63,6 +63,7 @@ public class FreightStatementWebMapper {
 
     private FreightStatementItemCommand toItemCommand(FreightBillItemRequest item) {
         return new FreightStatementItemCommand(
+                item.id(),
                 item.sourceNo(),
                 item.customerName(),
                 item.projectName(),

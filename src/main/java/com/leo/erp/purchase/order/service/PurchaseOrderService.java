@@ -58,6 +58,8 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
         this.workflowTransitionGuard = workflowTransitionGuard;
     }
 
+    private static final String[] PURCHASE_ORDER_SEARCH_FIELDS = {"orderNo", "supplierName"};
+
     @Transactional(readOnly = true)
     public Page<PurchaseOrderResponse> page(PageQuery query,
                                             String keyword,
@@ -66,11 +68,17 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
                                             java.time.LocalDate startDate,
                                             java.time.LocalDate endDate) {
         Specification<PurchaseOrder> spec = Specs.<PurchaseOrder>notDeleted()
-                .and(Specs.keywordLike(keyword, "orderNo", "supplierName"))
+                .and(Specs.keywordLike(keyword, PURCHASE_ORDER_SEARCH_FIELDS))
                 .and(Specs.equalIfPresent("supplierName", supplierName))
                 .and(Specs.equalIfPresent("status", status))
                 .and(Specs.betweenIfPresent("orderDate", startDate, endDate));
         return page(query, spec, purchaseOrderRepository);
+    }
+
+    @Transactional(readOnly = true)
+    public java.util.List<PurchaseOrderResponse> search(String keyword, int maxSize) {
+        return search(keyword, PURCHASE_ORDER_SEARCH_FIELDS, maxSize,
+                Specs.notDeleted(), purchaseOrderRepository);
     }
 
     @Override

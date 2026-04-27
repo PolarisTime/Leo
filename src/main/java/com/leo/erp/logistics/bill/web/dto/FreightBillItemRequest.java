@@ -24,7 +24,7 @@ public record FreightBillItemRequest(
         @NotNull @DecimalMin("0.000") BigDecimal pieceWeightTon,
         @NotNull @Min(0) Integer piecesPerBundle,
         String batchNo,
-        @NotNull @DecimalMin("0.000") BigDecimal weightTon,
+        BigDecimal weightTon,
         String warehouseName
 ) {
     public FreightBillItemRequest(String sourceNo,

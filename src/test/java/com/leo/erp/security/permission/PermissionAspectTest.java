@@ -11,6 +11,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 
 import java.lang.reflect.Proxy;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -88,6 +89,28 @@ class PermissionAspectTest {
 
         assertThat(result).isNull();
         assertThat(proceeded.get()).isTrue();
+    }
+
+    @Test
+    void shouldRestorePreviousDataScopeContextAfterProceeding() throws Throwable {
+        AtomicBoolean proceeded = new AtomicBoolean(false);
+        PermissionAspect aspect = new PermissionAspect(permissionService(true));
+        UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
+                principal(),
+                null,
+                List.of()
+        );
+        SecurityContextHolder.getContext().setAuthentication(authentication);
+        DataScopeContext.set(9L, "receipt", ResourcePermissionCatalog.SCOPE_SELF, Set.of(9L));
+
+        aspect.checkPermission(joinPoint(proceeded), requiresPermission("sales-order", "read"));
+
+        assertThat(proceeded.get()).isTrue();
+        assertThat(DataScopeContext.current()).isNotNull();
+        assertThat(DataScopeContext.current().userId()).isEqualTo(9L);
+        assertThat(DataScopeContext.current().resource()).isEqualTo("receipt");
+        assertThat(DataScopeContext.current().scope()).isEqualTo(ResourcePermissionCatalog.SCOPE_SELF);
+        assertThat(DataScopeContext.current().ownerUserIds()).containsExactly(9L);
     }
 
     @Test

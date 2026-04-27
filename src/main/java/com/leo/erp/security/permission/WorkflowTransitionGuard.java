@@ -37,11 +37,15 @@ public class WorkflowTransitionGuard {
             return;
         }
 
-        boolean protectedTransition = protectedValues.stream()
+        var normalizedProtected = protectedValues.stream()
                 .map(this::normalize)
                 .filter(value -> !value.isEmpty())
-                .anyMatch(normalizedNextValue::equals);
-        if (!protectedTransition) {
+                .toList();
+
+        boolean enteringProtected = normalizedProtected.stream().anyMatch(normalizedNextValue::equals);
+        boolean leavingProtected = normalizedProtected.stream().anyMatch(normalizedCurrentValue::equals);
+
+        if (!enteringProtected && !leavingProtected) {
             return;
         }
 

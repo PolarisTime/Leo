@@ -23,6 +23,15 @@ public class PurchaseInboundController {
         this.service = service;
     }
 
+    @GetMapping("/search")
+    @RequiresPermission(resource = "purchase-inbound", action = "read")
+    public ApiResponse<java.util.List<PurchaseInboundResponse>> search(
+            @RequestParam(required = false) String keyword,
+            @RequestParam(defaultValue = "100") int limit
+    ) {
+        return ApiResponse.success(service.search(keyword != null ? keyword : "", Math.min(limit, 500)));
+    }
+
     @GetMapping
     @RequiresPermission(resource = "purchase-inbound", action = "read")
     public ApiResponse<PageResponse<PurchaseInboundResponse>> page(
