@@ -1,0 +1,21 @@
+package com.leo.erp.common.web;
+
+import java.lang.annotation.ElementType;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.lang.annotation.Target;
+
+@Target(ElementType.PARAMETER)
+@Retention(RetentionPolicy.RUNTIME)
+public @interface BindPageQuery {
+
+    String sortFieldKey() default "";
+
+    String pageParam() default "page";
+
+    String sizeParam() default "size";
+
+    String sortByParam() default "sortBy";
+
+    String directionParam() default "direction";
+}

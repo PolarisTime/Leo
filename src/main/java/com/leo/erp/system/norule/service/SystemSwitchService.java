@@ -1,0 +1,87 @@
+package com.leo.erp.system.norule.service;
+
+import com.leo.erp.system.norule.repository.NoRuleRepository;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.Arrays;
+import java.util.LinkedHashSet;
+import java.util.Set;
+
+@Service
+public class SystemSwitchService {
+
+    public static final String BATCH_NO_AUTO_GENERATE_SWITCH = "SYS_BATCH_NO_AUTO_GENERATE";
+    public static final String OPERATION_LOG_RECORD_ALL_WRITE_SWITCH = "SYS_OPERATION_LOG_RECORD_ALL_WRITE";
+    public static final String OPERATION_LOG_DETAILED_PAGE_ACTIONS_SWITCH = "SYS_OPERATION_LOG_DETAILED_PAGE_ACTIONS";
+    public static final String AUTH_OPERATION_LOG_SWITCH = "SYS_OPERATION_LOG_RECORD_AUTH_EVENTS";
+    public static final String FORCE_USER_TOTP_ON_FIRST_LOGIN_SWITCH = "SYS_FORCE_USER_TOTP_ON_FIRST_LOGIN";
+    private static final Set<String> DEFAULT_DETAILED_PAGE_ACTIONS = Set.of(
+            "QUERY", "DETAIL", "CREATE", "EDIT", "DELETE", "AUDIT", "EXPORT", "PRINT"
+    );
+
+    private final NoRuleRepository noRuleRepository;
+
+    public SystemSwitchService(NoRuleRepository noRuleRepository) {
+        this.noRuleRepository = noRuleRepository;
+    }
+
+    @Transactional(readOnly = true)
+    public boolean isEnabled(String settingCode) {
+        return noRuleRepository.findBySettingCodeAndDeletedFlagFalse(settingCode)
+                .map(rule -> "正常".equals(rule.getStatus()))
+                .orElse(false);
+    }
+
+    @Transactional(readOnly = true)
+    public boolean shouldAutoRecordAllWriteOperations() {
+        return isEnabled(OPERATION_LOG_RECORD_ALL_WRITE_SWITCH);
+    }
+
+    @Transactional(readOnly = true)
+    public boolean shouldRecordDetailedPageActions() {
+        return isEnabled(OPERATION_LOG_DETAILED_PAGE_ACTIONS_SWITCH);
+    }
+
+    @Transactional(readOnly = true)
+    public boolean shouldRecordDetailedPageAction(String actionKey) {
+        if (actionKey == null || actionKey.isBlank()) {
+            return false;
+        }
+        return resolveDetailedPageActionKeys().contains(actionKey.trim().toUpperCase());
+    }
+
+    @Transactional(readOnly = true)
+    public boolean shouldAutoGenerateBatchNo() {
+        return isEnabled(BATCH_NO_AUTO_GENERATE_SWITCH);
+    }
+
+    @Transactional(readOnly = true)
+    public boolean shouldRecordAuthenticationOperationLogs() {
+        return isEnabled(AUTH_OPERATION_LOG_SWITCH);
+    }
+
+    @Transactional(readOnly = true)
+    public boolean shouldForceUserTotpOnFirstLogin() {
+        return isEnabled(FORCE_USER_TOTP_ON_FIRST_LOGIN_SWITCH);
+    }
+
+    private Set<String> resolveDetailedPageActionKeys() {
+        return noRuleRepository.findBySettingCodeAndDeletedFlagFalse(OPERATION_LOG_DETAILED_PAGE_ACTIONS_SWITCH)
+                .map(rule -> parseDetailedPageActionKeys(rule.getSampleNo()))
+                .orElse(DEFAULT_DETAILED_PAGE_ACTIONS);
+    }
+
+    private Set<String> parseDetailedPageActionKeys(String sampleNo) {
+        if (sampleNo == null || sampleNo.isBlank()) {
+            return DEFAULT_DETAILED_PAGE_ACTIONS;
+        }
+        Set<String> selected = Arrays.stream(sampleNo.split(","))
+                .map(String::trim)
+                .filter(item -> !item.isEmpty())
+                .map(String::toUpperCase)
+                .filter(DEFAULT_DETAILED_PAGE_ACTIONS::contains)
+                .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
+        return selected.isEmpty() ? DEFAULT_DETAILED_PAGE_ACTIONS : selected;
+    }
+}

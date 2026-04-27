@@ -1,0 +1,351 @@
+package com.leo.erp.finance.invoicereceipt.service;
+
+import com.leo.erp.common.api.PageQuery;
+import com.leo.erp.common.error.BusinessException;
+import com.leo.erp.common.error.ErrorCode;
+import com.leo.erp.common.persistence.Specs;
+import com.leo.erp.common.service.AbstractCrudService;
+import com.leo.erp.common.support.SnowflakeIdGenerator;
+import com.leo.erp.common.support.TradeItemCalculator;
+import com.leo.erp.finance.invoicereceipt.domain.entity.InvoiceReceipt;
+import com.leo.erp.finance.invoicereceipt.domain.entity.InvoiceReceiptItem;
+import com.leo.erp.finance.invoicereceipt.repository.InvoiceReceiptRepository;
+import com.leo.erp.finance.invoicereceipt.mapper.InvoiceReceiptMapper;
+import com.leo.erp.finance.invoicereceipt.web.dto.InvoiceReceiptItemRequest;
+import com.leo.erp.finance.invoicereceipt.web.dto.InvoiceReceiptItemResponse;
+import com.leo.erp.finance.invoicereceipt.web.dto.InvoiceReceiptRequest;
+import com.leo.erp.finance.invoicereceipt.web.dto.InvoiceReceiptResponse;
+import com.leo.erp.purchase.order.domain.entity.PurchaseOrderItem;
+import com.leo.erp.purchase.order.service.PurchaseOrderItemQueryService;
+import com.leo.erp.system.company.service.CompanySettingService;
+import org.springframework.data.domain.Page;
+import org.springframework.data.jpa.domain.Specification;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+
+@Service
+public class InvoiceReceiptService extends AbstractCrudService<InvoiceReceipt, InvoiceReceiptRequest, InvoiceReceiptResponse> {
+
+    private final InvoiceReceiptRepository repository;
+    private final InvoiceReceiptMapper mapper;
+    private final CompanySettingService companySettingService;
+    private final PurchaseOrderItemQueryService purchaseOrderItemQueryService;
+
+    public InvoiceReceiptService(InvoiceReceiptRepository repository,
+                                 SnowflakeIdGenerator idGenerator,
+                                 InvoiceReceiptMapper mapper,
+                                 CompanySettingService companySettingService,
+                                 PurchaseOrderItemQueryService purchaseOrderItemQueryService) {
+        super(idGenerator);
+        this.repository = repository;
+        this.mapper = mapper;
+        this.companySettingService = companySettingService;
+        this.purchaseOrderItemQueryService = purchaseOrderItemQueryService;
+    }
+
+    @Transactional(readOnly = true)
+    public Page<InvoiceReceiptResponse> page(PageQuery query,
+                                             String keyword,
+                                             String supplierName,
+                                             String status,
+                                             LocalDate startDate,
+                                             LocalDate endDate) {
+        Specification<InvoiceReceipt> spec = Specs.<InvoiceReceipt>notDeleted()
+                .and(Specs.keywordLike(keyword, "receiveNo", "invoiceNo", "sourcePurchaseOrderNos", "supplierName"))
+                .and(Specs.equalIfPresent("supplierName", supplierName))
+                .and(Specs.equalIfPresent("status", status))
+                .and((root, criteriaQuery, criteriaBuilder) ->
+                        startDate == null ? criteriaBuilder.conjunction() : criteriaBuilder.greaterThanOrEqualTo(root.get("invoiceDate"), startDate))
+                .and((root, criteriaQuery, criteriaBuilder) ->
+                        endDate == null ? criteriaBuilder.conjunction() : criteriaBuilder.lessThanOrEqualTo(root.get("invoiceDate"), endDate));
+        return page(query, spec, repository);
+    }
+
+    @Override
+    protected InvoiceReceiptResponse toDetailResponse(InvoiceReceipt entity) {
+        InvoiceReceiptResponse response = mapper.toResponse(entity);
+        return new InvoiceReceiptResponse(
+                response.id(),
+                response.receiveNo(),
+                response.invoiceNo(),
+                response.sourcePurchaseOrderNos(),
+                response.supplierName(),
+                response.invoiceTitle(),
+                response.invoiceDate(),
+                response.invoiceType(),
+                response.amount(),
+                response.taxAmount(),
+                response.status(),
+                response.operatorName(),
+                response.remark(),
+                entity.getItems().stream().map(this::toItemResponse).toList()
+        );
+    }
+
+    @Override
+    protected InvoiceReceiptResponse toSavedResponse(InvoiceReceipt entity) {
+        return toDetailResponse(entity);
+    }
+
+    @Override
+    protected void validateCreate(InvoiceReceiptRequest request) {
+        if (repository.existsByReceiveNoAndDeletedFlagFalse(request.receiveNo())) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "收票单号已存在");
+        }
+    }
+
+    @Override
+    protected void validateUpdate(InvoiceReceipt entity, InvoiceReceiptRequest request) {
+        if (!entity.getReceiveNo().equals(request.receiveNo())
+                && repository.existsByReceiveNoAndDeletedFlagFalse(request.receiveNo())) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "收票单号已存在");
+        }
+    }
+
+    @Override
+    protected InvoiceReceipt newEntity() {
+        return new InvoiceReceipt();
+    }
+
+    @Override
+    protected void assignId(InvoiceReceipt entity, Long id) {
+        entity.setId(id);
+    }
+
+    @Override
+    protected Optional<InvoiceReceipt> findActiveEntity(Long id) {
+        return repository.findByIdAndDeletedFlagFalse(id);
+    }
+
+    @Override
+    protected String notFoundMessage() {
+        return "收票单不存在";
+    }
+
+    @Override
+    protected void apply(InvoiceReceipt entity, InvoiceReceiptRequest request) {
+        entity.setReceiveNo(request.receiveNo());
+        entity.setInvoiceNo(request.invoiceNo());
+        entity.setSupplierName(request.supplierName());
+        entity.setInvoiceTitle(request.invoiceTitle() == null || request.invoiceTitle().isBlank()
+                ? request.supplierName()
+                : request.invoiceTitle().trim());
+        entity.setInvoiceDate(request.invoiceDate());
+        entity.setInvoiceType(request.invoiceType());
+        entity.setStatus(request.status());
+        entity.setOperatorName(request.operatorName());
+        entity.setRemark(request.remark());
+
+        List<Long> sourceItemIds = request.items().stream()
+                .map(InvoiceReceiptItemRequest::sourcePurchaseOrderItemId)
+                .filter(id -> id != null)
+                .distinct()
+                .toList();
+        Map<Long, PurchaseOrderItem> sourcePurchaseOrderItemMap = loadSourcePurchaseOrderItemMap(sourceItemIds);
+        Map<Long, InvoiceAllocationProgress> allocatedProgressMap = loadAllocatedProgressMap(sourceItemIds, entity.getId());
+        Map<Long, InvoiceAllocationProgress> requestProgressMap = new java.util.HashMap<>();
+        entity.getItems().clear();
+        LinkedHashSet<String> sourcePurchaseOrderNos = new LinkedHashSet<>();
+        List<InvoiceReceiptItem> items = new ArrayList<>();
+        BigDecimal amount = BigDecimal.ZERO;
+        for (int i = 0; i < request.items().size(); i++) {
+            InvoiceReceiptItemRequest source = request.items().get(i);
+            ResolvedInvoiceReceiptItem resolvedItem = resolveItem(source);
+            validateSourcePurchaseOrderAllocation(
+                    source,
+                    i + 1,
+                    resolvedItem,
+                    sourcePurchaseOrderItemMap,
+                    allocatedProgressMap,
+                    requestProgressMap
+            );
+            InvoiceReceiptItem item = new InvoiceReceiptItem();
+            item.setId(nextId());
+            item.setInvoiceReceipt(entity);
+            item.setLineNo(i + 1);
+            item.setSourceNo(source.sourceNo());
+            item.setSourcePurchaseOrderItemId(source.sourcePurchaseOrderItemId());
+            item.setMaterialCode(source.materialCode());
+            item.setBrand(source.brand());
+            item.setCategory(source.category());
+            item.setMaterial(source.material());
+            item.setSpec(source.spec());
+            item.setLength(source.length());
+            item.setUnit(source.unit());
+            item.setWarehouseName(source.warehouseName());
+            item.setBatchNo(source.batchNo());
+            item.setQuantity(source.quantity());
+            item.setQuantityUnit(TradeItemCalculator.normalizeQuantityUnit(source.quantityUnit()));
+            item.setPieceWeightTon(source.pieceWeightTon());
+            item.setPiecesPerBundle(source.piecesPerBundle());
+            item.setWeightTon(resolvedItem.weightTon());
+            item.setUnitPrice(source.unitPrice());
+            BigDecimal lineAmount = resolvedItem.amount();
+            item.setAmount(lineAmount);
+            items.add(item);
+            sourcePurchaseOrderNos.add(source.sourceNo());
+            amount = amount.add(lineAmount);
+        }
+        entity.getItems().addAll(items);
+        entity.setSourcePurchaseOrderNos(String.join(", ", sourcePurchaseOrderNos));
+        entity.setAmount(amount);
+        validateDeclaredAmount("收票", request.amount(), amount);
+        entity.setTaxAmount(calculateTaxAmount(amount, request.taxAmount()));
+    }
+
+    @Override
+    protected InvoiceReceipt saveEntity(InvoiceReceipt entity) {
+        return repository.save(entity);
+    }
+
+    @Override
+    protected InvoiceReceiptResponse toResponse(InvoiceReceipt entity) {
+        return mapper.toResponse(entity);
+    }
+
+    private Map<Long, PurchaseOrderItem> loadSourcePurchaseOrderItemMap(List<Long> sourceItemIds) {
+        if (sourceItemIds.isEmpty()) {
+            return Map.of();
+        }
+        return purchaseOrderItemQueryService.findActiveByIdIn(sourceItemIds).stream()
+                .collect(java.util.HashMap::new, (map, item) -> map.put(item.getId(), item), java.util.HashMap::putAll);
+    }
+
+    private Map<Long, InvoiceAllocationProgress> loadAllocatedProgressMap(List<Long> sourceItemIds, Long currentReceiptId) {
+        if (sourceItemIds.isEmpty()) {
+            return Map.of();
+        }
+        return repository.summarizeAllocatedBySourcePurchaseOrderItemIds(sourceItemIds, currentReceiptId).stream()
+                .collect(java.util.HashMap::new, (map, summary) -> map.put(
+                        summary.getSourcePurchaseOrderItemId(),
+                        new InvoiceAllocationProgress(safe(summary.getTotalWeightTon()), safe(summary.getTotalAmount()))
+                ), java.util.HashMap::putAll);
+    }
+
+    private void validateSourcePurchaseOrderAllocation(InvoiceReceiptItemRequest source,
+                                                       int lineNo,
+                                                       ResolvedInvoiceReceiptItem resolvedItem,
+                                                       Map<Long, PurchaseOrderItem> sourcePurchaseOrderItemMap,
+                                                       Map<Long, InvoiceAllocationProgress> allocatedProgressMap,
+                                                       Map<Long, InvoiceAllocationProgress> requestProgressMap) {
+        Long sourcePurchaseOrderItemId = source.sourcePurchaseOrderItemId();
+        if (sourcePurchaseOrderItemId == null) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行来源采购订单明细不能为空");
+        }
+
+        PurchaseOrderItem sourcePurchaseOrderItem = sourcePurchaseOrderItemMap.get(sourcePurchaseOrderItemId);
+        if (sourcePurchaseOrderItem == null) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行来源采购订单明细不存在");
+        }
+
+        InvoiceAllocationProgress allocatedProgress = allocatedProgressMap.getOrDefault(
+                sourcePurchaseOrderItemId,
+                InvoiceAllocationProgress.EMPTY
+        );
+        InvoiceAllocationProgress requestProgress = requestProgressMap.getOrDefault(
+                sourcePurchaseOrderItemId,
+                InvoiceAllocationProgress.EMPTY
+        );
+        BigDecimal nextWeightTon = allocatedProgress.weightTon()
+                .add(requestProgress.weightTon())
+                .add(resolvedItem.weightTon());
+        if (nextWeightTon.compareTo(safe(sourcePurchaseOrderItem.getWeightTon())) > 0) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行来源采购订单明细可收票吨位不足");
+        }
+
+        BigDecimal nextAmount = allocatedProgress.amount()
+                .add(requestProgress.amount())
+                .add(resolvedItem.amount());
+        if (nextAmount.compareTo(safe(sourcePurchaseOrderItem.getAmount())) > 0) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行来源采购订单明细可收票金额不足");
+        }
+
+        requestProgressMap.merge(
+                sourcePurchaseOrderItemId,
+                new InvoiceAllocationProgress(resolvedItem.weightTon(), resolvedItem.amount()),
+                InvoiceAllocationProgress::merge
+        );
+    }
+
+    private ResolvedInvoiceReceiptItem resolveItem(InvoiceReceiptItemRequest source) {
+        BigDecimal weightTon = resolveWeightTon(source.quantity(), source.pieceWeightTon(), source.weightTon());
+        BigDecimal amount = TradeItemCalculator.calculateAmount(weightTon, source.unitPrice());
+        return new ResolvedInvoiceReceiptItem(weightTon, amount);
+    }
+
+    private BigDecimal resolveWeightTon(Integer quantity, BigDecimal pieceWeightTon, BigDecimal weightTon) {
+        if (weightTon != null && weightTon.compareTo(BigDecimal.ZERO) > 0) {
+            return weightTon.setScale(3, RoundingMode.HALF_UP);
+        }
+        return TradeItemCalculator.calculateWeightTon(quantity, pieceWeightTon);
+    }
+
+    private BigDecimal calculateTaxAmount(BigDecimal amount, BigDecimal requestedTaxAmount) {
+        BigDecimal taxRate = companySettingService.resolveCurrentTaxRate();
+        if (taxRate.compareTo(BigDecimal.ZERO) <= 0) {
+            return requestedTaxAmount == null ? BigDecimal.ZERO : requestedTaxAmount;
+        }
+        return amount.multiply(taxRate).setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private void validateDeclaredAmount(String fieldLabel, BigDecimal requestValue, BigDecimal calculatedValue) {
+        if (requestValue != null && requestValue.compareTo(calculatedValue) != 0) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, fieldLabel + "与明细计算结果不一致");
+        }
+    }
+
+    private BigDecimal safe(BigDecimal value) {
+        return value == null ? BigDecimal.ZERO : value;
+    }
+
+    private InvoiceReceiptItemResponse toItemResponse(InvoiceReceiptItem item) {
+        return new InvoiceReceiptItemResponse(
+                item.getId(),
+                item.getLineNo(),
+                item.getSourceNo(),
+                item.getSourcePurchaseOrderItemId(),
+                item.getMaterialCode(),
+                item.getBrand(),
+                item.getCategory(),
+                item.getMaterial(),
+                item.getSpec(),
+                item.getLength(),
+                item.getUnit(),
+                item.getWarehouseName(),
+                item.getBatchNo(),
+                item.getQuantity(),
+                item.getQuantityUnit(),
+                item.getPieceWeightTon(),
+                item.getPiecesPerBundle(),
+                item.getWeightTon(),
+                item.getUnitPrice(),
+                item.getAmount()
+        );
+    }
+
+    private record ResolvedInvoiceReceiptItem(
+            BigDecimal weightTon,
+            BigDecimal amount
+    ) {
+    }
+
+    private record InvoiceAllocationProgress(
+            BigDecimal weightTon,
+            BigDecimal amount
+    ) {
+        private static final InvoiceAllocationProgress EMPTY = new InvoiceAllocationProgress(BigDecimal.ZERO, BigDecimal.ZERO);
+
+        private InvoiceAllocationProgress merge(InvoiceAllocationProgress other) {
+            return new InvoiceAllocationProgress(weightTon.add(other.weightTon), amount.add(other.amount));
+        }
+    }
+}
