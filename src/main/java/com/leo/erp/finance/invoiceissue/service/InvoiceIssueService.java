@@ -5,6 +5,7 @@ import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.service.AbstractCrudService;
+import com.leo.erp.common.support.ManagedEntityItemSupport;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.TradeItemCalculator;
 import com.leo.erp.finance.invoiceissue.domain.entity.InvoiceIssue;
@@ -15,6 +16,7 @@ import com.leo.erp.finance.invoiceissue.web.dto.InvoiceIssueItemRequest;
 import com.leo.erp.finance.invoiceissue.web.dto.InvoiceIssueItemResponse;
 import com.leo.erp.finance.invoiceissue.web.dto.InvoiceIssueRequest;
 import com.leo.erp.finance.invoiceissue.web.dto.InvoiceIssueResponse;
+import com.leo.erp.security.permission.WorkflowTransitionGuard;
 import com.leo.erp.sales.order.domain.entity.SalesOrderItem;
 import com.leo.erp.sales.order.service.SalesOrderItemQueryService;
 import com.leo.erp.system.company.service.CompanySettingService;
@@ -26,7 +28,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -40,17 +41,20 @@ public class InvoiceIssueService extends AbstractCrudService<InvoiceIssue, Invoi
     private final SalesOrderItemQueryService salesOrderItemQueryService;
     private final InvoiceIssueMapper mapper;
     private final CompanySettingService companySettingService;
+    private final WorkflowTransitionGuard workflowTransitionGuard;
 
     public InvoiceIssueService(InvoiceIssueRepository repository,
                                SalesOrderItemQueryService salesOrderItemQueryService,
                                SnowflakeIdGenerator idGenerator,
                                InvoiceIssueMapper mapper,
-                               CompanySettingService companySettingService) {
+                               CompanySettingService companySettingService,
+                               WorkflowTransitionGuard workflowTransitionGuard) {
         super(idGenerator);
         this.repository = repository;
         this.salesOrderItemQueryService = salesOrderItemQueryService;
         this.mapper = mapper;
         this.companySettingService = companySettingService;
+        this.workflowTransitionGuard = workflowTransitionGuard;
     }
 
     @Transactional(readOnly = true)
@@ -64,10 +68,7 @@ public class InvoiceIssueService extends AbstractCrudService<InvoiceIssue, Invoi
                 .and(Specs.keywordLike(keyword, "issueNo", "invoiceNo", "sourceSalesOrderNos", "customerName", "projectName"))
                 .and(Specs.equalIfPresent("customerName", customerName))
                 .and(Specs.equalIfPresent("status", status))
-                .and((root, criteriaQuery, criteriaBuilder) ->
-                        startDate == null ? criteriaBuilder.conjunction() : criteriaBuilder.greaterThanOrEqualTo(root.get("invoiceDate"), startDate))
-                .and((root, criteriaQuery, criteriaBuilder) ->
-                        endDate == null ? criteriaBuilder.conjunction() : criteriaBuilder.lessThanOrEqualTo(root.get("invoiceDate"), endDate));
+                .and(Specs.betweenIfPresent("invoiceDate", startDate, endDate));
         return page(query, spec, repository);
     }
 
@@ -134,6 +135,12 @@ public class InvoiceIssueService extends AbstractCrudService<InvoiceIssue, Invoi
 
     @Override
     protected void apply(InvoiceIssue entity, InvoiceIssueRequest request) {
+        workflowTransitionGuard.assertAuditPermissionForProtectedValue(
+                "invoice-issues",
+                entity.getStatus(),
+                request.status(),
+                "已开票"
+        );
         entity.setIssueNo(request.issueNo());
         entity.setInvoiceNo(request.invoiceNo());
         entity.setCustomerName(request.customerName());
@@ -153,7 +160,15 @@ public class InvoiceIssueService extends AbstractCrudService<InvoiceIssue, Invoi
         Map<Long, InvoiceAllocationProgress> allocatedProgressMap = loadAllocatedProgressMap(sourceItemIds, entity.getId());
         Map<Long, InvoiceAllocationProgress> requestProgressMap = new HashMap<>();
         LinkedHashSet<String> sourceSalesOrderNos = new LinkedHashSet<>();
-        List<InvoiceIssueItem> items = new ArrayList<>();
+        List<InvoiceIssueItem> items = ManagedEntityItemSupport.syncById(
+                entity.getItems(),
+                request.items(),
+                InvoiceIssueItem::getId,
+                InvoiceIssueItemRequest::id,
+                InvoiceIssueItem::new,
+                this::nextId,
+                InvoiceIssueItem::setId
+        );
         BigDecimal amount = BigDecimal.ZERO;
         for (int i = 0; i < request.items().size(); i++) {
             InvoiceIssueItemRequest source = request.items().get(i);
@@ -166,8 +181,7 @@ public class InvoiceIssueService extends AbstractCrudService<InvoiceIssue, Invoi
                     allocatedProgressMap,
                     requestProgressMap
             );
-            InvoiceIssueItem item = new InvoiceIssueItem();
-            item.setId(nextId());
+            InvoiceIssueItem item = items.get(i);
             item.setInvoiceIssue(entity);
             item.setLineNo(i + 1);
             item.setSourceNo(source.sourceNo());
@@ -189,12 +203,10 @@ public class InvoiceIssueService extends AbstractCrudService<InvoiceIssue, Invoi
             item.setUnitPrice(source.unitPrice());
             BigDecimal lineAmount = resolvedItem.amount();
             item.setAmount(lineAmount);
-            items.add(item);
             sourceSalesOrderNos.add(source.sourceNo());
             amount = amount.add(lineAmount);
         }
-        entity.getItems().clear();
-        entity.getItems().addAll(items);
+        entity.getItems().sort(java.util.Comparator.comparing(InvoiceIssueItem::getLineNo));
         entity.setSourceSalesOrderNos(String.join(", ", sourceSalesOrderNos));
         entity.setAmount(amount);
         validateDeclaredAmount("开票", request.amount(), amount);

@@ -7,6 +7,7 @@ import com.leo.erp.finance.payment.repository.PaymentRepository;
 import com.leo.erp.finance.payment.mapper.PaymentMapper;
 import com.leo.erp.finance.payment.web.dto.PaymentRequest;
 import com.leo.erp.security.permission.ResourceRecordAccessGuard;
+import com.leo.erp.security.permission.WorkflowTransitionGuard;
 import com.leo.erp.statement.service.StatementSettlementSyncService;
 import com.leo.erp.statement.freight.domain.entity.FreightStatement;
 import com.leo.erp.statement.freight.service.FreightStatementQueryService;
@@ -36,7 +37,8 @@ class PaymentServiceTest {
                 mock(SupplierStatementQueryService.class),
                 mock(FreightStatementQueryService.class),
                 mock(StatementSettlementSyncService.class),
-                mock(ResourceRecordAccessGuard.class)
+                mock(ResourceRecordAccessGuard.class),
+                mock(WorkflowTransitionGuard.class)
         );
 
         assertThatThrownBy(() -> service.create(buildRequest("供应商", null, "供应商A", new BigDecimal("100.00"), "已付款")))
@@ -68,7 +70,8 @@ class PaymentServiceTest {
                 supplierStatementQueryService,
                 mock(FreightStatementQueryService.class),
                 mock(StatementSettlementSyncService.class),
-                mock(ResourceRecordAccessGuard.class)
+                mock(ResourceRecordAccessGuard.class),
+                mock(WorkflowTransitionGuard.class)
         );
 
         assertThatThrownBy(() -> service.create(buildRequest("供应商", 11L, "供应商A", new BigDecimal("200.00"), "已付款")))
@@ -85,7 +88,8 @@ class PaymentServiceTest {
                 mock(SupplierStatementQueryService.class),
                 mock(FreightStatementQueryService.class),
                 mock(StatementSettlementSyncService.class),
-                mock(ResourceRecordAccessGuard.class)
+                mock(ResourceRecordAccessGuard.class),
+                mock(WorkflowTransitionGuard.class)
         );
 
         assertThatThrownBy(() -> service.create(buildRequest("物流商", null, "物流商A", new BigDecimal("100.00"), "已付款")))
@@ -117,7 +121,8 @@ class PaymentServiceTest {
                 mock(SupplierStatementQueryService.class),
                 freightStatementQueryService,
                 mock(StatementSettlementSyncService.class),
-                mock(ResourceRecordAccessGuard.class)
+                mock(ResourceRecordAccessGuard.class),
+                mock(WorkflowTransitionGuard.class)
         );
 
         assertThatThrownBy(() -> service.create(buildRequest("物流商", 31L, "物流商A", new BigDecimal("100.00"), "已付款")))
@@ -147,7 +152,8 @@ class PaymentServiceTest {
                 supplierStatementQueryService,
                 mock(FreightStatementQueryService.class),
                 mock(StatementSettlementSyncService.class),
-                resourceRecordAccessGuard
+                resourceRecordAccessGuard,
+                mock(WorkflowTransitionGuard.class)
         );
 
         assertThatThrownBy(() -> service.create(buildRequest("供应商", 11L, "供应商A", new BigDecimal("100.00"), "已付款")))
@@ -177,7 +183,8 @@ class PaymentServiceTest {
                 mock(SupplierStatementQueryService.class),
                 freightStatementQueryService,
                 mock(StatementSettlementSyncService.class),
-                resourceRecordAccessGuard
+                resourceRecordAccessGuard,
+                mock(WorkflowTransitionGuard.class)
         );
 
         assertThatThrownBy(() -> service.create(buildRequest("物流商", 31L, "物流商A", new BigDecimal("100.00"), "已付款")))

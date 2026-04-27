@@ -5,6 +5,7 @@ import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.service.AbstractCrudService;
+import com.leo.erp.common.support.ManagedEntityItemSupport;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.TradeItemCalculator;
 import com.leo.erp.finance.invoicereceipt.domain.entity.InvoiceReceipt;
@@ -17,6 +18,7 @@ import com.leo.erp.finance.invoicereceipt.web.dto.InvoiceReceiptRequest;
 import com.leo.erp.finance.invoicereceipt.web.dto.InvoiceReceiptResponse;
 import com.leo.erp.purchase.order.domain.entity.PurchaseOrderItem;
 import com.leo.erp.purchase.order.service.PurchaseOrderItemQueryService;
+import com.leo.erp.security.permission.WorkflowTransitionGuard;
 import com.leo.erp.system.company.service.CompanySettingService;
 import org.springframework.data.domain.Page;
 import org.springframework.data.jpa.domain.Specification;
@@ -26,7 +28,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
-import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -39,17 +40,20 @@ public class InvoiceReceiptService extends AbstractCrudService<InvoiceReceipt, I
     private final InvoiceReceiptMapper mapper;
     private final CompanySettingService companySettingService;
     private final PurchaseOrderItemQueryService purchaseOrderItemQueryService;
+    private final WorkflowTransitionGuard workflowTransitionGuard;
 
     public InvoiceReceiptService(InvoiceReceiptRepository repository,
                                  SnowflakeIdGenerator idGenerator,
                                  InvoiceReceiptMapper mapper,
                                  CompanySettingService companySettingService,
-                                 PurchaseOrderItemQueryService purchaseOrderItemQueryService) {
+                                 PurchaseOrderItemQueryService purchaseOrderItemQueryService,
+                                 WorkflowTransitionGuard workflowTransitionGuard) {
         super(idGenerator);
         this.repository = repository;
         this.mapper = mapper;
         this.companySettingService = companySettingService;
         this.purchaseOrderItemQueryService = purchaseOrderItemQueryService;
+        this.workflowTransitionGuard = workflowTransitionGuard;
     }
 
     @Transactional(readOnly = true)
@@ -63,10 +67,7 @@ public class InvoiceReceiptService extends AbstractCrudService<InvoiceReceipt, I
                 .and(Specs.keywordLike(keyword, "receiveNo", "invoiceNo", "sourcePurchaseOrderNos", "supplierName"))
                 .and(Specs.equalIfPresent("supplierName", supplierName))
                 .and(Specs.equalIfPresent("status", status))
-                .and((root, criteriaQuery, criteriaBuilder) ->
-                        startDate == null ? criteriaBuilder.conjunction() : criteriaBuilder.greaterThanOrEqualTo(root.get("invoiceDate"), startDate))
-                .and((root, criteriaQuery, criteriaBuilder) ->
-                        endDate == null ? criteriaBuilder.conjunction() : criteriaBuilder.lessThanOrEqualTo(root.get("invoiceDate"), endDate));
+                .and(Specs.betweenIfPresent("invoiceDate", startDate, endDate));
         return page(query, spec, repository);
     }
 
@@ -133,6 +134,12 @@ public class InvoiceReceiptService extends AbstractCrudService<InvoiceReceipt, I
 
     @Override
     protected void apply(InvoiceReceipt entity, InvoiceReceiptRequest request) {
+        workflowTransitionGuard.assertAuditPermissionForProtectedValue(
+                "invoice-receipts",
+                entity.getStatus(),
+                request.status(),
+                "已收票"
+        );
         entity.setReceiveNo(request.receiveNo());
         entity.setInvoiceNo(request.invoiceNo());
         entity.setSupplierName(request.supplierName());
@@ -153,9 +160,16 @@ public class InvoiceReceiptService extends AbstractCrudService<InvoiceReceipt, I
         Map<Long, PurchaseOrderItem> sourcePurchaseOrderItemMap = loadSourcePurchaseOrderItemMap(sourceItemIds);
         Map<Long, InvoiceAllocationProgress> allocatedProgressMap = loadAllocatedProgressMap(sourceItemIds, entity.getId());
         Map<Long, InvoiceAllocationProgress> requestProgressMap = new java.util.HashMap<>();
-        entity.getItems().clear();
         LinkedHashSet<String> sourcePurchaseOrderNos = new LinkedHashSet<>();
-        List<InvoiceReceiptItem> items = new ArrayList<>();
+        List<InvoiceReceiptItem> items = ManagedEntityItemSupport.syncById(
+                entity.getItems(),
+                request.items(),
+                InvoiceReceiptItem::getId,
+                InvoiceReceiptItemRequest::id,
+                InvoiceReceiptItem::new,
+                this::nextId,
+                InvoiceReceiptItem::setId
+        );
         BigDecimal amount = BigDecimal.ZERO;
         for (int i = 0; i < request.items().size(); i++) {
             InvoiceReceiptItemRequest source = request.items().get(i);
@@ -168,8 +182,7 @@ public class InvoiceReceiptService extends AbstractCrudService<InvoiceReceipt, I
                     allocatedProgressMap,
                     requestProgressMap
             );
-            InvoiceReceiptItem item = new InvoiceReceiptItem();
-            item.setId(nextId());
+            InvoiceReceiptItem item = items.get(i);
             item.setInvoiceReceipt(entity);
             item.setLineNo(i + 1);
             item.setSourceNo(source.sourceNo());
@@ -191,11 +204,10 @@ public class InvoiceReceiptService extends AbstractCrudService<InvoiceReceipt, I
             item.setUnitPrice(source.unitPrice());
             BigDecimal lineAmount = resolvedItem.amount();
             item.setAmount(lineAmount);
-            items.add(item);
             sourcePurchaseOrderNos.add(source.sourceNo());
             amount = amount.add(lineAmount);
         }
-        entity.getItems().addAll(items);
+        entity.getItems().sort(java.util.Comparator.comparing(InvoiceReceiptItem::getLineNo));
         entity.setSourcePurchaseOrderNos(String.join(", ", sourcePurchaseOrderNos));
         entity.setAmount(amount);
         validateDeclaredAmount("收票", request.amount(), amount);

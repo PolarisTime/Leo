@@ -14,7 +14,7 @@ class ReceivablePayableServiceTest {
     void shouldRejectUnknownDirectionFilter() {
         ReceivablePayableService service = new ReceivablePayableService(mock(ReceivablePayableQueryRepository.class));
 
-        assertThatThrownBy(() -> service.page(new PageQuery(0, 10, "status", "desc"), "未知", null, null))
+        assertThatThrownBy(() -> service.page(new PageQuery(0, 10, "status", "desc"), "未知", null, null, null))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("direction 不合法");
     }
@@ -23,7 +23,7 @@ class ReceivablePayableServiceTest {
     void shouldRejectUnknownCounterpartyTypeFilter() {
         ReceivablePayableService service = new ReceivablePayableService(mock(ReceivablePayableQueryRepository.class));
 
-        assertThatThrownBy(() -> service.page(new PageQuery(0, 10, "status", "desc"), null, "未知", null))
+        assertThatThrownBy(() -> service.page(new PageQuery(0, 10, "status", "desc"), null, "未知", null, null))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("counterpartyType 不合法");
     }

@@ -28,8 +28,11 @@ public class ReceivablePayableController {
             @BindPageQuery(sortFieldKey = "receivables-payables", directionParam = "sortDirection") PageQuery query,
             @RequestParam(name = "direction", required = false) String businessDirection,
             @RequestParam(required = false) String counterpartyType,
+            @RequestParam(required = false) String status,
             @RequestParam(required = false) String keyword
     ) {
-        return ApiResponse.success(PageResponse.from(receivablePayableService.page(query, businessDirection, counterpartyType, keyword)));
+        return ApiResponse.success(PageResponse.from(
+                receivablePayableService.page(query, businessDirection, counterpartyType, status, keyword)
+        ));
     }
 }

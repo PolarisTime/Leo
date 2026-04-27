@@ -4,12 +4,14 @@ import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.service.AbstractCrudService;
+import com.leo.erp.common.support.ManagedEntityItemSupport;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.TradeItemCalculator;
 import com.leo.erp.logistics.bill.domain.entity.FreightBill;
 import com.leo.erp.logistics.bill.domain.entity.FreightBillItem;
 import com.leo.erp.logistics.bill.repository.FreightBillRepository;
 import com.leo.erp.logistics.bill.mapper.FreightBillMapper;
+import com.leo.erp.security.permission.WorkflowTransitionGuard;
 import com.leo.erp.logistics.bill.web.dto.*;
 import org.springframework.data.domain.Page;
 import org.springframework.data.jpa.domain.Specification;
@@ -17,7 +19,6 @@ import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
@@ -26,18 +27,29 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
 
     private final FreightBillRepository repository;
     private final FreightBillMapper freightBillMapper;
+    private final WorkflowTransitionGuard workflowTransitionGuard;
 
     public FreightBillService(FreightBillRepository repository,
                               SnowflakeIdGenerator idGenerator,
-                              FreightBillMapper freightBillMapper) {
+                              FreightBillMapper freightBillMapper,
+                              WorkflowTransitionGuard workflowTransitionGuard) {
         super(idGenerator);
         this.repository = repository;
         this.freightBillMapper = freightBillMapper;
+        this.workflowTransitionGuard = workflowTransitionGuard;
     }
 
-    public Page<FreightBillResponse> page(PageQuery query, String keyword) {
+    public Page<FreightBillResponse> page(PageQuery query,
+                                          String keyword,
+                                          String carrierName,
+                                          String status,
+                                          java.time.LocalDate startDate,
+                                          java.time.LocalDate endDate) {
         Specification<FreightBill> spec = Specs.<FreightBill>notDeleted()
-                .and(Specs.keywordLike(keyword, "billNo", "carrierName", "customerName"));
+                .and(Specs.keywordLike(keyword, "billNo", "carrierName", "customerName"))
+                .and(Specs.equalIfPresent("carrierName", carrierName))
+                .and(Specs.equalIfPresent("status", status))
+                .and(Specs.betweenIfPresent("billTime", startDate, endDate));
         return page(query, spec, repository);
     }
 
@@ -97,6 +109,20 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
 
     @Override
     protected void apply(FreightBill entity, FreightBillRequest request) {
+        String nextStatus = (request.status() == null || request.status().isBlank()) ? "未审核" : request.status();
+        String nextDeliveryStatus = (request.deliveryStatus() == null || request.deliveryStatus().isBlank()) ? "未送达" : request.deliveryStatus();
+        workflowTransitionGuard.assertAuditPermissionForProtectedValue(
+                "freight-bills",
+                entity.getStatus(),
+                nextStatus,
+                "已审核"
+        );
+        workflowTransitionGuard.assertAuditPermissionForProtectedValue(
+                "freight-bills",
+                entity.getDeliveryStatus(),
+                nextDeliveryStatus,
+                "已送达"
+        );
         entity.setBillNo(request.billNo());
         entity.setOutboundNo(request.outboundNo());
         entity.setCarrierName(request.carrierName());
@@ -104,17 +130,23 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
         entity.setProjectName(request.projectName());
         entity.setBillTime(request.billTime());
         entity.setUnitPrice(request.unitPrice());
-        entity.setStatus((request.status() == null || request.status().isBlank()) ? "未审核" : request.status());
-        entity.setDeliveryStatus((request.deliveryStatus() == null || request.deliveryStatus().isBlank()) ? "未送达" : request.deliveryStatus());
+        entity.setStatus(nextStatus);
+        entity.setDeliveryStatus(nextDeliveryStatus);
         entity.setRemark(request.remark());
 
-        entity.getItems().clear();
         BigDecimal totalWeight = BigDecimal.ZERO;
-        List<FreightBillItem> items = new ArrayList<>();
+        List<FreightBillItem> items = ManagedEntityItemSupport.syncById(
+                entity.getItems(),
+                request.items(),
+                FreightBillItem::getId,
+                FreightBillItemRequest::id,
+                FreightBillItem::new,
+                this::nextId,
+                FreightBillItem::setId
+        );
         for (int i = 0; i < request.items().size(); i++) {
             FreightBillItemRequest source = request.items().get(i);
-            FreightBillItem item = new FreightBillItem();
-            item.setId(nextId());
+            FreightBillItem item = items.get(i);
             item.setFreightBill(entity);
             item.setLineNo(i + 1);
             item.setSourceNo(source.sourceNo());
@@ -135,10 +167,9 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
             BigDecimal weightTon = TradeItemCalculator.calculateWeightTon(source.quantity(), source.pieceWeightTon());
             item.setWeightTon(weightTon);
             item.setWarehouseName(source.warehouseName());
-            items.add(item);
             totalWeight = totalWeight.add(weightTon);
         }
-        entity.getItems().addAll(items);
+        entity.getItems().sort(java.util.Comparator.comparing(FreightBillItem::getLineNo));
         entity.setTotalWeight(totalWeight);
         entity.setTotalFreight(totalWeight.multiply(request.unitPrice()).setScale(2, RoundingMode.HALF_UP));
     }

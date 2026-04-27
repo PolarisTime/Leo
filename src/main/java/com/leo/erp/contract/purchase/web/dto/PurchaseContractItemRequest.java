@@ -8,6 +8,7 @@ import jakarta.validation.constraints.NotNull;
 import java.math.BigDecimal;
 
 public record PurchaseContractItemRequest(
+        Long id,
         @NotBlank(message = "商品编码不能为空")
         String materialCode,
         @NotBlank(message = "品牌不能为空")
@@ -41,4 +42,21 @@ public record PurchaseContractItemRequest(
         @DecimalMin(value = "0.00", message = "金额不能小于0")
         BigDecimal amount
 ) {
+    public PurchaseContractItemRequest(String materialCode,
+                                       String brand,
+                                       String category,
+                                       String material,
+                                       String spec,
+                                       String length,
+                                       String unit,
+                                       Integer quantity,
+                                       String quantityUnit,
+                                       BigDecimal pieceWeightTon,
+                                       Integer piecesPerBundle,
+                                       BigDecimal weightTon,
+                                       BigDecimal unitPrice,
+                                       BigDecimal amount) {
+        this(null, materialCode, brand, category, material, spec, length, unit, quantity, quantityUnit, pieceWeightTon,
+                piecesPerBundle, weightTon, unitPrice, amount);
+    }
 }

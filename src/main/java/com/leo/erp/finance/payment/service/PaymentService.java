@@ -13,6 +13,7 @@ import com.leo.erp.finance.payment.web.dto.PaymentRequest;
 import com.leo.erp.finance.payment.web.dto.PaymentResponse;
 import com.leo.erp.security.permission.ResourcePermissionCatalog;
 import com.leo.erp.security.permission.ResourceRecordAccessGuard;
+import com.leo.erp.security.permission.WorkflowTransitionGuard;
 import com.leo.erp.statement.service.StatementSettlementSyncService;
 import com.leo.erp.statement.freight.domain.entity.FreightStatement;
 import com.leo.erp.statement.freight.service.FreightStatementQueryService;
@@ -23,6 +24,7 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.Optional;
 
 @Service
@@ -37,6 +39,7 @@ public class PaymentService extends AbstractCrudService<Payment, PaymentRequest,
     private final FreightStatementQueryService freightStatementQueryService;
     private final StatementSettlementSyncService statementSettlementSyncService;
     private final ResourceRecordAccessGuard resourceRecordAccessGuard;
+    private final WorkflowTransitionGuard workflowTransitionGuard;
 
     public PaymentService(PaymentRepository paymentRepository,
                           SnowflakeIdGenerator snowflakeIdGenerator,
@@ -44,7 +47,8 @@ public class PaymentService extends AbstractCrudService<Payment, PaymentRequest,
                           SupplierStatementQueryService supplierStatementQueryService,
                           FreightStatementQueryService freightStatementQueryService,
                           StatementSettlementSyncService statementSettlementSyncService,
-                          ResourceRecordAccessGuard resourceRecordAccessGuard) {
+                          ResourceRecordAccessGuard resourceRecordAccessGuard,
+                          WorkflowTransitionGuard workflowTransitionGuard) {
         super(snowflakeIdGenerator);
         this.paymentRepository = paymentRepository;
         this.paymentMapper = paymentMapper;
@@ -52,11 +56,20 @@ public class PaymentService extends AbstractCrudService<Payment, PaymentRequest,
         this.freightStatementQueryService = freightStatementQueryService;
         this.statementSettlementSyncService = statementSettlementSyncService;
         this.resourceRecordAccessGuard = resourceRecordAccessGuard;
+        this.workflowTransitionGuard = workflowTransitionGuard;
     }
 
-    public Page<PaymentResponse> page(PageQuery query, String keyword) {
+    public Page<PaymentResponse> page(PageQuery query,
+                                      String keyword,
+                                      String businessType,
+                                      String status,
+                                      LocalDate startDate,
+                                      LocalDate endDate) {
         Specification<Payment> spec = Specs.<Payment>notDeleted()
-                .and(Specs.keywordLike(keyword, "paymentNo", "businessType", "counterpartyName"));
+                .and(Specs.keywordLike(keyword, "paymentNo", "businessType", "counterpartyName"))
+                .and(Specs.equalIfPresent("businessType", businessType))
+                .and(Specs.equalIfPresent("status", status))
+                .and(Specs.betweenIfPresent("paymentDate", startDate, endDate));
         return page(query, spec, paymentRepository);
     }
 
@@ -94,6 +107,12 @@ public class PaymentService extends AbstractCrudService<Payment, PaymentRequest,
 
     @Override
     protected void apply(Payment entity, PaymentRequest request) {
+        workflowTransitionGuard.assertAuditPermissionForProtectedValue(
+                "payments",
+                entity.getStatus(),
+                request.status(),
+                StatementSettlementSyncService.PAYMENT_STATUS_SETTLED
+        );
         entity.setPaymentNo(request.paymentNo());
         entity.setBusinessType(request.businessType());
         entity.setCounterpartyName(request.counterpartyName());

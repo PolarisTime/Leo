@@ -30,4 +30,20 @@ public final class Specs {
             return cb.equal(root.get(field), value.trim());
         };
     }
+
+    public static <T, V extends Comparable<? super V>> Specification<T> betweenIfPresent(String field, V start, V end) {
+        return (root, q, cb) -> {
+            var predicates = new java.util.ArrayList<jakarta.persistence.criteria.Predicate>(2);
+            if (start != null) {
+                predicates.add(cb.greaterThanOrEqualTo(root.get(field), start));
+            }
+            if (end != null) {
+                predicates.add(cb.lessThanOrEqualTo(root.get(field), end));
+            }
+            if (predicates.isEmpty()) {
+                return cb.conjunction();
+            }
+            return cb.and(predicates.toArray(jakarta.persistence.criteria.Predicate[]::new));
+        };
+    }
 }

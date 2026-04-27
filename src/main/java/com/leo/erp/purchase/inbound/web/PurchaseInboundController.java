@@ -9,6 +9,8 @@ import com.leo.erp.purchase.inbound.service.PurchaseInboundService;
 import com.leo.erp.purchase.inbound.web.dto.PurchaseInboundRequest;
 import com.leo.erp.purchase.inbound.web.dto.PurchaseInboundResponse;
 import jakarta.validation.Valid;
+import java.time.LocalDate;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -25,9 +27,15 @@ public class PurchaseInboundController {
     @RequiresPermission(resource = "purchase-inbound", action = "read")
     public ApiResponse<PageResponse<PurchaseInboundResponse>> page(
             @BindPageQuery(sortFieldKey = "purchase-inbounds") PageQuery query,
-            @RequestParam(required = false) String keyword
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) String supplierName,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate
     ) {
-        return ApiResponse.success(PageResponse.from(service.page(query, keyword)));
+        return ApiResponse.success(PageResponse.from(
+                service.page(query, keyword, supplierName, status, startDate, endDate)
+        ));
     }
 
     @GetMapping("/{id}")

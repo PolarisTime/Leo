@@ -8,6 +8,7 @@ import jakarta.validation.constraints.NotNull;
 import java.math.BigDecimal;
 
 public record FreightBillItemRequest(
+        Long id,
         @NotBlank String sourceNo,
         @NotBlank String customerName,
         @NotBlank String projectName,
@@ -26,4 +27,24 @@ public record FreightBillItemRequest(
         @NotNull @DecimalMin("0.000") BigDecimal weightTon,
         String warehouseName
 ) {
+    public FreightBillItemRequest(String sourceNo,
+                                  String customerName,
+                                  String projectName,
+                                  String materialCode,
+                                  String materialName,
+                                  String brand,
+                                  String category,
+                                  String material,
+                                  String spec,
+                                  String length,
+                                  Integer quantity,
+                                  String quantityUnit,
+                                  BigDecimal pieceWeightTon,
+                                  Integer piecesPerBundle,
+                                  String batchNo,
+                                  BigDecimal weightTon,
+                                  String warehouseName) {
+        this(null, sourceNo, customerName, projectName, materialCode, materialName, brand, category, material, spec,
+                length, quantity, quantityUnit, pieceWeightTon, piecesPerBundle, batchNo, weightTon, warehouseName);
+    }
 }

@@ -35,7 +35,7 @@ class ReceivablePayableQueryRepositoryTest {
         ));
         ReceivablePayableQueryRepository repository = new ReceivablePayableQueryRepository(jdbcTemplate);
 
-        var page = repository.page(new PageQuery(1, 20, "unexpected", "asc"), "应付", "物流商", " AcMe ");
+        var page = repository.page(new PageQuery(1, 20, "unexpected", "asc"), "应付", "物流商", null, " AcMe ");
 
         assertThat(jdbcTemplate.countSql).contains("SELECT COUNT(*)");
         assertThat(jdbcTemplate.dataSql).contains("ORDER BY rp.counterparty_name ASC, rp.id DESC");
@@ -54,7 +54,7 @@ class ReceivablePayableQueryRepositoryTest {
         RecordingNamedParameterJdbcTemplate jdbcTemplate = new RecordingNamedParameterJdbcTemplate();
         ReceivablePayableQueryRepository repository = new ReceivablePayableQueryRepository(jdbcTemplate);
 
-        var page = repository.page(new PageQuery(0, 10, "status", "desc"), null, null, null);
+        var page = repository.page(new PageQuery(0, 10, "status", "desc"), null, null, null, null);
 
         assertThat(page.getContent()).isEmpty();
         assertThat(page.getTotalElements()).isZero();

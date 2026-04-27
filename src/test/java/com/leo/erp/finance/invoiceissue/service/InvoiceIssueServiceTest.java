@@ -8,6 +8,7 @@ import com.leo.erp.finance.invoiceissue.mapper.InvoiceIssueMapper;
 import com.leo.erp.finance.invoiceissue.web.dto.InvoiceIssueItemRequest;
 import com.leo.erp.finance.invoiceissue.web.dto.InvoiceIssueRequest;
 import com.leo.erp.finance.invoiceissue.web.dto.InvoiceIssueResponse;
+import com.leo.erp.security.permission.WorkflowTransitionGuard;
 import com.leo.erp.sales.order.domain.entity.SalesOrderItem;
 import com.leo.erp.sales.order.service.SalesOrderItemQueryService;
 import com.leo.erp.system.company.service.CompanySettingService;
@@ -48,6 +49,9 @@ class InvoiceIssueServiceTest {
 
     @Mock
     private CompanySettingService companySettingService;
+
+    @Mock
+    private WorkflowTransitionGuard workflowTransitionGuard;
 
     @InjectMocks
     private InvoiceIssueService service;

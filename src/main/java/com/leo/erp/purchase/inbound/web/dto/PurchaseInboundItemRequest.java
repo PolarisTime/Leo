@@ -8,6 +8,7 @@ import jakarta.validation.constraints.NotNull;
 import java.math.BigDecimal;
 
 public record PurchaseInboundItemRequest(
+        Long id,
         @NotBlank String materialCode,
         @NotBlank String brand,
         @NotBlank String category,
@@ -26,4 +27,24 @@ public record PurchaseInboundItemRequest(
         @NotNull @DecimalMin("0.00") BigDecimal unitPrice,
         @NotNull @DecimalMin("0.00") BigDecimal amount
 ) {
+    public PurchaseInboundItemRequest(String materialCode,
+                                      String brand,
+                                      String category,
+                                      String material,
+                                      String spec,
+                                      String length,
+                                      String unit,
+                                      Long sourcePurchaseOrderItemId,
+                                      String warehouseName,
+                                      String batchNo,
+                                      Integer quantity,
+                                      String quantityUnit,
+                                      BigDecimal pieceWeightTon,
+                                      Integer piecesPerBundle,
+                                      BigDecimal weightTon,
+                                      BigDecimal unitPrice,
+                                      BigDecimal amount) {
+        this(null, materialCode, brand, category, material, spec, length, unit, sourcePurchaseOrderItemId, warehouseName,
+                batchNo, quantity, quantityUnit, pieceWeightTon, piecesPerBundle, weightTon, unitPrice, amount);
+    }
 }
