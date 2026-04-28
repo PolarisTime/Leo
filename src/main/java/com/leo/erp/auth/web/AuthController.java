@@ -81,6 +81,10 @@ public class AuthController {
                                               HttpServletRequest httpRequest,
                                               HttpServletResponse httpResponse) {
         String refreshToken = authTokenCookieService.resolveRefreshToken(httpRequest, request == null ? null : request.refreshToken());
+        if (refreshToken == null || refreshToken.isBlank()) {
+            authTokenCookieService.clearRefreshTokenCookie(httpResponse);
+            return ApiResponse.success("未登录", null);
+        }
         TokenResponse tokenResponse = authService.refresh(refreshToken, resolveIp(httpRequest), httpRequest.getHeader("User-Agent"));
         authTokenCookieService.writeRefreshTokenCookie(
                 httpResponse,
