@@ -1,0 +1,117 @@
+name: backend-ci
+
+on:
+  push:
+    branches:
+      - "**"
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend / Leo
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: leo
+          POSTGRES_USER: leo
+          POSTGRES_PASSWORD: leo_ci_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U leo -d leo"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    defaults:
+      run:
+        shell: bash
+
+    env:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/leo
+      SPRING_DATASOURCE_USERNAME: leo
+      SPRING_DATASOURCE_PASSWORD: leo_ci_password
+      SPRING_DATA_REDIS_HOST: localhost
+      SPRING_DATA_REDIS_PORT: 6379
+      SPRING_DATA_REDIS_DATABASE: 3
+      SPRING_DATA_REDIS_PASSWORD: ""
+      LEO_JWT_SECRET: ci-jwt-secret-ci-jwt-secret-ci-jwt-secret
+      TOTP_ENCRYPTION_KEY: ci-totp-secret-ci-totp-secret-ci-totp
+      LEO_MACHINE_ID: 1
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+          cache-dependency-path: pom.xml
+
+      - name: Static analysis
+        run: mvn -B -ntp -DskipTests checkstyle:check spotbugs:spotbugs
+
+      - name: Test
+        run: mvn -B -ntp test
+
+      - name: Inspect Flyway migrations
+        continue-on-error: true
+        run: >-
+          mvn -B -ntp flyway:info
+          -Dflyway.url="$SPRING_DATASOURCE_URL"
+          -Dflyway.user="$SPRING_DATASOURCE_USERNAME"
+          -Dflyway.password="$SPRING_DATASOURCE_PASSWORD"
+
+      - name: Package
+        run: mvn -B -ntp -DskipTests package
+
+      - name: Build backend image
+        run: docker build -t leo-backend:ci .
+
+      - name: Smoke test backend image
+        run: |
+          docker run -d --name leo-backend-smoke \
+            --network host \
+            -e SPRING_DATASOURCE_URL="$SPRING_DATASOURCE_URL" \
+            -e SPRING_DATASOURCE_USERNAME="$SPRING_DATASOURCE_USERNAME" \
+            -e SPRING_DATASOURCE_PASSWORD="$SPRING_DATASOURCE_PASSWORD" \
+            -e SPRING_DATA_REDIS_HOST=localhost \
+            -e SPRING_DATA_REDIS_PORT="$SPRING_DATA_REDIS_PORT" \
+            -e SPRING_DATA_REDIS_DATABASE="$SPRING_DATA_REDIS_DATABASE" \
+            -e SPRING_DATA_REDIS_PASSWORD="$SPRING_DATA_REDIS_PASSWORD" \
+            -e LEO_JWT_SECRET="$LEO_JWT_SECRET" \
+            -e TOTP_ENCRYPTION_KEY="$TOTP_ENCRYPTION_KEY" \
+            -e LEO_MACHINE_ID="$LEO_MACHINE_ID" \
+            leo-backend:ci
+          trap 'docker logs leo-backend-smoke --tail 100 || true; docker rm -f leo-backend-smoke || true' EXIT
+          timeout 90 bash -c 'until curl -fsS http://127.0.0.1:11211/api/health; do sleep 3; done'
+
+      - name: Upload backend artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: leo-backend-jar
+          path: target/*.jar
+          if-no-files-found: error
