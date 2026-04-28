@@ -84,6 +84,14 @@ mvn test
 mvn package -DskipTests
 ```
 
+### Maven 下载加速（可选）
+
+CI 默认使用 Maven Central，并通过 GitHub Actions 缓存 `~/.m2/repository`。国内开发环境如需镜像加速，可手动指定阿里云 settings：
+
+```bash
+mvn -s .mvn/settings.aliyun.xml test
+```
+
 ## API 文档
 
 开发环境访问 http://localhost:11211/api/swagger-ui.html
