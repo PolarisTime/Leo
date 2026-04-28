@@ -1,6 +1,7 @@
 package com.leo.erp.attachment.service.storage;
 
 import com.leo.erp.attachment.config.AttachmentProperties;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import javax.crypto.Mac;
@@ -27,6 +28,7 @@ public class S3Signer {
     private final S3PathParser pathParser;
     private final Clock clock;
 
+    @Autowired
     public S3Signer(S3ChecksumUtil checksumUtil, S3PathParser pathParser) {
         this(checksumUtil, pathParser, Clock.systemUTC());
     }
