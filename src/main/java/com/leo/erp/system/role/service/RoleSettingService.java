@@ -161,15 +161,18 @@ public class RoleSettingService extends AbstractCrudService<RoleSetting, RoleSet
         rolePermissionRepository.deleteActiveByRoleId(roleId);
         rolePermissionRepository.flush();
         for (RolePermissionItem item : permissions) {
-            String resource = ResourcePermissionCatalog.resolveResourceByMenuCode(item.resource())
-                    .orElseGet(() -> ResourcePermissionCatalog.normalizeResource(item.resource()));
+            String rawResource = ResourcePermissionCatalog.normalizeResource(item.resource());
+            String resource = ResourcePermissionCatalog.isKnownResource(rawResource)
+                    ? rawResource
+                    : ResourcePermissionCatalog.resolveResourceByMenuCode(item.resource()).orElse(rawResource);
             String action = ResourcePermissionCatalog.normalizeAction(item.action());
             String uniqueKey = resource + ":" + action;
             if (!seen.add(uniqueKey)) {
                 throw new BusinessException(ErrorCode.VALIDATION_ERROR, "权限列表存在重复项");
             }
             if (!ResourcePermissionCatalog.isAllowed(resource, action)) {
-                throw new BusinessException(ErrorCode.VALIDATION_ERROR, "存在无效的资源权限配置");
+                throw new BusinessException(ErrorCode.VALIDATION_ERROR,
+                        "存在无效的资源权限配置: " + resource + ":" + action);
             }
             actionsByResource.computeIfAbsent(resource, key -> new LinkedHashSet<>()).add(action);
         }
