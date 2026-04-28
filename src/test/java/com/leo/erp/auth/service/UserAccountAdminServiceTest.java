@@ -23,6 +23,7 @@ import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class UserAccountAdminServiceTest {
@@ -265,7 +266,7 @@ class UserAccountAdminServiceTest {
     }
 
     @Test
-    void shouldRejectCreateWhenDeletedUserAlreadyUsesLoginName() {
+    void shouldAllowCreateWhenDeletedUserAlreadyUsesLoginName() {
         RoleSetting role = new RoleSetting();
         role.setId(11L);
         role.setRoleName("采购专员");
@@ -277,8 +278,9 @@ class UserAccountAdminServiceTest {
         existing.setLoginName("test");
         existing.setDeletedFlag(Boolean.TRUE);
 
+        AtomicReference<UserAccount> savedUser = new AtomicReference<>();
         UserAccountAdminService service = createService(
-                repositoryWithExistingLoginName(existing),
+                repositoryForWriteWithExistingLoginName(existing, savedUser),
                 new FixedIdGenerator(100L),
                 new StubPasswordEncoder(),
                 mapper(),
@@ -293,7 +295,7 @@ class UserAccountAdminServiceTest {
                 departmentRepository()
         );
 
-        assertThatThrownBy(() -> service.create(new com.leo.erp.auth.web.dto.UserAccountAdminRequest(
+        assertThatCode(() -> service.create(new com.leo.erp.auth.web.dto.UserAccountAdminRequest(
                 "test",
                 "Init@123",
                 "测试用户",
@@ -304,9 +306,10 @@ class UserAccountAdminServiceTest {
                 "",
                 "正常",
                 ""
-        )))
-                .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("登录账号已存在");
+        ))).doesNotThrowAnyException();
+
+        assertThat(savedUser.get()).isNotNull();
+        assertThat(savedUser.get().getLoginName()).isEqualTo("test");
     }
 
     @Test
@@ -408,11 +411,35 @@ class UserAccountAdminServiceTest {
                 new Class[]{UserAccountRepository.class},
                 (proxy, method, args) -> switch (method.getName()) {
                     case "findByIdAndDeletedFlagFalse" -> Optional.empty();
-                    case "findByLoginNameAndDeletedFlagFalse" -> Optional.empty();
+                    case "findByLoginNameAndDeletedFlagFalse" ->
+                            Boolean.TRUE.equals(existingUser.getDeletedFlag()) ? Optional.empty() : Optional.of(existingUser);
                     case "findByLoginName" -> Optional.of(existingUser);
                     case "existsByLoginNameAndDeletedFlagFalse" -> false;
                     case "existsByLoginName" -> true;
                     case "toString" -> "UserAccountRepositoryExistingLoginStub";
+                    case "hashCode" -> System.identityHashCode(proxy);
+                    case "equals" -> proxy == args[0];
+                    default -> throw new UnsupportedOperationException(method.getName());
+                }
+        );
+    }
+
+    private UserAccountRepository repositoryForWriteWithExistingLoginName(UserAccount existingUser, AtomicReference<UserAccount> savedUser) {
+        return (UserAccountRepository) Proxy.newProxyInstance(
+                UserAccountRepository.class.getClassLoader(),
+                new Class[]{UserAccountRepository.class},
+                (proxy, method, args) -> switch (method.getName()) {
+                    case "findByIdAndDeletedFlagFalse" -> Optional.empty();
+                    case "findByLoginNameAndDeletedFlagFalse" ->
+                            Boolean.TRUE.equals(existingUser.getDeletedFlag()) ? Optional.empty() : Optional.of(existingUser);
+                    case "findByLoginName" -> Optional.of(existingUser);
+                    case "existsByLoginNameAndDeletedFlagFalse" -> false;
+                    case "existsByLoginName" -> true;
+                    case "save" -> {
+                        savedUser.set((UserAccount) args[0]);
+                        yield args[0];
+                    }
+                    case "toString" -> "UserAccountRepositoryWriteExistingLoginStub";
                     case "hashCode" -> System.identityHashCode(proxy);
                     case "equals" -> proxy == args[0];
                     default -> throw new UnsupportedOperationException(method.getName());
