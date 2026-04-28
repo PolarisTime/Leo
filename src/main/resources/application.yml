@@ -1,10 +1,3 @@
-# Leo 业务配置
-leo:
-  # 受信代理 IP/CIDR 列表（逗号分隔）。只有来自这些地址的请求才会信任 X-Forwarded-For 头。
-  # 部署在 nginx / CDN 后面时，填入代理的内网地址。
-  # 示例: "127.0.0.1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
-  trusted-proxies: ${LEO_TRUSTED_PROXIES:127.0.0.1}
-
 # Web 服务基础配置
 server:
   # 后端 HTTP 监听端口
@@ -89,6 +82,10 @@ spring:
 
 # 业务自定义配置
 leo:
+  # 受信代理 IP/CIDR 列表（逗号分隔）。只有来自这些地址的请求才会信任 X-Forwarded-For 头。
+  # 部署在 nginx / CDN 后面时，填入代理的内网地址。
+  # 示例: "127.0.0.1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
+  trusted-proxies: ${LEO_TRUSTED_PROXIES:127.0.0.1}
   attachment:
     # 业务层额外限制的附件大小
     max-file-size: 20MB
