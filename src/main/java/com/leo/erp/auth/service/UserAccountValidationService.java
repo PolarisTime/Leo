@@ -63,7 +63,7 @@ public class UserAccountValidationService {
         if (!resolveLoginNameAvailability(loginName, currentUserId).available()) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "登录账号已存在");
         }
-        repository.findByLoginName(loginName)
+        repository.findByLoginNameAndDeletedFlagFalse(loginName)
                 .filter(existing -> !existing.getId().equals(currentUserId))
                 .ifPresent(existing -> {
                     throw new BusinessException(ErrorCode.BUSINESS_ERROR, "登录账号已存在");
@@ -80,7 +80,7 @@ public class UserAccountValidationService {
 
     public Long loadLoginNameOwnerId(String loginName) {
         if (redisJsonCacheSupport == null) {
-            return repository.findByLoginName(loginName)
+            return repository.findByLoginNameAndDeletedFlagFalse(loginName)
                     .map(UserAccount::getId)
                     .orElse(LOGIN_NAME_NOT_FOUND);
         }
@@ -88,7 +88,7 @@ public class UserAccountValidationService {
                 loginNameOwnerCacheKey(loginName),
                 LOGIN_NAME_OWNER_CACHE_TTL,
                 Long.class,
-                () -> repository.findByLoginName(loginName)
+                () -> repository.findByLoginNameAndDeletedFlagFalse(loginName)
                         .map(UserAccount::getId)
                         .orElse(LOGIN_NAME_NOT_FOUND)
         );

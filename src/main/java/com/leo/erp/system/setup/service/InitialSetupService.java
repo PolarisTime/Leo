@@ -16,6 +16,8 @@ import com.leo.erp.system.company.domain.entity.CompanySetting;
 import com.leo.erp.system.company.repository.CompanySettingRepository;
 import com.leo.erp.system.company.service.CompanySettingService;
 import com.leo.erp.system.company.web.dto.CompanySettlementAccountResponse;
+import com.leo.erp.system.department.domain.entity.Department;
+import com.leo.erp.system.department.repository.DepartmentRepository;
 import com.leo.erp.system.norule.domain.entity.NoRule;
 import com.leo.erp.system.norule.repository.NoRuleRepository;
 import com.leo.erp.system.role.domain.entity.RoleSetting;
@@ -48,6 +50,7 @@ public class InitialSetupService {
     private final RoleSettingRepository roleSettingRepository;
     private final CompanySettingRepository companySettingRepository;
     private final NoRuleRepository noRuleRepository;
+    private final DepartmentRepository departmentRepository;
     private final PasswordEncoder passwordEncoder;
     private final SnowflakeIdGenerator snowflakeIdGenerator;
     private final ObjectMapper objectMapper;
@@ -59,6 +62,7 @@ public class InitialSetupService {
                                RoleSettingRepository roleSettingRepository,
                                CompanySettingRepository companySettingRepository,
                                NoRuleRepository noRuleRepository,
+                               DepartmentRepository departmentRepository,
                                PasswordEncoder passwordEncoder,
                                SnowflakeIdGenerator snowflakeIdGenerator,
                                ObjectMapper objectMapper,
@@ -69,6 +73,7 @@ public class InitialSetupService {
         this.roleSettingRepository = roleSettingRepository;
         this.companySettingRepository = companySettingRepository;
         this.noRuleRepository = noRuleRepository;
+        this.departmentRepository = departmentRepository;
         this.passwordEncoder = passwordEncoder;
         this.snowflakeIdGenerator = snowflakeIdGenerator;
         this.objectMapper = objectMapper;
@@ -203,6 +208,14 @@ public class InitialSetupService {
         admin.setTotpSecret(totpService.encryptSecret(totpSecret));
         admin.setTotpEnabled(Boolean.TRUE);
         admin.setRequireTotpSetup(Boolean.FALSE);
+
+        Department defaultDept = departmentRepository.findByDepartmentCodeAndDeletedFlagFalse("DEPT001")
+                .orElse(null);
+        if (defaultDept != null) {
+            admin.setDepartmentId(defaultDept.getId());
+            admin.setDepartmentName(defaultDept.getDepartmentName());
+        }
+
         try {
             userAccountRepository.saveAndFlush(admin);
             userRoleBindingService.replaceUserRoles(admin.getId(), java.util.List.of(adminRole));

@@ -29,7 +29,8 @@ public class NoRuleSequenceService {
             Map.entry("freight-bills", "RULE_FB"),
             Map.entry("supplier-statements", "RULE_SS"),
             Map.entry("customer-statements", "RULE_CS"),
-            Map.entry("freight-statements", "RULE_FS")
+            Map.entry("freight-statements", "RULE_FS"),
+            Map.entry("departments", "RULE_DEPT")
     );
     private static final DateTimeFormatter YEAR_FORMATTER = DateTimeFormatter.ofPattern("yyyy");
     private static final DateTimeFormatter SHORT_YEAR_FORMATTER = DateTimeFormatter.ofPattern("yy");
