@@ -18,12 +18,13 @@ import java.util.Optional;
 
 public abstract class AbstractCrudService<E extends AuditableEntity, Req, Res> {
 
-    private final Logger logger = LoggerFactory.getLogger(getClass());
+    private final Logger logger;
 
     private final SnowflakeIdGenerator idGenerator;
 
     protected AbstractCrudService(SnowflakeIdGenerator idGenerator) {
         this.idGenerator = idGenerator;
+        this.logger = LoggerFactory.getLogger(getClass());
     }
 
     @Transactional(readOnly = true)
