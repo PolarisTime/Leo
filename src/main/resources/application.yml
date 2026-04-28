@@ -133,7 +133,7 @@ leo:
       psql-command: ${LEO_DATABASE_BACKUP_PSQL_COMMAND:/usr/pgsql-18/bin/psql}
   company:
     bootstrap:
-      # 是否启用公司主体 OOBE 初始化；启用后启动时按配置写入公司信息
+      # 兼容旧配置；启动期灌库已废弃，首次初始化请使用网页 OOBE (/api/setup)
       enabled: ${LEO_COMPANY_BOOTSTRAP_ENABLED:false}
       company-name: ${LEO_COMPANY_BOOTSTRAP_COMPANY_NAME:}
       tax-no: ${LEO_COMPANY_BOOTSTRAP_TAX_NO:}
@@ -144,7 +144,7 @@ leo:
       remark: ${LEO_COMPANY_BOOTSTRAP_REMARK:}
   auth:
     bootstrap:
-      # 是否启用启动时管理员引导创建
+      # 兼容旧配置；启动期管理员创建已废弃，首次初始化请使用网页 OOBE (/api/setup)
       enabled: ${LEO_AUTH_BOOTSTRAP_ENABLED:false}
       # 引导账号登录名
       login-name: ${LEO_AUTH_BOOTSTRAP_LOGIN_NAME:}
