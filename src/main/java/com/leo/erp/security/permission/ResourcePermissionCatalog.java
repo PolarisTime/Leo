@@ -90,7 +90,7 @@ public final class ResourcePermissionCatalog {
             entry("payment", "付款单", "财务", true, List.of("payments"), List.of("/payments"), BUSINESS_ACTIONS),
             entry("invoice-receipt", "收票单", "财务", true, List.of("invoice-receipts"), List.of("/invoice-receipts"), BUSINESS_ACTIONS),
             entry("invoice-issue", "开票单", "财务", true, List.of("invoice-issues"), List.of("/invoice-issues"), BUSINESS_ACTIONS),
-            entry("receivable-payable", "应收应付", "财务", true, List.of("receivables-payables"), List.of("/receivables-payables"), READ_ONLY_ACTIONS),
+            entry("receivable-payable", "应收应付", "财务", true, List.of("receivables-payables"), List.of("/receivables-payables"), List.of(action(READ, "查看"), action(AUDIT, "审核"), action(EXPORT, "导出"), action(PRINT, "打印"))),
             entry("general-setting", "通用设置", "系统", false, List.of("general-settings"),
                     List.of("/general-settings", "/general-settings/upload-rule", "/upload-rules/page"), List.of(action(READ, "查看"), action(UPDATE, "编辑"))),
             entry("company-setting", "公司信息", "系统", false, List.of("company-settings"), List.of("/company-settings"), CRUD_ACTIONS),
