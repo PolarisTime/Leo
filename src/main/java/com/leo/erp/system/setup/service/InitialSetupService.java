@@ -4,31 +4,35 @@ import com.leo.erp.auth.domain.entity.UserAccount;
 import com.leo.erp.auth.domain.enums.UserStatus;
 import com.leo.erp.auth.repository.UserAccountRepository;
 import com.leo.erp.auth.repository.UserRoleRepository;
+import com.leo.erp.auth.service.TotpService;
 import com.leo.erp.auth.service.UserRoleBindingService;
+import com.leo.erp.auth.web.dto.TotpSetupResponse;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
-import com.leo.erp.system.company.service.CompanySettingService;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leo.erp.system.company.domain.entity.CompanySetting;
 import com.leo.erp.system.company.repository.CompanySettingRepository;
+import com.leo.erp.system.company.service.CompanySettingService;
 import com.leo.erp.system.company.web.dto.CompanySettlementAccountResponse;
 import com.leo.erp.system.norule.domain.entity.NoRule;
 import com.leo.erp.system.norule.repository.NoRuleRepository;
 import com.leo.erp.system.role.domain.entity.RoleSetting;
 import com.leo.erp.system.role.repository.RoleSettingRepository;
-import com.leo.erp.system.setup.web.dto.InitialSetupAdminRequest;
+import com.leo.erp.system.setup.web.dto.InitialSetupAdminSubmitRequest;
 import com.leo.erp.system.setup.web.dto.InitialSetupCompanyRequest;
 import com.leo.erp.system.setup.web.dto.InitialSetupStatusResponse;
 import com.leo.erp.system.setup.web.dto.InitialSetupSubmitRequest;
 import com.leo.erp.system.setup.web.dto.InitialSetupSubmitResponse;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import com.leo.erp.system.setup.web.dto.InitialSetupTotpSetupRequest;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.util.Base64;
 
 @Service
 public class InitialSetupService {
@@ -47,6 +51,7 @@ public class InitialSetupService {
     private final PasswordEncoder passwordEncoder;
     private final SnowflakeIdGenerator snowflakeIdGenerator;
     private final ObjectMapper objectMapper;
+    private final TotpService totpService;
 
     public InitialSetupService(UserAccountRepository userAccountRepository,
                                UserRoleRepository userRoleRepository,
@@ -56,7 +61,8 @@ public class InitialSetupService {
                                NoRuleRepository noRuleRepository,
                                PasswordEncoder passwordEncoder,
                                SnowflakeIdGenerator snowflakeIdGenerator,
-                               ObjectMapper objectMapper) {
+                               ObjectMapper objectMapper,
+                               TotpService totpService) {
         this.userAccountRepository = userAccountRepository;
         this.userRoleRepository = userRoleRepository;
         this.userRoleBindingService = userRoleBindingService;
@@ -66,6 +72,7 @@ public class InitialSetupService {
         this.passwordEncoder = passwordEncoder;
         this.snowflakeIdGenerator = snowflakeIdGenerator;
         this.objectMapper = objectMapper;
+        this.totpService = totpService;
     }
 
     @Transactional(readOnly = true)
@@ -89,7 +96,7 @@ public class InitialSetupService {
         String companyName = null;
 
         if (!adminConfigured) {
-            InitialSetupAdminRequest adminRequest = request == null ? null : request.admin();
+            InitialSetupAdminSubmitRequest adminRequest = request == null ? null : request.admin();
             adminLoginName = createAdmin(adminRequest);
         } else {
             adminLoginName = resolveExistingAdminLoginName();
@@ -97,7 +104,7 @@ public class InitialSetupService {
 
         if (!companyConfigured) {
             InitialSetupCompanyRequest companyRequest = request == null ? null : request.company();
-            companyName = createCompany(companyRequest);
+            companyName = createCompanyRecord(companyRequest);
         } else {
             companyName = companySettingRepository.findFirstByDeletedFlagFalseOrderByIdAsc()
                     .map(CompanySetting::getCompanyName)
@@ -105,6 +112,36 @@ public class InitialSetupService {
         }
 
         return new InitialSetupSubmitResponse(adminLoginName, companyName);
+    }
+
+    @Transactional(readOnly = true)
+    public TotpSetupResponse setupAdminTotp(InitialSetupTotpSetupRequest request) {
+        if (isAdminConfigured()) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "管理员账号已完成初始化");
+        }
+        String loginName = requireText(request == null ? null : request.loginName(), "管理员登录账号不能为空");
+        String secret = totpService.generateSecret();
+        byte[] qrCode = totpService.generateQrCodeImage(secret, loginName);
+        return new TotpSetupResponse(Base64.getEncoder().encodeToString(qrCode), secret);
+    }
+
+    @Transactional
+    public InitialSetupSubmitResponse configureAdmin(InitialSetupAdminSubmitRequest request) {
+        if (isAdminConfigured()) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "管理员账号已完成初始化");
+        }
+        return new InitialSetupSubmitResponse(createAdmin(request), null);
+    }
+
+    @Transactional
+    public InitialSetupSubmitResponse configureCompany(InitialSetupCompanyRequest request) {
+        if (!isAdminConfigured()) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "请先完成管理员账号初始化");
+        }
+        if (companySettingRepository.existsByDeletedFlagFalse()) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "公司主体已完成初始化");
+        }
+        return new InitialSetupSubmitResponse(resolveExistingAdminLoginName(), createCompanyRecord(request));
     }
 
     public boolean isSetupRequired() {
@@ -123,17 +160,26 @@ public class InitialSetupService {
                 .orElse("admin");
     }
 
-    private String createAdmin(InitialSetupAdminRequest request) {
+    private String createAdmin(InitialSetupAdminSubmitRequest request) {
         if (request == null) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "请填写管理员账号信息");
         }
 
-        String loginName = requireText(request.loginName(), "管理员登录账号不能为空");
-        String password = requireText(request.password(), "管理员密码不能为空");
-        String userName = requireText(request.userName(), "管理员姓名不能为空");
-        String mobile = trimToEmpty(request.mobile());
+        if (request.admin() == null) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "请填写管理员账号信息");
+        }
+
+        String loginName = requireText(request.admin().loginName(), "管理员登录账号不能为空");
+        String password = requireText(request.admin().password(), "管理员密码不能为空");
+        String userName = requireText(request.admin().userName(), "管理员姓名不能为空");
+        String mobile = trimToEmpty(request.admin().mobile());
+        String totpSecret = requireText(request.totpSecret(), "请先生成并绑定管理员 2FA");
+        String totpCode = requireText(request.totpCode(), "请输入管理员 2FA 验证码");
         if (password.length() < 8) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "管理员密码至少8位");
+        }
+        if (!totpService.verifyCode(totpSecret, totpCode)) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "管理员 2FA 验证码不正确");
         }
 
         if (userAccountRepository.existsByLoginNameAndDeletedFlagFalse(loginName)) {
@@ -154,7 +200,8 @@ public class InitialSetupService {
         admin.setPermissionSummary("");
         admin.setStatus(UserStatus.NORMAL);
         admin.setRemark(SETUP_REMARK);
-        admin.setTotpEnabled(Boolean.FALSE);
+        admin.setTotpSecret(totpService.encryptSecret(totpSecret));
+        admin.setTotpEnabled(Boolean.TRUE);
         admin.setRequireTotpSetup(Boolean.FALSE);
         try {
             userAccountRepository.saveAndFlush(admin);
@@ -165,7 +212,7 @@ public class InitialSetupService {
         }
     }
 
-    private String createCompany(InitialSetupCompanyRequest request) {
+    private String createCompanyRecord(InitialSetupCompanyRequest request) {
         if (request == null) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "请填写公司主体信息");
         }
