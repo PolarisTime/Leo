@@ -27,6 +27,28 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class UserAccountAdminServiceTest {
 
+    private static UserAccountAdminService createService(
+            UserAccountRepository repository,
+            com.leo.erp.common.support.SnowflakeIdGenerator idGenerator,
+            org.springframework.security.crypto.password.PasswordEncoder passwordEncoder,
+            UserAccountAdminMapper mapper,
+            TotpService totpService,
+            UserRoleBindingService userRoleBindingService,
+            com.leo.erp.security.permission.PermissionService permissionService,
+            AuthProperties authProperties,
+            SystemSwitchService systemSwitchService,
+            AuthenticatedUserCacheService authenticatedUserCacheService,
+            com.leo.erp.system.dashboard.service.DashboardSummaryService dashboardSummaryService,
+            com.leo.erp.common.support.RedisJsonCacheSupport redisJsonCacheSupport,
+            DepartmentRepository departmentRepository) {
+        UserAccountValidationService validationService = new UserAccountValidationService(
+                repository, departmentRepository, redisJsonCacheSupport, systemSwitchService);
+        UserAccountCacheService cacheService = new UserAccountCacheService(
+                redisJsonCacheSupport, authenticatedUserCacheService, dashboardSummaryService, permissionService);
+        return new UserAccountAdminService(repository, idGenerator, passwordEncoder, mapper,
+                totpService, userRoleBindingService, permissionService, validationService, cacheService);
+    }
+
     @Test
     void shouldReturnDerivedPermissionSummaryInsteadOfStoredValue() {
         UserAccount entity = new UserAccount();
@@ -46,7 +68,7 @@ class UserAccountAdminServiceTest {
         role.setRoleCode("PURCHASER");
         role.setStatus("正常");
 
-        UserAccountAdminService service = new UserAccountAdminService(
+        UserAccountAdminService service = createService(
                 userAccountRepository(entity),
                 null,
                 null,
@@ -76,7 +98,7 @@ class UserAccountAdminServiceTest {
         role.setRoleCode("PURCHASER");
         role.setStatus("正常");
 
-        UserAccountAdminService service = new UserAccountAdminService(
+        UserAccountAdminService service = createService(
                 repositoryForWrite(),
                 new FixedIdGenerator(100L),
                 new StubPasswordEncoder(),
@@ -117,7 +139,7 @@ class UserAccountAdminServiceTest {
         role.setStatus("正常");
         AtomicReference<UserAccount> savedUser = new AtomicReference<>();
 
-        UserAccountAdminService service = new UserAccountAdminService(
+        UserAccountAdminService service = createService(
                 repositoryForWrite(savedUser),
                 new FixedIdGenerator(100L),
                 new StubPasswordEncoder(),
@@ -163,7 +185,7 @@ class UserAccountAdminServiceTest {
 
         AtomicReference<UserAccount> savedUser = new AtomicReference<>();
 
-        UserAccountAdminService service = new UserAccountAdminService(
+        UserAccountAdminService service = createService(
                 repositoryForWrite(savedUser),
                 new FixedIdGenerator(100L),
                 new StubPasswordEncoder(),
@@ -209,7 +231,7 @@ class UserAccountAdminServiceTest {
         role.setStatus("正常");
         AtomicReference<UserAccount> savedUser = new AtomicReference<>();
 
-        UserAccountAdminService service = new UserAccountAdminService(
+        UserAccountAdminService service = createService(
                 repositoryForWrite(savedUser),
                 new FixedIdGenerator(100L),
                 new StubPasswordEncoder(),
@@ -255,7 +277,7 @@ class UserAccountAdminServiceTest {
         existing.setLoginName("test");
         existing.setDeletedFlag(Boolean.TRUE);
 
-        UserAccountAdminService service = new UserAccountAdminService(
+        UserAccountAdminService service = createService(
                 repositoryWithExistingLoginName(existing),
                 new FixedIdGenerator(100L),
                 new StubPasswordEncoder(),
@@ -293,7 +315,7 @@ class UserAccountAdminServiceTest {
         existing.setId(99L);
         existing.setLoginName("test");
 
-        UserAccountAdminService service = new UserAccountAdminService(
+        UserAccountAdminService service = createService(
                 repositoryWithExistingLoginName(existing),
                 new FixedIdGenerator(100L),
                 new StubPasswordEncoder(),
@@ -321,7 +343,7 @@ class UserAccountAdminServiceTest {
         existing.setId(99L);
         existing.setLoginName("test");
 
-        UserAccountAdminService service = new UserAccountAdminService(
+        UserAccountAdminService service = createService(
                 repositoryWithExistingLoginName(existing),
                 new FixedIdGenerator(100L),
                 new StubPasswordEncoder(),

@@ -7,6 +7,7 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -23,6 +24,9 @@ public class SupplierStatement extends AuditableEntity {
 
     @Id
     private Long id;
+
+    @Version
+    private Long version;
 
     @Column(name = "statement_no", nullable = false, unique = true, length = 32)
     private String statementNo;

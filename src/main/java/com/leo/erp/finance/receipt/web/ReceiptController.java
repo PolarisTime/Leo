@@ -12,7 +12,10 @@ import jakarta.validation.Valid;
 import java.time.LocalDate;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.*;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 
+@Tag(name = "收款管理")
 @RestController
 @RequestMapping("/receipts")
 public class ReceiptController {
@@ -23,6 +26,7 @@ public class ReceiptController {
         this.receiptService = receiptService;
     }
 
+    @Operation(summary = "分页查询收款单")
     @GetMapping
     @RequiresPermission(resource = "receipt", action = "read")
     public ApiResponse<PageResponse<ReceiptResponse>> page(
@@ -38,24 +42,28 @@ public class ReceiptController {
         ));
     }
 
+    @Operation(summary = "查询收款单详情")
     @GetMapping("/{id}")
     @RequiresPermission(resource = "receipt", action = "read")
     public ApiResponse<ReceiptResponse> detail(@PathVariable Long id) {
         return ApiResponse.success(receiptService.detail(id));
     }
 
+    @Operation(summary = "创建收款单")
     @PostMapping
     @RequiresPermission(resource = "receipt", action = "create")
     public ApiResponse<ReceiptResponse> create(@Valid @RequestBody ReceiptRequest request) {
         return ApiResponse.success("创建成功", receiptService.create(request));
     }
 
+    @Operation(summary = "更新收款单")
     @PutMapping("/{id}")
     @RequiresPermission(resource = "receipt", action = "update")
     public ApiResponse<ReceiptResponse> update(@PathVariable Long id, @Valid @RequestBody ReceiptRequest request) {
         return ApiResponse.success("更新成功", receiptService.update(id, request));
     }
 
+    @Operation(summary = "删除收款单")
     @DeleteMapping("/{id}")
     @RequiresPermission(resource = "receipt", action = "delete")
     public ApiResponse<Void> delete(@PathVariable Long id) {

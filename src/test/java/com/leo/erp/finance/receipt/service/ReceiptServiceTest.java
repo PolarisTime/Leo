@@ -10,7 +10,8 @@ import com.leo.erp.security.permission.ResourceRecordAccessGuard;
 import com.leo.erp.security.permission.WorkflowTransitionGuard;
 import com.leo.erp.statement.customer.domain.entity.CustomerStatement;
 import com.leo.erp.statement.customer.service.CustomerStatementQueryService;
-import com.leo.erp.statement.service.StatementSettlementSyncService;
+import com.leo.erp.common.support.StatusConstants;
+import org.springframework.context.ApplicationEventPublisher;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
@@ -33,7 +34,7 @@ class ReceiptServiceTest {
                 new SnowflakeIdGenerator(0L),
                 mock(ReceiptMapper.class),
                 mock(CustomerStatementQueryService.class),
-                mock(StatementSettlementSyncService.class),
+                mock(ApplicationEventPublisher.class),
                 mock(ResourceRecordAccessGuard.class),
                 mock(WorkflowTransitionGuard.class)
         );
@@ -57,7 +58,7 @@ class ReceiptServiceTest {
         when(receiptRepository.existsByReceiptNoAndDeletedFlagFalse("SK-001")).thenReturn(false);
         when(receiptRepository.sumAmountBySourceStatementIdAndStatusExcludingId(
                 eq(21L),
-                eq(StatementSettlementSyncService.RECEIPT_STATUS_SETTLED),
+                eq(StatusConstants.RECEIVED),
                 anyLong()
         )).thenReturn(new BigDecimal("950.00"));
 
@@ -66,7 +67,7 @@ class ReceiptServiceTest {
                 new SnowflakeIdGenerator(0L),
                 mock(ReceiptMapper.class),
                 customerStatementQueryService,
-                mock(StatementSettlementSyncService.class),
+                mock(ApplicationEventPublisher.class),
                 mock(ResourceRecordAccessGuard.class),
                 mock(WorkflowTransitionGuard.class)
         );
@@ -97,7 +98,7 @@ class ReceiptServiceTest {
                 new SnowflakeIdGenerator(0L),
                 mock(ReceiptMapper.class),
                 customerStatementQueryService,
-                mock(StatementSettlementSyncService.class),
+                mock(ApplicationEventPublisher.class),
                 resourceRecordAccessGuard,
                 mock(WorkflowTransitionGuard.class)
         );

@@ -6,6 +6,7 @@ import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.service.AbstractCrudService;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
+import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.support.TradeItemCalculator;
 import com.leo.erp.finance.payment.domain.entity.Payment;
 import com.leo.erp.finance.payment.repository.PaymentRepository;
@@ -15,11 +16,11 @@ import com.leo.erp.finance.payment.web.dto.PaymentResponse;
 import com.leo.erp.security.permission.ResourcePermissionCatalog;
 import com.leo.erp.security.permission.ResourceRecordAccessGuard;
 import com.leo.erp.security.permission.WorkflowTransitionGuard;
-import com.leo.erp.statement.service.StatementSettlementSyncService;
 import com.leo.erp.statement.freight.domain.entity.FreightStatement;
 import com.leo.erp.statement.freight.service.FreightStatementQueryService;
 import com.leo.erp.statement.supplier.domain.entity.SupplierStatement;
 import com.leo.erp.statement.supplier.service.SupplierStatementQueryService;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
@@ -33,12 +34,13 @@ public class PaymentService extends AbstractCrudService<Payment, PaymentRequest,
 
     private static final String SUPPLIER_PAYMENT_TYPE = "供应商";
     private static final String FREIGHT_PAYMENT_TYPE = "物流商";
+    private static final String PAYMENT_STATUS_SETTLED = StatusConstants.PAID;
 
     private final PaymentRepository paymentRepository;
     private final PaymentMapper paymentMapper;
     private final SupplierStatementQueryService supplierStatementQueryService;
     private final FreightStatementQueryService freightStatementQueryService;
-    private final StatementSettlementSyncService statementSettlementSyncService;
+    private final ApplicationEventPublisher eventPublisher;
     private final ResourceRecordAccessGuard resourceRecordAccessGuard;
     private final WorkflowTransitionGuard workflowTransitionGuard;
 
@@ -47,7 +49,7 @@ public class PaymentService extends AbstractCrudService<Payment, PaymentRequest,
                           PaymentMapper paymentMapper,
                           SupplierStatementQueryService supplierStatementQueryService,
                           FreightStatementQueryService freightStatementQueryService,
-                          StatementSettlementSyncService statementSettlementSyncService,
+                          ApplicationEventPublisher eventPublisher,
                           ResourceRecordAccessGuard resourceRecordAccessGuard,
                           WorkflowTransitionGuard workflowTransitionGuard) {
         super(snowflakeIdGenerator);
@@ -55,7 +57,7 @@ public class PaymentService extends AbstractCrudService<Payment, PaymentRequest,
         this.paymentMapper = paymentMapper;
         this.supplierStatementQueryService = supplierStatementQueryService;
         this.freightStatementQueryService = freightStatementQueryService;
-        this.statementSettlementSyncService = statementSettlementSyncService;
+        this.eventPublisher = eventPublisher;
         this.resourceRecordAccessGuard = resourceRecordAccessGuard;
         this.workflowTransitionGuard = workflowTransitionGuard;
     }
@@ -112,7 +114,7 @@ public class PaymentService extends AbstractCrudService<Payment, PaymentRequest,
                 "payments",
                 entity.getStatus(),
                 request.status(),
-                StatementSettlementSyncService.PAYMENT_STATUS_SETTLED
+                PAYMENT_STATUS_SETTLED
         );
         entity.setPaymentNo(request.paymentNo());
         entity.setBusinessType(request.businessType());
@@ -177,10 +179,10 @@ public class PaymentService extends AbstractCrudService<Payment, PaymentRequest,
         if (!statement.getSupplierName().equals(request.counterpartyName())) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "付款单往来单位与供应商对账单供应商不一致");
         }
-        if (StatementSettlementSyncService.PAYMENT_STATUS_SETTLED.equals(request.status())) {
+        if (PAYMENT_STATUS_SETTLED.equals(request.status())) {
             BigDecimal settledAmount = TradeItemCalculator.safeBigDecimal(paymentRepository.sumAmountBySourceStatementIdAndStatusExcludingId(
                     statement.getId(),
-                    StatementSettlementSyncService.PAYMENT_STATUS_SETTLED,
+                    PAYMENT_STATUS_SETTLED,
                     currentPaymentId
             ));
             BigDecimal nextSettledAmount = settledAmount.add(request.amount());
@@ -204,10 +206,10 @@ public class PaymentService extends AbstractCrudService<Payment, PaymentRequest,
         if (!statement.getCarrierName().equals(request.counterpartyName())) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "付款单往来单位与物流对账单物流商不一致");
         }
-        if (StatementSettlementSyncService.PAYMENT_STATUS_SETTLED.equals(request.status())) {
+        if (PAYMENT_STATUS_SETTLED.equals(request.status())) {
             BigDecimal settledAmount = TradeItemCalculator.safeBigDecimal(paymentRepository.sumAmountBySourceStatementIdAndStatusExcludingId(
                     statement.getId(),
-                    StatementSettlementSyncService.PAYMENT_STATUS_SETTLED,
+                    PAYMENT_STATUS_SETTLED,
                     currentPaymentId
             ));
             BigDecimal nextSettledAmount = settledAmount.add(request.amount());
@@ -233,15 +235,7 @@ public class PaymentService extends AbstractCrudService<Payment, PaymentRequest,
         if (sourceStatementId == null) {
             return;
         }
-        if (SUPPLIER_PAYMENT_TYPE.equals(businessType)) {
-            supplierStatementQueryService.findActiveById(sourceStatementId)
-                    .ifPresent(statementSettlementSyncService::syncSupplierStatement);
-            return;
-        }
-        if (FREIGHT_PAYMENT_TYPE.equals(businessType)) {
-            freightStatementQueryService.findActiveById(sourceStatementId)
-                    .ifPresent(statementSettlementSyncService::syncFreightStatement);
-        }
+        eventPublisher.publishEvent(new PaymentSettledEvent(sourceStatementId, businessType));
     }
 
     private boolean shouldSkipDuplicateSync(String originalBusinessType,

@@ -8,7 +8,8 @@ import com.leo.erp.finance.payment.mapper.PaymentMapper;
 import com.leo.erp.finance.payment.web.dto.PaymentRequest;
 import com.leo.erp.security.permission.ResourceRecordAccessGuard;
 import com.leo.erp.security.permission.WorkflowTransitionGuard;
-import com.leo.erp.statement.service.StatementSettlementSyncService;
+import com.leo.erp.common.support.StatusConstants;
+import org.springframework.context.ApplicationEventPublisher;
 import com.leo.erp.statement.freight.domain.entity.FreightStatement;
 import com.leo.erp.statement.freight.service.FreightStatementQueryService;
 import com.leo.erp.statement.supplier.domain.entity.SupplierStatement;
@@ -36,7 +37,7 @@ class PaymentServiceTest {
                 mock(PaymentMapper.class),
                 mock(SupplierStatementQueryService.class),
                 mock(FreightStatementQueryService.class),
-                mock(StatementSettlementSyncService.class),
+                mock(ApplicationEventPublisher.class),
                 mock(ResourceRecordAccessGuard.class),
                 mock(WorkflowTransitionGuard.class)
         );
@@ -59,7 +60,7 @@ class PaymentServiceTest {
         when(paymentRepository.existsByPaymentNoAndDeletedFlagFalse("FK-001")).thenReturn(false);
         when(paymentRepository.sumAmountBySourceStatementIdAndStatusExcludingId(
                 eq(11L),
-                eq(StatementSettlementSyncService.PAYMENT_STATUS_SETTLED),
+                eq(StatusConstants.PAID),
                 anyLong()
         )).thenReturn(new BigDecimal("900.00"));
 
@@ -69,7 +70,7 @@ class PaymentServiceTest {
                 mock(PaymentMapper.class),
                 supplierStatementQueryService,
                 mock(FreightStatementQueryService.class),
-                mock(StatementSettlementSyncService.class),
+                mock(ApplicationEventPublisher.class),
                 mock(ResourceRecordAccessGuard.class),
                 mock(WorkflowTransitionGuard.class)
         );
@@ -87,7 +88,7 @@ class PaymentServiceTest {
                 mock(PaymentMapper.class),
                 mock(SupplierStatementQueryService.class),
                 mock(FreightStatementQueryService.class),
-                mock(StatementSettlementSyncService.class),
+                mock(ApplicationEventPublisher.class),
                 mock(ResourceRecordAccessGuard.class),
                 mock(WorkflowTransitionGuard.class)
         );
@@ -110,7 +111,7 @@ class PaymentServiceTest {
         when(paymentRepository.existsByPaymentNoAndDeletedFlagFalse("FK-001")).thenReturn(false);
         when(paymentRepository.sumAmountBySourceStatementIdAndStatusExcludingId(
                 eq(31L),
-                eq(StatementSettlementSyncService.PAYMENT_STATUS_SETTLED),
+                eq(StatusConstants.PAID),
                 anyLong()
         )).thenReturn(new BigDecimal("450.00"));
 
@@ -120,7 +121,7 @@ class PaymentServiceTest {
                 mock(PaymentMapper.class),
                 mock(SupplierStatementQueryService.class),
                 freightStatementQueryService,
-                mock(StatementSettlementSyncService.class),
+                mock(ApplicationEventPublisher.class),
                 mock(ResourceRecordAccessGuard.class),
                 mock(WorkflowTransitionGuard.class)
         );
@@ -151,7 +152,7 @@ class PaymentServiceTest {
                 mock(PaymentMapper.class),
                 supplierStatementQueryService,
                 mock(FreightStatementQueryService.class),
-                mock(StatementSettlementSyncService.class),
+                mock(ApplicationEventPublisher.class),
                 resourceRecordAccessGuard,
                 mock(WorkflowTransitionGuard.class)
         );
@@ -182,7 +183,7 @@ class PaymentServiceTest {
                 mock(PaymentMapper.class),
                 mock(SupplierStatementQueryService.class),
                 freightStatementQueryService,
-                mock(StatementSettlementSyncService.class),
+                mock(ApplicationEventPublisher.class),
                 resourceRecordAccessGuard,
                 mock(WorkflowTransitionGuard.class)
         );

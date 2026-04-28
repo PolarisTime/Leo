@@ -25,7 +25,10 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 
+@Tag(name = "物流对账单")
 @RestController
 @RequestMapping("/freight-statements")
 public class FreightStatementController {
@@ -39,6 +42,7 @@ public class FreightStatementController {
         this.freightStatementWebMapper = freightStatementWebMapper;
     }
 
+    @Operation(summary = "分页查询物流对账单")
     @GetMapping
     @RequiresPermission(resource = "freight-statement", action = "read")
     public ApiResponse<PageResponse<FreightStatementResponse>> page(
@@ -62,12 +66,14 @@ public class FreightStatementController {
         return ApiResponse.success(PageResponse.from(toResponsePage(result)));
     }
 
+    @Operation(summary = "查询物流对账单详情")
     @GetMapping("/{id}")
     @RequiresPermission(resource = "freight-statement", action = "read")
     public ApiResponse<FreightStatementResponse> detail(@PathVariable Long id) {
         return ApiResponse.success(freightStatementWebMapper.toResponse(freightStatementService.detail(id)));
     }
 
+    @Operation(summary = "创建物流对账单")
     @PostMapping
     @RequiresPermission(resource = "freight-statement", action = "create")
     @OperationLoggable(moduleName = "物流对账单", actionType = "新增", businessNoFields = {"statementNo"})
@@ -78,6 +84,7 @@ public class FreightStatementController {
         );
     }
 
+    @Operation(summary = "更新物流对账单")
     @PutMapping("/{id}")
     @RequiresPermission(resource = "freight-statement", action = "update")
     @OperationLoggable(moduleName = "物流对账单", actionType = "编辑", businessNoFields = {"statementNo"})
@@ -88,6 +95,7 @@ public class FreightStatementController {
         );
     }
 
+    @Operation(summary = "删除物流对账单")
     @DeleteMapping("/{id}")
     @RequiresPermission(resource = "freight-statement", action = "delete")
     @OperationLoggable(moduleName = "物流对账单", actionType = "删除")

@@ -20,7 +20,10 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 
+@Tag(name = "采购订单")
 @RestController
 @RequestMapping("/purchase-orders")
 public class PurchaseOrderController {
@@ -31,6 +34,7 @@ public class PurchaseOrderController {
         this.purchaseOrderService = purchaseOrderService;
     }
 
+    @Operation(summary = "搜索采购订单")
     @GetMapping("/search")
     @RequiresPermission(resource = "purchase-order", action = "read")
     public ApiResponse<java.util.List<PurchaseOrderResponse>> search(
@@ -40,6 +44,7 @@ public class PurchaseOrderController {
         return ApiResponse.success(purchaseOrderService.search(keyword != null ? keyword : "", Math.min(limit, 500)));
     }
 
+    @Operation(summary = "分页查询采购订单")
     @GetMapping
     @RequiresPermission(resource = "purchase-order", action = "read")
     public ApiResponse<PageResponse<PurchaseOrderResponse>> page(
@@ -55,24 +60,28 @@ public class PurchaseOrderController {
         ));
     }
 
+    @Operation(summary = "查询采购订单详情")
     @GetMapping("/{id}")
     @RequiresPermission(resource = "purchase-order", action = "read")
     public ApiResponse<PurchaseOrderResponse> detail(@PathVariable Long id) {
         return ApiResponse.success(purchaseOrderService.detail(id));
     }
 
+    @Operation(summary = "创建采购订单")
     @PostMapping
     @RequiresPermission(resource = "purchase-order", action = "create")
     public ApiResponse<PurchaseOrderResponse> create(@Valid @RequestBody PurchaseOrderRequest request) {
         return ApiResponse.success("创建成功", purchaseOrderService.create(request));
     }
 
+    @Operation(summary = "更新采购订单")
     @PutMapping("/{id}")
     @RequiresPermission(resource = "purchase-order", action = "update")
     public ApiResponse<PurchaseOrderResponse> update(@PathVariable Long id, @Valid @RequestBody PurchaseOrderRequest request) {
         return ApiResponse.success("更新成功", purchaseOrderService.update(id, request));
     }
 
+    @Operation(summary = "删除采购订单")
     @DeleteMapping("/{id}")
     @RequiresPermission(resource = "purchase-order", action = "delete")
     public ApiResponse<Void> delete(@PathVariable Long id) {

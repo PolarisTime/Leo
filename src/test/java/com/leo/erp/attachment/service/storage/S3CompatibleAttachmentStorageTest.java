@@ -16,6 +16,14 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class S3CompatibleAttachmentStorageTest {
 
+    private static S3ChecksumUtil checksumUtil = new S3ChecksumUtil();
+    private static S3PathParser pathParser = new S3PathParser();
+
+    private static S3CompatibleAttachmentStorage createStorage(AttachmentProperties properties, S3RequestExecutor executor, Clock clock) {
+        S3Signer signer = new S3Signer(checksumUtil, pathParser, clock);
+        return new S3CompatibleAttachmentStorage(properties, executor, checksumUtil, pathParser, signer);
+    }
+
     @Test
     void shouldBuildSignedPutRequestForS3CompatibleEndpoint() throws Exception {
         AttachmentProperties properties = s3Properties();
@@ -34,11 +42,8 @@ class S3CompatibleAttachmentStorageTest {
             }
         };
 
-        S3CompatibleAttachmentStorage storage = new S3CompatibleAttachmentStorage(
-                properties,
-                executor,
-                Clock.fixed(Instant.parse("2026-04-24T12:30:45Z"), ZoneOffset.UTC)
-        );
+        S3CompatibleAttachmentStorage storage = createStorage(properties, executor,
+                Clock.fixed(Instant.parse("2026-04-24T12:30:45Z"), ZoneOffset.UTC));
 
         String storagePath = storage.store(
                 "attachments/2026/04/1/test.pdf",
@@ -71,11 +76,8 @@ class S3CompatibleAttachmentStorageTest {
             }
         };
 
-        S3CompatibleAttachmentStorage storage = new S3CompatibleAttachmentStorage(
-                properties,
-                executor,
-                Clock.fixed(Instant.parse("2026-04-24T12:30:45Z"), ZoneOffset.UTC)
-        );
+        S3CompatibleAttachmentStorage storage = createStorage(properties, executor,
+                Clock.fixed(Instant.parse("2026-04-24T12:30:45Z"), ZoneOffset.UTC));
 
         String content = new String(
                 storage.load("s3:test-bucket/attachments/2026/04/1/test.pdf").getInputStream().readAllBytes(),
