@@ -2,7 +2,6 @@ package com.leo.erp.system.operationlog.support;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leo.erp.common.support.IpResolutionService;
-import com.leo.erp.common.support.ModuleCatalog;
 import com.leo.erp.security.permission.RequiresPermission;
 import com.leo.erp.system.norule.service.SystemSwitchService;
 import com.leo.erp.system.operationlog.service.OperationLogService;
