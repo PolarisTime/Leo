@@ -45,9 +45,15 @@
 cp scripts/env-local.sh.example scripts/env-local.sh
 vim scripts/env-local.sh
 
+# 首次使用时创建空数据库和应用账号
+./scripts/init-database.sh
+
 # 启动
 ./scripts/start-local.sh
 ```
+
+启动后 Flyway 会创建表结构和系统菜单/权限等基础元数据，不再写入演示业务数据。
+首次打开前端时进入 `http://localhost:3100/setup`，通过 OOBE 创建管理员账号和公司主体信息。
 
 ### 环境变量
 
@@ -58,6 +64,8 @@ vim scripts/env-local.sh
 | `SPRING_DATASOURCE_DB` | `leo` | 数据库名 |
 | `SPRING_DATASOURCE_USERNAME` | `leo` | 数据库用户 |
 | `SPRING_DATASOURCE_PASSWORD` | — | 数据库密码 |
+| `LEO_DB_ADMIN_USER` | `postgres` | `scripts/init-database.sh` 使用的 PostgreSQL 管理账号 |
+| `LEO_DB_ADMIN_PASSWORD` | — | PostgreSQL 管理账号密码 |
 | `SPRING_DATA_REDIS_HOST` | `localhost` | Redis 主机 |
 | `SPRING_DATA_REDIS_PORT` | `6379` | Redis 端口 |
 | `LEO_AUTH_JWT_SECRET` | — | JWT 签名密钥 (必填) |

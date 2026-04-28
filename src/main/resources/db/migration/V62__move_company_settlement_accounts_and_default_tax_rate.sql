@@ -85,7 +85,7 @@ INSERT INTO sys_no_rule (
     remark
 )
 SELECT
-    700500000000000110,
+    (SELECT COALESCE(MAX(id), 700500000000000110) + 1 FROM sys_no_rule),
     'SYS_DEFAULT_TAX_RATE',
     '默认税率',
     '发票税率',
