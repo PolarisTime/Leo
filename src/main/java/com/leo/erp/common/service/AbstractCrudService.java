@@ -18,13 +18,14 @@ import java.util.Optional;
 
 public abstract class AbstractCrudService<E extends AuditableEntity, Req, Res> {
 
-    private final Logger logger;
-
     private final SnowflakeIdGenerator idGenerator;
 
     protected AbstractCrudService(SnowflakeIdGenerator idGenerator) {
         this.idGenerator = idGenerator;
-        this.logger = LoggerFactory.getLogger(getClass());
+    }
+
+    private Logger logger() {
+        return LoggerFactory.getLogger(getClass());
     }
 
     @Transactional(readOnly = true)
@@ -40,7 +41,7 @@ public abstract class AbstractCrudService<E extends AuditableEntity, Req, Res> {
         assignId(entity, id);
         apply(entity, request);
         Res response = toSavedResponse(saveEntity(entity));
-        logger.info("{} created: id={}", entity.getClass().getSimpleName(), id);
+        logger().info("{} created: id={}", entity.getClass().getSimpleName(), id);
         return response;
     }
 
@@ -50,7 +51,7 @@ public abstract class AbstractCrudService<E extends AuditableEntity, Req, Res> {
         validateUpdate(entity, request);
         apply(entity, request);
         Res response = toSavedResponse(saveEntity(entity));
-        logger.info("{} updated: id={}", entity.getClass().getSimpleName(), id);
+        logger().info("{} updated: id={}", entity.getClass().getSimpleName(), id);
         return response;
     }
 
@@ -60,7 +61,7 @@ public abstract class AbstractCrudService<E extends AuditableEntity, Req, Res> {
         beforeDelete(entity);
         entity.setDeletedFlag(Boolean.TRUE);
         saveEntity(entity);
-        logger.info("{} deleted: id={}", entity.getClass().getSimpleName(), id);
+        logger().info("{} deleted: id={}", entity.getClass().getSimpleName(), id);
     }
 
     protected final Page<Res> page(PageQuery query, Specification<E> specification, JpaSpecificationExecutor<E> repository) {
