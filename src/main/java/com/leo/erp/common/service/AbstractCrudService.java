@@ -18,10 +18,10 @@ import java.util.Optional;
 
 public abstract class AbstractCrudService<E extends AuditableEntity, Req, Res> {
 
-    private final SnowflakeIdGenerator idGenerator;
-
     protected AbstractCrudService(SnowflakeIdGenerator idGenerator) {
-        this.idGenerator = idGenerator;
+        if (SnowflakeIdGenerator.getInstance() == null) {
+            SnowflakeIdGenerator.registerInstance(idGenerator);
+        }
     }
 
     private Logger logger() {
@@ -37,7 +37,7 @@ public abstract class AbstractCrudService<E extends AuditableEntity, Req, Res> {
     public final Res create(Req request) {
         validateCreate(request);
         E entity = newEntity();
-        long id = idGenerator.nextId();
+        long id = SnowflakeIdGenerator.getInstance().nextId();
         assignId(entity, id);
         apply(entity, request);
         Res response = toSavedResponse(saveEntity(entity));
@@ -69,11 +69,6 @@ public abstract class AbstractCrudService<E extends AuditableEntity, Req, Res> {
                 .map(this::toResponse);
     }
 
-    /**
-     * Lightweight keyword search for dropdowns, selectors, and parent lookups.
-     * Returns at most {@code maxSize} rows. Applies data-scope filtering just like
-     * {@link #page} — users with SELF/DEPARTMENT scope only see their own data.
-     */
     protected final List<Res> search(String keyword, String[] searchFields, int maxSize,
                                       Specification<E> baseSpec, JpaSpecificationExecutor<E> repository) {
         Specification<E> spec = baseSpec
@@ -91,7 +86,7 @@ public abstract class AbstractCrudService<E extends AuditableEntity, Req, Res> {
     }
 
     protected final long nextId() {
-        return idGenerator.nextId();
+        return SnowflakeIdGenerator.getInstance().nextId();
     }
 
     protected void validateCreate(Req request) {
