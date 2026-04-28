@@ -161,7 +161,8 @@ public class RoleSettingService extends AbstractCrudService<RoleSetting, RoleSet
         rolePermissionRepository.deleteActiveByRoleId(roleId);
         rolePermissionRepository.flush();
         for (RolePermissionItem item : permissions) {
-            String resource = ResourcePermissionCatalog.normalizeResource(item.resource());
+            String resource = ResourcePermissionCatalog.resolveResourceByMenuCode(item.resource())
+                    .orElseGet(() -> ResourcePermissionCatalog.normalizeResource(item.resource()));
             String action = ResourcePermissionCatalog.normalizeAction(item.action());
             String uniqueKey = resource + ":" + action;
             if (!seen.add(uniqueKey)) {
