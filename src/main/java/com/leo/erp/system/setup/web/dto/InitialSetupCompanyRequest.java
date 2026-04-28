@@ -16,8 +16,6 @@ public record InitialSetupCompanyRequest(
         String bankAccount,
         @DecimalMin(value = "0.0000", message = "税率不能小于0")
         BigDecimal taxRate,
-        @Size(max = 16)
-        String status,
         @Size(max = 255)
         String remark
 ) {

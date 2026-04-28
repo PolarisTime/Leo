@@ -113,7 +113,7 @@ public class InitialSetupService {
 
     private boolean isAdminConfigured() {
         return roleSettingRepository.findByRoleCodeAndDeletedFlagFalse(ADMIN_ROLE_CODE)
-                .map(role -> userRoleRepository.countByRoleIdAndDeletedFlagFalse(role.getId()) > 0)
+                .map(role -> userRoleRepository.countActiveUsersByRoleId(role.getId()) > 0)
                 .orElseGet(() -> userAccountRepository.findByLoginNameAndDeletedFlagFalse("admin").isPresent());
     }
 
@@ -174,7 +174,6 @@ public class InitialSetupService {
         String taxNo = requireText(request.taxNo(), "税号不能为空");
         String bankName = requireText(request.bankName(), "开户银行不能为空");
         String bankAccount = requireText(request.bankAccount(), "银行账号不能为空");
-        String status = trimToEmpty(request.status()).isEmpty() ? DEFAULT_COMPANY_STATUS : request.status().trim();
         String remark = trimToEmpty(request.remark());
         BigDecimal taxRate = request.taxRate();
         if (taxRate == null) {
@@ -188,8 +187,8 @@ public class InitialSetupService {
         entity.setBankName(bankName);
         entity.setBankAccount(bankAccount);
         entity.setTaxRate(taxRate);
-        entity.setSettlementAccountsJson(buildSettlementAccountsJson(companyName, bankName, bankAccount, status, remark));
-        entity.setStatus(status);
+        entity.setSettlementAccountsJson(buildSettlementAccountsJson(companyName, bankName, bankAccount, DEFAULT_COMPANY_STATUS, remark));
+        entity.setStatus(DEFAULT_COMPANY_STATUS);
         entity.setRemark(remark.isEmpty() ? SETUP_REMARK : remark);
         try {
             companySettingRepository.saveAndFlush(entity);
