@@ -16,17 +16,21 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class OperationLogInterceptorTest {
 
+    private static OperationLogInterceptor createInterceptor(SystemSwitchService systemSwitchService) {
+        ObjectMapper objectMapper = new ObjectMapper();
+        IpResolutionService ipResolutionService = new IpResolutionService("");
+        OperationLogMetadataResolver metadataResolver = new OperationLogMetadataResolver(systemSwitchService);
+        OperationLogResultCollector resultCollector = new OperationLogResultCollector(objectMapper, ipResolutionService);
+        OperationLogCommandRecorder commandRecorder = new OperationLogCommandRecorder(
+                new OperationLogService(null, null, null, null), resultCollector);
+        return new OperationLogInterceptor(metadataResolver, resultCollector, commandRecorder);
+    }
+
     @Test
     void shouldAutoGenerateMetadataForWriteRequestWithRequiresPermission() throws Exception {
         StubSystemSwitchService systemSwitchService = new StubSystemSwitchService();
         systemSwitchService.autoRecordAllWriteOperations = true;
-        OperationLogInterceptor interceptor = new OperationLogInterceptor(
-                new OperationLogService(null, null, null, null),
-                new ObjectMapper(),
-                new ModuleCatalog(),
-                systemSwitchService,
-                new IpResolutionService("")
-        );
+        OperationLogInterceptor interceptor = createInterceptor(systemSwitchService);
         MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/purchase-orders");
 
         interceptor.preHandle(
@@ -44,13 +48,7 @@ class OperationLogInterceptorTest {
     @Test
     void shouldIgnoreReadOnlyRequestWithoutExplicitOperationLoggable() throws Exception {
         StubSystemSwitchService systemSwitchService = new StubSystemSwitchService();
-        OperationLogInterceptor interceptor = new OperationLogInterceptor(
-                new OperationLogService(null, null, null, null),
-                new ObjectMapper(),
-                new ModuleCatalog(),
-                systemSwitchService,
-                new IpResolutionService("")
-        );
+        OperationLogInterceptor interceptor = createInterceptor(systemSwitchService);
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/purchase-orders");
 
         interceptor.preHandle(
@@ -67,13 +65,7 @@ class OperationLogInterceptorTest {
         StubSystemSwitchService systemSwitchService = new StubSystemSwitchService();
         systemSwitchService.recordDetailedPageActions = true;
         systemSwitchService.allowedDetailedActions.add("QUERY");
-        OperationLogInterceptor interceptor = new OperationLogInterceptor(
-                new OperationLogService(null, null, null, null),
-                new ObjectMapper(),
-                new ModuleCatalog(),
-                systemSwitchService,
-                new IpResolutionService("")
-        );
+        OperationLogInterceptor interceptor = createInterceptor(systemSwitchService);
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/purchase-orders");
 
         interceptor.preHandle(
@@ -93,13 +85,7 @@ class OperationLogInterceptorTest {
         StubSystemSwitchService systemSwitchService = new StubSystemSwitchService();
         systemSwitchService.recordDetailedPageActions = true;
         systemSwitchService.allowedDetailedActions.add("DETAIL");
-        OperationLogInterceptor interceptor = new OperationLogInterceptor(
-                new OperationLogService(null, null, null, null),
-                new ObjectMapper(),
-                new ModuleCatalog(),
-                systemSwitchService,
-                new IpResolutionService("")
-        );
+        OperationLogInterceptor interceptor = createInterceptor(systemSwitchService);
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/purchase-orders/1");
         request.setAttribute(HandlerMapping.URI_TEMPLATE_VARIABLES_ATTRIBUTE, java.util.Map.of("id", "1"));
 
@@ -118,13 +104,7 @@ class OperationLogInterceptorTest {
     void shouldSkipUncheckedActionWhenDetailedPageActionLoggingEnabled() throws Exception {
         StubSystemSwitchService systemSwitchService = new StubSystemSwitchService();
         systemSwitchService.recordDetailedPageActions = true;
-        OperationLogInterceptor interceptor = new OperationLogInterceptor(
-                new OperationLogService(null, null, null, null),
-                new ObjectMapper(),
-                new ModuleCatalog(),
-                systemSwitchService,
-                new IpResolutionService("")
-        );
+        OperationLogInterceptor interceptor = createInterceptor(systemSwitchService);
         MockHttpServletRequest request = new MockHttpServletRequest("PUT", "/api/purchase-orders/1");
 
         interceptor.preHandle(
@@ -139,13 +119,7 @@ class OperationLogInterceptorTest {
     @Test
     void shouldSkipAutoGeneratedMetadataWhenSystemSwitchDisabled() throws Exception {
         StubSystemSwitchService systemSwitchService = new StubSystemSwitchService();
-        OperationLogInterceptor interceptor = new OperationLogInterceptor(
-                new OperationLogService(null, null, null, null),
-                new ObjectMapper(),
-                new ModuleCatalog(),
-                systemSwitchService,
-                new IpResolutionService("")
-        );
+        OperationLogInterceptor interceptor = createInterceptor(systemSwitchService);
         MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/purchase-orders");
 
         interceptor.preHandle(
@@ -160,13 +134,7 @@ class OperationLogInterceptorTest {
     @Test
     void shouldKeepExplicitOperationLoggableWhenSystemSwitchDisabled() throws Exception {
         StubSystemSwitchService systemSwitchService = new StubSystemSwitchService();
-        OperationLogInterceptor interceptor = new OperationLogInterceptor(
-                new OperationLogService(null, null, null, null),
-                new ObjectMapper(),
-                new ModuleCatalog(),
-                systemSwitchService,
-                new IpResolutionService("")
-        );
+        OperationLogInterceptor interceptor = createInterceptor(systemSwitchService);
         MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/manual-log");
 
         interceptor.preHandle(
@@ -185,13 +153,7 @@ class OperationLogInterceptorTest {
     void shouldResolveRoleResourceModuleNameForRoleSettingsPermission() throws Exception {
         StubSystemSwitchService systemSwitchService = new StubSystemSwitchService();
         systemSwitchService.autoRecordAllWriteOperations = true;
-        OperationLogInterceptor interceptor = new OperationLogInterceptor(
-                new OperationLogService(null, null, null, null),
-                new ObjectMapper(),
-                new ModuleCatalog(),
-                systemSwitchService,
-                new IpResolutionService("")
-        );
+        OperationLogInterceptor interceptor = createInterceptor(systemSwitchService);
         MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/role-settings");
 
         interceptor.preHandle(

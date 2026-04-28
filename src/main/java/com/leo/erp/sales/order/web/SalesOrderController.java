@@ -12,7 +12,10 @@ import jakarta.validation.Valid;
 import java.time.LocalDate;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.*;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 
+@Tag(name = "销售订单")
 @RestController
 @RequestMapping("/sales-orders")
 public class SalesOrderController {
@@ -23,6 +26,7 @@ public class SalesOrderController {
         this.service = service;
     }
 
+    @Operation(summary = "搜索销售订单")
     @GetMapping("/search")
     @RequiresPermission(resource = "sales-order", action = "read")
     public ApiResponse<java.util.List<SalesOrderResponse>> search(
@@ -32,6 +36,7 @@ public class SalesOrderController {
         return ApiResponse.success(service.search(keyword != null ? keyword : "", Math.min(limit, 500)));
     }
 
+    @Operation(summary = "分页查询销售订单")
     @GetMapping
     @RequiresPermission(resource = "sales-order", action = "read")
     public ApiResponse<PageResponse<SalesOrderResponse>> page(
@@ -47,24 +52,28 @@ public class SalesOrderController {
         ));
     }
 
+    @Operation(summary = "查询销售订单详情")
     @GetMapping("/{id}")
     @RequiresPermission(resource = "sales-order", action = "read")
     public ApiResponse<SalesOrderResponse> detail(@PathVariable Long id) {
         return ApiResponse.success(service.detail(id));
     }
 
+    @Operation(summary = "创建销售订单")
     @PostMapping
     @RequiresPermission(resource = "sales-order", action = "create")
     public ApiResponse<SalesOrderResponse> create(@Valid @RequestBody SalesOrderRequest request) {
         return ApiResponse.success("创建成功", service.create(request));
     }
 
+    @Operation(summary = "更新销售订单")
     @PutMapping("/{id}")
     @RequiresPermission(resource = "sales-order", action = "update")
     public ApiResponse<SalesOrderResponse> update(@PathVariable Long id, @Valid @RequestBody SalesOrderRequest request) {
         return ApiResponse.success("更新成功", service.update(id, request));
     }
 
+    @Operation(summary = "删除销售订单")
     @DeleteMapping("/{id}")
     @RequiresPermission(resource = "sales-order", action = "delete")
     public ApiResponse<Void> delete(@PathVariable Long id) {

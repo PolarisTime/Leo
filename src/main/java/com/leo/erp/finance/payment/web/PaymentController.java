@@ -8,11 +8,14 @@ import com.leo.erp.finance.payment.service.PaymentService;
 import com.leo.erp.finance.payment.web.dto.PaymentRequest;
 import com.leo.erp.finance.payment.web.dto.PaymentResponse;
 import com.leo.erp.security.permission.RequiresPermission;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.time.LocalDate;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.*;
 
+@Tag(name = "付款管理")
 @RestController
 @RequestMapping("/payments")
 public class PaymentController {
@@ -23,6 +26,7 @@ public class PaymentController {
         this.paymentService = paymentService;
     }
 
+    @Operation(summary = "分页查询付款单")
     @GetMapping
     @RequiresPermission(resource = "payment", action = "read")
     public ApiResponse<PageResponse<PaymentResponse>> page(
@@ -38,24 +42,28 @@ public class PaymentController {
         ));
     }
 
+    @Operation(summary = "查询付款单详情")
     @GetMapping("/{id}")
     @RequiresPermission(resource = "payment", action = "read")
     public ApiResponse<PaymentResponse> detail(@PathVariable Long id) {
         return ApiResponse.success(paymentService.detail(id));
     }
 
+    @Operation(summary = "创建付款单")
     @PostMapping
     @RequiresPermission(resource = "payment", action = "create")
     public ApiResponse<PaymentResponse> create(@Valid @RequestBody PaymentRequest request) {
         return ApiResponse.success("创建成功", paymentService.create(request));
     }
 
+    @Operation(summary = "更新付款单")
     @PutMapping("/{id}")
     @RequiresPermission(resource = "payment", action = "update")
     public ApiResponse<PaymentResponse> update(@PathVariable Long id, @Valid @RequestBody PaymentRequest request) {
         return ApiResponse.success("更新成功", paymentService.update(id, request));
     }
 
+    @Operation(summary = "删除付款单")
     @DeleteMapping("/{id}")
     @RequiresPermission(resource = "payment", action = "delete")
     public ApiResponse<Void> delete(@PathVariable Long id) {

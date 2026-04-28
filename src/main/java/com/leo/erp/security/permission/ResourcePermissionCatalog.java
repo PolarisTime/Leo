@@ -305,6 +305,23 @@ public final class ResourcePermissionCatalog {
         return String.join("、", labels.subList(0, 6)) + " 等" + labels.size() + "项";
     }
 
+    public static java.util.Map<String, String> getAllResourceLabels() {
+        java.util.LinkedHashMap<String, String> labels = new java.util.LinkedHashMap<>();
+        ENTRIES.forEach(entry -> labels.put(entry.code(), entry.title()));
+        return labels;
+    }
+
+    public static java.util.Map<String, String> getAllActionLabels() {
+        java.util.LinkedHashMap<String, String> labels = new java.util.LinkedHashMap<>();
+        java.util.Set<String> seen = new java.util.HashSet<>();
+        ENTRIES.forEach(entry -> entry.actions().forEach(action -> {
+            if (seen.add(action.code())) {
+                labels.put(action.code(), action.title());
+            }
+        }));
+        return labels;
+    }
+
     private static String normalizeKey(String value) {
         return String.valueOf(value == null ? "" : value)
                 .trim()

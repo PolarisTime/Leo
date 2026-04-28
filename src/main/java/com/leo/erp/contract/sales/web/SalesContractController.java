@@ -19,10 +19,13 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/sales-contracts")
+@Tag(name = "销售合同")
 public class SalesContractController {
 
     private final SalesContractService salesContractService;
@@ -33,6 +36,7 @@ public class SalesContractController {
 
     @GetMapping
     @RequiresPermission(resource = "sales-contract", action = "read")
+    @Operation(summary = "分页查询销售合同")
     public ApiResponse<PageResponse<SalesContractResponse>> page(
             @BindPageQuery(sortFieldKey = "sales-contracts") PageQuery query,
             @RequestParam(required = false) String keyword,
@@ -48,24 +52,28 @@ public class SalesContractController {
 
     @GetMapping("/{id}")
     @RequiresPermission(resource = "sales-contract", action = "read")
+    @Operation(summary = "查询销售合同详情")
     public ApiResponse<SalesContractResponse> detail(@PathVariable Long id) {
         return ApiResponse.success(salesContractService.detail(id));
     }
 
     @PostMapping
     @RequiresPermission(resource = "sales-contract", action = "create")
+    @Operation(summary = "创建销售合同")
     public ApiResponse<SalesContractResponse> create(@Valid @RequestBody SalesContractRequest request) {
         return ApiResponse.success("创建成功", salesContractService.create(request));
     }
 
     @PutMapping("/{id}")
     @RequiresPermission(resource = "sales-contract", action = "update")
+    @Operation(summary = "更新销售合同")
     public ApiResponse<SalesContractResponse> update(@PathVariable Long id, @Valid @RequestBody SalesContractRequest request) {
         return ApiResponse.success("更新成功", salesContractService.update(id, request));
     }
 
     @DeleteMapping("/{id}")
     @RequiresPermission(resource = "sales-contract", action = "delete")
+    @Operation(summary = "删除销售合同")
     public ApiResponse<Void> delete(@PathVariable Long id) {
         salesContractService.delete(id);
         return ApiResponse.success("删除成功", null);

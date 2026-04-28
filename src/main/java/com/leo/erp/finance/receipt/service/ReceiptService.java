@@ -6,6 +6,7 @@ import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.service.AbstractCrudService;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
+import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.support.TradeItemCalculator;
 import com.leo.erp.finance.receipt.domain.entity.Receipt;
 import com.leo.erp.finance.receipt.repository.ReceiptRepository;
@@ -17,7 +18,7 @@ import com.leo.erp.security.permission.ResourceRecordAccessGuard;
 import com.leo.erp.security.permission.WorkflowTransitionGuard;
 import com.leo.erp.statement.customer.domain.entity.CustomerStatement;
 import com.leo.erp.statement.customer.service.CustomerStatementQueryService;
-import com.leo.erp.statement.service.StatementSettlementSyncService;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
@@ -31,10 +32,12 @@ import java.util.Set;
 @Service
 public class ReceiptService extends AbstractCrudService<Receipt, ReceiptRequest, ReceiptResponse> {
 
+    private static final String RECEIPT_STATUS_SETTLED = StatusConstants.RECEIVED;
+
     private final ReceiptRepository receiptRepository;
     private final ReceiptMapper receiptMapper;
     private final CustomerStatementQueryService customerStatementQueryService;
-    private final StatementSettlementSyncService statementSettlementSyncService;
+    private final ApplicationEventPublisher eventPublisher;
     private final ResourceRecordAccessGuard resourceRecordAccessGuard;
     private final WorkflowTransitionGuard workflowTransitionGuard;
 
@@ -42,14 +45,14 @@ public class ReceiptService extends AbstractCrudService<Receipt, ReceiptRequest,
                           SnowflakeIdGenerator snowflakeIdGenerator,
                           ReceiptMapper receiptMapper,
                           CustomerStatementQueryService customerStatementQueryService,
-                          StatementSettlementSyncService statementSettlementSyncService,
+                          ApplicationEventPublisher eventPublisher,
                           ResourceRecordAccessGuard resourceRecordAccessGuard,
                           WorkflowTransitionGuard workflowTransitionGuard) {
         super(snowflakeIdGenerator);
         this.receiptRepository = receiptRepository;
         this.receiptMapper = receiptMapper;
         this.customerStatementQueryService = customerStatementQueryService;
-        this.statementSettlementSyncService = statementSettlementSyncService;
+        this.eventPublisher = eventPublisher;
         this.resourceRecordAccessGuard = resourceRecordAccessGuard;
         this.workflowTransitionGuard = workflowTransitionGuard;
     }
@@ -106,7 +109,7 @@ public class ReceiptService extends AbstractCrudService<Receipt, ReceiptRequest,
                 "receipts",
                 entity.getStatus(),
                 request.status(),
-                StatementSettlementSyncService.RECEIPT_STATUS_SETTLED
+                RECEIPT_STATUS_SETTLED
         );
         entity.setReceiptNo(request.receiptNo());
         entity.setCustomerName(request.customerName());
@@ -156,10 +159,10 @@ public class ReceiptService extends AbstractCrudService<Receipt, ReceiptRequest,
         if (!statement.getProjectName().equals(request.projectName())) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "收款单项目与客户对账单项目不一致");
         }
-        if (StatementSettlementSyncService.RECEIPT_STATUS_SETTLED.equals(request.status())) {
+        if (RECEIPT_STATUS_SETTLED.equals(request.status())) {
             BigDecimal settledAmount = TradeItemCalculator.safeBigDecimal(receiptRepository.sumAmountBySourceStatementIdAndStatusExcludingId(
                     statement.getId(),
-                    StatementSettlementSyncService.RECEIPT_STATUS_SETTLED,
+                    RECEIPT_STATUS_SETTLED,
                     currentReceiptId
             ));
             BigDecimal nextSettledAmount = settledAmount.add(request.amount());
@@ -179,8 +182,7 @@ public class ReceiptService extends AbstractCrudService<Receipt, ReceiptRequest,
             statementIds.add(currentSourceStatementId);
         }
         for (Long statementId : statementIds) {
-            customerStatementQueryService.findActiveById(statementId)
-                    .ifPresent(statementSettlementSyncService::syncCustomerStatement);
+            eventPublisher.publishEvent(new ReceiptSettledEvent(statementId));
         }
     }
 

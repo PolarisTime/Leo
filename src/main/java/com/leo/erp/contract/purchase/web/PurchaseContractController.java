@@ -19,10 +19,13 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/purchase-contracts")
+@Tag(name = "采购合同")
 public class PurchaseContractController {
 
     private final PurchaseContractService purchaseContractService;
@@ -33,6 +36,7 @@ public class PurchaseContractController {
 
     @GetMapping
     @RequiresPermission(resource = "purchase-contract", action = "read")
+    @Operation(summary = "分页查询采购合同")
     public ApiResponse<PageResponse<PurchaseContractResponse>> page(
             @BindPageQuery(sortFieldKey = "purchase-contracts") PageQuery query,
             @RequestParam(required = false) String keyword,
@@ -48,24 +52,28 @@ public class PurchaseContractController {
 
     @GetMapping("/{id}")
     @RequiresPermission(resource = "purchase-contract", action = "read")
+    @Operation(summary = "查询采购合同详情")
     public ApiResponse<PurchaseContractResponse> detail(@PathVariable Long id) {
         return ApiResponse.success(purchaseContractService.detail(id));
     }
 
     @PostMapping
     @RequiresPermission(resource = "purchase-contract", action = "create")
+    @Operation(summary = "创建采购合同")
     public ApiResponse<PurchaseContractResponse> create(@Valid @RequestBody PurchaseContractRequest request) {
         return ApiResponse.success("创建成功", purchaseContractService.create(request));
     }
 
     @PutMapping("/{id}")
     @RequiresPermission(resource = "purchase-contract", action = "update")
+    @Operation(summary = "更新采购合同")
     public ApiResponse<PurchaseContractResponse> update(@PathVariable Long id, @Valid @RequestBody PurchaseContractRequest request) {
         return ApiResponse.success("更新成功", purchaseContractService.update(id, request));
     }
 
     @DeleteMapping("/{id}")
     @RequiresPermission(resource = "purchase-contract", action = "delete")
+    @Operation(summary = "删除采购合同")
     public ApiResponse<Void> delete(@PathVariable Long id) {
         purchaseContractService.delete(id);
         return ApiResponse.success("删除成功", null);

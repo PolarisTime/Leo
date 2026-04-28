@@ -20,7 +20,10 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 
+@Tag(name = "供应商对账单")
 @RestController
 @RequestMapping("/supplier-statements")
 public class SupplierStatementController {
@@ -31,6 +34,7 @@ public class SupplierStatementController {
         this.supplierStatementService = supplierStatementService;
     }
 
+    @Operation(summary = "分页查询供应商对账单")
     @GetMapping
     @RequiresPermission(resource = "supplier-statement", action = "read")
     public ApiResponse<PageResponse<SupplierStatementResponse>> page(
@@ -53,24 +57,28 @@ public class SupplierStatementController {
         ));
     }
 
+    @Operation(summary = "查询供应商对账单详情")
     @GetMapping("/{id}")
     @RequiresPermission(resource = "supplier-statement", action = "read")
     public ApiResponse<SupplierStatementResponse> detail(@PathVariable Long id) {
         return ApiResponse.success(supplierStatementService.detail(id));
     }
 
+    @Operation(summary = "创建供应商对账单")
     @PostMapping
     @RequiresPermission(resource = "supplier-statement", action = "create")
     public ApiResponse<SupplierStatementResponse> create(@Valid @RequestBody SupplierStatementRequest request) {
         return ApiResponse.success("创建成功", supplierStatementService.create(request));
     }
 
+    @Operation(summary = "更新供应商对账单")
     @PutMapping("/{id}")
     @RequiresPermission(resource = "supplier-statement", action = "update")
     public ApiResponse<SupplierStatementResponse> update(@PathVariable Long id, @Valid @RequestBody SupplierStatementRequest request) {
         return ApiResponse.success("更新成功", supplierStatementService.update(id, request));
     }
 
+    @Operation(summary = "删除供应商对账单")
     @DeleteMapping("/{id}")
     @RequiresPermission(resource = "supplier-statement", action = "delete")
     public ApiResponse<Void> delete(@PathVariable Long id) {

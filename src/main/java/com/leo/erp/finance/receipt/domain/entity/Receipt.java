@@ -9,6 +9,7 @@ import jakarta.persistence.PostPersist;
 import jakarta.persistence.PostUpdate;
 import jakarta.persistence.Table;
 import jakarta.persistence.Transient;
+import jakarta.persistence.Version;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -23,6 +24,9 @@ public class Receipt extends AuditableEntity {
 
     @Id
     private Long id;
+
+    @Version
+    private Long version;
 
     @Column(name = "receipt_no", nullable = false, unique = true, length = 32)
     private String receiptNo;
