@@ -22,7 +22,7 @@ public class WarehouseController {
     }
 
     @GetMapping("/options")
-    @RequiresPermission(authenticatedOnly = true)
+    @RequiresPermission(resource = "warehouse", action = "read")
     public ApiResponse<java.util.List<com.leo.erp.common.web.OptionResponse>> options() {
         return ApiResponse.success(warehouseService.listActiveOptions());
     }

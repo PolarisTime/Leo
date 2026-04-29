@@ -22,7 +22,7 @@ public class CustomerController {
     }
 
     @GetMapping("/options")
-    @RequiresPermission(authenticatedOnly = true)
+    @RequiresPermission(resource = "customer", action = "read")
     public ApiResponse<java.util.List<com.leo.erp.common.web.OptionResponse>> options() {
         return ApiResponse.success(customerService.listActiveOptions());
     }

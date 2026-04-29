@@ -46,7 +46,7 @@ public class DepartmentController {
     }
 
     @GetMapping("/options")
-    @RequiresPermission(authenticatedOnly = true)
+    @RequiresPermission(resource = "department", action = "read")
     public ApiResponse<List<DepartmentOptionResponse>> options() {
         return ApiResponse.success(departmentService.options());
     }
