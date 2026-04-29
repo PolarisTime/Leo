@@ -49,6 +49,9 @@ public class PurchaseInboundItem {
     @Column(name = "warehouse_name", length = 128)
     private String warehouseName;
 
+    @Column(name = "settlement_mode", nullable = false, length = 32)
+    private String settlementMode;
+
     @Column(name = "batch_no", length = 64)
     private String batchNo;
 
@@ -66,6 +69,15 @@ public class PurchaseInboundItem {
 
     @Column(name = "weight_ton", nullable = false, precision = 14, scale = 3)
     private BigDecimal weightTon;
+
+    @Column(name = "weigh_weight_ton", precision = 14, scale = 3)
+    private BigDecimal weighWeightTon;
+
+    @Column(name = "weight_adjustment_ton", nullable = false, precision = 14, scale = 3)
+    private BigDecimal weightAdjustmentTon = BigDecimal.ZERO;
+
+    @Column(name = "weight_adjustment_amount", nullable = false, precision = 14, scale = 2)
+    private BigDecimal weightAdjustmentAmount = BigDecimal.ZERO;
 
     @Column(name = "unit_price", nullable = false, precision = 12, scale = 2)
     private BigDecimal unitPrice;

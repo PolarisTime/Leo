@@ -11,6 +11,8 @@ public interface SupplierRepository extends JpaRepository<Supplier, Long>, JpaSp
 
     boolean existsBySupplierCodeAndDeletedFlagFalse(String supplierCode);
 
+    Optional<Supplier> findFirstBySupplierNameAndDeletedFlagFalseOrderBySupplierCodeAsc(String supplierName);
+
     List<Supplier> findByDeletedFlagFalseOrderBySupplierCodeAsc();
 
     Optional<Supplier> findByIdAndDeletedFlagFalse(Long id);

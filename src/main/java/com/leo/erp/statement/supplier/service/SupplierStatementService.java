@@ -170,7 +170,20 @@ public class SupplierStatementService extends AbstractCrudService<SupplierStatem
             item.setQuantityUnit(TradeItemCalculator.normalizeQuantityUnit(source.quantityUnit()));
             item.setPieceWeightTon(source.pieceWeightTon());
             item.setPiecesPerBundle(source.piecesPerBundle());
-            item.setWeightTon(TradeItemCalculator.calculateWeightTon(source.quantity(), source.pieceWeightTon()));
+            BigDecimal theoreticalWeightTon = TradeItemCalculator.calculateWeightTon(source.quantity(), source.pieceWeightTon());
+            BigDecimal weightTon = source.weightTon() == null
+                    ? theoreticalWeightTon
+                    : TradeItemCalculator.scaleWeightTon(source.weightTon());
+            item.setWeightTon(weightTon);
+            item.setWeighWeightTon(source.weighWeightTon() == null ? null : TradeItemCalculator.scaleWeightTon(source.weighWeightTon()));
+            BigDecimal weightAdjustmentTon = source.weightAdjustmentTon() == null
+                    ? TradeItemCalculator.scaleWeightTon(weightTon.subtract(theoreticalWeightTon))
+                    : TradeItemCalculator.scaleWeightTon(source.weightAdjustmentTon());
+            item.setWeightAdjustmentTon(weightAdjustmentTon);
+            BigDecimal weightAdjustmentAmount = source.weightAdjustmentAmount() == null
+                    ? TradeItemCalculator.calculateAmount(weightAdjustmentTon, source.unitPrice())
+                    : TradeItemCalculator.scaleAmount(source.weightAdjustmentAmount());
+            item.setWeightAdjustmentAmount(weightAdjustmentAmount);
             item.setUnitPrice(source.unitPrice());
             BigDecimal amount = TradeItemCalculator.calculateAmount(item.getWeightTon(), source.unitPrice());
             item.setAmount(amount);
@@ -217,6 +230,9 @@ public class SupplierStatementService extends AbstractCrudService<SupplierStatem
                 item.getPieceWeightTon(),
                 item.getPiecesPerBundle(),
                 item.getWeightTon(),
+                item.getWeighWeightTon(),
+                item.getWeightAdjustmentTon(),
+                item.getWeightAdjustmentAmount(),
                 item.getUnitPrice(),
                 item.getAmount()
         );

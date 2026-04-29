@@ -12,11 +12,15 @@ import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.support.TradeItemCalculator;
 import com.leo.erp.common.support.WarehouseSelectionSupport;
 import com.leo.erp.master.material.domain.entity.Material;
+import com.leo.erp.master.material.domain.entity.MaterialCategory;
+import com.leo.erp.master.material.repository.MaterialCategoryRepository;
 import com.leo.erp.purchase.inbound.domain.entity.PurchaseInbound;
 import com.leo.erp.purchase.inbound.domain.entity.PurchaseInboundItem;
 import com.leo.erp.purchase.inbound.repository.PurchaseInboundItemRepository;
 import com.leo.erp.purchase.inbound.repository.PurchaseInboundRepository;
+import com.leo.erp.purchase.order.domain.entity.PurchaseOrder;
 import com.leo.erp.purchase.order.domain.entity.PurchaseOrderItem;
+import com.leo.erp.purchase.order.repository.PurchaseOrderRepository;
 import com.leo.erp.purchase.order.service.PurchaseOrderItemQueryService;
 import com.leo.erp.purchase.inbound.mapper.PurchaseInboundMapper;
 import com.leo.erp.security.permission.WorkflowTransitionGuard;
@@ -32,6 +36,9 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 @Service
 public class PurchaseInboundService extends AbstractCrudService<PurchaseInbound, PurchaseInboundRequest, PurchaseInboundResponse> {
@@ -40,7 +47,9 @@ public class PurchaseInboundService extends AbstractCrudService<PurchaseInbound,
     private final PurchaseInboundMapper purchaseInboundMapper;
     private final TradeItemMaterialSupport tradeItemMaterialSupport;
     private final WarehouseSelectionSupport warehouseSelectionSupport;
+    private final MaterialCategoryRepository materialCategoryRepository;
     private final PurchaseInboundItemRepository purchaseInboundItemRepository;
+    private final PurchaseOrderRepository purchaseOrderRepository;
     private final PurchaseOrderItemQueryService purchaseOrderItemQueryService;
     private final SalesOrderItemQueryService salesOrderItemQueryService;
     private final WorkflowTransitionGuard workflowTransitionGuard;
@@ -50,7 +59,9 @@ public class PurchaseInboundService extends AbstractCrudService<PurchaseInbound,
                                   PurchaseInboundMapper purchaseInboundMapper,
                                   TradeItemMaterialSupport tradeItemMaterialSupport,
                                   WarehouseSelectionSupport warehouseSelectionSupport,
+                                  MaterialCategoryRepository materialCategoryRepository,
                                   PurchaseInboundItemRepository purchaseInboundItemRepository,
+                                  PurchaseOrderRepository purchaseOrderRepository,
                                   PurchaseOrderItemQueryService purchaseOrderItemQueryService,
                                   SalesOrderItemQueryService salesOrderItemQueryService,
                                   WorkflowTransitionGuard workflowTransitionGuard) {
@@ -59,7 +70,9 @@ public class PurchaseInboundService extends AbstractCrudService<PurchaseInbound,
         this.purchaseInboundMapper = purchaseInboundMapper;
         this.tradeItemMaterialSupport = tradeItemMaterialSupport;
         this.warehouseSelectionSupport = warehouseSelectionSupport;
+        this.materialCategoryRepository = materialCategoryRepository;
         this.purchaseInboundItemRepository = purchaseInboundItemRepository;
+        this.purchaseOrderRepository = purchaseOrderRepository;
         this.purchaseOrderItemQueryService = purchaseOrderItemQueryService;
         this.salesOrderItemQueryService = salesOrderItemQueryService;
         this.workflowTransitionGuard = workflowTransitionGuard;
@@ -99,9 +112,11 @@ public class PurchaseInboundService extends AbstractCrudService<PurchaseInbound,
                 inbound.getItems().stream().map(item -> new PurchaseInboundItemResponse(
                         item.getId(), item.getLineNo(), item.getMaterialCode(),
                         item.getBrand(), item.getCategory(), item.getMaterial(),
-                        item.getSpec(), item.getLength(), item.getUnit(), item.getSourcePurchaseOrderItemId(), item.getWarehouseName(), item.getBatchNo(),
+                        item.getSpec(), item.getLength(), item.getUnit(), item.getSourcePurchaseOrderItemId(),
+                        item.getWarehouseName(), item.getSettlementMode(), item.getBatchNo(),
                         remainingQuantity(item, allocatedQuantityMap), item.getQuantity(), item.getQuantityUnit(), item.getPieceWeightTon(), item.getPiecesPerBundle(),
-                        item.getWeightTon(), item.getUnitPrice(), item.getAmount()
+                        item.getWeightTon(), item.getWeighWeightTon(), item.getWeightAdjustmentTon(), item.getWeightAdjustmentAmount(),
+                        item.getUnitPrice(), item.getAmount()
                 )).toList()
         );
     }
@@ -156,6 +171,190 @@ public class PurchaseInboundService extends AbstractCrudService<PurchaseInbound,
                         Math.toIntExact(summary.getTotalQuantity())
                 ));
         return allocatedQuantityMap;
+    }
+
+    private Set<String> loadPurchaseWeighRequiredCategoryNames(PurchaseInboundRequest request) {
+        List<String> categoryNames = request.items().stream()
+                .map(PurchaseInboundItemRequest::category)
+                .map(this::normalizeCategoryName)
+                .filter(category -> !category.isBlank())
+                .distinct()
+                .toList();
+        if (categoryNames.isEmpty()) {
+            return Set.of();
+        }
+        return materialCategoryRepository.findByCategoryNameInAndDeletedFlagFalse(categoryNames).stream()
+                .filter(category -> Boolean.TRUE.equals(category.getPurchaseWeighRequired()))
+                .map(MaterialCategory::getCategoryName)
+                .map(this::normalizeCategoryName)
+                .collect(Collectors.toSet());
+    }
+
+    private String normalizeCategoryName(String value) {
+        return value == null ? "" : value.trim();
+    }
+
+    private boolean isPurchaseWeighSettlement(String settlementMode) {
+        return "过磅".equals(settlementMode == null ? "" : settlementMode.trim());
+    }
+
+    private String trimToNull(String value) {
+        if (value == null) {
+            return null;
+        }
+        String normalized = value.trim();
+        return normalized.isEmpty() ? null : normalized;
+    }
+
+    private String resolveLineSettlementMode(PurchaseInboundItemRequest source, PurchaseInboundRequest request, int lineNo) {
+        String settlementMode = trimToNull(source.settlementMode());
+        if (settlementMode == null) {
+            settlementMode = trimToNull(request.settlementMode());
+        }
+        if (settlementMode == null) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "第" + lineNo + "行请选择结算方式");
+        }
+        return settlementMode;
+    }
+
+    private String resolveHeaderWarehouseName(String requestWarehouseName, String firstLineWarehouseName) {
+        String normalized = trimToNull(requestWarehouseName);
+        return normalized == null ? firstLineWarehouseName : normalized;
+    }
+
+    private String resolveHeaderSettlementMode(String requestSettlementMode, List<PurchaseInboundItem> items) {
+        String normalized = trimToNull(requestSettlementMode);
+        if (normalized != null) {
+            return normalized;
+        }
+        List<String> lineSettlementModes = items.stream()
+                .map(PurchaseInboundItem::getSettlementMode)
+                .map(this::trimToNull)
+                .filter(value -> value != null)
+                .distinct()
+                .toList();
+        if (lineSettlementModes.isEmpty()) {
+            return "理算";
+        }
+        return lineSettlementModes.size() == 1 ? lineSettlementModes.get(0) : "混合";
+    }
+
+    private BigDecimal requireWeighWeightTon(PurchaseInboundItemRequest source, int lineNo) {
+        BigDecimal weighWeightTon = source.weighWeightTon();
+        if (weighWeightTon == null) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "第" + lineNo + "行需填写过磅重量");
+        }
+        BigDecimal normalized = TradeItemCalculator.scaleWeightTon(weighWeightTon);
+        if (normalized.compareTo(BigDecimal.ZERO) < 0) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "第" + lineNo + "行过磅重量不能小于0");
+        }
+        if (source.quantity() != null && source.quantity() > 0 && normalized.compareTo(BigDecimal.ZERO) == 0) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "第" + lineNo + "行过磅重量必须大于0");
+        }
+        return normalized;
+    }
+
+    private WeightSettlementResult resolveWeightSettlement(
+            PurchaseInboundItemRequest source,
+            int lineNo,
+            Set<String> purchaseWeighRequiredCategoryNames,
+            String settlementMode
+    ) {
+        BigDecimal baseWeightTon = TradeItemCalculator.calculateWeightTon(source.quantity(), source.pieceWeightTon());
+        boolean purchaseWeighRequired = purchaseWeighRequiredCategoryNames.contains(normalizeCategoryName(source.category()));
+        boolean purchaseWeighSettlement = isPurchaseWeighSettlement(settlementMode);
+        if (!purchaseWeighRequired && !purchaseWeighSettlement) {
+            return new WeightSettlementResult(baseWeightTon, null, BigDecimal.ZERO.setScale(3), BigDecimal.ZERO.setScale(2));
+        }
+        if (!purchaseWeighSettlement) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "第" + lineNo + "行商品类别需按过磅入库，请将本行结算方式改为过磅");
+        }
+        BigDecimal weighWeightTon = requireWeighWeightTon(source, lineNo);
+        BigDecimal weightAdjustmentTon = TradeItemCalculator.scaleWeightTon(weighWeightTon.subtract(baseWeightTon));
+        BigDecimal weightAdjustmentAmount = TradeItemCalculator.calculateAmount(weightAdjustmentTon, source.unitPrice());
+        return new WeightSettlementResult(weighWeightTon, weighWeightTon, weightAdjustmentTon, weightAdjustmentAmount);
+    }
+
+    private Map<Long, BigDecimal> loadPersistedWeightAdjustmentMap(List<Long> sourcePurchaseOrderItemIds, Long currentInboundId) {
+        if (sourcePurchaseOrderItemIds.isEmpty()) {
+            return Map.of();
+        }
+        Map<Long, BigDecimal> adjustmentMap = new HashMap<>();
+        purchaseInboundItemRepository.summarizeWeightAdjustmentBySourcePurchaseOrderItemIdsExcludingInbound(
+                        sourcePurchaseOrderItemIds,
+                        currentInboundId
+                )
+                .forEach(summary -> adjustmentMap.put(
+                        summary.getSourcePurchaseOrderItemId(),
+                        TradeItemCalculator.scaleWeightTon(summary.getTotalWeightAdjustmentTon())
+                ));
+        return adjustmentMap;
+    }
+
+    private void writeBackPurchaseOrderWeights(
+            List<Long> sourcePurchaseOrderItemIds,
+            Long currentInboundId,
+            Map<Long, BigDecimal> currentAdjustmentMap,
+            Map<Long, PurchaseOrderItem> sourcePurchaseOrderItemMap
+    ) {
+        if (sourcePurchaseOrderItemIds.isEmpty()) {
+            return;
+        }
+        Map<Long, BigDecimal> persistedAdjustmentMap = loadPersistedWeightAdjustmentMap(sourcePurchaseOrderItemIds, currentInboundId);
+        Map<Long, PurchaseOrder> affectedOrderMap = loadAffectedPurchaseOrderMap(sourcePurchaseOrderItemMap);
+        Map<Long, PurchaseOrderItem> writeBackItemMap = affectedOrderMap.values().stream()
+                .flatMap(order -> order.getItems().stream())
+                .collect(Collectors.toMap(PurchaseOrderItem::getId, item -> item, (left, right) -> left));
+        for (Long sourcePurchaseOrderItemId : sourcePurchaseOrderItemIds) {
+            PurchaseOrderItem sourceItem = writeBackItemMap.get(sourcePurchaseOrderItemId);
+            if (sourceItem == null) {
+                continue;
+            }
+            BigDecimal baseWeightTon = TradeItemCalculator.calculateWeightTon(sourceItem.getQuantity(), sourceItem.getPieceWeightTon());
+            BigDecimal totalAdjustmentTon = persistedAdjustmentMap.getOrDefault(sourcePurchaseOrderItemId, BigDecimal.ZERO)
+                    .add(currentAdjustmentMap.getOrDefault(sourcePurchaseOrderItemId, BigDecimal.ZERO));
+            BigDecimal weightTon = TradeItemCalculator.scaleWeightTon(baseWeightTon.add(totalAdjustmentTon));
+            sourceItem.setWeightTon(weightTon);
+            sourceItem.setAmount(TradeItemCalculator.calculateAmount(weightTon, sourceItem.getUnitPrice()));
+        }
+        affectedOrderMap.values().forEach(this::refreshPurchaseOrderTotals);
+        if (!affectedOrderMap.isEmpty()) {
+            purchaseOrderRepository.saveAll(affectedOrderMap.values());
+        }
+    }
+
+    private Map<Long, PurchaseOrder> loadAffectedPurchaseOrderMap(Map<Long, PurchaseOrderItem> sourcePurchaseOrderItemMap) {
+        List<Long> orderIds = sourcePurchaseOrderItemMap.values().stream()
+                .map(PurchaseOrderItem::getPurchaseOrder)
+                .filter(order -> order != null)
+                .map(PurchaseOrder::getId)
+                .filter(id -> id != null)
+                .distinct()
+                .toList();
+        if (orderIds.isEmpty()) {
+            return Map.of();
+        }
+        return purchaseOrderRepository.findByIdInAndDeletedFlagFalse(orderIds).stream()
+                .collect(Collectors.toMap(PurchaseOrder::getId, order -> order));
+    }
+
+    private void refreshPurchaseOrderTotals(PurchaseOrder purchaseOrder) {
+        BigDecimal totalWeight = BigDecimal.ZERO;
+        BigDecimal totalAmount = BigDecimal.ZERO;
+        for (PurchaseOrderItem item : purchaseOrder.getItems()) {
+            totalWeight = totalWeight.add(TradeItemCalculator.safeBigDecimal(item.getWeightTon()));
+            totalAmount = totalAmount.add(TradeItemCalculator.safeBigDecimal(item.getAmount()));
+        }
+        purchaseOrder.setTotalWeight(TradeItemCalculator.scaleWeightTon(totalWeight));
+        purchaseOrder.setTotalAmount(TradeItemCalculator.scaleAmount(totalAmount));
+    }
+
+    private record WeightSettlementResult(
+            BigDecimal weightTon,
+            BigDecimal weighWeightTon,
+            BigDecimal weightAdjustmentTon,
+            BigDecimal weightAdjustmentAmount
+    ) {
     }
 
     private void validateSourcePurchaseOrderAllocation(
@@ -232,9 +431,7 @@ public class PurchaseInboundService extends AbstractCrudService<PurchaseInbound,
         inbound.setInboundNo(request.inboundNo());
         inbound.setPurchaseOrderNo(request.purchaseOrderNo());
         inbound.setSupplierName(request.supplierName());
-        inbound.setWarehouseName(request.warehouseName());
         inbound.setInboundDate(request.inboundDate());
-        inbound.setSettlementMode(request.settlementMode());
         inbound.setStatus(nextStatus);
         inbound.setRemark(request.remark());
 
@@ -243,10 +440,22 @@ public class PurchaseInboundService extends AbstractCrudService<PurchaseInbound,
         var materialMap = tradeItemMaterialSupport.loadMaterialMap(
                 request.items().stream().map(PurchaseInboundItemRequest::materialCode).toList()
         );
+        List<Long> previousSourcePurchaseOrderItemIds = inbound.getItems().stream()
+                .map(PurchaseInboundItem::getSourcePurchaseOrderItemId)
+                .filter(id -> id != null)
+                .distinct()
+                .toList();
         List<Long> sourcePurchaseOrderItemIds = extractSourcePurchaseOrderItemIds(request);
-        Map<Long, PurchaseOrderItem> sourcePurchaseOrderItemMap = loadSourcePurchaseOrderItemMap(sourcePurchaseOrderItemIds);
+        List<Long> affectedSourcePurchaseOrderItemIds = Stream
+                .concat(previousSourcePurchaseOrderItemIds.stream(), sourcePurchaseOrderItemIds.stream())
+                .distinct()
+                .toList();
+        Map<Long, PurchaseOrderItem> sourcePurchaseOrderItemMap = loadSourcePurchaseOrderItemMap(affectedSourcePurchaseOrderItemIds);
         Map<Long, Integer> allocatedQuantityMap = loadAllocatedQuantityMap(sourcePurchaseOrderItemIds, inbound.getId());
         Map<Long, Integer> requestAllocatedQuantityMap = new HashMap<>();
+        Set<String> purchaseWeighRequiredCategoryNames = loadPurchaseWeighRequiredCategoryNames(request);
+        Map<Long, BigDecimal> currentAdjustmentMap = new HashMap<>();
+        String firstLineWarehouseName = null;
         List<PurchaseInboundItem> items = ManagedEntityItemSupport.syncById(
                 inbound.getItems(),
                 request.items(),
@@ -271,27 +480,68 @@ public class PurchaseInboundService extends AbstractCrudService<PurchaseInbound,
             item.setUnit(source.unit());
             item.setSourcePurchaseOrderItemId(source.sourcePurchaseOrderItemId());
             validateSourcePurchaseOrderAllocation(source, i + 1, sourcePurchaseOrderItemMap, allocatedQuantityMap, requestAllocatedQuantityMap);
-            item.setWarehouseName(warehouseSelectionSupport.normalizeWarehouseName(
+            String warehouseName = warehouseSelectionSupport.normalizeWarehouseName(
                     source.warehouseName() == null || source.warehouseName().isBlank() ? request.warehouseName() : source.warehouseName(),
                     i + 1,
                     true
-            ));
+            );
+            if (firstLineWarehouseName == null) {
+                firstLineWarehouseName = warehouseName;
+            }
+            item.setWarehouseName(warehouseName);
+            String settlementMode = resolveLineSettlementMode(source, request, i + 1);
+            item.setSettlementMode(settlementMode);
             item.setBatchNo(tradeItemMaterialSupport.normalizeBatchNo(material, source.batchNo(), i + 1, true));
             item.setQuantity(source.quantity());
             item.setQuantityUnit(TradeItemCalculator.normalizeQuantityUnit(source.quantityUnit()));
             item.setPieceWeightTon(source.pieceWeightTon());
             item.setPiecesPerBundle(source.piecesPerBundle());
-            BigDecimal weightTon = TradeItemCalculator.calculateWeightTon(source.quantity(), source.pieceWeightTon());
+            WeightSettlementResult weightSettlement = resolveWeightSettlement(
+                    source,
+                    i + 1,
+                    purchaseWeighRequiredCategoryNames,
+                    settlementMode
+            );
+            BigDecimal weightTon = weightSettlement.weightTon();
             item.setWeightTon(weightTon);
+            item.setWeighWeightTon(weightSettlement.weighWeightTon());
+            item.setWeightAdjustmentTon(weightSettlement.weightAdjustmentTon());
+            item.setWeightAdjustmentAmount(weightSettlement.weightAdjustmentAmount());
             item.setUnitPrice(source.unitPrice());
             BigDecimal amount = TradeItemCalculator.calculateAmount(weightTon, source.unitPrice());
             item.setAmount(amount);
             totalWeight = totalWeight.add(weightTon);
             totalAmount = totalAmount.add(amount);
+            if (source.sourcePurchaseOrderItemId() != null) {
+                currentAdjustmentMap.merge(
+                        source.sourcePurchaseOrderItemId(),
+                        weightSettlement.weightAdjustmentTon(),
+                        BigDecimal::add
+                );
+            }
         }
         inbound.getItems().sort(java.util.Comparator.comparing(PurchaseInboundItem::getLineNo));
-        inbound.setTotalWeight(totalWeight);
-        inbound.setTotalAmount(totalAmount);
+        inbound.setWarehouseName(resolveHeaderWarehouseName(request.warehouseName(), firstLineWarehouseName));
+        inbound.setSettlementMode(resolveHeaderSettlementMode(request.settlementMode(), items));
+        inbound.setTotalWeight(TradeItemCalculator.scaleWeightTon(totalWeight));
+        inbound.setTotalAmount(TradeItemCalculator.scaleAmount(totalAmount));
+        writeBackPurchaseOrderWeights(
+                affectedSourcePurchaseOrderItemIds,
+                inbound.getId(),
+                currentAdjustmentMap,
+                sourcePurchaseOrderItemMap
+        );
+    }
+
+    @Override
+    protected void beforeDelete(PurchaseInbound inbound) {
+        List<Long> sourcePurchaseOrderItemIds = inbound.getItems().stream()
+                .map(PurchaseInboundItem::getSourcePurchaseOrderItemId)
+                .filter(id -> id != null)
+                .distinct()
+                .toList();
+        Map<Long, PurchaseOrderItem> sourcePurchaseOrderItemMap = loadSourcePurchaseOrderItemMap(sourcePurchaseOrderItemIds);
+        writeBackPurchaseOrderWeights(sourcePurchaseOrderItemIds, inbound.getId(), Map.of(), sourcePurchaseOrderItemMap);
     }
 
     @Override

@@ -5,6 +5,7 @@ public record MaterialCategoryResponse(
         String categoryCode,
         String categoryName,
         Integer sortOrder,
+        Boolean purchaseWeighRequired,
         String status,
         String remark
 ) {

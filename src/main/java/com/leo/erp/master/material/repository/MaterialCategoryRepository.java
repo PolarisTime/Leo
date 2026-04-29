@@ -4,6 +4,7 @@ import com.leo.erp.master.material.domain.entity.MaterialCategory;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -12,6 +13,8 @@ public interface MaterialCategoryRepository extends JpaRepository<MaterialCatego
     Optional<MaterialCategory> findByIdAndDeletedFlagFalse(Long id);
 
     Optional<MaterialCategory> findByCategoryCodeAndDeletedFlagFalse(String categoryCode);
+
+    List<MaterialCategory> findByCategoryNameInAndDeletedFlagFalse(Collection<String> categoryNames);
 
     List<MaterialCategory> findByStatusAndDeletedFlagFalseOrderBySortOrderAscIdAsc(String status);
 }

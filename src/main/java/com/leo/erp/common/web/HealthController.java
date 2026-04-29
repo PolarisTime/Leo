@@ -1,5 +1,7 @@
 package com.leo.erp.common.web;
 
+import com.leo.erp.common.config.TraceIdFilter;
+import org.slf4j.MDC;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.http.ResponseEntity;
@@ -32,6 +34,7 @@ public class HealthController {
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("status", "UP");
         result.put("app", appName);
+        result.put("traceId", MDC.get(TraceIdFilter.MDC_KEY));
         result.put("timestamp", OffsetDateTime.now().toString());
 
         result.put("db", checkDatabase());

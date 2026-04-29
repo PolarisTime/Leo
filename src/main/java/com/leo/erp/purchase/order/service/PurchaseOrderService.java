@@ -12,6 +12,8 @@ import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.support.TradeItemCalculator;
 import com.leo.erp.common.support.WarehouseSelectionSupport;
 import com.leo.erp.master.material.domain.entity.Material;
+import com.leo.erp.master.supplier.domain.entity.Supplier;
+import com.leo.erp.master.supplier.repository.SupplierRepository;
 import com.leo.erp.purchase.inbound.service.PurchaseInboundItemQueryService;
 import com.leo.erp.purchase.order.domain.entity.PurchaseOrder;
 import com.leo.erp.purchase.order.domain.entity.PurchaseOrderItem;
@@ -40,6 +42,7 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
     private final PurchaseOrderMapper purchaseOrderMapper;
     private final TradeItemMaterialSupport tradeItemMaterialSupport;
     private final WarehouseSelectionSupport warehouseSelectionSupport;
+    private final SupplierRepository supplierRepository;
     private final PurchaseInboundItemQueryService purchaseInboundItemQueryService;
     private final WorkflowTransitionGuard workflowTransitionGuard;
 
@@ -48,6 +51,7 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
                                 PurchaseOrderMapper purchaseOrderMapper,
                                 TradeItemMaterialSupport tradeItemMaterialSupport,
                                 WarehouseSelectionSupport warehouseSelectionSupport,
+                                SupplierRepository supplierRepository,
                                 PurchaseInboundItemQueryService purchaseInboundItemQueryService,
                                 WorkflowTransitionGuard workflowTransitionGuard) {
         super(snowflakeIdGenerator);
@@ -55,6 +59,7 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
         this.purchaseOrderMapper = purchaseOrderMapper;
         this.tradeItemMaterialSupport = tradeItemMaterialSupport;
         this.warehouseSelectionSupport = warehouseSelectionSupport;
+        this.supplierRepository = supplierRepository;
         this.purchaseInboundItemQueryService = purchaseInboundItemQueryService;
         this.workflowTransitionGuard = workflowTransitionGuard;
     }
@@ -156,6 +161,16 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
         return "采购订单不存在";
     }
 
+    private String requireMasterSupplierName(String supplierName) {
+        String normalizedName = supplierName == null ? "" : supplierName.trim();
+        return supplierRepository.findFirstBySupplierNameAndDeletedFlagFalseOrderBySupplierCodeAsc(normalizedName)
+                .map(Supplier::getSupplierName)
+                .orElseThrow(() -> new BusinessException(
+                        ErrorCode.BUSINESS_ERROR,
+                        "供应商不存在，请先在主数据供应商资料中维护"
+                ));
+    }
+
     @Override
     protected void apply(PurchaseOrder purchaseOrder, PurchaseOrderRequest request) {
         String nextStatus = (request.status() == null || request.status().isBlank()) ? StatusConstants.DRAFT : request.status();
@@ -167,7 +182,7 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
                 StatusConstants.PURCHASE_COMPLETED
         );
         purchaseOrder.setOrderNo(request.orderNo());
-        purchaseOrder.setSupplierName(request.supplierName());
+        purchaseOrder.setSupplierName(requireMasterSupplierName(request.supplierName()));
         purchaseOrder.setOrderDate(request.orderDate());
         purchaseOrder.setBuyerName(request.buyerName());
         purchaseOrder.setStatus(nextStatus);
@@ -187,6 +202,10 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
                 this::nextId,
                 PurchaseOrderItem::setId
         );
+        Map<Long, BigDecimal> inboundWeightAdjustmentMap =
+                purchaseInboundItemQueryService.summarizeWeightAdjustmentBySourcePurchaseOrderItemIds(
+                        items.stream().map(PurchaseOrderItem::getId).toList()
+                );
 
         for (int index = 0; index < request.items().size(); index++) {
             PurchaseOrderItemRequest itemRequest = request.items().get(index);
@@ -207,7 +226,9 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
             item.setQuantityUnit(TradeItemCalculator.normalizeQuantityUnit(itemRequest.quantityUnit()));
             item.setPieceWeightTon(itemRequest.pieceWeightTon());
             item.setPiecesPerBundle(itemRequest.piecesPerBundle());
-            BigDecimal weightTon = TradeItemCalculator.calculateWeightTon(itemRequest.quantity(), itemRequest.pieceWeightTon());
+            BigDecimal baseWeightTon = TradeItemCalculator.calculateWeightTon(itemRequest.quantity(), itemRequest.pieceWeightTon());
+            BigDecimal weightAdjustmentTon = inboundWeightAdjustmentMap.getOrDefault(item.getId(), BigDecimal.ZERO);
+            BigDecimal weightTon = TradeItemCalculator.scaleWeightTon(baseWeightTon.add(weightAdjustmentTon));
             item.setWeightTon(weightTon);
             item.setUnitPrice(itemRequest.unitPrice());
             BigDecimal amount = TradeItemCalculator.calculateAmount(weightTon, itemRequest.unitPrice());

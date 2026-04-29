@@ -8,6 +8,7 @@ import com.leo.erp.security.permission.ResourceRecordAccessGuard;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
@@ -59,6 +60,21 @@ public class PurchaseInboundItemQueryService {
                 .collect(Collectors.toMap(
                         PurchaseInboundItemRepository.PurchaseOrderAllocationSummary::getSourcePurchaseOrderItemId,
                         PurchaseInboundItemRepository.PurchaseOrderAllocationSummary::getTotalQuantity
+                ));
+    }
+
+    @Transactional(readOnly = true)
+    public Map<Long, BigDecimal> summarizeWeightAdjustmentBySourcePurchaseOrderItemIds(
+            Collection<Long> sourcePurchaseOrderItemIds) {
+        if (sourcePurchaseOrderItemIds == null || sourcePurchaseOrderItemIds.isEmpty()) {
+            return Map.of();
+        }
+        return repository
+                .summarizeWeightAdjustmentBySourcePurchaseOrderItemIdsExcludingInbound(sourcePurchaseOrderItemIds, null)
+                .stream()
+                .collect(Collectors.toMap(
+                        PurchaseInboundItemRepository.PurchaseOrderWeightAdjustmentSummary::getSourcePurchaseOrderItemId,
+                        PurchaseInboundItemRepository.PurchaseOrderWeightAdjustmentSummary::getTotalWeightAdjustmentTon
                 ));
     }
 }

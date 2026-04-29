@@ -3,7 +3,10 @@ package com.leo.erp.purchase.inbound.service;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.TradeItemMaterialSupport;
 import com.leo.erp.common.support.WarehouseSelectionSupport;
+import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.master.material.domain.entity.Material;
+import com.leo.erp.master.material.domain.entity.MaterialCategory;
+import com.leo.erp.master.material.repository.MaterialCategoryRepository;
 import com.leo.erp.purchase.inbound.domain.entity.PurchaseInbound;
 import com.leo.erp.purchase.inbound.domain.entity.PurchaseInboundItem;
 import com.leo.erp.purchase.inbound.repository.PurchaseInboundItemRepository;
@@ -12,7 +15,9 @@ import com.leo.erp.purchase.inbound.mapper.PurchaseInboundMapper;
 import com.leo.erp.purchase.inbound.web.dto.PurchaseInboundItemRequest;
 import com.leo.erp.purchase.inbound.web.dto.PurchaseInboundRequest;
 import com.leo.erp.purchase.inbound.web.dto.PurchaseInboundResponse;
+import com.leo.erp.purchase.order.domain.entity.PurchaseOrder;
 import com.leo.erp.purchase.order.domain.entity.PurchaseOrderItem;
+import com.leo.erp.purchase.order.repository.PurchaseOrderRepository;
 import com.leo.erp.purchase.order.service.PurchaseOrderItemQueryService;
 import com.leo.erp.security.permission.WorkflowTransitionGuard;
 import com.leo.erp.sales.order.service.SalesOrderItemQueryService;
@@ -27,9 +32,11 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentCaptor.forClass;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class PurchaseInboundServiceTest {
 
@@ -64,7 +71,9 @@ class PurchaseInboundServiceTest {
         PurchaseInboundMapper mapper = mock(PurchaseInboundMapper.class);
         TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
         WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
+        MaterialCategoryRepository materialCategoryRepository = mock(MaterialCategoryRepository.class);
         PurchaseInboundItemRepository purchaseInboundItemRepository = mock(PurchaseInboundItemRepository.class);
+        PurchaseOrderRepository purchaseOrderRepository = mock(PurchaseOrderRepository.class);
         PurchaseOrderItemQueryService purchaseOrderItemQueryService = mock(PurchaseOrderItemQueryService.class);
         SalesOrderItemQueryService salesOrderItemQueryService = mock(SalesOrderItemQueryService.class);
         PurchaseInboundService service = new PurchaseInboundService(
@@ -73,7 +82,9 @@ class PurchaseInboundServiceTest {
                 mapper,
                 materialSupport,
                 warehouseSelectionSupport,
+                materialCategoryRepository,
                 purchaseInboundItemRepository,
+                purchaseOrderRepository,
                 purchaseOrderItemQueryService,
                 salesOrderItemQueryService,
                 mock(WorkflowTransitionGuard.class)
@@ -89,15 +100,20 @@ class PurchaseInboundServiceTest {
         when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(Map.of("M1", new Material()));
         when(materialSupport.normalizeBatchNo(any(), eq("B1"), eq(1), eq(true))).thenReturn("B1");
         when(warehouseSelectionSupport.normalizeWarehouseName("一号库", 1, true)).thenReturn("一号库");
+        when(materialCategoryRepository.findByCategoryNameInAndDeletedFlagFalse(List.of("螺纹钢"))).thenReturn(List.of());
         when(purchaseOrderItemQueryService.findActiveByIdIn(List.of(201L))).thenReturn(List.of(sourceItem));
         PurchaseInboundItemRepository.PurchaseOrderAllocationSummary allocationSummary =
                 mock(PurchaseInboundItemRepository.PurchaseOrderAllocationSummary.class);
         when(allocationSummary.getSourcePurchaseOrderItemId()).thenReturn(201L);
         when(allocationSummary.getTotalQuantity()).thenReturn(3L);
         when(purchaseInboundItemRepository.summarizeAllocatedQuantityBySourcePurchaseOrderItemIdsExcludingInbound(
-                List.of(201L),
-                1L
+                eq(List.of(201L)),
+                any()
         )).thenReturn(List.of(allocationSummary));
+        when(purchaseInboundItemRepository.summarizeWeightAdjustmentBySourcePurchaseOrderItemIdsExcludingInbound(
+                eq(List.of(201L)),
+                any()
+        )).thenReturn(List.of());
         when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
         when(mapper.toResponse(any())).thenReturn(response());
 
@@ -106,9 +122,157 @@ class PurchaseInboundServiceTest {
         assertThat(response.inboundNo()).isEqualTo("PI-001");
         verify(purchaseOrderItemQueryService).findActiveByIdIn(List.of(201L));
         verify(purchaseInboundItemRepository).summarizeAllocatedQuantityBySourcePurchaseOrderItemIdsExcludingInbound(
-                List.of(201L),
-                1L
+                eq(List.of(201L)),
+                any()
         );
+    }
+
+    @Test
+    void shouldUseWeighWeightAndWriteBackPurchaseOrderAdjustmentWhenCategoryRequiresWeigh() {
+        PurchaseInboundRepository repository = mock(PurchaseInboundRepository.class);
+        PurchaseInboundMapper mapper = mock(PurchaseInboundMapper.class);
+        TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
+        WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
+        MaterialCategoryRepository materialCategoryRepository = mock(MaterialCategoryRepository.class);
+        PurchaseInboundItemRepository purchaseInboundItemRepository = mock(PurchaseInboundItemRepository.class);
+        PurchaseOrderRepository purchaseOrderRepository = mock(PurchaseOrderRepository.class);
+        PurchaseOrderItemQueryService purchaseOrderItemQueryService = mock(PurchaseOrderItemQueryService.class);
+        PurchaseInboundService service = new PurchaseInboundService(
+                repository,
+                mock(SnowflakeIdGenerator.class),
+                mapper,
+                materialSupport,
+                warehouseSelectionSupport,
+                materialCategoryRepository,
+                purchaseInboundItemRepository,
+                purchaseOrderRepository,
+                purchaseOrderItemQueryService,
+                mock(SalesOrderItemQueryService.class),
+                mock(WorkflowTransitionGuard.class)
+        );
+
+        PurchaseOrder purchaseOrder = new PurchaseOrder();
+        purchaseOrder.setId(301L);
+        PurchaseOrderItem sourceItem = new PurchaseOrderItem();
+        sourceItem.setId(201L);
+        sourceItem.setPurchaseOrder(purchaseOrder);
+        sourceItem.setQuantity(10);
+        sourceItem.setPieceWeightTon(new BigDecimal("0.100"));
+        sourceItem.setUnitPrice(new BigDecimal("4000.00"));
+        sourceItem.setWeightTon(new BigDecimal("1.000"));
+        sourceItem.setAmount(new BigDecimal("4000.00"));
+        purchaseOrder.getItems().add(sourceItem);
+
+        PurchaseInboundRequest request = new PurchaseInboundRequest(
+                "PI-002",
+                "PO-001",
+                "供应商A",
+                null,
+                LocalDate.of(2026, 4, 26),
+                null,
+                "草稿",
+                null,
+                List.of(new PurchaseInboundItemRequest(
+                        null, "M1", "宝钢", "盘螺", "HRB400", "18", "12m", "吨",
+                        201L, "一号库", "过磅", "B1", 4, "件",
+                        new BigDecimal("0.100"), 1, null,
+                        new BigDecimal("0.430"), null, null,
+                        new BigDecimal("4000.00"), null
+                ))
+        );
+        MaterialCategory category = purchaseWeighCategory("盘螺");
+
+        when(repository.existsByInboundNoAndDeletedFlagFalse("PI-002")).thenReturn(false);
+        when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(Map.of("M1", new Material()));
+        when(materialSupport.normalizeBatchNo(any(), eq("B1"), eq(1), eq(true))).thenReturn("B1");
+        when(warehouseSelectionSupport.normalizeWarehouseName("一号库", 1, true)).thenReturn("一号库");
+        when(materialCategoryRepository.findByCategoryNameInAndDeletedFlagFalse(List.of("盘螺"))).thenReturn(List.of(category));
+        when(purchaseOrderItemQueryService.findActiveByIdIn(List.of(201L))).thenReturn(List.of(sourceItem));
+        when(purchaseOrderRepository.findByIdInAndDeletedFlagFalse(List.of(301L))).thenReturn(List.of(purchaseOrder));
+        when(purchaseInboundItemRepository.summarizeAllocatedQuantityBySourcePurchaseOrderItemIdsExcludingInbound(eq(List.of(201L)), any()))
+                .thenReturn(List.of());
+        when(purchaseInboundItemRepository.summarizeWeightAdjustmentBySourcePurchaseOrderItemIdsExcludingInbound(eq(List.of(201L)), any()))
+                .thenReturn(List.of());
+        when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(mapper.toResponse(any())).thenReturn(response());
+
+        service.create(request);
+
+        var inboundCaptor = forClass(PurchaseInbound.class);
+        verify(repository).save(inboundCaptor.capture());
+        PurchaseInboundItem savedItem = inboundCaptor.getValue().getItems().get(0);
+        assertThat(inboundCaptor.getValue().getWarehouseName()).isEqualTo("一号库");
+        assertThat(inboundCaptor.getValue().getSettlementMode()).isEqualTo("过磅");
+        assertThat(savedItem.getSettlementMode()).isEqualTo("过磅");
+        assertThat(savedItem.getWeightTon()).isEqualByComparingTo("0.430");
+        assertThat(savedItem.getWeighWeightTon()).isEqualByComparingTo("0.430");
+        assertThat(savedItem.getWeightAdjustmentTon()).isEqualByComparingTo("0.030");
+        assertThat(savedItem.getWeightAdjustmentAmount()).isEqualByComparingTo("120.00");
+        assertThat(savedItem.getAmount()).isEqualByComparingTo("1720.00");
+        assertThat(sourceItem.getWeightTon()).isEqualByComparingTo("1.030");
+        assertThat(sourceItem.getAmount()).isEqualByComparingTo("4120.00");
+        assertThat(purchaseOrder.getTotalWeight()).isEqualByComparingTo("1.030");
+        assertThat(purchaseOrder.getTotalAmount()).isEqualByComparingTo("4120.00");
+        verify(purchaseOrderRepository).saveAll(any());
+    }
+
+    @Test
+    void shouldRejectPurchaseInboundWhenWeighRequiredCategoryMissingWeighWeight() {
+        PurchaseInboundRepository repository = mock(PurchaseInboundRepository.class);
+        PurchaseInboundMapper mapper = mock(PurchaseInboundMapper.class);
+        TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
+        WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
+        MaterialCategoryRepository materialCategoryRepository = mock(MaterialCategoryRepository.class);
+        PurchaseInboundItemRepository purchaseInboundItemRepository = mock(PurchaseInboundItemRepository.class);
+        PurchaseOrderRepository purchaseOrderRepository = mock(PurchaseOrderRepository.class);
+        PurchaseOrderItemQueryService purchaseOrderItemQueryService = mock(PurchaseOrderItemQueryService.class);
+        PurchaseInboundService service = new PurchaseInboundService(
+                repository,
+                mock(SnowflakeIdGenerator.class),
+                mapper,
+                materialSupport,
+                warehouseSelectionSupport,
+                materialCategoryRepository,
+                purchaseInboundItemRepository,
+                purchaseOrderRepository,
+                purchaseOrderItemQueryService,
+                mock(SalesOrderItemQueryService.class),
+                mock(WorkflowTransitionGuard.class)
+        );
+
+        PurchaseOrderItem sourceItem = new PurchaseOrderItem();
+        sourceItem.setId(201L);
+        sourceItem.setQuantity(10);
+        PurchaseInboundRequest request = new PurchaseInboundRequest(
+                "PI-003",
+                "PO-001",
+                "供应商A",
+                null,
+                LocalDate.of(2026, 4, 26),
+                null,
+                "草稿",
+                null,
+                List.of(new PurchaseInboundItemRequest(
+                        null, "M1", "宝钢", "盘螺", "HRB400", "18", "12m", "吨",
+                        201L, "一号库", "过磅", "B1", 4, "件",
+                        new BigDecimal("0.100"), 1, null,
+                        null, null, null,
+                        new BigDecimal("4000.00"), null
+                ))
+        );
+
+        when(repository.existsByInboundNoAndDeletedFlagFalse("PI-003")).thenReturn(false);
+        when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(Map.of("M1", new Material()));
+        when(materialSupport.normalizeBatchNo(any(), eq("B1"), eq(1), eq(true))).thenReturn("B1");
+        when(warehouseSelectionSupport.normalizeWarehouseName("一号库", 1, true)).thenReturn("一号库");
+        when(materialCategoryRepository.findByCategoryNameInAndDeletedFlagFalse(List.of("盘螺"))).thenReturn(List.of(purchaseWeighCategory("盘螺")));
+        when(purchaseOrderItemQueryService.findActiveByIdIn(List.of(201L))).thenReturn(List.of(sourceItem));
+        when(purchaseInboundItemRepository.summarizeAllocatedQuantityBySourcePurchaseOrderItemIdsExcludingInbound(eq(List.of(201L)), any()))
+                .thenReturn(List.of());
+
+        assertThatThrownBy(() -> service.create(request))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("第1行需填写过磅重量");
     }
 
     private PurchaseInboundService newService(PurchaseInboundRepository repository,
@@ -120,11 +284,20 @@ class PurchaseInboundServiceTest {
                 mapper,
                 mock(TradeItemMaterialSupport.class),
                 mock(WarehouseSelectionSupport.class),
+                mock(MaterialCategoryRepository.class),
                 mock(PurchaseInboundItemRepository.class),
+                mock(PurchaseOrderRepository.class),
                 mock(PurchaseOrderItemQueryService.class),
                 salesOrderItemQueryService,
                 mock(WorkflowTransitionGuard.class)
         );
+    }
+
+    private MaterialCategory purchaseWeighCategory(String categoryName) {
+        MaterialCategory category = new MaterialCategory();
+        category.setCategoryName(categoryName);
+        category.setPurchaseWeighRequired(Boolean.TRUE);
+        return category;
     }
 
     private PurchaseInbound inbound() {
@@ -172,15 +345,16 @@ class PurchaseInboundServiceTest {
                 "PI-001",
                 "PO-001",
                 "供应商A",
-                "一号库",
+                null,
                 LocalDate.of(2026, 4, 26),
-                "月结",
+                null,
                 "草稿",
                 null,
                 List.of(new PurchaseInboundItemRequest(
-                        "M1", "宝钢", "螺纹钢", "HRB400", "18", "12m", "吨",
-                        201L, null, "B1", 4, "支",
+                        null, "M1", "宝钢", "螺纹钢", "HRB400", "18", "12m", "吨",
+                        201L, "一号库", "理算", "B1", 4, "支",
                         new BigDecimal("0.100"), 1, new BigDecimal("0.400"),
+                        null, null, null,
                         new BigDecimal("4000.00"), new BigDecimal("1600.00")
                 ))
         );

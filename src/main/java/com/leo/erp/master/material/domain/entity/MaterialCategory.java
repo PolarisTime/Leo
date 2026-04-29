@@ -26,6 +26,9 @@ public class MaterialCategory extends AuditableEntity {
     @Column(name = "sort_order", nullable = false)
     private Integer sortOrder;
 
+    @Column(name = "purchase_weigh_required", nullable = false)
+    private Boolean purchaseWeighRequired = Boolean.FALSE;
+
     @Column(name = "status", nullable = false, length = 16)
     private String status;
 
