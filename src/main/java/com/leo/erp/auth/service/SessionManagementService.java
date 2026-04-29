@@ -47,7 +47,7 @@ public class SessionManagementService {
             AccessTokenBlacklistService blacklistService,
             SessionActivityService sessionActivityService,
             AfterCommitExecutor afterCommitExecutor,
-            SystemSwitchService systemSwitchService
+            @org.springframework.lang.Nullable SystemSwitchService systemSwitchService
     ) {
         this.userAccountRepository = userAccountRepository;
         this.refreshTokenSessionRepository = refreshTokenSessionRepository;
