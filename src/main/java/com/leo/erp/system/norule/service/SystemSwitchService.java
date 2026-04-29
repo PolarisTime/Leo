@@ -17,6 +17,7 @@ public class SystemSwitchService {
     public static final String AUTH_OPERATION_LOG_SWITCH = "SYS_OPERATION_LOG_RECORD_AUTH_EVENTS";
     public static final String FORCE_USER_TOTP_ON_FIRST_LOGIN_SWITCH = "SYS_FORCE_USER_TOTP_ON_FIRST_LOGIN";
     public static final String FORCE_BATCH_MANAGEMENT_SWITCH = "SYS_FORCE_BATCH_MANAGEMENT";
+    public static final String FORBID_DISABLE_2FA_SWITCH = "SYS_FORBID_DISABLE_2FA";
     private static final Set<String> DEFAULT_DETAILED_PAGE_ACTIONS = Set.of(
             "QUERY", "DETAIL", "CREATE", "EDIT", "DELETE", "AUDIT", "EXPORT", "PRINT"
     );
@@ -70,6 +71,11 @@ public class SystemSwitchService {
     @Transactional(readOnly = true)
     public boolean shouldForceBatchManagement() {
         return isEnabled(FORCE_BATCH_MANAGEMENT_SWITCH);
+    }
+
+    @Transactional(readOnly = true)
+    public boolean shouldForbidDisable2fa() {
+        return isEnabled(FORBID_DISABLE_2FA_SWITCH);
     }
 
     private Set<String> resolveDetailedPageActionKeys() {

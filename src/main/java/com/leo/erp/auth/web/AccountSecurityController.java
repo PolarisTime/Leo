@@ -12,6 +12,7 @@ import com.leo.erp.security.totp.RequiresTotpVerification;
 import com.leo.erp.system.operationlog.support.OperationLoggable;
 import jakarta.validation.Valid;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -25,6 +26,12 @@ public class AccountSecurityController {
 
     public AccountSecurityController(AccountSecurityService accountSecurityService) {
         this.accountSecurityService = accountSecurityService;
+    }
+
+    @GetMapping
+    @RequiresPermission(authenticatedOnly = true)
+    public ApiResponse<CurrentUserSecurityResponse> status(@AuthenticationPrincipal SecurityPrincipal principal) {
+        return ApiResponse.success(accountSecurityService.getStatus(principal.id()));
     }
 
     @PostMapping("/password")

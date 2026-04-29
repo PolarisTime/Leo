@@ -7,6 +7,9 @@ import com.leo.erp.auth.repository.UserAccountRepository;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.security.permission.PermissionService;
+import com.leo.erp.master.customer.repository.CustomerRepository;
+import com.leo.erp.master.material.repository.MaterialRepository;
+import com.leo.erp.master.supplier.repository.SupplierRepository;
 import com.leo.erp.system.company.domain.entity.CompanySetting;
 import com.leo.erp.system.company.repository.CompanySettingRepository;
 import com.leo.erp.system.dashboard.web.dto.DashboardSummaryResponse;
@@ -35,6 +38,9 @@ public class DashboardSummaryService {
     private final MenuRepository menuRepository;
     private final PermissionService permissionService;
     private final RefreshTokenSessionRepository refreshTokenSessionRepository;
+    private final MaterialRepository materialRepository;
+    private final SupplierRepository supplierRepository;
+    private final CustomerRepository customerRepository;
     private final RedisJsonCacheSupport redisJsonCacheSupport;
     private final String appName;
 
@@ -44,6 +50,9 @@ public class DashboardSummaryService {
                                    MenuRepository menuRepository,
                                    PermissionService permissionService,
                                    RefreshTokenSessionRepository refreshTokenSessionRepository,
+                                   MaterialRepository materialRepository,
+                                   SupplierRepository supplierRepository,
+                                   CustomerRepository customerRepository,
                                    RedisJsonCacheSupport redisJsonCacheSupport,
                                    @Value("${spring.application.name:leo}") String appName) {
         this.userAccountRepository = userAccountRepository;
@@ -51,6 +60,9 @@ public class DashboardSummaryService {
         this.menuRepository = menuRepository;
         this.permissionService = permissionService;
         this.refreshTokenSessionRepository = refreshTokenSessionRepository;
+        this.materialRepository = materialRepository;
+        this.supplierRepository = supplierRepository;
+        this.customerRepository = customerRepository;
         this.redisJsonCacheSupport = redisJsonCacheSupport;
         this.appName = appName;
     }
@@ -61,7 +73,7 @@ public class DashboardSummaryService {
                                    PermissionService permissionService,
                                    RefreshTokenSessionRepository refreshTokenSessionRepository,
                                    String appName) {
-        this(userAccountRepository, companySettingRepository, menuRepository, permissionService, refreshTokenSessionRepository, null, appName);
+        this(userAccountRepository, companySettingRepository, menuRepository, permissionService, refreshTokenSessionRepository, null, null, null, null, appName);
     }
 
     @Transactional(readOnly = true)
@@ -111,6 +123,10 @@ public class DashboardSummaryService {
         long activeSessionCount = refreshTokenSessionRepository
                 .countByUserIdAndDeletedFlagFalseAndRevokedAtIsNullAndExpiresAtAfter(userId, now);
 
+        long materialCount = materialRepository != null ? materialRepository.countByDeletedFlagFalse() : 0L;
+        long supplierCount = supplierRepository != null ? supplierRepository.countByDeletedFlagFalse() : 0L;
+        long customerCount = customerRepository != null ? customerRepository.countByDeletedFlagFalse() : 0L;
+
         return new DashboardSummaryResponse(
                 appName,
                 resolveCompanyName(),
@@ -123,7 +139,10 @@ public class DashboardSummaryService {
                 activeSessionCount,
                 Boolean.TRUE.equals(user.getTotpEnabled()),
                 user.getLastLoginDate(),
-                now
+                now,
+                materialCount,
+                supplierCount,
+                customerCount
         );
     }
 

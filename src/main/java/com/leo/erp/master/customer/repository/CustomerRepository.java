@@ -14,4 +14,6 @@ public interface CustomerRepository extends JpaRepository<Customer, Long>, JpaSp
     List<Customer> findByDeletedFlagFalseOrderByCustomerCodeAsc();
 
     Optional<Customer> findByIdAndDeletedFlagFalse(Long id);
+
+    long countByDeletedFlagFalse();
 }

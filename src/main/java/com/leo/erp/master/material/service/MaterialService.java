@@ -22,6 +22,8 @@ import org.apache.commons.csv.CSVPrinter;
 import org.apache.commons.csv.CSVRecord;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -66,18 +68,31 @@ public class MaterialService extends AbstractCrudService<Material, MaterialReque
 
     private static final String[] MATERIAL_SEARCH_FIELDS = {"materialCode", "brand", "spec"};
 
+    private static final Sort DEFAULT_MATERIAL_SORT = Sort.by(Sort.Direction.ASC, "material")
+            .and(Sort.by(Sort.Direction.ASC, "length"))
+            .and(Sort.by(Sort.Direction.ASC, "brand"))
+            .and(Sort.by(Sort.Direction.ASC, "spec"));
+
     public Page<MaterialResponse> page(PageQuery query, String keyword, String category, String material) {
         Specification<Material> spec = Specs.<Material>notDeleted()
                 .and(Specs.keywordLike(keyword, MATERIAL_SEARCH_FIELDS))
                 .and(Specs.equalIfPresent("category", category))
                 .and(Specs.equalIfPresent("material", material));
-        return page(query, spec, materialRepository);
+        Pageable pageable = query.sortBy() != null
+                ? query.toPageable("id")
+                : PageRequest.of(query.page(), query.size(), DEFAULT_MATERIAL_SORT);
+        return materialRepository.findAll(DataScopeContext.apply(spec), pageable)
+                .map(this::toResponse);
     }
 
     @Transactional(readOnly = true)
     public java.util.List<MaterialResponse> search(String keyword, int maxSize) {
-        return search(keyword, MATERIAL_SEARCH_FIELDS, maxSize,
-                Specs.notDeleted(), materialRepository);
+        Specification<Material> spec = Specs.<Material>notDeleted()
+                .and(com.leo.erp.common.persistence.Specs.keywordLike(keyword, MATERIAL_SEARCH_FIELDS));
+        return materialRepository.findAll(DataScopeContext.apply(spec),
+                        PageRequest.of(0, maxSize, DEFAULT_MATERIAL_SORT))
+                .map(this::toResponse)
+                .toList();
     }
 
     @Override
@@ -122,7 +137,7 @@ public class MaterialService extends AbstractCrudService<Material, MaterialReque
     public byte[] exportCsv(String keyword) {
         Specification<Material> spec = Specs.<Material>notDeleted()
                 .and(Specs.keywordLike(keyword, "materialCode", "brand", "spec"));
-        List<Material> materials = materialRepository.findAll(DataScopeContext.apply(spec), Sort.by(Sort.Direction.ASC, "materialCode"));
+        List<Material> materials = materialRepository.findAll(DataScopeContext.apply(spec), DEFAULT_MATERIAL_SORT);
         StringWriter writer = new StringWriter();
         writer.append('\uFEFF');
         try (CSVPrinter printer = new CSVPrinter(writer, MATERIAL_CSV_FORMAT)) {

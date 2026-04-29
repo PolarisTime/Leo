@@ -10,6 +10,7 @@ import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.security.jwt.AuthenticatedUserCacheService;
 import com.leo.erp.system.dashboard.service.DashboardSummaryService;
+import com.leo.erp.system.norule.service.SystemSwitchService;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -22,17 +23,20 @@ public class AccountSecurityService {
     private final TotpService totpService;
     private final AuthenticatedUserCacheService authenticatedUserCacheService;
     private final DashboardSummaryService dashboardSummaryService;
+    private final SystemSwitchService systemSwitchService;
 
     public AccountSecurityService(UserAccountRepository userAccountRepository,
                                   PasswordEncoder passwordEncoder,
                                   TotpService totpService,
                                   AuthenticatedUserCacheService authenticatedUserCacheService,
-                                  DashboardSummaryService dashboardSummaryService) {
+                                  DashboardSummaryService dashboardSummaryService,
+                                  SystemSwitchService systemSwitchService) {
         this.userAccountRepository = userAccountRepository;
         this.passwordEncoder = passwordEncoder;
         this.totpService = totpService;
         this.authenticatedUserCacheService = authenticatedUserCacheService;
         this.dashboardSummaryService = dashboardSummaryService;
+        this.systemSwitchService = systemSwitchService;
     }
 
     @Transactional
@@ -77,8 +81,16 @@ public class AccountSecurityService {
         return toSecurityResponse(saved);
     }
 
+    @Transactional(readOnly = true)
+    public CurrentUserSecurityResponse getStatus(Long userId) {
+        return toSecurityResponse(getAccount(userId));
+    }
+
     @Transactional
     public CurrentUserSecurityResponse disable2fa(Long userId) {
+        if (systemSwitchService != null && systemSwitchService.shouldForbidDisable2fa()) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "系统设置禁止关闭 2FA，请联系管理员");
+        }
         UserAccount account = getAccount(userId);
         account.setTotpSecret(null);
         account.setTotpEnabled(Boolean.FALSE);
@@ -99,12 +111,14 @@ public class AccountSecurityService {
     }
 
     private CurrentUserSecurityResponse toSecurityResponse(UserAccount account) {
+        boolean forbidDisable = systemSwitchService != null && systemSwitchService.shouldForbidDisable2fa();
         return new CurrentUserSecurityResponse(
                 account.getId(),
                 account.getLoginName(),
                 account.getUserName(),
                 Boolean.TRUE.equals(account.getTotpEnabled()),
-                Boolean.TRUE.equals(account.getRequireTotpSetup())
+                Boolean.TRUE.equals(account.getRequireTotpSetup()),
+                forbidDisable
         );
     }
 
