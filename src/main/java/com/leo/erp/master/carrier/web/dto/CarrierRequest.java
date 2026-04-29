@@ -11,6 +11,9 @@ public record CarrierRequest(
         String contactPhone,
         String vehicleType,
         String vehiclePlates,
+        String vehiclePlate,
+        String vehicleContact,
+        String vehiclePhone,
         String priceMode,
         @NotBlank(message = "状态不能为空")
         String status,

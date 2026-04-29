@@ -103,6 +103,9 @@ public class CarrierService extends AbstractCrudService<Carrier, CarrierRequest,
         entity.setContactPhone(emptyToNull(request.contactPhone()));
         entity.setVehicleType(emptyToNull(request.vehicleType()));
         entity.setVehiclePlates(emptyToNull(request.vehiclePlates()));
+        entity.setVehiclePlate(emptyToNull(request.vehiclePlate()));
+        entity.setVehicleContact(emptyToNull(request.vehicleContact()));
+        entity.setVehiclePhone(emptyToNull(request.vehiclePhone()));
         entity.setPriceMode(request.priceMode());
         entity.setStatus(request.status());
         entity.setRemark(request.remark());
