@@ -20,6 +20,9 @@ public record CarrierRequest(
         String vehiclePlate3,
         String vehicleContact3,
         String vehiclePhone3,
+        String vehicleRemark,
+        String vehicleRemark2,
+        String vehicleRemark3,
         String priceMode,
         @NotBlank(message = "状态不能为空")
         String status,

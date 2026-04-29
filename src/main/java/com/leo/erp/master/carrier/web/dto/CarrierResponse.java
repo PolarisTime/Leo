@@ -17,6 +17,9 @@ public record CarrierResponse(
         String vehiclePlate3,
         String vehicleContact3,
         String vehiclePhone3,
+        String vehicleRemark,
+        String vehicleRemark2,
+        String vehicleRemark3,
         String priceMode,
         String status,
         String remark
