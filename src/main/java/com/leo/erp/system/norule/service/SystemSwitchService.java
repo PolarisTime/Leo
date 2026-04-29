@@ -18,6 +18,8 @@ public class SystemSwitchService {
     public static final String FORCE_USER_TOTP_ON_FIRST_LOGIN_SWITCH = "SYS_FORCE_USER_TOTP_ON_FIRST_LOGIN";
     public static final String FORCE_BATCH_MANAGEMENT_SWITCH = "SYS_FORCE_BATCH_MANAGEMENT";
     public static final String FORBID_DISABLE_2FA_SWITCH = "SYS_FORBID_DISABLE_2FA";
+    public static final String MAX_CONCURRENT_SESSIONS_SWITCH = "SYS_MAX_CONCURRENT_SESSIONS";
+    private static final int DEFAULT_MAX_SESSIONS = 3;
     private static final Set<String> DEFAULT_DETAILED_PAGE_ACTIONS = Set.of(
             "QUERY", "DETAIL", "CREATE", "EDIT", "DELETE", "AUDIT", "EXPORT", "PRINT"
     );
@@ -76,6 +78,21 @@ public class SystemSwitchService {
     @Transactional(readOnly = true)
     public boolean shouldForbidDisable2fa() {
         return isEnabled(FORBID_DISABLE_2FA_SWITCH);
+    }
+
+    @Transactional(readOnly = true)
+    public int getMaxConcurrentSessions() {
+        return noRuleRepository.findBySettingCodeAndDeletedFlagFalse(MAX_CONCURRENT_SESSIONS_SWITCH)
+                .filter(rule -> "正常".equals(rule.getStatus()))
+                .map(rule -> {
+                    try {
+                        int val = Integer.parseInt(rule.getSampleNo());
+                        return val > 0 ? val : DEFAULT_MAX_SESSIONS;
+                    } catch (NumberFormatException e) {
+                        return DEFAULT_MAX_SESSIONS;
+                    }
+                })
+                .orElse(DEFAULT_MAX_SESSIONS);
     }
 
     private Set<String> resolveDetailedPageActionKeys() {
