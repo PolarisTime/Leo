@@ -9,6 +9,7 @@ import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.security.jwt.AccessTokenBlacklistService;
 import com.leo.erp.security.jwt.JwtTokenService;
 import com.leo.erp.security.jwt.SessionActivityService;
+import com.leo.erp.system.norule.service.SystemSwitchService;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -26,7 +27,7 @@ import java.util.UUID;
 @Service
 public class SessionManagementService {
 
-    private static final int MAX_REFRESH_TOKENS_PER_USER = 3;
+    private static final int DEFAULT_MAX_REFRESH_TOKENS = 3;
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
     private final UserAccountRepository userAccountRepository;
@@ -36,6 +37,7 @@ public class SessionManagementService {
     private final AccessTokenBlacklistService blacklistService;
     private final SessionActivityService sessionActivityService;
     private final AfterCommitExecutor afterCommitExecutor;
+    private final SystemSwitchService systemSwitchService;
 
     public SessionManagementService(
             UserAccountRepository userAccountRepository,
@@ -44,7 +46,8 @@ public class SessionManagementService {
             SnowflakeIdGenerator snowflakeIdGenerator,
             AccessTokenBlacklistService blacklistService,
             SessionActivityService sessionActivityService,
-            AfterCommitExecutor afterCommitExecutor
+            AfterCommitExecutor afterCommitExecutor,
+            SystemSwitchService systemSwitchService
     ) {
         this.userAccountRepository = userAccountRepository;
         this.refreshTokenSessionRepository = refreshTokenSessionRepository;
@@ -53,6 +56,12 @@ public class SessionManagementService {
         this.blacklistService = blacklistService;
         this.sessionActivityService = sessionActivityService;
         this.afterCommitExecutor = afterCommitExecutor;
+        this.systemSwitchService = systemSwitchService;
+    }
+
+    private int maxRefreshTokensPerUser() {
+        if (systemSwitchService == null) return DEFAULT_MAX_REFRESH_TOKENS;
+        return systemSwitchService.getMaxConcurrentSessions();
     }
 
     @Transactional
@@ -119,7 +128,7 @@ public class SessionManagementService {
     private void trimActiveSessionsBeforeIssuing(Long userId) {
         var activeTokens = refreshTokenSessionRepository
                 .findByUserIdAndDeletedFlagFalseAndRevokedAtIsNullAndExpiresAtAfterOrderByCreatedAtAsc(userId, LocalDateTime.now());
-        int limitBeforeCreate = MAX_REFRESH_TOKENS_PER_USER - 1;
+        int limitBeforeCreate = maxRefreshTokensPerUser() - 1;
         if (activeTokens.size() <= limitBeforeCreate) {
             return;
         }
