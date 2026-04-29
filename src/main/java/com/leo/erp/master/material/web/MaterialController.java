@@ -68,6 +68,20 @@ public class MaterialController {
         return ApiResponse.success("创建成功", materialService.create(request));
     }
 
+    @GetMapping("/template")
+    @RequiresPermission(resource = "material", action = "export")
+    public void downloadTemplate(HttpServletResponse response) throws IOException {
+        byte[] file = materialService.downloadTemplateCsv();
+        String filename = "商品资料导入模板.csv";
+        response.setContentType("text/csv;charset=UTF-8");
+        response.setHeader("Content-Disposition", "attachment; filename=\"" +
+                java.net.URLEncoder.encode(filename, StandardCharsets.UTF_8) + "\"");
+        response.setCharacterEncoding(StandardCharsets.UTF_8.name());
+        response.setContentLength(file.length);
+        response.getOutputStream().write(file);
+        response.getOutputStream().flush();
+    }
+
     @PostMapping("/export")
     @RequiresPermission(resource = "material", action = "export")
     public void export(@RequestParam(required = false) String keyword, HttpServletResponse response) throws IOException {

@@ -103,6 +103,22 @@ public class MaterialService extends AbstractCrudService<Material, MaterialReque
     }
 
     @Transactional(readOnly = true)
+    public byte[] downloadTemplateCsv() {
+        StringWriter writer = new StringWriter();
+        writer.append('﻿');
+        try (CSVPrinter printer = new CSVPrinter(writer, MATERIAL_CSV_FORMAT)) {
+            printer.printRecord(MATERIAL_EXPORT_HEADERS);
+            printer.printRecord(
+                    "RB400-18-12", "敬业", "HRB400", "螺纹钢", "18", "12米",
+                    "吨", "件", "0.002", "1", "3500.00", "否", "示例数据，可删除"
+            );
+        } catch (IOException ex) {
+            throw new IllegalStateException("生成商品资料导入模板CSV失败", ex);
+        }
+        return writer.toString().getBytes(StandardCharsets.UTF_8);
+    }
+
+    @Transactional(readOnly = true)
     public byte[] exportCsv(String keyword) {
         Specification<Material> spec = Specs.<Material>notDeleted()
                 .and(Specs.keywordLike(keyword, "materialCode", "brand", "spec"));
