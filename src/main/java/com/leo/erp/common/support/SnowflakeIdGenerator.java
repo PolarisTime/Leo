@@ -1,11 +1,14 @@
 package com.leo.erp.common.support;
 
+import jakarta.annotation.PostConstruct;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 @Component
 public class SnowflakeIdGenerator {
+
+    private static volatile SnowflakeIdGenerator instance;
 
     private static final long EPOCH = 1704038400000L;
     private static final long MAX_MACHINE_ID = 1023L;
@@ -25,6 +28,15 @@ public class SnowflakeIdGenerator {
             throw new IllegalArgumentException("leo.id.machine-id 必须在 0-1023 之间");
         }
         this.machineId = machineId;
+    }
+
+    @PostConstruct
+    void registerInstance() {
+        instance = this;
+    }
+
+    public static SnowflakeIdGenerator getInstance() {
+        return instance;
     }
 
     public synchronized long nextId() {
