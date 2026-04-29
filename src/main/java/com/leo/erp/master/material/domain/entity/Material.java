@@ -7,6 +7,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.Setter;
+import org.hibernate.annotations.Formula;
 
 import java.math.BigDecimal;
 
@@ -57,4 +58,10 @@ public class Material extends AuditableEntity {
 
     @Column(name = "remark", length = 255)
     private String remark;
+
+    @Column(name = "length_sort", insertable = false, updatable = false)
+    private Double lengthSort;
+
+    @Column(name = "spec_sort", insertable = false, updatable = false)
+    private Integer specSort;
 }

@@ -69,9 +69,9 @@ public class MaterialService extends AbstractCrudService<Material, MaterialReque
     private static final String[] MATERIAL_SEARCH_FIELDS = {"materialCode", "brand", "spec"};
 
     private static final Sort DEFAULT_MATERIAL_SORT = Sort.by(Sort.Direction.ASC, "material")
-            .and(Sort.by(Sort.Direction.ASC, "length"))
+            .and(Sort.by(Sort.Direction.ASC, "lengthSort"))
             .and(Sort.by(Sort.Direction.ASC, "brand"))
-            .and(Sort.by(Sort.Direction.ASC, "spec"));
+            .and(Sort.by(Sort.Direction.ASC, "specSort"));
 
     public Page<MaterialResponse> page(PageQuery query, String keyword, String category, String material) {
         Specification<Material> spec = Specs.<Material>notDeleted()

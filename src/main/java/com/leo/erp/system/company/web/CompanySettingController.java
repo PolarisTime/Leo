@@ -1,6 +1,7 @@
 package com.leo.erp.system.company.web;
 
 import com.leo.erp.common.api.ApiResponse;
+import com.leo.erp.common.web.PublicAccess;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.api.PageResponse;
 import com.leo.erp.common.web.BindPageQuery;
@@ -36,6 +37,12 @@ public class CompanySettingController {
     @RequiresPermission(resource = "company-setting", action = "read")
     public ApiResponse<CompanySettingResponse> detail(@PathVariable Long id) {
         return ApiResponse.success(companySettingService.detail(id));
+    }
+
+    @GetMapping("/name")
+    @PublicAccess
+    public ApiResponse<String> companyName() {
+        return ApiResponse.success(companySettingService.current().companyName());
     }
 
     @GetMapping("/current")

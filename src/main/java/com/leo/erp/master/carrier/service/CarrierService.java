@@ -55,6 +55,13 @@ public class CarrierService extends AbstractCrudService<Carrier, CarrierRequest,
         this(carrierRepository, snowflakeIdGenerator, carrierMapper, null);
     }
 
+    @org.springframework.transaction.annotation.Transactional(readOnly = true)
+    public java.util.List<com.leo.erp.common.web.OptionResponse> listActiveOptions() {
+        return carrierRepository.findByDeletedFlagFalseOrderByCarrierCodeAsc().stream()
+                .map(c -> new com.leo.erp.common.web.OptionResponse(c.getCarrierName(), c.getCarrierName()))
+                .toList();
+    }
+
     @Transactional(readOnly = true)
     public Page<CarrierResponse> page(PageQuery query, String keyword, String status) {
         Specification<Carrier> spec = Specs.<Carrier>notDeleted()

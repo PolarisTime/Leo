@@ -21,6 +21,12 @@ public class CarrierController {
         this.carrierService = carrierService;
     }
 
+    @GetMapping("/options")
+    @RequiresPermission(resource = "carrier", action = "read")
+    public ApiResponse<java.util.List<com.leo.erp.common.web.OptionResponse>> options() {
+        return ApiResponse.success(carrierService.listActiveOptions());
+    }
+
     @GetMapping
     @RequiresPermission(resource = "carrier", action = "read")
     public ApiResponse<PageResponse<CarrierResponse>> page(
