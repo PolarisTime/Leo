@@ -8,6 +8,7 @@ import com.leo.erp.security.permission.DataScopeContext;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
@@ -18,10 +19,11 @@ import java.util.Optional;
 
 public abstract class AbstractCrudService<E extends AuditableEntity, Req, Res> {
 
+    @Autowired
+    protected SnowflakeIdGenerator idGenerator;
+
     protected AbstractCrudService(SnowflakeIdGenerator idGenerator) {
-        if (SnowflakeIdGenerator.getInstance() == null) {
-            SnowflakeIdGenerator.registerInstance(idGenerator);
-        }
+        this.idGenerator = idGenerator;
     }
 
     private Logger logger() {
@@ -37,7 +39,7 @@ public abstract class AbstractCrudService<E extends AuditableEntity, Req, Res> {
     public final Res create(Req request) {
         validateCreate(request);
         E entity = newEntity();
-        long id = SnowflakeIdGenerator.getInstance().nextId();
+        long id = idGenerator.nextId();
         assignId(entity, id);
         apply(entity, request);
         Res response = toSavedResponse(saveEntity(entity));
@@ -86,7 +88,7 @@ public abstract class AbstractCrudService<E extends AuditableEntity, Req, Res> {
     }
 
     protected final long nextId() {
-        return SnowflakeIdGenerator.getInstance().nextId();
+        return idGenerator.nextId();
     }
 
     protected void validateCreate(Req request) {
