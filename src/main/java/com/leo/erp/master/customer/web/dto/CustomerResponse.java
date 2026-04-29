@@ -8,6 +8,9 @@ public record CustomerResponse(
         String contactPhone,
         String city,
         String settlementMode,
+        String projectName,
+        String projectNameAbbr,
+        String projectAddress,
         String status,
         String remark
 ) {

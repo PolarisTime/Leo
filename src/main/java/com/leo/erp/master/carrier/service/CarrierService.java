@@ -99,12 +99,17 @@ public class CarrierService extends AbstractCrudService<Carrier, CarrierRequest,
     protected void apply(Carrier entity, CarrierRequest request) {
         entity.setCarrierCode(request.carrierCode());
         entity.setCarrierName(request.carrierName());
-        entity.setContactName(request.contactName());
-        entity.setContactPhone(request.contactPhone());
-        entity.setVehicleType(request.vehicleType());
+        entity.setContactName(emptyToNull(request.contactName()));
+        entity.setContactPhone(emptyToNull(request.contactPhone()));
+        entity.setVehicleType(emptyToNull(request.vehicleType()));
+        entity.setVehiclePlates(emptyToNull(request.vehiclePlates()));
         entity.setPriceMode(request.priceMode());
         entity.setStatus(request.status());
         entity.setRemark(request.remark());
+    }
+
+    private String emptyToNull(String value) {
+        return value == null ? null : value.trim().isEmpty() ? null : value.trim();
     }
 
     @Override

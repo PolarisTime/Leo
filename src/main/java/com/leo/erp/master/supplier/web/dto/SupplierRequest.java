@@ -7,11 +7,8 @@ public record SupplierRequest(
         String supplierCode,
         @NotBlank(message = "供应商名称不能为空")
         String supplierName,
-        @NotBlank(message = "联系人不能为空")
         String contactName,
-        @NotBlank(message = "联系电话不能为空")
         String contactPhone,
-        @NotBlank(message = "所在城市不能为空")
         String city,
         @NotBlank(message = "状态不能为空")
         String status,

@@ -23,13 +23,13 @@ public class Supplier extends AuditableEntity {
     @Column(name = "supplier_name", nullable = false, length = 128)
     private String supplierName;
 
-    @Column(name = "contact_name", nullable = false, length = 64)
+    @Column(name = "contact_name", length = 64)
     private String contactName;
 
-    @Column(name = "contact_phone", nullable = false, length = 32)
+    @Column(name = "contact_phone", length = 32)
     private String contactPhone;
 
-    @Column(name = "city", nullable = false, length = 64)
+    @Column(name = "city", length = 64)
     private String city;
 
     @Column(name = "status", nullable = false, length = 16)

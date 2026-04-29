@@ -56,7 +56,7 @@ public class CustomerService extends AbstractCrudService<Customer, CustomerReque
     @Transactional(readOnly = true)
     public Page<CustomerResponse> page(PageQuery query, String keyword, String status) {
         Specification<Customer> spec = Specs.<Customer>notDeleted()
-                .and(Specs.keywordLike(keyword, "customerCode", "customerName", "contactName"))
+                .and(Specs.keywordLike(keyword, "customerCode", "customerName", "projectName", "contactName"))
                 .and(Specs.equalIfPresent("status", status));
         return page(query, spec, customerRepository);
     }
@@ -101,6 +101,9 @@ public class CustomerService extends AbstractCrudService<Customer, CustomerReque
         entity.setContactPhone(request.contactPhone());
         entity.setCity(request.city());
         entity.setSettlementMode(request.settlementMode());
+        entity.setProjectName(request.projectName());
+        entity.setProjectNameAbbr(request.projectNameAbbr());
+        entity.setProjectAddress(request.projectAddress());
         entity.setStatus(request.status());
         entity.setRemark(request.remark());
     }
