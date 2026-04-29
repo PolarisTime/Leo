@@ -82,7 +82,7 @@ public class NoRuleSequenceService {
     public String nextValueByModuleKey(String moduleKey) {
         String settingCode = MODULE_RULE_CODE_MAP.get(moduleKey);
         if (settingCode == null) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "当前模块未配置单号规则: " + moduleKey);
+            return null;
         }
         return nextValue(settingCode);
     }
