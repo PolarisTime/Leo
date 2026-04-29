@@ -79,7 +79,11 @@ public class MaterialCategoryController {
         List<MaterialCategoryOptionResponse> options = repository
                 .findByStatusAndDeletedFlagFalseOrderBySortOrderAscIdAsc("正常")
                 .stream()
-                .map(cat -> new MaterialCategoryOptionResponse(cat.getCategoryName(), cat.getCategoryName()))
+                .map(cat -> new MaterialCategoryOptionResponse(
+                        cat.getCategoryName(),
+                        cat.getCategoryName(),
+                        Boolean.TRUE.equals(cat.getPurchaseWeighRequired())
+                ))
                 .toList();
         return ApiResponse.success(options);
     }

@@ -12,9 +12,9 @@ public record PurchaseInboundRequest(
         @NotBlank String inboundNo,
         String purchaseOrderNo,
         @NotBlank String supplierName,
-        @NotBlank String warehouseName,
+        String warehouseName,
         @NotNull LocalDate inboundDate,
-        @NotBlank String settlementMode,
+        String settlementMode,
         String status,
         String remark,
         @Valid @NotEmpty List<PurchaseInboundItemRequest> items

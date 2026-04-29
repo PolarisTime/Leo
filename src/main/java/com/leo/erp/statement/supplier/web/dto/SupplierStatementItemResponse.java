@@ -19,6 +19,9 @@ public record SupplierStatementItemResponse(
         BigDecimal pieceWeightTon,
         Integer piecesPerBundle,
         BigDecimal weightTon,
+        BigDecimal weighWeightTon,
+        BigDecimal weightAdjustmentTon,
+        BigDecimal weightAdjustmentAmount,
         BigDecimal unitPrice,
         BigDecimal amount
 ) {

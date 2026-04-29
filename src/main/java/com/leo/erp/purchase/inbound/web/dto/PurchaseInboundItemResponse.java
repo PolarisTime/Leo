@@ -14,6 +14,7 @@ public record PurchaseInboundItemResponse(
         String unit,
         Long sourcePurchaseOrderItemId,
         String warehouseName,
+        String settlementMode,
         String batchNo,
         Integer remainingQuantity,
         Integer quantity,
@@ -21,6 +22,9 @@ public record PurchaseInboundItemResponse(
         BigDecimal pieceWeightTon,
         Integer piecesPerBundle,
         BigDecimal weightTon,
+        BigDecimal weighWeightTon,
+        BigDecimal weightAdjustmentTon,
+        BigDecimal weightAdjustmentAmount,
         BigDecimal unitPrice,
         BigDecimal amount
 ) {

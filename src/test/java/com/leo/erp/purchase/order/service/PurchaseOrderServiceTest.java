@@ -4,6 +4,8 @@ import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.TradeItemMaterialSupport;
 import com.leo.erp.common.support.WarehouseSelectionSupport;
 import com.leo.erp.master.material.domain.entity.Material;
+import com.leo.erp.master.supplier.domain.entity.Supplier;
+import com.leo.erp.master.supplier.repository.SupplierRepository;
 import com.leo.erp.purchase.inbound.service.PurchaseInboundItemQueryService;
 import com.leo.erp.purchase.order.domain.entity.PurchaseOrder;
 import com.leo.erp.purchase.order.domain.entity.PurchaseOrderItem;
@@ -22,6 +24,7 @@ import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -40,6 +43,7 @@ class PurchaseOrderServiceTest {
         PurchaseOrderMapper mapper = mock(PurchaseOrderMapper.class);
         TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
         WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
+        SupplierRepository supplierRepository = mock(SupplierRepository.class);
         PurchaseInboundItemQueryService purchaseInboundItemQueryService = mock(PurchaseInboundItemQueryService.class);
         WorkflowTransitionGuard workflowTransitionGuard = mock(WorkflowTransitionGuard.class);
         PurchaseOrderService service = new PurchaseOrderService(
@@ -48,6 +52,7 @@ class PurchaseOrderServiceTest {
                 mapper,
                 materialSupport,
                 warehouseSelectionSupport,
+                supplierRepository,
                 purchaseInboundItemQueryService,
                 workflowTransitionGuard
         );
@@ -108,6 +113,7 @@ class PurchaseOrderServiceTest {
         PurchaseOrderMapper mapper = mock(PurchaseOrderMapper.class);
         TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
         WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
+        SupplierRepository supplierRepository = mock(SupplierRepository.class);
         PurchaseInboundItemQueryService purchaseInboundItemQueryService = mock(PurchaseInboundItemQueryService.class);
         WorkflowTransitionGuard workflowTransitionGuard = mock(WorkflowTransitionGuard.class);
         PurchaseOrderService service = new PurchaseOrderService(
@@ -116,6 +122,7 @@ class PurchaseOrderServiceTest {
                 mapper,
                 materialSupport,
                 warehouseSelectionSupport,
+                supplierRepository,
                 purchaseInboundItemQueryService,
                 workflowTransitionGuard
         );
@@ -126,9 +133,13 @@ class PurchaseOrderServiceTest {
         PurchaseOrderRequest request = buildRequest(11L, "草稿");
 
         when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(order));
+        when(supplierRepository.findFirstBySupplierNameAndDeletedFlagFalseOrderBySupplierCodeAsc("供应商A"))
+                .thenReturn(Optional.of(supplier("供应商A")));
         when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(Map.of("M1", new Material()));
         when(materialSupport.normalizeBatchNo(any(), anyString(), anyInt(), eq(false))).thenReturn("B1");
         when(warehouseSelectionSupport.normalizeWarehouseName("一号库", 1, true)).thenReturn("一号库");
+        when(purchaseInboundItemQueryService.summarizeWeightAdjustmentBySourcePurchaseOrderItemIds(any()))
+                .thenReturn(Map.of());
         when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
         when(mapper.toResponse(any())).thenReturn(summaryResponse("草稿"));
 
@@ -147,6 +158,7 @@ class PurchaseOrderServiceTest {
         PurchaseOrderMapper mapper = mock(PurchaseOrderMapper.class);
         TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
         WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
+        SupplierRepository supplierRepository = mock(SupplierRepository.class);
         PurchaseInboundItemQueryService purchaseInboundItemQueryService = mock(PurchaseInboundItemQueryService.class);
         WorkflowTransitionGuard workflowTransitionGuard = mock(WorkflowTransitionGuard.class);
         PurchaseOrderService service = new PurchaseOrderService(
@@ -155,15 +167,20 @@ class PurchaseOrderServiceTest {
                 mapper,
                 materialSupport,
                 warehouseSelectionSupport,
+                supplierRepository,
                 purchaseInboundItemQueryService,
                 workflowTransitionGuard
         );
 
         when(repository.existsByOrderNoAndDeletedFlagFalse("PO-001")).thenReturn(false);
+        when(supplierRepository.findFirstBySupplierNameAndDeletedFlagFalseOrderBySupplierCodeAsc("供应商A"))
+                .thenReturn(Optional.of(supplier("供应商A")));
         when(idGenerator.nextId()).thenReturn(1L, 11L);
         when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(Map.of("M1", new Material()));
         when(materialSupport.normalizeBatchNo(any(), anyString(), anyInt(), eq(false))).thenReturn("B1");
         when(warehouseSelectionSupport.normalizeWarehouseName("一号库", 1, true)).thenReturn("一号库");
+        when(purchaseInboundItemQueryService.summarizeWeightAdjustmentBySourcePurchaseOrderItemIds(any()))
+                .thenReturn(Map.of());
         when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
         when(mapper.toResponse(any())).thenReturn(summaryResponse("已审核"));
 
@@ -176,6 +193,36 @@ class PurchaseOrderServiceTest {
                 "已审核",
                 "完成采购"
         );
+    }
+
+    @Test
+    void shouldRejectSupplierNameMissingFromMasterDataWhenCreatingOrder() {
+        PurchaseOrderRepository repository = mock(PurchaseOrderRepository.class);
+        SnowflakeIdGenerator idGenerator = mock(SnowflakeIdGenerator.class);
+        PurchaseOrderMapper mapper = mock(PurchaseOrderMapper.class);
+        TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
+        WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
+        SupplierRepository supplierRepository = mock(SupplierRepository.class);
+        PurchaseInboundItemQueryService purchaseInboundItemQueryService = mock(PurchaseInboundItemQueryService.class);
+        WorkflowTransitionGuard workflowTransitionGuard = mock(WorkflowTransitionGuard.class);
+        PurchaseOrderService service = new PurchaseOrderService(
+                repository,
+                idGenerator,
+                mapper,
+                materialSupport,
+                warehouseSelectionSupport,
+                supplierRepository,
+                purchaseInboundItemQueryService,
+                workflowTransitionGuard
+        );
+
+        when(repository.existsByOrderNoAndDeletedFlagFalse("PO-001")).thenReturn(false);
+        when(supplierRepository.findFirstBySupplierNameAndDeletedFlagFalseOrderBySupplierCodeAsc("供应商A"))
+                .thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.create(buildRequest(null, "草稿")))
+                .hasMessageContaining("供应商不存在");
+        verify(repository, never()).save(any());
     }
 
     private PurchaseOrder buildOrder() {
@@ -243,6 +290,12 @@ class PurchaseOrderServiceTest {
                         new BigDecimal("4000.00")
                 ))
         );
+    }
+
+    private Supplier supplier(String supplierName) {
+        Supplier supplier = new Supplier();
+        supplier.setSupplierName(supplierName);
+        return supplier;
     }
 
     private PurchaseOrderResponse summaryResponse(String status) {

@@ -43,6 +43,7 @@ public class MaterialCategoryService extends AbstractCrudService<MaterialCategor
                 entity.getCategoryCode(),
                 entity.getCategoryName(),
                 entity.getSortOrder(),
+                Boolean.TRUE.equals(entity.getPurchaseWeighRequired()),
                 entity.getStatus(),
                 entity.getRemark()
         );
@@ -90,6 +91,7 @@ public class MaterialCategoryService extends AbstractCrudService<MaterialCategor
         entity.setCategoryCode(normalizeCode(request.categoryCode()));
         entity.setCategoryName(required(request.categoryName(), "类别名称"));
         entity.setSortOrder(request.sortOrder() == null ? 0 : request.sortOrder());
+        entity.setPurchaseWeighRequired(Boolean.TRUE.equals(request.purchaseWeighRequired()));
         entity.setStatus(request.status() == null || request.status().isBlank() ? "正常" : request.status().trim());
         entity.setRemark(optional(request.remark()));
     }

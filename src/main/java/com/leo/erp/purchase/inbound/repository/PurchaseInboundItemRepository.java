@@ -47,10 +47,32 @@ public interface PurchaseInboundItemRepository extends JpaRepository<PurchaseInb
             @Param("currentInboundId") Long currentInboundId
     );
 
+    @Query("""
+            select item.sourcePurchaseOrderItemId as sourcePurchaseOrderItemId,
+                   coalesce(sum(item.weightAdjustmentTon), 0) as totalWeightAdjustmentTon
+            from PurchaseInboundItem item
+            join item.purchaseInbound inbound
+            where inbound.deletedFlag = false
+              and item.sourcePurchaseOrderItemId in :sourcePurchaseOrderItemIds
+              and (:currentInboundId is null or inbound.id <> :currentInboundId)
+            group by item.sourcePurchaseOrderItemId
+            """)
+    List<PurchaseOrderWeightAdjustmentSummary> summarizeWeightAdjustmentBySourcePurchaseOrderItemIdsExcludingInbound(
+            @Param("sourcePurchaseOrderItemIds") Collection<Long> sourcePurchaseOrderItemIds,
+            @Param("currentInboundId") Long currentInboundId
+    );
+
     interface PurchaseOrderAllocationSummary {
 
         Long getSourcePurchaseOrderItemId();
 
         Long getTotalQuantity();
+    }
+
+    interface PurchaseOrderWeightAdjustmentSummary {
+
+        Long getSourcePurchaseOrderItemId();
+
+        java.math.BigDecimal getTotalWeightAdjustmentTon();
     }
 }

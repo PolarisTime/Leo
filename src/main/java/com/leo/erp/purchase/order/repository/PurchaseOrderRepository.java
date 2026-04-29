@@ -9,6 +9,7 @@ import org.springframework.data.jpa.domain.Specification;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Collection;
 
 public interface PurchaseOrderRepository extends JpaRepository<PurchaseOrder, Long>, JpaSpecificationExecutor<PurchaseOrder> {
 
@@ -22,4 +23,7 @@ public interface PurchaseOrderRepository extends JpaRepository<PurchaseOrder, Lo
 
     @EntityGraph(attributePaths = "items")
     Optional<PurchaseOrder> findByIdAndDeletedFlagFalse(Long id);
+
+    @EntityGraph(attributePaths = "items")
+    List<PurchaseOrder> findByIdInAndDeletedFlagFalse(Collection<Long> ids);
 }

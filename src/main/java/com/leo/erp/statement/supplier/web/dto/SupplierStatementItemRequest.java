@@ -23,9 +23,33 @@ public record SupplierStatementItemRequest(
         @NotNull @DecimalMin("0.000") BigDecimal pieceWeightTon,
         @NotNull @Min(0) Integer piecesPerBundle,
         BigDecimal weightTon,
+        BigDecimal weighWeightTon,
+        BigDecimal weightAdjustmentTon,
+        BigDecimal weightAdjustmentAmount,
         @NotNull @DecimalMin("0.00") BigDecimal unitPrice,
         BigDecimal amount
 ) {
+    public SupplierStatementItemRequest(Long id,
+                                        String sourceNo,
+                                        String materialCode,
+                                        String brand,
+                                        String category,
+                                        String material,
+                                        String spec,
+                                        String length,
+                                        String unit,
+                                        String batchNo,
+                                        Integer quantity,
+                                        String quantityUnit,
+                                        BigDecimal pieceWeightTon,
+                                        Integer piecesPerBundle,
+                                        BigDecimal weightTon,
+                                        BigDecimal unitPrice,
+                                        BigDecimal amount) {
+        this(id, sourceNo, materialCode, brand, category, material, spec, length, unit, batchNo, quantity,
+                quantityUnit, pieceWeightTon, piecesPerBundle, weightTon, null, null, null, unitPrice, amount);
+    }
+
     public SupplierStatementItemRequest(String sourceNo,
                                         String materialCode,
                                         String brand,
@@ -43,6 +67,6 @@ public record SupplierStatementItemRequest(
                                         BigDecimal unitPrice,
                                         BigDecimal amount) {
         this(null, sourceNo, materialCode, brand, category, material, spec, length, unit, batchNo, quantity,
-                quantityUnit, pieceWeightTon, piecesPerBundle, weightTon, unitPrice, amount);
+                quantityUnit, pieceWeightTon, piecesPerBundle, weightTon, null, null, null, unitPrice, amount);
     }
 }
