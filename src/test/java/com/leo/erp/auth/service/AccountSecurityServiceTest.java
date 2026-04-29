@@ -26,6 +26,7 @@ class AccountSecurityServiceTest {
                 new StubPasswordEncoder(),
                 null,
                 authenticatedUserCacheService(),
+                null,
                 null
         );
 
@@ -43,6 +44,7 @@ class AccountSecurityServiceTest {
                 new StubPasswordEncoder(),
                 null,
                 authenticatedUserCacheService(),
+                null,
                 null
         );
 
@@ -62,6 +64,7 @@ class AccountSecurityServiceTest {
                 new StubPasswordEncoder(),
                 null,
                 authenticatedUserCacheService(),
+                null,
                 null
         );
 
