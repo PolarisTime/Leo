@@ -25,10 +25,8 @@ public record MaterialRequest(
         @NotNull(message = "件重不能为空")
         @DecimalMin(value = "0.000", message = "件重不能小于0")
         BigDecimal pieceWeightTon,
-        @NotNull(message = "每件支数不能为空")
         @Min(value = 0, message = "每件支数不能小于0")
         Integer piecesPerBundle,
-        @NotNull(message = "单价不能为空")
         @DecimalMin(value = "0.00", message = "单价不能小于0")
         BigDecimal unitPrice,
         Boolean batchNoEnabled,

@@ -155,11 +155,13 @@ public class MaterialService extends AbstractCrudService<Material, MaterialReque
         if (file == null || file.isEmpty()) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "上传文件不能为空");
         }
-        String content = new String(file.getBytes(), StandardCharsets.UTF_8);
-        if (!content.isEmpty() && content.charAt(0) == '\uFEFF') {
-            content = content.substring(1);
-        }
+        byte[] raw = file.getBytes();
+        String content = decodeAndStripBom(raw, StandardCharsets.UTF_8);
         List<List<String>> rows = parseCsv(content);
+        if (!rows.isEmpty() && !hasKnownHeaders(rows.get(0))) {
+            content = decodeAndStripBom(raw, java.nio.charset.Charset.forName("GBK"));
+            rows = parseCsv(content);
+        }
         if (rows.isEmpty()) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "导入文件不能为空");
         }
@@ -234,8 +236,8 @@ public class MaterialService extends AbstractCrudService<Material, MaterialReque
         entity.setUnit(request.unit());
         entity.setQuantityUnit(TradeItemCalculator.normalizeQuantityUnit(request.quantityUnit()));
         entity.setPieceWeightTon(request.pieceWeightTon());
-        entity.setPiecesPerBundle(request.piecesPerBundle());
-        entity.setUnitPrice(request.unitPrice());
+        entity.setPiecesPerBundle(request.piecesPerBundle() != null ? request.piecesPerBundle() : 0);
+        entity.setUnitPrice(request.unitPrice() != null ? request.unitPrice() : BigDecimal.ZERO);
         entity.setBatchNoEnabled(tradeItemMaterialSupport.normalizeBatchNoEnabled(request.batchNoEnabled()));
         entity.setRemark(request.remark());
     }
@@ -259,18 +261,20 @@ public class MaterialService extends AbstractCrudService<Material, MaterialReque
     }
 
     private MaterialRequest toMaterialRequest(List<String> row, Map<String, Integer> headerIndexes, int rowNumber) {
+        String category = requiredValue(row, headerIndexes, "category", "类别", rowNumber);
+        Integer piecesPerBundle = parsePiecesPerBundle(row, headerIndexes, rowNumber, category);
         MaterialRequest request = new MaterialRequest(
                 requiredValue(row, headerIndexes, "materialCode", "商品编码", rowNumber),
                 requiredValue(row, headerIndexes, "brand", "品牌", rowNumber),
                 requiredValue(row, headerIndexes, "material", "材质", rowNumber),
-                requiredValue(row, headerIndexes, "category", "类别", rowNumber),
+                category,
                 requiredValue(row, headerIndexes, "spec", "规格", rowNumber),
                 optionalValue(row, headerIndexes, "length"),
                 requiredValue(row, headerIndexes, "unit", "单位", rowNumber),
                 optionalValue(row, headerIndexes, "quantityUnit"),
                 parseBigDecimal(requiredValue(row, headerIndexes, "pieceWeightTon", "件重(吨)", rowNumber), rowNumber, "件重(吨)"),
-                parseInteger(requiredValue(row, headerIndexes, "piecesPerBundle", "每件支数", rowNumber), rowNumber, "每件支数"),
-                parseBigDecimal(requiredValue(row, headerIndexes, "unitPrice", "单价", rowNumber), rowNumber, "单价"),
+                piecesPerBundle,
+                parseBigDecimalOrNull(optionalValue(row, headerIndexes, "unitPrice"), rowNumber, "单价"),
                 parseBatchNoEnabled(optionalValue(row, headerIndexes, "batchNoEnabled"), rowNumber),
                 optionalValue(row, headerIndexes, "remark")
         );
@@ -354,16 +358,50 @@ public class MaterialService extends AbstractCrudService<Material, MaterialReque
         if (request.pieceWeightTon().compareTo(BigDecimal.ZERO) < 0) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "第" + rowNumber + "行【件重(吨)】不能小于0");
         }
-        if (request.piecesPerBundle() < 0) {
+        if (request.piecesPerBundle() != null && request.piecesPerBundle() < 0) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "第" + rowNumber + "行【每件支数】不能小于0");
         }
-        if (request.unitPrice().compareTo(BigDecimal.ZERO) < 0) {
+        if (request.unitPrice() != null && request.unitPrice().compareTo(BigDecimal.ZERO) < 0) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "第" + rowNumber + "行【单价】不能小于0");
         }
     }
 
+    private boolean isCoilOrWireCategory(String category) {
+        return "盘螺".equals(category) || "线材".equals(category);
+    }
+
+    private Integer parsePiecesPerBundle(List<String> row, Map<String, Integer> headerIndexes, int rowNumber, String category) {
+        String raw = optionalValue(row, headerIndexes, "piecesPerBundle");
+        if (raw == null || raw.isEmpty() || "-".equals(raw.trim())) {
+            if (isCoilOrWireCategory(category)) {
+                return null;
+            }
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "第" + rowNumber + "行【每件支数】不能为空");
+        }
+        try {
+            return Integer.valueOf(raw.trim());
+        } catch (NumberFormatException ex) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "第" + rowNumber + "行【每件支数】格式不正确");
+        }
+    }
+
+    private BigDecimal parseBigDecimalOrNull(String value, int rowNumber, String label) {
+        if (value == null || value.isEmpty()) {
+            return null;
+        }
+        try {
+            return new BigDecimal(value.trim());
+        } catch (NumberFormatException ex) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "第" + rowNumber + "行【" + label + "】格式不正确");
+        }
+    }
+
     private String normalizeHeader(String header) {
-        String value = header == null ? "" : header.replace(" ", "").trim().toLowerCase(Locale.ROOT);
+        String raw = header == null ? "" : header;
+        if (!raw.isEmpty() && raw.charAt(0) == '﻿') {
+            raw = raw.substring(1);
+        }
+        String value = raw.replace(" ", "").trim().toLowerCase(Locale.ROOT);
         return switch (value) {
             case "商品编码", "materialcode" -> "materialCode";
             case "品牌", "brand" -> "brand";
@@ -380,6 +418,25 @@ public class MaterialService extends AbstractCrudService<Material, MaterialReque
             case "备注", "remark" -> "remark";
             default -> value;
         };
+    }
+
+    private String decodeAndStripBom(byte[] raw, java.nio.charset.Charset charset) {
+        String content = new String(raw, charset);
+        if (!content.isEmpty() && content.charAt(0) == '﻿') {
+            content = content.substring(1);
+        }
+        return content;
+    }
+
+    private boolean hasKnownHeaders(List<String> headerRow) {
+        for (String header : headerRow) {
+            String normalized = normalizeHeader(header);
+            String plain = header.replace(" ", "").trim().toLowerCase(Locale.ROOT);
+            if (!normalized.equals(plain)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private boolean isBlankRow(List<String> row) {
