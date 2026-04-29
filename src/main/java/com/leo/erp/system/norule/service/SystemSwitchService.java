@@ -16,6 +16,7 @@ public class SystemSwitchService {
     public static final String OPERATION_LOG_DETAILED_PAGE_ACTIONS_SWITCH = "SYS_OPERATION_LOG_DETAILED_PAGE_ACTIONS";
     public static final String AUTH_OPERATION_LOG_SWITCH = "SYS_OPERATION_LOG_RECORD_AUTH_EVENTS";
     public static final String FORCE_USER_TOTP_ON_FIRST_LOGIN_SWITCH = "SYS_FORCE_USER_TOTP_ON_FIRST_LOGIN";
+    public static final String FORCE_BATCH_MANAGEMENT_SWITCH = "SYS_FORCE_BATCH_MANAGEMENT";
     private static final Set<String> DEFAULT_DETAILED_PAGE_ACTIONS = Set.of(
             "QUERY", "DETAIL", "CREATE", "EDIT", "DELETE", "AUDIT", "EXPORT", "PRINT"
     );
@@ -64,6 +65,11 @@ public class SystemSwitchService {
     @Transactional(readOnly = true)
     public boolean shouldForceUserTotpOnFirstLogin() {
         return isEnabled(FORCE_USER_TOTP_ON_FIRST_LOGIN_SWITCH);
+    }
+
+    @Transactional(readOnly = true)
+    public boolean shouldForceBatchManagement() {
+        return isEnabled(FORCE_BATCH_MANAGEMENT_SWITCH);
     }
 
     private Set<String> resolveDetailedPageActionKeys() {
