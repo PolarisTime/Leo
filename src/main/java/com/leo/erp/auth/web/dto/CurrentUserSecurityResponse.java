@@ -5,6 +5,7 @@ public record CurrentUserSecurityResponse(
         String loginName,
         String userName,
         Boolean totpEnabled,
-        Boolean forceTotpSetup
+        Boolean forceTotpSetup,
+        Boolean forbidDisable2fa
 ) {
 }

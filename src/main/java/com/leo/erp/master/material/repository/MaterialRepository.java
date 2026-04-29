@@ -3,6 +3,7 @@ package com.leo.erp.master.material.repository;
 import com.leo.erp.master.material.domain.entity.Material;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import org.springframework.data.jpa.repository.Query;
 
 import java.util.Collection;
 import java.util.List;
@@ -19,4 +20,9 @@ public interface MaterialRepository extends JpaRepository<Material, Long>, JpaSp
     List<Material> findByDeletedFlagFalseOrderByMaterialCodeAsc();
 
     Optional<Material> findByIdAndDeletedFlagFalse(Long id);
+
+    long countByDeletedFlagFalse();
+
+    @Query("SELECT DISTINCT m.material FROM Material m WHERE m.deletedFlag = false AND m.material IS NOT NULL ORDER BY m.material")
+    List<String> findDistinctMaterials();
 }

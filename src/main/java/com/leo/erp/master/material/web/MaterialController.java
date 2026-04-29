@@ -31,9 +31,12 @@ import java.nio.charset.StandardCharsets;
 public class MaterialController {
 
     private final MaterialService materialService;
+    private final com.leo.erp.master.material.repository.MaterialRepository materialRepository;
 
-    public MaterialController(MaterialService materialService) {
+    public MaterialController(MaterialService materialService,
+                              com.leo.erp.master.material.repository.MaterialRepository materialRepository) {
         this.materialService = materialService;
+        this.materialRepository = materialRepository;
     }
 
     @GetMapping("/search")
@@ -80,6 +83,12 @@ public class MaterialController {
         response.setContentLength(file.length);
         response.getOutputStream().write(file);
         response.getOutputStream().flush();
+    }
+
+    @GetMapping("/grades")
+    @RequiresPermission(resource = "material", action = "read")
+    public ApiResponse<java.util.List<String>> materialGrades() {
+        return ApiResponse.success(materialRepository.findDistinctMaterials());
     }
 
     @PostMapping("/export")

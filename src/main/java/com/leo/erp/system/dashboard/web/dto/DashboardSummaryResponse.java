@@ -14,6 +14,9 @@ public record DashboardSummaryResponse(
         long activeSessionCount,
         boolean totpEnabled,
         LocalDateTime lastLoginAt,
-        LocalDateTime serverTime
+        LocalDateTime serverTime,
+        long materialCount,
+        long supplierCount,
+        long customerCount
 ) {
 }
