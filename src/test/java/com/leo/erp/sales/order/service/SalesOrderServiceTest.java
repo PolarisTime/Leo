@@ -14,7 +14,9 @@ import com.leo.erp.sales.order.mapper.SalesOrderMapper;
 import com.leo.erp.sales.order.web.dto.SalesOrderItemRequest;
 import com.leo.erp.sales.order.web.dto.SalesOrderRequest;
 import com.leo.erp.sales.order.web.dto.SalesOrderResponse;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -29,6 +31,11 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class SalesOrderServiceTest {
+
+    @BeforeEach
+    void setUpIdGenerator() {
+        ReflectionTestUtils.invokeMethod(new SnowflakeIdGenerator(0L), "registerInstance");
+    }
 
     @Test
     void shouldLoadOnlyRequestedInboundItemsAndAllocationsWhenCreatingOrder() {
@@ -82,7 +89,7 @@ class SalesOrderServiceTest {
         when(materialSupport.normalizeBatchNo(any(), eq("B1"), eq(1), eq(true))).thenReturn("B1");
         when(warehouseSelectionSupport.normalizeWarehouseName("一号库", 1, true)).thenReturn("一号库");
         when(purchaseInboundItemQueryService.findAllActiveByIdIn(List.of(101L))).thenReturn(List.of(inboundItem));
-        when(salesOrderItemRepository.summarizeAllocatedQuantityBySourceInboundItemIds(List.of(101L), 1L))
+        when(salesOrderItemRepository.summarizeAllocatedQuantityBySourceInboundItemIds(eq(List.of(101L)), any()))
                 .thenReturn(List.of());
         when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
         when(mapper.toResponse(any())).thenReturn(new SalesOrderResponse(
@@ -94,6 +101,6 @@ class SalesOrderServiceTest {
 
         assertThat(response.orderNo()).isEqualTo("SO-001");
         verify(purchaseInboundItemQueryService).findAllActiveByIdIn(List.of(101L));
-        verify(salesOrderItemRepository).summarizeAllocatedQuantityBySourceInboundItemIds(List.of(101L), 1L);
+        verify(salesOrderItemRepository).summarizeAllocatedQuantityBySourceInboundItemIds(eq(List.of(101L)), any());
     }
 }

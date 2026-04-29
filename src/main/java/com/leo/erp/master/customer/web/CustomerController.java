@@ -5,6 +5,7 @@ import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.api.PageResponse;
 import com.leo.erp.common.web.BindPageQuery;
 import com.leo.erp.master.customer.service.CustomerService;
+import com.leo.erp.master.customer.web.dto.CustomerOptionResponse;
 import com.leo.erp.master.customer.web.dto.CustomerRequest;
 import com.leo.erp.master.customer.web.dto.CustomerResponse;
 import com.leo.erp.security.permission.RequiresPermission;
@@ -23,7 +24,7 @@ public class CustomerController {
 
     @GetMapping("/options")
     @RequiresPermission(resource = "customer", action = "read")
-    public ApiResponse<java.util.List<com.leo.erp.common.web.OptionResponse>> options() {
+    public ApiResponse<java.util.List<CustomerOptionResponse>> options() {
         return ApiResponse.success(customerService.listActiveOptions());
     }
 
