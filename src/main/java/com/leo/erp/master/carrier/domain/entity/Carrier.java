@@ -44,6 +44,24 @@ public class Carrier extends AuditableEntity {
     @Column(name = "vehicle_phone", length = 32)
     private String vehiclePhone;
 
+    @Column(name = "vehicle_plate2", length = 16)
+    private String vehiclePlate2;
+
+    @Column(name = "vehicle_contact2", length = 64)
+    private String vehicleContact2;
+
+    @Column(name = "vehicle_phone2", length = 32)
+    private String vehiclePhone2;
+
+    @Column(name = "vehicle_plate3", length = 16)
+    private String vehiclePlate3;
+
+    @Column(name = "vehicle_contact3", length = 64)
+    private String vehicleContact3;
+
+    @Column(name = "vehicle_phone3", length = 32)
+    private String vehiclePhone3;
+
     @Column(name = "price_mode", length = 32)
     private String priceMode;
 
