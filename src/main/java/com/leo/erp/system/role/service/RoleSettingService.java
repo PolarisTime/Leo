@@ -203,6 +203,10 @@ public class RoleSettingService extends AbstractCrudService<RoleSetting, RoleSet
         }
     }
 
+    private static final List<String> PERMISSION_GROUP_ORDER = List.of(
+            "工作台", "主数据", "采购", "销售", "物流", "合同", "对账", "财务", "报表", "系统"
+    );
+
     @Transactional(readOnly = true)
     public List<MenuTreeResponse> listPermissionOptions() {
         Map<String, List<ResourcePermissionCatalog.Entry>> entriesByGroup = ResourcePermissionCatalog.entries().stream()
@@ -211,9 +215,14 @@ public class RoleSettingService extends AbstractCrudService<RoleSetting, RoleSet
                         LinkedHashMap::new,
                         Collectors.toList()
                 ));
+        List<Map.Entry<String, List<ResourcePermissionCatalog.Entry>>> sortedGroups = new java.util.ArrayList<>(entriesByGroup.entrySet());
+        sortedGroups.sort(Comparator.comparingInt(entry -> {
+            int idx = PERMISSION_GROUP_ORDER.indexOf(entry.getKey());
+            return idx < 0 ? Integer.MAX_VALUE : idx;
+        }));
         List<MenuTreeResponse> result = new java.util.ArrayList<>();
         int groupOrder = 1;
-        for (Map.Entry<String, List<ResourcePermissionCatalog.Entry>> groupEntry : entriesByGroup.entrySet()) {
+        for (Map.Entry<String, List<ResourcePermissionCatalog.Entry>> groupEntry : sortedGroups) {
             String groupCode = "permission-group-" + groupOrder;
             List<MenuTreeResponse> children = new java.util.ArrayList<>();
             int childOrder = 1;
