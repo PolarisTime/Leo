@@ -35,6 +35,15 @@ public class Carrier extends AuditableEntity {
     @Column(name = "vehicle_plates", columnDefinition = "TEXT")
     private String vehiclePlates;
 
+    @Column(name = "vehicle_plate", length = 16)
+    private String vehiclePlate;
+
+    @Column(name = "vehicle_contact", length = 64)
+    private String vehicleContact;
+
+    @Column(name = "vehicle_phone", length = 32)
+    private String vehiclePhone;
+
     @Column(name = "price_mode", length = 32)
     private String priceMode;
 
