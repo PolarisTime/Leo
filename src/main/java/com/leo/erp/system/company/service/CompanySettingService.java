@@ -134,7 +134,7 @@ public class CompanySettingService extends AbstractCrudService<CompanySetting, C
         entity.setBankName(primaryAccount.bankName());
         entity.setBankAccount(primaryAccount.bankAccount());
         entity.setSettlementAccountsJson(writeSettlementAccounts(settlementAccounts));
-        entity.setStatus(request.status());
+        entity.setStatus(request.status() != null ? request.status() : "正常");
         entity.setRemark(request.remark());
     }
 

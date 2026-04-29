@@ -36,7 +36,7 @@ public class DepartmentController {
     }
 
     @GetMapping
-    @RequiresPermission(resource = "department", action = "read")
+    @RequiresPermission(authenticatedOnly = true)
     public ApiResponse<PageResponse<DepartmentResponse>> page(
             @BindPageQuery(sortFieldKey = "departments") PageQuery query,
             @RequestParam(required = false) String keyword,

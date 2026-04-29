@@ -22,7 +22,7 @@ public class CarrierController {
     }
 
     @GetMapping("/options")
-    @RequiresPermission(resource = "carrier", action = "read")
+    @RequiresPermission(authenticatedOnly = true)
     public ApiResponse<java.util.List<com.leo.erp.common.web.OptionResponse>> options() {
         return ApiResponse.success(carrierService.listActiveOptions());
     }
