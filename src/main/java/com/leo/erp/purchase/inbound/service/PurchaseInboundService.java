@@ -334,6 +334,7 @@ public class PurchaseInboundService extends AbstractCrudService<PurchaseInbound,
         if (orderIds.isEmpty()) {
             return Map.of();
         }
+        // Order ids come from PurchaseOrderItemQueryService, which already checks source order access.
         return purchaseOrderRepository.findByIdInAndDeletedFlagFalse(orderIds).stream()
                 .collect(Collectors.toMap(PurchaseOrder::getId, order -> order));
     }

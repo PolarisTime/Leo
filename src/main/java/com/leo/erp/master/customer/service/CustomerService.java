@@ -10,6 +10,7 @@ import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.master.customer.domain.entity.Customer;
 import com.leo.erp.master.customer.repository.CustomerRepository;
 import com.leo.erp.master.customer.mapper.CustomerMapper;
+import com.leo.erp.master.customer.web.dto.CustomerOptionResponse;
 import com.leo.erp.master.customer.web.dto.CustomerRequest;
 import com.leo.erp.master.customer.web.dto.CustomerResponse;
 import org.springframework.data.domain.Page;
@@ -47,10 +48,26 @@ public class CustomerService extends AbstractCrudService<Customer, CustomerReque
     }
 
     @Transactional(readOnly = true)
-    public java.util.List<com.leo.erp.common.web.OptionResponse> listActiveOptions() {
+    public java.util.List<CustomerOptionResponse> listActiveOptions() {
         return customerRepository.findByDeletedFlagFalseOrderByCustomerCodeAsc().stream()
-                .map(c -> new com.leo.erp.common.web.OptionResponse(c.getCustomerName(), c.getCustomerName()))
+                .map(c -> new CustomerOptionResponse(
+                        c.getId(),
+                        optionLabel(c),
+                        c.getCustomerName(),
+                        c.getCustomerCode(),
+                        c.getCustomerName(),
+                        c.getProjectName(),
+                        c.getProjectNameAbbr()
+                ))
                 .toList();
+    }
+
+    private String optionLabel(Customer customer) {
+        String projectName = customer.getProjectName() == null ? "" : customer.getProjectName().trim();
+        if (projectName.isEmpty() || projectName.equals(customer.getCustomerName())) {
+            return customer.getCustomerName();
+        }
+        return customer.getCustomerName() + " / " + projectName;
     }
 
     @Transactional(readOnly = true)

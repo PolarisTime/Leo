@@ -21,7 +21,9 @@ import com.leo.erp.purchase.order.repository.PurchaseOrderRepository;
 import com.leo.erp.purchase.order.service.PurchaseOrderItemQueryService;
 import com.leo.erp.security.permission.WorkflowTransitionGuard;
 import com.leo.erp.sales.order.service.SalesOrderItemQueryService;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -39,6 +41,11 @@ import static org.mockito.Mockito.when;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class PurchaseInboundServiceTest {
+
+    @BeforeEach
+    void setUpIdGenerator() {
+        ReflectionTestUtils.invokeMethod(new SnowflakeIdGenerator(0L), "registerInstance");
+    }
 
     @Test
     void shouldLoadAllocatedQuantitiesOnlyForCurrentInboundItemsWhenShowingDetail() {
@@ -151,17 +158,28 @@ class PurchaseInboundServiceTest {
                 mock(WorkflowTransitionGuard.class)
         );
 
-        PurchaseOrder purchaseOrder = new PurchaseOrder();
-        purchaseOrder.setId(301L);
+        PurchaseOrder sourceOrderReference = new PurchaseOrder();
+        sourceOrderReference.setId(301L);
         PurchaseOrderItem sourceItem = new PurchaseOrderItem();
         sourceItem.setId(201L);
-        sourceItem.setPurchaseOrder(purchaseOrder);
+        sourceItem.setPurchaseOrder(sourceOrderReference);
         sourceItem.setQuantity(10);
         sourceItem.setPieceWeightTon(new BigDecimal("0.100"));
         sourceItem.setUnitPrice(new BigDecimal("4000.00"));
         sourceItem.setWeightTon(new BigDecimal("1.000"));
         sourceItem.setAmount(new BigDecimal("4000.00"));
-        purchaseOrder.getItems().add(sourceItem);
+
+        PurchaseOrder loadedPurchaseOrder = new PurchaseOrder();
+        loadedPurchaseOrder.setId(301L);
+        PurchaseOrderItem loadedSourceItem = new PurchaseOrderItem();
+        loadedSourceItem.setId(201L);
+        loadedSourceItem.setPurchaseOrder(loadedPurchaseOrder);
+        loadedSourceItem.setQuantity(10);
+        loadedSourceItem.setPieceWeightTon(new BigDecimal("0.100"));
+        loadedSourceItem.setUnitPrice(new BigDecimal("4000.00"));
+        loadedSourceItem.setWeightTon(new BigDecimal("1.000"));
+        loadedSourceItem.setAmount(new BigDecimal("4000.00"));
+        loadedPurchaseOrder.getItems().add(loadedSourceItem);
 
         PurchaseInboundRequest request = new PurchaseInboundRequest(
                 "PI-002",
@@ -188,7 +206,7 @@ class PurchaseInboundServiceTest {
         when(warehouseSelectionSupport.normalizeWarehouseName("一号库", 1, true)).thenReturn("一号库");
         when(materialCategoryRepository.findByCategoryNameInAndDeletedFlagFalse(List.of("盘螺"))).thenReturn(List.of(category));
         when(purchaseOrderItemQueryService.findActiveByIdIn(List.of(201L))).thenReturn(List.of(sourceItem));
-        when(purchaseOrderRepository.findByIdInAndDeletedFlagFalse(List.of(301L))).thenReturn(List.of(purchaseOrder));
+        when(purchaseOrderRepository.findByIdInAndDeletedFlagFalse(List.of(301L))).thenReturn(List.of(loadedPurchaseOrder));
         when(purchaseInboundItemRepository.summarizeAllocatedQuantityBySourcePurchaseOrderItemIdsExcludingInbound(eq(List.of(201L)), any()))
                 .thenReturn(List.of());
         when(purchaseInboundItemRepository.summarizeWeightAdjustmentBySourcePurchaseOrderItemIdsExcludingInbound(eq(List.of(201L)), any()))
@@ -209,10 +227,10 @@ class PurchaseInboundServiceTest {
         assertThat(savedItem.getWeightAdjustmentTon()).isEqualByComparingTo("0.030");
         assertThat(savedItem.getWeightAdjustmentAmount()).isEqualByComparingTo("120.00");
         assertThat(savedItem.getAmount()).isEqualByComparingTo("1720.00");
-        assertThat(sourceItem.getWeightTon()).isEqualByComparingTo("1.030");
-        assertThat(sourceItem.getAmount()).isEqualByComparingTo("4120.00");
-        assertThat(purchaseOrder.getTotalWeight()).isEqualByComparingTo("1.030");
-        assertThat(purchaseOrder.getTotalAmount()).isEqualByComparingTo("4120.00");
+        assertThat(loadedSourceItem.getWeightTon()).isEqualByComparingTo("1.030");
+        assertThat(loadedSourceItem.getAmount()).isEqualByComparingTo("4120.00");
+        assertThat(loadedPurchaseOrder.getTotalWeight()).isEqualByComparingTo("1.030");
+        assertThat(loadedPurchaseOrder.getTotalAmount()).isEqualByComparingTo("4120.00");
         verify(purchaseOrderRepository).saveAll(any());
     }
 

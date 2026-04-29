@@ -1,6 +1,5 @@
 package com.leo.erp.common.web;
 
-import com.leo.erp.common.config.TraceIdFilter;
 import org.slf4j.MDC;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
@@ -16,6 +15,8 @@ import java.util.Map;
 
 @RestController
 public class HealthController {
+
+    private static final String TRACE_ID_MDC_KEY = "traceId";
 
     private final JdbcTemplate jdbcTemplate;
     private final RedisConnectionFactory redisConnectionFactory;
@@ -34,7 +35,7 @@ public class HealthController {
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("status", "UP");
         result.put("app", appName);
-        result.put("traceId", MDC.get(TraceIdFilter.MDC_KEY));
+        result.put("traceId", MDC.get(TRACE_ID_MDC_KEY));
         result.put("timestamp", OffsetDateTime.now().toString());
 
         result.put("db", checkDatabase());

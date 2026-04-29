@@ -53,7 +53,7 @@ class AuthServiceTest {
         SessionManagementService service = new SessionManagementService(
                 null, repository, jwtTokenService(), new SnowflakeIdGenerator(0L),
                 blacklistService(blacklistedSessionIds, new AtomicBoolean(false)),
-                sessionActivityService(), afterCommitExecutor()
+                sessionActivityService(), afterCommitExecutor(), null
         );
 
         org.springframework.test.util.ReflectionTestUtils.invokeMethod(service, "trimActiveSessionsBeforeIssuing", 42L);
@@ -442,7 +442,7 @@ class AuthServiceTest {
         return new SessionManagementService(
                 userRepo, sessionRepo, jwtTokenService(), new SnowflakeIdGenerator(0L),
                 blacklistService(new ArrayList<>(), new AtomicBoolean(false)),
-                sessionActivityService(), afterCommitExecutor()
+                sessionActivityService(), afterCommitExecutor(), null
         );
     }
 
@@ -455,7 +455,7 @@ class AuthServiceTest {
         SessionManagementService sessionMgmt = new SessionManagementService(
                 userRepo, sessionRepo, jwtTokenService(), new SnowflakeIdGenerator(0L),
                 blacklist != null ? blacklist : blacklistService(blacklisted, new AtomicBoolean(false)),
-                sessionActivityService(), afterCommitExecutor()
+                sessionActivityService(), afterCommitExecutor(), null
         );
         return new TokenIssuanceService(
                 userRepo, jwtTokenService(), permissionService(),
