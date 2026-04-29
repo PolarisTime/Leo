@@ -137,6 +137,10 @@ public class RoleSettingService extends AbstractCrudService<RoleSetting, RoleSet
         entity.setRoleName(normalizeRequiredValue(request.roleName(), "角色名称"));
         entity.setRoleType(normalizeAllowedValue(request.roleType(), ALLOWED_ROLE_TYPES, "角色类型"));
         entity.setDataScope(normalizeAllowedValue(request.dataScope(), ALLOWED_DATA_SCOPES, "数据范围"));
+        entity.setPermissionCodes(null);
+        entity.setPermissionCount(0);
+        entity.setPermissionSummary(null);
+        entity.setUserCount(0);
         entity.setStatus(normalizeStatus(request.status()));
         entity.setRemark(normalizeOptionalValue(request.remark()));
     }
