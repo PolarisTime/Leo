@@ -26,6 +26,7 @@ public class ModuleCatalog {
     private static Map<String, String> buildModuleNameMap() {
         Map<String, String> modules = new LinkedHashMap<>();
         modules.put("materials", "商品资料");
+        modules.put("material-categories", "商品类别");
         modules.put("suppliers", "供应商");
         modules.put("customers", "客户");
         modules.put("carriers", "物流商");

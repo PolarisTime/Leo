@@ -23,17 +23,26 @@ public class Customer extends AuditableEntity {
     @Column(name = "customer_name", nullable = false, length = 128)
     private String customerName;
 
-    @Column(name = "contact_name", nullable = false, length = 64)
+    @Column(name = "contact_name", length = 64)
     private String contactName;
 
-    @Column(name = "contact_phone", nullable = false, length = 32)
+    @Column(name = "contact_phone", length = 32)
     private String contactPhone;
 
-    @Column(name = "city", nullable = false, length = 64)
+    @Column(name = "city", length = 64)
     private String city;
 
-    @Column(name = "settlement_mode", nullable = false, length = 32)
+    @Column(name = "settlement_mode", length = 32)
     private String settlementMode;
+
+    @Column(name = "project_name", nullable = false, length = 128)
+    private String projectName;
+
+    @Column(name = "project_name_abbr", length = 64)
+    private String projectNameAbbr;
+
+    @Column(name = "project_address", length = 255)
+    private String projectAddress;
 
     @Column(name = "status", nullable = false, length = 16)
     private String status;

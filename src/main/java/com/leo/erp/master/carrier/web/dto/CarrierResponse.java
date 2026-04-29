@@ -7,6 +7,7 @@ public record CarrierResponse(
         String contactName,
         String contactPhone,
         String vehicleType,
+        String vehiclePlates,
         String priceMode,
         String status,
         String remark
