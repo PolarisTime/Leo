@@ -19,6 +19,8 @@ public class SystemSwitchService {
     public static final String FORCE_BATCH_MANAGEMENT_SWITCH = "SYS_FORCE_BATCH_MANAGEMENT";
     public static final String FORBID_DISABLE_2FA_SWITCH = "SYS_FORBID_DISABLE_2FA";
     public static final String MAX_CONCURRENT_SESSIONS_SWITCH = "SYS_MAX_CONCURRENT_SESSIONS";
+    public static final String HIDE_AUDITED_LIST_RECORDS_SWITCH = "UI_HIDE_AUDITED_LIST_RECORDS";
+    public static final String SHOW_SNOWFLAKE_ID_SWITCH = "UI_SHOW_SNOWFLAKE_ID";
     private static final int DEFAULT_MAX_SESSIONS = 3;
     private static final Set<String> DEFAULT_DETAILED_PAGE_ACTIONS = Set.of(
             "QUERY", "DETAIL", "CREATE", "EDIT", "DELETE", "AUDIT", "EXPORT", "PRINT"
@@ -78,6 +80,16 @@ public class SystemSwitchService {
     @Transactional(readOnly = true)
     public boolean shouldForbidDisable2fa() {
         return isEnabled(FORBID_DISABLE_2FA_SWITCH);
+    }
+
+    @Transactional(readOnly = true)
+    public boolean shouldHideAuditedListRecords() {
+        return isEnabled(HIDE_AUDITED_LIST_RECORDS_SWITCH);
+    }
+
+    @Transactional(readOnly = true)
+    public boolean shouldShowSnowflakeId() {
+        return isEnabled(SHOW_SNOWFLAKE_ID_SWITCH);
     }
 
     @Transactional(readOnly = true)
