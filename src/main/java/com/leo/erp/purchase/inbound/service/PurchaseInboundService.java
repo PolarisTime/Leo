@@ -21,6 +21,7 @@ import com.leo.erp.purchase.inbound.repository.PurchaseInboundRepository;
 import com.leo.erp.purchase.order.domain.entity.PurchaseOrder;
 import com.leo.erp.purchase.order.domain.entity.PurchaseOrderItem;
 import com.leo.erp.purchase.order.repository.PurchaseOrderRepository;
+import com.leo.erp.purchase.order.service.PurchaseOrderItemPieceWeightService;
 import com.leo.erp.purchase.order.service.PurchaseOrderItemQueryService;
 import com.leo.erp.purchase.inbound.mapper.PurchaseInboundMapper;
 import com.leo.erp.security.permission.WorkflowTransitionGuard;
@@ -50,6 +51,7 @@ public class PurchaseInboundService extends AbstractCrudService<PurchaseInbound,
     private final MaterialCategoryRepository materialCategoryRepository;
     private final PurchaseInboundItemRepository purchaseInboundItemRepository;
     private final PurchaseOrderRepository purchaseOrderRepository;
+    private final PurchaseOrderItemPieceWeightService purchaseOrderItemPieceWeightService;
     private final PurchaseOrderItemQueryService purchaseOrderItemQueryService;
     private final SalesOrderItemQueryService salesOrderItemQueryService;
     private final WorkflowTransitionGuard workflowTransitionGuard;
@@ -62,6 +64,7 @@ public class PurchaseInboundService extends AbstractCrudService<PurchaseInbound,
                                   MaterialCategoryRepository materialCategoryRepository,
                                   PurchaseInboundItemRepository purchaseInboundItemRepository,
                                   PurchaseOrderRepository purchaseOrderRepository,
+                                  PurchaseOrderItemPieceWeightService purchaseOrderItemPieceWeightService,
                                   PurchaseOrderItemQueryService purchaseOrderItemQueryService,
                                   SalesOrderItemQueryService salesOrderItemQueryService,
                                   WorkflowTransitionGuard workflowTransitionGuard) {
@@ -73,6 +76,7 @@ public class PurchaseInboundService extends AbstractCrudService<PurchaseInbound,
         this.materialCategoryRepository = materialCategoryRepository;
         this.purchaseInboundItemRepository = purchaseInboundItemRepository;
         this.purchaseOrderRepository = purchaseOrderRepository;
+        this.purchaseOrderItemPieceWeightService = purchaseOrderItemPieceWeightService;
         this.purchaseOrderItemQueryService = purchaseOrderItemQueryService;
         this.salesOrderItemQueryService = salesOrderItemQueryService;
         this.workflowTransitionGuard = workflowTransitionGuard;
@@ -260,19 +264,43 @@ public class PurchaseInboundService extends AbstractCrudService<PurchaseInbound,
             Set<String> purchaseWeighRequiredCategoryNames,
             String settlementMode
     ) {
-        BigDecimal baseWeightTon = TradeItemCalculator.calculateWeightTon(source.quantity(), source.pieceWeightTon());
+        BigDecimal sourcePieceWeightTon = TradeItemCalculator.scaleWeightTon(source.pieceWeightTon());
+        BigDecimal baseWeightTon = TradeItemCalculator.calculateWeightTon(source.quantity(), sourcePieceWeightTon);
         boolean purchaseWeighRequired = purchaseWeighRequiredCategoryNames.contains(normalizeCategoryName(source.category()));
         boolean purchaseWeighSettlement = isPurchaseWeighSettlement(settlementMode);
         if (!purchaseWeighRequired && !purchaseWeighSettlement) {
-            return new WeightSettlementResult(baseWeightTon, null, BigDecimal.ZERO.setScale(3), BigDecimal.ZERO.setScale(2));
+            return new WeightSettlementResult(
+                    baseWeightTon,
+                    null,
+                    BigDecimal.ZERO.setScale(3),
+                    BigDecimal.ZERO.setScale(2),
+                    sourcePieceWeightTon
+            );
         }
         if (!purchaseWeighSettlement) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "第" + lineNo + "行商品类别需按过磅入库，请将本行结算方式改为过磅");
         }
         BigDecimal weighWeightTon = requireWeighWeightTon(source, lineNo);
-        BigDecimal weightAdjustmentTon = TradeItemCalculator.scaleWeightTon(weighWeightTon.subtract(baseWeightTon));
+        BigDecimal averagePieceWeightTon = TradeItemCalculator.calculateAveragePieceWeightTon(source.quantity(), weighWeightTon);
+        BigDecimal calculatedWeightTon = TradeItemCalculator.calculateWeightTon(source.quantity(), averagePieceWeightTon);
+        BigDecimal sourceWeightTon = source.weightTon() == null ? null : TradeItemCalculator.scaleWeightTon(source.weightTon());
+        BigDecimal weightTon = sourceWeightTon != null && sourceWeightTon.compareTo(weighWeightTon) == 0
+                ? sourceWeightTon
+                : calculatedWeightTon;
+        BigDecimal adjustmentBaseWeightTon = resolveAdjustmentBaseWeightTon(source, weightTon);
+        BigDecimal weightAdjustmentTon = TradeItemCalculator.scaleWeightTon(weightTon.subtract(adjustmentBaseWeightTon));
         BigDecimal weightAdjustmentAmount = TradeItemCalculator.calculateAmount(weightAdjustmentTon, source.unitPrice());
-        return new WeightSettlementResult(weighWeightTon, weighWeightTon, weightAdjustmentTon, weightAdjustmentAmount);
+        return new WeightSettlementResult(weightTon, weighWeightTon, weightAdjustmentTon, weightAdjustmentAmount, averagePieceWeightTon);
+    }
+
+    private BigDecimal resolveAdjustmentBaseWeightTon(PurchaseInboundItemRequest source, BigDecimal currentWeightTon) {
+        if (source.weightAdjustmentTon() != null) {
+            BigDecimal previousWeightTon = source.weightTon() == null
+                    ? currentWeightTon
+                    : TradeItemCalculator.scaleWeightTon(source.weightTon());
+            return TradeItemCalculator.scaleWeightTon(previousWeightTon.subtract(source.weightAdjustmentTon()));
+        }
+        return TradeItemCalculator.calculateWeightTon(source.quantity(), source.pieceWeightTon());
     }
 
     private Map<Long, BigDecimal> loadPersistedWeightAdjustmentMap(List<Long> sourcePurchaseOrderItemIds, Long currentInboundId) {
@@ -291,16 +319,60 @@ public class PurchaseInboundService extends AbstractCrudService<PurchaseInbound,
         return adjustmentMap;
     }
 
+    private Map<Long, SourceWeighAccumulator> loadPersistedWeighAccumulatorMap(List<Long> sourcePurchaseOrderItemIds, Long currentInboundId) {
+        if (sourcePurchaseOrderItemIds.isEmpty()) {
+            return Map.of();
+        }
+        Map<Long, SourceWeighAccumulator> weighAccumulatorMap = new HashMap<>();
+        purchaseInboundItemRepository.summarizeWeighWeightBySourcePurchaseOrderItemIdsExcludingInbound(
+                        sourcePurchaseOrderItemIds,
+                        currentInboundId
+                )
+                .forEach(summary -> weighAccumulatorMap.put(
+                        summary.getSourcePurchaseOrderItemId(),
+                        new SourceWeighAccumulator(
+                                Math.toIntExact(summary.getTotalQuantity()),
+                                TradeItemCalculator.scaleWeightTon(summary.getTotalWeightTon())
+                        )
+                ));
+        return weighAccumulatorMap;
+    }
+
+    private Map<Long, BigDecimal> buildFallbackSourcePieceWeightMap(List<PurchaseInboundItem> items) {
+        Map<Long, BigDecimal> sourcePieceWeightMap = new HashMap<>();
+        for (PurchaseInboundItem item : items) {
+            Long sourcePurchaseOrderItemId = item.getSourcePurchaseOrderItemId();
+            if (sourcePurchaseOrderItemId == null || sourcePieceWeightMap.containsKey(sourcePurchaseOrderItemId)) {
+                continue;
+            }
+            sourcePieceWeightMap.put(sourcePurchaseOrderItemId, resolveOriginalPieceWeightTon(item));
+        }
+        return sourcePieceWeightMap;
+    }
+
+    private BigDecimal resolveOriginalPieceWeightTon(PurchaseInboundItem item) {
+        if (item.getQuantity() != null && item.getQuantity() > 0 && item.getWeightAdjustmentTon() != null) {
+            BigDecimal originalWeightTon = TradeItemCalculator.scaleWeightTon(
+                    TradeItemCalculator.safeBigDecimal(item.getWeightTon()).subtract(item.getWeightAdjustmentTon())
+            );
+            return TradeItemCalculator.calculateAveragePieceWeightTon(item.getQuantity(), originalWeightTon);
+        }
+        return TradeItemCalculator.scaleWeightTon(item.getPieceWeightTon());
+    }
+
     private void writeBackPurchaseOrderWeights(
             List<Long> sourcePurchaseOrderItemIds,
             Long currentInboundId,
             Map<Long, BigDecimal> currentAdjustmentMap,
+            Map<Long, SourceWeighAccumulator> currentWeighAccumulatorMap,
+            Map<Long, BigDecimal> fallbackSourcePieceWeightMap,
             Map<Long, PurchaseOrderItem> sourcePurchaseOrderItemMap
     ) {
         if (sourcePurchaseOrderItemIds.isEmpty()) {
             return;
         }
         Map<Long, BigDecimal> persistedAdjustmentMap = loadPersistedWeightAdjustmentMap(sourcePurchaseOrderItemIds, currentInboundId);
+        Map<Long, SourceWeighAccumulator> persistedWeighAccumulatorMap = loadPersistedWeighAccumulatorMap(sourcePurchaseOrderItemIds, currentInboundId);
         Map<Long, PurchaseOrder> affectedOrderMap = loadAffectedPurchaseOrderMap(sourcePurchaseOrderItemMap);
         Map<Long, PurchaseOrderItem> writeBackItemMap = affectedOrderMap.values().stream()
                 .flatMap(order -> order.getItems().stream())
@@ -310,16 +382,39 @@ public class PurchaseInboundService extends AbstractCrudService<PurchaseInbound,
             if (sourceItem == null) {
                 continue;
             }
-            BigDecimal baseWeightTon = TradeItemCalculator.calculateWeightTon(sourceItem.getQuantity(), sourceItem.getPieceWeightTon());
-            BigDecimal totalAdjustmentTon = persistedAdjustmentMap.getOrDefault(sourcePurchaseOrderItemId, BigDecimal.ZERO)
-                    .add(currentAdjustmentMap.getOrDefault(sourcePurchaseOrderItemId, BigDecimal.ZERO));
-            BigDecimal weightTon = TradeItemCalculator.scaleWeightTon(baseWeightTon.add(totalAdjustmentTon));
+            SourceWeighAccumulator weighAccumulator = mergeWeighAccumulator(
+                    persistedWeighAccumulatorMap.get(sourcePurchaseOrderItemId),
+                    currentWeighAccumulatorMap.get(sourcePurchaseOrderItemId)
+            );
+            BigDecimal weightTon;
+            if (weighAccumulator != null && weighAccumulator.hasQuantity()) {
+                BigDecimal averagePieceWeightTon = weighAccumulator.averagePieceWeightTon();
+                sourceItem.setPieceWeightTon(averagePieceWeightTon);
+                weightTon = weighAccumulator.isFullyAllocated(sourceItem.getQuantity())
+                        ? TradeItemCalculator.scaleWeightTon(weighAccumulator.weightTon())
+                        : TradeItemCalculator.calculateWeightTon(sourceItem.getQuantity(), averagePieceWeightTon);
+            } else {
+                BigDecimal fallbackPieceWeightTon = fallbackSourcePieceWeightMap.get(sourcePurchaseOrderItemId);
+                if (fallbackPieceWeightTon != null) {
+                    sourceItem.setPieceWeightTon(fallbackPieceWeightTon);
+                }
+                BigDecimal baseWeightTon = TradeItemCalculator.calculateWeightTon(sourceItem.getQuantity(), sourceItem.getPieceWeightTon());
+                BigDecimal totalAdjustmentTon = persistedAdjustmentMap.getOrDefault(sourcePurchaseOrderItemId, BigDecimal.ZERO)
+                        .add(currentAdjustmentMap.getOrDefault(sourcePurchaseOrderItemId, BigDecimal.ZERO));
+                weightTon = TradeItemCalculator.scaleWeightTon(baseWeightTon.add(totalAdjustmentTon));
+            }
             sourceItem.setWeightTon(weightTon);
             sourceItem.setAmount(TradeItemCalculator.calculateAmount(weightTon, sourceItem.getUnitPrice()));
         }
         affectedOrderMap.values().forEach(this::refreshPurchaseOrderTotals);
         if (!affectedOrderMap.isEmpty()) {
             purchaseOrderRepository.saveAll(affectedOrderMap.values());
+            purchaseOrderItemPieceWeightService.regenerateForPurchaseOrderItems(
+                    sourcePurchaseOrderItemIds.stream()
+                            .map(writeBackItemMap::get)
+                            .filter(item -> item != null)
+                            .toList()
+            );
         }
     }
 
@@ -354,8 +449,40 @@ public class PurchaseInboundService extends AbstractCrudService<PurchaseInbound,
             BigDecimal weightTon,
             BigDecimal weighWeightTon,
             BigDecimal weightAdjustmentTon,
-            BigDecimal weightAdjustmentAmount
+            BigDecimal weightAdjustmentAmount,
+            BigDecimal pieceWeightTon
     ) {
+    }
+
+    private record SourceWeighAccumulator(
+            int quantity,
+            BigDecimal weightTon
+    ) {
+
+        boolean hasQuantity() {
+            return quantity > 0;
+        }
+
+        boolean isFullyAllocated(Integer sourceQuantity) {
+            return sourceQuantity != null && sourceQuantity > 0 && quantity >= sourceQuantity;
+        }
+
+        BigDecimal averagePieceWeightTon() {
+            return TradeItemCalculator.calculateAveragePieceWeightTon(quantity, weightTon);
+        }
+    }
+
+    private SourceWeighAccumulator mergeWeighAccumulator(SourceWeighAccumulator left, SourceWeighAccumulator right) {
+        if (left == null) {
+            return right;
+        }
+        if (right == null) {
+            return left;
+        }
+        return new SourceWeighAccumulator(
+                left.quantity() + right.quantity(),
+                TradeItemCalculator.scaleWeightTon(left.weightTon().add(right.weightTon()))
+        );
     }
 
     private void validateSourcePurchaseOrderAllocation(
@@ -451,11 +578,13 @@ public class PurchaseInboundService extends AbstractCrudService<PurchaseInbound,
                 .concat(previousSourcePurchaseOrderItemIds.stream(), sourcePurchaseOrderItemIds.stream())
                 .distinct()
                 .toList();
+        Map<Long, BigDecimal> fallbackSourcePieceWeightMap = buildFallbackSourcePieceWeightMap(inbound.getItems());
         Map<Long, PurchaseOrderItem> sourcePurchaseOrderItemMap = loadSourcePurchaseOrderItemMap(affectedSourcePurchaseOrderItemIds);
         Map<Long, Integer> allocatedQuantityMap = loadAllocatedQuantityMap(sourcePurchaseOrderItemIds, inbound.getId());
         Map<Long, Integer> requestAllocatedQuantityMap = new HashMap<>();
         Set<String> purchaseWeighRequiredCategoryNames = loadPurchaseWeighRequiredCategoryNames(request);
         Map<Long, BigDecimal> currentAdjustmentMap = new HashMap<>();
+        Map<Long, SourceWeighAccumulator> currentWeighAccumulatorMap = new HashMap<>();
         String firstLineWarehouseName = null;
         List<PurchaseInboundItem> items = ManagedEntityItemSupport.syncById(
                 inbound.getItems(),
@@ -495,7 +624,6 @@ public class PurchaseInboundService extends AbstractCrudService<PurchaseInbound,
             item.setBatchNo(tradeItemMaterialSupport.normalizeBatchNo(material, source.batchNo(), i + 1, true));
             item.setQuantity(source.quantity());
             item.setQuantityUnit(TradeItemCalculator.normalizeQuantityUnit(source.quantityUnit()));
-            item.setPieceWeightTon(source.pieceWeightTon());
             item.setPiecesPerBundle(source.piecesPerBundle());
             WeightSettlementResult weightSettlement = resolveWeightSettlement(
                     source,
@@ -504,6 +632,7 @@ public class PurchaseInboundService extends AbstractCrudService<PurchaseInbound,
                     settlementMode
             );
             BigDecimal weightTon = weightSettlement.weightTon();
+            item.setPieceWeightTon(weightSettlement.pieceWeightTon());
             item.setWeightTon(weightTon);
             item.setWeighWeightTon(weightSettlement.weighWeightTon());
             item.setWeightAdjustmentTon(weightSettlement.weightAdjustmentTon());
@@ -519,6 +648,13 @@ public class PurchaseInboundService extends AbstractCrudService<PurchaseInbound,
                         weightSettlement.weightAdjustmentTon(),
                         BigDecimal::add
                 );
+                if (weightSettlement.weighWeightTon() != null) {
+                    currentWeighAccumulatorMap.merge(
+                            source.sourcePurchaseOrderItemId(),
+                            new SourceWeighAccumulator(source.quantity(), weightSettlement.weightTon()),
+                            this::mergeWeighAccumulator
+                    );
+                }
             }
         }
         inbound.getItems().sort(java.util.Comparator.comparing(PurchaseInboundItem::getLineNo));
@@ -530,6 +666,8 @@ public class PurchaseInboundService extends AbstractCrudService<PurchaseInbound,
                 affectedSourcePurchaseOrderItemIds,
                 inbound.getId(),
                 currentAdjustmentMap,
+                currentWeighAccumulatorMap,
+                fallbackSourcePieceWeightMap,
                 sourcePurchaseOrderItemMap
         );
     }
@@ -541,8 +679,16 @@ public class PurchaseInboundService extends AbstractCrudService<PurchaseInbound,
                 .filter(id -> id != null)
                 .distinct()
                 .toList();
+        Map<Long, BigDecimal> fallbackSourcePieceWeightMap = buildFallbackSourcePieceWeightMap(inbound.getItems());
         Map<Long, PurchaseOrderItem> sourcePurchaseOrderItemMap = loadSourcePurchaseOrderItemMap(sourcePurchaseOrderItemIds);
-        writeBackPurchaseOrderWeights(sourcePurchaseOrderItemIds, inbound.getId(), Map.of(), sourcePurchaseOrderItemMap);
+        writeBackPurchaseOrderWeights(
+                sourcePurchaseOrderItemIds,
+                inbound.getId(),
+                Map.of(),
+                Map.of(),
+                fallbackSourcePieceWeightMap,
+                sourcePurchaseOrderItemMap
+        );
     }
 
     @Override

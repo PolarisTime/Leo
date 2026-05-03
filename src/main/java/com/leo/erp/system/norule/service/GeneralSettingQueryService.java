@@ -20,6 +20,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 @Service
 public class GeneralSettingQueryService {
@@ -44,7 +45,16 @@ public class GeneralSettingQueryService {
             Map.entry("SYS_OPERATION_LOG_RECORD_AUTH_EVENTS", 160),
             Map.entry("SYS_FORCE_USER_TOTP_ON_FIRST_LOGIN", 170),
             Map.entry("SYS_BATCH_NO_AUTO_GENERATE", 180),
+            Map.entry("UI_HIDE_AUDITED_LIST_RECORDS", 190),
+            Map.entry("UI_SHOW_SNOWFLAKE_ID", 200),
             Map.entry("PAGE_UPLOAD", 900)
+    );
+
+    private static final Set<String> PUBLIC_DISPLAY_SWITCH_CODES = Set.of(
+            "UI_WEIGHT_ONLY_PURCHASE_INBOUNDS",
+            "UI_WEIGHT_ONLY_SALES_OUTBOUNDS",
+            SystemSwitchService.HIDE_AUDITED_LIST_RECORDS_SWITCH,
+            SystemSwitchService.SHOW_SNOWFLAKE_ID_SWITCH
     );
 
     private final NoRuleRepository noRuleRepository;
@@ -84,6 +94,15 @@ public class GeneralSettingQueryService {
                 PageRequest.of(query.page(), query.size()),
                 merged.size()
         );
+    }
+
+    @Transactional(readOnly = true)
+    public List<GeneralSettingResponse> publicDisplaySwitches() {
+        return noRuleRepository.findBySettingCodeInAndDeletedFlagFalse(PUBLIC_DISPLAY_SWITCH_CODES).stream()
+                .map(noRuleMapper::toResponse)
+                .map(this::toGeneralSettingResponse)
+                .sorted(generalSettingComparator())
+                .toList();
     }
 
     private GeneralSettingResponse toGeneralSettingResponse(NoRuleResponse rule) {

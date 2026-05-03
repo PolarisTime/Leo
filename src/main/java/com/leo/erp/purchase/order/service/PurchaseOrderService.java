@@ -23,6 +23,7 @@ import com.leo.erp.purchase.order.web.dto.PurchaseOrderItemRequest;
 import com.leo.erp.purchase.order.web.dto.PurchaseOrderItemResponse;
 import com.leo.erp.purchase.order.web.dto.PurchaseOrderRequest;
 import com.leo.erp.purchase.order.web.dto.PurchaseOrderResponse;
+import com.leo.erp.sales.order.service.SalesOrderItemQueryService;
 import com.leo.erp.security.permission.WorkflowTransitionGuard;
 import org.springframework.data.domain.Page;
 import org.springframework.data.jpa.domain.Specification;
@@ -44,6 +45,8 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
     private final WarehouseSelectionSupport warehouseSelectionSupport;
     private final SupplierRepository supplierRepository;
     private final PurchaseInboundItemQueryService purchaseInboundItemQueryService;
+    private final SalesOrderItemQueryService salesOrderItemQueryService;
+    private final PurchaseOrderItemPieceWeightService purchaseOrderItemPieceWeightService;
     private final WorkflowTransitionGuard workflowTransitionGuard;
 
     public PurchaseOrderService(PurchaseOrderRepository purchaseOrderRepository,
@@ -53,6 +56,8 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
                                 WarehouseSelectionSupport warehouseSelectionSupport,
                                 SupplierRepository supplierRepository,
                                 PurchaseInboundItemQueryService purchaseInboundItemQueryService,
+                                SalesOrderItemQueryService salesOrderItemQueryService,
+                                PurchaseOrderItemPieceWeightService purchaseOrderItemPieceWeightService,
                                 WorkflowTransitionGuard workflowTransitionGuard) {
         super(snowflakeIdGenerator);
         this.purchaseOrderRepository = purchaseOrderRepository;
@@ -61,6 +66,8 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
         this.warehouseSelectionSupport = warehouseSelectionSupport;
         this.supplierRepository = supplierRepository;
         this.purchaseInboundItemQueryService = purchaseInboundItemQueryService;
+        this.salesOrderItemQueryService = salesOrderItemQueryService;
+        this.purchaseOrderItemPieceWeightService = purchaseOrderItemPieceWeightService;
         this.workflowTransitionGuard = workflowTransitionGuard;
     }
 
@@ -90,6 +97,8 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
     @Override
     protected PurchaseOrderResponse toDetailResponse(PurchaseOrder order) {
         Map<Long, Integer> allocatedQuantityMap = loadAllocatedQuantityMap(order);
+        Map<Long, Integer> salesAllocatedQuantityMap = loadSalesAllocatedQuantityMap(order);
+        Map<Long, BigDecimal> salesRemainingWeightMap = loadSalesRemainingWeightMap(order);
         PurchaseOrderResponse response = purchaseOrderMapper.toResponse(order);
         return new PurchaseOrderResponse(
                 response.id(), response.orderNo(), response.supplierName(),
@@ -100,6 +109,8 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
                         item.getBrand(), item.getCategory(), item.getMaterial(),
                         item.getSpec(), item.getLength(), item.getUnit(), item.getWarehouseName(), item.getBatchNo(),
                         remainingQuantity(item, allocatedQuantityMap),
+                        salesRemainingQuantity(item, salesAllocatedQuantityMap),
+                        salesRemainingWeightTon(item, salesAllocatedQuantityMap, salesRemainingWeightMap),
                         item.getQuantity(), item.getQuantityUnit(), item.getPieceWeightTon(),
                         item.getPiecesPerBundle(), item.getWeightTon(),
                         item.getUnitPrice(), item.getAmount()
@@ -121,9 +132,53 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
         return allocatedMap;
     }
 
+    private Map<Long, Integer> loadSalesAllocatedQuantityMap(PurchaseOrder order) {
+        List<Long> orderItemIds = order.getItems().stream()
+                .map(PurchaseOrderItem::getId)
+                .distinct()
+                .toList();
+        if (orderItemIds.isEmpty()) {
+            return Map.of();
+        }
+        Map<Long, Long> summaryMap = salesOrderItemQueryService.summarizeAllocatedQuantityBySourcePurchaseOrderItemIds(orderItemIds, null);
+        Map<Long, Integer> allocatedMap = new HashMap<>();
+        summaryMap.forEach((key, value) -> allocatedMap.put(key, Math.toIntExact(value)));
+        return allocatedMap;
+    }
+
     private Integer remainingQuantity(PurchaseOrderItem item, Map<Long, Integer> allocatedQuantityMap) {
         int allocatedQuantity = allocatedQuantityMap.getOrDefault(item.getId(), 0);
         return Math.max(0, item.getQuantity() - allocatedQuantity);
+    }
+
+    private Integer salesRemainingQuantity(PurchaseOrderItem item, Map<Long, Integer> allocatedQuantityMap) {
+        int allocatedQuantity = allocatedQuantityMap.getOrDefault(item.getId(), 0);
+        return Math.max(0, item.getQuantity() - allocatedQuantity);
+    }
+
+    private Map<Long, BigDecimal> loadSalesRemainingWeightMap(PurchaseOrder order) {
+        List<Long> orderItemIds = order.getItems().stream()
+                .map(PurchaseOrderItem::getId)
+                .distinct()
+                .toList();
+        if (orderItemIds.isEmpty()) {
+            return Map.of();
+        }
+        return purchaseOrderItemPieceWeightService.summarizeRemainingWeightByPurchaseOrderItemIds(orderItemIds);
+    }
+
+    private BigDecimal salesRemainingWeightTon(PurchaseOrderItem item,
+                                               Map<Long, Integer> allocatedQuantityMap,
+                                               Map<Long, BigDecimal> remainingWeightMap) {
+        BigDecimal remainingWeightTon = remainingWeightMap.get(item.getId());
+        if (remainingWeightTon != null) {
+            return remainingWeightTon;
+        }
+        int remainingQuantity = salesRemainingQuantity(item, allocatedQuantityMap);
+        if (remainingQuantity == item.getQuantity()) {
+            return TradeItemCalculator.scaleWeightTon(item.getWeightTon());
+        }
+        return TradeItemCalculator.calculateWeightTon(remainingQuantity, item.getPieceWeightTon());
     }
 
     @Override
@@ -228,7 +283,14 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
             item.setPiecesPerBundle(itemRequest.piecesPerBundle());
             BigDecimal baseWeightTon = TradeItemCalculator.calculateWeightTon(itemRequest.quantity(), itemRequest.pieceWeightTon());
             BigDecimal weightAdjustmentTon = inboundWeightAdjustmentMap.getOrDefault(item.getId(), BigDecimal.ZERO);
-            BigDecimal weightTon = TradeItemCalculator.scaleWeightTon(baseWeightTon.add(weightAdjustmentTon));
+            BigDecimal requestedWeightTon = itemRequest.weightTon() == null
+                    ? null
+                    : TradeItemCalculator.scaleWeightTon(itemRequest.weightTon());
+            BigDecimal weightTon = requestedWeightTon != null
+                    && weightAdjustmentTon.compareTo(BigDecimal.ZERO) != 0
+                    && requestedWeightTon.compareTo(baseWeightTon) == 0
+                    ? requestedWeightTon
+                    : TradeItemCalculator.scaleWeightTon(baseWeightTon.add(weightAdjustmentTon));
             item.setWeightTon(weightTon);
             item.setUnitPrice(itemRequest.unitPrice());
             BigDecimal amount = TradeItemCalculator.calculateAmount(weightTon, itemRequest.unitPrice());

@@ -46,6 +46,9 @@ public class SalesOrderItem {
     @Column(name = "source_inbound_item_id")
     private Long sourceInboundItemId;
 
+    @Column(name = "source_purchase_order_item_id")
+    private Long sourcePurchaseOrderItemId;
+
     @Column(name = "warehouse_name", length = 128)
     private String warehouseName;
 

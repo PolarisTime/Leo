@@ -35,6 +35,14 @@ public final class TradeItemCalculator {
         return scaleWeightTon(safeQuantity.multiply(safePieceWeightTon));
     }
 
+    public static BigDecimal calculateAveragePieceWeightTon(Integer quantity, BigDecimal weightTon) {
+        if (quantity == null || quantity <= 0) {
+            return BigDecimal.ZERO.setScale(3, RoundingMode.HALF_UP);
+        }
+        return safeBigDecimal(weightTon)
+                .divide(BigDecimal.valueOf(quantity.longValue()), 3, RoundingMode.HALF_UP);
+    }
+
     public static BigDecimal calculateAmount(BigDecimal weightTon, BigDecimal unitPrice) {
         BigDecimal safeWeightTon = weightTon == null ? BigDecimal.ZERO : weightTon;
         BigDecimal safeUnitPrice = unitPrice == null ? BigDecimal.ZERO : unitPrice;

@@ -14,8 +14,11 @@ import com.leo.erp.purchase.order.mapper.PurchaseOrderMapper;
 import com.leo.erp.purchase.order.web.dto.PurchaseOrderItemRequest;
 import com.leo.erp.purchase.order.web.dto.PurchaseOrderRequest;
 import com.leo.erp.purchase.order.web.dto.PurchaseOrderResponse;
+import com.leo.erp.sales.order.service.SalesOrderItemQueryService;
 import com.leo.erp.security.permission.WorkflowTransitionGuard;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -36,6 +39,11 @@ import static org.mockito.Mockito.when;
 
 class PurchaseOrderServiceTest {
 
+    @BeforeEach
+    void setUpIdGenerator() {
+        ReflectionTestUtils.invokeMethod(new SnowflakeIdGenerator(0L), "registerInstance");
+    }
+
     @Test
     void shouldLoadAllocatedQuantitiesOnlyForCurrentOrderItemsWhenShowingDetail() {
         PurchaseOrderRepository repository = mock(PurchaseOrderRepository.class);
@@ -45,6 +53,8 @@ class PurchaseOrderServiceTest {
         WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
         SupplierRepository supplierRepository = mock(SupplierRepository.class);
         PurchaseInboundItemQueryService purchaseInboundItemQueryService = mock(PurchaseInboundItemQueryService.class);
+        SalesOrderItemQueryService salesOrderItemQueryService = mock(SalesOrderItemQueryService.class);
+        PurchaseOrderItemPieceWeightService pieceWeightService = mock(PurchaseOrderItemPieceWeightService.class);
         WorkflowTransitionGuard workflowTransitionGuard = mock(WorkflowTransitionGuard.class);
         PurchaseOrderService service = new PurchaseOrderService(
                 repository,
@@ -54,6 +64,8 @@ class PurchaseOrderServiceTest {
                 warehouseSelectionSupport,
                 supplierRepository,
                 purchaseInboundItemQueryService,
+                salesOrderItemQueryService,
+                pieceWeightService,
                 workflowTransitionGuard
         );
 
@@ -97,13 +109,24 @@ class PurchaseOrderServiceTest {
         ));
         when(purchaseInboundItemQueryService.summarizeAllocatedQuantityBySourcePurchaseOrderItemIds(List.of(7L)))
                 .thenReturn(Map.of(7L, 4L));
+        when(salesOrderItemQueryService.summarizeAllocatedQuantityBySourcePurchaseOrderItemIds(List.of(7L), null))
+                .thenReturn(Map.of(7L, 3L));
+        when(pieceWeightService.summarizeRemainingWeightByPurchaseOrderItemIds(List.of(7L)))
+                .thenReturn(Map.of(7L, new BigDecimal("0.700")));
 
         PurchaseOrderResponse response = service.detail(1L);
 
         assertThat(response.items()).singleElement().satisfies(detailItem ->
                 assertThat(detailItem.remainingQuantity()).isEqualTo(6)
         );
+        assertThat(response.items()).singleElement().satisfies(detailItem ->
+                assertThat(detailItem.salesRemainingQuantity()).isEqualTo(7)
+        );
+        assertThat(response.items()).singleElement().satisfies(detailItem ->
+                assertThat(detailItem.salesRemainingWeightTon()).isEqualByComparingTo("0.700")
+        );
         verify(purchaseInboundItemQueryService).summarizeAllocatedQuantityBySourcePurchaseOrderItemIds(List.of(7L));
+        verify(salesOrderItemQueryService).summarizeAllocatedQuantityBySourcePurchaseOrderItemIds(List.of(7L), null);
     }
 
     @Test
@@ -115,6 +138,8 @@ class PurchaseOrderServiceTest {
         WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
         SupplierRepository supplierRepository = mock(SupplierRepository.class);
         PurchaseInboundItemQueryService purchaseInboundItemQueryService = mock(PurchaseInboundItemQueryService.class);
+        SalesOrderItemQueryService salesOrderItemQueryService = mock(SalesOrderItemQueryService.class);
+        PurchaseOrderItemPieceWeightService pieceWeightService = mock(PurchaseOrderItemPieceWeightService.class);
         WorkflowTransitionGuard workflowTransitionGuard = mock(WorkflowTransitionGuard.class);
         PurchaseOrderService service = new PurchaseOrderService(
                 repository,
@@ -124,6 +149,8 @@ class PurchaseOrderServiceTest {
                 warehouseSelectionSupport,
                 supplierRepository,
                 purchaseInboundItemQueryService,
+                salesOrderItemQueryService,
+                pieceWeightService,
                 workflowTransitionGuard
         );
 
@@ -160,6 +187,8 @@ class PurchaseOrderServiceTest {
         WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
         SupplierRepository supplierRepository = mock(SupplierRepository.class);
         PurchaseInboundItemQueryService purchaseInboundItemQueryService = mock(PurchaseInboundItemQueryService.class);
+        SalesOrderItemQueryService salesOrderItemQueryService = mock(SalesOrderItemQueryService.class);
+        PurchaseOrderItemPieceWeightService pieceWeightService = mock(PurchaseOrderItemPieceWeightService.class);
         WorkflowTransitionGuard workflowTransitionGuard = mock(WorkflowTransitionGuard.class);
         PurchaseOrderService service = new PurchaseOrderService(
                 repository,
@@ -169,6 +198,8 @@ class PurchaseOrderServiceTest {
                 warehouseSelectionSupport,
                 supplierRepository,
                 purchaseInboundItemQueryService,
+                salesOrderItemQueryService,
+                pieceWeightService,
                 workflowTransitionGuard
         );
 
@@ -196,7 +227,7 @@ class PurchaseOrderServiceTest {
     }
 
     @Test
-    void shouldRejectSupplierNameMissingFromMasterDataWhenCreatingOrder() {
+    void shouldRejectDeletingAuditedOrder() {
         PurchaseOrderRepository repository = mock(PurchaseOrderRepository.class);
         SnowflakeIdGenerator idGenerator = mock(SnowflakeIdGenerator.class);
         PurchaseOrderMapper mapper = mock(PurchaseOrderMapper.class);
@@ -204,6 +235,8 @@ class PurchaseOrderServiceTest {
         WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
         SupplierRepository supplierRepository = mock(SupplierRepository.class);
         PurchaseInboundItemQueryService purchaseInboundItemQueryService = mock(PurchaseInboundItemQueryService.class);
+        SalesOrderItemQueryService salesOrderItemQueryService = mock(SalesOrderItemQueryService.class);
+        PurchaseOrderItemPieceWeightService pieceWeightService = mock(PurchaseOrderItemPieceWeightService.class);
         WorkflowTransitionGuard workflowTransitionGuard = mock(WorkflowTransitionGuard.class);
         PurchaseOrderService service = new PurchaseOrderService(
                 repository,
@@ -213,6 +246,42 @@ class PurchaseOrderServiceTest {
                 warehouseSelectionSupport,
                 supplierRepository,
                 purchaseInboundItemQueryService,
+                salesOrderItemQueryService,
+                pieceWeightService,
+                workflowTransitionGuard
+        );
+        PurchaseOrder order = buildOrder();
+        order.setStatus("已审核");
+
+        when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(order));
+
+        assertThatThrownBy(() -> service.delete(1L))
+                .hasMessageContaining("当前单据状态为「已审核」，不能删除");
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    void shouldRejectSupplierNameMissingFromMasterDataWhenCreatingOrder() {
+        PurchaseOrderRepository repository = mock(PurchaseOrderRepository.class);
+        SnowflakeIdGenerator idGenerator = mock(SnowflakeIdGenerator.class);
+        PurchaseOrderMapper mapper = mock(PurchaseOrderMapper.class);
+        TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
+        WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
+        SupplierRepository supplierRepository = mock(SupplierRepository.class);
+        PurchaseInboundItemQueryService purchaseInboundItemQueryService = mock(PurchaseInboundItemQueryService.class);
+        SalesOrderItemQueryService salesOrderItemQueryService = mock(SalesOrderItemQueryService.class);
+        PurchaseOrderItemPieceWeightService pieceWeightService = mock(PurchaseOrderItemPieceWeightService.class);
+        WorkflowTransitionGuard workflowTransitionGuard = mock(WorkflowTransitionGuard.class);
+        PurchaseOrderService service = new PurchaseOrderService(
+                repository,
+                idGenerator,
+                mapper,
+                materialSupport,
+                warehouseSelectionSupport,
+                supplierRepository,
+                purchaseInboundItemQueryService,
+                salesOrderItemQueryService,
+                pieceWeightService,
                 workflowTransitionGuard
         );
 
