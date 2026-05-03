@@ -6,24 +6,49 @@ import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.AuditableEntity;
 import com.leo.erp.security.permission.DataScopeContext;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
+import com.leo.erp.common.support.StatusConstants;
+import com.leo.erp.system.norule.service.SystemSwitchService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.lang.reflect.Method;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 public abstract class AbstractCrudService<E extends AuditableEntity, Req, Res> {
 
+    private static final Set<String> PROTECTED_DELETE_STATUSES = Set.of(
+            StatusConstants.AUDITED,
+            StatusConstants.COMPLETED,
+            StatusConstants.PURCHASE_COMPLETED,
+            StatusConstants.INBOUND_COMPLETED,
+            StatusConstants.SALES_COMPLETED,
+            StatusConstants.PAID,
+            StatusConstants.RECEIVED,
+            StatusConstants.SIGNED,
+            StatusConstants.DELIVERED
+    );
+
+    private final SnowflakeIdGenerator idGenerator;
+    private SystemSwitchService systemSwitchService;
+
     protected AbstractCrudService(SnowflakeIdGenerator idGenerator) {
-        // kept for backward compatibility; id resolution now uses static accessor
+        this.idGenerator = idGenerator;
+    }
+
+    @Autowired(required = false)
+    protected void setSystemSwitchService(SystemSwitchService systemSwitchService) {
+        this.systemSwitchService = systemSwitchService;
     }
 
     private SnowflakeIdGenerator idGen() {
-        return SnowflakeIdGenerator.getInstance();
+        return idGenerator != null ? idGenerator : SnowflakeIdGenerator.getInstance();
     }
 
     private Logger logger() {
@@ -60,6 +85,7 @@ public abstract class AbstractCrudService<E extends AuditableEntity, Req, Res> {
     @Transactional
     public final void delete(Long id) {
         E entity = requireEntity(id);
+        assertDeleteAllowedByStatus(entity);
         beforeDelete(entity);
         entity.setDeletedFlag(Boolean.TRUE);
         saveEntity(entity);
@@ -67,7 +93,8 @@ public abstract class AbstractCrudService<E extends AuditableEntity, Req, Res> {
     }
 
     protected final Page<Res> page(PageQuery query, Specification<E> specification, JpaSpecificationExecutor<E> repository) {
-        return repository.findAll(DataScopeContext.apply(specification), query.toPageable("id"))
+        Specification<E> effectiveSpec = applyListVisibilityPolicy(specification);
+        return repository.findAll(DataScopeContext.apply(effectiveSpec), query.toPageable("id"))
                 .map(this::toResponse);
     }
 
@@ -98,6 +125,55 @@ public abstract class AbstractCrudService<E extends AuditableEntity, Req, Res> {
     }
 
     protected void beforeDelete(E entity) {
+    }
+
+    private void assertDeleteAllowedByStatus(E entity) {
+        resolveStatus(entity).ifPresent(status -> {
+            if (PROTECTED_DELETE_STATUSES.contains(status)) {
+                throw new BusinessException(
+                        ErrorCode.BUSINESS_ERROR,
+                        "当前单据状态为「" + status + "」，不能删除"
+                );
+            }
+        });
+    }
+
+    private Specification<E> applyListVisibilityPolicy(Specification<E> specification) {
+        if (systemSwitchService == null || !systemSwitchService.shouldHideAuditedListRecords()) {
+            return specification;
+        }
+        return specification.and(excludeAuditedStatus());
+    }
+
+    private Specification<E> excludeAuditedStatus() {
+        return (root, query, criteriaBuilder) -> {
+            try {
+                root.getModel().getAttribute("status");
+            } catch (IllegalArgumentException ex) {
+                return criteriaBuilder.conjunction();
+            }
+            var statusPath = root.get("status");
+            return criteriaBuilder.or(
+                    criteriaBuilder.isNull(statusPath),
+                    criteriaBuilder.notEqual(statusPath, StatusConstants.AUDITED)
+            );
+        };
+    }
+
+    private Optional<String> resolveStatus(E entity) {
+        try {
+            Method getter = entity.getClass().getMethod("getStatus");
+            Object value = getter.invoke(entity);
+            if (value == null) {
+                return Optional.empty();
+            }
+            String status = String.valueOf(value).trim();
+            return status.isBlank() ? Optional.empty() : Optional.of(status);
+        } catch (NoSuchMethodException ignored) {
+            return Optional.empty();
+        } catch (ReflectiveOperationException ex) {
+            throw new IllegalStateException("读取单据状态失败", ex);
+        }
     }
 
     protected Res toDetailResponse(E entity) {
