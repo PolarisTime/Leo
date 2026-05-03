@@ -25,6 +25,9 @@ public class SalesOrder extends AuditableEntity {
     @Column(name = "purchase_inbound_no", length = 256)
     private String purchaseInboundNo;
 
+    @Column(name = "purchase_order_no", length = 256)
+    private String purchaseOrderNo;
+
     @Column(name = "customer_name", nullable = false, length = 128)
     private String customerName;
 

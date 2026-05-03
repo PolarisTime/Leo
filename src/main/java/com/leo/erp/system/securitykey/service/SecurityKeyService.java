@@ -18,6 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Base64;
@@ -80,14 +81,17 @@ public class SecurityKeyService {
         if (dbKeys.isEmpty()) {
             return List.of(resolveConfigMaterial(SECRET_TYPE_JWT));
         }
-        return dbKeys.stream().map(secret -> new ResolvedSecretMaterial(
-                SOURCE_DATABASE,
-                secret.getKeyVersion(),
-                secret.getSecretValue(),
-                secret.getActivatedAt(),
-                secret.getRetiredAt(),
-                fingerprint(secret.getSecretValue())
-        )).toList();
+        LocalDateTime now = LocalDateTime.now();
+        return dbKeys.stream()
+                .filter(secret -> isJwtVerificationMaterialUsable(secret, now))
+                .map(secret -> new ResolvedSecretMaterial(
+                        SOURCE_DATABASE,
+                        secret.getKeyVersion(),
+                        secret.getSecretValue(),
+                        secret.getActivatedAt(),
+                        secret.getRetiredAt(),
+                        fingerprint(secret.getSecretValue())
+                )).toList();
     }
 
     public ResolvedSecretMaterial getActiveTotpMaterial() {
@@ -221,6 +225,18 @@ public class SecurityKeyService {
                         fingerprint(secret.getSecretValue())
                 ))
                 .orElseGet(() -> resolveConfigMaterial(secretType));
+    }
+
+    private boolean isJwtVerificationMaterialUsable(SecuritySecret secret, LocalDateTime now) {
+        if (!STATUS_RETIRED.equals(secret.getStatus())) {
+            return true;
+        }
+        LocalDateTime retiredAt = secret.getRetiredAt();
+        if (retiredAt == null) {
+            return true;
+        }
+        LocalDateTime legacyWindowEnd = retiredAt.plus(Duration.ofMillis(jwtProperties.accessExpirationMs()));
+        return !legacyWindowEnd.isBefore(now);
     }
 
     private ResolvedSecretMaterial resolveConfigMaterial(String secretType) {

@@ -2,8 +2,11 @@ package com.leo.erp.security.jwt;
 
 import com.leo.erp.security.support.SecurityPrincipal;
 import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.ExpiredJwtException;
+import io.jsonwebtoken.IncorrectClaimException;
 import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.PrematureJwtException;
 import io.jsonwebtoken.security.Keys;
 import com.leo.erp.system.securitykey.service.SecurityKeyService;
 import org.springframework.stereotype.Service;
@@ -55,6 +58,8 @@ public class JwtTokenService {
                         .getPayload();
                 validateKeyWindow(material, claims);
                 return claims;
+            } catch (ExpiredJwtException | IncorrectClaimException | PrematureJwtException ex) {
+                throw ex;
             } catch (JwtException ex) {
                 lastException = ex;
             }

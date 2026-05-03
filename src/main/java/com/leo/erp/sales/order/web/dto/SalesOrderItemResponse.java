@@ -13,6 +13,7 @@ public record SalesOrderItemResponse(
         String length,
         String unit,
         Long sourceInboundItemId,
+        Long sourcePurchaseOrderItemId,
         String warehouseName,
         String batchNo,
         Integer quantity,

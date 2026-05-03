@@ -137,13 +137,13 @@ public class SalesOutboundService extends AbstractCrudService<SalesOutbound, Sal
         entity.setSalesOrderNo(request.salesOrderNo());
         entity.setCustomerName(request.customerName());
         entity.setProjectName(request.projectName());
-        entity.setWarehouseName(request.warehouseName());
         entity.setOutboundDate(request.outboundDate());
         entity.setStatus(nextStatus);
         entity.setRemark(request.remark());
 
         BigDecimal totalWeight = BigDecimal.ZERO;
         BigDecimal totalAmount = BigDecimal.ZERO;
+        String firstLineWarehouseName = null;
         var materialMap = tradeItemMaterialSupport.loadMaterialMap(
                 request.items().stream().map(SalesOutboundItemRequest::materialCode).toList()
         );
@@ -169,17 +169,23 @@ public class SalesOutboundService extends AbstractCrudService<SalesOutbound, Sal
             item.setSpec(source.spec());
             item.setLength(source.length());
             item.setUnit(source.unit());
-            item.setWarehouseName(warehouseSelectionSupport.normalizeWarehouseName(
+            String warehouseName = warehouseSelectionSupport.normalizeWarehouseName(
                     source.warehouseName() == null || source.warehouseName().isBlank() ? request.warehouseName() : source.warehouseName(),
                     i + 1,
                     true
-            ));
+            );
+            if (firstLineWarehouseName == null) {
+                firstLineWarehouseName = warehouseName;
+            }
+            item.setWarehouseName(warehouseName);
             item.setBatchNo(tradeItemMaterialSupport.normalizeBatchNo(material, source.batchNo(), i + 1, true));
             item.setQuantity(source.quantity());
             item.setQuantityUnit(TradeItemCalculator.normalizeQuantityUnit(source.quantityUnit()));
             item.setPieceWeightTon(source.pieceWeightTon());
             item.setPiecesPerBundle(source.piecesPerBundle());
-            BigDecimal weightTon = TradeItemCalculator.calculateWeightTon(source.quantity(), source.pieceWeightTon());
+            BigDecimal weightTon = source.weightTon() == null
+                    ? TradeItemCalculator.calculateWeightTon(source.quantity(), source.pieceWeightTon())
+                    : TradeItemCalculator.scaleWeightTon(source.weightTon());
             item.setWeightTon(weightTon);
             item.setUnitPrice(source.unitPrice());
             BigDecimal amount = TradeItemCalculator.calculateAmount(weightTon, source.unitPrice());
@@ -188,8 +194,17 @@ public class SalesOutboundService extends AbstractCrudService<SalesOutbound, Sal
             totalAmount = totalAmount.add(amount);
         }
         entity.getItems().sort(java.util.Comparator.comparing(SalesOutboundItem::getLineNo));
+        entity.setWarehouseName(firstLineWarehouseName == null ? trimToNull(request.warehouseName()) : firstLineWarehouseName);
         entity.setTotalWeight(totalWeight);
         entity.setTotalAmount(totalAmount);
+    }
+
+    private String trimToNull(String value) {
+        if (value == null) {
+            return null;
+        }
+        String normalized = value.trim();
+        return normalized.isEmpty() ? null : normalized;
     }
 
     @Override

@@ -13,7 +13,7 @@ public record SalesOutboundRequest(
         String salesOrderNo,
         @NotBlank String customerName,
         @NotBlank String projectName,
-        @NotBlank String warehouseName,
+        String warehouseName,
         @NotNull LocalDate outboundDate,
         String status,
         String remark,

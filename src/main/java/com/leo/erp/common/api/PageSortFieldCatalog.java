@@ -13,7 +13,7 @@ public final class PageSortFieldCatalog {
             Map.entry("warehouses", Set.of("id", "warehouseCode", "warehouseName", "warehouseType", "contactName", "contactPhone", "address", "status")),
             Map.entry("purchase-orders", Set.of("id", "orderNo", "supplierName", "orderDate", "buyerName", "totalWeight", "totalAmount", "status")),
             Map.entry("purchase-inbounds", Set.of("id", "inboundNo", "purchaseOrderNo", "supplierName", "warehouseName", "inboundDate", "settlementMode", "totalWeight", "totalAmount", "status")),
-            Map.entry("sales-orders", Set.of("id", "orderNo", "purchaseInboundNo", "customerName", "projectName", "deliveryDate", "salesName", "totalWeight", "totalAmount", "status")),
+            Map.entry("sales-orders", Set.of("id", "orderNo", "purchaseInboundNo", "purchaseOrderNo", "customerName", "projectName", "deliveryDate", "salesName", "totalWeight", "totalAmount", "status")),
             Map.entry("sales-outbounds", Set.of("id", "outboundNo", "salesOrderNo", "customerName", "projectName", "warehouseName", "outboundDate", "totalWeight", "totalAmount", "status")),
             Map.entry("freight-bills", Set.of("id", "billNo", "outboundNo", "carrierName", "customerName", "projectName", "billTime", "unitPrice", "totalWeight", "totalFreight", "status", "deliveryStatus")),
             Map.entry("purchase-contracts", Set.of("id", "contractNo", "supplierName", "signDate", "effectiveDate", "expireDate", "buyerName", "totalWeight", "totalAmount", "status")),

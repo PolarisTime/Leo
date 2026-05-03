@@ -2,6 +2,7 @@ package com.leo.erp.security.jwt;
 
 import com.leo.erp.security.support.SecurityPrincipal;
 import com.leo.erp.system.securitykey.service.SecurityKeyService;
+import io.jsonwebtoken.ExpiredJwtException;
 import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
@@ -105,6 +106,51 @@ class JwtTokenServiceTest {
         assertEquals(1002L, verifyService.extractUserId(token));
         assertEquals("session-1002", verifyService.extractSessionId(token));
         assertEquals("rotated-admin", verifyService.parseAccessToken(token).getSubject());
+    }
+
+    @Test
+    void shouldPreserveExpiredTokenFailureWhenStaleWeakRetiredKeyExists() {
+        JwtProperties properties = new JwtProperties(
+                "leo-erp",
+                "leo-erp-jwt-secret-key-2026-must-be-long-enough-for-hs512",
+                1_800_000L,
+                604_800_000L
+        );
+        SecurityKeyService.ResolvedSecretMaterial active = new SecurityKeyService.ResolvedSecretMaterial(
+                SecurityKeyService.SOURCE_DATABASE,
+                4,
+                properties.secret(),
+                null,
+                null,
+                "FP-ACTIVE"
+        );
+        SecurityKeyService.ResolvedSecretMaterial staleWeakRetired = new SecurityKeyService.ResolvedSecretMaterial(
+                SecurityKeyService.SOURCE_DATABASE,
+                1,
+                "leo-erp-jwt-secret-key-weak-2026",
+                LocalDateTime.now().minusDays(10),
+                LocalDateTime.now().minusDays(9),
+                "FP-WEAK"
+        );
+        SecurityKeyService securityKeyService = mock(SecurityKeyService.class);
+        when(securityKeyService.getJwtVerificationMaterials()).thenReturn(List.of(active, staleWeakRetired));
+        JwtTokenService jwtTokenService = new JwtTokenService(properties, securityKeyService);
+
+        Instant issuedAt = Instant.now().minusSeconds(3_600);
+        String token = Jwts.builder()
+                .header()
+                .keyId("4")
+                .and()
+                .issuer("leo-erp")
+                .subject("admin")
+                .claim("uid", 1001L)
+                .claim("sid", "session-1001")
+                .issuedAt(Date.from(issuedAt))
+                .expiration(Date.from(Instant.now().minusSeconds(60)))
+                .signWith(Keys.hmacShaKeyFor(properties.secret().getBytes(StandardCharsets.UTF_8)))
+                .compact();
+
+        assertThrows(ExpiredJwtException.class, () -> jwtTokenService.parseAccessToken(token));
     }
 
     @Test

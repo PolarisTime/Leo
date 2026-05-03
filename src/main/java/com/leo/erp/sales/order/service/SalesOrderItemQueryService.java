@@ -61,4 +61,18 @@ public class SalesOrderItemQueryService {
                         SalesOrderItemRepository.SourceInboundAllocationSummary::getTotalQuantity
                 ));
     }
+
+    @Transactional(readOnly = true)
+    public Map<Long, Long> summarizeAllocatedQuantityBySourcePurchaseOrderItemIds(
+            Collection<Long> sourcePurchaseOrderItemIds, Long excludeOrderId) {
+        if (sourcePurchaseOrderItemIds == null || sourcePurchaseOrderItemIds.isEmpty()) {
+            return Map.of();
+        }
+        return repository.summarizeAllocatedQuantityBySourcePurchaseOrderItemIds(sourcePurchaseOrderItemIds, excludeOrderId)
+                .stream()
+                .collect(Collectors.toMap(
+                        SalesOrderItemRepository.SourcePurchaseOrderAllocationSummary::getSourcePurchaseOrderItemId,
+                        SalesOrderItemRepository.SourcePurchaseOrderAllocationSummary::getTotalQuantity
+                ));
+    }
 }

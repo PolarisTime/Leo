@@ -13,6 +13,7 @@ import com.leo.erp.system.securitykey.web.dto.SecurityKeyRotateResponse;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -101,6 +102,51 @@ class SecurityKeyServiceTest {
         assertThat(overview.jwt().activeVersion()).isEqualTo(3);
         assertThat(service.getActiveTotpMaterial().source()).isEqualTo(SecurityKeyService.SOURCE_DATABASE);
         assertThat(service.getActiveTotpMaterial().version()).isEqualTo(4);
+    }
+
+    @Test
+    void shouldIgnoreRetiredJwtSecretsAfterAccessTokenWindow() {
+        SecuritySecretRepository repository = mock(SecuritySecretRepository.class);
+        UserAccountRepository userAccountRepository = mock(UserAccountRepository.class);
+        SnowflakeIdGenerator idGenerator = mock(SnowflakeIdGenerator.class);
+        TotpSecretCryptor cryptor = mock(TotpSecretCryptor.class);
+
+        SecuritySecret active = new SecuritySecret();
+        active.setSecretType(SecurityKeyService.SECRET_TYPE_JWT);
+        active.setKeyVersion(4);
+        active.setSecretValue("leo-erp-jwt-secret-key-2027-active-signature-material-is-long-enough");
+        active.setStatus("ACTIVE");
+
+        SecuritySecret recentRetired = new SecuritySecret();
+        recentRetired.setSecretType(SecurityKeyService.SECRET_TYPE_JWT);
+        recentRetired.setKeyVersion(3);
+        recentRetired.setSecretValue("leo-erp-jwt-secret-key-2027-recent-retired-material-is-long-enough");
+        recentRetired.setStatus("RETIRED");
+        recentRetired.setRetiredAt(LocalDateTime.now().minusMinutes(10));
+
+        SecuritySecret staleRetired = new SecuritySecret();
+        staleRetired.setSecretType(SecurityKeyService.SECRET_TYPE_JWT);
+        staleRetired.setKeyVersion(1);
+        staleRetired.setSecretValue("leo-erp-jwt-secret-key-weak-2026");
+        staleRetired.setStatus("RETIRED");
+        staleRetired.setRetiredAt(LocalDateTime.now().minusDays(1));
+
+        when(repository.findBySecretTypeAndStatusInAndDeletedFlagFalseOrderByKeyVersionDesc(
+                eq(SecurityKeyService.SECRET_TYPE_JWT), anyCollection()))
+                .thenReturn(List.of(active, recentRetired, staleRetired));
+
+        SecurityKeyService service = new SecurityKeyService(
+                repository,
+                userAccountRepository,
+                idGenerator,
+                new JwtProperties("leo-erp", null, 1_800_000L, 604_800_000L),
+                new TotpProperties("LeoERP", null),
+                cryptor
+        );
+
+        assertThat(service.getJwtVerificationMaterials())
+                .extracting(SecurityKeyService.ResolvedSecretMaterial::version)
+                .containsExactly(4, 3);
     }
 
     @Test

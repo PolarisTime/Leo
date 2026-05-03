@@ -15,6 +15,8 @@ public record PurchaseOrderItemResponse(
         String warehouseName,
         String batchNo,
         Integer remainingQuantity,
+        Integer salesRemainingQuantity,
+        BigDecimal salesRemainingWeightTon,
         Integer quantity,
         String quantityUnit,
         BigDecimal pieceWeightTon,

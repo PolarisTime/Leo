@@ -9,6 +9,8 @@ import org.springframework.data.repository.query.Param;
 
 import jakarta.persistence.LockModeType;
 
+import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 
 public interface NoRuleRepository extends JpaRepository<NoRule, Long>, JpaSpecificationExecutor<NoRule> {
@@ -18,6 +20,8 @@ public interface NoRuleRepository extends JpaRepository<NoRule, Long>, JpaSpecif
     Optional<NoRule> findByIdAndDeletedFlagFalse(Long id);
 
     Optional<NoRule> findBySettingCodeAndDeletedFlagFalse(String settingCode);
+
+    List<NoRule> findBySettingCodeInAndDeletedFlagFalse(Collection<String> settingCodes);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select rule from NoRule rule where rule.settingCode = :settingCode and rule.deletedFlag = false")
