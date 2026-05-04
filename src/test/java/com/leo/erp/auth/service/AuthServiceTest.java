@@ -104,7 +104,7 @@ class AuthServiceTest {
         LoginService loginService = buildLoginService(user, null, loggedCommands);
 
         LoginResponseBody response = loginService.login(
-                new LoginRequest("tester", "secret"),
+                new LoginRequest("tester", "secret", null, null),
                 "127.0.0.1", "JUnit", "/auth/login", "POST"
         );
 
@@ -130,7 +130,7 @@ class AuthServiceTest {
         LoginService loginService = buildLoginService(null, null, loggedCommands);
 
         org.assertj.core.api.Assertions.assertThatThrownBy(() -> loginService.login(
-                new LoginRequest("tester", "secret"),
+                new LoginRequest("tester", "secret", null, null),
                 "127.0.0.1", "JUnit", "/auth/login", "POST"
         )).isInstanceOf(BadCredentialsException.class);
 
@@ -196,7 +196,8 @@ class AuthServiceTest {
                 redisTemplate != null ? redisTemplate : stringRedisTemplate(),
                 tokenIssuance,
                 operationLogService(loggedCommands),
-                systemSwitchService(true)
+                systemSwitchService(true),
+                captchaService()
         );
     }
 
@@ -402,6 +403,10 @@ class AuthServiceTest {
         };
     }
 
+    private CaptchaService captchaService() {
+        return Mockito.mock(CaptchaService.class);
+    }
+
     private AfterCommitExecutor afterCommitExecutor() {
         return new AfterCommitExecutor() {
             @Override
@@ -514,7 +519,8 @@ class AuthServiceTest {
                 tokenIssuanceServiceStub(userRepo, loginRefreshTokenSessionRepository(),
                         blacklistService(new ArrayList<>(), new AtomicBoolean(false)), null),
                 operationLogService(new ArrayList<>()),
-                systemSwitchService(true)
+                systemSwitchService(true),
+                captchaService()
         );
 
         org.assertj.core.api.Assertions.assertThatThrownBy(() ->
