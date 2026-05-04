@@ -8,6 +8,8 @@ import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.core.Cursor;
 import org.springframework.data.redis.core.ScanOptions;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import java.nio.charset.StandardCharsets;
@@ -20,6 +22,8 @@ import java.util.function.Supplier;
 @Component
 public class RedisJsonCacheSupport {
 
+    private static final Logger log = LoggerFactory.getLogger(RedisJsonCacheSupport.class);
+
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
 
@@ -30,13 +34,15 @@ public class RedisJsonCacheSupport {
 
     public <T> T getOrLoad(String key, Duration ttl, TypeReference<T> typeReference, Supplier<T> loader) {
         if (redisTemplate != null && objectMapper != null) {
-            String cached = redisTemplate.opsForValue().get(key);
-            if (cached != null && !cached.isBlank()) {
-                try {
+            try {
+                String cached = redisTemplate.opsForValue().get(key);
+                if (cached != null && !cached.isBlank()) {
                     return objectMapper.readValue(cached, typeReference);
-                } catch (JsonProcessingException ex) {
-                    redisTemplate.delete(key);
                 }
+            } catch (JsonProcessingException ex) {
+                delete(key);
+            } catch (RuntimeException ex) {
+                log.warn("Redis cache read failed, key={}", key, ex);
             }
         }
 
@@ -47,13 +53,15 @@ public class RedisJsonCacheSupport {
 
     public <T> T getOrLoad(String key, Duration ttl, Class<T> type, Supplier<T> loader) {
         if (redisTemplate != null && objectMapper != null) {
-            String cached = redisTemplate.opsForValue().get(key);
-            if (cached != null && !cached.isBlank()) {
-                try {
+            try {
+                String cached = redisTemplate.opsForValue().get(key);
+                if (cached != null && !cached.isBlank()) {
                     return objectMapper.readValue(cached, type);
-                } catch (JsonProcessingException ex) {
-                    redisTemplate.delete(key);
                 }
+            } catch (JsonProcessingException ex) {
+                delete(key);
+            } catch (RuntimeException ex) {
+                log.warn("Redis cache read failed, key={}", key, ex);
             }
         }
 
@@ -69,7 +77,9 @@ public class RedisJsonCacheSupport {
         try {
             redisTemplate.opsForValue().set(key, objectMapper.writeValueAsString(value), ttl);
         } catch (JsonProcessingException ex) {
-            throw new IllegalStateException("缓存序列化失败", ex);
+            log.warn("Redis cache serialization failed, key={}", key, ex);
+        } catch (RuntimeException ex) {
+            log.warn("Redis cache write failed, key={}", key, ex);
         }
     }
 
@@ -77,14 +87,22 @@ public class RedisJsonCacheSupport {
         if (redisTemplate == null || key == null) {
             return;
         }
-        redisTemplate.delete(key);
+        try {
+            redisTemplate.delete(key);
+        } catch (RuntimeException ex) {
+            log.warn("Redis cache delete failed, key={}", key, ex);
+        }
     }
 
     public void delete(Collection<String> keys) {
         if (redisTemplate == null || keys == null || keys.isEmpty()) {
             return;
         }
-        redisTemplate.delete(keys);
+        try {
+            redisTemplate.delete(keys);
+        } catch (RuntimeException ex) {
+            log.warn("Redis cache delete failed, keys={}", keys, ex);
+        }
     }
 
     public void deleteByPattern(String pattern) {
@@ -95,21 +113,32 @@ public class RedisJsonCacheSupport {
         if (connectionFactory == null) {
             return;
         }
-        RedisConnection connection = connectionFactory.getConnection();
+        RedisConnection connection = null;
         List<String> batch = new ArrayList<>(256);
-        try (Cursor<byte[]> cursor = connection.scan(ScanOptions.scanOptions().match(pattern).count(256).build())) {
-            while (cursor.hasNext()) {
-                batch.add(new String(cursor.next(), StandardCharsets.UTF_8));
-                if (batch.size() >= 256) {
-                    redisTemplate.delete(batch);
-                    batch.clear();
+        try {
+            connection = connectionFactory.getConnection();
+            try (Cursor<byte[]> cursor = connection.scan(ScanOptions.scanOptions().match(pattern).count(256).build())) {
+                while (cursor.hasNext()) {
+                    batch.add(new String(cursor.next(), StandardCharsets.UTF_8));
+                    if (batch.size() >= 256) {
+                        redisTemplate.delete(batch);
+                        batch.clear();
+                    }
                 }
             }
             if (!batch.isEmpty()) {
                 redisTemplate.delete(batch);
             }
+        } catch (RuntimeException ex) {
+            log.warn("Redis cache pattern delete failed, pattern={}", pattern, ex);
         } finally {
-            connection.close();
+            if (connection != null) {
+                try {
+                    connection.close();
+                } catch (RuntimeException ex) {
+                    log.warn("Redis connection close failed after pattern delete, pattern={}", pattern, ex);
+                }
+            }
         }
     }
 }

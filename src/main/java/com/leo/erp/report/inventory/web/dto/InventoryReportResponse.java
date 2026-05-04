@@ -15,6 +15,7 @@ public record InventoryReportResponse(
         Integer quantity,
         String quantityUnit,
         BigDecimal weightTon,
-        String unit
+        String unit,
+        BigDecimal pieceWeightTon
 ) {
 }

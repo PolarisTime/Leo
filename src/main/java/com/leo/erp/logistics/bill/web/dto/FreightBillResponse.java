@@ -9,6 +9,7 @@ public record FreightBillResponse(
         String billNo,
         String outboundNo,
         String carrierName,
+        String vehiclePlate,
         String customerName,
         String projectName,
         LocalDate billTime,

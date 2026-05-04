@@ -16,6 +16,7 @@ public class FreightBillMapper {
                 bill.getBillNo(),
                 bill.getOutboundNo(),
                 bill.getCarrierName(),
+                bill.getVehiclePlate(),
                 bill.getCustomerName(),
                 bill.getProjectName(),
                 bill.getBillTime(),

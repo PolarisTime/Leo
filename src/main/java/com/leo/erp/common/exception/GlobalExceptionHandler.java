@@ -113,6 +113,7 @@ public class GlobalExceptionHandler {
             case NOT_FOUND -> HttpStatus.NOT_FOUND;
             case INTERNAL_ERROR -> HttpStatus.INTERNAL_SERVER_ERROR;
             case SUCCESS -> HttpStatus.OK;
+            case SESSION_EVICTED -> HttpStatus.UNAUTHORIZED;
             case BUSINESS_ERROR -> HttpStatus.UNPROCESSABLE_ENTITY;
         };
     }

@@ -5,6 +5,7 @@ import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.service.AbstractCrudService;
+import com.leo.erp.common.support.RedisJsonCacheSupport;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.system.company.domain.entity.CompanySetting;
 import com.leo.erp.system.company.repository.CompanySettingRepository;
@@ -20,11 +21,13 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.data.domain.Page;
 import org.springframework.data.jpa.domain.Specification;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -35,6 +38,9 @@ import java.util.Set;
 public class CompanySettingService extends AbstractCrudService<CompanySetting, CompanySettingRequest, CompanySettingResponse> {
 
     public static final String DEFAULT_TAX_RATE_SETTING_CODE = "SYS_DEFAULT_TAX_RATE";
+    public static final String CURRENT_COMPANY_CACHE_KEY = "leo:company:current";
+    public static final String CURRENT_TAX_RATE_CACHE_KEY = "leo:company:tax-rate";
+    private static final Duration COMPANY_CACHE_TTL = Duration.ofMinutes(10);
     private static final TypeReference<List<CompanySettlementAccountResponse>> SETTLEMENT_ACCOUNT_LIST_TYPE = new TypeReference<>() { };
 
     private final CompanySettingRepository companySettingRepository;
@@ -42,6 +48,24 @@ public class CompanySettingService extends AbstractCrudService<CompanySetting, C
     private final DashboardSummaryService dashboardSummaryService;
     private final NoRuleRepository noRuleRepository;
     private final ObjectMapper objectMapper;
+    private final RedisJsonCacheSupport redisJsonCacheSupport;
+
+    @Autowired
+    public CompanySettingService(CompanySettingRepository companySettingRepository,
+                                 SnowflakeIdGenerator snowflakeIdGenerator,
+                                 CompanySettingMapper companySettingMapper,
+                                 DashboardSummaryService dashboardSummaryService,
+                                 NoRuleRepository noRuleRepository,
+                                 ObjectMapper objectMapper,
+                                 RedisJsonCacheSupport redisJsonCacheSupport) {
+        super(snowflakeIdGenerator);
+        this.companySettingRepository = companySettingRepository;
+        this.companySettingMapper = companySettingMapper;
+        this.dashboardSummaryService = dashboardSummaryService;
+        this.noRuleRepository = noRuleRepository;
+        this.objectMapper = objectMapper;
+        this.redisJsonCacheSupport = redisJsonCacheSupport;
+    }
 
     public CompanySettingService(CompanySettingRepository companySettingRepository,
                                  SnowflakeIdGenerator snowflakeIdGenerator,
@@ -49,12 +73,8 @@ public class CompanySettingService extends AbstractCrudService<CompanySetting, C
                                  DashboardSummaryService dashboardSummaryService,
                                  NoRuleRepository noRuleRepository,
                                  ObjectMapper objectMapper) {
-        super(snowflakeIdGenerator);
-        this.companySettingRepository = companySettingRepository;
-        this.companySettingMapper = companySettingMapper;
-        this.dashboardSummaryService = dashboardSummaryService;
-        this.noRuleRepository = noRuleRepository;
-        this.objectMapper = objectMapper;
+        this(companySettingRepository, snowflakeIdGenerator, companySettingMapper, dashboardSummaryService,
+                noRuleRepository, objectMapper, null);
     }
 
     @Transactional(readOnly = true)
@@ -67,6 +87,18 @@ public class CompanySettingService extends AbstractCrudService<CompanySetting, C
 
     @Transactional(readOnly = true)
     public CompanySettingResponse current() {
+        if (redisJsonCacheSupport == null) {
+            return loadCurrent();
+        }
+        return redisJsonCacheSupport.getOrLoad(
+                CURRENT_COMPANY_CACHE_KEY,
+                COMPANY_CACHE_TTL,
+                CompanySettingResponse.class,
+                this::loadCurrent
+        );
+    }
+
+    private CompanySettingResponse loadCurrent() {
         return findCurrentEntity()
                 .map(this::toResponse)
                 .orElse(null);
@@ -74,6 +106,18 @@ public class CompanySettingService extends AbstractCrudService<CompanySetting, C
 
     @Transactional(readOnly = true)
     public BigDecimal resolveCurrentTaxRate() {
+        if (redisJsonCacheSupport == null) {
+            return loadCurrentTaxRate();
+        }
+        return redisJsonCacheSupport.getOrLoad(
+                CURRENT_TAX_RATE_CACHE_KEY,
+                COMPANY_CACHE_TTL,
+                BigDecimal.class,
+                this::loadCurrentTaxRate
+        );
+    }
+
+    private BigDecimal loadCurrentTaxRate() {
         return noRuleRepository.findBySettingCodeAndDeletedFlagFalse(DEFAULT_TAX_RATE_SETTING_CODE)
                 .map(NoRule::getSampleNo)
                 .flatMap(this::parseTaxRate)
@@ -91,6 +135,7 @@ public class CompanySettingService extends AbstractCrudService<CompanySetting, C
 
         apply(entity, request);
         CompanySetting saved = companySettingRepository.save(entity);
+        evictCache();
         dashboardSummaryService.evictAllCache();
         return toResponse(saved);
     }
@@ -155,6 +200,7 @@ public class CompanySettingService extends AbstractCrudService<CompanySetting, C
     @Override
     protected CompanySetting saveEntity(CompanySetting entity) {
         CompanySetting saved = companySettingRepository.save(entity);
+        evictCache();
         dashboardSummaryService.evictAllCache();
         return saved;
     }
@@ -234,6 +280,12 @@ public class CompanySettingService extends AbstractCrudService<CompanySetting, C
             return Optional.of(new BigDecimal(rawValue.trim()).setScale(4, RoundingMode.HALF_UP));
         } catch (NumberFormatException ex) {
             return Optional.empty();
+        }
+    }
+
+    public void evictCache() {
+        if (redisJsonCacheSupport != null) {
+            redisJsonCacheSupport.delete(List.of(CURRENT_COMPANY_CACHE_KEY, CURRENT_TAX_RATE_CACHE_KEY));
         }
     }
 

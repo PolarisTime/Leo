@@ -1,7 +1,9 @@
 package com.leo.erp.system.norule.service;
 
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.persistence.Specs;
+import com.leo.erp.common.support.RedisJsonCacheSupport;
 import com.leo.erp.common.setting.PageUploadRuleQueryService;
 import com.leo.erp.common.setting.PageUploadRuleSummary;
 import com.leo.erp.system.norule.repository.NoRuleRepository;
@@ -13,9 +15,11 @@ import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -24,6 +28,10 @@ import java.util.Set;
 
 @Service
 public class GeneralSettingQueryService {
+
+    public static final String PUBLIC_DISPLAY_SWITCHES_CACHE_KEY = "leo:system:public-display-switches";
+    private static final Duration PUBLIC_DISPLAY_SWITCHES_CACHE_TTL = Duration.ofMinutes(5);
+    private static final TypeReference<List<GeneralSettingResponse>> PUBLIC_DISPLAY_SWITCH_LIST_TYPE = new TypeReference<>() { };
 
     private static final Map<String, Integer> GENERAL_SETTING_ORDER = Map.ofEntries(
             Map.entry("RULE_PO", 10),
@@ -47,6 +55,7 @@ public class GeneralSettingQueryService {
             Map.entry("SYS_BATCH_NO_AUTO_GENERATE", 180),
             Map.entry("UI_HIDE_AUDITED_LIST_RECORDS", 190),
             Map.entry("UI_SHOW_SNOWFLAKE_ID", 200),
+            Map.entry("SYS_LOGIN_CAPTCHA", 205),
             Map.entry("PAGE_UPLOAD", 900)
     );
 
@@ -60,13 +69,23 @@ public class GeneralSettingQueryService {
     private final NoRuleRepository noRuleRepository;
     private final NoRuleMapper noRuleMapper;
     private final PageUploadRuleQueryService pageUploadRuleQueryService;
+    private final RedisJsonCacheSupport redisJsonCacheSupport;
+
+    @Autowired
+    public GeneralSettingQueryService(NoRuleRepository noRuleRepository,
+                                      NoRuleMapper noRuleMapper,
+                                      PageUploadRuleQueryService pageUploadRuleQueryService,
+                                      RedisJsonCacheSupport redisJsonCacheSupport) {
+        this.noRuleRepository = noRuleRepository;
+        this.noRuleMapper = noRuleMapper;
+        this.pageUploadRuleQueryService = pageUploadRuleQueryService;
+        this.redisJsonCacheSupport = redisJsonCacheSupport;
+    }
 
     public GeneralSettingQueryService(NoRuleRepository noRuleRepository,
                                       NoRuleMapper noRuleMapper,
                                       PageUploadRuleQueryService pageUploadRuleQueryService) {
-        this.noRuleRepository = noRuleRepository;
-        this.noRuleMapper = noRuleMapper;
-        this.pageUploadRuleQueryService = pageUploadRuleQueryService;
+        this(noRuleRepository, noRuleMapper, pageUploadRuleQueryService, null);
     }
 
     @Transactional(readOnly = true)
@@ -98,6 +117,24 @@ public class GeneralSettingQueryService {
 
     @Transactional(readOnly = true)
     public List<GeneralSettingResponse> publicDisplaySwitches() {
+        if (redisJsonCacheSupport == null) {
+            return loadPublicDisplaySwitches();
+        }
+        return redisJsonCacheSupport.getOrLoad(
+                PUBLIC_DISPLAY_SWITCHES_CACHE_KEY,
+                PUBLIC_DISPLAY_SWITCHES_CACHE_TTL,
+                PUBLIC_DISPLAY_SWITCH_LIST_TYPE,
+                this::loadPublicDisplaySwitches
+        );
+    }
+
+    public void evictPublicDisplaySwitchesCache() {
+        if (redisJsonCacheSupport != null) {
+            redisJsonCacheSupport.delete(PUBLIC_DISPLAY_SWITCHES_CACHE_KEY);
+        }
+    }
+
+    private List<GeneralSettingResponse> loadPublicDisplaySwitches() {
         return noRuleRepository.findBySettingCodeInAndDeletedFlagFalse(PUBLIC_DISPLAY_SWITCH_CODES).stream()
                 .map(noRuleMapper::toResponse)
                 .map(this::toGeneralSettingResponse)

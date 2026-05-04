@@ -11,6 +11,7 @@ import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.master.carrier.domain.entity.Carrier;
 import com.leo.erp.master.carrier.repository.CarrierRepository;
 import com.leo.erp.master.carrier.mapper.CarrierMapper;
+import com.leo.erp.master.carrier.web.dto.CarrierOptionResponse;
 import com.leo.erp.master.carrier.web.dto.CarrierRequest;
 import com.leo.erp.master.carrier.web.dto.CarrierResponse;
 import org.springframework.data.domain.PageImpl;
@@ -21,11 +22,15 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.LinkedHashSet;
 import java.time.Duration;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
+import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @Service
 public class CarrierService extends AbstractCrudService<Carrier, CarrierRequest, CarrierResponse> {
@@ -33,6 +38,7 @@ public class CarrierService extends AbstractCrudService<Carrier, CarrierRequest,
     private static final String CARRIER_CACHE_KEY = "leo:carrier:all";
     private static final Duration CARRIER_CACHE_TTL = Duration.ofMinutes(30);
     private static final TypeReference<List<CarrierResponse>> CARRIER_LIST_TYPE = new TypeReference<>() { };
+    private static final Pattern LEGACY_VEHICLE_PLATE_JSON_PATTERN = Pattern.compile("\"plate\"\\s*:\\s*\"([^\"]+)\"");
 
     private final CarrierRepository carrierRepository;
     private final CarrierMapper carrierMapper;
@@ -56,9 +62,9 @@ public class CarrierService extends AbstractCrudService<Carrier, CarrierRequest,
     }
 
     @org.springframework.transaction.annotation.Transactional(readOnly = true)
-    public java.util.List<com.leo.erp.common.web.OptionResponse> listActiveOptions() {
-        return carrierRepository.findByDeletedFlagFalseOrderByCarrierCodeAsc().stream()
-                .map(c -> new com.leo.erp.common.web.OptionResponse(c.getCarrierName(), c.getCarrierName()))
+    public List<CarrierOptionResponse> listActiveOptions() {
+        return loadCachedResponses().stream()
+                .map(c -> new CarrierOptionResponse(c.carrierName(), c.carrierName(), resolveVehiclePlates(c)))
                 .toList();
     }
 
@@ -163,6 +169,40 @@ public class CarrierService extends AbstractCrudService<Carrier, CarrierRequest,
                         .map(carrierMapper::toResponse)
                         .toList()
         );
+    }
+
+    private List<String> resolveVehiclePlates(CarrierResponse carrier) {
+        Set<String> plates = new LinkedHashSet<>();
+        addVehiclePlate(plates, carrier.vehiclePlate());
+        addVehiclePlate(plates, carrier.vehiclePlate2());
+        addVehiclePlate(plates, carrier.vehiclePlate3());
+        addLegacyVehiclePlates(plates, carrier.vehiclePlates());
+        return List.copyOf(plates);
+    }
+
+    private void addVehiclePlate(Set<String> plates, String value) {
+        if (value == null || value.trim().isEmpty()) {
+            return;
+        }
+        plates.add(value.trim());
+    }
+
+    private void addLegacyVehiclePlates(Set<String> plates, String value) {
+        if (value == null || value.trim().isEmpty()) {
+            return;
+        }
+        Matcher matcher = LEGACY_VEHICLE_PLATE_JSON_PATTERN.matcher(value);
+        boolean matchedJson = false;
+        while (matcher.find()) {
+            addVehiclePlate(plates, matcher.group(1));
+            matchedJson = true;
+        }
+        if (matchedJson) {
+            return;
+        }
+        for (String plate : value.split("[,，;；\\n\\r]+")) {
+            addVehiclePlate(plates, plate);
+        }
     }
 
     private boolean matches(CarrierResponse item, String keyword, String status) {

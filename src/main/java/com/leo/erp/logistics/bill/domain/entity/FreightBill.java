@@ -28,6 +28,9 @@ public class FreightBill extends AuditableEntity {
     @Column(name = "carrier_name", nullable = false, length = 128)
     private String carrierName;
 
+    @Column(name = "vehicle_plate", length = 32)
+    private String vehiclePlate;
+
     @Column(name = "customer_name", nullable = false, length = 128)
     private String customerName;
 

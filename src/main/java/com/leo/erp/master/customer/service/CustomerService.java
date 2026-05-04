@@ -1,5 +1,6 @@
 package com.leo.erp.master.customer.service;
 
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
@@ -19,12 +20,16 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
+import java.util.List;
 import java.util.Optional;
 
 @Service
 public class CustomerService extends AbstractCrudService<Customer, CustomerRequest, CustomerResponse> {
 
     private static final String CUSTOMER_CACHE_KEY = "leo:customer:all";
+    private static final Duration CUSTOMER_CACHE_TTL = Duration.ofMinutes(30);
+    private static final TypeReference<List<CustomerOptionResponse>> CUSTOMER_OPTION_LIST_TYPE = new TypeReference<>() { };
 
     private final CustomerRepository customerRepository;
     private final CustomerMapper customerMapper;
@@ -48,7 +53,19 @@ public class CustomerService extends AbstractCrudService<Customer, CustomerReque
     }
 
     @Transactional(readOnly = true)
-    public java.util.List<CustomerOptionResponse> listActiveOptions() {
+    public List<CustomerOptionResponse> listActiveOptions() {
+        if (redisJsonCacheSupport == null) {
+            return loadActiveOptions();
+        }
+        return redisJsonCacheSupport.getOrLoad(
+                CUSTOMER_CACHE_KEY,
+                CUSTOMER_CACHE_TTL,
+                CUSTOMER_OPTION_LIST_TYPE,
+                this::loadActiveOptions
+        );
+    }
+
+    private List<CustomerOptionResponse> loadActiveOptions() {
         return customerRepository.findByDeletedFlagFalseOrderByCustomerCodeAsc().stream()
                 .map(c -> new CustomerOptionResponse(
                         c.getId(),

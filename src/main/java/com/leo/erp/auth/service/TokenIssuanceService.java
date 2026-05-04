@@ -2,6 +2,7 @@ package com.leo.erp.auth.service;
 
 import com.leo.erp.auth.domain.entity.RefreshTokenSession;
 import com.leo.erp.auth.domain.entity.UserAccount;
+import com.leo.erp.auth.domain.enums.RevokeReason;
 import com.leo.erp.auth.domain.enums.UserStatus;
 import com.leo.erp.auth.repository.UserAccountRepository;
 import com.leo.erp.auth.web.dto.AuthUserResponse;
@@ -18,6 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.Map;
+import java.util.Optional;
 
 @Service
 public class TokenIssuanceService {
@@ -50,8 +52,17 @@ public class TokenIssuanceService {
         if (refreshToken == null || refreshToken.isBlank()) {
             throw new BadCredentialsException("refreshToken无效或已过期");
         }
-        RefreshTokenSession session = sessionManagementService.findActiveSession(refreshToken)
-                .orElseThrow(() -> new BadCredentialsException("refreshToken无效或已过期"));
+        Optional<RefreshTokenSession> activeOpt = sessionManagementService.findActiveSession(refreshToken);
+
+        if (activeOpt.isEmpty()) {
+            Optional<RefreshTokenSession> anySession = sessionManagementService.findSessionByHash(refreshToken);
+            if (anySession.isPresent() && anySession.get().getRevokeReason() == RevokeReason.CONCURRENT_LIMIT) {
+                throw new BusinessException(ErrorCode.SESSION_EVICTED, ErrorCode.SESSION_EVICTED.getMessage());
+            }
+            throw new BadCredentialsException("refreshToken无效或已过期");
+        }
+
+        RefreshTokenSession session = activeOpt.get();
 
         if (session.getExpiresAt().isBefore(LocalDateTime.now()) || session.isRevoked()) {
             throw new BadCredentialsException("refreshToken无效或已过期");
@@ -104,11 +115,14 @@ public class TokenIssuanceService {
 
         eventPublisher.publishEvent(new SessionInvalidatedEvent(user.getId(), sessionTokenId, false));
 
+        long refreshExpiresIn = jwtTokenService.getRefreshExpirationMs() / 1000;
+
         return new TokenResponse(
                 accessToken,
                 rawRefreshToken,
                 "Bearer",
                 jwtTokenService.getAccessExpirationMs() / 1000,
+                refreshExpiresIn,
                 new AuthUserResponse(
                         user.getId(),
                         user.getLoginName(),

@@ -3,6 +3,7 @@ package com.leo.erp.common.support;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
+import com.leo.erp.common.web.OptionResponse;
 import com.leo.erp.master.warehouse.repository.WarehouseRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
@@ -59,7 +60,7 @@ public class WarehouseSelectionSupport {
         if (normalizedNames.isEmpty()) {
             return;
         }
-        Set<String> configuredNames = loadActiveWarehouseNames();
+        Set<String> configuredNames = loadActiveWarehouseNameSet();
         String missingName = normalizedNames.stream()
                 .filter(name -> !configuredNames.contains(name))
                 .findFirst()
@@ -76,9 +77,15 @@ public class WarehouseSelectionSupport {
         redisJsonCacheSupport.delete(WAREHOUSE_CACHE_KEY);
     }
 
-    private Set<String> loadActiveWarehouseNames() {
+    public List<OptionResponse> listActiveOptions() {
+        return loadActiveWarehouseNames().stream()
+                .map(name -> new OptionResponse(name, name))
+                .toList();
+    }
+
+    private List<String> loadActiveWarehouseNames() {
         if (warehouseRepository == null) {
-            return Set.of();
+            return List.of();
         }
         List<String> names;
         if (redisJsonCacheSupport == null) {
@@ -97,6 +104,10 @@ public class WarehouseSelectionSupport {
                             .toList()
             );
         }
-        return names.stream().collect(Collectors.toSet());
+        return names;
+    }
+
+    private Set<String> loadActiveWarehouseNameSet() {
+        return loadActiveWarehouseNames().stream().collect(Collectors.toSet());
     }
 }

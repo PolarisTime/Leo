@@ -74,12 +74,14 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
     public Page<SalesOrderResponse> page(PageQuery query,
                                          String keyword,
                                          String customerName,
+                                         String projectName,
                                          String status,
                                          java.time.LocalDate startDate,
                                          java.time.LocalDate endDate) {
         Specification<SalesOrder> spec = Specs.<SalesOrder>notDeleted()
                 .and(Specs.keywordLike(keyword, "orderNo", "purchaseOrderNo", "customerName", "projectName"))
                 .and(Specs.equalIfPresent("customerName", customerName))
+                .and(Specs.equalIfPresent("projectName", projectName))
                 .and(Specs.equalIfPresent("status", status))
                 .and(Specs.betweenIfPresent("deliveryDate", startDate, endDate));
         return page(query, spec, repository);

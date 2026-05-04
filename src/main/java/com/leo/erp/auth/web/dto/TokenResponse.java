@@ -5,6 +5,7 @@ public record TokenResponse(
         String refreshToken,
         String tokenType,
         long expiresIn,
+        long refreshExpiresIn,
         AuthUserResponse user
 ) implements LoginResponseBody {
     @Override
@@ -18,6 +19,6 @@ public record TokenResponse(
     }
 
     public TokenResponse withoutRefreshToken() {
-        return new TokenResponse(accessToken, null, tokenType, expiresIn, user);
+        return new TokenResponse(accessToken, null, tokenType, expiresIn, refreshExpiresIn, user);
     }
 }

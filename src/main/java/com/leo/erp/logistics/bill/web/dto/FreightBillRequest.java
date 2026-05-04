@@ -14,6 +14,7 @@ public record FreightBillRequest(
         @NotBlank String billNo,
         String outboundNo,
         @NotBlank String carrierName,
+        String vehiclePlate,
         @NotBlank String customerName,
         @NotBlank String projectName,
         @NotNull LocalDate billTime,

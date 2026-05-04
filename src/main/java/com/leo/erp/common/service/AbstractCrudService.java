@@ -23,6 +23,18 @@ import java.util.Set;
 
 public abstract class AbstractCrudService<E extends AuditableEntity, Req, Res> {
 
+    private static final Set<String> PROTECTED_EDIT_STATUSES = Set.of(
+            StatusConstants.AUDITED,
+            StatusConstants.COMPLETED,
+            StatusConstants.PURCHASE_COMPLETED,
+            StatusConstants.INBOUND_COMPLETED,
+            StatusConstants.SALES_COMPLETED,
+            StatusConstants.PAID,
+            StatusConstants.RECEIVED,
+            StatusConstants.SIGNED,
+            StatusConstants.DELIVERED
+    );
+
     private static final Set<String> PROTECTED_DELETE_STATUSES = Set.of(
             StatusConstants.AUDITED,
             StatusConstants.COMPLETED,
@@ -75,6 +87,7 @@ public abstract class AbstractCrudService<E extends AuditableEntity, Req, Res> {
     @Transactional
     public final Res update(Long id, Req request) {
         E entity = requireEntity(id);
+        assertEditAllowedByStatus(entity);
         validateUpdate(entity, request);
         apply(entity, request);
         Res response = toSavedResponse(saveEntity(entity));
@@ -127,6 +140,17 @@ public abstract class AbstractCrudService<E extends AuditableEntity, Req, Res> {
     protected void beforeDelete(E entity) {
     }
 
+    private void assertEditAllowedByStatus(E entity) {
+        resolveStatus(entity).ifPresent(status -> {
+            if (PROTECTED_EDIT_STATUSES.contains(status)) {
+                throw new BusinessException(
+                        ErrorCode.BUSINESS_ERROR,
+                        "当前单据状态为「" + status + "」，不能编辑"
+                );
+            }
+        });
+    }
+
     private void assertDeleteAllowedByStatus(E entity) {
         resolveStatus(entity).ifPresent(status -> {
             if (PROTECTED_DELETE_STATUSES.contains(status)) {
@@ -139,13 +163,17 @@ public abstract class AbstractCrudService<E extends AuditableEntity, Req, Res> {
     }
 
     private Specification<E> applyListVisibilityPolicy(Specification<E> specification) {
-        if (systemSwitchService == null || !systemSwitchService.shouldHideAuditedListRecords()) {
+        if (systemSwitchService == null) {
             return specification;
         }
-        return specification.and(excludeAuditedStatus());
+        Set<String> hiddenStatuses = systemSwitchService.getHiddenAuditedStatuses();
+        if (hiddenStatuses.isEmpty()) {
+            return specification;
+        }
+        return specification.and(excludeStatuses(hiddenStatuses));
     }
 
-    private Specification<E> excludeAuditedStatus() {
+    private Specification<E> excludeStatuses(Set<String> hiddenStatuses) {
         return (root, query, criteriaBuilder) -> {
             try {
                 root.getModel().getAttribute("status");
@@ -155,7 +183,7 @@ public abstract class AbstractCrudService<E extends AuditableEntity, Req, Res> {
             var statusPath = root.get("status");
             return criteriaBuilder.or(
                     criteriaBuilder.isNull(statusPath),
-                    criteriaBuilder.notEqual(statusPath, StatusConstants.AUDITED)
+                    criteriaBuilder.not(statusPath.in(hiddenStatuses))
             );
         };
     }

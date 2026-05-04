@@ -2,6 +2,7 @@ package com.leo.erp.auth.web;
 
 import com.leo.erp.auth.service.AuthService;
 import com.leo.erp.auth.service.AuthTokenCookieService;
+import com.leo.erp.auth.service.CaptchaService;
 import com.leo.erp.auth.web.dto.Login2faRequest;
 import com.leo.erp.auth.web.dto.LoginRequest;
 import com.leo.erp.auth.web.dto.LoginResponseBody;
@@ -12,9 +13,11 @@ import com.leo.erp.common.api.ApiResponse;
 import com.leo.erp.common.support.IpResolutionService;
 import com.leo.erp.security.jwt.JwtTokenService;
 import com.leo.erp.security.permission.RateLimit;
+import com.leo.erp.system.norule.service.SystemSwitchService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -30,15 +33,21 @@ public class AuthController {
     private final AuthTokenCookieService authTokenCookieService;
     private final JwtTokenService jwtTokenService;
     private final IpResolutionService ipResolutionService;
+    private final CaptchaService captchaService;
+    private final SystemSwitchService systemSwitchService;
 
     public AuthController(AuthService authService,
                           AuthTokenCookieService authTokenCookieService,
                           JwtTokenService jwtTokenService,
-                          IpResolutionService ipResolutionService) {
+                          IpResolutionService ipResolutionService,
+                          CaptchaService captchaService,
+                          SystemSwitchService systemSwitchService) {
         this.authService = authService;
         this.authTokenCookieService = authTokenCookieService;
         this.jwtTokenService = jwtTokenService;
         this.ipResolutionService = ipResolutionService;
+        this.captchaService = captchaService;
+        this.systemSwitchService = systemSwitchService;
     }
 
     @PostMapping("/login")
@@ -106,6 +115,16 @@ public class AuthController {
         );
         authTokenCookieService.clearRefreshTokenCookie(httpResponse);
         return ApiResponse.success("退出成功", null);
+    }
+
+    @GetMapping("/captcha")
+    public ApiResponse<Map<String, Object>> captcha() {
+        CaptchaService.CaptchaResult result = captchaService.generate();
+        return ApiResponse.success(Map.of(
+                "captchaId", result.captchaId(),
+                "captchaImage", result.captchaImage(),
+                "required", systemSwitchService.shouldRequireLoginCaptcha()
+        ));
     }
 
     @GetMapping("/ping")

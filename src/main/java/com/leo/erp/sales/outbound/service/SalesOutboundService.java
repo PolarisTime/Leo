@@ -54,18 +54,20 @@ public class SalesOutboundService extends AbstractCrudService<SalesOutbound, Sal
     public Page<SalesOutboundResponse> page(PageQuery query,
                                             String keyword,
                                             String customerName,
+                                            String projectName,
                                             String status,
                                             java.time.LocalDate startDate,
                                             java.time.LocalDate endDate) {
         Specification<SalesOutbound> spec = Specs.<SalesOutbound>notDeleted()
-                .and(Specs.keywordLike(keyword, "outboundNo", "salesOrderNo", "customerName"))
+                .and(Specs.keywordLike(keyword, "outboundNo", "salesOrderNo", "customerName", "projectName"))
                 .and(Specs.equalIfPresent("customerName", customerName))
+                .and(Specs.equalIfPresent("projectName", projectName))
                 .and(Specs.equalIfPresent("status", status))
                 .and(Specs.betweenIfPresent("outboundDate", startDate, endDate));
         return page(query, spec, repository);
     }
 
-    private static final String[] OUTBOUND_SEARCH_FIELDS = {"outboundNo", "salesOrderNo", "customerName"};
+    private static final String[] OUTBOUND_SEARCH_FIELDS = {"outboundNo", "salesOrderNo", "customerName", "projectName"};
 
     @Transactional(readOnly = true)
     public java.util.List<SalesOutboundResponse> search(String keyword, int maxSize) {

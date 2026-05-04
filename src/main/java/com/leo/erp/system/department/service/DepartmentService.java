@@ -1,5 +1,6 @@
 package com.leo.erp.system.department.service;
 
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.leo.erp.auth.domain.entity.UserAccount;
 import com.leo.erp.auth.repository.UserAccountRepository;
 import com.leo.erp.common.api.PageQuery;
@@ -7,6 +8,7 @@ import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.service.AbstractCrudService;
+import com.leo.erp.common.support.RedisJsonCacheSupport;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.security.permission.PermissionService;
@@ -19,9 +21,11 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.jpa.domain.Specification;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -33,19 +37,33 @@ import java.util.stream.Collectors;
 public class DepartmentService extends AbstractCrudService<Department, DepartmentRequest, DepartmentResponse> {
 
     private static final Set<String> ALLOWED_STATUS = StatusConstants.ALLOWED_ACTIVE_STATUS;
+    private static final String DEPARTMENT_OPTIONS_CACHE_KEY = "leo:department:options";
+    private static final Duration DEPARTMENT_OPTIONS_CACHE_TTL = Duration.ofMinutes(30);
+    private static final TypeReference<List<DepartmentOptionResponse>> DEPARTMENT_OPTION_LIST_TYPE = new TypeReference<>() { };
 
     private final DepartmentRepository departmentRepository;
     private final UserAccountRepository userAccountRepository;
     private final PermissionService permissionService;
+    private final RedisJsonCacheSupport redisJsonCacheSupport;
+
+    @Autowired
+    public DepartmentService(DepartmentRepository departmentRepository,
+                             UserAccountRepository userAccountRepository,
+                             PermissionService permissionService,
+                             SnowflakeIdGenerator idGenerator,
+                             RedisJsonCacheSupport redisJsonCacheSupport) {
+        super(idGenerator);
+        this.departmentRepository = departmentRepository;
+        this.userAccountRepository = userAccountRepository;
+        this.permissionService = permissionService;
+        this.redisJsonCacheSupport = redisJsonCacheSupport;
+    }
 
     public DepartmentService(DepartmentRepository departmentRepository,
                              UserAccountRepository userAccountRepository,
                              PermissionService permissionService,
                              SnowflakeIdGenerator idGenerator) {
-        super(idGenerator);
-        this.departmentRepository = departmentRepository;
-        this.userAccountRepository = userAccountRepository;
-        this.permissionService = permissionService;
+        this(departmentRepository, userAccountRepository, permissionService, idGenerator, null);
     }
 
     @Transactional(readOnly = true)
@@ -63,6 +81,18 @@ public class DepartmentService extends AbstractCrudService<Department, Departmen
 
     @Transactional(readOnly = true)
     public List<DepartmentOptionResponse> options() {
+        if (redisJsonCacheSupport == null) {
+            return loadOptions();
+        }
+        return redisJsonCacheSupport.getOrLoad(
+                DEPARTMENT_OPTIONS_CACHE_KEY,
+                DEPARTMENT_OPTIONS_CACHE_TTL,
+                DEPARTMENT_OPTION_LIST_TYPE,
+                this::loadOptions
+        );
+    }
+
+    private List<DepartmentOptionResponse> loadOptions() {
         return departmentRepository.findByStatusAndDeletedFlagFalseOrderBySortOrderAscIdAsc("正常")
                 .stream()
                 .map(department -> new DepartmentOptionResponse(
@@ -121,6 +151,7 @@ public class DepartmentService extends AbstractCrudService<Department, Departmen
     protected Department saveEntity(Department entity) {
         try {
             Department saved = departmentRepository.save(entity);
+            evictOptionsCache();
             permissionService.evictDepartmentUserCache(saved.getId());
             syncBoundUserDepartmentName(saved);
             return saved;
@@ -129,6 +160,12 @@ public class DepartmentService extends AbstractCrudService<Department, Departmen
                 throw new BusinessException(ErrorCode.BUSINESS_ERROR, "部门编码已存在");
             }
             throw ex;
+        }
+    }
+
+    private void evictOptionsCache() {
+        if (redisJsonCacheSupport != null) {
+            redisJsonCacheSupport.delete(DEPARTMENT_OPTIONS_CACHE_KEY);
         }
     }
 

@@ -2,6 +2,7 @@ package com.leo.erp.auth.service;
 
 import com.leo.erp.auth.domain.entity.RefreshTokenSession;
 import com.leo.erp.auth.domain.entity.UserAccount;
+import com.leo.erp.auth.domain.enums.RevokeReason;
 import com.leo.erp.auth.repository.RefreshTokenSessionRepository;
 import com.leo.erp.auth.repository.UserAccountRepository;
 import com.leo.erp.common.support.AfterCommitExecutor;
@@ -84,7 +85,13 @@ public class SessionManagementService {
 
     @Transactional
     public void revokeSession(RefreshTokenSession session) {
+        revokeSession(session, RevokeReason.MANUAL);
+    }
+
+    @Transactional
+    public void revokeSession(RefreshTokenSession session, RevokeReason reason) {
         session.setRevokedAt(LocalDateTime.now());
+        session.setRevokeReason(reason);
         refreshTokenSessionRepository.save(session);
         scheduleSessionRevocationSideEffects(session.getTokenId());
     }
@@ -138,8 +145,19 @@ public class SessionManagementService {
         for (int i = 0; i < toRevoke; i++) {
             RefreshTokenSession token = activeTokens.get(i);
             token.setRevokedAt(revokedAt);
+            token.setRevokeReason(RevokeReason.CONCURRENT_LIMIT);
             refreshTokenSessionRepository.save(token);
             scheduleSessionRevocationSideEffects(token.getTokenId());
         }
+    }
+
+    public Optional<RefreshTokenSession> findSessionByHash(String rawToken) {
+        return refreshTokenSessionRepository.findByTokenHashAndDeletedFlagFalse(hashToken(rawToken));
+    }
+
+    public Optional<RefreshTokenSession> findRecentlyEvictedSession(Long userId) {
+        return refreshTokenSessionRepository
+                .findFirstByUserIdAndRevokeReasonAndDeletedFlagFalseOrderByRevokedAtDesc(
+                        userId, RevokeReason.CONCURRENT_LIMIT);
     }
 }
