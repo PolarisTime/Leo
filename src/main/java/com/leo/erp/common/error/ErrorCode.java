@@ -6,6 +6,7 @@ public enum ErrorCode {
     UNAUTHORIZED(4010, "未登录或登录已失效"),
     FORBIDDEN(4030, "无权访问"),
     NOT_FOUND(4040, "资源不存在"),
+    SESSION_EVICTED(4011, "您的账号已在其他设备登录，当前会话已被登出"),
     BUSINESS_ERROR(4220, "业务处理失败"),
     INTERNAL_ERROR(5000, "系统内部错误");
 

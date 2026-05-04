@@ -43,12 +43,13 @@ public class SalesOrderController {
             @BindPageQuery(sortFieldKey = "sales-orders") PageQuery query,
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) String customerName,
+            @RequestParam(required = false) String projectName,
             @RequestParam(required = false) String status,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate
     ) {
         return ApiResponse.success(PageResponse.from(
-                service.page(query, keyword, customerName, status, startDate, endDate)
+                service.page(query, keyword, customerName, projectName, status, startDate, endDate)
         ));
     }
 

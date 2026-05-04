@@ -98,7 +98,8 @@ public class InventoryReportQueryRepository {
             rs.getInt("quantity"),
             rs.getString("quantity_unit"),
             rs.getBigDecimal("weight_ton"),
-            rs.getString("unit")
+            rs.getString("unit"),
+            rs.getBigDecimal("piece_weight_ton")
     );
 
     private final NamedParameterJdbcTemplate jdbcTemplate;
@@ -144,8 +145,11 @@ public class InventoryReportQueryRepository {
                         report.quantity,
                         report.quantity_unit,
                         report.weight_ton,
-                        report.unit
+                        report.unit,
+                        material.piece_weight_ton
                     FROM inventory report
+                    LEFT JOIN md_material material ON material.material_code = report.material_code
+                        AND material.deleted_flag = FALSE
                     %s
                 ) paged
                 ORDER BY %s

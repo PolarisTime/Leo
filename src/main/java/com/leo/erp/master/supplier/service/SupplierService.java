@@ -1,5 +1,6 @@
 package com.leo.erp.master.supplier.service;
 
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
@@ -7,6 +8,7 @@ import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.service.AbstractCrudService;
 import com.leo.erp.common.support.RedisJsonCacheSupport;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
+import com.leo.erp.common.web.OptionResponse;
 import com.leo.erp.master.supplier.domain.entity.Supplier;
 import com.leo.erp.master.supplier.repository.SupplierRepository;
 import com.leo.erp.master.supplier.mapper.SupplierMapper;
@@ -18,12 +20,16 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
+import java.util.List;
 import java.util.Optional;
 
 @Service
 public class SupplierService extends AbstractCrudService<Supplier, SupplierRequest, SupplierResponse> {
 
     private static final String SUPPLIER_CACHE_KEY = "leo:supplier:all";
+    private static final Duration SUPPLIER_CACHE_TTL = Duration.ofMinutes(30);
+    private static final TypeReference<List<OptionResponse>> SUPPLIER_OPTION_LIST_TYPE = new TypeReference<>() { };
 
     private final SupplierRepository supplierRepository;
     private final SupplierMapper supplierMapper;
@@ -47,9 +53,21 @@ public class SupplierService extends AbstractCrudService<Supplier, SupplierReque
     }
 
     @Transactional(readOnly = true)
-    public java.util.List<com.leo.erp.common.web.OptionResponse> listActiveOptions() {
+    public List<OptionResponse> listActiveOptions() {
+        if (redisJsonCacheSupport == null) {
+            return loadActiveOptions();
+        }
+        return redisJsonCacheSupport.getOrLoad(
+                SUPPLIER_CACHE_KEY,
+                SUPPLIER_CACHE_TTL,
+                SUPPLIER_OPTION_LIST_TYPE,
+                this::loadActiveOptions
+        );
+    }
+
+    private List<OptionResponse> loadActiveOptions() {
         return supplierRepository.findByDeletedFlagFalseOrderBySupplierCodeAsc().stream()
-                .map(s -> new com.leo.erp.common.web.OptionResponse(s.getSupplierName(), s.getSupplierName()))
+                .map(s -> new OptionResponse(s.getSupplierName(), s.getSupplierName()))
                 .toList();
     }
 

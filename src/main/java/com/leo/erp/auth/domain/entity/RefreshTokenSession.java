@@ -1,8 +1,11 @@
 package com.leo.erp.auth.domain.entity;
 
+import com.leo.erp.auth.domain.enums.RevokeReason;
 import com.leo.erp.common.persistence.AuditableEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import lombok.Getter;
@@ -33,6 +36,10 @@ public class RefreshTokenSession extends AuditableEntity {
 
     @Column(name = "revoked_at")
     private LocalDateTime revokedAt;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "revoke_reason", length = 32)
+    private RevokeReason revokeReason;
 
     @Column(name = "login_ip", length = 64)
     private String loginIp;

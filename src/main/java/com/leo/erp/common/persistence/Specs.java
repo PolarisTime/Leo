@@ -1,13 +1,29 @@
 package com.leo.erp.common.persistence;
 
 import org.springframework.data.jpa.domain.Specification;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
 
 public final class Specs {
 
     private Specs() {}
 
     public static <T> Specification<T> notDeleted() {
-        return (root, q, cb) -> cb.isFalse(root.get("deletedFlag"));
+        return (root, q, cb) -> {
+            if (currentUserIsAdmin()) {
+                return cb.conjunction();
+            }
+            return cb.isFalse(root.get("deletedFlag"));
+        };
+    }
+
+    private static boolean currentUserIsAdmin() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || auth.getAuthorities() == null) return false;
+        return auth.getAuthorities().stream()
+                .map(GrantedAuthority::getAuthority)
+                .anyMatch(a -> a.equals("ROLE_ADMIN"));
     }
 
     public static <T> Specification<T> keywordLike(String keyword, String... fields) {

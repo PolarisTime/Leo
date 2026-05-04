@@ -5,6 +5,7 @@ import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.api.PageResponse;
 import com.leo.erp.common.web.BindPageQuery;
 import com.leo.erp.master.carrier.service.CarrierService;
+import com.leo.erp.master.carrier.web.dto.CarrierOptionResponse;
 import com.leo.erp.master.carrier.web.dto.CarrierRequest;
 import com.leo.erp.master.carrier.web.dto.CarrierResponse;
 import com.leo.erp.security.permission.RequiresPermission;
@@ -23,7 +24,7 @@ public class CarrierController {
 
     @GetMapping("/options")
     @RequiresPermission(resource = "carrier", action = "read")
-    public ApiResponse<java.util.List<com.leo.erp.common.web.OptionResponse>> options() {
+    public ApiResponse<java.util.List<CarrierOptionResponse>> options() {
         return ApiResponse.success(carrierService.listActiveOptions());
     }
 

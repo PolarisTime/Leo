@@ -1,6 +1,7 @@
 package com.leo.erp.auth.repository;
 
 import com.leo.erp.auth.domain.entity.RefreshTokenSession;
+import com.leo.erp.auth.domain.enums.RevokeReason;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Lock;
@@ -27,4 +28,9 @@ public interface RefreshTokenSessionRepository extends JpaRepository<RefreshToke
     );
 
     List<RefreshTokenSession> findByDeletedFlagFalseAndRevokedAtIsNullAndExpiresAtAfter(LocalDateTime now);
+
+    Optional<RefreshTokenSession> findFirstByUserIdAndRevokeReasonAndDeletedFlagFalseOrderByRevokedAtDesc(
+            Long userId,
+            RevokeReason revokeReason
+    );
 }

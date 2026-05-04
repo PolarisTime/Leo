@@ -6,6 +6,8 @@ public record LoginRequest(
         @NotBlank(message = "登录账号不能为空")
         String loginName,
         @NotBlank(message = "密码不能为空")
-        String password
+        String password,
+        String captchaId,
+        String captchaCode
 ) {
 }

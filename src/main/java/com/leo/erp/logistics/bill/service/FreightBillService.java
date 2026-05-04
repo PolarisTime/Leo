@@ -59,14 +59,15 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
         FreightBillResponse response = freightBillMapper.toResponse(entity);
         return new FreightBillResponse(
                 response.id(), response.billNo(), response.outboundNo(),
-                response.carrierName(), response.customerName(), response.projectName(),
+                response.carrierName(), response.vehiclePlate(),
+                response.customerName(), response.projectName(),
                 response.billTime(), response.unitPrice(), response.totalWeight(),
                 response.totalFreight(), response.status(), response.deliveryStatus(),
                 response.remark(),
                 entity.getItems().stream().map(item -> new FreightBillItemResponse(
                         item.getId(), item.getLineNo(), item.getSourceNo(),
                         item.getCustomerName(), item.getProjectName(), item.getMaterialCode(),
-                        item.getMaterialName(), item.getBrand(), item.getCategory(),
+                        resolveMaterialName(item), item.getBrand(), item.getCategory(),
                         item.getMaterial(), item.getSpec(), item.getLength(),
                         item.getQuantity(), item.getQuantityUnit(), item.getPieceWeightTon(), item.getPiecesPerBundle(),
                         item.getBatchNo(), item.getWeightTon(), item.getWarehouseName()
@@ -127,6 +128,7 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
         entity.setBillNo(request.billNo());
         entity.setOutboundNo(request.outboundNo());
         entity.setCarrierName(request.carrierName());
+        entity.setVehiclePlate(emptyToNull(request.vehiclePlate()));
         entity.setCustomerName(request.customerName());
         entity.setProjectName(request.projectName());
         entity.setBillTime(request.billTime());
@@ -154,7 +156,7 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
             item.setCustomerName(source.customerName());
             item.setProjectName(source.projectName());
             item.setMaterialCode(source.materialCode());
-            item.setMaterialName(source.materialName());
+            item.setMaterialName(resolveMaterialName(source));
             item.setBrand(source.brand());
             item.setCategory(source.category());
             item.setMaterial(source.material());
@@ -173,6 +175,26 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
         entity.getItems().sort(java.util.Comparator.comparing(FreightBillItem::getLineNo));
         entity.setTotalWeight(totalWeight);
         entity.setTotalFreight(totalWeight.multiply(request.unitPrice()).setScale(2, RoundingMode.HALF_UP));
+    }
+
+    private String emptyToNull(String value) {
+        return value == null ? null : value.trim().isEmpty() ? null : value.trim();
+    }
+
+    private String resolveMaterialName(FreightBillItemRequest source) {
+        String explicitName = emptyToNull(source.materialName());
+        if (explicitName != null) {
+            return explicitName;
+        }
+        return emptyToNull(source.brand());
+    }
+
+    private String resolveMaterialName(FreightBillItem item) {
+        String explicitName = emptyToNull(item.getMaterialName());
+        if (explicitName != null) {
+            return explicitName;
+        }
+        return emptyToNull(item.getBrand());
     }
 
     @Override
