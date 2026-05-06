@@ -26,13 +26,16 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentCaptor.forClass;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -678,5 +681,182 @@ class SalesOrderServiceTest {
         assertThat(savedItem.getAmount()).isEqualByComparingTo("424.00");
         assertThat(savedOrder.getTotalWeight()).isEqualByComparingTo("0.106");
         assertThat(savedOrder.getTotalAmount()).isEqualByComparingTo("424.00");
+    }
+
+    @Test
+    void shouldAllowReverseAuditWhenOnlySalesOrderStatusChanges() {
+        SalesOrderRepository repository = mock(SalesOrderRepository.class);
+        SnowflakeIdGenerator idGenerator = mock(SnowflakeIdGenerator.class);
+        SalesOrderMapper mapper = mock(SalesOrderMapper.class);
+        TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
+        PurchaseInboundItemQueryService purchaseInboundItemQueryService = mock(PurchaseInboundItemQueryService.class);
+        PurchaseOrderItemQueryService purchaseOrderItemQueryService = mock(PurchaseOrderItemQueryService.class);
+        PurchaseOrderItemPieceWeightService pieceWeightService = mock(PurchaseOrderItemPieceWeightService.class);
+        SalesOrderItemRepository salesOrderItemRepository = mock(SalesOrderItemRepository.class);
+        WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
+        WorkflowTransitionGuard workflowTransitionGuard = mock(WorkflowTransitionGuard.class);
+        SalesOrderService service = new SalesOrderService(
+                repository,
+                idGenerator,
+                mapper,
+                materialSupport,
+                purchaseInboundItemQueryService,
+                purchaseOrderItemQueryService,
+                pieceWeightService,
+                salesOrderItemRepository,
+                warehouseSelectionSupport,
+                workflowTransitionGuard
+        );
+
+        var order = new com.leo.erp.sales.order.domain.entity.SalesOrder();
+        order.setId(1L);
+        order.setOrderNo("SO-REV-001");
+        order.setCustomerName("客户A");
+        order.setProjectName("项目A");
+        order.setDeliveryDate(LocalDate.of(2026, 4, 26));
+        order.setSalesName("张三");
+        order.setStatus("已审核");
+        order.setRemark("备注");
+        var item = new com.leo.erp.sales.order.domain.entity.SalesOrderItem();
+        item.setId(11L);
+        item.setSalesOrder(order);
+        item.setLineNo(1);
+        item.setMaterialCode("M1");
+        item.setBrand("宝钢");
+        item.setCategory("盘螺");
+        item.setMaterial("HRB400");
+        item.setSpec("8");
+        item.setLength("12m");
+        item.setUnit("吨");
+        item.setWarehouseName("一号库");
+        item.setBatchNo("B1");
+        item.setQuantity(2);
+        item.setQuantityUnit("件");
+        item.setPieceWeightTon(new BigDecimal("2.248"));
+        item.setPiecesPerBundle(1);
+        item.setWeightTon(new BigDecimal("4.496"));
+        item.setUnitPrice(new BigDecimal("3000.00"));
+        item.setAmount(new BigDecimal("13488.00"));
+        order.setItems(new java.util.ArrayList<>(List.of(item)));
+
+        SalesOrderRequest request = new SalesOrderRequest(
+                "SO-REV-001",
+                null,
+                null,
+                "客户A",
+                "项目A",
+                LocalDate.of(2026, 4, 26),
+                "张三",
+                "草稿",
+                "备注",
+                List.of(new SalesOrderItemRequest(
+                        11L,
+                        "M1", "宝钢", "盘螺", "HRB400", "8", "12m", "吨",
+                        null, null, "一号库", "B1", 2, "件",
+                        new BigDecimal("2.248"), 1, new BigDecimal("4.496"),
+                        new BigDecimal("3000.00"), new BigDecimal("13488.00")
+                ))
+        );
+
+        when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(order));
+        when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(Map.of("M1", new Material()));
+        when(materialSupport.normalizeBatchNo(any(), eq("B1"), eq(1), eq(true))).thenReturn("B1");
+        when(warehouseSelectionSupport.normalizeWarehouseName("一号库", 1, true)).thenReturn("一号库");
+        when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(mapper.toResponse(any())).thenReturn(new SalesOrderResponse(
+                1L, "SO-REV-001", null, null, "客户A", "项目A", LocalDate.of(2026, 4, 26),
+                "张三", new BigDecimal("4.496"), new BigDecimal("13488.00"), "草稿", "备注", List.of()
+        ));
+
+        service.update(1L, request);
+
+        verify(workflowTransitionGuard).assertAuditPermissionForProtectedValue(
+                "sales-orders",
+                "已审核",
+                "草稿",
+                "已审核",
+                "完成销售"
+        );
+        verify(repository).save(any());
+        assertThat(order.getStatus()).isEqualTo("草稿");
+    }
+
+    @Test
+    void shouldRejectReverseAuditWhenSalesOrderPayloadChangesOtherFields() {
+        SalesOrderRepository repository = mock(SalesOrderRepository.class);
+        SnowflakeIdGenerator idGenerator = mock(SnowflakeIdGenerator.class);
+        SalesOrderMapper mapper = mock(SalesOrderMapper.class);
+        TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
+        PurchaseInboundItemQueryService purchaseInboundItemQueryService = mock(PurchaseInboundItemQueryService.class);
+        PurchaseOrderItemQueryService purchaseOrderItemQueryService = mock(PurchaseOrderItemQueryService.class);
+        PurchaseOrderItemPieceWeightService pieceWeightService = mock(PurchaseOrderItemPieceWeightService.class);
+        SalesOrderItemRepository salesOrderItemRepository = mock(SalesOrderItemRepository.class);
+        WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
+        WorkflowTransitionGuard workflowTransitionGuard = mock(WorkflowTransitionGuard.class);
+        SalesOrderService service = new SalesOrderService(
+                repository,
+                idGenerator,
+                mapper,
+                materialSupport,
+                purchaseInboundItemQueryService,
+                purchaseOrderItemQueryService,
+                pieceWeightService,
+                salesOrderItemRepository,
+                warehouseSelectionSupport,
+                workflowTransitionGuard
+        );
+
+        var order = new com.leo.erp.sales.order.domain.entity.SalesOrder();
+        order.setId(1L);
+        order.setOrderNo("SO-REV-002");
+        order.setCustomerName("客户A");
+        order.setProjectName("项目A");
+        order.setDeliveryDate(LocalDate.of(2026, 4, 26));
+        order.setSalesName("张三");
+        order.setStatus("已审核");
+        var item = new com.leo.erp.sales.order.domain.entity.SalesOrderItem();
+        item.setId(11L);
+        item.setSalesOrder(order);
+        item.setLineNo(1);
+        item.setMaterialCode("M1");
+        item.setBrand("宝钢");
+        item.setCategory("盘螺");
+        item.setMaterial("HRB400");
+        item.setSpec("8");
+        item.setUnit("吨");
+        item.setWarehouseName("一号库");
+        item.setQuantity(2);
+        item.setQuantityUnit("件");
+        item.setPieceWeightTon(new BigDecimal("2.248"));
+        item.setPiecesPerBundle(1);
+        item.setWeightTon(new BigDecimal("4.496"));
+        item.setUnitPrice(new BigDecimal("3000.00"));
+        item.setAmount(new BigDecimal("13488.00"));
+        order.setItems(new java.util.ArrayList<>(List.of(item)));
+
+        SalesOrderRequest request = new SalesOrderRequest(
+                "SO-REV-002",
+                null,
+                null,
+                "客户A",
+                "项目A",
+                LocalDate.of(2026, 4, 27),
+                "张三",
+                "草稿",
+                null,
+                List.of(new SalesOrderItemRequest(
+                        11L,
+                        "M1", "宝钢", "盘螺", "HRB400", "8", null, "吨",
+                        null, null, "一号库", null, 2, "件",
+                        new BigDecimal("2.248"), 1, new BigDecimal("4.496"),
+                        new BigDecimal("3000.00"), new BigDecimal("13488.00")
+                ))
+        );
+
+        when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(order));
+
+        assertThatThrownBy(() -> service.update(1L, request))
+                .hasMessageContaining("当前单据状态为「已审核」，不能编辑");
+        verify(repository, never()).save(any());
     }
 }
