@@ -17,6 +17,7 @@ import com.leo.erp.sales.outbound.domain.entity.SalesOutboundItem;
 import com.leo.erp.sales.outbound.repository.SalesOutboundRepository;
 import com.leo.erp.sales.outbound.mapper.SalesOutboundMapper;
 import com.leo.erp.security.permission.WorkflowTransitionGuard;
+import com.leo.erp.sales.order.service.SalesOrderCompletionSyncService;
 import com.leo.erp.sales.outbound.web.dto.*;
 import org.springframework.data.domain.Page;
 import org.springframework.data.jpa.domain.Specification;
@@ -35,19 +36,22 @@ public class SalesOutboundService extends AbstractCrudService<SalesOutbound, Sal
     private final TradeItemMaterialSupport tradeItemMaterialSupport;
     private final WarehouseSelectionSupport warehouseSelectionSupport;
     private final WorkflowTransitionGuard workflowTransitionGuard;
+    private final SalesOrderCompletionSyncService salesOrderCompletionSyncService;
 
     public SalesOutboundService(SalesOutboundRepository repository,
                                 SnowflakeIdGenerator idGenerator,
                                 SalesOutboundMapper salesOutboundMapper,
                                 TradeItemMaterialSupport tradeItemMaterialSupport,
                                 WarehouseSelectionSupport warehouseSelectionSupport,
-                                WorkflowTransitionGuard workflowTransitionGuard) {
+                                WorkflowTransitionGuard workflowTransitionGuard,
+                                SalesOrderCompletionSyncService salesOrderCompletionSyncService) {
         super(idGenerator);
         this.repository = repository;
         this.salesOutboundMapper = salesOutboundMapper;
         this.tradeItemMaterialSupport = tradeItemMaterialSupport;
         this.warehouseSelectionSupport = warehouseSelectionSupport;
         this.workflowTransitionGuard = workflowTransitionGuard;
+        this.salesOrderCompletionSyncService = salesOrderCompletionSyncService;
     }
 
     @Transactional(readOnly = true)
@@ -211,7 +215,9 @@ public class SalesOutboundService extends AbstractCrudService<SalesOutbound, Sal
 
     @Override
     protected SalesOutbound saveEntity(SalesOutbound entity) {
-        return repository.save(entity);
+        SalesOutbound saved = repository.save(entity);
+        salesOrderCompletionSyncService.syncBySalesOrderReference(saved.getSalesOrderNo());
+        return saved;
     }
 
     @Override

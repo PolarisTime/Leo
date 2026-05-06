@@ -1,6 +1,7 @@
 package com.leo.erp.sales.outbound.service;
 
 import com.leo.erp.common.support.SnowflakeIdGenerator;
+import com.leo.erp.sales.order.service.SalesOrderCompletionSyncService;
 import com.leo.erp.common.support.TradeItemMaterialSupport;
 import com.leo.erp.common.support.WarehouseSelectionSupport;
 import com.leo.erp.master.material.domain.entity.Material;
@@ -47,7 +48,8 @@ class SalesOutboundServiceTest {
                 mapper,
                 materialSupport,
                 warehouseSelectionSupport,
-                mock(WorkflowTransitionGuard.class)
+                mock(WorkflowTransitionGuard.class),
+                mock(SalesOrderCompletionSyncService.class)
         );
 
         SalesOutboundRequest request = new SalesOutboundRequest(
