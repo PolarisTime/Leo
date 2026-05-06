@@ -85,7 +85,7 @@ class AuthenticatedUserCacheServiceTest {
         assertThat(principal.orElseThrow().totpEnabled()).isFalse();
         assertThat(principal.orElseThrow().forceTotpSetup()).isTrue();
         assertThat(redisTemplate.lastSetKey).isEqualTo("auth:user:snapshot:2");
-        assertThat(redisTemplate.lastSetTtl).isEqualTo(Duration.ofMinutes(5));
+        assertThat(redisTemplate.lastSetTtl).isEqualTo(Duration.ofMinutes(2));
         assertThat(redisTemplate.values.get("auth:user:snapshot:2")).contains("\"forceTotpSetup\":true");
     }
 

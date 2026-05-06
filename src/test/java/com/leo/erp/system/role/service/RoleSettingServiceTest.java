@@ -4,6 +4,7 @@ import com.leo.erp.auth.repository.UserRoleRepository;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
+import com.leo.erp.security.jwt.AuthenticatedUserCacheService;
 import com.leo.erp.security.permission.PermissionService;
 import com.leo.erp.system.role.domain.entity.RolePermission;
 import com.leo.erp.system.role.repository.RolePermissionRepository;
@@ -18,6 +19,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.mock;
 
 class RoleSettingServiceTest {
 
@@ -28,7 +30,8 @@ class RoleSettingServiceTest {
                 rolePermissionRepository(),
                 repository(UserRoleRepository.class),
                 new SnowflakeIdGenerator(0L),
-                permissionService()
+                permissionService(),
+                mock(AuthenticatedUserCacheService.class)
         );
 
         assertThatThrownBy(() -> service.saveRolePermissions(1L, List.of(
@@ -46,7 +49,8 @@ class RoleSettingServiceTest {
                 rolePermissionRepository(),
                 repository(UserRoleRepository.class),
                 new SnowflakeIdGenerator(0L),
-                permissionService()
+                permissionService(),
+                mock(AuthenticatedUserCacheService.class)
         );
 
         assertThatThrownBy(() -> service.page(PageQuery.of(0, 20, null, null), null, "INVALID"))
@@ -62,7 +66,8 @@ class RoleSettingServiceTest {
                 rolePermissionRepository(saved),
                 repository(UserRoleRepository.class),
                 new SnowflakeIdGenerator(0L),
-                permissionService()
+                permissionService(),
+                mock(AuthenticatedUserCacheService.class)
         );
 
         service.saveRolePermissions(1L, List.of(new RolePermissionItem("material", "update")));
