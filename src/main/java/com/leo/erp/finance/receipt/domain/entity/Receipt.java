@@ -1,12 +1,11 @@
 package com.leo.erp.finance.receipt.domain.entity;
 
 import com.leo.erp.common.persistence.AuditableEntity;
+import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
-import jakarta.persistence.PostLoad;
-import jakarta.persistence.PostPersist;
-import jakarta.persistence.PostUpdate;
+import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
 import jakarta.persistence.Transient;
 import jakarta.persistence.Version;
@@ -15,6 +14,10 @@ import lombok.Setter;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Set;
 
 @Getter
 @Setter
@@ -58,13 +61,9 @@ public class Receipt extends AuditableEntity {
     @Column(name = "remark", length = 255)
     private String remark;
 
-    @Transient
-    private Long originalSourceStatementId;
+    @OneToMany(mappedBy = "receipt", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<ReceiptAllocation> items = new ArrayList<>();
 
-    @PostLoad
-    @PostPersist
-    @PostUpdate
-    void captureOriginalSourceStatementId() {
-        originalSourceStatementId = sourceStatementId;
-    }
+    @Transient
+    private Set<Long> originalAllocationStatementIds = new LinkedHashSet<>();
 }

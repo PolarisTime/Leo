@@ -9,6 +9,7 @@ import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.service.AbstractCrudService;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
+import com.leo.erp.security.jwt.AuthenticatedUserCacheService;
 import com.leo.erp.security.permission.PermissionService;
 import com.leo.erp.security.permission.ResourcePermissionCatalog;
 import com.leo.erp.system.dashboard.service.DashboardSummaryService;
@@ -49,6 +50,7 @@ public class RoleSettingService extends AbstractCrudService<RoleSetting, RoleSet
     private final UserRoleRepository userRoleRepository;
     private final PermissionService permissionService;
     private final DashboardSummaryService dashboardSummaryService;
+    private final AuthenticatedUserCacheService authenticatedUserCacheService;
 
     @Autowired
     public RoleSettingService(RoleSettingRepository repository,
@@ -56,21 +58,24 @@ public class RoleSettingService extends AbstractCrudService<RoleSetting, RoleSet
                               UserRoleRepository userRoleRepository,
                               SnowflakeIdGenerator idGenerator,
                               PermissionService permissionService,
-                              DashboardSummaryService dashboardSummaryService) {
+                              DashboardSummaryService dashboardSummaryService,
+                              AuthenticatedUserCacheService authenticatedUserCacheService) {
         super(idGenerator);
         this.repository = repository;
         this.rolePermissionRepository = rolePermissionRepository;
         this.userRoleRepository = userRoleRepository;
         this.permissionService = permissionService;
         this.dashboardSummaryService = dashboardSummaryService;
+        this.authenticatedUserCacheService = authenticatedUserCacheService;
     }
 
     public RoleSettingService(RoleSettingRepository repository,
                               RolePermissionRepository rolePermissionRepository,
                               UserRoleRepository userRoleRepository,
                               SnowflakeIdGenerator idGenerator,
-                              PermissionService permissionService) {
-        this(repository, rolePermissionRepository, userRoleRepository, idGenerator, permissionService, null);
+                              PermissionService permissionService,
+                              AuthenticatedUserCacheService authenticatedUserCacheService) {
+        this(repository, rolePermissionRepository, userRoleRepository, idGenerator, permissionService, null, authenticatedUserCacheService);
     }
 
     @Transactional(readOnly = true)
@@ -198,6 +203,7 @@ public class RoleSettingService extends AbstractCrudService<RoleSetting, RoleSet
             rolePermissionRepository.saveAll(toSave);
         }
         permissionService.evictAllCache();
+        authenticatedUserCacheService.evictAll();
         if (dashboardSummaryService != null) {
             dashboardSummaryService.evictAllCache();
         }
@@ -370,6 +376,7 @@ public class RoleSettingService extends AbstractCrudService<RoleSetting, RoleSet
     protected RoleSetting saveEntity(RoleSetting entity) {
         RoleSetting saved = repository.save(entity);
         permissionService.evictAllCache();
+        authenticatedUserCacheService.evictAll();
         if (dashboardSummaryService != null) {
             dashboardSummaryService.evictAllCache();
         }

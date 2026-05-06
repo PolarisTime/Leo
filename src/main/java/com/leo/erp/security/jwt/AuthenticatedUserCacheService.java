@@ -20,7 +20,7 @@ import java.util.Optional;
 public class AuthenticatedUserCacheService {
 
     private static final String USER_CACHE_PREFIX = "auth:user:snapshot:";
-    private static final Duration USER_CACHE_TTL = Duration.ofMinutes(5);
+    private static final Duration USER_CACHE_TTL = Duration.ofMinutes(2);
 
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
@@ -59,6 +59,13 @@ public class AuthenticatedUserCacheService {
             return;
         }
         redisTemplate.delete(cacheKey(userId));
+    }
+
+    public void evictAll() {
+        var keys = redisTemplate.keys(USER_CACHE_PREFIX + "*");
+        if (keys != null && !keys.isEmpty()) {
+            redisTemplate.delete(keys);
+        }
     }
 
     private Optional<SecurityPrincipal> parseCachedPrincipal(String cacheKey, String cached) {

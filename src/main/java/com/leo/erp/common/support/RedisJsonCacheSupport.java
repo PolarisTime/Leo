@@ -23,6 +23,8 @@ import java.util.function.Supplier;
 public class RedisJsonCacheSupport {
 
     private static final Logger log = LoggerFactory.getLogger(RedisJsonCacheSupport.class);
+    private static final int SCAN_BATCH_SIZE = 256;
+    private static final int MAX_SCAN_KEYS = 10000;
 
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
@@ -114,20 +116,30 @@ public class RedisJsonCacheSupport {
             return;
         }
         RedisConnection connection = null;
-        List<String> batch = new ArrayList<>(256);
+        List<String> batch = new ArrayList<>(SCAN_BATCH_SIZE);
+        int totalDeleted = 0;
         try {
             connection = connectionFactory.getConnection();
-            try (Cursor<byte[]> cursor = connection.scan(ScanOptions.scanOptions().match(pattern).count(256).build())) {
+            try (Cursor<byte[]> cursor = connection.scan(ScanOptions.scanOptions().match(pattern).count(SCAN_BATCH_SIZE).build())) {
                 while (cursor.hasNext()) {
                     batch.add(new String(cursor.next(), StandardCharsets.UTF_8));
-                    if (batch.size() >= 256) {
+                    if (batch.size() >= SCAN_BATCH_SIZE) {
                         redisTemplate.delete(batch);
+                        totalDeleted += batch.size();
                         batch.clear();
+                        if (totalDeleted >= MAX_SCAN_KEYS) {
+                            log.warn("Redis pattern delete reached max scan limit, pattern={}, deleted={}", pattern, totalDeleted);
+                            break;
+                        }
                     }
                 }
             }
             if (!batch.isEmpty()) {
                 redisTemplate.delete(batch);
+                totalDeleted += batch.size();
+            }
+            if (totalDeleted > 0) {
+                log.info("Redis pattern delete completed, pattern={}, deleted={}", pattern, totalDeleted);
             }
         } catch (RuntimeException ex) {
             log.warn("Redis cache pattern delete failed, pattern={}", pattern, ex);

@@ -181,19 +181,23 @@ public class CustomerStatementService extends AbstractCrudService<CustomerStatem
         }
         entity.getItems().sort(java.util.Comparator.comparing(CustomerStatementItem::getLineNo));
         entity.setSourceOrderNos(String.join(", ", sourceOrderNos));
-        BigDecimal settledReceiptAmount = entity.getReceiptAmount() == null ? BigDecimal.ZERO : entity.getReceiptAmount();
-        if (settledReceiptAmount.compareTo(salesAmount) > 0) {
+        BigDecimal receiptAmount = request.receiptAmount() == null
+                ? BigDecimal.ZERO
+                : TradeItemCalculator.scaleAmount(request.receiptAmount());
+        if (receiptAmount.compareTo(BigDecimal.ZERO) < 0) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "客户对账单收款金额不能为负数");
+        }
+        if (receiptAmount.compareTo(salesAmount) > 0) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "客户对账单销售金额不能低于已收款金额");
         }
         entity.setSalesAmount(salesAmount);
-        entity.setReceiptAmount(BigDecimal.ZERO);
-        entity.setClosingAmount(salesAmount);
+        entity.setReceiptAmount(receiptAmount);
+        entity.setClosingAmount(TradeItemCalculator.scaleAmount(salesAmount.subtract(receiptAmount).max(BigDecimal.ZERO)));
     }
 
     @Override
     protected CustomerStatement saveEntity(CustomerStatement entity) {
-        CustomerStatement saved = repository.save(entity);
-        return statementSettlementSyncService.syncCustomerStatement(saved);
+        return repository.save(entity);
     }
 
     @Override
