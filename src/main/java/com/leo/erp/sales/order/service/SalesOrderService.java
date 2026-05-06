@@ -196,6 +196,7 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
                         .filter(id -> id != null)
                         .toList()
         );
+        Map<Long, BigDecimal> purchaseOrderRemainingWeightMap = loadPurchaseOrderRemainingWeightMap(sourcePurchaseOrderItemIds);
         List<SalesOrderItem> items = ManagedEntityItemSupport.syncById(
                 entity.getItems(),
                 request.items(),
@@ -226,7 +227,13 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
             item.setBatchNo(tradeItemMaterialSupport.normalizeBatchNo(material, source.batchNo(), i + 1, true));
             item.setQuantity(source.quantity());
             item.setQuantityUnit(TradeItemCalculator.normalizeQuantityUnit(source.quantityUnit()));
-            BigDecimal pieceWeightTon = resolveSalesOrderPieceWeightTon(source, sourcePurchaseOrderItemMap);
+            BigDecimal pieceWeightTon = resolveSalesOrderPieceWeightTon(
+                    source,
+                    sourcePurchaseOrderItemMap,
+                    purchaseOrderAllocatedMap,
+                    requestPurchaseOrderAllocatedMap,
+                    purchaseOrderRemainingWeightMap
+            );
             item.setPieceWeightTon(pieceWeightTon);
             item.setPiecesPerBundle(source.piecesPerBundle());
             BigDecimal weightTon = resolveSalesOrderWeightTon(source, sourceInboundItemMap,
@@ -337,9 +344,21 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
         return allocatedMap;
     }
 
+    private Map<Long, BigDecimal> loadPurchaseOrderRemainingWeightMap(List<Long> sourcePurchaseOrderItemIds) {
+        if (sourcePurchaseOrderItemIds.isEmpty()) {
+            return Map.of();
+        }
+        Map<Long, BigDecimal> remainingWeightMap =
+                purchaseOrderItemPieceWeightService.summarizeRemainingWeightByPurchaseOrderItemIds(sourcePurchaseOrderItemIds);
+        return remainingWeightMap == null ? Map.of() : remainingWeightMap;
+    }
+
     private BigDecimal resolveSalesOrderPieceWeightTon(
             SalesOrderItemRequest source,
-            Map<Long, PurchaseOrderItem> sourcePurchaseOrderItemMap
+            Map<Long, PurchaseOrderItem> sourcePurchaseOrderItemMap,
+            Map<Long, SourceAllocation> purchaseOrderAllocatedMap,
+            Map<Long, SourceAllocation> requestPurchaseOrderAllocatedMap,
+            Map<Long, BigDecimal> purchaseOrderRemainingWeightMap
     ) {
         Long sourcePurchaseOrderItemId = source.sourcePurchaseOrderItemId();
         if (sourcePurchaseOrderItemId == null) {
@@ -354,7 +373,37 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
         if (sourceQuantity <= 0 || sourceWeightTon.compareTo(BigDecimal.ZERO) <= 0) {
             return TradeItemCalculator.scaleWeightTon(source.pieceWeightTon());
         }
-        return TradeItemCalculator.calculateAveragePieceWeightTon(sourceQuantity, sourceWeightTon);
+        BigDecimal defaultPieceWeightTon = TradeItemCalculator.calculateAveragePieceWeightTon(sourceQuantity, sourceWeightTon);
+        BigDecimal remainingWeightTon = purchaseOrderRemainingWeightMap.get(sourcePurchaseOrderItemId);
+        if (remainingWeightTon == null || source.quantity() == null || source.quantity() <= 0) {
+            return defaultPieceWeightTon;
+        }
+        SourceAllocation persistedAllocation = purchaseOrderAllocatedMap.getOrDefault(sourcePurchaseOrderItemId, SourceAllocation.ZERO);
+        SourceAllocation requestAllocation = requestPurchaseOrderAllocatedMap.getOrDefault(sourcePurchaseOrderItemId, SourceAllocation.ZERO);
+        int availableQuantity = sourceQuantity - persistedAllocation.quantity() - requestAllocation.quantity();
+        if (source.quantity() != availableQuantity) {
+            return defaultPieceWeightTon;
+        }
+        BigDecimal currentRemainingWeightTon = TradeItemCalculator.scaleWeightTon(
+                remainingWeightTon.subtract(requestAllocation.weightTon())
+        );
+        BigDecimal exactResidualPieceWeightTon =
+                resolveExactResidualPieceWeightTon(availableQuantity, currentRemainingWeightTon);
+        return exactResidualPieceWeightTon != null ? exactResidualPieceWeightTon : defaultPieceWeightTon;
+    }
+
+    private BigDecimal resolveExactResidualPieceWeightTon(int quantity, BigDecimal weightTon) {
+        if (quantity <= 0) {
+            return null;
+        }
+        BigDecimal scaledWeightTon = TradeItemCalculator.scaleWeightTon(weightTon);
+        if (scaledWeightTon.compareTo(BigDecimal.ZERO) <= 0) {
+            return null;
+        }
+        BigDecimal pieceWeightTon = TradeItemCalculator.calculateAveragePieceWeightTon(quantity, scaledWeightTon);
+        return TradeItemCalculator.calculateWeightTon(quantity, pieceWeightTon).compareTo(scaledWeightTon) == 0
+                ? pieceWeightTon
+                : null;
     }
 
     private BigDecimal resolveSalesOrderWeightTon(
