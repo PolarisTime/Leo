@@ -69,6 +69,18 @@ spring:
       password: ${SPRING_DATA_REDIS_PASSWORD:}
       # 使用的逻辑库编号
       database: ${SPRING_DATA_REDIS_DATABASE:3}
+      # 连接超时
+      timeout: ${SPRING_DATA_REDIS_TIMEOUT:3000ms}
+      lettuce:
+        pool:
+          # 最大活跃连接数
+          max-active: ${SPRING_DATA_REDIS_POOL_MAX_ACTIVE:16}
+          # 最大空闲连接数
+          max-idle: ${SPRING_DATA_REDIS_POOL_MAX_IDLE:8}
+          # 最小空闲连接数
+          min-idle: ${SPRING_DATA_REDIS_POOL_MIN_IDLE:4}
+          # 获取连接最大等待时间
+          max-wait: ${SPRING_DATA_REDIS_POOL_MAX_WAIT:2000ms}
       repositories:
         # 不启用 Spring Data Redis Repository 模式
         enabled: false

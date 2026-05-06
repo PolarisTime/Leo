@@ -27,7 +27,9 @@ class PermissionCache {
 
     static final String CACHE_PREFIX = "leo:resource-perm:";
     static final String SCOPE_CACHE_PREFIX = "leo:resource-scope:";
-    static final long CACHE_TTL_HOURS = 1;
+    static final long CACHE_TTL_MINUTES = 5;
+    private static final int SCAN_BATCH_SIZE = 256;
+    private static final int MAX_SCAN_KEYS = 10000;
 
     private final StringRedisTemplate redisTemplate;
     private final RedisJsonCacheSupport redisJsonCacheSupport;
@@ -67,10 +69,10 @@ class PermissionCache {
         Map<String, String> permissionCacheData = new LinkedHashMap<>();
         snapshot.permissionMap().forEach((resource, actions) -> permissionCacheData.put(resource, String.join(",", actions)));
         redisTemplate.opsForHash().putAll(CACHE_PREFIX + userId, permissionCacheData);
-        redisTemplate.expire(CACHE_PREFIX + userId, CACHE_TTL_HOURS, TimeUnit.HOURS);
+        redisTemplate.expire(CACHE_PREFIX + userId, CACHE_TTL_MINUTES, TimeUnit.MINUTES);
         if (!snapshot.dataScopeByPermission().isEmpty()) {
             redisTemplate.opsForHash().putAll(SCOPE_CACHE_PREFIX + userId, snapshot.dataScopeByPermission());
-            redisTemplate.expire(SCOPE_CACHE_PREFIX + userId, CACHE_TTL_HOURS, TimeUnit.HOURS);
+            redisTemplate.expire(SCOPE_CACHE_PREFIX + userId, CACHE_TTL_MINUTES, TimeUnit.MINUTES);
         }
     }
 
@@ -107,16 +109,26 @@ class PermissionCache {
 
     private void scanAndDelete(RedisConnection connection, String pattern, List<String> batch) {
         batch.clear();
-        try (Cursor<byte[]> cursor = connection.scan(ScanOptions.scanOptions().match(pattern).count(256).build())) {
+        int totalDeleted = 0;
+        try (Cursor<byte[]> cursor = connection.scan(ScanOptions.scanOptions().match(pattern).count(SCAN_BATCH_SIZE).build())) {
             while (cursor.hasNext()) {
                 batch.add(new String(cursor.next(), StandardCharsets.UTF_8));
-                if (batch.size() >= 256) {
+                if (batch.size() >= SCAN_BATCH_SIZE) {
                     redisTemplate.delete(batch);
+                    totalDeleted += batch.size();
                     batch.clear();
+                    if (totalDeleted >= MAX_SCAN_KEYS) {
+                        log.warn("Permission cache scan reached max limit, pattern={}, deleted={}", pattern, totalDeleted);
+                        break;
+                    }
                 }
             }
             if (!batch.isEmpty()) {
                 redisTemplate.delete(batch);
+                totalDeleted += batch.size();
+            }
+            if (totalDeleted > 0) {
+                log.info("Permission cache scan delete completed, pattern={}, deleted={}", pattern, totalDeleted);
             }
         }
     }

@@ -2,6 +2,7 @@ package com.leo.erp.finance.receipt.web.dto;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.List;
 
 public record ReceiptResponse(
         Long id,
@@ -14,6 +15,7 @@ public record ReceiptResponse(
         BigDecimal amount,
         String status,
         String operatorName,
-        String remark
+        String remark,
+        List<ReceiptAllocationResponse> items
 ) {
 }

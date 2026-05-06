@@ -192,19 +192,23 @@ public class SupplierStatementService extends AbstractCrudService<SupplierStatem
         }
         entity.getItems().sort(java.util.Comparator.comparing(SupplierStatementItem::getLineNo));
         entity.setSourceInboundNos(String.join(", ", sourceInboundNos));
-        BigDecimal settledPaymentAmount = entity.getPaymentAmount() == null ? BigDecimal.ZERO : entity.getPaymentAmount();
-        if (settledPaymentAmount.compareTo(purchaseAmount) > 0) {
+        BigDecimal paymentAmount = request.paymentAmount() == null
+                ? BigDecimal.ZERO
+                : TradeItemCalculator.scaleAmount(request.paymentAmount());
+        if (paymentAmount.compareTo(BigDecimal.ZERO) < 0) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "供应商对账单付款金额不能为负数");
+        }
+        if (paymentAmount.compareTo(purchaseAmount) > 0) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "供应商对账单采购金额不能低于已付款金额");
         }
         entity.setPurchaseAmount(purchaseAmount);
-        entity.setPaymentAmount(BigDecimal.ZERO);
-        entity.setClosingAmount(purchaseAmount);
+        entity.setPaymentAmount(paymentAmount);
+        entity.setClosingAmount(TradeItemCalculator.scaleAmount(purchaseAmount.subtract(paymentAmount).max(BigDecimal.ZERO)));
     }
 
     @Override
     protected SupplierStatement saveEntity(SupplierStatement entity) {
-        SupplierStatement saved = repository.save(entity);
-        return statementSettlementSyncService.syncSupplierStatement(saved);
+        return repository.save(entity);
     }
 
     @Override

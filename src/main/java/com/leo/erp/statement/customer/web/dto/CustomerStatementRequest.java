@@ -18,8 +18,8 @@ public record CustomerStatementRequest(
         @NotNull LocalDate startDate,
         @NotNull LocalDate endDate,
         @NotNull @DecimalMin("0.00") BigDecimal salesAmount,
-        BigDecimal receiptAmount,
-        BigDecimal closingAmount,
+        @DecimalMin("0.00") BigDecimal receiptAmount,
+        @DecimalMin("0.00") BigDecimal closingAmount,
         String status,
         String remark,
         @Valid @NotEmpty List<CustomerStatementItemRequest> items

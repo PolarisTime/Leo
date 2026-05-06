@@ -17,8 +17,8 @@ public record SupplierStatementRequest(
         @NotNull LocalDate startDate,
         @NotNull LocalDate endDate,
         @NotNull @DecimalMin("0.00") BigDecimal purchaseAmount,
-        BigDecimal paymentAmount,
-        BigDecimal closingAmount,
+        @DecimalMin("0.00") BigDecimal paymentAmount,
+        @DecimalMin("0.00") BigDecimal closingAmount,
         String status,
         String remark,
         @Valid @NotEmpty List<SupplierStatementItemRequest> items
