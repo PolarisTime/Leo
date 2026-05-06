@@ -229,8 +229,8 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
             BigDecimal pieceWeightTon = resolveSalesOrderPieceWeightTon(source, sourcePurchaseOrderItemMap);
             item.setPieceWeightTon(pieceWeightTon);
             item.setPiecesPerBundle(source.piecesPerBundle());
-            BigDecimal weightTon = resolveSalesOrderWeightTon(source, sourceInboundItemMap, sourcePurchaseOrderItemMap,
-                    inboundAllocatedMap, requestInboundAllocatedMap, item.getId(), i + 1, pieceWeightTon);
+            BigDecimal weightTon = resolveSalesOrderWeightTon(source, sourceInboundItemMap,
+                    inboundAllocatedMap, requestInboundAllocatedMap, pieceWeightTon);
             item.setWeightTon(weightTon);
             item.setUnitPrice(source.unitPrice());
             BigDecimal amount = TradeItemCalculator.calculateAmount(weightTon, source.unitPrice());
@@ -258,7 +258,12 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
 
     @Override
     protected SalesOrder saveEntity(SalesOrder entity) {
-        return repository.save(entity);
+        if (!hasPurchaseOrderBackedItems(entity)) {
+            return repository.save(entity);
+        }
+        SalesOrder saved = repository.saveAndFlush(entity);
+        finalizePurchaseOrderAllocations(saved);
+        return repository.save(saved);
     }
 
     @Override
@@ -355,23 +360,14 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
     private BigDecimal resolveSalesOrderWeightTon(
             SalesOrderItemRequest source,
             Map<Long, PurchaseInboundItem> sourceInboundItemMap,
-            Map<Long, PurchaseOrderItem> sourcePurchaseOrderItemMap,
             Map<Long, SourceAllocation> inboundAllocatedMap,
             Map<Long, SourceAllocation> requestInboundAllocatedMap,
-            Long salesOrderItemId,
-            int lineNo,
             BigDecimal pieceWeightTon
     ) {
         BigDecimal defaultWeightTon = TradeItemCalculator.calculateWeightTon(source.quantity(), pieceWeightTon);
         Long sourcePurchaseOrderItemId = source.sourcePurchaseOrderItemId();
         if (sourcePurchaseOrderItemId != null) {
-            return resolvePurchaseOrderWeightTon(
-                    source,
-                    sourcePurchaseOrderItemMap,
-                    salesOrderItemId,
-                    lineNo,
-                    defaultWeightTon
-            );
+            return defaultWeightTon;
         }
         Long sourceInboundItemId = source.sourceInboundItemId();
         if (sourceInboundItemId == null || source.quantity() == null || source.quantity() <= 0) {
@@ -399,33 +395,6 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
         return residualWeightTon.compareTo(BigDecimal.ZERO) < 0
                 ? BigDecimal.ZERO.setScale(3)
                 : residualWeightTon;
-    }
-
-    private BigDecimal resolvePurchaseOrderWeightTon(
-            SalesOrderItemRequest source,
-            Map<Long, PurchaseOrderItem> sourcePurchaseOrderItemMap,
-            Long salesOrderItemId,
-            int lineNo,
-            BigDecimal defaultWeightTon
-    ) {
-        Long sourcePurchaseOrderItemId = source.sourcePurchaseOrderItemId();
-        if (sourcePurchaseOrderItemId == null || source.quantity() == null || source.quantity() <= 0) {
-            return defaultWeightTon;
-        }
-        PurchaseOrderItem sourcePurchaseOrderItem = sourcePurchaseOrderItemMap.get(sourcePurchaseOrderItemId);
-        if (sourcePurchaseOrderItem == null || sourcePurchaseOrderItem.getWeightTon() == null) {
-            return defaultWeightTon;
-        }
-        int sourceQuantity = sourcePurchaseOrderItem.getQuantity() == null ? 0 : sourcePurchaseOrderItem.getQuantity();
-        if (sourceQuantity <= 0) {
-            return defaultWeightTon;
-        }
-        return purchaseOrderItemPieceWeightService.allocateForSalesOrderItem(
-                sourcePurchaseOrderItem,
-                source.quantity(),
-                salesOrderItemId,
-                lineNo
-        );
     }
 
     private void validateSourceAllocation(
@@ -484,6 +453,47 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
                 left.quantity() + right.quantity(),
                 TradeItemCalculator.scaleWeightTon(left.weightTon().add(right.weightTon()))
         );
+    }
+
+    private boolean hasPurchaseOrderBackedItems(SalesOrder entity) {
+        return entity.getItems().stream()
+                .anyMatch(item -> item.getSourcePurchaseOrderItemId() != null
+                        && item.getQuantity() != null
+                        && item.getQuantity() > 0);
+    }
+
+    private void finalizePurchaseOrderAllocations(SalesOrder entity) {
+        List<Long> sourcePurchaseOrderItemIds = entity.getItems().stream()
+                .map(SalesOrderItem::getSourcePurchaseOrderItemId)
+                .filter(id -> id != null)
+                .distinct()
+                .toList();
+        Map<Long, PurchaseOrderItem> sourcePurchaseOrderItemMap = loadSourcePurchaseOrderItemMap(sourcePurchaseOrderItemIds);
+        BigDecimal totalWeight = BigDecimal.ZERO;
+        BigDecimal totalAmount = BigDecimal.ZERO;
+        for (SalesOrderItem item : entity.getItems()) {
+            BigDecimal weightTon = TradeItemCalculator.scaleWeightTon(item.getWeightTon());
+            if (item.getSourcePurchaseOrderItemId() != null && item.getQuantity() != null && item.getQuantity() > 0) {
+                int lineNo = item.getLineNo() == null ? 0 : item.getLineNo();
+                PurchaseOrderItem sourcePurchaseOrderItem = sourcePurchaseOrderItemMap.get(item.getSourcePurchaseOrderItemId());
+                if (sourcePurchaseOrderItem == null) {
+                    throw new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行来源采购订单明细不存在");
+                }
+                weightTon = purchaseOrderItemPieceWeightService.allocateForSalesOrderItem(
+                        sourcePurchaseOrderItem,
+                        item.getQuantity(),
+                        item.getId(),
+                        lineNo
+                );
+                item.setWeightTon(weightTon);
+            }
+            BigDecimal amount = TradeItemCalculator.calculateAmount(weightTon, item.getUnitPrice());
+            item.setAmount(amount);
+            totalWeight = totalWeight.add(weightTon);
+            totalAmount = totalAmount.add(amount);
+        }
+        entity.setTotalWeight(TradeItemCalculator.scaleWeightTon(totalWeight));
+        entity.setTotalAmount(TradeItemCalculator.scaleAmount(totalAmount));
     }
 
     private record SourceAllocation(

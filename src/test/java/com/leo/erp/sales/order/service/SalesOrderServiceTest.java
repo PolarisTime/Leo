@@ -19,6 +19,7 @@ import com.leo.erp.sales.order.web.dto.SalesOrderRequest;
 import com.leo.erp.sales.order.web.dto.SalesOrderResponse;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.InOrder;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
@@ -30,6 +31,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentCaptor.forClass;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -173,6 +175,7 @@ class SalesOrderServiceTest {
         when(purchaseOrderItemQueryService.findActiveByIdIn(List.of(201L))).thenReturn(List.of(sourceItem));
         when(salesOrderItemRepository.summarizeAllocatedQuantityBySourcePurchaseOrderItemIds(eq(List.of(201L)), any()))
                 .thenReturn(List.of(allocationSummary));
+        when(repository.saveAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));
         when(pieceWeightService.allocateForSalesOrderItem(eq(sourceItem), eq(3), any(), eq(1)))
                 .thenReturn(new BigDecimal("0.301"));
         when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
@@ -191,6 +194,10 @@ class SalesOrderServiceTest {
         assertThat(savedItem.getSourcePurchaseOrderItemId()).isEqualTo(201L);
         assertThat(savedItem.getWeightTon()).isEqualByComparingTo("0.301");
         assertThat(savedItem.getAmount()).isEqualByComparingTo("1204.00");
+        InOrder saveFlow = inOrder(repository, pieceWeightService);
+        saveFlow.verify(repository).saveAndFlush(any());
+        saveFlow.verify(pieceWeightService).allocateForSalesOrderItem(eq(sourceItem), eq(3), any(), eq(1));
+        saveFlow.verify(repository).save(any());
     }
 
     @Test
@@ -248,6 +255,7 @@ class SalesOrderServiceTest {
         when(purchaseOrderItemQueryService.findActiveByIdIn(List.of(201L))).thenReturn(List.of(sourceItem));
         when(salesOrderItemRepository.summarizeAllocatedQuantityBySourcePurchaseOrderItemIds(eq(List.of(201L)), any()))
                 .thenReturn(List.of());
+        when(repository.saveAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));
         when(pieceWeightService.allocateForSalesOrderItem(eq(sourceItem), eq(2), any(), eq(1)))
                 .thenReturn(new BigDecimal("4.710"));
         when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
@@ -321,6 +329,7 @@ class SalesOrderServiceTest {
         when(purchaseOrderItemQueryService.findActiveByIdIn(List.of(201L))).thenReturn(List.of(sourceItem));
         when(salesOrderItemRepository.summarizeAllocatedQuantityBySourcePurchaseOrderItemIds(eq(List.of(201L)), any()))
                 .thenReturn(List.of());
+        when(repository.saveAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));
         when(pieceWeightService.allocateForSalesOrderItem(eq(sourceItem), eq(7), any(), eq(1)))
                 .thenReturn(new BigDecimal("14.258"));
         when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
