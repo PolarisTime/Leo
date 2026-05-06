@@ -158,6 +158,15 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
     }
 
     @Override
+    protected boolean allowProtectedStatusUpdate(SalesOrder entity, SalesOrderRequest request) {
+        if (!StatusConstants.AUDITED.equals(normalize(entity.getStatus()))
+                || !StatusConstants.DRAFT.equals(normalize(request.status()))) {
+            return false;
+        }
+        return matchesStatusOnlyUpdate(entity, request);
+    }
+
+    @Override
     protected void apply(SalesOrder entity, SalesOrderRequest request) {
         String nextStatus = (request.status() == null || request.status().isBlank()) ? StatusConstants.DRAFT : request.status();
         workflowTransitionGuard.assertAuditPermissionForProtectedValue(
@@ -488,6 +497,71 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
                 left.quantity() + right.quantity(),
                 TradeItemCalculator.scaleWeightTon(left.weightTon().add(right.weightTon()))
         );
+    }
+
+    private boolean matchesStatusOnlyUpdate(SalesOrder entity, SalesOrderRequest request) {
+        if (entity == null || request == null) {
+            return false;
+        }
+        if (!normalize(entity.getOrderNo()).equals(normalize(request.orderNo()))
+                || !normalize(entity.getPurchaseInboundNo()).equals(normalize(request.purchaseInboundNo()))
+                || !normalize(entity.getPurchaseOrderNo()).equals(normalize(request.purchaseOrderNo()))
+                || !normalize(entity.getCustomerName()).equals(normalize(request.customerName()))
+                || !normalize(entity.getProjectName()).equals(normalize(request.projectName()))
+                || !java.util.Objects.equals(entity.getDeliveryDate(), request.deliveryDate())
+                || !normalize(entity.getSalesName()).equals(normalize(request.salesName()))
+                || !normalize(entity.getRemark()).equals(normalize(request.remark()))) {
+            return false;
+        }
+
+        List<SalesOrderItem> entityItems = entity.getItems().stream()
+                .sorted(java.util.Comparator.comparing(SalesOrderItem::getLineNo))
+                .toList();
+        List<SalesOrderItemRequest> requestItems = request.items() == null ? List.of() : request.items();
+        if (entityItems.size() != requestItems.size()) {
+            return false;
+        }
+        for (int i = 0; i < entityItems.size(); i++) {
+            if (!matchesStatusOnlyUpdateItem(entityItems.get(i), requestItems.get(i))) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private boolean matchesStatusOnlyUpdateItem(SalesOrderItem entityItem, SalesOrderItemRequest requestItem) {
+        return java.util.Objects.equals(entityItem.getId(), requestItem.id())
+                && normalize(entityItem.getMaterialCode()).equals(normalize(requestItem.materialCode()))
+                && normalize(entityItem.getBrand()).equals(normalize(requestItem.brand()))
+                && normalize(entityItem.getCategory()).equals(normalize(requestItem.category()))
+                && normalize(entityItem.getMaterial()).equals(normalize(requestItem.material()))
+                && normalize(entityItem.getSpec()).equals(normalize(requestItem.spec()))
+                && normalize(entityItem.getLength()).equals(normalize(requestItem.length()))
+                && normalize(entityItem.getUnit()).equals(normalize(requestItem.unit()))
+                && java.util.Objects.equals(entityItem.getSourceInboundItemId(), requestItem.sourceInboundItemId())
+                && java.util.Objects.equals(entityItem.getSourcePurchaseOrderItemId(), requestItem.sourcePurchaseOrderItemId())
+                && normalize(entityItem.getWarehouseName()).equals(normalize(requestItem.warehouseName()))
+                && normalize(entityItem.getBatchNo()).equals(normalize(requestItem.batchNo()))
+                && java.util.Objects.equals(entityItem.getQuantity(), requestItem.quantity())
+                && TradeItemCalculator.normalizeQuantityUnit(entityItem.getQuantityUnit())
+                .equals(TradeItemCalculator.normalizeQuantityUnit(requestItem.quantityUnit()))
+                && compareWeight(entityItem.getPieceWeightTon(), requestItem.pieceWeightTon())
+                && java.util.Objects.equals(entityItem.getPiecesPerBundle(), requestItem.piecesPerBundle())
+                && compareWeight(entityItem.getWeightTon(), requestItem.weightTon())
+                && compareAmount(entityItem.getUnitPrice(), requestItem.unitPrice())
+                && compareAmount(entityItem.getAmount(), requestItem.amount());
+    }
+
+    private boolean compareWeight(BigDecimal left, BigDecimal right) {
+        return TradeItemCalculator.scaleWeightTon(left).compareTo(TradeItemCalculator.scaleWeightTon(right)) == 0;
+    }
+
+    private boolean compareAmount(BigDecimal left, BigDecimal right) {
+        return TradeItemCalculator.scaleAmount(left).compareTo(TradeItemCalculator.scaleAmount(right)) == 0;
+    }
+
+    private String normalize(String value) {
+        return value == null ? "" : value.trim();
     }
 
     private boolean hasPurchaseOrderBackedItems(SalesOrder entity) {

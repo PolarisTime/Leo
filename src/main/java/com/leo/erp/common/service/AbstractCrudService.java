@@ -87,7 +87,7 @@ public abstract class AbstractCrudService<E extends AuditableEntity, Req, Res> {
     @Transactional
     public final Res update(Long id, Req request) {
         E entity = requireEntity(id);
-        assertEditAllowedByStatus(entity);
+        assertEditAllowedByStatus(entity, request);
         validateUpdate(entity, request);
         apply(entity, request);
         Res response = toSavedResponse(saveEntity(entity));
@@ -140,9 +140,13 @@ public abstract class AbstractCrudService<E extends AuditableEntity, Req, Res> {
     protected void beforeDelete(E entity) {
     }
 
-    private void assertEditAllowedByStatus(E entity) {
+    protected boolean allowProtectedStatusUpdate(E entity, Req request) {
+        return false;
+    }
+
+    private void assertEditAllowedByStatus(E entity, Req request) {
         resolveStatus(entity).ifPresent(status -> {
-            if (PROTECTED_EDIT_STATUSES.contains(status)) {
+            if (PROTECTED_EDIT_STATUSES.contains(status) && !allowProtectedStatusUpdate(entity, request)) {
                 throw new BusinessException(
                         ErrorCode.BUSINESS_ERROR,
                         "当前单据状态为「" + status + "」，不能编辑"
