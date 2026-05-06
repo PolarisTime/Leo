@@ -43,6 +43,20 @@ public final class TradeItemCalculator {
                 .divide(BigDecimal.valueOf(quantity.longValue()), 3, RoundingMode.HALF_UP);
     }
 
+    public static BigDecimal calculateRepresentableAveragePieceWeightTon(Integer quantity, BigDecimal weightTon) {
+        if (quantity == null || quantity <= 0) {
+            return null;
+        }
+        BigDecimal scaledWeightTon = scaleWeightTon(weightTon);
+        if (scaledWeightTon.compareTo(BigDecimal.ZERO) <= 0) {
+            return null;
+        }
+        BigDecimal pieceWeightTon = calculateAveragePieceWeightTon(quantity, scaledWeightTon);
+        return calculateWeightTon(quantity, pieceWeightTon).compareTo(scaledWeightTon) == 0
+                ? pieceWeightTon
+                : null;
+    }
+
     public static BigDecimal calculateAmount(BigDecimal weightTon, BigDecimal unitPrice) {
         BigDecimal safeWeightTon = weightTon == null ? BigDecimal.ZERO : weightTon;
         BigDecimal safeUnitPrice = unitPrice == null ? BigDecimal.ZERO : unitPrice;

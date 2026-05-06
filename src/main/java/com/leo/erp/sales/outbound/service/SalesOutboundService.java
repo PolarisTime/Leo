@@ -187,11 +187,12 @@ public class SalesOutboundService extends AbstractCrudService<SalesOutbound, Sal
             item.setBatchNo(tradeItemMaterialSupport.normalizeBatchNo(material, source.batchNo(), i + 1, true));
             item.setQuantity(source.quantity());
             item.setQuantityUnit(TradeItemCalculator.normalizeQuantityUnit(source.quantityUnit()));
-            item.setPieceWeightTon(source.pieceWeightTon());
-            item.setPiecesPerBundle(source.piecesPerBundle());
             BigDecimal weightTon = source.weightTon() == null
                     ? TradeItemCalculator.calculateWeightTon(source.quantity(), source.pieceWeightTon())
                     : TradeItemCalculator.scaleWeightTon(source.weightTon());
+            BigDecimal pieceWeightTon = TradeItemCalculator.calculateRepresentableAveragePieceWeightTon(source.quantity(), weightTon);
+            item.setPieceWeightTon(pieceWeightTon != null ? pieceWeightTon : TradeItemCalculator.scaleWeightTon(source.pieceWeightTon()));
+            item.setPiecesPerBundle(source.piecesPerBundle());
             item.setWeightTon(weightTon);
             item.setUnitPrice(source.unitPrice());
             BigDecimal amount = TradeItemCalculator.calculateAmount(weightTon, source.unitPrice());
