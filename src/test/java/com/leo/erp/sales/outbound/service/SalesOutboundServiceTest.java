@@ -106,4 +106,74 @@ class SalesOutboundServiceTest {
             assertThat(item.getAmount()).isEqualByComparingTo("42774.00");
         });
     }
+
+    @Test
+    void shouldUseRepresentableAveragePieceWeightFromActualOutboundWeight() {
+        SalesOutboundRepository repository = mock(SalesOutboundRepository.class);
+        SalesOutboundMapper mapper = mock(SalesOutboundMapper.class);
+        TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
+        WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
+        SalesOutboundService service = new SalesOutboundService(
+                repository,
+                mock(SnowflakeIdGenerator.class),
+                mapper,
+                materialSupport,
+                warehouseSelectionSupport,
+                mock(WorkflowTransitionGuard.class),
+                mock(SalesOrderCompletionSyncService.class)
+        );
+
+        SalesOutboundRequest request = new SalesOutboundRequest(
+                "SOO-002",
+                "SO-002",
+                "客户A",
+                "项目A",
+                null,
+                LocalDate.of(2026, 4, 30),
+                "草稿",
+                null,
+                List.of(new SalesOutboundItemRequest(
+                        null, "M1", "宝钢", "盘螺", "HRB400", "10", null, "吨",
+                        "一号码头", "B1", 1, "件",
+                        new BigDecimal("2.249"), 0, new BigDecimal("2.248"),
+                        new BigDecimal("3111.00"), null
+                ))
+        );
+
+        when(repository.existsByOutboundNoAndDeletedFlagFalse("SOO-002")).thenReturn(false);
+        when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(Map.of("M1", new Material()));
+        when(materialSupport.normalizeBatchNo(any(), eq("B1"), eq(1), eq(true))).thenReturn("B1");
+        when(warehouseSelectionSupport.normalizeWarehouseName("一号码头", 1, true)).thenReturn("一号码头");
+        when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(mapper.toResponse(any())).thenAnswer(invocation -> {
+            SalesOutbound outbound = invocation.getArgument(0);
+            return new SalesOutboundResponse(
+                    outbound.getId(),
+                    outbound.getOutboundNo(),
+                    outbound.getSalesOrderNo(),
+                    outbound.getCustomerName(),
+                    outbound.getProjectName(),
+                    outbound.getWarehouseName(),
+                    outbound.getOutboundDate(),
+                    outbound.getTotalWeight(),
+                    outbound.getTotalAmount(),
+                    outbound.getStatus(),
+                    outbound.getRemark(),
+                    List.of()
+            );
+        });
+
+        service.create(request);
+
+        var outboundCaptor = forClass(SalesOutbound.class);
+        verify(repository).save(outboundCaptor.capture());
+        SalesOutbound saved = outboundCaptor.getValue();
+        assertThat(saved.getTotalWeight()).isEqualByComparingTo("2.248");
+        assertThat(saved.getTotalAmount()).isEqualByComparingTo("6993.53");
+        assertThat(saved.getItems()).singleElement().satisfies(item -> {
+            assertThat(item.getPieceWeightTon()).isEqualByComparingTo("2.248");
+            assertThat(item.getWeightTon()).isEqualByComparingTo("2.248");
+            assertThat(item.getAmount()).isEqualByComparingTo("6993.53");
+        });
+    }
 }

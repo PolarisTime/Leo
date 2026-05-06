@@ -388,22 +388,8 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
                 remainingWeightTon.subtract(requestAllocation.weightTon())
         );
         BigDecimal exactResidualPieceWeightTon =
-                resolveExactResidualPieceWeightTon(availableQuantity, currentRemainingWeightTon);
+                TradeItemCalculator.calculateRepresentableAveragePieceWeightTon(availableQuantity, currentRemainingWeightTon);
         return exactResidualPieceWeightTon != null ? exactResidualPieceWeightTon : defaultPieceWeightTon;
-    }
-
-    private BigDecimal resolveExactResidualPieceWeightTon(int quantity, BigDecimal weightTon) {
-        if (quantity <= 0) {
-            return null;
-        }
-        BigDecimal scaledWeightTon = TradeItemCalculator.scaleWeightTon(weightTon);
-        if (scaledWeightTon.compareTo(BigDecimal.ZERO) <= 0) {
-            return null;
-        }
-        BigDecimal pieceWeightTon = TradeItemCalculator.calculateAveragePieceWeightTon(quantity, scaledWeightTon);
-        return TradeItemCalculator.calculateWeightTon(quantity, pieceWeightTon).compareTo(scaledWeightTon) == 0
-                ? pieceWeightTon
-                : null;
     }
 
     private BigDecimal resolveSalesOrderWeightTon(
@@ -534,6 +520,13 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
                         item.getId(),
                         lineNo
                 );
+                BigDecimal exactPieceWeightTon = TradeItemCalculator.calculateRepresentableAveragePieceWeightTon(
+                        item.getQuantity(),
+                        weightTon
+                );
+                if (exactPieceWeightTon != null) {
+                    item.setPieceWeightTon(exactPieceWeightTon);
+                }
                 item.setWeightTon(weightTon);
             }
             BigDecimal amount = TradeItemCalculator.calculateAmount(weightTon, item.getUnitPrice());
