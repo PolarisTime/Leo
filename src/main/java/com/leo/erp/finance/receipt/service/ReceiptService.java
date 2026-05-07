@@ -81,6 +81,16 @@ public class ReceiptService extends AbstractCrudService<Receipt, ReceiptRequest,
         return page(query, spec, receiptRepository);
     }
 
+    private static final String[] RECEIPT_SEARCH_FIELDS = {
+            "receiptNo",
+            "customerName",
+            "projectName"
+    };
+
+    public List<ReceiptResponse> search(String keyword, int maxSize) {
+        return search(keyword, RECEIPT_SEARCH_FIELDS, maxSize, null, receiptRepository);
+    }
+
     @Override
     protected void validateCreate(ReceiptRequest request) {
         ensureReceiptNoUnique(request.receiptNo());

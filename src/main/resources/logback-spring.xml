@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <configuration>
 
-    <springProperty scope="context" name="APP_NAME" name="spring.application.name" defaultValue="leo"/>
+    <springProperty scope="context" name="APP_NAME" source="spring.application.name" defaultValue="leo"/>
 
     <!-- 控制台输出 -->
     <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">

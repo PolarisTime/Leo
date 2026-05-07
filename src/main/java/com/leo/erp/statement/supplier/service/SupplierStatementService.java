@@ -82,6 +82,17 @@ public class SupplierStatementService extends AbstractCrudService<SupplierStatem
         return page(query, spec, repository);
     }
 
+    private static final String[] SUPPLIER_STATEMENT_SEARCH_FIELDS = {
+            "statementNo",
+            "supplierName",
+            "sourceInboundNos"
+    };
+
+    @Transactional(readOnly = true)
+    public List<SupplierStatementResponse> search(String keyword, int maxSize) {
+        return search(keyword, SUPPLIER_STATEMENT_SEARCH_FIELDS, maxSize, null, repository);
+    }
+
     @Transactional(readOnly = true)
     public Page<SupplierStatementCandidateResponse> candidatePage(PageQuery query, String keyword) {
         Set<String> occupiedInboundNos = StatementCandidateSupport.parseRelationNos(

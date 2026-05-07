@@ -55,6 +55,16 @@ public class PurchaseContractService extends AbstractCrudService<PurchaseContrac
         return page(query, spec, repository);
     }
 
+    private static final String[] PURCHASE_CONTRACT_SEARCH_FIELDS = {
+            "contractNo",
+            "supplierName",
+            "buyerName"
+    };
+
+    public java.util.List<PurchaseContractResponse> search(String keyword, int maxSize) {
+        return search(keyword, PURCHASE_CONTRACT_SEARCH_FIELDS, maxSize, null, repository);
+    }
+
     @Override
     protected PurchaseContractResponse toDetailResponse(PurchaseContract entity) {
         PurchaseContractResponse response = purchaseContractMapper.toResponse(entity);

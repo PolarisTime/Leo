@@ -88,6 +88,16 @@ public class PaymentService extends AbstractCrudService<Payment, PaymentRequest,
         return page(query, spec, paymentRepository);
     }
 
+    private static final String[] PAYMENT_SEARCH_FIELDS = {
+            "paymentNo",
+            "businessType",
+            "counterpartyName"
+    };
+
+    public List<PaymentResponse> search(String keyword, int maxSize) {
+        return search(keyword, PAYMENT_SEARCH_FIELDS, maxSize, null, paymentRepository);
+    }
+
     @Override
     protected void validateCreate(PaymentRequest request) {
         ensurePaymentNoUnique(request.paymentNo());

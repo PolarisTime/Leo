@@ -11,7 +11,7 @@ if [[ -f "$ENV_SCRIPT" ]]; then
   source "$ENV_SCRIPT"
 fi
 
-DEFAULT_JAVA_HOME="/usr/lib/jvm/java-21-openjdk-21.0.10.0.7-1.el9.x86_64"
+DEFAULT_JAVA_HOME="/usr/lib/jvm/java-21-openjdk"
 DEFAULT_DB_HOST="${SPRING_DATASOURCE_HOST:-localhost}"
 DEFAULT_DB_PORT="${SPRING_DATASOURCE_PORT:-5432}"
 DEFAULT_DB_NAME="${SPRING_DATASOURCE_DB:-leo}"

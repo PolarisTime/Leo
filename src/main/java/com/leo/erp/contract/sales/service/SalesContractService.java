@@ -55,6 +55,16 @@ public class SalesContractService extends AbstractCrudService<SalesContract, Sal
         return page(query, spec, repository);
     }
 
+    private static final String[] SALES_CONTRACT_SEARCH_FIELDS = {
+            "contractNo",
+            "customerName",
+            "projectName"
+    };
+
+    public java.util.List<SalesContractResponse> search(String keyword, int maxSize) {
+        return search(keyword, SALES_CONTRACT_SEARCH_FIELDS, maxSize, null, repository);
+    }
+
     @Override
     protected SalesContractResponse toDetailResponse(SalesContract entity) {
         SalesContractResponse response = salesContractMapper.toResponse(entity);

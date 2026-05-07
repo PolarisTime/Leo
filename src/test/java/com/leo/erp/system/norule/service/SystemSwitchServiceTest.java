@@ -63,6 +63,20 @@ class SystemSwitchServiceTest {
         assertThat(service.getDefaultListPageSize()).isEqualTo(50);
     }
 
+    @Test
+    void shouldReadStatementGeneratorDefaultRules() {
+        NoRuleRepository repository = mock(NoRuleRepository.class);
+        when(repository.findBySettingCodeInAndDeletedFlagFalse(any())).thenReturn(List.of(
+                rule(SystemSwitchService.CUSTOMER_STATEMENT_RECEIPT_ZERO_FROM_SALES_ORDER_SWITCH, "正常", ""),
+                rule(SystemSwitchService.SUPPLIER_STATEMENT_FULL_PAYMENT_FROM_PURCHASE_SWITCH, "禁用", "")
+        ));
+
+        SystemSwitchService service = new SystemSwitchService(repository);
+
+        assertThat(service.shouldDefaultCustomerStatementReceiptAmountToZero()).isTrue();
+        assertThat(service.shouldDefaultSupplierStatementToFullPayment()).isFalse();
+    }
+
     private NoRule rule(String code, String status, String sampleNo) {
         NoRule rule = new NoRule();
         rule.setSettingCode(code);

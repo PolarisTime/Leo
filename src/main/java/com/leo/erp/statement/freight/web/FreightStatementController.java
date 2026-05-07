@@ -43,6 +43,21 @@ public class FreightStatementController {
         this.freightStatementWebMapper = freightStatementWebMapper;
     }
 
+    @Operation(summary = "搜索物流对账单")
+    @GetMapping("/search")
+    @RequiresPermission(resource = "freight-statement", action = "read")
+    public ApiResponse<java.util.List<FreightStatementResponse>> search(
+            @RequestParam(required = false) String keyword,
+            @RequestParam(defaultValue = "100") int limit
+    ) {
+        return ApiResponse.success(
+                freightStatementService.search(keyword != null ? keyword : "", Math.min(limit, 500))
+                        .stream()
+                        .map(freightStatementWebMapper::toResponse)
+                        .toList()
+        );
+    }
+
     @Operation(summary = "分页查询物流对账单")
     @GetMapping
     @RequiresPermission(resource = "freight-statement", action = "read")

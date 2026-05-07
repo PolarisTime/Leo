@@ -29,7 +29,7 @@ load_dotenv_file "$REPO_ROOT/.env"
 load_dotenv_file "$REPO_ROOT/.env.local"
 
 # Java 运行时
-export JAVA_HOME="${JAVA_HOME:-/usr/lib/jvm/java-21-openjdk-21.0.10.0.7-1.el9.x86_64}"
+export JAVA_HOME="${JAVA_HOME:-/usr/lib/jvm/java-21-openjdk}"
 
 # PostgreSQL 连接信息
 export SPRING_DATASOURCE_HOST="${SPRING_DATASOURCE_HOST:-localhost}"

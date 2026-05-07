@@ -34,6 +34,18 @@ public class SalesContractController {
         this.salesContractService = salesContractService;
     }
 
+    @GetMapping("/search")
+    @RequiresPermission(resource = "sales-contract", action = "read")
+    @Operation(summary = "搜索销售合同")
+    public ApiResponse<java.util.List<SalesContractResponse>> search(
+            @RequestParam(required = false) String keyword,
+            @RequestParam(defaultValue = "100") int limit
+    ) {
+        return ApiResponse.success(
+                salesContractService.search(keyword != null ? keyword : "", Math.min(limit, 500))
+        );
+    }
+
     @GetMapping
     @RequiresPermission(resource = "sales-contract", action = "read")
     @Operation(summary = "分页查询销售合同")

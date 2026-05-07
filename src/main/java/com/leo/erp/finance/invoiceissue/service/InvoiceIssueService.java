@@ -72,6 +72,19 @@ public class InvoiceIssueService extends AbstractCrudService<InvoiceIssue, Invoi
         return page(query, spec, repository);
     }
 
+    private static final String[] INVOICE_ISSUE_SEARCH_FIELDS = {
+            "issueNo",
+            "invoiceNo",
+            "sourceSalesOrderNos",
+            "customerName",
+            "projectName"
+    };
+
+    @Transactional(readOnly = true)
+    public List<InvoiceIssueResponse> search(String keyword, int maxSize) {
+        return search(keyword, INVOICE_ISSUE_SEARCH_FIELDS, maxSize, null, repository);
+    }
+
     @Override
     protected InvoiceIssueResponse toDetailResponse(InvoiceIssue entity) {
         InvoiceIssueResponse response = mapper.toResponse(entity);

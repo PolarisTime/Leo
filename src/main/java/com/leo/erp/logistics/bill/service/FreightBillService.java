@@ -53,6 +53,16 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
         return page(query, spec, repository);
     }
 
+    private static final String[] FREIGHT_BILL_SEARCH_FIELDS = {
+            "billNo",
+            "carrierName",
+            "customerName"
+    };
+
+    public java.util.List<FreightBillResponse> search(String keyword, int maxSize) {
+        return search(keyword, FREIGHT_BILL_SEARCH_FIELDS, maxSize, null, repository);
+    }
+
     @Override
     protected FreightBillResponse toDetailResponse(FreightBill entity) {
         FreightBillResponse response = freightBillMapper.toResponse(entity);

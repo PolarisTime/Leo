@@ -35,6 +35,18 @@ public class SupplierStatementController {
         this.supplierStatementService = supplierStatementService;
     }
 
+    @Operation(summary = "搜索供应商对账单")
+    @GetMapping("/search")
+    @RequiresPermission(resource = "supplier-statement", action = "read")
+    public ApiResponse<java.util.List<SupplierStatementResponse>> search(
+            @RequestParam(required = false) String keyword,
+            @RequestParam(defaultValue = "100") int limit
+    ) {
+        return ApiResponse.success(
+                supplierStatementService.search(keyword != null ? keyword : "", Math.min(limit, 500))
+        );
+    }
+
     @Operation(summary = "分页查询供应商对账单")
     @GetMapping
     @RequiresPermission(resource = "supplier-statement", action = "read")

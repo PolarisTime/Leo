@@ -100,6 +100,17 @@ public class FreightStatementService extends AbstractCrudService<FreightStatemen
         return new PageImpl<>(responses, entityPage.getPageable(), entityPage.getTotalElements());
     }
 
+    private static final String[] FREIGHT_STATEMENT_SEARCH_FIELDS = {
+            "statementNo",
+            "carrierName",
+            "sourceBillNos"
+    };
+
+    @Transactional(readOnly = true)
+    public List<FreightStatementView> search(String keyword, int maxSize) {
+        return search(keyword, FREIGHT_STATEMENT_SEARCH_FIELDS, maxSize, null, repository);
+    }
+
     @Transactional(readOnly = true)
     public Page<FreightStatementCandidateResponse> candidatePage(PageQuery query, String keyword) {
         Set<String> occupiedBillNos = StatementCandidateSupport.parseRelationNos(

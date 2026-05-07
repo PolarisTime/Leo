@@ -73,11 +73,8 @@ public class GeneralSettingQueryService {
     private static final Set<String> PUBLIC_CLIENT_SETTING_CODES = Set.of(
             "UI_WEIGHT_ONLY_PURCHASE_INBOUNDS",
             "UI_WEIGHT_ONLY_SALES_OUTBOUNDS",
-            SystemSwitchService.HIDE_AUDITED_LIST_RECORDS_SWITCH,
             SystemSwitchService.SHOW_SNOWFLAKE_ID_SWITCH,
-            SystemSwitchService.DEFAULT_LIST_PAGE_SIZE_SETTING,
-            "SYS_CUSTOMER_STATEMENT_RECEIPT_ZERO_FROM_SALES_ORDER",
-            "SYS_SUPPLIER_STATEMENT_FULL_PAYMENT_FROM_PURCHASE"
+            SystemSwitchService.DEFAULT_LIST_PAGE_SIZE_SETTING
     );
 
     private final NoRuleRepository noRuleRepository;

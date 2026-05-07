@@ -26,6 +26,16 @@ public class ReceiptController {
         this.receiptService = receiptService;
     }
 
+    @Operation(summary = "搜索收款单")
+    @GetMapping("/search")
+    @RequiresPermission(resource = "receipt", action = "read")
+    public ApiResponse<java.util.List<ReceiptResponse>> search(
+            @RequestParam(required = false) String keyword,
+            @RequestParam(defaultValue = "100") int limit
+    ) {
+        return ApiResponse.success(receiptService.search(keyword != null ? keyword : "", Math.min(limit, 500)));
+    }
+
     @Operation(summary = "分页查询收款单")
     @GetMapping
     @RequiresPermission(resource = "receipt", action = "read")
