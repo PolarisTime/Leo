@@ -17,7 +17,7 @@ class MenuServiceTest {
     void shouldBuildVisibleMenuTreeWithOnlyAllowedActions() {
         MenuService service = new MenuService(new StubPermissionService(
                 List.of(
-                        menu(1L, "system", "系统设置", null, null, "SettingOutlined", 1, "目录"),
+                        menu(1L, "system", "设置", null, null, "SettingOutlined", 1, "目录"),
                         menu(2L, "print-templates", "打印模板", "system", "/print-templates", "PrinterOutlined", 2, "菜单"),
                         menu(3L, "database-management", "数据库管理", "system", "/database-management", "DatabaseOutlined", 3, "菜单")
                 ),
@@ -39,7 +39,7 @@ class MenuServiceTest {
     @Test
     void shouldReturnEmptyTreeWhenUserHasNoVisibleMenus() {
         MenuService service = new MenuService(new StubPermissionService(
-                List.of(menu(1L, "system", "系统设置", null, null, "SettingOutlined", 1, "目录")),
+                List.of(menu(1L, "system", "设置", null, null, "SettingOutlined", 1, "目录")),
                 Set.of(), Map.of()
         ));
 
