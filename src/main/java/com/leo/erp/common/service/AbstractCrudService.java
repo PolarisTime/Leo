@@ -14,6 +14,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.lang.reflect.Method;
@@ -40,6 +43,7 @@ public abstract class AbstractCrudService<E extends AuditableEntity, Req, Res> {
             StatusConstants.COMPLETED,
             StatusConstants.PURCHASE_COMPLETED,
             StatusConstants.INBOUND_COMPLETED,
+            StatusConstants.SALES_PENDING_FINALIZE,
             StatusConstants.SALES_COMPLETED,
             StatusConstants.PAID,
             StatusConstants.RECEIVED,
@@ -69,7 +73,7 @@ public abstract class AbstractCrudService<E extends AuditableEntity, Req, Res> {
 
     @Transactional(readOnly = true)
     public final Res detail(Long id) {
-        return toDetailResponse(requireEntity(id));
+        return toDetailResponse(requireDetailEntity(id));
     }
 
     @Transactional
@@ -101,20 +105,27 @@ public abstract class AbstractCrudService<E extends AuditableEntity, Req, Res> {
         assertDeleteAllowedByStatus(entity);
         beforeDelete(entity);
         entity.setDeletedFlag(Boolean.TRUE);
+        markDeletedStatus(entity);
         saveEntity(entity);
         logger().info("{} deleted: id={}", entity.getClass().getSimpleName(), id);
     }
 
     protected final Page<Res> page(PageQuery query, Specification<E> specification, JpaSpecificationExecutor<E> repository) {
-        Specification<E> effectiveSpec = applyListVisibilityPolicy(specification);
-        return repository.findAll(DataScopeContext.apply(effectiveSpec), query.toPageable("id"))
+        return pageEntities(query, specification, repository)
                 .map(this::toResponse);
+    }
+
+    protected final Page<E> pageEntities(PageQuery query, Specification<E> specification, JpaSpecificationExecutor<E> repository) {
+        Specification<E> effectiveSpec = applyListVisibilityPolicy(applyDeletedVisibilityPolicy(specification));
+        return repository.findAll(DataScopeContext.apply(effectiveSpec), query.toPageable("id"));
     }
 
     protected final List<Res> search(String keyword, String[] searchFields, int maxSize,
                                       Specification<E> baseSpec, JpaSpecificationExecutor<E> repository) {
-        Specification<E> spec = baseSpec
-                .and(com.leo.erp.common.persistence.Specs.keywordLike(keyword, searchFields));
+        Specification<E> spec = combineSpecifications(
+                applyListVisibilityPolicy(applyDeletedVisibilityPolicy(baseSpec)),
+                com.leo.erp.common.persistence.Specs.keywordLike(keyword, searchFields)
+        );
         return repository.findAll(DataScopeContext.apply(spec), org.springframework.data.domain.PageRequest.of(0, maxSize))
                 .map(this::toResponse)
                 .toList();
@@ -122,6 +133,13 @@ public abstract class AbstractCrudService<E extends AuditableEntity, Req, Res> {
 
     protected final E requireEntity(Long id) {
         E entity = findActiveEntity(id)
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, notFoundMessage()));
+        DataScopeContext.assertCanAccess(entity);
+        return entity;
+    }
+
+    protected final E requireDetailEntity(Long id) {
+        E entity = resolveDetailEntity(id)
                 .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, notFoundMessage()));
         DataScopeContext.assertCanAccess(entity);
         return entity;
@@ -142,6 +160,14 @@ public abstract class AbstractCrudService<E extends AuditableEntity, Req, Res> {
 
     protected boolean allowProtectedStatusUpdate(E entity, Req request) {
         return false;
+    }
+
+    protected boolean allowAdminViewDeletedRecords() {
+        return false;
+    }
+
+    protected Optional<E> findVisibleEntity(Long id) {
+        return findActiveEntity(id);
     }
 
     private void assertEditAllowedByStatus(E entity, Req request) {
@@ -174,7 +200,16 @@ public abstract class AbstractCrudService<E extends AuditableEntity, Req, Res> {
         if (hiddenStatuses.isEmpty()) {
             return specification;
         }
-        return specification.and(excludeStatuses(hiddenStatuses));
+        return combineSpecifications(specification, excludeStatuses(hiddenStatuses));
+    }
+
+    protected final Specification<E> applyDeletedVisibilityPolicy(Specification<E> specification) {
+        if (shouldAdminViewDeletedRecords()) {
+            return specification;
+        }
+        Specification<E> activeOnly = (root, query, criteriaBuilder) ->
+                criteriaBuilder.isFalse(root.get("deletedFlag"));
+        return specification == null ? activeOnly : specification.and(activeOnly);
     }
 
     private Specification<E> excludeStatuses(Set<String> hiddenStatuses) {
@@ -192,6 +227,30 @@ public abstract class AbstractCrudService<E extends AuditableEntity, Req, Res> {
         };
     }
 
+    private Optional<E> resolveDetailEntity(Long id) {
+        if (shouldAdminViewDeletedRecords()) {
+            return findVisibleEntity(id);
+        }
+        return findActiveEntity(id);
+    }
+
+    private boolean shouldAdminViewDeletedRecords() {
+        return allowAdminViewDeletedRecords()
+                && systemSwitchService != null
+                && systemSwitchService.shouldAdminSeeDeletedRecords()
+                && currentUserIsAdmin();
+    }
+
+    private boolean currentUserIsAdmin() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || authentication.getAuthorities() == null) {
+            return false;
+        }
+        return authentication.getAuthorities().stream()
+                .map(GrantedAuthority::getAuthority)
+                .anyMatch("ROLE_ADMIN"::equals);
+    }
+
     private Optional<String> resolveStatus(E entity) {
         try {
             Method getter = entity.getClass().getMethod("getStatus");
@@ -205,6 +264,30 @@ public abstract class AbstractCrudService<E extends AuditableEntity, Req, Res> {
             return Optional.empty();
         } catch (ReflectiveOperationException ex) {
             throw new IllegalStateException("读取单据状态失败", ex);
+        }
+    }
+
+    private Specification<E> combineSpecifications(Specification<E> left, Specification<E> right) {
+        if (left == null) {
+            return right;
+        }
+        if (right == null) {
+            return left;
+        }
+        return left.and(right);
+    }
+
+    private void markDeletedStatus(E entity) {
+        if (!allowAdminViewDeletedRecords()) {
+            return;
+        }
+        try {
+            Method setter = entity.getClass().getMethod("setStatus", String.class);
+            setter.invoke(entity, StatusConstants.DELETED);
+        } catch (NoSuchMethodException ignored) {
+            // Entities without a main status field do not need deleted status tagging.
+        } catch (ReflectiveOperationException ex) {
+            throw new IllegalStateException("写入单据删除状态失败", ex);
         }
     }
 

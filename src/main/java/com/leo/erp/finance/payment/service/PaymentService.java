@@ -81,8 +81,7 @@ public class PaymentService extends AbstractCrudService<Payment, PaymentRequest,
                                       String status,
                                       LocalDate startDate,
                                       LocalDate endDate) {
-        Specification<Payment> spec = Specs.<Payment>notDeleted()
-                .and(Specs.keywordLike(keyword, "paymentNo", "businessType", "counterpartyName"))
+        Specification<Payment> spec = Specs.<Payment>keywordLike(keyword, "paymentNo", "businessType", "counterpartyName")
                 .and(Specs.equalIfPresent("businessType", businessType))
                 .and(Specs.equalIfPresent("status", status))
                 .and(Specs.betweenIfPresent("paymentDate", startDate, endDate));
@@ -117,8 +116,18 @@ public class PaymentService extends AbstractCrudService<Payment, PaymentRequest,
     }
 
     @Override
+    protected Optional<Payment> findVisibleEntity(Long id) {
+        return paymentRepository.findById(id);
+    }
+
+    @Override
     protected String notFoundMessage() {
         return "付款单不存在";
+    }
+
+    @Override
+    protected boolean allowAdminViewDeletedRecords() {
+        return true;
     }
 
     @Override

@@ -18,7 +18,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class SalesOrderCompletionSyncServiceTest {
 
     @Test
-    void shouldMarkSalesOrderCompletedWhenAuditedOutboundExists() {
+    void shouldMarkSalesOrderPendingFinalizeWhenAuditedOutboundExists() {
         SalesOrderRepository salesOrderRepository = mock(SalesOrderRepository.class);
         SalesOutboundRepository salesOutboundRepository = mock(SalesOutboundRepository.class);
         SalesOrderCompletionSyncService service = new SalesOrderCompletionSyncService(
@@ -39,12 +39,12 @@ class SalesOrderCompletionSyncServiceTest {
 
         service.syncBySalesOrderReference("SO-001");
 
-        assertThat(order.getStatus()).isEqualTo("完成销售");
+        assertThat(order.getStatus()).isEqualTo("待完善");
         verify(salesOrderRepository).saveAll(List.of(order));
     }
 
     @Test
-    void shouldRevertCompletedSalesOrderWhenNoAuditedOutboundRemains() {
+    void shouldRevertPendingFinalizeSalesOrderWhenNoAuditedOutboundRemains() {
         SalesOrderRepository salesOrderRepository = mock(SalesOrderRepository.class);
         SalesOutboundRepository salesOutboundRepository = mock(SalesOutboundRepository.class);
         SalesOrderCompletionSyncService service = new SalesOrderCompletionSyncService(
@@ -54,7 +54,7 @@ class SalesOrderCompletionSyncServiceTest {
 
         SalesOrder order = new SalesOrder();
         order.setOrderNo("SO-002");
-        order.setStatus("完成销售");
+        order.setStatus("待完善");
 
         SalesOutbound outbound = new SalesOutbound();
         outbound.setSalesOrderNo("SO-002");
@@ -70,7 +70,7 @@ class SalesOrderCompletionSyncServiceTest {
     }
 
     @Test
-    void shouldSkipSaveWhenStatusDoesNotNeedChange() {
+    void shouldSkipSaveWhenPendingFinalizeStatusDoesNotNeedChange() {
         SalesOrderRepository salesOrderRepository = mock(SalesOrderRepository.class);
         SalesOutboundRepository salesOutboundRepository = mock(SalesOutboundRepository.class);
         SalesOrderCompletionSyncService service = new SalesOrderCompletionSyncService(
@@ -80,10 +80,10 @@ class SalesOrderCompletionSyncServiceTest {
 
         SalesOrder order = new SalesOrder();
         order.setOrderNo("SO-003");
-        order.setStatus("已审核");
+        order.setStatus("待完善");
 
         SalesOutbound outbound = new SalesOutbound();
-        outbound.setSalesOrderNo("SO-999");
+        outbound.setSalesOrderNo("SO-003");
         outbound.setStatus("已审核");
 
         when(salesOrderRepository.findByOrderNoInAndDeletedFlagFalse(any())).thenReturn(List.of(order));
@@ -91,7 +91,33 @@ class SalesOrderCompletionSyncServiceTest {
 
         service.syncBySalesOrderReference("SO-003");
 
-        assertThat(order.getStatus()).isEqualTo("已审核");
+        assertThat(order.getStatus()).isEqualTo("待完善");
+        verify(salesOrderRepository, never()).saveAll(any());
+    }
+
+    @Test
+    void shouldKeepCompletedSalesOrderWhenAuditedOutboundStillExists() {
+        SalesOrderRepository salesOrderRepository = mock(SalesOrderRepository.class);
+        SalesOutboundRepository salesOutboundRepository = mock(SalesOutboundRepository.class);
+        SalesOrderCompletionSyncService service = new SalesOrderCompletionSyncService(
+                salesOrderRepository,
+                salesOutboundRepository
+        );
+
+        SalesOrder order = new SalesOrder();
+        order.setOrderNo("SO-003B");
+        order.setStatus("完成销售");
+
+        SalesOutbound outbound = new SalesOutbound();
+        outbound.setSalesOrderNo("SO-003B");
+        outbound.setStatus("已审核");
+
+        when(salesOrderRepository.findByOrderNoInAndDeletedFlagFalse(any())).thenReturn(List.of(order));
+        when(salesOutboundRepository.findByDeletedFlagFalse()).thenReturn(List.of(outbound));
+
+        service.syncBySalesOrderReference("SO-003B");
+
+        assertThat(order.getStatus()).isEqualTo("完成销售");
         verify(salesOrderRepository, never()).saveAll(any());
     }
 
@@ -117,7 +143,7 @@ class SalesOrderCompletionSyncServiceTest {
 
         service.syncBySalesOrderReference("SO-004");
 
-        assertThat(order.getStatus()).isEqualTo("完成销售");
+        assertThat(order.getStatus()).isEqualTo("待完善");
         verify(salesOrderRepository).saveAll(List.of(order));
     }
 }

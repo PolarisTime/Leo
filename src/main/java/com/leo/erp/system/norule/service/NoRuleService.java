@@ -122,6 +122,7 @@ public class NoRuleService extends AbstractCrudService<NoRule, NoRuleRequest, No
         redisJsonCacheSupport.delete(List.of(
                 SystemSwitchService.SWITCH_CACHE_KEY,
                 GeneralSettingQueryService.PUBLIC_DISPLAY_SWITCHES_CACHE_KEY,
+                GeneralSettingQueryService.PUBLIC_CLIENT_SETTINGS_CACHE_KEY,
                 CompanySettingService.CURRENT_COMPANY_CACHE_KEY,
                 CompanySettingService.CURRENT_TAX_RATE_CACHE_KEY
         ));

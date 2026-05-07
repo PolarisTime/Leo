@@ -46,8 +46,7 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
                                           String status,
                                           java.time.LocalDate startDate,
                                           java.time.LocalDate endDate) {
-        Specification<FreightBill> spec = Specs.<FreightBill>notDeleted()
-                .and(Specs.keywordLike(keyword, "billNo", "carrierName", "customerName"))
+        Specification<FreightBill> spec = Specs.<FreightBill>keywordLike(keyword, "billNo", "carrierName", "customerName")
                 .and(Specs.equalIfPresent("carrierName", carrierName))
                 .and(Specs.equalIfPresent("status", status))
                 .and(Specs.betweenIfPresent("billTime", startDate, endDate));
@@ -105,8 +104,18 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
     }
 
     @Override
+    protected Optional<FreightBill> findVisibleEntity(Long id) {
+        return repository.findById(id);
+    }
+
+    @Override
     protected String notFoundMessage() {
         return "物流单不存在";
+    }
+
+    @Override
+    protected boolean allowAdminViewDeletedRecords() {
+        return true;
     }
 
     @Override

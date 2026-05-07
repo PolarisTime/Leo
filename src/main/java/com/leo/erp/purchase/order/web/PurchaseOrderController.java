@@ -5,6 +5,7 @@ import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.api.PageResponse;
 import com.leo.erp.common.web.BindPageQuery;
 import com.leo.erp.purchase.order.service.PurchaseOrderService;
+import com.leo.erp.purchase.order.web.dto.PurchaseOrderImportCandidateResponse;
 import com.leo.erp.purchase.order.web.dto.PurchaseOrderRequest;
 import com.leo.erp.purchase.order.web.dto.PurchaseOrderResponse;
 import com.leo.erp.security.permission.RequiresPermission;
@@ -42,6 +43,19 @@ public class PurchaseOrderController {
             @RequestParam(defaultValue = "100") int limit
     ) {
         return ApiResponse.success(purchaseOrderService.search(keyword != null ? keyword : "", Math.min(limit, 500)));
+    }
+
+    @Operation(summary = "分页查询采购订单导入候选")
+    @GetMapping("/import-candidates")
+    @RequiresPermission(resource = "purchase-order", action = "read")
+    public ApiResponse<PageResponse<PurchaseOrderImportCandidateResponse>> importCandidates(
+            @BindPageQuery(sortFieldKey = "purchase-orders") PageQuery query,
+            @RequestParam(required = false) String keyword,
+            @RequestParam String usage
+    ) {
+        return ApiResponse.success(PageResponse.from(
+                purchaseOrderService.importCandidates(query, keyword, usage)
+        ));
     }
 
     @Operation(summary = "分页查询采购订单")

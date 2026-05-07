@@ -2,6 +2,7 @@ package com.leo.erp.statement.supplier.service;
 
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
+import com.leo.erp.purchase.inbound.repository.PurchaseInboundRepository;
 import com.leo.erp.security.permission.WorkflowTransitionGuard;
 import com.leo.erp.statement.service.StatementSettlementSyncService;
 import com.leo.erp.statement.supplier.domain.entity.SupplierStatement;
@@ -54,6 +55,7 @@ class SupplierStatementServiceTest {
                 repository,
                 new SnowflakeIdGenerator(0L),
                 mapper,
+                mock(PurchaseInboundRepository.class),
                 syncService,
                 mock(WorkflowTransitionGuard.class)
         );
@@ -75,6 +77,7 @@ class SupplierStatementServiceTest {
                 repository,
                 new SnowflakeIdGenerator(0L),
                 mock(SupplierStatementMapper.class),
+                mock(PurchaseInboundRepository.class),
                 mock(StatementSettlementSyncService.class),
                 mock(WorkflowTransitionGuard.class)
         );

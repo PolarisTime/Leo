@@ -32,6 +32,9 @@ public class GeneralSettingQueryService {
     public static final String PUBLIC_DISPLAY_SWITCHES_CACHE_KEY = "leo:system:public-display-switches";
     private static final Duration PUBLIC_DISPLAY_SWITCHES_CACHE_TTL = Duration.ofMinutes(5);
     private static final TypeReference<List<GeneralSettingResponse>> PUBLIC_DISPLAY_SWITCH_LIST_TYPE = new TypeReference<>() { };
+    public static final String PUBLIC_CLIENT_SETTINGS_CACHE_KEY = "leo:system:public-client-settings";
+    private static final Duration PUBLIC_CLIENT_SETTINGS_CACHE_TTL = Duration.ofMinutes(5);
+    private static final TypeReference<List<GeneralSettingResponse>> PUBLIC_CLIENT_SETTING_LIST_TYPE = new TypeReference<>() { };
 
     private static final Map<String, Integer> GENERAL_SETTING_ORDER = Map.ofEntries(
             Map.entry("RULE_PO", 10),
@@ -44,6 +47,7 @@ public class GeneralSettingQueryService {
             Map.entry("RULE_FS", 80),
             Map.entry("RULE_BATCH_NO", 90),
             Map.entry("SYS_DEFAULT_TAX_RATE", 95),
+            Map.entry(SystemSwitchService.DEFAULT_LIST_PAGE_SIZE_SETTING, 98),
             Map.entry("UI_WEIGHT_ONLY_PURCHASE_INBOUNDS", 100),
             Map.entry("UI_WEIGHT_ONLY_SALES_OUTBOUNDS", 110),
             Map.entry("SYS_CUSTOMER_STATEMENT_RECEIPT_ZERO_FROM_SALES_ORDER", 120),
@@ -54,6 +58,7 @@ public class GeneralSettingQueryService {
             Map.entry("SYS_FORCE_USER_TOTP_ON_FIRST_LOGIN", 170),
             Map.entry("SYS_BATCH_NO_AUTO_GENERATE", 180),
             Map.entry("UI_HIDE_AUDITED_LIST_RECORDS", 190),
+            Map.entry("SYS_ADMIN_VIEW_DELETED_RECORDS", 195),
             Map.entry("UI_SHOW_SNOWFLAKE_ID", 200),
             Map.entry("SYS_LOGIN_CAPTCHA", 205),
             Map.entry("PAGE_UPLOAD", 900)
@@ -64,6 +69,15 @@ public class GeneralSettingQueryService {
             "UI_WEIGHT_ONLY_SALES_OUTBOUNDS",
             SystemSwitchService.HIDE_AUDITED_LIST_RECORDS_SWITCH,
             SystemSwitchService.SHOW_SNOWFLAKE_ID_SWITCH
+    );
+    private static final Set<String> PUBLIC_CLIENT_SETTING_CODES = Set.of(
+            "UI_WEIGHT_ONLY_PURCHASE_INBOUNDS",
+            "UI_WEIGHT_ONLY_SALES_OUTBOUNDS",
+            SystemSwitchService.HIDE_AUDITED_LIST_RECORDS_SWITCH,
+            SystemSwitchService.SHOW_SNOWFLAKE_ID_SWITCH,
+            SystemSwitchService.DEFAULT_LIST_PAGE_SIZE_SETTING,
+            "SYS_CUSTOMER_STATEMENT_RECEIPT_ZERO_FROM_SALES_ORDER",
+            "SYS_SUPPLIER_STATEMENT_FULL_PAYMENT_FROM_PURCHASE"
     );
 
     private final NoRuleRepository noRuleRepository;
@@ -128,6 +142,19 @@ public class GeneralSettingQueryService {
         );
     }
 
+    @Transactional(readOnly = true)
+    public List<GeneralSettingResponse> publicClientSettings() {
+        if (redisJsonCacheSupport == null) {
+            return loadPublicClientSettings();
+        }
+        return redisJsonCacheSupport.getOrLoad(
+                PUBLIC_CLIENT_SETTINGS_CACHE_KEY,
+                PUBLIC_CLIENT_SETTINGS_CACHE_TTL,
+                PUBLIC_CLIENT_SETTING_LIST_TYPE,
+                this::loadPublicClientSettings
+        );
+    }
+
     public void evictPublicDisplaySwitchesCache() {
         if (redisJsonCacheSupport != null) {
             redisJsonCacheSupport.delete(PUBLIC_DISPLAY_SWITCHES_CACHE_KEY);
@@ -136,6 +163,14 @@ public class GeneralSettingQueryService {
 
     private List<GeneralSettingResponse> loadPublicDisplaySwitches() {
         return noRuleRepository.findBySettingCodeInAndDeletedFlagFalse(PUBLIC_DISPLAY_SWITCH_CODES).stream()
+                .map(noRuleMapper::toResponse)
+                .map(this::toGeneralSettingResponse)
+                .sorted(generalSettingComparator())
+                .toList();
+    }
+
+    private List<GeneralSettingResponse> loadPublicClientSettings() {
+        return noRuleRepository.findBySettingCodeInAndDeletedFlagFalse(PUBLIC_CLIENT_SETTING_CODES).stream()
                 .map(noRuleMapper::toResponse)
                 .map(this::toGeneralSettingResponse)
                 .sorted(generalSettingComparator())

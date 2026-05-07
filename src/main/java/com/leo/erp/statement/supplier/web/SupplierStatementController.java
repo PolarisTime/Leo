@@ -6,6 +6,7 @@ import com.leo.erp.common.api.PageResponse;
 import com.leo.erp.common.web.BindPageQuery;
 import com.leo.erp.security.permission.RequiresPermission;
 import com.leo.erp.statement.supplier.service.SupplierStatementService;
+import com.leo.erp.statement.supplier.web.dto.SupplierStatementCandidateResponse;
 import com.leo.erp.statement.supplier.web.dto.SupplierStatementRequest;
 import com.leo.erp.statement.supplier.web.dto.SupplierStatementResponse;
 import jakarta.validation.Valid;
@@ -54,6 +55,18 @@ public class SupplierStatementController {
                         periodStart,
                         periodEnd
                 )
+        ));
+    }
+
+    @Operation(summary = "分页查询供应商对账单候选采购入库单")
+    @GetMapping("/candidates")
+    @RequiresPermission(resource = "supplier-statement", action = "read")
+    public ApiResponse<PageResponse<SupplierStatementCandidateResponse>> candidates(
+            @BindPageQuery(sortFieldKey = "purchase-inbounds") PageQuery query,
+            @RequestParam(required = false) String keyword
+    ) {
+        return ApiResponse.success(PageResponse.from(
+                supplierStatementService.candidatePage(query, keyword)
         ));
     }
 

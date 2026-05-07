@@ -2,6 +2,7 @@ package com.leo.erp.statement.customer.service;
 
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
+import com.leo.erp.sales.order.repository.SalesOrderRepository;
 import com.leo.erp.statement.customer.domain.entity.CustomerStatement;
 import com.leo.erp.statement.customer.mapper.CustomerStatementMapper;
 import com.leo.erp.statement.customer.repository.CustomerStatementRepository;
@@ -15,11 +16,14 @@ import org.junit.jupiter.api.Test;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
@@ -55,6 +59,7 @@ class CustomerStatementServiceTest {
                 repository,
                 new SnowflakeIdGenerator(0L),
                 mapper,
+                mock(SalesOrderRepository.class),
                 syncService,
                 mock(WorkflowTransitionGuard.class)
         );
@@ -76,6 +81,7 @@ class CustomerStatementServiceTest {
                 repository,
                 new SnowflakeIdGenerator(0L),
                 mock(CustomerStatementMapper.class),
+                mock(SalesOrderRepository.class),
                 mock(StatementSettlementSyncService.class),
                 mock(WorkflowTransitionGuard.class)
         );
@@ -83,6 +89,35 @@ class CustomerStatementServiceTest {
         assertThatThrownBy(() -> service.create(buildRequest(new BigDecimal("1200.00"))))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("销售金额不能低于已收款金额");
+    }
+
+    @Test
+    void shouldMarkDeletedStatementStatusWhenDeleting() {
+        CustomerStatementRepository repository = mock(CustomerStatementRepository.class);
+        CustomerStatement statement = new CustomerStatement();
+        statement.setId(1L);
+        statement.setStatementNo("KHDZ-DELETE-001");
+        statement.setStatus("待确认");
+        statement.setDeletedFlag(Boolean.FALSE);
+        when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(statement));
+        when(repository.save(any(CustomerStatement.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        CustomerStatementService service = new CustomerStatementService(
+                repository,
+                new SnowflakeIdGenerator(0L),
+                mock(CustomerStatementMapper.class),
+                mock(SalesOrderRepository.class),
+                mock(StatementSettlementSyncService.class),
+                mock(WorkflowTransitionGuard.class)
+        );
+
+        service.delete(1L);
+
+        assertThat(statement.getDeletedFlag()).isTrue();
+        assertThat(statement.getStatus()).isEqualTo("已删除");
+        verify(repository).save(argThat(saved ->
+                Boolean.TRUE.equals(saved.getDeletedFlag()) && "已删除".equals(saved.getStatus())
+        ));
     }
 
     private CustomerStatementRequest buildRequest(BigDecimal receiptAmount) {

@@ -62,8 +62,7 @@ public class SalesOutboundService extends AbstractCrudService<SalesOutbound, Sal
                                             String status,
                                             java.time.LocalDate startDate,
                                             java.time.LocalDate endDate) {
-        Specification<SalesOutbound> spec = Specs.<SalesOutbound>notDeleted()
-                .and(Specs.keywordLike(keyword, "outboundNo", "salesOrderNo", "customerName", "projectName"))
+        Specification<SalesOutbound> spec = Specs.<SalesOutbound>keywordLike(keyword, "outboundNo", "salesOrderNo", "customerName", "projectName")
                 .and(Specs.equalIfPresent("customerName", customerName))
                 .and(Specs.equalIfPresent("projectName", projectName))
                 .and(Specs.equalIfPresent("status", status))
@@ -75,7 +74,7 @@ public class SalesOutboundService extends AbstractCrudService<SalesOutbound, Sal
 
     @Transactional(readOnly = true)
     public java.util.List<SalesOutboundResponse> search(String keyword, int maxSize) {
-        return search(keyword, OUTBOUND_SEARCH_FIELDS, maxSize, Specs.notDeleted(), repository);
+        return search(keyword, OUTBOUND_SEARCH_FIELDS, maxSize, null, repository);
     }
 
     @Override
@@ -126,8 +125,18 @@ public class SalesOutboundService extends AbstractCrudService<SalesOutbound, Sal
     }
 
     @Override
+    protected Optional<SalesOutbound> findVisibleEntity(Long id) {
+        return repository.findById(id);
+    }
+
+    @Override
     protected String notFoundMessage() {
         return "销售出库不存在";
+    }
+
+    @Override
+    protected boolean allowAdminViewDeletedRecords() {
+        return true;
     }
 
     @Override

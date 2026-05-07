@@ -8,6 +8,7 @@ import com.leo.erp.security.permission.RequiresPermission;
 import com.leo.erp.statement.freight.mapper.FreightStatementWebMapper;
 import com.leo.erp.statement.freight.service.FreightStatementService;
 import com.leo.erp.statement.freight.service.FreightStatementView;
+import com.leo.erp.statement.freight.web.dto.FreightStatementCandidateResponse;
 import com.leo.erp.statement.freight.web.dto.FreightStatementRequest;
 import com.leo.erp.statement.freight.web.dto.FreightStatementResponse;
 import com.leo.erp.system.operationlog.support.OperationLoggable;
@@ -64,6 +65,18 @@ public class FreightStatementController {
                 periodEnd
         );
         return ApiResponse.success(PageResponse.from(toResponsePage(result)));
+    }
+
+    @Operation(summary = "分页查询物流对账单候选物流单")
+    @GetMapping("/candidates")
+    @RequiresPermission(resource = "freight-statement", action = "read")
+    public ApiResponse<PageResponse<FreightStatementCandidateResponse>> candidates(
+            @BindPageQuery(sortFieldKey = "freight-bills") PageQuery query,
+            @RequestParam(required = false) String keyword
+    ) {
+        return ApiResponse.success(PageResponse.from(
+                freightStatementService.candidatePage(query, keyword)
+        ));
     }
 
     @Operation(summary = "查询物流对账单详情")

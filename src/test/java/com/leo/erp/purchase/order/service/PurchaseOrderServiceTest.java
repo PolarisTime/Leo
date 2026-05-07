@@ -1,5 +1,6 @@
 package com.leo.erp.purchase.order.service;
 
+import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.TradeItemMaterialSupport;
 import com.leo.erp.common.support.WarehouseSelectionSupport;
@@ -16,8 +17,16 @@ import com.leo.erp.purchase.order.web.dto.PurchaseOrderRequest;
 import com.leo.erp.purchase.order.web.dto.PurchaseOrderResponse;
 import com.leo.erp.sales.order.service.SalesOrderItemQueryService;
 import com.leo.erp.security.permission.WorkflowTransitionGuard;
+import com.leo.erp.system.norule.service.SystemSwitchService;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
@@ -25,6 +34,7 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -33,6 +43,7 @@ import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -42,6 +53,11 @@ class PurchaseOrderServiceTest {
     @BeforeEach
     void setUpIdGenerator() {
         ReflectionTestUtils.invokeMethod(new SnowflakeIdGenerator(0L), "registerInstance");
+    }
+
+    @AfterEach
+    void clearSecurityContext() {
+        SecurityContextHolder.clearContext();
     }
 
     @Test
@@ -292,6 +308,112 @@ class PurchaseOrderServiceTest {
         assertThatThrownBy(() -> service.create(buildRequest(null, "草稿")))
                 .hasMessageContaining("供应商不存在");
         verify(repository, never()).save(any());
+    }
+
+    @Test
+    void shouldBuildImportCandidatesWithUsageSpecificRemainingQuantity() {
+        PurchaseOrderRepository repository = mock(PurchaseOrderRepository.class);
+        SnowflakeIdGenerator idGenerator = mock(SnowflakeIdGenerator.class);
+        PurchaseOrderMapper mapper = mock(PurchaseOrderMapper.class);
+        TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
+        WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
+        SupplierRepository supplierRepository = mock(SupplierRepository.class);
+        PurchaseInboundItemQueryService purchaseInboundItemQueryService = mock(PurchaseInboundItemQueryService.class);
+        SalesOrderItemQueryService salesOrderItemQueryService = mock(SalesOrderItemQueryService.class);
+        PurchaseOrderItemPieceWeightService pieceWeightService = mock(PurchaseOrderItemPieceWeightService.class);
+        WorkflowTransitionGuard workflowTransitionGuard = mock(WorkflowTransitionGuard.class);
+        PurchaseOrderService service = new PurchaseOrderService(
+                repository,
+                idGenerator,
+                mapper,
+                materialSupport,
+                warehouseSelectionSupport,
+                supplierRepository,
+                purchaseInboundItemQueryService,
+                salesOrderItemQueryService,
+                pieceWeightService,
+                workflowTransitionGuard
+        );
+
+        PurchaseOrder order = buildOrder();
+        PurchaseOrderItem item1 = buildItem(11L, order);
+        item1.setQuantity(10);
+        PurchaseOrderItem item2 = buildItem(12L, order);
+        item2.setQuantity(6);
+        item2.setLineNo(2);
+        order.getItems().add(item1);
+        order.getItems().add(item2);
+
+        when(repository.findAll(any(Specification.class), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(order)));
+        when(repository.findByIdInAndDeletedFlagFalse(List.of(1L))).thenReturn(List.of(order));
+        when(purchaseInboundItemQueryService.summarizeAllocatedQuantityBySourcePurchaseOrderItemIds(List.of(11L, 12L)))
+                .thenReturn(Map.of(11L, 4L, 12L, 1L));
+        when(salesOrderItemQueryService.summarizeAllocatedQuantityBySourcePurchaseOrderItemIds(List.of(11L, 12L), null))
+                .thenReturn(Map.of(11L, 7L, 12L, 3L));
+
+        var inboundPage = service.importCandidates(PageQuery.of(0, 20, null, null), "", "purchase-inbound");
+        var salesPage = service.importCandidates(PageQuery.of(0, 20, null, null), "", "sales-order");
+
+        assertThat(inboundPage.getContent()).singleElement().satisfies(candidate ->
+                assertThat(candidate.importableQuantity()).isEqualTo(11)
+        );
+        assertThat(salesPage.getContent()).singleElement().satisfies(candidate ->
+                assertThat(candidate.importableQuantity()).isEqualTo(6)
+        );
+        assertThat(salesPage.getContent()).singleElement().satisfies(candidate ->
+                assertThat(candidate.status()).isEqualTo("草稿")
+        );
+        verify(repository, times(2)).findByIdInAndDeletedFlagFalse(List.of(1L));
+        verify(purchaseInboundItemQueryService).summarizeAllocatedQuantityBySourcePurchaseOrderItemIds(List.of(11L, 12L));
+        verify(salesOrderItemQueryService).summarizeAllocatedQuantityBySourcePurchaseOrderItemIds(List.of(11L, 12L), null);
+    }
+
+    @Test
+    void shouldSearchNormallyWhenAdminViewsDeletedRecordsAndBaseSpecIsNull() {
+        PurchaseOrderRepository repository = mock(PurchaseOrderRepository.class);
+        SnowflakeIdGenerator idGenerator = mock(SnowflakeIdGenerator.class);
+        PurchaseOrderMapper mapper = mock(PurchaseOrderMapper.class);
+        TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
+        WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
+        SupplierRepository supplierRepository = mock(SupplierRepository.class);
+        PurchaseInboundItemQueryService purchaseInboundItemQueryService = mock(PurchaseInboundItemQueryService.class);
+        SalesOrderItemQueryService salesOrderItemQueryService = mock(SalesOrderItemQueryService.class);
+        PurchaseOrderItemPieceWeightService pieceWeightService = mock(PurchaseOrderItemPieceWeightService.class);
+        WorkflowTransitionGuard workflowTransitionGuard = mock(WorkflowTransitionGuard.class);
+        SystemSwitchService systemSwitchService = mock(SystemSwitchService.class);
+        PurchaseOrderService service = new PurchaseOrderService(
+                repository,
+                idGenerator,
+                mapper,
+                materialSupport,
+                warehouseSelectionSupport,
+                supplierRepository,
+                purchaseInboundItemQueryService,
+                salesOrderItemQueryService,
+                pieceWeightService,
+                workflowTransitionGuard
+        );
+        PurchaseOrder order = buildOrder();
+
+        when(systemSwitchService.shouldAdminSeeDeletedRecords()).thenReturn(true);
+        when(systemSwitchService.getHiddenAuditedStatuses()).thenReturn(Set.of());
+        when(repository.findAll(any(Specification.class), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(order)));
+        when(mapper.toResponse(order)).thenReturn(summaryResponse("草稿"));
+        ReflectionTestUtils.setField(service, "systemSwitchService", systemSwitchService);
+        SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
+                "admin",
+                null,
+                List.of(new SimpleGrantedAuthority("ROLE_ADMIN"))
+        ));
+
+        List<PurchaseOrderResponse> response = service.search("", 200);
+
+        assertThat(response).singleElement().satisfies(item ->
+                assertThat(item.orderNo()).isEqualTo("PO-001")
+        );
+        verify(repository).findAll(any(Specification.class), any(Pageable.class));
     }
 
     private PurchaseOrder buildOrder() {

@@ -65,8 +65,7 @@ public class InvoiceIssueService extends AbstractCrudService<InvoiceIssue, Invoi
                                            String status,
                                            LocalDate startDate,
                                            LocalDate endDate) {
-        Specification<InvoiceIssue> spec = Specs.<InvoiceIssue>notDeleted()
-                .and(Specs.keywordLike(keyword, "issueNo", "invoiceNo", "sourceSalesOrderNos", "customerName", "projectName"))
+        Specification<InvoiceIssue> spec = Specs.<InvoiceIssue>keywordLike(keyword, "issueNo", "invoiceNo", "sourceSalesOrderNos", "customerName", "projectName")
                 .and(Specs.equalIfPresent("customerName", customerName))
                 .and(Specs.equalIfPresent("status", status))
                 .and(Specs.betweenIfPresent("invoiceDate", startDate, endDate));
@@ -130,8 +129,18 @@ public class InvoiceIssueService extends AbstractCrudService<InvoiceIssue, Invoi
     }
 
     @Override
+    protected Optional<InvoiceIssue> findVisibleEntity(Long id) {
+        return repository.findById(id);
+    }
+
+    @Override
     protected String notFoundMessage() {
         return "开票单不存在";
+    }
+
+    @Override
+    protected boolean allowAdminViewDeletedRecords() {
+        return true;
     }
 
     @Override

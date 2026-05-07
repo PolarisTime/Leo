@@ -74,8 +74,7 @@ public class ReceiptService extends AbstractCrudService<Receipt, ReceiptRequest,
                                       String status,
                                       LocalDate startDate,
                                       LocalDate endDate) {
-        Specification<Receipt> spec = Specs.<Receipt>notDeleted()
-                .and(Specs.keywordLike(keyword, "receiptNo", "customerName", "projectName"))
+        Specification<Receipt> spec = Specs.<Receipt>keywordLike(keyword, "receiptNo", "customerName", "projectName")
                 .and(Specs.equalIfPresent("customerName", customerName))
                 .and(Specs.equalIfPresent("status", status))
                 .and(Specs.betweenIfPresent("receiptDate", startDate, endDate));
@@ -110,8 +109,18 @@ public class ReceiptService extends AbstractCrudService<Receipt, ReceiptRequest,
     }
 
     @Override
+    protected Optional<Receipt> findVisibleEntity(Long id) {
+        return receiptRepository.findById(id);
+    }
+
+    @Override
     protected String notFoundMessage() {
         return "收款单不存在";
+    }
+
+    @Override
+    protected boolean allowAdminViewDeletedRecords() {
+        return true;
     }
 
     @Override

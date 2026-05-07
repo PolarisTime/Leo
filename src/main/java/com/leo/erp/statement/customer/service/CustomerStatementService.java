@@ -7,17 +7,23 @@ import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.service.AbstractCrudService;
 import com.leo.erp.common.support.ManagedEntityItemSupport;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
+import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.support.TradeItemCalculator;
+import com.leo.erp.sales.order.domain.entity.SalesOrder;
+import com.leo.erp.sales.order.repository.SalesOrderRepository;
+import com.leo.erp.security.permission.DataScopeContext;
 import com.leo.erp.security.permission.WorkflowTransitionGuard;
 import com.leo.erp.statement.customer.domain.entity.CustomerStatement;
 import com.leo.erp.statement.customer.domain.entity.CustomerStatementItem;
-import com.leo.erp.statement.customer.repository.CustomerStatementRepository;
-import com.leo.erp.statement.service.StatementSettlementSyncService;
 import com.leo.erp.statement.customer.mapper.CustomerStatementMapper;
+import com.leo.erp.statement.customer.repository.CustomerStatementRepository;
+import com.leo.erp.statement.customer.web.dto.CustomerStatementCandidateResponse;
 import com.leo.erp.statement.customer.web.dto.CustomerStatementItemRequest;
 import com.leo.erp.statement.customer.web.dto.CustomerStatementItemResponse;
 import com.leo.erp.statement.customer.web.dto.CustomerStatementRequest;
 import com.leo.erp.statement.customer.web.dto.CustomerStatementResponse;
+import com.leo.erp.statement.service.StatementCandidateSupport;
+import com.leo.erp.statement.service.StatementSettlementSyncService;
 import org.springframework.data.domain.Page;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
@@ -28,23 +34,36 @@ import java.time.LocalDate;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 @Service
 public class CustomerStatementService extends AbstractCrudService<CustomerStatement, CustomerStatementRequest, CustomerStatementResponse> {
 
+    private static final String[] SALES_ORDER_CANDIDATE_SEARCH_FIELDS = {
+            "orderNo",
+            "purchaseInboundNo",
+            "purchaseOrderNo",
+            "customerName",
+            "projectName",
+            "salesName"
+    };
+
     private final CustomerStatementRepository repository;
     private final CustomerStatementMapper customerStatementMapper;
+    private final SalesOrderRepository salesOrderRepository;
     private final StatementSettlementSyncService statementSettlementSyncService;
     private final WorkflowTransitionGuard workflowTransitionGuard;
 
     public CustomerStatementService(CustomerStatementRepository repository,
                                     SnowflakeIdGenerator idGenerator,
                                     CustomerStatementMapper customerStatementMapper,
+                                    SalesOrderRepository salesOrderRepository,
                                     StatementSettlementSyncService statementSettlementSyncService,
                                     WorkflowTransitionGuard workflowTransitionGuard) {
         super(idGenerator);
         this.repository = repository;
         this.customerStatementMapper = customerStatementMapper;
+        this.salesOrderRepository = salesOrderRepository;
         this.statementSettlementSyncService = statementSettlementSyncService;
         this.workflowTransitionGuard = workflowTransitionGuard;
     }
@@ -58,12 +77,26 @@ public class CustomerStatementService extends AbstractCrudService<CustomerStatem
             LocalDate periodStart,
             LocalDate periodEnd
     ) {
-        Specification<CustomerStatement> spec = Specs.<CustomerStatement>notDeleted()
-                .and(Specs.keywordLike(keyword, "statementNo", "customerName", "projectName", "sourceOrderNos"))
+        Specification<CustomerStatement> spec = Specs.<CustomerStatement>keywordLike(keyword, "statementNo", "customerName", "projectName", "sourceOrderNos")
                 .and(Specs.equalIfPresent("customerName", customerName))
                 .and(Specs.equalIfPresent("status", status))
                 .and(Specs.betweenIfPresent("endDate", periodStart, periodEnd));
         return page(query, spec, repository);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<CustomerStatementCandidateResponse> candidatePage(PageQuery query, String keyword) {
+        Set<String> occupiedOrderNos = StatementCandidateSupport.parseRelationNos(
+                repository.findAll(Specs.notDeleted()).stream()
+                        .map(CustomerStatement::getSourceOrderNos)
+                        .toList()
+        );
+        Specification<SalesOrder> spec = Specs.<SalesOrder>notDeleted()
+                .and(Specs.keywordLike(keyword, SALES_ORDER_CANDIDATE_SEARCH_FIELDS))
+                .and(Specs.equalIfPresent("status", StatusConstants.SALES_COMPLETED))
+                .and(StatementCandidateSupport.excludeFieldValues("orderNo", occupiedOrderNos));
+        return salesOrderRepository.findAll(DataScopeContext.apply(spec), query.toPageable("id"))
+                .map(this::toCandidateResponse);
     }
 
     @Override
@@ -122,8 +155,18 @@ public class CustomerStatementService extends AbstractCrudService<CustomerStatem
     }
 
     @Override
+    protected Optional<CustomerStatement> findVisibleEntity(Long id) {
+        return repository.findById(id);
+    }
+
+    @Override
     protected String notFoundMessage() {
         return "客户对账单不存在";
+    }
+
+    @Override
+    protected boolean allowAdminViewDeletedRecords() {
+        return true;
     }
 
     @Override
@@ -225,6 +268,20 @@ public class CustomerStatementService extends AbstractCrudService<CustomerStatem
                 item.getWeightTon(),
                 item.getUnitPrice(),
                 item.getAmount()
+        );
+    }
+
+    private CustomerStatementCandidateResponse toCandidateResponse(SalesOrder order) {
+        return new CustomerStatementCandidateResponse(
+                order.getId(),
+                order.getOrderNo(),
+                order.getCustomerName(),
+                order.getProjectName(),
+                order.getDeliveryDate(),
+                order.getSalesName(),
+                order.getTotalWeight(),
+                order.getTotalAmount(),
+                order.getStatus()
         );
     }
 }

@@ -6,6 +6,7 @@ import com.leo.erp.common.api.PageResponse;
 import com.leo.erp.common.web.BindPageQuery;
 import com.leo.erp.security.permission.RequiresPermission;
 import com.leo.erp.statement.customer.service.CustomerStatementService;
+import com.leo.erp.statement.customer.web.dto.CustomerStatementCandidateResponse;
 import com.leo.erp.statement.customer.web.dto.CustomerStatementRequest;
 import com.leo.erp.statement.customer.web.dto.CustomerStatementResponse;
 import jakarta.validation.Valid;
@@ -54,6 +55,18 @@ public class CustomerStatementController {
                         periodStart,
                         periodEnd
                 )
+        ));
+    }
+
+    @Operation(summary = "分页查询客户对账单候选销售订单")
+    @GetMapping("/candidates")
+    @RequiresPermission(resource = "customer-statement", action = "read")
+    public ApiResponse<PageResponse<CustomerStatementCandidateResponse>> candidates(
+            @BindPageQuery(sortFieldKey = "sales-orders") PageQuery query,
+            @RequestParam(required = false) String keyword
+    ) {
+        return ApiResponse.success(PageResponse.from(
+                customerStatementService.candidatePage(query, keyword)
         ));
     }
 
