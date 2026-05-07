@@ -84,6 +84,18 @@ public class CustomerStatementService extends AbstractCrudService<CustomerStatem
         return page(query, spec, repository);
     }
 
+    private static final String[] CUSTOMER_STATEMENT_SEARCH_FIELDS = {
+            "statementNo",
+            "customerName",
+            "projectName",
+            "sourceOrderNos"
+    };
+
+    @Transactional(readOnly = true)
+    public List<CustomerStatementResponse> search(String keyword, int maxSize) {
+        return search(keyword, CUSTOMER_STATEMENT_SEARCH_FIELDS, maxSize, null, repository);
+    }
+
     @Transactional(readOnly = true)
     public Page<CustomerStatementCandidateResponse> candidatePage(PageQuery query, String keyword) {
         Set<String> occupiedOrderNos = StatementCandidateSupport.parseRelationNos(

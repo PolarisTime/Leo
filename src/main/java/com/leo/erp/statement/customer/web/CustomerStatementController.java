@@ -35,6 +35,18 @@ public class CustomerStatementController {
         this.customerStatementService = customerStatementService;
     }
 
+    @Operation(summary = "搜索客户对账单")
+    @GetMapping("/search")
+    @RequiresPermission(resource = "customer-statement", action = "read")
+    public ApiResponse<java.util.List<CustomerStatementResponse>> search(
+            @RequestParam(required = false) String keyword,
+            @RequestParam(defaultValue = "100") int limit
+    ) {
+        return ApiResponse.success(
+                customerStatementService.search(keyword != null ? keyword : "", Math.min(limit, 500))
+        );
+    }
+
     @Operation(summary = "分页查询客户对账单")
     @GetMapping
     @RequiresPermission(resource = "customer-statement", action = "read")

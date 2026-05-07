@@ -26,6 +26,16 @@ public class InvoiceIssueController {
         this.service = service;
     }
 
+    @GetMapping("/search")
+    @RequiresPermission(resource = "invoice-issue", action = "read")
+    @Operation(summary = "搜索发票开具")
+    public ApiResponse<java.util.List<InvoiceIssueResponse>> search(
+            @RequestParam(required = false) String keyword,
+            @RequestParam(defaultValue = "100") int limit
+    ) {
+        return ApiResponse.success(service.search(keyword != null ? keyword : "", Math.min(limit, 500)));
+    }
+
     @GetMapping
     @RequiresPermission(resource = "invoice-issue", action = "read")
     @Operation(summary = "分页查询发票开具")

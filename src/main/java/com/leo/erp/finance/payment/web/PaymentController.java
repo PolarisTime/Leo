@@ -26,6 +26,16 @@ public class PaymentController {
         this.paymentService = paymentService;
     }
 
+    @Operation(summary = "搜索付款单")
+    @GetMapping("/search")
+    @RequiresPermission(resource = "payment", action = "read")
+    public ApiResponse<java.util.List<PaymentResponse>> search(
+            @RequestParam(required = false) String keyword,
+            @RequestParam(defaultValue = "100") int limit
+    ) {
+        return ApiResponse.success(paymentService.search(keyword != null ? keyword : "", Math.min(limit, 500)));
+    }
+
     @Operation(summary = "分页查询付款单")
     @GetMapping
     @RequiresPermission(resource = "payment", action = "read")

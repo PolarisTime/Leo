@@ -10,11 +10,13 @@ import com.leo.erp.security.support.SecurityPrincipal;
 import com.leo.erp.system.norule.service.GeneralSettingQueryService;
 import com.leo.erp.system.norule.service.NoRuleService;
 import com.leo.erp.system.norule.service.NoRuleSequenceService;
+import com.leo.erp.system.norule.service.SystemSwitchService;
 import com.leo.erp.system.operationlog.support.OperationLoggable;
 import com.leo.erp.system.norule.web.dto.GeneralSettingResponse;
 import com.leo.erp.system.norule.web.dto.NoRuleGenerateResponse;
 import com.leo.erp.system.norule.web.dto.NoRuleRequest;
 import com.leo.erp.system.norule.web.dto.NoRuleResponse;
+import com.leo.erp.system.norule.web.dto.StatementGeneratorRulesResponse;
 import jakarta.validation.Valid;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -37,15 +39,18 @@ public class NoRuleController {
     private final GeneralSettingQueryService generalSettingQueryService;
     private final NoRuleSequenceService noRuleSequenceService;
     private final ModulePermissionGuard modulePermissionGuard;
+    private final SystemSwitchService systemSwitchService;
 
     public NoRuleController(NoRuleService noRuleService,
                             GeneralSettingQueryService generalSettingQueryService,
                             NoRuleSequenceService noRuleSequenceService,
-                            ModulePermissionGuard modulePermissionGuard) {
+                            ModulePermissionGuard modulePermissionGuard,
+                            SystemSwitchService systemSwitchService) {
         this.noRuleService = noRuleService;
         this.generalSettingQueryService = generalSettingQueryService;
         this.noRuleSequenceService = noRuleSequenceService;
         this.modulePermissionGuard = modulePermissionGuard;
+        this.systemSwitchService = systemSwitchService;
     }
 
     @GetMapping
@@ -68,6 +73,15 @@ public class NoRuleController {
     @RequiresPermission(authenticatedOnly = true)
     public ApiResponse<List<GeneralSettingResponse>> clientSettings() {
         return ApiResponse.success(generalSettingQueryService.publicClientSettings());
+    }
+
+    @GetMapping("/statement-generator-rules")
+    @RequiresPermission(authenticatedOnly = true)
+    public ApiResponse<StatementGeneratorRulesResponse> statementGeneratorRules() {
+        return ApiResponse.success(new StatementGeneratorRulesResponse(
+                systemSwitchService.shouldDefaultCustomerStatementReceiptAmountToZero(),
+                systemSwitchService.shouldDefaultSupplierStatementToFullPayment()
+        ));
     }
 
     @GetMapping("/{id}")

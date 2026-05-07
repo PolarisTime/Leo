@@ -23,6 +23,15 @@ public class FreightBillController {
         this.service = service;
     }
 
+    @GetMapping("/search")
+    @RequiresPermission(resource = "freight-bill", action = "read")
+    public ApiResponse<java.util.List<FreightBillResponse>> search(
+            @RequestParam(required = false) String keyword,
+            @RequestParam(defaultValue = "100") int limit
+    ) {
+        return ApiResponse.success(service.search(keyword != null ? keyword : "", Math.min(limit, 500)));
+    }
+
     @GetMapping
     @RequiresPermission(resource = "freight-bill", action = "read")
     public ApiResponse<PageResponse<FreightBillResponse>> page(

@@ -1,0 +1,36 @@
+package com.leo.erp.common.web;
+
+import com.leo.erp.common.api.ApiResponse;
+import com.leo.erp.common.search.GlobalSearchResponse;
+import com.leo.erp.common.search.GlobalSearchService;
+import com.leo.erp.security.permission.RequiresPermission;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import java.util.List;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+@Tag(name = "全局搜索")
+@RestController
+@RequestMapping("/global-search")
+public class GlobalSearchController {
+
+    private final GlobalSearchService globalSearchService;
+
+    public GlobalSearchController(GlobalSearchService globalSearchService) {
+        this.globalSearchService = globalSearchService;
+    }
+
+    @Operation(summary = "聚合搜索有权限访问的业务单据")
+    @GetMapping
+    @RequiresPermission(authenticatedOnly = true, allowApiKey = true)
+    public ApiResponse<List<GlobalSearchResponse>> search(
+            @RequestParam(required = false) String keyword,
+            @RequestParam(defaultValue = "20") int limit,
+            @RequestParam(required = false) List<String> moduleKeys
+    ) {
+        return ApiResponse.success(globalSearchService.search(keyword != null ? keyword : "", limit, moduleKeys));
+    }
+}

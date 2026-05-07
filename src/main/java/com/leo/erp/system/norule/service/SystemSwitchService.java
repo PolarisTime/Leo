@@ -30,6 +30,8 @@ public class SystemSwitchService {
     public static final String HIDE_AUDITED_LIST_RECORDS_SWITCH = "UI_HIDE_AUDITED_LIST_RECORDS";
     public static final String ADMIN_VIEW_DELETED_RECORDS_SWITCH = "SYS_ADMIN_VIEW_DELETED_RECORDS";
     public static final String SHOW_SNOWFLAKE_ID_SWITCH = "UI_SHOW_SNOWFLAKE_ID";
+    public static final String CUSTOMER_STATEMENT_RECEIPT_ZERO_FROM_SALES_ORDER_SWITCH = "SYS_CUSTOMER_STATEMENT_RECEIPT_ZERO_FROM_SALES_ORDER";
+    public static final String SUPPLIER_STATEMENT_FULL_PAYMENT_FROM_PURCHASE_SWITCH = "SYS_SUPPLIER_STATEMENT_FULL_PAYMENT_FROM_PURCHASE";
     public static final String LOGIN_CAPTCHA_SWITCH = "SYS_LOGIN_CAPTCHA";
     public static final String SWITCH_CACHE_KEY = "leo:system:switches";
     private static final Duration SWITCH_CACHE_TTL = Duration.ofMinutes(5);
@@ -52,6 +54,8 @@ public class SystemSwitchService {
             HIDE_AUDITED_LIST_RECORDS_SWITCH,
             ADMIN_VIEW_DELETED_RECORDS_SWITCH,
             SHOW_SNOWFLAKE_ID_SWITCH,
+            CUSTOMER_STATEMENT_RECEIPT_ZERO_FROM_SALES_ORDER_SWITCH,
+            SUPPLIER_STATEMENT_FULL_PAYMENT_FROM_PURCHASE_SWITCH,
             LOGIN_CAPTCHA_SWITCH
     );
 
@@ -155,6 +159,16 @@ public class SystemSwitchService {
     @Transactional(readOnly = true)
     public boolean shouldShowSnowflakeId() {
         return isEnabled(SHOW_SNOWFLAKE_ID_SWITCH);
+    }
+
+    @Transactional(readOnly = true)
+    public boolean shouldDefaultCustomerStatementReceiptAmountToZero() {
+        return isEnabled(CUSTOMER_STATEMENT_RECEIPT_ZERO_FROM_SALES_ORDER_SWITCH);
+    }
+
+    @Transactional(readOnly = true)
+    public boolean shouldDefaultSupplierStatementToFullPayment() {
+        return isEnabled(SUPPLIER_STATEMENT_FULL_PAYMENT_FROM_PURCHASE_SWITCH);
     }
 
     @Transactional(readOnly = true)

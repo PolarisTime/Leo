@@ -95,7 +95,7 @@ class GeneralSettingQueryServiceTest {
     }
 
     @Test
-    void shouldExposeStatementGeneratorSwitchesThroughPublicClientSettings() {
+    void shouldKeepBusinessStatementSwitchesOutOfPublicClientSettings() {
         NoRule customerSwitch = new NoRule();
         customerSwitch.setId(3L);
         customerSwitch.setSettingCode("SYS_CUSTOMER_STATEMENT_RECEIPT_ZERO_FROM_SALES_ORDER");
@@ -110,8 +110,23 @@ class GeneralSettingQueryServiceTest {
         supplierSwitch.setBillName("供应商对账单");
         supplierSwitch.setStatus("正常");
 
+        NoRule hideAuditedSwitch = new NoRule();
+        hideAuditedSwitch.setId(5L);
+        hideAuditedSwitch.setSettingCode("UI_HIDE_AUDITED_LIST_RECORDS");
+        hideAuditedSwitch.setSettingName("隐藏已审核单据");
+        hideAuditedSwitch.setBillName("列表页");
+        hideAuditedSwitch.setStatus("正常");
+
+        NoRule defaultPageSizeSetting = new NoRule();
+        defaultPageSizeSetting.setId(6L);
+        defaultPageSizeSetting.setSettingCode(SystemSwitchService.DEFAULT_LIST_PAGE_SIZE_SETTING);
+        defaultPageSizeSetting.setSettingName("列表分页条数");
+        defaultPageSizeSetting.setBillName("列表页");
+        defaultPageSizeSetting.setSampleNo("50");
+        defaultPageSizeSetting.setStatus("正常");
+
         GeneralSettingQueryService service = new GeneralSettingQueryService(
-                noRuleRepository(List.of(customerSwitch, supplierSwitch)),
+                noRuleRepository(List.of(customerSwitch, supplierSwitch, hideAuditedSwitch, defaultPageSizeSetting)),
                 mapper(),
                 stubUploadRuleService()
         );
@@ -120,9 +135,11 @@ class GeneralSettingQueryServiceTest {
                 .map(GeneralSettingResponse::settingCode)
                 .collect(java.util.stream.Collectors.toSet());
 
-        assertThat(settingCodes).contains(
+        assertThat(settingCodes).contains(SystemSwitchService.DEFAULT_LIST_PAGE_SIZE_SETTING);
+        assertThat(settingCodes).doesNotContain(
                 "SYS_CUSTOMER_STATEMENT_RECEIPT_ZERO_FROM_SALES_ORDER",
-                "SYS_SUPPLIER_STATEMENT_FULL_PAYMENT_FROM_PURCHASE"
+                "SYS_SUPPLIER_STATEMENT_FULL_PAYMENT_FROM_PURCHASE",
+                SystemSwitchService.HIDE_AUDITED_LIST_RECORDS_SWITCH
         );
     }
 

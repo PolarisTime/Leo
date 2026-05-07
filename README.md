@@ -1,101 +1,112 @@
 # Leo ERP Backend
 
-钢材贸易业务中台后端服务，基于 Spring Boot 3.5 + Java 21。
+Leo 是钢材贸易 ERP 的后端服务，负责认证授权、业务单据、对账结算、附件、系统设置、全局搜索和审计能力。
 
 ## 技术栈
 
-- **语言**: Java 21
-- **框架**: Spring Boot 3.5, Spring Security, Spring Data JPA
-- **数据库**: PostgreSQL 16 (Flyway 迁移)
-- **缓存**: Redis 7
-- **认证**: JWT (jjwt) + TOTP 两步验证
-- **文档**: OpenAPI 3 / Swagger UI
-- **构建**: Maven 3.9
+- Java 21
+- Spring Boot 3.5
+- Spring Security
+- Spring Data JPA
+- PostgreSQL + Flyway
+- Redis
+- JWT + TOTP
+- OpenAPI / Swagger UI
+- Maven 3.9
 
-## 业务模块
+## 业务范围
 
-| 模块 | 说明 |
-|------|------|
-| `auth` | 认证、API Key 管理、用户账户管理、角色权限 |
-| `attachment` | 附件上传/下载、上传规则配置 |
-| `contract` | 采购/销售合同管理 |
-| `purchase` | 采购订单、入库管理 |
-| `sales` | 销售订单管理 |
-| `finance` | 收付款、发票、应收应付 |
-| `statement` | 客户/供应商/运费对账 |
-| `logistics` | 物流运输管理 |
-| `master` | 基础资料（物料、客户、供应商） |
-| `report` | 财务报表 |
-| `ops` | 运维工具（数据库备份、健康检查） |
-| `system` | 系统配置、单号规则、菜单管理 |
+- 采购：采购订单、采购入库
+- 销售：销售订单、销售出库
+- 合同：采购合同、销售合同
+- 物流：物流单、物流对账单
+- 对账：客户、供应商对账单
+- 财务：收款单、付款单、收票单、开票单、应收应付
+- 系统：通用设置、系统开关、单号规则、权限、附件、密钥轮转
+- 聚合全局搜索：按权限和数据范围搜索多类业务单据
 
-## 快速开始
-
-### 环境要求
+## 环境要求
 
 - Java 21+
 - Maven 3.9+
 - PostgreSQL 16+
-- Redis 7+
+- Redis 6+
 
-### 本地运行
+## 本地运行
+
+1. 准备根目录 `.env.local`，供 `scripts/env-local.sh` 自动加载。
+
+2. 如需初始化数据库和应用账号：
 
 ```bash
-# 配置环境变量
-cp scripts/env-local.sh.example scripts/env-local.sh
-vim scripts/env-local.sh
-
-# 首次使用时创建空数据库和应用账号
-./scripts/init-database.sh
-
-# 启动
-./scripts/start-local.sh
+bash scripts/init-database.sh
 ```
 
-启动后 Flyway 会创建表结构和系统菜单/权限等基础元数据，不再写入演示业务数据。
-首次打开前端时进入 `http://localhost:3100/setup`，通过 OOBE 创建管理员账号和公司主体信息。
-
-### 环境变量
-
-| 变量 | 默认值 | 说明 |
-|------|--------|------|
-| `SPRING_DATASOURCE_HOST` | `localhost` | 数据库主机 |
-| `SPRING_DATASOURCE_PORT` | `5432` | 数据库端口 |
-| `SPRING_DATASOURCE_DB` | `leo` | 数据库名 |
-| `SPRING_DATASOURCE_USERNAME` | `leo` | 数据库用户 |
-| `SPRING_DATASOURCE_PASSWORD` | — | 数据库密码 |
-| `LEO_DB_ADMIN_USER` | `postgres` | `scripts/init-database.sh` 使用的 PostgreSQL 管理账号 |
-| `LEO_DB_ADMIN_PASSWORD` | — | PostgreSQL 管理账号密码 |
-| `SPRING_DATA_REDIS_HOST` | `localhost` | Redis 主机 |
-| `SPRING_DATA_REDIS_PORT` | `6379` | Redis 端口 |
-| `LEO_AUTH_JWT_SECRET` | — | JWT 签名密钥 (必填) |
-| `LEO_AUTH_REFRESH_COOKIE_SECURE` | `true` | Refresh Token Cookie Secure |
-| `LEO_DOCS_PUBLIC_ACCESS_ENABLED` | `false` | 公开 Swagger 文档 |
-
-### 测试
+3. 启动本地后端：
 
 ```bash
+bash scripts/start-local.sh
+```
+
+启动脚本会检查：
+
+- `JAVA_HOME`
+- PostgreSQL 连通性和认证
+- Redis 连通性和认证
+- 可选启动密钥 `LEO_JWT_SECRET` / `TOTP_ENCRYPTION_KEY`
+
+## 常用命令
+
+```bash
+mvn -q -DskipTests compile
 mvn test
+mvn -DskipTests package
 ```
 
-### 构建
+Swagger UI：
+
+- `http://localhost:11211/api/swagger-ui.html`
+
+健康检查：
+
+- `http://localhost:11211/api/health`
+
+首次初始化页面由前端提供：
+
+- `http://localhost:3100/setup`
+
+## 关键配置
+
+常见环境变量：
+
+- `SPRING_DATASOURCE_HOST`
+- `SPRING_DATASOURCE_PORT`
+- `SPRING_DATASOURCE_DB`
+- `SPRING_DATASOURCE_USERNAME`
+- `SPRING_DATASOURCE_PASSWORD`
+- `SPRING_DATA_REDIS_HOST`
+- `SPRING_DATA_REDIS_PORT`
+- `SPRING_DATA_REDIS_DATABASE`
+- `SPRING_DATA_REDIS_PASSWORD`
+- `LEO_JWT_SECRET`
+- `TOTP_ENCRYPTION_KEY`
+- `LEO_MACHINE_ID`
+
+## CI 校验
+
+GitHub Actions 当前会执行以下步骤：
 
 ```bash
-mvn package -DskipTests
+mvn -B -ntp -DskipTests checkstyle:check spotbugs:spotbugs
+mvn -B -ntp test
+mvn -B -ntp -DskipTests package
+docker build -t leo-backend:ci .
 ```
 
-### Maven 下载加速（可选）
+CI 中还会拉起 PostgreSQL 和 Redis 服务，并做镜像启动冒烟检查。
 
-CI 默认使用 Maven Central，并通过 GitHub Actions 缓存 `~/.m2/repository`。国内开发环境如需镜像加速，可手动指定阿里云 settings：
+## 安全说明
 
-```bash
-mvn -s .mvn/settings.aliyun.xml test
-```
-
-## API 文档
-
-开发环境访问 http://localhost:11211/api/swagger-ui.html
-
-## 许可证
-
-MIT License - 详见 [LICENSE](LICENSE)
+- 不要把真实数据库密码、Redis 密码、JWT 密钥、TOTP 密钥提交到仓库。
+- 生产环境建议使用数据库托管密钥或外部密钥管理。
+- Swagger 和健康检查的匿名访问应通过配置显式控制。

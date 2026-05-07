@@ -34,6 +34,18 @@ public class PurchaseContractController {
         this.purchaseContractService = purchaseContractService;
     }
 
+    @GetMapping("/search")
+    @RequiresPermission(resource = "purchase-contract", action = "read")
+    @Operation(summary = "搜索采购合同")
+    public ApiResponse<java.util.List<PurchaseContractResponse>> search(
+            @RequestParam(required = false) String keyword,
+            @RequestParam(defaultValue = "100") int limit
+    ) {
+        return ApiResponse.success(
+                purchaseContractService.search(keyword != null ? keyword : "", Math.min(limit, 500))
+        );
+    }
+
     @GetMapping
     @RequiresPermission(resource = "purchase-contract", action = "read")
     @Operation(summary = "分页查询采购合同")

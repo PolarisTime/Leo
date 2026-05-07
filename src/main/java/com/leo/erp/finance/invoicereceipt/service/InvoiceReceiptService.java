@@ -71,6 +71,18 @@ public class InvoiceReceiptService extends AbstractCrudService<InvoiceReceipt, I
         return page(query, spec, repository);
     }
 
+    private static final String[] INVOICE_RECEIPT_SEARCH_FIELDS = {
+            "receiveNo",
+            "invoiceNo",
+            "sourcePurchaseOrderNos",
+            "supplierName"
+    };
+
+    @Transactional(readOnly = true)
+    public List<InvoiceReceiptResponse> search(String keyword, int maxSize) {
+        return search(keyword, INVOICE_RECEIPT_SEARCH_FIELDS, maxSize, null, repository);
+    }
+
     @Override
     protected InvoiceReceiptResponse toDetailResponse(InvoiceReceipt entity) {
         InvoiceReceiptResponse response = mapper.toResponse(entity);
