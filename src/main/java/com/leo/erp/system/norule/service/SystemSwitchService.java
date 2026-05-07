@@ -26,13 +26,16 @@ public class SystemSwitchService {
     public static final String FORCE_BATCH_MANAGEMENT_SWITCH = "SYS_FORCE_BATCH_MANAGEMENT";
     public static final String FORBID_DISABLE_2FA_SWITCH = "SYS_FORBID_DISABLE_2FA";
     public static final String MAX_CONCURRENT_SESSIONS_SWITCH = "SYS_MAX_CONCURRENT_SESSIONS";
+    public static final String DEFAULT_LIST_PAGE_SIZE_SETTING = "UI_DEFAULT_LIST_PAGE_SIZE";
     public static final String HIDE_AUDITED_LIST_RECORDS_SWITCH = "UI_HIDE_AUDITED_LIST_RECORDS";
+    public static final String ADMIN_VIEW_DELETED_RECORDS_SWITCH = "SYS_ADMIN_VIEW_DELETED_RECORDS";
     public static final String SHOW_SNOWFLAKE_ID_SWITCH = "UI_SHOW_SNOWFLAKE_ID";
     public static final String LOGIN_CAPTCHA_SWITCH = "SYS_LOGIN_CAPTCHA";
     public static final String SWITCH_CACHE_KEY = "leo:system:switches";
     private static final Duration SWITCH_CACHE_TTL = Duration.ofMinutes(5);
     private static final TypeReference<Map<String, SwitchSnapshot>> SWITCH_MAP_TYPE = new TypeReference<>() { };
     private static final int DEFAULT_MAX_SESSIONS = 3;
+    private static final int DEFAULT_LIST_PAGE_SIZE = 20;
     private static final Set<String> DEFAULT_DETAILED_PAGE_ACTIONS = Set.of(
             "QUERY", "DETAIL", "CREATE", "EDIT", "DELETE", "AUDIT", "EXPORT", "PRINT"
     );
@@ -45,7 +48,9 @@ public class SystemSwitchService {
             FORCE_BATCH_MANAGEMENT_SWITCH,
             FORBID_DISABLE_2FA_SWITCH,
             MAX_CONCURRENT_SESSIONS_SWITCH,
+            DEFAULT_LIST_PAGE_SIZE_SETTING,
             HIDE_AUDITED_LIST_RECORDS_SWITCH,
+            ADMIN_VIEW_DELETED_RECORDS_SWITCH,
             SHOW_SNOWFLAKE_ID_SWITCH,
             LOGIN_CAPTCHA_SWITCH
     );
@@ -120,6 +125,11 @@ public class SystemSwitchService {
     }
 
     @Transactional(readOnly = true)
+    public boolean shouldAdminSeeDeletedRecords() {
+        return isEnabled(ADMIN_VIEW_DELETED_RECORDS_SWITCH);
+    }
+
+    @Transactional(readOnly = true)
     public Set<String> getHiddenAuditedStatuses() {
         if (!isEnabled(HIDE_AUDITED_LIST_RECORDS_SWITCH)) {
             return Set.of();
@@ -165,6 +175,14 @@ public class SystemSwitchService {
                     }
                 })
                 .orElse(DEFAULT_MAX_SESSIONS);
+    }
+
+    @Transactional(readOnly = true)
+    public int getDefaultListPageSize() {
+        return findSwitch(DEFAULT_LIST_PAGE_SIZE_SETTING)
+                .filter(rule -> "正常".equals(rule.status()))
+                .map(rule -> parseBoundedPositiveInt(rule.sampleNo(), DEFAULT_LIST_PAGE_SIZE))
+                .orElse(DEFAULT_LIST_PAGE_SIZE);
     }
 
     public void evictCache() {
@@ -226,6 +244,15 @@ public class SystemSwitchService {
                 .filter(DEFAULT_DETAILED_PAGE_ACTIONS::contains)
                 .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
         return selected.isEmpty() ? DEFAULT_DETAILED_PAGE_ACTIONS : selected;
+    }
+
+    private int parseBoundedPositiveInt(String rawValue, int fallback) {
+        try {
+            int value = Integer.parseInt(rawValue == null ? "" : rawValue.trim());
+            return value >= 1 && value <= 200 ? value : fallback;
+        } catch (NumberFormatException ex) {
+            return fallback;
+        }
     }
 
     public record SwitchSnapshot(String status, String sampleNo) {

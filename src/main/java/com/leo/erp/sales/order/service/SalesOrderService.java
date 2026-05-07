@@ -78,8 +78,7 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
                                          String status,
                                          java.time.LocalDate startDate,
                                          java.time.LocalDate endDate) {
-        Specification<SalesOrder> spec = Specs.<SalesOrder>notDeleted()
-                .and(Specs.keywordLike(keyword, "orderNo", "purchaseOrderNo", "customerName", "projectName"))
+        Specification<SalesOrder> spec = Specs.<SalesOrder>keywordLike(keyword, "orderNo", "purchaseOrderNo", "customerName", "projectName")
                 .and(Specs.equalIfPresent("customerName", customerName))
                 .and(Specs.equalIfPresent("projectName", projectName))
                 .and(Specs.equalIfPresent("status", status))
@@ -91,7 +90,7 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
 
     @Transactional(readOnly = true)
     public java.util.List<SalesOrderResponse> search(String keyword, int maxSize) {
-        return search(keyword, SALES_ORDER_SEARCH_FIELDS, maxSize, Specs.notDeleted(), repository);
+        return search(keyword, SALES_ORDER_SEARCH_FIELDS, maxSize, null, repository);
     }
 
     @Override
@@ -153,8 +152,18 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
     }
 
     @Override
+    protected Optional<SalesOrder> findVisibleEntity(Long id) {
+        return repository.findById(id);
+    }
+
+    @Override
     protected String notFoundMessage() {
         return "销售订单不存在";
+    }
+
+    @Override
+    protected boolean allowAdminViewDeletedRecords() {
+        return true;
     }
 
     @Override

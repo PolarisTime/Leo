@@ -66,7 +66,14 @@ public class MaterialService extends AbstractCrudService<Material, MaterialReque
         this.tradeItemMaterialSupport = tradeItemMaterialSupport;
     }
 
-    private static final String[] MATERIAL_SEARCH_FIELDS = {"materialCode", "brand", "spec"};
+    private static final String[] MATERIAL_SEARCH_FIELDS = {
+            "materialCode",
+            "brand",
+            "material",
+            "category",
+            "spec",
+            "length"
+    };
 
     private static final Sort DEFAULT_MATERIAL_SORT = Sort.by(Sort.Direction.ASC, "material")
             .and(Sort.by(Sort.Direction.ASC, "lengthSort"))
@@ -136,7 +143,7 @@ public class MaterialService extends AbstractCrudService<Material, MaterialReque
     @Transactional(readOnly = true)
     public byte[] exportCsv(String keyword) {
         Specification<Material> spec = Specs.<Material>notDeleted()
-                .and(Specs.keywordLike(keyword, "materialCode", "brand", "spec"));
+                .and(Specs.keywordLike(keyword, MATERIAL_SEARCH_FIELDS));
         List<Material> materials = materialRepository.findAll(DataScopeContext.apply(spec), DEFAULT_MATERIAL_SORT);
         StringWriter writer = new StringWriter();
         writer.append('\uFEFF');

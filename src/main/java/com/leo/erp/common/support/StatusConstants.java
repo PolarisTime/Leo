@@ -10,6 +10,7 @@ public final class StatusConstants {
     // 通用状态
     public static final String NORMAL = "正常";
     public static final String DISABLED = "禁用";
+    public static final String DELETED = "已删除";
 
     // 单据状态
     public static final String DRAFT = "草稿";
@@ -23,6 +24,7 @@ public final class StatusConstants {
     // 业务完成状态
     public static final String PURCHASE_COMPLETED = "完成采购";
     public static final String SALES_COMPLETED = "完成销售";
+    public static final String SALES_PENDING_FINALIZE = "待完善";
     public static final String INBOUND_COMPLETED = "完成入库";
 
     // 签署/送达状态

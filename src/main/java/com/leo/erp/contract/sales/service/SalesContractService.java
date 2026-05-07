@@ -48,8 +48,7 @@ public class SalesContractService extends AbstractCrudService<SalesContract, Sal
                                             String status,
                                             java.time.LocalDate startDate,
                                             java.time.LocalDate endDate) {
-        Specification<SalesContract> spec = Specs.<SalesContract>notDeleted()
-                .and(Specs.keywordLike(keyword, "contractNo", "customerName", "projectName"))
+        Specification<SalesContract> spec = Specs.<SalesContract>keywordLike(keyword, "contractNo", "customerName", "projectName")
                 .and(Specs.equalIfPresent("customerName", customerName))
                 .and(Specs.equalIfPresent("status", status))
                 .and(Specs.betweenIfPresent("signDate", startDate, endDate));
@@ -106,8 +105,18 @@ public class SalesContractService extends AbstractCrudService<SalesContract, Sal
     }
 
     @Override
+    protected Optional<SalesContract> findVisibleEntity(Long id) {
+        return repository.findById(id);
+    }
+
+    @Override
     protected String notFoundMessage() {
         return "销售合同不存在";
+    }
+
+    @Override
+    protected boolean allowAdminViewDeletedRecords() {
+        return true;
     }
 
     @Override

@@ -64,6 +64,12 @@ public class NoRuleController {
         return ApiResponse.success(generalSettingQueryService.publicDisplaySwitches());
     }
 
+    @GetMapping("/client-settings")
+    @RequiresPermission(authenticatedOnly = true)
+    public ApiResponse<List<GeneralSettingResponse>> clientSettings() {
+        return ApiResponse.success(generalSettingQueryService.publicClientSettings());
+    }
+
     @GetMapping("/{id}")
     @RequiresPermission(resource = "general-setting", action = "read")
     public ApiResponse<NoRuleResponse> detail(@PathVariable Long id) {

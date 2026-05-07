@@ -60,10 +60,15 @@ public class SalesOrderCompletionSyncService {
     private boolean applyCompletedStatus(SalesOrder order, boolean completed) {
         String currentStatus = normalize(order.getStatus());
         if (completed) {
-            if (StatusConstants.SALES_COMPLETED.equals(currentStatus)) {
+            if (StatusConstants.SALES_PENDING_FINALIZE.equals(currentStatus)
+                    || StatusConstants.SALES_COMPLETED.equals(currentStatus)) {
                 return false;
             }
-            order.setStatus(StatusConstants.SALES_COMPLETED);
+            order.setStatus(StatusConstants.SALES_PENDING_FINALIZE);
+            return true;
+        }
+        if (StatusConstants.SALES_PENDING_FINALIZE.equals(currentStatus)) {
+            order.setStatus(StatusConstants.AUDITED);
             return true;
         }
         if (!StatusConstants.SALES_COMPLETED.equals(currentStatus)) {

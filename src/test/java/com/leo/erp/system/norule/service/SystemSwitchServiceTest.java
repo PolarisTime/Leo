@@ -40,6 +40,7 @@ class SystemSwitchServiceTest {
 
         assertThat(service.shouldShowSnowflakeId()).isTrue();
         assertThat(service.getMaxConcurrentSessions()).isEqualTo(8);
+        assertThat(service.getDefaultListPageSize()).isEqualTo(20);
         assertThat(service.shouldRecordDetailedPageAction("edit")).isTrue();
         assertThat(service.shouldRecordDetailedPageAction("delete")).isFalse();
         verify(redisJsonCacheSupport, atLeastOnce()).getOrLoad(
@@ -48,6 +49,18 @@ class SystemSwitchServiceTest {
                 any(TypeReference.class),
                 any(Supplier.class)
         );
+    }
+
+    @Test
+    void shouldReadConfiguredDefaultListPageSize() {
+        NoRuleRepository repository = mock(NoRuleRepository.class);
+        when(repository.findBySettingCodeInAndDeletedFlagFalse(any())).thenReturn(List.of(
+                rule(SystemSwitchService.DEFAULT_LIST_PAGE_SIZE_SETTING, "正常", "50")
+        ));
+
+        SystemSwitchService service = new SystemSwitchService(repository);
+
+        assertThat(service.getDefaultListPageSize()).isEqualTo(50);
     }
 
     private NoRule rule(String code, String status, String sampleNo) {

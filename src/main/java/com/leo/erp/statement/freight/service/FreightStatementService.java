@@ -12,11 +12,15 @@ import com.leo.erp.common.support.ManagedEntityItemSupport;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.support.TradeItemCalculator;
+import com.leo.erp.logistics.bill.domain.entity.FreightBill;
+import com.leo.erp.logistics.bill.repository.FreightBillRepository;
 import com.leo.erp.security.permission.DataScopeContext;
 import com.leo.erp.security.permission.WorkflowTransitionGuard;
 import com.leo.erp.statement.freight.domain.entity.FreightStatement;
 import com.leo.erp.statement.freight.domain.entity.FreightStatementItem;
 import com.leo.erp.statement.freight.repository.FreightStatementRepository;
+import com.leo.erp.statement.freight.web.dto.FreightStatementCandidateResponse;
+import com.leo.erp.statement.service.StatementCandidateSupport;
 import com.leo.erp.statement.service.StatementSettlementSyncService;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
@@ -32,14 +36,24 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
 public class FreightStatementService extends AbstractCrudService<FreightStatement, FreightStatementCommand, FreightStatementView> {
 
     private static final String MODULE_KEY = "freight-statements";
+    private static final String[] FREIGHT_BILL_CANDIDATE_SEARCH_FIELDS = {
+            "billNo",
+            "outboundNo",
+            "carrierName",
+            "vehiclePlate",
+            "customerName",
+            "projectName"
+    };
 
     private final FreightStatementRepository repository;
+    private final FreightBillRepository freightBillRepository;
     private final AttachmentService attachmentService;
     private final AttachmentBindingService attachmentBindingService;
     private final StatementSettlementSyncService statementSettlementSyncService;
@@ -47,12 +61,14 @@ public class FreightStatementService extends AbstractCrudService<FreightStatemen
 
     public FreightStatementService(FreightStatementRepository repository,
                                    SnowflakeIdGenerator idGenerator,
+                                   FreightBillRepository freightBillRepository,
                                    AttachmentService attachmentService,
                                    AttachmentBindingService attachmentBindingService,
                                    StatementSettlementSyncService statementSettlementSyncService,
                                    WorkflowTransitionGuard workflowTransitionGuard) {
         super(idGenerator);
         this.repository = repository;
+        this.freightBillRepository = freightBillRepository;
         this.attachmentService = attachmentService;
         this.attachmentBindingService = attachmentBindingService;
         this.statementSettlementSyncService = statementSettlementSyncService;
@@ -69,18 +85,33 @@ public class FreightStatementService extends AbstractCrudService<FreightStatemen
             LocalDate periodStart,
             LocalDate periodEnd
     ) {
-        Specification<FreightStatement> spec = Specs.<FreightStatement>notDeleted()
-                .and(Specs.keywordLike(keyword, "statementNo", "carrierName", "sourceBillNos"))
+        Specification<FreightStatement> spec = applyDeletedVisibilityPolicy(
+                Specs.<FreightStatement>keywordLike(keyword, "statementNo", "carrierName", "sourceBillNos")
                 .and(Specs.equalIfPresent("carrierName", carrierName))
                 .and(Specs.equalIfPresent("status", status))
                 .and(Specs.equalIfPresent("signStatus", signStatus))
-                .and(Specs.betweenIfPresent("endDate", periodStart, periodEnd));
+                .and(Specs.betweenIfPresent("endDate", periodStart, periodEnd))
+        );
         Page<FreightStatement> entityPage = repository.findAll(DataScopeContext.apply(spec), query.toPageable("id"));
         Map<Long, List<AttachmentView>> attachmentsByStatementId = resolveAttachmentsByStatement(entityPage.getContent());
         List<FreightStatementView> responses = entityPage.getContent().stream()
                 .map(entity -> toView(entity, attachmentsByStatementId.getOrDefault(entity.getId(), List.of())))
                 .toList();
         return new PageImpl<>(responses, entityPage.getPageable(), entityPage.getTotalElements());
+    }
+
+    @Transactional(readOnly = true)
+    public Page<FreightStatementCandidateResponse> candidatePage(PageQuery query, String keyword) {
+        Set<String> occupiedBillNos = StatementCandidateSupport.parseRelationNos(
+                repository.findAll(Specs.notDeleted()).stream()
+                        .map(FreightStatement::getSourceBillNos)
+                        .toList()
+        );
+        Specification<FreightBill> spec = Specs.<FreightBill>notDeleted()
+                .and(Specs.keywordLike(keyword, FREIGHT_BILL_CANDIDATE_SEARCH_FIELDS))
+                .and(StatementCandidateSupport.excludeFieldValues("billNo", occupiedBillNos));
+        return freightBillRepository.findAll(DataScopeContext.apply(spec), query.toPageable("id"))
+                .map(this::toCandidateResponse);
     }
 
     @Override
@@ -124,8 +155,18 @@ public class FreightStatementService extends AbstractCrudService<FreightStatemen
     }
 
     @Override
+    protected Optional<FreightStatement> findVisibleEntity(Long id) {
+        return repository.findById(id);
+    }
+
+    @Override
     protected String notFoundMessage() {
         return "物流对账单不存在";
+    }
+
+    @Override
+    protected boolean allowAdminViewDeletedRecords() {
+        return true;
     }
 
     @Override
@@ -261,6 +302,20 @@ public class FreightStatementService extends AbstractCrudService<FreightStatemen
                 item.getBatchNo(),
                 item.getWeightTon(),
                 item.getWarehouseName()
+        );
+    }
+
+    private FreightStatementCandidateResponse toCandidateResponse(FreightBill bill) {
+        return new FreightStatementCandidateResponse(
+                bill.getId(),
+                bill.getBillNo(),
+                bill.getCarrierName(),
+                bill.getCustomerName(),
+                bill.getProjectName(),
+                bill.getBillTime(),
+                bill.getTotalWeight(),
+                bill.getTotalFreight(),
+                bill.getStatus()
         );
     }
 

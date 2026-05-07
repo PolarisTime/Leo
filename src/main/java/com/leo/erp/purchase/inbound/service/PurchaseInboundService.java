@@ -89,8 +89,7 @@ public class PurchaseInboundService extends AbstractCrudService<PurchaseInbound,
                                               String status,
                                               java.time.LocalDate startDate,
                                               java.time.LocalDate endDate) {
-        Specification<PurchaseInbound> spec = Specs.<PurchaseInbound>notDeleted()
-                .and(Specs.keywordLike(keyword, "inboundNo", "purchaseOrderNo", "supplierName"))
+        Specification<PurchaseInbound> spec = Specs.<PurchaseInbound>keywordLike(keyword, "inboundNo", "purchaseOrderNo", "supplierName")
                 .and(Specs.equalIfPresent("supplierName", supplierName))
                 .and(Specs.equalIfPresent("status", status))
                 .and(Specs.betweenIfPresent("inboundDate", startDate, endDate));
@@ -101,7 +100,7 @@ public class PurchaseInboundService extends AbstractCrudService<PurchaseInbound,
 
     @Transactional(readOnly = true)
     public java.util.List<PurchaseInboundResponse> search(String keyword, int maxSize) {
-        return search(keyword, INBOUND_SEARCH_FIELDS, maxSize, Specs.notDeleted(), repository);
+        return search(keyword, INBOUND_SEARCH_FIELDS, maxSize, null, repository);
     }
 
     @Override
@@ -542,8 +541,18 @@ public class PurchaseInboundService extends AbstractCrudService<PurchaseInbound,
     }
 
     @Override
+    protected Optional<PurchaseInbound> findVisibleEntity(Long id) {
+        return repository.findById(id);
+    }
+
+    @Override
     protected String notFoundMessage() {
         return "采购入库不存在";
+    }
+
+    @Override
+    protected boolean allowAdminViewDeletedRecords() {
+        return true;
     }
 
     @Override

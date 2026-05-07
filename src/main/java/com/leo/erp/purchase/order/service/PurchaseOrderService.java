@@ -19,12 +19,14 @@ import com.leo.erp.purchase.order.domain.entity.PurchaseOrder;
 import com.leo.erp.purchase.order.domain.entity.PurchaseOrderItem;
 import com.leo.erp.purchase.order.repository.PurchaseOrderRepository;
 import com.leo.erp.purchase.order.mapper.PurchaseOrderMapper;
+import com.leo.erp.purchase.order.web.dto.PurchaseOrderImportCandidateResponse;
 import com.leo.erp.purchase.order.web.dto.PurchaseOrderItemRequest;
 import com.leo.erp.purchase.order.web.dto.PurchaseOrderItemResponse;
 import com.leo.erp.purchase.order.web.dto.PurchaseOrderRequest;
 import com.leo.erp.purchase.order.web.dto.PurchaseOrderResponse;
 import com.leo.erp.sales.order.service.SalesOrderItemQueryService;
 import com.leo.erp.security.permission.WorkflowTransitionGuard;
+import java.util.function.Function;
 import org.springframework.data.domain.Page;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
@@ -35,9 +37,30 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 @Service
 public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, PurchaseOrderRequest, PurchaseOrderResponse> {
+
+    private enum ImportCandidateUsage {
+        PURCHASE_INBOUND("purchase-inbound"),
+        SALES_ORDER("sales-order");
+
+        private final String value;
+
+        ImportCandidateUsage(String value) {
+            this.value = value;
+        }
+
+        public static ImportCandidateUsage from(String value) {
+            for (ImportCandidateUsage usage : values()) {
+                if (usage.value.equalsIgnoreCase(value == null ? "" : value.trim())) {
+                    return usage;
+                }
+            }
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "usage 不支持当前导入场景");
+        }
+    }
 
     private final PurchaseOrderRepository purchaseOrderRepository;
     private final PurchaseOrderMapper purchaseOrderMapper;
@@ -80,8 +103,7 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
                                             String status,
                                             java.time.LocalDate startDate,
                                             java.time.LocalDate endDate) {
-        Specification<PurchaseOrder> spec = Specs.<PurchaseOrder>notDeleted()
-                .and(Specs.keywordLike(keyword, PURCHASE_ORDER_SEARCH_FIELDS))
+        Specification<PurchaseOrder> spec = Specs.<PurchaseOrder>keywordLike(keyword, PURCHASE_ORDER_SEARCH_FIELDS)
                 .and(Specs.equalIfPresent("supplierName", supplierName))
                 .and(Specs.equalIfPresent("status", status))
                 .and(Specs.betweenIfPresent("orderDate", startDate, endDate));
@@ -91,7 +113,30 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
     @Transactional(readOnly = true)
     public java.util.List<PurchaseOrderResponse> search(String keyword, int maxSize) {
         return search(keyword, PURCHASE_ORDER_SEARCH_FIELDS, maxSize,
-                Specs.notDeleted(), purchaseOrderRepository);
+                null, purchaseOrderRepository);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<PurchaseOrderImportCandidateResponse> importCandidates(PageQuery query, String keyword, String usage) {
+        ImportCandidateUsage candidateUsage = ImportCandidateUsage.from(usage);
+        Specification<PurchaseOrder> spec = Specs.<PurchaseOrder>notDeleted()
+                .and(Specs.keywordLike(keyword, PURCHASE_ORDER_SEARCH_FIELDS));
+        Page<PurchaseOrder> page = pageEntities(query, spec, purchaseOrderRepository);
+        if (page.isEmpty()) {
+            return page.map(order -> toImportCandidateResponse(order, 0));
+        }
+
+        List<Long> orderIds = page.getContent().stream()
+                .map(PurchaseOrder::getId)
+                .toList();
+        Map<Long, PurchaseOrder> detailMap = purchaseOrderRepository.findByIdInAndDeletedFlagFalse(orderIds).stream()
+                .collect(Collectors.toMap(PurchaseOrder::getId, Function.identity()));
+        Map<Long, Integer> importableQuantityMap = buildImportableQuantityMap(detailMap.values().stream().toList(), candidateUsage);
+
+        return page.map(order -> toImportCandidateResponse(
+                order,
+                importableQuantityMap.getOrDefault(order.getId(), 0)
+        ));
     }
 
     @Override
@@ -156,6 +201,62 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
         return Math.max(0, item.getQuantity() - allocatedQuantity);
     }
 
+    private Map<Long, Integer> buildImportableQuantityMap(List<PurchaseOrder> orders, ImportCandidateUsage usage) {
+        if (orders == null || orders.isEmpty()) {
+            return Map.of();
+        }
+        List<PurchaseOrderItem> items = orders.stream()
+                .flatMap(order -> order.getItems().stream())
+                .toList();
+        List<Long> itemIds = items.stream()
+                .map(PurchaseOrderItem::getId)
+                .filter(java.util.Objects::nonNull)
+                .distinct()
+                .toList();
+        if (itemIds.isEmpty()) {
+            return orders.stream().collect(Collectors.toMap(PurchaseOrder::getId, order -> 0));
+        }
+
+        Map<Long, Integer> allocatedQuantityMap = switch (usage) {
+            case PURCHASE_INBOUND -> toIntegerQuantityMap(
+                    purchaseInboundItemQueryService.summarizeAllocatedQuantityBySourcePurchaseOrderItemIds(itemIds)
+            );
+            case SALES_ORDER -> toIntegerQuantityMap(
+                    salesOrderItemQueryService.summarizeAllocatedQuantityBySourcePurchaseOrderItemIds(itemIds, null)
+            );
+        };
+
+        Map<Long, Integer> result = new HashMap<>();
+        for (PurchaseOrder order : orders) {
+            int importableQuantity = order.getItems().stream()
+                    .mapToInt(item -> remainingQuantity(item, allocatedQuantityMap))
+                    .sum();
+            result.put(order.getId(), importableQuantity);
+        }
+        return result;
+    }
+
+    private Map<Long, Integer> toIntegerQuantityMap(Map<Long, Long> source) {
+        if (source == null || source.isEmpty()) {
+            return Map.of();
+        }
+        Map<Long, Integer> target = new HashMap<>();
+        source.forEach((key, value) -> target.put(key, Math.toIntExact(value)));
+        return target;
+    }
+
+    private PurchaseOrderImportCandidateResponse toImportCandidateResponse(PurchaseOrder order, int importableQuantity) {
+        return new PurchaseOrderImportCandidateResponse(
+                order.getId(),
+                order.getOrderNo(),
+                order.getSupplierName(),
+                order.getBuyerName(),
+                order.getOrderDate(),
+                order.getStatus(),
+                importableQuantity
+        );
+    }
+
     private Map<Long, BigDecimal> loadSalesRemainingWeightMap(PurchaseOrder order) {
         List<Long> orderItemIds = order.getItems().stream()
                 .map(PurchaseOrderItem::getId)
@@ -212,8 +313,18 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
     }
 
     @Override
+    protected Optional<PurchaseOrder> findVisibleEntity(Long id) {
+        return purchaseOrderRepository.findById(id);
+    }
+
+    @Override
     protected String notFoundMessage() {
         return "采购订单不存在";
+    }
+
+    @Override
+    protected boolean allowAdminViewDeletedRecords() {
+        return true;
     }
 
     private String requireMasterSupplierName(String supplierName) {

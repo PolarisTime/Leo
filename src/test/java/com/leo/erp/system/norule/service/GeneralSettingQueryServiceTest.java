@@ -12,6 +12,7 @@ import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Proxy;
 import java.util.List;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -93,12 +94,51 @@ class GeneralSettingQueryServiceTest {
         assertThat(records.get(0).status()).isEqualTo("禁用");
     }
 
+    @Test
+    void shouldExposeStatementGeneratorSwitchesThroughPublicClientSettings() {
+        NoRule customerSwitch = new NoRule();
+        customerSwitch.setId(3L);
+        customerSwitch.setSettingCode("SYS_CUSTOMER_STATEMENT_RECEIPT_ZERO_FROM_SALES_ORDER");
+        customerSwitch.setSettingName("客户对账单生成");
+        customerSwitch.setBillName("客户对账单");
+        customerSwitch.setStatus("正常");
+
+        NoRule supplierSwitch = new NoRule();
+        supplierSwitch.setId(4L);
+        supplierSwitch.setSettingCode("SYS_SUPPLIER_STATEMENT_FULL_PAYMENT_FROM_PURCHASE");
+        supplierSwitch.setSettingName("供应商对账单生成");
+        supplierSwitch.setBillName("供应商对账单");
+        supplierSwitch.setStatus("正常");
+
+        GeneralSettingQueryService service = new GeneralSettingQueryService(
+                noRuleRepository(List.of(customerSwitch, supplierSwitch)),
+                mapper(),
+                stubUploadRuleService()
+        );
+
+        Set<String> settingCodes = service.publicClientSettings().stream()
+                .map(GeneralSettingResponse::settingCode)
+                .collect(java.util.stream.Collectors.toSet());
+
+        assertThat(settingCodes).contains(
+                "SYS_CUSTOMER_STATEMENT_RECEIPT_ZERO_FROM_SALES_ORDER",
+                "SYS_SUPPLIER_STATEMENT_FULL_PAYMENT_FROM_PURCHASE"
+        );
+    }
+
     private NoRuleRepository noRuleRepository(List<NoRule> rules) {
         return (NoRuleRepository) Proxy.newProxyInstance(
                 NoRuleRepository.class.getClassLoader(),
                 new Class[]{NoRuleRepository.class},
                 (proxy, method, args) -> switch (method.getName()) {
                     case "findAll" -> rules;
+                    case "findBySettingCodeInAndDeletedFlagFalse" -> {
+                        @SuppressWarnings("unchecked")
+                        var settingCodes = (java.util.Collection<String>) args[0];
+                        yield rules.stream()
+                                .filter(rule -> settingCodes.contains(rule.getSettingCode()))
+                                .toList();
+                    }
                     case "toString" -> "NoRuleRepositoryStub";
                     case "hashCode" -> System.identityHashCode(proxy);
                     case "equals" -> proxy == args[0];

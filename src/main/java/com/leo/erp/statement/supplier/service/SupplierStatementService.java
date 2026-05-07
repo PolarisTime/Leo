@@ -7,17 +7,23 @@ import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.service.AbstractCrudService;
 import com.leo.erp.common.support.ManagedEntityItemSupport;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
+import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.support.TradeItemCalculator;
+import com.leo.erp.purchase.inbound.domain.entity.PurchaseInbound;
+import com.leo.erp.purchase.inbound.repository.PurchaseInboundRepository;
+import com.leo.erp.security.permission.DataScopeContext;
 import com.leo.erp.security.permission.WorkflowTransitionGuard;
 import com.leo.erp.statement.supplier.domain.entity.SupplierStatement;
 import com.leo.erp.statement.supplier.domain.entity.SupplierStatementItem;
-import com.leo.erp.statement.supplier.repository.SupplierStatementRepository;
-import com.leo.erp.statement.service.StatementSettlementSyncService;
 import com.leo.erp.statement.supplier.mapper.SupplierStatementMapper;
+import com.leo.erp.statement.supplier.repository.SupplierStatementRepository;
+import com.leo.erp.statement.supplier.web.dto.SupplierStatementCandidateResponse;
 import com.leo.erp.statement.supplier.web.dto.SupplierStatementItemRequest;
 import com.leo.erp.statement.supplier.web.dto.SupplierStatementItemResponse;
 import com.leo.erp.statement.supplier.web.dto.SupplierStatementRequest;
 import com.leo.erp.statement.supplier.web.dto.SupplierStatementResponse;
+import com.leo.erp.statement.service.StatementCandidateSupport;
+import com.leo.erp.statement.service.StatementSettlementSyncService;
 import org.springframework.data.domain.Page;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
@@ -28,23 +34,34 @@ import java.time.LocalDate;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 @Service
 public class SupplierStatementService extends AbstractCrudService<SupplierStatement, SupplierStatementRequest, SupplierStatementResponse> {
 
+    private static final String[] PURCHASE_INBOUND_CANDIDATE_SEARCH_FIELDS = {
+            "inboundNo",
+            "purchaseOrderNo",
+            "supplierName",
+            "warehouseName"
+    };
+
     private final SupplierStatementRepository repository;
     private final SupplierStatementMapper supplierStatementMapper;
+    private final PurchaseInboundRepository purchaseInboundRepository;
     private final StatementSettlementSyncService statementSettlementSyncService;
     private final WorkflowTransitionGuard workflowTransitionGuard;
 
     public SupplierStatementService(SupplierStatementRepository repository,
                                     SnowflakeIdGenerator idGenerator,
                                     SupplierStatementMapper supplierStatementMapper,
+                                    PurchaseInboundRepository purchaseInboundRepository,
                                     StatementSettlementSyncService statementSettlementSyncService,
                                     WorkflowTransitionGuard workflowTransitionGuard) {
         super(idGenerator);
         this.repository = repository;
         this.supplierStatementMapper = supplierStatementMapper;
+        this.purchaseInboundRepository = purchaseInboundRepository;
         this.statementSettlementSyncService = statementSettlementSyncService;
         this.workflowTransitionGuard = workflowTransitionGuard;
     }
@@ -58,12 +75,26 @@ public class SupplierStatementService extends AbstractCrudService<SupplierStatem
             LocalDate periodStart,
             LocalDate periodEnd
     ) {
-        Specification<SupplierStatement> spec = Specs.<SupplierStatement>notDeleted()
-                .and(Specs.keywordLike(keyword, "statementNo", "supplierName", "sourceInboundNos"))
+        Specification<SupplierStatement> spec = Specs.<SupplierStatement>keywordLike(keyword, "statementNo", "supplierName", "sourceInboundNos")
                 .and(Specs.equalIfPresent("supplierName", supplierName))
                 .and(Specs.equalIfPresent("status", status))
                 .and(Specs.betweenIfPresent("endDate", periodStart, periodEnd));
         return page(query, spec, repository);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<SupplierStatementCandidateResponse> candidatePage(PageQuery query, String keyword) {
+        Set<String> occupiedInboundNos = StatementCandidateSupport.parseRelationNos(
+                repository.findAll(Specs.notDeleted()).stream()
+                        .map(SupplierStatement::getSourceInboundNos)
+                        .toList()
+        );
+        Specification<PurchaseInbound> spec = Specs.<PurchaseInbound>notDeleted()
+                .and(Specs.keywordLike(keyword, PURCHASE_INBOUND_CANDIDATE_SEARCH_FIELDS))
+                .and(excludeDraftStatus())
+                .and(StatementCandidateSupport.excludeFieldValues("inboundNo", occupiedInboundNos));
+        return purchaseInboundRepository.findAll(DataScopeContext.apply(spec), query.toPageable("id"))
+                .map(this::toCandidateResponse);
     }
 
     @Override
@@ -121,8 +152,18 @@ public class SupplierStatementService extends AbstractCrudService<SupplierStatem
     }
 
     @Override
+    protected Optional<SupplierStatement> findVisibleEntity(Long id) {
+        return repository.findById(id);
+    }
+
+    @Override
     protected String notFoundMessage() {
         return "供应商对账单不存在";
+    }
+
+    @Override
+    protected boolean allowAdminViewDeletedRecords() {
+        return true;
     }
 
     @Override
@@ -239,6 +280,27 @@ public class SupplierStatementService extends AbstractCrudService<SupplierStatem
                 item.getWeightAdjustmentAmount(),
                 item.getUnitPrice(),
                 item.getAmount()
+        );
+    }
+
+    private Specification<PurchaseInbound> excludeDraftStatus() {
+        return (root, query, criteriaBuilder) -> criteriaBuilder.or(
+                criteriaBuilder.isNull(root.get("status")),
+                criteriaBuilder.notEqual(root.get("status"), StatusConstants.DRAFT)
+        );
+    }
+
+    private SupplierStatementCandidateResponse toCandidateResponse(PurchaseInbound inbound) {
+        return new SupplierStatementCandidateResponse(
+                inbound.getId(),
+                inbound.getInboundNo(),
+                inbound.getSupplierName(),
+                inbound.getWarehouseName(),
+                inbound.getInboundDate(),
+                inbound.getSettlementMode(),
+                inbound.getTotalWeight(),
+                inbound.getTotalAmount(),
+                inbound.getStatus()
         );
     }
 }
