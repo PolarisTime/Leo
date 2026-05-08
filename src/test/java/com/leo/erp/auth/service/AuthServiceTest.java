@@ -253,6 +253,7 @@ class AuthServiceTest {
                 new Class[]{UserAccountRepository.class},
                 (proxy, method, args) -> switch (method.getName()) {
                     case "findByLoginNameAndDeletedFlagFalse" -> Optional.ofNullable(user);
+                    case "findByIdAndDeletedFlagFalse" -> Optional.ofNullable(user);
                     case "save" -> args[0];
                     case "toString" -> "UserAccountRepositoryLoginStub";
                     case "hashCode" -> System.identityHashCode(proxy);
@@ -424,7 +425,10 @@ class AuthServiceTest {
     private StringRedisTemplate redisStub() {
         java.util.Map<String, String> store = new java.util.concurrent.ConcurrentHashMap<>();
         ValueOperations<String, String> valueOps = Mockito.mock(ValueOperations.class);
-        Mockito.when(valueOps.get(Mockito.any())).thenAnswer(inv -> store.get(String.valueOf(inv.getArgument(0))));
+        Mockito.when(valueOps.get(Mockito.any())).thenAnswer(inv -> {
+            Object key = inv.getArgument(0, Object.class);
+            return store.get(String.valueOf(key));
+        });
         Mockito.doAnswer(inv -> { store.put(inv.getArgument(0, String.class), inv.getArgument(1, String.class)); return null; })
                 .when(valueOps).set(Mockito.anyString(), Mockito.anyString());
         Mockito.doAnswer(inv -> { store.put(inv.getArgument(0, String.class), inv.getArgument(1, String.class)); return null; })
@@ -434,6 +438,9 @@ class AuthServiceTest {
 
         StringRedisTemplate template = Mockito.mock(StringRedisTemplate.class);
         Mockito.when(template.opsForValue()).thenReturn(valueOps);
+        Mockito.when(template.delete(Mockito.anyString())).thenAnswer(inv ->
+                store.remove(inv.getArgument(0, String.class)) != null
+        );
         return template;
     }
 
@@ -470,12 +477,6 @@ class AuthServiceTest {
     }
 
     // --- LoginService 2FA failure recording ---
-    // NOTE: This test requires a full Redis mock due to temp-token flow.
-    // The 2FA failure-recording behavior is verified via code review:
-    // LoginService.verifyTotpAndIssueTokens() calls loginAttemptService.recordFailure()
-    // on bad TOTP, and clearFailures() only after successful verification.
-
-    @org.junit.jupiter.api.Disabled("Requires full StringRedisTemplate mock for temp-token flow")
     @Test
     void shouldRecordFailureAndNotClearOnBadTotp() {
         UserAccount user = new UserAccount();
