@@ -33,6 +33,7 @@ public class SystemSwitchService {
     public static final String CUSTOMER_STATEMENT_RECEIPT_ZERO_FROM_SALES_ORDER_SWITCH = "SYS_CUSTOMER_STATEMENT_RECEIPT_ZERO_FROM_SALES_ORDER";
     public static final String SUPPLIER_STATEMENT_FULL_PAYMENT_FROM_PURCHASE_SWITCH = "SYS_SUPPLIER_STATEMENT_FULL_PAYMENT_FROM_PURCHASE";
     public static final String LOGIN_CAPTCHA_SWITCH = "SYS_LOGIN_CAPTCHA";
+    public static final String OOBE_COMPLETED_SWITCH = "SYS_OOBE_COMPLETED";
     public static final String SWITCH_CACHE_KEY = "leo:system:switches";
     private static final Duration SWITCH_CACHE_TTL = Duration.ofMinutes(5);
     private static final TypeReference<Map<String, SwitchSnapshot>> SWITCH_MAP_TYPE = new TypeReference<>() { };
@@ -56,7 +57,8 @@ public class SystemSwitchService {
             SHOW_SNOWFLAKE_ID_SWITCH,
             CUSTOMER_STATEMENT_RECEIPT_ZERO_FROM_SALES_ORDER_SWITCH,
             SUPPLIER_STATEMENT_FULL_PAYMENT_FROM_PURCHASE_SWITCH,
-            LOGIN_CAPTCHA_SWITCH
+            LOGIN_CAPTCHA_SWITCH,
+            OOBE_COMPLETED_SWITCH
     );
 
     private final NoRuleRepository noRuleRepository;
@@ -174,6 +176,11 @@ public class SystemSwitchService {
     @Transactional(readOnly = true)
     public boolean shouldRequireLoginCaptcha() {
         return isEnabled(LOGIN_CAPTCHA_SWITCH);
+    }
+
+    @Transactional(readOnly = true)
+    public boolean isOobeCompleted() {
+        return isEnabled(OOBE_COMPLETED_SWITCH);
     }
 
     @Transactional(readOnly = true)

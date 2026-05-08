@@ -20,6 +20,7 @@ import com.leo.erp.system.department.domain.entity.Department;
 import com.leo.erp.system.department.repository.DepartmentRepository;
 import com.leo.erp.system.norule.domain.entity.NoRule;
 import com.leo.erp.system.norule.repository.NoRuleRepository;
+import com.leo.erp.system.norule.service.SystemSwitchService;
 import com.leo.erp.system.role.domain.entity.RoleSetting;
 import com.leo.erp.system.role.repository.RoleSettingRepository;
 import com.leo.erp.system.setup.web.dto.InitialSetupAdminSubmitRequest;
@@ -114,6 +115,10 @@ public class InitialSetupService {
             companyName = companySettingRepository.findFirstByDeletedFlagFalseOrderByIdAsc()
                     .map(CompanySetting::getCompanyName)
                     .orElse(null);
+        }
+
+        if (isAdminConfigured() && companySettingRepository.existsByDeletedFlagFalse()) {
+            ensureOobeCompletedSwitch();
         }
 
         return new InitialSetupSubmitResponse(adminLoginName, companyName);
@@ -309,6 +314,25 @@ public class InitialSetupService {
         setting.setSampleNo(taxRate.setScale(4, java.math.RoundingMode.HALF_UP).toPlainString());
         setting.setStatus(StatusConstants.NORMAL);
         setting.setRemark("用于发票默认税率与税额自动计算");
+        noRuleRepository.save(setting);
+    }
+
+    private void ensureOobeCompletedSwitch() {
+        NoRule setting = noRuleRepository.findBySettingCodeAndDeletedFlagFalse(SystemSwitchService.OOBE_COMPLETED_SWITCH)
+                .orElseGet(NoRule::new);
+        if (setting.getId() == null) {
+            setting.setId(snowflakeIdGenerator.nextId());
+            setting.setSettingCode(SystemSwitchService.OOBE_COMPLETED_SWITCH);
+            setting.setSettingName("OOBE已完成");
+            setting.setBillName("系统初始化");
+            setting.setPrefix("SYS");
+            setting.setDateRule("yyyy");
+            setting.setSerialLength(1);
+            setting.setResetRule("ONCE");
+        }
+        setting.setSampleNo("COMPLETED");
+        setting.setStatus(StatusConstants.NORMAL);
+        setting.setRemark("首次初始化完成后自动创建，禁止重复执行 OOBE 流程");
         noRuleRepository.save(setting);
     }
 }

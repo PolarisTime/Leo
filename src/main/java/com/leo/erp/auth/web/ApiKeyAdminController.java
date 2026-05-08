@@ -79,6 +79,7 @@ public class ApiKeyAdminController {
 
     @PostMapping("/{id}/revoke")
     @RequiresPermission(resource = "api-key", action = "update")
+    @RequiresTotpVerification
     @OperationLoggable(moduleName = "API Key 管理", actionType = "禁用 API Key")
     public ApiResponse<Void> revoke(@PathVariable @Positive Long id) {
         service.revoke(id);
