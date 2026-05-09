@@ -16,7 +16,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.time.LocalDate;
 
 @RestController
-@RequestMapping("/operation-logs")
+@RequestMapping("/operation-log")
 public class OperationLogController {
 
     private final OperationLogService operationLogService;
@@ -28,7 +28,7 @@ public class OperationLogController {
     @GetMapping
     @RequiresPermission(resource = "operation-log", action = "read")
     public ApiResponse<PageResponse<OperationLogResponse>> page(
-            @BindPageQuery(sortFieldKey = "operation-logs") PageQuery query,
+            @BindPageQuery(sortFieldKey = "operation-log") PageQuery query,
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) String moduleName,
             @RequestParam(required = false) String actionType,

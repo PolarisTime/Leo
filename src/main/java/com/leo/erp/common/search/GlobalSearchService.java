@@ -81,20 +81,20 @@ public class GlobalSearchService {
         this.permissionService = permissionService;
         this.modulePermissionGuard = modulePermissionGuard;
         this.moduleSearchers = List.of(
-                module("purchase-orders", "orderNo", purchaseOrderService::search, purchaseOrderService::detail),
-                module("purchase-inbounds", "inboundNo", purchaseInboundService::search, purchaseInboundService::detail),
-                module("sales-orders", "orderNo", salesOrderService::search, salesOrderService::detail),
-                module("sales-outbounds", "outboundNo", salesOutboundService::search, salesOutboundService::detail),
-                module("freight-bills", "billNo", freightBillService::search, freightBillService::detail),
-                module("purchase-contracts", "contractNo", purchaseContractService::search, purchaseContractService::detail),
-                module("sales-contracts", "contractNo", salesContractService::search, salesContractService::detail),
-                module("supplier-statements", "statementNo", supplierStatementService::search, supplierStatementService::detail),
-                module("customer-statements", "statementNo", customerStatementService::search, customerStatementService::detail),
-                module("freight-statements", "statementNo", freightStatementService::search, freightStatementService::detail),
-                module("receipts", "receiptNo", receiptService::search, receiptService::detail),
-                module("payments", "paymentNo", paymentService::search, paymentService::detail),
-                module("invoice-receipts", "receiveNo", invoiceReceiptService::search, invoiceReceiptService::detail),
-                module("invoice-issues", "issueNo", invoiceIssueService::search, invoiceIssueService::detail)
+                module("purchase-order", "orderNo", purchaseOrderService::search, purchaseOrderService::detail),
+                module("purchase-inbound", "inboundNo", purchaseInboundService::search, purchaseInboundService::detail),
+                module("sales-order", "orderNo", salesOrderService::search, salesOrderService::detail),
+                module("sales-outbound", "outboundNo", salesOutboundService::search, salesOutboundService::detail),
+                module("freight-bill", "billNo", freightBillService::search, freightBillService::detail),
+                module("purchase-contract", "contractNo", purchaseContractService::search, purchaseContractService::detail),
+                module("sales-contract", "contractNo", salesContractService::search, salesContractService::detail),
+                module("supplier-statement", "statementNo", supplierStatementService::search, supplierStatementService::detail),
+                module("customer-statement", "statementNo", customerStatementService::search, customerStatementService::detail),
+                module("freight-statement", "statementNo", freightStatementService::search, freightStatementService::detail),
+                module("receipt", "receiptNo", receiptService::search, receiptService::detail),
+                module("payment", "paymentNo", paymentService::search, paymentService::detail),
+                module("invoice-receipt", "receiveNo", invoiceReceiptService::search, invoiceReceiptService::detail),
+                module("invoice-issue", "issueNo", invoiceIssueService::search, invoiceIssueService::detail)
         );
     }
 

@@ -13,7 +13,7 @@ import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
-@RequestMapping("/carriers")
+@RequestMapping("/carrier")
 public class CarrierController {
 
     private final CarrierService carrierService;
@@ -31,7 +31,7 @@ public class CarrierController {
     @GetMapping
     @RequiresPermission(resource = "carrier", action = "read")
     public ApiResponse<PageResponse<CarrierResponse>> page(
-            @BindPageQuery(sortFieldKey = "carriers") PageQuery query,
+            @BindPageQuery(sortFieldKey = "carrier") PageQuery query,
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) String status
     ) {

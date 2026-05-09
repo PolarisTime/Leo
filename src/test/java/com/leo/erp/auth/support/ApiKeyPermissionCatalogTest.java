@@ -32,7 +32,9 @@ class ResourcePermissionCatalogPathTest {
     void shouldRequireReadPermissionForVisibleMenus() {
         assertThat(ResourcePermissionCatalog.resolveVisibleMenuCodes(Map.of("role", Set.of("manage_permissions"))))
                 .isEmpty();
-        assertThat(ResourcePermissionCatalog.resolveVisibleMenuCodes(Map.of("role", Set.of("read", "manage_permissions"))))
-                .contains("role-settings", "role-action-editor");
+        assertThat(ResourcePermissionCatalog.resolveVisibleMenuCodes(Map.of("access-control", Set.of("read"))))
+                .contains("access-control");
+        assertThat(ResourcePermissionCatalog.resolveVisibleMenuCodes(Map.of("user-account", Set.of("read"))))
+                .isEmpty();
     }
 }

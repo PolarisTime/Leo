@@ -1,13 +1,15 @@
 # Web 服务基础配置
 server:
   # 后端 HTTP 监听端口
-  port: 11211
+  port: ${SERVER_PORT:11211}
   servlet:
     # 统一接口前缀
     context-path: /api
 
 # Spring 基础能力配置
 spring:
+  config:
+    import: optional:file:../.env.local[.properties]
   application:
     # 应用名称，用于日志和监控标识
     name: leo

@@ -28,7 +28,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @Validated
-@RequestMapping("/user-accounts")
+@RequestMapping("/user-account")
 public class UserAccountAdminController {
 
     private final UserAccountAdminService userAccountAdminService;
@@ -40,7 +40,7 @@ public class UserAccountAdminController {
     @GetMapping
     @RequiresPermission(resource = "user-account", action = "read")
     public ApiResponse<PageResponse<UserAccountAdminResponse>> page(
-            @BindPageQuery(sortFieldKey = "user-accounts") PageQuery query,
+            @BindPageQuery(sortFieldKey = "user-account") PageQuery query,
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) String status
     ) {

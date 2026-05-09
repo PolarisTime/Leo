@@ -167,7 +167,7 @@ public class PaymentService extends AbstractCrudService<Payment, PaymentRequest,
     @Override
     protected void apply(Payment entity, PaymentRequest request) {
         workflowTransitionGuard.assertAuditPermissionForProtectedValue(
-                "payments",
+                "payment",
                 entity.getStatus(),
                 request.status(),
                 PAYMENT_STATUS_SETTLED
@@ -263,7 +263,7 @@ public class PaymentService extends AbstractCrudService<Payment, PaymentRequest,
     private SupplierStatement requireAccessibleSupplierStatement(Long statementId) {
         SupplierStatement statement = supplierStatementQueryService.requireActiveById(statementId);
         resourceRecordAccessGuard.assertCurrentUserCanAccess(
-                "supplier-statements",
+                "supplier-statement",
                 ResourcePermissionCatalog.READ,
                 statement
         );
@@ -273,7 +273,7 @@ public class PaymentService extends AbstractCrudService<Payment, PaymentRequest,
     private FreightStatement requireAccessibleFreightStatement(Long statementId) {
         FreightStatement statement = freightStatementQueryService.requireActiveById(statementId);
         resourceRecordAccessGuard.assertCurrentUserCanAccess(
-                "freight-statements",
+                "freight-statement",
                 ResourcePermissionCatalog.READ,
                 statement
         );

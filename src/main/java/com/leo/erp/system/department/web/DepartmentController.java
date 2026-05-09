@@ -26,7 +26,7 @@ import java.util.List;
 
 @RestController
 @Validated
-@RequestMapping("/departments")
+@RequestMapping("/department")
 public class DepartmentController {
 
     private final DepartmentService departmentService;
@@ -38,7 +38,7 @@ public class DepartmentController {
     @GetMapping
     @RequiresPermission(authenticatedOnly = true)
     public ApiResponse<PageResponse<DepartmentResponse>> page(
-            @BindPageQuery(sortFieldKey = "departments") PageQuery query,
+            @BindPageQuery(sortFieldKey = "department") PageQuery query,
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) String status
     ) {

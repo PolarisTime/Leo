@@ -559,7 +559,7 @@ public class PurchaseInboundService extends AbstractCrudService<PurchaseInbound,
     protected void apply(PurchaseInbound inbound, PurchaseInboundRequest request) {
         String nextStatus = (request.status() == null || request.status().isBlank()) ? StatusConstants.DRAFT : request.status();
         workflowTransitionGuard.assertAuditPermissionForProtectedValue(
-                "purchase-inbounds",
+                "purchase-inbound",
                 inbound.getStatus(),
                 nextStatus,
                 StatusConstants.AUDITED,

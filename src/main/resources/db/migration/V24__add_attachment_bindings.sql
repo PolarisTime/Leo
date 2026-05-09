@@ -22,7 +22,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS uk_sys_attachment_binding_ref
 INSERT INTO sys_attachment_binding (id, module_key, record_id, attachment_id, sort_order)
 SELECT
     (SELECT COALESCE(MAX(id), 0) FROM sys_attachment_binding) + ROW_NUMBER() OVER (ORDER BY fs.id, token.ord),
-    'freight-statements',
+    'freight-statement',
     fs.id,
     CAST(token.attachment_id AS BIGINT),
     token.ord

@@ -13,7 +13,7 @@ import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
-@RequestMapping("/customers")
+@RequestMapping("/customer")
 public class CustomerController {
 
     private final CustomerService customerService;
@@ -31,7 +31,7 @@ public class CustomerController {
     @GetMapping
     @RequiresPermission(resource = "customer", action = "read")
     public ApiResponse<PageResponse<CustomerResponse>> page(
-            @BindPageQuery(sortFieldKey = "customers") PageQuery query,
+            @BindPageQuery(sortFieldKey = "customer") PageQuery query,
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) String status
     ) {

@@ -42,7 +42,7 @@ import java.util.stream.Collectors;
 @Service
 public class FreightStatementService extends AbstractCrudService<FreightStatement, FreightStatementCommand, FreightStatementView> {
 
-    private static final String MODULE_KEY = "freight-statements";
+    private static final String MODULE_KEY = "freight-statement";
     private static final String[] FREIGHT_BILL_CANDIDATE_SEARCH_FIELDS = {
             "billNo",
             "outboundNo",
@@ -185,13 +185,13 @@ public class FreightStatementService extends AbstractCrudService<FreightStatemen
         String nextStatus = (command.status() == null || command.status().isBlank()) ? "待审核" : command.status();
         String nextSignStatus = (command.signStatus() == null || command.signStatus().isBlank()) ? "未签署" : command.signStatus();
         workflowTransitionGuard.assertAuditPermissionForProtectedValue(
-                "freight-statements",
+                "freight-statement",
                 entity.getStatus(),
                 nextStatus,
                 StatusConstants.AUDITED
         );
         workflowTransitionGuard.assertAuditPermissionForProtectedValue(
-                "freight-statements",
+                "freight-statement",
                 entity.getSignStatus(),
                 nextSignStatus,
                 "已签署"

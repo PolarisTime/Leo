@@ -22,15 +22,15 @@ public class NoRuleSequenceService {
 
     public static final String BATCH_NO_RULE_CODE = "RULE_BATCH_NO";
     private static final Map<String, String> MODULE_RULE_CODE_MAP = Map.ofEntries(
-            Map.entry("purchase-orders", "RULE_PO"),
-            Map.entry("purchase-inbounds", "RULE_PI"),
-            Map.entry("sales-orders", "RULE_SO"),
-            Map.entry("sales-outbounds", "RULE_OB"),
-            Map.entry("freight-bills", "RULE_FB"),
-            Map.entry("supplier-statements", "RULE_SS"),
-            Map.entry("customer-statements", "RULE_CS"),
-            Map.entry("freight-statements", "RULE_FS"),
-            Map.entry("departments", "RULE_DEPT")
+            Map.entry("purchase-order", "RULE_PO"),
+            Map.entry("purchase-inbound", "RULE_PI"),
+            Map.entry("sales-order", "RULE_SO"),
+            Map.entry("sales-outbound", "RULE_OB"),
+            Map.entry("freight-bill", "RULE_FB"),
+            Map.entry("supplier-statement", "RULE_SS"),
+            Map.entry("customer-statement", "RULE_CS"),
+            Map.entry("freight-statement", "RULE_FS"),
+            Map.entry("department", "RULE_DEPT")
     );
     private static final DateTimeFormatter YEAR_FORMATTER = DateTimeFormatter.ofPattern("yyyy");
     private static final DateTimeFormatter SHORT_YEAR_FORMATTER = DateTimeFormatter.ofPattern("yy");

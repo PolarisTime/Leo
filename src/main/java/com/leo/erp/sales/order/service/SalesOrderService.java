@@ -179,7 +179,7 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
     protected void apply(SalesOrder entity, SalesOrderRequest request) {
         String nextStatus = (request.status() == null || request.status().isBlank()) ? StatusConstants.DRAFT : request.status();
         workflowTransitionGuard.assertAuditPermissionForProtectedValue(
-                "sales-orders",
+                "sales-order",
                 entity.getStatus(),
                 nextStatus,
                 StatusConstants.AUDITED,

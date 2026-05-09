@@ -10,6 +10,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 @Service
@@ -35,7 +36,9 @@ public class MenuService {
         Map<String, List<MenuTreeResponse>> childrenMap = new HashMap<>();
 
         for (Menu menu : menus) {
-            List<String> actions = ResourcePermissionCatalog.resolveResourceByMenuCode(menu.getMenuCode())
+            Optional<String> resolvedResource = ResourcePermissionCatalog.resolveResourceByMenuCode(menu.getMenuCode());
+            String resourceCode = resolvedResource.orElse(null);
+            List<String> actions = resolvedResource
                     .map(resource -> permissionMap.getOrDefault(resource, Set.of()).stream().toList())
                     .orElse(List.of());
             MenuTreeResponse node = new MenuTreeResponse(
@@ -46,6 +49,7 @@ public class MenuService {
                     menu.getIcon(),
                     menu.getSortOrder(),
                     menu.getMenuType(),
+                    resourceCode,
                     actions,
                     new ArrayList<>()
             );

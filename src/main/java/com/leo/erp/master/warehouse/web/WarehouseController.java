@@ -12,7 +12,7 @@ import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
-@RequestMapping("/warehouses")
+@RequestMapping("/warehouse")
 public class WarehouseController {
 
     private final WarehouseService warehouseService;
@@ -30,7 +30,7 @@ public class WarehouseController {
     @GetMapping
     @RequiresPermission(resource = "warehouse", action = "read")
     public ApiResponse<PageResponse<WarehouseResponse>> page(
-            @BindPageQuery(sortFieldKey = "warehouses") PageQuery query,
+            @BindPageQuery(sortFieldKey = "warehouse") PageQuery query,
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) String warehouseType,
             @RequestParam(required = false) String status

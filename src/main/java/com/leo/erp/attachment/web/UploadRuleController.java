@@ -20,7 +20,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @Validated
-@RequestMapping({"/general-settings/upload-rule", "/upload-rules/page"})
+@RequestMapping({"/general-setting/upload-rule", "/upload-rules/page"})
 public class UploadRuleController {
 
     private final UploadRuleService uploadRuleService;
@@ -65,7 +65,7 @@ public class UploadRuleController {
 
     private String defaultModuleKey(String moduleKey) {
         if (moduleKey == null || moduleKey.isBlank()) {
-            return "general-settings";
+            return "general-setting";
         }
         return moduleKey.trim();
     }

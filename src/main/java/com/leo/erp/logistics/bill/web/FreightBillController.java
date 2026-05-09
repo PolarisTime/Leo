@@ -14,7 +14,7 @@ import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
-@RequestMapping("/freight-bills")
+@RequestMapping("/freight-bill")
 public class FreightBillController {
 
     private final FreightBillService service;
@@ -35,7 +35,7 @@ public class FreightBillController {
     @GetMapping
     @RequiresPermission(resource = "freight-bill", action = "read")
     public ApiResponse<PageResponse<FreightBillResponse>> page(
-            @BindPageQuery(sortFieldKey = "freight-bills") PageQuery query,
+            @BindPageQuery(sortFieldKey = "freight-bill") PageQuery query,
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) String carrierName,
             @RequestParam(required = false) String status,

@@ -32,7 +32,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
 
 @RestController
-@RequestMapping("/general-settings")
+@RequestMapping("/general-setting")
 public class NoRuleController {
 
     private final NoRuleService noRuleService;
@@ -56,7 +56,7 @@ public class NoRuleController {
     @GetMapping
     @RequiresPermission(resource = "general-setting", action = "read")
     public ApiResponse<PageResponse<GeneralSettingResponse>> page(
-            @BindPageQuery(sortFieldKey = "general-settings") PageQuery query,
+            @BindPageQuery(sortFieldKey = "general-setting") PageQuery query,
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) String status
     ) {

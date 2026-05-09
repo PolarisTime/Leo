@@ -41,7 +41,7 @@ CREATE INDEX IF NOT EXISTS idx_md_settlement_account_account_name ON md_settleme
 INSERT INTO sys_menu (id, menu_code, menu_name, parent_code, route_path, icon, sort_order, menu_type)
 VALUES
     (2006, 'settlement-accounts', '结算账户', 'master', '/settlement-accounts', 'BankOutlined', 6, '菜单'),
-    (10012, 'company-settings', '公司信息', 'system', '/company-settings', 'AccountBookOutlined', 12, '菜单')
+    (10012, 'company-setting', '公司信息', 'system', '/company-settings', 'AccountBookOutlined', 12, '菜单')
 ON CONFLICT (menu_code) DO NOTHING;
 
 INSERT INTO sys_menu_action (id, menu_code, action_code, action_name)
@@ -53,10 +53,10 @@ VALUES
     (20065, 'settlement-accounts', 'AUDIT', '审核'),
     (20066, 'settlement-accounts', 'EXPORT', '导出'),
     (20067, 'settlement-accounts', 'PRINT', '打印'),
-    (100121, 'company-settings', 'VIEW', '查看'),
-    (100122, 'company-settings', 'CREATE', '新增'),
-    (100123, 'company-settings', 'EDIT', '编辑'),
-    (100124, 'company-settings', 'DELETE', '删除')
+    (100121, 'company-setting', 'VIEW', '查看'),
+    (100122, 'company-setting', 'CREATE', '新增'),
+    (100123, 'company-setting', 'EDIT', '编辑'),
+    (100124, 'company-setting', 'DELETE', '删除')
 ON CONFLICT (menu_code, action_code) DO NOTHING;
 
 INSERT INTO sys_role_action (id, role_id, menu_code, action_code)
@@ -67,6 +67,6 @@ SELECT
     ma.action_code
 FROM sys_role r
 JOIN sys_menu_action ma
-  ON ma.menu_code IN ('settlement-accounts', 'company-settings')
+  ON ma.menu_code IN ('settlement-accounts', 'company-setting')
 WHERE r.role_code IN ('ADMIN', 'FINANCE_MANAGER')
 ON CONFLICT (role_id, menu_code, action_code) DO NOTHING;

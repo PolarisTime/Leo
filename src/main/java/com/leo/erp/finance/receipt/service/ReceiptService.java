@@ -160,7 +160,7 @@ public class ReceiptService extends AbstractCrudService<Receipt, ReceiptRequest,
     @Override
     protected void apply(Receipt entity, ReceiptRequest request) {
         workflowTransitionGuard.assertAuditPermissionForProtectedValue(
-                "receipts",
+                "receipt",
                 entity.getStatus(),
                 request.status(),
                 RECEIPT_STATUS_SETTLED
@@ -248,7 +248,7 @@ public class ReceiptService extends AbstractCrudService<Receipt, ReceiptRequest,
     private CustomerStatement requireAccessibleCustomerStatement(Long statementId) {
         CustomerStatement statement = customerStatementQueryService.requireActiveById(statementId);
         resourceRecordAccessGuard.assertCurrentUserCanAccess(
-                "customer-statements",
+                "customer-statement",
                 ResourcePermissionCatalog.READ,
                 statement
         );

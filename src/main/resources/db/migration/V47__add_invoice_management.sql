@@ -49,26 +49,26 @@ CREATE INDEX IF NOT EXISTS idx_fm_invoice_issue_customer_date
 
 INSERT INTO sys_menu (id, menu_code, menu_name, parent_code, route_path, icon, sort_order, menu_type)
 VALUES
-    (9004, 'invoice-receipts', '收票单', 'finance', '/invoice-receipts', 'FileTextOutlined', 4, '菜单'),
-    (9005, 'invoice-issues', '开票单', 'finance', '/invoice-issues', 'FileDoneOutlined', 5, '菜单')
+    (9004, 'invoice-receipt', '收票单', 'finance', '/invoice-receipts', 'FileTextOutlined', 4, '菜单'),
+    (9005, 'invoice-issue', '开票单', 'finance', '/invoice-issues', 'FileDoneOutlined', 5, '菜单')
 ON CONFLICT (menu_code) DO NOTHING;
 
 INSERT INTO sys_menu_action (id, menu_code, action_code, action_name)
 VALUES
-    (90041, 'invoice-receipts', 'VIEW', '查看'),
-    (90042, 'invoice-receipts', 'CREATE', '新增'),
-    (90043, 'invoice-receipts', 'EDIT', '编辑'),
-    (90044, 'invoice-receipts', 'DELETE', '删除'),
-    (90045, 'invoice-receipts', 'AUDIT', '审核'),
-    (90046, 'invoice-receipts', 'EXPORT', '导出'),
-    (90047, 'invoice-receipts', 'PRINT', '打印'),
-    (90051, 'invoice-issues', 'VIEW', '查看'),
-    (90052, 'invoice-issues', 'CREATE', '新增'),
-    (90053, 'invoice-issues', 'EDIT', '编辑'),
-    (90054, 'invoice-issues', 'DELETE', '删除'),
-    (90055, 'invoice-issues', 'AUDIT', '审核'),
-    (90056, 'invoice-issues', 'EXPORT', '导出'),
-    (90057, 'invoice-issues', 'PRINT', '打印')
+    (90041, 'invoice-receipt', 'VIEW', '查看'),
+    (90042, 'invoice-receipt', 'CREATE', '新增'),
+    (90043, 'invoice-receipt', 'EDIT', '编辑'),
+    (90044, 'invoice-receipt', 'DELETE', '删除'),
+    (90045, 'invoice-receipt', 'AUDIT', '审核'),
+    (90046, 'invoice-receipt', 'EXPORT', '导出'),
+    (90047, 'invoice-receipt', 'PRINT', '打印'),
+    (90051, 'invoice-issue', 'VIEW', '查看'),
+    (90052, 'invoice-issue', 'CREATE', '新增'),
+    (90053, 'invoice-issue', 'EDIT', '编辑'),
+    (90054, 'invoice-issue', 'DELETE', '删除'),
+    (90055, 'invoice-issue', 'AUDIT', '审核'),
+    (90056, 'invoice-issue', 'EXPORT', '导出'),
+    (90057, 'invoice-issue', 'PRINT', '打印')
 ON CONFLICT (menu_code, action_code) DO NOTHING;
 
 INSERT INTO sys_role_action (id, role_id, menu_code, action_code)
@@ -79,7 +79,7 @@ SELECT
     ma.action_code
 FROM sys_role r
 JOIN sys_menu_action ma
-  ON ma.menu_code IN ('invoice-receipts', 'invoice-issues')
+  ON ma.menu_code IN ('invoice-receipt', 'invoice-issue')
 WHERE r.role_code IN ('ADMIN', 'FINANCE_MANAGER')
 ON CONFLICT (role_id, menu_code, action_code) DO NOTHING;
 

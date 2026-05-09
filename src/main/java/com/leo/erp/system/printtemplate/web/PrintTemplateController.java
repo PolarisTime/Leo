@@ -25,7 +25,7 @@ import java.util.List;
 
 @RestController
 @Validated
-@RequestMapping("/print-templates")
+@RequestMapping("/print-template")
 public class PrintTemplateController {
 
     private final PrintTemplateService printTemplateService;

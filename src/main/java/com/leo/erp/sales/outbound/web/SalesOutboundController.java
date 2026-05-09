@@ -16,7 +16,7 @@ import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
-@RequestMapping("/sales-outbounds")
+@RequestMapping("/sales-outbound")
 @Tag(name = "销售出库")
 public class SalesOutboundController {
 
@@ -40,7 +40,7 @@ public class SalesOutboundController {
     @RequiresPermission(resource = "sales-outbound", action = "read")
     @Operation(summary = "分页查询销售出库")
     public ApiResponse<PageResponse<SalesOutboundResponse>> page(
-            @BindPageQuery(sortFieldKey = "sales-outbounds") PageQuery query,
+            @BindPageQuery(sortFieldKey = "sales-outbound") PageQuery query,
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) String customerName,
             @RequestParam(required = false) String projectName,

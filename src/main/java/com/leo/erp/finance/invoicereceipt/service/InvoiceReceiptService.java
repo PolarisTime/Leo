@@ -157,7 +157,7 @@ public class InvoiceReceiptService extends AbstractCrudService<InvoiceReceipt, I
     @Override
     protected void apply(InvoiceReceipt entity, InvoiceReceiptRequest request) {
         workflowTransitionGuard.assertAuditPermissionForProtectedValue(
-                "invoice-receipts",
+                "invoice-receipt",
                 entity.getStatus(),
                 request.status(),
                 "已收票"

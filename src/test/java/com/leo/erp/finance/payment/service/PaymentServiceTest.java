@@ -204,7 +204,7 @@ class PaymentServiceTest {
         when(paymentRepository.existsByPaymentNoAndDeletedFlagFalse("FK-001")).thenReturn(false);
         doThrow(new BusinessException(ErrorCode.FORBIDDEN, "无数据权限"))
                 .when(resourceRecordAccessGuard)
-                .assertCurrentUserCanAccess("supplier-statements", "read", statement);
+                .assertCurrentUserCanAccess("supplier-statement", "read", statement);
 
         PaymentService service = new PaymentService(
                 paymentRepository,
@@ -243,7 +243,7 @@ class PaymentServiceTest {
         when(paymentRepository.existsByPaymentNoAndDeletedFlagFalse("FK-001")).thenReturn(false);
         doThrow(new BusinessException(ErrorCode.FORBIDDEN, "无数据权限"))
                 .when(resourceRecordAccessGuard)
-                .assertCurrentUserCanAccess("freight-statements", "read", statement);
+                .assertCurrentUserCanAccess("freight-statement", "read", statement);
 
         PaymentService service = new PaymentService(
                 paymentRepository,

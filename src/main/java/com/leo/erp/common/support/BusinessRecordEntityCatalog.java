@@ -56,25 +56,25 @@ public final class BusinessRecordEntityCatalog {
 
     private static Map<String, Class<? extends AuditableEntity>> buildEntityTypes() {
         Map<String, Class<? extends AuditableEntity>> entityTypes = new LinkedHashMap<>();
-        entityTypes.put("materials", Material.class);
-        entityTypes.put("suppliers", Supplier.class);
-        entityTypes.put("customers", Customer.class);
-        entityTypes.put("carriers", Carrier.class);
-        entityTypes.put("warehouses", Warehouse.class);
-        entityTypes.put("purchase-orders", PurchaseOrder.class);
-        entityTypes.put("purchase-inbounds", PurchaseInbound.class);
-        entityTypes.put("sales-orders", SalesOrder.class);
-        entityTypes.put("sales-outbounds", SalesOutbound.class);
-        entityTypes.put("freight-bills", FreightBill.class);
-        entityTypes.put("purchase-contracts", PurchaseContract.class);
-        entityTypes.put("sales-contracts", SalesContract.class);
-        entityTypes.put("supplier-statements", SupplierStatement.class);
-        entityTypes.put("customer-statements", CustomerStatement.class);
-        entityTypes.put("freight-statements", FreightStatement.class);
-        entityTypes.put("receipts", Receipt.class);
-        entityTypes.put("payments", Payment.class);
-        entityTypes.put("invoice-receipts", InvoiceReceipt.class);
-        entityTypes.put("invoice-issues", InvoiceIssue.class);
+        entityTypes.put("material", Material.class);
+        entityTypes.put("supplier", Supplier.class);
+        entityTypes.put("customer", Customer.class);
+        entityTypes.put("carrier", Carrier.class);
+        entityTypes.put("warehouse", Warehouse.class);
+        entityTypes.put("purchase-order", PurchaseOrder.class);
+        entityTypes.put("purchase-inbound", PurchaseInbound.class);
+        entityTypes.put("sales-order", SalesOrder.class);
+        entityTypes.put("sales-outbound", SalesOutbound.class);
+        entityTypes.put("freight-bill", FreightBill.class);
+        entityTypes.put("purchase-contract", PurchaseContract.class);
+        entityTypes.put("sales-contract", SalesContract.class);
+        entityTypes.put("supplier-statement", SupplierStatement.class);
+        entityTypes.put("customer-statement", CustomerStatement.class);
+        entityTypes.put("freight-statement", FreightStatement.class);
+        entityTypes.put("receipt", Receipt.class);
+        entityTypes.put("payment", Payment.class);
+        entityTypes.put("invoice-receipt", InvoiceReceipt.class);
+        entityTypes.put("invoice-issue", InvoiceIssue.class);
         return Collections.unmodifiableMap(entityTypes);
     }
 }

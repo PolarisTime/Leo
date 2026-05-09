@@ -1,6 +1,7 @@
 package com.leo.erp.finance.payment.repository;
 
 import com.leo.erp.finance.payment.domain.entity.Payment;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
@@ -13,6 +14,7 @@ public interface PaymentRepository extends JpaRepository<Payment, Long>, JpaSpec
 
     boolean existsByPaymentNoAndDeletedFlagFalse(String paymentNo);
 
+    @EntityGraph(attributePaths = "items")
     Optional<Payment> findByIdAndDeletedFlagFalse(Long id);
 
     @Query("""

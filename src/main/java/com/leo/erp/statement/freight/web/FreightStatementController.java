@@ -31,7 +31,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 
 @Tag(name = "物流对账单")
 @RestController
-@RequestMapping("/freight-statements")
+@RequestMapping("/freight-statement")
 public class FreightStatementController {
 
     private final FreightStatementService freightStatementService;
@@ -62,7 +62,7 @@ public class FreightStatementController {
     @GetMapping
     @RequiresPermission(resource = "freight-statement", action = "read")
     public ApiResponse<PageResponse<FreightStatementResponse>> page(
-            @BindPageQuery(sortFieldKey = "freight-statements") PageQuery query,
+            @BindPageQuery(sortFieldKey = "freight-statement") PageQuery query,
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) String carrierName,
             @RequestParam(required = false) String status,
@@ -86,7 +86,7 @@ public class FreightStatementController {
     @GetMapping("/candidates")
     @RequiresPermission(resource = "freight-statement", action = "read")
     public ApiResponse<PageResponse<FreightStatementCandidateResponse>> candidates(
-            @BindPageQuery(sortFieldKey = "freight-bills") PageQuery query,
+            @BindPageQuery(sortFieldKey = "freight-bill") PageQuery query,
             @RequestParam(required = false) String keyword
     ) {
         return ApiResponse.success(PageResponse.from(

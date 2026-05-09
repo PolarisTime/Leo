@@ -26,7 +26,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 
 @Tag(name = "客户对账单")
 @RestController
-@RequestMapping("/customer-statements")
+@RequestMapping("/customer-statement")
 public class CustomerStatementController {
 
     private final CustomerStatementService customerStatementService;
@@ -51,7 +51,7 @@ public class CustomerStatementController {
     @GetMapping
     @RequiresPermission(resource = "customer-statement", action = "read")
     public ApiResponse<PageResponse<CustomerStatementResponse>> page(
-            @BindPageQuery(sortFieldKey = "customer-statements") PageQuery query,
+            @BindPageQuery(sortFieldKey = "customer-statement") PageQuery query,
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) String customerName,
             @RequestParam(required = false) String status,
@@ -74,7 +74,7 @@ public class CustomerStatementController {
     @GetMapping("/candidates")
     @RequiresPermission(resource = "customer-statement", action = "read")
     public ApiResponse<PageResponse<CustomerStatementCandidateResponse>> candidates(
-            @BindPageQuery(sortFieldKey = "sales-orders") PageQuery query,
+            @BindPageQuery(sortFieldKey = "sales-order") PageQuery query,
             @RequestParam(required = false) String keyword
     ) {
         return ApiResponse.success(PageResponse.from(

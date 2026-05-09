@@ -19,7 +19,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
 
 @RestController
-@RequestMapping("/permission-management")
+@RequestMapping("/permission")
 public class PermissionEntryController {
 
     private final PermissionEntryService permissionEntryService;
@@ -50,7 +50,7 @@ public class PermissionEntryController {
     @GetMapping
     @RequiresPermission(resource = "permission", action = "read")
     public ApiResponse<PageResponse<PermissionEntryResponse>> page(
-            @BindPageQuery(sortFieldKey = "permission-management") PageQuery query,
+            @BindPageQuery(sortFieldKey = "permission") PageQuery query,
             @RequestParam(required = false) String keyword
     ) {
         return ApiResponse.success(PageResponse.from(permissionEntryService.page(query, keyword)));
