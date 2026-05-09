@@ -143,7 +143,7 @@ public class SalesOutboundService extends AbstractCrudService<SalesOutbound, Sal
     protected void apply(SalesOutbound entity, SalesOutboundRequest request) {
         String nextStatus = (request.status() == null || request.status().isBlank()) ? StatusConstants.DRAFT : request.status();
         workflowTransitionGuard.assertAuditPermissionForProtectedValue(
-                "sales-outbounds",
+                "sales-outbound",
                 entity.getStatus(),
                 nextStatus,
                 StatusConstants.AUDITED

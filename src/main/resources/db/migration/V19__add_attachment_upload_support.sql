@@ -44,7 +44,7 @@ ALTER TABLE st_freight_statement
 
 INSERT INTO sys_menu_action (id, menu_code, action_code, action_name)
 VALUES
-    (100012, 'general-settings', 'EDIT', '编辑'),
+    (100012, 'general-setting', 'EDIT', '编辑'),
     (100062, 'ops-support', 'EDIT', '编辑'),
     (100066, 'ops-support', 'EXPORT', '导出')
 ON CONFLICT (menu_code, action_code) DO NOTHING;
@@ -57,7 +57,7 @@ SELECT
     ma.action_code
 FROM sys_role r
 JOIN sys_menu_action ma
-  ON ma.menu_code = 'general-settings'
+  ON ma.menu_code = 'general-setting'
  AND ma.action_code IN ('VIEW', 'EDIT')
 WHERE r.role_code IN ('ADMIN', 'FINANCE_MANAGER')
 ON CONFLICT (role_id, menu_code, action_code) DO NOTHING;

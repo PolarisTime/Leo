@@ -22,14 +22,14 @@ INSERT INTO sys_print_template (
 ) VALUES
     (
         700540000000000001,
-        'purchase-orders',
+        'purchase-order',
         '采购订单默认模板',
         '<div><h2>采购订单</h2><div>单号：{{orderNo}}</div><div>供应商：{{supplierName}}</div><div>日期：{{orderDate}}</div><!--DETAIL_ROW_START--><div>{{detail.materialCode}} / {{detail.spec}} / {{detail.weightTon}}</div><!--DETAIL_ROW_END--></div>',
         '1'
     ),
     (
         700540000000000002,
-        'sales-outbounds',
+        'sales-outbound',
         '销售出库默认模板',
         '<div><h2>销售出库</h2><div>单号：{{outboundNo}}</div><div>客户：{{customerName}}</div><div>项目：{{projectName}}</div><!--DETAIL_ROW_START--><div>{{detail.materialCode}} / {{detail.batchNo}} / {{detail.weightTon}}</div><!--DETAIL_ROW_END--></div>',
         '1'

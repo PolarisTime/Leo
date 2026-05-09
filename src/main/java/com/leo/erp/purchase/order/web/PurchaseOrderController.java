@@ -26,7 +26,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 
 @Tag(name = "采购订单")
 @RestController
-@RequestMapping("/purchase-orders")
+@RequestMapping("/purchase-order")
 public class PurchaseOrderController {
 
     private final PurchaseOrderService purchaseOrderService;
@@ -49,7 +49,7 @@ public class PurchaseOrderController {
     @GetMapping("/import-candidates")
     @RequiresPermission(resource = "purchase-order", action = "read")
     public ApiResponse<PageResponse<PurchaseOrderImportCandidateResponse>> importCandidates(
-            @BindPageQuery(sortFieldKey = "purchase-orders") PageQuery query,
+            @BindPageQuery(sortFieldKey = "purchase-order") PageQuery query,
             @RequestParam(required = false) String keyword,
             @RequestParam String usage
     ) {
@@ -62,7 +62,7 @@ public class PurchaseOrderController {
     @GetMapping
     @RequiresPermission(resource = "purchase-order", action = "read")
     public ApiResponse<PageResponse<PurchaseOrderResponse>> page(
-            @BindPageQuery(sortFieldKey = "purchase-orders") PageQuery query,
+            @BindPageQuery(sortFieldKey = "purchase-order") PageQuery query,
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) String supplierName,
             @RequestParam(required = false) String status,

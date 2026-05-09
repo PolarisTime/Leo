@@ -22,13 +22,13 @@ CREATE INDEX IF NOT EXISTS idx_sys_security_secret_type_status
     ON sys_security_secret (secret_type, status, deleted_flag);
 
 INSERT INTO sys_menu (id, menu_code, menu_name, parent_code, route_path, icon, sort_order, menu_type)
-VALUES (10011, 'security-keys', '安全密钥管理', 'system', '/security-keys', 'SafetyCertificateOutlined', 11, '菜单')
+VALUES (10011, 'security-key', '安全密钥管理', 'system', '/security-keys', 'SafetyCertificateOutlined', 11, '菜单')
 ON CONFLICT (menu_code) DO NOTHING;
 
 INSERT INTO sys_menu_action (id, menu_code, action_code, action_name)
 VALUES
-    (100111, 'security-keys', 'VIEW', '查看'),
-    (100112, 'security-keys', 'EDIT', '编辑')
+    (100111, 'security-key', 'VIEW', '查看'),
+    (100112, 'security-key', 'EDIT', '编辑')
 ON CONFLICT (menu_code, action_code) DO NOTHING;
 
 INSERT INTO sys_role_action (id, role_id, menu_code, action_code)
@@ -39,6 +39,6 @@ SELECT
     ma.action_code
 FROM sys_role r
 JOIN sys_menu_action ma
-  ON ma.menu_code = 'security-keys'
+  ON ma.menu_code = 'security-key'
 WHERE r.role_code = 'ADMIN'
 ON CONFLICT (role_id, menu_code, action_code) DO NOTHING;

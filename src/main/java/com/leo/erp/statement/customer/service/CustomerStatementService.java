@@ -105,7 +105,10 @@ public class CustomerStatementService extends AbstractCrudService<CustomerStatem
         );
         Specification<SalesOrder> spec = Specs.<SalesOrder>notDeleted()
                 .and(Specs.keywordLike(keyword, SALES_ORDER_CANDIDATE_SEARCH_FIELDS))
-                .and(Specs.equalIfPresent("status", StatusConstants.SALES_COMPLETED))
+                .and((root, criteriaQuery, cb) -> root.get("status").in(
+                        StatusConstants.SALES_PENDING_FINALIZE,
+                        StatusConstants.SALES_COMPLETED
+                ))
                 .and(StatementCandidateSupport.excludeFieldValues("orderNo", occupiedOrderNos));
         return salesOrderRepository.findAll(DataScopeContext.apply(spec), query.toPageable("id"))
                 .map(this::toCandidateResponse);
@@ -185,7 +188,7 @@ public class CustomerStatementService extends AbstractCrudService<CustomerStatem
     protected void apply(CustomerStatement entity, CustomerStatementRequest request) {
         String nextStatus = (request.status() == null || request.status().isBlank()) ? "待确认" : request.status();
         workflowTransitionGuard.assertAuditPermissionForProtectedValue(
-                "customer-statements",
+                "customer-statement",
                 entity.getStatus(),
                 nextStatus,
                 "已确认"

@@ -24,7 +24,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/purchase-contracts")
+@RequestMapping("/purchase-contract")
 @Tag(name = "采购合同")
 public class PurchaseContractController {
 
@@ -50,7 +50,7 @@ public class PurchaseContractController {
     @RequiresPermission(resource = "purchase-contract", action = "read")
     @Operation(summary = "分页查询采购合同")
     public ApiResponse<PageResponse<PurchaseContractResponse>> page(
-            @BindPageQuery(sortFieldKey = "purchase-contracts") PageQuery query,
+            @BindPageQuery(sortFieldKey = "purchase-contract") PageQuery query,
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) String supplierName,
             @RequestParam(required = false) String status,

@@ -133,7 +133,7 @@ public class PurchaseContractService extends AbstractCrudService<PurchaseContrac
     protected void apply(PurchaseContract entity, PurchaseContractRequest request) {
         String nextStatus = (request.status() == null || request.status().isBlank()) ? StatusConstants.DRAFT : request.status();
         workflowTransitionGuard.assertAuditPermissionForProtectedValue(
-                "purchase-contracts",
+                "purchase-contract",
                 entity.getStatus(),
                 nextStatus,
                 "已签署",

@@ -15,7 +15,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/receivables-payables")
+@RequestMapping("/receivable-payable")
 @Tag(name = "应收应付")
 public class ReceivablePayableController {
 
@@ -29,7 +29,7 @@ public class ReceivablePayableController {
     @RequiresPermission(resource = "receivable-payable", action = "read")
     @Operation(summary = "分页查询应收应付")
     public ApiResponse<PageResponse<ReceivablePayableResponse>> page(
-            @BindPageQuery(sortFieldKey = "receivables-payables", directionParam = "sortDirection") PageQuery query,
+            @BindPageQuery(sortFieldKey = "receivable-payable", directionParam = "sortDirection") PageQuery query,
             @RequestParam(name = "direction", required = false) String businessDirection,
             @RequestParam(required = false) String counterpartyType,
             @RequestParam(required = false) String status,

@@ -181,7 +181,7 @@ public class SupplierStatementService extends AbstractCrudService<SupplierStatem
     protected void apply(SupplierStatement entity, SupplierStatementRequest request) {
         String nextStatus = (request.status() == null || request.status().isBlank()) ? "待确认" : request.status();
         workflowTransitionGuard.assertAuditPermissionForProtectedValue(
-                "supplier-statements",
+                "supplier-statement",
                 entity.getStatus(),
                 nextStatus,
                 "已确认"

@@ -64,7 +64,7 @@ public class CarrierService extends AbstractCrudService<Carrier, CarrierRequest,
     @org.springframework.transaction.annotation.Transactional(readOnly = true)
     public List<CarrierOptionResponse> listActiveOptions() {
         return loadCachedResponses().stream()
-                .map(c -> new CarrierOptionResponse(c.carrierName(), c.carrierName(), resolveVehiclePlates(c)))
+                .map(c -> new CarrierOptionResponse(c.id(), c.carrierName(), c.carrierName(), resolveVehiclePlates(c)))
                 .toList();
     }
 

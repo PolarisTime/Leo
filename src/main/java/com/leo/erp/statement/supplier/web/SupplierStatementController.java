@@ -26,7 +26,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 
 @Tag(name = "供应商对账单")
 @RestController
-@RequestMapping("/supplier-statements")
+@RequestMapping("/supplier-statement")
 public class SupplierStatementController {
 
     private final SupplierStatementService supplierStatementService;
@@ -51,7 +51,7 @@ public class SupplierStatementController {
     @GetMapping
     @RequiresPermission(resource = "supplier-statement", action = "read")
     public ApiResponse<PageResponse<SupplierStatementResponse>> page(
-            @BindPageQuery(sortFieldKey = "supplier-statements") PageQuery query,
+            @BindPageQuery(sortFieldKey = "supplier-statement") PageQuery query,
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) String supplierName,
             @RequestParam(required = false) String status,
@@ -74,7 +74,7 @@ public class SupplierStatementController {
     @GetMapping("/candidates")
     @RequiresPermission(resource = "supplier-statement", action = "read")
     public ApiResponse<PageResponse<SupplierStatementCandidateResponse>> candidates(
-            @BindPageQuery(sortFieldKey = "purchase-inbounds") PageQuery query,
+            @BindPageQuery(sortFieldKey = "purchase-inbound") PageQuery query,
             @RequestParam(required = false) String keyword
     ) {
         return ApiResponse.success(PageResponse.from(

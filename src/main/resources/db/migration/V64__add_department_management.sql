@@ -57,13 +57,13 @@ UPDATE sys_menu
 SET sort_order = sort_order + 1
 WHERE parent_code = 'system'
   AND sort_order >= 4
-  AND menu_code <> 'departments'
+  AND menu_code <> 'department'
   AND NOT EXISTS (
-      SELECT 1 FROM sys_menu WHERE menu_code = 'departments' AND deleted_flag = FALSE
+      SELECT 1 FROM sys_menu WHERE menu_code = 'department' AND deleted_flag = FALSE
   );
 
 INSERT INTO sys_menu (id, menu_code, menu_name, parent_code, route_path, icon, sort_order, menu_type)
-VALUES (10013, 'departments', '部门管理', 'system', '/departments', 'ApartmentOutlined', 4, '菜单')
+VALUES (10013, 'department', '部门管理', 'system', '/departments', 'ApartmentOutlined', 4, '菜单')
 ON CONFLICT (menu_code) DO UPDATE
 SET
     menu_name = EXCLUDED.menu_name,
@@ -77,10 +77,10 @@ SET
 
 INSERT INTO sys_menu_action (id, menu_code, action_code, action_name)
 VALUES
-    (100131, 'departments', 'VIEW', '查看'),
-    (100132, 'departments', 'CREATE', '新增'),
-    (100133, 'departments', 'EDIT', '编辑'),
-    (100134, 'departments', 'DELETE', '删除')
+    (100131, 'department', 'VIEW', '查看'),
+    (100132, 'department', 'CREATE', '新增'),
+    (100133, 'department', 'EDIT', '编辑'),
+    (100134, 'department', 'DELETE', '删除')
 ON CONFLICT (menu_code, action_code) DO NOTHING;
 
 INSERT INTO sys_role_action (id, role_id, menu_code, action_code)
@@ -91,7 +91,7 @@ SELECT
     ma.action_code
 FROM sys_role r
 JOIN sys_menu_action ma
-  ON ma.menu_code = 'departments'
+  ON ma.menu_code = 'department'
 WHERE r.role_code = 'ADMIN'
 ON CONFLICT (role_id, menu_code, action_code) DO NOTHING;
 

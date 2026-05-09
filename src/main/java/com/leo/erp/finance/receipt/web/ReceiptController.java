@@ -17,7 +17,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 
 @Tag(name = "收款管理")
 @RestController
-@RequestMapping("/receipts")
+@RequestMapping("/receipt")
 public class ReceiptController {
 
     private final ReceiptService receiptService;
@@ -40,7 +40,7 @@ public class ReceiptController {
     @GetMapping
     @RequiresPermission(resource = "receipt", action = "read")
     public ApiResponse<PageResponse<ReceiptResponse>> page(
-            @BindPageQuery(sortFieldKey = "receipts") PageQuery query,
+            @BindPageQuery(sortFieldKey = "receipt") PageQuery query,
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) String customerName,
             @RequestParam(required = false) String status,

@@ -133,13 +133,13 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
         String nextStatus = (request.status() == null || request.status().isBlank()) ? "未审核" : request.status();
         String nextDeliveryStatus = (request.deliveryStatus() == null || request.deliveryStatus().isBlank()) ? "未送达" : request.deliveryStatus();
         workflowTransitionGuard.assertAuditPermissionForProtectedValue(
-                "freight-bills",
+                "freight-bill",
                 entity.getStatus(),
                 nextStatus,
                 StatusConstants.AUDITED
         );
         workflowTransitionGuard.assertAuditPermissionForProtectedValue(
-                "freight-bills",
+                "freight-bill",
                 entity.getDeliveryStatus(),
                 nextDeliveryStatus,
                 "已送达"

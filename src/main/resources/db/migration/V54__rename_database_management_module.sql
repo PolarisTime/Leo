@@ -1,14 +1,14 @@
 UPDATE sys_menu
-SET menu_code = 'database-management',
+SET menu_code = 'database',
     route_path = '/database-management'
 WHERE menu_code = 'ops-support';
 
 UPDATE sys_menu_action
-SET menu_code = 'database-management'
+SET menu_code = 'database'
 WHERE menu_code = 'ops-support';
 
 UPDATE sys_role_action
-SET menu_code = 'database-management'
+SET menu_code = 'database'
 WHERE menu_code = 'ops-support';
 
 UPDATE auth_api_key
@@ -18,10 +18,10 @@ FROM (
         ak.id,
         COALESCE(
             string_agg(DISTINCT CASE
-                WHEN BTRIM(token.menu_code) = 'ops-support' THEN 'database-management'
+                WHEN BTRIM(token.menu_code) = 'ops-support' THEN 'database'
                 ELSE BTRIM(token.menu_code)
             END, ',' ORDER BY CASE
-                WHEN BTRIM(token.menu_code) = 'ops-support' THEN 'database-management'
+                WHEN BTRIM(token.menu_code) = 'ops-support' THEN 'database'
                 ELSE BTRIM(token.menu_code)
             END),
             ''
@@ -35,12 +35,12 @@ WHERE auth_api_key.id = normalized.id
   AND POSITION('ops-support' IN auth_api_key.allowed_menus) > 0;
 
 UPDATE sys_upload_rule
-SET module_key = 'database-management',
+SET module_key = 'database',
     rule_code = 'PAGE_UPLOAD_DATABASE_MANAGEMENT',
     rule_name = '数据库管理上传命名规则',
     remark = REPLACE(COALESCE(remark, ''), '运维支持', '数据库管理')
 WHERE module_key = 'ops-support';
 
 UPDATE sys_attachment_binding
-SET module_key = 'database-management'
+SET module_key = 'database'
 WHERE module_key = 'ops-support';

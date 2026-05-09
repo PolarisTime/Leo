@@ -16,7 +16,7 @@ import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
-@RequestMapping("/purchase-inbounds")
+@RequestMapping("/purchase-inbound")
 @Tag(name = "采购入库")
 public class PurchaseInboundController {
 
@@ -40,7 +40,7 @@ public class PurchaseInboundController {
     @RequiresPermission(resource = "purchase-inbound", action = "read")
     @Operation(summary = "分页查询采购入库")
     public ApiResponse<PageResponse<PurchaseInboundResponse>> page(
-            @BindPageQuery(sortFieldKey = "purchase-inbounds") PageQuery query,
+            @BindPageQuery(sortFieldKey = "purchase-inbound") PageQuery query,
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) String supplierName,
             @RequestParam(required = false) String status,

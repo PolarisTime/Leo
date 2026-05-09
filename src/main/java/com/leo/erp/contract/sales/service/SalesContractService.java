@@ -133,7 +133,7 @@ public class SalesContractService extends AbstractCrudService<SalesContract, Sal
     protected void apply(SalesContract entity, SalesContractRequest request) {
         String nextStatus = (request.status() == null || request.status().isBlank()) ? StatusConstants.DRAFT : request.status();
         workflowTransitionGuard.assertAuditPermissionForProtectedValue(
-                "sales-contracts",
+                "sales-contract",
                 entity.getStatus(),
                 nextStatus,
                 "已签署",

@@ -27,7 +27,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 
 @RestController
-@RequestMapping("/materials")
+@RequestMapping("/material")
 public class MaterialController {
 
     private final MaterialService materialService;
@@ -51,7 +51,7 @@ public class MaterialController {
     @GetMapping
     @RequiresPermission(resource = "material", action = "read")
     public ApiResponse<PageResponse<MaterialResponse>> page(
-            @BindPageQuery(sortFieldKey = "materials") PageQuery query,
+            @BindPageQuery(sortFieldKey = "material") PageQuery query,
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) String category,
             @RequestParam(required = false) String material

@@ -16,7 +16,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import java.time.LocalDate;
 
 @RestController
-@RequestMapping("/invoice-issues")
+@RequestMapping("/invoice-issue")
 @Tag(name = "发票开具")
 public class InvoiceIssueController {
 
@@ -40,7 +40,7 @@ public class InvoiceIssueController {
     @RequiresPermission(resource = "invoice-issue", action = "read")
     @Operation(summary = "分页查询发票开具")
     public ApiResponse<PageResponse<InvoiceIssueResponse>> page(
-            @BindPageQuery(sortFieldKey = "invoice-issues") PageQuery query,
+            @BindPageQuery(sortFieldKey = "invoice-issue") PageQuery query,
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) String customerName,
             @RequestParam(required = false) String status,

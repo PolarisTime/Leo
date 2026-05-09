@@ -24,10 +24,10 @@ public class PrintTemplateService extends AbstractCrudService<PrintTemplate, Pri
     private static final String DEFAULT_FLAG = "1";
     private static final String NORMAL_FLAG = "0";
     private static final Set<String> ALLOWED_BILL_TYPES = Set.of(
-            "purchase-orders", "purchase-inbounds", "sales-orders", "sales-outbounds",
-            "freight-bills", "purchase-contracts", "sales-contracts",
-            "supplier-statements", "customer-statements", "freight-statements",
-            "receipts", "payments", "invoice-receipts", "invoice-issues"
+            "purchase-order", "purchase-inbound", "sales-order", "sales-outbound",
+            "freight-bill", "purchase-contract", "sales-contract",
+            "supplier-statement", "customer-statement", "freight-statement",
+            "receipt", "payment", "invoice-receipt", "invoice-issue"
     );
     private static final List<Pattern> DANGEROUS_HTML_PATTERNS = List.of(
             Pattern.compile("<\\s*script\\b", Pattern.CASE_INSENSITIVE),

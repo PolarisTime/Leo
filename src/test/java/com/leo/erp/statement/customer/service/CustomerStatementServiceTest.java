@@ -1,17 +1,23 @@
 package com.leo.erp.statement.customer.service;
 
 import com.leo.erp.common.error.BusinessException;
+import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
+import com.leo.erp.sales.order.domain.entity.SalesOrder;
 import com.leo.erp.sales.order.repository.SalesOrderRepository;
 import com.leo.erp.statement.customer.domain.entity.CustomerStatement;
 import com.leo.erp.statement.customer.mapper.CustomerStatementMapper;
 import com.leo.erp.statement.customer.repository.CustomerStatementRepository;
 import com.leo.erp.statement.customer.web.dto.CustomerStatementItemRequest;
+import com.leo.erp.statement.customer.web.dto.CustomerStatementCandidateResponse;
 import com.leo.erp.statement.customer.web.dto.CustomerStatementRequest;
 import com.leo.erp.statement.customer.web.dto.CustomerStatementResponse;
 import com.leo.erp.security.permission.WorkflowTransitionGuard;
 import com.leo.erp.statement.service.StatementSettlementSyncService;
 import org.junit.jupiter.api.Test;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -118,6 +124,47 @@ class CustomerStatementServiceTest {
         verify(repository).save(argThat(saved ->
                 Boolean.TRUE.equals(saved.getDeletedFlag()) && "已删除".equals(saved.getStatus())
         ));
+    }
+
+    @Test
+    void shouldExposePendingFinalizeSalesOrdersAsStatementCandidates() {
+        CustomerStatementRepository repository = mock(CustomerStatementRepository.class);
+        CustomerStatementMapper mapper = mock(CustomerStatementMapper.class);
+        SalesOrderRepository salesOrderRepository = mock(SalesOrderRepository.class);
+        StatementSettlementSyncService syncService = mock(StatementSettlementSyncService.class);
+
+        SalesOrder salesOrder = new SalesOrder();
+        salesOrder.setId(1L);
+        salesOrder.setOrderNo("SO-001");
+        salesOrder.setCustomerName("客户甲");
+        salesOrder.setProjectName("项目A");
+        salesOrder.setDeliveryDate(LocalDate.of(2026, 5, 6));
+        salesOrder.setSalesName("张三");
+        salesOrder.setStatus("待完善");
+        salesOrder.setTotalWeight(new BigDecimal("1.000"));
+        salesOrder.setTotalAmount(new BigDecimal("1000.00"));
+
+        when(repository.findAll(any(Specification.class))).thenReturn(List.of());
+        when(salesOrderRepository.findAll(any(Specification.class), any(Pageable.class))).thenReturn(
+                new PageImpl<>(List.of(salesOrder))
+        );
+
+        CustomerStatementService service = new CustomerStatementService(
+                repository,
+                new SnowflakeIdGenerator(0L),
+                mapper,
+                salesOrderRepository,
+                syncService,
+                mock(WorkflowTransitionGuard.class)
+        );
+
+        List<CustomerStatementCandidateResponse> candidates = service
+                .candidatePage(PageQuery.of(0, 20, null, null), "")
+                .getContent();
+
+        assertThat(candidates).hasSize(1);
+        assertThat(candidates.get(0).orderNo()).isEqualTo("SO-001");
+        assertThat(candidates.get(0).status()).isEqualTo("待完善");
     }
 
     private CustomerStatementRequest buildRequest(BigDecimal receiptAmount) {

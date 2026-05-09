@@ -341,7 +341,7 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
     protected void apply(PurchaseOrder purchaseOrder, PurchaseOrderRequest request) {
         String nextStatus = (request.status() == null || request.status().isBlank()) ? StatusConstants.DRAFT : request.status();
         workflowTransitionGuard.assertAuditPermissionForProtectedValue(
-                "purchase-orders",
+                "purchase-order",
                 purchaseOrder.getStatus(),
                 nextStatus,
                 StatusConstants.AUDITED,

@@ -17,7 +17,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 
 @Tag(name = "销售订单")
 @RestController
-@RequestMapping("/sales-orders")
+@RequestMapping("/sales-order")
 public class SalesOrderController {
 
     private final SalesOrderService service;
@@ -40,7 +40,7 @@ public class SalesOrderController {
     @GetMapping
     @RequiresPermission(resource = "sales-order", action = "read")
     public ApiResponse<PageResponse<SalesOrderResponse>> page(
-            @BindPageQuery(sortFieldKey = "sales-orders") PageQuery query,
+            @BindPageQuery(sortFieldKey = "sales-order") PageQuery query,
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) String customerName,
             @RequestParam(required = false) String projectName,

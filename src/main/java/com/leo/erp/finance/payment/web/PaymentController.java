@@ -17,7 +17,7 @@ import org.springframework.web.bind.annotation.*;
 
 @Tag(name = "付款管理")
 @RestController
-@RequestMapping("/payments")
+@RequestMapping("/payment")
 public class PaymentController {
 
     private final PaymentService paymentService;
@@ -40,7 +40,7 @@ public class PaymentController {
     @GetMapping
     @RequiresPermission(resource = "payment", action = "read")
     public ApiResponse<PageResponse<PaymentResponse>> page(
-            @BindPageQuery(sortFieldKey = "payments") PageQuery query,
+            @BindPageQuery(sortFieldKey = "payment") PageQuery query,
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) String businessType,
             @RequestParam(required = false) String status,

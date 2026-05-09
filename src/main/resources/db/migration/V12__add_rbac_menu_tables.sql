@@ -98,28 +98,28 @@ ON CONFLICT (menu_code) DO NOTHING;
 
 -- 主数据管理子菜单
 INSERT INTO sys_menu (id, menu_code, menu_name, parent_code, route_path, icon, sort_order, menu_type) VALUES
-(2001, 'materials',   '商品资料',   'master',    '/materials',   'DatabaseOutlined', 1, '菜单'),
-(2002, 'suppliers',   '供应商资料', 'master',    '/suppliers',   'TeamOutlined',     2, '菜单'),
-(2003, 'customers',   '客户资料',   'master',    '/customers',   'UserOutlined',     3, '菜单'),
-(2004, 'carriers',    '物流方资料', 'master',    '/carriers',    'CarOutlined',      4, '菜单'),
-(2005, 'warehouses',  '仓库资料',   'master',    '/warehouses',  'BankOutlined',     5, '菜单')
+(2001, 'material',   '商品资料',   'master',    '/materials',   'DatabaseOutlined', 1, '菜单'),
+(2002, 'supplier',   '供应商资料', 'master',    '/suppliers',   'TeamOutlined',     2, '菜单'),
+(2003, 'customer',   '客户资料',   'master',    '/customers',   'UserOutlined',     3, '菜单'),
+(2004, 'carrier',    '物流方资料', 'master',    '/carriers',    'CarOutlined',      4, '菜单'),
+(2005, 'warehouse',  '仓库资料',   'master',    '/warehouses',  'BankOutlined',     5, '菜单')
 ON CONFLICT (menu_code) DO NOTHING;
 
 -- 采购管理子菜单
 INSERT INTO sys_menu (id, menu_code, menu_name, parent_code, route_path, icon, sort_order, menu_type) VALUES
-(3001, 'purchase-orders',    '采购订单', 'purchase', '/purchase-orders',    'ProfileOutlined', 1, '菜单'),
-(3002, 'purchase-inbounds',  '采购入库', 'purchase', '/purchase-inbounds',  'InboxOutlined',   2, '菜单')
+(3001, 'purchase-order',    '采购订单', 'purchase', '/purchase-orders',    'ProfileOutlined', 1, '菜单'),
+(3002, 'purchase-inbound',  '采购入库', 'purchase', '/purchase-inbounds',  'InboxOutlined',   2, '菜单')
 ON CONFLICT (menu_code) DO NOTHING;
 
 -- 销售管理子菜单
 INSERT INTO sys_menu (id, menu_code, menu_name, parent_code, route_path, icon, sort_order, menu_type) VALUES
-(4001, 'sales-orders',    '销售订单', 'sales', '/sales-orders',    'FileDoneOutlined', 1, '菜单'),
-(4002, 'sales-outbounds', '销售出库', 'sales', '/sales-outbounds', 'SwapOutlined',     2, '菜单')
+(4001, 'sales-order',    '销售订单', 'sales', '/sales-orders',    'FileDoneOutlined', 1, '菜单'),
+(4002, 'sales-outbound', '销售出库', 'sales', '/sales-outbounds', 'SwapOutlined',     2, '菜单')
 ON CONFLICT (menu_code) DO NOTHING;
 
 -- 物流管理子菜单
 INSERT INTO sys_menu (id, menu_code, menu_name, parent_code, route_path, icon, sort_order, menu_type) VALUES
-(5001, 'freight-bills', '物流单', 'freight', '/freight-bills', 'CarOutlined', 1, '菜单')
+(5001, 'freight-bill', '物流单', 'freight', '/freight-bills', 'CarOutlined', 1, '菜单')
 ON CONFLICT (menu_code) DO NOTHING;
 
 -- 合同管理子菜单
@@ -136,29 +136,29 @@ ON CONFLICT (menu_code) DO NOTHING;
 
 -- 对账管理子菜单
 INSERT INTO sys_menu (id, menu_code, menu_name, parent_code, route_path, icon, sort_order, menu_type) VALUES
-(8001, 'supplier-statements', '供应商对账单', 'statements', '/supplier-statements', 'FileSearchOutlined', 1, '菜单'),
-(8002, 'customer-statements', '客户对账单',   'statements', '/customer-statements', 'FileTextOutlined',   2, '菜单'),
-(8003, 'freight-statements',  '物流对账单',   'statements', '/freight-statements',  'FileSyncOutlined',   3, '菜单')
+(8001, 'supplier-statement', '供应商对账单', 'statements', '/supplier-statements', 'FileSearchOutlined', 1, '菜单'),
+(8002, 'customer-statement', '客户对账单',   'statements', '/customer-statements', 'FileTextOutlined',   2, '菜单'),
+(8003, 'freight-statement',  '物流对账单',   'statements', '/freight-statements',  'FileSyncOutlined',   3, '菜单')
 ON CONFLICT (menu_code) DO NOTHING;
 
 -- 财务管理子菜单
 INSERT INTO sys_menu (id, menu_code, menu_name, parent_code, route_path, icon, sort_order, menu_type) VALUES
-(9001, 'receipts',           '收款单',   'finance', '/receipts',           'AccountBookOutlined', 1, '菜单'),
-(9002, 'payments',           '付款单',   'finance', '/payments',           'CreditCardOutlined',  2, '菜单'),
-(9003, 'receivables-payables','应收应付', 'finance', '/receivables-payables','CalculatorOutlined', 3, '菜单')
+(9001, 'receipt',           '收款单',   'finance', '/receipts',           'AccountBookOutlined', 1, '菜单'),
+(9002, 'payment',           '付款单',   'finance', '/payments',           'CreditCardOutlined',  2, '菜单'),
+(9003, 'receivable-payable','应收应付', 'finance', '/receivables-payables','CalculatorOutlined', 3, '菜单')
 ON CONFLICT (menu_code) DO NOTHING;
 
 -- 系统设置子菜单
 INSERT INTO sys_menu (id, menu_code, menu_name, parent_code, route_path, icon, sort_order, menu_type) VALUES
-(10001, 'general-settings',    '通用设置',     'system', '/general-settings',    'SettingOutlined',         1, '菜单'),
-(10002, 'operation-logs',      '操作日志',     'system', '/operation-logs',      'FileSearchOutlined',      2, '菜单'),
-(10003, 'permission-management','权限管理',    'system', '/permission-management','TeamOutlined',           3, '菜单'),
-(10004, 'user-accounts',       '用户账户',     'system', '/user-accounts',       'UserOutlined',            4, '菜单'),
+(10001, 'general-setting',    '通用设置',     'system', '/general-settings',    'SettingOutlined',         1, '菜单'),
+(10002, 'operation-log',      '操作日志',     'system', '/operation-logs',      'FileSearchOutlined',      2, '菜单'),
+(10003, 'permission','权限管理',    'system', '/permission-management','TeamOutlined',           3, '菜单'),
+(10004, 'user-account',       '用户账户',     'system', '/user-accounts',       'UserOutlined',            4, '菜单'),
 (10005, 'role-settings',       '角色设置',     'system', '/role-settings',       'AccountBookOutlined',     5, '菜单'),
 (10006, 'ops-support',         '数据库管理',   'system', '/ops-support',         'DatabaseOutlined',        6, '菜单'),
-(10007, 'session-management',  '会话管理',     'system', '/session-management',  'SafetyCertificateOutlined',7, '菜单'),
-(10008, 'api-key-management',  'API Key 管理', 'system', '/api-key-management',  'SafetyCertificateOutlined',8, '菜单'),
-(10009, 'print-templates',     '打印模板',     'system', '/print-templates',     'PrinterOutlined',         9, '菜单')
+(10007, 'session',  '会话管理',     'system', '/session-management',  'SafetyCertificateOutlined',7, '菜单'),
+(10008, 'api-key',  'API Key 管理', 'system', '/api-key-management',  'SafetyCertificateOutlined',8, '菜单'),
+(10009, 'print-template',     '打印模板',     'system', '/print-templates',     'PrinterOutlined',         9, '菜单')
 ON CONFLICT (menu_code) DO NOTHING;
 
 -- ============================================================
@@ -227,7 +227,7 @@ SELECT
 FROM sys_role r
 CROSS JOIN sys_menu_action ma
 WHERE r.role_code = 'PURCHASER'
-  AND (ma.menu_code IN ('materials', 'suppliers', 'warehouses', 'purchase-orders', 'purchase-inbounds', 'purchase-contracts')
+  AND (ma.menu_code IN ('material', 'supplier', 'warehouse', 'purchase-order', 'purchase-inbound', 'purchase-contracts')
        OR ma.menu_code = 'dashboard')
 ON CONFLICT (role_id, menu_code, action_code) DO NOTHING;
 
@@ -241,7 +241,7 @@ SELECT
 FROM sys_role r
 CROSS JOIN sys_menu_action ma
 WHERE r.role_code = 'SALES_MANAGER'
-  AND (ma.menu_code IN ('customers', 'sales-orders', 'sales-outbounds', 'sales-contracts', 'supplier-statements', 'customer-statements')
+  AND (ma.menu_code IN ('customer', 'sales-order', 'sales-outbound', 'sales-contracts', 'supplier-statement', 'customer-statement')
        OR ma.menu_code = 'dashboard')
 ON CONFLICT (role_id, menu_code, action_code) DO NOTHING;
 
@@ -255,7 +255,7 @@ SELECT
 FROM sys_role r
 CROSS JOIN sys_menu_action ma
 WHERE r.role_code = 'FINANCE_MANAGER'
-  AND (ma.menu_code IN ('receipts', 'payments', 'receivables-payables', 'supplier-statements', 'customer-statements', 'freight-statements')
+  AND (ma.menu_code IN ('receipt', 'payment', 'receivable-payable', 'supplier-statement', 'customer-statement', 'freight-statement')
        OR ma.menu_code = 'dashboard')
 ON CONFLICT (role_id, menu_code, action_code) DO NOTHING;
 

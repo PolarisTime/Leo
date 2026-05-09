@@ -190,6 +190,11 @@ public class RoleSettingService extends AbstractCrudService<RoleSetting, RoleSet
                 actions.add(ResourcePermissionCatalog.READ);
             }
         });
+        // access-control 聚合页：授予任一子模块权限时自动带出入口
+        if (actionsByResource.keySet().stream().anyMatch(
+                resource -> "user-account".equals(resource) || "permission".equals(resource) || "role".equals(resource))) {
+            actionsByResource.computeIfAbsent("access-control", k -> new LinkedHashSet<>()).add(ResourcePermissionCatalog.READ);
+        }
         List<RolePermission> toSave = new java.util.ArrayList<>(actionsByResource.values().stream().mapToInt(Set::size).sum());
         actionsByResource.forEach((resource, actions) -> actions.forEach(action -> {
             RolePermission permission = new RolePermission();
@@ -234,13 +239,14 @@ public class RoleSettingService extends AbstractCrudService<RoleSetting, RoleSet
             int childOrder = 1;
             for (ResourcePermissionCatalog.Entry entry : groupEntry.getValue()) {
                 children.add(new MenuTreeResponse(
-                        entry.menuCodes().isEmpty() ? entry.code() : entry.menuCodes().get(0),
+                        entry.code(),
                         entry.title(),
                         groupCode,
                         entry.pathPrefixes().isEmpty() ? null : entry.pathPrefixes().get(0),
                         null,
                         childOrder++,
                         "菜单",
+                        entry.code(),
                         entry.actions().stream().map(ResourcePermissionCatalog.ActionOption::code).toList(),
                         new java.util.ArrayList<>()
                 ));
@@ -253,6 +259,7 @@ public class RoleSettingService extends AbstractCrudService<RoleSetting, RoleSet
                     null,
                     groupOrder++,
                     "目录",
+                    null,
                     List.of(),
                     children
             ));

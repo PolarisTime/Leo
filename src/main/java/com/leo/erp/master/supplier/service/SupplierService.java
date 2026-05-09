@@ -8,11 +8,11 @@ import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.service.AbstractCrudService;
 import com.leo.erp.common.support.RedisJsonCacheSupport;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
-import com.leo.erp.common.web.OptionResponse;
 import com.leo.erp.master.supplier.domain.entity.Supplier;
 import com.leo.erp.master.supplier.repository.SupplierRepository;
 import com.leo.erp.master.supplier.mapper.SupplierMapper;
 import com.leo.erp.master.supplier.web.dto.SupplierRequest;
+import com.leo.erp.master.supplier.web.dto.SupplierOptionResponse;
 import com.leo.erp.master.supplier.web.dto.SupplierResponse;
 import org.springframework.data.domain.Page;
 import org.springframework.data.jpa.domain.Specification;
@@ -29,7 +29,7 @@ public class SupplierService extends AbstractCrudService<Supplier, SupplierReque
 
     private static final String SUPPLIER_CACHE_KEY = "leo:supplier:all";
     private static final Duration SUPPLIER_CACHE_TTL = Duration.ofMinutes(30);
-    private static final TypeReference<List<OptionResponse>> SUPPLIER_OPTION_LIST_TYPE = new TypeReference<>() { };
+    private static final TypeReference<List<SupplierOptionResponse>> SUPPLIER_OPTION_LIST_TYPE = new TypeReference<>() { };
 
     private final SupplierRepository supplierRepository;
     private final SupplierMapper supplierMapper;
@@ -53,7 +53,7 @@ public class SupplierService extends AbstractCrudService<Supplier, SupplierReque
     }
 
     @Transactional(readOnly = true)
-    public List<OptionResponse> listActiveOptions() {
+    public List<SupplierOptionResponse> listActiveOptions() {
         if (redisJsonCacheSupport == null) {
             return loadActiveOptions();
         }
@@ -65,9 +65,9 @@ public class SupplierService extends AbstractCrudService<Supplier, SupplierReque
         );
     }
 
-    private List<OptionResponse> loadActiveOptions() {
+    private List<SupplierOptionResponse> loadActiveOptions() {
         return supplierRepository.findByDeletedFlagFalseOrderBySupplierCodeAsc().stream()
-                .map(s -> new OptionResponse(s.getSupplierName(), s.getSupplierName()))
+                .map(s -> new SupplierOptionResponse(s.getId(), s.getSupplierName(), s.getSupplierName()))
                 .toList();
     }
 

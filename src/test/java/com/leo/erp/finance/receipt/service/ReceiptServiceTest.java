@@ -159,7 +159,7 @@ class ReceiptServiceTest {
         when(receiptRepository.existsByReceiptNoAndDeletedFlagFalse("SK-001")).thenReturn(false);
         doThrow(new BusinessException(ErrorCode.FORBIDDEN, "无数据权限"))
                 .when(resourceRecordAccessGuard)
-                .assertCurrentUserCanAccess("customer-statements", "read", statement);
+                .assertCurrentUserCanAccess("customer-statement", "read", statement);
 
         ReceiptService service = new ReceiptService(
                 receiptRepository,

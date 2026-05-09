@@ -13,7 +13,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/system/security-keys")
+@RequestMapping("/system/security-key")
 public class SecurityKeyController {
 
     private final SecurityKeyService securityKeyService;

@@ -7,6 +7,7 @@ import com.leo.erp.common.web.BindPageQuery;
 import com.leo.erp.security.permission.RequiresPermission;
 import com.leo.erp.master.supplier.service.SupplierService;
 import com.leo.erp.master.supplier.web.dto.SupplierRequest;
+import com.leo.erp.master.supplier.web.dto.SupplierOptionResponse;
 import com.leo.erp.master.supplier.web.dto.SupplierResponse;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -20,7 +21,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/suppliers")
+@RequestMapping("/supplier")
 public class SupplierController {
 
     private final SupplierService supplierService;
@@ -31,14 +32,14 @@ public class SupplierController {
 
     @GetMapping("/options")
     @RequiresPermission(resource = "supplier", action = "read")
-    public ApiResponse<java.util.List<com.leo.erp.common.web.OptionResponse>> options() {
+    public ApiResponse<java.util.List<SupplierOptionResponse>> options() {
         return ApiResponse.success(supplierService.listActiveOptions());
     }
 
     @GetMapping
     @RequiresPermission(resource = "supplier", action = "read")
     public ApiResponse<PageResponse<SupplierResponse>> page(
-            @BindPageQuery(sortFieldKey = "suppliers") PageQuery query,
+            @BindPageQuery(sortFieldKey = "supplier") PageQuery query,
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) String status
     ) {

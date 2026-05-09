@@ -14,7 +14,7 @@ import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
-@RequestMapping("/company-settings")
+@RequestMapping("/company-setting")
 public class CompanySettingController {
 
     private final CompanySettingService companySettingService;
@@ -26,7 +26,7 @@ public class CompanySettingController {
     @GetMapping
     @RequiresPermission(resource = "company-setting", action = "read")
     public ApiResponse<PageResponse<CompanySettingResponse>> page(
-            @BindPageQuery(sortFieldKey = "company-settings") PageQuery query,
+            @BindPageQuery(sortFieldKey = "company-setting") PageQuery query,
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) String status
     ) {
