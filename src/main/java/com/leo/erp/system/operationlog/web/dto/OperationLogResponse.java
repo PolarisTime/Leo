@@ -10,6 +10,8 @@ public record OperationLogResponse(
         String moduleName,
         String actionType,
         String businessNo,
+        Long recordId,
+        String moduleKey,
         String requestMethod,
         String requestPath,
         String clientIp,
