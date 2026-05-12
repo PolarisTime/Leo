@@ -22,7 +22,6 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 
-import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
@@ -34,39 +33,38 @@ import static org.mockito.Mockito.when;
 class ReceiptServiceTest {
 
     @Test
-    void shouldAllowReceiptWithoutStatementAllocations() {
+    void shouldRejectReceiptAmountNotMatchingAllocations() {
         ReceiptRepository receiptRepository = mock(ReceiptRepository.class);
-        ReceiptMapper receiptMapper = mock(ReceiptMapper.class);
+        CustomerStatementQueryService customerStatementQueryService = mock(CustomerStatementQueryService.class);
+        CustomerStatement statement = new CustomerStatement();
+        statement.setId(21L);
+        statement.setCustomerName("客户A");
+        statement.setProjectName("项目A");
+        statement.setSalesAmount(new BigDecimal("1000.00"));
+        when(customerStatementQueryService.requireActiveById(21L)).thenReturn(statement);
         when(receiptRepository.existsByReceiptNoAndDeletedFlagFalse("SK-001")).thenReturn(false);
-        when(receiptRepository.save(any(Receipt.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(receiptMapper.toResponse(any(Receipt.class))).thenReturn(new ReceiptResponse(
-                1L,
-                "SK-001",
-                "客户A",
-                "项目A",
-                null,
-                LocalDate.of(2026, 4, 26),
-                "银行转账",
-                new BigDecimal("100.00"),
-                "已收款",
-                "财务A",
-                null,
-                List.of()
-        ));
 
         ReceiptService service = new ReceiptService(
                 receiptRepository,
                 mock(ReceiptAllocationRepository.class),
                 new SnowflakeIdGenerator(0L),
-                receiptMapper,
-                mock(CustomerStatementQueryService.class),
+                mock(ReceiptMapper.class),
+                customerStatementQueryService,
                 mock(ApplicationEventPublisher.class),
                 mock(ResourceRecordAccessGuard.class),
                 mock(WorkflowTransitionGuard.class)
         );
 
-        assertThatCode(() -> service.create(buildRequest(null, "客户A", "项目A", new BigDecimal("100.00"), "已收款", List.of())))
-                .doesNotThrowAnyException();
+        assertThatThrownBy(() -> service.create(buildRequest(
+                21L,
+                "客户A",
+                "项目A",
+                new BigDecimal("100.00"),
+                "已收款",
+                List.of(new ReceiptAllocationRequest(null, 21L, new BigDecimal("80.00")))
+        )))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("收款金额必须等于核销金额合计");
     }
 
     @Test
@@ -104,6 +102,47 @@ class ReceiptServiceTest {
                 "项目A",
                 new BigDecimal("100.00"),
                 "已收款",
+                List.of(new ReceiptAllocationRequest(null, 21L, new BigDecimal("100.00")))
+        )))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("累计收款金额不能超过销售金额");
+    }
+
+    @Test
+    void shouldRejectOverReceiptAgainstCustomerStatementWhenStatusContainsWhitespace() {
+        ReceiptRepository receiptRepository = mock(ReceiptRepository.class);
+        ReceiptAllocationRepository allocationRepository = mock(ReceiptAllocationRepository.class);
+        CustomerStatementQueryService customerStatementQueryService = mock(CustomerStatementQueryService.class);
+        CustomerStatement statement = new CustomerStatement();
+        statement.setId(21L);
+        statement.setCustomerName("客户A");
+        statement.setProjectName("项目A");
+        statement.setSalesAmount(new BigDecimal("1000.00"));
+        when(customerStatementQueryService.requireActiveById(21L)).thenReturn(statement);
+        when(receiptRepository.existsByReceiptNoAndDeletedFlagFalse("SK-001")).thenReturn(false);
+        when(allocationRepository.sumAllocatedAmountBySourceStatementIdAndReceiptStatusExcludingReceiptId(
+                eq(21L),
+                eq(StatusConstants.RECEIVED),
+                anyLong()
+        )).thenReturn(new BigDecimal("950.00"));
+
+        ReceiptService service = new ReceiptService(
+                receiptRepository,
+                allocationRepository,
+                new SnowflakeIdGenerator(0L),
+                mock(ReceiptMapper.class),
+                customerStatementQueryService,
+                mock(ApplicationEventPublisher.class),
+                mock(ResourceRecordAccessGuard.class),
+                mock(WorkflowTransitionGuard.class)
+        );
+
+        assertThatThrownBy(() -> service.create(buildRequest(
+                21L,
+                "客户A",
+                "项目A",
+                new BigDecimal("100.00"),
+                " 已收款 ",
                 List.of(new ReceiptAllocationRequest(null, 21L, new BigDecimal("100.00")))
         )))
                 .isInstanceOf(BusinessException.class)

@@ -125,8 +125,16 @@ class GeneralSettingQueryServiceTest {
         defaultPageSizeSetting.setSampleNo("50");
         defaultPageSizeSetting.setStatus("正常");
 
+        NoRule snowflakeBusinessNoSwitch = new NoRule();
+        snowflakeBusinessNoSwitch.setId(7L);
+        snowflakeBusinessNoSwitch.setSettingCode(SystemSwitchService.USE_SNOWFLAKE_ID_AS_BUSINESS_NO_SWITCH);
+        snowflakeBusinessNoSwitch.setSettingName("业务单据号使用雪花ID");
+        snowflakeBusinessNoSwitch.setBillName("系统开关");
+        snowflakeBusinessNoSwitch.setSampleNo("ON");
+        snowflakeBusinessNoSwitch.setStatus("正常");
+
         GeneralSettingQueryService service = new GeneralSettingQueryService(
-                noRuleRepository(List.of(customerSwitch, supplierSwitch, hideAuditedSwitch, defaultPageSizeSetting)),
+                noRuleRepository(List.of(customerSwitch, supplierSwitch, hideAuditedSwitch, defaultPageSizeSetting, snowflakeBusinessNoSwitch)),
                 mapper(),
                 stubUploadRuleService()
         );
@@ -136,6 +144,7 @@ class GeneralSettingQueryServiceTest {
                 .collect(java.util.stream.Collectors.toSet());
 
         assertThat(settingCodes).contains(SystemSwitchService.DEFAULT_LIST_PAGE_SIZE_SETTING);
+        assertThat(settingCodes).contains(SystemSwitchService.USE_SNOWFLAKE_ID_AS_BUSINESS_NO_SWITCH);
         assertThat(settingCodes).doesNotContain(
                 "SYS_CUSTOMER_STATEMENT_RECEIPT_ZERO_FROM_SALES_ORDER",
                 "SYS_SUPPLIER_STATEMENT_FULL_PAYMENT_FROM_PURCHASE",

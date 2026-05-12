@@ -24,7 +24,6 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 
-import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
@@ -36,40 +35,38 @@ import static org.mockito.Mockito.when;
 class PaymentServiceTest {
 
     @Test
-    void shouldAllowSupplierPaymentWithoutStatementAllocations() {
+    void shouldRejectSupplierPaymentAmountNotMatchingAllocations() {
         PaymentRepository paymentRepository = mock(PaymentRepository.class);
-        PaymentMapper paymentMapper = mock(PaymentMapper.class);
+        SupplierStatementQueryService supplierStatementQueryService = mock(SupplierStatementQueryService.class);
+        SupplierStatement statement = new SupplierStatement();
+        statement.setId(11L);
+        statement.setSupplierName("供应商A");
+        statement.setPurchaseAmount(new BigDecimal("1000.00"));
+        when(supplierStatementQueryService.requireActiveById(11L)).thenReturn(statement);
         when(paymentRepository.existsByPaymentNoAndDeletedFlagFalse("FK-001")).thenReturn(false);
-        when(paymentRepository.save(any(Payment.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(paymentMapper.toResponse(any(Payment.class))).thenReturn(new PaymentResponse(
-                1L,
-                "FK-001",
-                "供应商",
-                "供应商A",
-                null,
-                LocalDate.of(2026, 4, 26),
-                "银行转账",
-                new BigDecimal("100.00"),
-                "已付款",
-                "财务A",
-                null,
-                List.of()
-        ));
 
         PaymentService service = new PaymentService(
                 paymentRepository,
                 mock(PaymentAllocationRepository.class),
                 new SnowflakeIdGenerator(0L),
-                paymentMapper,
-                mock(SupplierStatementQueryService.class),
+                mock(PaymentMapper.class),
+                supplierStatementQueryService,
                 mock(FreightStatementQueryService.class),
                 mock(ApplicationEventPublisher.class),
                 mock(ResourceRecordAccessGuard.class),
                 mock(WorkflowTransitionGuard.class)
         );
 
-        assertThatCode(() -> service.create(buildRequest("供应商", null, "供应商A", new BigDecimal("100.00"), "已付款", List.of())))
-                .doesNotThrowAnyException();
+        assertThatThrownBy(() -> service.create(buildRequest(
+                "供应商",
+                11L,
+                "供应商A",
+                new BigDecimal("100.00"),
+                "已付款",
+                List.of(new PaymentAllocationRequest(null, 11L, new BigDecimal("80.00")))
+        )))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("付款金额必须等于核销金额合计");
     }
 
     @Test
@@ -108,6 +105,48 @@ class PaymentServiceTest {
                 "供应商A",
                 new BigDecimal("200.00"),
                 "已付款",
+                List.of(new PaymentAllocationRequest(null, 11L, new BigDecimal("200.00")))
+        )))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("累计付款金额不能超过采购金额");
+    }
+
+    @Test
+    void shouldRejectOverPaymentAgainstSupplierStatementWhenStatusContainsWhitespace() {
+        PaymentRepository paymentRepository = mock(PaymentRepository.class);
+        PaymentAllocationRepository allocationRepository = mock(PaymentAllocationRepository.class);
+        SupplierStatementQueryService supplierStatementQueryService = mock(SupplierStatementQueryService.class);
+        SupplierStatement statement = new SupplierStatement();
+        statement.setId(11L);
+        statement.setSupplierName("供应商A");
+        statement.setPurchaseAmount(new BigDecimal("1000.00"));
+        when(supplierStatementQueryService.requireActiveById(11L)).thenReturn(statement);
+        when(paymentRepository.existsByPaymentNoAndDeletedFlagFalse("FK-001")).thenReturn(false);
+        when(allocationRepository.sumAllocatedAmountBySourceStatementIdAndBusinessTypeAndStatusExcludingPaymentId(
+                eq(11L),
+                eq("供应商"),
+                eq(StatusConstants.PAID),
+                anyLong()
+        )).thenReturn(new BigDecimal("900.00"));
+
+        PaymentService service = new PaymentService(
+                paymentRepository,
+                allocationRepository,
+                new SnowflakeIdGenerator(0L),
+                mock(PaymentMapper.class),
+                supplierStatementQueryService,
+                mock(FreightStatementQueryService.class),
+                mock(ApplicationEventPublisher.class),
+                mock(ResourceRecordAccessGuard.class),
+                mock(WorkflowTransitionGuard.class)
+        );
+
+        assertThatThrownBy(() -> service.create(buildRequest(
+                "供应商",
+                11L,
+                "供应商A",
+                new BigDecimal("200.00"),
+                " 已付款 ",
                 List.of(new PaymentAllocationRequest(null, 11L, new BigDecimal("200.00")))
         )))
                 .isInstanceOf(BusinessException.class)

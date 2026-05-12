@@ -234,7 +234,7 @@ class PurchaseOrderServiceTest {
         service.create(buildRequest(null, "已审核"));
 
         verify(workflowTransitionGuard).assertAuditPermissionForProtectedValue(
-                "purchase-orders",
+                "purchase-order",
                 null,
                 "已审核",
                 "已审核",
