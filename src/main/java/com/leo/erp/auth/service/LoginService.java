@@ -173,6 +173,8 @@ public class LoginService {
                 loginIp,
                 resultStatus,
                 remark,
+                null,
+                null,
                 user == null ? null : user.getId(),
                 user == null ? null : user.getUserName(),
                 loginName

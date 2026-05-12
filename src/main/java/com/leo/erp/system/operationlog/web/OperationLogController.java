@@ -34,10 +34,11 @@ public class OperationLogController {
             @RequestParam(required = false) String actionType,
             @RequestParam(required = false) String resultStatus,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startTime,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endTime
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endTime,
+            @RequestParam(required = false) Long recordId
     ) {
         return ApiResponse.success(PageResponse.from(
-                operationLogService.page(query, keyword, moduleName, actionType, resultStatus, startTime, endTime)
+                operationLogService.page(query, keyword, moduleName, actionType, resultStatus, startTime, endTime, recordId)
         ));
     }
 }

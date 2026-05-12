@@ -39,6 +39,12 @@ public class OperationLog {
     @Column(name = "business_no", length = 128)
     private String businessNo;
 
+    @Column(name = "record_id")
+    private Long recordId;
+
+    @Column(name = "module_key", length = 64)
+    private String moduleKey;
+
     @Column(name = "request_method", nullable = false, length = 16)
     private String requestMethod;
 

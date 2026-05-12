@@ -9,6 +9,8 @@ public record OperationLogCommand(
         String clientIp,
         String resultStatus,
         String remark,
+        Long recordId,
+        String moduleKey,
         Long operatorId,
         String operatorName,
         String loginName
@@ -23,6 +25,6 @@ public record OperationLogCommand(
             String resultStatus,
             String remark
     ) {
-        this(moduleName, actionType, businessNo, requestMethod, requestPath, clientIp, resultStatus, remark, null, null, null);
+        this(moduleName, actionType, businessNo, requestMethod, requestPath, clientIp, resultStatus, remark, null, null, null, null, null);
     }
 }

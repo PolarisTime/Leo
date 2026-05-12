@@ -53,7 +53,8 @@ public class OperationLogService {
                                            String actionType,
                                            String resultStatus,
                                            LocalDate startTime,
-                                           LocalDate endTime) {
+                                           LocalDate endTime,
+                                           Long recordId) {
         String normalizedKeyword = trimToNull(keyword);
         String normalizedModuleName = trimToNull(moduleName);
         String normalizedActionType = trimToNull(actionType);
@@ -61,6 +62,9 @@ public class OperationLogService {
         validateDateRange(startTime, endTime);
         Specification<OperationLog> spec = (root, q, cb) -> {
             var predicate = cb.conjunction();
+            if (recordId != null) {
+                predicate = cb.and(predicate, cb.equal(root.get("recordId"), recordId));
+            }
             if (normalizedKeyword != null) {
                 String pattern = "%" + normalizedKeyword + "%";
                 predicate = cb.and(predicate, cb.or(
@@ -112,6 +116,8 @@ public class OperationLogService {
         entity.setModuleName(command.moduleName());
         entity.setActionType(command.actionType());
         entity.setBusinessNo(trimToNull(command.businessNo()));
+        entity.setRecordId(command.recordId());
+        entity.setModuleKey(trimToNull(command.moduleKey()));
         entity.setRequestMethod(command.requestMethod());
         entity.setRequestPath(command.requestPath());
         entity.setClientIp(trimToNull(command.clientIp()));
