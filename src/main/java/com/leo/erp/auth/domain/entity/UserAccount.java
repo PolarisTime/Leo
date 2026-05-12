@@ -71,4 +71,7 @@ public class UserAccount extends AuditableEntity {
 
     @Column(name = "require_totp_setup", nullable = false)
     private Boolean requireTotpSetup = Boolean.FALSE;
+
+    @Column(name = "preferences_json", columnDefinition = "TEXT")
+    private String preferencesJson;
 }
