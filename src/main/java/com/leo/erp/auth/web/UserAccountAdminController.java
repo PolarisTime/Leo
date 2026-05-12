@@ -1,20 +1,24 @@
 package com.leo.erp.auth.web;
 
 import com.leo.erp.auth.service.UserAccountAdminService;
+import com.leo.erp.auth.service.UserAccountPreferenceService;
 import com.leo.erp.auth.web.dto.LoginNameAvailabilityResponse;
 import com.leo.erp.auth.web.dto.TotpEnableRequest;
 import com.leo.erp.auth.web.dto.TotpSetupResponse;
 import com.leo.erp.auth.web.dto.UserAccountAdminRequest;
 import com.leo.erp.auth.web.dto.UserAccountCreateResponse;
 import com.leo.erp.auth.web.dto.UserAccountAdminResponse;
+import com.leo.erp.auth.web.dto.UserAccountPreferencesPayload;
 import com.leo.erp.common.api.ApiResponse;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.api.PageResponse;
 import com.leo.erp.common.web.BindPageQuery;
 import com.leo.erp.security.permission.RequiresPermission;
+import com.leo.erp.security.support.SecurityPrincipal;
 import com.leo.erp.system.operationlog.support.OperationLoggable;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Positive;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -32,9 +36,12 @@ import org.springframework.web.bind.annotation.RestController;
 public class UserAccountAdminController {
 
     private final UserAccountAdminService userAccountAdminService;
+    private final UserAccountPreferenceService userAccountPreferenceService;
 
-    public UserAccountAdminController(UserAccountAdminService userAccountAdminService) {
+    public UserAccountAdminController(UserAccountAdminService userAccountAdminService,
+                                      UserAccountPreferenceService userAccountPreferenceService) {
         this.userAccountAdminService = userAccountAdminService;
+        this.userAccountPreferenceService = userAccountPreferenceService;
     }
 
     @GetMapping
@@ -45,6 +52,24 @@ public class UserAccountAdminController {
             @RequestParam(required = false) String status
     ) {
         return ApiResponse.success(PageResponse.from(userAccountAdminService.page(query, keyword, status)));
+    }
+
+    @GetMapping("/preferences")
+    @RequiresPermission(authenticatedOnly = true)
+    public ApiResponse<UserAccountPreferencesPayload> preferences(
+            @AuthenticationPrincipal SecurityPrincipal principal
+    ) {
+        return ApiResponse.success(userAccountPreferenceService.getPreferences(principal.id()));
+    }
+
+    @PutMapping("/preferences")
+    @RequiresPermission(authenticatedOnly = true)
+    public ApiResponse<UserAccountPreferencesPayload> savePreferences(
+            @AuthenticationPrincipal SecurityPrincipal principal,
+            @Valid @RequestBody UserAccountPreferencesPayload request
+    ) {
+        return ApiResponse.success("保存成功",
+                userAccountPreferenceService.savePreferences(principal.id(), request));
     }
 
     @GetMapping("/{id}")
