@@ -8,6 +8,7 @@ import com.leo.erp.common.service.AbstractCrudService;
 import com.leo.erp.common.support.ManagedEntityItemSupport;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.TradeItemMaterialSupport;
+import com.leo.erp.common.support.BusinessStatusValidator;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.support.TradeItemCalculator;
 import com.leo.erp.common.support.WarehouseSelectionSupport;
@@ -31,6 +32,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -127,6 +129,38 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
     }
 
     @Override
+    protected SalesOrderRequest normalizeCreateRequest(SalesOrderRequest request, long entityId) {
+        return new SalesOrderRequest(
+                resolveCreateBusinessNo("sales-order", request.orderNo(), entityId),
+                request.purchaseInboundNo(),
+                request.purchaseOrderNo(),
+                request.customerName(),
+                request.projectName(),
+                request.deliveryDate(),
+                request.salesName(),
+                request.status(),
+                request.remark(),
+                request.items()
+        );
+    }
+
+    @Override
+    protected SalesOrderRequest normalizeUpdateRequest(SalesOrder entity, SalesOrderRequest request) {
+        return new SalesOrderRequest(
+                entity.getOrderNo(),
+                request.purchaseInboundNo(),
+                request.purchaseOrderNo(),
+                request.customerName(),
+                request.projectName(),
+                request.deliveryDate(),
+                request.salesName(),
+                request.status(),
+                request.remark(),
+                request.items()
+        );
+    }
+
+    @Override
     protected void beforeDelete(SalesOrder entity) {
         purchaseOrderItemPieceWeightService.releaseSalesOrderItems(
                 entity.getItems().stream()
@@ -177,7 +211,12 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
 
     @Override
     protected void apply(SalesOrder entity, SalesOrderRequest request) {
-        String nextStatus = (request.status() == null || request.status().isBlank()) ? StatusConstants.DRAFT : request.status();
+        String nextStatus = BusinessStatusValidator.normalizeWithDefault(
+                request.status(),
+                StatusConstants.DRAFT,
+                "销售订单状态",
+                StatusConstants.ALLOWED_SALES_ORDER_STATUS
+        );
         workflowTransitionGuard.assertAuditPermissionForProtectedValue(
                 "sales-order",
                 entity.getStatus(),
@@ -208,6 +247,8 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
         Map<Long, SourceAllocation> purchaseOrderAllocatedMap = loadPurchaseOrderAllocatedMap(sourcePurchaseOrderItemIds, entity.getId());
         Map<Long, SourceAllocation> requestInboundAllocatedMap = new HashMap<>();
         Map<Long, SourceAllocation> requestPurchaseOrderAllocatedMap = new HashMap<>();
+        LinkedHashSet<String> sourceInboundNos = new LinkedHashSet<>();
+        LinkedHashSet<String> sourcePurchaseOrderNos = new LinkedHashSet<>();
         purchaseOrderItemPieceWeightService.releaseSalesOrderItems(
                 entity.getItems().stream()
                         .map(SalesOrderItem::getId)
@@ -239,6 +280,25 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
             item.setUnit(source.unit());
             item.setSourceInboundItemId(source.sourceInboundItemId());
             item.setSourcePurchaseOrderItemId(source.sourcePurchaseOrderItemId());
+            PurchaseInboundItem sourceInboundItem = source.sourceInboundItemId() == null
+                    ? null
+                    : sourceInboundItemMap.get(source.sourceInboundItemId());
+            if (sourceInboundItem != null
+                    && sourceInboundItem.getPurchaseInbound() != null
+                    && sourceInboundItem.getPurchaseInbound().getInboundNo() != null) {
+                sourceInboundNos.add(sourceInboundItem.getPurchaseInbound().getInboundNo());
+                if (sourceInboundItem.getPurchaseInbound().getPurchaseOrderNo() != null) {
+                    sourcePurchaseOrderNos.add(sourceInboundItem.getPurchaseInbound().getPurchaseOrderNo());
+                }
+            }
+            PurchaseOrderItem sourcePurchaseOrderItem = source.sourcePurchaseOrderItemId() == null
+                    ? null
+                    : sourcePurchaseOrderItemMap.get(source.sourcePurchaseOrderItemId());
+            if (sourcePurchaseOrderItem != null
+                    && sourcePurchaseOrderItem.getPurchaseOrder() != null
+                    && sourcePurchaseOrderItem.getPurchaseOrder().getOrderNo() != null) {
+                sourcePurchaseOrderNos.add(sourcePurchaseOrderItem.getPurchaseOrder().getOrderNo());
+            }
             item.setWarehouseName(warehouseSelectionSupport.normalizeWarehouseName(source.warehouseName(), i + 1, true));
             validateSourceAllocation(source, i + 1, sourceInboundItemMap, sourcePurchaseOrderItemMap,
                     inboundAllocatedMap, purchaseOrderAllocatedMap, requestInboundAllocatedMap, requestPurchaseOrderAllocatedMap);
@@ -277,6 +337,12 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
             }
         }
         entity.getItems().sort(java.util.Comparator.comparing(SalesOrderItem::getLineNo));
+        entity.setPurchaseInboundNo(sourceInboundNos.isEmpty()
+                ? request.purchaseInboundNo()
+                : String.join(", ", sourceInboundNos));
+        entity.setPurchaseOrderNo(sourcePurchaseOrderNos.isEmpty()
+                ? request.purchaseOrderNo()
+                : String.join(", ", sourcePurchaseOrderNos));
         entity.setTotalWeight(totalWeight);
         entity.setTotalAmount(totalAmount);
     }

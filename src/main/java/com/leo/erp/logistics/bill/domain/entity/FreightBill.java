@@ -22,7 +22,7 @@ public class FreightBill extends AuditableEntity {
     @Column(name = "bill_no", nullable = false, unique = true, length = 32)
     private String billNo;
 
-    @Column(name = "outbound_no", length = 256)
+    @Column(name = "outbound_no", length = 1024)
     private String outboundNo;
 
     @Column(name = "carrier_name", nullable = false, length = 128)

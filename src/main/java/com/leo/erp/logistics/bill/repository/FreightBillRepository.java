@@ -4,7 +4,11 @@ import com.leo.erp.logistics.bill.domain.entity.FreightBill;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
+import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 
 public interface FreightBillRepository extends JpaRepository<FreightBill, Long>, JpaSpecificationExecutor<FreightBill> {
@@ -13,4 +17,20 @@ public interface FreightBillRepository extends JpaRepository<FreightBill, Long>,
 
     @EntityGraph(attributePaths = "items")
     Optional<FreightBill> findByIdAndDeletedFlagFalse(Long id);
+
+    @EntityGraph(attributePaths = "items")
+    List<FreightBill> findByBillNoInAndDeletedFlagFalse(Collection<String> billNos);
+
+    @Query("""
+            select distinct bill
+            from FreightBill bill
+            join fetch bill.items item
+            where bill.deletedFlag = false
+              and item.sourceNo in :sourceNos
+              and (:currentBillId is null or bill.id <> :currentBillId)
+            """)
+    List<FreightBill> findAllBySourceNosExcludingCurrentBill(
+            @Param("sourceNos") Collection<String> sourceNos,
+            @Param("currentBillId") Long currentBillId
+    );
 }

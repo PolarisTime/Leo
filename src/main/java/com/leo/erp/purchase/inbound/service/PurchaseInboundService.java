@@ -8,6 +8,7 @@ import com.leo.erp.common.service.AbstractCrudService;
 import com.leo.erp.common.support.ManagedEntityItemSupport;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.TradeItemMaterialSupport;
+import com.leo.erp.common.support.BusinessStatusValidator;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.support.TradeItemCalculator;
 import com.leo.erp.common.support.WarehouseSelectionSupport;
@@ -34,6 +35,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -526,6 +528,36 @@ public class PurchaseInboundService extends AbstractCrudService<PurchaseInbound,
     }
 
     @Override
+    protected PurchaseInboundRequest normalizeCreateRequest(PurchaseInboundRequest request, long entityId) {
+        return new PurchaseInboundRequest(
+                resolveCreateBusinessNo("purchase-inbound", request.inboundNo(), entityId),
+                request.purchaseOrderNo(),
+                request.supplierName(),
+                request.warehouseName(),
+                request.inboundDate(),
+                request.settlementMode(),
+                request.status(),
+                request.remark(),
+                request.items()
+        );
+    }
+
+    @Override
+    protected PurchaseInboundRequest normalizeUpdateRequest(PurchaseInbound entity, PurchaseInboundRequest request) {
+        return new PurchaseInboundRequest(
+                entity.getInboundNo(),
+                request.purchaseOrderNo(),
+                request.supplierName(),
+                request.warehouseName(),
+                request.inboundDate(),
+                request.settlementMode(),
+                request.status(),
+                request.remark(),
+                request.items()
+        );
+    }
+
+    @Override
     protected PurchaseInbound newEntity() {
         return new PurchaseInbound();
     }
@@ -557,7 +589,12 @@ public class PurchaseInboundService extends AbstractCrudService<PurchaseInbound,
 
     @Override
     protected void apply(PurchaseInbound inbound, PurchaseInboundRequest request) {
-        String nextStatus = (request.status() == null || request.status().isBlank()) ? StatusConstants.DRAFT : request.status();
+        String nextStatus = BusinessStatusValidator.normalizeWithDefault(
+                request.status(),
+                StatusConstants.DRAFT,
+                "采购入库状态",
+                StatusConstants.ALLOWED_PURCHASE_INBOUND_STATUS
+        );
         workflowTransitionGuard.assertAuditPermissionForProtectedValue(
                 "purchase-inbound",
                 inbound.getStatus(),
@@ -594,6 +631,7 @@ public class PurchaseInboundService extends AbstractCrudService<PurchaseInbound,
         Set<String> purchaseWeighRequiredCategoryNames = loadPurchaseWeighRequiredCategoryNames(request);
         Map<Long, BigDecimal> currentAdjustmentMap = new HashMap<>();
         Map<Long, SourceWeighAccumulator> currentWeighAccumulatorMap = new HashMap<>();
+        LinkedHashSet<String> sourcePurchaseOrderNos = new LinkedHashSet<>();
         String firstLineWarehouseName = null;
         List<PurchaseInboundItem> items = ManagedEntityItemSupport.syncById(
                 inbound.getItems(),
@@ -619,6 +657,14 @@ public class PurchaseInboundService extends AbstractCrudService<PurchaseInbound,
             item.setUnit(source.unit());
             item.setSourcePurchaseOrderItemId(source.sourcePurchaseOrderItemId());
             validateSourcePurchaseOrderAllocation(source, i + 1, sourcePurchaseOrderItemMap, allocatedQuantityMap, requestAllocatedQuantityMap);
+            PurchaseOrderItem sourcePurchaseOrderItem = source.sourcePurchaseOrderItemId() == null
+                    ? null
+                    : sourcePurchaseOrderItemMap.get(source.sourcePurchaseOrderItemId());
+            if (sourcePurchaseOrderItem != null
+                    && sourcePurchaseOrderItem.getPurchaseOrder() != null
+                    && sourcePurchaseOrderItem.getPurchaseOrder().getOrderNo() != null) {
+                sourcePurchaseOrderNos.add(sourcePurchaseOrderItem.getPurchaseOrder().getOrderNo());
+            }
             String warehouseName = warehouseSelectionSupport.normalizeWarehouseName(
                     source.warehouseName() == null || source.warehouseName().isBlank() ? request.warehouseName() : source.warehouseName(),
                     i + 1,
@@ -667,6 +713,9 @@ public class PurchaseInboundService extends AbstractCrudService<PurchaseInbound,
             }
         }
         inbound.getItems().sort(java.util.Comparator.comparing(PurchaseInboundItem::getLineNo));
+        inbound.setPurchaseOrderNo(sourcePurchaseOrderNos.isEmpty()
+                ? request.purchaseOrderNo()
+                : String.join(", ", sourcePurchaseOrderNos));
         inbound.setWarehouseName(resolveHeaderWarehouseName(request.warehouseName(), firstLineWarehouseName));
         inbound.setSettlementMode(resolveHeaderSettlementMode(request.settlementMode(), items));
         inbound.setTotalWeight(TradeItemCalculator.scaleWeightTon(totalWeight));

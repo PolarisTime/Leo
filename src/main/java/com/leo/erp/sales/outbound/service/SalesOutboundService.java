@@ -5,6 +5,7 @@ import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.service.AbstractCrudService;
+import com.leo.erp.common.support.BusinessStatusValidator;
 import com.leo.erp.common.support.ManagedEntityItemSupport;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.TradeItemMaterialSupport;
@@ -12,6 +13,8 @@ import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.support.TradeItemCalculator;
 import com.leo.erp.common.support.WarehouseSelectionSupport;
 import com.leo.erp.master.material.domain.entity.Material;
+import com.leo.erp.sales.order.domain.entity.SalesOrderItem;
+import com.leo.erp.sales.order.service.SalesOrderItemQueryService;
 import com.leo.erp.sales.outbound.domain.entity.SalesOutbound;
 import com.leo.erp.sales.outbound.domain.entity.SalesOutboundItem;
 import com.leo.erp.sales.outbound.repository.SalesOutboundRepository;
@@ -25,7 +28,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.util.Collection;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 
 @Service
@@ -37,6 +44,7 @@ public class SalesOutboundService extends AbstractCrudService<SalesOutbound, Sal
     private final WarehouseSelectionSupport warehouseSelectionSupport;
     private final WorkflowTransitionGuard workflowTransitionGuard;
     private final SalesOrderCompletionSyncService salesOrderCompletionSyncService;
+    private final SalesOrderItemQueryService salesOrderItemQueryService;
 
     public SalesOutboundService(SalesOutboundRepository repository,
                                 SnowflakeIdGenerator idGenerator,
@@ -44,7 +52,8 @@ public class SalesOutboundService extends AbstractCrudService<SalesOutbound, Sal
                                 TradeItemMaterialSupport tradeItemMaterialSupport,
                                 WarehouseSelectionSupport warehouseSelectionSupport,
                                 WorkflowTransitionGuard workflowTransitionGuard,
-                                SalesOrderCompletionSyncService salesOrderCompletionSyncService) {
+                                SalesOrderCompletionSyncService salesOrderCompletionSyncService,
+                                SalesOrderItemQueryService salesOrderItemQueryService) {
         super(idGenerator);
         this.repository = repository;
         this.salesOutboundMapper = salesOutboundMapper;
@@ -52,6 +61,7 @@ public class SalesOutboundService extends AbstractCrudService<SalesOutbound, Sal
         this.warehouseSelectionSupport = warehouseSelectionSupport;
         this.workflowTransitionGuard = workflowTransitionGuard;
         this.salesOrderCompletionSyncService = salesOrderCompletionSyncService;
+        this.salesOrderItemQueryService = salesOrderItemQueryService;
     }
 
     @Transactional(readOnly = true)
@@ -80,13 +90,14 @@ public class SalesOutboundService extends AbstractCrudService<SalesOutbound, Sal
     @Override
     protected SalesOutboundResponse toDetailResponse(SalesOutbound entity) {
         SalesOutboundResponse response = salesOutboundMapper.toResponse(entity);
+        Map<Long, SalesOrderItem> sourceSalesOrderItemMap = loadSourceSalesOrderItemMap(entity.getItems());
         return new SalesOutboundResponse(
                 response.id(), response.outboundNo(), response.salesOrderNo(),
                 response.customerName(), response.projectName(), response.warehouseName(),
                 response.outboundDate(), response.totalWeight(), response.totalAmount(),
                 response.status(), response.remark(),
                 entity.getItems().stream().map(item -> new SalesOutboundItemResponse(
-                        item.getId(), item.getLineNo(), item.getMaterialCode(),
+                        item.getId(), item.getLineNo(), resolveItemSourceNo(item, sourceSalesOrderItemMap), item.getSourceSalesOrderItemId(), item.getMaterialCode(),
                         item.getBrand(), item.getCategory(), item.getMaterial(),
                         item.getSpec(), item.getLength(), item.getUnit(), item.getWarehouseName(), item.getBatchNo(),
                         item.getQuantity(), item.getQuantityUnit(), item.getPieceWeightTon(), item.getPiecesPerBundle(),
@@ -107,6 +118,36 @@ public class SalesOutboundService extends AbstractCrudService<SalesOutbound, Sal
         if (!entity.getOutboundNo().equals(request.outboundNo()) && repository.existsByOutboundNoAndDeletedFlagFalse(request.outboundNo())) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "销售出库单号已存在");
         }
+    }
+
+    @Override
+    protected SalesOutboundRequest normalizeCreateRequest(SalesOutboundRequest request, long entityId) {
+        return new SalesOutboundRequest(
+                resolveCreateBusinessNo("sales-outbound", request.outboundNo(), entityId),
+                null,
+                request.customerName(),
+                request.projectName(),
+                request.warehouseName(),
+                request.outboundDate(),
+                request.status(),
+                request.remark(),
+                request.items()
+        );
+    }
+
+    @Override
+    protected SalesOutboundRequest normalizeUpdateRequest(SalesOutbound entity, SalesOutboundRequest request) {
+        return new SalesOutboundRequest(
+                entity.getOutboundNo(),
+                entity.getSalesOrderNo(),
+                request.customerName(),
+                request.projectName(),
+                request.warehouseName(),
+                request.outboundDate(),
+                request.status(),
+                request.remark(),
+                request.items()
+        );
     }
 
     @Override
@@ -141,7 +182,12 @@ public class SalesOutboundService extends AbstractCrudService<SalesOutbound, Sal
 
     @Override
     protected void apply(SalesOutbound entity, SalesOutboundRequest request) {
-        String nextStatus = (request.status() == null || request.status().isBlank()) ? StatusConstants.DRAFT : request.status();
+        String nextStatus = BusinessStatusValidator.normalizeWithDefault(
+                request.status(),
+                StatusConstants.DRAFT,
+                "销售出库状态",
+                StatusConstants.ALLOWED_SALES_OUTBOUND_STATUS
+        );
         workflowTransitionGuard.assertAuditPermissionForProtectedValue(
                 "sales-outbound",
                 entity.getStatus(),
@@ -155,6 +201,8 @@ public class SalesOutboundService extends AbstractCrudService<SalesOutbound, Sal
         entity.setOutboundDate(request.outboundDate());
         entity.setStatus(nextStatus);
         entity.setRemark(request.remark());
+
+        assertSourceSalesOrderItemsNotOccupied(request.items(), entity.getId());
 
         BigDecimal totalWeight = BigDecimal.ZERO;
         BigDecimal totalAmount = BigDecimal.ZERO;
@@ -171,12 +219,16 @@ public class SalesOutboundService extends AbstractCrudService<SalesOutbound, Sal
                 this::nextId,
                 SalesOutboundItem::setId
         );
+        Map<Long, SalesOrderItem> sourceSalesOrderItemMap = loadSourceSalesOrderItemMap(request.items(), items);
+        LinkedHashSet<String> sourceSalesOrderNos = new LinkedHashSet<>();
         for (int i = 0; i < request.items().size(); i++) {
             SalesOutboundItemRequest source = request.items().get(i);
             Material material = materialMap.get(source.materialCode());
             SalesOutboundItem item = items.get(i);
             item.setSalesOutbound(entity);
             item.setLineNo(i + 1);
+            Long sourceSalesOrderItemId = resolveSourceSalesOrderItemId(source, item);
+            item.setSourceSalesOrderItemId(sourceSalesOrderItemId);
             item.setMaterialCode(source.materialCode());
             item.setBrand(source.brand());
             item.setCategory(source.category());
@@ -206,13 +258,49 @@ public class SalesOutboundService extends AbstractCrudService<SalesOutbound, Sal
             item.setUnitPrice(source.unitPrice());
             BigDecimal amount = TradeItemCalculator.calculateAmount(weightTon, source.unitPrice());
             item.setAmount(amount);
+            collectSourceSalesOrderNos(sourceSalesOrderNos, source, sourceSalesOrderItemMap, sourceSalesOrderItemId);
             totalWeight = totalWeight.add(weightTon);
             totalAmount = totalAmount.add(amount);
         }
         entity.getItems().sort(java.util.Comparator.comparing(SalesOutboundItem::getLineNo));
+        entity.setSalesOrderNo(sourceSalesOrderNos.isEmpty()
+                ? trimToNull(request.salesOrderNo())
+                : String.join(", ", sourceSalesOrderNos));
         entity.setWarehouseName(firstLineWarehouseName == null ? trimToNull(request.warehouseName()) : firstLineWarehouseName);
         entity.setTotalWeight(totalWeight);
         entity.setTotalAmount(totalAmount);
+    }
+
+    private void assertSourceSalesOrderItemsNotOccupied(
+            Collection<SalesOutboundItemRequest> items,
+            Long currentOutboundId
+    ) {
+        LinkedHashSet<Long> sourceSalesOrderItemIds = items.stream()
+                .map(SalesOutboundItemRequest::sourceSalesOrderItemId)
+                .filter(Objects::nonNull)
+                .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
+        if (sourceSalesOrderItemIds.isEmpty()) {
+            return;
+        }
+
+        List<SalesOutbound> occupiedOutbounds =
+                repository.findAllBySourceSalesOrderItemIdsExcludingCurrentOutbound(
+                        sourceSalesOrderItemIds,
+                        currentOutboundId
+                );
+        for (Long sourceSalesOrderItemId : sourceSalesOrderItemIds) {
+            for (SalesOutbound occupiedOutbound : occupiedOutbounds) {
+                boolean matched = occupiedOutbound.getItems().stream()
+                        .anyMatch(item -> sourceSalesOrderItemId.equals(item.getSourceSalesOrderItemId()));
+                if (!matched) {
+                    continue;
+                }
+                throw new BusinessException(
+                        ErrorCode.BUSINESS_ERROR,
+                        "销售订单明细已被销售出库单" + occupiedOutbound.getOutboundNo() + "关联"
+                );
+            }
+        }
     }
 
     private String trimToNull(String value) {
@@ -233,5 +321,72 @@ public class SalesOutboundService extends AbstractCrudService<SalesOutbound, Sal
     @Override
     protected SalesOutboundResponse toResponse(SalesOutbound entity) {
         return salesOutboundMapper.toResponse(entity);
+    }
+
+    private Map<Long, SalesOrderItem> loadSourceSalesOrderItemMap(List<SalesOutboundItemRequest> requestItems,
+                                                                  List<SalesOutboundItem> items) {
+        LinkedHashSet<Long> sourceSalesOrderItemIds = new LinkedHashSet<>();
+        requestItems.stream()
+                .map(SalesOutboundItemRequest::sourceSalesOrderItemId)
+                .filter(id -> id != null)
+                .forEach(sourceSalesOrderItemIds::add);
+        items.stream()
+                .map(SalesOutboundItem::getSourceSalesOrderItemId)
+                .filter(id -> id != null)
+                .forEach(sourceSalesOrderItemIds::add);
+        if (sourceSalesOrderItemIds.isEmpty()) {
+            return Map.of();
+        }
+        return salesOrderItemQueryService.findActiveByIdIn(sourceSalesOrderItemIds).stream()
+                .collect(java.util.stream.Collectors.toMap(SalesOrderItem::getId, item -> item));
+    }
+
+    private Map<Long, SalesOrderItem> loadSourceSalesOrderItemMap(List<SalesOutboundItem> items) {
+        List<Long> sourceSalesOrderItemIds = items.stream()
+                .map(SalesOutboundItem::getSourceSalesOrderItemId)
+                .filter(id -> id != null)
+                .distinct()
+                .toList();
+        if (sourceSalesOrderItemIds.isEmpty()) {
+            return Map.of();
+        }
+        return salesOrderItemQueryService.findActiveByIdIn(sourceSalesOrderItemIds).stream()
+                .collect(java.util.stream.Collectors.toMap(SalesOrderItem::getId, item -> item));
+    }
+
+    private Long resolveSourceSalesOrderItemId(SalesOutboundItemRequest source, SalesOutboundItem item) {
+        if (source.sourceSalesOrderItemId() != null) {
+            return source.sourceSalesOrderItemId();
+        }
+        return item.getSourceSalesOrderItemId();
+    }
+
+    private void collectSourceSalesOrderNos(LinkedHashSet<String> sourceSalesOrderNos,
+                                            SalesOutboundItemRequest source,
+                                            Map<Long, SalesOrderItem> sourceSalesOrderItemMap,
+                                            Long sourceSalesOrderItemId) {
+        if (sourceSalesOrderItemId != null) {
+            SalesOrderItem sourceSalesOrderItem = sourceSalesOrderItemMap.get(sourceSalesOrderItemId);
+            if (sourceSalesOrderItem == null || sourceSalesOrderItem.getSalesOrder() == null) {
+                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "来源销售订单明细不存在");
+            }
+            sourceSalesOrderNos.add(sourceSalesOrderItem.getSalesOrder().getOrderNo());
+            return;
+        }
+        String sourceNo = trimToNull(source.sourceNo());
+        if (sourceNo != null) {
+            sourceSalesOrderNos.add(sourceNo);
+        }
+    }
+
+    private String resolveItemSourceNo(SalesOutboundItem item, Map<Long, SalesOrderItem> sourceSalesOrderItemMap) {
+        if (item.getSourceSalesOrderItemId() == null) {
+            return null;
+        }
+        SalesOrderItem sourceSalesOrderItem = sourceSalesOrderItemMap.get(item.getSourceSalesOrderItemId());
+        if (sourceSalesOrderItem == null || sourceSalesOrderItem.getSalesOrder() == null) {
+            return null;
+        }
+        return sourceSalesOrderItem.getSalesOrder().getOrderNo();
     }
 }

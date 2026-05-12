@@ -8,6 +8,7 @@ import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.service.AbstractCrudService;
+import com.leo.erp.common.support.BusinessStatusValidator;
 import com.leo.erp.common.support.ManagedEntityItemSupport;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
@@ -151,6 +152,48 @@ public class FreightStatementService extends AbstractCrudService<FreightStatemen
     }
 
     @Override
+    protected FreightStatementCommand normalizeCreateRequest(FreightStatementCommand command, long entityId) {
+        return new FreightStatementCommand(
+                resolveCreateBusinessNo("freight-statement", command.statementNo(), entityId),
+                command.sourceBillNos(),
+                command.carrierName(),
+                command.startDate(),
+                command.endDate(),
+                command.totalWeight(),
+                command.totalFreight(),
+                command.paidAmount(),
+                command.unpaidAmount(),
+                command.status(),
+                command.signStatus(),
+                command.attachment(),
+                command.attachmentIds(),
+                command.remark(),
+                command.items()
+        );
+    }
+
+    @Override
+    protected FreightStatementCommand normalizeUpdateRequest(FreightStatement entity, FreightStatementCommand command) {
+        return new FreightStatementCommand(
+                entity.getStatementNo(),
+                command.sourceBillNos(),
+                command.carrierName(),
+                command.startDate(),
+                command.endDate(),
+                command.totalWeight(),
+                command.totalFreight(),
+                command.paidAmount(),
+                command.unpaidAmount(),
+                command.status(),
+                command.signStatus(),
+                command.attachment(),
+                command.attachmentIds(),
+                command.remark(),
+                command.items()
+        );
+    }
+
+    @Override
     protected FreightStatement newEntity() {
         return new FreightStatement();
     }
@@ -182,8 +225,18 @@ public class FreightStatementService extends AbstractCrudService<FreightStatemen
 
     @Override
     protected void apply(FreightStatement entity, FreightStatementCommand command) {
-        String nextStatus = (command.status() == null || command.status().isBlank()) ? "待审核" : command.status();
-        String nextSignStatus = (command.signStatus() == null || command.signStatus().isBlank()) ? "未签署" : command.signStatus();
+        String nextStatus = BusinessStatusValidator.normalizeWithDefault(
+                command.status(),
+                StatusConstants.PENDING_AUDIT,
+                "物流对账单审核状态",
+                StatusConstants.ALLOWED_FREIGHT_STATEMENT_STATUS
+        );
+        String nextSignStatus = BusinessStatusValidator.normalizeWithDefault(
+                command.signStatus(),
+                StatusConstants.UNSIGNED,
+                "物流对账单签署状态",
+                StatusConstants.ALLOWED_SIGN_STATUS
+        );
         workflowTransitionGuard.assertAuditPermissionForProtectedValue(
                 "freight-statement",
                 entity.getStatus(),
@@ -194,10 +247,11 @@ public class FreightStatementService extends AbstractCrudService<FreightStatemen
                 "freight-statement",
                 entity.getSignStatus(),
                 nextSignStatus,
-                "已签署"
+                StatusConstants.SIGNED
         );
+        List<FreightBill> sourceBills = loadSourceBills(command);
         entity.setStatementNo(command.statementNo());
-        entity.setSourceBillNos(command.sourceBillNos());
+        entity.setSourceBillNos(joinSourceBillNos(sourceBills));
         entity.setCarrierName(command.carrierName());
         entity.setStartDate(command.startDate());
         entity.setEndDate(command.endDate());
@@ -226,10 +280,11 @@ public class FreightStatementService extends AbstractCrudService<FreightStatemen
         );
         for (int i = 0; i < command.items().size(); i++) {
             FreightStatementItemCommand source = command.items().get(i);
+            FreightBill sourceBill = resolveSourceBill(sourceBills, source.sourceNo(), i + 1);
             FreightStatementItem item = items.get(i);
             item.setFreightStatement(entity);
             item.setLineNo(i + 1);
-            item.setSourceNo(source.sourceNo());
+            item.setSourceNo(sourceBill.getBillNo());
             item.setCustomerName(source.customerName());
             item.setProjectName(source.projectName());
             item.setMaterialCode(source.materialCode());
@@ -251,13 +306,17 @@ public class FreightStatementService extends AbstractCrudService<FreightStatemen
         }
         entity.getItems().sort(java.util.Comparator.comparing(FreightStatementItem::getLineNo));
         entity.setTotalWeight(totalWeight);
-        entity.setTotalFreight(command.totalFreight());
+        BigDecimal totalFreight = sourceBills.stream()
+                .map(FreightBill::getTotalFreight)
+                .map(TradeItemCalculator::scaleAmount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        entity.setTotalFreight(totalFreight);
         BigDecimal paidAmount = entity.getPaidAmount() == null ? BigDecimal.ZERO : entity.getPaidAmount();
-        if (paidAmount.compareTo(command.totalFreight()) > 0) {
+        if (paidAmount.compareTo(totalFreight) > 0) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "物流对账单总运费不能低于已付款金额");
         }
         entity.setPaidAmount(paidAmount);
-        entity.setUnpaidAmount(command.totalFreight().subtract(paidAmount).max(BigDecimal.ZERO));
+        entity.setUnpaidAmount(totalFreight.subtract(paidAmount).max(BigDecimal.ZERO));
     }
 
     @Override
@@ -328,6 +387,49 @@ public class FreightStatementService extends AbstractCrudService<FreightStatemen
                 bill.getTotalFreight(),
                 bill.getStatus()
         );
+    }
+
+    private List<FreightBill> loadSourceBills(FreightStatementCommand command) {
+        Set<String> requestedBillNos = new LinkedHashSet<>(StatementCandidateSupport.parseRelationNos(List.of(command.sourceBillNos())));
+        command.items().stream()
+                .map(FreightStatementItemCommand::sourceNo)
+                .filter(value -> value != null && !value.isBlank())
+                .map(String::trim)
+                .forEach(requestedBillNos::add);
+        if (requestedBillNos.isEmpty()) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "物流对账单来源物流单不能为空");
+        }
+        List<FreightBill> bills = freightBillRepository.findByBillNoInAndDeletedFlagFalse(requestedBillNos);
+        Map<String, FreightBill> billMap = bills.stream()
+                .collect(Collectors.toMap(FreightBill::getBillNo, bill -> bill));
+        for (String billNo : requestedBillNos) {
+            if (!billMap.containsKey(billNo)) {
+                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "来源物流单" + billNo + "不存在");
+            }
+        }
+        for (FreightBill bill : bills) {
+            if (!command.carrierName().trim().equals(bill.getCarrierName())) {
+                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "来源物流单存在不同物流商，不能合并生成物流对账单");
+            }
+        }
+        return bills;
+    }
+
+    private FreightBill resolveSourceBill(List<FreightBill> bills, String sourceNo, int lineNo) {
+        String normalizedSourceNo = sourceNo == null ? "" : sourceNo.trim();
+        for (FreightBill bill : bills) {
+            if (bill.getBillNo().equals(normalizedSourceNo)) {
+                return bill;
+            }
+        }
+        throw new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行来源物流单不存在");
+    }
+
+    private String joinSourceBillNos(List<FreightBill> bills) {
+        return bills.stream()
+                .map(FreightBill::getBillNo)
+                .distinct()
+                .collect(Collectors.joining(", "));
     }
 
     private List<AttachmentView> resolveAttachments(FreightStatement entity) {

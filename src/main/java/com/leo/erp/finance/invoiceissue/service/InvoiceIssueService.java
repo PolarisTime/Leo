@@ -5,10 +5,12 @@ import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.service.AbstractCrudService;
+import com.leo.erp.common.support.BusinessStatusValidator;
 import com.leo.erp.common.support.InvoiceAllocationSupport;
 import com.leo.erp.common.support.InvoiceAllocationSupport.AllocationProgress;
 import com.leo.erp.common.support.ManagedEntityItemSupport;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
+import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.support.TradeItemCalculator;
 import com.leo.erp.finance.invoiceissue.domain.entity.InvoiceIssue;
 import com.leo.erp.finance.invoiceissue.domain.entity.InvoiceIssueItem;
@@ -127,6 +129,44 @@ public class InvoiceIssueService extends AbstractCrudService<InvoiceIssue, Invoi
     }
 
     @Override
+    protected InvoiceIssueRequest normalizeCreateRequest(InvoiceIssueRequest request, long entityId) {
+        return new InvoiceIssueRequest(
+                resolveCreateBusinessNo("invoice-issue", request.issueNo(), entityId),
+                request.invoiceNo(),
+                request.sourceSalesOrderNos(),
+                request.customerName(),
+                request.projectName(),
+                request.invoiceDate(),
+                request.invoiceType(),
+                request.amount(),
+                request.taxAmount(),
+                request.status(),
+                request.operatorName(),
+                request.remark(),
+                request.items()
+        );
+    }
+
+    @Override
+    protected InvoiceIssueRequest normalizeUpdateRequest(InvoiceIssue entity, InvoiceIssueRequest request) {
+        return new InvoiceIssueRequest(
+                entity.getIssueNo(),
+                request.invoiceNo(),
+                request.sourceSalesOrderNos(),
+                request.customerName(),
+                request.projectName(),
+                request.invoiceDate(),
+                request.invoiceType(),
+                request.amount(),
+                request.taxAmount(),
+                request.status(),
+                request.operatorName(),
+                request.remark(),
+                request.items()
+        );
+    }
+
+    @Override
     protected InvoiceIssue newEntity() {
         return new InvoiceIssue();
     }
@@ -158,11 +198,17 @@ public class InvoiceIssueService extends AbstractCrudService<InvoiceIssue, Invoi
 
     @Override
     protected void apply(InvoiceIssue entity, InvoiceIssueRequest request) {
+        String nextStatus = BusinessStatusValidator.normalizeWithDefault(
+                request.status(),
+                StatusConstants.DRAFT,
+                "开票单状态",
+                StatusConstants.ALLOWED_INVOICE_ISSUE_STATUS
+        );
         workflowTransitionGuard.assertAuditPermissionForProtectedValue(
                 "invoice-issue",
                 entity.getStatus(),
-                request.status(),
-                "已开票"
+                nextStatus,
+                StatusConstants.ISSUED
         );
         entity.setIssueNo(request.issueNo());
         entity.setInvoiceNo(request.invoiceNo());
@@ -170,7 +216,7 @@ public class InvoiceIssueService extends AbstractCrudService<InvoiceIssue, Invoi
         entity.setProjectName(request.projectName());
         entity.setInvoiceDate(request.invoiceDate());
         entity.setInvoiceType(request.invoiceType());
-        entity.setStatus(request.status());
+        entity.setStatus(nextStatus);
         entity.setOperatorName(request.operatorName());
         entity.setRemark(request.remark());
 
@@ -195,7 +241,7 @@ public class InvoiceIssueService extends AbstractCrudService<InvoiceIssue, Invoi
         BigDecimal amount = BigDecimal.ZERO;
         for (int i = 0; i < request.items().size(); i++) {
             InvoiceIssueItemRequest source = request.items().get(i);
-            ResolvedInvoiceIssueItem resolvedItem = resolveItem(source);
+            ResolvedInvoiceIssueItem resolvedItem = resolveItem(source, sourceSalesOrderItemMap, i + 1);
             validateSourceSalesOrderAllocation(
                     source,
                     i + 1,
@@ -207,26 +253,26 @@ public class InvoiceIssueService extends AbstractCrudService<InvoiceIssue, Invoi
             InvoiceIssueItem item = items.get(i);
             item.setInvoiceIssue(entity);
             item.setLineNo(i + 1);
-            item.setSourceNo(source.sourceNo());
+            item.setSourceNo(resolvedItem.sourceNo());
             item.setSourceSalesOrderItemId(source.sourceSalesOrderItemId());
-            item.setMaterialCode(source.materialCode());
-            item.setBrand(source.brand());
-            item.setCategory(source.category());
-            item.setMaterial(source.material());
-            item.setSpec(source.spec());
-            item.setLength(source.length());
-            item.setUnit(source.unit());
-            item.setWarehouseName(source.warehouseName());
-            item.setBatchNo(source.batchNo());
+            item.setMaterialCode(resolvedItem.materialCode());
+            item.setBrand(resolvedItem.brand());
+            item.setCategory(resolvedItem.category());
+            item.setMaterial(resolvedItem.material());
+            item.setSpec(resolvedItem.spec());
+            item.setLength(resolvedItem.length());
+            item.setUnit(resolvedItem.unit());
+            item.setWarehouseName(resolvedItem.warehouseName());
+            item.setBatchNo(resolvedItem.batchNo());
             item.setQuantity(source.quantity());
-            item.setQuantityUnit(TradeItemCalculator.normalizeQuantityUnit(source.quantityUnit()));
-            item.setPieceWeightTon(source.pieceWeightTon());
-            item.setPiecesPerBundle(source.piecesPerBundle());
+            item.setQuantityUnit(resolvedItem.quantityUnit());
+            item.setPieceWeightTon(resolvedItem.pieceWeightTon());
+            item.setPiecesPerBundle(resolvedItem.piecesPerBundle());
             item.setWeightTon(resolvedItem.weightTon());
-            item.setUnitPrice(source.unitPrice());
+            item.setUnitPrice(resolvedItem.unitPrice());
             BigDecimal lineAmount = resolvedItem.amount();
             item.setAmount(lineAmount);
-            sourceSalesOrderNos.add(source.sourceNo());
+            sourceSalesOrderNos.add(resolvedItem.sourceNo());
             amount = amount.add(lineAmount);
         }
         entity.getItems().sort(java.util.Comparator.comparing(InvoiceIssueItem::getLineNo));
@@ -314,10 +360,39 @@ public class InvoiceIssueService extends AbstractCrudService<InvoiceIssue, Invoi
         );
     }
 
-    private ResolvedInvoiceIssueItem resolveItem(InvoiceIssueItemRequest source) {
-        BigDecimal weightTon = InvoiceAllocationSupport.resolveWeightTon(source.quantity(), source.pieceWeightTon(), source.weightTon());
-        BigDecimal amount = TradeItemCalculator.calculateAmount(weightTon, source.unitPrice());
-        return new ResolvedInvoiceIssueItem(weightTon, amount);
+    private ResolvedInvoiceIssueItem resolveItem(InvoiceIssueItemRequest source,
+                                                 Map<Long, SalesOrderItem> sourceSalesOrderItemMap,
+                                                 int lineNo) {
+        Long sourceSalesOrderItemId = source.sourceSalesOrderItemId();
+        if (sourceSalesOrderItemId == null) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行来源销售订单明细不能为空");
+        }
+        SalesOrderItem sourceSalesOrderItem = sourceSalesOrderItemMap.get(sourceSalesOrderItemId);
+        if (sourceSalesOrderItem == null) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行来源销售订单明细不存在");
+        }
+        BigDecimal pieceWeightTon = TradeItemCalculator.scaleWeightTon(sourceSalesOrderItem.getPieceWeightTon());
+        BigDecimal unitPrice = TradeItemCalculator.scaleAmount(sourceSalesOrderItem.getUnitPrice());
+        BigDecimal weightTon = TradeItemCalculator.calculateWeightTon(source.quantity(), pieceWeightTon);
+        BigDecimal amount = TradeItemCalculator.calculateAmount(weightTon, unitPrice);
+        return new ResolvedInvoiceIssueItem(
+                sourceSalesOrderItem.getSalesOrder().getOrderNo(),
+                sourceSalesOrderItem.getMaterialCode(),
+                sourceSalesOrderItem.getBrand(),
+                sourceSalesOrderItem.getCategory(),
+                sourceSalesOrderItem.getMaterial(),
+                sourceSalesOrderItem.getSpec(),
+                sourceSalesOrderItem.getLength(),
+                sourceSalesOrderItem.getUnit(),
+                sourceSalesOrderItem.getWarehouseName(),
+                sourceSalesOrderItem.getBatchNo(),
+                TradeItemCalculator.normalizeQuantityUnit(source.quantityUnit()),
+                sourceSalesOrderItem.getPiecesPerBundle(),
+                pieceWeightTon,
+                unitPrice,
+                weightTon,
+                amount
+        );
     }
 
     private InvoiceIssueItemResponse toItemResponse(InvoiceIssueItem item) {
@@ -346,6 +421,20 @@ public class InvoiceIssueService extends AbstractCrudService<InvoiceIssue, Invoi
     }
 
     private record ResolvedInvoiceIssueItem(
+            String sourceNo,
+            String materialCode,
+            String brand,
+            String category,
+            String material,
+            String spec,
+            String length,
+            String unit,
+            String warehouseName,
+            String batchNo,
+            String quantityUnit,
+            Integer piecesPerBundle,
+            BigDecimal pieceWeightTon,
+            BigDecimal unitPrice,
             BigDecimal weightTon,
             BigDecimal amount
     ) {

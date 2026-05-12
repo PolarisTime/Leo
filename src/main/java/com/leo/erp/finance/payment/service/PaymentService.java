@@ -5,6 +5,7 @@ import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.service.AbstractCrudService;
+import com.leo.erp.common.support.BusinessStatusValidator;
 import com.leo.erp.common.support.ManagedEntityItemSupport;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
@@ -111,6 +112,40 @@ public class PaymentService extends AbstractCrudService<Payment, PaymentRequest,
     }
 
     @Override
+    protected PaymentRequest normalizeCreateRequest(PaymentRequest request, long entityId) {
+        return new PaymentRequest(
+                resolveCreateBusinessNo("payment", request.paymentNo(), entityId),
+                request.businessType(),
+                request.counterpartyName(),
+                request.sourceStatementId(),
+                request.paymentDate(),
+                request.payType(),
+                request.amount(),
+                request.status(),
+                request.operatorName(),
+                request.remark(),
+                request.items()
+        );
+    }
+
+    @Override
+    protected PaymentRequest normalizeUpdateRequest(Payment entity, PaymentRequest request) {
+        return new PaymentRequest(
+                entity.getPaymentNo(),
+                request.businessType(),
+                request.counterpartyName(),
+                request.sourceStatementId(),
+                request.paymentDate(),
+                request.payType(),
+                request.amount(),
+                request.status(),
+                request.operatorName(),
+                request.remark(),
+                request.items()
+        );
+    }
+
+    @Override
     protected Payment newEntity() {
         return new Payment();
     }
@@ -166,10 +201,16 @@ public class PaymentService extends AbstractCrudService<Payment, PaymentRequest,
 
     @Override
     protected void apply(Payment entity, PaymentRequest request) {
+        String nextStatus = BusinessStatusValidator.normalizeWithDefault(
+                request.status(),
+                StatusConstants.DRAFT,
+                "付款单状态",
+                StatusConstants.ALLOWED_PAYMENT_STATUS
+        );
         workflowTransitionGuard.assertAuditPermissionForProtectedValue(
                 "payment",
                 entity.getStatus(),
-                request.status(),
+                nextStatus,
                 PAYMENT_STATUS_SETTLED
         );
         captureOriginalAllocationState(entity);
@@ -179,10 +220,10 @@ public class PaymentService extends AbstractCrudService<Payment, PaymentRequest,
         entity.setPaymentDate(request.paymentDate());
         entity.setPayType(request.payType());
         entity.setAmount(TradeItemCalculator.scaleAmount(request.amount()));
-        entity.setStatus(request.status());
+        entity.setStatus(nextStatus);
         entity.setOperatorName(request.operatorName());
         entity.setRemark(request.remark());
-        applyAllocations(entity, request);
+        applyAllocations(entity, request, nextStatus);
         entity.setSourceStatementId(resolveLegacySourceStatementId(entity.getItems()));
     }
 
@@ -204,7 +245,7 @@ public class PaymentService extends AbstractCrudService<Payment, PaymentRequest,
         }
     }
 
-    private void applyAllocations(Payment entity, PaymentRequest request) {
+    private void applyAllocations(Payment entity, PaymentRequest request, String nextStatus) {
         List<PaymentAllocationRequest> allocationRequests = normalizeAllocationRequests(request);
         if (!SUPPLIER_PAYMENT_TYPE.equals(request.businessType()) && !FREIGHT_PAYMENT_TYPE.equals(request.businessType())) {
             if (!allocationRequests.isEmpty()) {
@@ -236,16 +277,36 @@ public class PaymentService extends AbstractCrudService<Payment, PaymentRequest,
             item.setAllocatedAmount(allocatedAmount);
             if (SUPPLIER_PAYMENT_TYPE.equals(request.businessType())) {
                 SupplierStatement statement = requireAccessibleSupplierStatement(source.sourceStatementId());
-                validateLinkedSupplierStatement(request, entity.getId(), statement, allocatedAmount, requestAllocatedAmountMap, i + 1);
+                validateLinkedSupplierStatement(
+                        request,
+                        nextStatus,
+                        entity.getId(),
+                        statement,
+                        allocatedAmount,
+                        requestAllocatedAmountMap,
+                        i + 1
+                );
             } else {
                 FreightStatement statement = requireAccessibleFreightStatement(source.sourceStatementId());
-                validateLinkedFreightStatement(request, entity.getId(), statement, allocatedAmount, requestAllocatedAmountMap, i + 1);
+                validateLinkedFreightStatement(
+                        request,
+                        nextStatus,
+                        entity.getId(),
+                        statement,
+                        allocatedAmount,
+                        requestAllocatedAmountMap,
+                        i + 1
+                );
             }
             totalAllocatedAmount = totalAllocatedAmount.add(allocatedAmount);
         }
 
         if (totalAllocatedAmount.compareTo(TradeItemCalculator.safeBigDecimal(entity.getAmount())) > 0) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "核销金额合计不能超过付款金额");
+        }
+        if (!allocationRequests.isEmpty()
+                && totalAllocatedAmount.compareTo(TradeItemCalculator.safeBigDecimal(entity.getAmount())) != 0) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "付款金额必须等于核销金额合计");
         }
         entity.getItems().sort(java.util.Comparator.comparing(PaymentAllocation::getLineNo));
     }
@@ -281,6 +342,7 @@ public class PaymentService extends AbstractCrudService<Payment, PaymentRequest,
     }
 
     private void validateLinkedSupplierStatement(PaymentRequest request,
+                                                 String normalizedStatus,
                                                  Long currentPaymentId,
                                                  SupplierStatement statement,
                                                  BigDecimal allocatedAmount,
@@ -292,7 +354,7 @@ public class PaymentService extends AbstractCrudService<Payment, PaymentRequest,
         if (requestAllocatedAmountMap.containsKey(statement.getId())) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "同一付款单不能重复核销同一供应商对账单");
         }
-        if (PAYMENT_STATUS_SETTLED.equals(request.status())) {
+        if (PAYMENT_STATUS_SETTLED.equals(normalizedStatus)) {
             BigDecimal settledAmount = TradeItemCalculator.safeBigDecimal(
                     paymentAllocationRepository.sumAllocatedAmountBySourceStatementIdAndBusinessTypeAndStatusExcludingPaymentId(
                             statement.getId(),
@@ -310,6 +372,7 @@ public class PaymentService extends AbstractCrudService<Payment, PaymentRequest,
     }
 
     private void validateLinkedFreightStatement(PaymentRequest request,
+                                                String normalizedStatus,
                                                 Long currentPaymentId,
                                                 FreightStatement statement,
                                                 BigDecimal allocatedAmount,
@@ -321,7 +384,7 @@ public class PaymentService extends AbstractCrudService<Payment, PaymentRequest,
         if (requestAllocatedAmountMap.containsKey(statement.getId())) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "同一付款单不能重复核销同一物流对账单");
         }
-        if (PAYMENT_STATUS_SETTLED.equals(request.status())) {
+        if (PAYMENT_STATUS_SETTLED.equals(normalizedStatus)) {
             BigDecimal settledAmount = TradeItemCalculator.safeBigDecimal(
                     paymentAllocationRepository.sumAllocatedAmountBySourceStatementIdAndBusinessTypeAndStatusExcludingPaymentId(
                             statement.getId(),

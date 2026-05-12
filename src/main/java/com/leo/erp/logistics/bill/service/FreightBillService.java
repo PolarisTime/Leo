@@ -4,6 +4,7 @@ import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.service.AbstractCrudService;
+import com.leo.erp.common.support.BusinessStatusValidator;
 import com.leo.erp.common.support.ManagedEntityItemSupport;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
@@ -20,8 +21,10 @@ import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 @Service
 public class FreightBillService extends AbstractCrudService<FreightBill, FreightBillRequest, FreightBillResponse> {
@@ -99,6 +102,42 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
     }
 
     @Override
+    protected FreightBillRequest normalizeCreateRequest(FreightBillRequest request, long entityId) {
+        return new FreightBillRequest(
+                resolveCreateBusinessNo("freight-bill", request.billNo(), entityId),
+                request.outboundNo(),
+                request.carrierName(),
+                request.vehiclePlate(),
+                request.customerName(),
+                request.projectName(),
+                request.billTime(),
+                request.unitPrice(),
+                request.status(),
+                request.deliveryStatus(),
+                request.remark(),
+                request.items()
+        );
+    }
+
+    @Override
+    protected FreightBillRequest normalizeUpdateRequest(FreightBill entity, FreightBillRequest request) {
+        return new FreightBillRequest(
+                entity.getBillNo(),
+                request.outboundNo(),
+                request.carrierName(),
+                request.vehiclePlate(),
+                request.customerName(),
+                request.projectName(),
+                request.billTime(),
+                request.unitPrice(),
+                request.status(),
+                request.deliveryStatus(),
+                request.remark(),
+                request.items()
+        );
+    }
+
+    @Override
     protected FreightBill newEntity() {
         return new FreightBill();
     }
@@ -130,8 +169,18 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
 
     @Override
     protected void apply(FreightBill entity, FreightBillRequest request) {
-        String nextStatus = (request.status() == null || request.status().isBlank()) ? "未审核" : request.status();
-        String nextDeliveryStatus = (request.deliveryStatus() == null || request.deliveryStatus().isBlank()) ? "未送达" : request.deliveryStatus();
+        String nextStatus = BusinessStatusValidator.normalizeWithDefault(
+                request.status(),
+                StatusConstants.UNAUDITED,
+                "物流单状态",
+                StatusConstants.ALLOWED_FREIGHT_BILL_STATUS
+        );
+        String nextDeliveryStatus = BusinessStatusValidator.normalizeWithDefault(
+                request.deliveryStatus(),
+                StatusConstants.UNDELIVERED,
+                "物流单送达状态",
+                StatusConstants.ALLOWED_DELIVERY_STATUS
+        );
         workflowTransitionGuard.assertAuditPermissionForProtectedValue(
                 "freight-bill",
                 entity.getStatus(),
@@ -142,21 +191,23 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
                 "freight-bill",
                 entity.getDeliveryStatus(),
                 nextDeliveryStatus,
-                "已送达"
+                StatusConstants.DELIVERED
         );
         entity.setBillNo(request.billNo());
-        entity.setOutboundNo(request.outboundNo());
         entity.setCarrierName(request.carrierName());
         entity.setVehiclePlate(emptyToNull(request.vehiclePlate()));
-        entity.setCustomerName(request.customerName());
-        entity.setProjectName(request.projectName());
         entity.setBillTime(request.billTime());
         entity.setUnitPrice(request.unitPrice());
         entity.setStatus(nextStatus);
         entity.setDeliveryStatus(nextDeliveryStatus);
         entity.setRemark(request.remark());
 
+        assertSourceOutboundsNotOccupied(request, entity.getId());
+
         BigDecimal totalWeight = BigDecimal.ZERO;
+        LinkedHashSet<String> sourceNos = new LinkedHashSet<>();
+        LinkedHashSet<String> customerNames = new LinkedHashSet<>();
+        LinkedHashSet<String> projectNames = new LinkedHashSet<>();
         List<FreightBillItem> items = ManagedEntityItemSupport.syncById(
                 entity.getItems(),
                 request.items(),
@@ -172,8 +223,11 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
             item.setFreightBill(entity);
             item.setLineNo(i + 1);
             item.setSourceNo(source.sourceNo());
+            sourceNos.add(source.sourceNo());
             item.setCustomerName(source.customerName());
+            customerNames.add(source.customerName());
             item.setProjectName(source.projectName());
+            projectNames.add(source.projectName());
             item.setMaterialCode(source.materialCode());
             item.setMaterialName(resolveMaterialName(source));
             item.setBrand(source.brand());
@@ -192,8 +246,51 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
             totalWeight = totalWeight.add(weightTon);
         }
         entity.getItems().sort(java.util.Comparator.comparing(FreightBillItem::getLineNo));
+        entity.setOutboundNo(String.join(", ", sourceNos));
+        entity.setCustomerName(resolveHeaderLabel(customerNames, "多客户"));
+        entity.setProjectName(resolveHeaderLabel(projectNames, "多项目"));
         entity.setTotalWeight(totalWeight);
         entity.setTotalFreight(totalWeight.multiply(request.unitPrice()).setScale(2, RoundingMode.HALF_UP));
+    }
+
+    private void assertSourceOutboundsNotOccupied(FreightBillRequest request, Long currentBillId) {
+        Set<String> sourceNos = request.items().stream()
+                .map(FreightBillItemRequest::sourceNo)
+                .map(this::emptyToNull)
+                .filter(java.util.Objects::nonNull)
+                .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
+        if (sourceNos.isEmpty()) {
+            return;
+        }
+
+        List<FreightBill> occupiedBills = repository.findAllBySourceNosExcludingCurrentBill(sourceNos, currentBillId);
+        for (String sourceNo : sourceNos) {
+            for (FreightBill occupiedBill : occupiedBills) {
+                boolean matched = occupiedBill.getItems().stream()
+                        .anyMatch(item -> sourceNo.equals(emptyToNull(item.getSourceNo())));
+                if (!matched) {
+                    continue;
+                }
+                String billNo = emptyToNull(occupiedBill.getBillNo());
+                String carrierName = emptyToNull(occupiedBill.getCarrierName());
+                throw new BusinessException(
+                        com.leo.erp.common.error.ErrorCode.BUSINESS_ERROR,
+                        "销售出库单" + sourceNo + "已归集到物流单"
+                                + (billNo == null ? "" : billNo)
+                                + (carrierName == null ? "" : "（物流商：" + carrierName + "）")
+                );
+            }
+        }
+    }
+
+    private String resolveHeaderLabel(Set<String> values, String multipleLabel) {
+        if (values.isEmpty()) {
+            return multipleLabel;
+        }
+        if (values.size() == 1) {
+            return values.iterator().next();
+        }
+        return multipleLabel;
     }
 
     private String emptyToNull(String value) {
