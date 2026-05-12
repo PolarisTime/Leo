@@ -771,7 +771,7 @@ class SalesOrderServiceTest {
         service.update(1L, request);
 
         verify(workflowTransitionGuard).assertAuditPermissionForProtectedValue(
-                "sales-orders",
+                "sales-order",
                 "已审核",
                 "草稿",
                 "已审核",

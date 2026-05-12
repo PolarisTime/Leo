@@ -27,7 +27,8 @@ class SystemSwitchServiceTest {
         when(repository.findBySettingCodeInAndDeletedFlagFalse(any())).thenReturn(List.of(
                 rule(SystemSwitchService.SHOW_SNOWFLAKE_ID_SWITCH, "正常", ""),
                 rule(SystemSwitchService.MAX_CONCURRENT_SESSIONS_SWITCH, "正常", "8"),
-                rule(SystemSwitchService.OPERATION_LOG_DETAILED_PAGE_ACTIONS_SWITCH, "正常", "QUERY,EDIT")
+                rule(SystemSwitchService.OPERATION_LOG_DETAILED_PAGE_ACTIONS_SWITCH, "正常", "QUERY,EDIT"),
+                rule(SystemSwitchService.USE_SNOWFLAKE_ID_AS_BUSINESS_NO_SWITCH, "禁用", "")
         ));
         when(redisJsonCacheSupport.getOrLoad(
                 eq(SystemSwitchService.SWITCH_CACHE_KEY),
@@ -39,6 +40,7 @@ class SystemSwitchServiceTest {
         SystemSwitchService service = new SystemSwitchService(repository, redisJsonCacheSupport);
 
         assertThat(service.shouldShowSnowflakeId()).isTrue();
+        assertThat(service.shouldUseSnowflakeIdAsBusinessNo()).isFalse();
         assertThat(service.getMaxConcurrentSessions()).isEqualTo(8);
         assertThat(service.getDefaultListPageSize()).isEqualTo(20);
         assertThat(service.shouldRecordDetailedPageAction("edit")).isTrue();
@@ -75,6 +77,18 @@ class SystemSwitchServiceTest {
 
         assertThat(service.shouldDefaultCustomerStatementReceiptAmountToZero()).isTrue();
         assertThat(service.shouldDefaultSupplierStatementToFullPayment()).isFalse();
+    }
+
+    @Test
+    void shouldReadSnowflakeBusinessNoSwitch() {
+        NoRuleRepository repository = mock(NoRuleRepository.class);
+        when(repository.findBySettingCodeInAndDeletedFlagFalse(any())).thenReturn(List.of(
+                rule(SystemSwitchService.USE_SNOWFLAKE_ID_AS_BUSINESS_NO_SWITCH, "正常", "ON")
+        ));
+
+        SystemSwitchService service = new SystemSwitchService(repository);
+
+        assertThat(service.shouldUseSnowflakeIdAsBusinessNo()).isTrue();
     }
 
     private NoRule rule(String code, String status, String sampleNo) {

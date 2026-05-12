@@ -4,6 +4,8 @@ import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.sales.order.domain.entity.SalesOrder;
+import com.leo.erp.sales.order.domain.entity.SalesOrderItem;
+import com.leo.erp.sales.order.service.SalesOrderItemQueryService;
 import com.leo.erp.sales.order.repository.SalesOrderRepository;
 import com.leo.erp.statement.customer.domain.entity.CustomerStatement;
 import com.leo.erp.statement.customer.mapper.CustomerStatementMapper;
@@ -39,9 +41,11 @@ class CustomerStatementServiceTest {
     void shouldPersistRequestedReceiptAmountWithoutImmediateSync() {
         CustomerStatementRepository repository = mock(CustomerStatementRepository.class);
         CustomerStatementMapper mapper = mock(CustomerStatementMapper.class);
+        SalesOrderItemQueryService salesOrderItemQueryService = mock(SalesOrderItemQueryService.class);
         StatementSettlementSyncService syncService = mock(StatementSettlementSyncService.class);
         when(repository.existsByStatementNoAndDeletedFlagFalse("KHDZ-001")).thenReturn(false);
         when(repository.save(any(CustomerStatement.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(salesOrderItemQueryService.findActiveByIdIn(List.of(201L))).thenReturn(List.of(buildSalesOrderItem()));
         when(mapper.toResponse(any(CustomerStatement.class))).thenAnswer(invocation -> {
             CustomerStatement statement = invocation.getArgument(0);
             return new CustomerStatementResponse(
@@ -66,6 +70,7 @@ class CustomerStatementServiceTest {
                 new SnowflakeIdGenerator(0L),
                 mapper,
                 mock(SalesOrderRepository.class),
+                salesOrderItemQueryService,
                 syncService,
                 mock(WorkflowTransitionGuard.class)
         );
@@ -81,13 +86,16 @@ class CustomerStatementServiceTest {
     @Test
     void shouldRejectOverReceiptAmount() {
         CustomerStatementRepository repository = mock(CustomerStatementRepository.class);
+        SalesOrderItemQueryService salesOrderItemQueryService = mock(SalesOrderItemQueryService.class);
         when(repository.existsByStatementNoAndDeletedFlagFalse("KHDZ-001")).thenReturn(false);
+        when(salesOrderItemQueryService.findActiveByIdIn(List.of(201L))).thenReturn(List.of(buildSalesOrderItem()));
 
         CustomerStatementService service = new CustomerStatementService(
                 repository,
                 new SnowflakeIdGenerator(0L),
                 mock(CustomerStatementMapper.class),
                 mock(SalesOrderRepository.class),
+                salesOrderItemQueryService,
                 mock(StatementSettlementSyncService.class),
                 mock(WorkflowTransitionGuard.class)
         );
@@ -113,6 +121,7 @@ class CustomerStatementServiceTest {
                 new SnowflakeIdGenerator(0L),
                 mock(CustomerStatementMapper.class),
                 mock(SalesOrderRepository.class),
+                mock(SalesOrderItemQueryService.class),
                 mock(StatementSettlementSyncService.class),
                 mock(WorkflowTransitionGuard.class)
         );
@@ -154,6 +163,7 @@ class CustomerStatementServiceTest {
                 new SnowflakeIdGenerator(0L),
                 mapper,
                 salesOrderRepository,
+                mock(SalesOrderItemQueryService.class),
                 syncService,
                 mock(WorkflowTransitionGuard.class)
         );
@@ -182,6 +192,7 @@ class CustomerStatementServiceTest {
                 "备注",
                 List.of(new CustomerStatementItemRequest(
                         "SO-001",
+                        201L,
                         "M-001",
                         "品牌A",
                         "螺纹",
@@ -199,5 +210,30 @@ class CustomerStatementServiceTest {
                         new BigDecimal("1000.00")
                 ))
         );
+    }
+
+    private SalesOrderItem buildSalesOrderItem() {
+        SalesOrder order = new SalesOrder();
+        order.setOrderNo("SO-001");
+
+        SalesOrderItem item = new SalesOrderItem();
+        item.setId(201L);
+        item.setSalesOrder(order);
+        item.setMaterialCode("M-001");
+        item.setBrand("品牌A");
+        item.setCategory("螺纹");
+        item.setMaterial("盘螺");
+        item.setSpec("HRB400");
+        item.setLength("12");
+        item.setUnit("吨");
+        item.setBatchNo("LOT-001");
+        item.setQuantity(1);
+        item.setQuantityUnit("件");
+        item.setPieceWeightTon(new BigDecimal("1.000"));
+        item.setPiecesPerBundle(1);
+        item.setWeightTon(new BigDecimal("1.000"));
+        item.setUnitPrice(new BigDecimal("1000.00"));
+        item.setAmount(new BigDecimal("1000.00"));
+        return item;
     }
 }

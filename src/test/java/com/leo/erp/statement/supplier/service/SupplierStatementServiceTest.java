@@ -2,6 +2,9 @@ package com.leo.erp.statement.supplier.service;
 
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
+import com.leo.erp.purchase.inbound.domain.entity.PurchaseInbound;
+import com.leo.erp.purchase.inbound.domain.entity.PurchaseInboundItem;
+import com.leo.erp.purchase.inbound.service.PurchaseInboundItemQueryService;
 import com.leo.erp.purchase.inbound.repository.PurchaseInboundRepository;
 import com.leo.erp.security.permission.WorkflowTransitionGuard;
 import com.leo.erp.statement.service.StatementSettlementSyncService;
@@ -30,9 +33,11 @@ class SupplierStatementServiceTest {
     void shouldPersistRequestedPaymentAmountWithoutImmediateSync() {
         SupplierStatementRepository repository = mock(SupplierStatementRepository.class);
         SupplierStatementMapper mapper = mock(SupplierStatementMapper.class);
+        PurchaseInboundItemQueryService purchaseInboundItemQueryService = mock(PurchaseInboundItemQueryService.class);
         StatementSettlementSyncService syncService = mock(StatementSettlementSyncService.class);
         when(repository.existsByStatementNoAndDeletedFlagFalse("GYDZ-001")).thenReturn(false);
         when(repository.save(any(SupplierStatement.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(purchaseInboundItemQueryService.findAllActiveByIdIn(List.of(101L))).thenReturn(List.of(buildInboundItem()));
         when(mapper.toResponse(any(SupplierStatement.class))).thenAnswer(invocation -> {
             SupplierStatement statement = invocation.getArgument(0);
             return new SupplierStatementResponse(
@@ -56,6 +61,7 @@ class SupplierStatementServiceTest {
                 new SnowflakeIdGenerator(0L),
                 mapper,
                 mock(PurchaseInboundRepository.class),
+                purchaseInboundItemQueryService,
                 syncService,
                 mock(WorkflowTransitionGuard.class)
         );
@@ -71,13 +77,16 @@ class SupplierStatementServiceTest {
     @Test
     void shouldRejectOverPaymentAmount() {
         SupplierStatementRepository repository = mock(SupplierStatementRepository.class);
+        PurchaseInboundItemQueryService purchaseInboundItemQueryService = mock(PurchaseInboundItemQueryService.class);
         when(repository.existsByStatementNoAndDeletedFlagFalse("GYDZ-001")).thenReturn(false);
+        when(purchaseInboundItemQueryService.findAllActiveByIdIn(List.of(101L))).thenReturn(List.of(buildInboundItem()));
 
         SupplierStatementService service = new SupplierStatementService(
                 repository,
                 new SnowflakeIdGenerator(0L),
                 mock(SupplierStatementMapper.class),
                 mock(PurchaseInboundRepository.class),
+                purchaseInboundItemQueryService,
                 mock(StatementSettlementSyncService.class),
                 mock(WorkflowTransitionGuard.class)
         );
@@ -101,6 +110,7 @@ class SupplierStatementServiceTest {
                 "备注",
                 List.of(new SupplierStatementItemRequest(
                         "IN-001",
+                        101L,
                         "M-001",
                         "品牌A",
                         "螺纹",
@@ -118,5 +128,32 @@ class SupplierStatementServiceTest {
                         new BigDecimal("1000.00")
                 ))
         );
+    }
+
+    private PurchaseInboundItem buildInboundItem() {
+        PurchaseInbound inbound = new PurchaseInbound();
+        inbound.setInboundNo("IN-001");
+
+        PurchaseInboundItem item = new PurchaseInboundItem();
+        item.setId(101L);
+        item.setPurchaseInbound(inbound);
+        item.setMaterialCode("M-001");
+        item.setBrand("品牌A");
+        item.setCategory("螺纹");
+        item.setMaterial("盘螺");
+        item.setSpec("HRB400");
+        item.setLength("12");
+        item.setUnit("吨");
+        item.setBatchNo("LOT-001");
+        item.setQuantity(1);
+        item.setQuantityUnit("件");
+        item.setPieceWeightTon(new BigDecimal("1.000"));
+        item.setPiecesPerBundle(1);
+        item.setWeightTon(new BigDecimal("1.000"));
+        item.setWeightAdjustmentTon(BigDecimal.ZERO);
+        item.setWeightAdjustmentAmount(BigDecimal.ZERO);
+        item.setUnitPrice(new BigDecimal("1000.00"));
+        item.setAmount(new BigDecimal("1000.00"));
+        return item;
     }
 }

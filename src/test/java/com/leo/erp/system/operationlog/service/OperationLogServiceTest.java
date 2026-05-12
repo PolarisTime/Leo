@@ -24,7 +24,7 @@ class OperationLogServiceTest {
                 .thenReturn(Page.empty());
         OperationLogService service = new OperationLogService(repository, mock(OperationLogMapper.class), null, null);
 
-        assertThatCode(() -> service.page(new PageQuery(0, 20, null, null), null, "API Key 管理", "禁用 API Key", null, null, null))
+        assertThatCode(() -> service.page(new PageQuery(0, 20, null, null), null, "API Key 管理", "禁用 API Key", null, null, null, null))
                 .doesNotThrowAnyException();
     }
 
@@ -35,7 +35,7 @@ class OperationLogServiceTest {
                 .thenReturn(Page.empty());
         OperationLogService service = new OperationLogService(repository, mock(OperationLogMapper.class), null, null);
 
-        assertThatCode(() -> service.page(new PageQuery(0, 20, null, null), null, "角色权限配置", null, null, null, null))
+        assertThatCode(() -> service.page(new PageQuery(0, 20, null, null), null, "角色权限配置", null, null, null, null, null))
                 .doesNotThrowAnyException();
     }
 
@@ -43,7 +43,7 @@ class OperationLogServiceTest {
     void shouldRejectUnknownResultStatusFilter() {
         OperationLogService service = new OperationLogService(null, null, null, null);
 
-        assertThatThrownBy(() -> service.page(new PageQuery(0, 20, null, null), null, null, null, "异常", null, null))
+        assertThatThrownBy(() -> service.page(new PageQuery(0, 20, null, null), null, null, null, "异常", null, null, null))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("resultStatus 不合法");
     }
@@ -59,7 +59,8 @@ class OperationLogServiceTest {
                 null,
                 null,
                 LocalDate.of(2026, 4, 30),
-                LocalDate.of(2026, 4, 1)
+                LocalDate.of(2026, 4, 1),
+                null
         ))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("startTime 不能晚于 endTime");
