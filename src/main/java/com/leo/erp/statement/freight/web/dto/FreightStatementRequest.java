@@ -3,7 +3,6 @@ package com.leo.erp.statement.freight.web.dto;
 import com.leo.erp.logistics.bill.web.dto.FreightBillItemRequest;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.DecimalMin;
-import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
@@ -13,9 +12,9 @@ import java.time.LocalDate;
 import java.util.List;
 
 public record FreightStatementRequest(
-        @NotBlank String statementNo,
+        String statementNo,
         String sourceBillNos,
-        @NotBlank String carrierName,
+        @jakarta.validation.constraints.NotBlank String carrierName,
         @NotNull LocalDate startDate,
         @NotNull LocalDate endDate,
         @NotNull @DecimalMin("0.000") BigDecimal totalWeight,

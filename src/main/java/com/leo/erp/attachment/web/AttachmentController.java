@@ -14,6 +14,8 @@ import com.leo.erp.security.permission.ModulePermissionGuard;
 import com.leo.erp.security.permission.RequiresPermission;
 import com.leo.erp.security.support.SecurityPrincipal;
 import com.leo.erp.system.operationlog.support.OperationLoggable;
+import jakarta.validation.constraints.NotBlank;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -31,6 +33,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 
 @RestController
+@Validated
 @RequestMapping("/attachments")
 public class AttachmentController {
 
@@ -56,7 +59,7 @@ public class AttachmentController {
     @RequiresPermission(authenticatedOnly = true, allowApiKey = true)
     @OperationLoggable(moduleName = "附件管理", actionType = "上传附件")
     public ApiResponse<AttachmentUploadResponse> upload(@AuthenticationPrincipal SecurityPrincipal principal,
-                                                        @RequestParam String moduleKey,
+                                                        @RequestParam @NotBlank(message = "模块标识不能为空") String moduleKey,
                                                         @RequestParam("file") MultipartFile file,
                                                         @RequestParam(required = false) String sourceType) throws IOException {
         String normalizedModuleKey = modulePermissionGuard.requirePermission(principal, moduleKey, "update");

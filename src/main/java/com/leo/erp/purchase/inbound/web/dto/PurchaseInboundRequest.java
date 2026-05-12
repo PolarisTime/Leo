@@ -1,7 +1,6 @@
 package com.leo.erp.purchase.inbound.web.dto;
 
 import jakarta.validation.Valid;
-import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 
@@ -9,9 +8,9 @@ import java.time.LocalDate;
 import java.util.List;
 
 public record PurchaseInboundRequest(
-        @NotBlank String inboundNo,
+        String inboundNo,
         String purchaseOrderNo,
-        @NotBlank String supplierName,
+        @jakarta.validation.constraints.NotBlank String supplierName,
         String warehouseName,
         @NotNull LocalDate inboundDate,
         String settlementMode,

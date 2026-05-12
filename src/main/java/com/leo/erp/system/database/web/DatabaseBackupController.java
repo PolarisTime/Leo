@@ -16,8 +16,11 @@ import org.springframework.core.io.Resource;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Positive;
 
 import java.io.IOException;
 import java.net.URLEncoder;
@@ -25,6 +28,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 @RestController
+@Validated
 @RequestMapping("/system/database")
 public class DatabaseBackupController {
 
@@ -56,13 +60,13 @@ public class DatabaseBackupController {
 
     @GetMapping("/export-tasks/{id}")
     @RequiresPermission(resource = "database", action = "export")
-    public ApiResponse<DatabaseExportTaskResponse> getExportTask(@PathVariable Long id) {
+    public ApiResponse<DatabaseExportTaskResponse> getExportTask(@PathVariable @Positive Long id) {
         return ApiResponse.success(toResponse(exportTaskService.getTask(id)));
     }
 
     @PostMapping("/export-tasks/{id}/download-link")
     @RequiresPermission(resource = "database", action = "export")
-    public ApiResponse<DatabaseExportDownloadLinkResponse> generateDownloadLink(@PathVariable Long id) {
+    public ApiResponse<DatabaseExportDownloadLinkResponse> generateDownloadLink(@PathVariable @Positive Long id) {
         DatabaseExportTaskService.DownloadLinkPayload payload = exportTaskService.generateDownloadLink(id);
         String contextPathValue = contextPath == null ? "" : contextPath;
         String downloadUrl = contextPathValue + "/system/database/export-tasks/" + payload.taskId() + "/download?token=" + payload.downloadToken();
@@ -71,8 +75,8 @@ public class DatabaseBackupController {
 
     @GetMapping("/export-tasks/{id}/download")
     @PublicAccess
-    public ResponseEntity<Resource> downloadExportTask(@PathVariable Long id,
-                                                       @RequestParam String token) {
+    public ResponseEntity<Resource> downloadExportTask(@PathVariable @Positive Long id,
+                                                       @RequestParam @NotBlank(message = "下载令牌不能为空") String token) {
         DatabaseExportTaskService.DownloadPayload payload = exportTaskService.getDownloadPayload(id, token);
         FileSystemResource resource = new FileSystemResource(payload.filePath());
         if (!resource.exists()) {
@@ -91,8 +95,8 @@ public class DatabaseBackupController {
     @RequiresTotpVerification
     @OperationLoggable(moduleName = "数据库管理", actionType = "导入备份")
     public ApiResponse<Void> importBackup(@RequestParam("file") MultipartFile file,
-                                          @RequestParam("databaseUsername") String databaseUsername,
-                                          @RequestParam("databasePassword") String databasePassword) throws IOException, InterruptedException {
+                                          @RequestParam("databaseUsername") @NotBlank(message = "数据库用户名不能为空") String databaseUsername,
+                                          @RequestParam("databasePassword") @NotBlank(message = "数据库密码不能为空") String databasePassword) throws IOException, InterruptedException {
         if (file.isEmpty()) {
             return ApiResponse.failure(ErrorCode.VALIDATION_ERROR, "上传文件不能为空");
         }
