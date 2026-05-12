@@ -4,6 +4,7 @@ import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.service.AbstractCrudService;
+import com.leo.erp.common.support.BusinessStatusValidator;
 import com.leo.erp.common.support.ManagedEntityItemSupport;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
@@ -100,6 +101,38 @@ public class SalesContractService extends AbstractCrudService<SalesContract, Sal
     }
 
     @Override
+    protected SalesContractRequest normalizeCreateRequest(SalesContractRequest request, long entityId) {
+        return new SalesContractRequest(
+                resolveCreateBusinessNo("sales-contract", request.contractNo(), entityId),
+                request.customerName(),
+                request.projectName(),
+                request.signDate(),
+                request.effectiveDate(),
+                request.expireDate(),
+                request.salesName(),
+                request.status(),
+                request.remark(),
+                request.items()
+        );
+    }
+
+    @Override
+    protected SalesContractRequest normalizeUpdateRequest(SalesContract entity, SalesContractRequest request) {
+        return new SalesContractRequest(
+                entity.getContractNo(),
+                request.customerName(),
+                request.projectName(),
+                request.signDate(),
+                request.effectiveDate(),
+                request.expireDate(),
+                request.salesName(),
+                request.status(),
+                request.remark(),
+                request.items()
+        );
+    }
+
+    @Override
     protected SalesContract newEntity() {
         return new SalesContract();
     }
@@ -131,7 +164,12 @@ public class SalesContractService extends AbstractCrudService<SalesContract, Sal
 
     @Override
     protected void apply(SalesContract entity, SalesContractRequest request) {
-        String nextStatus = (request.status() == null || request.status().isBlank()) ? StatusConstants.DRAFT : request.status();
+        String nextStatus = BusinessStatusValidator.normalizeWithDefault(
+                request.status(),
+                StatusConstants.DRAFT,
+                "销售合同状态",
+                StatusConstants.ALLOWED_CONTRACT_STATUS
+        );
         workflowTransitionGuard.assertAuditPermissionForProtectedValue(
                 "sales-contract",
                 entity.getStatus(),

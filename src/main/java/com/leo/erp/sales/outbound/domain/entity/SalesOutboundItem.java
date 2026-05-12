@@ -43,6 +43,9 @@ public class SalesOutboundItem {
     @Column(name = "unit", nullable = false, length = 16)
     private String unit;
 
+    @Column(name = "source_sales_order_item_id")
+    private Long sourceSalesOrderItemId;
+
     @Column(name = "warehouse_name", length = 128)
     private String warehouseName;
 

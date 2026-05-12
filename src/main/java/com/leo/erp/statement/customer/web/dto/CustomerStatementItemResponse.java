@@ -6,6 +6,7 @@ public record CustomerStatementItemResponse(
         Long id,
         Integer lineNo,
         String sourceNo,
+        Long sourceSalesOrderItemId,
         String materialCode,
         String brand,
         String category,

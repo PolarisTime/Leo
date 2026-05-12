@@ -31,6 +31,9 @@ public class CustomerStatementItem {
     @Column(name = "source_no", nullable = false, length = 64)
     private String sourceNo;
 
+    @Column(name = "source_sales_order_item_id")
+    private Long sourceSalesOrderItemId;
+
     @Column(name = "material_code", nullable = false, length = 64)
     private String materialCode;
 

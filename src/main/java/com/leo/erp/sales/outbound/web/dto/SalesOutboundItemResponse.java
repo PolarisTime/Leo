@@ -5,6 +5,8 @@ import java.math.BigDecimal;
 public record SalesOutboundItemResponse(
         Long id,
         Integer lineNo,
+        String sourceNo,
+        Long sourceSalesOrderItemId,
         String materialCode,
         String brand,
         String category,

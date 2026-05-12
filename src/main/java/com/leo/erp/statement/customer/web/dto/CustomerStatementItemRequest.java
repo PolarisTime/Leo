@@ -10,6 +10,7 @@ import java.math.BigDecimal;
 public record CustomerStatementItemRequest(
         Long id,
         @NotBlank String sourceNo,
+        Long sourceSalesOrderItemId,
         @NotBlank String materialCode,
         @NotBlank String brand,
         @NotBlank String category,
@@ -27,6 +28,7 @@ public record CustomerStatementItemRequest(
         BigDecimal amount
 ) {
     public CustomerStatementItemRequest(String sourceNo,
+                                        Long sourceSalesOrderItemId,
                                         String materialCode,
                                         String brand,
                                         String category,
@@ -42,7 +44,7 @@ public record CustomerStatementItemRequest(
                                         BigDecimal weightTon,
                                         BigDecimal unitPrice,
                                         BigDecimal amount) {
-        this(null, sourceNo, materialCode, brand, category, material, spec, length, unit, batchNo, quantity,
+        this(null, sourceNo, sourceSalesOrderItemId, materialCode, brand, category, material, spec, length, unit, batchNo, quantity,
                 quantityUnit, pieceWeightTon, piecesPerBundle, weightTon, unitPrice, amount);
     }
 }

@@ -10,6 +10,7 @@ import java.math.BigDecimal;
 public record SupplierStatementItemRequest(
         Long id,
         @NotBlank String sourceNo,
+        Long sourceInboundItemId,
         @NotBlank String materialCode,
         @NotBlank String brand,
         @NotBlank String category,
@@ -31,6 +32,7 @@ public record SupplierStatementItemRequest(
 ) {
     public SupplierStatementItemRequest(Long id,
                                         String sourceNo,
+                                        Long sourceInboundItemId,
                                         String materialCode,
                                         String brand,
                                         String category,
@@ -46,11 +48,12 @@ public record SupplierStatementItemRequest(
                                         BigDecimal weightTon,
                                         BigDecimal unitPrice,
                                         BigDecimal amount) {
-        this(id, sourceNo, materialCode, brand, category, material, spec, length, unit, batchNo, quantity,
+        this(id, sourceNo, sourceInboundItemId, materialCode, brand, category, material, spec, length, unit, batchNo, quantity,
                 quantityUnit, pieceWeightTon, piecesPerBundle, weightTon, null, null, null, unitPrice, amount);
     }
 
     public SupplierStatementItemRequest(String sourceNo,
+                                        Long sourceInboundItemId,
                                         String materialCode,
                                         String brand,
                                         String category,
@@ -66,7 +69,7 @@ public record SupplierStatementItemRequest(
                                         BigDecimal weightTon,
                                         BigDecimal unitPrice,
                                         BigDecimal amount) {
-        this(null, sourceNo, materialCode, brand, category, material, spec, length, unit, batchNo, quantity,
+        this(null, sourceNo, sourceInboundItemId, materialCode, brand, category, material, spec, length, unit, batchNo, quantity,
                 quantityUnit, pieceWeightTon, piecesPerBundle, weightTon, null, null, null, unitPrice, amount);
     }
 }

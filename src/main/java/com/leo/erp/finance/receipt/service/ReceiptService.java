@@ -5,6 +5,7 @@ import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.service.AbstractCrudService;
+import com.leo.erp.common.support.BusinessStatusValidator;
 import com.leo.erp.common.support.ManagedEntityItemSupport;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
@@ -104,6 +105,40 @@ public class ReceiptService extends AbstractCrudService<Receipt, ReceiptRequest,
     }
 
     @Override
+    protected ReceiptRequest normalizeCreateRequest(ReceiptRequest request, long entityId) {
+        return new ReceiptRequest(
+                resolveCreateBusinessNo("receipt", request.receiptNo(), entityId),
+                request.customerName(),
+                request.projectName(),
+                request.sourceStatementId(),
+                request.receiptDate(),
+                request.payType(),
+                request.amount(),
+                request.status(),
+                request.operatorName(),
+                request.remark(),
+                request.items()
+        );
+    }
+
+    @Override
+    protected ReceiptRequest normalizeUpdateRequest(Receipt entity, ReceiptRequest request) {
+        return new ReceiptRequest(
+                entity.getReceiptNo(),
+                request.customerName(),
+                request.projectName(),
+                request.sourceStatementId(),
+                request.receiptDate(),
+                request.payType(),
+                request.amount(),
+                request.status(),
+                request.operatorName(),
+                request.remark(),
+                request.items()
+        );
+    }
+
+    @Override
     protected Receipt newEntity() {
         return new Receipt();
     }
@@ -159,10 +194,16 @@ public class ReceiptService extends AbstractCrudService<Receipt, ReceiptRequest,
 
     @Override
     protected void apply(Receipt entity, ReceiptRequest request) {
+        String nextStatus = BusinessStatusValidator.normalizeWithDefault(
+                request.status(),
+                StatusConstants.DRAFT,
+                "收款单状态",
+                StatusConstants.ALLOWED_RECEIPT_STATUS
+        );
         workflowTransitionGuard.assertAuditPermissionForProtectedValue(
                 "receipt",
                 entity.getStatus(),
-                request.status(),
+                nextStatus,
                 RECEIPT_STATUS_SETTLED
         );
         captureOriginalAllocationStatementIds(entity);
@@ -172,10 +213,10 @@ public class ReceiptService extends AbstractCrudService<Receipt, ReceiptRequest,
         entity.setReceiptDate(request.receiptDate());
         entity.setPayType(request.payType());
         entity.setAmount(TradeItemCalculator.scaleAmount(request.amount()));
-        entity.setStatus(request.status());
+        entity.setStatus(nextStatus);
         entity.setOperatorName(request.operatorName());
         entity.setRemark(request.remark());
-        applyAllocations(entity, request);
+        applyAllocations(entity, request, nextStatus);
         entity.setSourceStatementId(resolveLegacySourceStatementId(entity.getItems()));
     }
 
@@ -197,7 +238,7 @@ public class ReceiptService extends AbstractCrudService<Receipt, ReceiptRequest,
         }
     }
 
-    private void applyAllocations(Receipt entity, ReceiptRequest request) {
+    private void applyAllocations(Receipt entity, ReceiptRequest request, String nextStatus) {
         List<ReceiptAllocationRequest> allocationRequests = normalizeAllocationRequests(request);
         BigDecimal totalAllocatedAmount = BigDecimal.ZERO;
         Map<Long, CustomerStatement> statementMap = new HashMap<>();
@@ -219,7 +260,15 @@ public class ReceiptService extends AbstractCrudService<Receipt, ReceiptRequest,
                     source.sourceStatementId(),
                     this::requireAccessibleCustomerStatement
             );
-            validateLinkedCustomerStatement(request, entity.getId(), statement, allocatedAmount, requestAllocatedAmountMap, i + 1);
+            validateLinkedCustomerStatement(
+                    request,
+                    nextStatus,
+                    entity.getId(),
+                    statement,
+                    allocatedAmount,
+                    requestAllocatedAmountMap,
+                    i + 1
+            );
 
             ReceiptAllocation item = items.get(i);
             item.setReceipt(entity);
@@ -231,6 +280,10 @@ public class ReceiptService extends AbstractCrudService<Receipt, ReceiptRequest,
 
         if (totalAllocatedAmount.compareTo(TradeItemCalculator.safeBigDecimal(entity.getAmount())) > 0) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "核销金额合计不能超过收款金额");
+        }
+        if (!allocationRequests.isEmpty()
+                && totalAllocatedAmount.compareTo(TradeItemCalculator.safeBigDecimal(entity.getAmount())) != 0) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "收款金额必须等于核销金额合计");
         }
         entity.getItems().sort(java.util.Comparator.comparing(ReceiptAllocation::getLineNo));
     }
@@ -256,6 +309,7 @@ public class ReceiptService extends AbstractCrudService<Receipt, ReceiptRequest,
     }
 
     private void validateLinkedCustomerStatement(ReceiptRequest request,
+                                                 String normalizedStatus,
                                                  Long currentReceiptId,
                                                  CustomerStatement statement,
                                                  BigDecimal allocatedAmount,
@@ -270,7 +324,7 @@ public class ReceiptService extends AbstractCrudService<Receipt, ReceiptRequest,
         if (requestAllocatedAmountMap.containsKey(statement.getId())) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "同一收款单不能重复核销同一客户对账单");
         }
-        if (RECEIPT_STATUS_SETTLED.equals(request.status())) {
+        if (RECEIPT_STATUS_SETTLED.equals(normalizedStatus)) {
             BigDecimal settledAmount = TradeItemCalculator.safeBigDecimal(
                     receiptAllocationRepository.sumAllocatedAmountBySourceStatementIdAndReceiptStatusExcludingReceiptId(
                             statement.getId(),

@@ -31,6 +31,9 @@ public class SupplierStatementItem {
     @Column(name = "source_no", nullable = false, length = 64)
     private String sourceNo;
 
+    @Column(name = "source_inbound_item_id")
+    private Long sourceInboundItemId;
+
     @Column(name = "material_code", nullable = false, length = 64)
     private String materialCode;
 

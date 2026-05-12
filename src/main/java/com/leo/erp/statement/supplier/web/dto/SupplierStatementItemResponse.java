@@ -6,6 +6,7 @@ public record SupplierStatementItemResponse(
         Long id,
         Integer lineNo,
         String sourceNo,
+        Long sourceInboundItemId,
         String materialCode,
         String brand,
         String category,

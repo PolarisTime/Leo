@@ -8,6 +8,7 @@ import com.leo.erp.common.service.AbstractCrudService;
 import com.leo.erp.common.support.ManagedEntityItemSupport;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.TradeItemMaterialSupport;
+import com.leo.erp.common.support.BusinessStatusValidator;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.support.TradeItemCalculator;
 import com.leo.erp.common.support.WarehouseSelectionSupport;
@@ -298,6 +299,32 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
     }
 
     @Override
+    protected PurchaseOrderRequest normalizeCreateRequest(PurchaseOrderRequest request, long entityId) {
+        return new PurchaseOrderRequest(
+                resolveCreateBusinessNo("purchase-order", request.orderNo(), entityId),
+                request.supplierName(),
+                request.orderDate(),
+                request.buyerName(),
+                request.status(),
+                request.remark(),
+                request.items()
+        );
+    }
+
+    @Override
+    protected PurchaseOrderRequest normalizeUpdateRequest(PurchaseOrder entity, PurchaseOrderRequest request) {
+        return new PurchaseOrderRequest(
+                entity.getOrderNo(),
+                request.supplierName(),
+                request.orderDate(),
+                request.buyerName(),
+                request.status(),
+                request.remark(),
+                request.items()
+        );
+    }
+
+    @Override
     protected PurchaseOrder newEntity() {
         return new PurchaseOrder();
     }
@@ -339,7 +366,12 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
 
     @Override
     protected void apply(PurchaseOrder purchaseOrder, PurchaseOrderRequest request) {
-        String nextStatus = (request.status() == null || request.status().isBlank()) ? StatusConstants.DRAFT : request.status();
+        String nextStatus = BusinessStatusValidator.normalizeWithDefault(
+                request.status(),
+                StatusConstants.DRAFT,
+                "采购订单状态",
+                StatusConstants.ALLOWED_PURCHASE_ORDER_STATUS
+        );
         workflowTransitionGuard.assertAuditPermissionForProtectedValue(
                 "purchase-order",
                 purchaseOrder.getStatus(),

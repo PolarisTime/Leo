@@ -4,6 +4,7 @@ import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.service.AbstractCrudService;
+import com.leo.erp.common.support.BusinessStatusValidator;
 import com.leo.erp.common.support.ManagedEntityItemSupport;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
@@ -100,6 +101,36 @@ public class PurchaseContractService extends AbstractCrudService<PurchaseContrac
     }
 
     @Override
+    protected PurchaseContractRequest normalizeCreateRequest(PurchaseContractRequest request, long entityId) {
+        return new PurchaseContractRequest(
+                resolveCreateBusinessNo("purchase-contract", request.contractNo(), entityId),
+                request.supplierName(),
+                request.signDate(),
+                request.effectiveDate(),
+                request.expireDate(),
+                request.buyerName(),
+                request.status(),
+                request.remark(),
+                request.items()
+        );
+    }
+
+    @Override
+    protected PurchaseContractRequest normalizeUpdateRequest(PurchaseContract entity, PurchaseContractRequest request) {
+        return new PurchaseContractRequest(
+                entity.getContractNo(),
+                request.supplierName(),
+                request.signDate(),
+                request.effectiveDate(),
+                request.expireDate(),
+                request.buyerName(),
+                request.status(),
+                request.remark(),
+                request.items()
+        );
+    }
+
+    @Override
     protected PurchaseContract newEntity() {
         return new PurchaseContract();
     }
@@ -131,7 +162,12 @@ public class PurchaseContractService extends AbstractCrudService<PurchaseContrac
 
     @Override
     protected void apply(PurchaseContract entity, PurchaseContractRequest request) {
-        String nextStatus = (request.status() == null || request.status().isBlank()) ? StatusConstants.DRAFT : request.status();
+        String nextStatus = BusinessStatusValidator.normalizeWithDefault(
+                request.status(),
+                StatusConstants.DRAFT,
+                "采购合同状态",
+                StatusConstants.ALLOWED_CONTRACT_STATUS
+        );
         workflowTransitionGuard.assertAuditPermissionForProtectedValue(
                 "purchase-contract",
                 entity.getStatus(),

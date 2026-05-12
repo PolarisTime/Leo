@@ -5,8 +5,10 @@ import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.service.AbstractCrudService;
+import com.leo.erp.common.support.BusinessStatusValidator;
 import com.leo.erp.common.support.InvoiceAllocationSupport;
 import com.leo.erp.common.support.InvoiceAllocationSupport.AllocationProgress;
+import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.support.ManagedEntityItemSupport;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.TradeItemCalculator;
@@ -125,6 +127,44 @@ public class InvoiceReceiptService extends AbstractCrudService<InvoiceReceipt, I
     }
 
     @Override
+    protected InvoiceReceiptRequest normalizeCreateRequest(InvoiceReceiptRequest request, long entityId) {
+        return new InvoiceReceiptRequest(
+                resolveCreateBusinessNo("invoice-receipt", request.receiveNo(), entityId),
+                request.invoiceNo(),
+                request.sourcePurchaseOrderNos(),
+                request.supplierName(),
+                request.invoiceTitle(),
+                request.invoiceDate(),
+                request.invoiceType(),
+                request.amount(),
+                request.taxAmount(),
+                request.status(),
+                request.operatorName(),
+                request.remark(),
+                request.items()
+        );
+    }
+
+    @Override
+    protected InvoiceReceiptRequest normalizeUpdateRequest(InvoiceReceipt entity, InvoiceReceiptRequest request) {
+        return new InvoiceReceiptRequest(
+                entity.getReceiveNo(),
+                request.invoiceNo(),
+                request.sourcePurchaseOrderNos(),
+                request.supplierName(),
+                request.invoiceTitle(),
+                request.invoiceDate(),
+                request.invoiceType(),
+                request.amount(),
+                request.taxAmount(),
+                request.status(),
+                request.operatorName(),
+                request.remark(),
+                request.items()
+        );
+    }
+
+    @Override
     protected InvoiceReceipt newEntity() {
         return new InvoiceReceipt();
     }
@@ -156,11 +196,17 @@ public class InvoiceReceiptService extends AbstractCrudService<InvoiceReceipt, I
 
     @Override
     protected void apply(InvoiceReceipt entity, InvoiceReceiptRequest request) {
+        String nextStatus = BusinessStatusValidator.normalizeWithDefault(
+                request.status(),
+                StatusConstants.DRAFT,
+                "收票单状态",
+                StatusConstants.ALLOWED_INVOICE_RECEIPT_STATUS
+        );
         workflowTransitionGuard.assertAuditPermissionForProtectedValue(
                 "invoice-receipt",
                 entity.getStatus(),
-                request.status(),
-                "已收票"
+                nextStatus,
+                StatusConstants.INVOICE_RECEIVED
         );
         entity.setReceiveNo(request.receiveNo());
         entity.setInvoiceNo(request.invoiceNo());
@@ -170,7 +216,7 @@ public class InvoiceReceiptService extends AbstractCrudService<InvoiceReceipt, I
                 : request.invoiceTitle().trim());
         entity.setInvoiceDate(request.invoiceDate());
         entity.setInvoiceType(request.invoiceType());
-        entity.setStatus(request.status());
+        entity.setStatus(nextStatus);
         entity.setOperatorName(request.operatorName());
         entity.setRemark(request.remark());
 
@@ -195,7 +241,7 @@ public class InvoiceReceiptService extends AbstractCrudService<InvoiceReceipt, I
         BigDecimal amount = BigDecimal.ZERO;
         for (int i = 0; i < request.items().size(); i++) {
             InvoiceReceiptItemRequest source = request.items().get(i);
-            ResolvedInvoiceReceiptItem resolvedItem = resolveItem(source);
+            ResolvedInvoiceReceiptItem resolvedItem = resolveItem(source, sourcePurchaseOrderItemMap, i + 1);
             validateSourcePurchaseOrderAllocation(
                     source,
                     i + 1,
@@ -207,26 +253,26 @@ public class InvoiceReceiptService extends AbstractCrudService<InvoiceReceipt, I
             InvoiceReceiptItem item = items.get(i);
             item.setInvoiceReceipt(entity);
             item.setLineNo(i + 1);
-            item.setSourceNo(source.sourceNo());
+            item.setSourceNo(resolvedItem.sourceNo());
             item.setSourcePurchaseOrderItemId(source.sourcePurchaseOrderItemId());
-            item.setMaterialCode(source.materialCode());
-            item.setBrand(source.brand());
-            item.setCategory(source.category());
-            item.setMaterial(source.material());
-            item.setSpec(source.spec());
-            item.setLength(source.length());
-            item.setUnit(source.unit());
-            item.setWarehouseName(source.warehouseName());
-            item.setBatchNo(source.batchNo());
+            item.setMaterialCode(resolvedItem.materialCode());
+            item.setBrand(resolvedItem.brand());
+            item.setCategory(resolvedItem.category());
+            item.setMaterial(resolvedItem.material());
+            item.setSpec(resolvedItem.spec());
+            item.setLength(resolvedItem.length());
+            item.setUnit(resolvedItem.unit());
+            item.setWarehouseName(resolvedItem.warehouseName());
+            item.setBatchNo(resolvedItem.batchNo());
             item.setQuantity(source.quantity());
-            item.setQuantityUnit(TradeItemCalculator.normalizeQuantityUnit(source.quantityUnit()));
-            item.setPieceWeightTon(source.pieceWeightTon());
-            item.setPiecesPerBundle(source.piecesPerBundle());
+            item.setQuantityUnit(resolvedItem.quantityUnit());
+            item.setPieceWeightTon(resolvedItem.pieceWeightTon());
+            item.setPiecesPerBundle(resolvedItem.piecesPerBundle());
             item.setWeightTon(resolvedItem.weightTon());
-            item.setUnitPrice(source.unitPrice());
+            item.setUnitPrice(resolvedItem.unitPrice());
             BigDecimal lineAmount = resolvedItem.amount();
             item.setAmount(lineAmount);
-            sourcePurchaseOrderNos.add(source.sourceNo());
+            sourcePurchaseOrderNos.add(resolvedItem.sourceNo());
             amount = amount.add(lineAmount);
         }
         entity.getItems().sort(java.util.Comparator.comparing(InvoiceReceiptItem::getLineNo));
@@ -310,10 +356,39 @@ public class InvoiceReceiptService extends AbstractCrudService<InvoiceReceipt, I
         );
     }
 
-    private ResolvedInvoiceReceiptItem resolveItem(InvoiceReceiptItemRequest source) {
-        BigDecimal weightTon = InvoiceAllocationSupport.resolveWeightTon(source.quantity(), source.pieceWeightTon(), source.weightTon());
-        BigDecimal amount = TradeItemCalculator.calculateAmount(weightTon, source.unitPrice());
-        return new ResolvedInvoiceReceiptItem(weightTon, amount);
+    private ResolvedInvoiceReceiptItem resolveItem(InvoiceReceiptItemRequest source,
+                                                   Map<Long, PurchaseOrderItem> sourcePurchaseOrderItemMap,
+                                                   int lineNo) {
+        Long sourcePurchaseOrderItemId = source.sourcePurchaseOrderItemId();
+        if (sourcePurchaseOrderItemId == null) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行来源采购订单明细不能为空");
+        }
+        PurchaseOrderItem sourcePurchaseOrderItem = sourcePurchaseOrderItemMap.get(sourcePurchaseOrderItemId);
+        if (sourcePurchaseOrderItem == null) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行来源采购订单明细不存在");
+        }
+        BigDecimal pieceWeightTon = TradeItemCalculator.scaleWeightTon(sourcePurchaseOrderItem.getPieceWeightTon());
+        BigDecimal unitPrice = TradeItemCalculator.scaleAmount(sourcePurchaseOrderItem.getUnitPrice());
+        BigDecimal weightTon = TradeItemCalculator.calculateWeightTon(source.quantity(), pieceWeightTon);
+        BigDecimal amount = TradeItemCalculator.calculateAmount(weightTon, unitPrice);
+        return new ResolvedInvoiceReceiptItem(
+                sourcePurchaseOrderItem.getPurchaseOrder().getOrderNo(),
+                sourcePurchaseOrderItem.getMaterialCode(),
+                sourcePurchaseOrderItem.getBrand(),
+                sourcePurchaseOrderItem.getCategory(),
+                sourcePurchaseOrderItem.getMaterial(),
+                sourcePurchaseOrderItem.getSpec(),
+                sourcePurchaseOrderItem.getLength(),
+                sourcePurchaseOrderItem.getUnit(),
+                sourcePurchaseOrderItem.getWarehouseName(),
+                sourcePurchaseOrderItem.getBatchNo(),
+                TradeItemCalculator.normalizeQuantityUnit(source.quantityUnit()),
+                pieceWeightTon,
+                sourcePurchaseOrderItem.getPiecesPerBundle(),
+                unitPrice,
+                weightTon,
+                amount
+        );
     }
 
     private InvoiceReceiptItemResponse toItemResponse(InvoiceReceiptItem item) {
@@ -342,6 +417,20 @@ public class InvoiceReceiptService extends AbstractCrudService<InvoiceReceipt, I
     }
 
     private record ResolvedInvoiceReceiptItem(
+            String sourceNo,
+            String materialCode,
+            String brand,
+            String category,
+            String material,
+            String spec,
+            String length,
+            String unit,
+            String warehouseName,
+            String batchNo,
+            String quantityUnit,
+            BigDecimal pieceWeightTon,
+            Integer piecesPerBundle,
+            BigDecimal unitPrice,
             BigDecimal weightTon,
             BigDecimal amount
     ) {

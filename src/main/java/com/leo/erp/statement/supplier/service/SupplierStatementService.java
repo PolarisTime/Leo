@@ -5,12 +5,15 @@ import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.service.AbstractCrudService;
+import com.leo.erp.common.support.BusinessStatusValidator;
 import com.leo.erp.common.support.ManagedEntityItemSupport;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.support.TradeItemCalculator;
 import com.leo.erp.purchase.inbound.domain.entity.PurchaseInbound;
+import com.leo.erp.purchase.inbound.domain.entity.PurchaseInboundItem;
 import com.leo.erp.purchase.inbound.repository.PurchaseInboundRepository;
+import com.leo.erp.purchase.inbound.service.PurchaseInboundItemQueryService;
 import com.leo.erp.security.permission.DataScopeContext;
 import com.leo.erp.security.permission.WorkflowTransitionGuard;
 import com.leo.erp.statement.supplier.domain.entity.SupplierStatement;
@@ -33,6 +36,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
@@ -49,6 +53,7 @@ public class SupplierStatementService extends AbstractCrudService<SupplierStatem
     private final SupplierStatementRepository repository;
     private final SupplierStatementMapper supplierStatementMapper;
     private final PurchaseInboundRepository purchaseInboundRepository;
+    private final PurchaseInboundItemQueryService purchaseInboundItemQueryService;
     private final StatementSettlementSyncService statementSettlementSyncService;
     private final WorkflowTransitionGuard workflowTransitionGuard;
 
@@ -56,12 +61,14 @@ public class SupplierStatementService extends AbstractCrudService<SupplierStatem
                                     SnowflakeIdGenerator idGenerator,
                                     SupplierStatementMapper supplierStatementMapper,
                                     PurchaseInboundRepository purchaseInboundRepository,
+                                    PurchaseInboundItemQueryService purchaseInboundItemQueryService,
                                     StatementSettlementSyncService statementSettlementSyncService,
                                     WorkflowTransitionGuard workflowTransitionGuard) {
         super(idGenerator);
         this.repository = repository;
         this.supplierStatementMapper = supplierStatementMapper;
         this.purchaseInboundRepository = purchaseInboundRepository;
+        this.purchaseInboundItemQueryService = purchaseInboundItemQueryService;
         this.statementSettlementSyncService = statementSettlementSyncService;
         this.workflowTransitionGuard = workflowTransitionGuard;
     }
@@ -148,6 +155,40 @@ public class SupplierStatementService extends AbstractCrudService<SupplierStatem
     }
 
     @Override
+    protected SupplierStatementRequest normalizeCreateRequest(SupplierStatementRequest request, long entityId) {
+        return new SupplierStatementRequest(
+                resolveCreateBusinessNo("supplier-statement", request.statementNo(), entityId),
+                request.sourceInboundNos(),
+                request.supplierName(),
+                request.startDate(),
+                request.endDate(),
+                request.purchaseAmount(),
+                request.paymentAmount(),
+                request.closingAmount(),
+                request.status(),
+                request.remark(),
+                request.items()
+        );
+    }
+
+    @Override
+    protected SupplierStatementRequest normalizeUpdateRequest(SupplierStatement entity, SupplierStatementRequest request) {
+        return new SupplierStatementRequest(
+                entity.getStatementNo(),
+                request.sourceInboundNos(),
+                request.supplierName(),
+                request.startDate(),
+                request.endDate(),
+                request.purchaseAmount(),
+                request.paymentAmount(),
+                request.closingAmount(),
+                request.status(),
+                request.remark(),
+                request.items()
+        );
+    }
+
+    @Override
     protected SupplierStatement newEntity() {
         return new SupplierStatement();
     }
@@ -179,12 +220,17 @@ public class SupplierStatementService extends AbstractCrudService<SupplierStatem
 
     @Override
     protected void apply(SupplierStatement entity, SupplierStatementRequest request) {
-        String nextStatus = (request.status() == null || request.status().isBlank()) ? "待确认" : request.status();
+        String nextStatus = BusinessStatusValidator.normalizeWithDefault(
+                request.status(),
+                StatusConstants.PENDING_CONFIRM,
+                "供应商对账单状态",
+                StatusConstants.ALLOWED_STATEMENT_STATUS
+        );
         workflowTransitionGuard.assertAuditPermissionForProtectedValue(
                 "supplier-statement",
                 entity.getStatus(),
                 nextStatus,
-                "已确认"
+                StatusConstants.CONFIRMED
         );
         entity.setStatementNo(request.statementNo());
         entity.setSupplierName(request.supplierName());
@@ -194,6 +240,7 @@ public class SupplierStatementService extends AbstractCrudService<SupplierStatem
         entity.setRemark(request.remark());
 
         BigDecimal purchaseAmount = BigDecimal.ZERO;
+        Map<Long, PurchaseInboundItem> sourceInboundItemMap = loadSourceInboundItemMap(request.items());
         LinkedHashSet<String> sourceInboundNos = new LinkedHashSet<>();
         List<SupplierStatementItem> items = ManagedEntityItemSupport.syncById(
                 entity.getItems(),
@@ -206,40 +253,34 @@ public class SupplierStatementService extends AbstractCrudService<SupplierStatem
         );
         for (int i = 0; i < request.items().size(); i++) {
             SupplierStatementItemRequest source = request.items().get(i);
+            PurchaseInboundItem sourceInboundItem = resolveSourceInboundItem(source, sourceInboundItemMap, i + 1);
             SupplierStatementItem item = items.get(i);
             item.setSupplierStatement(entity);
             item.setLineNo(i + 1);
-            item.setSourceNo(source.sourceNo());
-            item.setMaterialCode(source.materialCode());
-            item.setBrand(source.brand());
-            item.setCategory(source.category());
-            item.setMaterial(source.material());
-            item.setSpec(source.spec());
-            item.setLength(source.length());
-            item.setUnit(source.unit());
-            item.setBatchNo(source.batchNo());
-            item.setQuantity(source.quantity());
-            item.setQuantityUnit(TradeItemCalculator.normalizeQuantityUnit(source.quantityUnit()));
-            item.setPieceWeightTon(source.pieceWeightTon());
-            item.setPiecesPerBundle(source.piecesPerBundle());
-            BigDecimal theoreticalWeightTon = TradeItemCalculator.calculateWeightTon(source.quantity(), source.pieceWeightTon());
-            BigDecimal weightTon = source.weightTon() == null
-                    ? theoreticalWeightTon
-                    : TradeItemCalculator.scaleWeightTon(source.weightTon());
-            item.setWeightTon(weightTon);
-            item.setWeighWeightTon(source.weighWeightTon() == null ? null : TradeItemCalculator.scaleWeightTon(source.weighWeightTon()));
-            BigDecimal weightAdjustmentTon = source.weightAdjustmentTon() == null
-                    ? TradeItemCalculator.scaleWeightTon(weightTon.subtract(theoreticalWeightTon))
-                    : TradeItemCalculator.scaleWeightTon(source.weightAdjustmentTon());
-            item.setWeightAdjustmentTon(weightAdjustmentTon);
-            BigDecimal weightAdjustmentAmount = source.weightAdjustmentAmount() == null
-                    ? TradeItemCalculator.calculateAmount(weightAdjustmentTon, source.unitPrice())
-                    : TradeItemCalculator.scaleAmount(source.weightAdjustmentAmount());
-            item.setWeightAdjustmentAmount(weightAdjustmentAmount);
-            item.setUnitPrice(source.unitPrice());
-            BigDecimal amount = TradeItemCalculator.calculateAmount(item.getWeightTon(), source.unitPrice());
+            item.setSourceNo(sourceInboundItem.getPurchaseInbound().getInboundNo());
+            item.setSourceInboundItemId(sourceInboundItem.getId());
+            item.setMaterialCode(sourceInboundItem.getMaterialCode());
+            item.setBrand(sourceInboundItem.getBrand());
+            item.setCategory(sourceInboundItem.getCategory());
+            item.setMaterial(sourceInboundItem.getMaterial());
+            item.setSpec(sourceInboundItem.getSpec());
+            item.setLength(sourceInboundItem.getLength());
+            item.setUnit(sourceInboundItem.getUnit());
+            item.setBatchNo(sourceInboundItem.getBatchNo());
+            item.setQuantity(sourceInboundItem.getQuantity());
+            item.setQuantityUnit(TradeItemCalculator.normalizeQuantityUnit(sourceInboundItem.getQuantityUnit()));
+            item.setPieceWeightTon(TradeItemCalculator.scaleWeightTon(sourceInboundItem.getPieceWeightTon()));
+            item.setPiecesPerBundle(sourceInboundItem.getPiecesPerBundle());
+            item.setWeightTon(TradeItemCalculator.scaleWeightTon(sourceInboundItem.getWeightTon()));
+            item.setWeighWeightTon(sourceInboundItem.getWeighWeightTon() == null
+                    ? null
+                    : TradeItemCalculator.scaleWeightTon(sourceInboundItem.getWeighWeightTon()));
+            item.setWeightAdjustmentTon(TradeItemCalculator.scaleWeightTon(sourceInboundItem.getWeightAdjustmentTon()));
+            item.setWeightAdjustmentAmount(TradeItemCalculator.scaleAmount(sourceInboundItem.getWeightAdjustmentAmount()));
+            item.setUnitPrice(TradeItemCalculator.scaleAmount(sourceInboundItem.getUnitPrice()));
+            BigDecimal amount = TradeItemCalculator.scaleAmount(sourceInboundItem.getAmount());
             item.setAmount(amount);
-            sourceInboundNos.add(source.sourceNo());
+            sourceInboundNos.add(sourceInboundItem.getPurchaseInbound().getInboundNo());
             purchaseAmount = purchaseAmount.add(amount);
         }
         entity.getItems().sort(java.util.Comparator.comparing(SupplierStatementItem::getLineNo));
@@ -273,6 +314,7 @@ public class SupplierStatementService extends AbstractCrudService<SupplierStatem
                 item.getId(),
                 item.getLineNo(),
                 item.getSourceNo(),
+                item.getSourceInboundItemId(),
                 item.getMaterialCode(),
                 item.getBrand(),
                 item.getCategory(),
@@ -292,6 +334,54 @@ public class SupplierStatementService extends AbstractCrudService<SupplierStatem
                 item.getUnitPrice(),
                 item.getAmount()
         );
+    }
+
+    private Map<Long, PurchaseInboundItem> loadSourceInboundItemMap(List<SupplierStatementItemRequest> items) {
+        List<Long> sourceInboundItemIds = items.stream()
+                .map(SupplierStatementItemRequest::sourceInboundItemId)
+                .filter(id -> id != null)
+                .distinct()
+                .toList();
+        if (sourceInboundItemIds.isEmpty()) {
+            return Map.of();
+        }
+        return purchaseInboundItemQueryService.findAllActiveByIdIn(sourceInboundItemIds).stream()
+                .collect(java.util.stream.Collectors.toMap(PurchaseInboundItem::getId, item -> item));
+    }
+
+    private PurchaseInboundItem resolveSourceInboundItem(SupplierStatementItemRequest source,
+                                                         Map<Long, PurchaseInboundItem> sourceInboundItemMap,
+                                                         int lineNo) {
+        Long sourceInboundItemId = source.sourceInboundItemId();
+        if (sourceInboundItemId != null) {
+            PurchaseInboundItem sourceInboundItem = sourceInboundItemMap.get(sourceInboundItemId);
+            if (sourceInboundItem == null) {
+                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行来源采购入库明细不存在");
+            }
+            return sourceInboundItem;
+        }
+        String sourceNo = source.sourceNo() == null ? "" : source.sourceNo().trim();
+        if (sourceNo.isEmpty()) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行来源采购入库明细不能为空");
+        }
+        return purchaseInboundRepository.findAllByDeletedFlagFalse().stream()
+                .filter(inbound -> sourceNo.equals(inbound.getInboundNo()))
+                .flatMap(inbound -> inbound.getItems().stream())
+                .filter(item -> matchesLegacySupplierItem(source, item))
+                .findFirst()
+                .orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行来源采购入库明细不存在"));
+    }
+
+    private boolean matchesLegacySupplierItem(SupplierStatementItemRequest source, PurchaseInboundItem item) {
+        return item.getMaterialCode().equals(source.materialCode())
+                && item.getBrand().equals(source.brand())
+                && item.getCategory().equals(source.category())
+                && item.getMaterial().equals(source.material())
+                && item.getSpec().equals(source.spec())
+                && java.util.Objects.equals(item.getLength(), source.length())
+                && item.getQuantity().equals(source.quantity())
+                && TradeItemCalculator.normalizeQuantityUnit(item.getQuantityUnit())
+                .equals(TradeItemCalculator.normalizeQuantityUnit(source.quantityUnit()));
     }
 
     private Specification<PurchaseInbound> excludeDraftStatus() {

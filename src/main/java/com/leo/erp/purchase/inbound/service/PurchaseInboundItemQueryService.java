@@ -50,6 +50,20 @@ public class PurchaseInboundItemQueryService {
     }
 
     @Transactional(readOnly = true)
+    public List<PurchaseInboundItem> findAllActiveBySourcePurchaseOrderItemIds(Collection<Long> sourcePurchaseOrderItemIds) {
+        if (sourcePurchaseOrderItemIds == null || sourcePurchaseOrderItemIds.isEmpty()) {
+            return List.of();
+        }
+        List<PurchaseInboundItem> items = repository.findAllActiveBySourcePurchaseOrderItemIds(sourcePurchaseOrderItemIds);
+        for (PurchaseInboundItem item : items) {
+            if (item.getPurchaseInbound() != null) {
+                accessGuard.assertCurrentUserCanAccess(PARENT_MODULE_KEY, "read", item.getPurchaseInbound());
+            }
+        }
+        return items;
+    }
+
+    @Transactional(readOnly = true)
     public Map<Long, Long> summarizeAllocatedQuantityBySourcePurchaseOrderItemIds(
             Collection<Long> sourcePurchaseOrderItemIds) {
         if (sourcePurchaseOrderItemIds == null || sourcePurchaseOrderItemIds.isEmpty()) {

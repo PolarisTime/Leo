@@ -5,12 +5,15 @@ import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.service.AbstractCrudService;
+import com.leo.erp.common.support.BusinessStatusValidator;
 import com.leo.erp.common.support.ManagedEntityItemSupport;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.support.TradeItemCalculator;
 import com.leo.erp.sales.order.domain.entity.SalesOrder;
+import com.leo.erp.sales.order.domain.entity.SalesOrderItem;
 import com.leo.erp.sales.order.repository.SalesOrderRepository;
+import com.leo.erp.sales.order.service.SalesOrderItemQueryService;
 import com.leo.erp.security.permission.DataScopeContext;
 import com.leo.erp.security.permission.WorkflowTransitionGuard;
 import com.leo.erp.statement.customer.domain.entity.CustomerStatement;
@@ -33,6 +36,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
@@ -51,6 +55,7 @@ public class CustomerStatementService extends AbstractCrudService<CustomerStatem
     private final CustomerStatementRepository repository;
     private final CustomerStatementMapper customerStatementMapper;
     private final SalesOrderRepository salesOrderRepository;
+    private final SalesOrderItemQueryService salesOrderItemQueryService;
     private final StatementSettlementSyncService statementSettlementSyncService;
     private final WorkflowTransitionGuard workflowTransitionGuard;
 
@@ -58,12 +63,14 @@ public class CustomerStatementService extends AbstractCrudService<CustomerStatem
                                     SnowflakeIdGenerator idGenerator,
                                     CustomerStatementMapper customerStatementMapper,
                                     SalesOrderRepository salesOrderRepository,
+                                    SalesOrderItemQueryService salesOrderItemQueryService,
                                     StatementSettlementSyncService statementSettlementSyncService,
                                     WorkflowTransitionGuard workflowTransitionGuard) {
         super(idGenerator);
         this.repository = repository;
         this.customerStatementMapper = customerStatementMapper;
         this.salesOrderRepository = salesOrderRepository;
+        this.salesOrderItemQueryService = salesOrderItemQueryService;
         this.statementSettlementSyncService = statementSettlementSyncService;
         this.workflowTransitionGuard = workflowTransitionGuard;
     }
@@ -155,6 +162,42 @@ public class CustomerStatementService extends AbstractCrudService<CustomerStatem
     }
 
     @Override
+    protected CustomerStatementRequest normalizeCreateRequest(CustomerStatementRequest request, long entityId) {
+        return new CustomerStatementRequest(
+                resolveCreateBusinessNo("customer-statement", request.statementNo(), entityId),
+                request.sourceOrderNos(),
+                request.customerName(),
+                request.projectName(),
+                request.startDate(),
+                request.endDate(),
+                request.salesAmount(),
+                request.receiptAmount(),
+                request.closingAmount(),
+                request.status(),
+                request.remark(),
+                request.items()
+        );
+    }
+
+    @Override
+    protected CustomerStatementRequest normalizeUpdateRequest(CustomerStatement entity, CustomerStatementRequest request) {
+        return new CustomerStatementRequest(
+                entity.getStatementNo(),
+                request.sourceOrderNos(),
+                request.customerName(),
+                request.projectName(),
+                request.startDate(),
+                request.endDate(),
+                request.salesAmount(),
+                request.receiptAmount(),
+                request.closingAmount(),
+                request.status(),
+                request.remark(),
+                request.items()
+        );
+    }
+
+    @Override
     protected CustomerStatement newEntity() {
         return new CustomerStatement();
     }
@@ -186,12 +229,17 @@ public class CustomerStatementService extends AbstractCrudService<CustomerStatem
 
     @Override
     protected void apply(CustomerStatement entity, CustomerStatementRequest request) {
-        String nextStatus = (request.status() == null || request.status().isBlank()) ? "待确认" : request.status();
+        String nextStatus = BusinessStatusValidator.normalizeWithDefault(
+                request.status(),
+                StatusConstants.PENDING_CONFIRM,
+                "客户对账单状态",
+                StatusConstants.ALLOWED_STATEMENT_STATUS
+        );
         workflowTransitionGuard.assertAuditPermissionForProtectedValue(
                 "customer-statement",
                 entity.getStatus(),
                 nextStatus,
-                "已确认"
+                StatusConstants.CONFIRMED
         );
         entity.setStatementNo(request.statementNo());
         entity.setCustomerName(request.customerName());
@@ -202,6 +250,7 @@ public class CustomerStatementService extends AbstractCrudService<CustomerStatem
         entity.setRemark(request.remark());
 
         BigDecimal salesAmount = BigDecimal.ZERO;
+        Map<Long, SalesOrderItem> sourceSalesOrderItemMap = loadSourceSalesOrderItemMap(request.items());
         LinkedHashSet<String> sourceOrderNos = new LinkedHashSet<>();
         List<CustomerStatementItem> items = ManagedEntityItemSupport.syncById(
                 entity.getItems(),
@@ -214,27 +263,29 @@ public class CustomerStatementService extends AbstractCrudService<CustomerStatem
         );
         for (int i = 0; i < request.items().size(); i++) {
             CustomerStatementItemRequest source = request.items().get(i);
+            SalesOrderItem sourceSalesOrderItem = resolveSourceSalesOrderItem(source, sourceSalesOrderItemMap, i + 1);
             CustomerStatementItem item = items.get(i);
             item.setCustomerStatement(entity);
             item.setLineNo(i + 1);
-            item.setSourceNo(source.sourceNo());
-            item.setMaterialCode(source.materialCode());
-            item.setBrand(source.brand());
-            item.setCategory(source.category());
-            item.setMaterial(source.material());
-            item.setSpec(source.spec());
-            item.setLength(source.length());
-            item.setUnit(source.unit());
-            item.setBatchNo(source.batchNo());
-            item.setQuantity(source.quantity());
-            item.setQuantityUnit(TradeItemCalculator.normalizeQuantityUnit(source.quantityUnit()));
-            item.setPieceWeightTon(source.pieceWeightTon());
-            item.setPiecesPerBundle(source.piecesPerBundle());
-            item.setWeightTon(TradeItemCalculator.calculateWeightTon(source.quantity(), source.pieceWeightTon()));
-            item.setUnitPrice(source.unitPrice());
-            BigDecimal amount = TradeItemCalculator.calculateAmount(item.getWeightTon(), source.unitPrice());
+            item.setSourceNo(sourceSalesOrderItem.getSalesOrder().getOrderNo());
+            item.setSourceSalesOrderItemId(sourceSalesOrderItem.getId());
+            item.setMaterialCode(sourceSalesOrderItem.getMaterialCode());
+            item.setBrand(sourceSalesOrderItem.getBrand());
+            item.setCategory(sourceSalesOrderItem.getCategory());
+            item.setMaterial(sourceSalesOrderItem.getMaterial());
+            item.setSpec(sourceSalesOrderItem.getSpec());
+            item.setLength(sourceSalesOrderItem.getLength());
+            item.setUnit(sourceSalesOrderItem.getUnit());
+            item.setBatchNo(sourceSalesOrderItem.getBatchNo());
+            item.setQuantity(sourceSalesOrderItem.getQuantity());
+            item.setQuantityUnit(TradeItemCalculator.normalizeQuantityUnit(sourceSalesOrderItem.getQuantityUnit()));
+            item.setPieceWeightTon(TradeItemCalculator.scaleWeightTon(sourceSalesOrderItem.getPieceWeightTon()));
+            item.setPiecesPerBundle(sourceSalesOrderItem.getPiecesPerBundle());
+            item.setWeightTon(TradeItemCalculator.scaleWeightTon(sourceSalesOrderItem.getWeightTon()));
+            item.setUnitPrice(TradeItemCalculator.scaleAmount(sourceSalesOrderItem.getUnitPrice()));
+            BigDecimal amount = TradeItemCalculator.scaleAmount(sourceSalesOrderItem.getAmount());
             item.setAmount(amount);
-            sourceOrderNos.add(source.sourceNo());
+            sourceOrderNos.add(sourceSalesOrderItem.getSalesOrder().getOrderNo());
             salesAmount = salesAmount.add(amount);
         }
         entity.getItems().sort(java.util.Comparator.comparing(CustomerStatementItem::getLineNo));
@@ -268,6 +319,7 @@ public class CustomerStatementService extends AbstractCrudService<CustomerStatem
                 item.getId(),
                 item.getLineNo(),
                 item.getSourceNo(),
+                item.getSourceSalesOrderItemId(),
                 item.getMaterialCode(),
                 item.getBrand(),
                 item.getCategory(),
@@ -284,6 +336,53 @@ public class CustomerStatementService extends AbstractCrudService<CustomerStatem
                 item.getUnitPrice(),
                 item.getAmount()
         );
+    }
+
+    private Map<Long, SalesOrderItem> loadSourceSalesOrderItemMap(List<CustomerStatementItemRequest> items) {
+        List<Long> sourceSalesOrderItemIds = items.stream()
+                .map(CustomerStatementItemRequest::sourceSalesOrderItemId)
+                .filter(id -> id != null)
+                .distinct()
+                .toList();
+        if (sourceSalesOrderItemIds.isEmpty()) {
+            return Map.of();
+        }
+        return salesOrderItemQueryService.findActiveByIdIn(sourceSalesOrderItemIds).stream()
+                .collect(java.util.stream.Collectors.toMap(SalesOrderItem::getId, item -> item));
+    }
+
+    private SalesOrderItem resolveSourceSalesOrderItem(CustomerStatementItemRequest source,
+                                                       Map<Long, SalesOrderItem> sourceSalesOrderItemMap,
+                                                       int lineNo) {
+        Long sourceSalesOrderItemId = source.sourceSalesOrderItemId();
+        if (sourceSalesOrderItemId != null) {
+            SalesOrderItem sourceSalesOrderItem = sourceSalesOrderItemMap.get(sourceSalesOrderItemId);
+            if (sourceSalesOrderItem == null) {
+                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行来源销售订单明细不存在");
+            }
+            return sourceSalesOrderItem;
+        }
+        String sourceNo = source.sourceNo() == null ? "" : source.sourceNo().trim();
+        if (sourceNo.isEmpty()) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行来源销售订单明细不能为空");
+        }
+        return salesOrderRepository.findByOrderNoInAndDeletedFlagFalse(List.of(sourceNo)).stream()
+                .flatMap(order -> order.getItems().stream())
+                .filter(item -> matchesLegacyCustomerItem(source, item))
+                .findFirst()
+                .orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行来源销售订单明细不存在"));
+    }
+
+    private boolean matchesLegacyCustomerItem(CustomerStatementItemRequest source, SalesOrderItem item) {
+        return item.getMaterialCode().equals(source.materialCode())
+                && item.getBrand().equals(source.brand())
+                && item.getCategory().equals(source.category())
+                && item.getMaterial().equals(source.material())
+                && item.getSpec().equals(source.spec())
+                && java.util.Objects.equals(item.getLength(), source.length())
+                && item.getQuantity().equals(source.quantity())
+                && TradeItemCalculator.normalizeQuantityUnit(item.getQuantityUnit())
+                .equals(TradeItemCalculator.normalizeQuantityUnit(source.quantityUnit()));
     }
 
     private CustomerStatementCandidateResponse toCandidateResponse(SalesOrder order) {
