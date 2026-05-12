@@ -33,6 +33,7 @@ public class SystemSwitchService {
     public static final String CUSTOMER_STATEMENT_RECEIPT_ZERO_FROM_SALES_ORDER_SWITCH = "SYS_CUSTOMER_STATEMENT_RECEIPT_ZERO_FROM_SALES_ORDER";
     public static final String SUPPLIER_STATEMENT_FULL_PAYMENT_FROM_PURCHASE_SWITCH = "SYS_SUPPLIER_STATEMENT_FULL_PAYMENT_FROM_PURCHASE";
     public static final String LOGIN_CAPTCHA_SWITCH = "SYS_LOGIN_CAPTCHA";
+    public static final String USE_SNOWFLAKE_ID_AS_BUSINESS_NO_SWITCH = "SYS_USE_SNOWFLAKE_ID_AS_BUSINESS_NO";
     public static final String OOBE_COMPLETED_SWITCH = "SYS_OOBE_COMPLETED";
     public static final String SWITCH_CACHE_KEY = "leo:system:switches";
     private static final Duration SWITCH_CACHE_TTL = Duration.ofMinutes(5);
@@ -58,6 +59,7 @@ public class SystemSwitchService {
             CUSTOMER_STATEMENT_RECEIPT_ZERO_FROM_SALES_ORDER_SWITCH,
             SUPPLIER_STATEMENT_FULL_PAYMENT_FROM_PURCHASE_SWITCH,
             LOGIN_CAPTCHA_SWITCH,
+            USE_SNOWFLAKE_ID_AS_BUSINESS_NO_SWITCH,
             OOBE_COMPLETED_SWITCH
     );
 
@@ -176,6 +178,11 @@ public class SystemSwitchService {
     @Transactional(readOnly = true)
     public boolean shouldRequireLoginCaptcha() {
         return isEnabled(LOGIN_CAPTCHA_SWITCH);
+    }
+
+    @Transactional(readOnly = true)
+    public boolean shouldUseSnowflakeIdAsBusinessNo() {
+        return isEnabled(USE_SNOWFLAKE_ID_AS_BUSINESS_NO_SWITCH);
     }
 
     @Transactional(readOnly = true)

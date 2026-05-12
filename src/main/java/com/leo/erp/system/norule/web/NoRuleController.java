@@ -10,6 +10,7 @@ import com.leo.erp.security.support.SecurityPrincipal;
 import com.leo.erp.system.norule.service.GeneralSettingQueryService;
 import com.leo.erp.system.norule.service.NoRuleService;
 import com.leo.erp.system.norule.service.NoRuleSequenceService;
+import com.leo.erp.system.norule.service.PreallocatedBusinessNoService;
 import com.leo.erp.system.norule.service.SystemSwitchService;
 import com.leo.erp.system.operationlog.support.OperationLoggable;
 import com.leo.erp.system.norule.web.dto.GeneralSettingResponse;
@@ -40,17 +41,23 @@ public class NoRuleController {
     private final NoRuleSequenceService noRuleSequenceService;
     private final ModulePermissionGuard modulePermissionGuard;
     private final SystemSwitchService systemSwitchService;
+    private final com.leo.erp.common.support.SnowflakeIdGenerator snowflakeIdGenerator;
+    private final PreallocatedBusinessNoService preallocatedBusinessNoService;
 
     public NoRuleController(NoRuleService noRuleService,
                             GeneralSettingQueryService generalSettingQueryService,
                             NoRuleSequenceService noRuleSequenceService,
                             ModulePermissionGuard modulePermissionGuard,
-                            SystemSwitchService systemSwitchService) {
+                            SystemSwitchService systemSwitchService,
+                            com.leo.erp.common.support.SnowflakeIdGenerator snowflakeIdGenerator,
+                            PreallocatedBusinessNoService preallocatedBusinessNoService) {
         this.noRuleService = noRuleService;
         this.generalSettingQueryService = generalSettingQueryService;
         this.noRuleSequenceService = noRuleSequenceService;
         this.modulePermissionGuard = modulePermissionGuard;
         this.systemSwitchService = systemSwitchService;
+        this.snowflakeIdGenerator = snowflakeIdGenerator;
+        this.preallocatedBusinessNoService = preallocatedBusinessNoService;
     }
 
     @GetMapping
@@ -95,9 +102,19 @@ public class NoRuleController {
     public ApiResponse<NoRuleGenerateResponse> nextNumber(@AuthenticationPrincipal SecurityPrincipal principal,
                                                           @RequestParam String moduleKey) {
         String normalizedModuleKey = modulePermissionGuard.requirePermission(principal, moduleKey, "create");
+        if (systemSwitchService.shouldUseSnowflakeIdAsBusinessNo()) {
+            String generatedId = String.valueOf(snowflakeIdGenerator.nextId());
+            preallocatedBusinessNoService.reserve(normalizedModuleKey, Long.parseLong(generatedId), principal);
+            return ApiResponse.success(new NoRuleGenerateResponse(
+                    normalizedModuleKey,
+                    generatedId,
+                    generatedId
+            ));
+        }
         return ApiResponse.success(new NoRuleGenerateResponse(
                 normalizedModuleKey,
-                noRuleSequenceService.nextValueByModuleKey(normalizedModuleKey)
+                noRuleSequenceService.nextValueByModuleKey(normalizedModuleKey),
+                null
         ));
     }
 

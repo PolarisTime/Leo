@@ -42,10 +42,16 @@ public class GeneralSettingQueryService {
             Map.entry("RULE_SO", 30),
             Map.entry("RULE_OB", 40),
             Map.entry("RULE_FB", 50),
-            Map.entry("RULE_SS", 60),
-            Map.entry("RULE_CS", 70),
-            Map.entry("RULE_FS", 80),
-            Map.entry("RULE_BATCH_NO", 90),
+            Map.entry("RULE_PC", 60),
+            Map.entry("RULE_SC", 70),
+            Map.entry("RULE_SS", 80),
+            Map.entry("RULE_CS", 90),
+            Map.entry("RULE_FS", 100),
+            Map.entry("RULE_RC", 110),
+            Map.entry("RULE_PM", 120),
+            Map.entry("RULE_SP", 130),
+            Map.entry("RULE_KP", 140),
+            Map.entry("RULE_BATCH_NO", 150),
             Map.entry("SYS_DEFAULT_TAX_RATE", 95),
             Map.entry(SystemSwitchService.DEFAULT_LIST_PAGE_SIZE_SETTING, 98),
             Map.entry("UI_WEIGHT_ONLY_PURCHASE_INBOUNDS", 100),
@@ -61,6 +67,7 @@ public class GeneralSettingQueryService {
             Map.entry("SYS_ADMIN_VIEW_DELETED_RECORDS", 195),
             Map.entry("UI_SHOW_SNOWFLAKE_ID", 200),
             Map.entry("SYS_LOGIN_CAPTCHA", 205),
+            Map.entry(SystemSwitchService.USE_SNOWFLAKE_ID_AS_BUSINESS_NO_SWITCH, 210),
             Map.entry("PAGE_UPLOAD", 900)
     );
 
@@ -74,7 +81,8 @@ public class GeneralSettingQueryService {
             "UI_WEIGHT_ONLY_PURCHASE_INBOUNDS",
             "UI_WEIGHT_ONLY_SALES_OUTBOUNDS",
             SystemSwitchService.SHOW_SNOWFLAKE_ID_SWITCH,
-            SystemSwitchService.DEFAULT_LIST_PAGE_SIZE_SETTING
+            SystemSwitchService.DEFAULT_LIST_PAGE_SIZE_SETTING,
+            SystemSwitchService.USE_SNOWFLAKE_ID_AS_BUSINESS_NO_SWITCH
     );
 
     private final NoRuleRepository noRuleRepository;
