@@ -30,6 +30,13 @@ public final class StatusConstants {
     // 签署/送达状态
     public static final String SIGNED = "已签署";
     public static final String DELIVERED = "已送达";
+    public static final String UNSIGNED = "未签署";
+    public static final String UNDELIVERED = "未送达";
+    public static final String UNAUDITED = "未审核";
+    public static final String ISSUED = "已开票";
+    public static final String INVOICE_RECEIVED = "已收票";
+    public static final String EXECUTING = "执行中";
+    public static final String ARCHIVED = "已归档";
 
     // 待处理状态
     public static final String PENDING_CONFIRM = "待确认";
@@ -39,4 +46,18 @@ public final class StatusConstants {
     public static final Set<String> ALLOWED_ACTIVE_STATUS = Set.of(NORMAL, DISABLED);
     public static final Set<String> ALLOWED_AUDIT_STATUS = Set.of(DRAFT, AUDITED);
     public static final Set<String> ALLOWED_RECEIVABLE_STATUS = Set.of(PENDING_CONFIRM, CONFIRMED, PENDING_AUDIT, AUDITED);
+    public static final Set<String> ALLOWED_PURCHASE_ORDER_STATUS = Set.of(DRAFT, AUDITED, PURCHASE_COMPLETED);
+    public static final Set<String> ALLOWED_PURCHASE_INBOUND_STATUS = Set.of(DRAFT, AUDITED, INBOUND_COMPLETED);
+    public static final Set<String> ALLOWED_SALES_ORDER_STATUS = Set.of(DRAFT, AUDITED, SALES_PENDING_FINALIZE, SALES_COMPLETED);
+    public static final Set<String> ALLOWED_SALES_OUTBOUND_STATUS = Set.of(DRAFT, AUDITED);
+    public static final Set<String> ALLOWED_CONTRACT_STATUS = Set.of(DRAFT, EXECUTING, SIGNED, ARCHIVED);
+    public static final Set<String> ALLOWED_STATEMENT_STATUS = Set.of(PENDING_CONFIRM, CONFIRMED);
+    public static final Set<String> ALLOWED_FREIGHT_STATEMENT_STATUS = Set.of(PENDING_AUDIT, AUDITED);
+    public static final Set<String> ALLOWED_SIGN_STATUS = Set.of(UNSIGNED, SIGNED);
+    public static final Set<String> ALLOWED_FREIGHT_BILL_STATUS = Set.of(UNAUDITED, AUDITED);
+    public static final Set<String> ALLOWED_DELIVERY_STATUS = Set.of(UNDELIVERED, DELIVERED);
+    public static final Set<String> ALLOWED_PAYMENT_STATUS = Set.of(DRAFT, PAID);
+    public static final Set<String> ALLOWED_RECEIPT_STATUS = Set.of(DRAFT, RECEIVED);
+    public static final Set<String> ALLOWED_INVOICE_ISSUE_STATUS = Set.of(DRAFT, ISSUED);
+    public static final Set<String> ALLOWED_INVOICE_RECEIPT_STATUS = Set.of(DRAFT, INVOICE_RECEIVED);
 }

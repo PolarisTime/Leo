@@ -5,9 +5,12 @@ import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.AuditableEntity;
 import com.leo.erp.security.permission.DataScopeContext;
+import com.leo.erp.security.support.SecurityPrincipal;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.system.norule.service.SystemSwitchService;
+import com.leo.erp.system.norule.service.NoRuleSequenceService;
+import com.leo.erp.system.norule.service.PreallocatedBusinessNoService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -18,6 +21,9 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.context.request.RequestAttributes;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
 
 import java.lang.reflect.Method;
 import java.util.List;
@@ -25,6 +31,7 @@ import java.util.Optional;
 import java.util.Set;
 
 public abstract class AbstractCrudService<E extends AuditableEntity, Req, Res> {
+    private static final String PREALLOCATED_ID_HEADER = "X-Preallocated-Id";
 
     private static final Set<String> PROTECTED_EDIT_STATUSES = Set.of(
             StatusConstants.AUDITED,
@@ -53,6 +60,8 @@ public abstract class AbstractCrudService<E extends AuditableEntity, Req, Res> {
 
     private final SnowflakeIdGenerator idGenerator;
     private SystemSwitchService systemSwitchService;
+    private NoRuleSequenceService noRuleSequenceService;
+    private PreallocatedBusinessNoService preallocatedBusinessNoService;
 
     protected AbstractCrudService(SnowflakeIdGenerator idGenerator) {
         this.idGenerator = idGenerator;
@@ -63,12 +72,69 @@ public abstract class AbstractCrudService<E extends AuditableEntity, Req, Res> {
         this.systemSwitchService = systemSwitchService;
     }
 
+    @Autowired(required = false)
+    protected void setNoRuleSequenceService(NoRuleSequenceService noRuleSequenceService) {
+        this.noRuleSequenceService = noRuleSequenceService;
+    }
+
+    @Autowired(required = false)
+    protected void setPreallocatedBusinessNoService(PreallocatedBusinessNoService preallocatedBusinessNoService) {
+        this.preallocatedBusinessNoService = preallocatedBusinessNoService;
+    }
+
     private SnowflakeIdGenerator idGen() {
         return idGenerator != null ? idGenerator : SnowflakeIdGenerator.getInstance();
     }
 
     private Logger logger() {
         return LoggerFactory.getLogger(getClass());
+    }
+
+    private long resolveCreateEntityId() {
+        Long preallocatedId = resolvePreallocatedIdFromRequest();
+        return preallocatedId != null ? preallocatedId : idGen().nextId();
+    }
+
+    private Long resolvePreallocatedIdFromRequest() {
+        RequestAttributes requestAttributes = RequestContextHolder.getRequestAttributes();
+        if (!(requestAttributes instanceof ServletRequestAttributes servletRequestAttributes)) {
+            return null;
+        }
+        String rawValue = servletRequestAttributes.getRequest().getHeader(PREALLOCATED_ID_HEADER);
+        if (rawValue == null || rawValue.isBlank()) {
+            return null;
+        }
+        try {
+            long parsedValue = Long.parseLong(rawValue.trim());
+            if (parsedValue > 0 && preallocatedBusinessNoService != null) {
+                preallocatedBusinessNoService.consumeOrThrow(resolveBusinessModuleKey(), parsedValue, currentPrincipal());
+            }
+            return parsedValue > 0 ? parsedValue : null;
+        } catch (NumberFormatException ex) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "预分配雪花ID格式不正确");
+        }
+    }
+
+    private SecurityPrincipal currentPrincipal() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || !(authentication.getPrincipal() instanceof SecurityPrincipal principal)) {
+            throw new BusinessException(ErrorCode.UNAUTHORIZED, "未登录");
+        }
+        return principal;
+    }
+
+    private String resolveBusinessModuleKey() {
+        RequestAttributes requestAttributes = RequestContextHolder.getRequestAttributes();
+        if (!(requestAttributes instanceof ServletRequestAttributes servletRequestAttributes)) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "无法识别当前请求模块");
+        }
+        String uri = servletRequestAttributes.getRequest().getRequestURI();
+        if (uri == null || uri.isBlank()) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "无法识别当前请求模块");
+        }
+        String path = uri.startsWith("/api/") ? uri.substring(5) : uri;
+        int slashIndex = path.indexOf('/');
+        return slashIndex >= 0 ? path.substring(0, slashIndex) : path;
     }
 
     @Transactional(readOnly = true)
@@ -78,10 +144,11 @@ public abstract class AbstractCrudService<E extends AuditableEntity, Req, Res> {
 
     @Transactional
     public final Res create(Req request) {
-        validateCreate(request);
         E entity = newEntity();
-        long id = idGen().nextId();
+        long id = resolveCreateEntityId();
         assignId(entity, id);
+        request = normalizeCreateRequest(request, id);
+        validateCreate(request);
         apply(entity, request);
         Res response = toSavedResponse(saveEntity(entity));
         logger().info("{} created: id={}", entity.getClass().getSimpleName(), id);
@@ -91,6 +158,7 @@ public abstract class AbstractCrudService<E extends AuditableEntity, Req, Res> {
     @Transactional
     public final Res update(Long id, Req request) {
         E entity = requireEntity(id);
+        request = normalizeUpdateRequest(entity, request);
         assertEditAllowedByStatus(entity, request);
         validateUpdate(entity, request);
         apply(entity, request);
@@ -155,11 +223,54 @@ public abstract class AbstractCrudService<E extends AuditableEntity, Req, Res> {
     protected void validateUpdate(E entity, Req request) {
     }
 
+    protected Req normalizeCreateRequest(Req request) {
+        return request;
+    }
+
+    protected Req normalizeCreateRequest(Req request, long entityId) {
+        return normalizeCreateRequest(request);
+    }
+
+    protected Req normalizeUpdateRequest(E entity, Req request) {
+        return request;
+    }
+
     protected void beforeDelete(E entity) {
     }
 
     protected boolean allowProtectedStatusUpdate(E entity, Req request) {
         return false;
+    }
+
+    protected final String nextBusinessNo(String moduleKey) {
+        if (noRuleSequenceService == null) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "编号规则服务不可用");
+        }
+        String generatedNo = noRuleSequenceService.nextValueByModuleKey(moduleKey);
+        if (generatedNo == null || generatedNo.isBlank()) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "模块未配置编号规则: " + moduleKey);
+        }
+        return generatedNo;
+    }
+
+    protected final String resolveCreateBusinessNo(String moduleKey, String requestedNo) {
+        return resolveCreateBusinessNo(moduleKey, requestedNo, null);
+    }
+
+    protected final String resolveCreateBusinessNo(String moduleKey, String requestedNo, Long entityId) {
+        if (systemSwitchService != null && systemSwitchService.shouldUseSnowflakeIdAsBusinessNo()) {
+            if (entityId == null || entityId <= 0) {
+                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "业务单据雪花ID尚未分配");
+            }
+            return String.valueOf(entityId);
+        }
+        if (noRuleSequenceService == null) {
+            if (requestedNo == null || requestedNo.isBlank()) {
+                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "编号规则服务不可用");
+            }
+            return requestedNo;
+        }
+        return nextBusinessNo(moduleKey);
     }
 
     protected boolean allowAdminViewDeletedRecords() {

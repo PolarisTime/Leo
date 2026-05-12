@@ -27,9 +27,15 @@ public class NoRuleSequenceService {
             Map.entry("sales-order", "RULE_SO"),
             Map.entry("sales-outbound", "RULE_OB"),
             Map.entry("freight-bill", "RULE_FB"),
+            Map.entry("purchase-contract", "RULE_PC"),
+            Map.entry("sales-contract", "RULE_SC"),
             Map.entry("supplier-statement", "RULE_SS"),
             Map.entry("customer-statement", "RULE_CS"),
             Map.entry("freight-statement", "RULE_FS"),
+            Map.entry("receipt", "RULE_RC"),
+            Map.entry("payment", "RULE_PM"),
+            Map.entry("invoice-receipt", "RULE_SP"),
+            Map.entry("invoice-issue", "RULE_KP"),
             Map.entry("department", "RULE_DEPT")
     );
     private static final DateTimeFormatter YEAR_FORMATTER = DateTimeFormatter.ofPattern("yyyy");
