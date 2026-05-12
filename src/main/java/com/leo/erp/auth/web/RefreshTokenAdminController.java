@@ -8,9 +8,12 @@ import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.api.PageResponse;
 import com.leo.erp.common.web.BindPageQuery;
 import com.leo.erp.security.permission.RequiresPermission;
+import jakarta.validation.constraints.Positive;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
+@Validated
 @RequestMapping("/auth/refresh-tokens")
 public class RefreshTokenAdminController {
 
@@ -36,7 +39,7 @@ public class RefreshTokenAdminController {
 
     @PostMapping("/{id}/revoke")
     @RequiresPermission(resource = "session", action = "update")
-    public ApiResponse<Void> revoke(@PathVariable Long id) {
+    public ApiResponse<Void> revoke(@PathVariable @Positive Long id) {
         service.revoke(id);
         return ApiResponse.success("已禁用", null);
     }
