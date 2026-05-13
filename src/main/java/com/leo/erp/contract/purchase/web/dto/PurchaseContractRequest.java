@@ -10,6 +10,7 @@ import java.util.List;
 public record PurchaseContractRequest(
         String contractNo,
         @jakarta.validation.constraints.NotBlank String supplierName,
+        String sourcePurchaseOrderNos,
         @NotNull LocalDate signDate,
         @NotNull LocalDate effectiveDate,
         @NotNull LocalDate expireDate,

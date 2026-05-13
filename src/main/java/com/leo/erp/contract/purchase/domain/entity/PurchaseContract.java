@@ -30,6 +30,9 @@ public class PurchaseContract extends AuditableEntity {
     @Column(name = "supplier_name", nullable = false, length = 128)
     private String supplierName;
 
+    @Column(name = "source_purchase_order_nos", length = 512)
+    private String sourcePurchaseOrderNos;
+
     @Column(name = "sign_date", nullable = false)
     private LocalDate signDate;
 
