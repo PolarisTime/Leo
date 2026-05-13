@@ -70,7 +70,7 @@ public class PurchaseContractService extends AbstractCrudService<PurchaseContrac
     protected PurchaseContractResponse toDetailResponse(PurchaseContract entity) {
         PurchaseContractResponse response = purchaseContractMapper.toResponse(entity);
         return new PurchaseContractResponse(
-                response.id(), response.contractNo(), response.supplierName(),
+                response.id(), response.contractNo(), response.supplierName(), response.sourcePurchaseOrderNos(),
                 response.signDate(), response.effectiveDate(), response.expireDate(),
                 response.buyerName(), response.totalWeight(), response.totalAmount(),
                 response.status(), response.remark(),
@@ -105,6 +105,7 @@ public class PurchaseContractService extends AbstractCrudService<PurchaseContrac
         return new PurchaseContractRequest(
                 resolveCreateBusinessNo("purchase-contract", request.contractNo(), entityId),
                 request.supplierName(),
+                request.sourcePurchaseOrderNos(),
                 request.signDate(),
                 request.effectiveDate(),
                 request.expireDate(),
@@ -120,6 +121,7 @@ public class PurchaseContractService extends AbstractCrudService<PurchaseContrac
         return new PurchaseContractRequest(
                 entity.getContractNo(),
                 request.supplierName(),
+                request.sourcePurchaseOrderNos(),
                 request.signDate(),
                 request.effectiveDate(),
                 request.expireDate(),
@@ -177,6 +179,7 @@ public class PurchaseContractService extends AbstractCrudService<PurchaseContrac
         );
         entity.setContractNo(request.contractNo());
         entity.setSupplierName(request.supplierName());
+        entity.setSourcePurchaseOrderNos(request.sourcePurchaseOrderNos());
         entity.setSignDate(request.signDate());
         entity.setEffectiveDate(request.effectiveDate());
         entity.setExpireDate(request.expireDate());

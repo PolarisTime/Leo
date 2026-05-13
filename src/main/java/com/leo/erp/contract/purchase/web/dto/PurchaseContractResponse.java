@@ -8,6 +8,7 @@ public record PurchaseContractResponse(
         Long id,
         String contractNo,
         String supplierName,
+        String sourcePurchaseOrderNos,
         LocalDate signDate,
         LocalDate effectiveDate,
         LocalDate expireDate,
