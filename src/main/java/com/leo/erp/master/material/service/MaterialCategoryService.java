@@ -7,7 +7,9 @@ import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.service.AbstractCrudService;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.master.material.domain.entity.MaterialCategory;
+import com.leo.erp.master.material.mapper.MaterialCategoryMapper;
 import com.leo.erp.master.material.repository.MaterialCategoryRepository;
+import com.leo.erp.master.material.web.dto.MaterialCategoryOptionResponse;
 import com.leo.erp.master.material.web.dto.MaterialCategoryRequest;
 import com.leo.erp.master.material.web.dto.MaterialCategoryResponse;
 import org.springframework.data.domain.Page;
@@ -16,15 +18,20 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Optional;
+import java.util.List;
 
 @Service
 public class MaterialCategoryService extends AbstractCrudService<MaterialCategory, MaterialCategoryRequest, MaterialCategoryResponse> {
 
     private final MaterialCategoryRepository repository;
+    private final MaterialCategoryMapper materialCategoryMapper;
 
-    public MaterialCategoryService(MaterialCategoryRepository repository, SnowflakeIdGenerator idGenerator) {
+    public MaterialCategoryService(MaterialCategoryRepository repository,
+                                   SnowflakeIdGenerator idGenerator,
+                                   MaterialCategoryMapper materialCategoryMapper) {
         super(idGenerator);
         this.repository = repository;
+        this.materialCategoryMapper = materialCategoryMapper;
     }
 
     @Transactional(readOnly = true)
@@ -38,15 +45,15 @@ public class MaterialCategoryService extends AbstractCrudService<MaterialCategor
 
     @Override
     public MaterialCategoryResponse toResponse(MaterialCategory entity) {
-        return new MaterialCategoryResponse(
-                entity.getId(),
-                entity.getCategoryCode(),
-                entity.getCategoryName(),
-                entity.getSortOrder(),
-                Boolean.TRUE.equals(entity.getPurchaseWeighRequired()),
-                entity.getStatus(),
-                entity.getRemark()
-        );
+        return materialCategoryMapper.toResponse(entity);
+    }
+
+    @Transactional(readOnly = true)
+    public List<MaterialCategoryOptionResponse> options() {
+        return repository.findByStatusAndDeletedFlagFalseOrderBySortOrderAscIdAsc("正常")
+                .stream()
+                .map(materialCategoryMapper::toOptionResponse)
+                .toList();
     }
 
     @Override

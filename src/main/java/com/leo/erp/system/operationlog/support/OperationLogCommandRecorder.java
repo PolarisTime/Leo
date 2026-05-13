@@ -1,18 +1,15 @@
 package com.leo.erp.system.operationlog.support;
 
+import lombok.extern.slf4j.Slf4j;
 import com.leo.erp.common.api.ApiResponse;
 import com.leo.erp.system.operationlog.service.OperationLogCommand;
 import com.leo.erp.system.operationlog.service.OperationLogService;
 import jakarta.servlet.http.HttpServletRequest;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
+@Slf4j
 @Component
 public class OperationLogCommandRecorder {
-
-    private static final Logger log = LoggerFactory.getLogger(OperationLogCommandRecorder.class);
-
     private final OperationLogService operationLogService;
     private final OperationLogResultCollector resultCollector;
 

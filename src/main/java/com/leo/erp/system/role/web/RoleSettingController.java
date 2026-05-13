@@ -27,7 +27,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @Validated
-@RequestMapping("/role-settings")
+@RequestMapping("/role-setting")
 public class RoleSettingController {
 
     private final RoleSettingService roleSettingService;
@@ -39,7 +39,7 @@ public class RoleSettingController {
     @GetMapping
     @RequiresPermission(resource = "role", action = "read")
     public ApiResponse<PageResponse<RoleSettingResponse>> page(
-            @BindPageQuery(sortFieldKey = "role-settings") PageQuery query,
+            @BindPageQuery(sortFieldKey = "role-setting") PageQuery query,
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) String status
     ) {
@@ -74,19 +74,19 @@ public class RoleSettingController {
         return ApiResponse.success("删除成功", null);
     }
 
-    @GetMapping("/{id}/permissions")
+    @GetMapping("/{id}/permission")
     @RequiresPermission(resource = "role", action = "manage_permissions")
     public ApiResponse<List<RolePermissionItem>> getRolePermissions(@PathVariable @Positive Long id) {
         return ApiResponse.success(roleSettingService.getRolePermissions(id));
     }
 
-    @GetMapping("/permission-options")
+    @GetMapping("/permission-option")
     @RequiresPermission(resource = "role", action = "manage_permissions")
     public ApiResponse<List<MenuTreeResponse>> listPermissionOptions() {
         return ApiResponse.success(roleSettingService.listPermissionOptions());
     }
 
-    @PutMapping("/{id}/permissions")
+    @PutMapping("/{id}/permission")
     @RequiresPermission(resource = "role", action = "manage_permissions")
     @OperationLoggable(moduleName = "角色权限配置", actionType = "编辑权限")
     public ApiResponse<Void> saveRolePermissions(@PathVariable @Positive Long id,

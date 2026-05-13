@@ -54,7 +54,7 @@ public class UserAccountAdminController {
         return ApiResponse.success(PageResponse.from(userAccountAdminService.page(query, keyword, status)));
     }
 
-    @GetMapping("/preferences")
+    @GetMapping("/preference")
     @RequiresPermission(authenticatedOnly = true)
     public ApiResponse<UserAccountPreferencesPayload> preferences(
             @AuthenticationPrincipal SecurityPrincipal principal
@@ -62,7 +62,7 @@ public class UserAccountAdminController {
         return ApiResponse.success(userAccountPreferenceService.getPreferences(principal.id()));
     }
 
-    @PutMapping("/preferences")
+    @PutMapping("/preference")
     @RequiresPermission(authenticatedOnly = true)
     public ApiResponse<UserAccountPreferencesPayload> savePreferences(
             @AuthenticationPrincipal SecurityPrincipal principal,

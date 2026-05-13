@@ -21,6 +21,7 @@ import com.leo.erp.finance.invoiceissue.web.dto.InvoiceIssueItemResponse;
 import com.leo.erp.finance.invoiceissue.web.dto.InvoiceIssueRequest;
 import com.leo.erp.finance.invoiceissue.web.dto.InvoiceIssueResponse;
 import com.leo.erp.security.permission.WorkflowTransitionGuard;
+import com.leo.erp.sales.order.domain.entity.SalesOrder;
 import com.leo.erp.sales.order.domain.entity.SalesOrderItem;
 import com.leo.erp.sales.order.service.SalesOrderItemQueryService;
 import com.leo.erp.system.company.service.CompanySettingService;
@@ -371,12 +372,16 @@ public class InvoiceIssueService extends AbstractCrudService<InvoiceIssue, Invoi
         if (sourceSalesOrderItem == null) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行来源销售订单明细不存在");
         }
+        SalesOrder sourceSalesOrder = sourceSalesOrderItem.getSalesOrder();
+        if (sourceSalesOrder == null || sourceSalesOrder.getOrderNo() == null || sourceSalesOrder.getOrderNo().isBlank()) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行来源销售订单不存在");
+        }
         BigDecimal pieceWeightTon = TradeItemCalculator.scaleWeightTon(sourceSalesOrderItem.getPieceWeightTon());
         BigDecimal unitPrice = TradeItemCalculator.scaleAmount(sourceSalesOrderItem.getUnitPrice());
         BigDecimal weightTon = TradeItemCalculator.calculateWeightTon(source.quantity(), pieceWeightTon);
         BigDecimal amount = TradeItemCalculator.calculateAmount(weightTon, unitPrice);
         return new ResolvedInvoiceIssueItem(
-                sourceSalesOrderItem.getSalesOrder().getOrderNo(),
+                sourceSalesOrder.getOrderNo(),
                 sourceSalesOrderItem.getMaterialCode(),
                 sourceSalesOrderItem.getBrand(),
                 sourceSalesOrderItem.getCategory(),

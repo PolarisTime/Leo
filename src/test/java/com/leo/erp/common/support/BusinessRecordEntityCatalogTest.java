@@ -11,25 +11,25 @@ import static org.assertj.core.api.Assertions.assertThat;
 class BusinessRecordEntityCatalogTest {
 
     private static final List<String> ATTACHABLE_MODULE_KEYS = List.of(
-            "materials",
-            "suppliers",
-            "customers",
-            "carriers",
-            "warehouses",
-            "purchase-orders",
-            "purchase-inbounds",
-            "sales-orders",
-            "sales-outbounds",
-            "freight-bills",
-            "purchase-contracts",
-            "sales-contracts",
-            "supplier-statements",
-            "customer-statements",
-            "freight-statements",
-            "receipts",
-            "payments",
-            "invoice-receipts",
-            "invoice-issues"
+            "material",
+            "supplier",
+            "customer",
+            "carrier",
+            "warehouse",
+            "purchase-order",
+            "purchase-inbound",
+            "sales-order",
+            "sales-outbound",
+            "freight-bill",
+            "purchase-contract",
+            "sales-contract",
+            "supplier-statement",
+            "customer-statement",
+            "freight-statement",
+            "receipt",
+            "payment",
+            "invoice-receipt",
+            "invoice-issue"
     );
 
     @Test
@@ -41,7 +41,7 @@ class BusinessRecordEntityCatalogTest {
                         "inventory-report",
                         "io-report",
                         "pending-invoice-receipt-report",
-                        "receivables-payables"
+                        "receivable-payable"
                 );
     }
 
@@ -59,7 +59,7 @@ class BusinessRecordEntityCatalogTest {
 
     @Test
     void shouldNormalizeModuleKeyBeforeLookup() {
-        assertThat(BusinessRecordEntityCatalog.findEntityType("/Materials")).contains(Material.class);
-        assertThat(BusinessRecordEntityCatalog.hasEntity(" MATERIALS ")).isTrue();
+        assertThat(BusinessRecordEntityCatalog.findEntityType("/Material")).contains(Material.class);
+        assertThat(BusinessRecordEntityCatalog.hasEntity(" MATERIAL ")).isTrue();
     }
 }

@@ -50,7 +50,7 @@ class ApiKeyAuthenticationFilterTest {
                 mock(ApiKeyUsageService.class)
         );
 
-        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/sales-orders");
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/sales-order");
         MockHttpServletResponse response = new MockHttpServletResponse();
         AtomicBoolean chainInvoked = new AtomicBoolean(false);
         FilterChain chain = (req, res) -> chainInvoked.set(true);
@@ -72,7 +72,7 @@ class ApiKeyAuthenticationFilterTest {
                 mock(ApiKeyUsageService.class)
         );
 
-        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/sales-orders");
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/sales-order");
         request.addHeader("X-API-Key", "invalid-key");
         MockHttpServletResponse response = new MockHttpServletResponse();
         AtomicBoolean chainInvoked = new AtomicBoolean(false);
@@ -97,7 +97,7 @@ class ApiKeyAuthenticationFilterTest {
                 mock(ApiKeyUsageService.class)
         );
 
-        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/sales-orders");
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/sales-order");
         request.addHeader("X-API-Key", "readonly-key");
         MockHttpServletResponse response = new MockHttpServletResponse();
         AtomicBoolean chainInvoked = new AtomicBoolean(false);
@@ -146,7 +146,7 @@ class ApiKeyAuthenticationFilterTest {
                 mock(ApiKeyUsageService.class)
         );
 
-        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/sales-orders");
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/sales-order");
         request.addHeader("X-API-Key", "valid-key");
         MockHttpServletResponse response = new MockHttpServletResponse();
         AtomicBoolean chainInvoked = new AtomicBoolean(false);
@@ -172,7 +172,7 @@ class ApiKeyAuthenticationFilterTest {
                 mock(ApiKeyUsageService.class)
         );
 
-        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/sales-orders");
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/sales-order");
         request.addHeader("X-API-Key", "valid-key");
         MockHttpServletResponse response = new MockHttpServletResponse();
         AtomicBoolean chainInvoked = new AtomicBoolean(false);
@@ -199,7 +199,7 @@ class ApiKeyAuthenticationFilterTest {
                 apiKeyUsageService
         );
 
-        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/sales-orders");
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/sales-order");
         request.addHeader("X-API-Key", "valid-key");
         MockHttpServletResponse response = new MockHttpServletResponse();
         AtomicBoolean chainInvoked = new AtomicBoolean(false);
@@ -232,7 +232,7 @@ class ApiKeyAuthenticationFilterTest {
                 apiKeyUsageService
         );
 
-        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/sales-orders");
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/sales-order");
         request.addHeader("X-API-Key", "readonly-key");
         MockHttpServletResponse response = new MockHttpServletResponse();
 

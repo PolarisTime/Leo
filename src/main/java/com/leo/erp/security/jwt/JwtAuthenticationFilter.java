@@ -1,6 +1,8 @@
 package com.leo.erp.security.jwt;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.leo.erp.common.api.ApiResponse;
+import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.security.support.SecurityPrincipal;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
@@ -14,17 +16,14 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
 
 import java.io.IOException;
 import java.util.Date;
-import java.util.Map;
 
+@Slf4j
 @Component
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
-
-    private static final Logger log = LoggerFactory.getLogger(JwtAuthenticationFilter.class);
 
     private final JwtTokenService jwtTokenService;
     private final AuthenticatedUserCacheService authenticatedUserCacheService;
@@ -118,12 +117,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
         response.setCharacterEncoding("UTF-8");
-        objectMapper.writeValue(response.getOutputStream(), Map.of(
-                "code", 4010,
-                "message", message,
-                "data", (Object) Map.of(),
-                "timestamp", java.time.Instant.now().toString()
-        ));
+        objectMapper.writeValue(response.getOutputStream(), ApiResponse.failure(ErrorCode.UNAUTHORIZED, message));
     }
 
     private void authenticate(HttpServletRequest request, SecurityPrincipal principal) {

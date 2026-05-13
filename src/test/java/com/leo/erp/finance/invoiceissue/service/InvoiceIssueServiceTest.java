@@ -9,6 +9,7 @@ import com.leo.erp.finance.invoiceissue.web.dto.InvoiceIssueItemRequest;
 import com.leo.erp.finance.invoiceissue.web.dto.InvoiceIssueRequest;
 import com.leo.erp.finance.invoiceissue.web.dto.InvoiceIssueResponse;
 import com.leo.erp.security.permission.WorkflowTransitionGuard;
+import com.leo.erp.sales.order.domain.entity.SalesOrder;
 import com.leo.erp.sales.order.domain.entity.SalesOrderItem;
 import com.leo.erp.sales.order.service.SalesOrderItemQueryService;
 import com.leo.erp.system.company.service.CompanySettingService;
@@ -78,7 +79,7 @@ class InvoiceIssueServiceTest {
 
     @Test
     void createRecalculatesAmountFromRoundedWeight() {
-        SalesOrderItem sourceItem = buildSalesOrderItem(101L, "M-1", new BigDecimal("2.000"), new BigDecimal("6666.66"));
+        SalesOrderItem sourceItem = buildSalesOrderItem(101L, "M-1", new BigDecimal("0.300"), new BigDecimal("1000.00"));
 
         when(repository.existsByIssueNoAndDeletedFlagFalse("KP-ROUND")).thenReturn(false);
         when(salesOrderItemQueryService.findActiveByIdIn(anyCollection())).thenReturn(List.of(sourceItem));
@@ -178,6 +179,10 @@ class InvoiceIssueServiceTest {
     private SalesOrderItem buildSalesOrderItem(Long id, String materialCode, BigDecimal weightTon, BigDecimal amount) {
         SalesOrderItem item = new SalesOrderItem();
         item.setId(id);
+        SalesOrder order = new SalesOrder();
+        order.setId(1000L + id);
+        order.setOrderNo("SO-001");
+        item.setSalesOrder(order);
         item.setMaterialCode(materialCode);
         item.setBrand("品牌A");
         item.setCategory("品类A");

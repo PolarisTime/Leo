@@ -30,7 +30,7 @@ public class SupplierController {
         this.supplierService = supplierService;
     }
 
-    @GetMapping("/options")
+    @GetMapping("/option")
     @RequiresPermission(resource = "supplier", action = "read")
     public ApiResponse<java.util.List<SupplierOptionResponse>> options() {
         return ApiResponse.success(supplierService.listActiveOptions());

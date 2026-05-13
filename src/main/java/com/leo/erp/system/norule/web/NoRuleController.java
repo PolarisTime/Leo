@@ -70,19 +70,19 @@ public class NoRuleController {
         return ApiResponse.success(PageResponse.from(generalSettingQueryService.page(query, keyword, status)));
     }
 
-    @GetMapping("/display-switches")
+    @GetMapping("/display-switch")
     @RequiresPermission(authenticatedOnly = true)
     public ApiResponse<List<GeneralSettingResponse>> displaySwitches() {
         return ApiResponse.success(generalSettingQueryService.publicDisplaySwitches());
     }
 
-    @GetMapping("/client-settings")
+    @GetMapping("/client-setting")
     @RequiresPermission(authenticatedOnly = true)
     public ApiResponse<List<GeneralSettingResponse>> clientSettings() {
         return ApiResponse.success(generalSettingQueryService.publicClientSettings());
     }
 
-    @GetMapping("/statement-generator-rules")
+    @GetMapping("/statement-generator-rule")
     @RequiresPermission(authenticatedOnly = true)
     public ApiResponse<StatementGeneratorRulesResponse> statementGeneratorRules() {
         return ApiResponse.success(new StatementGeneratorRulesResponse(
@@ -97,7 +97,7 @@ public class NoRuleController {
         return ApiResponse.success(noRuleService.detail(id));
     }
 
-    @PostMapping("/number-rules/next")
+    @PostMapping("/number-rule/next")
     @RequiresPermission(authenticatedOnly = true)
     public ApiResponse<NoRuleGenerateResponse> nextNumber(@AuthenticationPrincipal SecurityPrincipal principal,
                                                           @RequestParam String moduleKey) {

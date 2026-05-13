@@ -1,17 +1,14 @@
 package com.leo.erp.auth.service;
 
+import lombok.extern.slf4j.Slf4j;
 import com.leo.erp.auth.config.AuthProperties;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
+@Slf4j
 @Component
 public class AuthBootstrapRunner implements ApplicationRunner {
-
-    private static final Logger log = LoggerFactory.getLogger(AuthBootstrapRunner.class);
-
     private final AuthProperties authProperties;
 
     public AuthBootstrapRunner(AuthProperties authProperties) {

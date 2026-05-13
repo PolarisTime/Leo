@@ -9,6 +9,7 @@ import com.leo.erp.logistics.bill.web.dto.FreightBillResponse;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.security.permission.WorkflowTransitionGuard;
 import org.junit.jupiter.api.Test;
+import org.mapstruct.factory.Mappers;
 import org.mockito.ArgumentCaptor;
 
 import java.math.BigDecimal;
@@ -32,7 +33,7 @@ class FreightBillServiceTest {
         FreightBillService service = new FreightBillService(
                 repository,
                 new SnowflakeIdGenerator(),
-                new FreightBillMapper(),
+                Mappers.getMapper(FreightBillMapper.class),
                 mock(WorkflowTransitionGuard.class)
         );
 

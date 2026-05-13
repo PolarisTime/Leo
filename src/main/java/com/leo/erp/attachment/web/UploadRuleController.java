@@ -1,7 +1,6 @@
 package com.leo.erp.attachment.web;
 
-import com.leo.erp.attachment.service.PageUploadRuleDetail;
-import com.leo.erp.attachment.service.UpdatePageUploadRuleCommand;
+import com.leo.erp.attachment.mapper.UploadRuleWebMapper;
 import com.leo.erp.attachment.service.UploadRuleService;
 import com.leo.erp.attachment.web.dto.UploadRuleRequest;
 import com.leo.erp.attachment.web.dto.UploadRuleResponse;
@@ -20,19 +19,22 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @Validated
-@RequestMapping({"/general-setting/upload-rule", "/upload-rules/page"})
+@RequestMapping("/general-setting/upload-rule")
 public class UploadRuleController {
 
     private final UploadRuleService uploadRuleService;
+    private final UploadRuleWebMapper uploadRuleWebMapper;
 
-    public UploadRuleController(UploadRuleService uploadRuleService) {
+    public UploadRuleController(UploadRuleService uploadRuleService,
+                                UploadRuleWebMapper uploadRuleWebMapper) {
         this.uploadRuleService = uploadRuleService;
+        this.uploadRuleWebMapper = uploadRuleWebMapper;
     }
 
     @GetMapping
     @RequiresPermission(authenticatedOnly = true, allowApiKey = true)
     public ApiResponse<UploadRuleResponse> detail(@RequestParam(required = false) @Size(max = 64) String moduleKey) {
-        return ApiResponse.success(toResponse(uploadRuleService.getPageUploadRule(defaultModuleKey(moduleKey))));
+        return ApiResponse.success(uploadRuleWebMapper.toResponse(uploadRuleService.getPageUploadRule(defaultModuleKey(moduleKey))));
     }
 
     @PutMapping
@@ -42,24 +44,10 @@ public class UploadRuleController {
                                                   @Valid @RequestBody UploadRuleRequest request) {
         return ApiResponse.success(
                 "更新成功",
-                toResponse(uploadRuleService.updatePageUploadRule(
+                uploadRuleWebMapper.toResponse(uploadRuleService.updatePageUploadRule(
                         defaultModuleKey(moduleKey),
-                        new UpdatePageUploadRuleCommand(request.renamePattern(), request.status(), request.remark())
+                        uploadRuleWebMapper.toCommand(request)
                 ))
-        );
-    }
-
-    private UploadRuleResponse toResponse(PageUploadRuleDetail detail) {
-        return new UploadRuleResponse(
-                detail.id(),
-                detail.moduleKey(),
-                detail.moduleName(),
-                detail.ruleCode(),
-                detail.ruleName(),
-                detail.renamePattern(),
-                detail.status(),
-                detail.remark(),
-                detail.previewFileName()
         );
     }
 

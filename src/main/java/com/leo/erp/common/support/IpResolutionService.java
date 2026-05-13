@@ -1,8 +1,7 @@
 package com.leo.erp.common.support;
 
+import lombok.extern.slf4j.Slf4j;
 import jakarta.servlet.http.HttpServletRequest;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -19,11 +18,9 @@ import java.util.stream.Stream;
  * Trusted proxies can be single IPs (127.0.0.1, 10.0.0.1) or CIDR ranges
  * (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16).
  */
+@Slf4j
 @Component
 public class IpResolutionService {
-
-    private static final Logger log = LoggerFactory.getLogger(IpResolutionService.class);
-
     private final List<TrustedProxyMatcher> trustedMatchers;
 
     public IpResolutionService(@Value("${leo.trusted-proxies:}") String trustedProxyList) {

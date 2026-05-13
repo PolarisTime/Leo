@@ -26,7 +26,7 @@ public class ModuleCatalog {
     private static Map<String, String> buildModuleNameMap() {
         Map<String, String> modules = new LinkedHashMap<>();
         modules.put("material", "商品资料");
-        modules.put("material-categories", "商品类别");
+        modules.put("material-category", "商品类别");
         modules.put("supplier", "供应商");
         modules.put("customer", "客户");
         modules.put("carrier", "物流商");
@@ -52,7 +52,7 @@ public class ModuleCatalog {
         modules.put("company-setting", "公司信息");
         modules.put("permission", "权限管理");
         modules.put("user-account", "用户账户");
-        modules.put("role-settings", "角色权限配置");
+        modules.put("role-setting", "角色权限配置");
         modules.put("role-action-editor", "角色权限配置");
         modules.put("print-template", "打印模板");
         modules.put("operation-log", "操作日志");

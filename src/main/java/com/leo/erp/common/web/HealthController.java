@@ -1,5 +1,10 @@
 package com.leo.erp.common.web;
 
+import com.leo.erp.common.api.ApiResponse;
+import com.leo.erp.common.support.DateTimeFormatSupport;
+import com.leo.erp.common.web.dto.HealthCheckResponse;
+import com.leo.erp.common.web.dto.HealthResponse;
+import lombok.extern.slf4j.Slf4j;
 import org.slf4j.MDC;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
@@ -9,10 +14,8 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.io.File;
-import java.time.OffsetDateTime;
-import java.util.LinkedHashMap;
-import java.util.Map;
 
+@Slf4j
 @RestController
 public class HealthController {
 
@@ -31,64 +34,56 @@ public class HealthController {
     }
 
     @GetMapping("/health")
-    public ResponseEntity<Map<String, Object>> health() {
-        Map<String, Object> result = new LinkedHashMap<>();
-        result.put("status", "UP");
-        result.put("app", appName);
-        result.put("traceId", MDC.get(TRACE_ID_MDC_KEY));
-        result.put("timestamp", OffsetDateTime.now().toString());
-
-        result.put("db", checkDatabase());
-        result.put("redis", checkRedis());
-        result.put("disk", checkDisk());
-
-        boolean allUp = result.values().stream()
-                .filter(v -> v instanceof Map)
-                .map(v -> (Map<?, ?>) v)
-                .allMatch(m -> "UP".equals(m.get("status")));
-
+    public ResponseEntity<ApiResponse<HealthResponse>> health() {
+        HealthCheckResponse db = checkDatabase();
+        HealthCheckResponse redis = checkRedis();
+        HealthCheckResponse disk = checkDisk();
+        boolean allUp = db.isUp() && redis.isUp() && disk.isUp();
         int httpStatus = allUp ? 200 : 503;
-        result.put("status", allUp ? "UP" : "DEGRADED");
-
-        return ResponseEntity.status(httpStatus).body(result);
+        HealthResponse response = new HealthResponse(
+                allUp ? "UP" : "DEGRADED",
+                appName,
+                safeTraceId(),
+                DateTimeFormatSupport.now(),
+                db,
+                redis,
+                disk
+        );
+        return ResponseEntity.status(httpStatus).body(ApiResponse.success(response));
     }
 
-    private Map<String, Object> checkDatabase() {
-        Map<String, Object> db = new LinkedHashMap<>();
+    private HealthCheckResponse checkDatabase() {
         try {
             jdbcTemplate.queryForObject("SELECT 1", Integer.class);
-            db.put("status", "UP");
+            return HealthCheckResponse.up();
         } catch (Exception e) {
-            db.put("status", "DOWN");
-            db.put("error", e.getMessage());
+            log.warn("health database check failed: {}", e.getClass().getSimpleName());
+            return HealthCheckResponse.down();
         }
-        return db;
     }
 
-    private Map<String, Object> checkRedis() {
-        Map<String, Object> redis = new LinkedHashMap<>();
+    private HealthCheckResponse checkRedis() {
         try {
             var connection = redisConnectionFactory.getConnection();
             connection.ping();
             connection.close();
-            redis.put("status", "UP");
+            return HealthCheckResponse.up();
         } catch (Exception e) {
-            redis.put("status", "DOWN");
-            redis.put("error", e.getMessage());
+            log.warn("health redis check failed: {}", e.getClass().getSimpleName());
+            return HealthCheckResponse.down();
         }
-        return redis;
     }
 
-    private Map<String, Object> checkDisk() {
-        Map<String, Object> disk = new LinkedHashMap<>();
+    private HealthCheckResponse checkDisk() {
         long freeBytes = new File("/").getFreeSpace();
         long totalBytes = new File("/").getTotalSpace();
         long freeGb = freeBytes / (1024 * 1024 * 1024);
         long totalGb = totalBytes / (1024 * 1024 * 1024);
+        return HealthCheckResponse.disk(freeGb < 1 ? "WARN" : "UP", freeGb, totalGb);
+    }
 
-        disk.put("status", freeGb < 1 ? "WARN" : "UP");
-        disk.put("freeGb", freeGb);
-        disk.put("totalGb", totalGb);
-        return disk;
+    private String safeTraceId() {
+        String traceId = MDC.get(TRACE_ID_MDC_KEY);
+        return traceId == null ? "" : traceId;
     }
 }

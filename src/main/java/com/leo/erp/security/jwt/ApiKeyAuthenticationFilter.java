@@ -144,7 +144,7 @@ public class ApiKeyAuthenticationFilter extends OncePerRequestFilter {
         if (resolvedCode != null) {
             return resolvedCode;
         }
-        if (requestPath != null && requestPath.startsWith("/attachments")) {
+        if (requestPath != null && requestPath.startsWith("/attachment")) {
             String moduleKey = request.getParameter("moduleKey");
             if (moduleKey != null) {
                 return ResourcePermissionCatalog.resolveResourceByMenuCode(moduleKey.trim())

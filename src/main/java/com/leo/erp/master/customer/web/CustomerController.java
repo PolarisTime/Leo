@@ -22,7 +22,7 @@ public class CustomerController {
         this.customerService = customerService;
     }
 
-    @GetMapping("/options")
+    @GetMapping("/option")
     @RequiresPermission(resource = "customer", action = "read")
     public ApiResponse<java.util.List<CustomerOptionResponse>> options() {
         return ApiResponse.success(customerService.listActiveOptions());

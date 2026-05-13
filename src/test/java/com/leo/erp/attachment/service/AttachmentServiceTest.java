@@ -66,8 +66,8 @@ class AttachmentServiceTest {
         assertThat(response.id()).isEqualTo(9001L);
         assertThat(response.fileName()).isEqualTo("renamed-contract.pdf");
         assertThat(store.get(9001L).getAccessKey()).isNotBlank();
-        assertThat(response.previewUrl()).isEqualTo("/api/attachments/9001/preview?accessKey=" + store.get(9001L).getAccessKey());
-        assertThat(response.downloadUrl()).isEqualTo("/api/attachments/9001/download?accessKey=" + store.get(9001L).getAccessKey());
+        assertThat(response.previewUrl()).isEqualTo("/api/attachment/9001/preview?accessKey=" + store.get(9001L).getAccessKey());
+        assertThat(response.downloadUrl()).isEqualTo("/api/attachment/9001/download?accessKey=" + store.get(9001L).getAccessKey());
         assertThat(store.get(9001L).getOriginalFileName()).isEqualTo("contract.pdf");
         assertThat(store.get(9001L).getStoragePath()).isEqualTo(
                 "local:attachments/" + LocalDate.now().getYear() + "/" + String.format("%02d", LocalDate.now().getMonthValue()) + "/9001/renamed-contract.pdf"
@@ -90,12 +90,12 @@ class AttachmentServiceTest {
         );
         MockMultipartFile file = new MockMultipartFile("file", "proof.pdf", "application/pdf", "hello".getBytes(StandardCharsets.UTF_8));
 
-        AttachmentView response = service.upload(file, "PAGE_UPLOAD", "freight-statements");
+        AttachmentView response = service.upload(file, "PAGE_UPLOAD", "freight-statement");
 
-        assertThat(response.previewUrl()).isEqualTo("/api/attachments/9002/preview?accessKey="
-                + store.get(9002L).getAccessKey() + "&moduleKey=freight-statements");
-        assertThat(response.downloadUrl()).isEqualTo("/api/attachments/9002/download?accessKey="
-                + store.get(9002L).getAccessKey() + "&moduleKey=freight-statements");
+        assertThat(response.previewUrl()).isEqualTo("/api/attachment/9002/preview?accessKey="
+                + store.get(9002L).getAccessKey() + "&moduleKey=freight-statement");
+        assertThat(response.downloadUrl()).isEqualTo("/api/attachment/9002/download?accessKey="
+                + store.get(9002L).getAccessKey() + "&moduleKey=freight-statement");
     }
 
     @Test

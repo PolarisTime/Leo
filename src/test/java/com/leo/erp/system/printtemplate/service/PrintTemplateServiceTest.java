@@ -38,7 +38,7 @@ class PrintTemplateServiceTest {
         );
 
         assertThatThrownBy(() -> service.create(new PrintTemplateRequest(
-                "purchase-orders",
+                "purchase-order",
                 "模板A",
                 "<img src=x onerror=alert(1)>",
                 "1"
@@ -57,7 +57,7 @@ class PrintTemplateServiceTest {
         );
 
         assertThatThrownBy(() -> service.create(new PrintTemplateRequest(
-                "purchase-orders",
+                "purchase-order",
                 "模板A",
                 "LODOP.PRINT_INIT('test'); window.alert('xss');",
                 "1"

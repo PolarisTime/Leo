@@ -1,5 +1,6 @@
 package com.leo.erp.system.database.service;
 
+import lombok.extern.slf4j.Slf4j;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.support.StatusConstants;
@@ -9,8 +10,6 @@ import com.leo.erp.system.database.domain.entity.DatabaseExportTask;
 import com.leo.erp.system.database.repository.DatabaseExportTaskRepository;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -27,10 +26,10 @@ import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+@Slf4j
 @Service
 public class DatabaseExportTaskService {
 
-    private static final Logger log = LoggerFactory.getLogger(DatabaseExportTaskService.class);
     private static final String STATUS_PENDING = "排队中";
     private static final String STATUS_RUNNING = "执行中";
     private static final String STATUS_SUCCESS = StatusConstants.COMPLETED;

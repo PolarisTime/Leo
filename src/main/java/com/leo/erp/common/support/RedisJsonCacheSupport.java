@@ -1,5 +1,6 @@
 package com.leo.erp.common.support;
 
+import lombok.extern.slf4j.Slf4j;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -8,8 +9,6 @@ import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.core.Cursor;
 import org.springframework.data.redis.core.ScanOptions;
 import org.springframework.data.redis.core.StringRedisTemplate;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import java.nio.charset.StandardCharsets;
@@ -19,10 +18,10 @@ import java.util.Collection;
 import java.util.List;
 import java.util.function.Supplier;
 
+@Slf4j
 @Component
 public class RedisJsonCacheSupport {
 
-    private static final Logger log = LoggerFactory.getLogger(RedisJsonCacheSupport.class);
     private static final int SCAN_BATCH_SIZE = 256;
     private static final int MAX_SCAN_KEYS = 10000;
 

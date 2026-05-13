@@ -71,7 +71,7 @@ public class SupplierStatementController {
     }
 
     @Operation(summary = "分页查询供应商对账单候选采购入库单")
-    @GetMapping("/candidates")
+    @GetMapping("/candidate")
     @RequiresPermission(resource = "supplier-statement", action = "read")
     public ApiResponse<PageResponse<SupplierStatementCandidateResponse>> candidates(
             @BindPageQuery(sortFieldKey = "purchase-inbound") PageQuery query,

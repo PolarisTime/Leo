@@ -22,7 +22,7 @@ public class CarrierController {
         this.carrierService = carrierService;
     }
 
-    @GetMapping("/options")
+    @GetMapping("/option")
     @RequiresPermission(resource = "carrier", action = "read")
     public ApiResponse<java.util.List<CarrierOptionResponse>> options() {
         return ApiResponse.success(carrierService.listActiveOptions());

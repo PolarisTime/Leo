@@ -34,7 +34,7 @@ import java.nio.charset.StandardCharsets;
 
 @RestController
 @Validated
-@RequestMapping("/attachments")
+@RequestMapping("/attachment")
 public class AttachmentController {
 
     private final AttachmentService attachmentService;

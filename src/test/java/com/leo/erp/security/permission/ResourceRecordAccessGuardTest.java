@@ -46,7 +46,7 @@ class ResourceRecordAccessGuardTest {
 
         DataScopeContext.set(1L, "receipt", ResourcePermissionCatalog.SCOPE_ALL);
 
-        assertThatThrownBy(() -> guard.assertCanAccess(principal, "customer-statements", "read", statement))
+        assertThatThrownBy(() -> guard.assertCanAccess(principal, "customer-statement", "read", statement))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("无数据权限");
 

@@ -28,7 +28,7 @@ public final class PageSortFieldCatalog {
             Map.entry("pending-invoice-receipt-report", Set.of("orderNo", "supplierName", "orderDate", "materialCode", "pendingInvoiceWeightTon", "pendingInvoiceAmount")),
             Map.entry("department", Set.of("id", "departmentCode", "departmentName", "parentId", "managerName", "contactPhone", "sortOrder", "status")),
             Map.entry("user-account", Set.of("id", "loginName", "userName", "mobile", "roleName", "dataScope", "lastLoginDate", "status")),
-            Map.entry("role-settings", Set.of("id", "roleCode", "roleName", "roleType", "dataScope", "status")),
+            Map.entry("role-setting", Set.of("id", "roleCode", "roleName", "roleType", "dataScope", "status")),
             Map.entry("general-setting", Set.of("id", "settingCode", "settingName", "billName", "prefix", "dateRule", "serialLength", "resetRule", "sampleNo", "status")),
             Map.entry("company-setting", Set.of("id", "companyName", "taxNo", "bankName", "bankAccount", "status")),
             Map.entry("permission", Set.of("id", "permissionCode", "permissionName", "moduleName", "permissionType", "actionName", "status")),

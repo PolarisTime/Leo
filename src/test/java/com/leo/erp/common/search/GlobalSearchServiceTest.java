@@ -84,7 +84,7 @@ class GlobalSearchServiceTest {
         List<GlobalSearchResponse> results = service.search("CG20260001", 20);
 
         assertThat(results).singleElement().satisfies(item -> {
-            assertThat(item.moduleKey()).isEqualTo("purchase-orders");
+            assertThat(item.moduleKey()).isEqualTo("purchase-order");
             assertThat(item.primaryNo()).isEqualTo("CG20260001");
             assertThat(item.summary()).isEqualTo("供应商甲 / 采购A / 已审核");
             assertThat(item.matchedByTrackId()).isFalse();
@@ -165,10 +165,10 @@ class GlobalSearchServiceTest {
                 List.of()
         )));
 
-        List<GlobalSearchResponse> results = service.search("CG20260001", 20, List.of("purchase-orders"));
+        List<GlobalSearchResponse> results = service.search("CG20260001", 20, List.of("purchase-order"));
 
         assertThat(results).singleElement().satisfies(item ->
-                assertThat(item.moduleKey()).isEqualTo("purchase-orders"));
+                assertThat(item.moduleKey()).isEqualTo("purchase-order"));
         verify(purchaseOrderService).search("CG20260001", 6);
         verifyNoInteractions(salesOrderService);
     }

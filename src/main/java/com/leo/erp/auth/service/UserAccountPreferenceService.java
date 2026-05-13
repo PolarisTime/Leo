@@ -1,5 +1,6 @@
 package com.leo.erp.auth.service;
 
+import lombok.extern.slf4j.Slf4j;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leo.erp.auth.domain.entity.UserAccount;
@@ -8,8 +9,6 @@ import com.leo.erp.auth.web.dto.UserAccountPreferencesPayload;
 import com.leo.erp.auth.web.dto.UserListColumnSettingsPayload;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -18,11 +17,9 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 
+@Slf4j
 @Service
 public class UserAccountPreferenceService {
-
-    private static final Logger log = LoggerFactory.getLogger(UserAccountPreferenceService.class);
-
     private final UserAccountRepository repository;
     private final ObjectMapper objectMapper;
 

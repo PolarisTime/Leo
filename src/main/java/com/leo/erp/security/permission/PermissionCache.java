@@ -1,8 +1,7 @@
 package com.leo.erp.security.permission;
 
+import lombok.extern.slf4j.Slf4j;
 import com.leo.erp.common.support.RedisJsonCacheSupport;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.data.redis.connection.RedisConnection;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.core.Cursor;
@@ -20,11 +19,9 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
+@Slf4j
 @Component
 class PermissionCache {
-
-    private static final Logger log = LoggerFactory.getLogger(PermissionCache.class);
-
     static final String CACHE_PREFIX = "leo:resource-perm:";
     static final String SCOPE_CACHE_PREFIX = "leo:resource-scope:";
     static final long CACHE_TTL_MINUTES = 5;

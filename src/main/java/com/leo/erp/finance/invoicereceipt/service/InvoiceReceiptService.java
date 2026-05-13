@@ -20,6 +20,7 @@ import com.leo.erp.finance.invoicereceipt.web.dto.InvoiceReceiptItemRequest;
 import com.leo.erp.finance.invoicereceipt.web.dto.InvoiceReceiptItemResponse;
 import com.leo.erp.finance.invoicereceipt.web.dto.InvoiceReceiptRequest;
 import com.leo.erp.finance.invoicereceipt.web.dto.InvoiceReceiptResponse;
+import com.leo.erp.purchase.order.domain.entity.PurchaseOrder;
 import com.leo.erp.purchase.order.domain.entity.PurchaseOrderItem;
 import com.leo.erp.purchase.order.service.PurchaseOrderItemQueryService;
 import com.leo.erp.security.permission.WorkflowTransitionGuard;
@@ -367,12 +368,16 @@ public class InvoiceReceiptService extends AbstractCrudService<InvoiceReceipt, I
         if (sourcePurchaseOrderItem == null) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行来源采购订单明细不存在");
         }
+        PurchaseOrder sourcePurchaseOrder = sourcePurchaseOrderItem.getPurchaseOrder();
+        if (sourcePurchaseOrder == null || sourcePurchaseOrder.getOrderNo() == null || sourcePurchaseOrder.getOrderNo().isBlank()) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行来源采购订单不存在");
+        }
         BigDecimal pieceWeightTon = TradeItemCalculator.scaleWeightTon(sourcePurchaseOrderItem.getPieceWeightTon());
         BigDecimal unitPrice = TradeItemCalculator.scaleAmount(sourcePurchaseOrderItem.getUnitPrice());
         BigDecimal weightTon = TradeItemCalculator.calculateWeightTon(source.quantity(), pieceWeightTon);
         BigDecimal amount = TradeItemCalculator.calculateAmount(weightTon, unitPrice);
         return new ResolvedInvoiceReceiptItem(
-                sourcePurchaseOrderItem.getPurchaseOrder().getOrderNo(),
+                sourcePurchaseOrder.getOrderNo(),
                 sourcePurchaseOrderItem.getMaterialCode(),
                 sourcePurchaseOrderItem.getBrand(),
                 sourcePurchaseOrderItem.getCategory(),

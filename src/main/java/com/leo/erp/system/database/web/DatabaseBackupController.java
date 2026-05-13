@@ -5,6 +5,7 @@ import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.web.PublicAccess;
 import com.leo.erp.security.permission.RequiresPermission;
 import com.leo.erp.security.totp.RequiresTotpVerification;
+import com.leo.erp.system.database.mapper.DatabaseExportTaskMapper;
 import com.leo.erp.system.database.service.DatabaseBackupService;
 import com.leo.erp.system.database.service.DatabaseExportTaskService;
 import com.leo.erp.system.operationlog.support.OperationLoggable;
@@ -34,46 +35,49 @@ public class DatabaseBackupController {
 
     private final DatabaseBackupService backupService;
     private final DatabaseExportTaskService exportTaskService;
+    private final DatabaseExportTaskMapper exportTaskMapper;
 
     @Value("${server.servlet.context-path:}")
     private String contextPath;
 
     public DatabaseBackupController(DatabaseBackupService backupService,
-                                    DatabaseExportTaskService exportTaskService) {
+                                    DatabaseExportTaskService exportTaskService,
+                                    DatabaseExportTaskMapper exportTaskMapper) {
         this.backupService = backupService;
         this.exportTaskService = exportTaskService;
+        this.exportTaskMapper = exportTaskMapper;
     }
 
-    @PostMapping("/export-tasks")
+    @PostMapping("/export-task")
     @RequiresPermission(resource = "database", action = "export")
     @RequiresTotpVerification
     @OperationLoggable(moduleName = "数据库管理", actionType = "导出备份")
     public ApiResponse<DatabaseExportTaskResponse> createExportTask() {
-        return ApiResponse.success("导出任务已提交", toResponse(exportTaskService.createTask()));
+        return ApiResponse.success("导出任务已提交", exportTaskMapper.toResponse(exportTaskService.createTask()));
     }
 
-    @GetMapping("/export-tasks")
+    @GetMapping("/export-task")
     @RequiresPermission(resource = "database", action = "export")
     public ApiResponse<List<DatabaseExportTaskResponse>> listExportTasks() {
-        return ApiResponse.success(exportTaskService.listRecentTasks().stream().map(this::toResponse).toList());
+        return ApiResponse.success(exportTaskService.listRecentTasks().stream().map(exportTaskMapper::toResponse).toList());
     }
 
-    @GetMapping("/export-tasks/{id}")
+    @GetMapping("/export-task/{id}")
     @RequiresPermission(resource = "database", action = "export")
     public ApiResponse<DatabaseExportTaskResponse> getExportTask(@PathVariable @Positive Long id) {
-        return ApiResponse.success(toResponse(exportTaskService.getTask(id)));
+        return ApiResponse.success(exportTaskMapper.toResponse(exportTaskService.getTask(id)));
     }
 
-    @PostMapping("/export-tasks/{id}/download-link")
+    @PostMapping("/export-task/{id}/download-link")
     @RequiresPermission(resource = "database", action = "export")
     public ApiResponse<DatabaseExportDownloadLinkResponse> generateDownloadLink(@PathVariable @Positive Long id) {
         DatabaseExportTaskService.DownloadLinkPayload payload = exportTaskService.generateDownloadLink(id);
         String contextPathValue = contextPath == null ? "" : contextPath;
-        String downloadUrl = contextPathValue + "/system/database/export-tasks/" + payload.taskId() + "/download?token=" + payload.downloadToken();
+        String downloadUrl = contextPathValue + "/system/database/export-task/" + payload.taskId() + "/download?token=" + payload.downloadToken();
         return ApiResponse.success("下载链接已生成", new DatabaseExportDownloadLinkResponse(downloadUrl, payload.expiresAt()));
     }
 
-    @GetMapping("/export-tasks/{id}/download")
+    @GetMapping("/export-task/{id}/download")
     @PublicAccess
     public ResponseEntity<Resource> downloadExportTask(@PathVariable @Positive Long id,
                                                        @RequestParam @NotBlank(message = "下载令牌不能为空") String token) {
@@ -102,20 +106,5 @@ public class DatabaseBackupController {
         }
         backupService.importBackup(file, databaseUsername, databasePassword);
         return ApiResponse.success("导入成功", null);
-    }
-
-    private DatabaseExportTaskResponse toResponse(com.leo.erp.system.database.domain.entity.DatabaseExportTask task) {
-        return new DatabaseExportTaskResponse(
-                task.getId(),
-                task.getTaskNo(),
-                task.getStatus(),
-                task.getFileName(),
-                task.getFileSize(),
-                task.getFailureReason(),
-                task.getCreatedAt(),
-                task.getFinishedAt(),
-                task.getExpiresAt(),
-                null
-        );
     }
 }
