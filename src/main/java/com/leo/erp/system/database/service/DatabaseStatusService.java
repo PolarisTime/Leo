@@ -1,11 +1,10 @@
 package com.leo.erp.system.database.service;
 
+import lombok.extern.slf4j.Slf4j;
 import com.leo.erp.common.support.PostgresJdbcUrlParser;
 import com.leo.erp.system.database.web.dto.DatabaseStatusResponse;
 import com.leo.erp.system.database.web.dto.DatabaseStatusResponse.PostgresStatus;
 import com.leo.erp.system.database.web.dto.DatabaseStatusResponse.RedisStatus;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.connection.RedisConnection;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -21,11 +20,9 @@ import java.util.Date;
 import java.util.Objects;
 import java.util.Properties;
 
+@Slf4j
 @Service
 public class DatabaseStatusService {
-
-    private static final Logger log = LoggerFactory.getLogger(DatabaseStatusService.class);
-
     private final DataSource dataSource;
     private final StringRedisTemplate redisTemplate;
 

@@ -1,12 +1,11 @@
 package com.leo.erp.security.permission;
 
+import lombok.extern.slf4j.Slf4j;
 import com.leo.erp.auth.domain.entity.UserAccount;
 import com.leo.erp.auth.repository.UserAccountRepository;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.system.department.domain.entity.Department;
 import com.leo.erp.system.department.repository.DepartmentRepository;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
@@ -16,10 +15,10 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Component
 class DepartmentScopeResolver {
 
-    private static final Logger log = LoggerFactory.getLogger(DepartmentScopeResolver.class);
     private static final Duration DEPARTMENT_CACHE_TTL = Duration.ofMinutes(5);
 
     private final ConcurrentHashMap<Long, DepartmentCacheEntry> departmentUserCache = new ConcurrentHashMap<>();

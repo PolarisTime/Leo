@@ -23,7 +23,7 @@ import java.util.List;
 
 @RestController
 @Validated
-@RequestMapping("/auth/api-keys")
+@RequestMapping("/auth/api-key")
 public class ApiKeyAdminController {
 
     private final ApiKeyAdminService service;
@@ -49,19 +49,19 @@ public class ApiKeyAdminController {
         return ApiResponse.success(service.detail(id));
     }
 
-    @GetMapping("/user-options")
+    @GetMapping("/user-option")
     @RequiresPermission(resource = "api-key", action = "read")
     public ApiResponse<List<ApiKeyUserOptionResponse>> userOptions(@RequestParam(required = false) @Size(max = 100) String keyword) {
         return ApiResponse.success(service.listAvailableUsers(keyword));
     }
 
-    @GetMapping("/resource-options")
+    @GetMapping("/resource-option")
     @RequiresPermission(resource = "api-key", action = "read")
     public ApiResponse<List<ApiKeyResourceOptionResponse>> resourceOptions() {
         return ApiResponse.success(service.listResourceOptions());
     }
 
-    @GetMapping("/action-options")
+    @GetMapping("/action-option")
     @RequiresPermission(resource = "api-key", action = "read")
     public ApiResponse<List<ApiKeyActionOptionResponse>> actionOptions() {
         return ApiResponse.success(service.listActionOptions());

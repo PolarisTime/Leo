@@ -4,7 +4,6 @@ import com.leo.erp.common.api.ApiResponse;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.api.PageResponse;
 import com.leo.erp.common.web.BindPageQuery;
-import com.leo.erp.master.material.repository.MaterialCategoryRepository;
 import com.leo.erp.master.material.service.MaterialCategoryService;
 import com.leo.erp.master.material.web.dto.MaterialCategoryOptionResponse;
 import com.leo.erp.master.material.web.dto.MaterialCategoryRequest;
@@ -27,15 +26,13 @@ import java.util.List;
 
 @RestController
 @Validated
-@RequestMapping("/material-categories")
+@RequestMapping("/material-category")
 public class MaterialCategoryController {
 
     private final MaterialCategoryService service;
-    private final MaterialCategoryRepository repository;
 
-    public MaterialCategoryController(MaterialCategoryService service, MaterialCategoryRepository repository) {
+    public MaterialCategoryController(MaterialCategoryService service) {
         this.service = service;
-        this.repository = repository;
     }
 
     @GetMapping
@@ -73,18 +70,9 @@ public class MaterialCategoryController {
         return ApiResponse.success("删除成功", null);
     }
 
-    @GetMapping("/options")
+    @GetMapping("/option")
     @RequiresPermission(resource = "material", action = "read")
     public ApiResponse<List<MaterialCategoryOptionResponse>> options() {
-        List<MaterialCategoryOptionResponse> options = repository
-                .findByStatusAndDeletedFlagFalseOrderBySortOrderAscIdAsc("正常")
-                .stream()
-                .map(cat -> new MaterialCategoryOptionResponse(
-                        cat.getCategoryName(),
-                        cat.getCategoryName(),
-                        Boolean.TRUE.equals(cat.getPurchaseWeighRequired())
-                ))
-                .toList();
-        return ApiResponse.success(options);
+        return ApiResponse.success(service.options());
     }
 }

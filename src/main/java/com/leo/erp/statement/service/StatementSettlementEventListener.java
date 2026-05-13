@@ -5,15 +5,12 @@ import com.leo.erp.finance.receipt.service.ReceiptSettledEvent;
 import com.leo.erp.statement.customer.repository.CustomerStatementRepository;
 import com.leo.erp.statement.freight.repository.FreightStatementRepository;
 import com.leo.erp.statement.supplier.repository.SupplierStatementRepository;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 
 @Component
 public class StatementSettlementEventListener {
 
-    private static final Logger log = LoggerFactory.getLogger(StatementSettlementEventListener.class);
     private static final String SUPPLIER_PAYMENT_TYPE = "供应商";
     private static final String FREIGHT_PAYMENT_TYPE = "物流商";
 

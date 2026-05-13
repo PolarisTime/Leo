@@ -1,5 +1,6 @@
 package com.leo.erp.common.search;
 
+import lombok.extern.slf4j.Slf4j;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.contract.purchase.service.PurchaseContractService;
@@ -31,18 +32,14 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+@Slf4j
 @Service
 public class GlobalSearchService {
-
-    private static final Logger log = LoggerFactory.getLogger(GlobalSearchService.class);
-
     private static final int MAX_TOTAL_LIMIT = 50;
     private static final int MAX_PER_MODULE_LIMIT = 6;
     private static final String[] SUMMARY_FIELDS = {

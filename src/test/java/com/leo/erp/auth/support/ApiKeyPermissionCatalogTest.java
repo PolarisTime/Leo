@@ -14,17 +14,17 @@ class ResourcePermissionCatalogPathTest {
     void shouldResolveRoleResourceForEditorPageAndPermissionEndpoints() {
         assertThat(ResourcePermissionCatalog.resolveResourceByPath("/role-action-editor"))
                 .contains("role");
-        assertThat(ResourcePermissionCatalog.resolveResourceByPath("/role-settings/1/permissions"))
+        assertThat(ResourcePermissionCatalog.resolveResourceByPath("/role-setting/1/permission"))
                 .contains("role");
-        assertThat(ResourcePermissionCatalog.resolveResourceByPath("/role-settings/1/actions/history"))
+        assertThat(ResourcePermissionCatalog.resolveResourceByPath("/role-setting/1/action/history"))
                 .contains("role");
     }
 
     @Test
     void shouldResolveRoleResourceForCrudEndpoints() {
-        assertThat(ResourcePermissionCatalog.resolveResourceByPath("/role-settings"))
+        assertThat(ResourcePermissionCatalog.resolveResourceByPath("/role-setting"))
                 .contains("role");
-        assertThat(ResourcePermissionCatalog.resolveResourceByPath("/role-settings/1"))
+        assertThat(ResourcePermissionCatalog.resolveResourceByPath("/role-setting/1"))
                 .contains("role");
     }
 

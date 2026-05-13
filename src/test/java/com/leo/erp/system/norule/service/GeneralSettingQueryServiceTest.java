@@ -46,7 +46,7 @@ class GeneralSettingQueryServiceTest {
                 .extracting(GeneralSettingResponse::ruleType, GeneralSettingResponse::moduleKey, GeneralSettingResponse::settingCode)
                 .contains(
                         org.assertj.core.groups.Tuple.tuple("NO_RULE", null, "RULE_SO"),
-                        org.assertj.core.groups.Tuple.tuple("UPLOAD_RULE", "sales-orders", "PAGE_UPLOAD_SALES_ORDERS")
+                        org.assertj.core.groups.Tuple.tuple("UPLOAD_RULE", "sales-order", "PAGE_UPLOAD_SALES_ORDER")
                 );
         assertThat(records.stream()
                 .filter(item -> "UPLOAD_RULE".equals(item.ruleType()))
@@ -75,9 +75,9 @@ class GeneralSettingQueryServiceTest {
                 () -> List.of(
                         new PageUploadRuleSummary(
                                 2L,
-                                "sales-orders",
+                                "sales-order",
                                 "销售订单",
-                                "PAGE_UPLOAD_SALES_ORDERS",
+                                "PAGE_UPLOAD_SALES_ORDER",
                                 "销售订单上传命名规则",
                                 "{yyyyMMddHHmmss}_{random8}",
                                 "禁用",
@@ -193,9 +193,9 @@ class GeneralSettingQueryServiceTest {
         return () -> List.of(
                 new PageUploadRuleSummary(
                         2L,
-                        "sales-orders",
+                        "sales-order",
                         "销售订单",
-                        "PAGE_UPLOAD_SALES_ORDERS",
+                        "PAGE_UPLOAD_SALES_ORDER",
                         "销售订单上传命名规则",
                         "{yyyyMMddHHmmss}_{random8}",
                         "正常",

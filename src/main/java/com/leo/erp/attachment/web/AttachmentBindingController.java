@@ -28,7 +28,7 @@ import java.util.List;
 
 @RestController
 @Validated
-@RequestMapping("/attachments/bindings")
+@RequestMapping("/attachment/binding")
 public class AttachmentBindingController {
 
     private final AttachmentBindingService attachmentBindingService;

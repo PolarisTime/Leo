@@ -102,6 +102,11 @@ public class MaterialService extends AbstractCrudService<Material, MaterialReque
                 .toList();
     }
 
+    @Transactional(readOnly = true)
+    public List<String> materialGrades() {
+        return materialRepository.findDistinctMaterials();
+    }
+
     @Override
     protected void validateCreate(MaterialRequest request) {
         ensureMaterialCodeUnique(request.materialCode());

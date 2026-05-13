@@ -50,7 +50,7 @@ class DashboardSummaryServiceTest {
 
         Menu dashboard = menu("dashboard", "/dashboard", "菜单");
         Menu purchase = menu("purchase", null, "目录");
-        Menu purchaseOrder = menu("purchase-order", "/purchase-orders", "菜单");
+        Menu purchaseOrder = menu("purchase-order", "/purchase-order", "菜单");
         when(menuRepository.findByStatusAndDeletedFlagFalseOrderBySortOrder("正常"))
                 .thenReturn(List.of(dashboard, purchase, purchaseOrder));
 

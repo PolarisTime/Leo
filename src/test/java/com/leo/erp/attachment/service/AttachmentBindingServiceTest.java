@@ -26,7 +26,7 @@ class AttachmentBindingServiceTest {
         AtomicReference<List<AttachmentBinding>> savedBindings = new AtomicReference<>(List.of());
         AtomicReference<List<AttachmentBinding>> deletedBindings = new AtomicReference<>(List.of());
         AtomicReference<Boolean> flushCalled = new AtomicReference<>(false);
-        List<AttachmentBinding> existingBindings = List.of(binding(90L, "sales-orders", 9L, 10L, 1));
+        List<AttachmentBinding> existingBindings = List.of(binding(90L, "sales-order", 9L, 10L, 1));
         Map<Long, AttachmentView> attachments = new LinkedHashMap<>();
         attachments.put(11L, attachment(11L, "A.pdf"));
         attachments.put(12L, attachment(12L, "B.pdf"));
@@ -38,13 +38,13 @@ class AttachmentBindingServiceTest {
                 new ModuleCatalog()
         );
 
-        List<AttachmentView> result = service.replace("sales-orders", 9L, List.of(12L, 11L));
+        List<AttachmentView> result = service.replace("sales-order", 9L, List.of(12L, 11L));
 
         assertThat(savedBindings.get())
                 .extracting(AttachmentBinding::getId, AttachmentBinding::getModuleKey, AttachmentBinding::getRecordId, AttachmentBinding::getAttachmentId, AttachmentBinding::getSortOrder)
                 .containsExactly(
-                        org.assertj.core.groups.Tuple.tuple(101L, "sales-orders", 9L, 12L, 1),
-                        org.assertj.core.groups.Tuple.tuple(102L, "sales-orders", 9L, 11L, 2)
+                        org.assertj.core.groups.Tuple.tuple(101L, "sales-order", 9L, 12L, 1),
+                        org.assertj.core.groups.Tuple.tuple(102L, "sales-order", 9L, 11L, 2)
                 );
         assertThat(deletedBindings.get()).containsExactlyElementsOf(existingBindings);
         assertThat(flushCalled.get()).isTrue();
@@ -60,7 +60,7 @@ class AttachmentBindingServiceTest {
                 new ModuleCatalog()
         );
 
-        assertThatThrownBy(() -> service.replace("sales-orders", 9L, List.of(12L, 12L)))
+        assertThatThrownBy(() -> service.replace("sales-order", 9L, List.of(12L, 12L)))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("附件列表存在重复项");
     }
@@ -144,8 +144,8 @@ class AttachmentBindingServiceTest {
                 LocalDateTime.now(),
                 true,
                 "pdf",
-                "/api/attachments/" + id + "/preview",
-                "/api/attachments/" + id + "/download"
+                "/api/attachment/" + id + "/preview",
+                "/api/attachment/" + id + "/download"
         );
     }
 

@@ -1,7 +1,6 @@
 package com.leo.erp.statement.freight.web;
 
 import com.leo.erp.attachment.service.AttachmentView;
-import com.leo.erp.attachment.mapper.AttachmentWebMapper;
 import com.leo.erp.statement.freight.mapper.FreightStatementWebMapper;
 import com.leo.erp.logistics.bill.web.dto.FreightBillItemRequest;
 import com.leo.erp.statement.freight.service.FreightStatementCommand;
@@ -11,6 +10,7 @@ import com.leo.erp.statement.freight.service.FreightStatementView;
 import com.leo.erp.statement.freight.web.dto.FreightStatementRequest;
 import com.leo.erp.statement.freight.web.dto.FreightStatementResponse;
 import org.junit.jupiter.api.Test;
+import org.mapstruct.factory.Mappers;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -21,7 +21,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class FreightStatementWebMapperTest {
 
-    private final FreightStatementWebMapper mapper = new FreightStatementWebMapper(new AttachmentWebMapper());
+    private final FreightStatementWebMapper mapper = Mappers.getMapper(FreightStatementWebMapper.class);
 
     @Test
     void shouldMapRequestToCommand() {
@@ -97,8 +97,8 @@ class FreightStatementWebMapperTest {
                         LocalDateTime.of(2026, 4, 25, 12, 0),
                         true,
                         "pdf",
-                        "/api/attachments/9/preview",
-                        "/api/attachments/9/download"
+                        "/api/attachment/9/preview",
+                        "/api/attachment/9/download"
                 )),
                 "备注",
                 List.of(new FreightStatementItemView(

@@ -38,11 +38,11 @@ class UploadRuleServiceTest {
                 new ModuleCatalog()
         );
 
-        PageUploadRuleDetail response = service.getPageUploadRule("sales-orders");
+        PageUploadRuleDetail response = service.getPageUploadRule("sales-order");
 
-        assertThat(response.moduleKey()).isEqualTo("sales-orders");
+        assertThat(response.moduleKey()).isEqualTo("sales-order");
         assertThat(response.moduleName()).isEqualTo("销售订单");
-        assertThat(response.ruleCode()).isEqualTo("PAGE_UPLOAD_SALES_ORDERS");
+        assertThat(response.ruleCode()).isEqualTo("PAGE_UPLOAD_SALES_ORDER");
         assertThat(response.renamePattern()).isEqualTo("LEGACY_{originName}");
         assertThat(response.remark()).isEqualTo("全局旧规则");
         assertThat(store.values())
@@ -70,13 +70,13 @@ class UploadRuleServiceTest {
         );
 
         PageUploadRuleDetail updated = service.updatePageUploadRule(
-                "customers",
+                "customer",
                 new UpdatePageUploadRuleCommand("CUSTOM_{originName}", "禁用", "客户页面上传")
         );
-        String fileName = service.buildPageUploadFileName("customers", "invoice.pdf", "application/pdf");
-        PageUploadRuleDetail salesRule = service.getPageUploadRule("sales-orders");
+        String fileName = service.buildPageUploadFileName("customer", "invoice.pdf", "application/pdf");
+        PageUploadRuleDetail salesRule = service.getPageUploadRule("sales-order");
 
-        assertThat(updated.moduleKey()).isEqualTo("customers");
+        assertThat(updated.moduleKey()).isEqualTo("customer");
         assertThat(updated.renamePattern()).isEqualTo("CUSTOM_{originName}");
         assertThat(updated.status()).isEqualTo("禁用");
         assertThat(updated.remark()).isEqualTo("客户页面上传");
@@ -109,7 +109,7 @@ class UploadRuleServiceTest {
         assertThat(responses).hasSize(new ModuleCatalog().orderedModuleKeys().size());
         assertThat(responses)
                 .extracting(PageUploadRuleSummary::moduleKey)
-                .contains("materials", "sales-orders", "general-settings", "role-settings");
+                .contains("material", "sales-order", "general-setting", "role-setting");
     }
 
     @Test

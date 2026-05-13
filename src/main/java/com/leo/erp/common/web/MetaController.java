@@ -20,7 +20,7 @@ import java.util.Map;
 public class MetaController {
 
     @Operation(summary = "获取错误码和权限点元数据")
-    @GetMapping("/codes")
+    @GetMapping("/code")
     public ApiResponse<Map<String, Object>> codes() {
         Map<String, Object> result = new LinkedHashMap<>();
 

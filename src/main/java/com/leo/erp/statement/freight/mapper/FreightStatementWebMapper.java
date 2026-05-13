@@ -9,102 +9,18 @@ import com.leo.erp.statement.freight.service.FreightStatementItemView;
 import com.leo.erp.statement.freight.service.FreightStatementView;
 import com.leo.erp.statement.freight.web.dto.FreightStatementRequest;
 import com.leo.erp.statement.freight.web.dto.FreightStatementResponse;
-import org.springframework.stereotype.Component;
+import org.mapstruct.Mapper;
+import org.mapstruct.Mapping;
 
-@Component
-public class FreightStatementWebMapper {
+@Mapper(componentModel = "spring", uses = AttachmentWebMapper.class)
+public interface FreightStatementWebMapper {
 
-    private final AttachmentWebMapper attachmentWebMapper;
+    FreightStatementCommand toCommand(FreightStatementRequest request);
 
-    public FreightStatementWebMapper(AttachmentWebMapper attachmentWebMapper) {
-        this.attachmentWebMapper = attachmentWebMapper;
-    }
+    FreightStatementItemCommand toItemCommand(FreightBillItemRequest item);
 
-    public FreightStatementCommand toCommand(FreightStatementRequest request) {
-        return new FreightStatementCommand(
-                request.statementNo(),
-                request.sourceBillNos(),
-                request.carrierName(),
-                request.startDate(),
-                request.endDate(),
-                request.totalWeight(),
-                request.totalFreight(),
-                request.paidAmount(),
-                request.unpaidAmount(),
-                request.status(),
-                request.signStatus(),
-                request.attachment(),
-                request.attachmentIds(),
-                request.remark(),
-                request.items().stream().map(this::toItemCommand).toList()
-        );
-    }
+    @Mapping(target = "attachments", source = "attachments")
+    FreightStatementResponse toResponse(FreightStatementView view);
 
-    public FreightStatementResponse toResponse(FreightStatementView view) {
-        return new FreightStatementResponse(
-                view.id(),
-                view.statementNo(),
-                view.sourceBillNos(),
-                view.carrierName(),
-                view.startDate(),
-                view.endDate(),
-                view.totalWeight(),
-                view.totalFreight(),
-                view.paidAmount(),
-                view.unpaidAmount(),
-                view.status(),
-                view.signStatus(),
-                view.attachment(),
-                attachmentWebMapper.toResponses(view.attachments()),
-                view.remark(),
-                view.items().stream().map(this::toItemResponse).toList()
-        );
-    }
-
-    private FreightStatementItemCommand toItemCommand(FreightBillItemRequest item) {
-        return new FreightStatementItemCommand(
-                item.id(),
-                item.sourceNo(),
-                item.customerName(),
-                item.projectName(),
-                item.materialCode(),
-                item.materialName(),
-                item.brand(),
-                item.category(),
-                item.material(),
-                item.spec(),
-                item.length(),
-                item.quantity(),
-                item.quantityUnit(),
-                item.pieceWeightTon(),
-                item.piecesPerBundle(),
-                item.batchNo(),
-                item.weightTon(),
-                item.warehouseName()
-        );
-    }
-
-    private FreightBillItemResponse toItemResponse(FreightStatementItemView item) {
-        return new FreightBillItemResponse(
-                item.id(),
-                item.lineNo(),
-                item.sourceNo(),
-                item.customerName(),
-                item.projectName(),
-                item.materialCode(),
-                item.materialName(),
-                item.brand(),
-                item.category(),
-                item.material(),
-                item.spec(),
-                item.length(),
-                item.quantity(),
-                item.quantityUnit(),
-                item.pieceWeightTon(),
-                item.piecesPerBundle(),
-                item.batchNo(),
-                item.weightTon(),
-                item.warehouseName()
-        );
-    }
+    FreightBillItemResponse toItemResponse(FreightStatementItemView item);
 }

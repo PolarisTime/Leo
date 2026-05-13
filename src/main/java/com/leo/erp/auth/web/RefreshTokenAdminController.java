@@ -14,7 +14,7 @@ import org.springframework.web.bind.annotation.*;
 
 @RestController
 @Validated
-@RequestMapping("/auth/refresh-tokens")
+@RequestMapping("/auth/refresh-token")
 public class RefreshTokenAdminController {
 
     private final RefreshTokenAdminService service;

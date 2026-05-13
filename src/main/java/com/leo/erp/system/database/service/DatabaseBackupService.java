@@ -1,13 +1,12 @@
 package com.leo.erp.system.database.service;
 
+import lombok.extern.slf4j.Slf4j;
 import com.leo.erp.common.support.ExternalProcessRunner;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.support.PostgresJdbcUrlParser;
 import com.leo.erp.system.database.config.DatabaseBackupProperties;
 import org.springframework.boot.autoconfigure.jdbc.DataSourceProperties;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -19,10 +18,10 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 
+@Slf4j
 @Service
 public class DatabaseBackupService {
 
-    private static final Logger log = LoggerFactory.getLogger(DatabaseBackupService.class);
     private static final DateTimeFormatter TIMESTAMP_FMT = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss");
     private static final Duration TIMEOUT = Duration.ofMinutes(5);
 

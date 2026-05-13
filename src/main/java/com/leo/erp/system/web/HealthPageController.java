@@ -2,10 +2,10 @@ package com.leo.erp.system.web;
 
 import com.leo.erp.security.permission.PermissionService;
 import com.leo.erp.security.support.SecurityPrincipal;
+import com.leo.erp.common.support.DateTimeFormatSupport;
 import com.leo.erp.system.database.service.DatabaseStatusService;
 import com.leo.erp.system.database.web.dto.DatabaseStatusResponse;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.MediaType;
 import org.springframework.security.core.Authentication;
@@ -19,13 +19,11 @@ import java.lang.management.MemoryMXBean;
 import java.lang.management.MemoryUsage;
 import java.lang.management.RuntimeMXBean;
 import java.lang.management.ThreadMXBean;
-import java.time.OffsetDateTime;
 
+@Slf4j
 @Controller
 @ConditionalOnProperty(prefix = "leo.health.page", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class HealthPageController {
-
-    private static final Logger log = LoggerFactory.getLogger(HealthPageController.class);
 
     private final DatabaseStatusService databaseStatusService;
     private final PermissionService permissionService;
@@ -38,7 +36,7 @@ public class HealthPageController {
     @ResponseBody
     @GetMapping(value = "/system/health", produces = MediaType.TEXT_HTML_VALUE)
     public String health() {
-        String checkedAt = OffsetDateTime.now().toString();
+        String checkedAt = DateTimeFormatSupport.now();
         JvmStatus jvm = getJvmStatus();
         if (!isPrivilegedRequest()) {
             log.debug("public health page requested: appStatus=UP");

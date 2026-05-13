@@ -46,7 +46,7 @@ public class PurchaseOrderController {
     }
 
     @Operation(summary = "分页查询采购订单导入候选")
-    @GetMapping("/import-candidates")
+    @GetMapping("/import-candidate")
     @RequiresPermission(resource = "purchase-order", action = "read")
     public ApiResponse<PageResponse<PurchaseOrderImportCandidateResponse>> importCandidates(
             @BindPageQuery(sortFieldKey = "purchase-order") PageQuery query,

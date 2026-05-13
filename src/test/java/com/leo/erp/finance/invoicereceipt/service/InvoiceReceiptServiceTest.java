@@ -8,6 +8,7 @@ import com.leo.erp.finance.invoicereceipt.mapper.InvoiceReceiptMapper;
 import com.leo.erp.finance.invoicereceipt.web.dto.InvoiceReceiptItemRequest;
 import com.leo.erp.finance.invoicereceipt.web.dto.InvoiceReceiptRequest;
 import com.leo.erp.finance.invoicereceipt.web.dto.InvoiceReceiptResponse;
+import com.leo.erp.purchase.order.domain.entity.PurchaseOrder;
 import com.leo.erp.purchase.order.domain.entity.PurchaseOrderItem;
 import com.leo.erp.purchase.order.service.PurchaseOrderItemQueryService;
 import com.leo.erp.security.permission.WorkflowTransitionGuard;
@@ -78,7 +79,7 @@ class InvoiceReceiptServiceTest {
 
     @Test
     void createRecalculatesAmountFromRoundedWeight() {
-        PurchaseOrderItem sourceItem = buildPurchaseOrderItem(201L, "M-1", new BigDecimal("2.000"), new BigDecimal("6666.66"));
+        PurchaseOrderItem sourceItem = buildPurchaseOrderItem(201L, "M-1", new BigDecimal("0.300"), new BigDecimal("1000.00"));
 
         when(repository.existsByReceiveNoAndDeletedFlagFalse("SP-ROUND")).thenReturn(false);
         when(purchaseOrderItemQueryService.findActiveByIdIn(anyCollection())).thenReturn(List.of(sourceItem));
@@ -144,6 +145,10 @@ class InvoiceReceiptServiceTest {
     private PurchaseOrderItem buildPurchaseOrderItem(Long id, String materialCode, BigDecimal weightTon, BigDecimal amount) {
         PurchaseOrderItem item = new PurchaseOrderItem();
         item.setId(id);
+        PurchaseOrder order = new PurchaseOrder();
+        order.setId(2000L + id);
+        order.setOrderNo("PO-001");
+        item.setPurchaseOrder(order);
         item.setMaterialCode(materialCode);
         item.setBrand("品牌A");
         item.setCategory("品类A");

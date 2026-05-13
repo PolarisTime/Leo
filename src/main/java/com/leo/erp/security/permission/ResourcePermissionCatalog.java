@@ -46,7 +46,7 @@ public final class ResourcePermissionCatalog {
 
     private static final Set<String> NO_MENU_RESOURCES = Set.of("user-account", "permission", "role");
     private static final Map<String, List<String>> EXTRA_MENU_CODES = Map.of(
-            "material", List.of("material-categories")
+            "material", List.of("material-category")
     );
 
     private static List<String> menuCodesFor(Entry entry) {
@@ -89,7 +89,7 @@ public final class ResourcePermissionCatalog {
 
     private static final List<Entry> ENTRIES = List.of(
             entry("dashboard", "工作台", "工作台", false, List.of("/dashboard"), READ_ONLY_ACTIONS),
-            entry("material", "商品资料", "主数据", true, List.of("/material", "/material-categories"), BUSINESS_ACTIONS),
+            entry("material", "商品资料", "主数据", true, List.of("/material", "/material-category"), BUSINESS_ACTIONS),
             entry("supplier", "供应商资料", "主数据", true, List.of("/supplier"), BUSINESS_ACTIONS),
             entry("customer", "客户资料", "主数据", true, List.of("/customer"), BUSINESS_ACTIONS),
             entry("carrier", "物流方资料", "主数据", true, List.of("/carrier"), BUSINESS_ACTIONS),
@@ -114,14 +114,14 @@ public final class ResourcePermissionCatalog {
             entry("invoice-issue", "开票单", "财务", true, List.of("/invoice-issue"), BUSINESS_ACTIONS),
             entry("receivable-payable", "应收应付", "财务", true, List.of("/receivable-payable"), BUSINESS_ACTIONS),
             entry("general-setting", "通用设置", "系统", false,
-                    List.of("/general-setting", "/general-setting/upload-rule", "/upload-rules/page"), List.of(action(READ, "查看"), action(UPDATE, "编辑"))),
+                    List.of("/general-setting", "/general-setting/upload-rule"), List.of(action(READ, "查看"), action(UPDATE, "编辑"))),
             entry("company-setting", "公司信息", "系统", false, List.of("/company-setting"), CRUD_ACTIONS),
             entry("operation-log", "操作日志", "系统", false, List.of("/operation-log"), READ_ONLY_ACTIONS),
             entry("department", "部门", "系统", false, List.of("/department"), CRUD_ACTIONS),
             entry("user-account", "用户账户", "系统", false, List.of("/user-account"), CRUD_ACTIONS),
             entry("permission", "权限管理", "系统", false, List.of("/permission"), READ_ONLY_ACTIONS),
             entry("role", "角色", "系统", false,
-                    List.of("/role-settings", "/role-action-editor"), List.of(
+                    List.of("/role-setting", "/role-action-editor"), List.of(
                             action(READ, "查看"),
                             action(CREATE, "新增"),
                             action(UPDATE, "编辑"),
@@ -132,8 +132,8 @@ public final class ResourcePermissionCatalog {
                     List.of("/access-control"), READ_ONLY_ACTIONS),
             entry("database", "数据库管理", "系统", false,
                     List.of("/database", "/system/database"), List.of(action(READ, "查看"), action(UPDATE, "编辑"), action(EXPORT, "导出"))),
-            entry("session", "会话管理", "系统", false, List.of("/auth/refresh-tokens"), List.of(action(READ, "查看"), action(UPDATE, "编辑"))),
-            entry("api-key", "API Key 管理", "系统", false, List.of("/auth/api-keys"), List.of(action(READ, "查看"), action(CREATE, "新增"), action(UPDATE, "编辑"))),
+            entry("session", "会话管理", "系统", false, List.of("/auth/refresh-token"), List.of(action(READ, "查看"), action(UPDATE, "编辑"))),
+            entry("api-key", "API Key 管理", "系统", false, List.of("/auth/api-key"), List.of(action(READ, "查看"), action(CREATE, "新增"), action(UPDATE, "编辑"))),
             entry("security-key", "安全密钥管理", "系统", false, List.of("/system/security-key"), List.of(action(READ, "查看"), action(UPDATE, "编辑"))),
             entry("print-template", "打印模板", "系统", false, List.of("/print-template"), CRUD_ACTIONS)
     );
@@ -214,8 +214,8 @@ public final class ResourcePermissionCatalog {
             return Optional.empty();
         }
         String path = rawPath.trim();
-        if (path.matches("^/role-settings/[^/]+/permissions(?:/.*)?$")
-                || path.matches("^/role-settings/[^/]+/actions(?:/.*)?$")) {
+        if (path.matches("^/role-setting/[^/]+/permission(?:/.*)?$")
+                || path.matches("^/role-setting/[^/]+/action(?:/.*)?$")) {
             return Optional.of("role");
         }
         return ENTRIES.stream()

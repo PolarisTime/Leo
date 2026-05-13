@@ -18,8 +18,8 @@ class MenuServiceTest {
         MenuService service = new MenuService(new StubPermissionService(
                 List.of(
                         menu(1L, "system", "设置", null, null, "SettingOutlined", 1, "目录"),
-                        menu(2L, "print-template", "打印模板", "system", "/print-templates", "PrinterOutlined", 2, "菜单"),
-                        menu(3L, "database", "数据库管理", "system", "/database-management", "DatabaseOutlined", 3, "菜单")
+                        menu(2L, "print-template", "打印模板", "system", "/print-template", "PrinterOutlined", 2, "菜单"),
+                        menu(3L, "database", "数据库管理", "system", "/database", "DatabaseOutlined", 3, "菜单")
                 ),
                 Set.of("system", "print-template"),
                 Map.of("print-template", Set.of("read"))
@@ -32,7 +32,7 @@ class MenuServiceTest {
         assertThat(root.menuCode()).isEqualTo("system");
         assertThat(root.children()).hasSize(1);
         assertThat(root.children().get(0).menuCode()).isEqualTo("print-template");
-        assertThat(root.children().get(0).routePath()).isEqualTo("/print-templates");
+        assertThat(root.children().get(0).routePath()).isEqualTo("/print-template");
         assertThat(root.children().get(0).actions()).containsExactly("read");
     }
 
