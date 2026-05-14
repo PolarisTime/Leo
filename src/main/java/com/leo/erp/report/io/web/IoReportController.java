@@ -1,5 +1,6 @@
 package com.leo.erp.report.io.web;
 
+import org.springframework.validation.annotation.Validated;
 import com.leo.erp.common.api.ApiResponse;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.api.PageResponse;
@@ -16,6 +17,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.time.LocalDate;
 
 @RestController
+@Validated
 @RequestMapping("/io-report")
 public class IoReportController {
 

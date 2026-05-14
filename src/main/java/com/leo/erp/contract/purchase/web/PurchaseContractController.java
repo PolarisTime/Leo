@@ -1,6 +1,8 @@
 package com.leo.erp.contract.purchase.web;
 
+import org.springframework.validation.annotation.Validated;
 import com.leo.erp.common.api.ApiResponse;
+import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.api.PageResponse;
 import com.leo.erp.common.web.BindPageQuery;
@@ -24,7 +26,8 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/purchase-contract")
+@Validated
+@RequestMapping("/purchase-contracts")
 @Tag(name = "采购合同")
 public class PurchaseContractController {
 
@@ -58,7 +61,7 @@ public class PurchaseContractController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate
     ) {
         return ApiResponse.success(PageResponse.from(
-                purchaseContractService.page(query, keyword, supplierName, status, startDate, endDate)
+                purchaseContractService.page(query, PageFilter.of(keyword, supplierName, status, startDate, endDate))
         ));
     }
 
@@ -88,6 +91,6 @@ public class PurchaseContractController {
     @Operation(summary = "删除采购合同")
     public ApiResponse<Void> delete(@PathVariable Long id) {
         purchaseContractService.delete(id);
-        return ApiResponse.success("删除成功", null);
+        return ApiResponse.success("删除成功");
     }
 }

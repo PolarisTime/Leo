@@ -6,6 +6,7 @@ import com.leo.erp.system.database.web.dto.DatabaseStatusResponse;
 import com.leo.erp.system.database.web.dto.DatabaseStatusResponse.PostgresStatus;
 import com.leo.erp.system.database.web.dto.DatabaseStatusResponse.RedisStatus;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.dao.DataAccessException;
 import org.springframework.data.redis.connection.RedisConnection;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
@@ -13,6 +14,7 @@ import org.springframework.stereotype.Service;
 import javax.sql.DataSource;
 import java.sql.Connection;
 import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.sql.Statement;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -120,7 +122,7 @@ public class DatabaseStatusService {
                     serverStartTime,
                     "正常"
             );
-        } catch (Exception e) {
+        } catch (SQLException e) {
             log.error("获取 PostgreSQL 状态失败", e);
             PostgresJdbcUrlParser.ParsedJdbcUrl jdbcUrl = extractJdbcUrl();
             return new PostgresStatus(
@@ -192,7 +194,7 @@ public class DatabaseStatusService {
                     Math.round(hitRate * 100.0) / 100.0,
                     "正常"
             );
-        } catch (Exception e) {
+        } catch (DataAccessException | NumberFormatException e) {
             log.error("获取 Redis 状态失败", e);
             return new RedisStatus(
                     redisHost,

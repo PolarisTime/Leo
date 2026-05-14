@@ -10,10 +10,22 @@ import com.leo.erp.master.carrier.web.dto.CarrierRequest;
 import com.leo.erp.master.carrier.web.dto.CarrierResponse;
 import com.leo.erp.security.permission.RequiresPermission;
 import jakarta.validation.Valid;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
 
 @RestController
-@RequestMapping("/carrier")
+@Validated
+@RequestMapping("/carriers")
 public class CarrierController {
 
     private final CarrierService carrierService;
@@ -24,7 +36,7 @@ public class CarrierController {
 
     @GetMapping("/option")
     @RequiresPermission(resource = "carrier", action = "read")
-    public ApiResponse<java.util.List<CarrierOptionResponse>> options() {
+    public ApiResponse<List<CarrierOptionResponse>> options() {
         return ApiResponse.success(carrierService.listActiveOptions());
     }
 
@@ -60,6 +72,6 @@ public class CarrierController {
     @RequiresPermission(resource = "carrier", action = "delete")
     public ApiResponse<Void> delete(@PathVariable Long id) {
         carrierService.delete(id);
-        return ApiResponse.success("删除成功", null);
+        return ApiResponse.success("删除成功");
     }
 }

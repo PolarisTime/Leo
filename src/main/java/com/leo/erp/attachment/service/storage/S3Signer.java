@@ -7,6 +7,7 @@ import org.springframework.stereotype.Component;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import java.net.URI;
+import java.security.GeneralSecurityException;
 import java.net.http.HttpRequest;
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
@@ -121,7 +122,7 @@ public class S3Signer {
             Mac mac = Mac.getInstance("HmacSHA256");
             mac.init(new SecretKeySpec(key, "HmacSHA256"));
             return mac.doFinal(data.getBytes(StandardCharsets.UTF_8));
-        } catch (Exception ex) {
+        } catch (GeneralSecurityException ex) {
             throw new IllegalStateException("HmacSHA256 计算失败", ex);
         }
     }

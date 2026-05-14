@@ -4,15 +4,28 @@ import com.leo.erp.common.api.ApiResponse;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.api.PageResponse;
 import com.leo.erp.common.web.BindPageQuery;
+import com.leo.erp.common.web.OptionResponse;
 import com.leo.erp.master.warehouse.service.WarehouseService;
 import com.leo.erp.master.warehouse.web.dto.WarehouseRequest;
 import com.leo.erp.master.warehouse.web.dto.WarehouseResponse;
 import com.leo.erp.security.permission.RequiresPermission;
 import jakarta.validation.Valid;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
 
 @RestController
-@RequestMapping("/warehouse")
+@Validated
+@RequestMapping("/warehouses")
 public class WarehouseController {
 
     private final WarehouseService warehouseService;
@@ -23,7 +36,7 @@ public class WarehouseController {
 
     @GetMapping("/option")
     @RequiresPermission(resource = "warehouse", action = "read")
-    public ApiResponse<java.util.List<com.leo.erp.common.web.OptionResponse>> options() {
+    public ApiResponse<List<OptionResponse>> options() {
         return ApiResponse.success(warehouseService.listActiveOptions());
     }
 
@@ -60,6 +73,6 @@ public class WarehouseController {
     @RequiresPermission(resource = "warehouse", action = "delete")
     public ApiResponse<Void> delete(@PathVariable Long id) {
         warehouseService.delete(id);
-        return ApiResponse.success("删除成功", null);
+        return ApiResponse.success("删除成功");
     }
 }

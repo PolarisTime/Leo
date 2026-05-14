@@ -1,6 +1,8 @@
 package com.leo.erp.contract.sales.web;
 
+import org.springframework.validation.annotation.Validated;
 import com.leo.erp.common.api.ApiResponse;
+import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.api.PageResponse;
 import com.leo.erp.common.web.BindPageQuery;
@@ -24,7 +26,8 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/sales-contract")
+@Validated
+@RequestMapping("/sales-contracts")
 @Tag(name = "销售合同")
 public class SalesContractController {
 
@@ -58,7 +61,7 @@ public class SalesContractController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate
     ) {
         return ApiResponse.success(PageResponse.from(
-                salesContractService.page(query, keyword, customerName, status, startDate, endDate)
+                salesContractService.page(query, PageFilter.of(keyword, customerName, status, startDate, endDate))
         ));
     }
 
@@ -88,6 +91,6 @@ public class SalesContractController {
     @Operation(summary = "删除销售合同")
     public ApiResponse<Void> delete(@PathVariable Long id) {
         salesContractService.delete(id);
-        return ApiResponse.success("删除成功", null);
+        return ApiResponse.success("删除成功");
     }
 }

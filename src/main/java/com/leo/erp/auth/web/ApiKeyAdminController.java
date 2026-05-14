@@ -17,13 +17,19 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 import org.springframework.validation.annotation.Validated;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
 @RestController
 @Validated
-@RequestMapping("/auth/api-key")
+@RequestMapping("/auth/api-keys")
 public class ApiKeyAdminController {
 
     private final ApiKeyAdminService service;
@@ -83,6 +89,6 @@ public class ApiKeyAdminController {
     @OperationLoggable(moduleName = "API Key 管理", actionType = "禁用 API Key")
     public ApiResponse<Void> revoke(@PathVariable @Positive Long id) {
         service.revoke(id);
-        return ApiResponse.success("已禁用", null);
+        return ApiResponse.success("已禁用");
     }
 }

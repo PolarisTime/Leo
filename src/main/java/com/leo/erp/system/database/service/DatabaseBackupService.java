@@ -90,7 +90,8 @@ public class DatabaseBackupService {
             processRunner.run(pb, TIMEOUT, "psql");
         } catch (IOException ex) {
             if (autoBackup != null) {
-                throw new IOException(ex.getMessage() + "，自动备份文件: " + autoBackup.toAbsolutePath(), ex);
+                log.error("数据库导入失败，已保留自动备份文件: {}", autoBackup.toAbsolutePath(), ex);
+                throw new IOException("数据库导入失败，已保留自动备份文件", ex);
             }
             throw ex;
         } finally {

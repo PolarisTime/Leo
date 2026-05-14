@@ -18,6 +18,10 @@ public record ApiResponse<T>(
         return new ApiResponse<>(ErrorCode.SUCCESS.getCode(), message, data, DateTimeFormatSupport.now());
     }
 
+    public static ApiResponse<Void> success(String message) {
+        return new ApiResponse<>(ErrorCode.SUCCESS.getCode(), message, null, DateTimeFormatSupport.now());
+    }
+
     public static ApiResponse<Void> failure(ErrorCode errorCode, String message) {
         return new ApiResponse<>(errorCode.getCode(), message, null, DateTimeFormatSupport.now());
     }

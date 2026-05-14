@@ -1,6 +1,5 @@
 package com.leo.erp.attachment.web;
 
-import com.leo.erp.attachment.mapper.UploadRuleWebMapper;
 import com.leo.erp.attachment.service.UploadRuleService;
 import com.leo.erp.attachment.web.dto.UploadRuleRequest;
 import com.leo.erp.attachment.web.dto.UploadRuleResponse;
@@ -19,22 +18,19 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @Validated
-@RequestMapping("/general-setting/upload-rule")
+@RequestMapping("/general-settings/upload-rule")
 public class UploadRuleController {
 
     private final UploadRuleService uploadRuleService;
-    private final UploadRuleWebMapper uploadRuleWebMapper;
 
-    public UploadRuleController(UploadRuleService uploadRuleService,
-                                UploadRuleWebMapper uploadRuleWebMapper) {
+    public UploadRuleController(UploadRuleService uploadRuleService) {
         this.uploadRuleService = uploadRuleService;
-        this.uploadRuleWebMapper = uploadRuleWebMapper;
     }
 
     @GetMapping
     @RequiresPermission(authenticatedOnly = true, allowApiKey = true)
     public ApiResponse<UploadRuleResponse> detail(@RequestParam(required = false) @Size(max = 64) String moduleKey) {
-        return ApiResponse.success(uploadRuleWebMapper.toResponse(uploadRuleService.getPageUploadRule(defaultModuleKey(moduleKey))));
+        return ApiResponse.success(uploadRuleService.responseDetail(moduleKey));
     }
 
     @PutMapping
@@ -44,17 +40,7 @@ public class UploadRuleController {
                                                   @Valid @RequestBody UploadRuleRequest request) {
         return ApiResponse.success(
                 "更新成功",
-                uploadRuleWebMapper.toResponse(uploadRuleService.updatePageUploadRule(
-                        defaultModuleKey(moduleKey),
-                        uploadRuleWebMapper.toCommand(request)
-                ))
+                uploadRuleService.responseUpdate(moduleKey, request)
         );
-    }
-
-    private String defaultModuleKey(String moduleKey) {
-        if (moduleKey == null || moduleKey.isBlank()) {
-            return "general-setting";
-        }
-        return moduleKey.trim();
     }
 }

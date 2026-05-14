@@ -1,5 +1,6 @@
 package com.leo.erp.auth.web;
 
+import org.springframework.validation.annotation.Validated;
 import com.leo.erp.auth.service.AccountSecurityService;
 import com.leo.erp.auth.web.dto.ChangeOwnPasswordRequest;
 import com.leo.erp.auth.web.dto.CurrentUserSecurityResponse;
@@ -19,6 +20,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
+@Validated
 @RequestMapping("/account/security")
 public class AccountSecurityController {
 
@@ -40,7 +42,7 @@ public class AccountSecurityController {
     public ApiResponse<Void> changePassword(@AuthenticationPrincipal SecurityPrincipal principal,
                                             @Valid @RequestBody ChangeOwnPasswordRequest request) {
         accountSecurityService.changePassword(principal.id(), request);
-        return ApiResponse.success("密码修改成功", null);
+        return ApiResponse.success("密码修改成功");
     }
 
     @PostMapping("/2fa/setup")

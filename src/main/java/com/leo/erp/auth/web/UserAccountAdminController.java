@@ -32,7 +32,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @Validated
-@RequestMapping("/user-account")
+@RequestMapping("/user-accounts")
 public class UserAccountAdminController {
 
     private final UserAccountAdminService userAccountAdminService;
@@ -106,7 +106,7 @@ public class UserAccountAdminController {
     @OperationLoggable(moduleName = "用户账户", actionType = "删除")
     public ApiResponse<Void> delete(@PathVariable @Positive Long id) {
         userAccountAdminService.delete(id);
-        return ApiResponse.success("删除成功", null);
+        return ApiResponse.success("删除成功");
     }
 
     // --- 2FA 管理 ---

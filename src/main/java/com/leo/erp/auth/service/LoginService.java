@@ -29,6 +29,10 @@ public class LoginService {
     private static final String TEMP_TOKEN_USER_INDEX_PREFIX = "auth:2fa:user-temp:";
     private static final Duration TEMP_TOKEN_TTL = Duration.ofMinutes(5);
 
+    /** 认证请求上下文，封装重复出现的请求元数据 */
+    public record AuthRequestContext(String loginIp, String userAgent, String requestPath, String requestMethod) {
+    }
+
     private final UserAccountRepository userAccountRepository;
     private final PasswordEncoder passwordEncoder;
     private final TotpService totpService;
@@ -62,7 +66,7 @@ public class LoginService {
     }
 
     @Transactional
-    public LoginResponseBody login(LoginRequest request, String loginIp, String userAgent, String requestPath, String requestMethod) {
+    public LoginResponseBody login(LoginRequest request, AuthRequestContext ctx) {
         String normalizedLoginName = request.loginName() == null ? "" : request.loginName().trim();
 
         if (systemSwitchService.shouldRequireLoginCaptcha()
@@ -73,15 +77,15 @@ public class LoginService {
         loginAttemptService.ensureLoginAllowed(normalizedLoginName);
 
         UserAccount user = userAccountRepository.findByLoginNameAndDeletedFlagFalse(normalizedLoginName)
-                .orElseThrow(() -> invalidCredentials(normalizedLoginName, loginIp, requestPath, requestMethod));
+                .orElseThrow(() -> invalidCredentials(normalizedLoginName, ctx));
 
         if (user.getStatus() != UserStatus.NORMAL) {
-            recordAuthenticationLog("登录失败", user, normalizedLoginName, loginIp, requestPath, requestMethod, "失败", "账户已禁用");
+            recordAuthenticationLog("登录失败", user, normalizedLoginName, ctx, "失败", "账户已禁用");
             throw new BusinessException(ErrorCode.FORBIDDEN, "账户已禁用");
         }
 
         if (!passwordEncoder.matches(request.password(), user.getPasswordHash())) {
-            throw invalidCredentials(normalizedLoginName, loginIp, requestPath, requestMethod);
+            throw invalidCredentials(normalizedLoginName, ctx);
         }
 
         if (Boolean.TRUE.equals(user.getTotpEnabled()) && user.getTotpSecret() != null) {
@@ -91,17 +95,17 @@ public class LoginService {
 
         loginAttemptService.clearFailures(normalizedLoginName);
         user.setLastLoginDate(LocalDateTime.now());
-        TokenResponse response = tokenIssuanceService.issueTokens(user, loginIp, userAgent);
-        recordLoginSuccess(user, loginIp, requestPath, requestMethod);
+        TokenResponse response = tokenIssuanceService.issueTokens(user, ctx.loginIp(), ctx.userAgent());
+        recordLoginSuccess(user, ctx);
         return response;
     }
 
     @Transactional
-    public TokenResponse verifyTotpAndIssueTokens(String tempToken, String totpCode, String loginIp, String userAgent, String requestPath, String requestMethod) {
+    public TokenResponse verifyTotpAndIssueTokens(String tempToken, String totpCode, AuthRequestContext ctx) {
         String redisKey = TEMP_TOKEN_PREFIX + tempToken;
         String userIdStr = redisTemplate.opsForValue().get(redisKey);
         if (userIdStr == null) {
-            recordAuthenticationLog("登录失败", null, null, loginIp, requestPath, requestMethod, "失败", "2FA验证已过期，请重新登录");
+            recordAuthenticationLog("登录失败", null, null, ctx, "失败", "2FA验证已过期，请重新登录");
             throw new BadCredentialsException("2FA验证已过期，请重新登录");
         }
 
@@ -113,21 +117,21 @@ public class LoginService {
                 .orElseThrow(() -> new BadCredentialsException("用户不存在"));
 
         if (user.getStatus() != UserStatus.NORMAL) {
-            recordAuthenticationLog("登录失败", user, user.getLoginName(), loginIp, requestPath, requestMethod, "失败", "账户已禁用");
+            recordAuthenticationLog("登录失败", user, user.getLoginName(), ctx, "失败", "账户已禁用");
             throw new BusinessException(ErrorCode.FORBIDDEN, "账户已禁用");
         }
 
         String secret = totpService.decryptSecret(user.getTotpSecret());
         if (!totpService.verifyCode(secret, totpCode)) {
             loginAttemptService.recordFailure(user.getLoginName());
-            recordAuthenticationLog("登录失败", user, user.getLoginName(), loginIp, requestPath, requestMethod, "失败", "验证码错误或已过期");
+            recordAuthenticationLog("登录失败", user, user.getLoginName(), ctx, "失败", "验证码错误或已过期");
             throw new BadCredentialsException("验证码错误或已过期");
         }
 
         loginAttemptService.clearFailures(user.getLoginName());
         user.setLastLoginDate(LocalDateTime.now());
-        TokenResponse response = tokenIssuanceService.issueTokens(user, loginIp, userAgent);
-        recordLoginSuccess(user, loginIp, requestPath, requestMethod);
+        TokenResponse response = tokenIssuanceService.issueTokens(user, ctx.loginIp(), ctx.userAgent());
+        recordLoginSuccess(user, ctx);
         return response;
     }
 
@@ -143,22 +147,20 @@ public class LoginService {
         return tempToken;
     }
 
-    private BadCredentialsException invalidCredentials(String loginName, String loginIp, String requestPath, String requestMethod) {
+    private BadCredentialsException invalidCredentials(String loginName, AuthRequestContext ctx) {
         loginAttemptService.recordFailure(loginName);
-        recordAuthenticationLog("登录失败", null, loginName, loginIp, requestPath, requestMethod, "失败", "账号或密码错误");
+        recordAuthenticationLog("登录失败", null, loginName, ctx, "失败", "账号或密码错误");
         return new BadCredentialsException("账号或密码错误");
     }
 
-    void recordLoginSuccess(UserAccount user, String loginIp, String requestPath, String requestMethod) {
-        recordAuthenticationLog("登录", user, user == null ? null : user.getLoginName(), loginIp, requestPath, requestMethod, "成功", "登录成功");
+    void recordLoginSuccess(UserAccount user, AuthRequestContext ctx) {
+        recordAuthenticationLog("登录", user, user == null ? null : user.getLoginName(), ctx, "成功", "登录成功");
     }
 
     void recordAuthenticationLog(String actionType,
                                  UserAccount user,
                                  String loginName,
-                                 String loginIp,
-                                 String requestPath,
-                                 String requestMethod,
+                                 AuthRequestContext ctx,
                                  String resultStatus,
                                  String remark) {
         if (operationLogService == null || systemSwitchService == null || !systemSwitchService.shouldRecordAuthenticationOperationLogs()) {
@@ -168,9 +170,9 @@ public class LoginService {
                 "认证授权",
                 actionType,
                 loginName,
-                requestMethod == null || requestMethod.isBlank() ? "POST" : requestMethod,
-                resolveAuthenticationRequestPath(actionType, requestPath),
-                loginIp,
+                ctx.requestMethod() == null || ctx.requestMethod().isBlank() ? "POST" : ctx.requestMethod(),
+                resolveAuthenticationRequestPath(actionType, ctx.requestPath()),
+                ctx.loginIp(),
                 resultStatus,
                 remark,
                 null,

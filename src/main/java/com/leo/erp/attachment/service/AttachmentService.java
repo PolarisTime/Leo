@@ -7,6 +7,8 @@ import com.leo.erp.attachment.service.storage.AttachmentStorageResolver;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.MediaType;
 import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -61,6 +63,7 @@ public class AttachmentService {
 
     @Transactional
     public AttachmentView upload(MultipartFile file, String sourceType, String moduleKey) throws IOException {
+        requirePageUploadEnabled(moduleKey);
         validateUpload(file);
 
         String normalizedSourceType = normalizeSourceType(sourceType);
@@ -186,6 +189,24 @@ public class AttachmentService {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "当前附件不支持预览");
         }
         return payload;
+    }
+
+    @Transactional(readOnly = true)
+    public AttachmentDownloadResource loadDownloadResource(Long id, String accessKey, boolean inline) {
+        AttachmentDownloadPayload payload = inline ? loadForPreview(id, accessKey) : loadForDownload(id, accessKey);
+        MediaType mediaType = (payload.contentType() == null || payload.contentType().isBlank())
+                ? MediaType.APPLICATION_OCTET_STREAM
+                : MediaType.parseMediaType(payload.contentType());
+        ContentDisposition contentDisposition = inline
+                ? ContentDisposition.inline().filename(payload.fileName(), StandardCharsets.UTF_8).build()
+                : ContentDisposition.attachment().filename(payload.fileName(), StandardCharsets.UTF_8).build();
+        return new AttachmentDownloadResource(payload.resource(), mediaType, contentDisposition.toString());
+    }
+
+    private void requirePageUploadEnabled(String moduleKey) {
+        if (!uploadRuleService.isPageUploadEnabled(moduleKey)) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "当前页面未启用附件标志");
+        }
     }
 
     private void validateUpload(MultipartFile file) {

@@ -1,5 +1,6 @@
 package com.leo.erp.finance.receipt.service;
 
+import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
@@ -30,7 +31,6 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
-import java.time.LocalDate;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -69,16 +69,11 @@ public class ReceiptService extends AbstractCrudService<Receipt, ReceiptRequest,
         this.workflowTransitionGuard = workflowTransitionGuard;
     }
 
-    public Page<ReceiptResponse> page(PageQuery query,
-                                      String keyword,
-                                      String customerName,
-                                      String status,
-                                      LocalDate startDate,
-                                      LocalDate endDate) {
-        Specification<Receipt> spec = Specs.<Receipt>keywordLike(keyword, "receiptNo", "customerName", "projectName")
-                .and(Specs.equalIfPresent("customerName", customerName))
-                .and(Specs.equalIfPresent("status", status))
-                .and(Specs.betweenIfPresent("receiptDate", startDate, endDate));
+    public Page<ReceiptResponse> page(PageQuery query, PageFilter filter) {
+        Specification<Receipt> spec = Specs.<Receipt>keywordLike(filter.keyword(), "receiptNo", "customerName", "projectName")
+                .and(Specs.equalIfPresent("customerName", filter.name()))
+                .and(Specs.equalIfPresent("status", filter.status()))
+                .and(Specs.betweenIfPresent("receiptDate", filter.startDate(), filter.endDate()));
         return page(query, spec, receiptRepository);
     }
 

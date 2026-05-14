@@ -1,5 +1,6 @@
 package com.leo.erp.purchase.order.service;
 
+import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
@@ -98,16 +99,11 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
     private static final String[] PURCHASE_ORDER_SEARCH_FIELDS = {"orderNo", "supplierName"};
 
     @Transactional(readOnly = true)
-    public Page<PurchaseOrderResponse> page(PageQuery query,
-                                            String keyword,
-                                            String supplierName,
-                                            String status,
-                                            java.time.LocalDate startDate,
-                                            java.time.LocalDate endDate) {
-        Specification<PurchaseOrder> spec = Specs.<PurchaseOrder>keywordLike(keyword, PURCHASE_ORDER_SEARCH_FIELDS)
-                .and(Specs.equalIfPresent("supplierName", supplierName))
-                .and(Specs.equalIfPresent("status", status))
-                .and(Specs.betweenIfPresent("orderDate", startDate, endDate));
+    public Page<PurchaseOrderResponse> page(PageQuery query, PageFilter filter) {
+        Specification<PurchaseOrder> spec = Specs.<PurchaseOrder>keywordLike(filter.keyword(), PURCHASE_ORDER_SEARCH_FIELDS)
+                .and(Specs.equalIfPresent("supplierName", filter.name()))
+                .and(Specs.equalIfPresent("status", filter.status()))
+                .and(Specs.betweenIfPresent("orderDate", filter.startDate(), filter.endDate()));
         return page(query, spec, purchaseOrderRepository);
     }
 

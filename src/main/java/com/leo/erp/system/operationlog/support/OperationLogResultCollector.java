@@ -4,7 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leo.erp.common.api.ApiResponse;
-import com.leo.erp.common.support.IpResolutionService;
+import com.leo.erp.common.support.ClientIpResolver;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.stereotype.Component;
@@ -22,11 +22,11 @@ import java.util.StringJoiner;
 public class OperationLogResultCollector {
 
     private final ObjectMapper objectMapper;
-    private final IpResolutionService ipResolutionService;
+    private final ClientIpResolver clientIpResolver;
 
-    public OperationLogResultCollector(ObjectMapper objectMapper, IpResolutionService ipResolutionService) {
+    public OperationLogResultCollector(ObjectMapper objectMapper, ClientIpResolver clientIpResolver) {
         this.objectMapper = objectMapper;
-        this.ipResolutionService = ipResolutionService;
+        this.clientIpResolver = clientIpResolver;
     }
 
     public ApiResponse<?> extractApiResponse(HttpServletRequest request) {
@@ -70,7 +70,7 @@ public class OperationLogResultCollector {
         if (apiResponse != null && apiResponse.message() != null && !apiResponse.message().isBlank()) {
             return apiResponse.message();
         }
-        return ex == null ? null : ex.getMessage();
+        return ex == null ? null : "请求处理失败";
     }
 
     public String resolveRequestPath(HttpServletRequest request) {
@@ -82,7 +82,7 @@ public class OperationLogResultCollector {
     }
 
     public String resolveIp(HttpServletRequest request) {
-        return ipResolutionService.resolveClientIpOrUnknown(request);
+        return clientIpResolver.resolveClientIpOrUnknown(request);
     }
 
     private Object parseRequestBody(HttpServletRequest request) {
@@ -153,7 +153,7 @@ public class OperationLogResultCollector {
         try {
             Method method = source.getClass().getMethod(methodName);
             return method.invoke(source);
-        } catch (Exception ignored) {
+        } catch (ReflectiveOperationException ignored) {
             return null;
         }
     }
@@ -165,7 +165,7 @@ public class OperationLogResultCollector {
                 Field field = type.getDeclaredField(fieldName);
                 field.setAccessible(true);
                 return field.get(source);
-            } catch (Exception ignored) {
+            } catch (ReflectiveOperationException ignored) {
                 type = type.getSuperclass();
             }
         }

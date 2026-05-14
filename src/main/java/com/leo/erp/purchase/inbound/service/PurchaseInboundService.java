@@ -1,5 +1,6 @@
 package com.leo.erp.purchase.inbound.service;
 
+import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
@@ -85,16 +86,11 @@ public class PurchaseInboundService extends AbstractCrudService<PurchaseInbound,
     }
 
     @Transactional(readOnly = true)
-    public Page<PurchaseInboundResponse> page(PageQuery query,
-                                              String keyword,
-                                              String supplierName,
-                                              String status,
-                                              java.time.LocalDate startDate,
-                                              java.time.LocalDate endDate) {
-        Specification<PurchaseInbound> spec = Specs.<PurchaseInbound>keywordLike(keyword, "inboundNo", "purchaseOrderNo", "supplierName")
-                .and(Specs.equalIfPresent("supplierName", supplierName))
-                .and(Specs.equalIfPresent("status", status))
-                .and(Specs.betweenIfPresent("inboundDate", startDate, endDate));
+    public Page<PurchaseInboundResponse> page(PageQuery query, PageFilter filter) {
+        Specification<PurchaseInbound> spec = Specs.<PurchaseInbound>keywordLike(filter.keyword(), "inboundNo", "purchaseOrderNo", "supplierName")
+                .and(Specs.equalIfPresent("supplierName", filter.name()))
+                .and(Specs.equalIfPresent("status", filter.status()))
+                .and(Specs.betweenIfPresent("inboundDate", filter.startDate(), filter.endDate()));
         return page(query, spec, repository);
     }
 

@@ -1,6 +1,8 @@
 package com.leo.erp.statement.supplier.web;
 
+import org.springframework.validation.annotation.Validated;
 import com.leo.erp.common.api.ApiResponse;
+import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.api.PageResponse;
 import com.leo.erp.common.web.BindPageQuery;
@@ -26,7 +28,8 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 
 @Tag(name = "供应商对账单")
 @RestController
-@RequestMapping("/supplier-statement")
+@Validated
+@RequestMapping("/supplier-statements")
 public class SupplierStatementController {
 
     private final SupplierStatementService supplierStatementService;
@@ -59,14 +62,7 @@ public class SupplierStatementController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate periodEnd
     ) {
         return ApiResponse.success(PageResponse.from(
-                supplierStatementService.page(
-                        query,
-                        keyword,
-                        supplierName,
-                        status,
-                        periodStart,
-                        periodEnd
-                )
+                supplierStatementService.page(query, PageFilter.of(keyword, supplierName, status, periodStart, periodEnd))
         ));
     }
 
@@ -108,6 +104,6 @@ public class SupplierStatementController {
     @RequiresPermission(resource = "supplier-statement", action = "delete")
     public ApiResponse<Void> delete(@PathVariable Long id) {
         supplierStatementService.delete(id);
-        return ApiResponse.success("删除成功", null);
+        return ApiResponse.success("删除成功");
     }
 }

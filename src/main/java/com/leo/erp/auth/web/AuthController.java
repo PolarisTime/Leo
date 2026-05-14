@@ -1,8 +1,10 @@
 package com.leo.erp.auth.web;
 
-import com.leo.erp.auth.service.AuthService;
-import com.leo.erp.auth.service.AuthTokenCookieService;
-import com.leo.erp.auth.service.CaptchaService;
+import com.leo.erp.auth.service.AuthRefreshResult;
+import com.leo.erp.auth.service.AuthSessionWebService;
+import com.leo.erp.auth.service.LoginService;
+import com.leo.erp.auth.web.support.AuthTokenCookieSupport;
+import com.leo.erp.auth.web.dto.CaptchaResponse;
 import com.leo.erp.auth.web.dto.Login2faRequest;
 import com.leo.erp.auth.web.dto.LoginRequest;
 import com.leo.erp.auth.web.dto.LoginResponseBody;
@@ -10,44 +12,40 @@ import com.leo.erp.auth.web.dto.LogoutRequest;
 import com.leo.erp.auth.web.dto.RefreshTokenRequest;
 import com.leo.erp.auth.web.dto.TokenResponse;
 import com.leo.erp.common.api.ApiResponse;
-import com.leo.erp.common.support.IpResolutionService;
+import com.leo.erp.common.support.ClientIpResolver;
 import com.leo.erp.security.jwt.JwtTokenService;
 import com.leo.erp.security.permission.RateLimit;
-import com.leo.erp.system.norule.service.SystemSwitchService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
-import java.util.Map;
-import java.util.concurrent.TimeUnit;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.time.Duration;
+import java.util.concurrent.TimeUnit;
+
 @RestController
+@Validated
 @RequestMapping("/auth")
 public class AuthController {
 
-    private final AuthService authService;
-    private final AuthTokenCookieService authTokenCookieService;
+    private final AuthSessionWebService authSessionWebService;
+    private final AuthTokenCookieSupport authTokenCookieSupport;
+    private final ClientIpResolver clientIpResolver;
     private final JwtTokenService jwtTokenService;
-    private final IpResolutionService ipResolutionService;
-    private final CaptchaService captchaService;
-    private final SystemSwitchService systemSwitchService;
 
-    public AuthController(AuthService authService,
-                          AuthTokenCookieService authTokenCookieService,
-                          JwtTokenService jwtTokenService,
-                          IpResolutionService ipResolutionService,
-                          CaptchaService captchaService,
-                          SystemSwitchService systemSwitchService) {
-        this.authService = authService;
-        this.authTokenCookieService = authTokenCookieService;
+    public AuthController(AuthSessionWebService authSessionWebService,
+                          AuthTokenCookieSupport authTokenCookieSupport,
+                          ClientIpResolver clientIpResolver,
+                          JwtTokenService jwtTokenService) {
+        this.authSessionWebService = authSessionWebService;
+        this.authTokenCookieSupport = authTokenCookieSupport;
+        this.clientIpResolver = clientIpResolver;
         this.jwtTokenService = jwtTokenService;
-        this.ipResolutionService = ipResolutionService;
-        this.captchaService = captchaService;
-        this.systemSwitchService = systemSwitchService;
     }
 
     @PostMapping("/login")
@@ -55,76 +53,52 @@ public class AuthController {
     public ApiResponse<LoginResponseBody> login(@Valid @RequestBody LoginRequest request,
                                                 HttpServletRequest httpRequest,
                                                 HttpServletResponse httpResponse) {
-        LoginResponseBody result = authService.login(
-                request,
-                resolveIp(httpRequest),
-                httpRequest.getHeader("User-Agent"),
-                httpRequest.getRequestURI(),
-                httpRequest.getMethod()
-        );
-        return ApiResponse.success("登录成功", attachRefreshCookieIfNeeded(result, httpResponse));
+        LoginResponseBody body = authSessionWebService.login(request, resolveAuthContext(httpRequest));
+        return ApiResponse.success("登录成功", attachRefreshCookieIfNeeded(body, httpResponse));
     }
 
     @PostMapping("/login-2fa")
     public ApiResponse<TokenResponse> login2fa(@Valid @RequestBody Login2faRequest request,
                                                HttpServletRequest httpRequest,
                                                HttpServletResponse httpResponse) {
-        TokenResponse tokenResponse = authService.verifyTotpAndIssueTokens(
-                request.tempToken(),
-                request.totpCode(),
-                resolveIp(httpRequest),
-                httpRequest.getHeader("User-Agent"),
-                httpRequest.getRequestURI(),
-                httpRequest.getMethod()
-        );
-        authTokenCookieService.writeRefreshTokenCookie(
-                httpResponse,
-                tokenResponse.refreshToken(),
-                java.time.Duration.ofMillis(jwtTokenService.getRefreshExpirationMs())
-        );
+        TokenResponse tokenResponse = authSessionWebService.login2fa(request, resolveAuthContext(httpRequest));
+        authTokenCookieSupport.writeRefreshTokenCookie(httpResponse, tokenResponse.refreshToken(), refreshTokenMaxAge());
         return ApiResponse.success("登录成功", tokenResponse.withoutRefreshToken());
     }
 
     @PostMapping("/refresh")
-    public ApiResponse<TokenResponse> refresh(@RequestBody(required = false) RefreshTokenRequest request,
+    public ApiResponse<TokenResponse> refresh(@Valid @RequestBody(required = false) RefreshTokenRequest request,
                                               HttpServletRequest httpRequest,
                                               HttpServletResponse httpResponse) {
-        String refreshToken = authTokenCookieService.resolveRefreshToken(httpRequest, request == null ? null : request.refreshToken());
-        if (refreshToken == null || refreshToken.isBlank()) {
-            authTokenCookieService.clearRefreshTokenCookie(httpResponse);
-            return ApiResponse.success("未登录", null);
-        }
-        TokenResponse tokenResponse = authService.refresh(refreshToken, resolveIp(httpRequest), httpRequest.getHeader("User-Agent"));
-        authTokenCookieService.writeRefreshTokenCookie(
-                httpResponse,
-                tokenResponse.refreshToken(),
-                java.time.Duration.ofMillis(jwtTokenService.getRefreshExpirationMs())
+        String refreshToken = authTokenCookieSupport.resolveRefreshToken(httpRequest, request == null ? null : request.refreshToken());
+        AuthRefreshResult result = authSessionWebService.refresh(
+                refreshToken,
+                clientIpResolver.resolveClientIpOrUnknown(httpRequest),
+                httpRequest.getHeader("User-Agent")
         );
-        return ApiResponse.success("刷新成功", tokenResponse.withoutRefreshToken());
+        if (result.token() == null) {
+            authTokenCookieSupport.clearRefreshTokenCookie(httpResponse);
+            return ApiResponse.success(result.message(), null);
+        }
+        authTokenCookieSupport.writeRefreshTokenCookie(httpResponse, result.token().refreshToken(), refreshTokenMaxAge());
+        return ApiResponse.success(result.message(), result.token().withoutRefreshToken());
     }
 
     @PostMapping("/logout")
-    public ApiResponse<Void> logout(@RequestBody(required = false) LogoutRequest request,
+    public ApiResponse<Void> logout(@Valid @RequestBody(required = false) LogoutRequest request,
                                     HttpServletRequest httpRequest,
                                     HttpServletResponse httpResponse) {
-        authService.logout(
-                authTokenCookieService.resolveRefreshToken(httpRequest, request == null ? null : request.refreshToken()),
-                resolveIp(httpRequest),
-                httpRequest.getRequestURI(),
-                httpRequest.getMethod()
+        authSessionWebService.logout(
+                authTokenCookieSupport.resolveRefreshToken(httpRequest, request == null ? null : request.refreshToken()),
+                resolveAuthContext(httpRequest)
         );
-        authTokenCookieService.clearRefreshTokenCookie(httpResponse);
-        return ApiResponse.success("退出成功", null);
+        authTokenCookieSupport.clearRefreshTokenCookie(httpResponse);
+        return ApiResponse.success("退出成功");
     }
 
     @GetMapping("/captcha")
-    public ApiResponse<Map<String, Object>> captcha() {
-        CaptchaService.CaptchaResult result = captchaService.generate();
-        return ApiResponse.success(Map.of(
-                "captchaId", result.captchaId(),
-                "captchaImage", result.captchaImage(),
-                "required", systemSwitchService.shouldRequireLoginCaptcha()
-        ));
+    public ApiResponse<CaptchaResponse> captcha() {
+        return ApiResponse.success(authSessionWebService.captcha());
     }
 
     @GetMapping("/ping")
@@ -132,8 +106,13 @@ public class AuthController {
         return ApiResponse.success("认证模块可用", "pong");
     }
 
-    private String resolveIp(HttpServletRequest request) {
-        return ipResolutionService.resolveClientIpOrUnknown(request);
+    private LoginService.AuthRequestContext resolveAuthContext(HttpServletRequest request) {
+        return new LoginService.AuthRequestContext(
+                clientIpResolver.resolveClientIpOrUnknown(request),
+                request.getHeader("User-Agent"),
+                request.getRequestURI(),
+                request.getMethod()
+        );
     }
 
     private LoginResponseBody attachRefreshCookieIfNeeded(LoginResponseBody result, HttpServletResponse response) {
@@ -141,11 +120,11 @@ public class AuthController {
         if (refreshToken == null || refreshToken.isBlank()) {
             return result;
         }
-        authTokenCookieService.writeRefreshTokenCookie(
-                response,
-                refreshToken,
-                java.time.Duration.ofMillis(jwtTokenService.getRefreshExpirationMs())
-        );
+        authTokenCookieSupport.writeRefreshTokenCookie(response, refreshToken, refreshTokenMaxAge());
         return result.withoutSensitiveTokens();
+    }
+
+    private Duration refreshTokenMaxAge() {
+        return Duration.ofMillis(jwtTokenService.getRefreshExpirationMs());
     }
 }

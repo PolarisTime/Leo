@@ -54,7 +54,7 @@ public class UserAccountPreferenceService {
         }
         try {
             return normalizePayload(objectMapper.readValue(raw, UserAccountPreferencesPayload.class));
-        } catch (Exception ex) {
+        } catch (JsonProcessingException ex) {
             log.warn("解析用户偏好配置失败, userId={}", account.getId(), ex);
             return emptyPayload();
         }

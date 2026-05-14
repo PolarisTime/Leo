@@ -1,6 +1,8 @@
 package com.leo.erp.statement.customer.web;
 
+import org.springframework.validation.annotation.Validated;
 import com.leo.erp.common.api.ApiResponse;
+import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.api.PageResponse;
 import com.leo.erp.common.web.BindPageQuery;
@@ -26,7 +28,8 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 
 @Tag(name = "客户对账单")
 @RestController
-@RequestMapping("/customer-statement")
+@Validated
+@RequestMapping("/customer-statements")
 public class CustomerStatementController {
 
     private final CustomerStatementService customerStatementService;
@@ -59,14 +62,7 @@ public class CustomerStatementController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate periodEnd
     ) {
         return ApiResponse.success(PageResponse.from(
-                customerStatementService.page(
-                        query,
-                        keyword,
-                        customerName,
-                        status,
-                        periodStart,
-                        periodEnd
-                )
+                customerStatementService.page(query, PageFilter.of(keyword, customerName, status, periodStart, periodEnd))
         ));
     }
 
@@ -108,6 +104,6 @@ public class CustomerStatementController {
     @RequiresPermission(resource = "customer-statement", action = "delete")
     public ApiResponse<Void> delete(@PathVariable Long id) {
         customerStatementService.delete(id);
-        return ApiResponse.success("删除成功", null);
+        return ApiResponse.success("删除成功");
     }
 }

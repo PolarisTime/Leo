@@ -1,5 +1,6 @@
 package com.leo.erp.finance.payment.service;
 
+import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
@@ -32,7 +33,6 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
-import java.time.LocalDate;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -76,16 +76,11 @@ public class PaymentService extends AbstractCrudService<Payment, PaymentRequest,
         this.workflowTransitionGuard = workflowTransitionGuard;
     }
 
-    public Page<PaymentResponse> page(PageQuery query,
-                                      String keyword,
-                                      String businessType,
-                                      String status,
-                                      LocalDate startDate,
-                                      LocalDate endDate) {
-        Specification<Payment> spec = Specs.<Payment>keywordLike(keyword, "paymentNo", "businessType", "counterpartyName")
-                .and(Specs.equalIfPresent("businessType", businessType))
-                .and(Specs.equalIfPresent("status", status))
-                .and(Specs.betweenIfPresent("paymentDate", startDate, endDate));
+    public Page<PaymentResponse> page(PageQuery query, PageFilter filter) {
+        Specification<Payment> spec = Specs.<Payment>keywordLike(filter.keyword(), "paymentNo", "businessType", "counterpartyName")
+                .and(Specs.equalIfPresent("businessType", filter.businessType()))
+                .and(Specs.equalIfPresent("status", filter.status()))
+                .and(Specs.betweenIfPresent("paymentDate", filter.startDate(), filter.endDate()));
         return page(query, spec, paymentRepository);
     }
 

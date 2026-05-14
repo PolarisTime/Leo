@@ -1,5 +1,6 @@
 package com.leo.erp.finance.receivablepayable.web;
 
+import org.springframework.validation.annotation.Validated;
 import com.leo.erp.common.api.ApiResponse;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.api.PageResponse;
@@ -15,7 +16,8 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/receivable-payable")
+@Validated
+@RequestMapping("/receivable-payables")
 @Tag(name = "应收应付")
 public class ReceivablePayableController {
 

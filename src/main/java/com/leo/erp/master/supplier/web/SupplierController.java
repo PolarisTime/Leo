@@ -1,5 +1,6 @@
 package com.leo.erp.master.supplier.web;
 
+import org.springframework.validation.annotation.Validated;
 import com.leo.erp.common.api.ApiResponse;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.api.PageResponse;
@@ -21,7 +22,8 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/supplier")
+@Validated
+@RequestMapping("/suppliers")
 public class SupplierController {
 
     private final SupplierService supplierService;
@@ -68,6 +70,6 @@ public class SupplierController {
     @RequiresPermission(resource = "supplier", action = "delete")
     public ApiResponse<Void> delete(@PathVariable Long id) {
         supplierService.delete(id);
-        return ApiResponse.success("删除成功", null);
+        return ApiResponse.success("删除成功");
     }
 }

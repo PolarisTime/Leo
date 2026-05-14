@@ -1,5 +1,6 @@
 package com.leo.erp.system.securitykey.web;
 
+import org.springframework.validation.annotation.Validated;
 import com.leo.erp.common.api.ApiResponse;
 import com.leo.erp.security.permission.RequiresPermission;
 import com.leo.erp.security.totp.RequiresTotpVerification;
@@ -13,7 +14,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/system/security-key")
+@Validated
+@RequestMapping("/system/security-keys")
 public class SecurityKeyController {
 
     private final SecurityKeyService securityKeyService;

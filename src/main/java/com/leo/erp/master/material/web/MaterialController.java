@@ -3,15 +3,20 @@ package com.leo.erp.master.material.web;
 import com.leo.erp.common.api.ApiResponse;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.api.PageResponse;
+import com.leo.erp.common.excel.dto.ImportResult;
 import com.leo.erp.common.web.BindPageQuery;
+import com.leo.erp.common.web.dto.FileDownloadResponse;
 import com.leo.erp.master.material.service.MaterialService;
 import com.leo.erp.master.material.web.dto.MaterialImportResultResponse;
 import com.leo.erp.master.material.web.dto.MaterialRequest;
 import com.leo.erp.master.material.web.dto.MaterialResponse;
 import com.leo.erp.security.permission.RequiresPermission;
-import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -27,7 +32,8 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 
 @RestController
-@RequestMapping("/material")
+@Validated
+@RequestMapping("/materials")
 public class MaterialController {
 
     private final MaterialService materialService;
@@ -70,16 +76,14 @@ public class MaterialController {
 
     @GetMapping("/template")
     @RequiresPermission(resource = "material", action = "export")
-    public void downloadTemplate(HttpServletResponse response) throws IOException {
-        byte[] file = materialService.downloadTemplateCsv();
-        String filename = "商品资料导入模板.csv";
-        response.setContentType("text/csv;charset=UTF-8");
-        response.setHeader("Content-Disposition", "attachment; filename=\"" +
-                java.net.URLEncoder.encode(filename, StandardCharsets.UTF_8) + "\"");
-        response.setCharacterEncoding(StandardCharsets.UTF_8.name());
-        response.setContentLength(file.length);
-        response.getOutputStream().write(file);
-        response.getOutputStream().flush();
+    public ResponseEntity<byte[]> downloadTemplate() {
+        return toDownloadResponse(materialService.excelTemplate());
+    }
+
+    @GetMapping("/template/csv")
+    @RequiresPermission(resource = "material", action = "export")
+    public ResponseEntity<byte[]> downloadCsvTemplate() {
+        return toDownloadResponse(materialService.downloadTemplateFile());
     }
 
     @GetMapping("/grade")
@@ -90,20 +94,25 @@ public class MaterialController {
 
     @PostMapping("/export")
     @RequiresPermission(resource = "material", action = "export")
-    public void export(@RequestParam(required = false) String keyword, HttpServletResponse response) throws IOException {
-        byte[] file = materialService.exportCsv(keyword);
-        String filename = "materials.csv";
-        response.setContentType("text/csv;charset=UTF-8");
-        response.setHeader("Content-Disposition", "attachment; filename=\"" + filename + "\"");
-        response.setCharacterEncoding(StandardCharsets.UTF_8.name());
-        response.setContentLength(file.length);
-        response.getOutputStream().write(file);
-        response.getOutputStream().flush();
+    public ResponseEntity<byte[]> export(@RequestParam(required = false) String keyword) {
+        return toDownloadResponse(materialService.exportExcel(keyword));
+    }
+
+    @PostMapping("/export/csv")
+    @RequiresPermission(resource = "material", action = "export")
+    public ResponseEntity<byte[]> exportCsv(@RequestParam(required = false) String keyword) {
+        return toDownloadResponse(materialService.exportFile(keyword));
     }
 
     @PostMapping(value = "/import", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @RequiresPermission(resource = "material", action = "update")
-    public ApiResponse<MaterialImportResultResponse> importMaterials(@RequestParam("file") MultipartFile file) throws IOException {
+    public ApiResponse<ImportResult> importMaterials(@RequestParam("file") MultipartFile file) throws IOException {
+        return ApiResponse.success("导入成功", materialService.importExcel(file));
+    }
+
+    @PostMapping(value = "/import/csv", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @RequiresPermission(resource = "material", action = "update")
+    public ApiResponse<MaterialImportResultResponse> importCsvMaterials(@RequestParam("file") MultipartFile file) throws IOException {
         return ApiResponse.success("导入成功", materialService.importCsv(file));
     }
 
@@ -117,6 +126,17 @@ public class MaterialController {
     @RequiresPermission(resource = "material", action = "delete")
     public ApiResponse<Void> delete(@PathVariable Long id) {
         materialService.delete(id);
-        return ApiResponse.success("删除成功", null);
+        return ApiResponse.success("删除成功");
+    }
+
+    private ResponseEntity<byte[]> toDownloadResponse(FileDownloadResponse file) {
+        return ResponseEntity.ok()
+                .contentType(file.contentType())
+                .contentLength(file.content().length)
+                .header(
+                        HttpHeaders.CONTENT_DISPOSITION,
+                        ContentDisposition.attachment().filename(file.filename(), StandardCharsets.UTF_8).build().toString()
+                )
+                .body(file.content());
     }
 }

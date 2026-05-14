@@ -2,6 +2,7 @@ package com.leo.erp.system.operationlog.service;
 
 import com.leo.erp.auth.domain.entity.UserAccount;
 import com.leo.erp.auth.repository.UserAccountRepository;
+import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
@@ -47,19 +48,13 @@ public class OperationLogService {
     }
 
     @Transactional(readOnly = true)
-    public Page<OperationLogResponse> page(PageQuery query,
-                                           String keyword,
-                                           String moduleName,
-                                           String actionType,
-                                           String resultStatus,
-                                           LocalDate startTime,
-                                           LocalDate endTime,
-                                           Long recordId) {
-        String normalizedKeyword = trimToNull(keyword);
-        String normalizedModuleName = trimToNull(moduleName);
-        String normalizedActionType = trimToNull(actionType);
-        String normalizedResultStatus = normalizeResultStatus(resultStatus);
-        validateDateRange(startTime, endTime);
+    public Page<OperationLogResponse> page(PageQuery query, PageFilter filter) {
+        String normalizedKeyword = trimToNull(filter.keyword());
+        String normalizedModuleName = trimToNull(filter.moduleName());
+        String normalizedActionType = trimToNull(filter.actionType());
+        String normalizedResultStatus = normalizeResultStatus(filter.resultStatus());
+        validateDateRange(filter.startDate(), filter.endDate());
+        Long recordId = filter.recordId();
         Specification<OperationLog> spec = (root, q, cb) -> {
             var predicate = cb.conjunction();
             if (recordId != null) {
@@ -89,11 +84,11 @@ public class OperationLogService {
             if (normalizedResultStatus != null) {
                 predicate = cb.and(predicate, cb.equal(root.get("resultStatus"), normalizedResultStatus));
             }
-            if (startTime != null) {
-                predicate = cb.and(predicate, cb.greaterThanOrEqualTo(root.get("operationTime"), startTime.atStartOfDay()));
+            if (filter.startDate() != null) {
+                predicate = cb.and(predicate, cb.greaterThanOrEqualTo(root.get("operationTime"), filter.startDate().atStartOfDay()));
             }
-            if (endTime != null) {
-                predicate = cb.and(predicate, cb.lessThan(root.get("operationTime"), endTime.plusDays(1).atStartOfDay()));
+            if (filter.endDate() != null) {
+                predicate = cb.and(predicate, cb.lessThan(root.get("operationTime"), filter.endDate().plusDays(1).atStartOfDay()));
             }
             return predicate;
         };

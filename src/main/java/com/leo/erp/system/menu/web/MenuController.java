@@ -1,5 +1,6 @@
 package com.leo.erp.system.menu.web;
 
+import org.springframework.validation.annotation.Validated;
 import com.leo.erp.common.api.ApiResponse;
 import com.leo.erp.security.support.SecurityPrincipal;
 import com.leo.erp.system.menu.service.MenuService;
@@ -12,6 +13,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
 
 @RestController
+@Validated
 @RequestMapping("/system/menu")
 public class MenuController {
 

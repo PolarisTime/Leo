@@ -1,5 +1,6 @@
 package com.leo.erp.sales.outbound.service;
 
+import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
@@ -65,18 +66,12 @@ public class SalesOutboundService extends AbstractCrudService<SalesOutbound, Sal
     }
 
     @Transactional(readOnly = true)
-    public Page<SalesOutboundResponse> page(PageQuery query,
-                                            String keyword,
-                                            String customerName,
-                                            String projectName,
-                                            String status,
-                                            java.time.LocalDate startDate,
-                                            java.time.LocalDate endDate) {
-        Specification<SalesOutbound> spec = Specs.<SalesOutbound>keywordLike(keyword, "outboundNo", "salesOrderNo", "customerName", "projectName")
-                .and(Specs.equalIfPresent("customerName", customerName))
-                .and(Specs.equalIfPresent("projectName", projectName))
-                .and(Specs.equalIfPresent("status", status))
-                .and(Specs.betweenIfPresent("outboundDate", startDate, endDate));
+    public Page<SalesOutboundResponse> page(PageQuery query, PageFilter filter) {
+        Specification<SalesOutbound> spec = Specs.<SalesOutbound>keywordLike(filter.keyword(), "outboundNo", "salesOrderNo", "customerName", "projectName")
+                .and(Specs.equalIfPresent("customerName", filter.name()))
+                .and(Specs.equalIfPresent("projectName", filter.projectName()))
+                .and(Specs.equalIfPresent("status", filter.status()))
+                .and(Specs.betweenIfPresent("outboundDate", filter.startDate(), filter.endDate()));
         return page(query, spec, repository);
     }
 

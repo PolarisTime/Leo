@@ -1,22 +1,21 @@
 package com.leo.erp.statement.freight.web;
 
 import com.leo.erp.common.api.ApiResponse;
+import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.api.PageResponse;
 import com.leo.erp.common.web.BindPageQuery;
 import com.leo.erp.security.permission.RequiresPermission;
-import com.leo.erp.statement.freight.mapper.FreightStatementWebMapper;
 import com.leo.erp.statement.freight.service.FreightStatementService;
-import com.leo.erp.statement.freight.service.FreightStatementView;
 import com.leo.erp.statement.freight.web.dto.FreightStatementCandidateResponse;
 import com.leo.erp.statement.freight.web.dto.FreightStatementRequest;
 import com.leo.erp.statement.freight.web.dto.FreightStatementResponse;
 import com.leo.erp.system.operationlog.support.OperationLoggable;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
-import java.time.LocalDate;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageImpl;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -26,21 +25,19 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.tags.Tag;
+
+import java.time.LocalDate;
 
 @Tag(name = "物流对账单")
 @RestController
-@RequestMapping("/freight-statement")
+@Validated
+@RequestMapping("/freight-statements")
 public class FreightStatementController {
 
     private final FreightStatementService freightStatementService;
-    private final FreightStatementWebMapper freightStatementWebMapper;
 
-    public FreightStatementController(FreightStatementService freightStatementService,
-                                     FreightStatementWebMapper freightStatementWebMapper) {
+    public FreightStatementController(FreightStatementService freightStatementService) {
         this.freightStatementService = freightStatementService;
-        this.freightStatementWebMapper = freightStatementWebMapper;
     }
 
     @Operation(summary = "搜索物流对账单")
@@ -50,12 +47,7 @@ public class FreightStatementController {
             @RequestParam(required = false) String keyword,
             @RequestParam(defaultValue = "100") int limit
     ) {
-        return ApiResponse.success(
-                freightStatementService.search(keyword != null ? keyword : "", Math.min(limit, 500))
-                        .stream()
-                        .map(freightStatementWebMapper::toResponse)
-                        .toList()
-        );
+        return ApiResponse.success(freightStatementService.responseSearch(keyword != null ? keyword : "", Math.min(limit, 500)));
     }
 
     @Operation(summary = "分页查询物流对账单")
@@ -70,16 +62,9 @@ public class FreightStatementController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate periodStart,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate periodEnd
     ) {
-        Page<FreightStatementView> result = freightStatementService.page(
-                query,
-                keyword,
-                carrierName,
-                status,
-                signStatus,
-                periodStart,
-                periodEnd
-        );
-        return ApiResponse.success(PageResponse.from(toResponsePage(result)));
+        return ApiResponse.success(PageResponse.from(
+                freightStatementService.responsePage(query, new PageFilter(keyword, status, periodStart, periodEnd, carrierName, null, null, null, null, null, signStatus, null, null, null))
+        ));
     }
 
     @Operation(summary = "分页查询物流对账单候选物流单")
@@ -98,7 +83,7 @@ public class FreightStatementController {
     @GetMapping("/{id}")
     @RequiresPermission(resource = "freight-statement", action = "read")
     public ApiResponse<FreightStatementResponse> detail(@PathVariable Long id) {
-        return ApiResponse.success(freightStatementWebMapper.toResponse(freightStatementService.detail(id)));
+        return ApiResponse.success(freightStatementService.responseDetail(id));
     }
 
     @Operation(summary = "创建物流对账单")
@@ -108,7 +93,7 @@ public class FreightStatementController {
     public ApiResponse<FreightStatementResponse> create(@Valid @RequestBody FreightStatementRequest request) {
         return ApiResponse.success(
                 "创建成功",
-                freightStatementWebMapper.toResponse(freightStatementService.create(freightStatementWebMapper.toCommand(request)))
+                freightStatementService.responseCreate(request)
         );
     }
 
@@ -119,7 +104,7 @@ public class FreightStatementController {
     public ApiResponse<FreightStatementResponse> update(@PathVariable Long id, @Valid @RequestBody FreightStatementRequest request) {
         return ApiResponse.success(
                 "更新成功",
-                freightStatementWebMapper.toResponse(freightStatementService.update(id, freightStatementWebMapper.toCommand(request)))
+                freightStatementService.responseUpdate(id, request)
         );
     }
 
@@ -129,14 +114,7 @@ public class FreightStatementController {
     @OperationLoggable(moduleName = "物流对账单", actionType = "删除")
     public ApiResponse<Void> delete(@PathVariable Long id) {
         freightStatementService.delete(id);
-        return ApiResponse.success("删除成功", null);
+        return ApiResponse.success("删除成功");
     }
 
-    private Page<FreightStatementResponse> toResponsePage(Page<FreightStatementView> page) {
-        return new PageImpl<>(
-                page.getContent().stream().map(freightStatementWebMapper::toResponse).toList(),
-                page.getPageable(),
-                page.getTotalElements()
-        );
-    }
 }

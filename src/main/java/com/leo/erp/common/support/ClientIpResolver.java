@@ -20,10 +20,10 @@ import java.util.stream.Stream;
  */
 @Slf4j
 @Component
-public class IpResolutionService {
+public class ClientIpResolver {
     private final List<TrustedProxyMatcher> trustedMatchers;
 
-    public IpResolutionService(@Value("${leo.trusted-proxies:}") String trustedProxyList) {
+    public ClientIpResolver(@Value("${leo.trusted-proxies:}") String trustedProxyList) {
         this.trustedMatchers = Stream.of(trustedProxyList.split(","))
                 .map(String::trim)
                 .filter(s -> !s.isEmpty())

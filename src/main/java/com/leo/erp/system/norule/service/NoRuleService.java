@@ -5,12 +5,15 @@ import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.service.AbstractCrudService;
 import com.leo.erp.common.support.RedisJsonCacheSupport;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
+import com.leo.erp.security.support.SecurityPrincipal;
 import com.leo.erp.system.company.service.CompanySettingService;
 import com.leo.erp.system.norule.domain.entity.NoRule;
 import com.leo.erp.system.norule.repository.NoRuleRepository;
 import com.leo.erp.system.norule.mapper.NoRuleMapper;
+import com.leo.erp.system.norule.web.dto.NoRuleGenerateResponse;
 import com.leo.erp.system.norule.web.dto.NoRuleRequest;
 import com.leo.erp.system.norule.web.dto.NoRuleResponse;
+import com.leo.erp.system.norule.web.dto.StatementGeneratorRulesResponse;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -22,18 +25,46 @@ public class NoRuleService extends AbstractCrudService<NoRule, NoRuleRequest, No
     private final NoRuleRepository repository;
     private final NoRuleMapper noRuleMapper;
     private final NoRuleSequenceService noRuleSequenceService;
+    private final SystemSwitchService systemSwitchService;
+    private final PreallocatedBusinessNoService preallocatedBusinessNoService;
     private final RedisJsonCacheSupport redisJsonCacheSupport;
+    private final SnowflakeIdGenerator snowflakeIdGenerator;
 
     public NoRuleService(NoRuleRepository repository,
                          SnowflakeIdGenerator idGenerator,
                          NoRuleMapper noRuleMapper,
                          NoRuleSequenceService noRuleSequenceService,
+                         SystemSwitchService systemSwitchService,
+                         PreallocatedBusinessNoService preallocatedBusinessNoService,
                          RedisJsonCacheSupport redisJsonCacheSupport) {
         super(idGenerator);
         this.repository = repository;
         this.noRuleMapper = noRuleMapper;
         this.noRuleSequenceService = noRuleSequenceService;
+        this.systemSwitchService = systemSwitchService;
+        this.preallocatedBusinessNoService = preallocatedBusinessNoService;
         this.redisJsonCacheSupport = redisJsonCacheSupport;
+        this.snowflakeIdGenerator = idGenerator;
+    }
+
+    public NoRuleGenerateResponse nextNumber(String normalizedModuleKey, SecurityPrincipal principal) {
+        if (systemSwitchService.shouldUseSnowflakeIdAsBusinessNo()) {
+            String generatedId = String.valueOf(snowflakeIdGenerator.nextId());
+            preallocatedBusinessNoService.reserve(normalizedModuleKey, Long.parseLong(generatedId), principal);
+            return new NoRuleGenerateResponse(normalizedModuleKey, generatedId, generatedId);
+        }
+        return new NoRuleGenerateResponse(
+                normalizedModuleKey,
+                noRuleSequenceService.nextValueByModuleKey(normalizedModuleKey),
+                null
+        );
+    }
+
+    public StatementGeneratorRulesResponse statementGeneratorRules() {
+        return new StatementGeneratorRulesResponse(
+                systemSwitchService.shouldDefaultCustomerStatementReceiptAmountToZero(),
+                systemSwitchService.shouldDefaultSupplierStatementToFullPayment()
+        );
     }
 
     @Override
