@@ -118,6 +118,13 @@
             <version>1.10.0</version>
         </dependency>
 
+        <!-- Excel -->
+        <dependency>
+            <groupId>org.apache.poi</groupId>
+            <artifactId>poi-ooxml</artifactId>
+            <version>5.4.0</version>
+        </dependency>
+
         <!-- TOTP 2FA -->
         <dependency>
             <groupId>dev.samstevens.totp</groupId>

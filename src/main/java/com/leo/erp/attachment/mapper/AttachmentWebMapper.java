@@ -4,12 +4,13 @@ import com.leo.erp.attachment.service.AttachmentView;
 import com.leo.erp.attachment.web.dto.AttachmentBindingResponse;
 import com.leo.erp.attachment.web.dto.AttachmentResponse;
 import com.leo.erp.attachment.web.dto.AttachmentUploadResponse;
+import com.leo.erp.common.mapper.StrictMapperConfig;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 
 import java.util.List;
 
-@Mapper(componentModel = "spring")
+@Mapper(config = StrictMapperConfig.class)
 public interface AttachmentWebMapper {
 
     AttachmentUploadResponse toUploadResponse(AttachmentView view);
