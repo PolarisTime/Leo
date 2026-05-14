@@ -1,6 +1,8 @@
 package com.leo.erp.system.operationlog.web;
 
+import org.springframework.validation.annotation.Validated;
 import com.leo.erp.common.api.ApiResponse;
+import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.api.PageResponse;
 import com.leo.erp.common.web.BindPageQuery;
@@ -16,7 +18,8 @@ import org.springframework.web.bind.annotation.RestController;
 import java.time.LocalDate;
 
 @RestController
-@RequestMapping("/operation-log")
+@Validated
+@RequestMapping("/operation-logs")
 public class OperationLogController {
 
     private final OperationLogService operationLogService;
@@ -37,8 +40,8 @@ public class OperationLogController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endTime,
             @RequestParam(required = false) Long recordId
     ) {
-        return ApiResponse.success(PageResponse.from(
-                operationLogService.page(query, keyword, moduleName, actionType, resultStatus, startTime, endTime, recordId)
-        ));
+        PageFilter filter = new PageFilter(keyword, null, startTime, endTime,
+                null, null, null, moduleName, actionType, resultStatus, null, null, recordId, null);
+        return ApiResponse.success(PageResponse.from(operationLogService.page(query, filter)));
     }
 }

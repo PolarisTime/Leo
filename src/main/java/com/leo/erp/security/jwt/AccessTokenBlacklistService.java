@@ -24,7 +24,7 @@ public class AccessTokenBlacklistService {
      */
     public void blacklistUser(Long userId) {
         String key = BLACKLIST_PREFIX + userId;
-        long ttlMs = jwtProperties.accessExpirationMs();
+        long ttlMs = jwtProperties.getAccessExpirationMs();
         redisTemplate.opsForValue().set(key, String.valueOf(System.currentTimeMillis()), ttlMs, TimeUnit.MILLISECONDS);
     }
 
@@ -47,7 +47,7 @@ public class AccessTokenBlacklistService {
 
     public void blacklistSession(String sessionId) {
         String key = SESSION_BLACKLIST_PREFIX + sessionId;
-        long ttlMs = jwtProperties.accessExpirationMs();
+        long ttlMs = jwtProperties.getAccessExpirationMs();
         redisTemplate.opsForValue().set(key, String.valueOf(System.currentTimeMillis()), ttlMs, TimeUnit.MILLISECONDS);
     }
 

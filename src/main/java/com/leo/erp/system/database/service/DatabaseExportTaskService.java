@@ -7,17 +7,25 @@ import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.system.database.config.DatabaseBackupProperties;
 import com.leo.erp.system.database.domain.entity.DatabaseExportTask;
+import com.leo.erp.system.database.mapper.DatabaseExportTaskMapper;
 import com.leo.erp.system.database.repository.DatabaseExportTaskRepository;
+import com.leo.erp.system.database.web.dto.DatabaseExportDownloadLinkResponse;
+import com.leo.erp.system.database.web.dto.DatabaseExportTaskResponse;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
+import org.springframework.core.io.FileSystemResource;
+import org.springframework.dao.DataAccessException;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.io.IOException;
+import java.net.URLEncoder;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
@@ -44,9 +52,13 @@ public class DatabaseExportTaskService {
     @Value("${spring.datasource.password}")
     private String datasourcePassword;
 
+    @Value("${server.servlet.context-path:}")
+    private String contextPath;
+
     private final DatabaseExportTaskRepository taskRepository;
     private final DatabaseBackupService databaseBackupService;
     private final DatabaseBackupProperties backupProperties;
+    private final DatabaseExportTaskMapper exportTaskMapper;
     private final SnowflakeIdGenerator snowflakeIdGenerator;
     private final ExecutorService executorService = Executors.newSingleThreadExecutor(r -> {
         Thread thread = new Thread(r, "database-export-task-worker");
@@ -57,10 +69,12 @@ public class DatabaseExportTaskService {
     public DatabaseExportTaskService(DatabaseExportTaskRepository taskRepository,
                                      DatabaseBackupService databaseBackupService,
                                      DatabaseBackupProperties backupProperties,
+                                     DatabaseExportTaskMapper exportTaskMapper,
                                      SnowflakeIdGenerator snowflakeIdGenerator) {
         this.taskRepository = taskRepository;
         this.databaseBackupService = databaseBackupService;
         this.backupProperties = backupProperties;
+        this.exportTaskMapper = exportTaskMapper;
         this.snowflakeIdGenerator = snowflakeIdGenerator;
     }
 
@@ -80,7 +94,7 @@ public class DatabaseExportTaskService {
         executorService.shutdownNow();
     }
 
-    public DatabaseExportTask createTask() {
+    public DatabaseExportTaskResponse createTask() {
         cleanupExpiredTasks();
         if (taskRepository.existsByStatusInAndDeletedFlagFalse(List.copyOf(ACTIVE_STATUSES))) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "已有数据库导出任务在执行，请等待完成后再试");
@@ -95,17 +109,19 @@ public class DatabaseExportTaskService {
 
         Long taskId = task.getId();
         executorService.submit(() -> runTask(taskId));
-        return task;
+        return exportTaskMapper.toResponse(task);
     }
 
-    public List<DatabaseExportTask> listRecentTasks() {
+    public List<DatabaseExportTaskResponse> listRecentTasks() {
         cleanupExpiredTasks();
-        return taskRepository.findTop20ByDeletedFlagFalseOrderByCreatedAtDescIdDesc();
+        return taskRepository.findTop20ByDeletedFlagFalseOrderByCreatedAtDescIdDesc().stream()
+                .map(exportTaskMapper::toResponse)
+                .toList();
     }
 
-    public DatabaseExportTask getTask(Long id) {
+    public DatabaseExportTaskResponse getTask(Long id) {
         cleanupExpiredTasks();
-        return findTask(id);
+        return exportTaskMapper.toResponse(findTask(id));
     }
 
     public DownloadLinkPayload generateDownloadLink(Long id) {
@@ -125,6 +141,14 @@ public class DatabaseExportTaskService {
         task.setDownloadToken(UUID.randomUUID().toString().replace("-", ""));
         taskRepository.save(task);
         return new DownloadLinkPayload(task.getId(), task.getDownloadToken(), task.getExpiresAt());
+    }
+
+    public DatabaseExportDownloadLinkResponse generateDownloadLinkResponse(Long id) {
+        DownloadLinkPayload payload = generateDownloadLink(id);
+        String contextPathValue = contextPath == null ? "" : contextPath;
+        String downloadUrl = contextPathValue + "/system/database/export-task/" + payload.taskId()
+                + "/download?token=" + payload.downloadToken();
+        return new DatabaseExportDownloadLinkResponse(downloadUrl, payload.expiresAt());
     }
 
     @Transactional
@@ -150,6 +174,22 @@ public class DatabaseExportTaskService {
             throw new BusinessException(ErrorCode.FORBIDDEN, "下载令牌无效");
         }
         return new DownloadPayload(filePath, task.getFileName(), task.getFileSize());
+    }
+
+    @Transactional
+    public DatabaseExportDownloadResource getDownloadResource(Long id, String token) {
+        DownloadPayload payload = getDownloadPayload(id, token);
+        FileSystemResource resource = new FileSystemResource(payload.filePath());
+        if (!resource.exists()) {
+            throw new BusinessException(ErrorCode.NOT_FOUND, "备份文件不存在或已被清理");
+        }
+        String encodedFileName = URLEncoder.encode(payload.fileName(), StandardCharsets.UTF_8).replace("+", "%20");
+        return new DatabaseExportDownloadResource(
+                resource,
+                MediaType.APPLICATION_OCTET_STREAM,
+                payload.fileSize() == null ? 0L : payload.fileSize(),
+                "attachment; filename*=UTF-8''" + encodedFileName
+        );
     }
 
     public boolean isExpired(DatabaseExportTask task) {
@@ -193,7 +233,7 @@ public class DatabaseExportTaskService {
             task.setFailureReason(null);
             taskRepository.save(task);
             log.info("数据库导出任务完成: taskNo={}, file={}", task.getTaskNo(), targetPath);
-        } catch (Exception ex) {
+        } catch (IOException | InterruptedException | DataAccessException ex) {
             if (tempFile != null) {
                 try {
                     Files.deleteIfExists(tempFile);
@@ -203,7 +243,7 @@ public class DatabaseExportTaskService {
             }
             task.setStatus(STATUS_FAILED);
             task.setFinishedAt(LocalDateTime.now());
-            task.setFailureReason(truncate(ex.getMessage(), 500));
+            task.setFailureReason("数据库导出失败，请查看服务端日志");
             taskRepository.save(task);
             log.error("数据库导出任务失败: taskNo={}", task.getTaskNo(), ex);
         }
@@ -235,12 +275,5 @@ public class DatabaseExportTaskService {
     private DatabaseExportTask findTask(Long id) {
         return taskRepository.findByIdAndDeletedFlagFalse(id)
                 .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "导出任务不存在"));
-    }
-
-    private String truncate(String value, int maxLength) {
-        if (value == null || value.length() <= maxLength) {
-            return value;
-        }
-        return value.substring(0, maxLength);
     }
 }

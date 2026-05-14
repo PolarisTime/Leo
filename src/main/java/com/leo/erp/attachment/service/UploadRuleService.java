@@ -1,7 +1,10 @@
 package com.leo.erp.attachment.service;
 
 import com.leo.erp.attachment.domain.entity.UploadRule;
+import com.leo.erp.attachment.mapper.UploadRuleWebMapper;
 import com.leo.erp.attachment.repository.UploadRuleRepository;
+import com.leo.erp.attachment.web.dto.UploadRuleRequest;
+import com.leo.erp.attachment.web.dto.UploadRuleResponse;
 import com.leo.erp.common.setting.PageUploadRuleQueryService;
 import com.leo.erp.common.setting.PageUploadRuleSummary;
 import com.leo.erp.common.error.BusinessException;
@@ -26,15 +29,18 @@ public class UploadRuleService implements PageUploadRuleQueryService {
     private final SnowflakeIdGenerator idGenerator;
     private final AttachmentFilenameResolver filenameResolver;
     private final ModuleCatalog moduleCatalog;
+    private final UploadRuleWebMapper uploadRuleWebMapper;
 
     public UploadRuleService(UploadRuleRepository repository,
                              SnowflakeIdGenerator idGenerator,
                              AttachmentFilenameResolver filenameResolver,
-                             ModuleCatalog moduleCatalog) {
+                             ModuleCatalog moduleCatalog,
+                             UploadRuleWebMapper uploadRuleWebMapper) {
         this.repository = repository;
         this.idGenerator = idGenerator;
         this.filenameResolver = filenameResolver;
         this.moduleCatalog = moduleCatalog;
+        this.uploadRuleWebMapper = uploadRuleWebMapper;
     }
 
     @Transactional(readOnly = true)
@@ -50,6 +56,11 @@ public class UploadRuleService implements PageUploadRuleQueryService {
         return toDetail(resolveRuleView(moduleKey));
     }
 
+    @Transactional(readOnly = true)
+    public UploadRuleResponse responseDetail(String moduleKey) {
+        return uploadRuleWebMapper.toResponse(getPageUploadRule(moduleKey));
+    }
+
     @Transactional
     public PageUploadRuleDetail updatePageUploadRule(String moduleKey, UpdatePageUploadRuleCommand command) {
         filenameResolver.preview(command.renamePattern(), "sample-contract.pdf");
@@ -59,6 +70,11 @@ public class UploadRuleService implements PageUploadRuleQueryService {
         rule.setStatus(normalizeStatus(command.status()));
         rule.setRemark(command.remark());
         return toDetail(repository.save(rule));
+    }
+
+    @Transactional
+    public UploadRuleResponse responseUpdate(String moduleKey, UploadRuleRequest request) {
+        return uploadRuleWebMapper.toResponse(updatePageUploadRule(moduleKey, uploadRuleWebMapper.toCommand(request)));
     }
 
     @Transactional(readOnly = true)
@@ -150,7 +166,7 @@ public class UploadRuleService implements PageUploadRuleQueryService {
 
     private String normalizeModuleKey(String moduleKey) {
         if (moduleKey == null || moduleKey.isBlank()) {
-            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "页面模块不能为空");
+            return "general-setting";
         }
         String normalized = moduleKey.trim();
         if (!moduleCatalog.containsModule(normalized)) {

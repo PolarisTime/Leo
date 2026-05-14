@@ -11,6 +11,7 @@ import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leo.erp.system.company.domain.entity.CompanySetting;
 import com.leo.erp.system.company.repository.CompanySettingRepository;
@@ -92,6 +93,7 @@ public class InitialSetupService {
 
     @Transactional
     public InitialSetupSubmitResponse initialize(InitialSetupSubmitRequest request) {
+        assertOobeNotCompleted();
         boolean adminConfigured = isAdminConfigured();
         boolean companyConfigured = companySettingRepository.existsByDeletedFlagFalse();
         if (adminConfigured && companyConfigured) {
@@ -126,6 +128,7 @@ public class InitialSetupService {
 
     @Transactional(readOnly = true)
     public TotpSetupResponse setupAdminTotp(InitialSetupTotpSetupRequest request) {
+        assertOobeNotCompleted();
         if (isAdminConfigured()) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "管理员账号已完成初始化");
         }
@@ -137,6 +140,7 @@ public class InitialSetupService {
 
     @Transactional
     public InitialSetupSubmitResponse configureAdmin(InitialSetupAdminSubmitRequest request) {
+        assertOobeNotCompleted();
         if (isAdminConfigured()) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "管理员账号已完成初始化");
         }
@@ -145,6 +149,7 @@ public class InitialSetupService {
 
     @Transactional
     public InitialSetupSubmitResponse configureCompany(InitialSetupCompanyRequest request) {
+        assertOobeNotCompleted();
         if (!isAdminConfigured()) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "请先完成管理员账号初始化");
         }
@@ -156,6 +161,12 @@ public class InitialSetupService {
 
     public boolean isSetupRequired() {
         return !isAdminConfigured() || !companySettingRepository.existsByDeletedFlagFalse();
+    }
+
+    private void assertOobeNotCompleted() {
+        if (!isSetupRequired()) {
+            throw new BusinessException(ErrorCode.FORBIDDEN, "系统已完成初始化，该接口已禁用");
+        }
     }
 
     private boolean isAdminConfigured() {
@@ -293,7 +304,7 @@ public class InitialSetupService {
                             remark.isEmpty() ? SETUP_REMARK : remark
                     )
             ));
-        } catch (Exception ex) {
+        } catch (JsonProcessingException ex) {
             throw new IllegalStateException("首次初始化结算账户序列化失败", ex);
         }
     }

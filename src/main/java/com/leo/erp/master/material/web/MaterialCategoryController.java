@@ -26,7 +26,7 @@ import java.util.List;
 
 @RestController
 @Validated
-@RequestMapping("/material-category")
+@RequestMapping("/material-categories")
 public class MaterialCategoryController {
 
     private final MaterialCategoryService service;
@@ -67,7 +67,7 @@ public class MaterialCategoryController {
     @RequiresPermission(resource = "material", action = "delete")
     public ApiResponse<Void> delete(@PathVariable @Positive Long id) {
         service.delete(id);
-        return ApiResponse.success("删除成功", null);
+        return ApiResponse.success("删除成功");
     }
 
     @GetMapping("/option")

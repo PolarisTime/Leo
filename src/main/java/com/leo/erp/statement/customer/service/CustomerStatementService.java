@@ -1,5 +1,6 @@
 package com.leo.erp.statement.customer.service;
 
+import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
@@ -33,7 +34,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
-import java.time.LocalDate;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -76,18 +76,11 @@ public class CustomerStatementService extends AbstractCrudService<CustomerStatem
     }
 
     @Transactional(readOnly = true)
-    public Page<CustomerStatementResponse> page(
-            PageQuery query,
-            String keyword,
-            String customerName,
-            String status,
-            LocalDate periodStart,
-            LocalDate periodEnd
-    ) {
-        Specification<CustomerStatement> spec = Specs.<CustomerStatement>keywordLike(keyword, "statementNo", "customerName", "projectName", "sourceOrderNos")
-                .and(Specs.equalIfPresent("customerName", customerName))
-                .and(Specs.equalIfPresent("status", status))
-                .and(Specs.betweenIfPresent("endDate", periodStart, periodEnd));
+    public Page<CustomerStatementResponse> page(PageQuery query, PageFilter filter) {
+        Specification<CustomerStatement> spec = Specs.<CustomerStatement>keywordLike(filter.keyword(), "statementNo", "customerName", "projectName", "sourceOrderNos")
+                .and(Specs.equalIfPresent("customerName", filter.name()))
+                .and(Specs.equalIfPresent("status", filter.status()))
+                .and(Specs.betweenIfPresent("endDate", filter.startDate(), filter.endDate()));
         return page(query, spec, repository);
     }
 

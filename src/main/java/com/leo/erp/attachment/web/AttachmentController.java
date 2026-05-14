@@ -1,26 +1,22 @@
 package com.leo.erp.attachment.web;
 
-import com.leo.erp.attachment.mapper.AttachmentWebMapper;
-import com.leo.erp.attachment.service.AttachmentService;
-import com.leo.erp.attachment.service.AttachmentService.AttachmentDownloadPayload;
+import com.leo.erp.attachment.service.AttachmentDownloadResource;
 import com.leo.erp.attachment.service.AttachmentRecordAccessService;
-import com.leo.erp.attachment.service.UploadRuleService;
-import com.leo.erp.attachment.service.AttachmentView;
+import com.leo.erp.attachment.service.AttachmentService;
+import com.leo.erp.attachment.service.AttachmentWebService;
 import com.leo.erp.attachment.web.dto.AttachmentUploadResponse;
 import com.leo.erp.common.api.ApiResponse;
-import com.leo.erp.common.error.BusinessException;
-import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.security.permission.ModulePermissionGuard;
 import com.leo.erp.security.permission.RequiresPermission;
 import com.leo.erp.security.support.SecurityPrincipal;
 import com.leo.erp.system.operationlog.support.OperationLoggable;
 import jakarta.validation.constraints.NotBlank;
-import org.springframework.validation.annotation.Validated;
-import org.springframework.http.ContentDisposition;
+import org.springframework.core.io.Resource;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -30,28 +26,24 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 
 @RestController
 @Validated
-@RequestMapping("/attachment")
+@RequestMapping("/attachments")
 public class AttachmentController {
 
     private final AttachmentService attachmentService;
-    private final AttachmentWebMapper attachmentWebMapper;
+    private final AttachmentWebService attachmentWebService;
     private final ModulePermissionGuard modulePermissionGuard;
-    private final UploadRuleService uploadRuleService;
     private final AttachmentRecordAccessService attachmentRecordAccessService;
 
     public AttachmentController(AttachmentService attachmentService,
-                                AttachmentWebMapper attachmentWebMapper,
+                                AttachmentWebService attachmentWebService,
                                 ModulePermissionGuard modulePermissionGuard,
-                                UploadRuleService uploadRuleService,
                                 AttachmentRecordAccessService attachmentRecordAccessService) {
         this.attachmentService = attachmentService;
-        this.attachmentWebMapper = attachmentWebMapper;
+        this.attachmentWebService = attachmentWebService;
         this.modulePermissionGuard = modulePermissionGuard;
-        this.uploadRuleService = uploadRuleService;
         this.attachmentRecordAccessService = attachmentRecordAccessService;
     }
 
@@ -63,47 +55,35 @@ public class AttachmentController {
                                                         @RequestParam("file") MultipartFile file,
                                                         @RequestParam(required = false) String sourceType) throws IOException {
         String normalizedModuleKey = modulePermissionGuard.requirePermission(principal, moduleKey, "update");
-        if (!uploadRuleService.isPageUploadEnabled(normalizedModuleKey)) {
-            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "当前页面未启用附件标志");
-        }
-        AttachmentView result = attachmentService.upload(file, sourceType, normalizedModuleKey);
-        return ApiResponse.success("上传成功", attachmentWebMapper.toUploadResponse(result));
+        return ApiResponse.success("上传成功", attachmentWebService.upload(file, sourceType, normalizedModuleKey));
     }
 
     @GetMapping("/{id}/download")
     @RequiresPermission(authenticatedOnly = true, allowApiKey = true)
-    public ResponseEntity<?> download(@AuthenticationPrincipal SecurityPrincipal principal,
-                                      @PathVariable Long id,
-                                      @RequestParam String moduleKey,
-                                      @RequestParam String accessKey) {
+    public ResponseEntity<Resource> download(@AuthenticationPrincipal SecurityPrincipal principal,
+                                             @PathVariable Long id,
+                                             @RequestParam String moduleKey,
+                                             @RequestParam String accessKey) {
         modulePermissionGuard.requirePermission(principal, moduleKey, "read");
         attachmentRecordAccessService.assertAttachmentAccessible(principal, moduleKey, "read", id);
-        AttachmentDownloadPayload payload = attachmentService.loadForDownload(id, accessKey);
-        return buildFileResponse(payload, false);
+        return buildFileResponse(attachmentService.loadDownloadResource(id, accessKey, false));
     }
 
     @GetMapping("/{id}/preview")
     @RequiresPermission(authenticatedOnly = true, allowApiKey = true)
-    public ResponseEntity<?> preview(@AuthenticationPrincipal SecurityPrincipal principal,
-                                     @PathVariable Long id,
-                                     @RequestParam String moduleKey,
-                                     @RequestParam String accessKey) {
+    public ResponseEntity<Resource> preview(@AuthenticationPrincipal SecurityPrincipal principal,
+                                            @PathVariable Long id,
+                                            @RequestParam String moduleKey,
+                                            @RequestParam String accessKey) {
         modulePermissionGuard.requirePermission(principal, moduleKey, "read");
         attachmentRecordAccessService.assertAttachmentAccessible(principal, moduleKey, "read", id);
-        AttachmentDownloadPayload payload = attachmentService.loadForPreview(id, accessKey);
-        return buildFileResponse(payload, true);
+        return buildFileResponse(attachmentService.loadDownloadResource(id, accessKey, true));
     }
 
-    private ResponseEntity<?> buildFileResponse(AttachmentDownloadPayload payload, boolean inline) {
-        MediaType mediaType = (payload.contentType() == null || payload.contentType().isBlank())
-                ? MediaType.APPLICATION_OCTET_STREAM
-                : MediaType.parseMediaType(payload.contentType());
-        ContentDisposition contentDisposition = inline
-                ? ContentDisposition.inline().filename(payload.fileName(), StandardCharsets.UTF_8).build()
-                : ContentDisposition.attachment().filename(payload.fileName(), StandardCharsets.UTF_8).build();
+    private ResponseEntity<Resource> buildFileResponse(AttachmentDownloadResource payload) {
         return ResponseEntity.ok()
-                .contentType(mediaType)
-                .header(HttpHeaders.CONTENT_DISPOSITION, contentDisposition.toString())
+                .contentType(payload.contentType())
+                .header(HttpHeaders.CONTENT_DISPOSITION, payload.contentDisposition())
                 .body(payload.resource());
     }
 }

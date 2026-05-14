@@ -27,7 +27,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @Validated
-@RequestMapping("/role-setting")
+@RequestMapping("/role-settings")
 public class RoleSettingController {
 
     private final RoleSettingService roleSettingService;
@@ -71,7 +71,7 @@ public class RoleSettingController {
     @OperationLoggable(moduleName = "角色权限配置", actionType = "删除")
     public ApiResponse<Void> delete(@PathVariable @Positive Long id) {
         roleSettingService.delete(id);
-        return ApiResponse.success("删除成功", null);
+        return ApiResponse.success("删除成功");
     }
 
     @GetMapping("/{id}/permission")
@@ -92,6 +92,6 @@ public class RoleSettingController {
     public ApiResponse<Void> saveRolePermissions(@PathVariable @Positive Long id,
                                                  @Valid @RequestBody List<@Valid RolePermissionItem> permissions) {
         roleSettingService.saveRolePermissions(id, permissions);
-        return ApiResponse.success("权限保存成功", null);
+        return ApiResponse.success("权限保存成功");
     }
 }

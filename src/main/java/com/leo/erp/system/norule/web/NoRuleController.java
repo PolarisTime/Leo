@@ -1,5 +1,6 @@
 package com.leo.erp.system.norule.web;
 
+import org.springframework.validation.annotation.Validated;
 import com.leo.erp.common.api.ApiResponse;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.api.PageResponse;
@@ -9,9 +10,6 @@ import com.leo.erp.security.permission.RequiresPermission;
 import com.leo.erp.security.support.SecurityPrincipal;
 import com.leo.erp.system.norule.service.GeneralSettingQueryService;
 import com.leo.erp.system.norule.service.NoRuleService;
-import com.leo.erp.system.norule.service.NoRuleSequenceService;
-import com.leo.erp.system.norule.service.PreallocatedBusinessNoService;
-import com.leo.erp.system.norule.service.SystemSwitchService;
 import com.leo.erp.system.operationlog.support.OperationLoggable;
 import com.leo.erp.system.norule.web.dto.GeneralSettingResponse;
 import com.leo.erp.system.norule.web.dto.NoRuleGenerateResponse;
@@ -33,31 +31,20 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
 
 @RestController
-@RequestMapping("/general-setting")
+@Validated
+@RequestMapping("/general-settings")
 public class NoRuleController {
 
     private final NoRuleService noRuleService;
     private final GeneralSettingQueryService generalSettingQueryService;
-    private final NoRuleSequenceService noRuleSequenceService;
     private final ModulePermissionGuard modulePermissionGuard;
-    private final SystemSwitchService systemSwitchService;
-    private final com.leo.erp.common.support.SnowflakeIdGenerator snowflakeIdGenerator;
-    private final PreallocatedBusinessNoService preallocatedBusinessNoService;
 
     public NoRuleController(NoRuleService noRuleService,
                             GeneralSettingQueryService generalSettingQueryService,
-                            NoRuleSequenceService noRuleSequenceService,
-                            ModulePermissionGuard modulePermissionGuard,
-                            SystemSwitchService systemSwitchService,
-                            com.leo.erp.common.support.SnowflakeIdGenerator snowflakeIdGenerator,
-                            PreallocatedBusinessNoService preallocatedBusinessNoService) {
+                            ModulePermissionGuard modulePermissionGuard) {
         this.noRuleService = noRuleService;
         this.generalSettingQueryService = generalSettingQueryService;
-        this.noRuleSequenceService = noRuleSequenceService;
         this.modulePermissionGuard = modulePermissionGuard;
-        this.systemSwitchService = systemSwitchService;
-        this.snowflakeIdGenerator = snowflakeIdGenerator;
-        this.preallocatedBusinessNoService = preallocatedBusinessNoService;
     }
 
     @GetMapping
@@ -85,10 +72,7 @@ public class NoRuleController {
     @GetMapping("/statement-generator-rule")
     @RequiresPermission(authenticatedOnly = true)
     public ApiResponse<StatementGeneratorRulesResponse> statementGeneratorRules() {
-        return ApiResponse.success(new StatementGeneratorRulesResponse(
-                systemSwitchService.shouldDefaultCustomerStatementReceiptAmountToZero(),
-                systemSwitchService.shouldDefaultSupplierStatementToFullPayment()
-        ));
+        return ApiResponse.success(noRuleService.statementGeneratorRules());
     }
 
     @GetMapping("/{id}")
@@ -102,20 +86,7 @@ public class NoRuleController {
     public ApiResponse<NoRuleGenerateResponse> nextNumber(@AuthenticationPrincipal SecurityPrincipal principal,
                                                           @RequestParam String moduleKey) {
         String normalizedModuleKey = modulePermissionGuard.requirePermission(principal, moduleKey, "create");
-        if (systemSwitchService.shouldUseSnowflakeIdAsBusinessNo()) {
-            String generatedId = String.valueOf(snowflakeIdGenerator.nextId());
-            preallocatedBusinessNoService.reserve(normalizedModuleKey, Long.parseLong(generatedId), principal);
-            return ApiResponse.success(new NoRuleGenerateResponse(
-                    normalizedModuleKey,
-                    generatedId,
-                    generatedId
-            ));
-        }
-        return ApiResponse.success(new NoRuleGenerateResponse(
-                normalizedModuleKey,
-                noRuleSequenceService.nextValueByModuleKey(normalizedModuleKey),
-                null
-        ));
+        return ApiResponse.success(noRuleService.nextNumber(normalizedModuleKey, principal));
     }
 
     @PostMapping
@@ -137,6 +108,6 @@ public class NoRuleController {
     @OperationLoggable(moduleName = "通用设置", actionType = "删除")
     public ApiResponse<Void> delete(@PathVariable Long id) {
         noRuleService.delete(id);
-        return ApiResponse.success("删除成功", null);
+        return ApiResponse.success("删除成功");
     }
 }

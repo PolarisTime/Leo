@@ -1,5 +1,6 @@
 package com.leo.erp.system.database.web;
 
+import org.springframework.validation.annotation.Validated;
 import com.leo.erp.common.api.ApiResponse;
 import com.leo.erp.security.permission.RequiresPermission;
 import com.leo.erp.system.database.service.DatabaseStatusService;
@@ -9,7 +10,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/system/database")
+@Validated
+@RequestMapping("/system/databases")
 public class DatabaseStatusController {
 
     private final DatabaseStatusService statusService;

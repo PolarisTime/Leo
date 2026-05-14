@@ -3,7 +3,7 @@ package com.leo.erp.security.permission;
 import lombok.extern.slf4j.Slf4j;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
-import com.leo.erp.common.support.IpResolutionService;
+import com.leo.erp.common.support.ClientIpResolver;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
@@ -22,11 +22,11 @@ public class RateLimitAspect {
     private static final String KEY_PREFIX = "rate-limit:";
 
     private final StringRedisTemplate redisTemplate;
-    private final IpResolutionService ipResolutionService;
+    private final ClientIpResolver clientIpResolver;
 
-    public RateLimitAspect(StringRedisTemplate redisTemplate, IpResolutionService ipResolutionService) {
+    public RateLimitAspect(StringRedisTemplate redisTemplate, ClientIpResolver clientIpResolver) {
         this.redisTemplate = redisTemplate;
-        this.ipResolutionService = ipResolutionService;
+        this.clientIpResolver = clientIpResolver;
     }
 
     @Around("@annotation(rateLimit)")
@@ -54,13 +54,13 @@ public class RateLimitAspect {
     private String buildKey(ProceedingJoinPoint joinPoint) {
         String clientIp = resolveClientIp();
         String method = joinPoint.getSignature().toShortString();
-        return KEY_PREFIX + clientIp + ":" + method;
+        return new StringBuilder(KEY_PREFIX).append(clientIp).append(':').append(method).toString();
     }
 
     private String resolveClientIp() {
         try {
             ServletRequestAttributes attrs = (ServletRequestAttributes) RequestContextHolder.currentRequestAttributes();
-            return ipResolutionService.resolveClientIpOrUnknown(attrs.getRequest());
+            return clientIpResolver.resolveClientIpOrUnknown(attrs.getRequest());
         } catch (Exception e) {
             return "unknown";
         }

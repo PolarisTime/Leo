@@ -1,5 +1,6 @@
 package com.leo.erp.common.web;
 
+import org.springframework.validation.annotation.Validated;
 import com.leo.erp.common.api.ApiResponse;
 import com.leo.erp.common.search.GlobalSearchResponse;
 import com.leo.erp.common.search.GlobalSearchService;
@@ -14,6 +15,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @Tag(name = "全局搜索")
 @RestController
+@Validated
 @RequestMapping("/global-search")
 public class GlobalSearchController {
 

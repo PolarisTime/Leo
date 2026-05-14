@@ -7,6 +7,7 @@ import javax.crypto.SecretKey;
 import javax.crypto.spec.GCMParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
+import java.security.GeneralSecurityException;
 import java.security.SecureRandom;
 import java.util.Base64;
 
@@ -29,7 +30,7 @@ public class TotpSecretCryptor {
             System.arraycopy(iv, 0, result, 0, iv.length);
             System.arraycopy(encrypted, 0, result, iv.length, encrypted.length);
             return Base64.getEncoder().encodeToString(result);
-        } catch (Exception e) {
+        } catch (GeneralSecurityException e) {
             throw new IllegalStateException("TOTP密钥加密失败", e);
         }
     }
@@ -47,7 +48,7 @@ public class TotpSecretCryptor {
             cipher.init(Cipher.DECRYPT_MODE, deriveKey(encryptionKey), new GCMParameterSpec(GCM_TAG_LENGTH, iv));
             byte[] decrypted = cipher.doFinal(ciphertext);
             return new String(decrypted, StandardCharsets.UTF_8);
-        } catch (Exception e) {
+        } catch (GeneralSecurityException e) {
             throw new IllegalStateException("TOTP密钥解密失败", e);
         }
     }

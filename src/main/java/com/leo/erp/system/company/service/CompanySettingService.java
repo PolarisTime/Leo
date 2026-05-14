@@ -17,6 +17,7 @@ import com.leo.erp.system.company.web.dto.CompanySettlementAccountResponse;
 import com.leo.erp.system.dashboard.service.DashboardSummaryService;
 import com.leo.erp.system.norule.domain.entity.NoRule;
 import com.leo.erp.system.norule.repository.NoRuleRepository;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.data.domain.Page;
@@ -246,7 +247,7 @@ public class CompanySettingService extends AbstractCrudService<CompanySetting, C
                 if (accounts != null && !accounts.isEmpty()) {
                     return accounts;
                 }
-            } catch (Exception ex) {
+            } catch (JsonProcessingException ex) {
                 throw new IllegalStateException("公司结算信息解析失败", ex);
             }
         }
@@ -267,7 +268,7 @@ public class CompanySettingService extends AbstractCrudService<CompanySetting, C
     private String writeSettlementAccounts(List<CompanySettlementAccountResponse> settlementAccounts) {
         try {
             return objectMapper.writeValueAsString(settlementAccounts);
-        } catch (Exception ex) {
+        } catch (JsonProcessingException ex) {
             throw new IllegalStateException("公司结算信息序列化失败", ex);
         }
     }

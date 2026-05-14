@@ -1,7 +1,9 @@
 package com.leo.erp.logistics.bill.service;
 
+import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.error.BusinessException;
+import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.service.AbstractCrudService;
 import com.leo.erp.common.support.BusinessStatusValidator;
@@ -43,16 +45,11 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
         this.workflowTransitionGuard = workflowTransitionGuard;
     }
 
-    public Page<FreightBillResponse> page(PageQuery query,
-                                          String keyword,
-                                          String carrierName,
-                                          String status,
-                                          java.time.LocalDate startDate,
-                                          java.time.LocalDate endDate) {
-        Specification<FreightBill> spec = Specs.<FreightBill>keywordLike(keyword, "billNo", "carrierName", "customerName")
-                .and(Specs.equalIfPresent("carrierName", carrierName))
-                .and(Specs.equalIfPresent("status", status))
-                .and(Specs.betweenIfPresent("billTime", startDate, endDate));
+    public Page<FreightBillResponse> page(PageQuery query, PageFilter filter) {
+        Specification<FreightBill> spec = Specs.<FreightBill>keywordLike(filter.keyword(), "billNo", "carrierName", "customerName")
+                .and(Specs.equalIfPresent("carrierName", filter.name()))
+                .and(Specs.equalIfPresent("status", filter.status()))
+                .and(Specs.betweenIfPresent("billTime", filter.startDate(), filter.endDate()));
         return page(query, spec, repository);
     }
 
@@ -273,12 +270,14 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
                 }
                 String billNo = emptyToNull(occupiedBill.getBillNo());
                 String carrierName = emptyToNull(occupiedBill.getCarrierName());
-                throw new BusinessException(
-                        com.leo.erp.common.error.ErrorCode.BUSINESS_ERROR,
-                        "销售出库单" + sourceNo + "已归集到物流单"
-                                + (billNo == null ? "" : billNo)
-                                + (carrierName == null ? "" : "（物流商：" + carrierName + "）")
-                );
+                StringBuilder msg = new StringBuilder("销售出库单").append(sourceNo).append("已归集到物流单");
+                if (billNo != null) {
+                    msg.append(billNo);
+                }
+                if (carrierName != null) {
+                    msg.append("（物流商：").append(carrierName).append("）");
+                }
+                throw new BusinessException(ErrorCode.BUSINESS_ERROR, msg.toString());
             }
         }
     }

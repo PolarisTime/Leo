@@ -1,6 +1,8 @@
 package com.leo.erp.purchase.order.web;
 
+import org.springframework.validation.annotation.Validated;
 import com.leo.erp.common.api.ApiResponse;
+import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.api.PageResponse;
 import com.leo.erp.common.web.BindPageQuery;
@@ -26,7 +28,8 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 
 @Tag(name = "采购订单")
 @RestController
-@RequestMapping("/purchase-order")
+@Validated
+@RequestMapping("/purchase-orders")
 public class PurchaseOrderController {
 
     private final PurchaseOrderService purchaseOrderService;
@@ -70,7 +73,7 @@ public class PurchaseOrderController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate
     ) {
         return ApiResponse.success(PageResponse.from(
-                purchaseOrderService.page(query, keyword, supplierName, status, startDate, endDate)
+                purchaseOrderService.page(query, PageFilter.of(keyword, supplierName, status, startDate, endDate))
         ));
     }
 
@@ -100,6 +103,6 @@ public class PurchaseOrderController {
     @RequiresPermission(resource = "purchase-order", action = "delete")
     public ApiResponse<Void> delete(@PathVariable Long id) {
         purchaseOrderService.delete(id);
-        return ApiResponse.success("删除成功", null);
+        return ApiResponse.success("删除成功");
     }
 }

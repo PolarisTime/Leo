@@ -6,6 +6,7 @@ import com.leo.erp.common.error.ErrorCode;
 import org.springframework.stereotype.Component;
 
 import java.net.URI;
+import java.net.URISyntaxException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 
@@ -43,7 +44,7 @@ public class S3PathParser {
         String host = pathStyle ? endpoint.getHost() : s3.getBucket() + "." + endpoint.getHost();
         try {
             return new URI(endpoint.getScheme(), endpoint.getUserInfo(), host, endpoint.getPort(), path, null, null);
-        } catch (Exception ex) {
+        } catch (URISyntaxException ex) {
             throw new BusinessException(ErrorCode.INTERNAL_ERROR, "S3 Endpoint 配置错误");
         }
     }
@@ -84,7 +85,7 @@ public class S3PathParser {
     public URI parseEndpoint(String endpoint) {
         try {
             return URI.create(endpoint);
-        } catch (Exception ex) {
+        } catch (IllegalArgumentException ex) {
             throw new BusinessException(ErrorCode.INTERNAL_ERROR, "S3 Endpoint 配置错误");
         }
     }

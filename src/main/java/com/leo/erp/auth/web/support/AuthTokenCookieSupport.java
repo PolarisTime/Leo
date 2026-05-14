@@ -1,4 +1,4 @@
-package com.leo.erp.auth.service;
+package com.leo.erp.auth.web.support;
 
 import com.leo.erp.auth.config.AuthCookieProperties;
 import jakarta.servlet.http.Cookie;
@@ -6,16 +6,16 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseCookie;
-import org.springframework.stereotype.Service;
+import org.springframework.stereotype.Component;
 
 import java.time.Duration;
 
-@Service
-public class AuthTokenCookieService {
+@Component
+public class AuthTokenCookieSupport {
 
     private final AuthCookieProperties cookieProperties;
 
-    public AuthTokenCookieService(AuthCookieProperties cookieProperties) {
+    public AuthTokenCookieSupport(AuthCookieProperties cookieProperties) {
         this.cookieProperties = cookieProperties;
     }
 

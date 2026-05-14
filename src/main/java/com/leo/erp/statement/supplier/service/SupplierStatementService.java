@@ -1,5 +1,6 @@
 package com.leo.erp.statement.supplier.service;
 
+import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
@@ -33,7 +34,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
-import java.time.LocalDate;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -74,18 +74,11 @@ public class SupplierStatementService extends AbstractCrudService<SupplierStatem
     }
 
     @Transactional(readOnly = true)
-    public Page<SupplierStatementResponse> page(
-            PageQuery query,
-            String keyword,
-            String supplierName,
-            String status,
-            LocalDate periodStart,
-            LocalDate periodEnd
-    ) {
-        Specification<SupplierStatement> spec = Specs.<SupplierStatement>keywordLike(keyword, "statementNo", "supplierName", "sourceInboundNos")
-                .and(Specs.equalIfPresent("supplierName", supplierName))
-                .and(Specs.equalIfPresent("status", status))
-                .and(Specs.betweenIfPresent("endDate", periodStart, periodEnd));
+    public Page<SupplierStatementResponse> page(PageQuery query, PageFilter filter) {
+        Specification<SupplierStatement> spec = Specs.<SupplierStatement>keywordLike(filter.keyword(), "statementNo", "supplierName", "sourceInboundNos")
+                .and(Specs.equalIfPresent("supplierName", filter.name()))
+                .and(Specs.equalIfPresent("status", filter.status()))
+                .and(Specs.betweenIfPresent("endDate", filter.startDate(), filter.endDate()));
         return page(query, spec, repository);
     }
 

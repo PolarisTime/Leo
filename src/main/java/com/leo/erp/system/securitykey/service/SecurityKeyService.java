@@ -17,6 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.time.Duration;
 import java.time.LocalDateTime;
@@ -235,12 +236,12 @@ public class SecurityKeyService {
         if (retiredAt == null) {
             return true;
         }
-        LocalDateTime legacyWindowEnd = retiredAt.plus(Duration.ofMillis(jwtProperties.accessExpirationMs()));
+        LocalDateTime legacyWindowEnd = retiredAt.plus(Duration.ofMillis(jwtProperties.getAccessExpirationMs()));
         return !legacyWindowEnd.isBefore(now);
     }
 
     private ResolvedSecretMaterial resolveConfigMaterial(String secretType) {
-        String secretValue = SECRET_TYPE_JWT.equals(secretType) ? jwtProperties.secret() : totpProperties.encryptionKey();
+        String secretValue = SECRET_TYPE_JWT.equals(secretType) ? jwtProperties.getSecret() : totpProperties.getEncryptionKey();
         requireConfigMaterial(secretType, secretValue);
         return new ResolvedSecretMaterial(
                 SOURCE_CONFIG,
@@ -331,7 +332,7 @@ public class SecurityKeyService {
         try {
             byte[] digest = MessageDigest.getInstance("SHA-256").digest(rawSecret.getBytes(StandardCharsets.UTF_8));
             return HexFormat.of().formatHex(digest).substring(0, 12).toUpperCase();
-        } catch (Exception e) {
+        } catch (NoSuchAlgorithmException e) {
             throw new IllegalStateException("生成密钥指纹失败", e);
         }
     }

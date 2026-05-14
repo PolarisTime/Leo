@@ -6,6 +6,8 @@ import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.security.permission.ResourcePermissionCatalog;
 import com.leo.erp.system.menu.repository.MenuActionRepository;
 import com.leo.erp.system.menu.repository.MenuRepository;
+import com.leo.erp.system.permission.web.dto.CatalogActionResponse;
+import com.leo.erp.system.permission.web.dto.CatalogEntryResponse;
 import com.leo.erp.system.permission.web.dto.PermissionEntryResponse;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
@@ -45,6 +47,22 @@ public class PermissionEntryService {
                 .filter(entry -> entry.id().equals(id))
                 .findFirst()
                 .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "权限不存在"));
+    }
+
+    public List<CatalogEntryResponse> catalog() {
+        return ResourcePermissionCatalog.entries().stream()
+                .map(entry -> new CatalogEntryResponse(
+                        entry.code(),
+                        entry.title(),
+                        entry.group(),
+                        entry.businessResource(),
+                        entry.menuCodes(),
+                        entry.pathPrefixes(),
+                        entry.actions().stream()
+                                .map(action -> new CatalogActionResponse(action.code(), action.title()))
+                                .toList()
+                ))
+                .toList();
     }
 
     private List<PermissionEntryResponse> buildPermissionEntries() {

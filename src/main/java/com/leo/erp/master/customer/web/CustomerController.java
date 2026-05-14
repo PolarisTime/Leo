@@ -10,10 +10,22 @@ import com.leo.erp.master.customer.web.dto.CustomerRequest;
 import com.leo.erp.master.customer.web.dto.CustomerResponse;
 import com.leo.erp.security.permission.RequiresPermission;
 import jakarta.validation.Valid;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
 
 @RestController
-@RequestMapping("/customer")
+@Validated
+@RequestMapping("/customers")
 public class CustomerController {
 
     private final CustomerService customerService;
@@ -24,7 +36,7 @@ public class CustomerController {
 
     @GetMapping("/option")
     @RequiresPermission(resource = "customer", action = "read")
-    public ApiResponse<java.util.List<CustomerOptionResponse>> options() {
+    public ApiResponse<List<CustomerOptionResponse>> options() {
         return ApiResponse.success(customerService.listActiveOptions());
     }
 
@@ -60,6 +72,6 @@ public class CustomerController {
     @RequiresPermission(resource = "customer", action = "delete")
     public ApiResponse<Void> delete(@PathVariable Long id) {
         customerService.delete(id);
-        return ApiResponse.success("删除成功", null);
+        return ApiResponse.success("删除成功");
     }
 }

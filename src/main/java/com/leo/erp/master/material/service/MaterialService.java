@@ -3,14 +3,20 @@ package com.leo.erp.master.material.service;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
+import com.leo.erp.common.excel.dto.ImportResult;
+import com.leo.erp.common.excel.service.ExcelExportService;
+import com.leo.erp.common.excel.service.ExcelImportService;
+import com.leo.erp.common.excel.service.ExcelTemplateService;
 import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.service.AbstractCrudService;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.TradeItemMaterialSupport;
 import com.leo.erp.common.support.TradeItemCalculator;
+import com.leo.erp.common.web.dto.FileDownloadResponse;
 import com.leo.erp.master.material.domain.entity.Material;
 import com.leo.erp.master.material.repository.MaterialRepository;
 import com.leo.erp.master.material.mapper.MaterialMapper;
+import com.leo.erp.master.material.web.dto.MaterialImportDTO;
 import com.leo.erp.master.material.web.dto.MaterialImportFailureResponse;
 import com.leo.erp.master.material.web.dto.MaterialImportResultResponse;
 import com.leo.erp.master.material.web.dto.MaterialRequest;
@@ -20,11 +26,13 @@ import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVParser;
 import org.apache.commons.csv.CSVPrinter;
 import org.apache.commons.csv.CSVRecord;
+import org.springframework.dao.DataAccessException;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
+import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -55,15 +63,24 @@ public class MaterialService extends AbstractCrudService<Material, MaterialReque
     private final MaterialRepository materialRepository;
     private final MaterialMapper materialMapper;
     private final TradeItemMaterialSupport tradeItemMaterialSupport;
+    private final ExcelExportService excelExportService;
+    private final ExcelImportService excelImportService;
+    private final ExcelTemplateService excelTemplateService;
 
     public MaterialService(MaterialRepository materialRepository,
                            SnowflakeIdGenerator snowflakeIdGenerator,
                            MaterialMapper materialMapper,
-                           TradeItemMaterialSupport tradeItemMaterialSupport) {
+                           TradeItemMaterialSupport tradeItemMaterialSupport,
+                           ExcelExportService excelExportService,
+                           ExcelImportService excelImportService,
+                           ExcelTemplateService excelTemplateService) {
         super(snowflakeIdGenerator);
         this.materialRepository = materialRepository;
         this.materialMapper = materialMapper;
         this.tradeItemMaterialSupport = tradeItemMaterialSupport;
+        this.excelExportService = excelExportService;
+        this.excelImportService = excelImportService;
+        this.excelTemplateService = excelTemplateService;
     }
 
     private static final String[] MATERIAL_SEARCH_FIELDS = {
@@ -146,6 +163,15 @@ public class MaterialService extends AbstractCrudService<Material, MaterialReque
     }
 
     @Transactional(readOnly = true)
+    public FileDownloadResponse downloadTemplateFile() {
+        return new FileDownloadResponse(
+                "商品资料导入模板.csv",
+                new MediaType("text", "csv", StandardCharsets.UTF_8),
+                downloadTemplateCsv()
+        );
+    }
+
+    @Transactional(readOnly = true)
     public byte[] exportCsv(String keyword) {
         Specification<Material> spec = Specs.<Material>notDeleted()
                 .and(Specs.keywordLike(keyword, MATERIAL_SEARCH_FIELDS));
@@ -176,6 +202,111 @@ public class MaterialService extends AbstractCrudService<Material, MaterialReque
         }
         return writer.toString().getBytes(StandardCharsets.UTF_8);
     }
+
+    @Transactional(readOnly = true)
+    public FileDownloadResponse exportFile(String keyword) {
+        return new FileDownloadResponse(
+                "materials.csv",
+                new MediaType("text", "csv", StandardCharsets.UTF_8),
+                exportCsv(keyword)
+        );
+    }
+
+    // ── Excel (XLSX) methods ──────────────────────────
+
+    @Transactional(readOnly = true)
+    public FileDownloadResponse exportExcel(String keyword) {
+        Specification<Material> spec = Specs.<Material>notDeleted()
+                .and(Specs.keywordLike(keyword, MATERIAL_SEARCH_FIELDS));
+        List<Material> materials = materialRepository.findAll(DataScopeContext.apply(spec), DEFAULT_MATERIAL_SORT);
+        List<MaterialImportDTO> dtoList = materials.stream().map(this::toImportDTO).toList();
+        byte[] data = excelExportService.export(dtoList, MaterialImportDTO.class);
+        return new FileDownloadResponse(
+                "material.xlsx",
+                new MediaType("application", "vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
+                data
+        );
+    }
+
+    @Transactional(readOnly = true)
+    public FileDownloadResponse excelTemplate() {
+        byte[] data = excelTemplateService.generateTemplate(MaterialImportDTO.class);
+        return new FileDownloadResponse(
+                "商品资料导入模板.xlsx",
+                new MediaType("application", "vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
+                data
+        );
+    }
+
+    @Transactional
+    public ImportResult importExcel(MultipartFile file) throws IOException {
+        List<MaterialImportDTO> dtoList = excelImportService.parseAndValidate(file, MaterialImportDTO.class);
+        int createdCount = 0;
+        int updatedCount = 0;
+        List<Material> successRows = new ArrayList<>();
+        for (MaterialImportDTO dto : dtoList) {
+            Material material = materialRepository.findByMaterialCode(dto.materialCode())
+                    .orElseGet(() -> {
+                        Material entity = new Material();
+                        entity.setId(nextId());
+                        return entity;
+                    });
+            boolean exists = material.getId() != null && materialRepository.existsById(material.getId());
+            material.setDeletedFlag(Boolean.FALSE);
+            applyImportDTO(material, dto);
+            materialRepository.save(material);
+            successRows.add(material);
+            if (exists) {
+                updatedCount++;
+            } else {
+                createdCount++;
+            }
+        }
+        if (!successRows.isEmpty()) {
+            tradeItemMaterialSupport.evictCache();
+        }
+        return new ImportResult(
+                dtoList.size(), dtoList.size(), createdCount, updatedCount, 0,
+                java.util.List.of(), new ArrayList<>(successRows)
+        );
+    }
+
+    private void applyImportDTO(Material entity, MaterialImportDTO dto) {
+        entity.setMaterialCode(dto.materialCode());
+        entity.setBrand(dto.brand());
+        entity.setMaterial(dto.material());
+        entity.setCategory(dto.category());
+        entity.setSpec(dto.spec());
+        entity.setLength(dto.length());
+        entity.setUnit(dto.unit());
+        entity.setQuantityUnit(TradeItemCalculator.normalizeQuantityUnit(dto.quantityUnit()));
+        entity.setPieceWeightTon(dto.pieceWeightTon() != null && !dto.pieceWeightTon().isBlank()
+                ? new BigDecimal(dto.pieceWeightTon()) : BigDecimal.ZERO);
+        entity.setPiecesPerBundle(dto.piecesPerBundle() != null && !dto.piecesPerBundle().isBlank()
+                ? Integer.parseInt(dto.piecesPerBundle()) : 0);
+        entity.setUnitPrice(dto.unitPrice() != null && !dto.unitPrice().isBlank()
+                ? new BigDecimal(dto.unitPrice()) : BigDecimal.ZERO);
+        entity.setBatchNoEnabled(tradeItemMaterialSupport.normalizeBatchNoEnabled(
+                dto.batchNoEnabled() != null && !dto.batchNoEnabled().isBlank()
+                        ? ("是".equals(dto.batchNoEnabled()) || "true".equalsIgnoreCase(dto.batchNoEnabled()))
+                        : false));
+        entity.setRemark(dto.remark());
+    }
+
+    private MaterialImportDTO toImportDTO(Material entity) {
+        return new MaterialImportDTO(
+                entity.getMaterialCode(), entity.getBrand(), entity.getMaterial(),
+                entity.getCategory(), entity.getSpec(), entity.getLength(),
+                entity.getUnit(), entity.getQuantityUnit(),
+                entity.getPieceWeightTon() != null ? entity.getPieceWeightTon().toPlainString() : null,
+                entity.getPiecesPerBundle() != null ? entity.getPiecesPerBundle().toString() : null,
+                entity.getUnitPrice() != null ? entity.getUnitPrice().toPlainString() : null,
+                entity.getBatchNoEnabled() != null && entity.getBatchNoEnabled() ? "是" : "否",
+                entity.getRemark()
+        );
+    }
+
+    // ── Legacy CSV import (kept for backward compat) ───
 
     @Transactional
     public MaterialImportResultResponse importCsv(MultipartFile file) throws IOException {
@@ -224,7 +355,7 @@ public class MaterialService extends AbstractCrudService<Material, MaterialReque
                 }
             } catch (BusinessException ex) {
                 failures.add(new MaterialImportFailureResponse(rowNumber, safe(materialCode), ex.getMessage()));
-            } catch (Exception ex) {
+            } catch (DataAccessException ex) {
                 failures.add(new MaterialImportFailureResponse(rowNumber, safe(materialCode), "保存失败，请检查该行数据"));
             }
         }

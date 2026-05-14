@@ -10,11 +10,16 @@ import com.leo.erp.common.web.BindPageQuery;
 import com.leo.erp.security.permission.RequiresPermission;
 import jakarta.validation.constraints.Positive;
 import org.springframework.validation.annotation.Validated;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @Validated
-@RequestMapping("/auth/refresh-token")
+@RequestMapping("/auth/refresh-tokens")
 public class RefreshTokenAdminController {
 
     private final RefreshTokenAdminService service;
@@ -41,7 +46,7 @@ public class RefreshTokenAdminController {
     @RequiresPermission(resource = "session", action = "update")
     public ApiResponse<Void> revoke(@PathVariable @Positive Long id) {
         service.revoke(id);
-        return ApiResponse.success("已禁用", null);
+        return ApiResponse.success("已禁用");
     }
 
     @PostMapping("/revoke-all")

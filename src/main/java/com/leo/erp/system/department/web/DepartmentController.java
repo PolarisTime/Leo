@@ -26,7 +26,7 @@ import java.util.List;
 
 @RestController
 @Validated
-@RequestMapping("/department")
+@RequestMapping("/departments")
 public class DepartmentController {
 
     private final DepartmentService departmentService;
@@ -73,6 +73,6 @@ public class DepartmentController {
     @RequiresPermission(resource = "department", action = "delete")
     public ApiResponse<Void> delete(@PathVariable @Positive Long id) {
         departmentService.delete(id);
-        return ApiResponse.success("删除成功", null);
+        return ApiResponse.success("删除成功");
     }
 }

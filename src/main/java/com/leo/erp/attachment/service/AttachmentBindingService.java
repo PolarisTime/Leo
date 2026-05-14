@@ -20,15 +20,18 @@ public class AttachmentBindingService {
 
     private final AttachmentBindingRepository repository;
     private final AttachmentService attachmentService;
+    private final UploadRuleService uploadRuleService;
     private final SnowflakeIdGenerator idGenerator;
     private final ModuleCatalog moduleCatalog;
 
     public AttachmentBindingService(AttachmentBindingRepository repository,
                                     AttachmentService attachmentService,
+                                    UploadRuleService uploadRuleService,
                                     SnowflakeIdGenerator idGenerator,
                                     ModuleCatalog moduleCatalog) {
         this.repository = repository;
         this.attachmentService = attachmentService;
+        this.uploadRuleService = uploadRuleService;
         this.idGenerator = idGenerator;
         this.moduleCatalog = moduleCatalog;
     }
@@ -37,6 +40,9 @@ public class AttachmentBindingService {
     public List<AttachmentView> list(String moduleKey, Long recordId) {
         String normalizedModuleKey = normalizeModuleKey(moduleKey);
         long normalizedRecordId = normalizeRecordId(recordId);
+        if (!uploadRuleService.isPageUploadEnabled(normalizedModuleKey)) {
+            return List.of();
+        }
         List<Long> attachmentIds = repository.findByModuleKeyAndRecordIdAndDeletedFlagFalseOrderBySortOrderAscIdAsc(
                         normalizedModuleKey,
                         normalizedRecordId
@@ -50,6 +56,9 @@ public class AttachmentBindingService {
     public List<AttachmentView> replace(String moduleKey, Long recordId, List<Long> attachmentIds) {
         String normalizedModuleKey = normalizeModuleKey(moduleKey);
         long normalizedRecordId = normalizeRecordId(recordId);
+        if (!uploadRuleService.isPageUploadEnabled(normalizedModuleKey)) {
+            return List.of();
+        }
         List<Long> normalizedAttachmentIds = normalizeAttachmentIds(attachmentIds);
         attachmentService.validateAttachmentIds(normalizedAttachmentIds);
 

@@ -25,7 +25,7 @@ import java.util.List;
 
 @RestController
 @Validated
-@RequestMapping("/print-template")
+@RequestMapping("/print-templates")
 public class PrintTemplateController {
 
     private final PrintTemplateService printTemplateService;
@@ -65,6 +65,6 @@ public class PrintTemplateController {
     @OperationLoggable(moduleName = "打印模板", actionType = "删除")
     public ApiResponse<Void> delete(@PathVariable @Positive Long id) {
         printTemplateService.delete(id);
-        return ApiResponse.success("删除成功", null);
+        return ApiResponse.success("删除成功");
     }
 }

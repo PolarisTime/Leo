@@ -36,12 +36,12 @@ public class JwtTokenService {
                 .header()
                 .keyId(String.valueOf(activeMaterial.version()))
                 .and()
-                .issuer(jwtProperties.issuer())
+                .issuer(jwtProperties.getIssuer())
                 .subject(principal.username())
                 .claim("uid", principal.id())
                 .claim("sid", sessionId)
                 .issuedAt(Date.from(now))
-                .expiration(Date.from(now.plusMillis(jwtProperties.accessExpirationMs())))
+                .expiration(Date.from(now.plusMillis(jwtProperties.getAccessExpirationMs())))
                 .signWith(secretKey)
                 .compact();
     }
@@ -51,7 +51,7 @@ public class JwtTokenService {
         for (SecurityKeyService.ResolvedSecretMaterial material : securityKeyService.getJwtVerificationMaterials()) {
             try {
                 Claims claims = Jwts.parser()
-                        .requireIssuer(jwtProperties.issuer())
+                        .requireIssuer(jwtProperties.getIssuer())
                         .verifyWith(secretKey(material.secretValue()))
                         .build()
                         .parseSignedClaims(token)
@@ -81,11 +81,11 @@ public class JwtTokenService {
     }
 
     public long getAccessExpirationMs() {
-        return jwtProperties.accessExpirationMs();
+        return jwtProperties.getAccessExpirationMs();
     }
 
     public long getRefreshExpirationMs() {
-        return jwtProperties.refreshExpirationMs();
+        return jwtProperties.getRefreshExpirationMs();
     }
 
     private SecretKey secretKey(String secret) {
@@ -118,7 +118,7 @@ public class JwtTokenService {
             throw new JwtException("JWT 缺少过期时间");
         }
 
-        Instant allowedExpiration = retiredAt.plusMillis(jwtProperties.accessExpirationMs());
+        Instant allowedExpiration = retiredAt.plusMillis(jwtProperties.getAccessExpirationMs());
         if (expiration.toInstant().isAfter(allowedExpiration)) {
             throw new JwtException("JWT 超出了历史密钥允许的有效窗口");
         }

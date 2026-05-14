@@ -1,5 +1,6 @@
 package com.leo.erp.sales.order.service;
 
+import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
@@ -73,18 +74,12 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
     }
 
     @Transactional(readOnly = true)
-    public Page<SalesOrderResponse> page(PageQuery query,
-                                         String keyword,
-                                         String customerName,
-                                         String projectName,
-                                         String status,
-                                         java.time.LocalDate startDate,
-                                         java.time.LocalDate endDate) {
-        Specification<SalesOrder> spec = Specs.<SalesOrder>keywordLike(keyword, "orderNo", "purchaseOrderNo", "customerName", "projectName")
-                .and(Specs.equalIfPresent("customerName", customerName))
-                .and(Specs.equalIfPresent("projectName", projectName))
-                .and(Specs.equalIfPresent("status", status))
-                .and(Specs.betweenIfPresent("deliveryDate", startDate, endDate));
+    public Page<SalesOrderResponse> page(PageQuery query, PageFilter filter) {
+        Specification<SalesOrder> spec = Specs.<SalesOrder>keywordLike(filter.keyword(), "orderNo", "purchaseOrderNo", "customerName", "projectName")
+                .and(Specs.equalIfPresent("customerName", filter.name()))
+                .and(Specs.equalIfPresent("projectName", filter.projectName()))
+                .and(Specs.equalIfPresent("status", filter.status()))
+                .and(Specs.betweenIfPresent("deliveryDate", filter.startDate(), filter.endDate()));
         return page(query, spec, repository);
     }
 

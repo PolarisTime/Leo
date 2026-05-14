@@ -1,5 +1,6 @@
 package com.leo.erp.contract.sales.service;
 
+import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.persistence.Specs;
@@ -43,16 +44,11 @@ public class SalesContractService extends AbstractCrudService<SalesContract, Sal
         this.workflowTransitionGuard = workflowTransitionGuard;
     }
 
-    public Page<SalesContractResponse> page(PageQuery query,
-                                            String keyword,
-                                            String customerName,
-                                            String status,
-                                            java.time.LocalDate startDate,
-                                            java.time.LocalDate endDate) {
-        Specification<SalesContract> spec = Specs.<SalesContract>keywordLike(keyword, "contractNo", "customerName", "projectName")
-                .and(Specs.equalIfPresent("customerName", customerName))
-                .and(Specs.equalIfPresent("status", status))
-                .and(Specs.betweenIfPresent("signDate", startDate, endDate));
+    public Page<SalesContractResponse> page(PageQuery query, PageFilter filter) {
+        Specification<SalesContract> spec = Specs.<SalesContract>keywordLike(filter.keyword(), "contractNo", "customerName", "projectName")
+                .and(Specs.equalIfPresent("customerName", filter.name()))
+                .and(Specs.equalIfPresent("status", filter.status()))
+                .and(Specs.betweenIfPresent("signDate", filter.startDate(), filter.endDate()));
         return page(query, spec, repository);
     }
 

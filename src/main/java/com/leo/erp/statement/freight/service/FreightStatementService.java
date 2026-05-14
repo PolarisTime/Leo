@@ -3,6 +3,7 @@ package com.leo.erp.statement.freight.service;
 import com.leo.erp.attachment.service.AttachmentService;
 import com.leo.erp.attachment.service.AttachmentBindingService;
 import com.leo.erp.attachment.service.AttachmentView;
+import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
@@ -19,8 +20,11 @@ import com.leo.erp.security.permission.DataScopeContext;
 import com.leo.erp.security.permission.WorkflowTransitionGuard;
 import com.leo.erp.statement.freight.domain.entity.FreightStatement;
 import com.leo.erp.statement.freight.domain.entity.FreightStatementItem;
+import com.leo.erp.statement.freight.mapper.FreightStatementWebMapper;
 import com.leo.erp.statement.freight.repository.FreightStatementRepository;
 import com.leo.erp.statement.freight.web.dto.FreightStatementCandidateResponse;
+import com.leo.erp.statement.freight.web.dto.FreightStatementRequest;
+import com.leo.erp.statement.freight.web.dto.FreightStatementResponse;
 import com.leo.erp.statement.service.StatementCandidateSupport;
 import com.leo.erp.statement.service.StatementSettlementSyncService;
 import org.springframework.data.domain.Page;
@@ -30,7 +34,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
-import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -59,6 +62,7 @@ public class FreightStatementService extends AbstractCrudService<FreightStatemen
     private final AttachmentBindingService attachmentBindingService;
     private final StatementSettlementSyncService statementSettlementSyncService;
     private final WorkflowTransitionGuard workflowTransitionGuard;
+    private final FreightStatementWebMapper freightStatementWebMapper;
 
     public FreightStatementService(FreightStatementRepository repository,
                                    SnowflakeIdGenerator idGenerator,
@@ -66,7 +70,8 @@ public class FreightStatementService extends AbstractCrudService<FreightStatemen
                                    AttachmentService attachmentService,
                                    AttachmentBindingService attachmentBindingService,
                                    StatementSettlementSyncService statementSettlementSyncService,
-                                   WorkflowTransitionGuard workflowTransitionGuard) {
+                                   WorkflowTransitionGuard workflowTransitionGuard,
+                                   FreightStatementWebMapper freightStatementWebMapper) {
         super(idGenerator);
         this.repository = repository;
         this.freightBillRepository = freightBillRepository;
@@ -74,24 +79,17 @@ public class FreightStatementService extends AbstractCrudService<FreightStatemen
         this.attachmentBindingService = attachmentBindingService;
         this.statementSettlementSyncService = statementSettlementSyncService;
         this.workflowTransitionGuard = workflowTransitionGuard;
+        this.freightStatementWebMapper = freightStatementWebMapper;
     }
 
     @Transactional(readOnly = true)
-    public Page<FreightStatementView> page(
-            PageQuery query,
-            String keyword,
-            String carrierName,
-            String status,
-            String signStatus,
-            LocalDate periodStart,
-            LocalDate periodEnd
-    ) {
+    public Page<FreightStatementView> page(PageQuery query, PageFilter filter) {
         Specification<FreightStatement> spec = applyDeletedVisibilityPolicy(
-                Specs.<FreightStatement>keywordLike(keyword, "statementNo", "carrierName", "sourceBillNos")
-                .and(Specs.equalIfPresent("carrierName", carrierName))
-                .and(Specs.equalIfPresent("status", status))
-                .and(Specs.equalIfPresent("signStatus", signStatus))
-                .and(Specs.betweenIfPresent("endDate", periodStart, periodEnd))
+                Specs.<FreightStatement>keywordLike(filter.keyword(), "statementNo", "carrierName", "sourceBillNos")
+                .and(Specs.equalIfPresent("carrierName", filter.name()))
+                .and(Specs.equalIfPresent("status", filter.status()))
+                .and(Specs.equalIfPresent("signStatus", filter.signStatus()))
+                .and(Specs.betweenIfPresent("endDate", filter.startDate(), filter.endDate()))
         );
         Page<FreightStatement> entityPage = repository.findAll(DataScopeContext.apply(spec), query.toPageable("id"));
         Map<Long, List<AttachmentView>> attachmentsByStatementId = resolveAttachmentsByStatement(entityPage.getContent());
@@ -99,6 +97,11 @@ public class FreightStatementService extends AbstractCrudService<FreightStatemen
                 .map(entity -> toView(entity, attachmentsByStatementId.getOrDefault(entity.getId(), List.of())))
                 .toList();
         return new PageImpl<>(responses, entityPage.getPageable(), entityPage.getTotalElements());
+    }
+
+    @Transactional(readOnly = true)
+    public Page<FreightStatementResponse> responsePage(PageQuery query, PageFilter filter) {
+        return page(query, filter).map(freightStatementWebMapper::toResponse);
     }
 
     private static final String[] FREIGHT_STATEMENT_SEARCH_FIELDS = {
@@ -110,6 +113,28 @@ public class FreightStatementService extends AbstractCrudService<FreightStatemen
     @Transactional(readOnly = true)
     public List<FreightStatementView> search(String keyword, int maxSize) {
         return search(keyword, FREIGHT_STATEMENT_SEARCH_FIELDS, maxSize, null, repository);
+    }
+
+    @Transactional(readOnly = true)
+    public List<FreightStatementResponse> responseSearch(String keyword, int maxSize) {
+        return search(keyword, maxSize).stream()
+                .map(freightStatementWebMapper::toResponse)
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public FreightStatementResponse responseDetail(Long id) {
+        return freightStatementWebMapper.toResponse(detail(id));
+    }
+
+    @Transactional
+    public FreightStatementResponse responseCreate(FreightStatementRequest request) {
+        return freightStatementWebMapper.toResponse(create(freightStatementWebMapper.toCommand(request)));
+    }
+
+    @Transactional
+    public FreightStatementResponse responseUpdate(Long id, FreightStatementRequest request) {
+        return freightStatementWebMapper.toResponse(update(id, freightStatementWebMapper.toCommand(request)));
     }
 
     @Transactional(readOnly = true)

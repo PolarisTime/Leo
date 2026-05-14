@@ -6,8 +6,33 @@ import org.springframework.validation.annotation.Validated;
 
 @Validated
 @ConfigurationProperties(prefix = "leo.security.totp")
-public record TotpProperties(
-        @NotBlank String issuer,
-        String encryptionKey
-) {
+public class TotpProperties {
+
+    @NotBlank
+    private String issuer;
+    private String encryptionKey;
+
+    public TotpProperties() {
+    }
+
+    public TotpProperties(String issuer, String encryptionKey) {
+        this.issuer = issuer;
+        this.encryptionKey = encryptionKey;
+    }
+
+    public String getIssuer() {
+        return issuer;
+    }
+
+    public void setIssuer(String issuer) {
+        this.issuer = issuer;
+    }
+
+    public String getEncryptionKey() {
+        return encryptionKey;
+    }
+
+    public void setEncryptionKey(String encryptionKey) {
+        this.encryptionKey = encryptionKey;
+    }
 }

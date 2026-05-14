@@ -69,7 +69,7 @@ public class TotpService {
         return qrDataFactory.newBuilder()
                 .label(loginName)
                 .secret(secret)
-                .issuer(properties.issuer())
+                .issuer(properties.getIssuer())
                 .algorithm(HashingAlgorithm.SHA1)
                 .digits(6)
                 .period(30)
