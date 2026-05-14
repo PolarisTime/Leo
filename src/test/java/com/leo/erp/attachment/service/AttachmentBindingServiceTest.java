@@ -6,6 +6,7 @@ import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.support.ModuleCatalog;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
 
 import java.lang.reflect.Proxy;
 import java.time.LocalDateTime;
@@ -34,6 +35,7 @@ class AttachmentBindingServiceTest {
         AttachmentBindingService service = new AttachmentBindingService(
                 bindingRepository(existingBindings, savedBindings, deletedBindings, flushCalled),
                 attachmentService(attachments),
+                enabledUploadRuleService(),
                 new FixedIdGenerator(101L, 102L),
                 new ModuleCatalog()
         );
@@ -56,6 +58,7 @@ class AttachmentBindingServiceTest {
         AttachmentBindingService service = new AttachmentBindingService(
                 bindingRepository(List.of(), new AtomicReference<>(List.of()), new AtomicReference<>(List.of()), new AtomicReference<>(false)),
                 attachmentService(Map.of()),
+                enabledUploadRuleService(),
                 new FixedIdGenerator(101L),
                 new ModuleCatalog()
         );
@@ -129,6 +132,12 @@ class AttachmentBindingServiceTest {
                 return result;
             }
         };
+    }
+
+    private UploadRuleService enabledUploadRuleService() {
+        UploadRuleService service = Mockito.mock(UploadRuleService.class);
+        Mockito.when(service.isPageUploadEnabled(Mockito.anyString())).thenReturn(true);
+        return service;
     }
 
     private AttachmentView attachment(Long id, String name) {

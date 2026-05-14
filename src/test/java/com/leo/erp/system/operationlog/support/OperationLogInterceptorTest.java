@@ -1,7 +1,7 @@
 package com.leo.erp.system.operationlog.support;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.leo.erp.common.support.IpResolutionService;
+import com.leo.erp.common.support.ClientIpResolver;
 import com.leo.erp.security.permission.RequiresPermission;
 import com.leo.erp.system.norule.service.SystemSwitchService;
 import com.leo.erp.system.operationlog.service.OperationLogService;
@@ -17,9 +17,9 @@ class OperationLogInterceptorTest {
 
     private static OperationLogInterceptor createInterceptor(SystemSwitchService systemSwitchService) {
         ObjectMapper objectMapper = new ObjectMapper();
-        IpResolutionService ipResolutionService = new IpResolutionService("");
+        ClientIpResolver clientIpResolver = new ClientIpResolver("");
         OperationLogMetadataResolver metadataResolver = new OperationLogMetadataResolver(systemSwitchService);
-        OperationLogResultCollector resultCollector = new OperationLogResultCollector(objectMapper, ipResolutionService);
+        OperationLogResultCollector resultCollector = new OperationLogResultCollector(objectMapper, clientIpResolver);
         OperationLogCommandRecorder commandRecorder = new OperationLogCommandRecorder(
                 new OperationLogService(null, null, null, null), resultCollector);
         return new OperationLogInterceptor(metadataResolver, resultCollector, commandRecorder);

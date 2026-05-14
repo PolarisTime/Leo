@@ -310,13 +310,18 @@ class AttachmentServiceTest {
         private final String fileName;
 
         private StubUploadRuleService(String fileName) {
-            super(emptyUploadRuleRepository(), new FixedIdGenerator(1L), new AttachmentFilenameResolver(), new ModuleCatalog());
+            super(emptyUploadRuleRepository(), new FixedIdGenerator(1L), new AttachmentFilenameResolver(), new ModuleCatalog(), null);
             this.fileName = fileName;
         }
 
         @Override
         public String buildPageUploadFileName(String moduleKey, String originalFilename, String contentType) {
             return fileName;
+        }
+
+        @Override
+        public boolean isPageUploadEnabled(String moduleKey) {
+            return true;
         }
 
         private static UploadRuleRepository emptyUploadRuleRepository() {

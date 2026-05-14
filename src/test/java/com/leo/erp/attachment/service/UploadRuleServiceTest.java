@@ -1,12 +1,14 @@
 package com.leo.erp.attachment.service;
 
 import com.leo.erp.attachment.domain.entity.UploadRule;
+import com.leo.erp.attachment.mapper.UploadRuleWebMapper;
 import com.leo.erp.attachment.repository.UploadRuleRepository;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.setting.PageUploadRuleSummary;
 import com.leo.erp.common.support.ModuleCatalog;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
 
 import java.lang.reflect.Proxy;
 import java.util.LinkedHashMap;
@@ -35,7 +37,8 @@ class UploadRuleServiceTest {
                 uploadRuleRepository(store),
                 new FixedIdGenerator(100L),
                 new AttachmentFilenameResolver(),
-                new ModuleCatalog()
+                new ModuleCatalog(),
+                Mockito.mock(UploadRuleWebMapper.class)
         );
 
         PageUploadRuleDetail response = service.getPageUploadRule("sales-order");
@@ -66,7 +69,8 @@ class UploadRuleServiceTest {
                 uploadRuleRepository(store),
                 new SequenceIdGenerator(200L, 201L, 202L),
                 new AttachmentFilenameResolver(),
-                new ModuleCatalog()
+                new ModuleCatalog(),
+                Mockito.mock(UploadRuleWebMapper.class)
         );
 
         PageUploadRuleDetail updated = service.updatePageUploadRule(
@@ -101,7 +105,8 @@ class UploadRuleServiceTest {
                 new SequenceIdGenerator(300L, 301L, 302L, 303L, 304L, 305L, 306L, 307L, 308L, 309L,
                         310L, 311L, 312L, 313L, 314L, 315L, 316L, 317L, 318L, 319L, 320L, 321L, 322L),
                 new AttachmentFilenameResolver(),
-                new ModuleCatalog()
+                new ModuleCatalog(),
+                Mockito.mock(UploadRuleWebMapper.class)
         );
 
         List<PageUploadRuleSummary> responses = service.listPageUploadRules();
@@ -118,7 +123,8 @@ class UploadRuleServiceTest {
                 uploadRuleRepository(new LinkedHashMap<>()),
                 new FixedIdGenerator(1L),
                 new AttachmentFilenameResolver(),
-                new ModuleCatalog()
+                new ModuleCatalog(),
+                Mockito.mock(UploadRuleWebMapper.class)
         );
 
         assertThatThrownBy(() -> service.getPageUploadRule("unknown-module"))

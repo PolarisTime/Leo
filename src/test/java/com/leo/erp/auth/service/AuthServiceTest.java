@@ -37,6 +37,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class AuthServiceTest {
 
+    private static final LoginService.AuthRequestContext AUTH_CONTEXT =
+            new LoginService.AuthRequestContext("127.0.0.1", "JUnit", "/auth/login", "POST");
+    private static final LoginService.AuthRequestContext LOGOUT_CONTEXT =
+            new LoginService.AuthRequestContext("127.0.0.1", "JUnit", "/auth/logout", "POST");
+    private static final LoginService.AuthRequestContext TOTP_CONTEXT =
+            new LoginService.AuthRequestContext("127.0.0.1", "JUnit", "/auth/login-2fa", "POST");
+
     // --- Session revocation (TokenIssuanceService) ---
 
     @Test
@@ -105,7 +112,7 @@ class AuthServiceTest {
 
         LoginResponseBody response = loginService.login(
                 new LoginRequest("tester", "secret", null, null),
-                "127.0.0.1", "JUnit", "/auth/login", "POST"
+                AUTH_CONTEXT
         );
 
         assertThat(response).isInstanceOf(com.leo.erp.auth.web.dto.TokenResponse.class);
@@ -131,7 +138,7 @@ class AuthServiceTest {
 
         org.assertj.core.api.Assertions.assertThatThrownBy(() -> loginService.login(
                 new LoginRequest("tester", "secret", null, null),
-                "127.0.0.1", "JUnit", "/auth/login", "POST"
+                AUTH_CONTEXT
         )).isInstanceOf(BadCredentialsException.class);
 
         assertThat(loggedCommands).hasSize(1);
@@ -167,9 +174,15 @@ class AuthServiceTest {
 
         LoginService loginService = buildLoginService(user, null, loggedCommands);
 
-        AuthService authService = new AuthService(loginService, tokenService, logoutSessionMgmt);
+        AuthService authService = new AuthService(
+                loginService,
+                tokenService,
+                logoutSessionMgmt,
+                captchaService(),
+                systemSwitchService(true)
+        );
 
-        authService.logout("refresh-token", "127.0.0.1", "/auth/logout", "POST");
+        authService.logout("refresh-token", LOGOUT_CONTEXT);
 
         assertThat(loggedCommands).hasSize(1);
         OperationLogCommand command = loggedCommands.get(0);
@@ -526,7 +539,7 @@ class AuthServiceTest {
 
         org.assertj.core.api.Assertions.assertThatThrownBy(() ->
                 loginService.verifyTotpAndIssueTokens("test-temp-token", "000000",
-                        "127.0.0.1", "JUnit", "/auth/login-2fa", "POST")
+                        TOTP_CONTEXT)
         ).isInstanceOf(BadCredentialsException.class);
 
         assertThat(failureRecorded.get()).as("recordFailure should be called on bad TOTP").isTrue();

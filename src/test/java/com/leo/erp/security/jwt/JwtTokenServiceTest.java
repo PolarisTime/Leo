@@ -36,7 +36,7 @@ class JwtTokenServiceTest {
         SecurityKeyService.ResolvedSecretMaterial active = new SecurityKeyService.ResolvedSecretMaterial(
                 SecurityKeyService.SOURCE_CONFIG,
                 0,
-                properties.secret(),
+                properties.getSecret(),
                 null,
                 null,
                 "FP-ACTIVE"
@@ -72,7 +72,7 @@ class JwtTokenServiceTest {
         SecurityKeyService.ResolvedSecretMaterial oldActive = new SecurityKeyService.ResolvedSecretMaterial(
                 SecurityKeyService.SOURCE_CONFIG,
                 1,
-                properties.secret(),
+                properties.getSecret(),
                 null,
                 null,
                 "FP-OLD"
@@ -119,7 +119,7 @@ class JwtTokenServiceTest {
         SecurityKeyService.ResolvedSecretMaterial active = new SecurityKeyService.ResolvedSecretMaterial(
                 SecurityKeyService.SOURCE_DATABASE,
                 4,
-                properties.secret(),
+                properties.getSecret(),
                 null,
                 null,
                 "FP-ACTIVE"
@@ -147,7 +147,7 @@ class JwtTokenServiceTest {
                 .claim("sid", "session-1001")
                 .issuedAt(Date.from(issuedAt))
                 .expiration(Date.from(Instant.now().minusSeconds(60)))
-                .signWith(Keys.hmacShaKeyFor(properties.secret().getBytes(StandardCharsets.UTF_8)))
+                .signWith(Keys.hmacShaKeyFor(properties.getSecret().getBytes(StandardCharsets.UTF_8)))
                 .compact();
 
         assertThrows(ExpiredJwtException.class, () -> jwtTokenService.parseAccessToken(token));
@@ -165,7 +165,7 @@ class JwtTokenServiceTest {
         SecurityKeyService.ResolvedSecretMaterial active = new SecurityKeyService.ResolvedSecretMaterial(
                 SecurityKeyService.SOURCE_CONFIG,
                 0,
-                properties.secret(),
+                properties.getSecret(),
                 null,
                 null,
                 "FP-ACTIVE"
@@ -178,7 +178,7 @@ class JwtTokenServiceTest {
                 .subject("admin")
                 .claim("uid", 1001L)
                 .claim("sid", "session-1001")
-                .signWith(Keys.hmacShaKeyFor(properties.secret().getBytes(StandardCharsets.UTF_8)))
+                .signWith(Keys.hmacShaKeyFor(properties.getSecret().getBytes(StandardCharsets.UTF_8)))
                 .compact();
 
         JwtTokenService jwtTokenService = new JwtTokenService(properties, securityKeyService);
@@ -198,7 +198,7 @@ class JwtTokenServiceTest {
         SecurityKeyService.ResolvedSecretMaterial retiredKey = new SecurityKeyService.ResolvedSecretMaterial(
                 SecurityKeyService.SOURCE_DATABASE,
                 1,
-                properties.secret(),
+                properties.getSecret(),
                 retiredAt.minusDays(30),
                 retiredAt,
                 "FP-OLD"
@@ -212,7 +212,7 @@ class JwtTokenServiceTest {
         Instant expiresAt = retiredAt
                 .atZone(ZoneId.systemDefault())
                 .toInstant()
-                .plusMillis(properties.accessExpirationMs())
+                .plusMillis(properties.getAccessExpirationMs())
                 .minusSeconds(1);
         String token = Jwts.builder()
                 .header()
@@ -224,7 +224,7 @@ class JwtTokenServiceTest {
                 .claim("sid", "session-1001")
                 .issuedAt(Date.from(issuedAt))
                 .expiration(Date.from(expiresAt))
-                .signWith(Keys.hmacShaKeyFor(properties.secret().getBytes(StandardCharsets.UTF_8)))
+                .signWith(Keys.hmacShaKeyFor(properties.getSecret().getBytes(StandardCharsets.UTF_8)))
                 .compact();
 
         assertEquals(1001L, jwtTokenService.extractUserId(token));
@@ -242,7 +242,7 @@ class JwtTokenServiceTest {
         SecurityKeyService.ResolvedSecretMaterial retiredKey = new SecurityKeyService.ResolvedSecretMaterial(
                 SecurityKeyService.SOURCE_DATABASE,
                 1,
-                properties.secret(),
+                properties.getSecret(),
                 retiredAt.minusDays(30),
                 retiredAt,
                 "FP-OLD"
@@ -264,7 +264,7 @@ class JwtTokenServiceTest {
                 .claim("sid", "session-1001")
                 .issuedAt(Date.from(issuedAt))
                 .expiration(Date.from(expiresAt))
-                .signWith(Keys.hmacShaKeyFor(properties.secret().getBytes(StandardCharsets.UTF_8)))
+                .signWith(Keys.hmacShaKeyFor(properties.getSecret().getBytes(StandardCharsets.UTF_8)))
                 .compact();
 
         assertThrows(JwtException.class, () -> jwtTokenService.parseAccessToken(token));
@@ -282,7 +282,7 @@ class JwtTokenServiceTest {
         SecurityKeyService.ResolvedSecretMaterial retiredKey = new SecurityKeyService.ResolvedSecretMaterial(
                 SecurityKeyService.SOURCE_DATABASE,
                 1,
-                properties.secret(),
+                properties.getSecret(),
                 retiredAt.minusDays(30),
                 retiredAt,
                 "FP-OLD"
@@ -296,7 +296,7 @@ class JwtTokenServiceTest {
         Instant expiresAt = retiredAt
                 .atZone(ZoneId.systemDefault())
                 .toInstant()
-                .plusMillis(properties.accessExpirationMs())
+                .plusMillis(properties.getAccessExpirationMs())
                 .plusSeconds(1);
         String token = Jwts.builder()
                 .header()
@@ -308,7 +308,7 @@ class JwtTokenServiceTest {
                 .claim("sid", "session-1001")
                 .issuedAt(Date.from(issuedAt))
                 .expiration(Date.from(expiresAt))
-                .signWith(Keys.hmacShaKeyFor(properties.secret().getBytes(StandardCharsets.UTF_8)))
+                .signWith(Keys.hmacShaKeyFor(properties.getSecret().getBytes(StandardCharsets.UTF_8)))
                 .compact();
 
         assertThrows(JwtException.class, () -> jwtTokenService.parseAccessToken(token));

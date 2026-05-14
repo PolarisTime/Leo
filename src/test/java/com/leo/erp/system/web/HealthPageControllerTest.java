@@ -4,6 +4,7 @@ import com.leo.erp.security.permission.PermissionService;
 import com.leo.erp.security.support.SecurityPrincipal;
 import com.leo.erp.system.database.service.DatabaseStatusService;
 import com.leo.erp.system.database.web.dto.DatabaseStatusResponse;
+import com.leo.erp.system.service.HealthPageService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -25,7 +26,7 @@ class HealthPageControllerTest {
     @Test
     void shouldHideInfrastructureDetailsFromAnonymousRequests() {
         StubDatabaseStatusService databaseStatusService = new StubDatabaseStatusService(null);
-        HealthPageController controller = new HealthPageController(databaseStatusService, new StubPermissionService(false));
+        HealthPageController controller = controller(databaseStatusService, new StubPermissionService(false));
 
         String html = controller.health();
 
@@ -48,7 +49,7 @@ class HealthPageControllerTest {
         SecurityContextHolder.getContext().setAuthentication(
                 new UsernamePasswordAuthenticationToken(principal, null, principal.getAuthorities())
         );
-        HealthPageController controller = new HealthPageController(databaseStatusService, new StubPermissionService(false));
+        HealthPageController controller = controller(databaseStatusService, new StubPermissionService(false));
 
         String html = controller.health();
 
@@ -99,7 +100,7 @@ class HealthPageControllerTest {
         SecurityContextHolder.getContext().setAuthentication(
                 new UsernamePasswordAuthenticationToken(principal, null, principal.getAuthorities())
         );
-        HealthPageController controller = new HealthPageController(databaseStatusService, new StubPermissionService(true));
+        HealthPageController controller = controller(databaseStatusService, new StubPermissionService(true));
 
         String html = controller.health();
 
@@ -107,6 +108,10 @@ class HealthPageControllerTest {
         assertThat(html).contains("redis.internal:16379 / DB 3");
         assertThat(html).contains("Debug 输出");
         assertThat(databaseStatusService.called).isTrue();
+    }
+
+    private HealthPageController controller(DatabaseStatusService databaseStatusService, PermissionService permissionService) {
+        return new HealthPageController(new HealthPageService(databaseStatusService, permissionService));
     }
 
     private static final class StubDatabaseStatusService extends DatabaseStatusService {
