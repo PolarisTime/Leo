@@ -4,9 +4,10 @@ import com.leo.erp.attachment.service.PageUploadRuleDetail;
 import com.leo.erp.attachment.service.UpdatePageUploadRuleCommand;
 import com.leo.erp.attachment.web.dto.UploadRuleRequest;
 import com.leo.erp.attachment.web.dto.UploadRuleResponse;
+import com.leo.erp.common.mapper.StrictMapperConfig;
 import org.mapstruct.Mapper;
 
-@Mapper(componentModel = "spring")
+@Mapper(config = StrictMapperConfig.class)
 public interface UploadRuleWebMapper {
 
     UploadRuleResponse toResponse(PageUploadRuleDetail detail);

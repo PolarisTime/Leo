@@ -3,10 +3,11 @@ package com.leo.erp.master.material.mapper;
 import com.leo.erp.master.material.domain.entity.MaterialCategory;
 import com.leo.erp.master.material.web.dto.MaterialCategoryOptionResponse;
 import com.leo.erp.master.material.web.dto.MaterialCategoryResponse;
+import com.leo.erp.common.mapper.StrictMapperConfig;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 
-@Mapper(componentModel = "spring")
+@Mapper(config = StrictMapperConfig.class)
 public interface MaterialCategoryMapper {
 
     MaterialCategoryResponse toResponse(MaterialCategory materialCategory);

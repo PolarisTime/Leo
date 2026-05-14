@@ -9,10 +9,11 @@ import com.leo.erp.statement.freight.service.FreightStatementItemView;
 import com.leo.erp.statement.freight.service.FreightStatementView;
 import com.leo.erp.statement.freight.web.dto.FreightStatementRequest;
 import com.leo.erp.statement.freight.web.dto.FreightStatementResponse;
+import com.leo.erp.common.mapper.StrictMapperConfig;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 
-@Mapper(componentModel = "spring", uses = AttachmentWebMapper.class)
+@Mapper(config = StrictMapperConfig.class, uses = AttachmentWebMapper.class)
 public interface FreightStatementWebMapper {
 
     FreightStatementCommand toCommand(FreightStatementRequest request);
