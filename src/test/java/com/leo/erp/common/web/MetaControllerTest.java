@@ -2,65 +2,58 @@ package com.leo.erp.common.web;
 
 import com.leo.erp.common.api.ApiResponse;
 import com.leo.erp.common.error.ErrorCode;
+import com.leo.erp.common.web.dto.MetaCodeResponse;
+import com.leo.erp.common.web.dto.MetaErrorCodeResponse;
+import com.leo.erp.common.web.service.MetaService;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
-import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 class MetaControllerTest {
 
-    private final MetaController controller = new MetaController();
+    private final MetaController controller = new MetaController(new MetaService());
 
     @Test
     void codesReturnsAllErrorCodesExceptSuccess() {
-        ApiResponse<Map<String, Object>> response = controller.codes();
+        ApiResponse<MetaCodeResponse> response = controller.codes();
 
         assertThat(response.code()).isEqualTo(0);
-        @SuppressWarnings("unchecked")
-        List<Map<String, Object>> errorCodes = (List<Map<String, Object>>) response.data().get("errorCodes");
+        List<MetaErrorCodeResponse> errorCodes = response.data().errorCodes();
         assertThat(errorCodes).hasSize(ErrorCode.values().length - 1);
-        assertThat(errorCodes).noneMatch(ec -> "SUCCESS".equals(ec.get("name")));
+        assertThat(errorCodes).noneMatch(errorCode -> "SUCCESS".equals(errorCode.name()));
     }
 
     @Test
     void codesErrorEntryHasRequiredFields() {
-        ApiResponse<Map<String, Object>> response = controller.codes();
+        ApiResponse<MetaCodeResponse> response = controller.codes();
 
-        @SuppressWarnings("unchecked")
-        List<Map<String, Object>> errorCodes = (List<Map<String, Object>>) response.data().get("errorCodes");
-        Map<String, Object> first = errorCodes.get(0);
+        MetaErrorCodeResponse first = response.data().errorCodes().get(0);
 
-        assertThat(first).containsKeys("name", "code", "message");
-        assertThat(first.get("code")).isInstanceOf(Integer.class);
-        assertThat(first.get("message")).isInstanceOf(String.class);
+        assertThat(first.name()).isNotBlank();
+        assertThat(first.code()).isInstanceOf(Integer.class);
+        assertThat(first.message()).isNotBlank();
     }
 
     @Test
     void codesReturnsResourceAndActionLabels() {
-        ApiResponse<Map<String, Object>> response = controller.codes();
+        ApiResponse<MetaCodeResponse> response = controller.codes();
 
-        @SuppressWarnings("unchecked")
-        Map<String, String> resourceLabels = (Map<String, String>) response.data().get("resourceLabels");
-        @SuppressWarnings("unchecked")
-        Map<String, String> actionLabels = (Map<String, String>) response.data().get("actionLabels");
-
-        assertThat(resourceLabels).isNotEmpty();
-        assertThat(actionLabels).isNotEmpty();
-        assertThat(resourceLabels).containsKey("material");
-        assertThat(actionLabels).containsKey("read");
+        assertThat(response.data().resourceLabels()).isNotEmpty();
+        assertThat(response.data().actionLabels()).isNotEmpty();
+        assertThat(response.data().resourceLabels()).containsKey("material");
+        assertThat(response.data().actionLabels()).containsKey("read");
     }
 
     @Test
     void codesPreservesInsertionOrder() {
-        ApiResponse<Map<String, Object>> response = controller.codes();
+        ApiResponse<MetaCodeResponse> response = controller.codes();
 
-        @SuppressWarnings("unchecked")
-        List<Map<String, Object>> errorCodes = (List<Map<String, Object>>) response.data().get("errorCodes");
+        List<MetaErrorCodeResponse> errorCodes = response.data().errorCodes();
 
         // VALIDATION_ERROR(4000) should come before BUSINESS_ERROR(4220)
-        assertThat(errorCodes.get(0).get("name")).isEqualTo("VALIDATION_ERROR");
-        assertThat(errorCodes.get(4).get("name")).isEqualTo("BUSINESS_ERROR");
+        assertThat(errorCodes.get(0).name()).isEqualTo("VALIDATION_ERROR");
+        assertThat(errorCodes.get(4).name()).isEqualTo("BUSINESS_ERROR");
     }
 }

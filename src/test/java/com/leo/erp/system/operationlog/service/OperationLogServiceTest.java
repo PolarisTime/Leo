@@ -1,5 +1,6 @@
 package com.leo.erp.system.operationlog.service;
 
+import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.system.operationlog.repository.OperationLogRepository;
@@ -17,6 +18,16 @@ import static org.mockito.Mockito.when;
 
 class OperationLogServiceTest {
 
+    private static PageFilter filter(String moduleName,
+                                     String actionType,
+                                     String resultStatus,
+                                     LocalDate startDate,
+                                     LocalDate endDate) {
+        return new PageFilter(null, null, startDate, endDate,
+                null, null, null, moduleName, actionType, resultStatus,
+                null, null, null, null);
+    }
+
     @Test
     void shouldAllowArbitraryModuleNameAndActionTypeFilters() {
         OperationLogRepository repository = mock(OperationLogRepository.class);
@@ -24,7 +35,9 @@ class OperationLogServiceTest {
                 .thenReturn(Page.empty());
         OperationLogService service = new OperationLogService(repository, mock(OperationLogMapper.class), null, null);
 
-        assertThatCode(() -> service.page(new PageQuery(0, 20, null, null), null, "API Key 管理", "禁用 API Key", null, null, null, null))
+        assertThatCode(() -> service.page(
+                new PageQuery(0, 20, null, null),
+                filter("API Key 管理", "禁用 API Key", null, null, null)))
                 .doesNotThrowAnyException();
     }
 
@@ -35,7 +48,9 @@ class OperationLogServiceTest {
                 .thenReturn(Page.empty());
         OperationLogService service = new OperationLogService(repository, mock(OperationLogMapper.class), null, null);
 
-        assertThatCode(() -> service.page(new PageQuery(0, 20, null, null), null, "角色权限配置", null, null, null, null, null))
+        assertThatCode(() -> service.page(
+                new PageQuery(0, 20, null, null),
+                filter("角色权限配置", null, null, null, null)))
                 .doesNotThrowAnyException();
     }
 
@@ -43,7 +58,9 @@ class OperationLogServiceTest {
     void shouldRejectUnknownResultStatusFilter() {
         OperationLogService service = new OperationLogService(null, null, null, null);
 
-        assertThatThrownBy(() -> service.page(new PageQuery(0, 20, null, null), null, null, null, "异常", null, null, null))
+        assertThatThrownBy(() -> service.page(
+                new PageQuery(0, 20, null, null),
+                filter(null, null, "异常", null, null)))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("resultStatus 不合法");
     }
@@ -54,13 +71,9 @@ class OperationLogServiceTest {
 
         assertThatThrownBy(() -> service.page(
                 new PageQuery(0, 20, null, null),
-                null,
-                null,
-                null,
-                null,
-                LocalDate.of(2026, 4, 30),
-                LocalDate.of(2026, 4, 1),
-                null
+                filter(null, null, null,
+                        LocalDate.of(2026, 4, 30),
+                        LocalDate.of(2026, 4, 1))
         ))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("startTime 不能晚于 endTime");

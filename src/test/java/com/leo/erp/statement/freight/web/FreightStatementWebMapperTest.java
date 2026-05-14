@@ -1,8 +1,9 @@
 package com.leo.erp.statement.freight.web;
 
 import com.leo.erp.attachment.service.AttachmentView;
-import com.leo.erp.statement.freight.mapper.FreightStatementWebMapper;
 import com.leo.erp.logistics.bill.web.dto.FreightBillItemRequest;
+import com.leo.erp.statement.freight.mapper.FreightStatementWebMapperImpl;
+import com.leo.erp.statement.freight.mapper.FreightStatementWebMapper;
 import com.leo.erp.statement.freight.service.FreightStatementCommand;
 import com.leo.erp.statement.freight.service.FreightStatementItemCommand;
 import com.leo.erp.statement.freight.service.FreightStatementItemView;
@@ -10,7 +11,8 @@ import com.leo.erp.statement.freight.service.FreightStatementView;
 import com.leo.erp.statement.freight.web.dto.FreightStatementRequest;
 import com.leo.erp.statement.freight.web.dto.FreightStatementResponse;
 import org.junit.jupiter.api.Test;
-import org.mapstruct.factory.Mappers;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -19,9 +21,14 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+@SpringBootTest(classes = {
+        FreightStatementWebMapperImpl.class,
+        com.leo.erp.attachment.mapper.AttachmentWebMapperImpl.class
+})
 class FreightStatementWebMapperTest {
 
-    private final FreightStatementWebMapper mapper = Mappers.getMapper(FreightStatementWebMapper.class);
+    @Autowired
+    private FreightStatementWebMapper mapper;
 
     @Test
     void shouldMapRequestToCommand() {

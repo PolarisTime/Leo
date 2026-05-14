@@ -2,6 +2,9 @@ package com.leo.erp.master.material.service;
 
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.TradeItemMaterialSupport;
+import com.leo.erp.common.excel.service.ExcelExportService;
+import com.leo.erp.common.excel.service.ExcelImportService;
+import com.leo.erp.common.excel.service.ExcelTemplateService;
 import com.leo.erp.master.material.domain.entity.Material;
 import com.leo.erp.master.material.repository.MaterialRepository;
 import com.leo.erp.master.material.mapper.MaterialMapper;
@@ -26,6 +29,9 @@ class MaterialServiceTest {
         MaterialRepository materialRepository = mock(MaterialRepository.class);
         MaterialMapper materialMapper = mock(MaterialMapper.class);
         TradeItemMaterialSupport tradeItemMaterialSupport = mock(TradeItemMaterialSupport.class);
+        ExcelExportService excelExportService = mock(ExcelExportService.class);
+        ExcelImportService excelImportService = mock(ExcelImportService.class);
+        ExcelTemplateService excelTemplateService = mock(ExcelTemplateService.class);
         when(materialRepository.findByMaterialCode("MAT-001")).thenReturn(Optional.empty());
         when(materialRepository.save(any(Material.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(tradeItemMaterialSupport.normalizeBatchNoEnabled(Boolean.TRUE)).thenReturn(true);
@@ -34,7 +40,10 @@ class MaterialServiceTest {
                 materialRepository,
                 new SnowflakeIdGenerator(1L),
                 materialMapper,
-                tradeItemMaterialSupport
+                tradeItemMaterialSupport,
+                excelExportService,
+                excelImportService,
+                excelTemplateService
         );
 
         String csv = "\uFEFF商品编码,品牌,材质,类别,规格,长度,单位,数量单位,件重(吨),每件支数,单价,批号管理,备注\r\n"
