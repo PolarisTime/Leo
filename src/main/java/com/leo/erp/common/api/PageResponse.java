@@ -9,7 +9,8 @@ public record PageResponse<T>(
         long totalElements,
         int totalPages,
         int currentPage,
-        int pageSize
+        int pageSize,
+        boolean hasMore
 ) {
 
     public static <T> PageResponse<T> from(Page<T> page) {
@@ -18,7 +19,8 @@ public record PageResponse<T>(
                 page.getTotalElements(),
                 page.getTotalPages(),
                 page.getNumber(),
-                page.getSize()
+                page.getSize(),
+                page.hasNext()
         );
     }
 }

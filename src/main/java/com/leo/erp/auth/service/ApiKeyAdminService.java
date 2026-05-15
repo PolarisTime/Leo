@@ -18,13 +18,10 @@ import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.security.permission.ResourcePermissionCatalog;
-import com.leo.erp.security.support.SecurityPrincipal;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.domain.Page;
 import org.springframework.data.jpa.domain.Specification;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -137,12 +134,6 @@ public class ApiKeyAdminService {
         }
         if (!Boolean.TRUE.equals(user.getTotpEnabled()) || user.getTotpSecret() == null || user.getTotpSecret().isBlank()) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "目标用户未启用2FA，不能生成 API Key");
-        }
-
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        if (authentication != null && authentication.getPrincipal() instanceof SecurityPrincipal principal
-                && principal.id().equals(userId)) {
-            throw new BusinessException(ErrorCode.FORBIDDEN, "不能为自己创建 API Key，请由其他管理员操作");
         }
 
         String rawKey = "leo_" + Base64.getUrlEncoder().withoutPadding().encodeToString(

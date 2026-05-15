@@ -55,6 +55,12 @@ public class Receipt extends AuditableEntity {
     @Column(name = "status", nullable = false, length = 16)
     private String status;
 
+    @Column(name = "customer_code", length = 64)
+    private String customerCode;
+
+    @Column(name = "project_id")
+    private Long projectId;
+
     @Column(name = "operator_name", nullable = false, length = 64)
     private String operatorName;
 
