@@ -6,15 +6,21 @@ import com.leo.erp.auth.repository.ApiKeyRepository;
 import com.leo.erp.auth.repository.UserAccountRepository;
 import com.leo.erp.auth.web.dto.ApiKeyRequest;
 import com.leo.erp.common.error.BusinessException;
+import com.leo.erp.security.support.SecurityPrincipal;
 import org.junit.jupiter.api.Test;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.lang.reflect.Proxy;
 import java.util.List;
 import java.util.Optional;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class ApiKeyAdminServiceTest {
@@ -111,6 +117,46 @@ class ApiKeyAdminServiceTest {
         )))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("目标用户未启用2FA");
+    }
+
+    @Test
+    void shouldAllowGenerateForCurrentUser() {
+        try {
+            ApiKeyRepository apiKeyRepository = mock(ApiKeyRepository.class);
+            UserAccountRepository userAccountRepository = mock(UserAccountRepository.class);
+            UserAccount user = new UserAccount();
+            user.setId(1L);
+            user.setLoginName("demo");
+            user.setUserName("Demo");
+            user.setStatus(UserStatus.NORMAL);
+            user.setTotpEnabled(Boolean.TRUE);
+            user.setTotpSecret("totp-secret");
+            when(userAccountRepository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(user));
+
+            ApiKeyAdminService service = new ApiKeyAdminService(
+                    apiKeyRepository,
+                    userAccountRepository,
+                    new com.leo.erp.common.support.SnowflakeIdGenerator(0L)
+            );
+            SecurityPrincipal principal = SecurityPrincipal.authenticated(1L, "demo", List.of(), true, false);
+            SecurityContextHolder.getContext().setAuthentication(
+                    new UsernamePasswordAuthenticationToken(principal, null, principal.getAuthorities())
+            );
+
+            var response = service.generate(1L, new ApiKeyRequest(
+                    "测试密钥",
+                    "全部接口",
+                    List.of(),
+                    List.of("read"),
+                    null
+            ));
+
+            assertThat(response.userId()).isEqualTo(1L);
+            assertThat(response.rawKey()).startsWith("leo_");
+            verify(apiKeyRepository).save(any());
+        } finally {
+            SecurityContextHolder.clearContext();
+        }
     }
 
     @SuppressWarnings("unchecked")

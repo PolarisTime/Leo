@@ -228,7 +228,9 @@ class ReceiptServiceTest {
                                         List<ReceiptAllocationRequest> items) {
         return new ReceiptRequest(
                 "SK-001",
+                null,
                 customerName,
+                null,
                 projectName,
                 sourceStatementId,
                 LocalDate.of(2026, 4, 26),

@@ -12,7 +12,9 @@ import java.util.List;
 public record CustomerStatementRequest(
         String statementNo,
         String sourceOrderNos,
+        String customerCode,
         @jakarta.validation.constraints.NotBlank String customerName,
+        Long projectId,
         @jakarta.validation.constraints.NotBlank String projectName,
         @NotNull LocalDate startDate,
         @NotNull LocalDate endDate,
@@ -23,4 +25,18 @@ public record CustomerStatementRequest(
         String remark,
         @Valid @NotEmpty List<CustomerStatementItemRequest> items
 ) {
+    public CustomerStatementRequest(String statementNo,
+                                    String sourceOrderNos,
+                                    String customerName,
+                                    String projectName,
+                                    LocalDate startDate,
+                                    LocalDate endDate,
+                                    BigDecimal salesAmount,
+                                    BigDecimal receiptAmount,
+                                    BigDecimal closingAmount,
+                                    String status,
+                                    String remark,
+                                    List<CustomerStatementItemRequest> items) {
+        this(statementNo, sourceOrderNos, null, customerName, null, projectName, startDate, endDate, salesAmount, receiptAmount, closingAmount, status, remark, items);
+    }
 }

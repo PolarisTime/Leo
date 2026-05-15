@@ -95,7 +95,7 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
         SalesOrderResponse response = salesOrderMapper.toResponse(entity);
         return new SalesOrderResponse(
                 response.id(), response.orderNo(), response.purchaseInboundNo(),
-                response.purchaseOrderNo(), response.customerName(), response.projectName(), response.deliveryDate(),
+                response.purchaseOrderNo(), response.customerCode(), response.customerName(), response.projectId(), response.projectName(), response.deliveryDate(),
                 response.salesName(), response.totalWeight(), response.totalAmount(),
                 response.status(), response.remark(),
                 entity.getItems().stream().map(item -> new SalesOrderItemResponse(
@@ -129,7 +129,9 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
                 resolveCreateBusinessNo("sales-order", request.orderNo(), entityId),
                 request.purchaseInboundNo(),
                 request.purchaseOrderNo(),
+                request.customerCode(),
                 request.customerName(),
+                request.projectId(),
                 request.projectName(),
                 request.deliveryDate(),
                 request.salesName(),
@@ -145,7 +147,9 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
                 entity.getOrderNo(),
                 request.purchaseInboundNo(),
                 request.purchaseOrderNo(),
+                request.customerCode(),
                 request.customerName(),
+                request.projectId(),
                 request.projectName(),
                 request.deliveryDate(),
                 request.salesName(),
@@ -224,6 +228,8 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
         entity.setPurchaseOrderNo(request.purchaseOrderNo());
         entity.setCustomerName(request.customerName());
         entity.setProjectName(request.projectName());
+        entity.setCustomerCode(request.customerCode());
+        entity.setProjectId(request.projectId());
         entity.setDeliveryDate(request.deliveryDate());
         entity.setSalesName(request.salesName());
         entity.setStatus(nextStatus);

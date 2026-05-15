@@ -103,7 +103,9 @@ public class ReceiptService extends AbstractCrudService<Receipt, ReceiptRequest,
     protected ReceiptRequest normalizeCreateRequest(ReceiptRequest request, long entityId) {
         return new ReceiptRequest(
                 resolveCreateBusinessNo("receipt", request.receiptNo(), entityId),
+                request.customerCode(),
                 request.customerName(),
+                request.projectId(),
                 request.projectName(),
                 request.sourceStatementId(),
                 request.receiptDate(),
@@ -120,7 +122,9 @@ public class ReceiptService extends AbstractCrudService<Receipt, ReceiptRequest,
     protected ReceiptRequest normalizeUpdateRequest(Receipt entity, ReceiptRequest request) {
         return new ReceiptRequest(
                 entity.getReceiptNo(),
+                request.customerCode(),
                 request.customerName(),
+                request.projectId(),
                 request.projectName(),
                 request.sourceStatementId(),
                 request.receiptDate(),
@@ -169,7 +173,9 @@ public class ReceiptService extends AbstractCrudService<Receipt, ReceiptRequest,
         return new ReceiptResponse(
                 response.id(),
                 response.receiptNo(),
+                response.customerCode(),
                 response.customerName(),
+                response.projectId(),
                 response.projectName(),
                 response.sourceStatementId(),
                 response.receiptDate(),
@@ -205,6 +211,8 @@ public class ReceiptService extends AbstractCrudService<Receipt, ReceiptRequest,
         entity.setReceiptNo(request.receiptNo());
         entity.setCustomerName(request.customerName());
         entity.setProjectName(request.projectName());
+        entity.setCustomerCode(request.customerCode());
+        entity.setProjectId(request.projectId());
         entity.setReceiptDate(request.receiptDate());
         entity.setPayType(request.payType());
         entity.setAmount(TradeItemCalculator.scaleAmount(request.amount()));

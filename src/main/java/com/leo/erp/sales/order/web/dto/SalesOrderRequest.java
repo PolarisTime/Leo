@@ -11,7 +11,9 @@ public record SalesOrderRequest(
         String orderNo,
         String purchaseInboundNo,
         String purchaseOrderNo,
+        String customerCode,
         @jakarta.validation.constraints.NotBlank String customerName,
+        Long projectId,
         @jakarta.validation.constraints.NotBlank String projectName,
         @NotNull LocalDate deliveryDate,
         @jakarta.validation.constraints.NotBlank String salesName,
@@ -21,6 +23,20 @@ public record SalesOrderRequest(
 ) {
     public SalesOrderRequest(String orderNo,
                              String purchaseInboundNo,
+                             String customerCode,
+                             String customerName,
+                             Long projectId,
+                             String projectName,
+                             LocalDate deliveryDate,
+                             String salesName,
+                             String status,
+                             String remark,
+                             List<SalesOrderItemRequest> items) {
+        this(orderNo, purchaseInboundNo, null, customerCode, customerName, projectId, projectName, deliveryDate, salesName, status, remark, items);
+    }
+
+    public SalesOrderRequest(String orderNo,
+                             String purchaseInboundNo,
                              String customerName,
                              String projectName,
                              LocalDate deliveryDate,
@@ -28,6 +44,19 @@ public record SalesOrderRequest(
                              String status,
                              String remark,
                              List<SalesOrderItemRequest> items) {
-        this(orderNo, purchaseInboundNo, null, customerName, projectName, deliveryDate, salesName, status, remark, items);
+        this(orderNo, purchaseInboundNo, null, null, customerName, null, projectName, deliveryDate, salesName, status, remark, items);
+    }
+
+    public SalesOrderRequest(String orderNo,
+                             String purchaseInboundNo,
+                             String purchaseOrderNo,
+                             String customerName,
+                             String projectName,
+                             LocalDate deliveryDate,
+                             String salesName,
+                             String status,
+                             String remark,
+                             List<SalesOrderItemRequest> items) {
+        this(orderNo, purchaseInboundNo, purchaseOrderNo, null, customerName, null, projectName, deliveryDate, salesName, status, remark, items);
     }
 }

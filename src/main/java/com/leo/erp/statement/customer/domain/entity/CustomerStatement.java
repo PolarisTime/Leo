@@ -55,6 +55,12 @@ public class CustomerStatement extends AuditableEntity {
     @Column(name = "closing_amount", nullable = false, precision = 14, scale = 2)
     private BigDecimal closingAmount;
 
+    @Column(name = "customer_code", length = 64)
+    private String customerCode;
+
+    @Column(name = "project_id")
+    private Long projectId;
+
     @Column(name = "status", nullable = false, length = 16)
     private String status;
 

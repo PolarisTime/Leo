@@ -121,7 +121,9 @@ public class CustomerStatementService extends AbstractCrudService<CustomerStatem
                 response.id(),
                 response.statementNo(),
                 response.sourceOrderNos(),
+                response.customerCode(),
                 response.customerName(),
+                response.projectId(),
                 response.projectName(),
                 response.startDate(),
                 response.endDate(),
@@ -159,7 +161,9 @@ public class CustomerStatementService extends AbstractCrudService<CustomerStatem
         return new CustomerStatementRequest(
                 resolveCreateBusinessNo("customer-statement", request.statementNo(), entityId),
                 request.sourceOrderNos(),
+                request.customerCode(),
                 request.customerName(),
+                request.projectId(),
                 request.projectName(),
                 request.startDate(),
                 request.endDate(),
@@ -177,7 +181,9 @@ public class CustomerStatementService extends AbstractCrudService<CustomerStatem
         return new CustomerStatementRequest(
                 entity.getStatementNo(),
                 request.sourceOrderNos(),
+                request.customerCode(),
                 request.customerName(),
+                request.projectId(),
                 request.projectName(),
                 request.startDate(),
                 request.endDate(),
@@ -237,6 +243,8 @@ public class CustomerStatementService extends AbstractCrudService<CustomerStatem
         entity.setStatementNo(request.statementNo());
         entity.setCustomerName(request.customerName());
         entity.setProjectName(request.projectName());
+        entity.setCustomerCode(request.customerCode());
+        entity.setProjectId(request.projectId());
         entity.setStartDate(request.startDate());
         entity.setEndDate(request.endDate());
         entity.setStatus(nextStatus);

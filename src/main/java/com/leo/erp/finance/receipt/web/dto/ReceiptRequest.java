@@ -10,8 +10,10 @@ import java.util.List;
 
 public record ReceiptRequest(
         String receiptNo,
+        String customerCode,
         @jakarta.validation.constraints.NotBlank(message = "客户不能为空")
         String customerName,
+        Long projectId,
         @jakarta.validation.constraints.NotBlank(message = "项目不能为空")
         String projectName,
         Long sourceStatementId,
@@ -30,4 +32,17 @@ public record ReceiptRequest(
         @Valid
         List<ReceiptAllocationRequest> items
 ) {
+    public ReceiptRequest(String receiptNo,
+                          String customerName,
+                          String projectName,
+                          Long sourceStatementId,
+                          LocalDate receiptDate,
+                          String payType,
+                          BigDecimal amount,
+                          String status,
+                          String operatorName,
+                          String remark,
+                          List<ReceiptAllocationRequest> items) {
+        this(receiptNo, null, customerName, null, projectName, sourceStatementId, receiptDate, payType, amount, status, operatorName, remark, items);
+    }
 }
