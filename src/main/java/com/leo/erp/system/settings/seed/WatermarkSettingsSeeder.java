@@ -27,6 +27,13 @@ public class WatermarkSettingsSeeder implements ApplicationRunner {
     @Override
     public void run(ApplicationArguments args) {
         try {
+            // Clean stale V127 entry from a previously-failed migration
+            try {
+                jdbcTemplate.update(
+                    "DELETE FROM public.flyway_schema_history WHERE version = '127'");
+            } catch (Exception ignored) {
+                // table may not exist
+            }
             ensureTable();
             ensureIndex();
             seedIfMissing("UI_WATERMARK_ENABLED",
