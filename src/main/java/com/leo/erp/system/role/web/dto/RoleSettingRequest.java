@@ -5,7 +5,6 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
-import java.util.List;
 
 public record RoleSettingRequest(
         @NotBlank @Size(max = 64) @Pattern(regexp = "[A-Za-z0-9_-]+", message = "角色编码格式不正确") String roleCode,

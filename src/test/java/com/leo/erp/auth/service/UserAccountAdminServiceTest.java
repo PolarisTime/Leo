@@ -57,7 +57,6 @@ class UserAccountAdminServiceTest {
         entity.setLoginName("tester");
         entity.setUserName("测试用户");
         entity.setMobile("13800000000");
-        entity.setRoleName("采购专员");
         entity.setPermissionSummary("旧摘要");
         entity.setLastLoginDate(LocalDateTime.of(2026, 4, 25, 12, 0));
         entity.setStatus(UserStatus.NORMAL);

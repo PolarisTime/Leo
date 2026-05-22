@@ -93,7 +93,6 @@ class InvoiceIssueServiceTest {
                     entity.getId(),
                     entity.getIssueNo(),
                     entity.getInvoiceNo(),
-                    entity.getSourceSalesOrderNos(),
                     entity.getCustomerName(),
                     entity.getProjectName(),
                     entity.getInvoiceDate(),
@@ -207,7 +206,6 @@ class InvoiceIssueServiceTest {
         return new InvoiceIssueRequest(
                 issueNo,
                 "INV-001",
-                "SO-001",
                 "客户A",
                 "项目A",
                 LocalDate.of(2026, 4, 26),
