@@ -27,7 +27,7 @@ public class InvoiceReceipt extends AuditableEntity {
     @Column(name = "receive_no", nullable = false, unique = true, length = 64)
     private String receiveNo;
 
-    @Column(name = "invoice_no", nullable = false, length = 64)
+    @Column(name = "invoice_no", nullable = false, unique = true, length = 64)
     private String invoiceNo;
 
     @Column(name = "supplier_name", nullable = false, length = 128)
