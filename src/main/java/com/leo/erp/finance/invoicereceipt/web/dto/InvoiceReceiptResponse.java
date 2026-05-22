@@ -8,7 +8,6 @@ public record InvoiceReceiptResponse(
         Long id,
         String receiveNo,
         String invoiceNo,
-        String sourcePurchaseOrderNos,
         String supplierName,
         String invoiceTitle,
         LocalDate invoiceDate,

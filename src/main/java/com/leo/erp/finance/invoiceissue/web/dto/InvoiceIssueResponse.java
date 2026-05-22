@@ -8,7 +8,6 @@ public record InvoiceIssueResponse(
         Long id,
         String issueNo,
         String invoiceNo,
-        String sourceSalesOrderNos,
         String customerName,
         String projectName,
         LocalDate invoiceDate,
