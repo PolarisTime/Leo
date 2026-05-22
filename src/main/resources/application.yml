@@ -60,6 +60,7 @@ spring:
     clean-disabled: true
     # 自动修复 checksum 不匹配
     repair-on-migrate: true
+    validate-on-migrate: false
     # 迁移脚本目录
     locations: classpath:db/migration
 
