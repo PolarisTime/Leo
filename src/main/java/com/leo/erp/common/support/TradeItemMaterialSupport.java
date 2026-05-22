@@ -81,8 +81,12 @@ public class TradeItemMaterialSupport {
         if (!Boolean.TRUE.equals(material.getBatchNoEnabled())) {
             return null;
         }
-        if (normalized == null && shouldAutoGenerateBatchNo()) {
-            normalized = noRuleSequenceService.nextValue(NoRuleSequenceService.BATCH_NO_RULE_CODE);
+        if (shouldAutoGenerateBatchNo()) {
+            // 前端已生成雪花 ID 则直接使用，否则后端补生成
+            if (normalized == null) {
+                long id = SnowflakeIdGenerator.getInstance().nextId();
+                normalized = Long.toString(id, 36).toUpperCase();
+            }
         }
         if (normalized != null && normalized.length() > 64) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "第" + lineNo + "行批号长度不能超过64");

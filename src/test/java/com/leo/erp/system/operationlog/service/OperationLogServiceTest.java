@@ -25,7 +25,7 @@ class OperationLogServiceTest {
                                      LocalDate endDate) {
         return new PageFilter(null, null, startDate, endDate,
                 null, null, null, moduleName, actionType, resultStatus,
-                null, null, null, null);
+                null, null, null, null, null);
     }
 
     @Test

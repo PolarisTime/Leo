@@ -20,7 +20,8 @@ public record PageFilter(
         String signStatus,
         String usageScope,
         Long recordId,
-        Long userId
+        Long userId,
+        String authType
 ) {
     public PageFilter {
         // defaults via compact constructor — no-op, all nullable
@@ -29,12 +30,12 @@ public record PageFilter(
     /** 最常用的四字段构造 */
     public static PageFilter of(String keyword, String status, LocalDate startDate, LocalDate endDate) {
         return new PageFilter(keyword, status, startDate, endDate,
-                null, null, null, null, null, null, null, null, null, null);
+                null, null, null, null, null, null, null, null, null, null, null);
     }
 
     /** 带一个名称过滤 */
     public static PageFilter of(String keyword, String name, String status, LocalDate startDate, LocalDate endDate) {
         return new PageFilter(keyword, status, startDate, endDate,
-                name, null, null, null, null, null, null, null, null, null);
+                name, null, null, null, null, null, null, null, null, null, null);
     }
 }

@@ -38,10 +38,11 @@ public class OperationLogController {
             @RequestParam(required = false) String resultStatus,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startTime,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endTime,
-            @RequestParam(required = false) Long recordId
+            @RequestParam(required = false) Long recordId,
+            @RequestParam(required = false) String authType
     ) {
         PageFilter filter = new PageFilter(keyword, null, startTime, endTime,
-                null, null, null, moduleName, actionType, resultStatus, null, null, recordId, null);
+                null, null, null, moduleName, actionType, resultStatus, null, null, recordId, null, authType);
         return ApiResponse.success(PageResponse.from(operationLogService.page(query, filter)));
     }
 }

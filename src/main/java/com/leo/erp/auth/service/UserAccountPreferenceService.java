@@ -35,10 +35,11 @@ public class UserAccountPreferenceService {
 
     @Transactional
     public UserAccountPreferencesPayload savePreferences(Long userId, UserAccountPreferencesPayload request) {
-        UserAccount account = getEntity(userId);
         UserAccountPreferencesPayload normalized = normalizePayload(request);
-        account.setPreferencesJson(writePreferences(normalized));
-        repository.save(account);
+        int updated = repository.updatePreferencesJson(userId, writePreferences(normalized));
+        if (updated == 0) {
+            throw new BusinessException(ErrorCode.NOT_FOUND, "用户不存在");
+        }
         return normalized;
     }
 

@@ -13,7 +13,7 @@ public interface SalesOrderItemRepository extends JpaRepository<SalesOrderItem, 
     @Query("""
             select item
             from SalesOrderItem item
-            join item.salesOrder salesOrder
+            join fetch item.salesOrder salesOrder
             where salesOrder.deletedFlag = false
               and item.id in :itemIds
             """)

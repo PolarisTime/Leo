@@ -34,9 +34,9 @@ class UserAccountPreferenceServiceTest {
     @Test
     void shouldNormalizeAndPersistPreferencesPayload() {
         UserAccount account = user(1L);
-        AtomicReference<UserAccount> savedAccount = new AtomicReference<>();
+        AtomicReference<String> savedPreferences = new AtomicReference<>();
         UserAccountPreferenceService service = new UserAccountPreferenceService(
-                repository(account, savedAccount),
+                repository(account, new AtomicReference<>(), savedPreferences),
                 new ObjectMapper()
         );
         List<String> hiddenKeys = new ArrayList<>();
@@ -58,8 +58,7 @@ class UserAccountPreferenceServiceTest {
                 .containsExactly("orderNo", "customerName");
         assertThat(saved.pages().get("sales-order").hiddenKeys())
                 .containsExactly("status");
-        assertThat(savedAccount.get()).isNotNull();
-        assertThat(savedAccount.get().getPreferencesJson()).isNotBlank();
+        assertThat(savedPreferences.get()).isNotBlank();
         assertThat(service.getPreferences(1L)).isEqualTo(saved);
     }
 
@@ -78,6 +77,14 @@ class UserAccountPreferenceServiceTest {
     }
 
     private UserAccountRepository repository(UserAccount account, AtomicReference<UserAccount> savedAccount) {
+        return repository(account, savedAccount, new AtomicReference<>());
+    }
+
+    private UserAccountRepository repository(
+            UserAccount account,
+            AtomicReference<UserAccount> savedAccount,
+            AtomicReference<String> savedPreferences
+    ) {
         return (UserAccountRepository) Proxy.newProxyInstance(
                 UserAccountRepository.class.getClassLoader(),
                 new Class[]{UserAccountRepository.class},
@@ -86,6 +93,11 @@ class UserAccountPreferenceServiceTest {
                     case "save" -> {
                         savedAccount.set((UserAccount) args[0]);
                         yield args[0];
+                    }
+                    case "updatePreferencesJson" -> {
+                        account.setPreferencesJson((String) args[1]);
+                        savedPreferences.set((String) args[1]);
+                        yield 1;
                     }
                     case "toString" -> "UserAccountRepositoryStub";
                     case "hashCode" -> System.identityHashCode(proxy);

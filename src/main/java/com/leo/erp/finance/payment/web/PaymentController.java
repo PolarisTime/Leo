@@ -60,7 +60,7 @@ public class PaymentController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate
     ) {
         return ApiResponse.success(PageResponse.from(
-                paymentService.page(query, new PageFilter(keyword, status, startDate, endDate, null, null, businessType, null, null, null, null, null, null, null))
+                paymentService.page(query, new PageFilter(keyword, status, startDate, endDate, null, null, businessType, null, null, null, null, null, null, null, null))
         ));
     }
 
