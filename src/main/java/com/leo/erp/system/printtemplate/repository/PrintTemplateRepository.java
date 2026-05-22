@@ -10,7 +10,7 @@ public interface PrintTemplateRepository extends JpaRepository<PrintTemplate, Lo
 
     List<PrintTemplate> findAllByBillTypeAndDeletedFlagFalseOrderByIsDefaultDescUpdatedAtDescIdDesc(String billType);
 
-    Optional<PrintTemplate> findFirstByBillTypeAndIsDefaultAndDeletedFlagFalse(String billType, String isDefault);
+    Optional<PrintTemplate> findFirstByBillTypeAndIsDefaultAndDeletedFlagFalse(String billType, Boolean isDefault);
 
     Optional<PrintTemplate> findByIdAndDeletedFlagFalse(Long id);
 

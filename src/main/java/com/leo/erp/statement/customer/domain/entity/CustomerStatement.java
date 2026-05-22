@@ -28,11 +28,8 @@ public class CustomerStatement extends AuditableEntity {
     @Version
     private Long version;
 
-    @Column(name = "statement_no", nullable = false, unique = true, length = 32)
+    @Column(name = "statement_no", nullable = false, unique = true, length = 64)
     private String statementNo;
-
-    @Column(name = "source_order_nos", length = 500)
-    private String sourceOrderNos;
 
     @Column(name = "customer_name", nullable = false, length = 128)
     private String customerName;

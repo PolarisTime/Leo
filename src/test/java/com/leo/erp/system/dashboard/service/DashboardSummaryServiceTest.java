@@ -4,7 +4,9 @@ import com.leo.erp.auth.domain.entity.UserAccount;
 import com.leo.erp.auth.domain.enums.UserStatus;
 import com.leo.erp.auth.repository.RefreshTokenSessionRepository;
 import com.leo.erp.auth.repository.UserAccountRepository;
+import com.leo.erp.auth.service.UserRoleBindingService;
 import com.leo.erp.security.permission.PermissionService;
+import com.leo.erp.system.role.domain.entity.RoleSetting;
 import com.leo.erp.system.company.domain.entity.CompanySetting;
 import com.leo.erp.system.company.repository.CompanySettingRepository;
 import com.leo.erp.system.dashboard.web.dto.DashboardSummaryResponse;
@@ -31,13 +33,13 @@ class DashboardSummaryServiceTest {
         CompanySettingRepository companySettingRepository = mock(CompanySettingRepository.class);
         MenuRepository menuRepository = mock(MenuRepository.class);
         PermissionService permissionService = mock(PermissionService.class);
+        UserRoleBindingService userRoleBindingService = mock(UserRoleBindingService.class);
         RefreshTokenSessionRepository refreshTokenSessionRepository = mock(RefreshTokenSessionRepository.class);
 
         UserAccount user = new UserAccount();
         user.setId(1L);
         user.setLoginName("leo");
         user.setUserName("Leo");
-        user.setRoleName("系统管理员");
         user.setTotpEnabled(Boolean.TRUE);
         user.setStatus(UserStatus.NORMAL);
         user.setLastLoginDate(LocalDateTime.of(2026, 4, 26, 9, 30));
@@ -65,11 +67,16 @@ class DashboardSummaryServiceTest {
                 any(Long.class), any(LocalDateTime.class)))
                 .thenReturn(2L);
 
+        RoleSetting mockRole = new RoleSetting();
+        mockRole.setRoleName("系统管理员");
+        when(userRoleBindingService.resolveRolesForUser(1L)).thenReturn(List.of(mockRole));
+
         DashboardSummaryService service = new DashboardSummaryService(
                 userAccountRepository,
                 companySettingRepository,
                 menuRepository,
                 permissionService,
+                userRoleBindingService,
                 refreshTokenSessionRepository,
                 "leo"
         );

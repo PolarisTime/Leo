@@ -19,7 +19,7 @@ public class SalesOutbound extends AuditableEntity {
     @Id
     private Long id;
 
-    @Column(name = "outbound_no", nullable = false, unique = true, length = 32)
+    @Column(name = "outbound_no", nullable = false, unique = true, length = 64)
     private String outboundNo;
 
     @Column(name = "sales_order_no", length = 256)

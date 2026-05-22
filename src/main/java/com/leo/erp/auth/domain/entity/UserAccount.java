@@ -29,13 +29,13 @@ public class UserAccount extends AuditableEntity {
     @Column(name = "login_name", nullable = false, unique = true, length = 64)
     private String loginName;
 
-    @Column(name = "password_hash", nullable = false, length = 255)
+    @Column(name = "password_hash", nullable = false, length = 128)
     private String passwordHash;
 
     @Column(name = "user_name", nullable = false, length = 64)
     private String userName;
 
-    @Column(name = "mobile", length = 32)
+    @Column(name = "mobile", length = 20)
     private String mobile;
 
     @Column(name = "department_id")
@@ -43,9 +43,6 @@ public class UserAccount extends AuditableEntity {
 
     @Column(name = "department_name", length = 128)
     private String departmentName;
-
-    @Column(name = "role_name", length = 64)
-    private String roleName;
 
     @Column(name = "data_scope", length = 32)
     private String dataScope;
@@ -72,6 +69,6 @@ public class UserAccount extends AuditableEntity {
     @Column(name = "require_totp_setup", nullable = false)
     private Boolean requireTotpSetup = Boolean.FALSE;
 
-    @Column(name = "preferences_json", columnDefinition = "TEXT")
+    @Column(name = "preferences_json", columnDefinition = "JSONB")
     private String preferencesJson;
 }

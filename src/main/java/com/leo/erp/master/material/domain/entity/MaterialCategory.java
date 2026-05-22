@@ -17,7 +17,7 @@ public class MaterialCategory extends AuditableEntity {
     @Id
     private Long id;
 
-    @Column(name = "category_code", nullable = false, length = 32)
+    @Column(name = "category_code", nullable = false, length = 16)
     private String categoryCode;
 
     @Column(name = "category_name", nullable = false, length = 64)

@@ -24,7 +24,7 @@ public class PurchaseInbound extends AuditableEntity {
     @Id
     private Long id;
 
-    @Column(name = "inbound_no", nullable = false, unique = true, length = 32)
+    @Column(name = "inbound_no", nullable = false, unique = true, length = 64)
     private String inboundNo;
 
     @Column(name = "purchase_order_no", length = 256)

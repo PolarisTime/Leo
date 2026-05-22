@@ -19,16 +19,13 @@ public class FreightBill extends AuditableEntity {
     @Id
     private Long id;
 
-    @Column(name = "bill_no", nullable = false, unique = true, length = 32)
+    @Column(name = "bill_no", nullable = false, unique = true, length = 64)
     private String billNo;
-
-    @Column(name = "outbound_no", length = 1024)
-    private String outboundNo;
 
     @Column(name = "carrier_name", nullable = false, length = 128)
     private String carrierName;
 
-    @Column(name = "vehicle_plate", length = 32)
+    @Column(name = "vehicle_plate", length = 16)
     private String vehiclePlate;
 
     @Column(name = "customer_name", nullable = false, length = 128)

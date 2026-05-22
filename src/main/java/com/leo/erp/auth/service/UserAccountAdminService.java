@@ -24,7 +24,6 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.Arrays;
 import java.util.Base64;
 import java.util.List;
 
@@ -66,7 +65,7 @@ public class UserAccountAdminService {
     @Transactional(readOnly = true)
     public Page<UserAccountAdminResponse> page(PageQuery query, String keyword, String status) {
         Specification<UserAccount> spec = Specs.<UserAccount>notDeleted()
-                .and(Specs.keywordLike(keyword, "loginName", "userName", "roleName", "mobile", "departmentName"));
+                .and(Specs.keywordLike(keyword, "loginName", "userName", "mobile", "departmentName"));
         if (status != null && !status.isBlank()) {
             spec = spec.and((root, criteriaQuery, criteriaBuilder) ->
                     criteriaBuilder.equal(root.get("status"), validationService.toStatus(status)));
@@ -182,7 +181,7 @@ public class UserAccountAdminService {
         return new UserAccountAdminResponse(
                 response.id(), response.loginName(), response.userName(),
                 response.mobile(), response.departmentId(), response.departmentName(),
-                splitRoles(userRoleBindingService.joinRoleNames(roles)),
+                roles.stream().map(RoleSetting::getRoleName).toList(),
                 response.dataScope(), permissionSummary,
                 response.lastLoginDate(), response.status(), response.remark(),
                 Boolean.TRUE.equals(entity.getTotpEnabled())
@@ -217,21 +216,10 @@ public class UserAccountAdminService {
         entity.setUserName(validationService.normalizeRequiredValue(request.userName(), "用户姓名"));
         entity.setMobile(validationService.normalizeOptionalValue(request.mobile()));
         validationService.applyDepartment(entity, request.departmentId());
-        entity.setRoleName(userRoleBindingService.joinRoleNames(roles));
         entity.setDataScope(validationService.resolveEffectiveDataScope(roles));
         entity.setPermissionSummary("");
         entity.setStatus(validationService.toStatus(request.status()));
         entity.setRemark(validationService.normalizeOptionalValue(request.remark()));
-    }
-
-    private List<String> splitRoles(String value) {
-        if (value == null || value.isBlank()) {
-            return List.of();
-        }
-        return Arrays.stream(value.split(","))
-                .map(String::trim)
-                .filter(item -> !item.isBlank())
-                .toList();
     }
 
     private boolean isLoginNameConflict(DataIntegrityViolationException ex) {

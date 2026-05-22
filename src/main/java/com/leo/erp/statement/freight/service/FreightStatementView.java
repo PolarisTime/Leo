@@ -9,7 +9,6 @@ import java.util.List;
 public record FreightStatementView(
         Long id,
         String statementNo,
-        String sourceBillNos,
         String carrierName,
         LocalDate startDate,
         LocalDate endDate,

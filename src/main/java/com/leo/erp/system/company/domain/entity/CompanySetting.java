@@ -34,7 +34,7 @@ public class CompanySetting extends AuditableEntity {
     @Column(name = "tax_rate", nullable = false, precision = 6, scale = 4)
     private BigDecimal taxRate;
 
-    @Column(name = "settlement_accounts_json", nullable = false, columnDefinition = "TEXT")
+    @Column(name = "settlement_accounts_json", nullable = false, columnDefinition = "JSONB")
     private String settlementAccountsJson;
 
     @Column(name = "status", nullable = false, length = 16)

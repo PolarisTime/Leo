@@ -1,6 +1,8 @@
 package com.leo.erp.master.carrier.web.dto;
 
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
+import java.util.List;
 
 public record CarrierRequest(
         @NotBlank(message = "物流方编码不能为空")
@@ -10,19 +12,7 @@ public record CarrierRequest(
         String contactName,
         String contactPhone,
         String vehicleType,
-        String vehiclePlates,
-        String vehiclePlate,
-        String vehicleContact,
-        String vehiclePhone,
-        String vehiclePlate2,
-        String vehicleContact2,
-        String vehiclePhone2,
-        String vehiclePlate3,
-        String vehicleContact3,
-        String vehiclePhone3,
-        String vehicleRemark,
-        String vehicleRemark2,
-        String vehicleRemark3,
+        List<@Valid VehicleItem> vehicles,
         String priceMode,
         @NotBlank(message = "状态不能为空")
         String status,

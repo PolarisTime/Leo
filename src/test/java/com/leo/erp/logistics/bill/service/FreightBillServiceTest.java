@@ -39,7 +39,6 @@ class FreightBillServiceTest {
 
         FreightBillResponse response = service.create(new FreightBillRequest(
                 "FB-001",
-                "OB-001",
                 "物流甲",
                 "苏A12345",
                 "客户甲",

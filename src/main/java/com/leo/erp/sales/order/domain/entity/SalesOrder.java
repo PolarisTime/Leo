@@ -19,7 +19,7 @@ public class SalesOrder extends AuditableEntity {
     @Id
     private Long id;
 
-    @Column(name = "order_no", nullable = false, unique = true, length = 32)
+    @Column(name = "order_no", nullable = false, unique = true, length = 64)
     private String orderNo;
 
     @Column(name = "purchase_inbound_no", length = 256)
@@ -37,7 +37,7 @@ public class SalesOrder extends AuditableEntity {
     @Column(name = "delivery_date", nullable = false)
     private LocalDate deliveryDate;
 
-    @Column(name = "sales_name", nullable = false, length = 64)
+    @Column(name = "sales_name", nullable = false, length = 32)
     private String salesName;
 
     @Column(name = "total_weight", nullable = false, precision = 14, scale = 3)

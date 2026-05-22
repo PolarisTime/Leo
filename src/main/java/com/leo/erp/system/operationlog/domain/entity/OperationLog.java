@@ -36,7 +36,7 @@ public class OperationLog {
     @Column(name = "action_type", nullable = false, length = 32)
     private String actionType;
 
-    @Column(name = "business_no", length = 128)
+    @Column(name = "business_no", length = 64)
     private String businessNo;
 
     @Column(name = "record_id")
@@ -45,7 +45,7 @@ public class OperationLog {
     @Column(name = "module_key", length = 64)
     private String moduleKey;
 
-    @Column(name = "request_method", nullable = false, length = 16)
+    @Column(name = "request_method", nullable = false, length = 8)
     private String requestMethod;
 
     @Column(name = "request_path", nullable = false, length = 255)

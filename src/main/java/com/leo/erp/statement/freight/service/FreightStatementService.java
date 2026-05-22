@@ -1,6 +1,5 @@
 package com.leo.erp.statement.freight.service;
 
-import com.leo.erp.attachment.service.AttachmentService;
 import com.leo.erp.attachment.service.AttachmentBindingService;
 import com.leo.erp.attachment.service.AttachmentView;
 import com.leo.erp.common.api.PageFilter;
@@ -34,7 +33,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -58,7 +56,6 @@ public class FreightStatementService extends AbstractCrudService<FreightStatemen
 
     private final FreightStatementRepository repository;
     private final FreightBillRepository freightBillRepository;
-    private final AttachmentService attachmentService;
     private final AttachmentBindingService attachmentBindingService;
     private final StatementSettlementSyncService statementSettlementSyncService;
     private final WorkflowTransitionGuard workflowTransitionGuard;
@@ -67,7 +64,6 @@ public class FreightStatementService extends AbstractCrudService<FreightStatemen
     public FreightStatementService(FreightStatementRepository repository,
                                    SnowflakeIdGenerator idGenerator,
                                    FreightBillRepository freightBillRepository,
-                                   AttachmentService attachmentService,
                                    AttachmentBindingService attachmentBindingService,
                                    StatementSettlementSyncService statementSettlementSyncService,
                                    WorkflowTransitionGuard workflowTransitionGuard,
@@ -75,7 +71,6 @@ public class FreightStatementService extends AbstractCrudService<FreightStatemen
         super(idGenerator);
         this.repository = repository;
         this.freightBillRepository = freightBillRepository;
-        this.attachmentService = attachmentService;
         this.attachmentBindingService = attachmentBindingService;
         this.statementSettlementSyncService = statementSettlementSyncService;
         this.workflowTransitionGuard = workflowTransitionGuard;
@@ -85,7 +80,7 @@ public class FreightStatementService extends AbstractCrudService<FreightStatemen
     @Transactional(readOnly = true)
     public Page<FreightStatementView> page(PageQuery query, PageFilter filter) {
         Specification<FreightStatement> spec = applyDeletedVisibilityPolicy(
-                Specs.<FreightStatement>keywordLike(filter.keyword(), "statementNo", "carrierName", "sourceBillNos")
+                Specs.<FreightStatement>keywordLike(filter.keyword(), "statementNo", "carrierName")
                 .and(Specs.equalIfPresent("carrierName", filter.name()))
                 .and(Specs.equalIfPresent("status", filter.status()))
                 .and(Specs.equalIfPresent("signStatus", filter.signStatus()))
@@ -106,8 +101,7 @@ public class FreightStatementService extends AbstractCrudService<FreightStatemen
 
     private static final String[] FREIGHT_STATEMENT_SEARCH_FIELDS = {
             "statementNo",
-            "carrierName",
-            "sourceBillNos"
+            "carrierName"
     };
 
     @Transactional(readOnly = true)
@@ -139,11 +133,12 @@ public class FreightStatementService extends AbstractCrudService<FreightStatemen
 
     @Transactional(readOnly = true)
     public Page<FreightStatementCandidateResponse> candidatePage(PageQuery query, String keyword) {
-        Set<String> occupiedBillNos = StatementCandidateSupport.parseRelationNos(
-                repository.findAll(Specs.notDeleted()).stream()
-                        .map(FreightStatement::getSourceBillNos)
-                        .toList()
-        );
+        Set<String> occupiedBillNos = new LinkedHashSet<>();
+        repository.findAll(Specs.notDeleted()).stream()
+                .flatMap(entity -> entity.getItems().stream())
+                .map(FreightStatementItem::getSourceNo)
+                .filter(v -> v != null && !v.isBlank())
+                .forEach(occupiedBillNos::add);
         Specification<FreightBill> spec = Specs.<FreightBill>notDeleted()
                 .and(Specs.keywordLike(keyword, FREIGHT_BILL_CANDIDATE_SEARCH_FIELDS))
                 .and(StatementCandidateSupport.excludeFieldValues("billNo", occupiedBillNos));
@@ -180,7 +175,6 @@ public class FreightStatementService extends AbstractCrudService<FreightStatemen
     protected FreightStatementCommand normalizeCreateRequest(FreightStatementCommand command, long entityId) {
         return new FreightStatementCommand(
                 resolveCreateBusinessNo("freight-statement", command.statementNo(), entityId),
-                command.sourceBillNos(),
                 command.carrierName(),
                 command.startDate(),
                 command.endDate(),
@@ -191,7 +185,6 @@ public class FreightStatementService extends AbstractCrudService<FreightStatemen
                 command.status(),
                 command.signStatus(),
                 command.attachment(),
-                command.attachmentIds(),
                 command.remark(),
                 command.items()
         );
@@ -201,7 +194,6 @@ public class FreightStatementService extends AbstractCrudService<FreightStatemen
     protected FreightStatementCommand normalizeUpdateRequest(FreightStatement entity, FreightStatementCommand command) {
         return new FreightStatementCommand(
                 entity.getStatementNo(),
-                command.sourceBillNos(),
                 command.carrierName(),
                 command.startDate(),
                 command.endDate(),
@@ -212,7 +204,6 @@ public class FreightStatementService extends AbstractCrudService<FreightStatemen
                 command.status(),
                 command.signStatus(),
                 command.attachment(),
-                command.attachmentIds(),
                 command.remark(),
                 command.items()
         );
@@ -276,7 +267,6 @@ public class FreightStatementService extends AbstractCrudService<FreightStatemen
         );
         List<FreightBill> sourceBills = loadSourceBills(command);
         entity.setStatementNo(command.statementNo());
-        entity.setSourceBillNos(joinSourceBillNos(sourceBills));
         entity.setCarrierName(command.carrierName());
         entity.setStartDate(command.startDate());
         entity.setEndDate(command.endDate());
@@ -284,12 +274,6 @@ public class FreightStatementService extends AbstractCrudService<FreightStatemen
         entity.setSignStatus(nextSignStatus);
         if (command.attachment() != null) {
             entity.setAttachment(command.attachment());
-        }
-        if (command.attachmentIds() != null) {
-            attachmentService.validateAttachmentIds(command.attachmentIds());
-            List<Long> normalizedAttachmentIds = parseAttachmentIds(joinAttachmentIds(command.attachmentIds()));
-            entity.setAttachmentIds(joinAttachmentIds(normalizedAttachmentIds));
-            attachmentBindingService.replace(MODULE_KEY, entity.getId(), normalizedAttachmentIds);
         }
         entity.setRemark(command.remark());
 
@@ -359,7 +343,6 @@ public class FreightStatementService extends AbstractCrudService<FreightStatemen
         return new FreightStatementView(
                 entity.getId(),
                 entity.getStatementNo(),
-                entity.getSourceBillNos(),
                 entity.getCarrierName(),
                 entity.getStartDate(),
                 entity.getEndDate(),
@@ -415,12 +398,11 @@ public class FreightStatementService extends AbstractCrudService<FreightStatemen
     }
 
     private List<FreightBill> loadSourceBills(FreightStatementCommand command) {
-        Set<String> requestedBillNos = new LinkedHashSet<>(StatementCandidateSupport.parseRelationNos(List.of(command.sourceBillNos())));
-        command.items().stream()
+        Set<String> requestedBillNos = command.items().stream()
                 .map(FreightStatementItemCommand::sourceNo)
                 .filter(value -> value != null && !value.isBlank())
                 .map(String::trim)
-                .forEach(requestedBillNos::add);
+                .collect(Collectors.toCollection(LinkedHashSet::new));
         if (requestedBillNos.isEmpty()) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "物流对账单来源物流单不能为空");
         }
@@ -450,19 +432,8 @@ public class FreightStatementService extends AbstractCrudService<FreightStatemen
         throw new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行来源物流单不存在");
     }
 
-    private String joinSourceBillNos(List<FreightBill> bills) {
-        return bills.stream()
-                .map(FreightBill::getBillNo)
-                .distinct()
-                .collect(Collectors.joining(", "));
-    }
-
     private List<AttachmentView> resolveAttachments(FreightStatement entity) {
-        List<AttachmentView> attachments = attachmentBindingService.list(MODULE_KEY, entity.getId());
-        if (!attachments.isEmpty()) {
-            return attachments;
-        }
-        return attachmentService.getAttachments(parseAttachmentIds(entity.getAttachmentIds()), MODULE_KEY);
+        return attachmentBindingService.list(MODULE_KEY, entity.getId());
     }
 
     private Map<Long, List<AttachmentView>> resolveAttachmentsByStatement(List<FreightStatement> statements) {
@@ -471,29 +442,9 @@ public class FreightStatementService extends AbstractCrudService<FreightStatemen
         }
         List<Long> statementIds = statements.stream().map(FreightStatement::getId).toList();
         Map<Long, List<AttachmentView>> boundAttachments = attachmentBindingService.listByRecordIds(MODULE_KEY, statementIds);
-        Map<Long, List<Long>> attachmentIdsByStatementId = new LinkedHashMap<>();
-        List<Long> allAttachmentIds = new ArrayList<>();
-        for (FreightStatement statement : statements) {
-            if (boundAttachments.containsKey(statement.getId())) {
-                continue;
-            }
-            List<Long> attachmentIds = parseAttachmentIds(statement.getAttachmentIds());
-            attachmentIdsByStatementId.put(statement.getId(), attachmentIds);
-            allAttachmentIds.addAll(attachmentIds);
-        }
-        Map<Long, AttachmentView> attachmentMap = attachmentService.getAttachmentMap(allAttachmentIds, MODULE_KEY);
         Map<Long, List<AttachmentView>> result = new LinkedHashMap<>(boundAttachments);
         for (FreightStatement statement : statements) {
-            if (result.containsKey(statement.getId())) {
-                continue;
-            }
-            List<AttachmentView> attachments = attachmentIdsByStatementId
-                    .getOrDefault(statement.getId(), List.of())
-                    .stream()
-                    .map(attachmentMap::get)
-                    .filter(item -> item != null)
-                    .toList();
-            result.put(statement.getId(), attachments);
+            result.putIfAbsent(statement.getId(), List.of());
         }
         return result;
     }
@@ -506,35 +457,5 @@ public class FreightStatementService extends AbstractCrudService<FreightStatemen
                 .map(AttachmentView::name)
                 .filter(name -> name != null && !name.isBlank())
                 .collect(Collectors.joining(", "));
-    }
-
-    private String joinAttachmentIds(List<Long> attachmentIds) {
-        if (attachmentIds == null || attachmentIds.isEmpty()) {
-            return null;
-        }
-        List<Long> normalizedIds = new ArrayList<>(new LinkedHashSet<>(attachmentIds));
-        if (normalizedIds.isEmpty()) {
-            return null;
-        }
-        return normalizedIds.stream().map(String::valueOf).collect(Collectors.joining(","));
-    }
-
-    private List<Long> parseAttachmentIds(String attachmentIds) {
-        if (attachmentIds == null || attachmentIds.isBlank()) {
-            return List.of();
-        }
-        List<Long> ids = new ArrayList<>();
-        for (String token : attachmentIds.split(",")) {
-            String trimmed = token.trim();
-            if (trimmed.isBlank()) {
-                continue;
-            }
-            try {
-                ids.add(Long.parseLong(trimmed));
-            } catch (NumberFormatException ex) {
-                throw new BusinessException(ErrorCode.VALIDATION_ERROR, "附件 ID 格式不正确");
-            }
-        }
-        return new ArrayList<>(new LinkedHashSet<>(ids));
     }
 }

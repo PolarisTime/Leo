@@ -29,9 +29,6 @@ public class RoleSetting extends AuditableEntity {
     @Column(name = "data_scope", nullable = false, length = 32)
     private String dataScope;
 
-    @Column(name = "permission_codes", length = 1000)
-    private String permissionCodes;
-
     @Column(name = "permission_count", nullable = false)
     private Integer permissionCount;
 

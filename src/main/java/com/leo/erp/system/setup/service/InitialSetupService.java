@@ -216,7 +216,6 @@ public class InitialSetupService {
         admin.setPasswordHash(passwordEncoder.encode(password));
         admin.setUserName(userName);
         admin.setMobile(mobile);
-        admin.setRoleName(userRoleBindingService.joinRoleNames(java.util.List.of(adminRole)));
         admin.setDataScope(DEFAULT_ADMIN_SCOPE);
         admin.setPermissionSummary("");
         admin.setStatus(UserStatus.NORMAL);

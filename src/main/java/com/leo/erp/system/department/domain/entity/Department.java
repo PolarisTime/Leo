@@ -26,10 +26,10 @@ public class Department extends AuditableEntity {
     @Column(name = "parent_id")
     private Long parentId;
 
-    @Column(name = "manager_name", length = 64)
+    @Column(name = "manager_name", length = 32)
     private String managerName;
 
-    @Column(name = "contact_phone", length = 32)
+    @Column(name = "contact_phone", length = 20)
     private String contactPhone;
 
     @Column(name = "sort_order", nullable = false)

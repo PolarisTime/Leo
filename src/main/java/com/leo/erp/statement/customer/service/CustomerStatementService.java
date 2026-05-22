@@ -77,7 +77,7 @@ public class CustomerStatementService extends AbstractCrudService<CustomerStatem
 
     @Transactional(readOnly = true)
     public Page<CustomerStatementResponse> page(PageQuery query, PageFilter filter) {
-        Specification<CustomerStatement> spec = Specs.<CustomerStatement>keywordLike(filter.keyword(), "statementNo", "customerName", "projectName", "sourceOrderNos")
+        Specification<CustomerStatement> spec = Specs.<CustomerStatement>keywordLike(filter.keyword(), "statementNo", "customerName", "projectName")
                 .and(Specs.equalIfPresent("customerName", filter.name()))
                 .and(Specs.equalIfPresent("status", filter.status()))
                 .and(Specs.betweenIfPresent("endDate", filter.startDate(), filter.endDate()));
@@ -87,8 +87,7 @@ public class CustomerStatementService extends AbstractCrudService<CustomerStatem
     private static final String[] CUSTOMER_STATEMENT_SEARCH_FIELDS = {
             "statementNo",
             "customerName",
-            "projectName",
-            "sourceOrderNos"
+            "projectName"
     };
 
     @Transactional(readOnly = true)
@@ -98,11 +97,12 @@ public class CustomerStatementService extends AbstractCrudService<CustomerStatem
 
     @Transactional(readOnly = true)
     public Page<CustomerStatementCandidateResponse> candidatePage(PageQuery query, String keyword) {
-        Set<String> occupiedOrderNos = StatementCandidateSupport.parseRelationNos(
-                repository.findAll(Specs.notDeleted()).stream()
-                        .map(CustomerStatement::getSourceOrderNos)
-                        .toList()
-        );
+        Set<String> occupiedOrderNos = new LinkedHashSet<>();
+        repository.findAll(Specs.notDeleted()).stream()
+                .flatMap(entity -> entity.getItems().stream())
+                .map(CustomerStatementItem::getSourceNo)
+                .filter(v -> v != null)
+                .forEach(occupiedOrderNos::add);
         Specification<SalesOrder> spec = Specs.<SalesOrder>notDeleted()
                 .and(Specs.keywordLike(keyword, SALES_ORDER_CANDIDATE_SEARCH_FIELDS))
                 .and((root, criteriaQuery, cb) -> root.get("status").in(
@@ -120,7 +120,6 @@ public class CustomerStatementService extends AbstractCrudService<CustomerStatem
         return new CustomerStatementResponse(
                 response.id(),
                 response.statementNo(),
-                response.sourceOrderNos(),
                 response.customerCode(),
                 response.customerName(),
                 response.projectId(),
@@ -160,7 +159,6 @@ public class CustomerStatementService extends AbstractCrudService<CustomerStatem
     protected CustomerStatementRequest normalizeCreateRequest(CustomerStatementRequest request, long entityId) {
         return new CustomerStatementRequest(
                 resolveCreateBusinessNo("customer-statement", request.statementNo(), entityId),
-                request.sourceOrderNos(),
                 request.customerCode(),
                 request.customerName(),
                 request.projectId(),
@@ -180,7 +178,6 @@ public class CustomerStatementService extends AbstractCrudService<CustomerStatem
     protected CustomerStatementRequest normalizeUpdateRequest(CustomerStatement entity, CustomerStatementRequest request) {
         return new CustomerStatementRequest(
                 entity.getStatementNo(),
-                request.sourceOrderNos(),
                 request.customerCode(),
                 request.customerName(),
                 request.projectId(),
@@ -252,7 +249,6 @@ public class CustomerStatementService extends AbstractCrudService<CustomerStatem
 
         BigDecimal salesAmount = BigDecimal.ZERO;
         Map<Long, SalesOrderItem> sourceSalesOrderItemMap = loadSourceSalesOrderItemMap(request.items());
-        LinkedHashSet<String> sourceOrderNos = new LinkedHashSet<>();
         List<CustomerStatementItem> items = ManagedEntityItemSupport.syncById(
                 entity.getItems(),
                 request.items(),
@@ -286,11 +282,9 @@ public class CustomerStatementService extends AbstractCrudService<CustomerStatem
             item.setUnitPrice(TradeItemCalculator.scaleAmount(sourceSalesOrderItem.getUnitPrice()));
             BigDecimal amount = TradeItemCalculator.scaleAmount(sourceSalesOrderItem.getAmount());
             item.setAmount(amount);
-            sourceOrderNos.add(sourceSalesOrderItem.getSalesOrder().getOrderNo());
             salesAmount = salesAmount.add(amount);
         }
         entity.getItems().sort(java.util.Comparator.comparing(CustomerStatementItem::getLineNo));
-        entity.setSourceOrderNos(String.join(", ", sourceOrderNos));
         BigDecimal receiptAmount = request.receiptAmount() == null
                 ? BigDecimal.ZERO
                 : TradeItemCalculator.scaleAmount(request.receiptAmount());

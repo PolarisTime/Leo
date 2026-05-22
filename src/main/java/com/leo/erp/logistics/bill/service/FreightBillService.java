@@ -67,7 +67,7 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
     protected FreightBillResponse toDetailResponse(FreightBill entity) {
         FreightBillResponse response = freightBillMapper.toResponse(entity);
         return new FreightBillResponse(
-                response.id(), response.billNo(), response.outboundNo(),
+                response.id(), response.billNo(),
                 response.carrierName(), response.vehiclePlate(),
                 response.customerName(), response.projectName(),
                 response.billTime(), response.unitPrice(), response.totalWeight(),
@@ -102,7 +102,6 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
     protected FreightBillRequest normalizeCreateRequest(FreightBillRequest request, long entityId) {
         return new FreightBillRequest(
                 resolveCreateBusinessNo("freight-bill", request.billNo(), entityId),
-                request.outboundNo(),
                 request.carrierName(),
                 request.vehiclePlate(),
                 request.customerName(),
@@ -120,7 +119,6 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
     protected FreightBillRequest normalizeUpdateRequest(FreightBill entity, FreightBillRequest request) {
         return new FreightBillRequest(
                 entity.getBillNo(),
-                request.outboundNo(),
                 request.carrierName(),
                 request.vehiclePlate(),
                 request.customerName(),
@@ -202,7 +200,6 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
         assertSourceOutboundsNotOccupied(request, entity.getId());
 
         BigDecimal totalWeight = BigDecimal.ZERO;
-        LinkedHashSet<String> sourceNos = new LinkedHashSet<>();
         LinkedHashSet<String> customerNames = new LinkedHashSet<>();
         LinkedHashSet<String> projectNames = new LinkedHashSet<>();
         List<FreightBillItem> items = ManagedEntityItemSupport.syncById(
@@ -220,7 +217,6 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
             item.setFreightBill(entity);
             item.setLineNo(i + 1);
             item.setSourceNo(source.sourceNo());
-            sourceNos.add(source.sourceNo());
             item.setCustomerName(source.customerName());
             customerNames.add(source.customerName());
             item.setProjectName(source.projectName());
@@ -243,7 +239,6 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
             totalWeight = totalWeight.add(weightTon);
         }
         entity.getItems().sort(java.util.Comparator.comparing(FreightBillItem::getLineNo));
-        entity.setOutboundNo(String.join(", ", sourceNos));
         entity.setCustomerName(resolveHeaderLabel(customerNames, "多客户"));
         entity.setProjectName(resolveHeaderLabel(projectNames, "多项目"));
         entity.setTotalWeight(totalWeight);

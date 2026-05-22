@@ -9,11 +9,14 @@ import com.leo.erp.common.service.AbstractCrudService;
 import com.leo.erp.common.support.RedisJsonCacheSupport;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.master.carrier.domain.entity.Carrier;
+import com.leo.erp.master.carrier.domain.entity.Vehicle;
 import com.leo.erp.master.carrier.repository.CarrierRepository;
+import com.leo.erp.master.carrier.repository.VehicleRepository;
 import com.leo.erp.master.carrier.mapper.CarrierMapper;
 import com.leo.erp.master.carrier.web.dto.CarrierOptionResponse;
 import com.leo.erp.master.carrier.web.dto.CarrierRequest;
 import com.leo.erp.master.carrier.web.dto.CarrierResponse;
+import com.leo.erp.master.carrier.web.dto.VehicleItem;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -22,15 +25,11 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.LinkedHashSet;
 import java.time.Duration;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
-import java.util.Set;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 @Service
 public class CarrierService extends AbstractCrudService<Carrier, CarrierRequest, CarrierResponse> {
@@ -38,33 +37,36 @@ public class CarrierService extends AbstractCrudService<Carrier, CarrierRequest,
     private static final String CARRIER_CACHE_KEY = "leo:carrier:all";
     private static final Duration CARRIER_CACHE_TTL = Duration.ofMinutes(30);
     private static final TypeReference<List<CarrierResponse>> CARRIER_LIST_TYPE = new TypeReference<>() { };
-    private static final Pattern LEGACY_VEHICLE_PLATE_JSON_PATTERN = Pattern.compile("\"plate\"\\s*:\\s*\"([^\"]+)\"");
 
     private final CarrierRepository carrierRepository;
+    private final VehicleRepository vehicleRepository;
     private final CarrierMapper carrierMapper;
     private final RedisJsonCacheSupport redisJsonCacheSupport;
 
     @Autowired
     public CarrierService(CarrierRepository carrierRepository,
+                          VehicleRepository vehicleRepository,
                           SnowflakeIdGenerator snowflakeIdGenerator,
                           CarrierMapper carrierMapper,
                           RedisJsonCacheSupport redisJsonCacheSupport) {
         super(snowflakeIdGenerator);
         this.carrierRepository = carrierRepository;
+        this.vehicleRepository = vehicleRepository;
         this.carrierMapper = carrierMapper;
         this.redisJsonCacheSupport = redisJsonCacheSupport;
     }
 
     public CarrierService(CarrierRepository carrierRepository,
+                          VehicleRepository vehicleRepository,
                           SnowflakeIdGenerator snowflakeIdGenerator,
                           CarrierMapper carrierMapper) {
-        this(carrierRepository, snowflakeIdGenerator, carrierMapper, null);
+        this(carrierRepository, vehicleRepository, snowflakeIdGenerator, carrierMapper, null);
     }
 
     @org.springframework.transaction.annotation.Transactional(readOnly = true)
     public List<CarrierOptionResponse> listActiveOptions() {
-        return loadCachedResponses().stream()
-                .map(c -> new CarrierOptionResponse(c.id(), c.carrierName(), c.carrierName(), resolveVehiclePlates(c)))
+        return carrierRepository.findByDeletedFlagFalseOrderByCarrierCodeAsc().stream()
+                .map(c -> new CarrierOptionResponse(c.getId(), c.getCarrierName(), c.getCarrierName(), resolveVehiclePlates(c)))
                 .toList();
     }
 
@@ -115,19 +117,24 @@ public class CarrierService extends AbstractCrudService<Carrier, CarrierRequest,
         entity.setContactName(emptyToNull(request.contactName()));
         entity.setContactPhone(emptyToNull(request.contactPhone()));
         entity.setVehicleType(emptyToNull(request.vehicleType()));
-        entity.setVehiclePlates(emptyToNull(request.vehiclePlates()));
-        entity.setVehiclePlate(emptyToNull(request.vehiclePlate()));
-        entity.setVehicleContact(emptyToNull(request.vehicleContact()));
-        entity.setVehiclePhone(emptyToNull(request.vehiclePhone()));
-        entity.setVehiclePlate2(emptyToNull(request.vehiclePlate2()));
-        entity.setVehicleContact2(emptyToNull(request.vehicleContact2()));
-        entity.setVehiclePhone2(emptyToNull(request.vehiclePhone2()));
-        entity.setVehiclePlate3(emptyToNull(request.vehiclePlate3()));
-        entity.setVehicleContact3(emptyToNull(request.vehicleContact3()));
-        entity.setVehiclePhone3(emptyToNull(request.vehiclePhone3()));
-        entity.setVehicleRemark(emptyToNull(request.vehicleRemark()));
-        entity.setVehicleRemark2(emptyToNull(request.vehicleRemark2()));
-        entity.setVehicleRemark3(emptyToNull(request.vehicleRemark3()));
+        // Sync vehicles
+        if (request.vehicles() != null) {
+            entity.getVehicles().clear();
+            for (int i = 0; i < request.vehicles().size(); i++) {
+                VehicleItem item = request.vehicles().get(i);
+                if (item.plate() != null && !item.plate().trim().isEmpty()) {
+                    Vehicle vehicle = new Vehicle();
+                    vehicle.setId(nextId());
+                    vehicle.setCarrier(entity);
+                    vehicle.setPlate(item.plate().trim());
+                    vehicle.setContact(emptyToNull(item.contact()));
+                    vehicle.setPhone(emptyToNull(item.phone()));
+                    vehicle.setRemark(emptyToNull(item.remark()));
+                    vehicle.setSortOrder(i);
+                    entity.getVehicles().add(vehicle);
+                }
+            }
+        }
         entity.setPriceMode(request.priceMode());
         entity.setStatus(request.status());
         entity.setRemark(request.remark());
@@ -171,38 +178,10 @@ public class CarrierService extends AbstractCrudService<Carrier, CarrierRequest,
         );
     }
 
-    private List<String> resolveVehiclePlates(CarrierResponse carrier) {
-        Set<String> plates = new LinkedHashSet<>();
-        addVehiclePlate(plates, carrier.vehiclePlate());
-        addVehiclePlate(plates, carrier.vehiclePlate2());
-        addVehiclePlate(plates, carrier.vehiclePlate3());
-        addLegacyVehiclePlates(plates, carrier.vehiclePlates());
-        return List.copyOf(plates);
-    }
-
-    private void addVehiclePlate(Set<String> plates, String value) {
-        if (value == null || value.trim().isEmpty()) {
-            return;
-        }
-        plates.add(value.trim());
-    }
-
-    private void addLegacyVehiclePlates(Set<String> plates, String value) {
-        if (value == null || value.trim().isEmpty()) {
-            return;
-        }
-        Matcher matcher = LEGACY_VEHICLE_PLATE_JSON_PATTERN.matcher(value);
-        boolean matchedJson = false;
-        while (matcher.find()) {
-            addVehiclePlate(plates, matcher.group(1));
-            matchedJson = true;
-        }
-        if (matchedJson) {
-            return;
-        }
-        for (String plate : value.split("[,，;；\\n\\r]+")) {
-            addVehiclePlate(plates, plate);
-        }
+    private List<String> resolveVehiclePlates(Carrier carrier) {
+        return carrier.getVehicles().stream()
+                .map(Vehicle::getPlate)
+                .toList();
     }
 
     private boolean matches(CarrierResponse item, String keyword, String status) {

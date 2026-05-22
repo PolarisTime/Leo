@@ -12,7 +12,6 @@ public record RoleSettingRequest(
         @NotBlank @Size(max = 128) String roleName,
         @NotBlank @Size(max = 32) String roleType,
         @NotBlank @Size(max = 32) String dataScope,
-        List<@NotBlank @Size(max = 128) String> permissionCodes,
         @Size(max = 500) String permissionSummary,
         @Min(0) Integer userCount,
         @Pattern(regexp = "正常|禁用", message = "状态不合法") String status,

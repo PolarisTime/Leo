@@ -6,7 +6,6 @@ import java.util.List;
 
 public record FreightStatementCommand(
         String statementNo,
-        String sourceBillNos,
         String carrierName,
         LocalDate startDate,
         LocalDate endDate,
@@ -17,7 +16,6 @@ public record FreightStatementCommand(
         String status,
         String signStatus,
         String attachment,
-        List<Long> attachmentIds,
         String remark,
         List<FreightStatementItemCommand> items
 ) {

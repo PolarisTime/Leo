@@ -75,7 +75,7 @@ public class SupplierStatementService extends AbstractCrudService<SupplierStatem
 
     @Transactional(readOnly = true)
     public Page<SupplierStatementResponse> page(PageQuery query, PageFilter filter) {
-        Specification<SupplierStatement> spec = Specs.<SupplierStatement>keywordLike(filter.keyword(), "statementNo", "supplierName", "sourceInboundNos")
+        Specification<SupplierStatement> spec = Specs.<SupplierStatement>keywordLike(filter.keyword(), "statementNo", "supplierName")
                 .and(Specs.equalIfPresent("supplierName", filter.name()))
                 .and(Specs.equalIfPresent("status", filter.status()))
                 .and(Specs.betweenIfPresent("endDate", filter.startDate(), filter.endDate()));
@@ -84,8 +84,7 @@ public class SupplierStatementService extends AbstractCrudService<SupplierStatem
 
     private static final String[] SUPPLIER_STATEMENT_SEARCH_FIELDS = {
             "statementNo",
-            "supplierName",
-            "sourceInboundNos"
+            "supplierName"
     };
 
     @Transactional(readOnly = true)
@@ -95,11 +94,12 @@ public class SupplierStatementService extends AbstractCrudService<SupplierStatem
 
     @Transactional(readOnly = true)
     public Page<SupplierStatementCandidateResponse> candidatePage(PageQuery query, String keyword) {
-        Set<String> occupiedInboundNos = StatementCandidateSupport.parseRelationNos(
-                repository.findAll(Specs.notDeleted()).stream()
-                        .map(SupplierStatement::getSourceInboundNos)
-                        .toList()
-        );
+        Set<String> occupiedInboundNos = new LinkedHashSet<>();
+        repository.findAll(Specs.notDeleted()).stream()
+                .flatMap(entity -> entity.getItems().stream())
+                .map(SupplierStatementItem::getSourceNo)
+                .filter(v -> v != null)
+                .forEach(occupiedInboundNos::add);
         Specification<PurchaseInbound> spec = Specs.<PurchaseInbound>notDeleted()
                 .and(Specs.keywordLike(keyword, PURCHASE_INBOUND_CANDIDATE_SEARCH_FIELDS))
                 .and(excludeDraftStatus())
@@ -114,7 +114,6 @@ public class SupplierStatementService extends AbstractCrudService<SupplierStatem
         return new SupplierStatementResponse(
                 response.id(),
                 response.statementNo(),
-                response.sourceInboundNos(),
                 response.supplierName(),
                 response.startDate(),
                 response.endDate(),
@@ -151,7 +150,6 @@ public class SupplierStatementService extends AbstractCrudService<SupplierStatem
     protected SupplierStatementRequest normalizeCreateRequest(SupplierStatementRequest request, long entityId) {
         return new SupplierStatementRequest(
                 resolveCreateBusinessNo("supplier-statement", request.statementNo(), entityId),
-                request.sourceInboundNos(),
                 request.supplierName(),
                 request.startDate(),
                 request.endDate(),
@@ -168,7 +166,6 @@ public class SupplierStatementService extends AbstractCrudService<SupplierStatem
     protected SupplierStatementRequest normalizeUpdateRequest(SupplierStatement entity, SupplierStatementRequest request) {
         return new SupplierStatementRequest(
                 entity.getStatementNo(),
-                request.sourceInboundNos(),
                 request.supplierName(),
                 request.startDate(),
                 request.endDate(),
@@ -234,7 +231,6 @@ public class SupplierStatementService extends AbstractCrudService<SupplierStatem
 
         BigDecimal purchaseAmount = BigDecimal.ZERO;
         Map<Long, PurchaseInboundItem> sourceInboundItemMap = loadSourceInboundItemMap(request.items());
-        LinkedHashSet<String> sourceInboundNos = new LinkedHashSet<>();
         List<SupplierStatementItem> items = ManagedEntityItemSupport.syncById(
                 entity.getItems(),
                 request.items(),
@@ -273,11 +269,9 @@ public class SupplierStatementService extends AbstractCrudService<SupplierStatem
             item.setUnitPrice(TradeItemCalculator.scaleAmount(sourceInboundItem.getUnitPrice()));
             BigDecimal amount = TradeItemCalculator.scaleAmount(sourceInboundItem.getAmount());
             item.setAmount(amount);
-            sourceInboundNos.add(sourceInboundItem.getPurchaseInbound().getInboundNo());
             purchaseAmount = purchaseAmount.add(amount);
         }
         entity.getItems().sort(java.util.Comparator.comparing(SupplierStatementItem::getLineNo));
-        entity.setSourceInboundNos(String.join(", ", sourceInboundNos));
         BigDecimal paymentAmount = request.paymentAmount() == null
                 ? BigDecimal.ZERO
                 : TradeItemCalculator.scaleAmount(request.paymentAmount());

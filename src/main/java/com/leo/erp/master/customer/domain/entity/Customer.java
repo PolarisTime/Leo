@@ -23,10 +23,10 @@ public class Customer extends AuditableEntity {
     @Column(name = "customer_name", nullable = false, length = 128)
     private String customerName;
 
-    @Column(name = "contact_name", length = 64)
+    @Column(name = "contact_name", length = 32)
     private String contactName;
 
-    @Column(name = "contact_phone", length = 32)
+    @Column(name = "contact_phone", length = 20)
     private String contactPhone;
 
     @Column(name = "city", length = 64)
@@ -35,7 +35,7 @@ public class Customer extends AuditableEntity {
     @Column(name = "settlement_mode", length = 32)
     private String settlementMode;
 
-    @Column(name = "project_name", nullable = false, length = 128)
+    @Column(name = "project_name", nullable = false, length = 200)
     private String projectName;
 
     @Column(name = "project_name_abbr", length = 64)
