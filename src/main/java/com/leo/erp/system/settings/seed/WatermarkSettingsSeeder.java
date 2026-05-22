@@ -45,10 +45,12 @@ public class WatermarkSettingsSeeder implements ApplicationRunner {
                 )
                 """);
 
-            jdbcTemplate.execute("""
-                CREATE UNIQUE INDEX IF NOT EXISTS idx_system_settings_code
-                ON system_settings(setting_code)
-                """);
+            try {
+                jdbcTemplate.execute(
+                    "CREATE UNIQUE INDEX idx_system_settings_code ON system_settings(setting_code)");
+            } catch (Exception ignored) {
+                // index already exists
+            }
 
             // Clean stale V127 entry from a previous failed migration attempt
             jdbcTemplate.update(
