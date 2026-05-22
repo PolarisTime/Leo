@@ -58,6 +58,8 @@ spring:
     baseline-on-migrate: true
     # 禁止执行危险的 clean 操作
     clean-disabled: true
+    # 自动修复 checksum 不匹配
+    repair-on-migrate: true
     # 迁移脚本目录
     locations: classpath:db/migration
 
