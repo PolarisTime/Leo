@@ -90,7 +90,7 @@ class PrintTemplateServiceTest {
                         entity.getId(),
                         entity.getTemplateName(),
                         entity.getTemplateHtml(),
-                        entity.getIsDefault(),
+                        entity.getIsDefault() ? "1" : "0",
                         entity.getBillType(),
                         entity.getCreatedAt(),
                         entity.getUpdatedAt()

@@ -51,7 +51,6 @@ class CustomerStatementServiceTest {
             return new CustomerStatementResponse(
                     statement.getId(),
                     statement.getStatementNo(),
-                    statement.getSourceOrderNos(),
                     statement.getCustomerCode(),
                     statement.getCustomerName(),
                     statement.getProjectId(),
@@ -182,7 +181,6 @@ class CustomerStatementServiceTest {
     private CustomerStatementRequest buildRequest(BigDecimal receiptAmount) {
         return new CustomerStatementRequest(
                 "KHDZ-001",
-                "SO-001",
                 null,
                 "客户甲",
                 null,

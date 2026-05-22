@@ -43,7 +43,6 @@ class SupplierStatementServiceTest {
             return new SupplierStatementResponse(
                     statement.getId(),
                     statement.getStatementNo(),
-                    statement.getSourceInboundNos(),
                     statement.getSupplierName(),
                     statement.getStartDate(),
                     statement.getEndDate(),
@@ -99,7 +98,6 @@ class SupplierStatementServiceTest {
     private SupplierStatementRequest buildRequest(BigDecimal paymentAmount) {
         return new SupplierStatementRequest(
                 "GYDZ-001",
-                "IN-001",
                 "供应商甲",
                 LocalDate.of(2026, 5, 1),
                 LocalDate.of(2026, 5, 6),

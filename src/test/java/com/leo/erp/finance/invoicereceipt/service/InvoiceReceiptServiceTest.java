@@ -93,7 +93,6 @@ class InvoiceReceiptServiceTest {
                     entity.getId(),
                     entity.getReceiveNo(),
                     entity.getInvoiceNo(),
-                    entity.getSourcePurchaseOrderNos(),
                     entity.getSupplierName(),
                     entity.getInvoiceTitle(),
                     entity.getInvoiceDate(),
@@ -192,7 +191,6 @@ class InvoiceReceiptServiceTest {
         return new InvoiceReceiptRequest(
                 receiveNo,
                 "INV-001",
-                "PO-001",
                 "供应商A",
                 null,
                 LocalDate.of(2026, 4, 26),

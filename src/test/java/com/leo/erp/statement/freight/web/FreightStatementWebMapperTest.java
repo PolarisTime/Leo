@@ -34,7 +34,6 @@ class FreightStatementWebMapperTest {
     void shouldMapRequestToCommand() {
         FreightStatementRequest request = new FreightStatementRequest(
                 "FS-001",
-                "WL-1",
                 "顺丰",
                 LocalDate.of(2026, 4, 1),
                 LocalDate.of(2026, 4, 30),
@@ -45,7 +44,6 @@ class FreightStatementWebMapperTest {
                 "待审核",
                 "未签署",
                 "附件A",
-                List.of(11L, 12L),
                 "备注",
                 List.of(new FreightBillItemRequest(
                         "WL-1",
@@ -71,7 +69,6 @@ class FreightStatementWebMapperTest {
         FreightStatementCommand command = mapper.toCommand(request);
 
         assertThat(command.statementNo()).isEqualTo("FS-001");
-        assertThat(command.attachmentIds()).containsExactly(11L, 12L);
         assertThat(command.items()).singleElement().extracting(FreightStatementItemCommand::sourceNo, FreightStatementItemCommand::warehouseName)
                 .containsExactly("WL-1", "一号库");
     }
@@ -81,7 +78,6 @@ class FreightStatementWebMapperTest {
         FreightStatementView view = new FreightStatementView(
                 1L,
                 "FS-001",
-                "WL-1",
                 "顺丰",
                 LocalDate.of(2026, 4, 1),
                 LocalDate.of(2026, 4, 30),
