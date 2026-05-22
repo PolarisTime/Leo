@@ -11,7 +11,6 @@ import java.util.List;
 
 public record SupplierStatementRequest(
         String statementNo,
-        String sourceInboundNos,
         @jakarta.validation.constraints.NotBlank String supplierName,
         @NotNull LocalDate startDate,
         @NotNull LocalDate endDate,

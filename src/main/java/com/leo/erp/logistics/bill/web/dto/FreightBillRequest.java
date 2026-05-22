@@ -11,7 +11,6 @@ import java.util.List;
 
 public record FreightBillRequest(
         String billNo,
-        String outboundNo,
         @jakarta.validation.constraints.NotBlank String carrierName,
         String vehiclePlate,
         @jakarta.validation.constraints.NotBlank String customerName,

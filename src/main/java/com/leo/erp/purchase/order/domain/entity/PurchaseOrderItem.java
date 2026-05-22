@@ -34,19 +34,19 @@ public class PurchaseOrderItem {
     @Column(name = "brand", nullable = false, length = 64)
     private String brand;
 
-    @Column(name = "category", nullable = false, length = 32)
+    @Column(name = "category", nullable = false, length = 16)
     private String category;
 
-    @Column(name = "material", nullable = false, length = 32)
+    @Column(name = "material", nullable = false, length = 16)
     private String material;
 
-    @Column(name = "spec", nullable = false, length = 32)
+    @Column(name = "spec", nullable = false, length = 64)
     private String spec;
 
     @Column(name = "length", length = 32)
     private String length;
 
-    @Column(name = "unit", nullable = false, length = 16)
+    @Column(name = "unit", nullable = false, length = 8)
     private String unit;
 
     @Column(name = "warehouse_name", length = 128)
@@ -58,7 +58,7 @@ public class PurchaseOrderItem {
     @Column(name = "quantity", nullable = false)
     private Integer quantity;
 
-    @Column(name = "quantity_unit", nullable = false, length = 16)
+    @Column(name = "quantity_unit", nullable = false, length = 8)
     private String quantityUnit;
 
     @Column(name = "piece_weight_ton", nullable = false, precision = 12, scale = 3)

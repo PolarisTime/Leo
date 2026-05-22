@@ -7,7 +7,6 @@ import java.util.List;
 public record FreightBillResponse(
         Long id,
         String billNo,
-        String outboundNo,
         String carrierName,
         String vehiclePlate,
         String customerName,

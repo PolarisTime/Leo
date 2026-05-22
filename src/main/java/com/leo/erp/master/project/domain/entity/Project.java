@@ -29,7 +29,7 @@ public class Project extends AuditableEntity {
     @Column(name = "project_address", length = 255)
     private String projectAddress;
 
-    @Column(name = "project_manager", length = 64)
+    @Column(name = "project_manager", length = 32)
     private String projectManager;
 
     @Column(name = "customer_code", nullable = false, length = 64)

@@ -25,7 +25,7 @@ public class RefreshTokenSession extends AuditableEntity {
     @Column(name = "user_id", nullable = false)
     private Long userId;
 
-    @Column(name = "token_id", nullable = false, unique = true, length = 64)
+    @Column(name = "token_id", nullable = false, unique = true, length = 36)
     private String tokenId;
 
     @Column(name = "token_hash", nullable = false, unique = true, length = 128)

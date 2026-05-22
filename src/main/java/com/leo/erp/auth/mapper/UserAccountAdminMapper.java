@@ -7,13 +7,11 @@ import com.leo.erp.common.mapper.StrictMapperConfig;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 
-import java.util.List;
-
 @Mapper(config = StrictMapperConfig.class)
 public interface UserAccountAdminMapper {
 
     @Mapping(target = "status", expression = "java(fromStatus(entity.getStatus()))")
-    @Mapping(target = "roleNames", expression = "java(toRoleNames(entity.getRoleName()))")
+    @Mapping(target = "roleNames", ignore = true)
     UserAccountAdminResponse toResponse(UserAccount entity);
 
     default String fromStatus(UserStatus status) {
@@ -21,12 +19,5 @@ public interface UserAccountAdminMapper {
             return "正常";
         }
         return status == UserStatus.DISABLED ? "禁用" : "正常";
-    }
-
-    default List<String> toRoleNames(String roleName) {
-        if (roleName == null || roleName.isBlank()) {
-            return List.of();
-        }
-        return List.of(roleName);
     }
 }

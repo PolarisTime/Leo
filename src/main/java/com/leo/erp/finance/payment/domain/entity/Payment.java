@@ -31,7 +31,7 @@ public class Payment extends AuditableEntity {
     @Version
     private Long version;
 
-    @Column(name = "payment_no", nullable = false, unique = true, length = 32)
+    @Column(name = "payment_no", nullable = false, unique = true, length = 64)
     private String paymentNo;
 
     @Column(name = "business_type", nullable = false, length = 32)
@@ -55,7 +55,7 @@ public class Payment extends AuditableEntity {
     @Column(name = "status", nullable = false, length = 16)
     private String status;
 
-    @Column(name = "operator_name", nullable = false, length = 64)
+    @Column(name = "operator_name", nullable = false, length = 32)
     private String operatorName;
 
     @Column(name = "remark", length = 255)

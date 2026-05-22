@@ -24,7 +24,7 @@ public class SalesContract extends AuditableEntity {
     @Id
     private Long id;
 
-    @Column(name = "contract_no", nullable = false, unique = true, length = 32)
+    @Column(name = "contract_no", nullable = false, unique = true, length = 64)
     private String contractNo;
 
     @Column(name = "customer_name", nullable = false, length = 128)
@@ -42,7 +42,7 @@ public class SalesContract extends AuditableEntity {
     @Column(name = "expire_date", nullable = false)
     private LocalDate expireDate;
 
-    @Column(name = "sales_name", nullable = false, length = 64)
+    @Column(name = "sales_name", nullable = false, length = 32)
     private String salesName;
 
     @Column(name = "total_weight", nullable = false, precision = 14, scale = 3)

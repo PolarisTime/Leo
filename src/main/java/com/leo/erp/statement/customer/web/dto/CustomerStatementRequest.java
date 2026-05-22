@@ -11,7 +11,6 @@ import java.util.List;
 
 public record CustomerStatementRequest(
         String statementNo,
-        String sourceOrderNos,
         String customerCode,
         @jakarta.validation.constraints.NotBlank String customerName,
         Long projectId,
@@ -26,7 +25,6 @@ public record CustomerStatementRequest(
         @Valid @NotEmpty List<CustomerStatementItemRequest> items
 ) {
     public CustomerStatementRequest(String statementNo,
-                                    String sourceOrderNos,
                                     String customerName,
                                     String projectName,
                                     LocalDate startDate,
@@ -37,6 +35,6 @@ public record CustomerStatementRequest(
                                     String status,
                                     String remark,
                                     List<CustomerStatementItemRequest> items) {
-        this(statementNo, sourceOrderNos, null, customerName, null, projectName, startDate, endDate, salesAmount, receiptAmount, closingAmount, status, remark, items);
+        this(statementNo, null, customerName, null, projectName, startDate, endDate, salesAmount, receiptAmount, closingAmount, status, remark, items);
     }
 }

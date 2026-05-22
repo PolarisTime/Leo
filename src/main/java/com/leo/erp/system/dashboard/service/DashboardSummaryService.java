@@ -4,6 +4,7 @@ import com.leo.erp.common.support.RedisJsonCacheSupport;
 import com.leo.erp.auth.domain.entity.UserAccount;
 import com.leo.erp.auth.repository.RefreshTokenSessionRepository;
 import com.leo.erp.auth.repository.UserAccountRepository;
+import com.leo.erp.auth.service.UserRoleBindingService;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.security.permission.PermissionService;
@@ -15,6 +16,7 @@ import com.leo.erp.system.company.repository.CompanySettingRepository;
 import com.leo.erp.system.dashboard.web.dto.DashboardSummaryResponse;
 import com.leo.erp.system.menu.domain.entity.Menu;
 import com.leo.erp.system.menu.repository.MenuRepository;
+import com.leo.erp.system.role.domain.entity.RoleSetting;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -37,6 +39,7 @@ public class DashboardSummaryService {
     private final CompanySettingRepository companySettingRepository;
     private final MenuRepository menuRepository;
     private final PermissionService permissionService;
+    private final UserRoleBindingService userRoleBindingService;
     private final RefreshTokenSessionRepository refreshTokenSessionRepository;
     private final MaterialRepository materialRepository;
     private final SupplierRepository supplierRepository;
@@ -49,6 +52,7 @@ public class DashboardSummaryService {
                                    CompanySettingRepository companySettingRepository,
                                    MenuRepository menuRepository,
                                    PermissionService permissionService,
+                                   UserRoleBindingService userRoleBindingService,
                                    RefreshTokenSessionRepository refreshTokenSessionRepository,
                                    MaterialRepository materialRepository,
                                    SupplierRepository supplierRepository,
@@ -59,6 +63,7 @@ public class DashboardSummaryService {
         this.companySettingRepository = companySettingRepository;
         this.menuRepository = menuRepository;
         this.permissionService = permissionService;
+        this.userRoleBindingService = userRoleBindingService;
         this.refreshTokenSessionRepository = refreshTokenSessionRepository;
         this.materialRepository = materialRepository;
         this.supplierRepository = supplierRepository;
@@ -71,9 +76,10 @@ public class DashboardSummaryService {
                                    CompanySettingRepository companySettingRepository,
                                    MenuRepository menuRepository,
                                    PermissionService permissionService,
+                                   UserRoleBindingService userRoleBindingService,
                                    RefreshTokenSessionRepository refreshTokenSessionRepository,
                                    String appName) {
-        this(userAccountRepository, companySettingRepository, menuRepository, permissionService, refreshTokenSessionRepository, null, null, null, null, appName);
+        this(userAccountRepository, companySettingRepository, menuRepository, permissionService, userRoleBindingService, refreshTokenSessionRepository, null, null, null, null, appName);
     }
 
     @Transactional(readOnly = true)
@@ -132,7 +138,7 @@ public class DashboardSummaryService {
                 resolveCompanyName(),
                 user.getUserName(),
                 user.getLoginName(),
-                user.getRoleName(),
+                resolveRoleNames(userId),
                 visibleMenus.size(),
                 moduleCount,
                 actionCount,
@@ -157,6 +163,18 @@ public class DashboardSummaryService {
                 .map(CompanySetting::getCompanyName)
                 .or(() -> companySettingRepository.findFirstByDeletedFlagFalseOrderByIdAsc().map(CompanySetting::getCompanyName))
                 .orElse(null);
+    }
+
+    private String resolveRoleNames(Long userId) {
+        try {
+            List<RoleSetting> roles = userRoleBindingService.resolveRolesForUser(userId);
+            return roles.stream()
+                    .map(RoleSetting::getRoleName)
+                    .reduce((left, right) -> left + "," + right)
+                    .orElse("");
+        } catch (Exception e) {
+            return "";
+        }
     }
 
     private String dashboardCacheKey(Long userId) {

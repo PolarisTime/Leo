@@ -28,11 +28,8 @@ public class SupplierStatement extends AuditableEntity {
     @Version
     private Long version;
 
-    @Column(name = "statement_no", nullable = false, unique = true, length = 32)
+    @Column(name = "statement_no", nullable = false, unique = true, length = 64)
     private String statementNo;
-
-    @Column(name = "source_inbound_nos", length = 500)
-    private String sourceInboundNos;
 
     @Column(name = "supplier_name", nullable = false, length = 128)
     private String supplierName;

@@ -7,7 +7,6 @@ import java.util.List;
 public record CustomerStatementResponse(
         Long id,
         String statementNo,
-        String sourceOrderNos,
         String customerCode,
         String customerName,
         Long projectId,
@@ -23,7 +22,6 @@ public record CustomerStatementResponse(
 ) {
     public CustomerStatementResponse(Long id,
                                      String statementNo,
-                                     String sourceOrderNos,
                                      String customerName,
                                      String projectName,
                                      LocalDate startDate,
@@ -34,6 +32,6 @@ public record CustomerStatementResponse(
                                      String status,
                                      String remark,
                                      List<CustomerStatementItemResponse> items) {
-        this(id, statementNo, sourceOrderNos, null, customerName, null, projectName, startDate, endDate, salesAmount, receiptAmount, closingAmount, status, remark, items);
+        this(id, statementNo, null, customerName, null, projectName, startDate, endDate, salesAmount, receiptAmount, closingAmount, status, remark, items);
     }
 }

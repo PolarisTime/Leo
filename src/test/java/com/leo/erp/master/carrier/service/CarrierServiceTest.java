@@ -1,10 +1,11 @@
 package com.leo.erp.master.carrier.service;
 
 import com.leo.erp.master.carrier.domain.entity.Carrier;
+import com.leo.erp.master.carrier.domain.entity.Vehicle;
 import com.leo.erp.master.carrier.mapper.CarrierMapper;
 import com.leo.erp.master.carrier.repository.CarrierRepository;
+import com.leo.erp.master.carrier.repository.VehicleRepository;
 import com.leo.erp.master.carrier.web.dto.CarrierOptionResponse;
-import com.leo.erp.master.carrier.web.dto.CarrierResponse;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -18,36 +19,27 @@ class CarrierServiceTest {
     @Test
     void shouldReturnCarrierOptionsWithVehiclePlates() {
         CarrierRepository repository = mock(CarrierRepository.class);
+        VehicleRepository vehicleRepository = mock(VehicleRepository.class);
         CarrierMapper mapper = mock(CarrierMapper.class);
         Carrier carrier = new Carrier();
         carrier.setId(1L);
-        when(repository.findByDeletedFlagFalseOrderByCarrierCodeAsc()).thenReturn(List.of(carrier));
-        when(mapper.toResponse(carrier)).thenReturn(new CarrierResponse(
-                1L,
-                "WL-001",
-                "物流甲",
-                null,
-                null,
-                null,
-                "[{\"plate\":\"苏A12345\"},{\"plate\":\"苏A99999\"}]",
-                "苏A12345",
-                null,
-                null,
-                "苏A67890",
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                "正常",
-                null
-        ));
+        carrier.setCarrierCode("WL-001");
+        carrier.setCarrierName("物流甲");
 
-        CarrierService service = new CarrierService(repository, null, mapper);
+        Vehicle v1 = new Vehicle();
+        v1.setPlate("苏A12345");
+        v1.setCarrier(carrier);
+        Vehicle v2 = new Vehicle();
+        v2.setPlate("苏A67890");
+        v2.setCarrier(carrier);
+        Vehicle v3 = new Vehicle();
+        v3.setPlate("苏A99999");
+        v3.setCarrier(carrier);
+        carrier.setVehicles(List.of(v1, v2, v3));
+
+        when(repository.findByDeletedFlagFalseOrderByCarrierCodeAsc()).thenReturn(List.of(carrier));
+
+        CarrierService service = new CarrierService(repository, vehicleRepository, null, mapper);
 
         List<CarrierOptionResponse> options = service.listActiveOptions();
 

@@ -26,10 +26,10 @@ public class Warehouse extends AuditableEntity {
     @Column(name = "warehouse_type", nullable = false, length = 32)
     private String warehouseType;
 
-    @Column(name = "contact_name", length = 64)
+    @Column(name = "contact_name", length = 32)
     private String contactName;
 
-    @Column(name = "contact_phone", length = 32)
+    @Column(name = "contact_phone", length = 20)
     private String contactPhone;
 
     @Column(name = "address", length = 255)

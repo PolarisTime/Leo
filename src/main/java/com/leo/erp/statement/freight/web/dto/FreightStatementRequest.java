@@ -13,7 +13,6 @@ import java.util.List;
 
 public record FreightStatementRequest(
         String statementNo,
-        String sourceBillNos,
         @jakarta.validation.constraints.NotBlank String carrierName,
         @NotNull LocalDate startDate,
         @NotNull LocalDate endDate,
@@ -24,7 +23,6 @@ public record FreightStatementRequest(
         String status,
         String signStatus,
         @Size(max = 500) String attachment,
-        List<Long> attachmentIds,
         @Size(max = 255) String remark,
         @Valid @NotEmpty List<FreightBillItemRequest> items
 ) {

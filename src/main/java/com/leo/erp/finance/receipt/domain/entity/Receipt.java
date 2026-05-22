@@ -31,7 +31,7 @@ public class Receipt extends AuditableEntity {
     @Version
     private Long version;
 
-    @Column(name = "receipt_no", nullable = false, unique = true, length = 32)
+    @Column(name = "receipt_no", nullable = false, unique = true, length = 64)
     private String receiptNo;
 
     @Column(name = "customer_name", nullable = false, length = 128)
@@ -61,7 +61,7 @@ public class Receipt extends AuditableEntity {
     @Column(name = "project_id")
     private Long projectId;
 
-    @Column(name = "operator_name", nullable = false, length = 64)
+    @Column(name = "operator_name", nullable = false, length = 32)
     private String operatorName;
 
     @Column(name = "remark", length = 255)

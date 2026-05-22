@@ -26,6 +26,6 @@ public class PrintTemplate extends AuditableEntity {
     @Column(name = "template_html", nullable = false, columnDefinition = "TEXT")
     private String templateHtml;
 
-    @Column(name = "is_default", nullable = false, length = 1)
-    private String isDefault;
+    @Column(name = "is_default", nullable = false)
+    private Boolean isDefault = Boolean.FALSE;
 }

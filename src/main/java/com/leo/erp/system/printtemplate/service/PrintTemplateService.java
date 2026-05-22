@@ -21,8 +21,8 @@ import java.util.regex.Pattern;
 @Service
 public class PrintTemplateService extends AbstractCrudService<PrintTemplate, PrintTemplateRequest, PrintTemplateResponse> {
 
-    private static final String DEFAULT_FLAG = "1";
-    private static final String NORMAL_FLAG = "0";
+    private static final Boolean DEFAULT_FLAG = true;
+    private static final Boolean NORMAL_FLAG = false;
     private static final Set<String> ALLOWED_BILL_TYPES = Set.of(
             "purchase-order", "purchase-inbound", "sales-order", "sales-outbound",
             "freight-bill", "purchase-contract", "sales-contract",
@@ -118,7 +118,7 @@ public class PrintTemplateService extends AbstractCrudService<PrintTemplate, Pri
         entity.setIsDefault(normalizeDefaultFlag(request.isDefault()));
     }
 
-    private void syncDefaultTemplate(String billType, Long currentId, String isDefault) {
+    private void syncDefaultTemplate(String billType, Long currentId, Boolean isDefault) {
         if (!DEFAULT_FLAG.equals(isDefault)) {
             return;
         }
@@ -179,15 +179,18 @@ public class PrintTemplateService extends AbstractCrudService<PrintTemplate, Pri
         return false;
     }
 
-    private String normalizeDefaultFlag(String isDefault) {
+    private Boolean normalizeDefaultFlag(String isDefault) {
         if (isDefault == null || isDefault.isBlank()) {
             return NORMAL_FLAG;
         }
         String normalized = isDefault.trim();
-        if (!DEFAULT_FLAG.equals(normalized) && !NORMAL_FLAG.equals(normalized)) {
-            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "默认模板标记不合法");
+        if ("1".equals(normalized)) {
+            return DEFAULT_FLAG;
         }
-        return normalized;
+        if ("0".equals(normalized)) {
+            return NORMAL_FLAG;
+        }
+        throw new BusinessException(ErrorCode.VALIDATION_ERROR, "默认模板标记不合法");
     }
 
     @Override

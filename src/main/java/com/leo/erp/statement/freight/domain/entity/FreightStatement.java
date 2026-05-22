@@ -28,11 +28,8 @@ public class FreightStatement extends AuditableEntity {
     @Version
     private Long version;
 
-    @Column(name = "statement_no", nullable = false, unique = true, length = 32)
+    @Column(name = "statement_no", nullable = false, unique = true, length = 64)
     private String statementNo;
-
-    @Column(name = "source_bill_nos", length = 500)
-    private String sourceBillNos;
 
     @Column(name = "carrier_name", nullable = false, length = 128)
     private String carrierName;
@@ -63,9 +60,6 @@ public class FreightStatement extends AuditableEntity {
 
     @Column(name = "attachment", length = 500)
     private String attachment;
-
-    @Column(name = "attachment_ids", length = 500)
-    private String attachmentIds;
 
     @Column(name = "remark", length = 255)
     private String remark;

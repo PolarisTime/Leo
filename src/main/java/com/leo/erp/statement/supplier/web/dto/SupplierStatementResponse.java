@@ -7,7 +7,6 @@ import java.util.List;
 public record SupplierStatementResponse(
         Long id,
         String statementNo,
-        String sourceInboundNos,
         String supplierName,
         LocalDate startDate,
         LocalDate endDate,
