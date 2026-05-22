@@ -63,7 +63,7 @@ public class FreightStatementController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate periodEnd
     ) {
         return ApiResponse.success(PageResponse.from(
-                freightStatementService.responsePage(query, new PageFilter(keyword, status, periodStart, periodEnd, carrierName, null, null, null, null, null, signStatus, null, null, null))
+                freightStatementService.responsePage(query, new PageFilter(keyword, status, periodStart, periodEnd, carrierName, null, null, null, null, null, signStatus, null, null, null, null))
         ));
     }
 

@@ -60,6 +60,9 @@ public class OperationLog {
     @Column(name = "operation_time", nullable = false)
     private LocalDateTime operationTime;
 
+    @Column(name = "auth_type", length = 16)
+    private String authType;
+
     @Column(name = "remark", length = 255)
     private String remark;
 }

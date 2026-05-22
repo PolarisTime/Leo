@@ -7,6 +7,7 @@ import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
+import com.leo.erp.security.jwt.ApiKeyAuthenticationDetails;
 import com.leo.erp.security.support.SecurityPrincipal;
 import com.leo.erp.system.operationlog.domain.entity.OperationLog;
 import com.leo.erp.system.operationlog.repository.OperationLogRepository;
@@ -53,6 +54,7 @@ public class OperationLogService {
         String normalizedModuleName = trimToNull(filter.moduleName());
         String normalizedActionType = trimToNull(filter.actionType());
         String normalizedResultStatus = normalizeResultStatus(filter.resultStatus());
+        String normalizedAuthType = trimToNull(filter.authType());
         validateDateRange(filter.startDate(), filter.endDate());
         Long recordId = filter.recordId();
         Specification<OperationLog> spec = (root, q, cb) -> {
@@ -83,6 +85,9 @@ public class OperationLogService {
             }
             if (normalizedResultStatus != null) {
                 predicate = cb.and(predicate, cb.equal(root.get("resultStatus"), normalizedResultStatus));
+            }
+            if (normalizedAuthType != null) {
+                predicate = cb.and(predicate, cb.equal(root.get("authType"), normalizedAuthType));
             }
             if (filter.startDate() != null) {
                 predicate = cb.and(predicate, cb.greaterThanOrEqualTo(root.get("operationTime"), filter.startDate().atStartOfDay()));
@@ -118,6 +123,7 @@ public class OperationLogService {
         entity.setClientIp(trimToNull(command.clientIp()));
         entity.setResultStatus(command.resultStatus());
         entity.setOperationTime(LocalDateTime.now());
+        entity.setAuthType(resolveAuthType());
         entity.setRemark(truncate(command.remark(), 255));
         repository.save(entity);
     }
@@ -151,6 +157,14 @@ public class OperationLogService {
 
     private String defaultLoginName(String explicitOperatorName) {
         return explicitOperatorName != null ? explicitOperatorName : "system";
+    }
+
+    private String resolveAuthType() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication != null && authentication.getDetails() instanceof ApiKeyAuthenticationDetails) {
+            return "API_KEY";
+        }
+        return authentication != null ? "WEB" : "SYSTEM";
     }
 
     private String trimToNull(String value) {

@@ -61,7 +61,7 @@ public class SalesOrderController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate
     ) {
         return ApiResponse.success(PageResponse.from(
-                service.page(query, new PageFilter(keyword, status, startDate, endDate, customerName, projectName, null, null, null, null, null, null, null, null))
+                service.page(query, new PageFilter(keyword, status, startDate, endDate, customerName, projectName, null, null, null, null, null, null, null, null, null))
         ));
     }
 

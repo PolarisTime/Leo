@@ -7,6 +7,7 @@ public record OperationLogResponse(
         String logNo,
         String operatorName,
         String loginName,
+        String authType,
         String moduleName,
         String actionType,
         String businessNo,

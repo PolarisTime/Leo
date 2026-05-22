@@ -69,7 +69,9 @@ public class NoRuleSequenceService {
 
         LocalDate today = LocalDate.now(clock);
         String currentPeriod = resolveCurrentPeriod(rule.getResetRule(), today);
-        if (!Objects.equals(currentPeriod, rule.getCurrentPeriod()) || rule.getNextSerialValue() == null || rule.getNextSerialValue() < 1) {
+        if (!Objects.equals(currentPeriod, rule.getCurrentPeriod())
+                || rule.getNextSerialValue() == null
+                || rule.getNextSerialValue() < 1) {
             rule.setCurrentPeriod(currentPeriod);
             rule.setNextSerialValue(1L);
         }
