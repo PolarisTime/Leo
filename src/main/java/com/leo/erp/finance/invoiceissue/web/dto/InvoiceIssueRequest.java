@@ -13,7 +13,6 @@ public record InvoiceIssueRequest(
         String issueNo,
         @jakarta.validation.constraints.NotBlank(message = "发票号码不能为空")
         String invoiceNo,
-        String sourceSalesOrderNos,
         @jakarta.validation.constraints.NotBlank(message = "客户不能为空")
         String customerName,
         @jakarta.validation.constraints.NotBlank(message = "项目不能为空")

@@ -24,14 +24,11 @@ public class InvoiceIssue extends AuditableEntity {
     @Id
     private Long id;
 
-    @Column(name = "issue_no", nullable = false, unique = true, length = 32)
+    @Column(name = "issue_no", nullable = false, unique = true, length = 64)
     private String issueNo;
 
     @Column(name = "invoice_no", nullable = false, length = 64)
     private String invoiceNo;
-
-    @Column(name = "source_sales_order_nos", length = 2000)
-    private String sourceSalesOrderNos;
 
     @Column(name = "customer_name", nullable = false, length = 128)
     private String customerName;
@@ -54,7 +51,7 @@ public class InvoiceIssue extends AuditableEntity {
     @Column(name = "status", nullable = false, length = 16)
     private String status;
 
-    @Column(name = "operator_name", nullable = false, length = 64)
+    @Column(name = "operator_name", nullable = false, length = 32)
     private String operatorName;
 
     @Column(name = "remark", length = 255)

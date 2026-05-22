@@ -33,7 +33,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.util.HashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -63,7 +62,7 @@ public class InvoiceIssueService extends AbstractCrudService<InvoiceIssue, Invoi
 
     @Transactional(readOnly = true)
     public Page<InvoiceIssueResponse> page(PageQuery query, PageFilter filter) {
-        Specification<InvoiceIssue> spec = Specs.<InvoiceIssue>keywordLike(filter.keyword(), "issueNo", "invoiceNo", "sourceSalesOrderNos", "customerName", "projectName")
+        Specification<InvoiceIssue> spec = Specs.<InvoiceIssue>keywordLike(filter.keyword(), "issueNo", "invoiceNo", "customerName", "projectName")
                 .and(Specs.equalIfPresent("customerName", filter.name()))
                 .and(Specs.equalIfPresent("status", filter.status()))
                 .and(Specs.betweenIfPresent("invoiceDate", filter.startDate(), filter.endDate()));
@@ -73,7 +72,6 @@ public class InvoiceIssueService extends AbstractCrudService<InvoiceIssue, Invoi
     private static final String[] INVOICE_ISSUE_SEARCH_FIELDS = {
             "issueNo",
             "invoiceNo",
-            "sourceSalesOrderNos",
             "customerName",
             "projectName"
     };
@@ -90,7 +88,6 @@ public class InvoiceIssueService extends AbstractCrudService<InvoiceIssue, Invoi
                 response.id(),
                 response.issueNo(),
                 response.invoiceNo(),
-                response.sourceSalesOrderNos(),
                 response.customerName(),
                 response.projectName(),
                 response.invoiceDate(),
@@ -129,7 +126,6 @@ public class InvoiceIssueService extends AbstractCrudService<InvoiceIssue, Invoi
         return new InvoiceIssueRequest(
                 resolveCreateBusinessNo("invoice-issue", request.issueNo(), entityId),
                 request.invoiceNo(),
-                request.sourceSalesOrderNos(),
                 request.customerName(),
                 request.projectName(),
                 request.invoiceDate(),
@@ -148,7 +144,6 @@ public class InvoiceIssueService extends AbstractCrudService<InvoiceIssue, Invoi
         return new InvoiceIssueRequest(
                 entity.getIssueNo(),
                 request.invoiceNo(),
-                request.sourceSalesOrderNos(),
                 request.customerName(),
                 request.projectName(),
                 request.invoiceDate(),
@@ -224,7 +219,6 @@ public class InvoiceIssueService extends AbstractCrudService<InvoiceIssue, Invoi
         Map<Long, SalesOrderItem> sourceSalesOrderItemMap = loadSourceSalesOrderItemMap(sourceItemIds);
         Map<Long, AllocationProgress> allocatedProgressMap = loadAllocatedProgressMap(sourceItemIds, entity.getId());
         Map<Long, AllocationProgress> requestProgressMap = new HashMap<>();
-        LinkedHashSet<String> sourceSalesOrderNos = new LinkedHashSet<>();
         List<InvoiceIssueItem> items = ManagedEntityItemSupport.syncById(
                 entity.getItems(),
                 request.items(),
@@ -268,11 +262,9 @@ public class InvoiceIssueService extends AbstractCrudService<InvoiceIssue, Invoi
             item.setUnitPrice(resolvedItem.unitPrice());
             BigDecimal lineAmount = resolvedItem.amount();
             item.setAmount(lineAmount);
-            sourceSalesOrderNos.add(resolvedItem.sourceNo());
             amount = amount.add(lineAmount);
         }
         entity.getItems().sort(java.util.Comparator.comparing(InvoiceIssueItem::getLineNo));
-        entity.setSourceSalesOrderNos(String.join(", ", sourceSalesOrderNos));
         entity.setAmount(amount);
         InvoiceAllocationSupport.validateDeclaredAmount("开票", request.amount(), amount);
         entity.setTaxAmount(InvoiceAllocationSupport.calculateTaxAmount(amount, request.taxAmount(), companySettingService));

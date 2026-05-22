@@ -32,7 +32,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -62,7 +61,7 @@ public class InvoiceReceiptService extends AbstractCrudService<InvoiceReceipt, I
 
     @Transactional(readOnly = true)
     public Page<InvoiceReceiptResponse> page(PageQuery query, PageFilter filter) {
-        Specification<InvoiceReceipt> spec = Specs.<InvoiceReceipt>keywordLike(filter.keyword(), "receiveNo", "invoiceNo", "sourcePurchaseOrderNos", "supplierName")
+        Specification<InvoiceReceipt> spec = Specs.<InvoiceReceipt>keywordLike(filter.keyword(), "receiveNo", "invoiceNo", "supplierName")
                 .and(Specs.equalIfPresent("supplierName", filter.name()))
                 .and(Specs.equalIfPresent("status", filter.status()))
                 .and(Specs.betweenIfPresent("invoiceDate", filter.startDate(), filter.endDate()));
@@ -72,7 +71,6 @@ public class InvoiceReceiptService extends AbstractCrudService<InvoiceReceipt, I
     private static final String[] INVOICE_RECEIPT_SEARCH_FIELDS = {
             "receiveNo",
             "invoiceNo",
-            "sourcePurchaseOrderNos",
             "supplierName"
     };
 
@@ -88,7 +86,6 @@ public class InvoiceReceiptService extends AbstractCrudService<InvoiceReceipt, I
                 response.id(),
                 response.receiveNo(),
                 response.invoiceNo(),
-                response.sourcePurchaseOrderNos(),
                 response.supplierName(),
                 response.invoiceTitle(),
                 response.invoiceDate(),
@@ -127,7 +124,6 @@ public class InvoiceReceiptService extends AbstractCrudService<InvoiceReceipt, I
         return new InvoiceReceiptRequest(
                 resolveCreateBusinessNo("invoice-receipt", request.receiveNo(), entityId),
                 request.invoiceNo(),
-                request.sourcePurchaseOrderNos(),
                 request.supplierName(),
                 request.invoiceTitle(),
                 request.invoiceDate(),
@@ -146,7 +142,6 @@ public class InvoiceReceiptService extends AbstractCrudService<InvoiceReceipt, I
         return new InvoiceReceiptRequest(
                 entity.getReceiveNo(),
                 request.invoiceNo(),
-                request.sourcePurchaseOrderNos(),
                 request.supplierName(),
                 request.invoiceTitle(),
                 request.invoiceDate(),
@@ -224,7 +219,6 @@ public class InvoiceReceiptService extends AbstractCrudService<InvoiceReceipt, I
         Map<Long, PurchaseOrderItem> sourcePurchaseOrderItemMap = loadSourcePurchaseOrderItemMap(sourceItemIds);
         Map<Long, AllocationProgress> allocatedProgressMap = loadAllocatedProgressMap(sourceItemIds, entity.getId());
         Map<Long, AllocationProgress> requestProgressMap = new java.util.HashMap<>();
-        LinkedHashSet<String> sourcePurchaseOrderNos = new LinkedHashSet<>();
         List<InvoiceReceiptItem> items = ManagedEntityItemSupport.syncById(
                 entity.getItems(),
                 request.items(),
@@ -268,11 +262,9 @@ public class InvoiceReceiptService extends AbstractCrudService<InvoiceReceipt, I
             item.setUnitPrice(resolvedItem.unitPrice());
             BigDecimal lineAmount = resolvedItem.amount();
             item.setAmount(lineAmount);
-            sourcePurchaseOrderNos.add(resolvedItem.sourceNo());
             amount = amount.add(lineAmount);
         }
         entity.getItems().sort(java.util.Comparator.comparing(InvoiceReceiptItem::getLineNo));
-        entity.setSourcePurchaseOrderNos(String.join(", ", sourcePurchaseOrderNos));
         entity.setAmount(amount);
         InvoiceAllocationSupport.validateDeclaredAmount("收票", request.amount(), amount);
         entity.setTaxAmount(InvoiceAllocationSupport.calculateTaxAmount(amount, request.taxAmount(), companySettingService));
