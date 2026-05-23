@@ -4,6 +4,7 @@ import com.leo.erp.common.json.ScaledBigDecimalSerializer;
 import com.leo.erp.common.support.DateTimeFormatSupport;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.databind.ser.std.ToStringSerializer;
+import com.fasterxml.jackson.datatype.jsr310.deser.LocalDateTimeDeserializer;
 import com.fasterxml.jackson.datatype.jsr310.ser.LocalDateTimeSerializer;
 import com.fasterxml.jackson.datatype.jsr310.ser.OffsetDateTimeSerializer;
 import org.springframework.boot.autoconfigure.jackson.Jackson2ObjectMapperBuilderCustomizer;
@@ -24,6 +25,7 @@ public class JacksonConfig {
                 .serializerByType(Long.TYPE, ToStringSerializer.instance)
                 .serializerByType(BigDecimal.class, new ScaledBigDecimalSerializer())
                 .serializerByType(LocalDateTime.class, new LocalDateTimeSerializer(DateTimeFormatSupport.DATE_TIME_FORMATTER))
+                .deserializerByType(LocalDateTime.class, new LocalDateTimeDeserializer(DateTimeFormatSupport.DATE_TIME_FORMATTER))
                 .serializerByType(OffsetDateTime.class, new OffsetDateTimeSerializer(
                         OffsetDateTimeSerializer.INSTANCE,
                         Boolean.FALSE,
