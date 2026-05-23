@@ -15,6 +15,7 @@ import org.springframework.core.io.Resource;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -47,6 +48,13 @@ public class AttachmentController {
         this.attachmentRecordAccessService = attachmentRecordAccessService;
     }
 
+    private boolean isAdmin(SecurityPrincipal principal) {
+        if (principal == null) return false;
+        return principal.getAuthorities().stream()
+                .map(GrantedAuthority::getAuthority)
+                .anyMatch(a -> a.contains("系统管理员") || a.contains("超级管理员") || a.contains("全部数据"));
+    }
+
     @PostMapping(value = "/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @RequiresPermission(authenticatedOnly = true, allowApiKey = true)
     @OperationLoggable(moduleName = "附件管理", actionType = "上传附件")
@@ -66,7 +74,9 @@ public class AttachmentController {
                                              @RequestParam String accessKey) {
         modulePermissionGuard.requirePermission(principal, moduleKey, "read");
         attachmentRecordAccessService.assertAttachmentAccessible(principal, moduleKey, "read", id);
-        return buildFileResponse(attachmentService.loadDownloadResource(id, accessKey, false));
+        boolean admin = isAdmin(principal);
+        return buildFileResponse(attachmentService.loadDownloadResource(
+                id, accessKey, false, !admin, principal.getUsername()));
     }
 
     @GetMapping("/{id}/preview")
@@ -77,7 +87,9 @@ public class AttachmentController {
                                             @RequestParam String accessKey) {
         modulePermissionGuard.requirePermission(principal, moduleKey, "read");
         attachmentRecordAccessService.assertAttachmentAccessible(principal, moduleKey, "read", id);
-        return buildFileResponse(attachmentService.loadDownloadResource(id, accessKey, true));
+        boolean admin = isAdmin(principal);
+        return buildFileResponse(attachmentService.loadDownloadResource(
+                id, accessKey, true, !admin, principal.getUsername()));
     }
 
     private ResponseEntity<Resource> buildFileResponse(AttachmentDownloadResource payload) {

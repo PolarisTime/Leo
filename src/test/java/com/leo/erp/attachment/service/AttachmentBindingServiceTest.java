@@ -110,7 +110,7 @@ class AttachmentBindingServiceTest {
     }
 
     private AttachmentService attachmentService(Map<Long, AttachmentView> attachments) {
-        return new AttachmentService(null, null, null, null, null, null) {
+        return new AttachmentService(null, null, null, null, null, null, null) {
             @Override
             public void validateAttachmentIds(List<Long> ids) {
             }
