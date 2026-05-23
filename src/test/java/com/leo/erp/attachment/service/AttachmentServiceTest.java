@@ -50,7 +50,7 @@ class AttachmentServiceTest {
                 properties,
                 filenameResolver,
                 new StubUploadRuleService("renamed-contract.pdf"),
-                new AttachmentStorageResolver(List.of(new LocalAttachmentStorage(properties)), properties), null
+                new AttachmentStorageResolver(List.of(new LocalAttachmentStorage(properties)), properties), null, null
         );
         MockMultipartFile file = new MockMultipartFile("file", "contract.pdf", "application/pdf", "hello".getBytes(StandardCharsets.UTF_8));
 
@@ -86,7 +86,7 @@ class AttachmentServiceTest {
                 properties,
                 filenameResolver,
                 new StubUploadRuleService("renamed-proof.pdf"),
-                new AttachmentStorageResolver(List.of(new LocalAttachmentStorage(properties)), properties), null
+                new AttachmentStorageResolver(List.of(new LocalAttachmentStorage(properties)), properties), null, null
         );
         MockMultipartFile file = new MockMultipartFile("file", "proof.pdf", "application/pdf", "hello".getBytes(StandardCharsets.UTF_8));
 
@@ -108,7 +108,7 @@ class AttachmentServiceTest {
                 properties,
                 filenameResolver,
                 new StubUploadRuleService("ignored.txt"),
-                new AttachmentStorageResolver(List.of(new LocalAttachmentStorage(properties)), properties), null
+                new AttachmentStorageResolver(List.of(new LocalAttachmentStorage(properties)), properties), null, null
         );
 
         assertThatThrownBy(() -> service.validateAttachmentIds(List.of(1L)))
@@ -127,7 +127,7 @@ class AttachmentServiceTest {
                 properties,
                 filenameResolver,
                 new StubUploadRuleService("big.txt"),
-                new AttachmentStorageResolver(List.of(new LocalAttachmentStorage(properties)), properties), null
+                new AttachmentStorageResolver(List.of(new LocalAttachmentStorage(properties)), properties), null, null
         );
         MockMultipartFile file = new MockMultipartFile("file", "big.txt", "text/plain", "toolarge".getBytes(StandardCharsets.UTF_8));
 
@@ -157,7 +157,7 @@ class AttachmentServiceTest {
                 properties,
                 filenameResolver,
                 new StubUploadRuleService("rollback.pdf"),
-                new AttachmentStorageResolver(List.of(new LocalAttachmentStorage(properties)), properties), null
+                new AttachmentStorageResolver(List.of(new LocalAttachmentStorage(properties)), properties), null, null
         );
 
         assertThatThrownBy(() -> service.upload(
@@ -204,7 +204,7 @@ class AttachmentServiceTest {
                 properties,
                 filenameResolver,
                 new StubUploadRuleService("preview.pdf"),
-                new AttachmentStorageResolver(List.of(new LocalAttachmentStorage(properties)), properties), null
+                new AttachmentStorageResolver(List.of(new LocalAttachmentStorage(properties)), properties), null, null
         );
 
         AttachmentService.AttachmentDownloadPayload payload = service.loadForDownload(9200L, "access-key-9200");
@@ -240,7 +240,7 @@ class AttachmentServiceTest {
                 properties,
                 filenameResolver,
                 new StubUploadRuleService("proof.pdf"),
-                new AttachmentStorageResolver(List.of(new LocalAttachmentStorage(properties)), properties), null
+                new AttachmentStorageResolver(List.of(new LocalAttachmentStorage(properties)), properties), null, null
         );
 
         assertThatThrownBy(() -> service.loadForDownload(9300L, "wrong-key"))

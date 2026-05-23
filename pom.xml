@@ -156,6 +156,17 @@
             <scope>runtime</scope>
             <optional>true</optional>
         </dependency>
+        <!-- iText Community (AGPL) — PDF watermark -->
+        <dependency>
+            <groupId>com.itextpdf</groupId>
+            <artifactId>kernel</artifactId>
+            <version>9.5.0</version>
+        </dependency>
+        <dependency>
+            <groupId>com.itextpdf</groupId>
+            <artifactId>layout</artifactId>
+            <version>9.5.0</version>
+        </dependency>
     </dependencies>
 
     <build>

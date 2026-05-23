@@ -42,6 +42,7 @@ public class AttachmentService {
     private final UploadRuleService uploadRuleService;
     private final AttachmentStorageResolver storageResolver;
     private final ImageWatermarkService imageWatermarkService;
+    private final PdfWatermarkService pdfWatermarkService;
 
     public AttachmentService(AttachmentFileRepository repository,
                              SnowflakeIdGenerator idGenerator,
@@ -49,7 +50,8 @@ public class AttachmentService {
                              AttachmentFilenameResolver filenameResolver,
                              UploadRuleService uploadRuleService,
                              AttachmentStorageResolver storageResolver,
-                             ImageWatermarkService imageWatermarkService) {
+                             ImageWatermarkService imageWatermarkService,
+                             PdfWatermarkService pdfWatermarkService) {
         this.repository = repository;
         this.idGenerator = idGenerator;
         this.properties = properties;
@@ -57,6 +59,7 @@ public class AttachmentService {
         this.uploadRuleService = uploadRuleService;
         this.storageResolver = storageResolver;
         this.imageWatermarkService = imageWatermarkService;
+        this.pdfWatermarkService = pdfWatermarkService;
     }
 
     @Transactional
@@ -204,10 +207,16 @@ public class AttachmentService {
             Long id, String accessKey, boolean inline, boolean watermark, String username) {
         AttachmentDownloadPayload payload = inline ? loadForPreview(id, accessKey) : loadForDownload(id, accessKey);
         Resource resource = payload.resource();
-        if (watermark && "image".equals(payload.previewType()) && username != null) {
+        if (watermark && username != null) {
             try {
-                byte[] watermarked = imageWatermarkService.apply(resource.getInputStream(), username);
-                resource = new org.springframework.core.io.ByteArrayResource(watermarked);
+                byte[] watermarked = switch (payload.previewType()) {
+                    case "image" -> imageWatermarkService.apply(resource.getInputStream(), username);
+                    case "pdf" -> pdfWatermarkService.apply(resource.getInputStream(), username);
+                    default -> null;
+                };
+                if (watermarked != null) {
+                    resource = new org.springframework.core.io.ByteArrayResource(watermarked);
+                }
             } catch (IOException e) {
                 // watermark failed — fall through to original
             }
