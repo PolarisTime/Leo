@@ -35,14 +35,24 @@ public class PrintScriptService {
         PrintTemplate template = templateRepository.findByIdAndDeletedFlagFalse(Long.parseLong(templateId))
                 .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "打印模板不存在"));
 
-        // 1. Replace {{fieldName}} placeholders with escaped values
+        // 1. Validate input data (type + length)
+        for (var entry : data.entrySet()) {
+            String value = entry.getValue();
+            if (value == null) continue;
+            if (value.length() > 2000) {
+                throw new BusinessException(ErrorCode.VALIDATION_ERROR,
+                        "字段 " + entry.getKey() + " 内容过长，最大2000字符");
+            }
+        }
+
+        // 2. Replace {{fieldName}} placeholders with escaped values
         String script = PLACEHOLDER.matcher(template.getTemplateHtml()).replaceAll(mr -> {
             String key = mr.group(1);
             String value = data.getOrDefault(key, "");
             return escapeJs(value);
         });
 
-        // 2. Validate each line is a safe LODOP method call
+        // 3. Validate each line is a safe LODOP method call
         for (String line : script.split(";\\r?\\n?")) {
             String trimmed = line.trim();
             if (trimmed.isEmpty() || !trimmed.startsWith("LODOP.")) continue;
