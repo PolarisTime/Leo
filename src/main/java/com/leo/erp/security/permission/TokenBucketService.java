@@ -19,6 +19,7 @@ public class TokenBucketService {
     private final StringRedisTemplate redisTemplate;
     private final DefaultRedisScript<List> script;
 
+    @SuppressWarnings({"unchecked", "rawtypes"})
     public TokenBucketService(StringRedisTemplate redisTemplate) {
         this.redisTemplate = redisTemplate;
         DefaultRedisScript<List> s = new DefaultRedisScript<>();
@@ -31,6 +32,7 @@ public class TokenBucketService {
         return tryConsume(dimensionKey, DEFAULT_RATE, DEFAULT_CAPACITY, requested);
     }
 
+    @SuppressWarnings("unchecked")
     public TokenBucketResult tryConsume(String dimensionKey, double rate, int capacity, int requested) {
         String tokensKey = KEY_PREFIX + dimensionKey + ":tokens";
         String timestampKey = KEY_PREFIX + dimensionKey + ":ts";
@@ -49,10 +51,8 @@ public class TokenBucketService {
                 log.warn("TokenBucket Lua returned unexpected: {}", result);
                 return TokenBucketResult.ALLOW_FALLBACK;
             }
-            long allowed = result.get(0);
-            long remaining = result.get(1);
-            long retryAfterMs = result.get(2);
-            return new TokenBucketResult(allowed == 1L, remaining, retryAfterMs);
+            return new TokenBucketResult(
+                    result.get(0) == 1L, result.get(1), result.get(2));
         } catch (Exception e) {
             log.error("TokenBucket Redis call failed, failing open", e);
             return TokenBucketResult.ALLOW_FALLBACK;
