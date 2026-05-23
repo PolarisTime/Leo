@@ -70,5 +70,6 @@ public class UserAccount extends AuditableEntity {
     private Boolean requireTotpSetup = Boolean.FALSE;
 
     @Column(name = "preferences_json", columnDefinition = "JSONB")
+    @org.hibernate.annotations.JdbcTypeCode(java.sql.Types.OTHER)
     private String preferencesJson;
 }
