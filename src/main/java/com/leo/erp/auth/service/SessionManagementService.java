@@ -133,9 +133,13 @@ public class SessionManagementService {
     }
 
     private void trimActiveSessionsBeforeIssuing(Long userId) {
+        int maxSessions = maxRefreshTokensPerUser();
+        if (maxSessions <= 0) {
+            return;
+        }
         var activeTokens = refreshTokenSessionRepository
                 .findByUserIdAndDeletedFlagFalseAndRevokedAtIsNullAndExpiresAtAfterOrderByCreatedAtAsc(userId, LocalDateTime.now());
-        int limitBeforeCreate = maxRefreshTokensPerUser() - 1;
+        int limitBeforeCreate = maxSessions - 1;
         if (activeTokens.size() <= limitBeforeCreate) {
             return;
         }
