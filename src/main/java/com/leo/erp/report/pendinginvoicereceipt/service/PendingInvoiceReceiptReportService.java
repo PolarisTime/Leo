@@ -17,6 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -154,7 +155,7 @@ public class PendingInvoiceReceiptReportService {
     private Comparator<PendingInvoiceReceiptReportResponse> buildComparator(PageQuery query) {
         Comparator<PendingInvoiceReceiptReportResponse> comparator = switch (query.sortBy() == null ? "" : query.sortBy()) {
             case "supplierName" -> Comparator.comparing(PendingInvoiceReceiptReportResponse::supplierName, Comparator.nullsLast(String::compareToIgnoreCase));
-            case "orderDate" -> Comparator.comparing(PendingInvoiceReceiptReportResponse::orderDate, Comparator.nullsLast(LocalDate::compareTo));
+            case "orderDate" -> Comparator.comparing(PendingInvoiceReceiptReportResponse::orderDate, Comparator.nullsLast(LocalDateTime::compareTo));
             case "materialCode" -> Comparator.comparing(PendingInvoiceReceiptReportResponse::materialCode, Comparator.nullsLast(String::compareToIgnoreCase));
             case "pendingInvoiceWeightTon" -> Comparator.comparing(PendingInvoiceReceiptReportResponse::pendingInvoiceWeightTon, Comparator.nullsLast(BigDecimal::compareTo));
             case "pendingInvoiceAmount" -> Comparator.comparing(PendingInvoiceReceiptReportResponse::pendingInvoiceAmount, Comparator.nullsLast(BigDecimal::compareTo));

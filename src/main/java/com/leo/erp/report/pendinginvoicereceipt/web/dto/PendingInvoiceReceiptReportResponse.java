@@ -1,14 +1,14 @@
 package com.leo.erp.report.pendinginvoicereceipt.web.dto;
 
 import java.math.BigDecimal;
-import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 public record PendingInvoiceReceiptReportResponse(
         Long id,
         String orderNo,
         String supplierName,
         String invoiceTitle,
-        LocalDate orderDate,
+        LocalDateTime orderDate,
         String materialCode,
         String brand,
         String material,

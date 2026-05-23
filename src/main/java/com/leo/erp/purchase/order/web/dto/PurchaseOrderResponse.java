@@ -1,14 +1,14 @@
 package com.leo.erp.purchase.order.web.dto;
 
 import java.math.BigDecimal;
-import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 
 public record PurchaseOrderResponse(
         Long id,
         String orderNo,
         String supplierName,
-        LocalDate orderDate,
+        LocalDateTime orderDate,
         String buyerName,
         BigDecimal totalWeight,
         BigDecimal totalAmount,
