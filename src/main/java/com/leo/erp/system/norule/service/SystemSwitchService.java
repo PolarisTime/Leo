@@ -197,7 +197,7 @@ public class SystemSwitchService {
                 .map(rule -> {
                     try {
                         int val = Integer.parseInt(rule.sampleNo());
-                        return val > 0 ? val : DEFAULT_MAX_SESSIONS;
+                        return val >= 0 ? val : DEFAULT_MAX_SESSIONS;
                     } catch (NumberFormatException e) {
                         return DEFAULT_MAX_SESSIONS;
                     }
