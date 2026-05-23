@@ -23,7 +23,7 @@ import java.time.format.DateTimeFormatter;
 @Component
 public class PdfWatermarkService {
 
-    private static final DateTimeFormatter TIME_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
+    private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
     private static final float OPACITY = 0.10f;
     private static final float FONT_SIZE = 24f;
     private static final double ANGLE = Math.toRadians(-35);
@@ -32,13 +32,15 @@ public class PdfWatermarkService {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         PdfDocument doc = new PdfDocument(new PdfReader(pdfStream), new PdfWriter(out));
         int pages = doc.getNumberOfPages();
-        String text = username + "  " + LocalDateTime.now().format(TIME_FMT);
+        String text = username + "  " + LocalDateTime.now().format(TIME_FORMATTER);
 
-        PdfFont font = null;
+        PdfFont font;
         try {
             font = PdfFontFactory.createFont("Helvetica", "WinAnsiEncoding");
         } catch (Exception e) {
             font = PdfFontFactory.createFont();
+            org.slf4j.LoggerFactory.getLogger(PdfWatermarkService.class)
+                    .warn("Helvetica 字体不可用，回退到默认字体: {}", e.getMessage());
         }
 
         for (int i = 1; i <= pages; i++) {

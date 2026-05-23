@@ -9,6 +9,7 @@ import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.MediaType;
+import org.springframework.core.io.ByteArrayResource;
 import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -219,7 +220,7 @@ public class AttachmentService {
                 throw new BusinessException(ErrorCode.INTERNAL_ERROR, "附件水印处理失败，请联系管理员");
             }
             if (watermarked != null) {
-                resource = new org.springframework.core.io.ByteArrayResource(watermarked);
+                resource = new ByteArrayResource(watermarked);
             }
         }
         MediaType mediaType = (payload.contentType() == null || payload.contentType().isBlank())
