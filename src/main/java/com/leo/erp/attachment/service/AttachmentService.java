@@ -41,19 +41,22 @@ public class AttachmentService {
     private final AttachmentFilenameResolver filenameResolver;
     private final UploadRuleService uploadRuleService;
     private final AttachmentStorageResolver storageResolver;
+    private final ImageWatermarkService imageWatermarkService;
 
     public AttachmentService(AttachmentFileRepository repository,
                              SnowflakeIdGenerator idGenerator,
                              AttachmentProperties properties,
                              AttachmentFilenameResolver filenameResolver,
                              UploadRuleService uploadRuleService,
-                             AttachmentStorageResolver storageResolver) {
+                             AttachmentStorageResolver storageResolver,
+                             ImageWatermarkService imageWatermarkService) {
         this.repository = repository;
         this.idGenerator = idGenerator;
         this.properties = properties;
         this.filenameResolver = filenameResolver;
         this.uploadRuleService = uploadRuleService;
         this.storageResolver = storageResolver;
+        this.imageWatermarkService = imageWatermarkService;
     }
 
     @Transactional
@@ -193,14 +196,29 @@ public class AttachmentService {
 
     @Transactional(readOnly = true)
     public AttachmentDownloadResource loadDownloadResource(Long id, String accessKey, boolean inline) {
+        return loadDownloadResource(id, accessKey, inline, false, null);
+    }
+
+    @Transactional(readOnly = true)
+    public AttachmentDownloadResource loadDownloadResource(
+            Long id, String accessKey, boolean inline, boolean watermark, String username) {
         AttachmentDownloadPayload payload = inline ? loadForPreview(id, accessKey) : loadForDownload(id, accessKey);
+        Resource resource = payload.resource();
+        if (watermark && "image".equals(payload.previewType()) && username != null) {
+            try {
+                byte[] watermarked = imageWatermarkService.apply(resource.getInputStream(), username);
+                resource = new org.springframework.core.io.ByteArrayResource(watermarked);
+            } catch (IOException e) {
+                // watermark failed — fall through to original
+            }
+        }
         MediaType mediaType = (payload.contentType() == null || payload.contentType().isBlank())
                 ? MediaType.APPLICATION_OCTET_STREAM
                 : MediaType.parseMediaType(payload.contentType());
         ContentDisposition contentDisposition = inline
                 ? ContentDisposition.inline().filename(payload.fileName(), StandardCharsets.UTF_8).build()
                 : ContentDisposition.attachment().filename(payload.fileName(), StandardCharsets.UTF_8).build();
-        return new AttachmentDownloadResource(payload.resource(), mediaType, contentDisposition.toString());
+        return new AttachmentDownloadResource(resource, mediaType, contentDisposition.toString());
     }
 
     private void requirePageUploadEnabled(String moduleKey) {
