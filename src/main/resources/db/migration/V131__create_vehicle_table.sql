@@ -22,23 +22,28 @@ CREATE TABLE IF NOT EXISTS md_vehicle (
 CREATE INDEX IF NOT EXISTS idx_md_vehicle_carrier_id ON md_vehicle (carrier_id);
 CREATE INDEX IF NOT EXISTS idx_md_vehicle_plate ON md_vehicle (plate);
 
+-- Generate IDs using a temporary sequence (project uses app-level Snowflake IDs, not DB sequences)
+CREATE TEMPORARY SEQUENCE IF NOT EXISTS migrate_vehicle_seq;
+
 -- Migrate vehicle 1 data
 INSERT INTO md_vehicle (id, carrier_id, plate, contact, phone, remark, sort_order)
-SELECT nextval('hibernate_sequence'), id, vehicle_plate, vehicle_contact, vehicle_phone, vehicle_remark, 0
+SELECT nextval('migrate_vehicle_seq'), id, vehicle_plate, vehicle_contact, vehicle_phone, vehicle_remark, 0
 FROM md_carrier
 WHERE vehicle_plate IS NOT NULL AND vehicle_plate <> '';
 
 -- Migrate vehicle 2 data
 INSERT INTO md_vehicle (id, carrier_id, plate, contact, phone, remark, sort_order)
-SELECT nextval('hibernate_sequence'), id, vehicle_plate2, vehicle_contact2, vehicle_phone2, vehicle_remark2, 1
+SELECT nextval('migrate_vehicle_seq'), id, vehicle_plate2, vehicle_contact2, vehicle_phone2, vehicle_remark2, 1
 FROM md_carrier
 WHERE vehicle_plate2 IS NOT NULL AND vehicle_plate2 <> '';
 
 -- Migrate vehicle 3 data
 INSERT INTO md_vehicle (id, carrier_id, plate, contact, phone, remark, sort_order)
-SELECT nextval('hibernate_sequence'), id, vehicle_plate3, vehicle_contact3, vehicle_phone3, vehicle_remark3, 2
+SELECT nextval('migrate_vehicle_seq'), id, vehicle_plate3, vehicle_contact3, vehicle_phone3, vehicle_remark3, 2
 FROM md_carrier
 WHERE vehicle_plate3 IS NOT NULL AND vehicle_plate3 <> '';
+
+DROP SEQUENCE IF EXISTS migrate_vehicle_seq;
 
 -- Drop old vehicle columns from Carrier
 ALTER TABLE md_carrier
