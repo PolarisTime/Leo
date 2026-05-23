@@ -45,7 +45,7 @@ bash scripts/init-database.sh
 3. 启动本地后端：
 
 ```bash
-bash scripts/start-local.sh
+bash leo/scripts/dev.sh start
 ```
 
 启动脚本会检查：

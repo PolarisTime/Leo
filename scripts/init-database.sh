@@ -114,7 +114,7 @@ cat <<EOF
 [leo-db] database initialization complete.
 [leo-db] Next:
 [leo-db]   1. Start Leo so Flyway creates tables and system metadata:
-[leo-db]      $ROOT_DIR/scripts/start-local.sh
+[leo-db]      $ROOT_DIR/leo/scripts/dev.sh start
 [leo-db]   2. Open the Aries setup page or login page:
 [leo-db]      http://localhost:3100/setup
 [leo-db] OOBE creates the first admin account and company profile; this script intentionally does not seed them.
