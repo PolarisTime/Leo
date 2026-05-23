@@ -47,7 +47,7 @@ public class RateLimitAspect {
         // --- 维度1: API Key ---
         String apiKey = request.getHeader(ApiKeyAuthenticationFilter.API_KEY_HEADER);
         if (apiKey != null && !apiKey.isBlank()) {
-            String key = "apikey:" + normalizeKey(apiKey);
+            String key = "apikey:" + Integer.toHexString(apiKey.hashCode());
             TokenBucketService.TokenBucketResult r = tokenBucketService.tryConsume(
                     key, resolveRate(rateLimit), resolveCapacity(rateLimit), rateLimit.tokens());
             if (!r.allowed()) {
@@ -123,7 +123,7 @@ public class RateLimitAspect {
     }
 
     private String resolveUserId(HttpServletRequest request) {
-        var auth = request.getUserPrincipal();
+        java.security.Principal auth = request.getUserPrincipal();
         if (auth != null) {
             return auth.getName();
         }
