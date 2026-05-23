@@ -453,4 +453,9 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
     protected PurchaseOrderResponse toResponse(PurchaseOrder entity) {
         return purchaseOrderMapper.toResponse(entity);
     }
+
+    @Override
+    protected PurchaseOrderResponse toSavedResponse(PurchaseOrder entity) {
+        return toDetailResponse(entity);
+    }
 }

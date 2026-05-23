@@ -318,6 +318,11 @@ public class SalesOutboundService extends AbstractCrudService<SalesOutbound, Sal
         return salesOutboundMapper.toResponse(entity);
     }
 
+    @Override
+    protected SalesOutboundResponse toSavedResponse(SalesOutbound entity) {
+        return toDetailResponse(entity);
+    }
+
     private Map<Long, SalesOrderItem> loadSourceSalesOrderItemMap(List<SalesOutboundItemRequest> requestItems,
                                                                   List<SalesOutboundItem> items) {
         LinkedHashSet<Long> sourceSalesOrderItemIds = new LinkedHashSet<>();

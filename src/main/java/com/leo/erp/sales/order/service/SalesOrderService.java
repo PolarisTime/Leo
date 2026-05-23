@@ -363,6 +363,11 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
         return salesOrderMapper.toResponse(entity);
     }
 
+    @Override
+    protected SalesOrderResponse toSavedResponse(SalesOrder entity) {
+        return toDetailResponse(entity);
+    }
+
     private List<Long> extractSourceInboundItemIds(SalesOrderRequest request) {
         return request.items().stream()
                 .map(SalesOrderItemRequest::sourceInboundItemId)
