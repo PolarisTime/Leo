@@ -3,7 +3,7 @@
 # 本地开发环境变量脚本。
 # 用法：
 #   source leo/scripts/env-local.sh
-# 或由 leo/scripts/start-local.sh 自动加载。
+# 或由 leo/leo/scripts/dev.sh start 自动加载。
 
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
   echo "请使用 'source leo/scripts/env-local.sh' 加载环境变量，不要直接执行。" >&2
