@@ -63,12 +63,10 @@ public class AttachmentService {
         this.pdfWatermarkService = pdfWatermarkService;
     }
 
-    @Transactional
     public AttachmentView upload(MultipartFile file, String sourceType) throws IOException {
         return upload(file, sourceType, null);
     }
 
-    @Transactional
     public AttachmentView upload(MultipartFile file, String sourceType, String moduleKey) throws IOException {
         requirePageUploadEnabled(moduleKey);
         validateUpload(file);
@@ -78,25 +76,22 @@ public class AttachmentService {
         String candidateFileName = uploadRuleService.buildPageUploadFileName(moduleKey, originalFileName, file.getContentType());
         long attachmentId = idGenerator.nextId();
         String storedFileName = extractFileName(candidateFileName);
-        String storagePath = storageResolver.store(buildObjectKey(attachmentId, storedFileName), file);
 
-        AttachmentFile entity = new AttachmentFile();
-        entity.setId(attachmentId);
-        entity.setFileName(storedFileName);
-        entity.setOriginalFileName(originalFileName);
-        entity.setFileExtension(filenameResolver.parseFilenameParts(storedFileName, file.getContentType()).extension());
-        entity.setContentType(file.getContentType());
-        entity.setFileSize(file.getSize());
-        entity.setStoragePath(storagePath);
-        entity.setAccessKey(generateAccessKey());
-        entity.setSourceType(normalizedSourceType);
-        AttachmentFile saved;
+        // Persist metadata first (inside transaction), then store the file externally
+        AttachmentFile saved = persistAttachmentMetadata(
+                attachmentId, storedFileName, originalFileName, file, normalizedSourceType);
+
+        // Store file outside the DB transaction to avoid holding connections during I/O
+        String storagePath;
         try {
-            saved = repository.save(entity);
-        } catch (RuntimeException ex) {
-            cleanupStoredFileQuietly(storagePath);
+            storagePath = storageResolver.store(buildObjectKey(attachmentId, storedFileName), file);
+        } catch (IOException ex) {
+            rollbackAttachmentMetadata(saved.getId());
             throw ex;
         }
+
+        updateStoragePath(saved.getId(), storagePath);
+        saved.setStoragePath(storagePath);
 
         AttachmentPresentation presentation = toPresentation(saved, moduleKey);
         return new AttachmentView(
@@ -114,6 +109,35 @@ public class AttachmentService {
                 presentation.previewUrl(),
                 presentation.downloadUrl()
         );
+    }
+
+    @Transactional
+    protected AttachmentFile persistAttachmentMetadata(
+            long attachmentId, String storedFileName, String originalFileName,
+            MultipartFile file, String normalizedSourceType) {
+        AttachmentFile entity = new AttachmentFile();
+        entity.setId(attachmentId);
+        entity.setFileName(storedFileName);
+        entity.setOriginalFileName(originalFileName);
+        entity.setFileExtension(filenameResolver.parseFilenameParts(storedFileName, file.getContentType()).extension());
+        entity.setContentType(file.getContentType());
+        entity.setFileSize(file.getSize());
+        entity.setAccessKey(generateAccessKey());
+        entity.setSourceType(normalizedSourceType);
+        return repository.save(entity);
+    }
+
+    @Transactional
+    protected void rollbackAttachmentMetadata(long attachmentId) {
+        repository.findById(attachmentId).ifPresent(repository::delete);
+    }
+
+    @Transactional
+    protected void updateStoragePath(long attachmentId, String storagePath) {
+        repository.findById(attachmentId).ifPresent(entity -> {
+            entity.setStoragePath(storagePath);
+            repository.save(entity);
+        });
     }
 
     @Transactional(readOnly = true)

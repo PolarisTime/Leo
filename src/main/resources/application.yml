@@ -192,9 +192,9 @@ leo:
       # Refresh Token Cookie 路径
       refresh-token-path: ${LEO_AUTH_REFRESH_COOKIE_PATH:/api/auth}
       # 是否只通过 HTTPS 发送 Cookie
-      secure: ${LEO_AUTH_REFRESH_COOKIE_SECURE:false}
+      secure: ${LEO_AUTH_REFRESH_COOKIE_SECURE:true}
       # SameSite 策略
-      same-site: ${LEO_AUTH_REFRESH_COOKIE_SAME_SITE:Lax}
+      same-site: ${LEO_AUTH_REFRESH_COOKIE_SAME_SITE:Strict}
   health:
     page:
       # 是否启用公开健康检查页面
