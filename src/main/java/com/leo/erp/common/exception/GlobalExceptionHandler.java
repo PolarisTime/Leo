@@ -87,8 +87,11 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler({BadCredentialsException.class, JwtException.class})
     public ResponseEntity<ApiResponse<Void>> handleUnauthorized(Exception ex) {
+        String message = ex.getMessage() != null && !ex.getMessage().isBlank()
+                ? ex.getMessage()
+                : "认证失败";
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                .body(ApiResponse.failure(ErrorCode.UNAUTHORIZED, "认证失败"));
+                .body(ApiResponse.failure(ErrorCode.UNAUTHORIZED, message));
     }
 
     @ExceptionHandler(AccessDeniedException.class)

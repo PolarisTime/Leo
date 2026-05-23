@@ -58,6 +58,7 @@ public class AuthController {
     }
 
     @PostMapping("/login-2fa")
+    @RateLimit(maxRequests = 5, duration = 1, timeUnit = TimeUnit.MINUTES)
     public ApiResponse<TokenResponse> login2fa(@Valid @RequestBody Login2faRequest request,
                                                HttpServletRequest httpRequest,
                                                HttpServletResponse httpResponse) {
@@ -67,6 +68,7 @@ public class AuthController {
     }
 
     @PostMapping("/refresh")
+    @RateLimit(maxRequests = 10, duration = 1, timeUnit = TimeUnit.MINUTES)
     public ApiResponse<TokenResponse> refresh(@Valid @RequestBody(required = false) RefreshTokenRequest request,
                                               HttpServletRequest httpRequest,
                                               HttpServletResponse httpResponse) {
