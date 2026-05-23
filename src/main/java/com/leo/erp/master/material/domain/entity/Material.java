@@ -59,7 +59,7 @@ public class Material extends AuditableEntity {
     private String remark;
 
     @Column(name = "length_sort", insertable = false, updatable = false)
-    private Double lengthSort;
+    private BigDecimal lengthSort;
 
     @Column(name = "spec_sort", insertable = false, updatable = false)
     private Integer specSort;

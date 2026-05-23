@@ -35,7 +35,7 @@ public class CompanySetting extends AuditableEntity {
     private BigDecimal taxRate;
 
     @Column(name = "settlement_accounts_json", nullable = false, columnDefinition = "JSONB")
-    @org.hibernate.annotations.JdbcTypeCode(java.sql.Types.OTHER)
+    @org.hibernate.annotations.ColumnTransformer(read = "settlement_accounts_json::text", write = "?::jsonb")
     private String settlementAccountsJson;
 
     @Column(name = "status", nullable = false, length = 16)
