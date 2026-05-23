@@ -26,7 +26,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.Duration;
-import java.util.concurrent.TimeUnit;
 
 @RestController
 @Validated
@@ -49,7 +48,7 @@ public class AuthController {
     }
 
     @PostMapping("/login")
-    @RateLimit(maxRequests = 5, duration = 1, timeUnit = TimeUnit.MINUTES)
+    @RateLimit(rate = 0.1, capacity = 5)
     public ApiResponse<LoginResponseBody> login(@Valid @RequestBody LoginRequest request,
                                                 HttpServletRequest httpRequest,
                                                 HttpServletResponse httpResponse) {
@@ -58,7 +57,7 @@ public class AuthController {
     }
 
     @PostMapping("/login-2fa")
-    @RateLimit(maxRequests = 5, duration = 1, timeUnit = TimeUnit.MINUTES)
+    @RateLimit(rate = 0.1, capacity = 5)
     public ApiResponse<TokenResponse> login2fa(@Valid @RequestBody Login2faRequest request,
                                                HttpServletRequest httpRequest,
                                                HttpServletResponse httpResponse) {
@@ -68,7 +67,7 @@ public class AuthController {
     }
 
     @PostMapping("/refresh")
-    @RateLimit(maxRequests = 10, duration = 1, timeUnit = TimeUnit.MINUTES)
+    @RateLimit(rate = 0.2, capacity = 10)
     public ApiResponse<TokenResponse> refresh(@Valid @RequestBody(required = false) RefreshTokenRequest request,
                                               HttpServletRequest httpRequest,
                                               HttpServletResponse httpResponse) {

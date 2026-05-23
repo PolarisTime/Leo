@@ -7,6 +7,7 @@ import com.leo.erp.attachment.service.AttachmentWebService;
 import com.leo.erp.attachment.web.dto.AttachmentUploadResponse;
 import com.leo.erp.common.api.ApiResponse;
 import com.leo.erp.security.permission.ModulePermissionGuard;
+import com.leo.erp.security.permission.RateLimit;
 import com.leo.erp.security.permission.RequiresPermission;
 import com.leo.erp.security.support.SecurityPrincipal;
 import com.leo.erp.system.norule.service.SystemSwitchService;
@@ -62,6 +63,7 @@ public class AttachmentController {
     }
 
     @PostMapping(value = "/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @RateLimit(rate = 0.5, capacity = 10)
     @RequiresPermission(authenticatedOnly = true, allowApiKey = true)
     @OperationLoggable(moduleName = "附件管理", actionType = "上传附件")
     public ApiResponse<AttachmentUploadResponse> upload(@AuthenticationPrincipal SecurityPrincipal principal,

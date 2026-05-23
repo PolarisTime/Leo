@@ -29,7 +29,7 @@ import java.util.Set;
 @Component
 public class ApiKeyAuthenticationFilter extends OncePerRequestFilter {
 
-    private static final String API_KEY_HEADER = "X-API-Key";
+    public static final String API_KEY_HEADER = "X-API-Key";
     private static final Set<String> READ_ONLY_METHODS = Set.of("GET", "HEAD", "OPTIONS");
     private final ApiKeyRepository apiKeyRepository;
     private final UserAccountRepository userAccountRepository;
