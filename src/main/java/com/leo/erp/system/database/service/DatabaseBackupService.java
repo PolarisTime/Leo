@@ -8,10 +8,8 @@ import com.leo.erp.common.support.PostgresJdbcUrlParser;
 import com.leo.erp.system.database.config.DatabaseBackupProperties;
 import org.springframework.boot.autoconfigure.jdbc.DataSourceProperties;
 import org.springframework.stereotype.Service;
-import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
-import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
@@ -39,24 +37,36 @@ public class DatabaseBackupService {
         this.dataSourceProperties = dataSourceProperties;
     }
 
-    public Path exportBackup() throws IOException, InterruptedException {
-        return exportBackup(dataSourceProperties.getUsername(), dataSourceProperties.getPassword());
+    public Path exportBackup(Path targetFile) throws IOException, InterruptedException {
+        return exportBackup(targetFile, dataSourceProperties.getUsername(), dataSourceProperties.getPassword());
+    }
+
+    public Path exportBackup(Path targetFile, String databaseUsername, String databasePassword) throws IOException, InterruptedException {
+        try {
+            runPgDump(targetFile, databaseUsername, databasePassword);
+            return targetFile;
+        } catch (IOException ex) {
+            Files.deleteIfExists(targetFile);
+            throw ex;
+        }
     }
 
     public Path exportBackup(String databaseUsername, String databasePassword) throws IOException, InterruptedException {
         String timestamp = LocalDateTime.now().format(TIMESTAMP_FMT);
         Path tempFile = Files.createTempFile("leo-backup-" + timestamp + "-", ".sql");
-        try {
-            runPgDump(tempFile, databaseUsername, databasePassword);
-            return tempFile;
-        } catch (IOException ex) {
-            Files.deleteIfExists(tempFile);
-            throw ex;
-        }
+        return exportBackup(tempFile, databaseUsername, databasePassword);
     }
 
-    public void importBackup(MultipartFile file, String databaseUsername, String databasePassword) throws IOException, InterruptedException {
-        validateImportFile(file);
+    public Path exportBackup() throws IOException, InterruptedException {
+        return exportBackup(dataSourceProperties.getUsername(), dataSourceProperties.getPassword());
+    }
+
+    public void importBackup(Path sqlFile) throws IOException, InterruptedException {
+        importBackup(sqlFile, dataSourceProperties.getUsername(), dataSourceProperties.getPassword());
+    }
+
+    public void importBackup(Path sqlFile, String databaseUsername, String databasePassword) throws IOException, InterruptedException {
+        validateImportFile(sqlFile);
         validateDatabaseCredentials(databaseUsername, databasePassword);
         Path autoBackup = null;
         if (backupProperties.isAutoBackupBeforeImport()) {
@@ -66,11 +76,6 @@ public class DatabaseBackupService {
             log.info("数据库导入前自动备份已禁用，跳过自动备份");
         }
 
-        Path uploadFile = Files.createTempFile("leo-import-", ".sql");
-        try (InputStream in = file.getInputStream()) {
-            Files.copy(in, uploadFile, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
-        }
-
         PostgresJdbcUrlParser.ParsedJdbcUrl jdbcUrl = extractJdbcUrl();
         String[] cmd = {
                 backupProperties.getPsqlCommand(),
@@ -78,12 +83,12 @@ public class DatabaseBackupService {
                 "--port=" + jdbcUrl.port(),
                 "--username=" + databaseUsername.trim(),
                 "--dbname=" + jdbcUrl.database(),
-                "--file=" + uploadFile.toAbsolutePath(),
+                "--file=" + sqlFile.toAbsolutePath(),
                 "--single-transaction",
                 "--set=ON_ERROR_STOP=on"
         };
 
-        log.info("开始导入数据库: {} ({}KB)", file.getOriginalFilename(), file.getSize() / 1024);
+        log.info("开始导入数据库: {} ({}KB)", sqlFile.getFileName(), Files.size(sqlFile) / 1024);
         ProcessBuilder pb = new ProcessBuilder(cmd);
         pb.environment().put("PGPASSWORD", databasePassword.trim());
         pb.redirectErrorStream(true);
@@ -96,29 +101,27 @@ public class DatabaseBackupService {
                 throw new IOException("数据库导入失败，已保留自动备份文件", ex);
             }
             throw ex;
-        } finally {
-            Files.deleteIfExists(uploadFile);
         }
 
-        log.info("数据库导入完成: {}", file.getOriginalFilename());
+        log.info("数据库导入完成: {}", sqlFile.getFileName());
     }
 
     private static final Set<String> ALLOWED_IMPORT_EXTENSIONS = Set.of(".sql", ".dump", ".pgdump");
-    private static final long MAX_IMPORT_FILE_SIZE = 500L * 1024 * 1024; // 500 MB
+    private static final long MAX_IMPORT_FILE_SIZE = 500L * 1024 * 1024;
 
-    private void validateImportFile(MultipartFile file) {
-        if (file == null || file.isEmpty()) {
-            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "上传文件不能为空");
+    private void validateImportFile(Path file) {
+        if (file == null || !Files.exists(file)) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "导入文件不存在");
         }
-        if (file.getSize() > MAX_IMPORT_FILE_SIZE) {
-            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "上传文件超过大小限制 (最大 500MB)");
+        try {
+            if (Files.size(file) > MAX_IMPORT_FILE_SIZE) {
+                throw new BusinessException(ErrorCode.VALIDATION_ERROR, "导入文件超过大小限制 (最大 500MB)");
+            }
+        } catch (IOException e) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "无法读取导入文件");
         }
-        String originalFilename = file.getOriginalFilename();
-        if (originalFilename == null || originalFilename.isBlank()) {
-            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "上传文件缺少文件名");
-        }
-        String lower = originalFilename.toLowerCase(Locale.ROOT);
-        boolean allowed = ALLOWED_IMPORT_EXTENSIONS.stream().anyMatch(lower::endsWith);
+        String filename = file.getFileName().toString().toLowerCase(Locale.ROOT);
+        boolean allowed = ALLOWED_IMPORT_EXTENSIONS.stream().anyMatch(filename::endsWith);
         if (!allowed) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "不支持的文件类型，仅允许 .sql / .dump / .pgdump");
         }
