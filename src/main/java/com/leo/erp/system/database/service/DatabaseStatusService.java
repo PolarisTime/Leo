@@ -5,6 +5,7 @@ import com.leo.erp.common.support.PostgresJdbcUrlParser;
 import com.leo.erp.system.database.web.dto.DatabaseStatusResponse;
 import com.leo.erp.system.database.web.dto.DatabaseStatusResponse.PostgresStatus;
 import com.leo.erp.system.database.web.dto.DatabaseStatusResponse.RedisStatus;
+import com.leo.erp.system.database.web.dto.PgMonitoringResponse;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataAccessException;
 import org.springframework.data.redis.connection.RedisConnection;
@@ -18,7 +19,9 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.Date;
+import java.util.List;
 import java.util.Objects;
 import java.util.Properties;
 
@@ -229,5 +232,50 @@ public class DatabaseStatusService {
 
     private PostgresJdbcUrlParser.ParsedJdbcUrl extractJdbcUrl() {
         return PostgresJdbcUrlParser.parse(datasourceUrl);
+    }
+
+    public PgMonitoringResponse getMonitoring() {
+        try (Connection conn = dataSource.getConnection(); Statement stmt = conn.createStatement()) {
+            List<PgMonitoringResponse.SlowQueryItem> slowQueries = new ArrayList<>();
+            try (ResultSet rs = stmt.executeQuery("SELECT query_preview, calls, avg_ms, pct_total, cache_hit_pct FROM v_top_slow_queries LIMIT 10")) {
+                while (rs.next()) {
+                    slowQueries.add(new PgMonitoringResponse.SlowQueryItem(
+                            rs.getString("query_preview"), rs.getLong("calls"),
+                            rs.getDouble("avg_ms"), rs.getDouble("pct_total"), rs.getDouble("cache_hit_pct")));
+                }
+            } catch (SQLException ignored) { /* view may not exist yet */ }
+
+            List<PgMonitoringResponse.CacheItem> cache = new ArrayList<>();
+            try (ResultSet rs = stmt.executeQuery("SELECT table_name, heap_cache_pct, idx_cache_pct, hot_update_pct FROM v_cache_efficiency LIMIT 10")) {
+                while (rs.next()) {
+                    cache.add(new PgMonitoringResponse.CacheItem(
+                            rs.getString("table_name"), rs.getDouble("heap_cache_pct"),
+                            rs.getDouble("idx_cache_pct"), rs.getDouble("hot_update_pct")));
+                }
+            } catch (SQLException ignored) { }
+
+            List<PgMonitoringResponse.BloatItem> bloat = new ArrayList<>();
+            try (ResultSet rs = stmt.executeQuery("SELECT table_name, live_rows, dead_rows, dead_pct, to_char(last_autovacuum, 'YYYY-MM-DD HH24:MI') AS last_av FROM v_table_bloat LIMIT 10")) {
+                while (rs.next()) {
+                    bloat.add(new PgMonitoringResponse.BloatItem(
+                            rs.getString("table_name"), rs.getLong("live_rows"), rs.getLong("dead_rows"),
+                            rs.getDouble("dead_pct"), rs.getString("last_av")));
+                }
+            } catch (SQLException ignored) { }
+
+            List<PgMonitoringResponse.UnusedIndexItem> unused = new ArrayList<>();
+            try (ResultSet rs = stmt.executeQuery("SELECT index_name, table_name, size, scans FROM v_unused_indexes LIMIT 10")) {
+                while (rs.next()) {
+                    unused.add(new PgMonitoringResponse.UnusedIndexItem(
+                            rs.getString("index_name"), rs.getString("table_name"),
+                            rs.getString("size"), rs.getLong("scans")));
+                }
+            } catch (SQLException ignored) { }
+
+            return new PgMonitoringResponse(slowQueries, cache, bloat, unused);
+        } catch (SQLException e) {
+            log.error("获取 PG 监控数据失败", e);
+            return new PgMonitoringResponse(List.of(), List.of(), List.of(), List.of());
+        }
     }
 }
