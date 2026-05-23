@@ -2,6 +2,7 @@ package com.leo.erp.system.database.web;
 
 import com.leo.erp.common.api.ApiResponse;
 import com.leo.erp.common.web.PublicAccess;
+import com.leo.erp.security.permission.RateLimit;
 import com.leo.erp.security.permission.RequiresPermission;
 import com.leo.erp.security.totp.RequiresTotpVerification;
 import com.leo.erp.system.database.service.DatabaseBackupService;
@@ -43,6 +44,7 @@ public class DatabaseBackupController {
     }
 
     @PostMapping("/export-tasks")
+    @RateLimit(rate = 0.05, capacity = 1)
     @RequiresPermission(resource = "database", action = "export")
     @RequiresTotpVerification
     @OperationLoggable(moduleName = "数据库管理", actionType = "导出备份")
@@ -81,6 +83,7 @@ public class DatabaseBackupController {
     }
 
     @PostMapping(value = "/import", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @RateLimit(rate = 0.05, capacity = 1)
     @RequiresPermission(resource = "database", action = "update")
     @RequiresTotpVerification
     @OperationLoggable(moduleName = "数据库管理", actionType = "导入备份")

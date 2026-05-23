@@ -81,7 +81,14 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(BusinessException.class)
     public ResponseEntity<ApiResponse<Void>> handleBusinessException(BusinessException ex) {
-        return ResponseEntity.status(resolveStatus(ex.getErrorCode()))
+        HttpStatus status = resolveStatus(ex.getErrorCode());
+        // Rate limiting → 429
+        if (ex.getErrorCode() == ErrorCode.FORBIDDEN
+                && ex.getMessage() != null
+                && ex.getMessage().contains("过于频繁")) {
+            status = HttpStatus.TOO_MANY_REQUESTS;
+        }
+        return ResponseEntity.status(status)
                 .body(ApiResponse.failure(ex.getErrorCode(), ex.getMessage()));
     }
 
