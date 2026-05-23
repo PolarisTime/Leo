@@ -232,4 +232,9 @@ public class PurchaseContractService extends AbstractCrudService<PurchaseContrac
     protected PurchaseContractResponse toResponse(PurchaseContract entity) {
         return purchaseContractMapper.toResponse(entity);
     }
+
+    @Override
+    protected PurchaseContractResponse toSavedResponse(PurchaseContract entity) {
+        return toDetailResponse(entity);
+    }
 }

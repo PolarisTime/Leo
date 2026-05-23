@@ -754,4 +754,9 @@ public class PurchaseInboundService extends AbstractCrudService<PurchaseInbound,
     protected PurchaseInboundResponse toResponse(PurchaseInbound entity) {
         return purchaseInboundMapper.toResponse(entity);
     }
+
+    @Override
+    protected PurchaseInboundResponse toSavedResponse(PurchaseInbound entity) {
+        return toDetailResponse(entity);
+    }
 }

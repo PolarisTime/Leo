@@ -316,4 +316,9 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
     protected FreightBillResponse toResponse(FreightBill entity) {
         return freightBillMapper.toResponse(entity);
     }
+
+    @Override
+    protected FreightBillResponse toSavedResponse(FreightBill entity) {
+        return toDetailResponse(entity);
+    }
 }
