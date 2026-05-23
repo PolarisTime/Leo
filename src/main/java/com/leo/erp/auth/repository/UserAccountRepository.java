@@ -29,11 +29,11 @@ public interface UserAccountRepository extends JpaRepository<UserAccount, Long>,
     List<UserAccount> findByTotpSecretIsNotNullAndDeletedFlagFalse();
 
     @Modifying(flushAutomatically = true, clearAutomatically = true)
-    @Query("""
-            update UserAccount userAccount
-               set userAccount.preferencesJson = :preferencesJson
-             where userAccount.id = :id
-               and userAccount.deletedFlag = false
-            """)
+    @Query(value = """
+            UPDATE sys_user
+               SET preferences_json = :preferencesJson::jsonb
+             WHERE id = :id
+               AND deleted_flag = false
+            """, nativeQuery = true)
     int updatePreferencesJson(@Param("id") Long id, @Param("preferencesJson") String preferencesJson);
 }
