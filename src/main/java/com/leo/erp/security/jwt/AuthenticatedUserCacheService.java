@@ -62,8 +62,15 @@ public class AuthenticatedUserCacheService {
     }
 
     public void evictAll() {
-        var keys = redisTemplate.keys(USER_CACHE_PREFIX + "*");
-        if (keys != null && !keys.isEmpty()) {
+        var keys = new java.util.HashSet<String>();
+        try (var cursor = redisTemplate.scan(
+                org.springframework.data.redis.core.ScanOptions.scanOptions()
+                        .match(USER_CACHE_PREFIX + "*")
+                        .count(100)
+                        .build())) {
+            cursor.forEachRemaining(keys::add);
+        }
+        if (!keys.isEmpty()) {
             redisTemplate.delete(keys);
         }
     }

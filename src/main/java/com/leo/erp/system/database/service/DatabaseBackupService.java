@@ -17,6 +17,8 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.Locale;
+import java.util.Set;
 
 @Slf4j
 @Service
@@ -101,9 +103,25 @@ public class DatabaseBackupService {
         log.info("数据库导入完成: {}", file.getOriginalFilename());
     }
 
+    private static final Set<String> ALLOWED_IMPORT_EXTENSIONS = Set.of(".sql", ".dump", ".pgdump");
+    private static final long MAX_IMPORT_FILE_SIZE = 500L * 1024 * 1024; // 500 MB
+    private static final byte[] PGDUMP_MAGIC = new byte[] { 0x50, 0x47, 0x44, 0x4D, 0x50 }; // "PGDMP"
+
     private void validateImportFile(MultipartFile file) {
         if (file == null || file.isEmpty()) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "上传文件不能为空");
+        }
+        if (file.getSize() > MAX_IMPORT_FILE_SIZE) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "上传文件超过大小限制 (最大 500MB)");
+        }
+        String originalFilename = file.getOriginalFilename();
+        if (originalFilename == null || originalFilename.isBlank()) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "上传文件缺少文件名");
+        }
+        String lower = originalFilename.toLowerCase(Locale.ROOT);
+        boolean allowed = ALLOWED_IMPORT_EXTENSIONS.stream().anyMatch(lower::endsWith);
+        if (!allowed) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "不支持的文件类型，仅允许 .sql / .dump / .pgdump");
         }
     }
 

@@ -15,6 +15,7 @@ import com.leo.erp.common.api.PageResponse;
 import com.leo.erp.common.web.BindPageQuery;
 import com.leo.erp.security.permission.RequiresPermission;
 import com.leo.erp.security.support.SecurityPrincipal;
+import com.leo.erp.security.totp.RequiresTotpVerification;
 import com.leo.erp.system.operationlog.support.OperationLoggable;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Positive;
@@ -113,6 +114,7 @@ public class UserAccountAdminController {
 
     @PostMapping("/{id}/2fa/setup")
     @RequiresPermission(resource = "user-account", action = "update")
+    @RequiresTotpVerification
     @OperationLoggable(moduleName = "用户账户", actionType = "生成2FA密钥")
     public ApiResponse<TotpSetupResponse> setup2fa(@PathVariable @Positive Long id) {
         return ApiResponse.success("密钥生成成功", userAccountAdminService.setup2fa(id));
@@ -120,6 +122,7 @@ public class UserAccountAdminController {
 
     @PostMapping("/{id}/2fa/enable")
     @RequiresPermission(resource = "user-account", action = "update")
+    @RequiresTotpVerification
     @OperationLoggable(moduleName = "用户账户", actionType = "启用2FA")
     public ApiResponse<UserAccountAdminResponse> enable2fa(@PathVariable @Positive Long id, @Valid @RequestBody TotpEnableRequest request) {
         return ApiResponse.success("2FA已启用", userAccountAdminService.enable2fa(id, request));
@@ -127,6 +130,7 @@ public class UserAccountAdminController {
 
     @PostMapping("/{id}/2fa/disable")
     @RequiresPermission(resource = "user-account", action = "update")
+    @RequiresTotpVerification
     @OperationLoggable(moduleName = "用户账户", actionType = "禁用2FA")
     public ApiResponse<UserAccountAdminResponse> disable2fa(@PathVariable @Positive Long id) {
         return ApiResponse.success("2FA已禁用", userAccountAdminService.disable2fa(id));
