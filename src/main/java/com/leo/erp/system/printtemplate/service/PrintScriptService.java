@@ -4,8 +4,10 @@ import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.system.printtemplate.domain.entity.PrintTemplate;
 import com.leo.erp.system.printtemplate.repository.PrintTemplateRepository;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
+import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
@@ -25,10 +27,46 @@ public class PrintScriptService {
     );
     private static final Pattern PLACEHOLDER = Pattern.compile("\\{\\{(\\w+)\\}\\}");
 
-    private final PrintTemplateRepository templateRepository;
+    // moduleKey → table_name mapping for record loading
+    private static final Map<String, String> MODULE_TABLES = Map.ofEntries(
+            Map.entry("purchase-order", "po_purchase_order"),
+            Map.entry("sales-order", "so_sales_order"),
+            Map.entry("purchase-inbound", "po_purchase_inbound"),
+            Map.entry("sales-outbound", "so_sales_outbound"),
+            Map.entry("freight-bill", "lg_freight_bill"),
+            Map.entry("purchase-contract", "ct_purchase_contract"),
+            Map.entry("sales-contract", "ct_sales_contract"),
+            Map.entry("customer-statement", "st_customer_statement"),
+            Map.entry("supplier-statement", "st_supplier_statement"),
+            Map.entry("freight-statement", "st_freight_statement"),
+            Map.entry("receipt", "fm_receipt"),
+            Map.entry("payment", "fm_payment"),
+            Map.entry("invoice-issue", "fm_invoice_issue"),
+            Map.entry("invoice-receipt", "fm_invoice_receipt")
+    );
 
-    public PrintScriptService(PrintTemplateRepository templateRepository) {
+    private final PrintTemplateRepository templateRepository;
+    private final JdbcTemplate jdbc;
+
+    public PrintScriptService(PrintTemplateRepository templateRepository, JdbcTemplate jdbc) {
         this.templateRepository = templateRepository;
+        this.jdbc = jdbc;
+    }
+
+    /** Load record from DB by moduleKey + recordId, then generate script. */
+    public String generateFromRecord(String templateId, String moduleKey, Long recordId) {
+        String table = MODULE_TABLES.get(moduleKey);
+        if (table == null) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "不支持的打印模块: " + moduleKey);
+        }
+        Map<String, Object> row = jdbc.queryForMap(
+                "SELECT * FROM " + table + " WHERE id = ? AND deleted_flag = FALSE", recordId);
+        Map<String, String> data = new HashMap<>();
+        for (var entry : row.entrySet()) {
+            if (entry.getValue() == null) continue;
+            data.put(entry.getKey(), String.valueOf(entry.getValue()));
+        }
+        return generate(templateId, data);
     }
 
     public String generate(String templateId, Map<String, String> data) {
