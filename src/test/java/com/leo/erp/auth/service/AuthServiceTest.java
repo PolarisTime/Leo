@@ -209,8 +209,7 @@ class AuthServiceTest {
                 redisTemplate != null ? redisTemplate : stringRedisTemplate(),
                 tokenIssuance,
                 operationLogService(loggedCommands),
-                systemSwitchService(true),
-                captchaService()
+                systemSwitchService(true)
         );
     }
 
@@ -533,8 +532,7 @@ class AuthServiceTest {
                 tokenIssuanceServiceStub(userRepo, loginRefreshTokenSessionRepository(),
                         blacklistService(new ArrayList<>(), new AtomicBoolean(false)), null),
                 operationLogService(new ArrayList<>()),
-                systemSwitchService(true),
-                captchaService()
+                systemSwitchService(true)
         );
 
         org.assertj.core.api.Assertions.assertThatThrownBy(() ->
