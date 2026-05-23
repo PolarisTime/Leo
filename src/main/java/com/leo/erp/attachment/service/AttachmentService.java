@@ -276,7 +276,7 @@ public class AttachmentService {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "上传文件超过大小限制");
         }
         String originalFilename = file.getOriginalFilename();
-        if (originalFilename != null && !originalFilename.isBlank()) {
+        if (originalFilename != null && !originalFilename.isBlank() && originalFilename.contains(".")) {
             String ext = originalFilename.substring(originalFilename.lastIndexOf('.') + 1).toLowerCase(Locale.ROOT);
             if (BLOCKED_ATTACHMENT_EXTENSIONS.contains(ext)) {
                 throw new BusinessException(ErrorCode.VALIDATION_ERROR, "不支持的文件类型: ." + ext);

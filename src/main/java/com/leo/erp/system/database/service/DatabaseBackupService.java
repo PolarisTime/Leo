@@ -105,7 +105,6 @@ public class DatabaseBackupService {
 
     private static final Set<String> ALLOWED_IMPORT_EXTENSIONS = Set.of(".sql", ".dump", ".pgdump");
     private static final long MAX_IMPORT_FILE_SIZE = 500L * 1024 * 1024; // 500 MB
-    private static final byte[] PGDUMP_MAGIC = new byte[] { 0x50, 0x47, 0x44, 0x4D, 0x50 }; // "PGDMP"
 
     private void validateImportFile(MultipartFile file) {
         if (file == null || file.isEmpty()) {
