@@ -4,7 +4,7 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 
-import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 
 public record PurchaseOrderRequest(
@@ -12,7 +12,7 @@ public record PurchaseOrderRequest(
         @jakarta.validation.constraints.NotBlank(message = "供应商不能为空")
         String supplierName,
         @NotNull(message = "订单日期不能为空")
-        LocalDate orderDate,
+        LocalDateTime orderDate,
         String buyerName,
         String status,
         String remark,
