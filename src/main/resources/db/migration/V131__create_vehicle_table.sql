@@ -22,28 +22,35 @@ CREATE TABLE IF NOT EXISTS md_vehicle (
 CREATE INDEX IF NOT EXISTS idx_md_vehicle_carrier_id ON md_vehicle (carrier_id);
 CREATE INDEX IF NOT EXISTS idx_md_vehicle_plate ON md_vehicle (plate);
 
--- Generate IDs using a temporary sequence (project uses app-level Snowflake IDs, not DB sequences)
-CREATE TEMPORARY SEQUENCE IF NOT EXISTS migrate_vehicle_seq;
-
--- Migrate vehicle 1 data
+-- Migrate all 3 vehicle slots in a single INSERT, generating IDs via ROW_NUMBER()
+-- Project uses app-level Snowflake IDs; ROW_NUMBER() is the simplest DB-side surrogate
 INSERT INTO md_vehicle (id, carrier_id, plate, contact, phone, remark, sort_order)
-SELECT nextval('migrate_vehicle_seq'), id, vehicle_plate, vehicle_contact, vehicle_phone, vehicle_remark, 0
-FROM md_carrier
-WHERE vehicle_plate IS NOT NULL AND vehicle_plate <> '';
+SELECT
+    ROW_NUMBER() OVER () AS id,
+    carrier_id,
+    plate,
+    contact,
+    phone,
+    remark,
+    sort_order
+FROM (
+    SELECT id AS carrier_id, vehicle_plate AS plate, vehicle_contact AS contact,
+           vehicle_phone AS phone, vehicle_remark AS remark, 0 AS sort_order
+    FROM md_carrier
+    WHERE vehicle_plate IS NOT NULL AND vehicle_plate <> ''
 
--- Migrate vehicle 2 data
-INSERT INTO md_vehicle (id, carrier_id, plate, contact, phone, remark, sort_order)
-SELECT nextval('migrate_vehicle_seq'), id, vehicle_plate2, vehicle_contact2, vehicle_phone2, vehicle_remark2, 1
-FROM md_carrier
-WHERE vehicle_plate2 IS NOT NULL AND vehicle_plate2 <> '';
+    UNION ALL
 
--- Migrate vehicle 3 data
-INSERT INTO md_vehicle (id, carrier_id, plate, contact, phone, remark, sort_order)
-SELECT nextval('migrate_vehicle_seq'), id, vehicle_plate3, vehicle_contact3, vehicle_phone3, vehicle_remark3, 2
-FROM md_carrier
-WHERE vehicle_plate3 IS NOT NULL AND vehicle_plate3 <> '';
+    SELECT id, vehicle_plate2, vehicle_contact2, vehicle_phone2, vehicle_remark2, 1
+    FROM md_carrier
+    WHERE vehicle_plate2 IS NOT NULL AND vehicle_plate2 <> ''
 
-DROP SEQUENCE IF EXISTS migrate_vehicle_seq;
+    UNION ALL
+
+    SELECT id, vehicle_plate3, vehicle_contact3, vehicle_phone3, vehicle_remark3, 2
+    FROM md_carrier
+    WHERE vehicle_plate3 IS NOT NULL AND vehicle_plate3 <> ''
+) AS vehicles;
 
 -- Drop old vehicle columns from Carrier
 ALTER TABLE md_carrier
