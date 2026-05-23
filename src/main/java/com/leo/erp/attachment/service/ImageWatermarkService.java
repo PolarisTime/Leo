@@ -20,7 +20,9 @@ import java.time.format.DateTimeFormatter;
 @Component
 public class ImageWatermarkService {
 
-    private static final DateTimeFormatter TIME_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
+    private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
+    private static final String FORMAT_PNG = "png";
+    private static final String FORMAT_JPG = "jpg";
     private static final float OPACITY = 0.12f;
     private static final int TILE_SPACING = 200;
     private static final int FONT_SIZE = 14;
@@ -31,7 +33,7 @@ public class ImageWatermarkService {
         if (original == null) {
             throw new IOException("无法解析图片文件");
         }
-        String text = username + "  " + LocalDateTime.now().format(TIME_FMT);
+        String text = username + "  " + LocalDateTime.now().format(TIME_FORMATTER);
 
         BufferedImage watermarked = new BufferedImage(
                 original.getWidth(), original.getHeight(), original.getType() == 0 ? BufferedImage.TYPE_INT_ARGB : original.getType());
@@ -69,9 +71,10 @@ public class ImageWatermarkService {
     }
 
     private String guessFormat(BufferedImage image) {
-        switch (image.getType()) {
-            case BufferedImage.TYPE_BYTE_BINARY, BufferedImage.TYPE_BYTE_INDEXED -> { return "png"; }
-            default -> { return "jpg"; }
-        }
+        return switch (image.getType()) {
+            case BufferedImage.TYPE_INT_ARGB, BufferedImage.TYPE_4BYTE_ABGR,
+                 BufferedImage.TYPE_BYTE_BINARY, BufferedImage.TYPE_BYTE_INDEXED -> FORMAT_PNG;
+            default -> FORMAT_JPG;
+        };
     }
 }

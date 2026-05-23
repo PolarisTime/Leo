@@ -40,6 +40,10 @@ public class AttachmentController {
     private final AttachmentRecordAccessService attachmentRecordAccessService;
     private final SystemSwitchService systemSwitchService;
 
+    private static final String ADMIN_ROLE_SYSTEM = "系统管理员";
+    private static final String ADMIN_ROLE_SUPER = "超级管理员";
+    private static final String DATA_SCOPE_ALL = "全部数据";
+
     public AttachmentController(AttachmentService attachmentService,
                                 AttachmentWebService attachmentWebService,
                                 ModulePermissionGuard modulePermissionGuard,
@@ -56,7 +60,9 @@ public class AttachmentController {
         if (principal == null) return false;
         return principal.getAuthorities().stream()
                 .map(GrantedAuthority::getAuthority)
-                .anyMatch(a -> a.contains("系统管理员") || a.contains("超级管理员") || a.contains("全部数据"));
+                .anyMatch(a -> a.contains(ADMIN_ROLE_SYSTEM)
+                           || a.contains(ADMIN_ROLE_SUPER)
+                           || a.contains(DATA_SCOPE_ALL));
     }
 
     @PostMapping(value = "/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
