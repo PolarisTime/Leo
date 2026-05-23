@@ -208,17 +208,18 @@ public class AttachmentService {
         AttachmentDownloadPayload payload = inline ? loadForPreview(id, accessKey) : loadForDownload(id, accessKey);
         Resource resource = payload.resource();
         if (watermark && username != null) {
+            byte[] watermarked;
             try {
-                byte[] watermarked = switch (payload.previewType()) {
+                watermarked = switch (payload.previewType()) {
                     case "image" -> imageWatermarkService.apply(resource.getInputStream(), username);
                     case "pdf" -> pdfWatermarkService.apply(resource.getInputStream(), username);
                     default -> null;
                 };
-                if (watermarked != null) {
-                    resource = new org.springframework.core.io.ByteArrayResource(watermarked);
-                }
             } catch (IOException e) {
-                // watermark failed — fall through to original
+                throw new BusinessException(ErrorCode.INTERNAL_ERROR, "附件水印处理失败，请联系管理员");
+            }
+            if (watermarked != null) {
+                resource = new org.springframework.core.io.ByteArrayResource(watermarked);
             }
         }
         MediaType mediaType = (payload.contentType() == null || payload.contentType().isBlank())
