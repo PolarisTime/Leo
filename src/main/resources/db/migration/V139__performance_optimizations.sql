@@ -22,10 +22,8 @@ CREATE INDEX IF NOT EXISTS idx_so_sales_order_active_date
 -- 2. BRIN 索引（操作日志表，体积仅 B-tree 的 1/100）
 -- ============================================================
 
-CREATE INDEX IF NOT EXISTS idx_operation_log_brin_created_at
-    ON sys_operation_log USING brin (created_at) WITH (pages_per_range = 64);
-CREATE INDEX IF NOT EXISTS idx_operation_log_brin_id
-    ON sys_operation_log USING brin (id) WITH (pages_per_range = 128);
+CREATE INDEX IF NOT EXISTS idx_operation_log_brin_time
+    ON sys_operation_log USING brin (operation_time) WITH (pages_per_range = 64);
 
 -- ============================================================
 -- 3. Fillfactor（高频 UPDATE 表预留 30% 页内空间给 HOT 更新）
