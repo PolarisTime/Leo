@@ -9,6 +9,7 @@ import com.leo.erp.common.api.ApiResponse;
 import com.leo.erp.security.permission.ModulePermissionGuard;
 import com.leo.erp.security.permission.RequiresPermission;
 import com.leo.erp.security.support.SecurityPrincipal;
+import com.leo.erp.system.norule.service.SystemSwitchService;
 import com.leo.erp.system.operationlog.support.OperationLoggable;
 import jakarta.validation.constraints.NotBlank;
 import org.springframework.core.io.Resource;
@@ -37,15 +38,18 @@ public class AttachmentController {
     private final AttachmentWebService attachmentWebService;
     private final ModulePermissionGuard modulePermissionGuard;
     private final AttachmentRecordAccessService attachmentRecordAccessService;
+    private final SystemSwitchService systemSwitchService;
 
     public AttachmentController(AttachmentService attachmentService,
                                 AttachmentWebService attachmentWebService,
                                 ModulePermissionGuard modulePermissionGuard,
-                                AttachmentRecordAccessService attachmentRecordAccessService) {
+                                AttachmentRecordAccessService attachmentRecordAccessService,
+                                SystemSwitchService systemSwitchService) {
         this.attachmentService = attachmentService;
         this.attachmentWebService = attachmentWebService;
         this.modulePermissionGuard = modulePermissionGuard;
         this.attachmentRecordAccessService = attachmentRecordAccessService;
+        this.systemSwitchService = systemSwitchService;
     }
 
     private boolean isAdmin(SecurityPrincipal principal) {
@@ -74,9 +78,9 @@ public class AttachmentController {
                                              @RequestParam String accessKey) {
         modulePermissionGuard.requirePermission(principal, moduleKey, "read");
         attachmentRecordAccessService.assertAttachmentAccessible(principal, moduleKey, "read", id);
-        boolean admin = isAdmin(principal);
+        boolean watermark = systemSwitchService.shouldWatermarkAttachments() && !isAdmin(principal);
         return buildFileResponse(attachmentService.loadDownloadResource(
-                id, accessKey, false, !admin, principal.getUsername()));
+                id, accessKey, false, watermark, principal.getUsername()));
     }
 
     @GetMapping("/{id}/preview")
@@ -87,9 +91,9 @@ public class AttachmentController {
                                             @RequestParam String accessKey) {
         modulePermissionGuard.requirePermission(principal, moduleKey, "read");
         attachmentRecordAccessService.assertAttachmentAccessible(principal, moduleKey, "read", id);
-        boolean admin = isAdmin(principal);
+        boolean watermark = systemSwitchService.shouldWatermarkAttachments() && !isAdmin(principal);
         return buildFileResponse(attachmentService.loadDownloadResource(
-                id, accessKey, true, !admin, principal.getUsername()));
+                id, accessKey, true, watermark, principal.getUsername()));
     }
 
     private ResponseEntity<Resource> buildFileResponse(AttachmentDownloadResource payload) {
