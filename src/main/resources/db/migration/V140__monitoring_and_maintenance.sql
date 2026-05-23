@@ -28,16 +28,17 @@ LIMIT 20;
 
 CREATE OR REPLACE VIEW v_cache_efficiency AS
 SELECT
-    t.relname AS table_name,
+    s.relname AS table_name,
     t.n_tup_ins AS inserts,
     t.n_tup_upd AS updates,
     t.n_tup_del AS deletes,
     ROUND(100.0 * t.n_tup_hot_upd / NULLIF(t.n_tup_upd, 0), 1) AS hot_update_pct,
-    ROUND(100.0 * t.heap_blks_hit / NULLIF(t.heap_blks_read + t.heap_blks_hit, 0), 1) AS heap_cache_pct,
-    ROUND(100.0 * t.idx_blks_hit / NULLIF(t.idx_blks_read + t.idx_blks_hit, 0), 1) AS idx_cache_pct
+    ROUND(100.0 * s.heap_blks_hit / NULLIF(s.heap_blks_read + s.heap_blks_hit, 0), 1) AS heap_cache_pct,
+    ROUND(100.0 * s.idx_blks_hit / NULLIF(s.idx_blks_read + s.idx_blks_hit, 0), 1) AS idx_cache_pct
 FROM pg_stat_user_tables t
+JOIN pg_statio_user_tables s ON t.relid = s.relid
 WHERE t.n_tup_ins + t.n_tup_upd + t.n_tup_del > 100
-ORDER BY (t.heap_blks_read + t.idx_blks_read) DESC
+ORDER BY (s.heap_blks_read + s.idx_blks_read) DESC
 LIMIT 20;
 
 -- ============================================================
