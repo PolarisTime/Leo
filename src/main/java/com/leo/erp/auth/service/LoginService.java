@@ -41,7 +41,6 @@ public class LoginService {
     private final TokenIssuanceService tokenIssuanceService;
     private final OperationLogService operationLogService;
     private final SystemSwitchService systemSwitchService;
-    private final CaptchaService captchaService;
 
     public LoginService(
             UserAccountRepository userAccountRepository,
@@ -51,8 +50,7 @@ public class LoginService {
             StringRedisTemplate redisTemplate,
             TokenIssuanceService tokenIssuanceService,
             OperationLogService operationLogService,
-            SystemSwitchService systemSwitchService,
-            CaptchaService captchaService
+            SystemSwitchService systemSwitchService
     ) {
         this.userAccountRepository = userAccountRepository;
         this.passwordEncoder = passwordEncoder;
@@ -62,17 +60,11 @@ public class LoginService {
         this.tokenIssuanceService = tokenIssuanceService;
         this.operationLogService = operationLogService;
         this.systemSwitchService = systemSwitchService;
-        this.captchaService = captchaService;
     }
 
     @Transactional
     public LoginResponseBody login(LoginRequest request, AuthRequestContext ctx) {
         String normalizedLoginName = request.loginName() == null ? "" : request.loginName().trim();
-
-        if (systemSwitchService.shouldRequireLoginCaptcha()
-                && !captchaService.verify(request.captchaId(), request.captchaCode())) {
-            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "验证码错误或已过期");
-        }
 
         loginAttemptService.ensureLoginAllowed(normalizedLoginName);
 
