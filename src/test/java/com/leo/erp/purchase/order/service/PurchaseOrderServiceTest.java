@@ -30,7 +30,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
-import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -89,7 +89,7 @@ class PurchaseOrderServiceTest {
         order.setId(1L);
         order.setOrderNo("PO-001");
         order.setSupplierName("供应商A");
-        order.setOrderDate(LocalDate.of(2026, 4, 26));
+        order.setOrderDate(LocalDateTime.of(2026, 4, 26, 0, 0));
         order.setBuyerName("李四");
         order.setTotalWeight(new BigDecimal("2.000"));
         order.setTotalAmount(new BigDecimal("8000.00"));
@@ -120,7 +120,7 @@ class PurchaseOrderServiceTest {
 
         when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(order));
         when(mapper.toResponse(order)).thenReturn(new PurchaseOrderResponse(
-                1L, "PO-001", "供应商A", LocalDate.of(2026, 4, 26), "李四",
+                1L, "PO-001", "供应商A", LocalDateTime.of(2026, 4, 26, 0, 0), "李四",
                 new BigDecimal("2.000"), new BigDecimal("8000.00"), "草稿", null, List.of()
         ));
         when(purchaseInboundItemQueryService.summarizeAllocatedQuantityBySourcePurchaseOrderItemIds(List.of(7L)))
@@ -421,7 +421,7 @@ class PurchaseOrderServiceTest {
         order.setId(1L);
         order.setOrderNo("PO-001");
         order.setSupplierName("供应商A");
-        order.setOrderDate(LocalDate.of(2026, 4, 26));
+        order.setOrderDate(LocalDateTime.of(2026, 4, 26, 0, 0));
         order.setBuyerName("李四");
         order.setTotalWeight(new BigDecimal("2.000"));
         order.setTotalAmount(new BigDecimal("8000.00"));
@@ -457,7 +457,7 @@ class PurchaseOrderServiceTest {
         return new PurchaseOrderRequest(
                 "PO-001",
                 "供应商A",
-                LocalDate.of(2026, 4, 26),
+                LocalDateTime.of(2026, 4, 26, 0, 0),
                 "李四",
                 status,
                 null,
@@ -494,7 +494,7 @@ class PurchaseOrderServiceTest {
                 1L,
                 "PO-001",
                 "供应商A",
-                LocalDate.of(2026, 4, 26),
+                LocalDateTime.of(2026, 4, 26, 0, 0),
                 "李四",
                 new BigDecimal("1.000"),
                 new BigDecimal("4000.00"),

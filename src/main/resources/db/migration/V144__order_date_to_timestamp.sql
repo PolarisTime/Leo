@@ -1,2 +1,22 @@
 -- V144: Business date fields DATE → TIMESTAMP for time precision
 ALTER TABLE po_purchase_order ALTER COLUMN order_date TYPE TIMESTAMP;
+ALTER TABLE ct_purchase_contract ALTER COLUMN sign_date TYPE TIMESTAMP;
+ALTER TABLE ct_purchase_contract ALTER COLUMN effective_date TYPE TIMESTAMP;
+ALTER TABLE ct_purchase_contract ALTER COLUMN expire_date TYPE TIMESTAMP;
+ALTER TABLE ct_sales_contract ALTER COLUMN sign_date TYPE TIMESTAMP;
+ALTER TABLE ct_sales_contract ALTER COLUMN effective_date TYPE TIMESTAMP;
+ALTER TABLE ct_sales_contract ALTER COLUMN expire_date TYPE TIMESTAMP;
+ALTER TABLE so_sales_order ALTER COLUMN delivery_date TYPE TIMESTAMP;
+ALTER TABLE po_purchase_inbound ALTER COLUMN inbound_date TYPE TIMESTAMP;
+ALTER TABLE so_sales_outbound ALTER COLUMN outbound_date TYPE TIMESTAMP;
+ALTER TABLE lg_freight_bill ALTER COLUMN bill_time TYPE TIMESTAMP;
+ALTER TABLE fm_receipt ALTER COLUMN receipt_date TYPE TIMESTAMP;
+ALTER TABLE fm_payment ALTER COLUMN payment_date TYPE TIMESTAMP;
+ALTER TABLE fm_invoice_issue ALTER COLUMN invoice_date TYPE TIMESTAMP;
+ALTER TABLE fm_invoice_receipt ALTER COLUMN invoice_date TYPE TIMESTAMP;
+ALTER TABLE st_customer_statement ALTER COLUMN start_date TYPE TIMESTAMP;
+ALTER TABLE st_customer_statement ALTER COLUMN end_date TYPE TIMESTAMP;
+ALTER TABLE st_supplier_statement ALTER COLUMN start_date TYPE TIMESTAMP;
+ALTER TABLE st_supplier_statement ALTER COLUMN end_date TYPE TIMESTAMP;
+ALTER TABLE st_freight_statement ALTER COLUMN start_date TYPE TIMESTAMP;
+ALTER TABLE st_freight_statement ALTER COLUMN end_date TYPE TIMESTAMP;

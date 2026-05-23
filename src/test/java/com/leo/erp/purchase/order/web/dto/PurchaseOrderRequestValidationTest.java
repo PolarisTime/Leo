@@ -5,7 +5,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.validation.beanvalidation.LocalValidatorFactoryBean;
 
 import java.math.BigDecimal;
-import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -21,7 +21,7 @@ class PurchaseOrderRequestValidationTest {
         PurchaseOrderRequest request = new PurchaseOrderRequest(
                 "PO-20260425-001",
                 "供应商甲",
-                LocalDate.of(2026, 4, 25),
+                LocalDateTime.of(2026, 4, 25, 0, 0),
                 "采购员A",
                 "草稿",
                 null,
@@ -57,7 +57,7 @@ class PurchaseOrderRequestValidationTest {
         PurchaseOrderRequest request = new PurchaseOrderRequest(
                 "PO-20260425-002",
                 "供应商甲",
-                LocalDate.of(2026, 4, 25),
+                LocalDateTime.of(2026, 4, 25, 0, 0),
                 "采购员A",
                 "草稿",
                 null,

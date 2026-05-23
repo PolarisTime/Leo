@@ -17,7 +17,7 @@ import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 
 import java.math.BigDecimal;
-import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
 
@@ -96,7 +96,7 @@ class PendingInvoiceReceiptReportServiceTest {
         order.setId(101L);
         order.setOrderNo("PO-001");
         order.setSupplierName("供应商A");
-        order.setOrderDate(LocalDate.of(2026, 4, 26));
+        order.setOrderDate(LocalDateTime.of(2026, 4, 26, 0, 0));
         order.setCreatedBy(1L);
         order.setDeletedFlag(Boolean.FALSE);
         order.getItems().addAll(List.of(items));
