@@ -1,7 +1,8 @@
-package com.leo.erp.common.search;
+package com.leo.erp.search.service;
 
 import lombok.extern.slf4j.Slf4j;
 import com.leo.erp.common.error.BusinessException;
+import com.leo.erp.search.web.GlobalSearchResponse;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.contract.purchase.service.PurchaseContractService;
 import com.leo.erp.contract.sales.service.SalesContractService;

@@ -1,4 +1,4 @@
-package com.leo.erp.common.search;
+package com.leo.erp.search.web;
 
 public record GlobalSearchResponse(
         String moduleKey,
