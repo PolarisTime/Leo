@@ -4,13 +4,78 @@
   "https://checkstyle.org/dtds/configuration_1_3.dtd">
 <module name="Checker">
   <property name="charset" value="UTF-8"/>
+  <property name="severity" value="warning"/>
 
+  <!-- P3C: 禁止 Tab 字符 -->
   <module name="FileTabCharacter">
     <property name="eachLine" value="true"/>
   </module>
 
+  <!-- P3C: 单行不超过 120 字符 -->
+  <module name="LineLength">
+    <property name="max" value="120"/>
+    <property name="ignorePattern" value="^package.*|^import.*|a href|href|@see|http://|https://"/>
+  </module>
+
   <module name="TreeWalker">
+    <!-- P3C: 禁止冗余/未使用 import -->
     <module name="RedundantImport"/>
     <module name="UnusedImports"/>
+
+    <!-- P3C: 命名规范 -->
+    <module name="ConstantName">
+      <property name="format" value="^[A-Z][A-Z0-9]*(_[A-Z0-9]+)*$"/>
+    </module>
+    <module name="LocalVariableName">
+      <property name="format" value="^[a-z][a-zA-Z0-9]*$"/>
+    </module>
+
+    <!-- P3C: 空格规范 -->
+    <module name="WhitespaceAround">
+      <property name="allowEmptyConstructors" value="true"/>
+      <property name="allowEmptyMethods" value="true"/>
+      <property name="allowEmptyLoops" value="true"/>
+    </module>
+    <module name="MethodParamPad"/>
+    <module name="NoWhitespaceBefore"/>
+
+    <!-- P3C: 禁止空 catch 块 -->
+    <module name="EmptyBlock">
+      <property name="option" value="text"/>
+      <property name="tokens" value="LITERAL_CATCH"/>
+    </module>
+
+    <!-- P3C: 禁止 System.out.println -->
+    <module name="RegexpSinglelineJava">
+      <property name="format" value="System\.out\.print"/>
+      <property name="ignoreComments" value="true"/>
+      <property name="message" value="禁止使用 System.out.println，请使用 SLF4J 日志"/>
+    </module>
+
+    <!-- P3C: 禁止 Executors 工厂方法 (必须用 ThreadPoolExecutor) -->
+    <module name="RegexpSinglelineJava">
+      <property name="format" value="Executors\.new"/>
+      <property name="ignoreComments" value="true"/>
+      <property name="message" value="禁止使用 Executors 工厂方法，请使用 ThreadPoolExecutor"/>
+    </module>
+
+    <!-- P3C: 禁止 SimpleDateFormat -->
+    <module name="RegexpSinglelineJava">
+      <property name="format" value="new\s+SimpleDateFormat"/>
+      <property name="ignoreComments" value="true"/>
+      <property name="message" value="SimpleDateFormat 非线程安全，请使用 DateTimeFormatter"/>
+    </module>
+
+    <!-- P3C: 大括号规范 -->
+    <module name="LeftCurly"/>
+    <module name="RightCurly"/>
+
+    <!-- P3C: 禁止魔法数字（可选，设为大阈值以减少噪音） -->
+    <module name="MagicNumber">
+      <property name="ignoreNumbers" value="-1, 0, 1, 2, 100, 1000"/>
+      <property name="ignoreHashCodeMethod" value="true"/>
+      <property name="ignoreAnnotation" value="true"/>
+      <property name="ignoreFieldDeclaration" value="true"/>
+    </module>
   </module>
 </module>

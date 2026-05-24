@@ -1,25 +1,6 @@
 package com.leo.erp.common.support;
 
 import com.leo.erp.common.persistence.AbstractAuditableEntity;
-import com.leo.erp.contract.purchase.domain.entity.PurchaseContract;
-import com.leo.erp.contract.sales.domain.entity.SalesContract;
-import com.leo.erp.finance.invoiceissue.domain.entity.InvoiceIssue;
-import com.leo.erp.finance.invoicereceipt.domain.entity.InvoiceReceipt;
-import com.leo.erp.finance.payment.domain.entity.Payment;
-import com.leo.erp.finance.receipt.domain.entity.Receipt;
-import com.leo.erp.logistics.bill.domain.entity.FreightBill;
-import com.leo.erp.master.carrier.domain.entity.Carrier;
-import com.leo.erp.master.customer.domain.entity.Customer;
-import com.leo.erp.master.material.domain.entity.Material;
-import com.leo.erp.master.supplier.domain.entity.Supplier;
-import com.leo.erp.master.warehouse.domain.entity.Warehouse;
-import com.leo.erp.purchase.inbound.domain.entity.PurchaseInbound;
-import com.leo.erp.purchase.order.domain.entity.PurchaseOrder;
-import com.leo.erp.sales.order.domain.entity.SalesOrder;
-import com.leo.erp.sales.outbound.domain.entity.SalesOutbound;
-import com.leo.erp.statement.customer.domain.entity.CustomerStatement;
-import com.leo.erp.statement.freight.domain.entity.FreightStatement;
-import com.leo.erp.statement.supplier.domain.entity.SupplierStatement;
 
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -28,53 +9,45 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
+/**
+ * @deprecated 请直接注入 {@link BusinessEntityRegistrar} 替代静态调用。
+ * 实体注册已迁移至 {@code com.leo.erp.config.BusinessEntityConfig}，
+ * 消除了 common 包对业务模块的编译期反向依赖。
+ */
+@Deprecated
 public final class BusinessRecordEntityCatalog {
 
-    private static final Map<String, Class<? extends AbstractAuditableEntity>> ENTITY_TYPES_BY_MODULE_KEY = buildEntityTypes();
+    private static volatile BusinessEntityRegistrar registrar;
 
     private BusinessRecordEntityCatalog() {
     }
 
+    /** 由 BusinessEntityConfig 在 Spring 启动时调用 */
+    public static void setRegistrar(BusinessEntityRegistrar r) {
+        registrar = r;
+    }
+
+    private static BusinessEntityRegistrar reg() {
+        BusinessEntityRegistrar r = registrar;
+        if (r == null) {
+            throw new IllegalStateException("BusinessEntityRegistrar not initialized");
+        }
+        return r;
+    }
+
     public static Optional<Class<? extends AbstractAuditableEntity>> findEntityType(String moduleKey) {
-        return Optional.ofNullable(ENTITY_TYPES_BY_MODULE_KEY.get(normalizeModuleKey(moduleKey)));
+        return reg().findEntityType(moduleKey);
     }
 
     public static boolean hasEntity(String moduleKey) {
-        return findEntityType(moduleKey).isPresent();
+        return reg().hasEntity(moduleKey);
     }
 
     public static Set<String> moduleKeys() {
-        return ENTITY_TYPES_BY_MODULE_KEY.keySet();
+        return reg().moduleKeys();
     }
 
     public static String normalizeModuleKey(String moduleKey) {
-        return String.valueOf(moduleKey == null ? "" : moduleKey)
-                .trim()
-                .replaceFirst("^/+", "")
-                .toLowerCase(Locale.ROOT);
-    }
-
-    private static Map<String, Class<? extends AbstractAuditableEntity>> buildEntityTypes() {
-        Map<String, Class<? extends AbstractAuditableEntity>> entityTypes = new LinkedHashMap<>();
-        entityTypes.put("material", Material.class);
-        entityTypes.put("supplier", Supplier.class);
-        entityTypes.put("customer", Customer.class);
-        entityTypes.put("carrier", Carrier.class);
-        entityTypes.put("warehouse", Warehouse.class);
-        entityTypes.put("purchase-order", PurchaseOrder.class);
-        entityTypes.put("purchase-inbound", PurchaseInbound.class);
-        entityTypes.put("sales-order", SalesOrder.class);
-        entityTypes.put("sales-outbound", SalesOutbound.class);
-        entityTypes.put("freight-bill", FreightBill.class);
-        entityTypes.put("purchase-contract", PurchaseContract.class);
-        entityTypes.put("sales-contract", SalesContract.class);
-        entityTypes.put("supplier-statement", SupplierStatement.class);
-        entityTypes.put("customer-statement", CustomerStatement.class);
-        entityTypes.put("freight-statement", FreightStatement.class);
-        entityTypes.put("receipt", Receipt.class);
-        entityTypes.put("payment", Payment.class);
-        entityTypes.put("invoice-receipt", InvoiceReceipt.class);
-        entityTypes.put("invoice-issue", InvoiceIssue.class);
-        return Collections.unmodifiableMap(entityTypes);
+        return BusinessEntityRegistrar.normalizeModuleKey(moduleKey);
     }
 }
