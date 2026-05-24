@@ -1,6 +1,6 @@
 package com.leo.erp.sales.order.domain.entity;
 
-import com.leo.erp.common.persistence.AuditableEntity;
+import com.leo.erp.common.persistence.AbstractAuditableEntity;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
@@ -14,7 +14,7 @@ import java.util.List;
 @Setter
 @Entity
 @Table(name = "so_sales_order")
-public class SalesOrder extends AuditableEntity {
+public class SalesOrder extends AbstractAuditableEntity {
 
     @Id
     private Long id;

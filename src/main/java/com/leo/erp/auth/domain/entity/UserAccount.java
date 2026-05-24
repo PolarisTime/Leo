@@ -1,7 +1,7 @@
 package com.leo.erp.auth.domain.entity;
 
 import com.leo.erp.auth.domain.enums.UserStatus;
-import com.leo.erp.common.persistence.AuditableEntity;
+import com.leo.erp.common.persistence.AbstractAuditableEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -18,7 +18,7 @@ import java.time.LocalDateTime;
 @Setter
 @Entity
 @Table(name = "sys_user")
-public class UserAccount extends AuditableEntity {
+public class UserAccount extends AbstractAuditableEntity {
 
     @Id
     private Long id;

@@ -1,6 +1,6 @@
 package com.leo.erp.system.company.domain.entity;
 
-import com.leo.erp.common.persistence.AuditableEntity;
+import com.leo.erp.common.persistence.AbstractAuditableEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
@@ -14,7 +14,7 @@ import java.math.BigDecimal;
 @Setter
 @Entity
 @Table(name = "sys_company_setting")
-public class CompanySetting extends AuditableEntity {
+public class CompanySetting extends AbstractAuditableEntity {
 
     @Id
     private Long id;

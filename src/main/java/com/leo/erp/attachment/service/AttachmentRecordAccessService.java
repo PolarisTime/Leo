@@ -4,7 +4,7 @@ import com.leo.erp.attachment.domain.entity.AttachmentBinding;
 import com.leo.erp.attachment.repository.AttachmentBindingRepository;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
-import com.leo.erp.common.persistence.AuditableEntity;
+import com.leo.erp.common.persistence.AbstractAuditableEntity;
 import com.leo.erp.common.support.BusinessRecordEntityCatalog;
 import com.leo.erp.security.permission.DataScopeContext;
 import com.leo.erp.security.permission.PermissionService;
@@ -38,7 +38,7 @@ public class AttachmentRecordAccessService {
         if (!isBusinessModule(normalizedModuleKey)) {
             return;
         }
-        AuditableEntity entity = loadBusinessEntity(normalizedModuleKey, normalizedRecordId);
+        AbstractAuditableEntity entity = loadBusinessEntity(normalizedModuleKey, normalizedRecordId);
         if (entity == null || Boolean.TRUE.equals(entity.getDeletedFlag())) {
             throw new BusinessException(ErrorCode.NOT_FOUND, "业务记录不存在");
         }
@@ -70,13 +70,13 @@ public class AttachmentRecordAccessService {
         }
     }
 
-    private void assertCanAccess(SecurityPrincipal principal, String moduleKey, String actionCode, AuditableEntity entity) {
+    private void assertCanAccess(SecurityPrincipal principal, String moduleKey, String actionCode, AbstractAuditableEntity entity) {
         if (!canAccess(principal, moduleKey, actionCode, entity)) {
             throw new BusinessException(ErrorCode.FORBIDDEN, "无数据权限");
         }
     }
 
-    private boolean canAccess(SecurityPrincipal principal, String moduleKey, String actionCode, AuditableEntity entity) {
+    private boolean canAccess(SecurityPrincipal principal, String moduleKey, String actionCode, AbstractAuditableEntity entity) {
         DataScopeContext.Context previous = DataScopeContext.current();
         String resource = resolveResource(moduleKey);
         String action = ResourcePermissionCatalog.normalizeAction(actionCode);
@@ -94,7 +94,7 @@ public class AttachmentRecordAccessService {
         }
     }
 
-    private AuditableEntity loadBusinessEntity(String moduleKey, Long recordId) {
+    private AbstractAuditableEntity loadBusinessEntity(String moduleKey, Long recordId) {
         return BusinessRecordEntityCatalog.findEntityType(moduleKey)
                 .map(entityType -> entityManager.find(entityType, recordId))
                 .orElse(null);

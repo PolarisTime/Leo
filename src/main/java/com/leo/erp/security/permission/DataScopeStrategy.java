@@ -1,6 +1,6 @@
 package com.leo.erp.security.permission;
 
-import com.leo.erp.common.persistence.AuditableEntity;
+import com.leo.erp.common.persistence.AbstractAuditableEntity;
 import org.springframework.data.jpa.domain.Specification;
 
 import java.util.Set;
@@ -14,7 +14,7 @@ import java.util.Set;
  * and register via {@link DataScopeContext#setStrategy(DataScopeStrategy)}.
  * </p>
  */
-public interface DataScopeStrategy<E extends AuditableEntity> {
+public interface DataScopeStrategy<E extends AbstractAuditableEntity> {
 
     /**
      * Build a JPA Specification that restricts rows to the given owner user IDs.

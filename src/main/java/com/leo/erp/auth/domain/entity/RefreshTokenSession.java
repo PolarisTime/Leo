@@ -1,7 +1,7 @@
 package com.leo.erp.auth.domain.entity;
 
 import com.leo.erp.auth.domain.enums.RevokeReason;
-import com.leo.erp.common.persistence.AuditableEntity;
+import com.leo.erp.common.persistence.AbstractAuditableEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -17,7 +17,7 @@ import java.time.LocalDateTime;
 @Setter
 @Entity
 @Table(name = "auth_refresh_token")
-public class RefreshTokenSession extends AuditableEntity {
+public class RefreshTokenSession extends AbstractAuditableEntity {
 
     @Id
     private Long id;

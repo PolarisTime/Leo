@@ -1,6 +1,6 @@
 package com.leo.erp.auth.domain.entity;
 
-import com.leo.erp.common.persistence.AuditableEntity;
+import com.leo.erp.common.persistence.AbstractAuditableEntity;
 import com.leo.erp.auth.domain.enums.ApiKeyStatus;
 import com.leo.erp.auth.domain.enums.ApiKeyStatusConverter;
 import jakarta.persistence.Column;
@@ -17,7 +17,7 @@ import java.time.LocalDateTime;
 @Setter
 @Entity
 @Table(name = "auth_api_key")
-public class ApiKey extends AuditableEntity {
+public class ApiKey extends AbstractAuditableEntity {
 
     @Id
     private Long id;

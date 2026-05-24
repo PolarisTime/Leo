@@ -1,6 +1,6 @@
 package com.leo.erp.logistics.bill.domain.entity;
 
-import com.leo.erp.common.persistence.AuditableEntity;
+import com.leo.erp.common.persistence.AbstractAuditableEntity;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
@@ -14,7 +14,7 @@ import java.util.List;
 @Setter
 @Entity
 @Table(name = "lg_freight_bill")
-public class FreightBill extends AuditableEntity {
+public class FreightBill extends AbstractAuditableEntity {
 
     @Id
     private Long id;

@@ -1,6 +1,6 @@
 package com.leo.erp.system.role.domain.entity;
 
-import com.leo.erp.common.persistence.AuditableEntity;
+import com.leo.erp.common.persistence.AbstractAuditableEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
@@ -12,7 +12,7 @@ import lombok.Setter;
 @Setter
 @Entity
 @Table(name = "sys_role_permission")
-public class RolePermission extends AuditableEntity {
+public class RolePermission extends AbstractAuditableEntity {
 
     @Id
     private Long id;
