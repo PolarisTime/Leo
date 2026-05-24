@@ -262,3 +262,25 @@ logging:
   level:
     # 健康检查页面单独开 DEBUG，便于排查探活请求
     com.leo.erp.system.web.HealthPageController: DEBUG
+
+# Resilience4j 熔断降级与限流配置 (GB/T 34944-2017 软件容错)
+resilience4j:
+  circuitbreaker:
+    configs:
+      default:
+        sliding-window-size: 10
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 30s
+        permitted-number-of-calls-in-half-open-state: 3
+    instances:
+      database-export:
+        base-config: default
+  ratelimiter:
+    configs:
+      default:
+        limit-for-period: 100
+        limit-refresh-period: 1s
+        timeout-duration: 500ms
+    instances:
+      global-api:
+        base-config: default
