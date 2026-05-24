@@ -125,7 +125,7 @@ public class ProjectArQueryRepository {
         String whereSql = buildSummaryWhereClause(params, normalizedKeyword, projectId);
 
         Number totalNumber = jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) " + SUMMARY_UNION_SQL + whereSql, params, Number.class);
+                "SELECT COUNT(1) " + SUMMARY_UNION_SQL + whereSql, params, Number.class);
         long total = totalNumber == null ? 0L : totalNumber.longValue();
         if (total == 0) {
             return new PageImpl<>(List.of(), PageRequest.of(query.page(), query.size()), 0);
@@ -203,7 +203,7 @@ public class ProjectArQueryRepository {
                   )
                 """;
 
-        Number totalNumber = jdbcTemplate.queryForObject("SELECT COUNT(*) " + baseFrom, params, Number.class);
+        Number totalNumber = jdbcTemplate.queryForObject("SELECT COUNT(1) " + baseFrom, params, Number.class);
         long total = totalNumber == null ? 0L : totalNumber.longValue();
         if (total == 0) {
             return new PageImpl<>(List.of(), PageRequest.of(query.page(), query.size()), 0);
