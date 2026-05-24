@@ -7,6 +7,8 @@ import com.fasterxml.jackson.databind.JsonSerializer;
 import com.fasterxml.jackson.databind.SerializerProvider;
 import com.fasterxml.jackson.databind.ser.ContextualSerializer;
 
+import com.leo.erp.common.support.PrecisionConstants;
+
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -46,7 +48,7 @@ public class ScaledBigDecimalSerializer extends JsonSerializer<BigDecimal> imple
     private Integer resolveScale(String propertyName) {
         String normalizedName = propertyName == null ? "" : propertyName.toLowerCase(Locale.ROOT);
         if (normalizedName.contains("weight")) {
-            return 3;
+            return PrecisionConstants.WEIGHT_SCALE;
         }
         if (normalizedName.contains("amount") || normalizedName.contains("price") || normalizedName.contains("freight")) {
             return 2;

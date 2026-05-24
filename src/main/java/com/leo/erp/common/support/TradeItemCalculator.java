@@ -22,11 +22,11 @@ public final class TradeItemCalculator {
     }
 
     public static BigDecimal scaleWeightTon(BigDecimal value) {
-        return safeBigDecimal(value).setScale(3, RoundingMode.HALF_UP);
+        return safeBigDecimal(value).setScale(PrecisionConstants.WEIGHT_SCALE, PrecisionConstants.DEFAULT_ROUNDING);
     }
 
     public static BigDecimal scaleAmount(BigDecimal value) {
-        return safeBigDecimal(value).setScale(2, RoundingMode.HALF_UP);
+        return safeBigDecimal(value).setScale(PrecisionConstants.AMOUNT_SCALE, PrecisionConstants.DEFAULT_ROUNDING);
     }
 
     public static BigDecimal calculateWeightTon(Integer quantity, BigDecimal pieceWeightTon) {
@@ -37,7 +37,7 @@ public final class TradeItemCalculator {
 
     public static BigDecimal calculateAveragePieceWeightTon(Integer quantity, BigDecimal weightTon) {
         if (quantity == null || quantity <= 0) {
-            return BigDecimal.ZERO.setScale(3, RoundingMode.HALF_UP);
+            return BigDecimal.ZERO.setScale(PrecisionConstants.WEIGHT_SCALE, PrecisionConstants.DEFAULT_ROUNDING);
         }
         return safeBigDecimal(weightTon)
                 .divide(BigDecimal.valueOf(quantity.longValue()), 3, RoundingMode.HALF_UP);

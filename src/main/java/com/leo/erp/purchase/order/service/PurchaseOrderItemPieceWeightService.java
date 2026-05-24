@@ -2,6 +2,7 @@ package com.leo.erp.purchase.order.service;
 
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
+import com.leo.erp.common.support.PrecisionConstants;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.TradeItemCalculator;
 import com.leo.erp.purchase.order.domain.entity.PurchaseOrderItem;
@@ -66,7 +67,7 @@ public class PurchaseOrderItemPieceWeightService {
                     TradeItemCalculator.safeBigDecimal(item.getWeightTon()).subtract(allocatedWeightTon)
             );
             if (unallocatedWeightTon.compareTo(BigDecimal.ZERO) < 0) {
-                unallocatedWeightTon = BigDecimal.ZERO.setScale(3);
+                unallocatedWeightTon = BigDecimal.ZERO.setScale(PrecisionConstants.WEIGHT_SCALE);
             }
             List<Integer> unallocatedPieceNos = IntStream.rangeClosed(1, item.getQuantity())
                     .filter(pieceNo -> !allocatedPieceNos.contains(pieceNo))
@@ -87,7 +88,7 @@ public class PurchaseOrderItemPieceWeightService {
                                                 Long salesOrderItemId,
                                                 int lineNo) {
         if (sourceItem == null || sourceItem.getId() == null || quantity == null || quantity <= 0) {
-            return BigDecimal.ZERO.setScale(3);
+            return BigDecimal.ZERO.setScale(PrecisionConstants.WEIGHT_SCALE);
         }
         if (salesOrderItemId == null) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "第" + lineNo + "行销售订单明细ID缺失，无法分配逐件重量");
