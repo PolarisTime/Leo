@@ -7,6 +7,7 @@ import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.service.AbstractCrudService;
 import com.leo.erp.common.support.ManagedEntityItemSupport;
+import com.leo.erp.common.support.PrecisionConstants;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.TradeItemMaterialSupport;
 import com.leo.erp.common.support.BusinessStatusValidator;
@@ -518,7 +519,7 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
                         .subtract(requestAllocation.weightTon())
         );
         return residualWeightTon.compareTo(BigDecimal.ZERO) < 0
-                ? BigDecimal.ZERO.setScale(3)
+                ? BigDecimal.ZERO.setScale(PrecisionConstants.WEIGHT_SCALE)
                 : residualWeightTon;
     }
 
@@ -698,6 +699,6 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
             BigDecimal weightTon
     ) {
 
-        private static final SourceAllocation ZERO = new SourceAllocation(0, BigDecimal.ZERO.setScale(3));
+        private static final SourceAllocation ZERO = new SourceAllocation(0, BigDecimal.ZERO.setScale(PrecisionConstants.WEIGHT_SCALE));
     }
 }

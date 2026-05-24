@@ -2,6 +2,7 @@ package com.leo.erp.attachment.service;
 
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
+import com.leo.erp.common.support.PrecisionConstants;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
@@ -20,7 +21,7 @@ public class AttachmentFilenameResolver {
     private static final DateTimeFormatter FULL = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
 
     public String buildFileName(String renamePattern, String originalFilename, String contentType, LocalDateTime now) {
-        return renderFileName(renamePattern, originalFilename, contentType, now, String.valueOf(System.currentTimeMillis()), UUID.randomUUID().toString().replace("-", "").substring(0, 8));
+        return renderFileName(renamePattern, originalFilename, contentType, now, String.valueOf(System.currentTimeMillis()), UUID.randomUUID().toString().replace("-", "").substring(0, PrecisionConstants.ID_PREFIX_LENGTH));
     }
 
     public String preview(String renamePattern, String originalFilename) {

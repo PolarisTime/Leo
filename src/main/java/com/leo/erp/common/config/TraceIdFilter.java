@@ -8,6 +8,8 @@ import org.slf4j.MDC;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
+import com.leo.erp.common.support.PrecisionConstants;
+
 import java.io.IOException;
 import java.util.UUID;
 
@@ -22,7 +24,7 @@ public class TraceIdFilter extends OncePerRequestFilter {
             throws ServletException, IOException {
         String traceId = request.getHeader(TRACE_ID_HEADER);
         if (traceId == null || traceId.isBlank()) {
-            traceId = UUID.randomUUID().toString().substring(0, 8);
+            traceId = UUID.randomUUID().toString().substring(0, PrecisionConstants.ID_PREFIX_LENGTH);
         }
         response.setHeader(TRACE_ID_HEADER, traceId);
         try (var ignored = MDC.putCloseable(MDC_KEY, traceId)) {

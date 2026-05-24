@@ -7,6 +7,7 @@ import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.service.AbstractCrudService;
 import com.leo.erp.common.support.ManagedEntityItemSupport;
+import com.leo.erp.common.support.PrecisionConstants;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.TradeItemMaterialSupport;
 import com.leo.erp.common.support.BusinessStatusValidator;
@@ -269,8 +270,8 @@ public class PurchaseInboundService extends AbstractCrudService<PurchaseInbound,
             return new WeightSettlementResult(
                     baseWeightTon,
                     null,
-                    BigDecimal.ZERO.setScale(3),
-                    BigDecimal.ZERO.setScale(2),
+                    BigDecimal.ZERO.setScale(PrecisionConstants.WEIGHT_SCALE),
+                    BigDecimal.ZERO.setScale(PrecisionConstants.AMOUNT_SCALE),
                     sourcePieceWeightTon
             );
         }

@@ -6,6 +6,7 @@ import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.service.AbstractCrudService;
 import com.leo.erp.common.support.RedisJsonCacheSupport;
+import com.leo.erp.common.support.PrecisionConstants;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.system.company.domain.entity.CompanySetting;
 import com.leo.erp.system.company.repository.CompanySettingRepository;
@@ -124,7 +125,7 @@ public class CompanySettingService extends AbstractCrudService<CompanySetting, C
                 .flatMap(this::parseTaxRate)
                 .or(() -> findCurrentEntity().map(CompanySetting::getTaxRate))
                 .orElse(BigDecimal.ZERO)
-                .setScale(4, RoundingMode.HALF_UP);
+                .setScale(PrecisionConstants.TAX_RATE_SCALE, PrecisionConstants.DEFAULT_ROUNDING);
     }
 
     @Transactional
@@ -278,7 +279,7 @@ public class CompanySettingService extends AbstractCrudService<CompanySetting, C
             return Optional.empty();
         }
         try {
-            return Optional.of(new BigDecimal(rawValue.trim()).setScale(4, RoundingMode.HALF_UP));
+            return Optional.of(new BigDecimal(rawValue.trim()).setScale(PrecisionConstants.TAX_RATE_SCALE, PrecisionConstants.DEFAULT_ROUNDING));
         } catch (NumberFormatException ex) {
             return Optional.empty();
         }

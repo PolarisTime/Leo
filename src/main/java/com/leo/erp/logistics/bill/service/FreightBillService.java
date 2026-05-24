@@ -8,6 +8,7 @@ import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.service.AbstractCrudService;
 import com.leo.erp.common.support.BusinessStatusValidator;
 import com.leo.erp.common.support.ManagedEntityItemSupport;
+import com.leo.erp.common.support.PrecisionConstants;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.support.TradeItemCalculator;
@@ -242,7 +243,7 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
         entity.setCustomerName(resolveHeaderLabel(customerNames, "多客户"));
         entity.setProjectName(resolveHeaderLabel(projectNames, "多项目"));
         entity.setTotalWeight(totalWeight);
-        entity.setTotalFreight(totalWeight.multiply(request.unitPrice()).setScale(2, RoundingMode.HALF_UP));
+        entity.setTotalFreight(totalWeight.multiply(request.unitPrice()).setScale(PrecisionConstants.AMOUNT_SCALE, PrecisionConstants.DEFAULT_ROUNDING));
     }
 
     private void assertSourceOutboundsNotOccupied(FreightBillRequest request, Long currentBillId) {

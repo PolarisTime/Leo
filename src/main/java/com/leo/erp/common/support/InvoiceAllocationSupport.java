@@ -14,7 +14,7 @@ public final class InvoiceAllocationSupport {
 
     public static BigDecimal resolveWeightTon(Integer quantity, BigDecimal pieceWeightTon, BigDecimal weightTon) {
         if (weightTon != null && weightTon.compareTo(BigDecimal.ZERO) > 0) {
-            return weightTon.setScale(3, RoundingMode.HALF_UP);
+            return weightTon.setScale(PrecisionConstants.WEIGHT_SCALE, PrecisionConstants.DEFAULT_ROUNDING);
         }
         return TradeItemCalculator.calculateWeightTon(quantity, pieceWeightTon);
     }
@@ -24,7 +24,7 @@ public final class InvoiceAllocationSupport {
         if (taxRate.compareTo(BigDecimal.ZERO) <= 0) {
             return requestedTaxAmount == null ? BigDecimal.ZERO : requestedTaxAmount;
         }
-        return amount.multiply(taxRate).setScale(2, RoundingMode.HALF_UP);
+        return amount.multiply(taxRate).setScale(PrecisionConstants.AMOUNT_SCALE, PrecisionConstants.DEFAULT_ROUNDING);
     }
 
     public static void validateDeclaredAmount(String fieldLabel, BigDecimal requestValue, BigDecimal calculatedValue) {

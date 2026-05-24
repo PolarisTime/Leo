@@ -10,6 +10,7 @@ import com.leo.erp.auth.web.dto.TotpSetupResponse;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.support.StatusConstants;
+import com.leo.erp.common.support.PrecisionConstants;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -321,7 +322,7 @@ public class InitialSetupService {
             setting.setSerialLength(1);
             setting.setResetRule("YEARLY");
         }
-        setting.setSampleNo(taxRate.setScale(4, java.math.RoundingMode.HALF_UP).toPlainString());
+        setting.setSampleNo(taxRate.setScale(PrecisionConstants.TAX_RATE_SCALE, PrecisionConstants.DEFAULT_ROUNDING).toPlainString());
         setting.setStatus(StatusConstants.NORMAL);
         setting.setRemark("用于发票默认税率与税额自动计算");
         noRuleRepository.save(setting);

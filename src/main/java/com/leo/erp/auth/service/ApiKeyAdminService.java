@@ -16,6 +16,7 @@ import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
+import com.leo.erp.common.support.PrecisionConstants;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.security.permission.ResourcePermissionCatalog;
 import org.springframework.data.domain.PageRequest;
@@ -139,7 +140,7 @@ public class ApiKeyAdminService {
         String rawKey = "leo_" + Base64.getUrlEncoder().withoutPadding().encodeToString(
                 generateRandomBytes(32));
         String keyHash = ApiKeySupport.hashKey(rawKey);
-        String keyPrefix = rawKey.substring(0, 8);
+        String keyPrefix = rawKey.substring(0, PrecisionConstants.ID_PREFIX_LENGTH);
 
         ApiKey entity = new ApiKey();
         entity.setId(idGenerator.nextId());
