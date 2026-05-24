@@ -26,7 +26,7 @@ import com.leo.erp.purchase.order.web.dto.PurchaseOrderItemRequest;
 import com.leo.erp.purchase.order.web.dto.PurchaseOrderItemResponse;
 import com.leo.erp.purchase.order.web.dto.PurchaseOrderRequest;
 import com.leo.erp.purchase.order.web.dto.PurchaseOrderResponse;
-import com.leo.erp.sales.order.service.SalesOrderItemQueryService;
+import com.leo.erp.allocation.repository.ItemAllocationNativeRepository;
 import com.leo.erp.security.permission.WorkflowTransitionGuard;
 import java.util.function.Function;
 import org.springframework.data.domain.Page;
@@ -70,7 +70,7 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
     private final WarehouseSelectionSupport warehouseSelectionSupport;
     private final SupplierRepository supplierRepository;
     private final PurchaseInboundItemQueryService purchaseInboundItemQueryService;
-    private final SalesOrderItemQueryService salesOrderItemQueryService;
+    private final ItemAllocationNativeRepository itemAllocationRepo;
     private final PurchaseOrderItemPieceWeightService purchaseOrderItemPieceWeightService;
     private final WorkflowTransitionGuard workflowTransitionGuard;
 
@@ -81,7 +81,7 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
                                 WarehouseSelectionSupport warehouseSelectionSupport,
                                 SupplierRepository supplierRepository,
                                 PurchaseInboundItemQueryService purchaseInboundItemQueryService,
-                                SalesOrderItemQueryService salesOrderItemQueryService,
+                                ItemAllocationNativeRepository itemAllocationRepo,
                                 PurchaseOrderItemPieceWeightService purchaseOrderItemPieceWeightService,
                                 WorkflowTransitionGuard workflowTransitionGuard) {
         super(snowflakeIdGenerator);
@@ -91,7 +91,7 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
         this.warehouseSelectionSupport = warehouseSelectionSupport;
         this.supplierRepository = supplierRepository;
         this.purchaseInboundItemQueryService = purchaseInboundItemQueryService;
-        this.salesOrderItemQueryService = salesOrderItemQueryService;
+        this.itemAllocationRepo = itemAllocationRepo;
         this.purchaseOrderItemPieceWeightService = purchaseOrderItemPieceWeightService;
         this.workflowTransitionGuard = workflowTransitionGuard;
     }
@@ -182,9 +182,9 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
         if (orderItemIds.isEmpty()) {
             return Map.of();
         }
-        Map<Long, Long> summaryMap = salesOrderItemQueryService.summarizeAllocatedQuantityBySourcePurchaseOrderItemIds(orderItemIds, null);
         Map<Long, Integer> allocatedMap = new HashMap<>();
-        summaryMap.forEach((key, value) -> allocatedMap.put(key, Math.toIntExact(value)));
+        itemAllocationRepo.summarizeSalesByPurchaseOrderItems(orderItemIds, null)
+                .forEach(p -> allocatedMap.put(p.getSourceItemId(), Math.toIntExact(p.getTotalQuantity())));
         return allocatedMap;
     }
 
@@ -219,7 +219,11 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
                     purchaseInboundItemQueryService.summarizeAllocatedQuantityBySourcePurchaseOrderItemIds(itemIds)
             );
             case SALES_ORDER -> toIntegerQuantityMap(
-                    salesOrderItemQueryService.summarizeAllocatedQuantityBySourcePurchaseOrderItemIds(itemIds, null)
+                    itemAllocationRepo.summarizeSalesByPurchaseOrderItems(itemIds, null)
+                            .stream().collect(Collectors.toMap(
+                                    ItemAllocationNativeRepository.AllocationProjection::getSourceItemId,
+                                    p -> p.getTotalQuantity()
+                            ))
             );
         };
 
