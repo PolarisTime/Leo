@@ -252,7 +252,9 @@ public class DatabaseStatusService {
                             rs.getString("table_name"), rs.getDouble("heap_cache_pct"),
                             rs.getDouble("idx_cache_pct"), rs.getDouble("hot_update_pct")));
                 }
-            } catch (SQLException ignored) { }
+            } catch (SQLException e) {
+                log.debug("PG 缓存监控视图不可用: {}", e.getMessage());
+            }
 
             List<PgMonitoringResponse.BloatItem> bloat = new ArrayList<>();
             try (ResultSet rs = stmt.executeQuery("SELECT table_name, live_rows, dead_rows, dead_pct, to_char(last_autovacuum, 'YYYY-MM-DD HH24:MI') AS last_av FROM v_table_bloat LIMIT 10")) {
@@ -261,7 +263,9 @@ public class DatabaseStatusService {
                             rs.getString("table_name"), rs.getLong("live_rows"), rs.getLong("dead_rows"),
                             rs.getDouble("dead_pct"), rs.getString("last_av")));
                 }
-            } catch (SQLException ignored) { }
+            } catch (SQLException e) {
+                log.debug("PG 膨胀监控视图不可用: {}", e.getMessage());
+            }
 
             List<PgMonitoringResponse.UnusedIndexItem> unused = new ArrayList<>();
             try (ResultSet rs = stmt.executeQuery("SELECT index_name, table_name, size, scans FROM v_unused_indexes LIMIT 10")) {
@@ -270,7 +274,9 @@ public class DatabaseStatusService {
                             rs.getString("index_name"), rs.getString("table_name"),
                             rs.getString("size"), rs.getLong("scans")));
                 }
-            } catch (SQLException ignored) { }
+            } catch (SQLException e) {
+                log.debug("PG 未使用索引监控视图不可用: {}", e.getMessage());
+            }
 
             return new PgMonitoringResponse(slowQueries, cache, bloat, unused);
         } catch (SQLException e) {
