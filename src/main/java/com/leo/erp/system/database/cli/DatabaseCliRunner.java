@@ -23,7 +23,7 @@ public class DatabaseCliRunner implements ApplicationRunner {
     }
 
     @Override
-    public void run(ApplicationArguments args) throws Exception {
+    public void run(ApplicationArguments args) throws java.io.IOException, InterruptedException {
         if (args.containsOption("db-export")) {
             String path = args.getOptionValues("db-export").get(0);
             Path target = Path.of(path);

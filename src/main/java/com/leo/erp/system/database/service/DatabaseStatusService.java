@@ -75,7 +75,7 @@ public class DatabaseStatusService {
             }
 
             try (ResultSet rs = stmt.executeQuery(
-                    "SELECT count(*) AS total, count(*) FILTER (WHERE state = 'active') AS active FROM pg_stat_activity WHERE datname = current_database()")) {
+                    "SELECT count(1) AS total, count(1) FILTER (WHERE state = 'active') AS active FROM pg_stat_activity WHERE datname = current_database()")) {
                 if (rs.next()) {
                     totalConnections = rs.getLong("total");
                     activeConnections = rs.getLong("active");
@@ -96,7 +96,7 @@ public class DatabaseStatusService {
             }
 
             try (ResultSet rs = stmt.executeQuery(
-                    "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public'")) {
+                    "SELECT count(1) FROM information_schema.tables WHERE table_schema = 'public'")) {
                 if (rs.next()) {
                     tableCount = rs.getLong(1);
                 }

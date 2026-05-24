@@ -98,7 +98,7 @@ public class ReceivablePayableQueryRepository {
                 .addValue("offset", (long) query.page() * query.size());
         String whereSql = buildWhereClause(params, direction, counterpartyType, status, normalizedKeyword);
 
-        Number totalNumber = jdbcTemplate.queryForObject("SELECT COUNT(*) " + UNION_SQL + whereSql, params, Number.class);
+        Number totalNumber = jdbcTemplate.queryForObject("SELECT COUNT(1) " + UNION_SQL + whereSql, params, Number.class);
         long total = totalNumber == null ? 0L : totalNumber.longValue();
         if (total == 0) {
             return new PageImpl<>(List.of(), PageRequest.of(query.page(), query.size()), 0);

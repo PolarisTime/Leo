@@ -108,7 +108,7 @@ public class IoReportQueryRepository {
         String whereClause = buildWhereClause(params, keyword, businessType, startDate, endDate);
 
         Number totalNumber = jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) " + IO_REPORT_FROM_SQL + whereClause,
+                "SELECT COUNT(1) " + IO_REPORT_FROM_SQL + whereClause,
                 params,
                 Number.class
         );

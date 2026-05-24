@@ -119,7 +119,7 @@ public class InventoryReportQueryRepository {
         String whereClause = buildWhereClause(params, keyword, warehouseName, category);
 
         Number totalNumber = jdbcTemplate.queryForObject(
-                inventoryCte + "SELECT COUNT(*) FROM inventory report" + whereClause,
+                inventoryCte + "SELECT COUNT(1) FROM inventory report" + whereClause,
                 params,
                 Number.class
         );
