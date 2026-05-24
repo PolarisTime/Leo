@@ -1,12 +1,12 @@
 package com.leo.erp.security.permission;
 
-import com.leo.erp.common.persistence.AuditableEntity;
+import com.leo.erp.common.persistence.AbstractAuditableEntity;
 import org.springframework.data.jpa.domain.Specification;
 
 import java.util.Objects;
 import java.util.Set;
 
-public final class CreatedByScopeStrategy implements DataScopeStrategy<AuditableEntity> {
+public final class CreatedByScopeStrategy implements DataScopeStrategy<AbstractAuditableEntity> {
 
     private static final CreatedByScopeStrategy INSTANCE = new CreatedByScopeStrategy();
 
@@ -18,7 +18,7 @@ public final class CreatedByScopeStrategy implements DataScopeStrategy<Auditable
     }
 
     @Override
-    public Specification<AuditableEntity> toSpecification(Set<Long> ownerUserIds) {
+    public Specification<AbstractAuditableEntity> toSpecification(Set<Long> ownerUserIds) {
         return (root, query, criteriaBuilder) ->
                 ownerUserIds.isEmpty()
                         ? criteriaBuilder.disjunction()
@@ -26,7 +26,7 @@ public final class CreatedByScopeStrategy implements DataScopeStrategy<Auditable
     }
 
     @Override
-    public boolean canAccess(AuditableEntity entity, Set<Long> ownerUserIds) {
+    public boolean canAccess(AbstractAuditableEntity entity, Set<Long> ownerUserIds) {
         if (entity == null || ownerUserIds.isEmpty()) {
             return false;
         }

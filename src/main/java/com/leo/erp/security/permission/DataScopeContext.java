@@ -2,7 +2,7 @@ package com.leo.erp.security.permission;
 
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
-import com.leo.erp.common.persistence.AuditableEntity;
+import com.leo.erp.common.persistence.AbstractAuditableEntity;
 import org.springframework.data.jpa.domain.Specification;
 
 import java.util.Objects;
@@ -27,7 +27,7 @@ public final class DataScopeContext {
      * Call this during application startup if you need custom ownership fields.
      */
     @SuppressWarnings("unchecked")
-    public static <E extends AuditableEntity> void setStrategy(DataScopeStrategy<E> customStrategy) {
+    public static <E extends AbstractAuditableEntity> void setStrategy(DataScopeStrategy<E> customStrategy) {
         strategy = customStrategy;
     }
 
@@ -53,7 +53,7 @@ public final class DataScopeContext {
     }
 
     @SuppressWarnings("unchecked")
-    public static <E extends AuditableEntity> Specification<E> apply(Specification<E> specification) {
+    public static <E extends AbstractAuditableEntity> Specification<E> apply(Specification<E> specification) {
         Context context = current();
         Set<Long> ownerUserIds = allowedOwnerUserIds(context);
         if (ownerUserIds == null) {
@@ -63,14 +63,14 @@ public final class DataScopeContext {
         return specification == null ? ownerSpecification : specification.and(ownerSpecification);
     }
 
-    public static void assertCanAccess(AuditableEntity entity) {
+    public static void assertCanAccess(AbstractAuditableEntity entity) {
         if (!canAccess(entity)) {
             throw new BusinessException(ErrorCode.FORBIDDEN, "无数据权限");
         }
     }
 
     @SuppressWarnings("unchecked")
-    public static boolean canAccess(AuditableEntity entity) {
+    public static boolean canAccess(AbstractAuditableEntity entity) {
         Context context = current();
         Set<Long> ownerUserIds = allowedOwnerUserIds(context);
         if (entity == null || ownerUserIds == null) {
@@ -79,7 +79,7 @@ public final class DataScopeContext {
         if (ownerUserIds.isEmpty()) {
             return false;
         }
-        return ((DataScopeStrategy<AuditableEntity>) strategy).canAccess(entity, ownerUserIds);
+        return ((DataScopeStrategy<AbstractAuditableEntity>) strategy).canAccess(entity, ownerUserIds);
     }
 
     public static Set<Long> allowedOwnerUserIds() {

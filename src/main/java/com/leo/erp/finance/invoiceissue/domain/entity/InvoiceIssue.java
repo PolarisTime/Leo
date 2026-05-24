@@ -1,6 +1,6 @@
 package com.leo.erp.finance.invoiceissue.domain.entity;
 
-import com.leo.erp.common.persistence.AuditableEntity;
+import com.leo.erp.common.persistence.AbstractAuditableEntity;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -19,7 +19,7 @@ import java.util.List;
 @Setter
 @Entity
 @Table(name = "fm_invoice_issue")
-public class InvoiceIssue extends AuditableEntity {
+public class InvoiceIssue extends AbstractAuditableEntity {
 
     @Id
     private Long id;

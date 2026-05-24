@@ -1,6 +1,6 @@
 package com.leo.erp.system.menu.domain.entity;
 
-import com.leo.erp.common.persistence.AuditableEntity;
+import com.leo.erp.common.persistence.AbstractAuditableEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
@@ -12,7 +12,7 @@ import lombok.Setter;
 @Setter
 @Entity
 @Table(name = "sys_menu")
-public class Menu extends AuditableEntity {
+public class Menu extends AbstractAuditableEntity {
 
     @Id
     private Long id;

@@ -3,7 +3,7 @@ package com.leo.erp.common.service;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
-import com.leo.erp.common.persistence.AuditableEntity;
+import com.leo.erp.common.persistence.AbstractAuditableEntity;
 import com.leo.erp.security.permission.DataScopeContext;
 import com.leo.erp.security.support.SecurityPrincipal;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
@@ -30,7 +30,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
-public abstract class AbstractCrudService<E extends AuditableEntity, Req, Res> {
+public abstract class AbstractCrudService<E extends AbstractAuditableEntity, Req, Res> {
     private static final String PREALLOCATED_ID_HEADER = "X-Preallocated-Id";
 
     private static final Set<String> PROTECTED_EDIT_STATUSES = Set.of(

@@ -1,6 +1,6 @@
 package com.leo.erp.statement.customer.domain.entity;
 
-import com.leo.erp.common.persistence.AuditableEntity;
+import com.leo.erp.common.persistence.AbstractAuditableEntity;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -20,7 +20,7 @@ import java.util.List;
 @Setter
 @Entity
 @Table(name = "st_customer_statement")
-public class CustomerStatement extends AuditableEntity {
+public class CustomerStatement extends AbstractAuditableEntity {
 
     @Id
     private Long id;

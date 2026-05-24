@@ -1,6 +1,6 @@
 package com.leo.erp.statement.freight.domain.entity;
 
-import com.leo.erp.common.persistence.AuditableEntity;
+import com.leo.erp.common.persistence.AbstractAuditableEntity;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -20,7 +20,7 @@ import java.util.List;
 @Setter
 @Entity
 @Table(name = "st_freight_statement")
-public class FreightStatement extends AuditableEntity {
+public class FreightStatement extends AbstractAuditableEntity {
 
     @Id
     private Long id;

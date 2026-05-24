@@ -1,6 +1,6 @@
 package com.leo.erp.finance.payment.domain.entity;
 
-import com.leo.erp.common.persistence.AuditableEntity;
+import com.leo.erp.common.persistence.AbstractAuditableEntity;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -23,7 +23,7 @@ import java.util.Set;
 @Setter
 @Entity
 @Table(name = "fm_payment")
-public class Payment extends AuditableEntity {
+public class Payment extends AbstractAuditableEntity {
 
     @Id
     private Long id;

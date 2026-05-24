@@ -1,6 +1,6 @@
 package com.leo.erp.system.database.domain.entity;
 
-import com.leo.erp.common.persistence.AuditableEntity;
+import com.leo.erp.common.persistence.AbstractAuditableEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
@@ -14,7 +14,7 @@ import java.time.LocalDateTime;
 @Setter
 @Entity
 @Table(name = "sys_database_export_task")
-public class DatabaseExportTask extends AuditableEntity {
+public class DatabaseExportTask extends AbstractAuditableEntity {
 
     @Id
     private Long id;

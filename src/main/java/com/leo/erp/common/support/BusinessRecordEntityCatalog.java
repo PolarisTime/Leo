@@ -1,6 +1,6 @@
 package com.leo.erp.common.support;
 
-import com.leo.erp.common.persistence.AuditableEntity;
+import com.leo.erp.common.persistence.AbstractAuditableEntity;
 import com.leo.erp.contract.purchase.domain.entity.PurchaseContract;
 import com.leo.erp.contract.sales.domain.entity.SalesContract;
 import com.leo.erp.finance.invoiceissue.domain.entity.InvoiceIssue;
@@ -30,12 +30,12 @@ import java.util.Set;
 
 public final class BusinessRecordEntityCatalog {
 
-    private static final Map<String, Class<? extends AuditableEntity>> ENTITY_TYPES_BY_MODULE_KEY = buildEntityTypes();
+    private static final Map<String, Class<? extends AbstractAuditableEntity>> ENTITY_TYPES_BY_MODULE_KEY = buildEntityTypes();
 
     private BusinessRecordEntityCatalog() {
     }
 
-    public static Optional<Class<? extends AuditableEntity>> findEntityType(String moduleKey) {
+    public static Optional<Class<? extends AbstractAuditableEntity>> findEntityType(String moduleKey) {
         return Optional.ofNullable(ENTITY_TYPES_BY_MODULE_KEY.get(normalizeModuleKey(moduleKey)));
     }
 
@@ -54,8 +54,8 @@ public final class BusinessRecordEntityCatalog {
                 .toLowerCase(Locale.ROOT);
     }
 
-    private static Map<String, Class<? extends AuditableEntity>> buildEntityTypes() {
-        Map<String, Class<? extends AuditableEntity>> entityTypes = new LinkedHashMap<>();
+    private static Map<String, Class<? extends AbstractAuditableEntity>> buildEntityTypes() {
+        Map<String, Class<? extends AbstractAuditableEntity>> entityTypes = new LinkedHashMap<>();
         entityTypes.put("material", Material.class);
         entityTypes.put("supplier", Supplier.class);
         entityTypes.put("customer", Customer.class);

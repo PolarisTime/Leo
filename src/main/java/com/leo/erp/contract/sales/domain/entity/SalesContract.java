@@ -1,6 +1,6 @@
 package com.leo.erp.contract.sales.domain.entity;
 
-import com.leo.erp.common.persistence.AuditableEntity;
+import com.leo.erp.common.persistence.AbstractAuditableEntity;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -19,7 +19,7 @@ import java.util.List;
 @Setter
 @Entity
 @Table(name = "ct_sales_contract")
-public class SalesContract extends AuditableEntity {
+public class SalesContract extends AbstractAuditableEntity {
 
     @Id
     private Long id;
