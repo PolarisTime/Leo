@@ -13,6 +13,7 @@ import com.leo.erp.system.database.web.dto.DatabaseExportDownloadLinkResponse;
 import com.leo.erp.system.database.web.dto.DatabaseExportTaskResponse;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
+import java.util.concurrent.TimeUnit;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.dao.DataAccessException;
 import org.springframework.beans.factory.annotation.Value;
@@ -32,7 +33,8 @@ import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ThreadPoolExecutor;
 
 @Slf4j
 @Service
@@ -60,11 +62,16 @@ public class DatabaseExportTaskService {
     private final DatabaseBackupProperties backupProperties;
     private final DatabaseExportTaskMapper exportTaskMapper;
     private final SnowflakeIdGenerator snowflakeIdGenerator;
-    private final ExecutorService executorService = Executors.newSingleThreadExecutor(r -> {
-        Thread thread = new Thread(r, "database-export-task-worker");
-        thread.setDaemon(true);
-        return thread;
-    });
+    private final ExecutorService executorService = new ThreadPoolExecutor(
+            1, 1,
+            0L, TimeUnit.MILLISECONDS,
+            new LinkedBlockingQueue<>(1),
+            r -> {
+                Thread thread = new Thread(r, "database-export-task-worker");
+                thread.setDaemon(true);
+                return thread;
+            },
+            new ThreadPoolExecutor.DiscardPolicy());
 
     public DatabaseExportTaskService(DatabaseExportTaskRepository taskRepository,
                                      DatabaseBackupService databaseBackupService,
