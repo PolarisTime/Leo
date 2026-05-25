@@ -66,12 +66,15 @@ public class GlobalRateLimitFilter extends OncePerRequestFilter implements Order
             response.setStatus(HttpStatus.TOO_MANY_REQUESTS.value());
             response.setContentType("application/json;charset=UTF-8");
             response.setHeader("Retry-After", String.valueOf(result.retryAfterSeconds()));
+            response.setHeader("X-RateLimit-Limit", String.valueOf(GLOBAL_CAPACITY));
             response.setHeader("X-RateLimit-Remaining", "0");
+            response.setHeader("X-RateLimit-Reset", String.valueOf(result.retryAfterSeconds()));
             response.getWriter().write(
                     "{\"code\":429,\"message\":\"请求过于频繁，请在 " + result.retryAfterSeconds() + " 秒后重试\"}");
             response.getWriter().flush();
             return;
         }
+        response.setHeader("X-RateLimit-Limit", String.valueOf(GLOBAL_CAPACITY));
         response.setHeader("X-RateLimit-Remaining", String.valueOf(result.remaining()));
         chain.doFilter(request, response);
     }

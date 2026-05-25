@@ -29,6 +29,7 @@ public class ModuleCatalog {
         modules.put("material-category", "商品类别");
         modules.put("supplier", "供应商");
         modules.put("customer", "客户");
+        modules.put("project", "项目");
         modules.put("carrier", "物流商");
         modules.put("warehouse", "仓库");
         modules.put("department", "部门");
@@ -48,6 +49,7 @@ public class ModuleCatalog {
         modules.put("invoice-issue", "开票单");
         modules.put("pending-invoice-receipt-report", "未收票报表");
         modules.put("receivable-payable", "应收应付");
+        modules.put("project-ar", "项目应收");
         modules.put("general-setting", "通用设置");
         modules.put("company-setting", "公司信息");
         modules.put("permission", "权限管理");

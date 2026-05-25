@@ -23,4 +23,23 @@ public class RateLimitAdminService {
             ORDER BY priority, rule_key
             """);
     }
+
+    public void updateRule(Long id, Map<String, Object> body) {
+        if (body.containsKey("enabled")) {
+            jdbc.update("UPDATE sys_rate_limit_rule SET enabled = ? WHERE id = ?",
+                Boolean.TRUE.equals(body.get("enabled")), id);
+        }
+        if (body.containsKey("rate")) {
+            jdbc.update("UPDATE sys_rate_limit_rule SET rate = ? WHERE id = ?",
+                ((Number) body.get("rate")).doubleValue(), id);
+        }
+        if (body.containsKey("capacity")) {
+            jdbc.update("UPDATE sys_rate_limit_rule SET capacity = ? WHERE id = ?",
+                ((Number) body.get("capacity")).intValue(), id);
+        }
+        if (body.containsKey("tokens_per_request")) {
+            jdbc.update("UPDATE sys_rate_limit_rule SET tokens_per_request = ? WHERE id = ?",
+                ((Number) body.get("tokens_per_request")).intValue(), id);
+        }
+    }
 }
