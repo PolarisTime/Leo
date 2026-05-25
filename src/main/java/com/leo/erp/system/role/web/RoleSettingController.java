@@ -31,9 +31,12 @@ import org.springframework.web.bind.annotation.RestController;
 public class RoleSettingController {
 
     private final RoleSettingService roleSettingService;
+    private final com.leo.erp.system.role.service.RoleTemplateService roleTemplateService;
 
-    public RoleSettingController(RoleSettingService roleSettingService) {
+    public RoleSettingController(RoleSettingService roleSettingService,
+                                  com.leo.erp.system.role.service.RoleTemplateService roleTemplateService) {
         this.roleSettingService = roleSettingService;
+        this.roleTemplateService = roleTemplateService;
     }
 
     @GetMapping
@@ -84,6 +87,12 @@ public class RoleSettingController {
     @RequiresPermission(resource = "role", action = "manage_permissions")
     public ApiResponse<List<MenuTreeResponse>> listPermissionOptions() {
         return ApiResponse.success(roleSettingService.listPermissionOptions());
+    }
+
+    @GetMapping("/templates")
+    @RequiresPermission(resource = "role", action = "manage_permissions")
+    public ApiResponse<List<com.leo.erp.system.role.service.RoleTemplateService.Template>> listRoleTemplates() {
+        return ApiResponse.success(roleTemplateService.listTemplates());
     }
 
     @PutMapping("/{id}/permission")

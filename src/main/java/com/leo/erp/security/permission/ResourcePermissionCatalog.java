@@ -87,7 +87,7 @@ public final class ResourcePermissionCatalog {
             action(READ, "查看")
     );
 
-    private static final List<Entry> ENTRIES = List.of(
+    public static final List<Entry> ENTRIES = List.of(
             entry("dashboard", "工作台", "工作台", false, List.of("/dashboard"), READ_ONLY_ACTIONS),
             entry("material", "商品资料", "主数据", true, List.of("/material", "/material-category"), BUSINESS_ACTIONS),
             entry("supplier", "供应商资料", "主数据", true, List.of("/supplier"), BUSINESS_ACTIONS),
