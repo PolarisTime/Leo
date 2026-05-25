@@ -35,8 +35,7 @@ public interface ItemAllocationNativeRepository extends JpaRepository<Allocation
                    COALESCE(SUM(pi.weight_ton), 0)   AS total_weight_ton
               FROM po_purchase_inbound_item pi
               JOIN po_purchase_inbound inbound ON inbound.id = pi.inbound_id AND inbound.deleted_flag = FALSE
-             WHERE pi.deleted_flag = FALSE
-               AND pi.source_purchase_order_item_id IN (:ids)
+             WHERE pi.source_purchase_order_item_id IN (:ids)
                AND (:exclude_inbound_id IS NULL OR pi.inbound_id <> :exclude_inbound_id)
              GROUP BY pi.source_purchase_order_item_id
             """, nativeQuery = true)
@@ -65,8 +64,7 @@ public interface ItemAllocationNativeRepository extends JpaRepository<Allocation
                    COALESCE(SUM(pi.weight_adjustment_ton), 0) AS total_weight_ton
               FROM po_purchase_inbound_item pi
               JOIN po_purchase_inbound inbound ON inbound.id = pi.inbound_id AND inbound.deleted_flag = FALSE
-             WHERE pi.deleted_flag = FALSE
-               AND pi.source_purchase_order_item_id IN (:ids)
+             WHERE pi.source_purchase_order_item_id IN (:ids)
              GROUP BY pi.source_purchase_order_item_id
             """, nativeQuery = true)
     List<AllocationProjection> summarizeWeightAdjustmentByPurchaseOrderItems(
