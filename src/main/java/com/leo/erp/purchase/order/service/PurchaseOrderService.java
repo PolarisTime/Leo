@@ -24,6 +24,7 @@ import com.leo.erp.purchase.order.mapper.PurchaseOrderMapper;
 import com.leo.erp.purchase.order.web.dto.PurchaseOrderImportCandidateResponse;
 import com.leo.erp.purchase.order.web.dto.PurchaseOrderItemRequest;
 import com.leo.erp.purchase.order.web.dto.PurchaseOrderItemResponse;
+import com.leo.erp.purchase.order.web.dto.PieceWeightResponse;
 import com.leo.erp.purchase.order.web.dto.PurchaseOrderRequest;
 import com.leo.erp.purchase.order.web.dto.PurchaseOrderResponse;
 import com.leo.erp.allocation.repository.ItemAllocationNativeRepository;
@@ -31,6 +32,7 @@ import com.leo.erp.security.permission.WorkflowTransitionGuard;
 import java.util.function.Function;
 import org.springframework.data.domain.Page;
 import org.springframework.data.jpa.domain.Specification;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -73,6 +75,7 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
     private final ItemAllocationNativeRepository itemAllocationRepo;
     private final PurchaseOrderItemPieceWeightService purchaseOrderItemPieceWeightService;
     private final WorkflowTransitionGuard workflowTransitionGuard;
+    private final JdbcTemplate jdbc;
 
     public PurchaseOrderService(PurchaseOrderRepository purchaseOrderRepository,
                                 SnowflakeIdGenerator snowflakeIdGenerator,
@@ -83,7 +86,8 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
                                 PurchaseInboundItemQueryService purchaseInboundItemQueryService,
                                 ItemAllocationNativeRepository itemAllocationRepo,
                                 PurchaseOrderItemPieceWeightService purchaseOrderItemPieceWeightService,
-                                WorkflowTransitionGuard workflowTransitionGuard) {
+                                WorkflowTransitionGuard workflowTransitionGuard,
+                                JdbcTemplate jdbc) {
         super(snowflakeIdGenerator);
         this.purchaseOrderRepository = purchaseOrderRepository;
         this.purchaseOrderMapper = purchaseOrderMapper;
@@ -93,6 +97,7 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
         this.purchaseInboundItemQueryService = purchaseInboundItemQueryService;
         this.itemAllocationRepo = itemAllocationRepo;
         this.purchaseOrderItemPieceWeightService = purchaseOrderItemPieceWeightService;
+        this.jdbc = jdbc;
         this.workflowTransitionGuard = workflowTransitionGuard;
     }
 
@@ -462,5 +467,23 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
     @Override
     protected PurchaseOrderResponse toSavedResponse(PurchaseOrder entity) {
         return toDetailResponse(entity);
+    }
+
+    public List<PieceWeightResponse> getPieceWeights(Long itemId) {
+        return jdbc.query("""
+                SELECT pw.piece_no, pw.weight_ton,
+                       COALESCE(so.order_no, '') AS sales_order_no
+                FROM po_purchase_order_item_piece_weight pw
+                LEFT JOIN so_sales_order_item soi ON soi.id = pw.sales_order_item_id
+                LEFT JOIN so_sales_order so ON so.id = soi.order_id
+                WHERE pw.purchase_order_item_id = ?
+                ORDER BY pw.piece_no
+                """,
+                (rs, rowNum) -> new PieceWeightResponse(
+                        rs.getInt("piece_no"),
+                        rs.getBigDecimal("weight_ton"),
+                        rs.getString("sales_order_no")
+                ),
+                itemId);
     }
 }
