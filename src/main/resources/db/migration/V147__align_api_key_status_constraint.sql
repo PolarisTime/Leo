@@ -1,8 +1,5 @@
--- Align auth_api_key.status with ApiKeyStatus persisted by @Enumerated(EnumType.STRING).
-UPDATE auth_api_key
-SET status = CASE status
-    WHEN '有效' THEN 'NORMAL'
-    WHEN '禁用' THEN 'DISABLED'
-    ELSE status
-END
-WHERE status IN ('有效', '禁用');
+-- ApiKeyStatusConverter stores displayName: ACTIVE→'有效', DISABLED→'已禁用'
+-- Fix constraint to match actual stored values
+ALTER TABLE auth_api_key DROP CONSTRAINT IF EXISTS chk_api_key_status;
+ALTER TABLE auth_api_key ADD CONSTRAINT chk_api_key_status
+    CHECK (status IN ('有效', '已禁用'));
