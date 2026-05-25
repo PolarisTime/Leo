@@ -58,6 +58,23 @@ public class UserRoleBindingService {
         return resolvedRoles;
     }
 
+    public List<RoleSetting> resolveRolesByIds(Collection<Long> roleIds) {
+        if (roleIds == null || roleIds.isEmpty()) {
+            return List.of();
+        }
+        List<Long> distinctIds = roleIds.stream().filter(id -> id != null).distinct().toList();
+        if (distinctIds.isEmpty()) {
+            return List.of();
+        }
+        List<RoleSetting> roles = roleRepository.findByIdInAndDeletedFlagFalse(distinctIds);
+        if (roles.size() != distinctIds.size()) {
+            Set<Long> foundIds = roles.stream().map(RoleSetting::getId).collect(java.util.stream.Collectors.toSet());
+            List<Long> missing = distinctIds.stream().filter(id -> !foundIds.contains(id)).toList();
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "角色不存在: " + missing);
+        }
+        return roles;
+    }
+
     @Transactional
     public void replaceUserRoles(Long userId, Collection<RoleSetting> roles) {
         userRoleRepository.deleteByUserIdAndDeletedFlagFalse(userId);
