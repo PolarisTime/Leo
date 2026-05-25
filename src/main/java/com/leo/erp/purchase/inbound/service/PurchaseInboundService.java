@@ -303,12 +303,6 @@ public class PurchaseInboundService extends AbstractCrudService<PurchaseInbound,
     }
 
     private BigDecimal resolveAdjustmentBaseWeightTon(PurchaseInboundItemRequest source, BigDecimal currentWeightTon) {
-        if (source.weightAdjustmentTon() != null) {
-            BigDecimal previousWeightTon = source.weightTon() == null
-                    ? currentWeightTon
-                    : TradeItemCalculator.scaleWeightTon(source.weightTon());
-            return TradeItemCalculator.scaleWeightTon(previousWeightTon.subtract(source.weightAdjustmentTon()));
-        }
         return TradeItemCalculator.calculateWeightTon(source.quantity(), source.pieceWeightTon());
     }
 
