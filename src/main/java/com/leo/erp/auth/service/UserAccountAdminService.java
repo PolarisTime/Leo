@@ -182,6 +182,7 @@ public class UserAccountAdminService {
                 response.id(), response.loginName(), response.userName(),
                 response.mobile(), response.departmentId(), response.departmentName(),
                 roles.stream().map(RoleSetting::getRoleName).toList(),
+                roles.stream().map(RoleSetting::getId).toList(),
                 response.dataScope(), permissionSummary,
                 response.lastLoginDate(), response.status(), response.remark(),
                 Boolean.TRUE.equals(entity.getTotpEnabled())
@@ -191,7 +192,7 @@ public class UserAccountAdminService {
     private UserAccountAdminResponse saveWithRoles(UserAccount entity, UserAccountAdminRequest request) {
         String previousLoginName = entity.getLoginName();
         Long previousDepartmentId = entity.getDepartmentId();
-        List<RoleSetting> roles = userRoleBindingService.resolveRoles(request.roleNames());
+        List<RoleSetting> roles = resolveRolesFromRequest(request);
         apply(entity, request, roles);
         try {
             UserAccount saved = repository.save(entity);
@@ -209,6 +210,13 @@ public class UserAccountAdminService {
             }
             throw ex;
         }
+    }
+
+    private List<RoleSetting> resolveRolesFromRequest(UserAccountAdminRequest request) {
+        if (request.roleIds() != null && !request.roleIds().isEmpty()) {
+            return userRoleBindingService.resolveRolesByIds(request.roleIds());
+        }
+        return userRoleBindingService.resolveRoles(request.roleNames());
     }
 
     private void apply(UserAccount entity, UserAccountAdminRequest request, List<RoleSetting> roles) {

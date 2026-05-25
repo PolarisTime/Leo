@@ -110,7 +110,7 @@ public final class DataScopeContext {
             return Set.of(userId);
         }
         throw new IllegalArgumentException(
-                "无法从 scope 自动解析 ownerUserIds，请使用 set(userId, resource, scope, ownerUserIds) 重载: scope=" + scope);
+                "custom scope is reserved and not yet implemented. Use set(userId, resource, scope, ownerUserIds) or choose all/department/self. scope=" + scope);
     }
 
     private static Set<Long> normalizeOwnerUserIds(Set<Long> ownerUserIds) {

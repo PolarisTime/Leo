@@ -251,6 +251,7 @@ public final class ResourcePermissionCatalog {
 
     public static final String SCOPE_ALL = "all";
     public static final String SCOPE_DEPARTMENT = "department";
+    /** @deprecated Reserved for future implementation; not yet supported by DataScopeContext. */
     public static final String SCOPE_CUSTOM = "custom";
     public static final String SCOPE_SELF = "self";
 
