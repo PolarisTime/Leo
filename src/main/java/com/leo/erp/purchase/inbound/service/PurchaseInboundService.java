@@ -417,6 +417,9 @@ public class PurchaseInboundService extends AbstractCrudService<PurchaseInbound,
         }
         affectedOrderMap.values().forEach(this::refreshPurchaseOrderTotals);
         if (!affectedOrderMap.isEmpty()) {
+            if (StatusConstants.INBOUND_COMPLETED.equals(nextStatus)) {
+                affectedOrderMap.values().forEach(this::maybeCompletePurchaseOrder);
+            }
             purchaseOrderRepository.saveAll(affectedOrderMap.values());
             purchaseOrderItemPieceWeightService.regenerateForPurchaseOrderItems(
                     sourcePurchaseOrderItemIds.stream()
@@ -441,6 +444,19 @@ public class PurchaseInboundService extends AbstractCrudService<PurchaseInbound,
         // Order ids come from PurchaseOrderItemQueryService, which already checks source order access.
         return purchaseOrderRepository.findByIdInAndDeletedFlagFalse(orderIds).stream()
                 .collect(Collectors.toMap(PurchaseOrder::getId, order -> order));
+    }
+
+    private void maybeCompletePurchaseOrder(PurchaseOrder purchaseOrder) {
+        if (!StatusConstants.AUDITED.equals(purchaseOrder.getStatus())) {
+            return;
+        }
+        List<PurchaseInbound> allInbounds = purchaseInboundRepository
+                .findByPurchaseOrderNoAndDeletedFlagFalse(purchaseOrder.getOrderNo());
+        boolean allComplete = allInbounds.stream()
+                .allMatch(i -> StatusConstants.INBOUND_COMPLETED.equals(i.getStatus()));
+        if (allComplete) {
+            purchaseOrder.setStatus(StatusConstants.PURCHASE_COMPLETED);
+        }
     }
 
     private void refreshPurchaseOrderTotals(PurchaseOrder purchaseOrder) {

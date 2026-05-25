@@ -17,4 +17,6 @@ public interface PurchaseInboundRepository extends JpaRepository<PurchaseInbound
 
     @EntityGraph(attributePaths = "items")
     Optional<PurchaseInbound> findByIdAndDeletedFlagFalse(Long id);
+
+    List<PurchaseInbound> findByPurchaseOrderNoAndDeletedFlagFalse(String purchaseOrderNo);
 }
