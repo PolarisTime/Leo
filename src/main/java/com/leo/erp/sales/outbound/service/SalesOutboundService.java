@@ -25,6 +25,10 @@ import com.leo.erp.sales.order.service.SalesOrderCompletionSyncService;
 import com.leo.erp.sales.outbound.web.dto.*;
 import org.springframework.data.domain.Page;
 import org.springframework.data.jpa.domain.Specification;
+import com.leo.erp.purchase.order.service.PurchaseOrderItemPieceWeightService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -45,7 +49,11 @@ public class SalesOutboundService extends AbstractCrudService<SalesOutbound, Sal
     private final WarehouseSelectionSupport warehouseSelectionSupport;
     private final WorkflowTransitionGuard workflowTransitionGuard;
     private final SalesOrderCompletionSyncService salesOrderCompletionSyncService;
+    private static final Logger logger = LoggerFactory.getLogger(SalesOutboundService.class);
+
     private final SalesOrderItemQueryService salesOrderItemQueryService;
+    private final PurchaseOrderItemPieceWeightService purchaseOrderItemPieceWeightService;
+    private final JdbcTemplate jdbc;
 
     public SalesOutboundService(SalesOutboundRepository repository,
                                 SnowflakeIdGenerator idGenerator,
@@ -54,7 +62,9 @@ public class SalesOutboundService extends AbstractCrudService<SalesOutbound, Sal
                                 WarehouseSelectionSupport warehouseSelectionSupport,
                                 WorkflowTransitionGuard workflowTransitionGuard,
                                 SalesOrderCompletionSyncService salesOrderCompletionSyncService,
-                                SalesOrderItemQueryService salesOrderItemQueryService) {
+                                SalesOrderItemQueryService salesOrderItemQueryService,
+                                PurchaseOrderItemPieceWeightService purchaseOrderItemPieceWeightService,
+                                JdbcTemplate jdbc) {
         super(idGenerator);
         this.repository = repository;
         this.salesOutboundMapper = salesOutboundMapper;
@@ -63,6 +73,8 @@ public class SalesOutboundService extends AbstractCrudService<SalesOutbound, Sal
         this.workflowTransitionGuard = workflowTransitionGuard;
         this.salesOrderCompletionSyncService = salesOrderCompletionSyncService;
         this.salesOrderItemQueryService = salesOrderItemQueryService;
+        this.purchaseOrderItemPieceWeightService = purchaseOrderItemPieceWeightService;
+        this.jdbc = jdbc;
     }
 
     @Transactional(readOnly = true)
@@ -243,9 +255,7 @@ public class SalesOutboundService extends AbstractCrudService<SalesOutbound, Sal
             item.setBatchNo(tradeItemMaterialSupport.normalizeBatchNo(material, source.batchNo(), i + 1, true));
             item.setQuantity(source.quantity());
             item.setQuantityUnit(TradeItemCalculator.normalizeQuantityUnit(source.quantityUnit()));
-            BigDecimal weightTon = source.weightTon() == null
-                    ? TradeItemCalculator.calculateWeightTon(source.quantity(), source.pieceWeightTon())
-                    : TradeItemCalculator.scaleWeightTon(source.weightTon());
+            BigDecimal weightTon = resolveOutboundWeightTon(source, i + 1);
             BigDecimal pieceWeightTon = TradeItemCalculator.calculateRepresentableAveragePieceWeightTon(source.quantity(), weightTon);
             item.setPieceWeightTon(pieceWeightTon != null ? pieceWeightTon : TradeItemCalculator.scaleWeightTon(source.pieceWeightTon()));
             item.setPiecesPerBundle(source.piecesPerBundle());
@@ -264,6 +274,37 @@ public class SalesOutboundService extends AbstractCrudService<SalesOutbound, Sal
         entity.setWarehouseName(firstLineWarehouseName == null ? trimToNull(request.warehouseName()) : firstLineWarehouseName);
         entity.setTotalWeight(totalWeight);
         entity.setTotalAmount(totalAmount);
+    }
+
+    /**
+     * 从逐件重量表中按重量降序取件，实现"先出重件"的 FIFO 原则。
+     * 若无逐件记录则回退使用销售订单明细的平均重量。
+     */
+    private BigDecimal resolveOutboundWeightTon(SalesOutboundItemRequest source, int lineNo) {
+        Long sourceSalesOrderItemId = source.sourceSalesOrderItemId();
+        if (sourceSalesOrderItemId == null || source.quantity() == null || source.quantity() <= 0) {
+            return fallbackWeightTon(source);
+        }
+        List<BigDecimal> weights = jdbc.query(
+                "SELECT pw.weight_ton FROM po_purchase_order_item_piece_weight pw" +
+                " WHERE pw.sales_order_item_id = ? ORDER BY pw.weight_ton DESC",
+                (rs, rowNum) -> rs.getBigDecimal("weight_ton"),
+                sourceSalesOrderItemId);
+        if (weights.size() < source.quantity()) {
+            logger.warn("第{}行逐件记录不足: 需要{}件, 实际{}件, 回退平均值", lineNo, source.quantity(), weights.size());
+            return fallbackWeightTon(source);
+        }
+        BigDecimal total = BigDecimal.ZERO;
+        for (int i = 0; i < source.quantity(); i++) {
+            total = total.add(weights.get(i));
+        }
+        return TradeItemCalculator.scaleWeightTon(total);
+    }
+
+    private BigDecimal fallbackWeightTon(SalesOutboundItemRequest source) {
+        return source.weightTon() == null
+                ? TradeItemCalculator.calculateWeightTon(source.quantity(), source.pieceWeightTon())
+                : TradeItemCalculator.scaleWeightTon(source.weightTon());
     }
 
     private void assertSourceSalesOrderItemsNotOccupied(
