@@ -158,8 +158,16 @@ public class PurchaseInboundService extends AbstractCrudService<PurchaseInbound,
             return Map.of();
         }
 
-        return purchaseOrderItemQueryService.findActiveByIdIn(sourceIds).stream()
+        Map<Long, PurchaseOrderItem> sourceMap = purchaseOrderItemQueryService.findActiveByIdIn(sourceIds).stream()
                 .collect(java.util.stream.Collectors.toMap(PurchaseOrderItem::getId, item -> item));
+
+        // Pre-load lazy purchaseOrder to avoid LazyInitializationException in InboundItemMapper
+        sourceMap.values().forEach(item -> {
+            if (item.getPurchaseOrder() != null) {
+                item.getPurchaseOrder().getOrderNo();
+            }
+        });
+        return sourceMap;
     }
 
     private Map<Long, Integer> loadAllocatedQuantityMap(List<Long> sourcePurchaseOrderItemIds, Long currentInboundId) {
