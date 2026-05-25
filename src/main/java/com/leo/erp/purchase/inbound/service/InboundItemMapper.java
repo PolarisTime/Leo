@@ -87,7 +87,7 @@ public class InboundItemMapper {
                 weightSettlement.weightAdjustmentTon(),
                 weightSettlement.weighWeightTon(),
                 source.quantity(),
-                weightSettlement.weightTon()
+                weightSettlement.calculatedWeightTon()
         );
     }
 

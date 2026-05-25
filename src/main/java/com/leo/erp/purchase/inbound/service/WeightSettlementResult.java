@@ -7,5 +7,6 @@ record WeightSettlementResult(
         BigDecimal weighWeightTon,
         BigDecimal weightAdjustmentTon,
         BigDecimal weightAdjustmentAmount,
-        BigDecimal pieceWeightTon
+        BigDecimal pieceWeightTon,
+        BigDecimal calculatedWeightTon
 ) {}

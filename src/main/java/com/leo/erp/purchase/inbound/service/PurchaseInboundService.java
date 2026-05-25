@@ -283,26 +283,23 @@ public class PurchaseInboundService extends AbstractCrudService<PurchaseInbound,
                     null,
                     BigDecimal.ZERO.setScale(PrecisionConstants.WEIGHT_SCALE),
                     BigDecimal.ZERO.setScale(PrecisionConstants.AMOUNT_SCALE),
-                    sourcePieceWeightTon
+                    sourcePieceWeightTon,
+                    baseWeightTon
             );
         }
         if (!purchaseWeighSettlement) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "第" + lineNo + "行商品类别需按过磅入库，请将本行结算方式改为过磅");
         }
         BigDecimal weighWeightTon = requireWeighWeightTon(source, lineNo);
+        BigDecimal theoreticalWeightTon = resolveAdjustmentBaseWeightTon(source);
         BigDecimal averagePieceWeightTon = TradeItemCalculator.calculateAveragePieceWeightTon(source.quantity(), weighWeightTon);
         BigDecimal calculatedWeightTon = TradeItemCalculator.calculateWeightTon(source.quantity(), averagePieceWeightTon);
-        BigDecimal sourceWeightTon = source.weightTon() == null ? null : TradeItemCalculator.scaleWeightTon(source.weightTon());
-        BigDecimal weightTon = sourceWeightTon != null && sourceWeightTon.compareTo(weighWeightTon) == 0
-                ? sourceWeightTon
-                : calculatedWeightTon;
-        BigDecimal adjustmentBaseWeightTon = resolveAdjustmentBaseWeightTon(source, weightTon);
-        BigDecimal weightAdjustmentTon = TradeItemCalculator.scaleWeightTon(weightTon.subtract(adjustmentBaseWeightTon));
+        BigDecimal weightAdjustmentTon = TradeItemCalculator.scaleWeightTon(weighWeightTon.subtract(theoreticalWeightTon));
         BigDecimal weightAdjustmentAmount = TradeItemCalculator.calculateAmount(weightAdjustmentTon, source.unitPrice());
-        return new WeightSettlementResult(weightTon, weighWeightTon, weightAdjustmentTon, weightAdjustmentAmount, averagePieceWeightTon);
+        return new WeightSettlementResult(theoreticalWeightTon, weighWeightTon, weightAdjustmentTon, weightAdjustmentAmount, averagePieceWeightTon, calculatedWeightTon);
     }
 
-    private BigDecimal resolveAdjustmentBaseWeightTon(PurchaseInboundItemRequest source, BigDecimal currentWeightTon) {
+    private BigDecimal resolveAdjustmentBaseWeightTon(PurchaseInboundItemRequest source) {
         return TradeItemCalculator.calculateWeightTon(source.quantity(), source.pieceWeightTon());
     }
 
@@ -395,7 +392,6 @@ public class PurchaseInboundService extends AbstractCrudService<PurchaseInbound,
                         ? TradeItemCalculator.scaleWeightTon(weighAccumulator.weightTon())
                         : TradeItemCalculator.calculateWeightTon(sourceItem.getQuantity(), averagePieceWeightTon);
                 sourceItem.setWeightTon(actualWeightTon);
-                sourceItem.setPieceWeightTon(TradeItemCalculator.scaleWeightTon(averagePieceWeightTon));
                 sourceItem.setAmount(TradeItemCalculator.calculateAmount(actualWeightTon, sourceItem.getUnitPrice()));
                 sourceItem.setActualWeightTon(actualWeightTon);
                 sourceItem.setActualPieceWeightTon(TradeItemCalculator.scaleWeightTon(averagePieceWeightTon));
