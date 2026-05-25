@@ -93,21 +93,43 @@ class PermissionResolver {
         if (userRoles.isEmpty()) {
             return List.of();
         }
-        List<Long> roleIds = userRoles.stream()
+        List<Long> directRoleIds = userRoles.stream()
                 .map(UserRole::getRoleId)
                 .filter(Objects::nonNull)
                 .distinct()
                 .toList();
-        if (roleIds.isEmpty()) {
+        if (directRoleIds.isEmpty()) {
             return List.of();
         }
-        Map<Long, RoleSetting> activeRoleMap = new LinkedHashMap<>();
-        roleSettingRepository.findByIdInAndDeletedFlagFalse(roleIds).stream()
-                .filter(role -> StatusConstants.NORMAL.equals(role.getStatus()))
-                .forEach(role -> activeRoleMap.put(role.getId(), role));
-        return roleIds.stream()
-                .map(activeRoleMap::get)
-                .filter(Objects::nonNull)
-                .toList();
+
+        // Load directly assigned roles + recursively resolve ancestors
+        Map<Long, RoleSetting> allRoles = new LinkedHashMap<>();
+        var queue = new java.util.ArrayDeque<>(directRoleIds);
+        var visited = new java.util.HashSet<Long>();
+        while (!queue.isEmpty()) {
+            Long roleId = queue.poll();
+            if (!visited.add(roleId)) continue;
+            roleSettingRepository.findByIdAndDeletedFlagFalse(roleId)
+                    .filter(role -> StatusConstants.NORMAL.equals(role.getStatus()))
+                    .ifPresent(role -> {
+                        allRoles.put(role.getId(), role);
+                        if (role.getParentId() != null && !visited.contains(role.getParentId())) {
+                            queue.add(role.getParentId());
+                        }
+                    });
+        }
+
+        // Preserve original order: direct roles first, then ancestors
+        LinkedHashSet<RoleSetting> ordered = new LinkedHashSet<>();
+        for (Long id : directRoleIds) {
+            RoleSetting role = allRoles.get(id);
+            if (role != null) ordered.add(role);
+        }
+        for (var entry : allRoles.entrySet()) {
+            if (!directRoleIds.contains(entry.getKey())) {
+                ordered.add(entry.getValue());
+            }
+        }
+        return List.copyOf(ordered);
     }
 }

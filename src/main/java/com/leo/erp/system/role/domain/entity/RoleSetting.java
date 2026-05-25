@@ -38,6 +38,9 @@ public class RoleSetting extends AbstractAuditableEntity {
     @Column(name = "user_count", nullable = false)
     private Integer userCount;
 
+    @Column(name = "parent_id")
+    private Long parentId;
+
     @Column(name = "status", nullable = false, length = 16)
     private String status;
 
