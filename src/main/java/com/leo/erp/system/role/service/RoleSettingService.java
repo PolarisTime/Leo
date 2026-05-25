@@ -43,6 +43,22 @@ public class RoleSettingService extends AbstractCrudService<RoleSetting, RoleSet
 
     private static final Set<String> ALLOWED_ROLE_TYPES = Set.of("平台角色", "系统角色", "业务角色", "财务角色");
     private static final Set<String> ALLOWED_DATA_SCOPES = Set.of("全部数据", "全部", "本部门", "本人");
+
+    private void evictCachesForRole(Long roleId) {
+        List<Long> affectedUserIds = userRoleRepository
+                .findByRoleIdInAndDeletedFlagFalse(List.of(roleId)).stream()
+                .map(ur -> ur.getUser().getId())
+                .distinct()
+                .toList();
+        if (affectedUserIds.isEmpty()) return;
+        permissionService.evictUserCaches(affectedUserIds);
+        for (Long userId : affectedUserIds) {
+            authenticatedUserCacheService.evict(userId);
+        }
+        if (dashboardSummaryService != null) {
+            dashboardSummaryService.evictAllCache();
+        }
+    }
     private static final Set<String> ALLOWED_STATUS = StatusConstants.ALLOWED_ACTIVE_STATUS;
 
     private final RoleSettingRepository repository;
@@ -206,11 +222,7 @@ public class RoleSettingService extends AbstractCrudService<RoleSetting, RoleSet
         if (!toSave.isEmpty()) {
             rolePermissionRepository.saveAll(toSave);
         }
-        permissionService.evictAllCache();
-        authenticatedUserCacheService.evictAll();
-        if (dashboardSummaryService != null) {
-            dashboardSummaryService.evictAllCache();
-        }
+        evictCachesForRole(roleId);
     }
 
     private static final List<String> PERMISSION_GROUP_ORDER = List.of(
@@ -381,11 +393,7 @@ public class RoleSettingService extends AbstractCrudService<RoleSetting, RoleSet
     @Override
     protected RoleSetting saveEntity(RoleSetting entity) {
         RoleSetting saved = repository.save(entity);
-        permissionService.evictAllCache();
-        authenticatedUserCacheService.evictAll();
-        if (dashboardSummaryService != null) {
-            dashboardSummaryService.evictAllCache();
-        }
+        evictCachesForRole(saved.getId());
         return saved;
     }
 

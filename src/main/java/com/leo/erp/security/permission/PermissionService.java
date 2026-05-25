@@ -143,6 +143,12 @@ public class PermissionService {
         cache.evict(userId);
     }
 
+    public void evictUserCaches(Collection<Long> userIds) {
+        for (Long userId : userIds) {
+            cache.evict(userId);
+        }
+    }
+
     public void evictDepartmentUserCache(Long departmentId) {
         departmentScope.evictDepartmentUserCache(departmentId);
     }
