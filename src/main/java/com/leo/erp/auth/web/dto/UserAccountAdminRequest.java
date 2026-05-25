@@ -13,7 +13,7 @@ public record UserAccountAdminRequest(
         @NotBlank @Size(max = 64) String userName,
         @Size(max = 32) @Pattern(regexp = "^$|^1\\d{10}$", message = "手机号格式不正确") String mobile,
         Long departmentId,
-        @NotEmpty List<@NotBlank @Size(max = 128) String> roleNames,
+        List<@NotBlank @Size(max = 128) String> roleNames,
         List<Long> roleIds,
         @Pattern(regexp = "全部数据|全部|本部门|本人", message = "数据范围不合法") String dataScope,
         @Size(max = 500) String permissionSummary,
