@@ -1,3 +1,5 @@
+import com.leo.erp.allocation.repository.ItemAllocationNativeRepository;
+import com.leo.erp.purchase.inbound.service.InboundItemMapper;
 package com.leo.erp.purchase.inbound.service;
 
 import com.leo.erp.common.support.SnowflakeIdGenerator;
@@ -52,7 +54,8 @@ class PurchaseInboundServiceTest {
     void shouldLoadAllocatedQuantitiesOnlyForCurrentInboundItemsWhenShowingDetail() {
         PurchaseInboundRepository repository = mock(PurchaseInboundRepository.class);
         PurchaseInboundMapper mapper = mock(PurchaseInboundMapper.class);
-        SalesOrderItemQueryService salesOrderItemQueryService = mock(SalesOrderItemQueryService.class);
+        var itemAllocationRepo = mock(ItemAllocationNativeRepository.class);
+        var inboundItemMapper = mock(InboundItemMapper.class);
         PurchaseInboundService service = newService(repository, mapper, salesOrderItemQueryService);
 
         PurchaseInbound inbound = inbound();
@@ -83,7 +86,8 @@ class PurchaseInboundServiceTest {
         PurchaseInboundItemRepository purchaseInboundItemRepository = mock(PurchaseInboundItemRepository.class);
         PurchaseOrderRepository purchaseOrderRepository = mock(PurchaseOrderRepository.class);
         PurchaseOrderItemQueryService purchaseOrderItemQueryService = mock(PurchaseOrderItemQueryService.class);
-        SalesOrderItemQueryService salesOrderItemQueryService = mock(SalesOrderItemQueryService.class);
+        var itemAllocationRepo = mock(ItemAllocationNativeRepository.class);
+        var inboundItemMapper = mock(InboundItemMapper.class);
         PurchaseInboundService service = new PurchaseInboundService(
                 repository,
                 idGenerator,
