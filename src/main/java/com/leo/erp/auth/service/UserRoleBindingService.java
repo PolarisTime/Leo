@@ -18,7 +18,9 @@ import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.Locale;
+import java.util.stream.Collectors;
 import java.util.Map;
 import java.util.Objects;
 
@@ -66,7 +68,7 @@ public class UserRoleBindingService {
         if (distinctIds.isEmpty()) {
             return List.of();
         }
-        List<RoleSetting> roles = roleRepository.findByIdInAndDeletedFlagFalse(distinctIds);
+        List<RoleSetting> roles = roleSettingRepository.findByIdInAndDeletedFlagFalse(distinctIds);
         if (roles.size() != distinctIds.size()) {
             Set<Long> foundIds = roles.stream().map(RoleSetting::getId).collect(java.util.stream.Collectors.toSet());
             List<Long> missing = distinctIds.stream().filter(id -> !foundIds.contains(id)).toList();

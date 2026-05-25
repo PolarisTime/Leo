@@ -47,9 +47,10 @@ public class RoleSettingService extends AbstractCrudService<RoleSetting, RoleSet
     private void evictCachesForRole(Long roleId) {
         List<Long> affectedUserIds = userRoleRepository
                 .findByRoleIdInAndDeletedFlagFalse(List.of(roleId)).stream()
-                .map(ur -> ur.getUser().getId())
+                .map(com.leo.erp.auth.domain.entity.UserRole::getUserId)
+                .filter(id -> id != null)
                 .distinct()
-                .toList();
+                .collect(java.util.stream.Collectors.toList());
         if (affectedUserIds.isEmpty()) return;
         permissionService.evictUserCaches(affectedUserIds);
         for (Long userId : affectedUserIds) {
