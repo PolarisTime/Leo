@@ -1,4 +1,4 @@
-package com.leo.erp.common.search;
+package com.leo.erp.search.service;
 
 import com.leo.erp.contract.purchase.service.PurchaseContractService;
 import com.leo.erp.contract.sales.service.SalesContractService;
