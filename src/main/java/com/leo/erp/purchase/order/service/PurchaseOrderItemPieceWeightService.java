@@ -8,6 +8,7 @@ import com.leo.erp.common.support.TradeItemCalculator;
 import com.leo.erp.purchase.order.domain.entity.PurchaseOrderItem;
 import com.leo.erp.purchase.order.domain.entity.PurchaseOrderItemPieceWeight;
 import com.leo.erp.purchase.order.repository.PurchaseOrderItemPieceWeightRepository;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -27,9 +28,12 @@ public class PurchaseOrderItemPieceWeightService {
     private static final BigDecimal WEIGHT_UNIT = new BigDecimal("0.001");
 
     private final PurchaseOrderItemPieceWeightRepository repository;
+    private final JdbcTemplate jdbc;
 
-    public PurchaseOrderItemPieceWeightService(PurchaseOrderItemPieceWeightRepository repository) {
+    public PurchaseOrderItemPieceWeightService(PurchaseOrderItemPieceWeightRepository repository,
+                                                JdbcTemplate jdbc) {
         this.repository = repository;
+        this.jdbc = jdbc;
     }
 
     @Transactional
@@ -63,8 +67,9 @@ public class PurchaseOrderItemPieceWeightService {
                     .filter(piece -> piece.getSalesOrderItemId() != null)
                     .map(piece -> TradeItemCalculator.safeBigDecimal(piece.getWeightTon()))
                     .reduce(BigDecimal.ZERO, BigDecimal::add);
+            BigDecimal totalWeightTon = resolveItemTotalWeight(item);
             BigDecimal unallocatedWeightTon = TradeItemCalculator.scaleWeightTon(
-                    TradeItemCalculator.safeBigDecimal(item.getWeightTon()).subtract(allocatedWeightTon)
+                    totalWeightTon.subtract(allocatedWeightTon)
             );
             if (unallocatedWeightTon.compareTo(BigDecimal.ZERO) < 0) {
                 unallocatedWeightTon = BigDecimal.ZERO.setScale(PrecisionConstants.WEIGHT_SCALE);
@@ -80,6 +85,31 @@ public class PurchaseOrderItemPieceWeightService {
         if (!nextPieces.isEmpty()) {
             repository.saveAll(nextPieces);
         }
+    }
+
+    /**
+     * 汇总采购入库的过磅实际重量作为逐件分配的总重量基准。
+     * 盘螺/线材等需要过磅结算的品类，实际入库重量与理论重量存在磅差，
+     * 应以过磅实际值为准进行逐件分配，否则会导致销售端可分配重量虚高。
+     *
+     * 若无采购入库（仅有采购订单），则回退使用采购订单的理论重量。
+     */
+    private BigDecimal resolveItemTotalWeight(PurchaseOrderItem item) {
+        BigDecimal theoreticalWeight = TradeItemCalculator.safeBigDecimal(item.getWeightTon());
+        List<BigDecimal> weighWeights = jdbc.queryForList("""
+                SELECT COALESCE(ini.weigh_weight_ton, ini.weight_ton) AS actual_weight_ton
+                  FROM po_purchase_inbound_item ini
+                  JOIN po_purchase_inbound inbound ON inbound.id = ini.inbound_id AND inbound.deleted_flag = FALSE
+                 WHERE ini.source_purchase_order_item_id = ?
+                   AND inbound.deleted_flag = FALSE
+                   AND inbound.status IN ('已审核', '完成入库')
+                """, BigDecimal.class, item.getId());
+        if (weighWeights.isEmpty()) {
+            return theoreticalWeight;
+        }
+        BigDecimal totalWeighWeight = weighWeights.stream()
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        return TradeItemCalculator.scaleWeightTon(totalWeighWeight);
     }
 
     @Transactional
