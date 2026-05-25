@@ -183,9 +183,17 @@ public abstract class AbstractCrudService<E extends AbstractAuditableEntity, Req
                 .map(this::toResponse);
     }
 
+    protected boolean shouldApplyDataScope() {
+        return true;
+    }
+
+    private Specification<E> withDataScope(Specification<E> spec) {
+        return shouldApplyDataScope() ? DataScopeContext.apply(spec) : spec;
+    }
+
     protected final Page<E> pageEntities(PageQuery query, Specification<E> specification, JpaSpecificationExecutor<E> repository) {
         Specification<E> effectiveSpec = applyListVisibilityPolicy(applyDeletedVisibilityPolicy(specification));
-        return repository.findAll(DataScopeContext.apply(effectiveSpec), query.toPageable("id"));
+        return repository.findAll(withDataScope(effectiveSpec), query.toPageable("id"));
     }
 
     protected final List<Res> search(String keyword, String[] searchFields, int maxSize,
@@ -194,7 +202,7 @@ public abstract class AbstractCrudService<E extends AbstractAuditableEntity, Req
                 applyListVisibilityPolicy(applyDeletedVisibilityPolicy(baseSpec)),
                 com.leo.erp.common.persistence.Specs.keywordLike(keyword, searchFields)
         );
-        return repository.findAll(DataScopeContext.apply(spec), org.springframework.data.domain.PageRequest.of(0, maxSize))
+        return repository.findAll(withDataScope(spec), org.springframework.data.domain.PageRequest.of(0, maxSize))
                 .map(this::toResponse)
                 .toList();
     }
