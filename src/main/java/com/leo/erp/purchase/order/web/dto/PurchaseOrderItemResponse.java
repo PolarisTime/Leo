@@ -22,6 +22,8 @@ public record PurchaseOrderItemResponse(
         BigDecimal pieceWeightTon,
         Integer piecesPerBundle,
         BigDecimal weightTon,
+        BigDecimal actualWeightTon,
+        BigDecimal actualPieceWeightTon,
         BigDecimal unitPrice,
         BigDecimal amount
 ) {

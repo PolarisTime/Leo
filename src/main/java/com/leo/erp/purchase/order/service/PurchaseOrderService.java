@@ -155,6 +155,7 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
                         salesRemainingWeightTon(item, salesAllocatedQuantityMap, salesRemainingWeightMap),
                         item.getQuantity(), item.getQuantityUnit(), item.getPieceWeightTon(),
                         item.getPiecesPerBundle(), item.getWeightTon(),
+                        item.getActualWeightTon(), item.getActualPieceWeightTon(),
                         item.getUnitPrice(), item.getAmount()
                 )).toList()
         );

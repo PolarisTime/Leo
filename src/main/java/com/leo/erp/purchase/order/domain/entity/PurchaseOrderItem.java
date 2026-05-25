@@ -75,4 +75,10 @@ public class PurchaseOrderItem {
 
     @Column(name = "amount", nullable = false, precision = 14, scale = 2)
     private BigDecimal amount;
+
+    @Column(name = "actual_weight_ton", precision = 14, scale = 3)
+    private BigDecimal actualWeightTon;
+
+    @Column(name = "actual_piece_weight_ton", precision = 12, scale = 3)
+    private BigDecimal actualPieceWeightTon;
 }
