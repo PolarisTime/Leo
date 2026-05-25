@@ -389,25 +389,17 @@ public class PurchaseInboundService extends AbstractCrudService<PurchaseInbound,
                     persistedWeighAccumulatorMap.get(sourcePurchaseOrderItemId),
                     currentWeighAccumulatorMap.get(sourcePurchaseOrderItemId)
             );
-            BigDecimal weightTon;
             if (weighAccumulator != null && weighAccumulator.hasQuantity()) {
                 BigDecimal averagePieceWeightTon = weighAccumulator.averagePieceWeightTon();
-                sourceItem.setPieceWeightTon(averagePieceWeightTon);
-                weightTon = weighAccumulator.isFullyAllocated(sourceItem.getQuantity())
+                BigDecimal actualWeightTon = weighAccumulator.isFullyAllocated(sourceItem.getQuantity())
                         ? TradeItemCalculator.scaleWeightTon(weighAccumulator.weightTon())
                         : TradeItemCalculator.calculateWeightTon(sourceItem.getQuantity(), averagePieceWeightTon);
+                sourceItem.setActualWeightTon(actualWeightTon);
+                sourceItem.setActualPieceWeightTon(TradeItemCalculator.scaleWeightTon(averagePieceWeightTon));
             } else {
-                BigDecimal fallbackPieceWeightTon = fallbackSourcePieceWeightMap.get(sourcePurchaseOrderItemId);
-                if (fallbackPieceWeightTon != null) {
-                    sourceItem.setPieceWeightTon(fallbackPieceWeightTon);
-                }
-                BigDecimal baseWeightTon = TradeItemCalculator.calculateWeightTon(sourceItem.getQuantity(), sourceItem.getPieceWeightTon());
-                BigDecimal totalAdjustmentTon = persistedAdjustmentMap.getOrDefault(sourcePurchaseOrderItemId, BigDecimal.ZERO)
-                        .add(currentAdjustmentMap.getOrDefault(sourcePurchaseOrderItemId, BigDecimal.ZERO));
-                weightTon = TradeItemCalculator.scaleWeightTon(baseWeightTon.add(totalAdjustmentTon));
+                sourceItem.setActualWeightTon(null);
+                sourceItem.setActualPieceWeightTon(null);
             }
-            sourceItem.setWeightTon(weightTon);
-            sourceItem.setAmount(TradeItemCalculator.calculateAmount(weightTon, sourceItem.getUnitPrice()));
         }
         affectedOrderMap.values().forEach(this::refreshPurchaseOrderTotals);
         if (!affectedOrderMap.isEmpty()) {
