@@ -32,8 +32,9 @@ public record PageQuery(
     }
 
     public static PageQuery of(Integer page, Integer size, String sortBy, String direction, Set<String> allowedSortFields) {
-        int resolvedPage = page == null ? DEFAULT_PAGE : page;
+        int rawPage = page == null ? DEFAULT_PAGE : page;
         int resolvedSize = size == null ? DEFAULT_SIZE : size;
+        int resolvedPage = rawPage > 0 ? rawPage - 1 : rawPage;
         if (resolvedPage < 0) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "page 不能小于0");
         }
