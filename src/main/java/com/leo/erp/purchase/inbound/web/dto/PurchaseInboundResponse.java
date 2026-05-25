@@ -16,6 +16,8 @@ public record PurchaseInboundResponse(
         BigDecimal totalAmount,
         String status,
         String remark,
+        BigDecimal totalWeighWeightTon,
+        BigDecimal totalWeightAdjustmentTon,
         List<PurchaseInboundItemResponse> items
 ) {
 }

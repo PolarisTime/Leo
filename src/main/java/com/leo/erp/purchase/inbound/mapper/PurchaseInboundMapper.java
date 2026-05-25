@@ -10,5 +10,7 @@ import org.mapstruct.Mapping;
 public interface PurchaseInboundMapper {
 
     @Mapping(target = "items", ignore = true)
+    @Mapping(target = "totalWeighWeightTon", ignore = true)
+    @Mapping(target = "totalWeightAdjustmentTon", ignore = true)
     PurchaseInboundResponse toResponse(PurchaseInbound inbound);
 }

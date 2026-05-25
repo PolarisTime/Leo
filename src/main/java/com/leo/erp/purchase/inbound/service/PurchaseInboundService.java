@@ -109,12 +109,21 @@ public class PurchaseInboundService extends AbstractCrudService<PurchaseInbound,
     protected PurchaseInboundResponse toDetailResponse(PurchaseInbound inbound) {
         Map<Long, Integer> allocatedQuantityMap = loadAllocatedQuantityMap(inbound);
         PurchaseInboundResponse response = purchaseInboundMapper.toResponse(inbound);
+        List<PurchaseInboundItem> items = inbound.getItems();
+        BigDecimal totalWeighWeightTon = items.stream()
+                .map(i -> i.getWeighWeightTon() != null ? i.getWeighWeightTon() : i.getWeightTon())
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal totalWeightAdjustmentTon = items.stream()
+                .map(i -> i.getWeightAdjustmentTon() != null ? i.getWeightAdjustmentTon() : BigDecimal.ZERO)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
         return new PurchaseInboundResponse(
                 response.id(), response.inboundNo(), response.purchaseOrderNo(),
                 response.supplierName(), response.warehouseName(), response.inboundDate(),
                 response.settlementMode(), response.totalWeight(), response.totalAmount(),
                 response.status(), response.remark(),
-                inbound.getItems().stream().map(item -> new PurchaseInboundItemResponse(
+                TradeItemCalculator.scaleWeightTon(totalWeighWeightTon),
+                TradeItemCalculator.scaleWeightTon(totalWeightAdjustmentTon),
+                items.stream().map(item -> new PurchaseInboundItemResponse(
                         item.getId(), item.getLineNo(), item.getMaterialCode(),
                         item.getBrand(), item.getCategory(), item.getMaterial(),
                         item.getSpec(), item.getLength(), item.getUnit(), item.getSourcePurchaseOrderItemId(),
