@@ -394,6 +394,9 @@ public class PurchaseInboundService extends AbstractCrudService<PurchaseInbound,
                 BigDecimal actualWeightTon = weighAccumulator.isFullyAllocated(sourceItem.getQuantity())
                         ? TradeItemCalculator.scaleWeightTon(weighAccumulator.weightTon())
                         : TradeItemCalculator.calculateWeightTon(sourceItem.getQuantity(), averagePieceWeightTon);
+                sourceItem.setWeightTon(actualWeightTon);
+                sourceItem.setPieceWeightTon(TradeItemCalculator.scaleWeightTon(averagePieceWeightTon));
+                sourceItem.setAmount(TradeItemCalculator.calculateAmount(actualWeightTon, sourceItem.getUnitPrice()));
                 sourceItem.setActualWeightTon(actualWeightTon);
                 sourceItem.setActualPieceWeightTon(TradeItemCalculator.scaleWeightTon(averagePieceWeightTon));
             } else {
