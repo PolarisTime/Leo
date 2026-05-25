@@ -15,7 +15,9 @@ import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.security.permission.PermissionService;
+import com.leo.erp.system.role.domain.entity.RoleConflict;
 import com.leo.erp.system.role.domain.entity.RoleSetting;
+import com.leo.erp.system.role.repository.RoleConflictRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
@@ -39,6 +41,7 @@ public class UserAccountAdminService {
     private final PermissionService permissionService;
     private final UserAccountValidationService validationService;
     private final UserAccountCacheService cacheService;
+    private final RoleConflictRepository roleConflictRepository;
 
     @Autowired
     public UserAccountAdminService(
@@ -50,7 +53,8 @@ public class UserAccountAdminService {
             UserRoleBindingService userRoleBindingService,
             PermissionService permissionService,
             UserAccountValidationService validationService,
-            UserAccountCacheService cacheService) {
+            UserAccountCacheService cacheService,
+            RoleConflictRepository roleConflictRepository) {
         this.repository = repository;
         this.idGenerator = idGenerator;
         this.passwordEncoder = passwordEncoder;
@@ -60,6 +64,7 @@ public class UserAccountAdminService {
         this.permissionService = permissionService;
         this.validationService = validationService;
         this.cacheService = cacheService;
+        this.roleConflictRepository = roleConflictRepository;
     }
 
     @Transactional(readOnly = true)
@@ -193,6 +198,7 @@ public class UserAccountAdminService {
         String previousLoginName = entity.getLoginName();
         Long previousDepartmentId = entity.getDepartmentId();
         List<RoleSetting> roles = resolveRolesFromRequest(request);
+        assertNoRoleConflict(roles);
         apply(entity, request, roles);
         try {
             UserAccount saved = repository.save(entity);
@@ -209,6 +215,25 @@ public class UserAccountAdminService {
                 throw new BusinessException(ErrorCode.BUSINESS_ERROR, "登录账号已存在");
             }
             throw ex;
+        }
+    }
+
+    private void assertNoRoleConflict(List<RoleSetting> roles) {
+        if (roles.size() < 2) return;
+        List<Long> roleIds = roles.stream().map(RoleSetting::getId).toList();
+        List<RoleConflict> conflicts = roleConflictRepository.findConflictsByRoleIds(roleIds);
+        if (conflicts.isEmpty()) return;
+        for (RoleConflict conflict : conflicts) {
+            for (RoleSetting role : roles) {
+                if (role.getId().equals(conflict.getConflictRoleId())) {
+                    RoleSetting conflictRole = roles.stream()
+                            .filter(r -> r.getId().equals(conflict.getRoleId())).findFirst().orElse(null);
+                    if (conflictRole != null) {
+                        throw new BusinessException(ErrorCode.VALIDATION_ERROR,
+                                "角色 \"" + conflictRole.getRoleName() + "\" 与 \"" + role.getRoleName() + "\" 互斥，不能同时选择");
+                    }
+                }
+            }
         }
     }
 
