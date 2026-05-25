@@ -293,10 +293,9 @@ public class PurchaseInboundService extends AbstractCrudService<PurchaseInbound,
         BigDecimal weighWeightTon = requireWeighWeightTon(source, lineNo);
         BigDecimal theoreticalWeightTon = resolveAdjustmentBaseWeightTon(source);
         BigDecimal averagePieceWeightTon = TradeItemCalculator.calculateAveragePieceWeightTon(source.quantity(), weighWeightTon);
-        BigDecimal calculatedWeightTon = TradeItemCalculator.calculateWeightTon(source.quantity(), averagePieceWeightTon);
         BigDecimal weightAdjustmentTon = TradeItemCalculator.scaleWeightTon(weighWeightTon.subtract(theoreticalWeightTon));
         BigDecimal weightAdjustmentAmount = TradeItemCalculator.calculateAmount(weightAdjustmentTon, source.unitPrice());
-        return new WeightSettlementResult(theoreticalWeightTon, weighWeightTon, weightAdjustmentTon, weightAdjustmentAmount, averagePieceWeightTon, calculatedWeightTon);
+        return new WeightSettlementResult(theoreticalWeightTon, weighWeightTon, weightAdjustmentTon, weightAdjustmentAmount, averagePieceWeightTon, weighWeightTon);
     }
 
     private BigDecimal resolveAdjustmentBaseWeightTon(PurchaseInboundItemRequest source) {
