@@ -9,7 +9,11 @@ import com.leo.erp.system.department.repository.DepartmentRepository;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
+import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -78,11 +82,15 @@ class DepartmentScopeResolver {
             }
         }
 
-        Set<Long> userIds = userAccountRepository.findByDepartmentIdAndDeletedFlagFalse(departmentId)
-                .stream()
-                .map(UserAccount::getId)
-                .filter(java.util.Objects::nonNull)
-                .collect(Collectors.toCollection(LinkedHashSet::new));
+        Set<Long> allDepartmentIds = collectDepartmentAndDescendants(departmentId);
+        Set<Long> userIds = new LinkedHashSet<>();
+        for (Long deptId : allDepartmentIds) {
+            userAccountRepository.findByDepartmentIdAndDeletedFlagFalse(deptId)
+                    .stream()
+                    .map(UserAccount::getId)
+                    .filter(java.util.Objects::nonNull)
+                    .forEach(userIds::add);
+        }
         userIds.add(userId);
         departmentUserCache.put(departmentId, new DepartmentCacheEntry(
                 Set.copyOf(userIds),
@@ -99,6 +107,34 @@ class DepartmentScopeResolver {
                 .map(Department::getStatus)
                 .filter(StatusConstants.NORMAL::equals)
                 .isPresent();
+    }
+
+    private Set<Long> collectDepartmentAndDescendants(Long rootDepartmentId) {
+        Set<Long> result = new LinkedHashSet<>();
+        result.add(rootDepartmentId);
+        if (departmentRepository == null) {
+            return result;
+        }
+        List<Department> allActive = departmentRepository
+                .findByStatusAndDeletedFlagFalseOrderBySortOrderAscIdAsc(StatusConstants.NORMAL);
+        Map<Long, List<Department>> childrenByParent = allActive.stream()
+                .filter(d -> d.getParentId() != null)
+                .collect(Collectors.groupingBy(Department::getParentId));
+
+        var queue = new ArrayDeque<Long>();
+        queue.add(rootDepartmentId);
+        Set<Long> visited = new LinkedHashSet<>();
+        visited.add(rootDepartmentId);
+        while (!queue.isEmpty()) {
+            Long parentId = queue.poll();
+            for (Department child : childrenByParent.getOrDefault(parentId, List.of())) {
+                if (visited.add(child.getId())) {
+                    result.add(child.getId());
+                    queue.add(child.getId());
+                }
+            }
+        }
+        return result;
     }
 
     private record DepartmentCacheEntry(Set<Long> userIds, long expiresAt) {
