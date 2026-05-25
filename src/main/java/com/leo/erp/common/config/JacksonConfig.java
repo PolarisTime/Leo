@@ -37,7 +37,18 @@ public class JacksonConfig {
                 .serializerByType(BigDecimal.class, new ScaledBigDecimalSerializer())
                 .serializerByType(LocalDateTime.class, new EpochMillisLocalDateTimeSerializer())
                 .deserializerByType(LocalDateTime.class, new FlexibleLocalDateTimeDeserializer())
+                .serializerByType(LocalDate.class, new EpochMillisLocalDateSerializer())
                 .deserializerByType(LocalDate.class, new FlexibleLocalDateDeserializer());
+    }
+
+    /** Serialize LocalDate → epoch milliseconds at start of day (Asia/Shanghai). */
+    static class EpochMillisLocalDateSerializer extends JsonSerializer<LocalDate> {
+        @Override
+        public void serialize(LocalDate value, JsonGenerator gen,
+                              SerializerProvider provider) throws IOException {
+            long epoch = value.atStartOfDay(ZONE).toInstant().toEpochMilli();
+            gen.writeNumber(epoch);
+        }
     }
 
     /** Serialize LocalDateTime → epoch milliseconds (Asia/Shanghai). */
