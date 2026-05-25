@@ -48,6 +48,7 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
     private final PurchaseItemPieceWeightAppService purchaseItemPieceWeightAppService;
     private final SalesOrderItemRepository salesOrderItemRepository;
     private final WarehouseSelectionSupport warehouseSelectionSupport;
+    private final SalesOrderItemMapper salesOrderItemMapper;
     private final WorkflowTransitionGuard workflowTransitionGuard;
 
     public SalesOrderService(SalesOrderRepository repository,
@@ -58,6 +59,7 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
                              PurchaseItemPieceWeightAppService purchaseItemPieceWeightAppService,
                              SalesOrderItemRepository salesOrderItemRepository,
                              WarehouseSelectionSupport warehouseSelectionSupport,
+                             SalesOrderItemMapper salesOrderItemMapper,
                              WorkflowTransitionGuard workflowTransitionGuard) {
         super(idGenerator);
         this.repository = repository;
@@ -67,6 +69,7 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
         this.purchaseItemPieceWeightAppService = purchaseItemPieceWeightAppService;
         this.salesOrderItemRepository = salesOrderItemRepository;
         this.warehouseSelectionSupport = warehouseSelectionSupport;
+        this.salesOrderItemMapper = salesOrderItemMapper;
         this.workflowTransitionGuard = workflowTransitionGuard;
     }
 
@@ -264,58 +267,19 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
                 SalesOrderItem::setId
         );
         for (int i = 0; i < request.items().size(); i++) {
+            int lineNo = i + 1;
             SalesOrderItemRequest source = request.items().get(i);
             Material material = materialMap.get(source.materialCode());
             SalesOrderItem item = items.get(i);
-            item.setSalesOrder(entity);
-            item.setLineNo(i + 1);
-            item.setMaterialCode(source.materialCode());
-            item.setBrand(source.brand());
-            item.setCategory(source.category());
-            item.setMaterial(source.material());
-            item.setSpec(source.spec());
-            item.setLength(source.length());
-            item.setUnit(source.unit());
-            item.setSourceInboundItemId(source.sourceInboundItemId());
-            item.setSourcePurchaseOrderItemId(source.sourcePurchaseOrderItemId());
-            SourceInboundItemRecord sourceInboundItem = source.sourceInboundItemId() == null
-                    ? null
-                    : sourceInboundItemMap.get(source.sourceInboundItemId());
-            if (sourceInboundItem != null
-                    
-                    && sourceInboundItem.inboundNo() != null) {
-                sourceInboundNos.add(sourceInboundItem.inboundNo());
-                if (sourceInboundItem.purchaseOrderNo() != null) {
-                    sourcePurchaseOrderNos.add(sourceInboundItem.purchaseOrderNo());
-                }
-            }
-            SourcePurchaseOrderItemRecord sourcePurchaseOrderItem = source.sourcePurchaseOrderItemId() == null
-                    ? null
-                    : sourcePurchaseOrderItemMap.get(source.sourcePurchaseOrderItemId());
-            if (sourcePurchaseOrderItem != null
-                    
-                    && sourcePurchaseOrderItem.orderNo() != null) {
-                sourcePurchaseOrderNos.add(sourcePurchaseOrderItem.orderNo());
-            }
-            item.setWarehouseName(warehouseSelectionSupport.normalizeWarehouseName(source.warehouseName(), i + 1, true));
-            validateSourceAllocation(source, i + 1, sourceInboundItemMap, sourcePurchaseOrderItemMap,
+            SourceInboundItemRecord sourceInboundItem = resolveSourceInbound(source, sourceInboundItemMap, sourceInboundNos, sourcePurchaseOrderNos);
+            SourcePurchaseOrderItemRecord sourcePurchaseOrderItem = resolveSourcePurchaseOrder(source, sourcePurchaseOrderItemMap, sourcePurchaseOrderNos);
+            validateSourceAllocation(source, lineNo, sourceInboundItemMap, sourcePurchaseOrderItemMap,
                     inboundAllocatedMap, purchaseOrderAllocatedMap, requestInboundAllocatedMap, requestPurchaseOrderAllocatedMap);
-            item.setBatchNo(tradeItemMaterialSupport.normalizeBatchNo(material, source.batchNo(), i + 1, true));
-            item.setQuantity(source.quantity());
-            item.setQuantityUnit(TradeItemCalculator.normalizeQuantityUnit(source.quantityUnit()));
-            BigDecimal pieceWeightTon = resolveSalesOrderPieceWeightTon(
-                    source,
-                    sourcePurchaseOrderItemMap,
-                    purchaseOrderAllocatedMap,
-                    requestPurchaseOrderAllocatedMap,
-                    purchaseOrderRemainingWeightMap
-            );
-            item.setPieceWeightTon(pieceWeightTon);
-            item.setPiecesPerBundle(source.piecesPerBundle());
+            BigDecimal pieceWeightTon = resolveSalesOrderPieceWeightTon(source, sourcePurchaseOrderItemMap,
+                    purchaseOrderAllocatedMap, requestPurchaseOrderAllocatedMap, purchaseOrderRemainingWeightMap);
             BigDecimal weightTon = resolveSalesOrderWeightTon(source, sourceInboundItemMap,
                     inboundAllocatedMap, requestInboundAllocatedMap, pieceWeightTon);
-            item.setWeightTon(weightTon);
-            item.setUnitPrice(source.unitPrice());
+            salesOrderItemMapper.applyItemFields(entity, source, item, lineNo, material, weightTon, pieceWeightTon);
             BigDecimal amount = TradeItemCalculator.calculateAmount(weightTon, source.unitPrice());
             item.setAmount(amount);
             totalWeight = totalWeight.add(weightTon);
@@ -438,6 +402,28 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
         Map<Long, BigDecimal> remainingWeightMap =
                 purchaseItemPieceWeightAppService.summarizeRemainingWeightByPurchaseOrderItemIds(sourcePurchaseOrderItemIds);
         return remainingWeightMap == null ? Map.of() : remainingWeightMap;
+    }
+
+    private SourceInboundItemRecord resolveSourceInbound(SalesOrderItemRequest source,
+            Map<Long, SourceInboundItemRecord> sourceInboundItemMap,
+            java.util.Set<String> sourceInboundNos,
+            java.util.Set<String> sourcePurchaseOrderNos) {
+        SourceInboundItemRecord si = source.sourceInboundItemId() == null ? null
+                : sourceInboundItemMap.get(source.sourceInboundItemId());
+        if (si != null && si.inboundNo() != null) {
+            sourceInboundNos.add(si.inboundNo());
+            if (si.purchaseOrderNo() != null) sourcePurchaseOrderNos.add(si.purchaseOrderNo());
+        }
+        return si;
+    }
+
+    private SourcePurchaseOrderItemRecord resolveSourcePurchaseOrder(SalesOrderItemRequest source,
+            Map<Long, SourcePurchaseOrderItemRecord> sourcePurchaseOrderItemMap,
+            java.util.Set<String> sourcePurchaseOrderNos) {
+        SourcePurchaseOrderItemRecord spo = source.sourcePurchaseOrderItemId() == null ? null
+                : sourcePurchaseOrderItemMap.get(source.sourcePurchaseOrderItemId());
+        if (spo != null && spo.orderNo() != null) sourcePurchaseOrderNos.add(spo.orderNo());
+        return spo;
     }
 
     private BigDecimal resolveSalesOrderPieceWeightTon(

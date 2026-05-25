@@ -58,6 +58,7 @@ public class PurchaseInboundService extends AbstractCrudService<PurchaseInbound,
     private final PurchaseOrderItemPieceWeightService purchaseOrderItemPieceWeightService;
     private final PurchaseOrderItemQueryService purchaseOrderItemQueryService;
     private final ItemAllocationNativeRepository itemAllocationRepo;
+    private final InboundItemMapper inboundItemMapper;
     private final WorkflowTransitionGuard workflowTransitionGuard;
 
     public PurchaseInboundService(PurchaseInboundRepository repository,
@@ -71,6 +72,7 @@ public class PurchaseInboundService extends AbstractCrudService<PurchaseInbound,
                                   PurchaseOrderItemPieceWeightService purchaseOrderItemPieceWeightService,
                                   PurchaseOrderItemQueryService purchaseOrderItemQueryService,
                                   ItemAllocationNativeRepository itemAllocationRepo,
+                                  InboundItemMapper inboundItemMapper,
                                   WorkflowTransitionGuard workflowTransitionGuard) {
         super(idGenerator);
         this.repository = repository;
@@ -83,6 +85,7 @@ public class PurchaseInboundService extends AbstractCrudService<PurchaseInbound,
         this.purchaseOrderItemPieceWeightService = purchaseOrderItemPieceWeightService;
         this.purchaseOrderItemQueryService = purchaseOrderItemQueryService;
         this.itemAllocationRepo = itemAllocationRepo;
+        this.inboundItemMapper = inboundItemMapper;
         this.workflowTransitionGuard = workflowTransitionGuard;
     }
 
@@ -443,15 +446,6 @@ public class PurchaseInboundService extends AbstractCrudService<PurchaseInbound,
         purchaseOrder.setTotalAmount(TradeItemCalculator.scaleAmount(totalAmount));
     }
 
-    private record WeightSettlementResult(
-            BigDecimal weightTon,
-            BigDecimal weighWeightTon,
-            BigDecimal weightAdjustmentTon,
-            BigDecimal weightAdjustmentAmount,
-            BigDecimal pieceWeightTon
-    ) {
-    }
-
     private record SourceWeighAccumulator(
             int quantity,
             BigDecimal weightTon
@@ -643,69 +637,31 @@ public class PurchaseInboundService extends AbstractCrudService<PurchaseInbound,
             PurchaseInboundItemRequest source = request.items().get(i);
             Material material = materialMap.get(source.materialCode());
             PurchaseInboundItem item = items.get(i);
-            item.setPurchaseInbound(inbound);
-            item.setLineNo(i + 1);
-            item.setMaterialCode(source.materialCode());
-            item.setBrand(source.brand());
-            item.setCategory(source.category());
-            item.setMaterial(source.material());
-            item.setSpec(source.spec());
-            item.setLength(source.length());
-            item.setUnit(source.unit());
-            item.setSourcePurchaseOrderItemId(source.sourcePurchaseOrderItemId());
-            validateSourcePurchaseOrderAllocation(source, i + 1, sourcePurchaseOrderItemMap, allocatedQuantityMap, requestAllocatedQuantityMap);
-            PurchaseOrderItem sourcePurchaseOrderItem = source.sourcePurchaseOrderItemId() == null
-                    ? null
-                    : sourcePurchaseOrderItemMap.get(source.sourcePurchaseOrderItemId());
-            if (sourcePurchaseOrderItem != null
-                    && sourcePurchaseOrderItem.getPurchaseOrder() != null
-                    && sourcePurchaseOrderItem.getPurchaseOrder().getOrderNo() != null) {
-                sourcePurchaseOrderNos.add(sourcePurchaseOrderItem.getPurchaseOrder().getOrderNo());
-            }
-            String warehouseName = warehouseSelectionSupport.normalizeWarehouseName(
-                    source.warehouseName() == null || source.warehouseName().isBlank() ? request.warehouseName() : source.warehouseName(),
-                    i + 1,
-                    true
-            );
-            if (firstLineWarehouseName == null) {
-                firstLineWarehouseName = warehouseName;
-            }
-            item.setWarehouseName(warehouseName);
-            String settlementMode = resolveLineSettlementMode(source, request, i + 1);
-            item.setSettlementMode(settlementMode);
-            item.setBatchNo(tradeItemMaterialSupport.normalizeBatchNo(material, source.batchNo(), i + 1, true));
-            item.setQuantity(source.quantity());
-            item.setQuantityUnit(TradeItemCalculator.normalizeQuantityUnit(source.quantityUnit()));
-            item.setPiecesPerBundle(source.piecesPerBundle());
+            int lineNo = i + 1;
+
+            validateSourcePurchaseOrderAllocation(source, lineNo, sourcePurchaseOrderItemMap, allocatedQuantityMap, requestAllocatedQuantityMap);
             WeightSettlementResult weightSettlement = resolveWeightSettlement(
-                    source,
-                    i + 1,
-                    purchaseWeighRequiredCategoryNames,
-                    settlementMode
-            );
-            BigDecimal weightTon = weightSettlement.weightTon();
-            item.setPieceWeightTon(weightSettlement.pieceWeightTon());
-            item.setWeightTon(weightTon);
-            item.setWeighWeightTon(weightSettlement.weighWeightTon());
-            item.setWeightAdjustmentTon(weightSettlement.weightAdjustmentTon());
-            item.setWeightAdjustmentAmount(weightSettlement.weightAdjustmentAmount());
-            item.setUnitPrice(source.unitPrice());
-            BigDecimal amount = TradeItemCalculator.calculateAmount(weightTon, source.unitPrice());
-            item.setAmount(amount);
-            totalWeight = totalWeight.add(weightTon);
-            totalAmount = totalAmount.add(amount);
-            if (source.sourcePurchaseOrderItemId() != null) {
-                currentAdjustmentMap.merge(
-                        source.sourcePurchaseOrderItemId(),
-                        weightSettlement.weightAdjustmentTon(),
-                        BigDecimal::add
-                );
-                if (weightSettlement.weighWeightTon() != null) {
+                    source, lineNo, purchaseWeighRequiredCategoryNames,
+                    resolveLineSettlementMode(source, request, lineNo));
+
+            var result = inboundItemMapper.applyItemFields(
+                    inbound, source, item, lineNo, material,
+                    sourcePurchaseOrderItemMap, weightSettlement,
+                    request.warehouseName(), request.settlementMode());
+
+            if (result.sourceOrderNo() != null) sourcePurchaseOrderNos.add(result.sourceOrderNo());
+            if (firstLineWarehouseName == null) firstLineWarehouseName = result.firstLineWarehouseName();
+
+            totalWeight = totalWeight.add(result.weightTon());
+            totalAmount = totalAmount.add(result.amount());
+
+            if (result.sourcePurchaseOrderItemId() != null) {
+                currentAdjustmentMap.merge(result.sourcePurchaseOrderItemId(), result.weightAdjustmentTon(), BigDecimal::add);
+                if (result.weighWeightTon() != null) {
                     currentWeighAccumulatorMap.merge(
-                            source.sourcePurchaseOrderItemId(),
-                            new SourceWeighAccumulator(source.quantity(), weightSettlement.weightTon()),
-                            this::mergeWeighAccumulator
-                    );
+                            result.sourcePurchaseOrderItemId(),
+                            new SourceWeighAccumulator(result.quantity(), result.sourceWeightTon()),
+                            this::mergeWeighAccumulator);
                 }
             }
         }
