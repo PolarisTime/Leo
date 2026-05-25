@@ -1,7 +1,7 @@
 package com.leo.erp.security.permission;
 
 import com.leo.erp.common.error.BusinessException;
-import com.leo.erp.common.persistence.AuditableEntity;
+import com.leo.erp.common.persistence.AbstractAuditableEntity;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
@@ -57,6 +57,6 @@ class DataScopeContextTest {
                 .hasMessageContaining("无数据权限");
     }
 
-    private static class TestEntity extends AuditableEntity {
+    private static class TestEntity extends AbstractAuditableEntity {
     }
 }
