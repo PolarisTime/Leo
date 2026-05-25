@@ -20,8 +20,7 @@ public interface ItemAllocationNativeRepository extends JpaRepository<Allocation
                    COALESCE(SUM(si.weight_ton), 0)   AS total_weight_ton
               FROM so_sales_order_item si
               JOIN so_sales_order so ON so.id = si.order_id AND so.deleted_flag = FALSE
-             WHERE si.deleted_flag = FALSE
-               AND si.source_purchase_order_item_id IN (:ids)
+             WHERE si.source_purchase_order_item_id IN (:ids)
                AND (:exclude_order_id IS NULL OR si.order_id <> :exclude_order_id)
              GROUP BY si.source_purchase_order_item_id
             """, nativeQuery = true)
@@ -52,8 +51,7 @@ public interface ItemAllocationNativeRepository extends JpaRepository<Allocation
                    COALESCE(SUM(si.weight_ton), 0)   AS total_weight_ton
               FROM so_sales_order_item si
               JOIN so_sales_order so ON so.id = si.order_id AND so.deleted_flag = FALSE
-             WHERE si.deleted_flag = FALSE
-               AND si.source_inbound_item_id IN (:ids)
+             WHERE si.source_inbound_item_id IN (:ids)
                AND (:exclude_order_id IS NULL OR si.order_id <> :exclude_order_id)
              GROUP BY si.source_inbound_item_id
             """, nativeQuery = true)
