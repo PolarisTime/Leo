@@ -12,6 +12,7 @@ public interface UserAccountAdminMapper {
 
     @Mapping(target = "status", expression = "java(fromStatus(entity.getStatus()))")
     @Mapping(target = "roleNames", ignore = true)
+    @Mapping(target = "roleIds", ignore = true)
     UserAccountAdminResponse toResponse(UserAccount entity);
 
     default String fromStatus(UserStatus status) {
