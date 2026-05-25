@@ -46,7 +46,7 @@ public final class ResourcePermissionCatalog {
 
     private static final Set<String> NO_MENU_RESOURCES = Set.of("user-account", "permission", "role");
     private static final Map<String, List<String>> EXTRA_MENU_CODES = Map.of(
-            "material", List.of("material-category")
+            "material", List.of("material-categories", "material-category")
     );
 
     private static List<String> menuCodesFor(Entry entry) {
@@ -89,9 +89,10 @@ public final class ResourcePermissionCatalog {
 
     public static final List<Entry> ENTRIES = List.of(
             entry("dashboard", "工作台", "工作台", false, List.of("/dashboard"), READ_ONLY_ACTIONS),
-            entry("material", "商品资料", "主数据", true, List.of("/material", "/material-category"), BUSINESS_ACTIONS),
+            entry("material", "商品资料", "主数据", true, List.of("/material", "/material-categories", "/material-category"), BUSINESS_ACTIONS),
             entry("supplier", "供应商资料", "主数据", true, List.of("/supplier"), BUSINESS_ACTIONS),
             entry("customer", "客户资料", "主数据", true, List.of("/customer"), BUSINESS_ACTIONS),
+            entry("project", "项目", "主数据", true, List.of("/project", "/projects"), CRUD_ACTIONS),
             entry("carrier", "物流方资料", "主数据", true, List.of("/carrier"), BUSINESS_ACTIONS),
             entry("warehouse", "仓库资料", "主数据", true, List.of("/warehouse"), BUSINESS_ACTIONS),
             entry("purchase-order", "采购订单", "采购", true, List.of("/purchase-order"), BUSINESS_ACTIONS),
@@ -105,6 +106,7 @@ public final class ResourcePermissionCatalog {
             entry("io-report", "出入库报表", "报表", true, List.of("/io-report"), REPORT_ACTIONS),
             entry("pending-invoice-receipt-report", "未收票报表", "报表", true,
                     List.of("/pending-invoice-receipt-report"), REPORT_ACTIONS),
+            entry("project-ar", "项目应收", "财务", true, List.of("/project-ar"), READ_ONLY_ACTIONS),
             entry("supplier-statement", "供应商对账单", "对账", true, List.of("/supplier-statement"), BUSINESS_ACTIONS),
             entry("customer-statement", "客户对账单", "对账", true, List.of("/customer-statement"), BUSINESS_ACTIONS),
             entry("freight-statement", "物流对账单", "对账", true, List.of("/freight-statement"), BUSINESS_ACTIONS),

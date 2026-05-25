@@ -51,9 +51,9 @@ public class RateLimitAspect {
             TokenBucketService.TokenBucketResult r = tokenBucketService.tryConsume(
                     key, resolveRate(rateLimit), resolveCapacity(rateLimit), rateLimit.tokens());
             if (!r.allowed()) {
-                return reject(response, r);
+                return reject(response, r, rateLimit);
             }
-            setHeaders(response, r);
+            setHeaders(response, r, rateLimit);
             return joinPoint.proceed();
         }
 
@@ -64,9 +64,9 @@ public class RateLimitAspect {
             TokenBucketService.TokenBucketResult r = tokenBucketService.tryConsume(
                     key, resolveRate(rateLimit), resolveCapacity(rateLimit), rateLimit.tokens());
             if (!r.allowed()) {
-                return reject(response, r);
+                return reject(response, r, rateLimit);
             }
-            setHeaders(response, r);
+            setHeaders(response, r, rateLimit);
             return joinPoint.proceed();
         }
 
@@ -92,9 +92,9 @@ public class RateLimitAspect {
         TokenBucketService.TokenBucketResult r = tokenBucketService.tryConsume(
                 key, rateLimit.rate(), rateLimit.capacity(), rateLimit.tokens());
         if (!r.allowed()) {
-            return reject(response, r);
+            return reject(response, r, rateLimit);
         }
-        setHeaders(response, r);
+        setHeaders(response, r, rateLimit);
         return joinPoint.proceed();
     }
 
@@ -106,18 +106,21 @@ public class RateLimitAspect {
         return rl.capacity() > 0 ? rl.capacity() : DEFAULT_CAPACITY;
     }
 
-    private Object reject(HttpServletResponse response, TokenBucketService.TokenBucketResult r) {
+    private Object reject(HttpServletResponse response, TokenBucketService.TokenBucketResult r, RateLimit rl) {
         if (response != null) {
             response.setStatus(HttpStatus.TOO_MANY_REQUESTS.value());
             response.setHeader("Retry-After", String.valueOf(r.retryAfterSeconds()));
+            response.setHeader("X-RateLimit-Limit", String.valueOf(resolveCapacity(rl)));
             response.setHeader("X-RateLimit-Remaining", "0");
+            response.setHeader("X-RateLimit-Reset", String.valueOf(r.retryAfterSeconds()));
         }
         throw new BusinessException(ErrorCode.FORBIDDEN,
                 "请求过于频繁，请在 " + r.retryAfterSeconds() + " 秒后重试");
     }
 
-    private void setHeaders(HttpServletResponse response, TokenBucketService.TokenBucketResult r) {
+    private void setHeaders(HttpServletResponse response, TokenBucketService.TokenBucketResult r, RateLimit rl) {
         if (response != null) {
+            response.setHeader("X-RateLimit-Limit", String.valueOf(resolveCapacity(rl)));
             response.setHeader("X-RateLimit-Remaining", String.valueOf(r.remaining()));
         }
     }
