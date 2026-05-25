@@ -417,9 +417,6 @@ public class PurchaseInboundService extends AbstractCrudService<PurchaseInbound,
         }
         affectedOrderMap.values().forEach(this::refreshPurchaseOrderTotals);
         if (!affectedOrderMap.isEmpty()) {
-            if (StatusConstants.INBOUND_COMPLETED.equals(nextStatus)) {
-                affectedOrderMap.values().forEach(this::maybeCompletePurchaseOrder);
-            }
             purchaseOrderRepository.saveAll(affectedOrderMap.values());
             purchaseOrderItemPieceWeightService.regenerateForPurchaseOrderItems(
                     sourcePurchaseOrderItemIds.stream()
@@ -450,7 +447,7 @@ public class PurchaseInboundService extends AbstractCrudService<PurchaseInbound,
         if (!StatusConstants.AUDITED.equals(purchaseOrder.getStatus())) {
             return;
         }
-        List<PurchaseInbound> allInbounds = purchaseInboundRepository
+        List<PurchaseInbound> allInbounds = repository
                 .findByPurchaseOrderNoAndDeletedFlagFalse(purchaseOrder.getOrderNo());
         boolean allComplete = allInbounds.stream()
                 .allMatch(i -> StatusConstants.INBOUND_COMPLETED.equals(i.getStatus()));
@@ -705,6 +702,13 @@ public class PurchaseInboundService extends AbstractCrudService<PurchaseInbound,
                 fallbackSourcePieceWeightMap,
                 sourcePurchaseOrderItemMap
         );
+        if (StatusConstants.INBOUND_COMPLETED.equals(nextStatus)) {
+            sourcePurchaseOrderItemMap.values().stream()
+                    .map(PurchaseOrderItem::getPurchaseOrder)
+                    .filter(order -> order != null)
+                    .distinct()
+                    .forEach(this::maybeCompletePurchaseOrder);
+        }
     }
 
     @Override
