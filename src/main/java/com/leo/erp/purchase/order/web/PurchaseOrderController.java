@@ -8,11 +8,13 @@ import com.leo.erp.common.api.PageResponse;
 import com.leo.erp.common.web.BindPageQuery;
 import com.leo.erp.purchase.order.service.PurchaseOrderService;
 import com.leo.erp.purchase.order.web.dto.PurchaseOrderImportCandidateResponse;
+import com.leo.erp.purchase.order.web.dto.PieceWeightResponse;
 import com.leo.erp.purchase.order.web.dto.PurchaseOrderRequest;
 import com.leo.erp.purchase.order.web.dto.PurchaseOrderResponse;
 import com.leo.erp.security.permission.RequiresPermission;
 import jakarta.validation.Valid;
 import java.time.LocalDate;
+import java.util.List;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -104,5 +106,12 @@ public class PurchaseOrderController {
     public ApiResponse<Void> delete(@PathVariable Long id) {
         purchaseOrderService.delete(id);
         return ApiResponse.success("删除成功");
+    }
+
+    @Operation(summary = "查询逐件重量明细")
+    @GetMapping("/items/{itemId}/piece-weights")
+    @RequiresPermission(resource = "purchase-order", action = "read")
+    public ApiResponse<List<PieceWeightResponse>> pieceWeights(@PathVariable Long itemId) {
+        return ApiResponse.success(purchaseOrderService.getPieceWeights(itemId));
     }
 }
