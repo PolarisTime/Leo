@@ -50,7 +50,6 @@ public abstract class AbstractCrudService<E extends AbstractAuditableEntity, Req
             StatusConstants.COMPLETED,
             StatusConstants.PURCHASE_COMPLETED,
             StatusConstants.INBOUND_COMPLETED,
-            StatusConstants.SALES_PENDING_FINALIZE,
             StatusConstants.SALES_COMPLETED,
             StatusConstants.PAID,
             StatusConstants.RECEIVED,

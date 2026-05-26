@@ -106,7 +106,6 @@ public class CustomerStatementService extends AbstractCrudService<CustomerStatem
         Specification<SalesOrder> spec = Specs.<SalesOrder>notDeleted()
                 .and(Specs.keywordLike(keyword, SALES_ORDER_CANDIDATE_SEARCH_FIELDS))
                 .and((root, criteriaQuery, cb) -> root.get("status").in(
-                        StatusConstants.SALES_PENDING_FINALIZE,
                         StatusConstants.SALES_COMPLETED
                 ))
                 .and(StatementCandidateSupport.excludeFieldValues("orderNo", occupiedOrderNos));
