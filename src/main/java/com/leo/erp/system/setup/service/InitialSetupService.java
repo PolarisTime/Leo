@@ -140,7 +140,7 @@ public class InitialSetupService {
     }
 
     @Transactional
-    public InitialSetupSubmitResponse configureAdmin(InitialSetupAdminSubmitRequest request) {
+    public synchronized InitialSetupSubmitResponse configureAdmin(InitialSetupAdminSubmitRequest request) {
         assertOobeNotCompleted();
         if (isAdminConfigured()) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "管理员账号已完成初始化");
@@ -149,7 +149,7 @@ public class InitialSetupService {
     }
 
     @Transactional
-    public InitialSetupSubmitResponse configureCompany(InitialSetupCompanyRequest request) {
+    public synchronized InitialSetupSubmitResponse configureCompany(InitialSetupCompanyRequest request) {
         assertOobeNotCompleted();
         if (!isAdminConfigured()) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "请先完成管理员账号初始化");
@@ -222,7 +222,11 @@ public class InitialSetupService {
         admin.setPermissionSummary("");
         admin.setStatus(UserStatus.NORMAL);
         admin.setRemark(SETUP_REMARK);
-        admin.setTotpSecret(totpService.encryptSecret(totpSecret));
+        try {
+            admin.setTotpSecret(totpService.encryptSecret(totpSecret));
+        } catch (IllegalStateException e) {
+            throw new BusinessException(ErrorCode.INTERNAL_ERROR, "TOTP 加密密钥未配置，请联系系统管理员");
+        }
         admin.setTotpEnabled(Boolean.TRUE);
         admin.setRequireTotpSetup(Boolean.FALSE);
 
