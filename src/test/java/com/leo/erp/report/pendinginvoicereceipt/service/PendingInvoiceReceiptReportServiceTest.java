@@ -98,7 +98,7 @@ class PendingInvoiceReceiptReportServiceTest {
         order.setSupplierName("供应商A");
         order.setOrderDate(LocalDateTime.of(2026, 4, 26, 0, 0));
         order.setCreatedBy(1L);
-        order.setDeletedFlag(Boolean.FALSE);
+        order.setDeletedFlag(false);
         order.getItems().addAll(List.of(items));
         for (PurchaseOrderItem item : items) {
             item.setPurchaseOrder(order);

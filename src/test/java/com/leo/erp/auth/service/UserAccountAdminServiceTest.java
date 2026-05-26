@@ -275,7 +275,7 @@ class UserAccountAdminServiceTest {
         UserAccount existing = new UserAccount();
         existing.setId(99L);
         existing.setLoginName("test");
-        existing.setDeletedFlag(Boolean.TRUE);
+        existing.setDeletedFlag(true);
 
         AtomicReference<UserAccount> savedUser = new AtomicReference<>();
         UserAccountAdminService service = createService(
@@ -411,7 +411,7 @@ class UserAccountAdminServiceTest {
                 (proxy, method, args) -> switch (method.getName()) {
                     case "findByIdAndDeletedFlagFalse" -> Optional.empty();
                     case "findByLoginNameAndDeletedFlagFalse" ->
-                            Boolean.TRUE.equals(existingUser.getDeletedFlag()) ? Optional.empty() : Optional.of(existingUser);
+                            existingUser.isDeletedFlag() ? Optional.empty() : Optional.of(existingUser);
                     case "findByLoginName" -> Optional.of(existingUser);
                     case "existsByLoginNameAndDeletedFlagFalse" -> false;
                     case "existsByLoginName" -> true;
@@ -430,7 +430,7 @@ class UserAccountAdminServiceTest {
                 (proxy, method, args) -> switch (method.getName()) {
                     case "findByIdAndDeletedFlagFalse" -> Optional.empty();
                     case "findByLoginNameAndDeletedFlagFalse" ->
-                            Boolean.TRUE.equals(existingUser.getDeletedFlag()) ? Optional.empty() : Optional.of(existingUser);
+                            existingUser.isDeletedFlag() ? Optional.empty() : Optional.of(existingUser);
                     case "findByLoginName" -> Optional.of(existingUser);
                     case "existsByLoginNameAndDeletedFlagFalse" -> false;
                     case "existsByLoginName" -> true;

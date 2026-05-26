@@ -113,7 +113,7 @@ class CustomerStatementServiceTest {
         statement.setId(1L);
         statement.setStatementNo("KHDZ-DELETE-001");
         statement.setStatus("待确认");
-        statement.setDeletedFlag(Boolean.FALSE);
+        statement.setDeletedFlag(false);
         when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(statement));
         when(repository.save(any(CustomerStatement.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -129,10 +129,10 @@ class CustomerStatementServiceTest {
 
         service.delete(1L);
 
-        assertThat(statement.getDeletedFlag()).isTrue();
+        assertThat(statement.isDeletedFlag()).isTrue();
         assertThat(statement.getStatus()).isEqualTo("已删除");
         verify(repository).save(argThat(saved ->
-                Boolean.TRUE.equals(saved.getDeletedFlag()) && "已删除".equals(saved.getStatus())
+                saved.isDeletedFlag() && "已删除".equals(saved.getStatus())
         ));
     }
 

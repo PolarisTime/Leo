@@ -233,7 +233,7 @@ public class DepartmentService extends AbstractCrudService<Department, Departmen
     }
 
     private void syncBoundUserDepartmentName(Department department) {
-        if (Boolean.TRUE.equals(department.getDeletedFlag())) {
+        if (department.isDeletedFlag()) {
             return;
         }
         List<UserAccount> changedUsers = userAccountRepository.findByDepartmentIdAndDeletedFlagFalse(department.getId())

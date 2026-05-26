@@ -82,12 +82,6 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(BusinessException.class)
     public ResponseEntity<ApiResponse<Void>> handleBusinessException(BusinessException ex) {
         HttpStatus status = resolveStatus(ex.getErrorCode());
-        // Rate limiting → 429
-        if (ex.getErrorCode() == ErrorCode.FORBIDDEN
-                && ex.getMessage() != null
-                && ex.getMessage().contains("过于频繁")) {
-            status = HttpStatus.TOO_MANY_REQUESTS;
-        }
         return ResponseEntity.status(status)
                 .body(ApiResponse.failure(ex.getErrorCode(), ex.getMessage()));
     }
@@ -132,6 +126,7 @@ public class GlobalExceptionHandler {
             case INTERNAL_ERROR -> HttpStatus.INTERNAL_SERVER_ERROR;
             case SUCCESS -> HttpStatus.OK;
             case SESSION_EVICTED -> HttpStatus.UNAUTHORIZED;
+            case RATE_LIMITED -> HttpStatus.TOO_MANY_REQUESTS;
             case BUSINESS_ERROR -> HttpStatus.UNPROCESSABLE_ENTITY;
         };
     }

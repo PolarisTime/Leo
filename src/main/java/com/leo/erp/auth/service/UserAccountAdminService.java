@@ -113,7 +113,7 @@ public class UserAccountAdminService {
     @Transactional
     public void delete(Long id) {
         UserAccount entity = getEntity(id);
-        entity.setDeletedFlag(Boolean.TRUE);
+        entity.setDeletedFlag(true);
         repository.save(entity);
         cacheService.evictLoginNameCache(entity.getLoginName());
         cacheService.evictPermissionCache(entity.getId());

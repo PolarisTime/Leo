@@ -70,7 +70,7 @@ public class GlobalRateLimitFilter extends OncePerRequestFilter implements Order
             response.setHeader("X-RateLimit-Remaining", "0");
             response.setHeader("X-RateLimit-Reset", String.valueOf(result.retryAfterSeconds()));
             response.getWriter().write(
-                    "{\"code\":429,\"message\":\"请求过于频繁，请在 " + result.retryAfterSeconds() + " 秒后重试\"}");
+                    "{\"code\":4290,\"message\":\"请求过于频繁，请在 " + result.retryAfterSeconds() + " 秒后重试\"}");
             response.getWriter().flush();
             return;
         }
