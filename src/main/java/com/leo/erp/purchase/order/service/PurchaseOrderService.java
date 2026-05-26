@@ -374,7 +374,7 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
     protected void apply(PurchaseOrder purchaseOrder, PurchaseOrderRequest request) {
         String nextStatus = BusinessStatusValidator.normalizeWithDefault(
                 request.status(),
-                StatusConstants.DRAFT,
+                purchaseOrder.getStatus() != null ? purchaseOrder.getStatus() : StatusConstants.DRAFT,
                 "采购订单状态",
                 StatusConstants.ALLOWED_PURCHASE_ORDER_STATUS
         );

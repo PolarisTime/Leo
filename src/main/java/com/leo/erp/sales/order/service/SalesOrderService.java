@@ -212,7 +212,7 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
     protected void apply(SalesOrder entity, SalesOrderRequest request) {
         String nextStatus = BusinessStatusValidator.normalizeWithDefault(
                 request.status(),
-                StatusConstants.DRAFT,
+                entity.getStatus() != null ? entity.getStatus() : StatusConstants.DRAFT,
                 "销售订单状态",
                 StatusConstants.ALLOWED_SALES_ORDER_STATUS
         );
