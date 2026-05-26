@@ -26,4 +26,16 @@ public interface UserRoleRepository extends JpaRepository<UserRole, Long> {
               and userAccount.deletedFlag = false
             """)
     long countActiveUsersByRoleId(@Param("roleId") Long roleId);
+
+    @Query("""
+            select userAccount
+            from UserRole userRole
+            join UserAccount userAccount on userAccount.id = userRole.userId
+            where userRole.roleId = :roleId
+              and userRole.deletedFlag = false
+              and userAccount.deletedFlag = false
+            order by userAccount.id
+            limit 1
+            """)
+    java.util.Optional<com.leo.erp.auth.domain.entity.UserAccount> findFirstActiveUserByRoleId(@Param("roleId") Long roleId);
 }

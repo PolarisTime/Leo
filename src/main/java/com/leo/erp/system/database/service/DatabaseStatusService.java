@@ -2,10 +2,22 @@ package com.leo.erp.system.database.service;
 
 import lombok.extern.slf4j.Slf4j;
 import com.leo.erp.common.support.PostgresJdbcUrlParser;
+import com.leo.erp.system.database.web.dto.DatabaseMonitoringResponse;
+import com.leo.erp.system.database.web.dto.DatabaseMonitoringResponse.IndexHealthItem;
+import com.leo.erp.system.database.web.dto.DatabaseMonitoringResponse.PostgresActivity;
+import com.leo.erp.system.database.web.dto.DatabaseMonitoringResponse.PostgresOverview;
+import com.leo.erp.system.database.web.dto.DatabaseMonitoringResponse.QueryStats;
+import com.leo.erp.system.database.web.dto.DatabaseMonitoringResponse.QueryStatsItem;
+import com.leo.erp.system.database.web.dto.DatabaseMonitoringResponse.RedisClientItem;
+import com.leo.erp.system.database.web.dto.DatabaseMonitoringResponse.RedisKeyspaceItem;
+import com.leo.erp.system.database.web.dto.DatabaseMonitoringResponse.RedisMemoryItem;
+import com.leo.erp.system.database.web.dto.DatabaseMonitoringResponse.RedisMonitoring;
+import com.leo.erp.system.database.web.dto.DatabaseMonitoringResponse.RedisPersistenceItem;
+import com.leo.erp.system.database.web.dto.DatabaseMonitoringResponse.RedisThroughputItem;
+import com.leo.erp.system.database.web.dto.DatabaseMonitoringResponse.TableHealthItem;
 import com.leo.erp.system.database.web.dto.DatabaseStatusResponse;
 import com.leo.erp.system.database.web.dto.DatabaseStatusResponse.PostgresStatus;
 import com.leo.erp.system.database.web.dto.DatabaseStatusResponse.RedisStatus;
-import com.leo.erp.system.database.web.dto.PgMonitoringResponse;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataAccessException;
 import org.springframework.data.redis.connection.RedisConnection;
@@ -17,6 +29,7 @@ import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.sql.Timestamp;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
@@ -75,7 +88,7 @@ public class DatabaseStatusService {
             }
 
             try (ResultSet rs = stmt.executeQuery(
-                    "SELECT count(1) AS total, count(1) FILTER (WHERE state = 'active') AS active FROM pg_stat_activity WHERE datname = current_database()")) {
+                    "SELECT count(1) AS total, sum(CASE WHEN state = 'active' THEN 1 ELSE 0 END) AS active FROM pg_stat_activity WHERE datname = current_database()")) {
                 if (rs.next()) {
                     totalConnections = rs.getLong("total");
                     activeConnections = rs.getLong("active");
@@ -154,33 +167,21 @@ public class DatabaseStatusService {
             Properties clientsInfo = connection.info("clients");
             Properties statsInfo = connection.info("stats");
 
-            String version = serverInfo.getProperty("redis_version", "未知");
-            String usedMemoryStr = memoryInfo.getProperty("used_memory", "0");
-            long usedMemory = Long.parseLong(usedMemoryStr);
-            String usedMemoryPeakStr = memoryInfo.getProperty("used_memory_peak", "0");
-            long usedMemoryPeak = Long.parseLong(usedMemoryPeakStr);
+            String version = propertyValue(serverInfo, "redis_version", "未知");
+            long usedMemory = longProperty(memoryInfo, "used_memory");
+            long usedMemoryPeak = longProperty(memoryInfo, "used_memory_peak");
 
             String dbKey = "db" + redisDatabase;
-            long totalKeys = 0;
-            String dbInfo = keyspaceInfo.getProperty(dbKey);
-            if (dbInfo != null) {
-                String[] parts = dbInfo.split(",");
-                for (String part : parts) {
-                    if (part.startsWith("keys=")) {
-                        totalKeys = Long.parseLong(part.substring(5));
-                        break;
-                    }
-                }
-            }
+            long totalKeys = parseRedisKeyspaceLong(propertyValue(keyspaceInfo, dbKey, null), "keys");
 
-            long connectedClients = Long.parseLong(clientsInfo.getProperty("connected_clients", "0"));
+            long connectedClients = longProperty(clientsInfo, "connected_clients");
 
-            long uptimeSeconds = Long.parseLong(serverInfo.getProperty("uptime_in_seconds", "0"));
+            long uptimeSeconds = longProperty(serverInfo, "uptime_in_seconds");
             String uptime = formatUptime(uptimeSeconds);
 
-            long hitCount = Long.parseLong(statsInfo.getProperty("keyspace_hits", "0"));
-            long missCount = Long.parseLong(statsInfo.getProperty("keyspace_misses", "0"));
-            double hitRate = (hitCount + missCount) > 0 ? (double) hitCount / (hitCount + missCount) * 100 : 0;
+            long hitCount = longProperty(statsInfo, "keyspace_hits");
+            long missCount = longProperty(statsInfo, "keyspace_misses");
+            double hitRate = calculateRate(hitCount, missCount);
 
             return new RedisStatus(
                     redisHost,
@@ -197,7 +198,7 @@ public class DatabaseStatusService {
                     Math.round(hitRate * 100.0) / 100.0,
                     "正常"
             );
-        } catch (DataAccessException | NumberFormatException e) {
+        } catch (DataAccessException e) {
             log.error("获取 Redis 状态失败", e);
             return new RedisStatus(
                     redisHost,
@@ -221,6 +222,120 @@ public class DatabaseStatusService {
         }
     }
 
+    private RedisMonitoring getRedisMonitoring() {
+        RedisConnection connection = null;
+        try {
+            connection = Objects.requireNonNull(redisTemplate.getConnectionFactory()).getConnection();
+            Properties memoryInfo = connection.info("memory");
+            Properties clientsInfo = connection.info("clients");
+            Properties statsInfo = connection.info("stats");
+            Properties keyspaceInfo = connection.info("keyspace");
+            Properties persistenceInfo = connection.info("persistence");
+
+            long hitCount = longProperty(statsInfo, "keyspace_hits");
+            long missCount = longProperty(statsInfo, "keyspace_misses");
+            String dbInfo = propertyValue(keyspaceInfo, "db" + redisDatabase, null);
+
+            return new RedisMonitoring(
+                    new RedisMemoryItem(
+                            longProperty(memoryInfo, "used_memory"),
+                            longProperty(memoryInfo, "used_memory_peak"),
+                            longProperty(memoryInfo, "maxmemory"),
+                            roundTwoDecimal(doubleProperty(memoryInfo, "mem_fragmentation_ratio")),
+                            longProperty(statsInfo, "evicted_keys"),
+                            longProperty(statsInfo, "expired_keys")
+                    ),
+                    new RedisClientItem(
+                            longProperty(clientsInfo, "connected_clients"),
+                            longProperty(clientsInfo, "blocked_clients"),
+                            longProperty(statsInfo, "rejected_connections")
+                    ),
+                    new RedisThroughputItem(
+                            longProperty(statsInfo, "total_commands_processed"),
+                            longProperty(statsInfo, "instantaneous_ops_per_sec"),
+                            hitCount,
+                            missCount,
+                            roundTwoDecimal(calculateRate(hitCount, missCount))
+                    ),
+                    new RedisKeyspaceItem(
+                            redisDatabase,
+                            parseRedisKeyspaceLong(dbInfo, "keys"),
+                            parseRedisKeyspaceLong(dbInfo, "expires"),
+                            parseRedisKeyspaceLong(dbInfo, "avg_ttl")
+                    ),
+                    new RedisPersistenceItem(
+                            longProperty(persistenceInfo, "rdb_last_save_time"),
+                            propertyValue(persistenceInfo, "rdb_last_bgsave_status", "未知"),
+                            longProperty(persistenceInfo, "aof_enabled") == 1,
+                            propertyValue(persistenceInfo, "aof_last_bgrewrite_status", "未知")
+                    ),
+                    "正常"
+            );
+        } catch (DataAccessException e) {
+            log.error("获取 Redis 监控数据失败", e);
+            return RedisMonitoring.unavailable(redisDatabase, "异常: " + e.getMessage());
+        } finally {
+            if (connection != null) {
+                connection.close();
+            }
+        }
+    }
+
+    private String propertyValue(Properties properties, String key, String defaultValue) {
+        if (properties == null) {
+            return defaultValue;
+        }
+        String value = properties.getProperty(key);
+        return value == null || value.isBlank() ? defaultValue : value;
+    }
+
+    private long longProperty(Properties properties, String key) {
+        String value = propertyValue(properties, key, "0");
+        try {
+            return Long.parseLong(value);
+        } catch (NumberFormatException e) {
+            log.debug("Redis INFO 字段 {} 不是整数: {}", key, value);
+            return 0;
+        }
+    }
+
+    private double doubleProperty(Properties properties, String key) {
+        String value = propertyValue(properties, key, "0");
+        try {
+            return Double.parseDouble(value);
+        } catch (NumberFormatException e) {
+            log.debug("Redis INFO 字段 {} 不是数字: {}", key, value);
+            return 0;
+        }
+    }
+
+    private long parseRedisKeyspaceLong(String keyspaceLine, String key) {
+        if (keyspaceLine == null || keyspaceLine.isBlank()) {
+            return 0;
+        }
+        String prefix = key + "=";
+        for (String part : keyspaceLine.split(",")) {
+            if (part.startsWith(prefix)) {
+                try {
+                    return Long.parseLong(part.substring(prefix.length()));
+                } catch (NumberFormatException e) {
+                    log.debug("Redis keyspace 字段 {} 不是整数: {}", key, part);
+                    return 0;
+                }
+            }
+        }
+        return 0;
+    }
+
+    private double calculateRate(long hits, long misses) {
+        long total = hits + misses;
+        return total > 0 ? (double) hits / total * 100 : 0;
+    }
+
+    private double roundTwoDecimal(double value) {
+        return Math.round(value * 100.0) / 100.0;
+    }
+
     private String formatUptime(long seconds) {
         if (seconds < 60) return seconds + " 秒";
         if (seconds < 3600) return (seconds / 60) + " 分钟";
@@ -234,54 +349,421 @@ public class DatabaseStatusService {
         return PostgresJdbcUrlParser.parse(datasourceUrl);
     }
 
-    public PgMonitoringResponse getMonitoring() {
+    public DatabaseMonitoringResponse getMonitoring() {
+        RedisMonitoring redisMonitoring = getRedisMonitoring();
         try (Connection conn = dataSource.getConnection(); Statement stmt = conn.createStatement()) {
-            List<PgMonitoringResponse.SlowQueryItem> slowQueries = new ArrayList<>();
-            try (ResultSet rs = stmt.executeQuery("SELECT query_preview, calls, avg_ms, pct_total, cache_hit_pct FROM v_top_slow_queries LIMIT 10")) {
-                while (rs.next()) {
-                    slowQueries.add(new PgMonitoringResponse.SlowQueryItem(
-                            rs.getString("query_preview"), rs.getLong("calls"),
-                            rs.getDouble("avg_ms"), rs.getDouble("pct_total"), rs.getDouble("cache_hit_pct")));
-                }
-            } catch (SQLException ignored) { /* view may not exist yet */ }
-
-            List<PgMonitoringResponse.CacheItem> cache = new ArrayList<>();
-            try (ResultSet rs = stmt.executeQuery("SELECT table_name, heap_cache_pct, idx_cache_pct, hot_update_pct FROM v_cache_efficiency LIMIT 10")) {
-                while (rs.next()) {
-                    cache.add(new PgMonitoringResponse.CacheItem(
-                            rs.getString("table_name"), rs.getDouble("heap_cache_pct"),
-                            rs.getDouble("idx_cache_pct"), rs.getDouble("hot_update_pct")));
-                }
+            String status = "正常";
+            PostgresOverview overview = PostgresOverview.empty();
+            try {
+                overview = getPostgresOverview(stmt);
             } catch (SQLException e) {
-                log.debug("PG 缓存监控视图不可用: {}", e.getMessage());
+                status = "部分指标不可用";
+                log.warn("PostgreSQL 健康摘要不可用: {}", e.getMessage());
             }
 
-            List<PgMonitoringResponse.BloatItem> bloat = new ArrayList<>();
-            try (ResultSet rs = stmt.executeQuery("SELECT table_name, live_rows, dead_rows, dead_pct, to_char(last_autovacuum, 'YYYY-MM-DD HH24:MI') AS last_av FROM v_table_bloat LIMIT 10")) {
-                while (rs.next()) {
-                    bloat.add(new PgMonitoringResponse.BloatItem(
-                            rs.getString("table_name"), rs.getLong("live_rows"), rs.getLong("dead_rows"),
-                            rs.getDouble("dead_pct"), rs.getString("last_av")));
-                }
+            PostgresActivity activity = PostgresActivity.empty();
+            try {
+                activity = getPostgresActivity(stmt);
             } catch (SQLException e) {
-                log.debug("PG 膨胀监控视图不可用: {}", e.getMessage());
+                status = "部分指标不可用";
+                log.warn("PostgreSQL 当前活动不可用: {}", e.getMessage());
             }
 
-            List<PgMonitoringResponse.UnusedIndexItem> unused = new ArrayList<>();
-            try (ResultSet rs = stmt.executeQuery("SELECT index_name, table_name, size, scans FROM v_unused_indexes LIMIT 10")) {
-                while (rs.next()) {
-                    unused.add(new PgMonitoringResponse.UnusedIndexItem(
-                            rs.getString("index_name"), rs.getString("table_name"),
-                            rs.getString("size"), rs.getLong("scans")));
-                }
+            List<TableHealthItem> tableHealth = List.of();
+            try {
+                tableHealth = getTableHealth(stmt);
             } catch (SQLException e) {
-                log.debug("PG 未使用索引监控视图不可用: {}", e.getMessage());
+                status = "部分指标不可用";
+                log.warn("PostgreSQL 表健康不可用: {}", e.getMessage());
             }
 
-            return new PgMonitoringResponse(slowQueries, cache, bloat, unused);
+            List<IndexHealthItem> indexHealth = List.of();
+            try {
+                indexHealth = getIndexHealth(stmt);
+            } catch (SQLException e) {
+                status = "部分指标不可用";
+                log.warn("PostgreSQL 索引健康不可用: {}", e.getMessage());
+            }
+
+            QueryStats queryStats = getQueryStats(stmt);
+
+            return new DatabaseMonitoringResponse(
+                    true,
+                    status,
+                    overview,
+                    activity,
+                    tableHealth,
+                    indexHealth,
+                    queryStats,
+                    redisMonitoring
+            );
         } catch (SQLException e) {
-            log.error("获取 PG 监控数据失败", e);
-            return new PgMonitoringResponse(List.of(), List.of(), List.of(), List.of());
+            log.error("获取 PostgreSQL 只读诊断数据失败", e);
+            return DatabaseMonitoringResponse.unavailable("异常: " + e.getMessage(), redisMonitoring);
         }
+    }
+
+    private PostgresOverview getPostgresOverview(Statement stmt) throws SQLException {
+        String sql = """
+                WITH activity AS (
+                    SELECT
+                        count(*) AS total_connections,
+                        sum(CASE WHEN state = 'active' THEN 1 ELSE 0 END) AS active_connections,
+                        sum(CASE WHEN state = 'idle in transaction' THEN 1 ELSE 0 END) AS idle_in_transaction_connections,
+                        sum(CASE WHEN wait_event_type = 'Lock' THEN 1 ELSE 0 END) AS lock_wait_sessions,
+                        sum(CASE WHEN cardinality(pg_blocking_pids(pid)) > 0 THEN 1 ELSE 0 END) AS blocked_sessions,
+                        sum(CASE WHEN xact_start IS NOT NULL AND now() - xact_start > interval '5 minutes' THEN 1 ELSE 0 END) AS long_transactions,
+                        COALESCE(max(CASE WHEN xact_start IS NOT NULL THEN EXTRACT(EPOCH FROM now() - xact_start) ELSE NULL END), 0) AS longest_transaction_seconds,
+                        COALESCE(max(CASE WHEN query_start IS NOT NULL AND state = 'active' THEN EXTRACT(EPOCH FROM now() - query_start) ELSE NULL END), 0) AS longest_query_seconds
+                    FROM pg_stat_activity
+                    WHERE datname = current_database()
+                ),
+                db AS (
+                    SELECT
+                        xact_commit,
+                        xact_rollback,
+                        deadlocks,
+                        temp_files,
+                        temp_bytes,
+                        ROUND((100.0 * blks_hit / NULLIF(blks_hit + blks_read, 0))::numeric, 2) AS cache_hit_rate
+                    FROM pg_stat_database
+                    WHERE datname = current_database()
+                ),
+                meta AS (
+                    SELECT
+                        pg_size_pretty(pg_database_size(current_database())) AS database_size,
+                        EXTRACT(EPOCH FROM now() - pg_postmaster_start_time()) AS uptime_seconds
+                )
+                SELECT * FROM activity, db, meta
+                """;
+        try (ResultSet rs = stmt.executeQuery(sql)) {
+            if (rs.next()) {
+                return new PostgresOverview(
+                        rs.getLong("total_connections"),
+                        rs.getLong("active_connections"),
+                        rs.getLong("idle_in_transaction_connections"),
+                        rs.getLong("lock_wait_sessions"),
+                        rs.getLong("blocked_sessions"),
+                        rs.getLong("long_transactions"),
+                        rs.getLong("longest_transaction_seconds"),
+                        rs.getLong("longest_query_seconds"),
+                        rs.getLong("xact_commit"),
+                        rs.getLong("xact_rollback"),
+                        rs.getLong("deadlocks"),
+                        rs.getLong("temp_files"),
+                        rs.getLong("temp_bytes"),
+                        rs.getDouble("cache_hit_rate"),
+                        rs.getString("database_size"),
+                        rs.getLong("uptime_seconds")
+                );
+            }
+        }
+        return PostgresOverview.empty();
+    }
+
+    private PostgresActivity getPostgresActivity(Statement stmt) throws SQLException {
+        String sql = """
+                SELECT
+                    sum(CASE WHEN state = 'active' THEN 1 ELSE 0 END) AS active_sessions,
+                    sum(CASE WHEN state = 'idle in transaction' THEN 1 ELSE 0 END) AS idle_in_transaction_sessions,
+                    sum(CASE WHEN wait_event_type = 'Lock' THEN 1 ELSE 0 END) AS lock_wait_sessions,
+                    sum(CASE WHEN cardinality(pg_blocking_pids(pid)) > 0 THEN 1 ELSE 0 END) AS blocked_sessions,
+                    sum(CASE WHEN xact_start IS NOT NULL AND now() - xact_start > interval '5 minutes' THEN 1 ELSE 0 END) AS long_transactions,
+                    COALESCE(max(CASE WHEN xact_start IS NOT NULL THEN EXTRACT(EPOCH FROM now() - xact_start) ELSE NULL END), 0) AS longest_transaction_seconds,
+                    COALESCE(max(CASE WHEN query_start IS NOT NULL AND state = 'active' THEN EXTRACT(EPOCH FROM now() - query_start) ELSE NULL END), 0) AS longest_query_seconds
+                FROM pg_stat_activity
+                WHERE datname = current_database()
+                """;
+        try (ResultSet rs = stmt.executeQuery(sql)) {
+            if (rs.next()) {
+                return new PostgresActivity(
+                        rs.getLong("active_sessions"),
+                        rs.getLong("idle_in_transaction_sessions"),
+                        rs.getLong("lock_wait_sessions"),
+                        rs.getLong("blocked_sessions"),
+                        rs.getLong("long_transactions"),
+                        rs.getLong("longest_transaction_seconds"),
+                        rs.getLong("longest_query_seconds")
+                );
+            }
+        }
+        return PostgresActivity.empty();
+    }
+
+    private List<TableHealthItem> getTableHealth(Statement stmt) throws SQLException {
+        String sql = """
+                WITH settings AS (
+                    SELECT
+                        current_setting('autovacuum_vacuum_threshold')::bigint AS vacuum_threshold,
+                        current_setting('autovacuum_vacuum_scale_factor')::numeric AS vacuum_scale_factor,
+                        current_setting('autovacuum_analyze_threshold')::bigint AS analyze_threshold,
+                        current_setting('autovacuum_analyze_scale_factor')::numeric AS analyze_scale_factor
+                ),
+                raw_stats AS (
+                    SELECT
+                        t.schemaname || '.' || t.relname AS table_name,
+                        t.n_live_tup AS live_rows,
+                        t.n_dead_tup AS dead_rows,
+                        t.seq_scan,
+                        t.idx_scan,
+                        t.n_mod_since_analyze,
+                        ROUND((100.0 * s.heap_blks_hit / NULLIF(s.heap_blks_read + s.heap_blks_hit, 0))::numeric, 2) AS heap_cache_pct,
+                        FLOOR(
+                            COALESCE(
+                                (SELECT split_part(opt, '=', 2)::bigint
+                                 FROM unnest(c.reloptions) opt
+                                 WHERE split_part(opt, '=', 1) = 'autovacuum_vacuum_threshold'),
+                                settings.vacuum_threshold
+                            )
+                            + COALESCE(
+                                (SELECT split_part(opt, '=', 2)::numeric
+                                 FROM unnest(c.reloptions) opt
+                                 WHERE split_part(opt, '=', 1) = 'autovacuum_vacuum_scale_factor'),
+                                settings.vacuum_scale_factor
+                            ) * GREATEST(t.n_live_tup, 0)
+                        )::bigint AS vacuum_trigger_rows,
+                        FLOOR(
+                            COALESCE(
+                                (SELECT split_part(opt, '=', 2)::bigint
+                                 FROM unnest(c.reloptions) opt
+                                 WHERE split_part(opt, '=', 1) = 'autovacuum_analyze_threshold'),
+                                settings.analyze_threshold
+                            )
+                            + COALESCE(
+                                (SELECT split_part(opt, '=', 2)::numeric
+                                 FROM unnest(c.reloptions) opt
+                                 WHERE split_part(opt, '=', 1) = 'autovacuum_analyze_scale_factor'),
+                                settings.analyze_scale_factor
+                            ) * GREATEST(t.n_live_tup, 0)
+                        )::bigint AS analyze_trigger_rows,
+                        EXTRACT(EPOCH FROM now() - t.last_autovacuum)::bigint AS last_autovacuum_age_seconds,
+                        EXTRACT(EPOCH FROM now() - t.last_autoanalyze)::bigint AS last_autoanalyze_age_seconds,
+                        t.last_vacuum,
+                        t.last_autovacuum,
+                        t.last_analyze,
+                        t.last_autoanalyze
+                    FROM pg_stat_user_tables t
+                    JOIN pg_statio_user_tables s ON s.relid = t.relid
+                    JOIN pg_class c ON c.oid = t.relid
+                    CROSS JOIN settings
+                ),
+                table_stats AS (
+                    SELECT
+                        raw.table_name,
+                        raw.live_rows,
+                        raw.dead_rows,
+                        ROUND((100.0 * raw.dead_rows / NULLIF(raw.live_rows + raw.dead_rows, 0))::numeric, 2) AS dead_pct,
+                        raw.seq_scan,
+                        raw.idx_scan,
+                        raw.n_mod_since_analyze,
+                        raw.heap_cache_pct,
+                        raw.vacuum_trigger_rows,
+                        raw.analyze_trigger_rows,
+                        raw.last_autovacuum_age_seconds,
+                        raw.last_autoanalyze_age_seconds,
+                        CASE
+                            WHEN raw.dead_rows >= raw.vacuum_trigger_rows
+                                THEN 4
+                            WHEN raw.live_rows >= 1000 AND raw.dead_rows >= GREATEST(1000, FLOOR(0.5 * raw.vacuum_trigger_rows))
+                                THEN 3
+                            WHEN raw.n_mod_since_analyze >= raw.analyze_trigger_rows
+                                THEN 2
+                            WHEN raw.dead_rows > 0
+                                THEN 1
+                            ELSE 0
+                        END AS health_rank,
+                        CASE
+                            WHEN raw.dead_rows >= raw.vacuum_trigger_rows
+                                THEN '需 VACUUM'
+                            WHEN raw.live_rows >= 1000 AND raw.dead_rows >= GREATEST(1000, FLOOR(0.5 * raw.vacuum_trigger_rows))
+                                THEN '关注'
+                            WHEN raw.n_mod_since_analyze >= raw.analyze_trigger_rows
+                                THEN '需 ANALYZE'
+                            WHEN raw.dead_rows > 0
+                                THEN '正常'
+                            ELSE '干净'
+                        END AS autovacuum_status,
+                        CASE
+                            WHEN raw.dead_rows >= raw.vacuum_trigger_rows
+                                THEN '死元组已达到 autovacuum 触发阈值，观察是否持续不下降'
+                            WHEN raw.live_rows >= 1000 AND raw.dead_rows >= GREATEST(1000, FLOOR(0.5 * raw.vacuum_trigger_rows))
+                                THEN '死元组接近触发阈值，建议继续观察增长趋势'
+                            WHEN raw.n_mod_since_analyze >= raw.analyze_trigger_rows
+                                THEN '变更行数已达到 autoanalyze 触发阈值，统计信息可能滞后'
+                            WHEN raw.dead_rows > 0 AND raw.live_rows < 1000
+                                THEN '小表死元组比例可能偏高，优先看绝对数量'
+                            ELSE 'autovacuum 指标正常'
+                        END AS autovacuum_advice,
+                        raw.last_vacuum,
+                        raw.last_autovacuum,
+                        raw.last_analyze,
+                        raw.last_autoanalyze
+                    FROM raw_stats raw
+                )
+                SELECT
+                    table_name,
+                    live_rows,
+                    dead_rows,
+                    dead_pct,
+                    seq_scan,
+                    idx_scan,
+                    n_mod_since_analyze,
+                    heap_cache_pct,
+                    vacuum_trigger_rows,
+                    analyze_trigger_rows,
+                    last_autovacuum_age_seconds,
+                    last_autoanalyze_age_seconds,
+                    autovacuum_status,
+                    autovacuum_advice,
+                    last_vacuum,
+                    last_autovacuum,
+                    last_analyze,
+                    last_autoanalyze
+                FROM table_stats
+                ORDER BY
+                    health_rank DESC,
+                    dead_rows DESC,
+                    dead_pct DESC NULLS LAST,
+                    n_mod_since_analyze DESC,
+                    seq_scan DESC
+                LIMIT 20
+                """;
+        List<TableHealthItem> items = new ArrayList<>();
+        try (ResultSet rs = stmt.executeQuery(sql)) {
+            while (rs.next()) {
+                items.add(new TableHealthItem(
+                        rs.getString("table_name"),
+                        rs.getLong("live_rows"),
+                        rs.getLong("dead_rows"),
+                        rs.getDouble("dead_pct"),
+                        rs.getLong("seq_scan"),
+                        rs.getLong("idx_scan"),
+                        rs.getLong("n_mod_since_analyze"),
+                        rs.getDouble("heap_cache_pct"),
+                        rs.getLong("vacuum_trigger_rows"),
+                        rs.getLong("analyze_trigger_rows"),
+                        nullableLong(rs, "last_autovacuum_age_seconds"),
+                        nullableLong(rs, "last_autoanalyze_age_seconds"),
+                        rs.getString("autovacuum_status"),
+                        rs.getString("autovacuum_advice"),
+                        timestampString(rs, "last_vacuum"),
+                        timestampString(rs, "last_autovacuum"),
+                        timestampString(rs, "last_analyze"),
+                        timestampString(rs, "last_autoanalyze")
+                ));
+            }
+        }
+        return items;
+    }
+
+    private List<IndexHealthItem> getIndexHealth(Statement stmt) throws SQLException {
+        String sql = """
+                SELECT
+                    s.schemaname || '.' || s.indexrelname AS index_name,
+                    s.relname AS table_name,
+                    pg_size_pretty(pg_relation_size(s.indexrelid)) AS size,
+                    pg_relation_size(s.indexrelid) AS size_bytes,
+                    s.idx_scan AS scans,
+                    s.idx_tup_read AS tuples_read,
+                    s.idx_tup_fetch AS tuples_fetched,
+                    i.indisvalid AS is_valid,
+                    i.indisunique AS is_unique,
+                    i.indisprimary AS is_primary
+                FROM pg_stat_user_indexes s
+                JOIN pg_index i ON i.indexrelid = s.indexrelid
+                WHERE s.schemaname = 'public'
+                ORDER BY
+                    i.indisvalid ASC,
+                    (CASE WHEN s.idx_scan = 0 THEN pg_relation_size(s.indexrelid) ELSE 0 END) DESC,
+                    pg_relation_size(s.indexrelid) DESC
+                LIMIT 20
+                """;
+        List<IndexHealthItem> items = new ArrayList<>();
+        try (ResultSet rs = stmt.executeQuery(sql)) {
+            while (rs.next()) {
+                items.add(new IndexHealthItem(
+                        rs.getString("index_name"),
+                        rs.getString("table_name"),
+                        rs.getString("size"),
+                        rs.getLong("size_bytes"),
+                        rs.getLong("scans"),
+                        rs.getLong("tuples_read"),
+                        rs.getLong("tuples_fetched"),
+                        rs.getBoolean("is_valid"),
+                        rs.getBoolean("is_unique"),
+                        rs.getBoolean("is_primary")
+                ));
+            }
+        }
+        return items;
+    }
+
+    private QueryStats getQueryStats(Statement stmt) {
+        if (!isPgStatStatementsAvailable(stmt)) {
+            return QueryStats.unavailable("未启用 pg_stat_statements");
+        }
+
+        String sql = """
+                SELECT
+                    queryid::text AS query_id,
+                    LEFT(regexp_replace(query, '\\s+', ' ', 'g'), 220) AS query_preview,
+                    calls,
+                    ROUND(total_exec_time::numeric, 2) AS total_ms,
+                    ROUND(mean_exec_time::numeric, 2) AS avg_ms,
+                    rows,
+                    ROUND((100.0 * shared_blks_hit / NULLIF(shared_blks_hit + shared_blks_read, 0))::numeric, 2) AS cache_hit_pct
+                FROM pg_stat_statements
+                WHERE dbid = (SELECT oid FROM pg_database WHERE datname = current_database())
+                  AND calls > 0
+                ORDER BY total_exec_time DESC
+                LIMIT 10
+                """;
+        List<QueryStatsItem> items = new ArrayList<>();
+        try (ResultSet rs = stmt.executeQuery(sql)) {
+            while (rs.next()) {
+                items.add(new QueryStatsItem(
+                        rs.getString("query_id"),
+                        rs.getString("query_preview"),
+                        rs.getLong("calls"),
+                        rs.getDouble("total_ms"),
+                        rs.getDouble("avg_ms"),
+                        rs.getLong("rows"),
+                        rs.getDouble("cache_hit_pct")
+                ));
+            }
+            return new QueryStats(true, "正常", items);
+        } catch (SQLException e) {
+            log.debug("pg_stat_statements 查询不可用: {}", e.getMessage());
+            return QueryStats.unavailable("pg_stat_statements 不可读取");
+        }
+    }
+
+    private boolean isPgStatStatementsAvailable(Statement stmt) {
+        String sql = """
+                SELECT EXISTS (
+                    SELECT 1
+                    FROM pg_extension
+                    WHERE extname = 'pg_stat_statements'
+                )
+                """;
+        try (ResultSet rs = stmt.executeQuery(sql)) {
+            return rs.next() && rs.getBoolean(1);
+        } catch (SQLException e) {
+            log.debug("检测 pg_stat_statements 失败: {}", e.getMessage());
+            return false;
+        }
+    }
+
+    private String timestampString(ResultSet rs, String column) throws SQLException {
+        Timestamp timestamp = rs.getTimestamp(column);
+        if (timestamp == null) {
+            return null;
+        }
+        return timestamp.toInstant().atZone(ZoneId.systemDefault()).toLocalDateTime().toString();
+    }
+
+    private Long nullableLong(ResultSet rs, String column) throws SQLException {
+        long value = rs.getLong(column);
+        return rs.wasNull() ? null : value;
     }
 }

@@ -12,9 +12,6 @@ import org.springframework.data.redis.serializer.Jackson2JsonRedisSerializer;
 import org.springframework.data.redis.serializer.RedisSerializationContext;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
 
-import java.time.Duration;
-import java.util.concurrent.ThreadLocalRandom;
-
 @Configuration
 @EnableCaching
 public class CacheConfig {
@@ -24,16 +21,20 @@ public class CacheConfig {
 
     @Bean
     @ConditionalOnBean(RedisConnectionFactory.class)
-    public RedisCacheManager cacheManager(RedisConnectionFactory connectionFactory, ObjectMapper objectMapper) {
+    public RedisCacheManager cacheManager(RedisConnectionFactory connectionFactory,
+                                          ObjectMapper objectMapper,
+                                          RedisTuningProperties redisTuningProperties) {
         Jackson2JsonRedisSerializer<Object> serializer = new Jackson2JsonRedisSerializer<>(objectMapper, Object.class);
 
         RedisCacheConfiguration staticConfig = RedisCacheConfiguration.defaultCacheConfig()
-                .entryTtl(Duration.ofDays(7).plusMinutes(ThreadLocalRandom.current().nextInt(120)))
+                .entryTtl(redisTuningProperties.withTtlJitter(redisTuningProperties.getCache().getStaticTtl()))
+                .disableCachingNullValues()
                 .serializeKeysWith(RedisSerializationContext.SerializationPair.fromSerializer(new StringRedisSerializer()))
                 .serializeValuesWith(RedisSerializationContext.SerializationPair.fromSerializer(serializer));
 
         RedisCacheConfiguration hotConfig = RedisCacheConfiguration.defaultCacheConfig()
-                .entryTtl(Duration.ofMinutes(10).plusSeconds(ThreadLocalRandom.current().nextInt(60)))
+                .entryTtl(redisTuningProperties.withTtlJitter(redisTuningProperties.getCache().getHotTtl()))
+                .disableCachingNullValues()
                 .serializeKeysWith(RedisSerializationContext.SerializationPair.fromSerializer(new StringRedisSerializer()))
                 .serializeValuesWith(RedisSerializationContext.SerializationPair.fromSerializer(serializer));
 
