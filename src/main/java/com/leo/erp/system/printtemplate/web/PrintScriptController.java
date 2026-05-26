@@ -11,7 +11,7 @@ import com.leo.erp.system.printtemplate.service.ClodopScriptGenerator;
 import com.leo.erp.system.printtemplate.service.JsonPrintTemplate;
 import com.leo.erp.system.printtemplate.service.PdfPrintGenerator;
 import com.leo.erp.system.printtemplate.service.PrintScriptService;
-import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -54,7 +54,7 @@ public class PrintScriptController {
     @RequiresPermission(authenticatedOnly = true)
     public ApiResponse<Map<String, String>> fromRecord(
             @AuthenticationPrincipal SecurityPrincipal principal,
-            @RequestBody @NotBlank Map<String, Object> payload) {
+            @RequestBody @NotNull Map<String, Object> payload) {
         String moduleKey = String.valueOf(payload.getOrDefault("moduleKey", ""));
         modulePermissionGuard.requirePermission(principal, moduleKey, "read");
         String templateId = String.valueOf(payload.get("templateId"));
@@ -67,7 +67,7 @@ public class PrintScriptController {
     @RequiresPermission(authenticatedOnly = true)
     public ApiResponse<Map<String, String>> generate(
             @AuthenticationPrincipal SecurityPrincipal principal,
-            @RequestBody @NotBlank Map<String, Object> payload) {
+            @RequestBody @NotNull Map<String, Object> payload) {
         String templateId = String.valueOf(payload.get("templateId"));
         String moduleKey = String.valueOf(payload.getOrDefault("moduleKey", ""));
         modulePermissionGuard.requirePermission(principal, moduleKey, "read");
@@ -82,7 +82,7 @@ public class PrintScriptController {
     @RequiresPermission(authenticatedOnly = true)
     public ApiResponse<Map<String, String>> clodop(
             @AuthenticationPrincipal SecurityPrincipal principal,
-            @RequestBody @NotBlank Map<String, Object> payload) {
+            @RequestBody @NotNull Map<String, Object> payload) {
         String moduleKey = String.valueOf(payload.getOrDefault("moduleKey", ""));
         modulePermissionGuard.requirePermission(principal, moduleKey, "read");
         JsonPrintTemplate template = parseTemplate(payload);
@@ -100,7 +100,7 @@ public class PrintScriptController {
     @RequiresPermission(authenticatedOnly = true)
     public ResponseEntity<byte[]> pdf(
             @AuthenticationPrincipal SecurityPrincipal principal,
-            @RequestBody @NotBlank Map<String, Object> payload) throws IOException {
+            @RequestBody @NotNull Map<String, Object> payload) throws IOException {
         String moduleKey = String.valueOf(payload.getOrDefault("moduleKey", ""));
         modulePermissionGuard.requirePermission(principal, moduleKey, "read");
         JsonPrintTemplate template = parseTemplate(payload);
