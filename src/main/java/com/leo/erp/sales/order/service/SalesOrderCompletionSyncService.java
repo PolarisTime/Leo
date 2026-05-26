@@ -62,7 +62,7 @@ public class SalesOrderCompletionSyncService {
                     .filter(obi -> item.getId().equals(obi.getSourceSalesOrderItemId()))
                     .mapToInt(obi -> obi.getQuantity() != null ? obi.getQuantity() : 0)
                     .sum();
-            if (totalOutbounded < (item.getQuantity() != null ? item.getQuantity() : 0)) {
+            if (totalOutbounded != (item.getQuantity() != null ? item.getQuantity() : 0)) {
                 return false;
             }
         }
