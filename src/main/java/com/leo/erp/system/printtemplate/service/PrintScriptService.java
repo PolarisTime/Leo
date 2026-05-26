@@ -27,7 +27,9 @@ import java.util.regex.Pattern;
 public class PrintScriptService {
 
     private static final Pattern SAFE_METHOD = Pattern.compile(
-            "^\\s*LODOP\\.(SET_|ADD_|NewPage|NEWPAGE|SET_PRINT|SELECT_|DELETE_|PRINT_INIT|PRINT\\b|PREVIEW|PRINT_DESIGN|PRINT_SETUP)[A-Za-z_]*\\s*\\(",
+            "^\\s*LODOP\\.(SET_|ADD_|NewPage|NEWPAGE|SET_PRINT|SELECT_|DELETE_|"
+                    + "PRINT_INIT|PRINT\\b|PREVIEW|PRINT_DESIGN|PRINT_SETUP)"
+                    + "[A-Za-z_]*\\s*\\(",
             Pattern.CASE_INSENSITIVE);
     private static final Set<String> DISALLOWED_METHODS = Set.of(
             "GET_FILE", "SEND_PRINT_RAWDATA", "WRITE_PORT_DATA"
@@ -43,6 +45,14 @@ public class PrintScriptService {
 
     private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd");
     private static final DateTimeFormatter TIME_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+
+    // Business constants
+    private static final String SEPARATOR_FLAG = "true";
+    private static final String MODULE_FREIGHT_BILL = "freight-bill";
+    private static final int BRAND_DISPLAY_LENGTH = 2;
+    private static final int WEIGHT_SCALE = 3;
+    private static final int PRICE_SCALE = 2;
+    private static final Set<String> COIL_CATEGORIES = Set.of("盘螺", "线材");
 
     // moduleKey → table_name mapping for record loading
     private static final Map<String, String> MODULE_TABLES = Map.ofEntries(
@@ -60,6 +70,28 @@ public class PrintScriptService {
             Map.entry("payment", "fm_payment"),
             Map.entry("invoice-issue", "fm_invoice_issue"),
             Map.entry("invoice-receipt", "fm_invoice_receipt")
+    );
+
+    // Whitelist of valid item tables for loadItems() SQL safety
+    private static final Set<String> VALID_ITEM_TABLES = Set.of(
+            "po_purchase_order_item", "po_purchase_inbound_item",
+            "so_sales_order_item", "so_sales_outbound_item",
+            "lg_freight_bill_item",
+            "ct_purchase_contract_item", "ct_sales_contract_item",
+            "st_customer_statement_item", "st_supplier_statement_item",
+            "st_freight_statement_item",
+            "fm_receipt_item", "fm_payment_item",
+            "fm_invoice_issue_item", "fm_invoice_receipt_item"
+    );
+
+    // Table prefix → foreign key column mapping
+    private static final Map<String, String> TABLE_FK_COLUMNS = Map.of(
+            "po_", "order_id",
+            "so_", "order_id",
+            "ct_", "contract_id",
+            "fm_", "receipt_id",
+            "st_", "statement_id",
+            "lg_", "order_id"
     );
 
     // Layout parameters per bill_type for COORD templates
@@ -113,18 +145,31 @@ public class PrintScriptService {
         }
     }
 
-    private List<Map<String, String>> loadItems(String table, String moduleKey, Long recordId) {
+    private List<Map<String, String>> loadItems(
+            String table, String moduleKey, Long recordId
+    ) {
         String itemTable = table + "_item";
+
+        // Security: validate item table name against whitelist
+        if (!VALID_ITEM_TABLES.contains(itemTable)) {
+            throw new BusinessException(
+                    ErrorCode.VALIDATION_ERROR,
+                    "非法的明细表名: " + itemTable
+            );
+        }
+
+        // Determine foreign key column from table prefix
+        String fkColumn = TABLE_FK_COLUMNS.entrySet().stream()
+                .filter(e -> table.startsWith(e.getKey()))
+                .map(Map.Entry::getValue)
+                .findFirst()
+                .orElse("inbound_id");
+
         List<Map<String, String>> result = new ArrayList<>();
         try {
-            var items = jdbc.queryForList(
-                    "SELECT * FROM " + itemTable + " WHERE " +
-                    (table.startsWith("po_") ? "order_id" :
-                     table.startsWith("so_") ? "order_id" :
-                     table.startsWith("ct_") ? "contract_id" :
-                     table.startsWith("fm_") ? "receipt_id" :
-                     table.startsWith("st_") ? "statement_id" :
-                     "inbound_id") + " = ?", recordId);
+            String sql = "SELECT * FROM " + itemTable
+                    + " WHERE " + fkColumn + " = ?";
+            var items = jdbc.queryForList(sql, recordId);
             for (var item : items) {
                 Map<String, String> row = new HashMap<>();
                 for (var entry : item.entrySet()) {
@@ -135,7 +180,7 @@ public class PrintScriptService {
                 result.add(row);
             }
         } catch (Exception ignored) {
-            // items table may not exist
+            // items table may not exist for this module
         }
         return result;
     }
@@ -242,9 +287,10 @@ public class PrintScriptService {
         int totalQuantity = 0;
 
         // For freight-bill: group by projectName
-        boolean needsGrouping = "freight-bill".equals(moduleKey);
+        boolean needsGrouping = MODULE_FREIGHT_BILL.equals(moduleKey);
         final List<String> groupOrder = needsGrouping ? new ArrayList<>() : List.of();
-        final Map<String, List<Map<String, String>>> groups = needsGrouping ? new java.util.LinkedHashMap<>() : Map.of();
+        final Map<String, List<Map<String, String>>> groups = needsGrouping
+                ? new java.util.LinkedHashMap<>() : Map.of();
         if (needsGrouping && !rawItems.isEmpty()) {
             for (var item : rawItems) {
                 String pn = item.getOrDefault("projectName", "");
@@ -267,7 +313,7 @@ public class PrintScriptService {
                 // Add separator entry
                 if (!pn.isEmpty()) {
                     Map<String, String> sep = new HashMap<>();
-                    sep.put("_isSeparator", "true");
+                    sep.put("_isSeparator", SEPARATOR_FLAG);
                     sep.put("_groupName", pn);
                     flatItems.add(sep);
                 }
@@ -284,42 +330,47 @@ public class PrintScriptService {
         for (var item : flatItems) {
             Map<String, String> enrichedItem = new HashMap<>(item);
 
-            if (!"true".equals(item.get("_isSeparator"))) {
+            if (!SEPARATOR_FLAG.equals(item.get("_isSeparator"))) {
                 enrichedItem.put("_index", String.valueOf(seq++));
                 dataIdx++;
 
                 // Piece weight display
                 String category = item.getOrDefault("category", "");
-                boolean isCoil = "盘螺".equals(category) || "线材".equals(category);
+                boolean isCoil = COIL_CATEGORIES.contains(category);
                 String pieceWeightDisplay = "-";
                 if (!isCoil) {
                     BigDecimal w = safeDecimal(item.get("weightTon"));
                     BigDecimal q = safeDecimal(item.get("quantity"));
                     if (w.compareTo(BigDecimal.ZERO) > 0 && q.compareTo(BigDecimal.ZERO) > 0) {
-                        pieceWeightDisplay = w.divide(q, 3, RoundingMode.HALF_UP).toPlainString();
+                        pieceWeightDisplay = w.divide(q, WEIGHT_SCALE, RoundingMode.HALF_UP)
+                                .toPlainString();
                     }
                 }
                 enrichedItem.put("pieceWeightDisplay", pieceWeightDisplay);
 
-                // Brand display (last 2 chars for A5)
+                // Brand display (last N chars for A5)
                 String brand = item.getOrDefault("brand", "");
-                enrichedItem.put("brandDisplay", brand.length() > 2 ? brand.substring(brand.length() - 2) : brand);
+                enrichedItem.put("brandDisplay", brand.length() > BRAND_DISPLAY_LENGTH
+                        ? brand.substring(brand.length() - BRAND_DISPLAY_LENGTH) : brand);
 
                 // Number formatting
-                enrichedItem.put("weightTonDisplay", formatDecimal(item.get("weightTon"), 3));
-                enrichedItem.put("unitPriceDisplay", formatDecimal(item.get("unitPrice"), 2));
-                enrichedItem.put("amountDisplay", formatDecimal(item.get("amount"), 2));
+                enrichedItem.put("weightTonDisplay",
+                        formatDecimal(item.get("weightTon"), WEIGHT_SCALE));
+                enrichedItem.put("unitPriceDisplay",
+                        formatDecimal(item.get("unitPrice"), PRICE_SCALE));
+                enrichedItem.put("amountDisplay",
+                        formatDecimal(item.get("amount"), PRICE_SCALE));
 
                 // Page break for A4 portrait
                 if (pageBreakH > 0 && rowTop + layout.rowH() * 2 > pageBreakH) {
-                    enrichedItem.put("_needsNewPage", "true");
+                    enrichedItem.put("_needsNewPage", SEPARATOR_FLAG);
                     rowTop = 20;
                 }
 
                 // BillNo separator for customer-statement-A4
                 String billNo = item.getOrDefault("sourceNo", "");
                 if (prevBillNo != null && !billNo.equals(prevBillNo) && !billNo.isEmpty()) {
-                    enrichedItem.put("_needsSeparator", "true");
+                    enrichedItem.put("_needsSeparator", SEPARATOR_FLAG);
                 }
                 prevBillNo = billNo;
 
@@ -336,13 +387,18 @@ public class PrintScriptService {
 
         // Summary positions
         data.put("totalWeight", totalWeight.toPlainString());
-        data.put("totalWeightDisplay", totalWeight.setScale(3, RoundingMode.HALF_UP).toPlainString());
-        data.put("totalAmount", totalAmount.setScale(2, RoundingMode.HALF_UP).toPlainString());
+        data.put("totalWeightDisplay", totalWeight.setScale(WEIGHT_SCALE, RoundingMode.HALF_UP).toPlainString());
+        data.put("totalAmount", totalAmount.setScale(PRICE_SCALE, RoundingMode.HALF_UP).toPlainString());
         data.put("totalQuantity", String.valueOf(totalQuantity));
 
         int sumTop = layout.tableTop() + layout.maxRows() * layout.rowH();
-        int itemCount = (int) flatItems.stream().filter(i -> !"true".equals(i.get("_isSeparator"))).count();
-        int actualSumTop = layout.tableTop() + (needsGrouping ? flatItems.size() : Math.min(itemCount, layout.maxRows())) * layout.rowH();
+        int itemCount = (int) flatItems.stream()
+                .filter(i -> !SEPARATOR_FLAG.equals(i.get("_isSeparator")))
+                .count();
+        int actualItemCount = needsGrouping
+                ? flatItems.size()
+                : Math.min(itemCount, layout.maxRows());
+        int actualSumTop = layout.tableTop() + actualItemCount * layout.rowH();
         data.put("_sumTop", String.valueOf(needsGrouping ? actualSumTop : sumTop));
         data.put("_sumTop2", String.valueOf((needsGrouping ? actualSumTop : sumTop) + 2));
 
@@ -391,7 +447,10 @@ public class PrintScriptService {
             String field = m.group(1);
             String inner = m.group(2);
             String value = data.getOrDefault(field, "");
-            if (!value.isEmpty() && !"false".equals(value) && !"0".equals(value)) {
+            boolean isTruthy = !value.isEmpty()
+                    && !"false".equals(value)
+                    && !"0".equals(value);
+            if (isTruthy) {
                 m.appendReplacement(sb, Matcher.quoteReplacement(inner));
             } else {
                 m.appendReplacement(sb, "");

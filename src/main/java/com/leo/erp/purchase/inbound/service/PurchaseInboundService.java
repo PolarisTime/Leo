@@ -36,6 +36,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -46,7 +47,14 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 @Service
-public class PurchaseInboundService extends AbstractCrudService<PurchaseInbound, PurchaseInboundRequest, PurchaseInboundResponse> {
+public class PurchaseInboundService extends AbstractCrudService<
+        PurchaseInbound, PurchaseInboundRequest, PurchaseInboundResponse> {
+
+    /**
+     * Fulfillment tolerance: allow 5% over-receipt.
+     * E.g., if expected=100, actual can be 95-105.
+     */
+    private static final BigDecimal FULFILLMENT_TOLERANCE = new BigDecimal("0.05");
 
     private final PurchaseInboundRepository repository;
     private final PurchaseInboundMapper purchaseInboundMapper;
@@ -91,10 +99,15 @@ public class PurchaseInboundService extends AbstractCrudService<PurchaseInbound,
 
     @Transactional(readOnly = true)
     public Page<PurchaseInboundResponse> page(PageQuery query, PageFilter filter) {
-        Specification<PurchaseInbound> spec = Specs.<PurchaseInbound>keywordLike(filter.keyword(), "inboundNo", "purchaseOrderNo", "supplierName")
+        Specification<PurchaseInbound> spec = Specs.<PurchaseInbound>keywordLike(
+                        filter.keyword(),
+                        "inboundNo", "purchaseOrderNo", "supplierName"
+                )
                 .and(Specs.equalIfPresent("supplierName", filter.name()))
                 .and(Specs.equalIfPresent("status", filter.status()))
-                .and(Specs.betweenIfPresent("inboundDate", filter.startDate(), filter.endDate()));
+                .and(Specs.betweenIfPresent(
+                        "inboundDate", filter.startDate(), filter.endDate()
+                ));
         return page(query, spec, repository);
     }
 
@@ -126,10 +139,16 @@ public class PurchaseInboundService extends AbstractCrudService<PurchaseInbound,
                 items.stream().map(item -> new PurchaseInboundItemResponse(
                         item.getId(), item.getLineNo(), item.getMaterialCode(),
                         item.getBrand(), item.getCategory(), item.getMaterial(),
-                        item.getSpec(), item.getLength(), item.getUnit(), item.getSourcePurchaseOrderItemId(),
-                        item.getWarehouseName(), item.getSettlementMode(), item.getBatchNo(),
-                        remainingQuantity(item, allocatedQuantityMap), item.getQuantity(), item.getQuantityUnit(), item.getPieceWeightTon(), item.getPiecesPerBundle(),
-                        item.getWeightTon(), item.getWeighWeightTon(), item.getWeightAdjustmentTon(), item.getWeightAdjustmentAmount(),
+                        item.getSpec(), item.getLength(), item.getUnit(),
+                        item.getSourcePurchaseOrderItemId(),
+                        item.getWarehouseName(), item.getSettlementMode(),
+                        item.getBatchNo(),
+                        remainingQuantity(item, allocatedQuantityMap),
+                        item.getQuantity(), item.getQuantityUnit(),
+                        item.getPieceWeightTon(), item.getPiecesPerBundle(),
+                        item.getWeightTon(), item.getWeighWeightTon(),
+                        item.getWeightAdjustmentTon(),
+                        item.getWeightAdjustmentAmount(),
                         item.getUnitPrice(), item.getAmount()
                 )).toList()
         );
@@ -228,7 +247,11 @@ public class PurchaseInboundService extends AbstractCrudService<PurchaseInbound,
         return normalized.isEmpty() ? null : normalized;
     }
 
-    private String resolveLineSettlementMode(PurchaseInboundItemRequest source, PurchaseInboundRequest request, int lineNo) {
+    private String resolveLineSettlementMode(
+            PurchaseInboundItemRequest source,
+            PurchaseInboundRequest request,
+            int lineNo
+    ) {
         String settlementMode = trimToNull(source.settlementMode());
         if (settlementMode == null) {
             settlementMode = trimToNull(request.settlementMode());
@@ -284,7 +307,8 @@ public class PurchaseInboundService extends AbstractCrudService<PurchaseInbound,
     ) {
         BigDecimal sourcePieceWeightTon = TradeItemCalculator.scaleWeightTon(source.pieceWeightTon());
         BigDecimal baseWeightTon = TradeItemCalculator.calculateWeightTon(source.quantity(), sourcePieceWeightTon);
-        boolean purchaseWeighRequired = purchaseWeighRequiredCategoryNames.contains(normalizeCategoryName(source.category()));
+        boolean purchaseWeighRequired = purchaseWeighRequiredCategoryNames
+                .contains(normalizeCategoryName(source.category()));
         boolean purchaseWeighSettlement = isPurchaseWeighSettlement(settlementMode);
         if (!purchaseWeighRequired && !purchaseWeighSettlement) {
             return new WeightSettlementResult(
@@ -301,17 +325,26 @@ public class PurchaseInboundService extends AbstractCrudService<PurchaseInbound,
         }
         BigDecimal weighWeightTon = requireWeighWeightTon(source, lineNo);
         BigDecimal theoreticalWeightTon = resolveAdjustmentBaseWeightTon(source);
-        BigDecimal averagePieceWeightTon = TradeItemCalculator.calculateAveragePieceWeightTon(source.quantity(), weighWeightTon);
-        BigDecimal weightAdjustmentTon = TradeItemCalculator.scaleWeightTon(weighWeightTon.subtract(theoreticalWeightTon));
-        BigDecimal weightAdjustmentAmount = TradeItemCalculator.calculateAmount(weightAdjustmentTon, source.unitPrice());
-        return new WeightSettlementResult(theoreticalWeightTon, weighWeightTon, weightAdjustmentTon, weightAdjustmentAmount, averagePieceWeightTon, weighWeightTon);
+        BigDecimal averagePieceWeightTon = TradeItemCalculator
+                .calculateAveragePieceWeightTon(source.quantity(), weighWeightTon);
+        BigDecimal weightAdjustmentTon = TradeItemCalculator
+                .scaleWeightTon(weighWeightTon.subtract(theoreticalWeightTon));
+        BigDecimal weightAdjustmentAmount = TradeItemCalculator
+                .calculateAmount(weightAdjustmentTon, source.unitPrice());
+        return new WeightSettlementResult(
+                theoreticalWeightTon, weighWeightTon,
+                weightAdjustmentTon, weightAdjustmentAmount,
+                averagePieceWeightTon, weighWeightTon
+        );
     }
 
     private BigDecimal resolveAdjustmentBaseWeightTon(PurchaseInboundItemRequest source) {
         return TradeItemCalculator.calculateWeightTon(source.quantity(), source.pieceWeightTon());
     }
 
-    private Map<Long, BigDecimal> loadPersistedWeightAdjustmentMap(List<Long> sourcePurchaseOrderItemIds, Long currentInboundId) {
+    private Map<Long, BigDecimal> loadPersistedWeightAdjustmentMap(
+            List<Long> sourcePurchaseOrderItemIds, Long currentInboundId
+    ) {
         if (sourcePurchaseOrderItemIds.isEmpty()) {
             return Map.of();
         }
@@ -327,7 +360,9 @@ public class PurchaseInboundService extends AbstractCrudService<PurchaseInbound,
         return adjustmentMap;
     }
 
-    private Map<Long, SourceWeighAccumulator> loadPersistedWeighAccumulatorMap(List<Long> sourcePurchaseOrderItemIds, Long currentInboundId) {
+    private Map<Long, SourceWeighAccumulator> loadPersistedWeighAccumulatorMap(
+            List<Long> sourcePurchaseOrderItemIds, Long currentInboundId
+    ) {
         if (sourcePurchaseOrderItemIds.isEmpty()) {
             return Map.of();
         }
@@ -379,8 +414,12 @@ public class PurchaseInboundService extends AbstractCrudService<PurchaseInbound,
         if (sourcePurchaseOrderItemIds.isEmpty()) {
             return;
         }
-        Map<Long, BigDecimal> persistedAdjustmentMap = loadPersistedWeightAdjustmentMap(sourcePurchaseOrderItemIds, currentInboundId);
-        Map<Long, SourceWeighAccumulator> persistedWeighAccumulatorMap = loadPersistedWeighAccumulatorMap(sourcePurchaseOrderItemIds, currentInboundId);
+        Map<Long, BigDecimal> persistedAdjustmentMap = loadPersistedWeightAdjustmentMap(
+                sourcePurchaseOrderItemIds, currentInboundId
+        );
+        Map<Long, SourceWeighAccumulator> persistedWeighAccumulatorMap = loadPersistedWeighAccumulatorMap(
+                sourcePurchaseOrderItemIds, currentInboundId
+        );
         Map<Long, PurchaseOrder> affectedOrderMap = loadAffectedPurchaseOrderMap(sourcePurchaseOrderItemMap);
         Map<Long, PurchaseOrderItem> writeBackItemMap = affectedOrderMap.values().stream()
                 .flatMap(order -> order.getItems().stream())
@@ -420,7 +459,9 @@ public class PurchaseInboundService extends AbstractCrudService<PurchaseInbound,
         }
     }
 
-    private Map<Long, PurchaseOrder> loadAffectedPurchaseOrderMap(Map<Long, PurchaseOrderItem> sourcePurchaseOrderItemMap) {
+    private Map<Long, PurchaseOrder> loadAffectedPurchaseOrderMap(
+            Map<Long, PurchaseOrderItem> sourcePurchaseOrderItemMap
+    ) {
         List<Long> orderIds = sourcePurchaseOrderItemMap.values().stream()
                 .map(PurchaseOrderItem::getPurchaseOrder)
                 .filter(order -> order != null)
@@ -447,18 +488,41 @@ public class PurchaseInboundService extends AbstractCrudService<PurchaseInbound,
         if (!allInboundCompleted) {
             return;
         }
-        // 检查采购订单所有明细的数量是否已全部入库
-        for (PurchaseOrderItem item : purchaseOrder.getItems()) {
-            int totalReceived = allInbounds.stream()
-                    .flatMap(inbound -> inbound.getItems().stream())
-                    .filter(inboundItem -> item.getId().equals(inboundItem.getSourcePurchaseOrderItemId()))
-                    .mapToInt(inboundItem -> inboundItem.getQuantity() != null ? inboundItem.getQuantity() : 0)
-                    .sum();
-            if (totalReceived != (item.getQuantity() != null ? item.getQuantity() : 0)) {
-                return;
+
+        // Pre-compute: aggregate received quantities by purchase order item ID
+        Map<Long, Integer> receivedQtyByItemId = allInbounds.stream()
+                .flatMap(inbound -> inbound.getItems().stream())
+                .filter(item -> item.getSourcePurchaseOrderItemId() != null)
+                .collect(Collectors.groupingBy(
+                        PurchaseInboundItem::getSourcePurchaseOrderItemId,
+                        Collectors.summingInt(
+                                item -> item.getQuantity() != null ? item.getQuantity() : 0
+                        )
+                ));
+
+        // Check each order item against pre-computed map with tolerance
+        boolean allFulfilled = purchaseOrder.getItems().stream().allMatch(item -> {
+            int expected = item.getQuantity() != null ? item.getQuantity() : 0;
+            int actual = receivedQtyByItemId.getOrDefault(item.getId(), 0);
+
+            // Zero-quantity items: must match exactly
+            if (expected == 0) {
+                return actual == 0;
             }
+
+            // Calculate fulfillment ratio with tolerance
+            BigDecimal ratio = BigDecimal.valueOf(actual)
+                    .divide(BigDecimal.valueOf(expected), 4, RoundingMode.HALF_UP);
+            BigDecimal lowerBound = BigDecimal.ONE.subtract(FULFILLMENT_TOLERANCE);
+            BigDecimal upperBound = BigDecimal.ONE.add(FULFILLMENT_TOLERANCE);
+
+            return ratio.compareTo(lowerBound) >= 0
+                    && ratio.compareTo(upperBound) <= 0;
+        });
+
+        if (allFulfilled) {
+            purchaseOrder.setStatus(StatusConstants.PURCHASE_COMPLETED);
         }
-        purchaseOrder.setStatus(StatusConstants.PURCHASE_COMPLETED);
     }
 
     private void refreshPurchaseOrderTotals(PurchaseOrder purchaseOrder) {
@@ -539,7 +603,11 @@ public class PurchaseInboundService extends AbstractCrudService<PurchaseInbound,
 
     @Override
     protected void validateUpdate(PurchaseInbound inbound, PurchaseInboundRequest request) {
-        if (!inbound.getInboundNo().equals(request.inboundNo()) && repository.existsByInboundNoAndDeletedFlagFalse(request.inboundNo())) {
+        boolean noChanged = !inbound.getInboundNo().equals(request.inboundNo());
+        boolean noExists = repository.existsByInboundNoAndDeletedFlagFalse(
+                request.inboundNo()
+        );
+        if (noChanged && noExists) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "采购入库单号已存在");
         }
     }
@@ -642,7 +710,8 @@ public class PurchaseInboundService extends AbstractCrudService<PurchaseInbound,
                 .distinct()
                 .toList();
         Map<Long, BigDecimal> fallbackSourcePieceWeightMap = buildFallbackSourcePieceWeightMap(inbound.getItems());
-        Map<Long, PurchaseOrderItem> sourcePurchaseOrderItemMap = loadSourcePurchaseOrderItemMap(affectedSourcePurchaseOrderItemIds);
+        Map<Long, PurchaseOrderItem> sourcePurchaseOrderItemMap =
+                loadSourcePurchaseOrderItemMap(affectedSourcePurchaseOrderItemIds);
         Map<Long, Integer> allocatedQuantityMap = loadAllocatedQuantityMap(sourcePurchaseOrderItemIds, inbound.getId());
         Map<Long, Integer> requestAllocatedQuantityMap = new HashMap<>();
         Set<String> purchaseWeighRequiredCategoryNames = loadPurchaseWeighRequiredCategoryNames(request);
@@ -665,7 +734,10 @@ public class PurchaseInboundService extends AbstractCrudService<PurchaseInbound,
             PurchaseInboundItem item = items.get(i);
             int lineNo = i + 1;
 
-            validateSourcePurchaseOrderAllocation(source, lineNo, sourcePurchaseOrderItemMap, allocatedQuantityMap, requestAllocatedQuantityMap);
+            validateSourcePurchaseOrderAllocation(
+                    source, lineNo, sourcePurchaseOrderItemMap,
+                    allocatedQuantityMap, requestAllocatedQuantityMap
+            );
             WeightSettlementResult weightSettlement = resolveWeightSettlement(
                     source, lineNo, purchaseWeighRequiredCategoryNames,
                     resolveLineSettlementMode(source, request, lineNo));
@@ -682,7 +754,11 @@ public class PurchaseInboundService extends AbstractCrudService<PurchaseInbound,
             totalAmount = totalAmount.add(result.amount());
 
             if (result.sourcePurchaseOrderItemId() != null) {
-                currentAdjustmentMap.merge(result.sourcePurchaseOrderItemId(), result.weightAdjustmentTon(), BigDecimal::add);
+                currentAdjustmentMap.merge(
+                        result.sourcePurchaseOrderItemId(),
+                        result.weightAdjustmentTon(),
+                        BigDecimal::add
+                );
                 if (result.weighWeightTon() != null) {
                     currentWeighAccumulatorMap.merge(
                             result.sourcePurchaseOrderItemId(),
@@ -724,7 +800,8 @@ public class PurchaseInboundService extends AbstractCrudService<PurchaseInbound,
                 .distinct()
                 .toList();
         Map<Long, BigDecimal> fallbackSourcePieceWeightMap = buildFallbackSourcePieceWeightMap(inbound.getItems());
-        Map<Long, PurchaseOrderItem> sourcePurchaseOrderItemMap = loadSourcePurchaseOrderItemMap(sourcePurchaseOrderItemIds);
+        Map<Long, PurchaseOrderItem> sourcePurchaseOrderItemMap =
+                loadSourcePurchaseOrderItemMap(sourcePurchaseOrderItemIds);
         writeBackPurchaseOrderWeights(
                 sourcePurchaseOrderItemIds,
                 inbound.getId(),
