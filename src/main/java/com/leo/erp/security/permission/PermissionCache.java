@@ -31,16 +31,12 @@ class PermissionCache {
     private final RedisJsonCacheSupport redisJsonCacheSupport;
     private final RedisTuningProperties redisTuningProperties;
 
-    PermissionCache(StringRedisTemplate redisTemplate, Optional<RedisJsonCacheSupport> redisJsonCacheSupport) {
-        this(redisTemplate, redisJsonCacheSupport, new RedisTuningProperties());
-    }
-
     PermissionCache(StringRedisTemplate redisTemplate,
                     Optional<RedisJsonCacheSupport> redisJsonCacheSupport,
                     RedisTuningProperties redisTuningProperties) {
         this.redisTemplate = redisTemplate;
         this.redisJsonCacheSupport = redisJsonCacheSupport == null ? null : redisJsonCacheSupport.orElse(null);
-        this.redisTuningProperties = redisTuningProperties == null ? new RedisTuningProperties() : redisTuningProperties;
+        this.redisTuningProperties = redisTuningProperties;
     }
 
     UserPermissionSnapshot read(Long userId) {

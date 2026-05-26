@@ -5,6 +5,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leo.erp.common.config.RedisTuningProperties;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.connection.RedisConnection;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.core.Cursor;
@@ -33,10 +34,6 @@ public class RedisJsonCacheSupport {
         this.redisTemplate = redisTemplate;
         this.objectMapper = objectMapper;
         this.redisTuningProperties = redisTuningProperties;
-    }
-
-    public RedisJsonCacheSupport(StringRedisTemplate redisTemplate, ObjectMapper objectMapper) {
-        this(redisTemplate, objectMapper, new RedisTuningProperties());
     }
 
     public <T> T getOrLoad(String key, Duration ttl, TypeReference<T> typeReference, Supplier<T> loader) {

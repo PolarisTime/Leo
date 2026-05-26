@@ -33,10 +33,6 @@ public class TokenBucketService {
         this.script = s;
     }
 
-    public TokenBucketService(StringRedisTemplate redisTemplate) {
-        this(redisTemplate, new RedisTuningProperties());
-    }
-
     public TokenBucketResult tryConsume(String dimensionKey, int requested) {
         return tryConsume(dimensionKey, DEFAULT_RATE, DEFAULT_CAPACITY, requested);
     }

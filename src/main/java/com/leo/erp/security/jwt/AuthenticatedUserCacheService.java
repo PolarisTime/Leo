@@ -50,13 +50,6 @@ public class AuthenticatedUserCacheService {
         this.redisTuningProperties = redisTuningProperties;
     }
 
-    public AuthenticatedUserCacheService(StringRedisTemplate redisTemplate,
-                                         ObjectMapper objectMapper,
-                                         UserAccountRepository userAccountRepository,
-                                         UserRoleBindingService userRoleBindingService) {
-        this(redisTemplate, objectMapper, userAccountRepository, userRoleBindingService, new RedisTuningProperties());
-    }
-
     public Optional<SecurityPrincipal> getActivePrincipal(Long userId) {
         if (userId == null) {
             return Optional.empty();
