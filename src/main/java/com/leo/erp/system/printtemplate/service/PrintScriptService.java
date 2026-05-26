@@ -21,7 +21,8 @@ import java.util.regex.Pattern;
 public class PrintScriptService {
 
     private static final Pattern SAFE_METHOD = Pattern.compile(
-            "^\\s*LODOP\\.(SET_|ADD_|NewPage|SET_PRINT|SELECT_|DELETE_)[A-Za-z_]*\\s*\\(");
+            "^\\s*LODOP\\.(SET_|ADD_|NewPage|NEWPAGE|SET_PRINT|SELECT_|DELETE_|PRINT_INIT|PRINT\\b|PREVIEW|PRINT_DESIGN|PRINT_SETUP)[A-Za-z_]*\\s*\\(",
+            Pattern.CASE_INSENSITIVE);
     private static final Set<String> DISALLOWED_METHODS = Set.of(
             "GET_FILE", "SEND_PRINT_RAWDATA", "WRITE_PORT_DATA"
     );
