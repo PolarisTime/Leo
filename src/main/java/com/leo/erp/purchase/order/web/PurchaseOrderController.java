@@ -114,4 +114,13 @@ public class PurchaseOrderController {
     public ApiResponse<List<PieceWeightResponse>> pieceWeights(@PathVariable Long itemId) {
         return ApiResponse.success(purchaseOrderService.getPieceWeights(itemId));
     }
+
+    @Operation(summary = "按销售订单明细ID查询逐件重量")
+    @GetMapping("/items/piece-weights/by-sales-order-item")
+    @RequiresPermission(resource = "purchase-order", action = "read")
+    public ApiResponse<List<PieceWeightResponse>> pieceWeightsBySalesOrderItem(
+            @RequestParam Long salesOrderItemId) {
+        return ApiResponse.success(
+                purchaseOrderService.getPieceWeightsBySalesOrderItemId(salesOrderItemId));
+    }
 }
