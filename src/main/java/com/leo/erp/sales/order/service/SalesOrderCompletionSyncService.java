@@ -8,13 +8,23 @@ import com.leo.erp.sales.outbound.repository.SalesOutboundRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.Arrays;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 public class SalesOrderCompletionSyncService {
+
+    /**
+     * Fulfillment tolerance: allow 5% over-fulfillment.
+     * E.g., if expected=100, actual can be 95-105.
+     */
+    private static final BigDecimal FULFILLMENT_TOLERANCE = new BigDecimal("0.05");
 
     private final SalesOrderRepository salesOrderRepository;
     private final SalesOutboundRepository salesOutboundRepository;
@@ -53,20 +63,44 @@ public class SalesOrderCompletionSyncService {
         }
     }
 
-    private boolean isFullyOutbounded(SalesOrder order, List<SalesOutbound> allOutbounds, String normalizedOrderNo) {
-        for (var item : order.getItems()) {
-            int totalOutbounded = allOutbounds.stream()
-                    .filter(ob -> StatusConstants.AUDITED.equals(normalize(ob.getStatus())))
-                    .filter(ob -> parseSalesOrderNos(ob.getSalesOrderNo()).contains(normalizedOrderNo))
-                    .flatMap(ob -> ob.getItems().stream())
-                    .filter(obi -> item.getId().equals(obi.getSourceSalesOrderItemId()))
-                    .mapToInt(obi -> obi.getQuantity() != null ? obi.getQuantity() : 0)
-                    .sum();
-            if (totalOutbounded != (item.getQuantity() != null ? item.getQuantity() : 0)) {
-                return false;
+    private boolean isFullyOutbounded(
+            SalesOrder order,
+            List<SalesOutbound> allOutbounds,
+            String normalizedOrderNo
+    ) {
+        // Pre-compute: aggregate outbound quantities by sales order item ID
+        Map<Long, Integer> outboundQtyByItemId = allOutbounds.stream()
+                .filter(ob -> StatusConstants.AUDITED.equals(normalize(ob.getStatus())))
+                .filter(ob -> parseSalesOrderNos(ob.getSalesOrderNo())
+                        .contains(normalizedOrderNo))
+                .flatMap(ob -> ob.getItems().stream())
+                .filter(obi -> obi.getSourceSalesOrderItemId() != null)
+                .collect(Collectors.groupingBy(
+                        obi -> obi.getSourceSalesOrderItemId(),
+                        Collectors.summingInt(
+                                obi -> obi.getQuantity() != null ? obi.getQuantity() : 0
+                        )
+                ));
+
+        // Check each order item against pre-computed map with tolerance
+        return order.getItems().stream().allMatch(item -> {
+            int expected = item.getQuantity() != null ? item.getQuantity() : 0;
+            int actual = outboundQtyByItemId.getOrDefault(item.getId(), 0);
+
+            // Zero-quantity items: must match exactly
+            if (expected == 0) {
+                return actual == 0;
             }
-        }
-        return true;
+
+            // Calculate fulfillment ratio with tolerance
+            BigDecimal ratio = BigDecimal.valueOf(actual)
+                    .divide(BigDecimal.valueOf(expected), 4, RoundingMode.HALF_UP);
+            BigDecimal lowerBound = BigDecimal.ONE.subtract(FULFILLMENT_TOLERANCE);
+            BigDecimal upperBound = BigDecimal.ONE.add(FULFILLMENT_TOLERANCE);
+
+            return ratio.compareTo(lowerBound) >= 0
+                    && ratio.compareTo(upperBound) <= 0;
+        });
     }
 
     private boolean applyCompletedStatus(SalesOrder order, boolean completed) {
