@@ -454,7 +454,7 @@ public class PurchaseInboundService extends AbstractCrudService<PurchaseInbound,
                     .filter(inboundItem -> item.getId().equals(inboundItem.getSourcePurchaseOrderItemId()))
                     .mapToInt(inboundItem -> inboundItem.getQuantity() != null ? inboundItem.getQuantity() : 0)
                     .sum();
-            if (totalReceived < (item.getQuantity() != null ? item.getQuantity() : 0)) {
+            if (totalReceived != (item.getQuantity() != null ? item.getQuantity() : 0)) {
                 return;
             }
         }
