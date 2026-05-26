@@ -57,20 +57,18 @@ public class PermissionService {
                              RoleSettingRepository roleSettingRepository,
                              Optional<RedisJsonCacheSupport> redisJsonCacheSupport,
                              Optional<UserAccountRepository> userAccountRepository,
-                             Optional<DepartmentRepository> departmentRepository) {
-        this(userRoleRepository, rolePermissionRepository, menuRepository, redisTemplate, roleSettingRepository,
-                redisJsonCacheSupport, userAccountRepository, departmentRepository, new RedisTuningProperties());
+                             RedisTuningProperties redisTuningProperties) {
+        this(userRoleRepository, rolePermissionRepository, menuRepository, redisTemplate, roleSettingRepository, redisJsonCacheSupport, userAccountRepository, Optional.empty(), redisTuningProperties);
     }
 
-    // Backward-compatible constructors for callers that omit optional dependencies
     public PermissionService(UserRoleRepository userRoleRepository,
                              RolePermissionRepository rolePermissionRepository,
                              MenuRepository menuRepository,
                              StringRedisTemplate redisTemplate,
                              RoleSettingRepository roleSettingRepository,
                              Optional<RedisJsonCacheSupport> redisJsonCacheSupport,
-                             Optional<UserAccountRepository> userAccountRepository) {
-        this(userRoleRepository, rolePermissionRepository, menuRepository, redisTemplate, roleSettingRepository, redisJsonCacheSupport, userAccountRepository, Optional.empty());
+                             RedisTuningProperties redisTuningProperties) {
+        this(userRoleRepository, rolePermissionRepository, menuRepository, redisTemplate, roleSettingRepository, redisJsonCacheSupport, Optional.empty(), Optional.empty(), redisTuningProperties);
     }
 
     public PermissionService(UserRoleRepository userRoleRepository,
@@ -78,16 +76,8 @@ public class PermissionService {
                              MenuRepository menuRepository,
                              StringRedisTemplate redisTemplate,
                              RoleSettingRepository roleSettingRepository,
-                             Optional<RedisJsonCacheSupport> redisJsonCacheSupport) {
-        this(userRoleRepository, rolePermissionRepository, menuRepository, redisTemplate, roleSettingRepository, redisJsonCacheSupport, Optional.empty(), Optional.empty());
-    }
-
-    public PermissionService(UserRoleRepository userRoleRepository,
-                             RolePermissionRepository rolePermissionRepository,
-                             MenuRepository menuRepository,
-                             StringRedisTemplate redisTemplate,
-                             RoleSettingRepository roleSettingRepository) {
-        this(userRoleRepository, rolePermissionRepository, menuRepository, redisTemplate, roleSettingRepository, Optional.empty(), Optional.empty(), Optional.empty());
+                             RedisTuningProperties redisTuningProperties) {
+        this(userRoleRepository, rolePermissionRepository, menuRepository, redisTemplate, roleSettingRepository, Optional.empty(), Optional.empty(), Optional.empty(), redisTuningProperties);
     }
 
     // --- Public API ---

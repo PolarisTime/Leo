@@ -38,10 +38,6 @@ public class SessionActivityService {
         this.touchScript = script;
     }
 
-    public SessionActivityService(StringRedisTemplate redisTemplate) {
-        this(redisTemplate, new RedisTuningProperties());
-    }
-
     public void touchSession(String sessionId) {
         if (sessionId == null || sessionId.isBlank()) {
             return;
