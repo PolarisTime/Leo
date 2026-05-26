@@ -2,6 +2,7 @@ package com.leo.erp.security.permission;
 
 import com.leo.erp.auth.repository.UserAccountRepository;
 import com.leo.erp.auth.repository.UserRoleRepository;
+import com.leo.erp.common.config.RedisTuningProperties;
 import com.leo.erp.auth.web.dto.ResourcePermissionResponse;
 import com.leo.erp.common.support.RedisJsonCacheSupport;
 import com.leo.erp.system.department.repository.DepartmentRepository;
@@ -41,11 +42,24 @@ public class PermissionService {
                              RoleSettingRepository roleSettingRepository,
                              Optional<RedisJsonCacheSupport> redisJsonCacheSupport,
                              Optional<UserAccountRepository> userAccountRepository,
-                             Optional<DepartmentRepository> departmentRepository) {
-        this.cache = new PermissionCache(redisTemplate, redisJsonCacheSupport);
+                             Optional<DepartmentRepository> departmentRepository,
+                             RedisTuningProperties redisTuningProperties) {
+        this.cache = new PermissionCache(redisTemplate, redisJsonCacheSupport, redisTuningProperties);
         this.resolver = new PermissionResolver(userRoleRepository, rolePermissionRepository, roleSettingRepository, cache);
         this.menuVisibility = new MenuVisibilityService(menuRepository, redisJsonCacheSupport);
         this.departmentScope = new DepartmentScopeResolver(userAccountRepository, departmentRepository);
+    }
+
+    public PermissionService(UserRoleRepository userRoleRepository,
+                             RolePermissionRepository rolePermissionRepository,
+                             MenuRepository menuRepository,
+                             StringRedisTemplate redisTemplate,
+                             RoleSettingRepository roleSettingRepository,
+                             Optional<RedisJsonCacheSupport> redisJsonCacheSupport,
+                             Optional<UserAccountRepository> userAccountRepository,
+                             Optional<DepartmentRepository> departmentRepository) {
+        this(userRoleRepository, rolePermissionRepository, menuRepository, redisTemplate, roleSettingRepository,
+                redisJsonCacheSupport, userAccountRepository, departmentRepository, new RedisTuningProperties());
     }
 
     // Backward-compatible constructors for callers that omit optional dependencies

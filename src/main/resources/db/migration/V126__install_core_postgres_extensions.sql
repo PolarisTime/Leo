@@ -1,14 +1,14 @@
--- Core PostgreSQL extensions for production operations
--- pg_stat_statements: query performance monitoring
--- pg_repack: online table repack (no lock VACUUM FULL alternative)
--- pg_prewarm: cache warmup after restart
--- pg_buffercache: shared buffer cache diagnostics
---
--- Note: pg_cron is installed in the "postgres" database (required by its design),
---       not in the application database. See setup instructions below:
---   psql -U postgres -d postgres -c "CREATE EXTENSION IF NOT EXISTS pg_cron;"
+-- Optional PostgreSQL diagnostics extension.
+-- The ERP monitoring page must not depend on maintenance extensions. It reads
+-- built-in pg_stat_* views by default and enables the slow SQL block only when
+-- pg_stat_statements is already available.
 
-CREATE EXTENSION IF NOT EXISTS pg_stat_statements;
-CREATE EXTENSION IF NOT EXISTS pg_repack;
-CREATE EXTENSION IF NOT EXISTS pg_prewarm;
-CREATE EXTENSION IF NOT EXISTS pg_buffercache;
+DO $$
+BEGIN
+    BEGIN
+        EXECUTE 'CREATE EXTENSION IF NOT EXISTS pg_stat_statements';
+    EXCEPTION WHEN OTHERS THEN
+        RAISE NOTICE 'pg_stat_statements is optional and was not installed: %', SQLERRM;
+    END;
+END
+$$;

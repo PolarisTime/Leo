@@ -4,6 +4,7 @@ import lombok.extern.slf4j.Slf4j;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.leo.erp.common.config.RedisTuningProperties;
 import org.springframework.data.redis.connection.RedisConnection;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.core.Cursor;
@@ -22,15 +23,20 @@ import java.util.function.Supplier;
 @Component
 public class RedisJsonCacheSupport {
 
-    private static final int SCAN_BATCH_SIZE = 256;
-    private static final int MAX_SCAN_KEYS = 10000;
-
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
+    private final RedisTuningProperties redisTuningProperties;
 
-    public RedisJsonCacheSupport(StringRedisTemplate redisTemplate, ObjectMapper objectMapper) {
+    public RedisJsonCacheSupport(StringRedisTemplate redisTemplate,
+                                 ObjectMapper objectMapper,
+                                 RedisTuningProperties redisTuningProperties) {
         this.redisTemplate = redisTemplate;
         this.objectMapper = objectMapper;
+        this.redisTuningProperties = redisTuningProperties;
+    }
+
+    public RedisJsonCacheSupport(StringRedisTemplate redisTemplate, ObjectMapper objectMapper) {
+        this(redisTemplate, objectMapper, new RedisTuningProperties());
     }
 
     public <T> T getOrLoad(String key, Duration ttl, TypeReference<T> typeReference, Supplier<T> loader) {
@@ -76,7 +82,7 @@ public class RedisJsonCacheSupport {
             return;
         }
         try {
-            redisTemplate.opsForValue().set(key, objectMapper.writeValueAsString(value), ttl);
+            redisTemplate.opsForValue().set(key, objectMapper.writeValueAsString(value), redisTuningProperties.withTtlJitter(ttl));
         } catch (JsonProcessingException ex) {
             log.warn("Redis cache serialization failed, key={}", key, ex);
         } catch (RuntimeException ex) {
@@ -115,18 +121,21 @@ public class RedisJsonCacheSupport {
             return;
         }
         RedisConnection connection = null;
-        List<String> batch = new ArrayList<>(SCAN_BATCH_SIZE);
+        int scanBatchSize = redisTuningProperties.scanBatchSize();
+        int deleteBatchSize = redisTuningProperties.deleteBatchSize();
+        int maxScanKeys = redisTuningProperties.maxScanKeys();
+        List<String> batch = new ArrayList<>(deleteBatchSize);
         int totalDeleted = 0;
         try {
             connection = connectionFactory.getConnection();
-            try (Cursor<byte[]> cursor = connection.scan(ScanOptions.scanOptions().match(pattern).count(SCAN_BATCH_SIZE).build())) {
+            try (Cursor<byte[]> cursor = connection.scan(ScanOptions.scanOptions().match(pattern).count(scanBatchSize).build())) {
                 while (cursor.hasNext()) {
                     batch.add(new String(cursor.next(), StandardCharsets.UTF_8));
-                    if (batch.size() >= SCAN_BATCH_SIZE) {
+                    if (batch.size() >= deleteBatchSize) {
                         redisTemplate.delete(batch);
                         totalDeleted += batch.size();
                         batch.clear();
-                        if (totalDeleted >= MAX_SCAN_KEYS) {
+                        if (totalDeleted >= maxScanKeys) {
                             log.warn("Redis pattern delete reached max scan limit, pattern={}, deleted={}", pattern, totalDeleted);
                             break;
                         }

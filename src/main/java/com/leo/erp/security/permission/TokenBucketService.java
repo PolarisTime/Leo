@@ -1,6 +1,8 @@
 package com.leo.erp.security.permission;
 
 import lombok.extern.slf4j.Slf4j;
+import com.leo.erp.common.config.RedisTuningProperties;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
@@ -17,15 +19,22 @@ public class TokenBucketService {
     private static final int DEFAULT_CAPACITY = 150;
 
     private final StringRedisTemplate redisTemplate;
+    private final RedisTuningProperties redisTuningProperties;
     private final DefaultRedisScript<List> script;
 
     @SuppressWarnings({"unchecked", "rawtypes"})
-    public TokenBucketService(StringRedisTemplate redisTemplate) {
+    @Autowired
+    public TokenBucketService(StringRedisTemplate redisTemplate, RedisTuningProperties redisTuningProperties) {
         this.redisTemplate = redisTemplate;
+        this.redisTuningProperties = redisTuningProperties;
         DefaultRedisScript<List> s = new DefaultRedisScript<>();
         s.setLocation(new ClassPathResource("db/token_bucket.lua"));
         s.setResultType(List.class);
         this.script = s;
+    }
+
+    public TokenBucketService(StringRedisTemplate redisTemplate) {
+        this(redisTemplate, new RedisTuningProperties());
     }
 
     public TokenBucketResult tryConsume(String dimensionKey, int requested) {
@@ -34,18 +43,18 @@ public class TokenBucketService {
 
     @SuppressWarnings("unchecked")
     public TokenBucketResult tryConsume(String dimensionKey, double rate, int capacity, int requested) {
-        String tokensKey = KEY_PREFIX + dimensionKey + ":tokens";
-        String timestampKey = KEY_PREFIX + dimensionKey + ":ts";
+        String bucketKey = KEY_PREFIX + dimensionKey;
         long now = System.currentTimeMillis();
 
         try {
             List<Long> result = redisTemplate.execute(
                     script,
-                    List.of(tokensKey, timestampKey),
+                    List.of(bucketKey),
                     String.valueOf(rate),
                     String.valueOf(capacity),
                     String.valueOf(now),
-                    String.valueOf(requested)
+                    String.valueOf(requested),
+                    String.valueOf(redisTuningProperties.rateLimitBucketTtlFloorSeconds())
             );
             if (result == null || result.size() < 3) {
                 log.warn("TokenBucket Lua returned unexpected: {}", result);

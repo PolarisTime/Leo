@@ -173,11 +173,12 @@ public class InitialSetupService {
     private boolean isAdminConfigured() {
         return roleSettingRepository.findByRoleCodeAndDeletedFlagFalse(ADMIN_ROLE_CODE)
                 .map(role -> userRoleRepository.countActiveUsersByRoleId(role.getId()) > 0)
-                .orElseGet(() -> userAccountRepository.findByLoginNameAndDeletedFlagFalse("admin").isPresent());
+                .orElse(false);
     }
 
     private String resolveExistingAdminLoginName() {
-        return userAccountRepository.findByLoginNameAndDeletedFlagFalse("admin")
+        return roleSettingRepository.findByRoleCodeAndDeletedFlagFalse(ADMIN_ROLE_CODE)
+                .flatMap(role -> userRoleRepository.findFirstActiveUserByRoleId(role.getId()))
                 .map(UserAccount::getLoginName)
                 .orElse("admin");
     }

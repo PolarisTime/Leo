@@ -30,13 +30,34 @@ spring:
     driver-class-name: org.postgresql.Driver
     hikari:
       # 保持少量空闲连接，减少低流量时的建连开销
-      minimum-idle: 5
+      minimum-idle: ${SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE:5}
       # 控制数据库最大并发连接数，避免连接池无限放大
-      maximum-pool-size: 20
+      maximum-pool-size: ${SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE:20}
+      # 获取连接最大等待时间，避免请求在数据库拥塞时长时间堆积
+      connection-timeout: ${SPRING_DATASOURCE_HIKARI_CONNECTION_TIMEOUT:3000}
+      # 连接可用性检测超时
+      validation-timeout: ${SPRING_DATASOURCE_HIKARI_VALIDATION_TIMEOUT:1000}
+      # 空闲连接保留时间
+      idle-timeout: ${SPRING_DATASOURCE_HIKARI_IDLE_TIMEOUT:600000}
+      # 连接最大生命周期，低于常见数据库/代理层连接回收时间
+      max-lifetime: ${SPRING_DATASOURCE_HIKARI_MAX_LIFETIME:1800000}
+      # 定期保活，降低 NAT/代理空闲断连概率
+      keepalive-time: ${SPRING_DATASOURCE_HIKARI_KEEPALIVE_TIME:300000}
       # 统一由 Spring 事务提交，避免隐式自动提交
       auto-commit: false
       # 显式指定默认事务隔离级别，和 PostgreSQL 常用配置保持一致
       transaction-isolation: TRANSACTION_READ_COMMITTED
+      data-source-properties:
+        # 标识数据库连接来源，便于 pg_stat_activity 诊断
+        ApplicationName: ${SPRING_DATASOURCE_APPLICATION_NAME:leo-erp}
+        # 批量 INSERT 时让 PostgreSQL 驱动重写为更高效的批量语句
+        reWriteBatchedInserts: true
+        # 启用 TCP keepalive，降低长连接被中间网络设备静默断开的概率
+        tcpKeepAlive: true
+        # 开启服务端 prepared statement，兼顾计划缓存和动态 SQL 稳定性
+        prepareThreshold: ${SPRING_DATASOURCE_PREPARE_THRESHOLD:3}
+        preparedStatementCacheQueries: ${SPRING_DATASOURCE_PREPARED_STATEMENT_CACHE_QUERIES:256}
+        preparedStatementCacheSizeMiB: ${SPRING_DATASOURCE_PREPARED_STATEMENT_CACHE_SIZE_MIB:5}
 
   jpa:
     hibernate:
@@ -50,6 +71,18 @@ spring:
       hibernate:
         # 打印更易读的 SQL 格式
         format_sql: true
+        # 批量写入参数，降低导入/批量保存时的 round-trip 次数
+        jdbc:
+          batch_size: ${SPRING_JPA_HIBERNATE_JDBC_BATCH_SIZE:50}
+          fetch_size: ${SPRING_JPA_HIBERNATE_JDBC_FETCH_SIZE:100}
+        # 按表排序批量写入，提升 JDBC batch 命中率
+        order_inserts: true
+        order_updates: true
+        # 避免 IN 参数数量变化导致数据库生成过多相似执行计划
+        query:
+          in_clause_parameter_padding: true
+        # 降低懒加载集合/关联的 N+1 查询成本
+        default_batch_fetch_size: ${SPRING_JPA_HIBERNATE_DEFAULT_BATCH_FETCH_SIZE:50}
 
   flyway:
     # 启用数据库迁移
@@ -75,17 +108,19 @@ spring:
       # 使用的逻辑库编号
       database: ${SPRING_DATA_REDIS_DATABASE:3}
       # 连接超时
-      timeout: ${SPRING_DATA_REDIS_TIMEOUT:3000ms}
+      timeout: ${SPRING_DATA_REDIS_TIMEOUT:2000ms}
+      # 建连超时，避免 Redis 异常时拖慢业务请求
+      connect-timeout: ${SPRING_DATA_REDIS_CONNECT_TIMEOUT:1000ms}
       lettuce:
         pool:
           # 最大活跃连接数
-          max-active: ${SPRING_DATA_REDIS_POOL_MAX_ACTIVE:16}
+          max-active: ${SPRING_DATA_REDIS_POOL_MAX_ACTIVE:32}
           # 最大空闲连接数
-          max-idle: ${SPRING_DATA_REDIS_POOL_MAX_IDLE:8}
+          max-idle: ${SPRING_DATA_REDIS_POOL_MAX_IDLE:16}
           # 最小空闲连接数
           min-idle: ${SPRING_DATA_REDIS_POOL_MIN_IDLE:4}
           # 获取连接最大等待时间
-          max-wait: ${SPRING_DATA_REDIS_POOL_MAX_WAIT:2000ms}
+          max-wait: ${SPRING_DATA_REDIS_POOL_MAX_WAIT:1000ms}
       repositories:
         # 不启用 Spring Data Redis Repository 模式
         enabled: false
@@ -103,6 +138,32 @@ leo:
   # 部署在 nginx / CDN 后面时，填入代理的内网地址。
   # 示例: "127.0.0.1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
   trusted-proxies: ${LEO_TRUSTED_PROXIES:127.0.0.1}
+  redis:
+    cache:
+      # 静态缓存默认 TTL
+      static-ttl: ${LEO_REDIS_CACHE_STATIC_TTL:7d}
+      # 热点缓存默认 TTL
+      hot-ttl: ${LEO_REDIS_CACHE_HOT_TTL:10m}
+      # 写缓存时附加 TTL 抖动，降低同一时刻集中失效
+      ttl-jitter-percent: ${LEO_REDIS_CACHE_TTL_JITTER_PERCENT:10}
+    scan:
+      # SCAN 仅保留给兜底/管理场景，正常缓存失效优先用精确 key
+      batch-size: ${LEO_REDIS_SCAN_BATCH_SIZE:256}
+      delete-batch-size: ${LEO_REDIS_DELETE_BATCH_SIZE:256}
+      max-keys: ${LEO_REDIS_SCAN_MAX_KEYS:10000}
+    permission:
+      ttl: ${LEO_REDIS_PERMISSION_TTL:5m}
+      index-ttl: ${LEO_REDIS_PERMISSION_INDEX_TTL:1d}
+    auth-user:
+      ttl: ${LEO_REDIS_AUTH_USER_TTL:2m}
+      index-ttl: ${LEO_REDIS_AUTH_USER_INDEX_TTL:1d}
+    session:
+      online-ttl: ${LEO_REDIS_SESSION_ONLINE_TTL:2m}
+      # 登录态每个请求都会经过过滤器，这里限制会话活跃时间写入频率
+      activity-write-interval: ${LEO_REDIS_SESSION_ACTIVITY_WRITE_INTERVAL:30s}
+      mget-batch-size: ${LEO_REDIS_SESSION_MGET_BATCH_SIZE:500}
+    rate-limit:
+      bucket-ttl-floor: ${LEO_REDIS_RATE_LIMIT_BUCKET_TTL_FLOOR:60s}
   attachment:
     # 业务层额外限制的附件大小
     max-file-size: 20MB
