@@ -272,7 +272,7 @@ class AttachmentServiceTest {
                         List<AttachmentFile> results = new ArrayList<>();
                         for (Long id : ids) {
                             AttachmentFile entity = store.get(id);
-                            if (entity != null && !Boolean.TRUE.equals(entity.getDeletedFlag())) {
+                            if (entity != null && !entity.isDeletedFlag()) {
                                 results.add(entity);
                             }
                         }
@@ -280,7 +280,7 @@ class AttachmentServiceTest {
                     }
                     case "findByIdAndDeletedFlagFalse" -> {
                         AttachmentFile entity = store.get((Long) args[0]);
-                        yield entity != null && !Boolean.TRUE.equals(entity.getDeletedFlag()) ? Optional.of(entity) : Optional.empty();
+                        yield entity != null && !entity.isDeletedFlag() ? Optional.of(entity) : Optional.empty();
                     }
                     case "findById" -> Optional.ofNullable(store.get((Long) args[0]));
                     case "toString" -> "AttachmentFileRepositoryStub";

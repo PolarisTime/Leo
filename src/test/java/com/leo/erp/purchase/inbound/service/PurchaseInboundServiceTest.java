@@ -1,6 +1,7 @@
+package com.leo.erp.purchase.inbound.service;
+
 import com.leo.erp.allocation.repository.ItemAllocationNativeRepository;
 import com.leo.erp.purchase.inbound.service.InboundItemMapper;
-package com.leo.erp.purchase.inbound.service;
 
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.TradeItemMaterialSupport;

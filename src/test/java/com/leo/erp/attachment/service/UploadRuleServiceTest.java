@@ -138,15 +138,15 @@ class UploadRuleServiceTest {
                 new Class[]{UploadRuleRepository.class},
                 (proxy, method, args) -> switch (method.getName()) {
                     case "findByRuleCodeAndDeletedFlagFalse" -> store.values().stream()
-                            .filter(rule -> !Boolean.TRUE.equals(rule.getDeletedFlag()))
+                            .filter(rule -> !rule.isDeletedFlag())
                             .filter(rule -> ((String) args[0]).equals(rule.getRuleCode()))
                             .findFirst();
                     case "findByModuleKeyAndDeletedFlagFalse" -> store.values().stream()
-                            .filter(rule -> !Boolean.TRUE.equals(rule.getDeletedFlag()))
+                            .filter(rule -> !rule.isDeletedFlag())
                             .filter(rule -> ((String) args[0]).equals(rule.getModuleKey()))
                             .findFirst();
                     case "findAllByDeletedFlagFalseOrderByIdAsc" -> store.values().stream()
-                            .filter(rule -> !Boolean.TRUE.equals(rule.getDeletedFlag()))
+                            .filter(rule -> !rule.isDeletedFlag())
                             .sorted(java.util.Comparator.comparing(UploadRule::getId))
                             .toList();
                     case "save" -> {

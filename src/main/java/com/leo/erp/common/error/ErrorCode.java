@@ -8,6 +8,7 @@ public enum ErrorCode {
     NOT_FOUND(4040, "资源不存在"),
     BUSINESS_ERROR(4220, "业务处理失败"),
     SESSION_EVICTED(4011, "您的账号已在其他设备登录，当前会话已被登出"),
+    RATE_LIMITED(4290, "请求过于频繁，请稍后再试"),
     INTERNAL_ERROR(5000, "系统内部错误");
 
     private final int code;

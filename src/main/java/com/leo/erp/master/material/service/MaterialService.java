@@ -252,7 +252,7 @@ public class MaterialService extends AbstractCrudService<Material, MaterialReque
                         return entity;
                     });
             boolean exists = material.getId() != null && materialRepository.existsById(material.getId());
-            material.setDeletedFlag(Boolean.FALSE);
+            material.setDeletedFlag(false);
             applyImportDTO(material, dto);
             materialRepository.save(material);
             successRows.add(material);
@@ -345,7 +345,7 @@ public class MaterialService extends AbstractCrudService<Material, MaterialReque
                             return entity;
                         });
                 boolean exists = material.getId() != null && materialRepository.existsById(material.getId());
-                material.setDeletedFlag(Boolean.FALSE);
+                material.setDeletedFlag(false);
                 apply(material, request);
                 materialRepository.save(material);
                 if (exists) {

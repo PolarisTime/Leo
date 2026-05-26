@@ -39,7 +39,7 @@ public class AttachmentRecordAccessService {
             return;
         }
         AbstractAuditableEntity entity = loadBusinessEntity(normalizedModuleKey, normalizedRecordId);
-        if (entity == null || Boolean.TRUE.equals(entity.getDeletedFlag())) {
+        if (entity == null || entity.isDeletedFlag()) {
             throw new BusinessException(ErrorCode.NOT_FOUND, "业务记录不存在");
         }
         assertCanAccess(principal, normalizedModuleKey, actionCode, entity);
@@ -63,7 +63,7 @@ public class AttachmentRecordAccessService {
         boolean accessible = bindings.stream()
                 .map(AttachmentBinding::getRecordId)
                 .map(recordId -> loadBusinessEntity(normalizedModuleKey, recordId))
-                .filter(entity -> entity != null && !Boolean.TRUE.equals(entity.getDeletedFlag()))
+                .filter(entity -> entity != null && !entity.isDeletedFlag())
                 .anyMatch(entity -> canAccess(principal, normalizedModuleKey, actionCode, entity));
         if (!accessible) {
             throw new BusinessException(ErrorCode.FORBIDDEN, "无数据权限");

@@ -84,7 +84,7 @@ public class RateLimitAspect {
             }
             if (count != null && count > rateLimit.maxRequests()) {
                 log.warn("Rate limit exceeded (legacy): key={}", legacyKey);
-                throw new BusinessException(ErrorCode.FORBIDDEN, "请求过于频繁，请稍后重试");
+                throw new BusinessException(ErrorCode.RATE_LIMITED, "请求过于频繁，请稍后重试");
             }
             return joinPoint.proceed();
         }
@@ -114,7 +114,7 @@ public class RateLimitAspect {
             response.setHeader("X-RateLimit-Remaining", "0");
             response.setHeader("X-RateLimit-Reset", String.valueOf(r.retryAfterSeconds()));
         }
-        throw new BusinessException(ErrorCode.FORBIDDEN,
+        throw new BusinessException(ErrorCode.RATE_LIMITED,
                 "请求过于频繁，请在 " + r.retryAfterSeconds() + " 秒后重试");
     }
 

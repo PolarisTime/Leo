@@ -42,5 +42,5 @@ public abstract class AbstractAuditableEntity {
     private LocalDateTime updatedAt;
 
     @Column(name = "deleted_flag", nullable = false)
-    private Boolean deletedFlag = Boolean.FALSE;
+    private boolean deletedFlag = false;
 }
