@@ -442,11 +442,23 @@ public class PurchaseInboundService extends AbstractCrudService<PurchaseInbound,
         }
         List<PurchaseInbound> allInbounds = repository
                 .findByPurchaseOrderNoAndDeletedFlagFalse(purchaseOrder.getOrderNo());
-        boolean allComplete = allInbounds.stream()
+        boolean allInboundCompleted = allInbounds.stream()
                 .allMatch(i -> StatusConstants.INBOUND_COMPLETED.equals(i.getStatus()));
-        if (allComplete) {
-            purchaseOrder.setStatus(StatusConstants.PURCHASE_COMPLETED);
+        if (!allInboundCompleted) {
+            return;
         }
+        // 检查采购订单所有明细的数量是否已全部入库
+        for (PurchaseOrderItem item : purchaseOrder.getItems()) {
+            int totalReceived = allInbounds.stream()
+                    .flatMap(inbound -> inbound.getItems().stream())
+                    .filter(inboundItem -> item.getId().equals(inboundItem.getSourcePurchaseOrderItemId()))
+                    .mapToInt(inboundItem -> inboundItem.getQuantity() != null ? inboundItem.getQuantity() : 0)
+                    .sum();
+            if (totalReceived < (item.getQuantity() != null ? item.getQuantity() : 0)) {
+                return;
+            }
+        }
+        purchaseOrder.setStatus(StatusConstants.PURCHASE_COMPLETED);
     }
 
     private void refreshPurchaseOrderTotals(PurchaseOrder purchaseOrder) {

@@ -37,24 +37,36 @@ public class SalesOrderCompletionSyncService {
             return;
         }
 
-        Set<String> completedOrderNos = new LinkedHashSet<>();
-        for (SalesOutbound outbound : salesOutboundRepository.findByDeletedFlagFalse()) {
-            if (!StatusConstants.AUDITED.equals(normalize(outbound.getStatus()))) {
-                continue;
-            }
-            for (String orderNo : parseSalesOrderNos(outbound.getSalesOrderNo())) {
-                if (orderNos.contains(orderNo)) {
-                    completedOrderNos.add(orderNo);
-                }
-            }
+        // 收集所有已审核出库中引用这些SO的明细
+        List<SalesOutbound> allOutbounds = salesOutboundRepository.findByDeletedFlagFalse();
+        for (SalesOrder order : orders) {
+            String normalizedOrderNo = normalize(order.getOrderNo());
+            // 计算该SO每项明细的已出库总量
+            boolean fullyOutbounded = isFullyOutbounded(order, allOutbounds, normalizedOrderNo);
+            applyCompletedStatus(order, fullyOutbounded);
         }
-
         List<SalesOrder> changedOrders = orders.stream()
-                .filter(order -> applyCompletedStatus(order, completedOrderNos.contains(normalize(order.getOrderNo()))))
+                .filter(order -> order.getStatus() != null)
                 .toList();
         if (!changedOrders.isEmpty()) {
             salesOrderRepository.saveAll(changedOrders);
         }
+    }
+
+    private boolean isFullyOutbounded(SalesOrder order, List<SalesOutbound> allOutbounds, String normalizedOrderNo) {
+        for (var item : order.getItems()) {
+            int totalOutbounded = allOutbounds.stream()
+                    .filter(ob -> StatusConstants.AUDITED.equals(normalize(ob.getStatus())))
+                    .filter(ob -> parseSalesOrderNos(ob.getSalesOrderNo()).contains(normalizedOrderNo))
+                    .flatMap(ob -> ob.getItems().stream())
+                    .filter(obi -> item.getId().equals(obi.getSourceSalesOrderItemId()))
+                    .mapToInt(obi -> obi.getQuantity() != null ? obi.getQuantity() : 0)
+                    .sum();
+            if (totalOutbounded < (item.getQuantity() != null ? item.getQuantity() : 0)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private boolean applyCompletedStatus(SalesOrder order, boolean completed) {
