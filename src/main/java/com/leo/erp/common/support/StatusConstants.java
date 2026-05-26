@@ -24,7 +24,6 @@ public final class StatusConstants {
     // 业务完成状态
     public static final String PURCHASE_COMPLETED = "完成采购";
     public static final String SALES_COMPLETED = "完成销售";
-    public static final String SALES_PENDING_FINALIZE = "待完善";
     public static final String INBOUND_COMPLETED = "完成入库";
 
     // 签署/送达状态
@@ -48,7 +47,7 @@ public final class StatusConstants {
     public static final Set<String> ALLOWED_RECEIVABLE_STATUS = Set.of(PENDING_CONFIRM, CONFIRMED, PENDING_AUDIT, AUDITED);
     public static final Set<String> ALLOWED_PURCHASE_ORDER_STATUS = Set.of(DRAFT, AUDITED, PURCHASE_COMPLETED);
     public static final Set<String> ALLOWED_PURCHASE_INBOUND_STATUS = Set.of(DRAFT, AUDITED, INBOUND_COMPLETED);
-    public static final Set<String> ALLOWED_SALES_ORDER_STATUS = Set.of(DRAFT, AUDITED, SALES_PENDING_FINALIZE, SALES_COMPLETED);
+    public static final Set<String> ALLOWED_SALES_ORDER_STATUS = Set.of(DRAFT, AUDITED, SALES_COMPLETED);
     public static final Set<String> ALLOWED_SALES_OUTBOUND_STATUS = Set.of(DRAFT, AUDITED);
     public static final Set<String> ALLOWED_CONTRACT_STATUS = Set.of(DRAFT, EXECUTING, SIGNED, ARCHIVED);
     public static final Set<String> ALLOWED_STATEMENT_STATUS = Set.of(PENDING_CONFIRM, CONFIRMED);
