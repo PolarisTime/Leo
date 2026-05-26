@@ -114,7 +114,8 @@ public class PrintTemplateService extends AbstractCrudService<PrintTemplate, Pri
     protected void apply(PrintTemplate entity, PrintTemplateRequest request) {
         entity.setBillType(normalizeBillType(request.billType()));
         entity.setTemplateName(normalizeTemplateName(request.templateName()));
-        entity.setTemplateHtml(normalizeTemplateHtml(request.templateHtml()));
+        entity.setTemplateHtml(normalizeTemplateHtml(request.templateHtml(), request.templateType()));
+        entity.setTemplateType(normalizeTemplateType(request.templateType()));
         entity.setIsDefault(normalizeDefaultFlag(request.isDefault()));
     }
 
@@ -150,17 +151,18 @@ public class PrintTemplateService extends AbstractCrudService<PrintTemplate, Pri
         return templateName.trim();
     }
 
-    private String normalizeTemplateHtml(String templateHtml) {
+    private String normalizeTemplateHtml(String templateHtml, String templateType) {
         if (templateHtml == null || templateHtml.isBlank()) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "模板内容不能为空");
         }
         String normalized = templateHtml.trim();
-        validateTemplateContent(normalized);
+        validateTemplateContent(normalized, templateType);
         return normalized;
     }
 
-    private void validateTemplateContent(String templateHtml) {
-        List<Pattern> patterns = isLodopTemplate(templateHtml) ? DANGEROUS_LODOP_PATTERNS : DANGEROUS_HTML_PATTERNS;
+    private void validateTemplateContent(String templateHtml, String templateType) {
+        boolean isCoord = "COORD".equals(templateType);
+        List<Pattern> patterns = isCoord ? DANGEROUS_LODOP_PATTERNS : DANGEROUS_HTML_PATTERNS;
         for (Pattern pattern : patterns) {
             if (pattern.matcher(templateHtml).find()) {
                 throw new BusinessException(ErrorCode.VALIDATION_ERROR, "模板内容包含不允许的脚本或危险标签");
@@ -168,15 +170,15 @@ public class PrintTemplateService extends AbstractCrudService<PrintTemplate, Pri
         }
     }
 
-    private boolean isLodopTemplate(String templateHtml) {
-        String[] lines = templateHtml.split("\\R");
-        for (String line : lines) {
-            String trimmed = line.trim();
-            if (!trimmed.isEmpty()) {
-                return trimmed.startsWith("LODOP.");
-            }
+    private String normalizeTemplateType(String templateType) {
+        if (templateType == null || templateType.isBlank()) {
+            return "HTML";
         }
-        return false;
+        String normalized = templateType.trim().toUpperCase();
+        if (!Set.of("HTML", "COORD").contains(normalized)) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "模板类型仅支持 HTML 或 COORD");
+        }
+        return normalized;
     }
 
     private Boolean normalizeDefaultFlag(String isDefault) {
