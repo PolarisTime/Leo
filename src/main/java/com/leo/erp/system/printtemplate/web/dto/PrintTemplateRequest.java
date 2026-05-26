@@ -9,6 +9,8 @@ public record PrintTemplateRequest(
         @NotBlank @Size(max = 128) String templateName,
         @NotBlank @Size(max = 200000) String templateHtml,
         @Pattern(regexp = "[01]", message = "默认模板标记不合法")
-        String isDefault
+        String isDefault,
+        @Pattern(regexp = "HTML|COORD", message = "模板类型仅支持 HTML 或 COORD")
+        String templateType
 ) {
 }

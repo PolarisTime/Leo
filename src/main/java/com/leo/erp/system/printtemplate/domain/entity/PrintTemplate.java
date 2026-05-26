@@ -26,6 +26,9 @@ public class PrintTemplate extends AbstractAuditableEntity {
     @Column(name = "template_html", nullable = false, columnDefinition = "TEXT")
     private String templateHtml;
 
+    @Column(name = "template_type", nullable = false, length = 16)
+    private String templateType = "HTML";
+
     @Column(name = "is_default", nullable = false)
     private Boolean isDefault = Boolean.FALSE;
 }

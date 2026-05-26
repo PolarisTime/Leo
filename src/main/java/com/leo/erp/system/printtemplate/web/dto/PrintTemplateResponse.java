@@ -8,6 +8,7 @@ public record PrintTemplateResponse(
         String templateHtml,
         String isDefault,
         String billType,
+        String templateType,
         LocalDateTime createTime,
         LocalDateTime updateTime
 ) {
