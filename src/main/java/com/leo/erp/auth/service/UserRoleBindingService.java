@@ -103,8 +103,7 @@ public class UserRoleBindingService {
         return roles.stream()
                 .map(RoleSetting::getRoleName)
                 .distinct()
-                .reduce((left, right) -> left + "," + right)
-                .orElse("");
+                .collect(Collectors.joining(","));
     }
 
     @Transactional(readOnly = true)

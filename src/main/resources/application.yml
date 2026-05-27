@@ -285,7 +285,7 @@ leo:
       # JWT 启动主密钥；执行系统设置中的 JWT 轮转后，运行时优先使用数据库托管密钥
       secret: ${LEO_JWT_SECRET:}
       # Access Token 有效期，单位毫秒
-      access-expiration-ms: 1800000
+      access-expiration-ms: 600000
       # Refresh Token 有效期，单位毫秒
       refresh-expiration-ms: 604800000
     totp:

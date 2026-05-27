@@ -31,6 +31,15 @@ public class InboundItemMapper {
         this.warehouseSelectionSupport = warehouseSelectionSupport;
     }
 
+    /**
+     * 明细映射上下文，封装头部级信息以减少方法参数数量。
+     */
+    record ItemMappingContext(
+            WeightSettlementResult weightSettlement,
+            String headerWarehouseName,
+            String headerSettlementMode
+    ) {}
+
     ItemMappingResult applyItemFields(
             PurchaseInbound inbound,
             PurchaseInboundItemRequest source,
@@ -38,9 +47,7 @@ public class InboundItemMapper {
             int lineNo,
             Material material,
             Map<Long, PurchaseOrderItem> sourcePurchaseOrderItemMap,
-            WeightSettlementResult weightSettlement,
-            String headerWarehouseName,
-            String headerSettlementMode) {
+            ItemMappingContext ctx) {
 
         item.setPurchaseInbound(inbound);
         item.setLineNo(lineNo);
@@ -56,38 +63,38 @@ public class InboundItemMapper {
         String sourceOrderNo = resolveSourceOrderNo(source, sourcePurchaseOrderItemMap);
         String warehouseName = warehouseSelectionSupport.normalizeWarehouseName(
                 source.warehouseName() == null || source.warehouseName().isBlank()
-                        ? headerWarehouseName : source.warehouseName(),
+                        ? ctx.headerWarehouseName() : source.warehouseName(),
                 lineNo, true);
         item.setWarehouseName(warehouseName);
 
         String settlementMode = source.settlementMode() != null && !source.settlementMode().isBlank()
                 ? source.settlementMode()
-                : headerSettlementMode != null && !headerSettlementMode.isBlank()
-                        ? headerSettlementMode : "现结";
+                : ctx.headerSettlementMode() != null && !ctx.headerSettlementMode().isBlank()
+                        ? ctx.headerSettlementMode() : "现结";
         item.setSettlementMode(settlementMode);
 
         item.setBatchNo(tradeItemMaterialSupport.normalizeBatchNo(material, source.batchNo(), lineNo, true));
         item.setQuantity(source.quantity());
         item.setQuantityUnit(TradeItemCalculator.normalizeQuantityUnit(source.quantityUnit()));
         item.setPiecesPerBundle(source.piecesPerBundle());
-        item.setPieceWeightTon(weightSettlement.pieceWeightTon());
-        item.setWeightTon(weightSettlement.weightTon());
-        item.setWeighWeightTon(weightSettlement.weighWeightTon());
-        item.setWeightAdjustmentTon(weightSettlement.weightAdjustmentTon());
-        item.setWeightAdjustmentAmount(weightSettlement.weightAdjustmentAmount());
+        item.setPieceWeightTon(ctx.weightSettlement().pieceWeightTon());
+        item.setWeightTon(ctx.weightSettlement().weightTon());
+        item.setWeighWeightTon(ctx.weightSettlement().weighWeightTon());
+        item.setWeightAdjustmentTon(ctx.weightSettlement().weightAdjustmentTon());
+        item.setWeightAdjustmentAmount(ctx.weightSettlement().weightAdjustmentAmount());
         item.setUnitPrice(source.unitPrice());
-        item.setAmount(TradeItemCalculator.calculateAmount(weightSettlement.weightTon(), source.unitPrice()));
+        item.setAmount(TradeItemCalculator.calculateAmount(ctx.weightSettlement().weightTon(), source.unitPrice()));
 
         return new ItemMappingResult(
                 sourceOrderNo,
                 warehouseName,
-                weightSettlement.weightTon(),
+                ctx.weightSettlement().weightTon(),
                 item.getAmount(),
                 source.sourcePurchaseOrderItemId(),
-                weightSettlement.weightAdjustmentTon(),
-                weightSettlement.weighWeightTon(),
+                ctx.weightSettlement().weightAdjustmentTon(),
+                ctx.weightSettlement().weighWeightTon(),
                 source.quantity(),
-                weightSettlement.calculatedWeightTon()
+                ctx.weightSettlement().calculatedWeightTon()
         );
     }
 
