@@ -30,7 +30,11 @@ public class JacksonConfig {
     private final ZoneId zone;
 
     public JacksonConfig(@org.springframework.beans.factory.annotation.Value("${leo.timezone:Asia/Shanghai}") String timezone) {
-        this.zone = ZoneId.of(timezone);
+        try {
+            this.zone = ZoneId.of(timezone);
+        } catch (Exception e) {
+            throw new IllegalArgumentException("Invalid timezone configured: " + timezone, e);
+        }
     }
 
     @Bean
