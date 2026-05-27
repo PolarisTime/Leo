@@ -27,7 +27,11 @@ import java.time.format.DateTimeParseException;
 @Configuration
 public class JacksonConfig {
 
-    private static final ZoneId ZONE = ZoneId.of("Asia/Shanghai");
+    private final ZoneId zone;
+
+    public JacksonConfig(@org.springframework.beans.factory.annotation.Value("${leo.timezone:Asia/Shanghai}") String timezone) {
+        this.zone = ZoneId.of(timezone);
+    }
 
     @Bean
     public Jackson2ObjectMapperBuilderCustomizer jackson2ObjectMapperBuilderCustomizer() {
@@ -42,47 +46,47 @@ public class JacksonConfig {
     }
 
     /** Serialize LocalDate → epoch milliseconds at start of day (Asia/Shanghai). */
-    static class EpochMillisLocalDateSerializer extends JsonSerializer<LocalDate> {
+    class EpochMillisLocalDateSerializer extends JsonSerializer<LocalDate> {
         @Override
         public void serialize(LocalDate value, JsonGenerator gen,
                               SerializerProvider provider) throws IOException {
-            long epoch = value.atStartOfDay(ZONE).toInstant().toEpochMilli();
+            long epoch = value.atStartOfDay(zone).toInstant().toEpochMilli();
             gen.writeNumber(epoch);
         }
     }
 
     /** Serialize LocalDateTime → epoch milliseconds (Asia/Shanghai). */
-    static class EpochMillisLocalDateTimeSerializer extends JsonSerializer<LocalDateTime> {
+    class EpochMillisLocalDateTimeSerializer extends JsonSerializer<LocalDateTime> {
         @Override
         public void serialize(LocalDateTime value, JsonGenerator gen,
                               SerializerProvider provider) throws IOException {
-            long epoch = value.atZone(ZONE).toInstant().toEpochMilli();
+            long epoch = value.atZone(zone).toInstant().toEpochMilli();
             gen.writeNumber(epoch);
         }
     }
 
     /** Deserialize LocalDateTime from epoch millis (number) or "yyyy-MM-dd HH:mm:ss" (string). */
-    static class FlexibleLocalDateTimeDeserializer extends JsonDeserializer<LocalDateTime> {
+    class FlexibleLocalDateTimeDeserializer extends JsonDeserializer<LocalDateTime> {
         private static final DateTimeFormatter FMT = DateTimeFormatSupport.DATE_TIME_FORMATTER;
 
         @Override
         public LocalDateTime deserialize(JsonParser p, DeserializationContext ctxt) throws IOException {
             if (p.currentToken() == JsonToken.VALUE_NUMBER_INT) {
                 long epoch = p.getLongValue();
-                return Instant.ofEpochMilli(epoch).atZone(ZONE).toLocalDateTime();
+                return Instant.ofEpochMilli(epoch).atZone(zone).toLocalDateTime();
             }
             String text = p.getText().trim();
             try {
                 return LocalDateTime.parse(text, FMT);
             } catch (DateTimeParseException e) {
                 long epoch = Long.parseLong(text);
-                return Instant.ofEpochMilli(epoch).atZone(ZONE).toLocalDateTime();
+                return Instant.ofEpochMilli(epoch).atZone(zone).toLocalDateTime();
             }
         }
     }
 
     /** Deserialize LocalDate from epoch millis or "yyyy-MM-dd" or "yyyy-MM-dd HH:mm:ss". */
-    static class FlexibleLocalDateDeserializer extends JsonDeserializer<LocalDate> {
+    class FlexibleLocalDateDeserializer extends JsonDeserializer<LocalDate> {
         private static final DateTimeFormatter DATE_ONLY = DateTimeFormatter.ISO_LOCAL_DATE;
         private static final DateTimeFormatter DATE_TIME = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
@@ -90,7 +94,7 @@ public class JacksonConfig {
         public LocalDate deserialize(JsonParser p, DeserializationContext ctxt) throws IOException {
             if (p.currentToken() == JsonToken.VALUE_NUMBER_INT) {
                 long epoch = p.getLongValue();
-                return Instant.ofEpochMilli(epoch).atZone(ZONE).toLocalDate();
+                return Instant.ofEpochMilli(epoch).atZone(zone).toLocalDate();
             }
             String text = p.getText().trim();
             if (text.length() > 10) {
@@ -104,7 +108,7 @@ public class JacksonConfig {
                 return LocalDate.parse(text, DATE_ONLY);
             } catch (DateTimeParseException e) {
                 long epoch = Long.parseLong(text);
-                return Instant.ofEpochMilli(epoch).atZone(ZONE).toLocalDate();
+                return Instant.ofEpochMilli(epoch).atZone(zone).toLocalDate();
             }
         }
     }

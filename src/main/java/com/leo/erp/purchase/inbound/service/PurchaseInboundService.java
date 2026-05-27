@@ -744,8 +744,8 @@ public class PurchaseInboundService extends AbstractCrudService<
 
             var result = inboundItemMapper.applyItemFields(
                     inbound, source, item, lineNo, material,
-                    sourcePurchaseOrderItemMap, weightSettlement,
-                    request.warehouseName(), request.settlementMode());
+                    sourcePurchaseOrderItemMap,
+                    new InboundItemMapper.ItemMappingContext(weightSettlement, request.warehouseName(), request.settlementMode()));
 
             if (result.sourceOrderNo() != null) sourcePurchaseOrderNos.add(result.sourceOrderNo());
             if (firstLineWarehouseName == null) firstLineWarehouseName = result.firstLineWarehouseName();

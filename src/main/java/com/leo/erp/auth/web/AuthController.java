@@ -86,6 +86,7 @@ public class AuthController {
     }
 
     @PostMapping("/logout")
+    @RateLimit(rate = 1, capacity = 10)
     public ApiResponse<Void> logout(@Valid @RequestBody(required = false) LogoutRequest request,
                                     HttpServletRequest httpRequest,
                                     HttpServletResponse httpResponse) {

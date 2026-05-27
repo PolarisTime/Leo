@@ -11,6 +11,8 @@ import org.springframework.http.ContentDisposition;
 import org.springframework.http.MediaType;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.core.io.Resource;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -34,6 +36,7 @@ import java.util.stream.Collectors;
 @Service
 public class AttachmentService {
 
+    private static final Logger log = LoggerFactory.getLogger(AttachmentService.class);
     private static final String SOURCE_PAGE_UPLOAD = "PAGE_UPLOAD";
     private static final String SOURCE_CLIPBOARD = "CLIPBOARD_PASTE";
 
@@ -377,8 +380,9 @@ public class AttachmentService {
         }
         try {
             storageResolver.delete(storagePath);
-        } catch (Exception ignored) {
+        } catch (Exception ex) {
             // Best-effort cleanup only. The original persistence error should be preserved.
+            log.warn("Failed to cleanup storage file: {}", storagePath, ex);
         }
     }
 

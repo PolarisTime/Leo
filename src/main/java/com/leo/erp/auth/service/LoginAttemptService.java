@@ -83,7 +83,7 @@ public class LoginAttemptService {
     }
 
     private String normalize(String loginName) {
-        return String.valueOf(loginName == null ? "" : loginName.trim()).toLowerCase(Locale.ROOT);
+        return (loginName == null ? "" : loginName.trim()).toLowerCase(Locale.ROOT);
     }
 
     private String formatWaitTime(long remainingSeconds) {
