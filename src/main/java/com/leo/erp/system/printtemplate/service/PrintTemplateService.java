@@ -21,8 +21,6 @@ import java.util.regex.Pattern;
 @Service
 public class PrintTemplateService extends AbstractCrudService<PrintTemplate, PrintTemplateRequest, PrintTemplateResponse> {
 
-    private static final Boolean DEFAULT_FLAG = true;
-    private static final Boolean NORMAL_FLAG = false;
     private static final Set<String> ALLOWED_BILL_TYPES = Set.of(
             "purchase-order", "purchase-inbound", "sales-order", "sales-outbound",
             "freight-bill", "purchase-contract", "sales-contract",
@@ -57,17 +55,10 @@ public class PrintTemplateService extends AbstractCrudService<PrintTemplate, Pri
 
     @Transactional(readOnly = true)
     public List<PrintTemplateResponse> listByBillType(String billType) {
-        return repository.findAllByBillTypeAndDeletedFlagFalseOrderByIsDefaultDescUpdatedAtDescIdDesc(normalizeBillType(billType))
+        return repository.findAllByBillTypeAndDeletedFlagFalseOrderByUpdatedAtDescIdDesc(normalizeBillType(billType))
                 .stream()
                 .map(printTemplateMapper::toResponse)
                 .toList();
-    }
-
-    @Transactional(readOnly = true)
-    public PrintTemplateResponse getDefaultByBillType(String billType) {
-        return repository.findFirstByBillTypeAndIsDefaultAndDeletedFlagFalse(normalizeBillType(billType), DEFAULT_FLAG)
-                .map(printTemplateMapper::toResponse)
-                .orElse(null);
     }
 
     @Override
@@ -116,21 +107,6 @@ public class PrintTemplateService extends AbstractCrudService<PrintTemplate, Pri
         entity.setTemplateName(normalizeTemplateName(request.templateName()));
         entity.setTemplateHtml(normalizeTemplateHtml(request.templateHtml(), request.templateType()));
         entity.setTemplateType(normalizeTemplateType(request.templateType()));
-        entity.setIsDefault(normalizeDefaultFlag(request.isDefault()));
-    }
-
-    private void syncDefaultTemplate(String billType, Long currentId, Boolean isDefault) {
-        if (!DEFAULT_FLAG.equals(isDefault)) {
-            return;
-        }
-
-        List<PrintTemplate> templates = repository.findAllByBillTypeAndDeletedFlagFalseOrderByIsDefaultDescUpdatedAtDescIdDesc(billType);
-        for (PrintTemplate template : templates) {
-            if (!template.getId().equals(currentId) && DEFAULT_FLAG.equals(template.getIsDefault())) {
-                template.setIsDefault(NORMAL_FLAG);
-                repository.save(template);
-            }
-        }
     }
 
     private String normalizeBillType(String billType) {
@@ -181,23 +157,8 @@ public class PrintTemplateService extends AbstractCrudService<PrintTemplate, Pri
         return normalized;
     }
 
-    private Boolean normalizeDefaultFlag(String isDefault) {
-        if (isDefault == null || isDefault.isBlank()) {
-            return NORMAL_FLAG;
-        }
-        String normalized = isDefault.trim();
-        if ("1".equals(normalized)) {
-            return DEFAULT_FLAG;
-        }
-        if ("0".equals(normalized)) {
-            return NORMAL_FLAG;
-        }
-        throw new BusinessException(ErrorCode.VALIDATION_ERROR, "默认模板标记不合法");
-    }
-
     @Override
     protected PrintTemplate saveEntity(PrintTemplate entity) {
-        syncDefaultTemplate(entity.getBillType(), entity.getId(), entity.getIsDefault());
         return repository.save(entity);
     }
 

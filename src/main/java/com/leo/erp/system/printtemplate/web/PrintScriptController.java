@@ -49,18 +49,17 @@ public class PrintScriptController {
         this.objectMapper = objectMapper;
     }
 
-    /** 传单据 ID，后端从 DB 加载数据生成脚本/HTML（防篡改）。
-     *  返回 { type: "HTML"|"COORD", html/script: "..." } */
+    /** 传单据 ID，后端返回原始模版 + 数据，由前端渲染。 */
     @PostMapping("/record")
     @RequiresPermission(authenticatedOnly = true)
-    public ApiResponse<Map<String, String>> fromRecord(
+    public ApiResponse<Map<String, Object>> fromRecord(
             @AuthenticationPrincipal SecurityPrincipal principal,
             @RequestBody @NotNull Map<String, Object> payload) {
         String moduleKey = String.valueOf(payload.getOrDefault("moduleKey", ""));
         modulePermissionGuard.requirePermission(principal, moduleKey, "read");
         String templateId = String.valueOf(payload.get("templateId"));
         Long recordId = Long.valueOf(String.valueOf(payload.get("recordId")));
-        Map<String, String> result = printScriptService.generateFromRecord(templateId, moduleKey, recordId);
+        Map<String, Object> result = printScriptService.generateFromRecord(templateId, moduleKey, recordId);
         return ApiResponse.success(result);
     }
 

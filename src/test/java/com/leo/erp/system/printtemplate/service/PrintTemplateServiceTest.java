@@ -23,7 +23,7 @@ class PrintTemplateServiceTest {
                 new ModuleCatalog()
         );
 
-        assertThatThrownBy(() -> service.create(new PrintTemplateRequest("permission-management", "模板A", "<div/>", "1")))
+        assertThatThrownBy(() -> service.create(new PrintTemplateRequest("permission-management", "模板A", "<div/>", null)))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("适用页面不合法");
     }
@@ -41,7 +41,7 @@ class PrintTemplateServiceTest {
                 "purchase-order",
                 "模板A",
                 "<img src=x onerror=alert(1)>",
-                "1"
+                null
         )))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("模板内容包含不允许的脚本或危险标签");
@@ -60,7 +60,7 @@ class PrintTemplateServiceTest {
                 "purchase-order",
                 "模板A",
                 "LODOP.PRINT_INIT('test'); window.alert('xss');",
-                "1"
+                null
         )))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("模板内容包含不允许的脚本或危险标签");
@@ -72,7 +72,7 @@ class PrintTemplateServiceTest {
                 new Class[]{PrintTemplateRepository.class},
                 (proxy, method, args) -> switch (method.getName()) {
                     case "existsByBillTypeAndTemplateNameAndDeletedFlagFalse" -> false;
-                    case "findAllByBillTypeAndDeletedFlagFalseOrderByIsDefaultDescUpdatedAtDescIdDesc" -> java.util.List.of();
+                    case "findAllByBillTypeAndDeletedFlagFalseOrderByUpdatedAtDescIdDesc" -> java.util.List.of();
                     case "save" -> args[0];
                     case "toString" -> "PrintTemplateRepositoryStub";
                     case "hashCode" -> System.identityHashCode(proxy);
@@ -90,8 +90,8 @@ class PrintTemplateServiceTest {
                         entity.getId(),
                         entity.getTemplateName(),
                         entity.getTemplateHtml(),
-                        entity.getIsDefault() ? "1" : "0",
                         entity.getBillType(),
+                        entity.getTemplateType(),
                         entity.getCreatedAt(),
                         entity.getUpdatedAt()
                 );

@@ -6,7 +6,6 @@ public record PrintTemplateResponse(
         Long id,
         String templateName,
         String templateHtml,
-        String isDefault,
         String billType,
         String templateType,
         LocalDateTime createTime,
