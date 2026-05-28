@@ -13,5 +13,7 @@ public interface CarrierRepository extends JpaRepository<Carrier, Long>, JpaSpec
 
     List<Carrier> findByDeletedFlagFalseOrderByCarrierCodeAsc();
 
+    List<Carrier> findByDeletedFlagFalseAndStatusOrderByCarrierCodeAsc(String status);
+
     Optional<Carrier> findByIdAndDeletedFlagFalse(Long id);
 }

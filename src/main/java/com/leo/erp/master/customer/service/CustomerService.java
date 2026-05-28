@@ -7,6 +7,7 @@ import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.service.AbstractCrudService;
 import com.leo.erp.common.support.RedisJsonCacheSupport;
+import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.master.customer.domain.entity.Customer;
 import com.leo.erp.master.customer.repository.CustomerRepository;
@@ -66,7 +67,7 @@ public class CustomerService extends AbstractCrudService<Customer, CustomerReque
     }
 
     private List<CustomerOptionResponse> loadActiveOptions() {
-        return customerRepository.findByDeletedFlagFalseOrderByCustomerCodeAsc().stream()
+        return customerRepository.findByDeletedFlagFalseAndStatusOrderByCustomerCodeAsc(StatusConstants.NORMAL).stream()
                 .map(c -> new CustomerOptionResponse(
                         c.getId(),
                         optionLabel(c),
