@@ -86,6 +86,11 @@ public class PrintScriptService {
 
         List<Map<String, String>> items = loadItems(table, recordId);
 
+        // 销售订单：补充 projectAddress（来自 md_project）和 vehiclePlate（来自物流单）
+        if ("sales-order".equals(moduleKey)) {
+            enrichSalesOrder(data);
+        }
+
         Map<String, Object> result = new HashMap<>();
         result.put("templateHtml", template.getTemplateHtml());
         result.put("templateType", template.getTemplateType() != null ? template.getTemplateType() : "HTML");
@@ -127,6 +132,42 @@ public class PrintScriptService {
             // items table may not exist for this module
         }
         return result;
+    }
+
+    /** 销售订单打印数据补充：projectAddress + vehiclePlate */
+    private void enrichSalesOrder(Map<String, String> data) {
+        // 1. projectAddress — 从 md_project 表查
+        String projectId = data.get("project_id");
+        if (projectId != null && !projectId.isEmpty()) {
+            try {
+                String addr = jdbc.queryForObject(
+                        "SELECT project_address FROM md_project WHERE id = ? AND deleted_flag = FALSE",
+                        String.class, Long.parseLong(projectId));
+                if (addr != null && !addr.isEmpty()) {
+                    data.put("projectAddress", addr);
+                }
+            } catch (Exception ignored) { }
+        }
+
+        // 2. vehiclePlate — 通过出库单间接关联物流单
+        //    链路：so_sales_order.order_no → so_sales_outbound.sales_order_no
+        //          → lg_freight_bill_item.source_no (= outbound_no)
+        //          → lg_freight_bill.vehicle_plate
+        String orderNo = data.get("order_no");
+        if (orderNo != null && !orderNo.isEmpty()) {
+            try {
+                List<String> plates = jdbc.queryForList(
+                        "SELECT DISTINCT fb.vehicle_plate " +
+                        "FROM so_sales_outbound ob " +
+                        "JOIN lg_freight_bill_item fbi ON fbi.source_no = ob.outbound_no " +
+                        "JOIN lg_freight_bill fb ON fb.id = fbi.bill_id " +
+                        "WHERE ob.sales_order_no = ? AND fb.vehicle_plate IS NOT NULL",
+                        String.class, orderNo);
+                if (!plates.isEmpty()) {
+                    data.put("vehiclePlate", String.join(", ", plates));
+                }
+            } catch (Exception ignored) { }
+        }
     }
 
     // ─── HTML 模板 ─────────────────────────────────────────
