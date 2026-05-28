@@ -43,7 +43,8 @@ class MaterialServiceTest {
                 tradeItemMaterialSupport,
                 excelExportService,
                 excelImportService,
-                excelTemplateService
+                excelTemplateService,
+                null
         );
 
         String csv = "\uFEFF商品编码,品牌,材质,类别,规格,长度,单位,数量单位,件重(吨),每件支数,单价,批号管理,备注\r\n"
