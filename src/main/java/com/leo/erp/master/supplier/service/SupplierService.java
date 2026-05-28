@@ -7,6 +7,7 @@ import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.service.AbstractCrudService;
 import com.leo.erp.common.support.RedisJsonCacheSupport;
+import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.master.supplier.domain.entity.Supplier;
 import com.leo.erp.master.supplier.repository.SupplierRepository;
@@ -66,7 +67,7 @@ public class SupplierService extends AbstractCrudService<Supplier, SupplierReque
     }
 
     private List<SupplierOptionResponse> loadActiveOptions() {
-        return supplierRepository.findByDeletedFlagFalseOrderBySupplierCodeAsc().stream()
+        return supplierRepository.findByDeletedFlagFalseAndStatusOrderBySupplierCodeAsc(StatusConstants.NORMAL).stream()
                 .map(s -> new SupplierOptionResponse(s.getId(), s.getSupplierName(), s.getSupplierName()))
                 .toList();
     }

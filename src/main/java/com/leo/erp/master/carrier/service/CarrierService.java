@@ -7,6 +7,7 @@ import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.service.AbstractCrudService;
 import com.leo.erp.common.support.RedisJsonCacheSupport;
+import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.master.carrier.domain.entity.Carrier;
 import com.leo.erp.master.carrier.domain.entity.Vehicle;
@@ -65,7 +66,7 @@ public class CarrierService extends AbstractCrudService<Carrier, CarrierRequest,
 
     @org.springframework.transaction.annotation.Transactional(readOnly = true)
     public List<CarrierOptionResponse> listActiveOptions() {
-        return carrierRepository.findByDeletedFlagFalseOrderByCarrierCodeAsc().stream()
+        return carrierRepository.findByDeletedFlagFalseAndStatusOrderByCarrierCodeAsc(StatusConstants.NORMAL).stream()
                 .map(c -> new CarrierOptionResponse(c.getId(), c.getCarrierName(), c.getCarrierName(), resolveVehiclePlates(c)))
                 .toList();
     }

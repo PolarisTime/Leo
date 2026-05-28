@@ -13,6 +13,8 @@ public interface CustomerRepository extends JpaRepository<Customer, Long>, JpaSp
 
     List<Customer> findByDeletedFlagFalseOrderByCustomerCodeAsc();
 
+    List<Customer> findByDeletedFlagFalseAndStatusOrderByCustomerCodeAsc(String status);
+
     Optional<Customer> findByIdAndDeletedFlagFalse(Long id);
 
     long countByDeletedFlagFalse();
