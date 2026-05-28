@@ -8,9 +8,7 @@ import java.util.Optional;
 
 public interface PrintTemplateRepository extends JpaRepository<PrintTemplate, Long> {
 
-    List<PrintTemplate> findAllByBillTypeAndDeletedFlagFalseOrderByIsDefaultDescUpdatedAtDescIdDesc(String billType);
-
-    Optional<PrintTemplate> findFirstByBillTypeAndIsDefaultAndDeletedFlagFalse(String billType, Boolean isDefault);
+    List<PrintTemplate> findAllByBillTypeAndDeletedFlagFalseOrderByUpdatedAtDescIdDesc(String billType);
 
     Optional<PrintTemplate> findByIdAndDeletedFlagFalse(Long id);
 

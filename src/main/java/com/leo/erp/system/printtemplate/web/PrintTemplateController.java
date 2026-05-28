@@ -40,12 +40,6 @@ public class PrintTemplateController {
         return ApiResponse.success(printTemplateService.listByBillType(billType));
     }
 
-    @GetMapping("/default")
-    @RequiresPermission(resource = "print-template", action = "read")
-    public ApiResponse<PrintTemplateResponse> getDefault(@RequestParam @NotBlank @Size(max = 64) String billType) {
-        return ApiResponse.success(printTemplateService.getDefaultByBillType(billType));
-    }
-
     @PostMapping
     @RequiresPermission(resource = "print-template", action = "create")
     @OperationLoggable(moduleName = "打印模板", actionType = "新增", businessNoFields = {"billType", "templateName"})
