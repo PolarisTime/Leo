@@ -33,6 +33,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -60,12 +61,26 @@ public class MaterialService extends AbstractCrudService<Material, MaterialReque
             .setRecordSeparator("\r\n")
             .build();
 
+    private static final List<String> REFERENCING_ITEM_TABLES = List.of(
+            "po_purchase_order_item",
+            "po_purchase_inbound_item",
+            "so_sales_order_item",
+            "so_sales_outbound_item",
+            "lg_freight_bill_item",
+            "ct_purchase_contract_item",
+            "ct_sales_contract_item",
+            "st_customer_statement_item",
+            "st_supplier_statement_item",
+            "st_freight_statement_item"
+    );
+
     private final MaterialRepository materialRepository;
     private final MaterialMapper materialMapper;
     private final TradeItemMaterialSupport tradeItemMaterialSupport;
     private final ExcelExportService excelExportService;
     private final ExcelImportService excelImportService;
     private final ExcelTemplateService excelTemplateService;
+    private final JdbcTemplate jdbc;
 
     public MaterialService(MaterialRepository materialRepository,
                            SnowflakeIdGenerator snowflakeIdGenerator,
@@ -73,7 +88,8 @@ public class MaterialService extends AbstractCrudService<Material, MaterialReque
                            TradeItemMaterialSupport tradeItemMaterialSupport,
                            ExcelExportService excelExportService,
                            ExcelImportService excelImportService,
-                           ExcelTemplateService excelTemplateService) {
+                           ExcelTemplateService excelTemplateService,
+                           JdbcTemplate jdbc) {
         super(snowflakeIdGenerator);
         this.materialRepository = materialRepository;
         this.materialMapper = materialMapper;
@@ -81,6 +97,7 @@ public class MaterialService extends AbstractCrudService<Material, MaterialReque
         this.excelExportService = excelExportService;
         this.excelImportService = excelImportService;
         this.excelTemplateService = excelTemplateService;
+        this.jdbc = jdbc;
     }
 
     private static final String[] MATERIAL_SEARCH_FIELDS = {
@@ -133,6 +150,20 @@ public class MaterialService extends AbstractCrudService<Material, MaterialReque
     protected void validateUpdate(Material entity, MaterialRequest request) {
         if (!entity.getMaterialCode().equals(request.materialCode())) {
             ensureMaterialCodeUnique(request.materialCode());
+        }
+    }
+
+    @Override
+    protected void beforeDelete(Material entity) {
+        String materialCode = entity.getMaterialCode();
+        for (String table : REFERENCING_ITEM_TABLES) {
+            Integer count = jdbc.queryForObject(
+                    "SELECT COUNT(*) FROM " + table + " WHERE material_code = ?",
+                    Integer.class, materialCode);
+            if (count != null && count > 0) {
+                throw new BusinessException(ErrorCode.BUSINESS_ERROR,
+                        "该商品已被业务单据引用，不能删除（" + table + " 中有 " + count + " 条记录）");
+            }
         }
     }
 
