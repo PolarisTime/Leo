@@ -23,6 +23,7 @@ import com.leo.erp.purchase.inbound.repository.PurchaseInboundItemRepository;
 import com.leo.erp.purchase.inbound.repository.PurchaseInboundRepository;
 import com.leo.erp.purchase.order.domain.entity.PurchaseOrder;
 import com.leo.erp.purchase.order.domain.entity.PurchaseOrderItem;
+import com.leo.erp.purchase.order.web.dto.PieceWeightResponse;
 import com.leo.erp.purchase.order.repository.PurchaseOrderRepository;
 import com.leo.erp.purchase.order.service.PurchaseOrderItemPieceWeightService;
 import com.leo.erp.purchase.order.service.PurchaseOrderItemQueryService;
@@ -55,6 +56,7 @@ public class PurchaseInboundService extends AbstractCrudService<
      * E.g., if expected=100, actual can be 95-105.
      */
     private static final BigDecimal FULFILLMENT_TOLERANCE = new BigDecimal("0.05");
+    private static final BigDecimal WEIGHT_UNIT = new BigDecimal("0.001");
 
     private final PurchaseInboundRepository repository;
     private final PurchaseInboundMapper purchaseInboundMapper;
@@ -171,6 +173,43 @@ public class PurchaseInboundService extends AbstractCrudService<
     private Integer remainingQuantity(PurchaseInboundItem item, Map<Long, Integer> allocatedQuantityMap) {
         int allocatedQuantity = allocatedQuantityMap.getOrDefault(item.getId(), 0);
         return Math.max(0, item.getQuantity() - allocatedQuantity);
+    }
+
+    @Transactional(readOnly = true)
+    public List<PieceWeightResponse> getPieceWeights(Long itemId) {
+        List<PurchaseInboundItem> items = purchaseInboundItemRepository.findAllActiveByIdIn(List.of(itemId));
+        if (items.isEmpty()) {
+            throw new BusinessException(ErrorCode.NOT_FOUND, "采购入库明细不存在");
+        }
+        PurchaseInboundItem item = items.get(0);
+        int quantity = item.getQuantity() == null ? 0 : item.getQuantity();
+        if (quantity <= 0) {
+            return List.of();
+        }
+        BigDecimal totalWeightTon = TradeItemCalculator.scaleWeightTon(
+                item.getWeighWeightTon() != null ? item.getWeighWeightTon() : item.getWeightTon()
+        );
+        BigDecimal averageWeightTon = TradeItemCalculator.calculateAveragePieceWeightTon(quantity, totalWeightTon);
+        BigDecimal averageTotalWeightTon = averageWeightTon.multiply(BigDecimal.valueOf(quantity));
+        int residualUnits = totalWeightTon.subtract(averageTotalWeightTon)
+                .divide(WEIGHT_UNIT)
+                .intValue();
+        int residualCount = Math.min(Math.abs(residualUnits), quantity);
+        BigDecimal adjustment = residualUnits > 0 ? WEIGHT_UNIT : WEIGHT_UNIT.negate();
+
+        java.util.ArrayList<PieceWeightResponse> responses = new java.util.ArrayList<>(quantity);
+        for (int i = 0; i < quantity; i++) {
+            BigDecimal pieceWeightTon = averageWeightTon;
+            if (residualUnits != 0 && i >= quantity - residualCount) {
+                pieceWeightTon = pieceWeightTon.add(adjustment);
+            }
+            responses.add(new PieceWeightResponse(
+                    i + 1,
+                    TradeItemCalculator.scaleWeightTon(pieceWeightTon),
+                    item.getPurchaseInbound() == null ? "" : item.getPurchaseInbound().getInboundNo()
+            ));
+        }
+        return responses;
     }
 
     private List<Long> extractSourcePurchaseOrderItemIds(PurchaseInboundRequest request) {
