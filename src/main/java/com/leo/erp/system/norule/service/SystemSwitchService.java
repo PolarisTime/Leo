@@ -34,6 +34,7 @@ public class SystemSwitchService {
     public static final String SUPPLIER_STATEMENT_FULL_PAYMENT_FROM_PURCHASE_SWITCH = "SYS_SUPPLIER_STATEMENT_FULL_PAYMENT_FROM_PURCHASE";
     public static final String LOGIN_CAPTCHA_SWITCH = "SYS_LOGIN_CAPTCHA";
     public static final String USE_SNOWFLAKE_ID_AS_BUSINESS_NO_SWITCH = "SYS_USE_SNOWFLAKE_ID_AS_BUSINESS_NO";
+    public static final String UI_WATERMARK_ENABLED_SWITCH = "UI_WATERMARK_ENABLED";
     public static final String ATTACHMENT_WATERMARK_SWITCH = "SYS_ATTACHMENT_WATERMARK_ENABLED";
     public static final String OOBE_COMPLETED_SWITCH = "SYS_OOBE_COMPLETED";
     public static final String SWITCH_CACHE_KEY = "leo:system:switches";
@@ -61,6 +62,7 @@ public class SystemSwitchService {
             SUPPLIER_STATEMENT_FULL_PAYMENT_FROM_PURCHASE_SWITCH,
             LOGIN_CAPTCHA_SWITCH,
             USE_SNOWFLAKE_ID_AS_BUSINESS_NO_SWITCH,
+            UI_WATERMARK_ENABLED_SWITCH,
             OOBE_COMPLETED_SWITCH
     );
 
