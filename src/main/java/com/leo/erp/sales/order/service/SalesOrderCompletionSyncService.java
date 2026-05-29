@@ -105,6 +105,10 @@ public class SalesOrderCompletionSyncService {
 
     private boolean applyCompletedStatus(SalesOrder order, boolean completed) {
         String currentStatus = normalize(order.getStatus());
+        if (!StatusConstants.AUDITED.equals(currentStatus)
+                && !StatusConstants.SALES_COMPLETED.equals(currentStatus)) {
+            return false;
+        }
         if (completed) {
             if (StatusConstants.SALES_COMPLETED.equals(currentStatus)) {
                 return false;
