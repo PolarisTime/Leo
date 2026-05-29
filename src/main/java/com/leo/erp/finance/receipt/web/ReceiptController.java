@@ -5,6 +5,7 @@ import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.api.PageResponse;
 import com.leo.erp.common.web.BindPageQuery;
+import com.leo.erp.common.web.dto.StatusUpdateRequest;
 import com.leo.erp.finance.receipt.service.ReceiptService;
 import com.leo.erp.finance.receipt.web.dto.ReceiptRequest;
 import com.leo.erp.finance.receipt.web.dto.ReceiptResponse;
@@ -16,6 +17,7 @@ import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -83,6 +85,13 @@ public class ReceiptController {
     @RequiresPermission(resource = "receipt", action = "update")
     public ApiResponse<ReceiptResponse> update(@PathVariable Long id, @Valid @RequestBody ReceiptRequest request) {
         return ApiResponse.success("更新成功", receiptService.update(id, request));
+    }
+
+    @Operation(summary = "更新收款单状态")
+    @PatchMapping("/{id}/status")
+    @RequiresPermission(resource = "receipt", action = "audit")
+    public ApiResponse<ReceiptResponse> updateStatus(@PathVariable Long id, @Valid @RequestBody StatusUpdateRequest request) {
+        return ApiResponse.success("状态更新成功", receiptService.updateStatus(id, request.status()));
     }
 
     @Operation(summary = "删除收款单")

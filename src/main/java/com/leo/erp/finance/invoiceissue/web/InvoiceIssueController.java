@@ -5,6 +5,7 @@ import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.api.PageResponse;
 import com.leo.erp.common.web.BindPageQuery;
+import com.leo.erp.common.web.dto.StatusUpdateRequest;
 import com.leo.erp.finance.invoiceissue.service.InvoiceIssueService;
 import com.leo.erp.finance.invoiceissue.web.dto.InvoiceIssueRequest;
 import com.leo.erp.finance.invoiceissue.web.dto.InvoiceIssueResponse;
@@ -15,6 +16,7 @@ import jakarta.validation.Valid;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -82,6 +84,13 @@ public class InvoiceIssueController {
     @Operation(summary = "更新发票开具")
     public ApiResponse<InvoiceIssueResponse> update(@PathVariable Long id, @Valid @RequestBody InvoiceIssueRequest request) {
         return ApiResponse.success("更新成功", service.update(id, request));
+    }
+
+    @PatchMapping("/{id}/status")
+    @RequiresPermission(resource = "invoice-issue", action = "audit")
+    @Operation(summary = "更新发票开具状态")
+    public ApiResponse<InvoiceIssueResponse> updateStatus(@PathVariable Long id, @Valid @RequestBody StatusUpdateRequest request) {
+        return ApiResponse.success("状态更新成功", service.updateStatus(id, request.status()));
     }
 
     @DeleteMapping("/{id}")

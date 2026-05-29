@@ -168,6 +168,37 @@ public class ReceiptService extends AbstractCrudService<Receipt, ReceiptRequest,
     }
 
     @Override
+    protected java.util.Set<String> allowedStatusTransitions() {
+        return java.util.Set.of(
+                StatusConstants.DRAFT + "->" + StatusConstants.RECEIVED,
+                StatusConstants.RECEIVED + "->" + StatusConstants.DRAFT
+        );
+    }
+
+    @Override
+    protected void beforeStatusUpdate(Receipt entity, String currentStatus, String nextStatus) {
+        captureOriginalAllocationStatementIds(entity);
+        if (!RECEIPT_STATUS_SETTLED.equals(nextStatus)) {
+            return;
+        }
+        ReceiptRequest request = toStatusOnlyRequest(entity);
+        Map<Long, BigDecimal> requestAllocatedAmountMap = new HashMap<>();
+        for (int i = 0; i < entity.getItems().size(); i++) {
+            ReceiptAllocation item = entity.getItems().get(i);
+            CustomerStatement statement = requireAccessibleCustomerStatement(item.getSourceStatementId());
+            validateLinkedCustomerStatement(
+                    request,
+                    nextStatus,
+                    entity.getId(),
+                    statement,
+                    TradeItemCalculator.safeBigDecimal(item.getAllocatedAmount()),
+                    requestAllocatedAmountMap,
+                    i + 1
+            );
+        }
+    }
+
+    @Override
     protected ReceiptResponse toDetailResponse(Receipt entity) {
         ReceiptResponse response = receiptMapper.toResponse(entity);
         return new ReceiptResponse(
@@ -299,6 +330,30 @@ public class ReceiptService extends AbstractCrudService<Receipt, ReceiptRequest,
             return List.of();
         }
         return List.of(new ReceiptAllocationRequest(null, request.sourceStatementId(), request.amount()));
+    }
+
+    private ReceiptRequest toStatusOnlyRequest(Receipt entity) {
+        return new ReceiptRequest(
+                entity.getReceiptNo(),
+                entity.getCustomerCode(),
+                entity.getCustomerName(),
+                entity.getProjectId(),
+                entity.getProjectName(),
+                entity.getSourceStatementId(),
+                entity.getReceiptDate(),
+                entity.getPayType(),
+                entity.getAmount(),
+                entity.getStatus(),
+                entity.getOperatorName(),
+                entity.getRemark(),
+                entity.getItems().stream()
+                        .map(item -> new ReceiptAllocationRequest(
+                                item.getId(),
+                                item.getSourceStatementId(),
+                                item.getAllocatedAmount()
+                        ))
+                        .toList()
+        );
     }
 
     private CustomerStatement requireAccessibleCustomerStatement(Long statementId) {

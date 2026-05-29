@@ -167,6 +167,28 @@ public abstract class AbstractCrudService<E extends AbstractAuditableEntity, Req
     }
 
     @Transactional
+    public final Res updateStatus(Long id, String status) {
+        E entity = requireEntity(id);
+        String currentStatus = resolveStatus(entity).orElse("");
+        String nextStatus = normalizeRequiredStatus(status);
+        if (currentStatus.equals(nextStatus)) {
+            return toSavedResponse(entity);
+        }
+        validateStatusTransition(entity, currentStatus, nextStatus);
+        beforeStatusUpdate(entity, currentStatus, nextStatus);
+        writeStatus(entity, nextStatus);
+        Res response = toSavedResponse(saveEntity(entity));
+        logger().info(
+                "{} status updated: id={}, {} -> {}",
+                entity.getClass().getSimpleName(),
+                id,
+                currentStatus,
+                nextStatus
+        );
+        return response;
+    }
+
+    @Transactional
     public final void delete(Long id) {
         E entity = requireEntity(id);
         assertDeleteAllowedByStatus(entity);
@@ -247,6 +269,13 @@ public abstract class AbstractCrudService<E extends AbstractAuditableEntity, Req
 
     protected boolean allowProtectedStatusUpdate(E entity, Req request) {
         return false;
+    }
+
+    protected Set<String> allowedStatusTransitions() {
+        return Set.of();
+    }
+
+    protected void beforeStatusUpdate(E entity, String currentStatus, String nextStatus) {
     }
 
     protected final String nextBusinessNo(String moduleKey) {
@@ -382,6 +411,38 @@ public abstract class AbstractCrudService<E extends AbstractAuditableEntity, Req
             return Optional.empty();
         } catch (ReflectiveOperationException ex) {
             throw new IllegalStateException("读取单据状态失败", ex);
+        }
+    }
+
+    private String normalizeRequiredStatus(String status) {
+        if (status == null || status.isBlank()) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "状态不能为空");
+        }
+        return status.trim();
+    }
+
+    private void validateStatusTransition(E entity, String currentStatus, String nextStatus) {
+        Set<String> allowedTransitions = allowedStatusTransitions();
+        if (allowedTransitions.isEmpty()) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "当前模块不支持状态变更");
+        }
+        String transition = currentStatus + "->" + nextStatus;
+        if (!allowedTransitions.contains(transition)) {
+            throw new BusinessException(
+                    ErrorCode.BUSINESS_ERROR,
+                    "当前单据状态不能从「" + currentStatus + "」变更为「" + nextStatus + "」"
+            );
+        }
+    }
+
+    private void writeStatus(E entity, String status) {
+        try {
+            Method setter = entity.getClass().getMethod("setStatus", String.class);
+            setter.invoke(entity, status);
+        } catch (NoSuchMethodException ex) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "当前模块不支持状态变更");
+        } catch (ReflectiveOperationException ex) {
+            throw new IllegalStateException("写入单据状态失败", ex);
         }
     }
 

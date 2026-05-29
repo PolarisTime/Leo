@@ -188,6 +188,11 @@ public class SalesOutboundService extends AbstractCrudService<SalesOutbound, Sal
     }
 
     @Override
+    protected java.util.Set<String> allowedStatusTransitions() {
+        return StatusConstants.DRAFT_AUDIT_TRANSITIONS;
+    }
+
+    @Override
     protected void apply(SalesOutbound entity, SalesOutboundRequest request) {
         String nextStatus = BusinessStatusValidator.normalizeWithDefault(
                 request.status(),

@@ -200,6 +200,11 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
     }
 
     @Override
+    protected java.util.Set<String> allowedStatusTransitions() {
+        return StatusConstants.DRAFT_AUDIT_TRANSITIONS;
+    }
+
+    @Override
     protected boolean allowProtectedStatusUpdate(SalesOrder entity, SalesOrderRequest request) {
         if (!StatusConstants.AUDITED.equals(normalize(entity.getStatus()))
                 || !StatusConstants.DRAFT.equals(normalize(request.status()))) {

@@ -164,6 +164,11 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
     }
 
     @Override
+    protected java.util.Set<String> allowedStatusTransitions() {
+        return StatusConstants.FREIGHT_BILL_AUDIT_TRANSITIONS;
+    }
+
+    @Override
     protected void apply(FreightBill entity, FreightBillRequest request) {
         String nextStatus = BusinessStatusValidator.normalizeWithDefault(
                 request.status(),

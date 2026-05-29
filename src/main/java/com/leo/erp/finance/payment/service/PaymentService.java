@@ -171,6 +171,51 @@ public class PaymentService extends AbstractCrudService<Payment, PaymentRequest,
     }
 
     @Override
+    protected java.util.Set<String> allowedStatusTransitions() {
+        return java.util.Set.of(
+                StatusConstants.DRAFT + "->" + StatusConstants.PAID,
+                StatusConstants.PAID + "->" + StatusConstants.DRAFT
+        );
+    }
+
+    @Override
+    protected void beforeStatusUpdate(Payment entity, String currentStatus, String nextStatus) {
+        captureOriginalAllocationState(entity);
+        if (!PAYMENT_STATUS_SETTLED.equals(nextStatus)) {
+            return;
+        }
+        PaymentRequest request = toStatusOnlyRequest(entity);
+        Map<Long, BigDecimal> requestAllocatedAmountMap = new HashMap<>();
+        for (int i = 0; i < entity.getItems().size(); i++) {
+            PaymentAllocation item = entity.getItems().get(i);
+            BigDecimal allocatedAmount = TradeItemCalculator.safeBigDecimal(item.getAllocatedAmount());
+            if (SUPPLIER_PAYMENT_TYPE.equals(entity.getBusinessType())) {
+                SupplierStatement statement = requireAccessibleSupplierStatement(item.getSourceStatementId());
+                validateLinkedSupplierStatement(
+                        request,
+                        nextStatus,
+                        entity.getId(),
+                        statement,
+                        allocatedAmount,
+                        requestAllocatedAmountMap,
+                        i + 1
+                );
+            } else {
+                FreightStatement statement = requireAccessibleFreightStatement(item.getSourceStatementId());
+                validateLinkedFreightStatement(
+                        request,
+                        nextStatus,
+                        entity.getId(),
+                        statement,
+                        allocatedAmount,
+                        requestAllocatedAmountMap,
+                        i + 1
+                );
+            }
+        }
+    }
+
+    @Override
     protected PaymentResponse toDetailResponse(Payment entity) {
         PaymentResponse response = paymentMapper.toResponse(entity);
         return new PaymentResponse(
@@ -314,6 +359,28 @@ public class PaymentService extends AbstractCrudService<Payment, PaymentRequest,
             return List.of();
         }
         return List.of(new PaymentAllocationRequest(null, request.sourceStatementId(), request.amount()));
+    }
+
+    private PaymentRequest toStatusOnlyRequest(Payment entity) {
+        return new PaymentRequest(
+                entity.getPaymentNo(),
+                entity.getBusinessType(),
+                entity.getCounterpartyName(),
+                entity.getSourceStatementId(),
+                entity.getPaymentDate(),
+                entity.getPayType(),
+                entity.getAmount(),
+                entity.getStatus(),
+                entity.getOperatorName(),
+                entity.getRemark(),
+                entity.getItems().stream()
+                        .map(item -> new PaymentAllocationRequest(
+                                item.getId(),
+                                item.getSourceStatementId(),
+                                item.getAllocatedAmount()
+                        ))
+                        .toList()
+        );
     }
 
     private SupplierStatement requireAccessibleSupplierStatement(Long statementId) {

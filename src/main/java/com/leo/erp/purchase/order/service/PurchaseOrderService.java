@@ -360,6 +360,11 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
         return true;
     }
 
+    @Override
+    protected java.util.Set<String> allowedStatusTransitions() {
+        return StatusConstants.DRAFT_AUDIT_TRANSITIONS;
+    }
+
     private String requireMasterSupplierName(String supplierName) {
         String normalizedName = supplierName == null ? "" : supplierName.trim();
         return supplierRepository.findFirstBySupplierNameAndDeletedFlagFalseOrderBySupplierCodeAsc(normalizedName)
