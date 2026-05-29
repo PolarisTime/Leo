@@ -325,6 +325,11 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
     }
 
     @Override
+    protected SalesOrder saveStatusEntity(SalesOrder entity) {
+        return repository.save(entity);
+    }
+
+    @Override
     protected SalesOrderResponse toResponse(SalesOrder entity) {
         return salesOrderMapper.toResponse(entity);
     }

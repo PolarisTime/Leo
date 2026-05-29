@@ -137,12 +137,12 @@ public abstract class AbstractCrudService<E extends AbstractAuditableEntity, Req
     }
 
     @Transactional(readOnly = true)
-    public final Res detail(Long id) {
+    public Res detail(Long id) {
         return toDetailResponse(requireDetailEntity(id));
     }
 
     @Transactional
-    public final Res create(Req request) {
+    public Res create(Req request) {
         E entity = newEntity();
         long id = resolveCreateEntityId();
         assignId(entity, id);
@@ -155,7 +155,7 @@ public abstract class AbstractCrudService<E extends AbstractAuditableEntity, Req
     }
 
     @Transactional
-    public final Res update(Long id, Req request) {
+    public Res update(Long id, Req request) {
         E entity = requireEntity(id);
         request = normalizeUpdateRequest(entity, request);
         assertEditAllowedByStatus(entity, request);
@@ -167,7 +167,7 @@ public abstract class AbstractCrudService<E extends AbstractAuditableEntity, Req
     }
 
     @Transactional
-    public final Res updateStatus(Long id, String status) {
+    public Res updateStatus(Long id, String status) {
         E entity = requireEntity(id);
         String currentStatus = resolveStatus(entity).orElse("");
         String nextStatus = normalizeRequiredStatus(status);
@@ -177,7 +177,7 @@ public abstract class AbstractCrudService<E extends AbstractAuditableEntity, Req
         validateStatusTransition(entity, currentStatus, nextStatus);
         beforeStatusUpdate(entity, currentStatus, nextStatus);
         writeStatus(entity, nextStatus);
-        Res response = toSavedResponse(saveEntity(entity));
+        Res response = toSavedResponse(saveStatusEntity(entity));
         logger().info(
                 "{} status updated: id={}, {} -> {}",
                 entity.getClass().getSimpleName(),
@@ -189,7 +189,7 @@ public abstract class AbstractCrudService<E extends AbstractAuditableEntity, Req
     }
 
     @Transactional
-    public final void delete(Long id) {
+    public void delete(Long id) {
         E entity = requireEntity(id);
         assertDeleteAllowedByStatus(entity);
         beforeDelete(entity);
@@ -265,6 +265,10 @@ public abstract class AbstractCrudService<E extends AbstractAuditableEntity, Req
     }
 
     protected void beforeDelete(E entity) {
+    }
+
+    protected E saveStatusEntity(E entity) {
+        return saveEntity(entity);
     }
 
     protected boolean allowProtectedStatusUpdate(E entity, Req request) {
