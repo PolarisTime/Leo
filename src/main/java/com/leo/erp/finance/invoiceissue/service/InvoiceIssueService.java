@@ -188,6 +188,50 @@ public class InvoiceIssueService extends AbstractCrudService<InvoiceIssue, Invoi
     }
 
     @Override
+    protected java.util.Set<String> allowedStatusTransitions() {
+        return java.util.Set.of(
+                StatusConstants.DRAFT + "->" + StatusConstants.ISSUED,
+                StatusConstants.ISSUED + "->" + StatusConstants.DRAFT
+        );
+    }
+
+    @Override
+    protected void beforeStatusUpdate(InvoiceIssue entity, String currentStatus, String nextStatus) {
+        if (!StatusConstants.ISSUED.equals(nextStatus)) {
+            return;
+        }
+        List<InvoiceIssueItemRequest> items = entity.getItems().stream()
+                .map(item -> new InvoiceIssueItemRequest(
+                        item.getId(),
+                        item.getSourceNo(),
+                        item.getSourceSalesOrderItemId(),
+                        item.getMaterialCode(),
+                        item.getBrand(),
+                        item.getCategory(),
+                        item.getMaterial(),
+                        item.getSpec(),
+                        item.getLength(),
+                        item.getUnit(),
+                        item.getWarehouseName(),
+                        item.getBatchNo(),
+                        item.getQuantity(),
+                        item.getQuantityUnit(),
+                        item.getPieceWeightTon(),
+                        item.getPiecesPerBundle(),
+                        item.getWeightTon(),
+                        item.getUnitPrice(),
+                        item.getAmount()
+                ))
+                .toList();
+        List<Long> sourceItemIds = extractSourceItemIds(items);
+        validateSourceSalesOrderAllocations(
+                items,
+                loadSourceSalesOrderItemMap(sourceItemIds),
+                loadAllocatedProgressMap(sourceItemIds, entity.getId())
+        );
+    }
+
+    @Override
     protected void apply(InvoiceIssue entity, InvoiceIssueRequest request) {
         String nextStatus = BusinessStatusValidator.normalizeWithDefault(
                 request.status(),
@@ -211,11 +255,7 @@ public class InvoiceIssueService extends AbstractCrudService<InvoiceIssue, Invoi
         entity.setOperatorName(request.operatorName());
         entity.setRemark(request.remark());
 
-        List<Long> sourceItemIds = request.items().stream()
-                .map(InvoiceIssueItemRequest::sourceSalesOrderItemId)
-                .filter(id -> id != null)
-                .distinct()
-                .toList();
+        List<Long> sourceItemIds = extractSourceItemIds(request.items());
         Map<Long, SalesOrderItem> sourceSalesOrderItemMap = loadSourceSalesOrderItemMap(sourceItemIds);
         Map<Long, AllocationProgress> allocatedProgressMap = loadAllocatedProgressMap(sourceItemIds, entity.getId());
         Map<Long, AllocationProgress> requestProgressMap = new HashMap<>();
@@ -280,6 +320,14 @@ public class InvoiceIssueService extends AbstractCrudService<InvoiceIssue, Invoi
         return mapper.toResponse(entity);
     }
 
+    private List<Long> extractSourceItemIds(List<InvoiceIssueItemRequest> items) {
+        return items.stream()
+                .map(InvoiceIssueItemRequest::sourceSalesOrderItemId)
+                .filter(id -> id != null)
+                .distinct()
+                .toList();
+    }
+
     private Map<Long, SalesOrderItem> loadSourceSalesOrderItemMap(List<Long> sourceItemIds) {
         if (sourceItemIds.isEmpty()) {
             return Map.of();
@@ -301,6 +349,25 @@ public class InvoiceIssueService extends AbstractCrudService<InvoiceIssue, Invoi
                         summary.getSourceSalesOrderItemId(),
                         new AllocationProgress(TradeItemCalculator.safeBigDecimal(summary.getTotalWeightTon()), TradeItemCalculator.safeBigDecimal(summary.getTotalAmount()))
                 ), HashMap::putAll);
+    }
+
+    private void validateSourceSalesOrderAllocations(
+            List<InvoiceIssueItemRequest> items,
+            Map<Long, SalesOrderItem> sourceSalesOrderItemMap,
+            Map<Long, AllocationProgress> allocatedProgressMap
+    ) {
+        Map<Long, AllocationProgress> requestProgressMap = new HashMap<>();
+        for (int i = 0; i < items.size(); i++) {
+            InvoiceIssueItemRequest source = items.get(i);
+            validateSourceSalesOrderAllocation(
+                    source,
+                    i + 1,
+                    resolveItem(source, sourceSalesOrderItemMap, i + 1),
+                    sourceSalesOrderItemMap,
+                    allocatedProgressMap,
+                    requestProgressMap
+            );
+        }
     }
 
     private void validateSourceSalesOrderAllocation(InvoiceIssueItemRequest source,

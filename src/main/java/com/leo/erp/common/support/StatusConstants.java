@@ -59,4 +59,13 @@ public final class StatusConstants {
     public static final Set<String> ALLOWED_RECEIPT_STATUS = Set.of(DRAFT, RECEIVED);
     public static final Set<String> ALLOWED_INVOICE_ISSUE_STATUS = Set.of(DRAFT, ISSUED);
     public static final Set<String> ALLOWED_INVOICE_RECEIPT_STATUS = Set.of(DRAFT, INVOICE_RECEIVED);
+
+    public static final Set<String> DRAFT_AUDIT_TRANSITIONS = Set.of(
+            DRAFT + "->" + AUDITED,
+            AUDITED + "->" + DRAFT
+    );
+    public static final Set<String> FREIGHT_BILL_AUDIT_TRANSITIONS = Set.of(
+            UNAUDITED + "->" + AUDITED,
+            AUDITED + "->" + UNAUDITED
+    );
 }

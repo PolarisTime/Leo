@@ -5,6 +5,7 @@ import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.api.PageResponse;
 import com.leo.erp.common.web.BindPageQuery;
+import com.leo.erp.common.web.dto.StatusUpdateRequest;
 import com.leo.erp.security.permission.RequiresPermission;
 import com.leo.erp.sales.outbound.service.SalesOutboundService;
 import com.leo.erp.sales.outbound.web.dto.SalesOutboundRequest;
@@ -16,6 +17,7 @@ import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -84,6 +86,13 @@ public class SalesOutboundController {
     @Operation(summary = "更新销售出库")
     public ApiResponse<SalesOutboundResponse> update(@PathVariable Long id, @Valid @RequestBody SalesOutboundRequest request) {
         return ApiResponse.success("更新成功", service.update(id, request));
+    }
+
+    @PatchMapping("/{id}/status")
+    @RequiresPermission(resource = "sales-outbound", action = "audit")
+    @Operation(summary = "更新销售出库状态")
+    public ApiResponse<SalesOutboundResponse> updateStatus(@PathVariable Long id, @Valid @RequestBody StatusUpdateRequest request) {
+        return ApiResponse.success("状态更新成功", service.updateStatus(id, request.status()));
     }
 
     @DeleteMapping("/{id}")

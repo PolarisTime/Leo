@@ -131,6 +131,11 @@ public class FreightStatementService extends AbstractCrudService<FreightStatemen
         return freightStatementWebMapper.toResponse(update(id, freightStatementWebMapper.toCommand(request)));
     }
 
+    @Transactional
+    public FreightStatementResponse responseUpdateStatus(Long id, String status) {
+        return freightStatementWebMapper.toResponse(updateStatus(id, status));
+    }
+
     @Transactional(readOnly = true)
     public Page<FreightStatementCandidateResponse> candidatePage(PageQuery query, String keyword) {
         Set<String> occupiedBillNos = new LinkedHashSet<>();
@@ -237,6 +242,14 @@ public class FreightStatementService extends AbstractCrudService<FreightStatemen
     @Override
     protected boolean allowAdminViewDeletedRecords() {
         return true;
+    }
+
+    @Override
+    protected java.util.Set<String> allowedStatusTransitions() {
+        return java.util.Set.of(
+                StatusConstants.PENDING_AUDIT + "->" + StatusConstants.AUDITED,
+                StatusConstants.AUDITED + "->" + StatusConstants.PENDING_AUDIT
+        );
     }
 
     @Override

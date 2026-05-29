@@ -673,6 +673,11 @@ public class PurchaseInboundService extends AbstractCrudService<
     }
 
     @Override
+    protected java.util.Set<String> allowedStatusTransitions() {
+        return StatusConstants.DRAFT_AUDIT_TRANSITIONS;
+    }
+
+    @Override
     protected void apply(PurchaseInbound inbound, PurchaseInboundRequest request) {
         String nextStatus = BusinessStatusValidator.normalizeWithDefault(
                 request.status(),

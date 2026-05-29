@@ -186,6 +186,50 @@ public class InvoiceReceiptService extends AbstractCrudService<InvoiceReceipt, I
     }
 
     @Override
+    protected java.util.Set<String> allowedStatusTransitions() {
+        return java.util.Set.of(
+                StatusConstants.DRAFT + "->" + StatusConstants.INVOICE_RECEIVED,
+                StatusConstants.INVOICE_RECEIVED + "->" + StatusConstants.DRAFT
+        );
+    }
+
+    @Override
+    protected void beforeStatusUpdate(InvoiceReceipt entity, String currentStatus, String nextStatus) {
+        if (!StatusConstants.INVOICE_RECEIVED.equals(nextStatus)) {
+            return;
+        }
+        List<InvoiceReceiptItemRequest> items = entity.getItems().stream()
+                .map(item -> new InvoiceReceiptItemRequest(
+                        item.getId(),
+                        item.getSourceNo(),
+                        item.getSourcePurchaseOrderItemId(),
+                        item.getMaterialCode(),
+                        item.getBrand(),
+                        item.getCategory(),
+                        item.getMaterial(),
+                        item.getSpec(),
+                        item.getLength(),
+                        item.getUnit(),
+                        item.getWarehouseName(),
+                        item.getBatchNo(),
+                        item.getQuantity(),
+                        item.getQuantityUnit(),
+                        item.getPieceWeightTon(),
+                        item.getPiecesPerBundle(),
+                        item.getWeightTon(),
+                        item.getUnitPrice(),
+                        item.getAmount()
+                ))
+                .toList();
+        List<Long> sourceItemIds = extractSourceItemIds(items);
+        validateSourcePurchaseOrderAllocations(
+                items,
+                loadSourcePurchaseOrderItemMap(sourceItemIds),
+                loadAllocatedProgressMap(sourceItemIds, entity.getId())
+        );
+    }
+
+    @Override
     protected void apply(InvoiceReceipt entity, InvoiceReceiptRequest request) {
         String nextStatus = BusinessStatusValidator.normalizeWithDefault(
                 request.status(),
@@ -211,11 +255,7 @@ public class InvoiceReceiptService extends AbstractCrudService<InvoiceReceipt, I
         entity.setOperatorName(request.operatorName());
         entity.setRemark(request.remark());
 
-        List<Long> sourceItemIds = request.items().stream()
-                .map(InvoiceReceiptItemRequest::sourcePurchaseOrderItemId)
-                .filter(id -> id != null)
-                .distinct()
-                .toList();
+        List<Long> sourceItemIds = extractSourceItemIds(request.items());
         Map<Long, PurchaseOrderItem> sourcePurchaseOrderItemMap = loadSourcePurchaseOrderItemMap(sourceItemIds);
         Map<Long, AllocationProgress> allocatedProgressMap = loadAllocatedProgressMap(sourceItemIds, entity.getId());
         Map<Long, AllocationProgress> requestProgressMap = new java.util.HashMap<>();
@@ -280,6 +320,14 @@ public class InvoiceReceiptService extends AbstractCrudService<InvoiceReceipt, I
         return mapper.toResponse(entity);
     }
 
+    private List<Long> extractSourceItemIds(List<InvoiceReceiptItemRequest> items) {
+        return items.stream()
+                .map(InvoiceReceiptItemRequest::sourcePurchaseOrderItemId)
+                .filter(id -> id != null)
+                .distinct()
+                .toList();
+    }
+
     private Map<Long, PurchaseOrderItem> loadSourcePurchaseOrderItemMap(List<Long> sourceItemIds) {
         if (sourceItemIds.isEmpty()) {
             return Map.of();
@@ -297,6 +345,25 @@ public class InvoiceReceiptService extends AbstractCrudService<InvoiceReceipt, I
                         summary.getSourcePurchaseOrderItemId(),
                         new AllocationProgress(TradeItemCalculator.safeBigDecimal(summary.getTotalWeightTon()), TradeItemCalculator.safeBigDecimal(summary.getTotalAmount()))
                 ), java.util.HashMap::putAll);
+    }
+
+    private void validateSourcePurchaseOrderAllocations(
+            List<InvoiceReceiptItemRequest> items,
+            Map<Long, PurchaseOrderItem> sourcePurchaseOrderItemMap,
+            Map<Long, AllocationProgress> allocatedProgressMap
+    ) {
+        Map<Long, AllocationProgress> requestProgressMap = new java.util.HashMap<>();
+        for (int i = 0; i < items.size(); i++) {
+            InvoiceReceiptItemRequest source = items.get(i);
+            validateSourcePurchaseOrderAllocation(
+                    source,
+                    i + 1,
+                    resolveItem(source, sourcePurchaseOrderItemMap, i + 1),
+                    sourcePurchaseOrderItemMap,
+                    allocatedProgressMap,
+                    requestProgressMap
+            );
+        }
     }
 
     private void validateSourcePurchaseOrderAllocation(InvoiceReceiptItemRequest source,
