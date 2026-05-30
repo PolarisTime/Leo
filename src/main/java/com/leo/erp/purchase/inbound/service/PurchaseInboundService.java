@@ -110,14 +110,76 @@ public class PurchaseInboundService extends AbstractCrudService<
                 .and(Specs.betweenIfPresent(
                         "inboundDate", filter.startDate(), filter.endDate()
                 ));
-        return page(query, spec, repository);
+        Page<PurchaseInbound> page = pageEntities(query, spec, repository);
+        Map<Long, PurchaseInboundItemRepository.InboundWeightSummary> weightSummaryMap =
+                loadInboundWeightSummaryMap(page.getContent());
+        return page.map(inbound -> toListResponse(inbound, weightSummaryMap.get(inbound.getId())));
     }
 
     private static final String[] INBOUND_SEARCH_FIELDS = {"inboundNo", "purchaseOrderNo", "supplierName"};
 
+    private Map<Long, PurchaseInboundItemRepository.InboundWeightSummary> loadInboundWeightSummaryMap(
+            List<PurchaseInbound> inbounds
+    ) {
+        List<Long> inboundIds = inbounds.stream()
+                .map(PurchaseInbound::getId)
+                .distinct()
+                .toList();
+        return loadInboundWeightSummaryMapByIds(inboundIds);
+    }
+
+    private Map<Long, PurchaseInboundItemRepository.InboundWeightSummary> loadInboundWeightSummaryMapByIds(
+            List<Long> inboundIds
+    ) {
+        if (inboundIds.isEmpty()) {
+            return Map.of();
+        }
+        return purchaseInboundItemRepository.summarizeWeightByInboundIds(inboundIds).stream()
+                .collect(Collectors.toMap(
+                        PurchaseInboundItemRepository.InboundWeightSummary::getInboundId,
+                        summary -> summary
+                ));
+    }
+
+    private PurchaseInboundResponse toListResponse(
+            PurchaseInbound inbound,
+            PurchaseInboundItemRepository.InboundWeightSummary weightSummary
+    ) {
+        return withInboundWeightSummary(purchaseInboundMapper.toResponse(inbound), weightSummary);
+    }
+
+    private PurchaseInboundResponse withInboundWeightSummary(
+            PurchaseInboundResponse response,
+            PurchaseInboundItemRepository.InboundWeightSummary weightSummary
+    ) {
+        BigDecimal totalWeighWeightTon = weightSummary == null
+                ? response.totalWeight()
+                : weightSummary.getTotalWeighWeightTon();
+        BigDecimal totalWeightAdjustmentTon = weightSummary == null
+                ? BigDecimal.ZERO
+                : weightSummary.getTotalWeightAdjustmentTon();
+        return new PurchaseInboundResponse(
+                response.id(), response.inboundNo(), response.purchaseOrderNo(),
+                response.supplierName(), response.warehouseName(), response.inboundDate(),
+                response.settlementMode(), response.totalWeight(), response.totalAmount(),
+                response.status(), response.remark(),
+                TradeItemCalculator.scaleWeightTon(totalWeighWeightTon),
+                TradeItemCalculator.scaleWeightTon(totalWeightAdjustmentTon),
+                response.items()
+        );
+    }
+
     @Transactional(readOnly = true)
     public java.util.List<PurchaseInboundResponse> search(String keyword, int maxSize) {
-        return search(keyword, INBOUND_SEARCH_FIELDS, maxSize, null, repository);
+        java.util.List<PurchaseInboundResponse> responses = search(keyword, INBOUND_SEARCH_FIELDS, maxSize, null, repository);
+        Map<Long, PurchaseInboundItemRepository.InboundWeightSummary> weightSummaryMap =
+                loadInboundWeightSummaryMapByIds(responses.stream()
+                        .map(PurchaseInboundResponse::id)
+                        .distinct()
+                        .toList());
+        return responses.stream()
+                .map(response -> withInboundWeightSummary(response, weightSummaryMap.get(response.id())))
+                .toList();
     }
 
     @Override

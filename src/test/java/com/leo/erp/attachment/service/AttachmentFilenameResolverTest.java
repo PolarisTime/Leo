@@ -31,6 +31,13 @@ class AttachmentFilenameResolverTest {
     }
 
     @Test
+    void shouldRenderChineseDatePlaceholders() {
+        String fileName = resolver.preview("{年月日}_{年月日时分秒}_{originName}", "合同.pdf");
+
+        assertThat(fileName).isEqualTo("20260424_20260424123045_合同.pdf");
+    }
+
+    @Test
     void shouldSanitizeUnsafeCharacters() {
         String fileName = resolver.preview("{originName}", "../报价单?.xlsx");
 

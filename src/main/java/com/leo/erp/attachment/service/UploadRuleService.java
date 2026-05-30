@@ -23,7 +23,7 @@ import java.util.Locale;
 public class UploadRuleService implements PageUploadRuleQueryService {
 
     public static final String LEGACY_PAGE_UPLOAD_RULE_CODE = "PAGE_UPLOAD";
-    public static final String DEFAULT_RENAME_PATTERN = "{yyyyMMddHHmmss}_{random8}";
+    public static final String DEFAULT_RENAME_PATTERN = "{年月日时分秒}_{random8}";
 
     private final UploadRuleRepository repository;
     private final SnowflakeIdGenerator idGenerator;
