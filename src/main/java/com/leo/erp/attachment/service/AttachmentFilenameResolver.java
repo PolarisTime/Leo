@@ -37,8 +37,10 @@ public class AttachmentFilenameResolver {
         FilenameParts parts = parseFilenameParts(originalFilename, contentType);
         Map<String, String> placeholders = new LinkedHashMap<>();
         placeholders.put("{yyyy}", now.format(YYYY));
+        placeholders.put("{年月日}", now.format(YYYYMMDD));
         placeholders.put("{yyyyMMdd}", now.format(YYYYMMDD));
         placeholders.put("{HHmmss}", now.format(HHMMSS));
+        placeholders.put("{年月日时分秒}", now.format(FULL));
         placeholders.put("{yyyyMMddHHmmss}", now.format(FULL));
         placeholders.put("{timestamp}", timestamp);
         placeholders.put("{random8}", random8);
