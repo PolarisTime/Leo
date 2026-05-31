@@ -5,6 +5,7 @@ import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.AbstractAuditableEntity;
 import com.leo.erp.security.permission.DataScopeContext;
+import com.leo.erp.security.permission.ResourcePermissionCatalog;
 import com.leo.erp.security.support.SecurityPrincipal;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
@@ -32,6 +33,7 @@ import java.util.Set;
 
 public abstract class AbstractCrudService<E extends AbstractAuditableEntity, Req, Res> {
     private static final String PREALLOCATED_ID_HEADER = "X-Preallocated-Id";
+    private static final String BUSINESS_MODULE_KEY_HEADER = "X-Business-Module-Key";
 
     private static final Set<String> PROTECTED_EDIT_STATUSES = Set.of(
             StatusConstants.AUDITED,
@@ -123,6 +125,12 @@ public abstract class AbstractCrudService<E extends AbstractAuditableEntity, Req
     }
 
     private String resolveBusinessModuleKey() {
+        String headerModuleKey = resolveBusinessModuleKeyFromHeader();
+        if (!headerModuleKey.isBlank()) {
+            assertBusinessModuleKeyMatchesCurrentResource(headerModuleKey);
+            return headerModuleKey;
+        }
+
         RequestAttributes requestAttributes = RequestContextHolder.getRequestAttributes();
         if (!(requestAttributes instanceof ServletRequestAttributes servletRequestAttributes)) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "无法识别当前请求模块");
@@ -133,7 +141,57 @@ public abstract class AbstractCrudService<E extends AbstractAuditableEntity, Req
         }
         String path = uri.startsWith("/api/") ? uri.substring(5) : uri;
         int slashIndex = path.indexOf('/');
-        return slashIndex >= 0 ? path.substring(0, slashIndex) : path;
+        return normalizeRestCollectionModuleKey(slashIndex >= 0 ? path.substring(0, slashIndex) : path);
+    }
+
+    private String resolveBusinessModuleKeyFromHeader() {
+        RequestAttributes requestAttributes = RequestContextHolder.getRequestAttributes();
+        if (!(requestAttributes instanceof ServletRequestAttributes servletRequestAttributes)) {
+            return "";
+        }
+        String rawValue = servletRequestAttributes.getRequest().getHeader(BUSINESS_MODULE_KEY_HEADER);
+        return rawValue == null ? "" : rawValue.trim();
+    }
+
+    private void assertBusinessModuleKeyMatchesCurrentResource(String moduleKey) {
+        DataScopeContext.Context context = DataScopeContext.current();
+        if (context == null || context.resource() == null || context.resource().isBlank()) {
+            return;
+        }
+        String expectedResource = ResourcePermissionCatalog.normalizeResource(context.resource());
+        String moduleResource = ResourcePermissionCatalog.resolveResourceByMenuCode(moduleKey)
+                .orElseGet(() -> ResourcePermissionCatalog.normalizeResource(moduleKey));
+        if (!expectedResource.equals(moduleResource)) {
+            throw new BusinessException(ErrorCode.FORBIDDEN, "预分配雪花ID模块与当前接口不匹配");
+        }
+    }
+
+    private String normalizeRestCollectionModuleKey(String rawSegment) {
+        String segment = rawSegment == null ? "" : rawSegment.trim();
+        if (segment.isBlank()) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "无法识别当前请求模块");
+        }
+        if (isKnownModuleKey(segment)) {
+            return segment;
+        }
+        if (segment.endsWith("ies") && segment.length() > 3) {
+            String candidate = segment.substring(0, segment.length() - 3) + "y";
+            if (isKnownModuleKey(candidate)) {
+                return candidate;
+            }
+        }
+        if (segment.endsWith("s") && segment.length() > 1) {
+            String candidate = segment.substring(0, segment.length() - 1);
+            if (isKnownModuleKey(candidate)) {
+                return candidate;
+            }
+        }
+        return segment;
+    }
+
+    private boolean isKnownModuleKey(String moduleKey) {
+        return ResourcePermissionCatalog.isKnownResource(moduleKey)
+                || ResourcePermissionCatalog.resolveResourceByMenuCode(moduleKey).isPresent();
     }
 
     @Transactional(readOnly = true)

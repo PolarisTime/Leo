@@ -71,10 +71,13 @@ public class SupplierStatementController {
     @RequiresPermission(resource = "supplier-statement", action = "read")
     public ApiResponse<PageResponse<SupplierStatementCandidateResponse>> candidates(
             @BindPageQuery(sortFieldKey = "purchase-inbound") PageQuery query,
-            @RequestParam(required = false) String keyword
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) String supplierName,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate
     ) {
         return ApiResponse.success(PageResponse.from(
-                supplierStatementService.candidatePage(query, keyword)
+                supplierStatementService.candidatePage(query, PageFilter.of(keyword, supplierName, null, startDate, endDate))
         ));
     }
 

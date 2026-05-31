@@ -96,18 +96,14 @@ public class CustomerStatementService extends AbstractCrudService<CustomerStatem
     }
 
     @Transactional(readOnly = true)
-    public Page<CustomerStatementCandidateResponse> candidatePage(PageQuery query, String keyword) {
-        Set<String> occupiedOrderNos = new LinkedHashSet<>();
-        repository.findAll(Specs.notDeleted()).stream()
-                .flatMap(entity -> entity.getItems().stream())
-                .map(CustomerStatementItem::getSourceNo)
-                .filter(v -> v != null)
-                .forEach(occupiedOrderNos::add);
+    public Page<CustomerStatementCandidateResponse> candidatePage(PageQuery query, PageFilter filter) {
+        Set<String> occupiedOrderNos = collectOccupiedOrderNos(null);
         Specification<SalesOrder> spec = Specs.<SalesOrder>notDeleted()
-                .and(Specs.keywordLike(keyword, SALES_ORDER_CANDIDATE_SEARCH_FIELDS))
-                .and((root, criteriaQuery, cb) -> root.get("status").in(
-                        StatusConstants.SALES_COMPLETED
-                ))
+                .and(Specs.keywordLike(filter.keyword(), SALES_ORDER_CANDIDATE_SEARCH_FIELDS))
+                .and(Specs.equalIfPresent("customerName", filter.name()))
+                .and(Specs.equalIfPresent("projectName", filter.projectName()))
+                .and(Specs.equalIfPresent("status", StatusConstants.SALES_COMPLETED))
+                .and(Specs.betweenIfPresent("deliveryDate", filter.startDate(), filter.endDate()))
                 .and(StatementCandidateSupport.excludeFieldValues("orderNo", occupiedOrderNos));
         return salesOrderRepository.findAll(DataScopeContext.apply(spec), query.toPageable("id"))
                 .map(this::toCandidateResponse);
@@ -248,6 +244,7 @@ public class CustomerStatementService extends AbstractCrudService<CustomerStatem
 
         BigDecimal salesAmount = BigDecimal.ZERO;
         Map<Long, SalesOrderItem> sourceSalesOrderItemMap = loadSourceSalesOrderItemMap(request.items());
+        validateSourceSalesOrders(request, sourceSalesOrderItemMap, entity.getId());
         List<CustomerStatementItem> items = ManagedEntityItemSupport.syncById(
                 entity.getItems(),
                 request.items(),
@@ -343,6 +340,61 @@ public class CustomerStatementService extends AbstractCrudService<CustomerStatem
         }
         return salesOrderItemQueryService.findActiveByIdIn(sourceSalesOrderItemIds).stream()
                 .collect(java.util.stream.Collectors.toMap(SalesOrderItem::getId, item -> item));
+    }
+
+    private void validateSourceSalesOrders(CustomerStatementRequest request,
+                                           Map<Long, SalesOrderItem> sourceSalesOrderItemMap,
+                                           Long currentStatementId) {
+        Set<String> requestedOrderNos = new LinkedHashSet<>();
+        for (SalesOrderItem item : sourceSalesOrderItemMap.values()) {
+            SalesOrder order = item.getSalesOrder();
+            DataScopeContext.assertCanAccess(order);
+            requestedOrderNos.add(order.getOrderNo());
+            if (!request.customerName().trim().equals(order.getCustomerName())) {
+                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "来源销售订单存在不同客户，不能合并生成客户对账单");
+            }
+            if (!request.projectName().trim().equals(order.getProjectName())) {
+                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "来源销售订单存在不同项目，不能合并生成客户对账单");
+            }
+            if (!StatusConstants.SALES_COMPLETED.equals(order.getStatus())) {
+                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "来源销售订单" + order.getOrderNo() + "未完成销售，不能生成客户对账单");
+            }
+        }
+        if (requestedOrderNos.isEmpty()) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "客户对账单来源销售订单不能为空");
+        }
+        assertSourceOrdersNotOccupied(requestedOrderNos, currentStatementId);
+    }
+
+    private void assertSourceOrdersNotOccupied(Set<String> requestedOrderNos, Long currentStatementId) {
+        List<CustomerStatement> occupiedStatements =
+                repository.findAllBySourceNosExcludingCurrentStatement(requestedOrderNos, currentStatementId);
+        Set<String> occupiedOrderNos = occupiedStatements.stream()
+                .flatMap(entity -> entity.getItems().stream())
+                .map(CustomerStatementItem::getSourceNo)
+                .filter(v -> v != null && !v.isBlank())
+                .map(String::trim)
+                .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
+        for (String orderNo : requestedOrderNos) {
+            if (occupiedOrderNos.contains(orderNo)) {
+                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "来源销售订单" + orderNo + "已生成客户对账单");
+            }
+        }
+    }
+
+    private Set<String> collectOccupiedOrderNos(Long currentStatementId) {
+        Specification<CustomerStatement> spec = Specs.notDeleted();
+        if (currentStatementId != null) {
+            spec = spec.and((root, query, cb) -> cb.notEqual(root.get("id"), currentStatementId));
+        }
+        Set<String> occupiedOrderNos = new LinkedHashSet<>();
+        repository.findAll(spec).stream()
+                .flatMap(entity -> entity.getItems().stream())
+                .map(CustomerStatementItem::getSourceNo)
+                .filter(v -> v != null && !v.isBlank())
+                .map(String::trim)
+                .forEach(occupiedOrderNos::add);
+        return occupiedOrderNos;
     }
 
     private SalesOrderItem resolveSourceSalesOrderItem(CustomerStatementItemRequest source,

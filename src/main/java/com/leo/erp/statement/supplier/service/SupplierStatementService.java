@@ -93,16 +93,13 @@ public class SupplierStatementService extends AbstractCrudService<SupplierStatem
     }
 
     @Transactional(readOnly = true)
-    public Page<SupplierStatementCandidateResponse> candidatePage(PageQuery query, String keyword) {
-        Set<String> occupiedInboundNos = new LinkedHashSet<>();
-        repository.findAll(Specs.notDeleted()).stream()
-                .flatMap(entity -> entity.getItems().stream())
-                .map(SupplierStatementItem::getSourceNo)
-                .filter(v -> v != null)
-                .forEach(occupiedInboundNos::add);
+    public Page<SupplierStatementCandidateResponse> candidatePage(PageQuery query, PageFilter filter) {
+        Set<String> occupiedInboundNos = collectOccupiedInboundNos(null);
         Specification<PurchaseInbound> spec = Specs.<PurchaseInbound>notDeleted()
-                .and(Specs.keywordLike(keyword, PURCHASE_INBOUND_CANDIDATE_SEARCH_FIELDS))
-                .and(excludeDraftStatus())
+                .and(Specs.keywordLike(filter.keyword(), PURCHASE_INBOUND_CANDIDATE_SEARCH_FIELDS))
+                .and(Specs.equalIfPresent("supplierName", filter.name()))
+                .and(Specs.equalIfPresent("status", StatusConstants.PURCHASE_COMPLETED))
+                .and(Specs.betweenIfPresent("inboundDate", filter.startDate(), filter.endDate()))
                 .and(StatementCandidateSupport.excludeFieldValues("inboundNo", occupiedInboundNos));
         return purchaseInboundRepository.findAll(DataScopeContext.apply(spec), query.toPageable("id"))
                 .map(this::toCandidateResponse);
@@ -231,6 +228,7 @@ public class SupplierStatementService extends AbstractCrudService<SupplierStatem
 
         BigDecimal purchaseAmount = BigDecimal.ZERO;
         Map<Long, PurchaseInboundItem> sourceInboundItemMap = loadSourceInboundItemMap(request.items());
+        validateSourceInbounds(request, sourceInboundItemMap, entity.getId());
         List<SupplierStatementItem> items = ManagedEntityItemSupport.syncById(
                 entity.getItems(),
                 request.items(),
@@ -336,6 +334,58 @@ public class SupplierStatementService extends AbstractCrudService<SupplierStatem
                 .collect(java.util.stream.Collectors.toMap(PurchaseInboundItem::getId, item -> item));
     }
 
+    private void validateSourceInbounds(SupplierStatementRequest request,
+                                        Map<Long, PurchaseInboundItem> sourceInboundItemMap,
+                                        Long currentStatementId) {
+        Set<String> requestedInboundNos = new LinkedHashSet<>();
+        for (PurchaseInboundItem item : sourceInboundItemMap.values()) {
+            PurchaseInbound inbound = item.getPurchaseInbound();
+            DataScopeContext.assertCanAccess(inbound);
+            requestedInboundNos.add(inbound.getInboundNo());
+            if (!request.supplierName().trim().equals(inbound.getSupplierName())) {
+                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "来源采购入库单存在不同供应商，不能合并生成供应商对账单");
+            }
+            if (!StatusConstants.PURCHASE_COMPLETED.equals(inbound.getStatus())) {
+                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "来源采购入库单" + inbound.getInboundNo() + "未完成采购，不能生成供应商对账单");
+            }
+        }
+        if (requestedInboundNos.isEmpty()) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "供应商对账单来源采购入库单不能为空");
+        }
+        assertSourceInboundsNotOccupied(requestedInboundNos, currentStatementId);
+    }
+
+    private void assertSourceInboundsNotOccupied(Set<String> requestedInboundNos, Long currentStatementId) {
+        List<SupplierStatement> occupiedStatements =
+                repository.findAllBySourceNosExcludingCurrentStatement(requestedInboundNos, currentStatementId);
+        Set<String> occupiedInboundNos = occupiedStatements.stream()
+                .flatMap(entity -> entity.getItems().stream())
+                .map(SupplierStatementItem::getSourceNo)
+                .filter(v -> v != null && !v.isBlank())
+                .map(String::trim)
+                .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
+        for (String inboundNo : requestedInboundNos) {
+            if (occupiedInboundNos.contains(inboundNo)) {
+                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "来源采购入库单" + inboundNo + "已生成供应商对账单");
+            }
+        }
+    }
+
+    private Set<String> collectOccupiedInboundNos(Long currentStatementId) {
+        Specification<SupplierStatement> spec = Specs.notDeleted();
+        if (currentStatementId != null) {
+            spec = spec.and((root, query, cb) -> cb.notEqual(root.get("id"), currentStatementId));
+        }
+        Set<String> occupiedInboundNos = new LinkedHashSet<>();
+        repository.findAll(spec).stream()
+                .flatMap(entity -> entity.getItems().stream())
+                .map(SupplierStatementItem::getSourceNo)
+                .filter(v -> v != null && !v.isBlank())
+                .map(String::trim)
+                .forEach(occupiedInboundNos::add);
+        return occupiedInboundNos;
+    }
+
     private PurchaseInboundItem resolveSourceInboundItem(SupplierStatementItemRequest source,
                                                          Map<Long, PurchaseInboundItem> sourceInboundItemMap,
                                                          int lineNo) {
@@ -369,13 +419,6 @@ public class SupplierStatementService extends AbstractCrudService<SupplierStatem
                 && item.getQuantity().equals(source.quantity())
                 && TradeItemCalculator.normalizeQuantityUnit(item.getQuantityUnit())
                 .equals(TradeItemCalculator.normalizeQuantityUnit(source.quantityUnit()));
-    }
-
-    private Specification<PurchaseInbound> excludeDraftStatus() {
-        return (root, query, criteriaBuilder) -> criteriaBuilder.or(
-                criteriaBuilder.isNull(root.get("status")),
-                criteriaBuilder.notEqual(root.get("status"), StatusConstants.DRAFT)
-        );
     }
 
     private SupplierStatementCandidateResponse toCandidateResponse(PurchaseInbound inbound) {

@@ -164,6 +164,44 @@ public class InventoryReportQueryRepository {
         return new PageImpl<>(rows, PageRequest.of(query.page(), query.size()), total);
     }
 
+    public List<InventoryReportResponse> list(PageQuery query, String keyword, String warehouseName, String category) {
+        MapSqlParameterSource params = new MapSqlParameterSource();
+        String inventoryCte = INVENTORY_CTE.formatted(
+                dataScopeClause(params, "inbound"),
+                dataScopeClause(params, "outbound")
+        );
+        String whereClause = buildWhereClause(params, keyword, warehouseName, category);
+        String orderExpression = sortExpression("report", query.sortBy(), query.direction());
+        String dataSql = (inventoryCte + """
+                SELECT
+                    ROW_NUMBER() OVER (ORDER BY %s) AS id,
+                    report.material_code,
+                    report.brand,
+                    report.material,
+                    report.category,
+                    report.spec,
+                    report.length,
+                    report.warehouse_name,
+                    report.batch_no,
+                    report.quantity,
+                    report.quantity_unit,
+                    report.weight_ton,
+                    report.unit,
+                    material.piece_weight_ton
+                FROM inventory report
+                LEFT JOIN md_material material ON material.material_code = report.material_code
+                    AND material.deleted_flag = FALSE
+                %s
+                ORDER BY %s
+                """).formatted(
+                orderExpression,
+                whereClause,
+                orderExpression
+        );
+
+        return jdbcTemplate.query(dataSql, params, ROW_MAPPER);
+    }
+
     private String dataScopeClause(MapSqlParameterSource params, String alias) {
         Set<Long> ownerUserIds = DataScopeContext.allowedOwnerUserIds();
         if (ownerUserIds == null) {
