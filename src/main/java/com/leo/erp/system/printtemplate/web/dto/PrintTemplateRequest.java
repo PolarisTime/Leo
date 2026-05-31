@@ -8,7 +8,7 @@ public record PrintTemplateRequest(
         @NotBlank @Size(max = 64) String billType,
         @NotBlank @Size(max = 128) String templateName,
         @NotBlank @Size(max = 200000) String templateHtml,
-        @Pattern(regexp = "HTML|COORD", message = "模板类型仅支持 HTML 或 COORD")
+        @Pattern(regexp = "HTML|COORD|PDF_FORM", message = "模板类型仅支持 HTML、COORD 或 PDF_FORM")
         String templateType
 ) {
 }
