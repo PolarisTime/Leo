@@ -74,10 +74,13 @@ public class FreightStatementController {
     @RequiresPermission(resource = "freight-statement", action = "read")
     public ApiResponse<PageResponse<FreightStatementCandidateResponse>> candidates(
             @BindPageQuery(sortFieldKey = "freight-bill") PageQuery query,
-            @RequestParam(required = false) String keyword
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) String carrierName,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate
     ) {
         return ApiResponse.success(PageResponse.from(
-                freightStatementService.candidatePage(query, keyword)
+                freightStatementService.candidatePage(query, PageFilter.of(keyword, carrierName, null, startDate, endDate))
         ));
     }
 

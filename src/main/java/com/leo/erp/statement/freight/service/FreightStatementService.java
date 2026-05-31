@@ -137,15 +137,13 @@ public class FreightStatementService extends AbstractCrudService<FreightStatemen
     }
 
     @Transactional(readOnly = true)
-    public Page<FreightStatementCandidateResponse> candidatePage(PageQuery query, String keyword) {
-        Set<String> occupiedBillNos = new LinkedHashSet<>();
-        repository.findAll(Specs.notDeleted()).stream()
-                .flatMap(entity -> entity.getItems().stream())
-                .map(FreightStatementItem::getSourceNo)
-                .filter(v -> v != null && !v.isBlank())
-                .forEach(occupiedBillNos::add);
+    public Page<FreightStatementCandidateResponse> candidatePage(PageQuery query, PageFilter filter) {
+        Set<String> occupiedBillNos = collectOccupiedBillNos(null);
         Specification<FreightBill> spec = Specs.<FreightBill>notDeleted()
-                .and(Specs.keywordLike(keyword, FREIGHT_BILL_CANDIDATE_SEARCH_FIELDS))
+                .and(Specs.keywordLike(filter.keyword(), FREIGHT_BILL_CANDIDATE_SEARCH_FIELDS))
+                .and(Specs.equalIfPresent("carrierName", filter.name()))
+                .and(Specs.equalIfPresent("status", StatusConstants.AUDITED))
+                .and(Specs.betweenIfPresent("billTime", filter.startDate(), filter.endDate()))
                 .and(StatementCandidateSupport.excludeFieldValues("billNo", occupiedBillNos));
         return freightBillRepository.findAll(DataScopeContext.apply(spec), query.toPageable("id"))
                 .map(this::toCandidateResponse);
@@ -278,7 +276,7 @@ public class FreightStatementService extends AbstractCrudService<FreightStatemen
                 nextSignStatus,
                 StatusConstants.SIGNED
         );
-        List<FreightBill> sourceBills = loadSourceBills(command);
+        List<FreightBill> sourceBills = loadSourceBills(command, entity.getId());
         entity.setStatementNo(command.statementNo());
         entity.setCarrierName(command.carrierName());
         entity.setStartDate(command.startDate());
@@ -410,7 +408,7 @@ public class FreightStatementService extends AbstractCrudService<FreightStatemen
         );
     }
 
-    private List<FreightBill> loadSourceBills(FreightStatementCommand command) {
+    private List<FreightBill> loadSourceBills(FreightStatementCommand command, Long currentStatementId) {
         Set<String> requestedBillNos = command.items().stream()
                 .map(FreightStatementItemCommand::sourceNo)
                 .filter(value -> value != null && !value.isBlank())
@@ -428,11 +426,47 @@ public class FreightStatementService extends AbstractCrudService<FreightStatemen
             }
         }
         for (FreightBill bill : bills) {
+            DataScopeContext.assertCanAccess(bill);
             if (!command.carrierName().trim().equals(bill.getCarrierName())) {
                 throw new BusinessException(ErrorCode.BUSINESS_ERROR, "来源物流单存在不同物流商，不能合并生成物流对账单");
             }
+            if (!StatusConstants.AUDITED.equals(bill.getStatus())) {
+                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "来源物流单" + bill.getBillNo() + "未审核，不能生成物流对账单");
+            }
         }
+        assertSourceBillsNotOccupied(requestedBillNos, currentStatementId);
         return bills;
+    }
+
+    private void assertSourceBillsNotOccupied(Set<String> requestedBillNos, Long currentStatementId) {
+        List<FreightStatement> occupiedStatements =
+                repository.findAllBySourceNosExcludingCurrentStatement(requestedBillNos, currentStatementId);
+        Set<String> occupiedBillNos = occupiedStatements.stream()
+                .flatMap(entity -> entity.getItems().stream())
+                .map(FreightStatementItem::getSourceNo)
+                .filter(v -> v != null && !v.isBlank())
+                .map(String::trim)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        for (String billNo : requestedBillNos) {
+            if (occupiedBillNos.contains(billNo)) {
+                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "来源物流单" + billNo + "已生成物流对账单");
+            }
+        }
+    }
+
+    private Set<String> collectOccupiedBillNos(Long currentStatementId) {
+        Specification<FreightStatement> spec = Specs.notDeleted();
+        if (currentStatementId != null) {
+            spec = spec.and((root, query, cb) -> cb.notEqual(root.get("id"), currentStatementId));
+        }
+        Set<String> occupiedBillNos = new LinkedHashSet<>();
+        repository.findAll(spec).stream()
+                .flatMap(entity -> entity.getItems().stream())
+                .map(FreightStatementItem::getSourceNo)
+                .filter(v -> v != null && !v.isBlank())
+                .map(String::trim)
+                .forEach(occupiedBillNos::add);
+        return occupiedBillNos;
     }
 
     private FreightBill resolveSourceBill(List<FreightBill> bills, String sourceNo, int lineNo) {

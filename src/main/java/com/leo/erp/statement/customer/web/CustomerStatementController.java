@@ -71,10 +71,14 @@ public class CustomerStatementController {
     @RequiresPermission(resource = "customer-statement", action = "read")
     public ApiResponse<PageResponse<CustomerStatementCandidateResponse>> candidates(
             @BindPageQuery(sortFieldKey = "sales-order") PageQuery query,
-            @RequestParam(required = false) String keyword
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) String customerName,
+            @RequestParam(required = false) String projectName,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate
     ) {
         return ApiResponse.success(PageResponse.from(
-                customerStatementService.candidatePage(query, keyword)
+                customerStatementService.candidatePage(query, new PageFilter(keyword, null, startDate, endDate, customerName, projectName, null, null, null, null, null, null, null, null, null))
         ));
     }
 

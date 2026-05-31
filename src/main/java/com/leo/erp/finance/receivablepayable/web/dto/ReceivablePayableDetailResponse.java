@@ -1,8 +1,9 @@
 package com.leo.erp.finance.receivablepayable.web.dto;
 
 import java.math.BigDecimal;
+import java.util.List;
 
-public record ReceivablePayableResponse(
+public record ReceivablePayableDetailResponse(
         String id,
         String direction,
         String counterpartyType,
@@ -13,6 +14,7 @@ public record ReceivablePayableResponse(
         BigDecimal balanceAmount,
         Long documentCount,
         String status,
-        String remark
+        String remark,
+        List<ReceivablePayableDetailItemResponse> items
 ) {
 }
