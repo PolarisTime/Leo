@@ -1,10 +1,16 @@
 package com.leo.erp.system.printtemplate.service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.itextpdf.forms.PdfAcroForm;
+import com.itextpdf.kernel.pdf.PdfDocument;
+import com.itextpdf.kernel.pdf.PdfReader;
+import com.itextpdf.kernel.pdf.canvas.parser.PdfTextExtractor;
 import com.leo.erp.system.printtemplate.domain.entity.PrintTemplate;
 import com.leo.erp.system.printtemplate.repository.PrintTemplateRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 
+import java.io.ByteArrayInputStream;
 import java.math.BigDecimal;
 import java.sql.Date;
 import java.util.List;
@@ -109,13 +115,58 @@ class PrintScriptServiceTest {
         assertThat(item.get("amount")).isEqualTo("37.50");
     }
 
+    @Test
+    void shouldFillAndFlattenYingjieA4RemarkPdfForm() throws Exception {
+        JdbcTemplate jdbc = mock(JdbcTemplate.class);
+        PrintScriptService scriptService = new PrintScriptService(repository(
+                "sales-order",
+                "PDF_FORM",
+                "{\"form\":\"YINGJIE_A4_REMARK\",\"template\":\"print-forms/yingjie-a4-remark.pdf\"}"
+        ), jdbc);
+        PrintPdfFormService pdfFormService = new PrintPdfFormService(scriptService, new ObjectMapper());
+
+        when(jdbc.queryForMap(anyString(), eq(1L))).thenReturn(Map.of(
+                "id", 1L,
+                "order_no", "SO-001",
+                "customer_name", "客户A",
+                "project_name", "项目A",
+                "delivery_date", Date.valueOf("2026-05-31"),
+                "deleted_flag", false
+        ));
+        when(jdbc.queryForList(anyString(), eq(1L))).thenReturn(List.of(Map.of(
+                "line_no", 1,
+                "brand", "抚顺新钢",
+                "category", "螺纹钢",
+                "material", "HRB400E",
+                "spec", "Ф18",
+                "quantity", 2,
+                "weight_ton", new BigDecimal("2.345")
+        )));
+        when(jdbc.queryForList(anyString(), eq(String.class), eq("SO-001"))).thenReturn(List.of());
+        when(jdbc.queryForList(anyString(), eq(String.class), eq("项目A"))).thenReturn(List.of("项目地址A"));
+
+        byte[] pdf = pdfFormService.generateFromRecord("1", "sales-order", 1L);
+
+        assertThat(pdf).startsWith("%PDF".getBytes(java.nio.charset.StandardCharsets.US_ASCII));
+        assertThat(pdf.length).isGreaterThan(1000);
+        try (PdfDocument document = new PdfDocument(new PdfReader(new ByteArrayInputStream(pdf)))) {
+            assertThat(PdfAcroForm.getAcroForm(document, false)).isNull();
+            String text = PdfTextExtractor.getTextFromPage(document.getFirstPage());
+            assertThat(text).contains("客户A", "SO-001", "抚顺新钢", "螺纹钢");
+        }
+    }
+
     private PrintTemplateRepository repository(String billType) {
+        return repository(billType, "COORD", "LODOP.PRINT_INIT('模板');");
+    }
+
+    private PrintTemplateRepository repository(String billType, String templateType, String templateHtml) {
         PrintTemplate template = new PrintTemplate();
         template.setId(1L);
         template.setBillType(billType);
         template.setTemplateName("模板");
-        template.setTemplateHtml("LODOP.PRINT_INIT('模板');");
-        template.setTemplateType("COORD");
+        template.setTemplateHtml(templateHtml);
+        template.setTemplateType(templateType);
 
         PrintTemplateRepository repository = mock(PrintTemplateRepository.class);
         when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(template));

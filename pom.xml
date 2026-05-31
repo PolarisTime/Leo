@@ -183,6 +183,16 @@
             <artifactId>layout</artifactId>
             <version>9.5.0</version>
         </dependency>
+        <dependency>
+            <groupId>com.itextpdf</groupId>
+            <artifactId>forms</artifactId>
+            <version>9.5.0</version>
+        </dependency>
+        <dependency>
+            <groupId>com.itextpdf</groupId>
+            <artifactId>font-asian</artifactId>
+            <version>9.5.0</version>
+        </dependency>
     </dependencies>
 
     <build>

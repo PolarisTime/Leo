@@ -137,6 +137,9 @@ public class PrintTemplateService extends AbstractCrudService<PrintTemplate, Pri
     }
 
     private void validateTemplateContent(String templateHtml, String templateType) {
+        if ("PDF_FORM".equals(normalizeTemplateType(templateType))) {
+            return;
+        }
         boolean isCoord = "COORD".equals(templateType);
         List<Pattern> patterns = isCoord ? DANGEROUS_LODOP_PATTERNS : DANGEROUS_HTML_PATTERNS;
         for (Pattern pattern : patterns) {
@@ -151,8 +154,8 @@ public class PrintTemplateService extends AbstractCrudService<PrintTemplate, Pri
             return "HTML";
         }
         String normalized = templateType.trim().toUpperCase();
-        if (!Set.of("HTML", "COORD").contains(normalized)) {
-            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "模板类型仅支持 HTML 或 COORD");
+        if (!Set.of("HTML", "COORD", "PDF_FORM").contains(normalized)) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "模板类型仅支持 HTML、COORD 或 PDF_FORM");
         }
         return normalized;
     }
