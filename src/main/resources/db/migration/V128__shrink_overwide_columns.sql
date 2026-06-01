@@ -142,8 +142,7 @@ DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM st_supplier_statement_item WHERE length
     ALTER TABLE st_supplier_statement_item ALTER COLUMN unit TYPE VARCHAR(8);
     ALTER TABLE st_supplier_statement_item ALTER COLUMN quantity_unit TYPE VARCHAR(8);
 END IF; END $$;
-DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM st_freight_statement_item WHERE length(unit) > 8 OR length(quantity_unit) > 8) THEN
-    ALTER TABLE st_freight_statement_item ALTER COLUMN unit TYPE VARCHAR(8);
+DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM st_freight_statement_item WHERE length(quantity_unit) > 8) THEN
     ALTER TABLE st_freight_statement_item ALTER COLUMN quantity_unit TYPE VARCHAR(8);
 END IF; END $$;
 

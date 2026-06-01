@@ -43,7 +43,7 @@ ALTER TABLE sys_no_rule DROP CONSTRAINT IF EXISTS chk_no_rule_status;
 ALTER TABLE sys_no_rule ADD CONSTRAINT chk_no_rule_status CHECK (status IN ('正常', '禁用'));
 
 ALTER TABLE sys_upload_rule DROP CONSTRAINT IF EXISTS chk_upload_rule_status;
-ALTER TABLE sys_upload_rule ADD CONSTRAINT chk_upload_rule_status CHECK (status IN ('启用', '禁用'));
+ALTER TABLE sys_upload_rule ADD CONSTRAINT chk_upload_rule_status CHECK (status IN ('正常', '禁用'));
 
 ALTER TABLE sys_security_secret DROP CONSTRAINT IF EXISTS chk_security_secret_status;
 ALTER TABLE sys_security_secret ADD CONSTRAINT chk_security_secret_status CHECK (status IN ('启用', '禁用'));
