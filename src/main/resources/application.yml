@@ -247,6 +247,11 @@ leo:
       failure-window-seconds: ${LEO_AUTH_LOGIN_PROTECTION_FAILURE_WINDOW_SECONDS:900}
       # 触发保护后的锁定时长，单位秒
       lock-duration-seconds: ${LEO_AUTH_LOGIN_PROTECTION_LOCK_DURATION_SECONDS:900}
+    refresh-token:
+      # 刷新时是否轮换 refresh token；开启后仍复用同一条 session 记录
+      rotation-enabled: ${LEO_AUTH_REFRESH_TOKEN_ROTATION_ENABLED:true}
+      # 旧 refresh token 并发重放宽限期；宽限期内返回 409 让客户端用最新 Cookie 重试
+      reuse-grace-seconds: ${LEO_AUTH_REFRESH_TOKEN_REUSE_GRACE_SECONDS:30}
     cookie:
       # Refresh Token Cookie 名称
       refresh-token-name: ${LEO_AUTH_REFRESH_COOKIE_NAME:leo_refresh_token}

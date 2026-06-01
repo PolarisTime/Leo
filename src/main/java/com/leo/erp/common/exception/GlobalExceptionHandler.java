@@ -126,6 +126,7 @@ public class GlobalExceptionHandler {
             case INTERNAL_ERROR -> HttpStatus.INTERNAL_SERVER_ERROR;
             case SUCCESS -> HttpStatus.OK;
             case SESSION_EVICTED -> HttpStatus.UNAUTHORIZED;
+            case REFRESH_TOKEN_REUSE_CONFLICT -> HttpStatus.CONFLICT;
             case RATE_LIMITED -> HttpStatus.TOO_MANY_REQUESTS;
             case BUSINESS_ERROR -> HttpStatus.UNPROCESSABLE_ENTITY;
         };

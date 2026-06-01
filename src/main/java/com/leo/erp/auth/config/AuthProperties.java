@@ -8,6 +8,7 @@ public class AuthProperties {
     private final Bootstrap bootstrap = new Bootstrap();
     private final User user = new User();
     private final LoginProtection loginProtection = new LoginProtection();
+    private final RefreshToken refreshToken = new RefreshToken();
 
     public Bootstrap getBootstrap() {
         return bootstrap;
@@ -19,6 +20,10 @@ public class AuthProperties {
 
     public LoginProtection getLoginProtection() {
         return loginProtection;
+    }
+
+    public RefreshToken getRefreshToken() {
+        return refreshToken;
     }
 
     public static class Bootstrap {
@@ -147,6 +152,28 @@ public class AuthProperties {
 
         public void setLockDurationSeconds(long lockDurationSeconds) {
             this.lockDurationSeconds = lockDurationSeconds;
+        }
+    }
+
+    public static class RefreshToken {
+
+        private boolean rotationEnabled = true;
+        private long reuseGraceSeconds = 30;
+
+        public boolean isRotationEnabled() {
+            return rotationEnabled;
+        }
+
+        public void setRotationEnabled(boolean rotationEnabled) {
+            this.rotationEnabled = rotationEnabled;
+        }
+
+        public long getReuseGraceSeconds() {
+            return reuseGraceSeconds;
+        }
+
+        public void setReuseGraceSeconds(long reuseGraceSeconds) {
+            this.reuseGraceSeconds = reuseGraceSeconds;
         }
     }
 }

@@ -2,11 +2,15 @@ package com.leo.erp.auth.service;
 
 import com.leo.erp.auth.domain.entity.RefreshTokenSession;
 import com.leo.erp.auth.domain.entity.UserAccount;
+import com.leo.erp.auth.domain.enums.RevokeReason;
 import com.leo.erp.auth.repository.RefreshTokenSessionRepository;
 import com.leo.erp.auth.repository.UserAccountRepository;
 import org.springframework.context.ApplicationEventPublisher;
 import com.leo.erp.auth.web.dto.LoginResponseBody;
 import com.leo.erp.auth.web.dto.LoginRequest;
+import com.leo.erp.common.config.RedisTuningProperties;
+import com.leo.erp.common.error.BusinessException;
+import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.support.AfterCommitExecutor;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.security.jwt.AccessTokenBlacklistService;
@@ -34,6 +38,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class AuthServiceTest {
 
@@ -60,7 +65,7 @@ class AuthServiceTest {
         SessionManagementService service = new SessionManagementService(
                 null, repository, jwtTokenService(), new SnowflakeIdGenerator(0L),
                 blacklistService(blacklistedSessionIds, new AtomicBoolean(false)),
-                sessionActivityService(), afterCommitExecutor(), null
+                sessionActivityService(), afterCommitExecutor(), null, new com.leo.erp.auth.config.AuthProperties()
         );
 
         org.springframework.test.util.ReflectionTestUtils.invokeMethod(service, "trimActiveSessionsBeforeIssuing", 42L);
@@ -91,6 +96,89 @@ class AuthServiceTest {
         assertThat(session.getRevokedAt()).isNotNull();
         assertThat(blacklistedSessionIds).containsExactly(session.getTokenId());
         assertThat(blacklistedUser.get()).isFalse();
+    }
+
+    @Test
+    void shouldRefreshAccessTokenAndRotateRefreshTokenWithoutCreatingSession() {
+        UserAccount user = new UserAccount();
+        user.setId(42L);
+        user.setLoginName("tester");
+        user.setUserName("测试用户");
+        user.setStatus(com.leo.erp.auth.domain.enums.UserStatus.NORMAL);
+
+        RefreshTokenSession session = token(11L);
+        session.setTokenHash(SessionManagementService.hashToken("refresh-token"));
+        session.setLoginIp("old-ip");
+        session.setDeviceInfo("old-agent");
+        LocalDateTime originalExpiresAt = session.getExpiresAt();
+        List<RefreshTokenSession> savedTokens = new ArrayList<>();
+        RefreshTokenSessionRepository repository = logoutRefreshTokenSessionRepository(session, savedTokens);
+        UserAccountRepository userRepository = logoutUserAccountRepository(user);
+        TokenIssuanceService tokenService = tokenIssuanceServiceStub(
+                userRepository, repository, blacklistService(new ArrayList<>(), new AtomicBoolean(false)), null
+        );
+
+        var response = tokenService.refresh("refresh-token", "new-ip", "new-agent");
+
+        assertThat(response.accessToken()).isEqualTo("access-token");
+        assertThat(response.refreshToken()).isNotBlank();
+        assertThat(response.refreshToken()).isNotEqualTo("refresh-token");
+        assertThat(savedTokens).containsExactly(session);
+        assertThat(session.getRevokedAt()).isNull();
+        assertThat(session.getRevokeReason()).isNull();
+        assertThat(session.getTokenId()).isEqualTo("token-11");
+        assertThat(session.getTokenHash()).isEqualTo(SessionManagementService.hashToken(response.refreshToken()));
+        assertThat(session.getPreviousTokenHash()).isEqualTo(SessionManagementService.hashToken("refresh-token"));
+        assertThat(session.getPreviousTokenValidUntil()).isAfter(LocalDateTime.now());
+        assertThat(session.getExpiresAt()).isAfter(originalExpiresAt);
+        assertThat(session.getLoginIp()).isEqualTo("new-ip");
+        assertThat(session.getDeviceInfo()).isEqualTo("new-agent");
+    }
+
+    @Test
+    void shouldRejectPreviousRefreshTokenWithinGraceWindow() {
+        RefreshTokenSession session = token(11L);
+        session.setPreviousTokenHash(SessionManagementService.hashToken("old-refresh-token"));
+        session.setPreviousTokenValidUntil(LocalDateTime.now().plusSeconds(30));
+        RefreshTokenSessionRepository repository = previousTokenRefreshSessionRepository(session, new ArrayList<>());
+        TokenIssuanceService tokenService = tokenIssuanceServiceStub(
+                logoutUserAccountRepository(null),
+                repository,
+                blacklistService(new ArrayList<>(), new AtomicBoolean(false)),
+                null
+        );
+
+        assertThatThrownBy(() -> tokenService.refresh("old-refresh-token", "ip", "agent"))
+                .isInstanceOf(BusinessException.class)
+                .extracting(ex -> ((BusinessException) ex).getErrorCode())
+                .isEqualTo(ErrorCode.REFRESH_TOKEN_REUSE_CONFLICT);
+
+        assertThat(session.getRevokedAt()).isNull();
+        assertThat(session.getRevokeReason()).isNull();
+    }
+
+    @Test
+    void shouldRevokeSessionWhenPreviousRefreshTokenIsReusedAfterGraceWindow() {
+        RefreshTokenSession session = token(11L);
+        session.setPreviousTokenHash(SessionManagementService.hashToken("old-refresh-token"));
+        session.setPreviousTokenValidUntil(LocalDateTime.now().minusSeconds(1));
+        List<RefreshTokenSession> savedTokens = new ArrayList<>();
+        List<String> blacklistedSessionIds = new ArrayList<>();
+        RefreshTokenSessionRepository repository = previousTokenRefreshSessionRepository(session, savedTokens);
+        TokenIssuanceService tokenService = tokenIssuanceServiceStub(
+                logoutUserAccountRepository(null),
+                repository,
+                blacklistService(blacklistedSessionIds, new AtomicBoolean(false)),
+                null
+        );
+
+        assertThatThrownBy(() -> tokenService.refresh("old-refresh-token", "ip", "agent"))
+                .isInstanceOf(BadCredentialsException.class);
+
+        assertThat(savedTokens).containsExactly(session);
+        assertThat(session.getRevokedAt()).isNotNull();
+        assertThat(session.getRevokeReason()).isEqualTo(RevokeReason.REUSE_DETECTED);
+        assertThat(blacklistedSessionIds).containsExactly(session.getTokenId());
     }
 
     // --- Login flow (LoginService) ---
@@ -246,12 +334,34 @@ class AuthServiceTest {
                 new Class[]{RefreshTokenSessionRepository.class},
                 (proxy, method, args) -> switch (method.getName()) {
                     case "findByTokenHashAndDeletedFlagFalse" -> Optional.of(session);
+                    case "findByPreviousTokenHashAndDeletedFlagFalse" -> Optional.empty();
                     case "save" -> {
                         RefreshTokenSession entity = (RefreshTokenSession) args[0];
                         savedTokens.add(entity);
                         yield entity;
                     }
                     case "toString" -> "RefreshTokenSessionRepositoryLogoutStub";
+                    case "hashCode" -> System.identityHashCode(proxy);
+                    case "equals" -> proxy == args[0];
+                    default -> throw new UnsupportedOperationException(method.getName());
+                }
+        );
+    }
+
+    private RefreshTokenSessionRepository previousTokenRefreshSessionRepository(RefreshTokenSession session,
+                                                                               List<RefreshTokenSession> savedTokens) {
+        return (RefreshTokenSessionRepository) Proxy.newProxyInstance(
+                RefreshTokenSessionRepository.class.getClassLoader(),
+                new Class[]{RefreshTokenSessionRepository.class},
+                (proxy, method, args) -> switch (method.getName()) {
+                    case "findByTokenHashAndDeletedFlagFalse" -> Optional.empty();
+                    case "findByPreviousTokenHashAndDeletedFlagFalse" -> Optional.of(session);
+                    case "save" -> {
+                        RefreshTokenSession entity = (RefreshTokenSession) args[0];
+                        savedTokens.add(entity);
+                        yield entity;
+                    }
+                    case "toString" -> "RefreshTokenSessionRepositoryPreviousTokenStub";
                     case "hashCode" -> System.identityHashCode(proxy);
                     case "equals" -> proxy == args[0];
                     default -> throw new UnsupportedOperationException(method.getName());
@@ -318,7 +428,7 @@ class AuthServiceTest {
     }
 
     private SessionActivityService sessionActivityService() {
-        return new SessionActivityService(null) {
+        return new SessionActivityService(null, new RedisTuningProperties()) {
             @Override
             public void clearSession(String sessionId) {}
             @Override
@@ -466,7 +576,7 @@ class AuthServiceTest {
         return new SessionManagementService(
                 userRepo, sessionRepo, jwtTokenService(), new SnowflakeIdGenerator(0L),
                 blacklistService(new ArrayList<>(), new AtomicBoolean(false)),
-                sessionActivityService(), afterCommitExecutor(), null
+                sessionActivityService(), afterCommitExecutor(), null, new com.leo.erp.auth.config.AuthProperties()
         );
     }
 
@@ -479,7 +589,7 @@ class AuthServiceTest {
         SessionManagementService sessionMgmt = new SessionManagementService(
                 userRepo, sessionRepo, jwtTokenService(), new SnowflakeIdGenerator(0L),
                 blacklist != null ? blacklist : blacklistService(blacklisted, new AtomicBoolean(false)),
-                sessionActivityService(), afterCommitExecutor(), null
+                sessionActivityService(), afterCommitExecutor(), null, new com.leo.erp.auth.config.AuthProperties()
         );
         return new TokenIssuanceService(
                 userRepo, jwtTokenService(), permissionService(),
