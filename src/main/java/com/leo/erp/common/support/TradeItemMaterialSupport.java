@@ -78,7 +78,7 @@ public class TradeItemMaterialSupport {
         if (normalized != null && normalized.isBlank()) {
             normalized = null;
         }
-        if (!Boolean.TRUE.equals(material.getBatchNoEnabled())) {
+        if (!isBatchManaged(material)) {
             return null;
         }
         if (shouldAutoGenerateBatchNo()) {
@@ -92,7 +92,7 @@ public class TradeItemMaterialSupport {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "第" + lineNo + "行批号长度不能超过64");
         }
         if (requiredWhenEnabled && normalized == null) {
-            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "第" + lineNo + "行商品已启用批号管理，批号不能为空");
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "第" + lineNo + "行当前商品需批号管理，批号不能为空");
         }
         return normalized;
     }
@@ -141,6 +141,14 @@ public class TradeItemMaterialSupport {
         return systemSwitchService != null
                 && noRuleSequenceService != null
                 && systemSwitchService.shouldAutoGenerateBatchNo();
+    }
+
+    private boolean isBatchManaged(Material material) {
+        return Boolean.TRUE.equals(material.getBatchNoEnabled()) || shouldForceBatchManagement();
+    }
+
+    private boolean shouldForceBatchManagement() {
+        return systemSwitchService != null && systemSwitchService.shouldForceBatchManagement();
     }
 
     private record MaterialSnapshot(String materialCode, Boolean batchNoEnabled) {
