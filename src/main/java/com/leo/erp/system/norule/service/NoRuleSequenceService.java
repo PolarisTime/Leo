@@ -22,6 +22,13 @@ public class NoRuleSequenceService {
 
     public static final String BATCH_NO_RULE_CODE = "RULE_BATCH_NO";
     private static final Map<String, String> MODULE_RULE_CODE_MAP = Map.ofEntries(
+            Map.entry("material", "RULE_MAT"),
+            Map.entry("material-category", "RULE_MC"),
+            Map.entry("material-categories", "RULE_MC"),
+            Map.entry("supplier", "RULE_SUP"),
+            Map.entry("customer", "RULE_CUST"),
+            Map.entry("carrier", "RULE_CAR"),
+            Map.entry("warehouse", "RULE_WH"),
             Map.entry("purchase-order", "RULE_PO"),
             Map.entry("purchase-inbound", "RULE_PI"),
             Map.entry("sales-order", "RULE_SO"),

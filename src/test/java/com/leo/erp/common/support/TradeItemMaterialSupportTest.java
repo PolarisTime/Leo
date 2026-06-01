@@ -32,7 +32,7 @@ class TradeItemMaterialSupportTest {
 
         assertThatThrownBy(() -> support.normalizeBatchNo(batchManagedMaterial("MAT-001"), " ", 1, true))
                 .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("第1行商品已启用批号管理，批号不能为空");
+                .hasMessageContaining("第1行当前商品需批号管理，批号不能为空");
     }
 
     @Test
@@ -42,6 +42,38 @@ class TradeItemMaterialSupportTest {
         String normalized = support.normalizeBatchNo(batchDisabledMaterial("MAT-001"), "BATCH-001", 1, true);
 
         assertThat(normalized).isNull();
+    }
+
+    @Test
+    void shouldTreatMaterialAsBatchManagedWhenForceSwitchEnabled() {
+        SystemSwitchService systemSwitchService = mock(SystemSwitchService.class);
+        when(systemSwitchService.shouldForceBatchManagement()).thenReturn(true);
+        TradeItemMaterialSupport support = new TradeItemMaterialSupport(
+                repository(List.of(batchDisabledMaterial("MAT-001"))),
+                null,
+                systemSwitchService,
+                null
+        );
+
+        String normalized = support.normalizeBatchNo(batchDisabledMaterial("MAT-001"), " FORCE-001 ", 1, true);
+
+        assertThat(normalized).isEqualTo("FORCE-001");
+    }
+
+    @Test
+    void shouldRequireBatchNoWhenForceSwitchEnabled() {
+        SystemSwitchService systemSwitchService = mock(SystemSwitchService.class);
+        when(systemSwitchService.shouldForceBatchManagement()).thenReturn(true);
+        TradeItemMaterialSupport support = new TradeItemMaterialSupport(
+                repository(List.of(batchDisabledMaterial("MAT-001"))),
+                null,
+                systemSwitchService,
+                null
+        );
+
+        assertThatThrownBy(() -> support.normalizeBatchNo(batchDisabledMaterial("MAT-001"), " ", 1, true))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("第1行当前商品需批号管理，批号不能为空");
     }
 
     @Test
