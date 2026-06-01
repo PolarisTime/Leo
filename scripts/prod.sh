@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
-# Leo ERP 开发环境管理脚本
-# 用法: dev.sh {start|stop|restart|status|logs|check}
+# Leo ERP 生产测试环境管理脚本
+# 用法: prod.sh {start|stop|restart|status|logs|check}
 set -euo pipefail
 
-RUNTIME_ENV=dev
+RUNTIME_ENV=prod
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LEO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 WORKSPACE_DIR="$(cd "$LEO_DIR/.." && pwd)"
 ARIES_DIR="$WORKSPACE_DIR/aries"
 
 # shellcheck disable=SC1090
-source "$SCRIPT_DIR/env/dev.sh"
+source "$SCRIPT_DIR/env/prod.sh"
 
 BACKEND_PORT="${SERVER_PORT:-11211}"
 FRONTEND_PORT="${FRONTEND_PORT:-3100}"
@@ -67,8 +67,8 @@ status_one() {
 }
 
 do_status() {
-  status_one "后端端口(dev)" "$BACKEND_PORT"
-  status_one "前端端口(dev)" "$FRONTEND_PORT"
+  status_one "后端端口(prod)" "$BACKEND_PORT"
+  status_one "前端端口(prod)" "$FRONTEND_PORT"
 }
 
 stop_port() {
@@ -90,38 +90,38 @@ stop_port() {
 }
 
 do_stop() {
-  stop_port "前端(dev)" "$FRONTEND_PORT"
-  stop_port "后端(dev)" "$BACKEND_PORT"
+  stop_port "前端(prod)" "$FRONTEND_PORT"
+  stop_port "后端(prod)" "$BACKEND_PORT"
 }
 
 do_check() {
-  bash "$SCRIPT_DIR/env/check.sh" dev
+  bash "$SCRIPT_DIR/env/check.sh" prod
 }
 
 start_backend() {
   local pid
   pid="$(find_pid "$BACKEND_PORT")"
   if [[ -n "$pid" ]]; then
-    fail "后端端口 $BACKEND_PORT 已被占用 (PID=$pid)，请先执行 stop 后再启动 dev"
+    fail "后端端口 $BACKEND_PORT 已被占用 (PID=$pid)，请先执行 stop 后再启动 prod"
     return 1
   fi
 
-  echo "[dev] 启动后端 ..."
-  setsid -f bash "$SCRIPT_DIR/backend/start-dev.sh" > "$BACKEND_LOG" 2>&1 < /dev/null
-  wait_for_port "后端(dev)" "$BACKEND_PORT" "$BACKEND_LOG" 120
+  echo "[prod] 启动后端 ..."
+  setsid -f bash "$SCRIPT_DIR/backend/start-prod.sh" > "$BACKEND_LOG" 2>&1 < /dev/null
+  wait_for_port "后端(prod)" "$BACKEND_PORT" "$BACKEND_LOG" 180
 }
 
 start_frontend() {
   local pid
   pid="$(find_pid "$FRONTEND_PORT")"
   if [[ -n "$pid" ]]; then
-    fail "前端端口 $FRONTEND_PORT 已被占用 (PID=$pid)，请先执行 stop 后再启动 dev"
+    fail "前端端口 $FRONTEND_PORT 已被占用 (PID=$pid)，请先执行 stop 后再启动 prod"
     return 1
   fi
 
-  echo "[dev] 启动前端 ..."
-  setsid -f bash "$ARIES_DIR/scripts/frontend/start-dev.sh" > "$FRONTEND_LOG" 2>&1 < /dev/null
-  wait_for_port "前端(dev)" "$FRONTEND_PORT" "$FRONTEND_LOG" 60
+  echo "[prod] 启动前端生产预览 ..."
+  setsid -f bash "$ARIES_DIR/scripts/frontend/start-prod.sh" > "$FRONTEND_LOG" 2>&1 < /dev/null
+  wait_for_port "前端(prod)" "$FRONTEND_PORT" "$FRONTEND_LOG" 120
 }
 
 do_start() {
@@ -131,7 +131,7 @@ do_start() {
   echo ""
   do_status
   echo ""
-  ok "开发环境已启动: http://localhost:$FRONTEND_PORT"
+  ok "生产测试环境已启动: http://localhost:$FRONTEND_PORT"
   echo "日志目录: $LOG_DIR"
 }
 
@@ -147,7 +147,7 @@ do_logs() {
     be|backend) tail -f "$BACKEND_LOG" ;;
     fe|frontend) tail -f "$FRONTEND_LOG" ;;
     all) tail -f "$BACKEND_LOG" "$FRONTEND_LOG" ;;
-    *) echo "用法: dev.sh logs [backend|frontend|all]" >&2; exit 1 ;;
+    *) echo "用法: prod.sh logs [backend|frontend|all]" >&2; exit 1 ;;
   esac
 }
 
@@ -159,13 +159,13 @@ case "${1:-}" in
   logs) do_logs "${2:-all}" ;;
   check) do_check ;;
   *)
-    echo "用法: dev.sh {start|stop|restart|status|logs|check}"
-    echo "  start    启动开发后端和 Vite dev server"
-    echo "  stop     停止开发前后端"
-    echo "  restart  重启开发前后端"
-    echo "  status   查看开发服务状态"
-    echo "  logs     查看开发日志"
-    echo "  check    检查开发环境"
+    echo "用法: prod.sh {start|stop|restart|status|logs|check}"
+    echo "  start    启动生产 profile 后端和前端生产预览"
+    echo "  stop     停止生产测试前后端"
+    echo "  restart  重启生产测试前后端"
+    echo "  status   查看生产测试服务状态"
+    echo "  logs     查看生产测试日志"
+    echo "  check    检查生产环境"
     exit 1
     ;;
 esac

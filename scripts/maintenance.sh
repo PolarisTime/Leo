@@ -4,7 +4,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "$SCRIPT_DIR/env-local.sh"
+source "$SCRIPT_DIR/env/dev.sh"
 
 PG_HOST="${SPRING_DATASOURCE_HOST:-localhost}"
 PG_PORT="${SPRING_DATASOURCE_PORT:-5432}"

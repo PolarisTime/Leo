@@ -8,10 +8,10 @@ ARIES_DIR="$ROOT_DIR/aries"
 
 echo "[oobe] 加载后端环境变量"
 # shellcheck disable=SC1090
-source "$LEO_DIR/scripts/env-local.sh"
+source "$LEO_DIR/scripts/env/dev.sh"
 
 echo "[oobe] 生成前端 .env.local"
-bash "$ARIES_DIR/scripts/env-local.sh"
+bash "$ARIES_DIR/scripts/env/dev.sh"
 
 echo "[oobe] 准备本地附件目录"
 mkdir -p "${LEO_ATTACHMENT_LOCAL_PATH}"

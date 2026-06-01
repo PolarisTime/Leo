@@ -23,6 +23,9 @@ leo:
         hsts-enabled: ${LEO_SECURITY_HSTS_ENABLED:true}
 
 spring:
+  datasource:
+    # 生产环境默认连接 prod 库，可通过 SPRING_DATASOURCE_URL 或 SPRING_DATASOURCE_DB 覆盖
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://${SPRING_DATASOURCE_HOST:localhost}:${SPRING_DATASOURCE_PORT:5432}/${SPRING_DATASOURCE_DB:prod}}
   jpa:
     properties:
       hibernate:
