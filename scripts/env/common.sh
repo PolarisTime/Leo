@@ -1,0 +1,74 @@
+#!/usr/bin/env bash
+
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  echo "请通过 source 加载 scripts/env/common.sh。" >&2
+  exit 1
+fi
+
+LEO_ENV_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LEO_SCRIPTS_DIR="$(cd "$LEO_ENV_DIR/.." && pwd)"
+LEO_DIR="$(cd "$LEO_SCRIPTS_DIR/.." && pwd)"
+WORKSPACE_DIR="$(cd "$LEO_DIR/.." && pwd)"
+
+load_dotenv_file() {
+  local dotenv_file="$1"
+  if [[ ! -f "$dotenv_file" ]]; then
+    return
+  fi
+
+  set -a
+  # shellcheck disable=SC1090
+  source "$dotenv_file"
+  set +a
+}
+
+load_workspace_env() {
+  load_dotenv_file "$WORKSPACE_DIR/.env"
+  load_dotenv_file "$WORKSPACE_DIR/.env.local"
+  if [[ -n "${LEO_RUNTIME_ENV:-}" ]]; then
+    load_dotenv_file "$WORKSPACE_DIR/.env.${LEO_RUNTIME_ENV}"
+    load_dotenv_file "$WORKSPACE_DIR/.env.${LEO_RUNTIME_ENV}.local"
+  fi
+}
+
+set_backend_common_defaults() {
+  export JAVA_HOME="${JAVA_HOME:-/usr/lib/jvm/java-21-openjdk}"
+  export SERVER_PORT="${SERVER_PORT:-11211}"
+
+  export SPRING_DATASOURCE_HOST="${SPRING_DATASOURCE_HOST:-localhost}"
+  export SPRING_DATASOURCE_PORT="${SPRING_DATASOURCE_PORT:-5432}"
+  export SPRING_DATASOURCE_USERNAME="${SPRING_DATASOURCE_USERNAME:-leo}"
+  export SPRING_DATASOURCE_PASSWORD="${SPRING_DATASOURCE_PASSWORD:-}"
+
+  export LEO_DB_ADMIN_HOST="${LEO_DB_ADMIN_HOST:-$SPRING_DATASOURCE_HOST}"
+  export LEO_DB_ADMIN_PORT="${LEO_DB_ADMIN_PORT:-$SPRING_DATASOURCE_PORT}"
+  export LEO_DB_ADMIN_DATABASE="${LEO_DB_ADMIN_DATABASE:-postgres}"
+  export LEO_DB_ADMIN_USER="${LEO_DB_ADMIN_USER:-postgres}"
+  export LEO_DB_ADMIN_PASSWORD="${LEO_DB_ADMIN_PASSWORD:-}"
+
+  export SPRING_DATA_REDIS_HOST="${SPRING_DATA_REDIS_HOST:-127.0.0.1}"
+  export SPRING_DATA_REDIS_PORT="${SPRING_DATA_REDIS_PORT:-16379}"
+  export SPRING_DATA_REDIS_DATABASE="${SPRING_DATA_REDIS_DATABASE:-3}"
+  export SPRING_DATA_REDIS_PASSWORD="${SPRING_DATA_REDIS_PASSWORD:-}"
+
+  export LEO_ATTACHMENT_STORAGE_TYPE="${LEO_ATTACHMENT_STORAGE_TYPE:-local}"
+  export LEO_ATTACHMENT_KEY_PREFIX="${LEO_ATTACHMENT_KEY_PREFIX:-attachments}"
+  export LEO_ATTACHMENT_LOCAL_PATH="${LEO_ATTACHMENT_LOCAL_PATH:-/tmp/leo/uploads}"
+
+  export LEO_DATABASE_BACKUP_PG_DUMP_COMMAND="${LEO_DATABASE_BACKUP_PG_DUMP_COMMAND:-/usr/pgsql-18/bin/pg_dump}"
+  export LEO_DATABASE_BACKUP_PSQL_COMMAND="${LEO_DATABASE_BACKUP_PSQL_COMMAND:-/usr/pgsql-18/bin/psql}"
+
+  export LEO_COMPANY_BOOTSTRAP_ENABLED="${LEO_COMPANY_BOOTSTRAP_ENABLED:-false}"
+  export LEO_COMPANY_BOOTSTRAP_COMPANY_NAME="${LEO_COMPANY_BOOTSTRAP_COMPANY_NAME:-}"
+  export LEO_COMPANY_BOOTSTRAP_TAX_NO="${LEO_COMPANY_BOOTSTRAP_TAX_NO:-}"
+  export LEO_COMPANY_BOOTSTRAP_BANK_NAME="${LEO_COMPANY_BOOTSTRAP_BANK_NAME:-}"
+  export LEO_COMPANY_BOOTSTRAP_BANK_ACCOUNT="${LEO_COMPANY_BOOTSTRAP_BANK_ACCOUNT:-}"
+  export LEO_COMPANY_BOOTSTRAP_TAX_RATE="${LEO_COMPANY_BOOTSTRAP_TAX_RATE:-0.1300}"
+  export LEO_COMPANY_BOOTSTRAP_STATUS="${LEO_COMPANY_BOOTSTRAP_STATUS:-正常}"
+  export LEO_COMPANY_BOOTSTRAP_REMARK="${LEO_COMPANY_BOOTSTRAP_REMARK:-}"
+
+  export LEO_AUTH_DEFAULT_PASSWORD="${LEO_AUTH_DEFAULT_PASSWORD:-}"
+  export LEO_JWT_SECRET="${LEO_JWT_SECRET:-}"
+  export TOTP_ENCRYPTION_KEY="${TOTP_ENCRYPTION_KEY:-}"
+  export LEO_MACHINE_ID="${LEO_MACHINE_ID:-0}"
+}
