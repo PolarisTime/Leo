@@ -9,6 +9,8 @@ ALTER TABLE sys_user ALTER COLUMN password_hash TYPE VARCHAR(128);
 ALTER TABLE md_customer ALTER COLUMN project_name TYPE VARCHAR(200);
 
 -- L6: spec for complex steel descriptions (e.g. "不锈钢无缝钢管 304 89*4.5 6m GB/T14976")
+DROP INDEX IF EXISTS idx_md_material_spec_sort;
+ALTER TABLE md_material DROP COLUMN IF EXISTS spec_sort;
 ALTER TABLE md_material ALTER COLUMN spec TYPE VARCHAR(64);
 ALTER TABLE po_purchase_order_item ALTER COLUMN spec TYPE VARCHAR(64);
 ALTER TABLE so_sales_order_item ALTER COLUMN spec TYPE VARCHAR(64);
@@ -22,6 +24,9 @@ ALTER TABLE lg_freight_bill_item ALTER COLUMN spec TYPE VARCHAR(64);
 ALTER TABLE st_customer_statement_item ALTER COLUMN spec TYPE VARCHAR(64);
 ALTER TABLE st_supplier_statement_item ALTER COLUMN spec TYPE VARCHAR(64);
 ALTER TABLE st_freight_statement_item ALTER COLUMN spec TYPE VARCHAR(64);
+ALTER TABLE md_material ADD COLUMN spec_sort INTEGER
+    GENERATED ALWAYS AS (CAST(NULLIF(regexp_replace(spec, '[^0-9]', '', 'g'), '') AS integer)) STORED;
+CREATE INDEX IF NOT EXISTS idx_md_material_spec_sort ON md_material (spec_sort);
 
 -- L9: UUID is fixed 36 characters
 ALTER TABLE auth_refresh_token ALTER COLUMN token_id TYPE VARCHAR(36);

@@ -1,6 +1,18 @@
 -- Align coordinate print templates to backend-provided current-system camelCase fields.
 -- No legacy frontend aliases or underscored private print fields are kept.
 
+UPDATE sys_print_template target
+SET bill_type = 'freight-bill',
+    template_name = '物流单A版',
+    template_type = source.template_type,
+    template_html = source.template_html,
+    is_default = false,
+    deleted_flag = false
+FROM sys_print_template source
+WHERE target.id = 700540000000000024
+  AND source.id = 700540000000000025
+  AND target.template_type = 'PDF_FORM';
+
 INSERT INTO sys_print_template (id, bill_type, template_name, template_type, template_html, is_default, deleted_flag)
 VALUES (
     700540000000000029,
@@ -17,18 +29,6 @@ SET bill_type = EXCLUDED.bill_type,
     template_type = EXCLUDED.template_type,
     template_html = EXCLUDED.template_html,
     deleted_flag = FALSE;
-
-UPDATE sys_print_template target
-SET bill_type = 'freight-bill',
-    template_name = '物流单A版',
-    template_type = source.template_type,
-    template_html = source.template_html,
-    is_default = false,
-    deleted_flag = false
-FROM sys_print_template source
-WHERE target.id = 700540000000000024
-  AND source.id = 700540000000000025
-  AND target.template_type = 'PDF_FORM';
 
 UPDATE sys_print_template
 SET template_html = replace(template_html, '{{_printDate}}', '{{printDate}}')
