@@ -17,6 +17,9 @@ public interface RefreshTokenSessionRepository extends JpaRepository<RefreshToke
     Optional<RefreshTokenSession> findByTokenHashAndDeletedFlagFalse(String tokenHash);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
+    Optional<RefreshTokenSession> findByPreviousTokenHashAndDeletedFlagFalse(String previousTokenHash);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
     List<RefreshTokenSession> findByUserIdAndDeletedFlagFalseAndRevokedAtIsNullAndExpiresAtAfterOrderByCreatedAtAsc(
             Long userId,
             LocalDateTime now

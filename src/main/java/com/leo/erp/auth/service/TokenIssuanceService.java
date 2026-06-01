@@ -47,7 +47,7 @@ public class TokenIssuanceService {
         this.eventPublisher = eventPublisher;
     }
 
-    @Transactional
+    @Transactional(noRollbackFor = BadCredentialsException.class)
     public TokenResponse refresh(String refreshToken, String loginIp, String userAgent) {
         if (refreshToken == null || refreshToken.isBlank()) {
             throw new BadCredentialsException("refreshToken无效或已过期");
@@ -55,6 +55,10 @@ public class TokenIssuanceService {
         Optional<RefreshTokenSession> activeOpt = sessionManagementService.findActiveSession(refreshToken);
 
         if (activeOpt.isEmpty()) {
+            Optional<RefreshTokenSession> previousSession = sessionManagementService.findPreviousTokenSession(refreshToken);
+            if (previousSession.isPresent()) {
+                handlePreviousRefreshToken(previousSession.get());
+            }
             Optional<RefreshTokenSession> anySession = sessionManagementService.findSessionByHash(refreshToken);
             if (anySession.isPresent() && anySession.get().getRevokeReason() == RevokeReason.CONCURRENT_LIMIT) {
                 throw new BusinessException(ErrorCode.SESSION_EVICTED, ErrorCode.SESSION_EVICTED.getMessage());
@@ -73,9 +77,21 @@ public class TokenIssuanceService {
             throw new BusinessException(ErrorCode.FORBIDDEN, "账户已禁用");
         }
 
-        sessionManagementService.revokeSession(session);
-        eventPublisher.publishEvent(new SessionInvalidatedEvent(user.getId(), session.getTokenId(), false));
-        return issueTokens(user, loginIp, userAgent);
+        SessionManagementService.RefreshTokenRotationResult refreshResult =
+                sessionManagementService.refreshSession(session, refreshToken, loginIp, userAgent);
+        return issueAccessTokenForSession(user, refreshResult.session(), refreshResult.refreshToken());
+    }
+
+    private void handlePreviousRefreshToken(RefreshTokenSession session) {
+        if (sessionManagementService.isPreviousTokenInGraceWindow(session)) {
+            throw new BusinessException(
+                    ErrorCode.REFRESH_TOKEN_REUSE_CONFLICT,
+                    ErrorCode.REFRESH_TOKEN_REUSE_CONFLICT.getMessage()
+            );
+        }
+        sessionManagementService.revokeSession(session, RevokeReason.REUSE_DETECTED);
+        eventPublisher.publishEvent(new SessionInvalidatedEvent(session.getUserId(), session.getTokenId(), true));
+        throw new BadCredentialsException("refreshToken无效或已过期");
     }
 
     @Transactional
@@ -115,6 +131,44 @@ public class TokenIssuanceService {
 
         eventPublisher.publishEvent(new SessionInvalidatedEvent(user.getId(), sessionTokenId, false));
 
+        long refreshExpiresIn = jwtTokenService.getRefreshExpirationMs() / 1000;
+
+        return new TokenResponse(
+                accessToken,
+                rawRefreshToken,
+                "Bearer",
+                jwtTokenService.getAccessExpirationMs() / 1000,
+                refreshExpiresIn,
+                new AuthUserResponse(
+                        user.getId(),
+                        user.getLoginName(),
+                        user.getUserName(),
+                        currentRoleNames,
+                        user.getTotpEnabled(),
+                        user.getRequireTotpSetup(),
+                        permissions,
+                        dataScopes
+                )
+        );
+    }
+
+    private TokenResponse issueAccessTokenForSession(UserAccount user,
+                                                     RefreshTokenSession session,
+                                                     String rawRefreshToken) {
+        var boundRoles = userRoleBindingService.resolveRolesForUser(user.getId());
+        SecurityPrincipal principal = SecurityPrincipal.authenticated(
+                user.getId(),
+                user.getLoginName(),
+                userRoleBindingService.toGrantedAuthorities(boundRoles),
+                Boolean.TRUE.equals(user.getTotpEnabled()),
+                Boolean.TRUE.equals(user.getRequireTotpSetup())
+        );
+        String accessToken = jwtTokenService.generateAccessToken(principal, session.getTokenId());
+
+        permissionService.evictCache(user.getId());
+        var permissions = permissionService.getUserPermissions(user.getId());
+        Map<String, String> dataScopes = permissionService.getUserDataScopes(user.getId());
+        String currentRoleNames = userRoleBindingService.joinRoleNames(boundRoles);
         long refreshExpiresIn = jwtTokenService.getRefreshExpirationMs() / 1000;
 
         return new TokenResponse(

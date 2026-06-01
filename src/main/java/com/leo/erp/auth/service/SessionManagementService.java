@@ -5,6 +5,7 @@ import com.leo.erp.auth.domain.entity.UserAccount;
 import com.leo.erp.auth.domain.enums.RevokeReason;
 import com.leo.erp.auth.repository.RefreshTokenSessionRepository;
 import com.leo.erp.auth.repository.UserAccountRepository;
+import com.leo.erp.auth.config.AuthProperties;
 import com.leo.erp.common.support.AfterCommitExecutor;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.security.jwt.AccessTokenBlacklistService;
@@ -39,6 +40,7 @@ public class SessionManagementService {
     private final SessionActivityService sessionActivityService;
     private final AfterCommitExecutor afterCommitExecutor;
     private final SystemSwitchService systemSwitchService;
+    private final AuthProperties authProperties;
 
     public SessionManagementService(
             UserAccountRepository userAccountRepository,
@@ -48,7 +50,8 @@ public class SessionManagementService {
             AccessTokenBlacklistService blacklistService,
             SessionActivityService sessionActivityService,
             AfterCommitExecutor afterCommitExecutor,
-            @org.springframework.lang.Nullable SystemSwitchService systemSwitchService
+            @org.springframework.lang.Nullable SystemSwitchService systemSwitchService,
+            AuthProperties authProperties
     ) {
         this.userAccountRepository = userAccountRepository;
         this.refreshTokenSessionRepository = refreshTokenSessionRepository;
@@ -58,6 +61,7 @@ public class SessionManagementService {
         this.sessionActivityService = sessionActivityService;
         this.afterCommitExecutor = afterCommitExecutor;
         this.systemSwitchService = systemSwitchService;
+        this.authProperties = authProperties != null ? authProperties : new AuthProperties();
     }
 
     private int maxRefreshTokensPerUser() {
@@ -84,6 +88,31 @@ public class SessionManagementService {
     }
 
     @Transactional
+    public RefreshTokenRotationResult refreshSession(RefreshTokenSession session,
+                                                    String currentRefreshToken,
+                                                    String loginIp,
+                                                    String userAgent) {
+        String nextRefreshToken = authProperties.getRefreshToken().isRotationEnabled()
+                ? generateRefreshToken()
+                : currentRefreshToken;
+        String currentHash = session.getTokenHash();
+        if (authProperties.getRefreshToken().isRotationEnabled()) {
+            session.setTokenHash(hashToken(nextRefreshToken));
+            session.setPreviousTokenHash(currentHash);
+            session.setPreviousTokenValidUntil(LocalDateTime.now().plusSeconds(refreshTokenReuseGraceSeconds()));
+        } else {
+            session.setPreviousTokenHash(null);
+            session.setPreviousTokenValidUntil(null);
+        }
+        session.setExpiresAt(LocalDateTime.now().plusSeconds(jwtTokenService.getRefreshExpirationMs() / 1000));
+        session.setLoginIp(loginIp);
+        session.setDeviceInfo(userAgent);
+        RefreshTokenSession saved = refreshTokenSessionRepository.save(session);
+        sessionActivityService.touchSession(session.getTokenId());
+        return new RefreshTokenRotationResult(saved, nextRefreshToken);
+    }
+
+    @Transactional
     public void revokeSession(RefreshTokenSession session) {
         revokeSession(session, RevokeReason.MANUAL);
     }
@@ -101,6 +130,16 @@ public class SessionManagementService {
                 .filter(session -> !session.isRevoked());
     }
 
+    public Optional<RefreshTokenSession> findPreviousTokenSession(String refreshToken) {
+        return refreshTokenSessionRepository.findByPreviousTokenHashAndDeletedFlagFalse(hashToken(refreshToken))
+                .filter(session -> !session.isRevoked());
+    }
+
+    public boolean isPreviousTokenInGraceWindow(RefreshTokenSession session) {
+        LocalDateTime validUntil = session.getPreviousTokenValidUntil();
+        return validUntil != null && !validUntil.isBefore(LocalDateTime.now());
+    }
+
     public UserAccount findUserById(Long userId) {
         return userAccountRepository.findByIdAndDeletedFlagFalse(userId)
                 .orElseThrow(() -> new BadCredentialsException("用户不存在"));
@@ -114,6 +153,10 @@ public class SessionManagementService {
 
     public String newSessionTokenId() {
         return UUID.randomUUID().toString();
+    }
+
+    private long refreshTokenReuseGraceSeconds() {
+        return Math.max(0L, authProperties.getRefreshToken().getReuseGraceSeconds());
     }
 
     static String hashToken(String rawToken) {
@@ -163,5 +206,11 @@ public class SessionManagementService {
         return refreshTokenSessionRepository
                 .findFirstByUserIdAndRevokeReasonAndDeletedFlagFalseOrderByRevokedAtDesc(
                         userId, RevokeReason.CONCURRENT_LIMIT);
+    }
+
+    public record RefreshTokenRotationResult(
+            RefreshTokenSession session,
+            String refreshToken
+    ) {
     }
 }
