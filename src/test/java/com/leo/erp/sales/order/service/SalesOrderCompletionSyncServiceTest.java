@@ -18,7 +18,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class SalesOrderCompletionSyncServiceTest {
 
     @Test
-    void shouldMarkSalesOrderPendingFinalizeWhenAuditedOutboundExists() {
+    void shouldMarkSalesOrderCompletedWhenAuditedOutboundExists() {
         SalesOrderRepository salesOrderRepository = mock(SalesOrderRepository.class);
         SalesOutboundRepository salesOutboundRepository = mock(SalesOutboundRepository.class);
         SalesOrderCompletionSyncService service = new SalesOrderCompletionSyncService(
@@ -39,12 +39,12 @@ class SalesOrderCompletionSyncServiceTest {
 
         service.syncBySalesOrderReference("SO-001");
 
-        assertThat(order.getStatus()).isEqualTo("待完善");
+        assertThat(order.getStatus()).isEqualTo("完成销售");
         verify(salesOrderRepository).saveAll(List.of(order));
     }
 
     @Test
-    void shouldRevertPendingFinalizeSalesOrderWhenNoAuditedOutboundRemains() {
+    void shouldRevertCompletedSalesOrderWhenNoAuditedOutboundRemains() {
         SalesOrderRepository salesOrderRepository = mock(SalesOrderRepository.class);
         SalesOutboundRepository salesOutboundRepository = mock(SalesOutboundRepository.class);
         SalesOrderCompletionSyncService service = new SalesOrderCompletionSyncService(
@@ -54,7 +54,7 @@ class SalesOrderCompletionSyncServiceTest {
 
         SalesOrder order = new SalesOrder();
         order.setOrderNo("SO-002");
-        order.setStatus("待完善");
+        order.setStatus("完成销售");
 
         SalesOutbound outbound = new SalesOutbound();
         outbound.setSalesOrderNo("SO-002");
@@ -65,12 +65,12 @@ class SalesOrderCompletionSyncServiceTest {
 
         service.syncBySalesOrderReference("SO-002");
 
-        assertThat(order.getStatus()).isEqualTo("已审核");
+        assertThat(order.getStatus()).isEqualTo("完成销售");
         verify(salesOrderRepository).saveAll(List.of(order));
     }
 
     @Test
-    void shouldSkipSaveWhenPendingFinalizeStatusDoesNotNeedChange() {
+    void shouldSkipSaveWhenCompletedStatusDoesNotNeedChange() {
         SalesOrderRepository salesOrderRepository = mock(SalesOrderRepository.class);
         SalesOutboundRepository salesOutboundRepository = mock(SalesOutboundRepository.class);
         SalesOrderCompletionSyncService service = new SalesOrderCompletionSyncService(
@@ -80,7 +80,7 @@ class SalesOrderCompletionSyncServiceTest {
 
         SalesOrder order = new SalesOrder();
         order.setOrderNo("SO-003");
-        order.setStatus("待完善");
+        order.setStatus("完成销售");
 
         SalesOutbound outbound = new SalesOutbound();
         outbound.setSalesOrderNo("SO-003");
@@ -91,8 +91,8 @@ class SalesOrderCompletionSyncServiceTest {
 
         service.syncBySalesOrderReference("SO-003");
 
-        assertThat(order.getStatus()).isEqualTo("待完善");
-        verify(salesOrderRepository, never()).saveAll(any());
+        assertThat(order.getStatus()).isEqualTo("完成销售");
+        verify(salesOrderRepository).saveAll(List.of(order));
     }
 
     @Test
@@ -118,7 +118,7 @@ class SalesOrderCompletionSyncServiceTest {
         service.syncBySalesOrderReference("SO-003B");
 
         assertThat(order.getStatus()).isEqualTo("完成销售");
-        verify(salesOrderRepository, never()).saveAll(any());
+        verify(salesOrderRepository).saveAll(List.of(order));
     }
 
     @Test
@@ -143,7 +143,7 @@ class SalesOrderCompletionSyncServiceTest {
 
         service.syncBySalesOrderReference("SO-004");
 
-        assertThat(order.getStatus()).isEqualTo("待完善");
+        assertThat(order.getStatus()).isEqualTo("完成销售");
         verify(salesOrderRepository).saveAll(List.of(order));
     }
 }

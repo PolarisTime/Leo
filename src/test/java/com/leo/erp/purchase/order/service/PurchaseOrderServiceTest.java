@@ -15,8 +15,9 @@ import com.leo.erp.purchase.order.mapper.PurchaseOrderMapper;
 import com.leo.erp.purchase.order.web.dto.PurchaseOrderItemRequest;
 import com.leo.erp.purchase.order.web.dto.PurchaseOrderRequest;
 import com.leo.erp.purchase.order.web.dto.PurchaseOrderResponse;
-import com.leo.erp.sales.order.service.SalesOrderItemQueryService;
+import com.leo.erp.allocation.repository.ItemAllocationNativeRepository;
 import com.leo.erp.security.permission.WorkflowTransitionGuard;
+import org.springframework.jdbc.core.JdbcTemplate;
 import com.leo.erp.system.norule.service.SystemSwitchService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -69,7 +70,7 @@ class PurchaseOrderServiceTest {
         WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
         SupplierRepository supplierRepository = mock(SupplierRepository.class);
         PurchaseInboundItemQueryService purchaseInboundItemQueryService = mock(PurchaseInboundItemQueryService.class);
-        SalesOrderItemQueryService salesOrderItemQueryService = mock(SalesOrderItemQueryService.class);
+        ItemAllocationNativeRepository itemAllocationRepo = mock(ItemAllocationNativeRepository.class);
         PurchaseOrderItemPieceWeightService pieceWeightService = mock(PurchaseOrderItemPieceWeightService.class);
         WorkflowTransitionGuard workflowTransitionGuard = mock(WorkflowTransitionGuard.class);
         PurchaseOrderService service = new PurchaseOrderService(
@@ -80,9 +81,10 @@ class PurchaseOrderServiceTest {
                 warehouseSelectionSupport,
                 supplierRepository,
                 purchaseInboundItemQueryService,
-                salesOrderItemQueryService,
+                itemAllocationRepo,
                 pieceWeightService,
-                workflowTransitionGuard
+                workflowTransitionGuard,
+                mock(JdbcTemplate.class)
         );
 
         PurchaseOrder order = new PurchaseOrder();
@@ -125,8 +127,8 @@ class PurchaseOrderServiceTest {
         ));
         when(purchaseInboundItemQueryService.summarizeAllocatedQuantityBySourcePurchaseOrderItemIds(List.of(7L)))
                 .thenReturn(Map.of(7L, 4L));
-        when(salesOrderItemQueryService.summarizeAllocatedQuantityBySourcePurchaseOrderItemIds(List.of(7L), null))
-                .thenReturn(Map.of(7L, 3L));
+        when(itemAllocationRepo.summarizeSalesByPurchaseOrderItems(List.of(7L), null))
+                .thenReturn(List.of(allocationProjection(7L, 3L)));
         when(pieceWeightService.summarizeRemainingWeightByPurchaseOrderItemIds(List.of(7L)))
                 .thenReturn(Map.of(7L, new BigDecimal("0.700")));
 
@@ -142,7 +144,7 @@ class PurchaseOrderServiceTest {
                 assertThat(detailItem.salesRemainingWeightTon()).isEqualByComparingTo("0.700")
         );
         verify(purchaseInboundItemQueryService).summarizeAllocatedQuantityBySourcePurchaseOrderItemIds(List.of(7L));
-        verify(salesOrderItemQueryService).summarizeAllocatedQuantityBySourcePurchaseOrderItemIds(List.of(7L), null);
+        verify(itemAllocationRepo).summarizeSalesByPurchaseOrderItems(List.of(7L), null);
     }
 
     @Test
@@ -154,7 +156,7 @@ class PurchaseOrderServiceTest {
         WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
         SupplierRepository supplierRepository = mock(SupplierRepository.class);
         PurchaseInboundItemQueryService purchaseInboundItemQueryService = mock(PurchaseInboundItemQueryService.class);
-        SalesOrderItemQueryService salesOrderItemQueryService = mock(SalesOrderItemQueryService.class);
+        ItemAllocationNativeRepository itemAllocationRepo = mock(ItemAllocationNativeRepository.class);
         PurchaseOrderItemPieceWeightService pieceWeightService = mock(PurchaseOrderItemPieceWeightService.class);
         WorkflowTransitionGuard workflowTransitionGuard = mock(WorkflowTransitionGuard.class);
         PurchaseOrderService service = new PurchaseOrderService(
@@ -165,9 +167,10 @@ class PurchaseOrderServiceTest {
                 warehouseSelectionSupport,
                 supplierRepository,
                 purchaseInboundItemQueryService,
-                salesOrderItemQueryService,
+                itemAllocationRepo,
                 pieceWeightService,
-                workflowTransitionGuard
+                workflowTransitionGuard,
+                mock(JdbcTemplate.class)
         );
 
         PurchaseOrder order = buildOrder();
@@ -203,7 +206,7 @@ class PurchaseOrderServiceTest {
         WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
         SupplierRepository supplierRepository = mock(SupplierRepository.class);
         PurchaseInboundItemQueryService purchaseInboundItemQueryService = mock(PurchaseInboundItemQueryService.class);
-        SalesOrderItemQueryService salesOrderItemQueryService = mock(SalesOrderItemQueryService.class);
+        ItemAllocationNativeRepository itemAllocationRepo = mock(ItemAllocationNativeRepository.class);
         PurchaseOrderItemPieceWeightService pieceWeightService = mock(PurchaseOrderItemPieceWeightService.class);
         WorkflowTransitionGuard workflowTransitionGuard = mock(WorkflowTransitionGuard.class);
         PurchaseOrderService service = new PurchaseOrderService(
@@ -214,9 +217,10 @@ class PurchaseOrderServiceTest {
                 warehouseSelectionSupport,
                 supplierRepository,
                 purchaseInboundItemQueryService,
-                salesOrderItemQueryService,
+                itemAllocationRepo,
                 pieceWeightService,
-                workflowTransitionGuard
+                workflowTransitionGuard,
+                mock(JdbcTemplate.class)
         );
 
         when(repository.existsByOrderNoAndDeletedFlagFalse("PO-001")).thenReturn(false);
@@ -251,7 +255,7 @@ class PurchaseOrderServiceTest {
         WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
         SupplierRepository supplierRepository = mock(SupplierRepository.class);
         PurchaseInboundItemQueryService purchaseInboundItemQueryService = mock(PurchaseInboundItemQueryService.class);
-        SalesOrderItemQueryService salesOrderItemQueryService = mock(SalesOrderItemQueryService.class);
+        ItemAllocationNativeRepository itemAllocationRepo = mock(ItemAllocationNativeRepository.class);
         PurchaseOrderItemPieceWeightService pieceWeightService = mock(PurchaseOrderItemPieceWeightService.class);
         WorkflowTransitionGuard workflowTransitionGuard = mock(WorkflowTransitionGuard.class);
         PurchaseOrderService service = new PurchaseOrderService(
@@ -262,9 +266,10 @@ class PurchaseOrderServiceTest {
                 warehouseSelectionSupport,
                 supplierRepository,
                 purchaseInboundItemQueryService,
-                salesOrderItemQueryService,
+                itemAllocationRepo,
                 pieceWeightService,
-                workflowTransitionGuard
+                workflowTransitionGuard,
+                mock(JdbcTemplate.class)
         );
         PurchaseOrder order = buildOrder();
         order.setStatus("已审核");
@@ -285,7 +290,7 @@ class PurchaseOrderServiceTest {
         WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
         SupplierRepository supplierRepository = mock(SupplierRepository.class);
         PurchaseInboundItemQueryService purchaseInboundItemQueryService = mock(PurchaseInboundItemQueryService.class);
-        SalesOrderItemQueryService salesOrderItemQueryService = mock(SalesOrderItemQueryService.class);
+        ItemAllocationNativeRepository itemAllocationRepo = mock(ItemAllocationNativeRepository.class);
         PurchaseOrderItemPieceWeightService pieceWeightService = mock(PurchaseOrderItemPieceWeightService.class);
         WorkflowTransitionGuard workflowTransitionGuard = mock(WorkflowTransitionGuard.class);
         PurchaseOrderService service = new PurchaseOrderService(
@@ -296,9 +301,10 @@ class PurchaseOrderServiceTest {
                 warehouseSelectionSupport,
                 supplierRepository,
                 purchaseInboundItemQueryService,
-                salesOrderItemQueryService,
+                itemAllocationRepo,
                 pieceWeightService,
-                workflowTransitionGuard
+                workflowTransitionGuard,
+                mock(JdbcTemplate.class)
         );
 
         when(repository.existsByOrderNoAndDeletedFlagFalse("PO-001")).thenReturn(false);
@@ -319,7 +325,7 @@ class PurchaseOrderServiceTest {
         WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
         SupplierRepository supplierRepository = mock(SupplierRepository.class);
         PurchaseInboundItemQueryService purchaseInboundItemQueryService = mock(PurchaseInboundItemQueryService.class);
-        SalesOrderItemQueryService salesOrderItemQueryService = mock(SalesOrderItemQueryService.class);
+        ItemAllocationNativeRepository itemAllocationRepo = mock(ItemAllocationNativeRepository.class);
         PurchaseOrderItemPieceWeightService pieceWeightService = mock(PurchaseOrderItemPieceWeightService.class);
         WorkflowTransitionGuard workflowTransitionGuard = mock(WorkflowTransitionGuard.class);
         PurchaseOrderService service = new PurchaseOrderService(
@@ -330,9 +336,10 @@ class PurchaseOrderServiceTest {
                 warehouseSelectionSupport,
                 supplierRepository,
                 purchaseInboundItemQueryService,
-                salesOrderItemQueryService,
+                itemAllocationRepo,
                 pieceWeightService,
-                workflowTransitionGuard
+                workflowTransitionGuard,
+                mock(JdbcTemplate.class)
         );
 
         PurchaseOrder order = buildOrder();
@@ -349,8 +356,8 @@ class PurchaseOrderServiceTest {
         when(repository.findByIdInAndDeletedFlagFalse(List.of(1L))).thenReturn(List.of(order));
         when(purchaseInboundItemQueryService.summarizeAllocatedQuantityBySourcePurchaseOrderItemIds(List.of(11L, 12L)))
                 .thenReturn(Map.of(11L, 4L, 12L, 1L));
-        when(salesOrderItemQueryService.summarizeAllocatedQuantityBySourcePurchaseOrderItemIds(List.of(11L, 12L), null))
-                .thenReturn(Map.of(11L, 7L, 12L, 3L));
+        when(itemAllocationRepo.summarizeSalesByPurchaseOrderItems(List.of(11L, 12L), null))
+                .thenReturn(List.of(allocationProjection(11L, 7L), allocationProjection(12L, 3L)));
 
         var inboundPage = service.importCandidates(PageQuery.of(0, 20, null, null), "", "purchase-inbound");
         var salesPage = service.importCandidates(PageQuery.of(0, 20, null, null), "", "sales-order");
@@ -366,7 +373,7 @@ class PurchaseOrderServiceTest {
         );
         verify(repository, times(2)).findByIdInAndDeletedFlagFalse(List.of(1L));
         verify(purchaseInboundItemQueryService).summarizeAllocatedQuantityBySourcePurchaseOrderItemIds(List.of(11L, 12L));
-        verify(salesOrderItemQueryService).summarizeAllocatedQuantityBySourcePurchaseOrderItemIds(List.of(11L, 12L), null);
+        verify(itemAllocationRepo).summarizeSalesByPurchaseOrderItems(List.of(11L, 12L), null);
     }
 
     @Test
@@ -378,7 +385,7 @@ class PurchaseOrderServiceTest {
         WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
         SupplierRepository supplierRepository = mock(SupplierRepository.class);
         PurchaseInboundItemQueryService purchaseInboundItemQueryService = mock(PurchaseInboundItemQueryService.class);
-        SalesOrderItemQueryService salesOrderItemQueryService = mock(SalesOrderItemQueryService.class);
+        ItemAllocationNativeRepository itemAllocationRepo = mock(ItemAllocationNativeRepository.class);
         PurchaseOrderItemPieceWeightService pieceWeightService = mock(PurchaseOrderItemPieceWeightService.class);
         WorkflowTransitionGuard workflowTransitionGuard = mock(WorkflowTransitionGuard.class);
         SystemSwitchService systemSwitchService = mock(SystemSwitchService.class);
@@ -390,9 +397,10 @@ class PurchaseOrderServiceTest {
                 warehouseSelectionSupport,
                 supplierRepository,
                 purchaseInboundItemQueryService,
-                salesOrderItemQueryService,
+                itemAllocationRepo,
                 pieceWeightService,
-                workflowTransitionGuard
+                workflowTransitionGuard,
+                mock(JdbcTemplate.class)
         );
         PurchaseOrder order = buildOrder();
 
@@ -502,5 +510,13 @@ class PurchaseOrderServiceTest {
                 null,
                 List.of()
         );
+    }
+
+    private ItemAllocationNativeRepository.AllocationProjection allocationProjection(Long sourceItemId, Long totalQuantity) {
+        return new ItemAllocationNativeRepository.AllocationProjection() {
+            @Override public Long getSourceItemId() { return sourceItemId; }
+            @Override public Long getTotalQuantity() { return totalQuantity; }
+            @Override public java.math.BigDecimal getTotalWeightTon() { return java.math.BigDecimal.ZERO; }
+        };
     }
 }

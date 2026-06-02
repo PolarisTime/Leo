@@ -1,0 +1,152 @@
+package com.leo.erp.system.schedule.config;
+
+import org.springframework.boot.context.properties.ConfigurationProperties;
+
+@ConfigurationProperties(prefix = "leo.maintenance")
+public class MaintenanceScheduleProperties {
+
+    private boolean enabled = true;
+    private String zone = "Asia/Shanghai";
+    private BackupTask databaseBackup = new BackupTask();
+    private OperationLogArchiveTask operationLogArchive = new OperationLogArchiveTask();
+    private ExportTaskCleanup exportTaskCleanup = new ExportTaskCleanup();
+
+    public boolean isEnabled() {
+        return enabled;
+    }
+
+    public void setEnabled(boolean enabled) {
+        this.enabled = enabled;
+    }
+
+    public String getZone() {
+        return zone;
+    }
+
+    public void setZone(String zone) {
+        this.zone = zone;
+    }
+
+    public BackupTask getDatabaseBackup() {
+        return databaseBackup;
+    }
+
+    public void setDatabaseBackup(BackupTask databaseBackup) {
+        this.databaseBackup = databaseBackup;
+    }
+
+    public OperationLogArchiveTask getOperationLogArchive() {
+        return operationLogArchive;
+    }
+
+    public void setOperationLogArchive(OperationLogArchiveTask operationLogArchive) {
+        this.operationLogArchive = operationLogArchive;
+    }
+
+    public ExportTaskCleanup getExportTaskCleanup() {
+        return exportTaskCleanup;
+    }
+
+    public void setExportTaskCleanup(ExportTaskCleanup exportTaskCleanup) {
+        this.exportTaskCleanup = exportTaskCleanup;
+    }
+
+    public static class BackupTask {
+        private boolean enabled = true;
+        private String cron = "0 15 2 * * *";
+        private int retentionDays = 30;
+
+        public boolean isEnabled() {
+            return enabled;
+        }
+
+        public void setEnabled(boolean enabled) {
+            this.enabled = enabled;
+        }
+
+        public String getCron() {
+            return cron;
+        }
+
+        public void setCron(String cron) {
+            this.cron = cron;
+        }
+
+        public int getRetentionDays() {
+            return retentionDays;
+        }
+
+        public void setRetentionDays(int retentionDays) {
+            this.retentionDays = retentionDays;
+        }
+    }
+
+    public static class OperationLogArchiveTask {
+        private boolean enabled = true;
+        private String cron = "0 30 2 * * *";
+        private int retentionDays = 30;
+        private int batchSize = 1000;
+        private String archivePath = "/tmp/leo/operation-log-archives";
+
+        public boolean isEnabled() {
+            return enabled;
+        }
+
+        public void setEnabled(boolean enabled) {
+            this.enabled = enabled;
+        }
+
+        public String getCron() {
+            return cron;
+        }
+
+        public void setCron(String cron) {
+            this.cron = cron;
+        }
+
+        public int getRetentionDays() {
+            return retentionDays;
+        }
+
+        public void setRetentionDays(int retentionDays) {
+            this.retentionDays = retentionDays;
+        }
+
+        public int getBatchSize() {
+            return batchSize;
+        }
+
+        public void setBatchSize(int batchSize) {
+            this.batchSize = batchSize;
+        }
+
+        public String getArchivePath() {
+            return archivePath;
+        }
+
+        public void setArchivePath(String archivePath) {
+            this.archivePath = archivePath;
+        }
+    }
+
+    public static class ExportTaskCleanup {
+        private boolean enabled = true;
+        private String cron = "0 45 2 * * *";
+
+        public boolean isEnabled() {
+            return enabled;
+        }
+
+        public void setEnabled(boolean enabled) {
+            this.enabled = enabled;
+        }
+
+        public String getCron() {
+            return cron;
+        }
+
+        public void setCron(String cron) {
+            this.cron = cron;
+        }
+    }
+}

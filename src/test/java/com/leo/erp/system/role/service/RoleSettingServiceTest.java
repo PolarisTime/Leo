@@ -102,6 +102,7 @@ class RoleSettingServiceTest {
                 new Class[]{RolePermissionRepository.class},
                 (proxy, method, args) -> switch (method.getName()) {
                     case "findByRoleIdAndDeletedFlagFalse" -> List.of();
+                    case "findByRoleIdInAndDeletedFlagFalse" -> List.of();
                     case "deleteActiveByRoleId" -> 0;
                     case "flush" -> null;
                     case "saveAll" -> {
@@ -121,8 +122,12 @@ class RoleSettingServiceTest {
         return (T) Proxy.newProxyInstance(
                 type.getClassLoader(),
                 new Class[]{type},
-                (proxy, method, args) -> {
-                    throw new UnsupportedOperationException(method.getName());
+                (proxy, method, args) -> switch (method.getName()) {
+                    case "findByRoleIdInAndDeletedFlagFalse" -> List.of();
+                    case "toString" -> type.getSimpleName() + "Stub";
+                    case "hashCode" -> System.identityHashCode(proxy);
+                    case "equals" -> proxy == args[0];
+                    default -> throw new UnsupportedOperationException(method.getName());
                 }
         );
     }

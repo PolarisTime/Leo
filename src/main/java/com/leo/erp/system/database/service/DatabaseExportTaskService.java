@@ -256,7 +256,7 @@ public class DatabaseExportTaskService {
         }
     }
 
-    private void cleanupExpiredTasks() {
+    public void cleanupExpiredTasks() {
         taskRepository.findByStatusAndExpiresAtBeforeAndDeletedFlagFalse(STATUS_SUCCESS, LocalDateTime.now())
                 .forEach(this::expireTask);
     }

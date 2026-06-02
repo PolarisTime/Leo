@@ -1,19 +1,20 @@
 package com.leo.erp.sales.order.service;
 
+import com.leo.erp.allocation.appservice.PurchaseItemQueryAppService;
+import com.leo.erp.allocation.appservice.PurchaseItemPieceWeightAppService;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.TradeItemMaterialSupport;
 import com.leo.erp.common.support.WarehouseSelectionSupport;
 import com.leo.erp.master.material.domain.entity.Material;
 import com.leo.erp.purchase.inbound.domain.entity.PurchaseInbound;
 import com.leo.erp.purchase.inbound.domain.entity.PurchaseInboundItem;
-import com.leo.erp.purchase.inbound.service.PurchaseInboundItemQueryService;
 import com.leo.erp.purchase.order.domain.entity.PurchaseOrderItem;
-import com.leo.erp.purchase.order.service.PurchaseOrderItemPieceWeightService;
-import com.leo.erp.purchase.order.service.PurchaseOrderItemQueryService;
 import com.leo.erp.security.permission.WorkflowTransitionGuard;
 import com.leo.erp.sales.order.repository.SalesOrderItemRepository;
 import com.leo.erp.sales.order.repository.SalesOrderRepository;
+import com.leo.erp.sales.order.domain.entity.SalesOrderItem;
 import com.leo.erp.sales.order.mapper.SalesOrderMapper;
+import com.leo.erp.sales.order.service.SalesOrderItemMapper;
 import com.leo.erp.sales.order.web.dto.SalesOrderItemRequest;
 import com.leo.erp.sales.order.web.dto.SalesOrderRequest;
 import com.leo.erp.sales.order.web.dto.SalesOrderResponse;
@@ -33,6 +34,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentCaptor.forClass;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -52,9 +55,8 @@ class SalesOrderServiceTest {
         SnowflakeIdGenerator idGenerator = mock(SnowflakeIdGenerator.class);
         SalesOrderMapper mapper = mock(SalesOrderMapper.class);
         TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
-        PurchaseInboundItemQueryService purchaseInboundItemQueryService = mock(PurchaseInboundItemQueryService.class);
-        PurchaseOrderItemQueryService purchaseOrderItemQueryService = mock(PurchaseOrderItemQueryService.class);
-        PurchaseOrderItemPieceWeightService pieceWeightService = mock(PurchaseOrderItemPieceWeightService.class);
+        PurchaseItemQueryAppService purchaseItemQueryAppService = mock(PurchaseItemQueryAppService.class);
+        PurchaseItemPieceWeightAppService pieceWeightAppService = mock(PurchaseItemPieceWeightAppService.class);
         SalesOrderItemRepository salesOrderItemRepository = mock(SalesOrderItemRepository.class);
         WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
         SalesOrderService service = new SalesOrderService(
@@ -62,11 +64,11 @@ class SalesOrderServiceTest {
                 idGenerator,
                 mapper,
                 materialSupport,
-                purchaseInboundItemQueryService,
-                purchaseOrderItemQueryService,
-                pieceWeightService,
+                purchaseItemQueryAppService,
+                pieceWeightAppService,
                 salesOrderItemRepository,
                 warehouseSelectionSupport,
+                stubbedSalesOrderItemMapper(),
                 mock(WorkflowTransitionGuard.class)
         );
 
@@ -101,7 +103,7 @@ class SalesOrderServiceTest {
         when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(Map.of("M1", new Material()));
         when(materialSupport.normalizeBatchNo(any(), eq("B1"), eq(1), eq(true))).thenReturn("B1");
         when(warehouseSelectionSupport.normalizeWarehouseName("一号库", 1, true)).thenReturn("一号库");
-        when(purchaseInboundItemQueryService.findAllActiveByIdIn(List.of(101L))).thenReturn(List.of(inboundItem));
+        when(purchaseItemQueryAppService.findSourceInboundItemsByIds(List.of(101L))).thenReturn(List.of(sourceInboundRecord(101L, inbound.getWarehouseName(), inboundItem.getQuantity())));
         when(salesOrderItemRepository.summarizeAllocatedQuantityBySourceInboundItemIds(eq(List.of(101L)), any()))
                 .thenReturn(List.of());
         when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
@@ -113,7 +115,7 @@ class SalesOrderServiceTest {
         SalesOrderResponse response = service.create(request);
 
         assertThat(response.orderNo()).isEqualTo("SO-001");
-        verify(purchaseInboundItemQueryService).findAllActiveByIdIn(List.of(101L));
+        verify(purchaseItemQueryAppService).findSourceInboundItemsByIds(List.of(101L));
         verify(salesOrderItemRepository).summarizeAllocatedQuantityBySourceInboundItemIds(eq(List.of(101L)), any());
     }
 
@@ -123,9 +125,8 @@ class SalesOrderServiceTest {
         SnowflakeIdGenerator idGenerator = mock(SnowflakeIdGenerator.class);
         SalesOrderMapper mapper = mock(SalesOrderMapper.class);
         TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
-        PurchaseInboundItemQueryService purchaseInboundItemQueryService = mock(PurchaseInboundItemQueryService.class);
-        PurchaseOrderItemQueryService purchaseOrderItemQueryService = mock(PurchaseOrderItemQueryService.class);
-        PurchaseOrderItemPieceWeightService pieceWeightService = mock(PurchaseOrderItemPieceWeightService.class);
+        PurchaseItemQueryAppService purchaseItemQueryAppService = mock(PurchaseItemQueryAppService.class);
+        PurchaseItemPieceWeightAppService pieceWeightAppService = mock(PurchaseItemPieceWeightAppService.class);
         SalesOrderItemRepository salesOrderItemRepository = mock(SalesOrderItemRepository.class);
         WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
         SalesOrderService service = new SalesOrderService(
@@ -133,11 +134,11 @@ class SalesOrderServiceTest {
                 idGenerator,
                 mapper,
                 materialSupport,
-                purchaseInboundItemQueryService,
-                purchaseOrderItemQueryService,
-                pieceWeightService,
+                purchaseItemQueryAppService,
+                pieceWeightAppService,
                 salesOrderItemRepository,
                 warehouseSelectionSupport,
+                stubbedSalesOrderItemMapper(),
                 mock(WorkflowTransitionGuard.class)
         );
 
@@ -175,11 +176,11 @@ class SalesOrderServiceTest {
         when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(Map.of("M1", new Material()));
         when(materialSupport.normalizeBatchNo(any(), eq("B1"), eq(1), eq(true))).thenReturn("B1");
         when(warehouseSelectionSupport.normalizeWarehouseName("一号库", 1, true)).thenReturn("一号库");
-        when(purchaseOrderItemQueryService.findActiveByIdIn(List.of(201L))).thenReturn(List.of(sourceItem));
+        when(purchaseItemQueryAppService.findSourcePurchaseOrderItemsByIds(List.of(201L))).thenReturn(List.of(sourcePurchaseOrderRecord(sourceItem.getId(), sourceItem.getQuantity(), sourceItem.getWeightTon())));
         when(salesOrderItemRepository.summarizeAllocatedQuantityBySourcePurchaseOrderItemIds(eq(List.of(201L)), any()))
                 .thenReturn(List.of(allocationSummary));
         when(repository.saveAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));
-        when(pieceWeightService.allocateForSalesOrderItem(eq(sourceItem), eq(3), any(), eq(1)))
+        when(pieceWeightAppService.allocateForSalesOrderItem(eq(sourceItem.getId()), eq(3), any(), eq(1)))
                 .thenReturn(new BigDecimal("0.301"));
         when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
         when(mapper.toResponse(any())).thenReturn(new SalesOrderResponse(
@@ -197,9 +198,9 @@ class SalesOrderServiceTest {
         assertThat(savedItem.getSourcePurchaseOrderItemId()).isEqualTo(201L);
         assertThat(savedItem.getWeightTon()).isEqualByComparingTo("0.301");
         assertThat(savedItem.getAmount()).isEqualByComparingTo("1204.00");
-        InOrder saveFlow = inOrder(repository, pieceWeightService);
+        InOrder saveFlow = inOrder(repository, pieceWeightAppService);
         saveFlow.verify(repository).saveAndFlush(any());
-        saveFlow.verify(pieceWeightService).allocateForSalesOrderItem(eq(sourceItem), eq(3), any(), eq(1));
+        saveFlow.verify(pieceWeightAppService).allocateForSalesOrderItem(eq(sourceItem.getId()), eq(3), any(), eq(1));
         saveFlow.verify(repository).save(any());
     }
 
@@ -209,9 +210,8 @@ class SalesOrderServiceTest {
         SnowflakeIdGenerator idGenerator = mock(SnowflakeIdGenerator.class);
         SalesOrderMapper mapper = mock(SalesOrderMapper.class);
         TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
-        PurchaseInboundItemQueryService purchaseInboundItemQueryService = mock(PurchaseInboundItemQueryService.class);
-        PurchaseOrderItemQueryService purchaseOrderItemQueryService = mock(PurchaseOrderItemQueryService.class);
-        PurchaseOrderItemPieceWeightService pieceWeightService = mock(PurchaseOrderItemPieceWeightService.class);
+        PurchaseItemQueryAppService purchaseItemQueryAppService = mock(PurchaseItemQueryAppService.class);
+        PurchaseItemPieceWeightAppService pieceWeightAppService = mock(PurchaseItemPieceWeightAppService.class);
         SalesOrderItemRepository salesOrderItemRepository = mock(SalesOrderItemRepository.class);
         WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
         SalesOrderService service = new SalesOrderService(
@@ -219,11 +219,11 @@ class SalesOrderServiceTest {
                 idGenerator,
                 mapper,
                 materialSupport,
-                purchaseInboundItemQueryService,
-                purchaseOrderItemQueryService,
-                pieceWeightService,
+                purchaseItemQueryAppService,
+                pieceWeightAppService,
                 salesOrderItemRepository,
                 warehouseSelectionSupport,
+                stubbedSalesOrderItemMapper(),
                 mock(WorkflowTransitionGuard.class)
         );
 
@@ -255,11 +255,11 @@ class SalesOrderServiceTest {
         when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(Map.of("M1", new Material()));
         when(materialSupport.normalizeBatchNo(any(), eq("B1"), eq(1), eq(true))).thenReturn("B1");
         when(warehouseSelectionSupport.normalizeWarehouseName("一号库", 1, true)).thenReturn("一号库");
-        when(purchaseOrderItemQueryService.findActiveByIdIn(List.of(201L))).thenReturn(List.of(sourceItem));
+        when(purchaseItemQueryAppService.findSourcePurchaseOrderItemsByIds(List.of(201L))).thenReturn(List.of(sourcePurchaseOrderRecord(sourceItem.getId(), sourceItem.getQuantity(), sourceItem.getWeightTon())));
         when(salesOrderItemRepository.summarizeAllocatedQuantityBySourcePurchaseOrderItemIds(eq(List.of(201L)), any()))
                 .thenReturn(List.of());
         when(repository.saveAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));
-        when(pieceWeightService.allocateForSalesOrderItem(eq(sourceItem), eq(2), any(), eq(1)))
+        when(pieceWeightAppService.allocateForSalesOrderItem(eq(sourceItem.getId()), eq(2), any(), eq(1)))
                 .thenReturn(new BigDecimal("4.710"));
         when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
         when(mapper.toResponse(any())).thenReturn(new SalesOrderResponse(
@@ -283,9 +283,8 @@ class SalesOrderServiceTest {
         SnowflakeIdGenerator idGenerator = mock(SnowflakeIdGenerator.class);
         SalesOrderMapper mapper = mock(SalesOrderMapper.class);
         TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
-        PurchaseInboundItemQueryService purchaseInboundItemQueryService = mock(PurchaseInboundItemQueryService.class);
-        PurchaseOrderItemQueryService purchaseOrderItemQueryService = mock(PurchaseOrderItemQueryService.class);
-        PurchaseOrderItemPieceWeightService pieceWeightService = mock(PurchaseOrderItemPieceWeightService.class);
+        PurchaseItemQueryAppService purchaseItemQueryAppService = mock(PurchaseItemQueryAppService.class);
+        PurchaseItemPieceWeightAppService pieceWeightAppService = mock(PurchaseItemPieceWeightAppService.class);
         SalesOrderItemRepository salesOrderItemRepository = mock(SalesOrderItemRepository.class);
         WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
         SalesOrderService service = new SalesOrderService(
@@ -293,11 +292,11 @@ class SalesOrderServiceTest {
                 idGenerator,
                 mapper,
                 materialSupport,
-                purchaseInboundItemQueryService,
-                purchaseOrderItemQueryService,
-                pieceWeightService,
+                purchaseItemQueryAppService,
+                pieceWeightAppService,
                 salesOrderItemRepository,
                 warehouseSelectionSupport,
+                stubbedSalesOrderItemMapper(),
                 mock(WorkflowTransitionGuard.class)
         );
 
@@ -335,13 +334,13 @@ class SalesOrderServiceTest {
         when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(Map.of("M1", new Material()));
         when(materialSupport.normalizeBatchNo(any(), eq("B1"), eq(1), eq(true))).thenReturn("B1");
         when(warehouseSelectionSupport.normalizeWarehouseName("一号库", 1, true)).thenReturn("一号库");
-        when(purchaseOrderItemQueryService.findActiveByIdIn(List.of(201L))).thenReturn(List.of(sourceItem));
+        when(purchaseItemQueryAppService.findSourcePurchaseOrderItemsByIds(List.of(201L))).thenReturn(List.of(sourcePurchaseOrderRecord(sourceItem.getId(), sourceItem.getQuantity(), sourceItem.getWeightTon())));
         when(salesOrderItemRepository.summarizeAllocatedQuantityBySourcePurchaseOrderItemIds(eq(List.of(201L)), any()))
                 .thenReturn(List.of(allocationSummary));
-        when(pieceWeightService.summarizeRemainingWeightByPurchaseOrderItemIds(List.of(201L)))
+        when(pieceWeightAppService.summarizeRemainingWeightByPurchaseOrderItemIds(List.of(201L)))
                 .thenReturn(Map.of(201L, new BigDecimal("4.496")));
         when(repository.saveAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));
-        when(pieceWeightService.allocateForSalesOrderItem(eq(sourceItem), eq(2), any(), eq(1)))
+        when(pieceWeightAppService.allocateForSalesOrderItem(eq(sourceItem.getId()), eq(2), any(), eq(1)))
                 .thenReturn(new BigDecimal("4.496"));
         when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
         when(mapper.toResponse(any())).thenReturn(new SalesOrderResponse(
@@ -365,9 +364,8 @@ class SalesOrderServiceTest {
         SnowflakeIdGenerator idGenerator = mock(SnowflakeIdGenerator.class);
         SalesOrderMapper mapper = mock(SalesOrderMapper.class);
         TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
-        PurchaseInboundItemQueryService purchaseInboundItemQueryService = mock(PurchaseInboundItemQueryService.class);
-        PurchaseOrderItemQueryService purchaseOrderItemQueryService = mock(PurchaseOrderItemQueryService.class);
-        PurchaseOrderItemPieceWeightService pieceWeightService = mock(PurchaseOrderItemPieceWeightService.class);
+        PurchaseItemQueryAppService purchaseItemQueryAppService = mock(PurchaseItemQueryAppService.class);
+        PurchaseItemPieceWeightAppService pieceWeightAppService = mock(PurchaseItemPieceWeightAppService.class);
         SalesOrderItemRepository salesOrderItemRepository = mock(SalesOrderItemRepository.class);
         WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
         SalesOrderService service = new SalesOrderService(
@@ -375,11 +373,11 @@ class SalesOrderServiceTest {
                 idGenerator,
                 mapper,
                 materialSupport,
-                purchaseInboundItemQueryService,
-                purchaseOrderItemQueryService,
-                pieceWeightService,
+                purchaseItemQueryAppService,
+                pieceWeightAppService,
                 salesOrderItemRepository,
                 warehouseSelectionSupport,
+                stubbedSalesOrderItemMapper(),
                 mock(WorkflowTransitionGuard.class)
         );
 
@@ -417,13 +415,13 @@ class SalesOrderServiceTest {
         when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(Map.of("M1", new Material()));
         when(materialSupport.normalizeBatchNo(any(), eq("B1"), eq(1), eq(true))).thenReturn("B1");
         when(warehouseSelectionSupport.normalizeWarehouseName("一号库", 1, true)).thenReturn("一号库");
-        when(purchaseOrderItemQueryService.findActiveByIdIn(List.of(201L))).thenReturn(List.of(sourceItem));
+        when(purchaseItemQueryAppService.findSourcePurchaseOrderItemsByIds(List.of(201L))).thenReturn(List.of(sourcePurchaseOrderRecord(sourceItem.getId(), sourceItem.getQuantity(), sourceItem.getWeightTon())));
         when(salesOrderItemRepository.summarizeAllocatedQuantityBySourcePurchaseOrderItemIds(eq(List.of(201L)), any()))
                 .thenReturn(List.of(allocationSummary));
-        when(pieceWeightService.summarizeRemainingWeightByPurchaseOrderItemIds(List.of(201L)))
+        when(pieceWeightAppService.summarizeRemainingWeightByPurchaseOrderItemIds(List.of(201L)))
                 .thenReturn(Map.of(201L, new BigDecimal("0.667")));
         when(repository.saveAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));
-        when(pieceWeightService.allocateForSalesOrderItem(eq(sourceItem), eq(2), any(), eq(1)))
+        when(pieceWeightAppService.allocateForSalesOrderItem(eq(sourceItem.getId()), eq(2), any(), eq(1)))
                 .thenReturn(new BigDecimal("0.667"));
         when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
         when(mapper.toResponse(any())).thenReturn(new SalesOrderResponse(
@@ -447,9 +445,8 @@ class SalesOrderServiceTest {
         SnowflakeIdGenerator idGenerator = mock(SnowflakeIdGenerator.class);
         SalesOrderMapper mapper = mock(SalesOrderMapper.class);
         TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
-        PurchaseInboundItemQueryService purchaseInboundItemQueryService = mock(PurchaseInboundItemQueryService.class);
-        PurchaseOrderItemQueryService purchaseOrderItemQueryService = mock(PurchaseOrderItemQueryService.class);
-        PurchaseOrderItemPieceWeightService pieceWeightService = mock(PurchaseOrderItemPieceWeightService.class);
+        PurchaseItemQueryAppService purchaseItemQueryAppService = mock(PurchaseItemQueryAppService.class);
+        PurchaseItemPieceWeightAppService pieceWeightAppService = mock(PurchaseItemPieceWeightAppService.class);
         SalesOrderItemRepository salesOrderItemRepository = mock(SalesOrderItemRepository.class);
         WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
         SalesOrderService service = new SalesOrderService(
@@ -457,11 +454,11 @@ class SalesOrderServiceTest {
                 idGenerator,
                 mapper,
                 materialSupport,
-                purchaseInboundItemQueryService,
-                purchaseOrderItemQueryService,
-                pieceWeightService,
+                purchaseItemQueryAppService,
+                pieceWeightAppService,
                 salesOrderItemRepository,
                 warehouseSelectionSupport,
+                stubbedSalesOrderItemMapper(),
                 mock(WorkflowTransitionGuard.class)
         );
 
@@ -499,13 +496,13 @@ class SalesOrderServiceTest {
         when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(Map.of("M1", new Material()));
         when(materialSupport.normalizeBatchNo(any(), eq("B1"), eq(1), eq(true))).thenReturn("B1");
         when(warehouseSelectionSupport.normalizeWarehouseName("一号库", 1, true)).thenReturn("一号库");
-        when(purchaseOrderItemQueryService.findActiveByIdIn(List.of(201L))).thenReturn(List.of(sourceItem));
+        when(purchaseItemQueryAppService.findSourcePurchaseOrderItemsByIds(List.of(201L))).thenReturn(List.of(sourcePurchaseOrderRecord(sourceItem.getId(), sourceItem.getQuantity(), sourceItem.getWeightTon())));
         when(salesOrderItemRepository.summarizeAllocatedQuantityBySourcePurchaseOrderItemIds(eq(List.of(201L)), any()))
                 .thenReturn(List.of(allocationSummary));
-        when(pieceWeightService.summarizeRemainingWeightByPurchaseOrderItemIds(List.of(201L)))
+        when(pieceWeightAppService.summarizeRemainingWeightByPurchaseOrderItemIds(List.of(201L)))
                 .thenReturn(Map.of(201L, new BigDecimal("4.496")));
         when(repository.saveAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));
-        when(pieceWeightService.allocateForSalesOrderItem(eq(sourceItem), eq(1), any(), eq(1)))
+        when(pieceWeightAppService.allocateForSalesOrderItem(eq(sourceItem.getId()), eq(1), any(), eq(1)))
                 .thenReturn(new BigDecimal("2.248"));
         when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
         when(mapper.toResponse(any())).thenReturn(new SalesOrderResponse(
@@ -529,9 +526,8 @@ class SalesOrderServiceTest {
         SnowflakeIdGenerator idGenerator = mock(SnowflakeIdGenerator.class);
         SalesOrderMapper mapper = mock(SalesOrderMapper.class);
         TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
-        PurchaseInboundItemQueryService purchaseInboundItemQueryService = mock(PurchaseInboundItemQueryService.class);
-        PurchaseOrderItemQueryService purchaseOrderItemQueryService = mock(PurchaseOrderItemQueryService.class);
-        PurchaseOrderItemPieceWeightService pieceWeightService = mock(PurchaseOrderItemPieceWeightService.class);
+        PurchaseItemQueryAppService purchaseItemQueryAppService = mock(PurchaseItemQueryAppService.class);
+        PurchaseItemPieceWeightAppService pieceWeightAppService = mock(PurchaseItemPieceWeightAppService.class);
         SalesOrderItemRepository salesOrderItemRepository = mock(SalesOrderItemRepository.class);
         WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
         SalesOrderService service = new SalesOrderService(
@@ -539,11 +535,11 @@ class SalesOrderServiceTest {
                 idGenerator,
                 mapper,
                 materialSupport,
-                purchaseInboundItemQueryService,
-                purchaseOrderItemQueryService,
-                pieceWeightService,
+                purchaseItemQueryAppService,
+                pieceWeightAppService,
                 salesOrderItemRepository,
                 warehouseSelectionSupport,
+                stubbedSalesOrderItemMapper(),
                 mock(WorkflowTransitionGuard.class)
         );
 
@@ -575,11 +571,11 @@ class SalesOrderServiceTest {
         when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(Map.of("M1", new Material()));
         when(materialSupport.normalizeBatchNo(any(), eq("B1"), eq(1), eq(true))).thenReturn("B1");
         when(warehouseSelectionSupport.normalizeWarehouseName("一号库", 1, true)).thenReturn("一号库");
-        when(purchaseOrderItemQueryService.findActiveByIdIn(List.of(201L))).thenReturn(List.of(sourceItem));
+        when(purchaseItemQueryAppService.findSourcePurchaseOrderItemsByIds(List.of(201L))).thenReturn(List.of(sourcePurchaseOrderRecord(sourceItem.getId(), sourceItem.getQuantity(), sourceItem.getWeightTon())));
         when(salesOrderItemRepository.summarizeAllocatedQuantityBySourcePurchaseOrderItemIds(eq(List.of(201L)), any()))
                 .thenReturn(List.of());
         when(repository.saveAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));
-        when(pieceWeightService.allocateForSalesOrderItem(eq(sourceItem), eq(7), any(), eq(1)))
+        when(pieceWeightAppService.allocateForSalesOrderItem(eq(sourceItem.getId()), eq(7), any(), eq(1)))
                 .thenReturn(new BigDecimal("14.258"));
         when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
         when(mapper.toResponse(any())).thenReturn(new SalesOrderResponse(
@@ -606,9 +602,8 @@ class SalesOrderServiceTest {
         SnowflakeIdGenerator idGenerator = mock(SnowflakeIdGenerator.class);
         SalesOrderMapper mapper = mock(SalesOrderMapper.class);
         TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
-        PurchaseInboundItemQueryService purchaseInboundItemQueryService = mock(PurchaseInboundItemQueryService.class);
-        PurchaseOrderItemQueryService purchaseOrderItemQueryService = mock(PurchaseOrderItemQueryService.class);
-        PurchaseOrderItemPieceWeightService pieceWeightService = mock(PurchaseOrderItemPieceWeightService.class);
+        PurchaseItemQueryAppService purchaseItemQueryAppService = mock(PurchaseItemQueryAppService.class);
+        PurchaseItemPieceWeightAppService pieceWeightAppService = mock(PurchaseItemPieceWeightAppService.class);
         SalesOrderItemRepository salesOrderItemRepository = mock(SalesOrderItemRepository.class);
         WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
         SalesOrderService service = new SalesOrderService(
@@ -616,11 +611,11 @@ class SalesOrderServiceTest {
                 idGenerator,
                 mapper,
                 materialSupport,
-                purchaseInboundItemQueryService,
-                purchaseOrderItemQueryService,
-                pieceWeightService,
+                purchaseItemQueryAppService,
+                pieceWeightAppService,
                 salesOrderItemRepository,
                 warehouseSelectionSupport,
+                stubbedSalesOrderItemMapper(),
                 mock(WorkflowTransitionGuard.class)
         );
 
@@ -662,7 +657,7 @@ class SalesOrderServiceTest {
         when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(Map.of("M1", new Material()));
         when(materialSupport.normalizeBatchNo(any(), eq("B1"), eq(1), eq(true))).thenReturn("B1");
         when(warehouseSelectionSupport.normalizeWarehouseName("一号库", 1, true)).thenReturn("一号库");
-        when(purchaseInboundItemQueryService.findAllActiveByIdIn(List.of(101L))).thenReturn(List.of(inboundItem));
+        when(purchaseItemQueryAppService.findSourceInboundItemsByIds(List.of(101L))).thenReturn(List.of(sourceInboundRecord(101L, inbound.getWarehouseName(), inboundItem.getQuantity())));
         when(salesOrderItemRepository.summarizeAllocatedQuantityBySourceInboundItemIds(eq(List.of(101L)), any()))
                 .thenReturn(List.of(allocationSummary));
         when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
@@ -677,10 +672,10 @@ class SalesOrderServiceTest {
         verify(repository).save(orderCaptor.capture());
         var savedOrder = orderCaptor.getValue();
         var savedItem = savedOrder.getItems().get(0);
-        assertThat(savedItem.getWeightTon()).isEqualByComparingTo("0.106");
-        assertThat(savedItem.getAmount()).isEqualByComparingTo("424.00");
-        assertThat(savedOrder.getTotalWeight()).isEqualByComparingTo("0.106");
-        assertThat(savedOrder.getTotalAmount()).isEqualByComparingTo("424.00");
+        assertThat(savedItem.getWeightTon()).isEqualByComparingTo("0.108");
+        assertThat(savedItem.getAmount()).isEqualByComparingTo("432.00");
+        assertThat(savedOrder.getTotalWeight()).isEqualByComparingTo("0.108");
+        assertThat(savedOrder.getTotalAmount()).isEqualByComparingTo("432.00");
     }
 
     @Test
@@ -689,9 +684,8 @@ class SalesOrderServiceTest {
         SnowflakeIdGenerator idGenerator = mock(SnowflakeIdGenerator.class);
         SalesOrderMapper mapper = mock(SalesOrderMapper.class);
         TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
-        PurchaseInboundItemQueryService purchaseInboundItemQueryService = mock(PurchaseInboundItemQueryService.class);
-        PurchaseOrderItemQueryService purchaseOrderItemQueryService = mock(PurchaseOrderItemQueryService.class);
-        PurchaseOrderItemPieceWeightService pieceWeightService = mock(PurchaseOrderItemPieceWeightService.class);
+        PurchaseItemQueryAppService purchaseItemQueryAppService = mock(PurchaseItemQueryAppService.class);
+        PurchaseItemPieceWeightAppService pieceWeightAppService = mock(PurchaseItemPieceWeightAppService.class);
         SalesOrderItemRepository salesOrderItemRepository = mock(SalesOrderItemRepository.class);
         WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
         WorkflowTransitionGuard workflowTransitionGuard = mock(WorkflowTransitionGuard.class);
@@ -700,11 +694,11 @@ class SalesOrderServiceTest {
                 idGenerator,
                 mapper,
                 materialSupport,
-                purchaseInboundItemQueryService,
-                purchaseOrderItemQueryService,
-                pieceWeightService,
+                purchaseItemQueryAppService,
+                pieceWeightAppService,
                 salesOrderItemRepository,
                 warehouseSelectionSupport,
+                stubbedSalesOrderItemMapper(),
                 workflowTransitionGuard
         );
 
@@ -787,9 +781,8 @@ class SalesOrderServiceTest {
         SnowflakeIdGenerator idGenerator = mock(SnowflakeIdGenerator.class);
         SalesOrderMapper mapper = mock(SalesOrderMapper.class);
         TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
-        PurchaseInboundItemQueryService purchaseInboundItemQueryService = mock(PurchaseInboundItemQueryService.class);
-        PurchaseOrderItemQueryService purchaseOrderItemQueryService = mock(PurchaseOrderItemQueryService.class);
-        PurchaseOrderItemPieceWeightService pieceWeightService = mock(PurchaseOrderItemPieceWeightService.class);
+        PurchaseItemQueryAppService purchaseItemQueryAppService = mock(PurchaseItemQueryAppService.class);
+        PurchaseItemPieceWeightAppService pieceWeightAppService = mock(PurchaseItemPieceWeightAppService.class);
         SalesOrderItemRepository salesOrderItemRepository = mock(SalesOrderItemRepository.class);
         WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
         WorkflowTransitionGuard workflowTransitionGuard = mock(WorkflowTransitionGuard.class);
@@ -798,11 +791,11 @@ class SalesOrderServiceTest {
                 idGenerator,
                 mapper,
                 materialSupport,
-                purchaseInboundItemQueryService,
-                purchaseOrderItemQueryService,
-                pieceWeightService,
+                purchaseItemQueryAppService,
+                pieceWeightAppService,
                 salesOrderItemRepository,
                 warehouseSelectionSupport,
+                stubbedSalesOrderItemMapper(),
                 workflowTransitionGuard
         );
 
@@ -858,5 +851,49 @@ class SalesOrderServiceTest {
         assertThatThrownBy(() -> service.update(1L, request))
                 .hasMessageContaining("当前单据状态为「已审核」，不能编辑");
         verify(repository, never()).save(any());
+    }
+
+    private PurchaseItemQueryAppService.SourceInboundItemRecord sourceInboundRecord(
+            Long id, String warehouseName, Integer quantity) {
+        return new PurchaseItemQueryAppService.SourceInboundItemRecord(
+                id, null, null, quantity, null,
+                null, null, null, null, null, null, warehouseName, null);
+    }
+
+    private PurchaseItemQueryAppService.SourcePurchaseOrderItemRecord sourcePurchaseOrderRecord(
+            Long id, Integer quantity, java.math.BigDecimal weightTon) {
+        return new PurchaseItemQueryAppService.SourcePurchaseOrderItemRecord(
+                id, quantity, weightTon, null,
+                null, null, null, null, null, null, null, null);
+    }
+
+    private SalesOrderItemMapper stubbedSalesOrderItemMapper() {
+        SalesOrderItemMapper mapper = mock(SalesOrderItemMapper.class);
+        doAnswer(invocation -> {
+            SalesOrderItem item = invocation.getArgument(2);
+            SalesOrderItemRequest source = invocation.getArgument(1);
+            java.math.BigDecimal weightTon = invocation.getArgument(5);
+            java.math.BigDecimal pieceWeightTon = invocation.getArgument(6);
+            item.setLineNo(invocation.getArgument(3));
+            item.setMaterialCode(source.materialCode());
+            item.setBrand(source.brand());
+            item.setCategory(source.category());
+            item.setMaterial(source.material());
+            item.setSpec(source.spec());
+            item.setLength(source.length());
+            item.setUnit(source.unit());
+            item.setSourceInboundItemId(source.sourceInboundItemId());
+            item.setSourcePurchaseOrderItemId(source.sourcePurchaseOrderItemId());
+            item.setWarehouseName(source.warehouseName());
+            item.setBatchNo(source.batchNo());
+            item.setQuantity(source.quantity());
+            item.setQuantityUnit(source.quantityUnit());
+            item.setPieceWeightTon(pieceWeightTon);
+            item.setPiecesPerBundle(source.piecesPerBundle());
+            item.setWeightTon(weightTon);
+            item.setUnitPrice(source.unitPrice());
+            return null;
+        }).when(mapper).applyItemFields(any(), any(), any(), anyInt(), any(), any(), any());
+        return mapper;
     }
 }

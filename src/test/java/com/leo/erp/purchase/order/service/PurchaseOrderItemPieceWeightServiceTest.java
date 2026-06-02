@@ -4,6 +4,7 @@ import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.purchase.order.domain.entity.PurchaseOrderItem;
 import com.leo.erp.purchase.order.domain.entity.PurchaseOrderItemPieceWeight;
 import com.leo.erp.purchase.order.repository.PurchaseOrderItemPieceWeightRepository;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -28,7 +29,7 @@ class PurchaseOrderItemPieceWeightServiceTest {
     @Test
     void shouldDistributeResidualWeightToPieceWeights() {
         PurchaseOrderItemPieceWeightRepository repository = mock(PurchaseOrderItemPieceWeightRepository.class);
-        PurchaseOrderItemPieceWeightService service = new PurchaseOrderItemPieceWeightService(repository);
+        PurchaseOrderItemPieceWeightService service = new PurchaseOrderItemPieceWeightService(repository, mock(JdbcTemplate.class));
         PurchaseOrderItem item = new PurchaseOrderItem();
         item.setId(201L);
         item.setQuantity(7);
@@ -57,7 +58,7 @@ class PurchaseOrderItemPieceWeightServiceTest {
     @Test
     void shouldAllocateWeightByAvailablePieces() {
         PurchaseOrderItemPieceWeightRepository repository = mock(PurchaseOrderItemPieceWeightRepository.class);
-        PurchaseOrderItemPieceWeightService service = new PurchaseOrderItemPieceWeightService(repository);
+        PurchaseOrderItemPieceWeightService service = new PurchaseOrderItemPieceWeightService(repository, mock(JdbcTemplate.class));
         PurchaseOrderItem item = new PurchaseOrderItem();
         item.setId(201L);
         item.setQuantity(7);

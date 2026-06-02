@@ -14,6 +14,9 @@ DB_ADMIN_PASSWORD="${LEO_RELEASE_DB_ADMIN_PASSWORD:-${LEO_DB_ADMIN_PASSWORD:-${P
 PG_DUMP="${LEO_RELEASE_PG_DUMP:-pg_dump}"
 TMP_DB="${LEO_RELEASE_TMP_DB:-leo_release_full_$(date +%Y%m%d%H%M%S)}"
 WORK_DIR="${LEO_RELEASE_WORK_DIR:-$(mktemp -d /tmp/leo-release-schema-src.XXXXXX)}"
+DB_STATEMENT_TIMEOUT="${LEO_RELEASE_DB_STATEMENT_TIMEOUT:-${LEO_POSTGRES_STATEMENT_TIMEOUT:-60s}}"
+DB_IDLE_IN_TRANSACTION_SESSION_TIMEOUT="${LEO_RELEASE_DB_IDLE_IN_TRANSACTION_SESSION_TIMEOUT:-${LEO_POSTGRES_IDLE_IN_TRANSACTION_SESSION_TIMEOUT:-120s}}"
+DB_LOCK_TIMEOUT="${LEO_RELEASE_DB_LOCK_TIMEOUT:-${LEO_POSTGRES_LOCK_TIMEOUT:-10s}}"
 
 export PGPASSWORD="$DB_ADMIN_PASSWORD"
 
@@ -25,6 +28,14 @@ trap cleanup EXIT
 
 mkdir -p "$OUT_DIR"
 git -C "$ROOT_DIR" archive HEAD | tar -x -C "$WORK_DIR"
+
+sql_literal() {
+  printf '%s' "$1" | sed "s/'/''/g"
+}
+
+DB_STATEMENT_TIMEOUT_SQL="$(sql_literal "$DB_STATEMENT_TIMEOUT")"
+DB_IDLE_IN_TRANSACTION_SESSION_TIMEOUT_SQL="$(sql_literal "$DB_IDLE_IN_TRANSACTION_SESSION_TIMEOUT")"
+DB_LOCK_TIMEOUT_SQL="$(sql_literal "$DB_LOCK_TIMEOUT")"
 
 createdb -h "$DB_HOST" -p "$DB_PORT" -U "$DB_ADMIN_USER" -E UTF8 "$TMP_DB"
 psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_ADMIN_USER" -d "$TMP_DB" \
@@ -61,6 +72,17 @@ mvn -q org.flywaydb:flyway-maven-plugin:11.20.3:migrate \
   printf -- '-- Usage: psql -v ON_ERROR_STOP=1 -d <database> -f postgresql-full-init.sql\n\n'
   printf -- "SET client_encoding = 'UTF8';\n"
   printf -- 'SET standard_conforming_strings = on;\n\n'
+  printf -- '-- Runtime database defaults for application sessions.\n'
+  printf -- 'DO $leo_db_runtime_defaults$\n'
+  printf -- 'BEGIN\n'
+  printf -- "  EXECUTE format('ALTER DATABASE %%I SET statement_timeout = %%L', current_database(), '%s');\n" "$DB_STATEMENT_TIMEOUT_SQL"
+  printf -- "  EXECUTE format('ALTER DATABASE %%I SET idle_in_transaction_session_timeout = %%L', current_database(), '%s');\n" "$DB_IDLE_IN_TRANSACTION_SESSION_TIMEOUT_SQL"
+  printf -- "  EXECUTE format('ALTER DATABASE %%I SET lock_timeout = %%L', current_database(), '%s');\n" "$DB_LOCK_TIMEOUT_SQL"
+  printf -- "  EXECUTE format('ALTER ROLE %%I IN DATABASE %%I SET statement_timeout = %%L', current_user, current_database(), '%s');\n" "$DB_STATEMENT_TIMEOUT_SQL"
+  printf -- "  EXECUTE format('ALTER ROLE %%I IN DATABASE %%I SET idle_in_transaction_session_timeout = %%L', current_user, current_database(), '%s');\n" "$DB_IDLE_IN_TRANSACTION_SESSION_TIMEOUT_SQL"
+  printf -- "  EXECUTE format('ALTER ROLE %%I IN DATABASE %%I SET lock_timeout = %%L', current_user, current_database(), '%s');\n" "$DB_LOCK_TIMEOUT_SQL"
+  printf -- 'END\n'
+  printf -- '$leo_db_runtime_defaults$;\n\n'
   sed -E \
     -e '/^\\restrict /d' \
     -e '/^\\unrestrict /d' \

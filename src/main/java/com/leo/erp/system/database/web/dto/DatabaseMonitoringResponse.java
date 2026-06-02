@@ -7,6 +7,7 @@ public record DatabaseMonitoringResponse(
         String status,
         PostgresOverview overview,
         PostgresActivity activity,
+        PostgresTuningSettings tuning,
         List<TableHealthItem> tableHealth,
         List<IndexHealthItem> indexHealth,
         QueryStats queryStats,
@@ -18,6 +19,7 @@ public record DatabaseMonitoringResponse(
                 status,
                 PostgresOverview.empty(),
                 PostgresActivity.empty(),
+                PostgresTuningSettings.empty(),
                 List.of(),
                 List.of(),
                 QueryStats.unavailable("PostgreSQL 监控不可用"),
@@ -59,6 +61,48 @@ public record DatabaseMonitoringResponse(
     ) {
         public static PostgresActivity empty() {
             return new PostgresActivity(0, 0, 0, 0, 0, 0, 0);
+        }
+    }
+
+    public record PostgresTuningSettings(
+            long maxConnections,
+            long totalConnections,
+            long activeConnections,
+            int hikariMaximumPoolSize,
+            int hikariMinimumIdle,
+            long hikariLeakDetectionThresholdMs,
+            String statementTimeout,
+            String idleInTransactionSessionTimeout,
+            String lockTimeout,
+            String trackIoTiming,
+            String sharedBuffers,
+            String effectiveCacheSize,
+            String workMem,
+            String maintenanceWorkMem,
+            String maxWalSize,
+            String checkpointTimeout,
+            String pgStatStatementsTrack
+    ) {
+        public static PostgresTuningSettings empty() {
+            return new PostgresTuningSettings(
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    "未知",
+                    "未知",
+                    "未知",
+                    "未知",
+                    "未知",
+                    "未知",
+                    "未知",
+                    "未知",
+                    "未知",
+                    "未知",
+                    "未知"
+            );
         }
     }
 

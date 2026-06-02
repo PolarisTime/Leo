@@ -2,6 +2,7 @@ package com.leo.erp.security.jwt;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leo.erp.common.api.ApiResponse;
+import com.leo.erp.common.api.RateLimitContext;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.security.support.SecurityPrincipal;
 import jakarta.servlet.FilterChain;
@@ -47,7 +48,11 @@ public class ForceTotpSetupFilter extends OncePerRequestFilter {
         response.setCharacterEncoding("UTF-8");
         objectMapper.writeValue(
                 response.getOutputStream(),
-                ApiResponse.failure(ErrorCode.FORBIDDEN, "当前账号需先完成 2FA 绑定后才能继续访问系统")
+                ApiResponse.failure(
+                        ErrorCode.FORBIDDEN,
+                        "当前账号需先完成 2FA 绑定后才能继续访问系统",
+                        RateLimitContext.current(request)
+                )
         );
     }
 

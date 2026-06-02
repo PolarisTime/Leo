@@ -1,11 +1,13 @@
 package com.leo.erp.system.database.service;
 
 import lombok.extern.slf4j.Slf4j;
+import com.zaxxer.hikari.HikariDataSource;
 import com.leo.erp.common.support.PostgresJdbcUrlParser;
 import com.leo.erp.system.database.web.dto.DatabaseMonitoringResponse;
 import com.leo.erp.system.database.web.dto.DatabaseMonitoringResponse.IndexHealthItem;
 import com.leo.erp.system.database.web.dto.DatabaseMonitoringResponse.PostgresActivity;
 import com.leo.erp.system.database.web.dto.DatabaseMonitoringResponse.PostgresOverview;
+import com.leo.erp.system.database.web.dto.DatabaseMonitoringResponse.PostgresTuningSettings;
 import com.leo.erp.system.database.web.dto.DatabaseMonitoringResponse.QueryStats;
 import com.leo.erp.system.database.web.dto.DatabaseMonitoringResponse.QueryStatsItem;
 import com.leo.erp.system.database.web.dto.DatabaseMonitoringResponse.RedisClientItem;
@@ -369,6 +371,14 @@ public class DatabaseStatusService {
                 log.warn("PostgreSQL 当前活动不可用: {}", e.getMessage());
             }
 
+            PostgresTuningSettings tuning = PostgresTuningSettings.empty();
+            try {
+                tuning = getPostgresTuningSettings(stmt);
+            } catch (SQLException e) {
+                status = "部分指标不可用";
+                log.warn("PostgreSQL 调优参数不可用: {}", e.getMessage());
+            }
+
             List<TableHealthItem> tableHealth = List.of();
             try {
                 tableHealth = getTableHealth(stmt);
@@ -392,6 +402,7 @@ public class DatabaseStatusService {
                     status,
                     overview,
                     activity,
+                    tuning,
                     tableHealth,
                     indexHealth,
                     queryStats,
@@ -489,6 +500,91 @@ public class DatabaseStatusService {
         }
         return PostgresActivity.empty();
     }
+
+    private PostgresTuningSettings getPostgresTuningSettings(Statement stmt) throws SQLException {
+        HikariPoolSettings hikari = getHikariPoolSettings();
+        String sql = """
+                WITH activity AS (
+                    SELECT
+                        count(*) AS total_connections,
+                        sum(CASE WHEN state = 'active' THEN 1 ELSE 0 END) AS active_connections
+                    FROM pg_stat_activity
+                    WHERE datname = current_database()
+                )
+                SELECT
+                    current_setting('max_connections')::bigint AS max_connections,
+                    activity.total_connections,
+                    activity.active_connections,
+                    current_setting('statement_timeout') AS statement_timeout,
+                    current_setting('idle_in_transaction_session_timeout') AS idle_in_transaction_session_timeout,
+                    current_setting('lock_timeout') AS lock_timeout,
+                    current_setting('track_io_timing') AS track_io_timing,
+                    current_setting('shared_buffers') AS shared_buffers,
+                    current_setting('effective_cache_size') AS effective_cache_size,
+                    current_setting('work_mem') AS work_mem,
+                    current_setting('maintenance_work_mem') AS maintenance_work_mem,
+                    current_setting('max_wal_size') AS max_wal_size,
+                    current_setting('checkpoint_timeout') AS checkpoint_timeout,
+                    COALESCE(current_setting('pg_stat_statements.track', true), '未启用') AS pg_stat_statements_track
+                FROM activity
+                """;
+        try (ResultSet rs = stmt.executeQuery(sql)) {
+            if (rs.next()) {
+                return new PostgresTuningSettings(
+                        rs.getLong("max_connections"),
+                        rs.getLong("total_connections"),
+                        rs.getLong("active_connections"),
+                        hikari.maximumPoolSize(),
+                        hikari.minimumIdle(),
+                        hikari.leakDetectionThresholdMs(),
+                        rs.getString("statement_timeout"),
+                        rs.getString("idle_in_transaction_session_timeout"),
+                        rs.getString("lock_timeout"),
+                        rs.getString("track_io_timing"),
+                        rs.getString("shared_buffers"),
+                        rs.getString("effective_cache_size"),
+                        rs.getString("work_mem"),
+                        rs.getString("maintenance_work_mem"),
+                        rs.getString("max_wal_size"),
+                        rs.getString("checkpoint_timeout"),
+                        rs.getString("pg_stat_statements_track")
+                );
+            }
+        }
+        return PostgresTuningSettings.empty();
+    }
+
+    private HikariPoolSettings getHikariPoolSettings() {
+        HikariDataSource hikari = resolveHikariDataSource();
+        if (hikari == null) {
+            return new HikariPoolSettings(0, 0, 0);
+        }
+        return new HikariPoolSettings(
+                hikari.getMaximumPoolSize(),
+                hikari.getMinimumIdle(),
+                hikari.getLeakDetectionThreshold()
+        );
+    }
+
+    private HikariDataSource resolveHikariDataSource() {
+        if (dataSource instanceof HikariDataSource hikari) {
+            return hikari;
+        }
+        try {
+            if (dataSource.isWrapperFor(HikariDataSource.class)) {
+                return dataSource.unwrap(HikariDataSource.class);
+            }
+        } catch (SQLException e) {
+            log.debug("HikariDataSource 不可展开: {}", e.getMessage());
+        }
+        return null;
+    }
+
+    private record HikariPoolSettings(
+            int maximumPoolSize,
+            int minimumIdle,
+            long leakDetectionThresholdMs
+    ) {}
 
     private List<TableHealthItem> getTableHealth(Statement stmt) throws SQLException {
         String sql = """

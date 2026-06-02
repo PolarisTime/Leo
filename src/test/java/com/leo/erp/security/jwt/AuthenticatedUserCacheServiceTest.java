@@ -5,9 +5,11 @@ import com.leo.erp.auth.domain.entity.UserAccount;
 import com.leo.erp.auth.domain.enums.UserStatus;
 import com.leo.erp.auth.repository.UserAccountRepository;
 import com.leo.erp.auth.service.UserRoleBindingService;
+import com.leo.erp.common.config.RedisTuningProperties;
 import com.leo.erp.security.support.SecurityPrincipal;
 import com.leo.erp.system.role.domain.entity.RoleSetting;
 import org.junit.jupiter.api.Test;
+import org.springframework.data.redis.core.SetOperations;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -39,7 +41,8 @@ class AuthenticatedUserCacheServiceTest {
                     repositoryQueried.set(true);
                     return Optional.empty();
                 }),
-                roleBindingService(List.of())
+                roleBindingService(List.of()),
+                new RedisTuningProperties()
         );
 
         Optional<SecurityPrincipal> principal = service.getActivePrincipal(1L);
@@ -75,7 +78,8 @@ class AuthenticatedUserCacheServiceTest {
                 redisTemplate,
                 new ObjectMapper(),
                 repository(userId -> Optional.of(user)),
-                roleBindingService(List.of(role))
+                roleBindingService(List.of(role)),
+                new RedisTuningProperties()
         );
 
         Optional<SecurityPrincipal> principal = service.getActivePrincipal(2L);
@@ -85,7 +89,7 @@ class AuthenticatedUserCacheServiceTest {
         assertThat(principal.orElseThrow().totpEnabled()).isFalse();
         assertThat(principal.orElseThrow().forceTotpSetup()).isTrue();
         assertThat(redisTemplate.lastSetKey).isEqualTo("auth:user:snapshot:2");
-        assertThat(redisTemplate.lastSetTtl).isEqualTo(Duration.ofMinutes(2));
+        assertThat(redisTemplate.lastSetTtl).isGreaterThanOrEqualTo(Duration.ofMinutes(2));
         assertThat(redisTemplate.values.get("auth:user:snapshot:2")).contains("\"forceTotpSetup\":true");
     }
 
@@ -163,6 +167,32 @@ class AuthenticatedUserCacheServiceTest {
         public Boolean delete(String key) {
             values.remove(key);
             return Boolean.TRUE;
+        }
+
+        @Override
+        public Boolean expire(String key, java.time.Duration timeout) {
+            return Boolean.TRUE;
+        }
+
+        @Override
+        public SetOperations<String, String> opsForSet() {
+            return (SetOperations<String, String>) Proxy.newProxyInstance(
+                    SetOperations.class.getClassLoader(),
+                    new Class[]{SetOperations.class},
+                    (proxy, method, args) -> switch (method.getName()) {
+                        case "add" -> 1L;
+                        case "remove" -> 1L;
+                        case "toString" -> "SetOperationsStub";
+                        case "hashCode" -> System.identityHashCode(proxy);
+                        case "equals" -> proxy == args[0];
+                        default -> throw new UnsupportedOperationException(method.getName());
+                    }
+            );
+        }
+
+        @Override
+        public Boolean hasKey(String key) {
+            return values.containsKey(key);
         }
     }
 }

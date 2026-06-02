@@ -60,7 +60,7 @@ class PrintTemplateServiceTest {
                 "purchase-order",
                 "模板A",
                 "LODOP.PRINT_INIT('test'); window.alert('xss');",
-                null
+                "COORD"
         )))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("模板内容包含不允许的脚本或危险标签");

@@ -2,6 +2,7 @@ package com.leo.erp.security.jwt;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leo.erp.common.api.ApiResponse;
+import com.leo.erp.common.api.RateLimitContext;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.security.support.SecurityPrincipal;
 import io.jsonwebtoken.Claims;
@@ -65,7 +66,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             if (userId != null) {
                 // 检查 access token 是否在黑名单中（签发时间早于黑名单时间则视为无效）
                 if (isTokenBlacklisted(claims, userId, sessionId)) {
-                    sendUnauthorized(response, "会话已失效，请重新登录");
+                    sendUnauthorized(request, response, "会话已失效，请重新登录");
                     return;
                 }
 
@@ -83,7 +84,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                     ex.getClass().getSimpleName(),
                     ex.getMessage()
             );
-            sendUnauthorized(response, "登录状态已失效，请重新登录");
+            sendUnauthorized(request, response, "登录状态已失效，请重新登录");
             return;
         }
 
@@ -113,11 +114,16 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         return issuedAt != null && issuedAt.getTime() < blacklistTime;
     }
 
-    private void sendUnauthorized(HttpServletResponse response, String message) throws IOException {
+    private void sendUnauthorized(HttpServletRequest request,
+                                  HttpServletResponse response,
+                                  String message) throws IOException {
         response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
         response.setCharacterEncoding("UTF-8");
-        objectMapper.writeValue(response.getOutputStream(), ApiResponse.failure(ErrorCode.UNAUTHORIZED, message));
+        objectMapper.writeValue(
+                response.getOutputStream(),
+                ApiResponse.failure(ErrorCode.UNAUTHORIZED, message, RateLimitContext.current(request))
+        );
     }
 
     private void authenticate(HttpServletRequest request, SecurityPrincipal principal) {

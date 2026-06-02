@@ -16,11 +16,18 @@ import com.leo.erp.system.norule.web.dto.NoRuleResponse;
 import com.leo.erp.system.norule.web.dto.StatementGeneratorRulesResponse;
 import org.springframework.stereotype.Service;
 
+import java.util.Arrays;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 public class NoRuleService extends AbstractCrudService<NoRule, NoRuleRequest, NoRuleResponse> {
+    private static final Set<String> DETAILED_OPERATION_LOG_ACTIONS = Set.of(
+            "QUERY", "DETAIL", "CREATE", "EDIT", "DELETE", "AUDIT", "EXPORT", "PRINT"
+    );
 
     private final NoRuleRepository repository;
     private final NoRuleMapper noRuleMapper;
@@ -134,6 +141,10 @@ public class NoRuleService extends AbstractCrudService<NoRule, NoRuleRequest, No
     }
 
     private void validateRuleTemplate(NoRuleRequest request) {
+        if (SystemSwitchService.OPERATION_LOG_DETAILED_PAGE_ACTIONS_SWITCH.equals(request.settingCode())) {
+            validateDetailedOperationLogActions(request.sampleNo());
+            return;
+        }
         if (request.settingCode() == null || !request.settingCode().startsWith("RULE_")) {
             return;
         }
@@ -143,6 +154,20 @@ public class NoRuleService extends AbstractCrudService<NoRule, NoRuleRequest, No
         }
         if (!noRuleSequenceService.containsSequenceToken(template)) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "单号规则模板必须包含 {seq} 变量");
+        }
+    }
+
+    private void validateDetailedOperationLogActions(String sampleNo) {
+        Set<String> selected = Arrays.stream((sampleNo == null ? "" : sampleNo).split(","))
+                .map(String::trim)
+                .filter(item -> !item.isEmpty())
+                .map(String::toUpperCase)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        if (selected.isEmpty()) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "页面操作详细日志至少需要勾选一个记录动作");
+        }
+        if (!DETAILED_OPERATION_LOG_ACTIONS.containsAll(selected)) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "页面操作详细日志包含不支持的记录动作");
         }
     }
 
