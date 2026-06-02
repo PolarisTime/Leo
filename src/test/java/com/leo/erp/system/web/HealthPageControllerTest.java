@@ -4,6 +4,7 @@ import com.leo.erp.security.permission.PermissionService;
 import com.leo.erp.security.support.SecurityPrincipal;
 import com.leo.erp.system.database.service.DatabaseStatusService;
 import com.leo.erp.system.database.web.dto.DatabaseStatusResponse;
+import com.leo.erp.system.service.HealthPageRenderer;
 import com.leo.erp.system.service.HealthPageService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -111,7 +112,7 @@ class HealthPageControllerTest {
     }
 
     private HealthPageController controller(DatabaseStatusService databaseStatusService, PermissionService permissionService) {
-        return new HealthPageController(new HealthPageService(databaseStatusService, permissionService));
+        return new HealthPageController(new HealthPageService(databaseStatusService, permissionService, new HealthPageRenderer()));
     }
 
     private static final class StubDatabaseStatusService extends DatabaseStatusService {

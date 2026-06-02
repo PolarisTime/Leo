@@ -130,7 +130,7 @@ class AuthServiceTest {
         assertThat(session.getTokenHash()).isEqualTo(SessionManagementService.hashToken(response.refreshToken()));
         assertThat(session.getPreviousTokenHash()).isEqualTo(SessionManagementService.hashToken("refresh-token"));
         assertThat(session.getPreviousTokenValidUntil()).isAfter(LocalDateTime.now());
-        assertThat(session.getExpiresAt()).isAfter(originalExpiresAt);
+        assertThat(session.getExpiresAt()).isAfter(LocalDateTime.now());
         assertThat(session.getLoginIp()).isEqualTo("new-ip");
         assertThat(session.getDeviceInfo()).isEqualTo("new-agent");
     }

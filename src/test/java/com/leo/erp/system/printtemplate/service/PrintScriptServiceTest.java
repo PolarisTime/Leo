@@ -18,7 +18,6 @@ import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -68,7 +67,7 @@ class PrintScriptServiceTest {
                 "source_no", "SO-001",
                 "quantity", 2
         )));
-        when(jdbc.queryForList(anyString(), any(Object[].class))).thenReturn(List.of(Map.of(
+        when(jdbc.queryForList(anyString(), eq("SO-001"))).thenReturn(List.of(Map.of(
                 "order_no", "SO-001",
                 "delivery_date", Date.valueOf("2026-05-30")
         )));
@@ -96,7 +95,7 @@ class PrintScriptServiceTest {
                 "source_no", "FB-001",
                 "weight_ton", new BigDecimal("3.000")
         )));
-        when(jdbc.queryForList(anyString(), any(Object[].class))).thenReturn(List.of(Map.of(
+        when(jdbc.queryForList(anyString(), eq("FB-001"))).thenReturn(List.of(Map.of(
                 "bill_no", "FB-001",
                 "bill_time", Date.valueOf("2026-05-30"),
                 "carrier_name", "物流A",

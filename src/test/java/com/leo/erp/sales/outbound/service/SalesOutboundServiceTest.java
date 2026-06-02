@@ -15,8 +15,10 @@ import com.leo.erp.sales.outbound.repository.SalesOutboundRepository;
 import com.leo.erp.sales.outbound.web.dto.SalesOutboundItemRequest;
 import com.leo.erp.sales.outbound.web.dto.SalesOutboundRequest;
 import com.leo.erp.sales.outbound.web.dto.SalesOutboundResponse;
+import com.leo.erp.purchase.order.service.PurchaseOrderItemPieceWeightService;
 import com.leo.erp.security.permission.WorkflowTransitionGuard;
 import org.junit.jupiter.api.BeforeEach;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -57,7 +59,9 @@ class SalesOutboundServiceTest {
                 warehouseSelectionSupport,
                 mock(WorkflowTransitionGuard.class),
                 mock(SalesOrderCompletionSyncService.class),
-                salesOrderItemQueryService
+                salesOrderItemQueryService,
+                mock(PurchaseOrderItemPieceWeightService.class),
+                mock(JdbcTemplate.class)
         );
 
         SalesOutboundRequest request = new SalesOutboundRequest(
@@ -134,7 +138,9 @@ class SalesOutboundServiceTest {
                 warehouseSelectionSupport,
                 mock(WorkflowTransitionGuard.class),
                 mock(SalesOrderCompletionSyncService.class),
-                salesOrderItemQueryService
+                salesOrderItemQueryService,
+                mock(PurchaseOrderItemPieceWeightService.class),
+                mock(JdbcTemplate.class)
         );
 
         SalesOutboundRequest request = new SalesOutboundRequest(
@@ -209,7 +215,9 @@ class SalesOutboundServiceTest {
                 warehouseSelectionSupport,
                 mock(WorkflowTransitionGuard.class),
                 mock(SalesOrderCompletionSyncService.class),
-                salesOrderItemQueryService
+                salesOrderItemQueryService,
+                mock(PurchaseOrderItemPieceWeightService.class),
+                mock(JdbcTemplate.class)
         );
 
         SalesOutbound existing = new SalesOutbound();

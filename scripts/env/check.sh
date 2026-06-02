@@ -25,7 +25,9 @@ echo "=== Leo ERP 环境检查 ($RUNTIME_ENV) ==="
 echo ""
 
 check "Java 版本"
-JAVA_VER=$(java -version 2>&1 | head -1 | grep -oP '\d+' | head -1 || echo "0")
+JAVA_VERSION_OUTPUT="$(java -version 2>&1)"
+JAVA_VER=$(awk 'NR == 1 { if (match($0, /[0-9]+/)) print substr($0, RSTART, RLENGTH); exit }' <<< "$JAVA_VERSION_OUTPUT")
+JAVA_VER="${JAVA_VER:-0}"
 if [[ "$JAVA_VER" -ge 21 ]]; then
   ok "Java $JAVA_VER"
 else

@@ -37,7 +37,7 @@ class CarrierServiceTest {
         v3.setCarrier(carrier);
         carrier.setVehicles(List.of(v1, v2, v3));
 
-        when(repository.findByDeletedFlagFalseOrderByCarrierCodeAsc()).thenReturn(List.of(carrier));
+        when(repository.findByDeletedFlagFalseAndStatusOrderByCarrierCodeAsc(com.leo.erp.common.support.StatusConstants.NORMAL)).thenReturn(List.of(carrier));
 
         CarrierService service = new CarrierService(repository, vehicleRepository, null, mapper);
 

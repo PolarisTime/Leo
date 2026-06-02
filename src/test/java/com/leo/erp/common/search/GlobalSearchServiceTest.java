@@ -20,6 +20,7 @@ import com.leo.erp.statement.customer.service.CustomerStatementService;
 import com.leo.erp.statement.freight.service.FreightStatementService;
 import com.leo.erp.statement.supplier.service.SupplierStatementService;
 import com.leo.erp.logistics.bill.service.FreightBillService;
+import com.leo.erp.search.web.GlobalSearchResponse;
 import java.util.List;
 import java.util.Set;
 import org.junit.jupiter.api.AfterEach;

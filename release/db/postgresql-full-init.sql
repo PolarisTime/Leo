@@ -9,6 +9,18 @@
 SET client_encoding = 'UTF8';
 SET standard_conforming_strings = on;
 
+-- Runtime database defaults for application sessions.
+DO $leo_db_runtime_defaults$
+BEGIN
+  EXECUTE format('ALTER DATABASE %I SET statement_timeout = %L', current_database(), '60s');
+  EXECUTE format('ALTER DATABASE %I SET idle_in_transaction_session_timeout = %L', current_database(), '120s');
+  EXECUTE format('ALTER DATABASE %I SET lock_timeout = %L', current_database(), '10s');
+  EXECUTE format('ALTER ROLE %I IN DATABASE %I SET statement_timeout = %L', current_user, current_database(), '60s');
+  EXECUTE format('ALTER ROLE %I IN DATABASE %I SET idle_in_transaction_session_timeout = %L', current_user, current_database(), '120s');
+  EXECUTE format('ALTER ROLE %I IN DATABASE %I SET lock_timeout = %L', current_user, current_database(), '10s');
+END
+$leo_db_runtime_defaults$;
+
 --
 -- PostgreSQL database dump
 --

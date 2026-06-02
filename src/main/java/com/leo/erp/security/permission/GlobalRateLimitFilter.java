@@ -1,5 +1,9 @@
 package com.leo.erp.security.permission;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.leo.erp.common.api.ApiResponse;
+import com.leo.erp.common.api.RateLimitContext;
+import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.support.ClientIpResolver;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -31,11 +35,14 @@ public class GlobalRateLimitFilter extends OncePerRequestFilter implements Order
 
     private final TokenBucketService tokenBucketService;
     private final ClientIpResolver clientIpResolver;
+    private final ObjectMapper objectMapper;
 
     public GlobalRateLimitFilter(TokenBucketService tokenBucketService,
-                                 ClientIpResolver clientIpResolver) {
+                                 ClientIpResolver clientIpResolver,
+                                 ObjectMapper objectMapper) {
         this.tokenBucketService = tokenBucketService;
         this.clientIpResolver = clientIpResolver;
+        this.objectMapper = objectMapper;
     }
 
     @Override
@@ -63,17 +70,26 @@ public class GlobalRateLimitFilter extends OncePerRequestFilter implements Order
                 key, GLOBAL_RATE, GLOBAL_CAPACITY, 1);
 
         if (!result.allowed()) {
+            long retryAfterSeconds = result.retryAfterSeconds();
+            RateLimitContext.Snapshot snapshot =
+                    RateLimitContext.Snapshot.rejected(GLOBAL_CAPACITY, retryAfterSeconds);
+            RateLimitContext.set(request, snapshot);
             response.setStatus(HttpStatus.TOO_MANY_REQUESTS.value());
             response.setContentType("application/json;charset=UTF-8");
-            response.setHeader("Retry-After", String.valueOf(result.retryAfterSeconds()));
+            response.setHeader("Retry-After", String.valueOf(retryAfterSeconds));
             response.setHeader("X-RateLimit-Limit", String.valueOf(GLOBAL_CAPACITY));
             response.setHeader("X-RateLimit-Remaining", "0");
-            response.setHeader("X-RateLimit-Reset", String.valueOf(result.retryAfterSeconds()));
-            response.getWriter().write(
-                    "{\"code\":4290,\"message\":\"请求过于频繁，请在 " + result.retryAfterSeconds() + " 秒后重试\"}");
+            response.setHeader("X-RateLimit-Reset", String.valueOf(retryAfterSeconds));
+            ApiResponse<Void> body = ApiResponse.failure(
+                    ErrorCode.RATE_LIMITED,
+                    "请求过于频繁，请在 " + retryAfterSeconds + " 秒后重试",
+                    snapshot
+            );
+            response.getWriter().write(objectMapper.writeValueAsString(body));
             response.getWriter().flush();
             return;
         }
+        RateLimitContext.set(request, RateLimitContext.Snapshot.allowed(GLOBAL_CAPACITY, result.remaining()));
         response.setHeader("X-RateLimit-Limit", String.valueOf(GLOBAL_CAPACITY));
         response.setHeader("X-RateLimit-Remaining", String.valueOf(result.remaining()));
         chain.doFilter(request, response);

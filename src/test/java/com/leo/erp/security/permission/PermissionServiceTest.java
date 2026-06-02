@@ -1,6 +1,7 @@
 package com.leo.erp.security.permission;
 
 import com.leo.erp.auth.repository.UserRoleRepository;
+import com.leo.erp.common.config.RedisTuningProperties;
 import com.leo.erp.system.role.domain.entity.RolePermission;
 import com.leo.erp.system.role.domain.entity.RoleSetting;
 import com.leo.erp.system.role.repository.RolePermissionRepository;
@@ -10,6 +11,7 @@ import org.springframework.data.redis.connection.RedisConnection;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.core.Cursor;
 import org.springframework.data.redis.core.HashOperations;
+import org.springframework.data.redis.core.SetOperations;
 import org.springframework.data.redis.core.StringRedisTemplate;
 
 import java.lang.reflect.Proxy;
@@ -49,6 +51,28 @@ class PermissionServiceTest {
                     }
                     case "keys" -> throw new AssertionError("KEYS should not be used for cache eviction");
                     case "isClosed" -> connectionClosed.get();
+                    case "isPipelined" -> false;
+                    case "isQueueing" -> false;
+                    case "closePipeline" -> null;
+                    case "openPipeline" -> null;
+                    case "exists" -> false;
+                    case "expire" -> true;
+                    case "del" -> 1L;
+                    case "type" -> null;
+                    case "scriptLoad" -> "return 0";
+                    case "evalSha" -> null;
+                    case "eval" -> null;
+                    case "zAdd" -> true;
+                    case "zRem" -> 1L;
+                    case "hSet" -> true;
+                    case "hDel" -> 1L;
+                    case "sAdd" -> 1L;
+                    case "sRem" -> 1L;
+                    case "sMembers" -> java.util.Set.of();
+                    case "multi" -> null;
+                    case "exec" -> List.of();
+                    case "watch" -> null;
+                    case "unwatch" -> null;
                     case "toString" -> "RedisConnectionStub";
                     case "hashCode" -> System.identityHashCode(proxy);
                     case "equals" -> proxy == args[0];
@@ -67,7 +91,7 @@ class PermissionServiceTest {
                 }
         );
         RecordingStringRedisTemplate redisTemplate = new RecordingStringRedisTemplate(connectionFactory);
-        PermissionService service = new PermissionService(null, null, null, redisTemplate, null, null);
+        PermissionService service = new PermissionService(null, null, null, redisTemplate, null, new RedisTuningProperties());
 
         service.evictAllCache();
 
@@ -97,7 +121,8 @@ class PermissionServiceTest {
                 rolePermissionRepository(action),
                 null,
                 noOpRedisTemplate(),
-                roleSettingRepository(role)
+                roleSettingRepository(role),
+                new RedisTuningProperties()
         );
 
         assertThat(service.can(1L, "material", "read")).isTrue();
@@ -120,7 +145,8 @@ class PermissionServiceTest {
                 rolePermissionRepository(action),
                 null,
                 noOpRedisTemplate(),
-                roleSettingRepository(role)
+                roleSettingRepository(role),
+                new RedisTuningProperties()
         );
 
         assertThat(service.can(1L, "material", "read")).isFalse();
@@ -146,7 +172,8 @@ class PermissionServiceTest {
                 rolePermissionRepository(view, edit),
                 null,
                 noOpRedisTemplate(),
-                null
+                null,
+                new RedisTuningProperties()
         );
 
         assertThat(service.getPermissionSummaryForRoles(List.of(role))).isEqualTo("商品资料-查看、商品资料-编辑");
@@ -164,7 +191,8 @@ class PermissionServiceTest {
                 rolePermissionRepository(read, update),
                 null,
                 noOpRedisTemplate(),
-                roleSettingRepository(readRole, updateRole)
+                roleSettingRepository(readRole, updateRole),
+                new RedisTuningProperties()
         );
 
         assertThat(service.getUserDataScope(1L, "purchase-order", "read")).isEqualTo(ResourcePermissionCatalog.SCOPE_ALL);
@@ -184,7 +212,8 @@ class PermissionServiceTest {
                 countingRolePermissionRepository(permissionQueries, read, update),
                 null,
                 inMemoryRedisTemplate(),
-                roleSettingRepository(readRole, updateRole)
+                roleSettingRepository(readRole, updateRole),
+                new RedisTuningProperties()
         );
 
         assertThat(service.can(1L, "purchase-order", "read")).isTrue();
@@ -200,6 +229,7 @@ class PermissionServiceTest {
 
         private RecordingStringRedisTemplate(RedisConnectionFactory connectionFactory) {
             this.connectionFactory = connectionFactory;
+            try { afterPropertiesSet(); } catch (Exception ignored) {}
         }
 
         @Override
@@ -217,6 +247,7 @@ class PermissionServiceTest {
     @SuppressWarnings("unchecked")
     private StringRedisTemplate noOpRedisTemplate() {
         return new StringRedisTemplate() {
+            { try { afterPropertiesSet(); } catch (Exception ignored) {} }
             private final HashOperations<String, Object, Object> hashOperations =
                     (HashOperations<String, Object, Object>) Proxy.newProxyInstance(
                             HashOperations.class.getClassLoader(),
@@ -234,6 +265,20 @@ class PermissionServiceTest {
             @Override
             public HashOperations<String, Object, Object> opsForHash() {
                 return hashOperations;
+            }
+
+            @Override
+            public SetOperations<String, String> opsForSet() {
+                return (SetOperations<String, String>) Proxy.newProxyInstance(
+                        SetOperations.class.getClassLoader(),
+                        new Class[]{SetOperations.class},
+                        (p, m, a) -> switch (m.getName()) {
+                            case "add" -> 1L;
+                            case "toString" -> "SetOperationsStub";
+                            case "hashCode" -> System.identityHashCode(p);
+                            case "equals" -> p == a[0];
+                            default -> throw new UnsupportedOperationException(m.getName());
+                        });
             }
 
             @Override
@@ -263,6 +308,7 @@ class PermissionServiceTest {
                 new Class[]{RoleSettingRepository.class},
                 (proxy, method, args) -> switch (method.getName()) {
                     case "findByIdInAndDeletedFlagFalse" -> Arrays.asList(roles);
+                    case "findByIdAndDeletedFlagFalse" -> java.util.Optional.ofNullable(roles.length > 0 ? roles[0] : null);
                     case "toString" -> "RoleSettingRepositoryStub";
                     case "hashCode" -> System.identityHashCode(proxy);
                     case "equals" -> proxy == args[0];
@@ -336,6 +382,7 @@ class PermissionServiceTest {
     private StringRedisTemplate inMemoryRedisTemplate() {
         Map<String, Map<Object, Object>> hashes = new java.util.LinkedHashMap<>();
         return new StringRedisTemplate() {
+            { try { afterPropertiesSet(); } catch (Exception ignored) {} }
             private final HashOperations<String, Object, Object> hashOperations =
                     (HashOperations<String, Object, Object>) Proxy.newProxyInstance(
                             HashOperations.class.getClassLoader(),
@@ -357,6 +404,20 @@ class PermissionServiceTest {
             @Override
             public HashOperations<String, Object, Object> opsForHash() {
                 return hashOperations;
+            }
+
+            @Override
+            public SetOperations<String, String> opsForSet() {
+                return (SetOperations<String, String>) Proxy.newProxyInstance(
+                        SetOperations.class.getClassLoader(),
+                        new Class[]{SetOperations.class},
+                        (p, m, a) -> switch (m.getName()) {
+                            case "add" -> 1L;
+                            case "toString" -> "SetOperationsStub";
+                            case "hashCode" -> System.identityHashCode(p);
+                            case "equals" -> p == a[0];
+                            default -> throw new UnsupportedOperationException(m.getName());
+                        });
             }
 
             @Override

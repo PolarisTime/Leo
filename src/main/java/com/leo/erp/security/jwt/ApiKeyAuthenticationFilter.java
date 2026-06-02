@@ -9,6 +9,7 @@ import com.leo.erp.auth.repository.UserAccountRepository;
 import com.leo.erp.auth.service.UserRoleBindingService;
 import com.leo.erp.auth.support.ApiKeySupport;
 import com.leo.erp.common.api.ApiResponse;
+import com.leo.erp.common.api.RateLimitContext;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.security.permission.ResourcePermissionCatalog;
 import com.leo.erp.security.support.SecurityPrincipal;
@@ -66,21 +67,21 @@ public class ApiKeyAuthenticationFilter extends OncePerRequestFilter {
         ApiKey apiKey = apiKeyRepository.findByKeyHashAndDeletedFlagFalse(ApiKeySupport.hashKey(rawKey.trim()))
                 .orElse(null);
         if (apiKey == null || !apiKey.isActive()) {
-            sendFailure(response, HttpServletResponse.SC_UNAUTHORIZED, ErrorCode.UNAUTHORIZED, "API Key 无效或已失效");
+            sendFailure(request, response, HttpServletResponse.SC_UNAUTHORIZED, ErrorCode.UNAUTHORIZED, "API Key 无效或已失效");
             return;
         }
 
         String requestPath = resolveRequestPath(request);
         if (!isScopeAllowed(apiKey.getUsageScope(), requestPath, request.getMethod())) {
-            sendFailure(response, HttpServletResponse.SC_FORBIDDEN, ErrorCode.FORBIDDEN, "当前 API Key 使用范围不允许访问该接口");
+            sendFailure(request, response, HttpServletResponse.SC_FORBIDDEN, ErrorCode.FORBIDDEN, "当前 API Key 使用范围不允许访问该接口");
             return;
         }
         if (!isResourceAllowed(apiKey, request, requestPath)) {
-            sendFailure(response, HttpServletResponse.SC_FORBIDDEN, ErrorCode.FORBIDDEN, "当前 API Key 未开通该资源接口权限");
+            sendFailure(request, response, HttpServletResponse.SC_FORBIDDEN, ErrorCode.FORBIDDEN, "当前 API Key 未开通该资源接口权限");
             return;
         }
         if (!hasConfiguredActions(apiKey)) {
-            sendFailure(response, HttpServletResponse.SC_FORBIDDEN, ErrorCode.FORBIDDEN, "当前 API Key 未配置动作权限");
+            sendFailure(request, response, HttpServletResponse.SC_FORBIDDEN, ErrorCode.FORBIDDEN, "当前 API Key 未配置动作权限");
             return;
         }
 
@@ -88,7 +89,7 @@ public class ApiKeyAuthenticationFilter extends OncePerRequestFilter {
                 .filter(candidate -> candidate.getStatus() == UserStatus.NORMAL)
                 .orElse(null);
         if (user == null) {
-            sendFailure(response, HttpServletResponse.SC_UNAUTHORIZED, ErrorCode.UNAUTHORIZED, "API Key 所属用户不存在或已禁用");
+            sendFailure(request, response, HttpServletResponse.SC_UNAUTHORIZED, ErrorCode.UNAUTHORIZED, "API Key 所属用户不存在或已禁用");
             return;
         }
 
@@ -154,11 +155,18 @@ public class ApiKeyAuthenticationFilter extends OncePerRequestFilter {
         return null;
     }
 
-    private void sendFailure(HttpServletResponse response, int httpStatus, ErrorCode errorCode, String message) throws IOException {
+    private void sendFailure(HttpServletRequest request,
+                             HttpServletResponse response,
+                             int httpStatus,
+                             ErrorCode errorCode,
+                             String message) throws IOException {
         response.setStatus(httpStatus);
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
         response.setCharacterEncoding("UTF-8");
-        objectMapper.writeValue(response.getOutputStream(), ApiResponse.failure(errorCode, message));
+        objectMapper.writeValue(
+                response.getOutputStream(),
+                ApiResponse.failure(errorCode, message, RateLimitContext.current(request))
+        );
     }
 
     private void authenticate(HttpServletRequest request, UserAccount user, ApiKey apiKey) {

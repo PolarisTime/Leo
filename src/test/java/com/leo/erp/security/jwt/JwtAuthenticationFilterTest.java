@@ -1,6 +1,7 @@
 package com.leo.erp.security.jwt;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.leo.erp.common.config.RedisTuningProperties;
 import com.leo.erp.security.support.SecurityPrincipal;
 import io.jsonwebtoken.JwtException;
 import jakarta.servlet.FilterChain;
@@ -69,7 +70,7 @@ class JwtAuthenticationFilterTest {
             Optional<SecurityPrincipal> principal,
             AtomicBoolean touched
     ) {
-        return new AuthenticatedUserCacheService(null, null, null, null) {
+        return new AuthenticatedUserCacheService(null, null, null, null, new RedisTuningProperties()) {
             @Override
             public Optional<SecurityPrincipal> getActivePrincipal(Long userId) {
                 touched.set(true);
@@ -115,7 +116,7 @@ class JwtAuthenticationFilterTest {
     private static final class NoOpSessionActivityService extends SessionActivityService {
 
         private NoOpSessionActivityService() {
-            super(null);
+            super(null, new RedisTuningProperties());
         }
 
         @Override

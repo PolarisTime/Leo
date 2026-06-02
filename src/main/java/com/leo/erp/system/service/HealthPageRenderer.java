@@ -10,7 +10,7 @@ import java.lang.management.RuntimeMXBean;
 import java.lang.management.ThreadMXBean;
 
 @Component
-class HealthPageRenderer {
+public class HealthPageRenderer {
 
     private static final long BYTES_PER_KB = 1024L;
     private static final long BYTES_PER_MB = BYTES_PER_KB * 1024;

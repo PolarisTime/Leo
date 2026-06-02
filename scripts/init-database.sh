@@ -17,7 +17,10 @@ for env_name in \
   SPRING_DATASOURCE_PORT \
   SPRING_DATASOURCE_DB \
   SPRING_DATASOURCE_USERNAME \
-  SPRING_DATASOURCE_PASSWORD
+  SPRING_DATASOURCE_PASSWORD \
+  LEO_POSTGRES_STATEMENT_TIMEOUT \
+  LEO_POSTGRES_IDLE_IN_TRANSACTION_SESSION_TIMEOUT \
+  LEO_POSTGRES_LOCK_TIMEOUT
 do
   if [[ -v "$env_name" ]]; then
     CALLER_ENV["$env_name"]="${!env_name}"
@@ -40,6 +43,9 @@ DB_ADMIN_USER="${LEO_DB_ADMIN_USER:-postgres}"
 APP_DATABASE="${SPRING_DATASOURCE_DB:-leo}"
 APP_USER="${SPRING_DATASOURCE_USERNAME:-leo}"
 APP_PASSWORD="${SPRING_DATASOURCE_PASSWORD:-}"
+STATEMENT_TIMEOUT="${LEO_POSTGRES_STATEMENT_TIMEOUT:-60s}"
+IDLE_IN_TRANSACTION_SESSION_TIMEOUT="${LEO_POSTGRES_IDLE_IN_TRANSACTION_SESSION_TIMEOUT:-120s}"
+LOCK_TIMEOUT="${LEO_POSTGRES_LOCK_TIMEOUT:-10s}"
 
 export PGPASSWORD="${LEO_DB_ADMIN_PASSWORD:-${PGPASSWORD:-}}"
 
@@ -63,7 +69,10 @@ psql \
   -v ON_ERROR_STOP=1 \
   -v app_database="$APP_DATABASE" \
   -v app_user="$APP_USER" \
-  -v app_password="$APP_PASSWORD" <<'SQL'
+  -v app_password="$APP_PASSWORD" \
+  -v statement_timeout="$STATEMENT_TIMEOUT" \
+  -v idle_in_transaction_session_timeout="$IDLE_IN_TRANSACTION_SESSION_TIMEOUT" \
+  -v lock_timeout="$LOCK_TIMEOUT" <<'SQL'
 SELECT
     CASE
         WHEN :'app_password' = ''
@@ -96,6 +105,24 @@ SELECT format('ALTER DATABASE %I OWNER TO %I', :'app_database', :'app_user')
 \gexec
 
 SELECT format('GRANT ALL PRIVILEGES ON DATABASE %I TO %I', :'app_database', :'app_user')
+\gexec
+
+SELECT format('ALTER DATABASE %I SET statement_timeout = %L', :'app_database', :'statement_timeout')
+\gexec
+
+SELECT format('ALTER DATABASE %I SET idle_in_transaction_session_timeout = %L', :'app_database', :'idle_in_transaction_session_timeout')
+\gexec
+
+SELECT format('ALTER DATABASE %I SET lock_timeout = %L', :'app_database', :'lock_timeout')
+\gexec
+
+SELECT format('ALTER ROLE %I IN DATABASE %I SET statement_timeout = %L', :'app_user', :'app_database', :'statement_timeout')
+\gexec
+
+SELECT format('ALTER ROLE %I IN DATABASE %I SET idle_in_transaction_session_timeout = %L', :'app_user', :'app_database', :'idle_in_transaction_session_timeout')
+\gexec
+
+SELECT format('ALTER ROLE %I IN DATABASE %I SET lock_timeout = %L', :'app_user', :'app_database', :'lock_timeout')
 \gexec
 
 \connect :app_database

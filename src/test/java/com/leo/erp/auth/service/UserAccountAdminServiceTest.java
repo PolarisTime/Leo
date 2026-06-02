@@ -1,29 +1,52 @@
 package com.leo.erp.auth.service;
 
+import com.leo.erp.common.config.RedisTuningProperties;
 import com.leo.erp.auth.config.AuthProperties;
+import com.leo.erp.common.config.RedisTuningProperties;
 import com.leo.erp.auth.domain.entity.UserAccount;
+import com.leo.erp.common.config.RedisTuningProperties;
 import com.leo.erp.auth.domain.enums.UserStatus;
+import com.leo.erp.common.config.RedisTuningProperties;
 import com.leo.erp.auth.repository.UserAccountRepository;
+import com.leo.erp.common.config.RedisTuningProperties;
 import com.leo.erp.auth.mapper.UserAccountAdminMapper;
+import com.leo.erp.common.config.RedisTuningProperties;
 import com.leo.erp.auth.web.dto.LoginNameAvailabilityResponse;
+import com.leo.erp.common.config.RedisTuningProperties;
 import com.leo.erp.auth.web.dto.UserAccountCreateResponse;
+import com.leo.erp.common.config.RedisTuningProperties;
 import com.leo.erp.common.error.BusinessException;
+import com.leo.erp.common.config.RedisTuningProperties;
 import com.leo.erp.auth.web.dto.UserAccountAdminResponse;
+import com.leo.erp.common.config.RedisTuningProperties;
 import com.leo.erp.security.jwt.AuthenticatedUserCacheService;
+import com.leo.erp.common.config.RedisTuningProperties;
 import com.leo.erp.system.department.domain.entity.Department;
+import com.leo.erp.common.config.RedisTuningProperties;
 import com.leo.erp.system.department.repository.DepartmentRepository;
+import com.leo.erp.common.config.RedisTuningProperties;
 import com.leo.erp.system.norule.service.SystemSwitchService;
+import com.leo.erp.common.config.RedisTuningProperties;
 import com.leo.erp.system.role.domain.entity.RoleSetting;
+import com.leo.erp.common.config.RedisTuningProperties;
 import org.junit.jupiter.api.Test;
 
+import com.leo.erp.common.config.RedisTuningProperties;
 import java.lang.reflect.Proxy;
+import com.leo.erp.common.config.RedisTuningProperties;
 import java.time.LocalDateTime;
+import com.leo.erp.common.config.RedisTuningProperties;
 import java.util.List;
+import com.leo.erp.common.config.RedisTuningProperties;
 import java.util.Optional;
+import com.leo.erp.common.config.RedisTuningProperties;
 import java.util.concurrent.atomic.AtomicReference;
 
+import com.leo.erp.common.config.RedisTuningProperties;
 import static org.assertj.core.api.Assertions.assertThat;
+import com.leo.erp.common.config.RedisTuningProperties;
 import static org.assertj.core.api.Assertions.assertThatCode;
+import com.leo.erp.common.config.RedisTuningProperties;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class UserAccountAdminServiceTest {
@@ -47,7 +70,7 @@ class UserAccountAdminServiceTest {
         UserAccountCacheService cacheService = new UserAccountCacheService(
                 redisJsonCacheSupport, authenticatedUserCacheService, dashboardSummaryService, permissionService);
         return new UserAccountAdminService(repository, idGenerator, passwordEncoder, mapper,
-                totpService, userRoleBindingService, permissionService, validationService, cacheService);
+                totpService, userRoleBindingService, permissionService, validationService, cacheService, null);
     }
 
     @Test
@@ -120,7 +143,7 @@ class UserAccountAdminServiceTest {
                 "测试用户",
                 "13800000000",
                 10L,
-                List.of("采购专员"),
+                List.of("全部数据"), null,
                 "全部数据",
                 "",
                 "INVALID",
@@ -161,7 +184,7 @@ class UserAccountAdminServiceTest {
                 "测试用户",
                 "13800000000",
                 10L,
-                List.of("采购专员"),
+                List.of("全部数据"), null,
                 "全部数据",
                 "",
                 "正常",
@@ -207,7 +230,7 @@ class UserAccountAdminServiceTest {
                 "测试用户",
                 "13800000000",
                 10L,
-                List.of("采购专员"),
+                List.of("全部数据"), null,
                 "全部数据",
                 "",
                 "正常",
@@ -253,7 +276,7 @@ class UserAccountAdminServiceTest {
                 "测试用户",
                 "13800000000",
                 10L,
-                List.of("采购专员"),
+                List.of("全部数据"), null,
                 "全部数据",
                 "",
                 "正常",
@@ -300,7 +323,7 @@ class UserAccountAdminServiceTest {
                 "测试用户",
                 "13800000000",
                 10L,
-                List.of("采购专员"),
+                List.of("全部数据"), null,
                 "全部数据",
                 "",
                 "正常",
@@ -477,7 +500,7 @@ class UserAccountAdminServiceTest {
                         entity.getMobile(),
                         entity.getDepartmentId(),
                         entity.getDepartmentName(),
-                        List.of(),
+                        List.of(), null,
                         entity.getDataScope(),
                         entity.getPermissionSummary(),
                         entity.getLastLoginDate(),
@@ -566,7 +589,7 @@ class UserAccountAdminServiceTest {
     }
 
     private AuthenticatedUserCacheService authenticatedUserCacheService() {
-        return new AuthenticatedUserCacheService(null, null, null, null) {
+        return new AuthenticatedUserCacheService(null, null, null, null, new RedisTuningProperties()) {
             @Override
             public void evict(Long userId) {
             }

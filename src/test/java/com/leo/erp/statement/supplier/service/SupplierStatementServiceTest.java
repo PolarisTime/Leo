@@ -131,6 +131,8 @@ class SupplierStatementServiceTest {
     private PurchaseInboundItem buildInboundItem() {
         PurchaseInbound inbound = new PurchaseInbound();
         inbound.setInboundNo("IN-001");
+        inbound.setSupplierName("供应商甲");
+        inbound.setStatus("完成采购");
 
         PurchaseInboundItem item = new PurchaseInboundItem();
         item.setId(101L);

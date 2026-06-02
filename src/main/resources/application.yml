@@ -195,6 +195,8 @@ leo:
   database:
     # 数据库是否只读，开启后应限制写操作
     read-only: false
+    # Hikari 连接泄漏检测阈值，默认关闭；排障时通过环境变量临时开启
+    hikari-leak-detection-threshold: ${LEO_DATABASE_HIKARI_LEAK_DETECTION_THRESHOLD:0}
     backup:
       # 导入前是否自动备份数据库
       auto-backup-before-import: true
@@ -206,6 +208,29 @@ leo:
       pg-dump-command: ${LEO_DATABASE_BACKUP_PG_DUMP_COMMAND:/usr/pgsql-18/bin/pg_dump}
       # psql 可执行文件路径
       psql-command: ${LEO_DATABASE_BACKUP_PSQL_COMMAND:/usr/pgsql-18/bin/psql}
+  maintenance:
+    # 后台维护任务总开关
+    enabled: ${LEO_MAINTENANCE_ENABLED:true}
+    # 定时任务时区
+    zone: ${LEO_MAINTENANCE_ZONE:Asia/Shanghai}
+    database-backup:
+      # 每天 02:15 执行数据库全量备份并压缩
+      enabled: ${LEO_MAINTENANCE_DATABASE_BACKUP_ENABLED:true}
+      cron: ${LEO_MAINTENANCE_DATABASE_BACKUP_CRON:0 15 2 * * *}
+      # 默认保留最近 30 天备份文件
+      retention-days: ${LEO_MAINTENANCE_DATABASE_BACKUP_RETENTION_DAYS:30}
+    operation-log-archive:
+      # 每天 02:30 归档并压缩 30 天前的操作日志
+      enabled: ${LEO_MAINTENANCE_OPERATION_LOG_ARCHIVE_ENABLED:true}
+      cron: ${LEO_MAINTENANCE_OPERATION_LOG_ARCHIVE_CRON:0 30 2 * * *}
+      # 在线表默认保留最近 30 天，早于该阈值的全部归档
+      retention-days: ${LEO_MAINTENANCE_OPERATION_LOG_RETENTION_DAYS:30}
+      batch-size: ${LEO_MAINTENANCE_OPERATION_LOG_ARCHIVE_BATCH_SIZE:1000}
+      archive-path: ${LEO_MAINTENANCE_OPERATION_LOG_ARCHIVE_PATH:/tmp/leo/operation-log-archives}
+    export-task-cleanup:
+      # 每天 02:45 清理过期数据库导出任务文件
+      enabled: ${LEO_MAINTENANCE_EXPORT_TASK_CLEANUP_ENABLED:true}
+      cron: ${LEO_MAINTENANCE_EXPORT_TASK_CLEANUP_CRON:0 45 2 * * *}
   company:
     bootstrap:
       # 兼容旧配置；启动期灌库已废弃，首次初始化请使用网页 OOBE (/api/setup)

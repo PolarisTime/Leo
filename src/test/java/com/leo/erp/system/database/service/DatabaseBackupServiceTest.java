@@ -4,10 +4,11 @@ import com.leo.erp.common.support.ExternalProcessRunner;
 import com.leo.erp.system.database.config.DatabaseBackupProperties;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.autoconfigure.jdbc.DataSourceProperties;
-import org.springframework.mock.web.MockMultipartFile;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -21,11 +22,10 @@ class DatabaseBackupServiceTest {
         RecordingProcessRunner processRunner = new RecordingProcessRunner();
         DatabaseBackupService service = newService(processRunner, true);
 
-        service.importBackup(
-                new MockMultipartFile("file", "backup.sql", "application/sql", "select 1;".getBytes(StandardCharsets.UTF_8)),
-                "leo",
-                "secret"
-        );
+        Path tempFile = Files.createTempFile("backup-test-", ".sql");
+        tempFile.toFile().deleteOnExit();
+        Files.write(tempFile, "select 1;".getBytes(StandardCharsets.UTF_8));
+        service.importBackup(tempFile, "leo", "secret");
 
         assertThat(processRunner.actions).containsExactly("pg_dump", "psql");
     }
@@ -35,11 +35,10 @@ class DatabaseBackupServiceTest {
         RecordingProcessRunner processRunner = new RecordingProcessRunner();
         DatabaseBackupService service = newService(processRunner, false);
 
-        service.importBackup(
-                new MockMultipartFile("file", "backup.sql", "application/sql", "select 1;".getBytes(StandardCharsets.UTF_8)),
-                "leo",
-                "secret"
-        );
+        Path tempFile = Files.createTempFile("backup-test-", ".sql");
+        tempFile.toFile().deleteOnExit();
+        Files.write(tempFile, "select 1;".getBytes(StandardCharsets.UTF_8));
+        service.importBackup(tempFile, "leo", "secret");
 
         assertThat(processRunner.actions).containsExactly("psql");
     }

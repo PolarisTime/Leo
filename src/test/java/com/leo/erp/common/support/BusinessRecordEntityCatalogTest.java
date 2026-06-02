@@ -1,7 +1,9 @@
 package com.leo.erp.common.support;
 
+import com.leo.erp.config.BusinessEntityConfig;
 import com.leo.erp.master.material.domain.entity.Material;
 import com.leo.erp.security.permission.ResourcePermissionCatalog;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -31,6 +33,11 @@ class BusinessRecordEntityCatalogTest {
             "invoice-receipt",
             "invoice-issue"
     );
+
+    @BeforeEach
+    void setUpCatalog() {
+        new BusinessEntityConfig().businessEntityRegistrar();
+    }
 
     @Test
     void shouldExposeOnlyAttachableBusinessModules() {

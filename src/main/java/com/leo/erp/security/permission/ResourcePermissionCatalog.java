@@ -119,7 +119,7 @@ public final class ResourcePermissionCatalog {
                     List.of("/general-setting", "/general-setting/upload-rule"), List.of(action(READ, "查看"), action(UPDATE, "编辑"))),
             entry("company-setting", "公司信息", "系统", false, List.of("/company-setting"), CRUD_ACTIONS),
             entry("operation-log", "操作日志", "系统", false, List.of("/operation-log"), READ_ONLY_ACTIONS),
-            entry("department", "部门", "系统", false, List.of("/department"), CRUD_ACTIONS),
+            entry("department", "部门", "主数据", false, List.of("/department"), CRUD_ACTIONS),
             entry("user-account", "用户账户", "系统", false, List.of("/user-account"), CRUD_ACTIONS),
             entry("permission", "权限管理", "系统", false, List.of("/permission"), READ_ONLY_ACTIONS),
             entry("role", "角色", "系统", false,

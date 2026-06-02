@@ -1,5 +1,6 @@
 package com.leo.erp.statement.customer.service;
 
+import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
@@ -170,7 +171,7 @@ class CustomerStatementServiceTest {
         );
 
         List<CustomerStatementCandidateResponse> candidates = service
-                .candidatePage(PageQuery.of(0, 20, null, null), "")
+                .candidatePage(PageQuery.of(0, 20, null, null), new PageFilter("", null, null, null, null, null, null, null, null, null, null, null, null, null, null))
                 .getContent();
 
         assertThat(candidates).hasSize(1);
@@ -217,6 +218,9 @@ class CustomerStatementServiceTest {
     private SalesOrderItem buildSalesOrderItem() {
         SalesOrder order = new SalesOrder();
         order.setOrderNo("SO-001");
+        order.setCustomerName("客户甲");
+        order.setProjectName("项目A");
+        order.setStatus("完成销售");
 
         SalesOrderItem item = new SalesOrderItem();
         item.setId(201L);

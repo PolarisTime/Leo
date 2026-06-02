@@ -1,5 +1,6 @@
 package com.leo.erp.auth.service;
 
+import com.leo.erp.common.config.RedisTuningProperties;
 import com.leo.erp.auth.domain.entity.RefreshTokenSession;
 import com.leo.erp.auth.domain.entity.UserAccount;
 import com.leo.erp.auth.domain.enums.UserStatus;
@@ -113,7 +114,7 @@ class RefreshTokenAdminServiceTest {
     }
 
     private SessionActivityService sessionActivityService(Map<String, LocalDateTime> activityMap) {
-        return new SessionActivityService(null) {
+        return new SessionActivityService(null, new RedisTuningProperties()) {
             @Override
             public Map<String, LocalDateTime> resolveLastActiveAt(java.util.Collection<String> sessionIds) {
                 return activityMap;

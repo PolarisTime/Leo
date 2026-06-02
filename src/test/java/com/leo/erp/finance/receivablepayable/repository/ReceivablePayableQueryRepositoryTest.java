@@ -22,7 +22,7 @@ class ReceivablePayableQueryRepositoryTest {
         RecordingNamedParameterJdbcTemplate jdbcTemplate = new RecordingNamedParameterJdbcTemplate();
         jdbcTemplate.total = 21L;
         jdbcTemplate.rows = List.of(new ReceivablePayableResponse(
-                9L,
+                "9",
                 "应付",
                 "物流商",
                 "Acme Logistics",
@@ -30,6 +30,7 @@ class ReceivablePayableQueryRepositoryTest {
                 new BigDecimal("100.00"),
                 new BigDecimal("40.00"),
                 new BigDecimal("60.00"),
+                null,
                 "正常",
                 "账期内"
         ));
@@ -37,7 +38,7 @@ class ReceivablePayableQueryRepositoryTest {
 
         var page = repository.page(new PageQuery(1, 20, "unexpected", "asc"), "应付", "物流商", null, " AcMe ");
 
-        assertThat(jdbcTemplate.countSql).contains("SELECT COUNT(*)");
+        assertThat(jdbcTemplate.countSql).containsPattern("SELECT COUNT\\((1|\\*)\\)");
         assertThat(jdbcTemplate.dataSql).contains("ORDER BY rp.counterparty_name ASC, rp.id DESC");
         assertThat(jdbcTemplate.lastParams.getValue("direction")).isEqualTo("应付");
         assertThat(jdbcTemplate.lastParams.getValue("counterpartyType")).isEqualTo("物流商");
