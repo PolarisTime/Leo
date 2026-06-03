@@ -17,20 +17,10 @@ CREATE INDEX IF NOT EXISTS idx_sys_print_template_bill_type ON sys_print_templat
 CREATE UNIQUE INDEX IF NOT EXISTS uk_sys_print_template_bill_type_name
     ON sys_print_template (bill_type, template_name, deleted_flag);
 
-MERGE INTO sys_print_template (id, bill_type, template_name, template_html, is_default)
-KEY(id) VALUES (
-    700540000000000001,
-    'purchase-order',
-    '采购订单默认模板',
-    '<div><h2>采购订单</h2><div>单号：{{orderNo}}</div><div>供应商：{{supplierName}}</div><div>日期：{{orderDate}}</div><!--DETAIL_ROW_START--><div>{{detail.materialCode}} / {{detail.spec}} / {{detail.weightTon}}</div><!--DETAIL_ROW_END--></div>',
-    '1'
-);
+INSERT INTO sys_print_template (id, bill_type, template_name, template_html, is_default)
+SELECT 700540000000000001, 'purchase-order', '采购订单默认模板', '<div><h2>采购订单</h2><div>单号：{{orderNo}}</div><div>供应商：{{supplierName}}</div><div>日期：{{orderDate}}</div><!--DETAIL_ROW_START--><div>{{detail.materialCode}} / {{detail.spec}} / {{detail.weightTon}}</div><!--DETAIL_ROW_END--></div>', '1'
+WHERE NOT EXISTS (SELECT 1 FROM sys_print_template WHERE id = 700540000000000001);
 
-MERGE INTO sys_print_template (id, bill_type, template_name, template_html, is_default)
-KEY(id) VALUES (
-    700540000000000002,
-    'sales-outbound',
-    '销售出库默认模板',
-    '<div><h2>销售出库</h2><div>单号：{{outboundNo}}</div><div>客户：{{customerName}}</div><div>项目：{{projectName}}</div><!--DETAIL_ROW_START--><div>{{detail.materialCode}} / {{detail.batchNo}} / {{detail.weightTon}}</div><!--DETAIL_ROW_END--></div>',
-    '1'
-);
+INSERT INTO sys_print_template (id, bill_type, template_name, template_html, is_default)
+SELECT 700540000000000002, 'sales-outbound', '销售出库默认模板', '<div><h2>销售出库</h2><div>单号：{{outboundNo}}</div><div>客户：{{customerName}}</div><div>项目：{{projectName}}</div><!--DETAIL_ROW_START--><div>{{detail.materialCode}} / {{detail.batchNo}} / {{detail.weightTon}}</div><!--DETAIL_ROW_END--></div>', '1'
+WHERE NOT EXISTS (SELECT 1 FROM sys_print_template WHERE id = 700540000000000002);
