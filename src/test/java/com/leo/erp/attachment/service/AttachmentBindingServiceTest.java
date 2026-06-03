@@ -239,7 +239,7 @@ class AttachmentBindingServiceTest {
                 new ModuleCatalog()
         );
 
-        Map<Long, List<AttachmentView>> result = service.listByRecordIds("sales-order", List.of(null, 0L, -1L));
+        Map<Long, List<AttachmentView>> result = service.listByRecordIds("sales-order", List.of(0L, -1L));
 
         assertThat(result).isEmpty();
     }
@@ -408,7 +408,7 @@ class AttachmentBindingServiceTest {
                 new ModuleCatalog()
         );
 
-        assertThatThrownBy(() -> service.replace("sales-order", 1L, List.of(1L, null)))
+        assertThatThrownBy(() -> service.replace("sales-order", 1L, java.util.Arrays.asList(1L, null)))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("附件ID不合法");
     }

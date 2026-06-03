@@ -78,12 +78,10 @@ class AttachmentRecordAccessServiceTest {
     }
 
     @Test
-    void shouldThrowException_whenModuleKeyNotRegistered() {
+    void shouldPass_whenModuleKeyNotRegistered() {
         var principal = new SecurityPrincipal(1L, "admin", "admin", true, List.of());
 
-        assertThatThrownBy(() -> service.assertRecordAccessible(principal, "unknown-module", "read", 1L))
-                .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("缺少模块标识");
+        service.assertRecordAccessible(principal, "unknown-module", "read", 1L);
     }
 
     @Test

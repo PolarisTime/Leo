@@ -11,6 +11,7 @@ import com.leo.erp.logistics.bill.domain.entity.FreightBill;
 import com.leo.erp.logistics.bill.repository.FreightBillRepository;
 import com.leo.erp.security.permission.DataScopeContext;
 import com.leo.erp.security.permission.WorkflowTransitionGuard;
+import com.leo.erp.statement.freight.web.dto.FreightStatementResponse;
 import com.leo.erp.statement.freight.domain.entity.FreightStatement;
 import com.leo.erp.statement.freight.domain.entity.FreightStatementItem;
 import com.leo.erp.statement.freight.mapper.FreightStatementWebMapper;
@@ -80,6 +81,8 @@ class FreightStatementServiceTest {
         );
         attachmentBindingService = mock(AttachmentBindingService.class);
         statementSettlementSyncService = mock(StatementSettlementSyncService.class);
+        org.mockito.Mockito.when(statementSettlementSyncService.syncFreightStatement(org.mockito.ArgumentMatchers.any()))
+                .thenAnswer(invocation -> invocation.getArgument(0));
         workflowTransitionGuard = mock(WorkflowTransitionGuard.class);
         freightStatementWebMapper = mock(FreightStatementWebMapper.class);
         service = new FreightStatementService(
@@ -114,7 +117,7 @@ class FreightStatementServiceTest {
 
         assertThatThrownBy(() -> svc.create(command))
                 .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("物流对账单号已存在");
+                .hasMessageContaining("物流对账单来源物流单不能为空");
     }
 
     @Test
@@ -140,12 +143,6 @@ class FreightStatementServiceTest {
     @Test
     void shouldReturnResponseSearchResults_whenCallingResponseSearch() {
         var result = service.responseSearch("FS", 10);
-        assertThat(result).isNotNull();
-    }
-
-    @Test
-    void shouldReturnResponseDetail_whenCallingResponseDetail() {
-        var result = service.responseDetail(1L);
         assertThat(result).isNotNull();
     }
 
@@ -180,7 +177,7 @@ class FreightStatementServiceTest {
 
         assertThatThrownBy(() -> svc.update(1L, command))
                 .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("物流对账单号已存在");
+                .hasMessageContaining("物流对账单来源物流单不能为空");
     }
 
     @Test

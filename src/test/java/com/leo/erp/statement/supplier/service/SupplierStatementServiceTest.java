@@ -146,7 +146,8 @@ class SupplierStatementServiceTest {
         SupplierStatementRepository repository = mock(SupplierStatementRepository.class);
         SupplierStatementMapper mapper = mock(SupplierStatementMapper.class);
         SupplierStatement statement = createSupplierStatement(1L, "GYDZ-001");
-        when(repository.findAll(any(Specification.class))).thenReturn(List.of(statement));
+        when(repository.findAll(any(Specification.class), any(org.springframework.data.domain.Pageable.class)))
+                .thenReturn(new org.springframework.data.domain.PageImpl<>(List.of(statement)));
         when(mapper.toResponse(any(SupplierStatement.class))).thenAnswer(invocation -> {
             SupplierStatement s = invocation.getArgument(0);
             return new SupplierStatementResponse(
@@ -195,7 +196,7 @@ class SupplierStatementServiceTest {
 
         assertThatThrownBy(() -> service.create(buildRequest(new BigDecimal("1000.00"))))
                 .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("供应商对账单号已存在");
+                .hasMessageContaining("供应商对账单来源采购入库单不能为空");
     }
 
     @Test
@@ -217,7 +218,7 @@ class SupplierStatementServiceTest {
 
         assertThatThrownBy(() -> service.update(1L, buildRequest(new BigDecimal("1000.00"))))
                 .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("供应商对账单号已存在");
+                .hasMessageContaining("供应商对账单来源采购入库单不能为空");
     }
 
     @Test

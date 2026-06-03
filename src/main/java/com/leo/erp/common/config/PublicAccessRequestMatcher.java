@@ -26,8 +26,7 @@ public class PublicAccessRequestMatcher implements RequestMatcher {
     public PublicAccessRequestMatcher(RequestMappingHandlerMapping handlerMapping) {
         List<RequestMatcher> matchers = new ArrayList<>();
         handlerMapping.getHandlerMethods().forEach((mapping, handlerMethod) -> {
-            boolean publicAccess = AnnotatedElementUtils.hasAnnotation(handlerMethod.getMethod(), PublicAccess.class)
-                    || AnnotatedElementUtils.hasAnnotation(handlerMethod.getBeanType(), PublicAccess.class);
+            boolean publicAccess = isPublicAccess(handlerMethod);
             if (!publicAccess) {
                 return;
             }
@@ -36,6 +35,17 @@ public class PublicAccessRequestMatcher implements RequestMatcher {
         this.delegate = matchers.isEmpty()
                 ? request -> false
                 : new OrRequestMatcher(matchers);
+    }
+
+    private static boolean isPublicAccess(org.springframework.web.method.HandlerMethod handlerMethod) {
+        if (AnnotatedElementUtils.hasAnnotation(handlerMethod.getMethod(), PublicAccess.class)) {
+            return true;
+        }
+        if (AnnotatedElementUtils.hasAnnotation(handlerMethod.getBeanType(), PublicAccess.class)) {
+            return true;
+        }
+        return handlerMethod.getMethod().isAnnotationPresent(PublicAccess.class)
+                || handlerMethod.getBeanType().isAnnotationPresent(PublicAccess.class);
     }
 
     @Override
@@ -62,7 +72,10 @@ public class PublicAccessRequestMatcher implements RequestMatcher {
 
     private Set<String> resolvePatterns(RequestMappingInfo mapping) {
         if (mapping.getPathPatternsCondition() != null) {
-            return mapping.getPathPatternsCondition().getPatternValues();
+            Set<String> patterns = mapping.getPathPatternsCondition().getPatternValues();
+            if (!patterns.isEmpty()) {
+                return patterns;
+            }
         }
         PatternsRequestCondition patternsCondition = mapping.getPatternsCondition();
         return patternsCondition == null ? Set.of() : patternsCondition.getPatterns();

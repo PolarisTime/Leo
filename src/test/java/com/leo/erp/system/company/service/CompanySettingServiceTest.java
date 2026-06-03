@@ -61,7 +61,7 @@ class CompanySettingServiceTest {
 
     @Test
     void shouldThrowException_whenCreatingDirectly() {
-        var service = new CompanySettingService(null, null, null, null, null, null);
+        var service = new CompanySettingService(null, new SnowflakeIdGenerator(1), null, null, null, null);
 
         assertThatThrownBy(() -> service.create(new CompanySettingRequest(
                 null, null, List.of(), null, null

@@ -792,6 +792,14 @@ class PurchaseInboundServiceTest {
         when(materialSupport.normalizeBatchNo(any(), eq("B1"), eq(1), eq(true))).thenReturn("B1");
         when(warehouseSelectionSupport.normalizeWarehouseName("一号库", 1, true)).thenReturn("一号库");
         when(materialCategoryRepository.findByCategoryNameInAndDeletedFlagFalse(List.of("螺纹钢"))).thenReturn(List.of());
+        PurchaseOrderItem sourceOrderItem = new PurchaseOrderItem();
+        sourceOrderItem.setId(201L);
+        sourceOrderItem.setQuantity(10);
+        sourceOrderItem.setPieceWeightTon(new BigDecimal("0.100"));
+        sourceOrderItem.setUnitPrice(new BigDecimal("4000.00"));
+        sourceOrderItem.setWeightTon(new BigDecimal("1.000"));
+        sourceOrderItem.setAmount(new BigDecimal("4000.00"));
+        when(purchaseOrderItemQueryService.findActiveByIdIn(List.of(201L))).thenReturn(List.of(sourceOrderItem));
         when(purchaseInboundItemRepository.summarizeWeightAdjustmentBySourcePurchaseOrderItemIdsExcludingInbound(any(), any()))
                 .thenReturn(List.of());
         when(purchaseInboundItemRepository.summarizeWeighWeightBySourcePurchaseOrderItemIdsExcludingInbound(any(), any()))
@@ -1202,7 +1210,7 @@ class PurchaseInboundServiceTest {
         completedInbound.setId(1L);
         completedInbound.setInboundNo("PI-001");
         completedInbound.setPurchaseOrderNo("PO-001");
-        completedInbound.setStatus("完成入库");
+        completedInbound.setStatus("草稿");
         PurchaseInboundItem completedItem = new PurchaseInboundItem();
         completedItem.setId(101L);
         completedItem.setSourcePurchaseOrderItemId(201L);
