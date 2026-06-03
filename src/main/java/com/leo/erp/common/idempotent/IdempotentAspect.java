@@ -47,6 +47,9 @@ public class IdempotentAspect {
     }
 
     private String resolveKey(ProceedingJoinPoint joinPoint, String keyExpression) {
+        if (keyExpression == null || keyExpression.isBlank()) {
+            return null;
+        }
         StandardEvaluationContext context = new StandardEvaluationContext();
         Object[] args = joinPoint.getArgs();
         String[] paramNames = ((org.aspectj.lang.reflect.MethodSignature) joinPoint.getSignature()).getParameterNames();
