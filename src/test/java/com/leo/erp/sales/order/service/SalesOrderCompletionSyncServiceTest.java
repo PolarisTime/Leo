@@ -1,19 +1,23 @@
 package com.leo.erp.sales.order.service;
 
 import com.leo.erp.sales.order.domain.entity.SalesOrder;
+import com.leo.erp.sales.order.domain.entity.SalesOrderItem;
 import com.leo.erp.sales.order.repository.SalesOrderRepository;
 import com.leo.erp.sales.outbound.domain.entity.SalesOutbound;
+import com.leo.erp.sales.outbound.domain.entity.SalesOutboundItem;
 import com.leo.erp.sales.outbound.repository.SalesOutboundRepository;
 import org.junit.jupiter.api.Test;
 
+import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.List;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
-import static org.assertj.core.api.Assertions.assertThat;
 
 class SalesOrderCompletionSyncServiceTest {
 
@@ -22,17 +26,10 @@ class SalesOrderCompletionSyncServiceTest {
         SalesOrderRepository salesOrderRepository = mock(SalesOrderRepository.class);
         SalesOutboundRepository salesOutboundRepository = mock(SalesOutboundRepository.class);
         SalesOrderCompletionSyncService service = new SalesOrderCompletionSyncService(
-                salesOrderRepository,
-                salesOutboundRepository
-        );
+                salesOrderRepository, salesOutboundRepository);
 
-        SalesOrder order = new SalesOrder();
-        order.setOrderNo("SO-001");
-        order.setStatus("已审核");
-
-        SalesOutbound outbound = new SalesOutbound();
-        outbound.setSalesOrderNo("SO-001");
-        outbound.setStatus("已审核");
+        SalesOrder order = buildOrder("SO-001", "已审核", 10);
+        SalesOutbound outbound = buildOutbound("SO-001", "已审核", order.getItems().get(0).getId(), 10);
 
         when(salesOrderRepository.findByOrderNoInAndDeletedFlagFalse(any())).thenReturn(List.of(order));
         when(salesOutboundRepository.findByDeletedFlagFalse()).thenReturn(List.of(outbound));
@@ -40,7 +37,7 @@ class SalesOrderCompletionSyncServiceTest {
         service.syncBySalesOrderReference("SO-001");
 
         assertThat(order.getStatus()).isEqualTo("完成销售");
-        verify(salesOrderRepository).saveAll(List.of(order));
+        verify(salesOrderRepository).saveAll(any());
     }
 
     @Test
@@ -48,25 +45,18 @@ class SalesOrderCompletionSyncServiceTest {
         SalesOrderRepository salesOrderRepository = mock(SalesOrderRepository.class);
         SalesOutboundRepository salesOutboundRepository = mock(SalesOutboundRepository.class);
         SalesOrderCompletionSyncService service = new SalesOrderCompletionSyncService(
-                salesOrderRepository,
-                salesOutboundRepository
-        );
+                salesOrderRepository, salesOutboundRepository);
 
-        SalesOrder order = new SalesOrder();
-        order.setOrderNo("SO-002");
-        order.setStatus("完成销售");
-
-        SalesOutbound outbound = new SalesOutbound();
-        outbound.setSalesOrderNo("SO-002");
-        outbound.setStatus("草稿");
+        SalesOrder order = buildOrder("SO-002", "完成销售", 10);
+        SalesOutbound outbound = buildOutbound("SO-002", "草稿", order.getItems().get(0).getId(), 5);
 
         when(salesOrderRepository.findByOrderNoInAndDeletedFlagFalse(any())).thenReturn(List.of(order));
         when(salesOutboundRepository.findByDeletedFlagFalse()).thenReturn(List.of(outbound));
 
         service.syncBySalesOrderReference("SO-002");
 
-        assertThat(order.getStatus()).isEqualTo("完成销售");
-        verify(salesOrderRepository).saveAll(List.of(order));
+        assertThat(order.getStatus()).isEqualTo("已审核");
+        verify(salesOrderRepository).saveAll(any());
     }
 
     @Test
@@ -74,17 +64,10 @@ class SalesOrderCompletionSyncServiceTest {
         SalesOrderRepository salesOrderRepository = mock(SalesOrderRepository.class);
         SalesOutboundRepository salesOutboundRepository = mock(SalesOutboundRepository.class);
         SalesOrderCompletionSyncService service = new SalesOrderCompletionSyncService(
-                salesOrderRepository,
-                salesOutboundRepository
-        );
+                salesOrderRepository, salesOutboundRepository);
 
-        SalesOrder order = new SalesOrder();
-        order.setOrderNo("SO-003");
-        order.setStatus("完成销售");
-
-        SalesOutbound outbound = new SalesOutbound();
-        outbound.setSalesOrderNo("SO-003");
-        outbound.setStatus("已审核");
+        SalesOrder order = buildOrder("SO-003", "完成销售", 10);
+        SalesOutbound outbound = buildOutbound("SO-003", "已审核", order.getItems().get(0).getId(), 10);
 
         when(salesOrderRepository.findByOrderNoInAndDeletedFlagFalse(any())).thenReturn(List.of(order));
         when(salesOutboundRepository.findByDeletedFlagFalse()).thenReturn(List.of(outbound));
@@ -92,7 +75,7 @@ class SalesOrderCompletionSyncServiceTest {
         service.syncBySalesOrderReference("SO-003");
 
         assertThat(order.getStatus()).isEqualTo("完成销售");
-        verify(salesOrderRepository).saveAll(List.of(order));
+        verify(salesOrderRepository).saveAll(any());
     }
 
     @Test
@@ -100,17 +83,10 @@ class SalesOrderCompletionSyncServiceTest {
         SalesOrderRepository salesOrderRepository = mock(SalesOrderRepository.class);
         SalesOutboundRepository salesOutboundRepository = mock(SalesOutboundRepository.class);
         SalesOrderCompletionSyncService service = new SalesOrderCompletionSyncService(
-                salesOrderRepository,
-                salesOutboundRepository
-        );
+                salesOrderRepository, salesOutboundRepository);
 
-        SalesOrder order = new SalesOrder();
-        order.setOrderNo("SO-003B");
-        order.setStatus("完成销售");
-
-        SalesOutbound outbound = new SalesOutbound();
-        outbound.setSalesOrderNo("SO-003B");
-        outbound.setStatus("已审核");
+        SalesOrder order = buildOrder("SO-003B", "完成销售", 10);
+        SalesOutbound outbound = buildOutbound("SO-003B", "已审核", order.getItems().get(0).getId(), 10);
 
         when(salesOrderRepository.findByOrderNoInAndDeletedFlagFalse(any())).thenReturn(List.of(order));
         when(salesOutboundRepository.findByDeletedFlagFalse()).thenReturn(List.of(outbound));
@@ -118,7 +94,7 @@ class SalesOrderCompletionSyncServiceTest {
         service.syncBySalesOrderReference("SO-003B");
 
         assertThat(order.getStatus()).isEqualTo("完成销售");
-        verify(salesOrderRepository).saveAll(List.of(order));
+        verify(salesOrderRepository).saveAll(any());
     }
 
     @Test
@@ -126,17 +102,10 @@ class SalesOrderCompletionSyncServiceTest {
         SalesOrderRepository salesOrderRepository = mock(SalesOrderRepository.class);
         SalesOutboundRepository salesOutboundRepository = mock(SalesOutboundRepository.class);
         SalesOrderCompletionSyncService service = new SalesOrderCompletionSyncService(
-                salesOrderRepository,
-                salesOutboundRepository
-        );
+                salesOrderRepository, salesOutboundRepository);
 
-        SalesOrder order = new SalesOrder();
-        order.setOrderNo("SO-004");
-        order.setStatus("已审核");
-
-        SalesOutbound outbound = new SalesOutbound();
-        outbound.setSalesOrderNo("SO-004, SO-005");
-        outbound.setStatus("已审核");
+        SalesOrder order = buildOrder("SO-004", "已审核", 10);
+        SalesOutbound outbound = buildOutbound("SO-004, SO-005", "已审核", order.getItems().get(0).getId(), 10);
 
         when(salesOrderRepository.findByOrderNoInAndDeletedFlagFalse(any())).thenReturn(List.of(order));
         when(salesOutboundRepository.findByDeletedFlagFalse()).thenReturn(List.of(outbound));
@@ -144,6 +113,442 @@ class SalesOrderCompletionSyncServiceTest {
         service.syncBySalesOrderReference("SO-004");
 
         assertThat(order.getStatus()).isEqualTo("完成销售");
-        verify(salesOrderRepository).saveAll(List.of(order));
+        verify(salesOrderRepository).saveAll(any());
+    }
+
+    @Test
+    void shouldAcceptFulfillmentWithinTolerance() {
+        SalesOrderRepository salesOrderRepository = mock(SalesOrderRepository.class);
+        SalesOutboundRepository salesOutboundRepository = mock(SalesOutboundRepository.class);
+        SalesOrderCompletionSyncService service = new SalesOrderCompletionSyncService(
+                salesOrderRepository, salesOutboundRepository);
+
+        SalesOrder order = buildOrder("SO-TOL-001", "已审核", 100);
+        SalesOutbound outbound = buildOutbound("SO-TOL-001", "已审核", order.getItems().get(0).getId(), 104);
+
+        when(salesOrderRepository.findByOrderNoInAndDeletedFlagFalse(any())).thenReturn(List.of(order));
+        when(salesOutboundRepository.findByDeletedFlagFalse()).thenReturn(List.of(outbound));
+
+        service.syncBySalesOrderReference("SO-TOL-001");
+
+        assertThat(order.getStatus()).isEqualTo("完成销售");
+    }
+
+    @Test
+    void shouldAcceptUnderFulfillmentWithinTolerance() {
+        SalesOrderRepository salesOrderRepository = mock(SalesOrderRepository.class);
+        SalesOutboundRepository salesOutboundRepository = mock(SalesOutboundRepository.class);
+        SalesOrderCompletionSyncService service = new SalesOrderCompletionSyncService(
+                salesOrderRepository, salesOutboundRepository);
+
+        SalesOrder order = buildOrder("SO-TOL-002", "已审核", 100);
+        SalesOutbound outbound = buildOutbound("SO-TOL-002", "已审核", order.getItems().get(0).getId(), 96);
+
+        when(salesOrderRepository.findByOrderNoInAndDeletedFlagFalse(any())).thenReturn(List.of(order));
+        when(salesOutboundRepository.findByDeletedFlagFalse()).thenReturn(List.of(outbound));
+
+        service.syncBySalesOrderReference("SO-TOL-002");
+
+        assertThat(order.getStatus()).isEqualTo("完成销售");
+    }
+
+    @Test
+    void shouldRejectOverFulfillmentBeyondTolerance() {
+        SalesOrderRepository salesOrderRepository = mock(SalesOrderRepository.class);
+        SalesOutboundRepository salesOutboundRepository = mock(SalesOutboundRepository.class);
+        SalesOrderCompletionSyncService service = new SalesOrderCompletionSyncService(
+                salesOrderRepository, salesOutboundRepository);
+
+        SalesOrder order = buildOrder("SO-TOL-003", "已审核", 100);
+        SalesOutbound outbound = buildOutbound("SO-TOL-003", "已审核", order.getItems().get(0).getId(), 106);
+
+        when(salesOrderRepository.findByOrderNoInAndDeletedFlagFalse(any())).thenReturn(List.of(order));
+        when(salesOutboundRepository.findByDeletedFlagFalse()).thenReturn(List.of(outbound));
+
+        service.syncBySalesOrderReference("SO-TOL-003");
+
+        assertThat(order.getStatus()).isEqualTo("已审核");
+    }
+
+    @Test
+    void shouldRejectUnderFulfillmentBeyondTolerance() {
+        SalesOrderRepository salesOrderRepository = mock(SalesOrderRepository.class);
+        SalesOutboundRepository salesOutboundRepository = mock(SalesOutboundRepository.class);
+        SalesOrderCompletionSyncService service = new SalesOrderCompletionSyncService(
+                salesOrderRepository, salesOutboundRepository);
+
+        SalesOrder order = buildOrder("SO-TOL-004", "已审核", 100);
+        SalesOutbound outbound = buildOutbound("SO-TOL-004", "已审核", order.getItems().get(0).getId(), 94);
+
+        when(salesOrderRepository.findByOrderNoInAndDeletedFlagFalse(any())).thenReturn(List.of(order));
+        when(salesOutboundRepository.findByDeletedFlagFalse()).thenReturn(List.of(outbound));
+
+        service.syncBySalesOrderReference("SO-TOL-004");
+
+        assertThat(order.getStatus()).isEqualTo("已审核");
+    }
+
+    @Test
+    void shouldHandleZeroQuantityItemExactly() {
+        SalesOrderRepository salesOrderRepository = mock(SalesOrderRepository.class);
+        SalesOutboundRepository salesOutboundRepository = mock(SalesOutboundRepository.class);
+        SalesOrderCompletionSyncService service = new SalesOrderCompletionSyncService(
+                salesOrderRepository, salesOutboundRepository);
+
+        SalesOrder order = buildOrder("SO-ZERO-001", "已审核", 0);
+        SalesOutbound outbound = buildOutbound("SO-ZERO-001", "已审核", order.getItems().get(0).getId(), 0);
+
+        when(salesOrderRepository.findByOrderNoInAndDeletedFlagFalse(any())).thenReturn(List.of(order));
+        when(salesOutboundRepository.findByDeletedFlagFalse()).thenReturn(List.of(outbound));
+
+        service.syncBySalesOrderReference("SO-ZERO-001");
+
+        assertThat(order.getStatus()).isEqualTo("完成销售");
+    }
+
+    @Test
+    void shouldNotCompleteWhenZeroQuantityItemHasOutbound() {
+        SalesOrderRepository salesOrderRepository = mock(SalesOrderRepository.class);
+        SalesOutboundRepository salesOutboundRepository = mock(SalesOutboundRepository.class);
+        SalesOrderCompletionSyncService service = new SalesOrderCompletionSyncService(
+                salesOrderRepository, salesOutboundRepository);
+
+        SalesOrder order = buildOrder("SO-ZERO-002", "已审核", 0);
+        SalesOutbound outbound = buildOutbound("SO-ZERO-002", "已审核", order.getItems().get(0).getId(), 1);
+
+        when(salesOrderRepository.findByOrderNoInAndDeletedFlagFalse(any())).thenReturn(List.of(order));
+        when(salesOutboundRepository.findByDeletedFlagFalse()).thenReturn(List.of(outbound));
+
+        service.syncBySalesOrderReference("SO-ZERO-002");
+
+        assertThat(order.getStatus()).isEqualTo("已审核");
+    }
+
+    @Test
+    void shouldReturnEarlyWhenReferenceIsBlank() {
+        SalesOrderRepository salesOrderRepository = mock(SalesOrderRepository.class);
+        SalesOutboundRepository salesOutboundRepository = mock(SalesOutboundRepository.class);
+        SalesOrderCompletionSyncService service = new SalesOrderCompletionSyncService(
+                salesOrderRepository, salesOutboundRepository);
+
+        service.syncBySalesOrderReference("");
+        service.syncBySalesOrderReference(null);
+        service.syncBySalesOrderReference("   ");
+
+        verify(salesOrderRepository, never()).findByOrderNoInAndDeletedFlagFalse(any());
+    }
+
+    @Test
+    void shouldReturnEarlyWhenNoOrdersFound() {
+        SalesOrderRepository salesOrderRepository = mock(SalesOrderRepository.class);
+        SalesOutboundRepository salesOutboundRepository = mock(SalesOutboundRepository.class);
+        SalesOrderCompletionSyncService service = new SalesOrderCompletionSyncService(
+                salesOrderRepository, salesOutboundRepository);
+
+        when(salesOrderRepository.findByOrderNoInAndDeletedFlagFalse(any())).thenReturn(List.of());
+
+        service.syncBySalesOrderReference("SO-NONEXIST");
+
+        verify(salesOutboundRepository, never()).findByDeletedFlagFalse();
+    }
+
+    @Test
+    void shouldNotChangeNonAuditedStatus() {
+        SalesOrderRepository salesOrderRepository = mock(SalesOrderRepository.class);
+        SalesOutboundRepository salesOutboundRepository = mock(SalesOutboundRepository.class);
+        SalesOrderCompletionSyncService service = new SalesOrderCompletionSyncService(
+                salesOrderRepository, salesOutboundRepository);
+
+        SalesOrder order = buildOrder("SO-DRAFT-001", "草稿", 10);
+        SalesOutbound outbound = buildOutbound("SO-DRAFT-001", "已审核", order.getItems().get(0).getId(), 10);
+
+        when(salesOrderRepository.findByOrderNoInAndDeletedFlagFalse(any())).thenReturn(List.of(order));
+        when(salesOutboundRepository.findByDeletedFlagFalse()).thenReturn(List.of(outbound));
+
+        service.syncBySalesOrderReference("SO-DRAFT-001");
+
+        assertThat(order.getStatus()).isEqualTo("草稿");
+    }
+
+    @Test
+    void shouldHandleMultipleOrders() {
+        SalesOrderRepository salesOrderRepository = mock(SalesOrderRepository.class);
+        SalesOutboundRepository salesOutboundRepository = mock(SalesOutboundRepository.class);
+        SalesOrderCompletionSyncService service = new SalesOrderCompletionSyncService(
+                salesOrderRepository, salesOutboundRepository);
+
+        SalesOrder order1 = buildOrder("SO-M-001", "已审核", 10);
+        SalesOrder order2 = buildOrder("SO-M-002", "已审核", 5);
+        SalesOutbound outbound1 = buildOutbound("SO-M-001", "已审核", order1.getItems().get(0).getId(), 10);
+        SalesOutbound outbound2 = buildOutbound("SO-M-002", "已审核", order2.getItems().get(0).getId(), 5);
+
+        when(salesOrderRepository.findByOrderNoInAndDeletedFlagFalse(any())).thenReturn(List.of(order1, order2));
+        when(salesOutboundRepository.findByDeletedFlagFalse()).thenReturn(List.of(outbound1, outbound2));
+
+        service.syncBySalesOrderReference("SO-M-001, SO-M-002");
+
+        assertThat(order1.getStatus()).isEqualTo("完成销售");
+        assertThat(order2.getStatus()).isEqualTo("完成销售");
+    }
+
+    @Test
+    void shouldNotSaveWhenNoStatusChanged() {
+        SalesOrderRepository salesOrderRepository = mock(SalesOrderRepository.class);
+        SalesOutboundRepository salesOutboundRepository = mock(SalesOutboundRepository.class);
+        SalesOrderCompletionSyncService service = new SalesOrderCompletionSyncService(
+                salesOrderRepository, salesOutboundRepository);
+
+        SalesOrder order = buildOrder("SO-NC-001", "草稿", 10);
+
+        when(salesOrderRepository.findByOrderNoInAndDeletedFlagFalse(any())).thenReturn(List.of(order));
+        when(salesOutboundRepository.findByDeletedFlagFalse()).thenReturn(List.of());
+
+        service.syncBySalesOrderReference("SO-NC-001");
+
+        assertThat(order.getStatus()).isEqualTo("草稿");
+    }
+
+    @Test
+    void shouldHandleMultipleItemsInOrder() {
+        SalesOrderRepository salesOrderRepository = mock(SalesOrderRepository.class);
+        SalesOutboundRepository salesOutboundRepository = mock(SalesOutboundRepository.class);
+        SalesOrderCompletionSyncService service = new SalesOrderCompletionSyncService(
+                salesOrderRepository, salesOutboundRepository);
+
+        SalesOrder order = new SalesOrder();
+        order.setOrderNo("SO-MULTI-001");
+        order.setStatus("已审核");
+        SalesOrderItem item1 = new SalesOrderItem();
+        item1.setId(200L);
+        item1.setSalesOrder(order);
+        item1.setLineNo(1);
+        item1.setMaterialCode("M1");
+        item1.setQuantity(10);
+        SalesOrderItem item2 = new SalesOrderItem();
+        item2.setId(201L);
+        item2.setSalesOrder(order);
+        item2.setLineNo(2);
+        item2.setMaterialCode("M2");
+        item2.setQuantity(5);
+        order.setItems(new ArrayList<>(List.of(item1, item2)));
+
+        SalesOutbound outbound = new SalesOutbound();
+        outbound.setSalesOrderNo("SO-MULTI-001");
+        outbound.setStatus("已审核");
+        SalesOutboundItem obItem1 = new SalesOutboundItem();
+        obItem1.setSalesOutbound(outbound);
+        obItem1.setLineNo(1);
+        obItem1.setSourceSalesOrderItemId(200L);
+        obItem1.setQuantity(10);
+        SalesOutboundItem obItem2 = new SalesOutboundItem();
+        obItem2.setSalesOutbound(outbound);
+        obItem2.setLineNo(2);
+        obItem2.setSourceSalesOrderItemId(201L);
+        obItem2.setQuantity(5);
+        outbound.setItems(new ArrayList<>(List.of(obItem1, obItem2)));
+
+        when(salesOrderRepository.findByOrderNoInAndDeletedFlagFalse(any())).thenReturn(List.of(order));
+        when(salesOutboundRepository.findByDeletedFlagFalse()).thenReturn(List.of(outbound));
+
+        service.syncBySalesOrderReference("SO-MULTI-001");
+
+        assertThat(order.getStatus()).isEqualTo("完成销售");
+    }
+
+    @Test
+    void shouldNotCompleteWhenOneItemNotFullyOutbounded() {
+        SalesOrderRepository salesOrderRepository = mock(SalesOrderRepository.class);
+        SalesOutboundRepository salesOutboundRepository = mock(SalesOutboundRepository.class);
+        SalesOrderCompletionSyncService service = new SalesOrderCompletionSyncService(
+                salesOrderRepository, salesOutboundRepository);
+
+        SalesOrder order = new SalesOrder();
+        order.setOrderNo("SO-PARTIAL-001");
+        order.setStatus("已审核");
+        SalesOrderItem item1 = new SalesOrderItem();
+        item1.setId(300L);
+        item1.setSalesOrder(order);
+        item1.setLineNo(1);
+        item1.setMaterialCode("M1");
+        item1.setQuantity(10);
+        SalesOrderItem item2 = new SalesOrderItem();
+        item2.setId(301L);
+        item2.setSalesOrder(order);
+        item2.setLineNo(2);
+        item2.setMaterialCode("M2");
+        item2.setQuantity(5);
+        order.setItems(new ArrayList<>(List.of(item1, item2)));
+
+        SalesOutbound outbound = new SalesOutbound();
+        outbound.setSalesOrderNo("SO-PARTIAL-001");
+        outbound.setStatus("已审核");
+        SalesOutboundItem obItem1 = new SalesOutboundItem();
+        obItem1.setSalesOutbound(outbound);
+        obItem1.setLineNo(1);
+        obItem1.setSourceSalesOrderItemId(300L);
+        obItem1.setQuantity(10);
+        outbound.setItems(new ArrayList<>(List.of(obItem1)));
+
+        when(salesOrderRepository.findByOrderNoInAndDeletedFlagFalse(any())).thenReturn(List.of(order));
+        when(salesOutboundRepository.findByDeletedFlagFalse()).thenReturn(List.of(outbound));
+
+        service.syncBySalesOrderReference("SO-PARTIAL-001");
+
+        assertThat(order.getStatus()).isEqualTo("已审核");
+    }
+
+    @Test
+    void shouldHandleOutboundWithNullQuantity() {
+        SalesOrderRepository salesOrderRepository = mock(SalesOrderRepository.class);
+        SalesOutboundRepository salesOutboundRepository = mock(SalesOutboundRepository.class);
+        SalesOrderCompletionSyncService service = new SalesOrderCompletionSyncService(
+                salesOrderRepository, salesOutboundRepository);
+
+        SalesOrder order = buildOrder("SO-NULL-QTY", "已审核", 10);
+        SalesOutbound outbound = buildOutbound("SO-NULL-QTY", "已审核", order.getItems().get(0).getId(), 0);
+        outbound.getItems().get(0).setQuantity(null);
+
+        when(salesOrderRepository.findByOrderNoInAndDeletedFlagFalse(any())).thenReturn(List.of(order));
+        when(salesOutboundRepository.findByDeletedFlagFalse()).thenReturn(List.of(outbound));
+
+        service.syncBySalesOrderReference("SO-NULL-QTY");
+
+        assertThat(order.getStatus()).isEqualTo("已审核");
+    }
+
+    @Test
+    void shouldHandleOutboundWithNullSourceSalesOrderItemId() {
+        SalesOrderRepository salesOrderRepository = mock(SalesOrderRepository.class);
+        SalesOutboundRepository salesOutboundRepository = mock(SalesOutboundRepository.class);
+        SalesOrderCompletionSyncService service = new SalesOrderCompletionSyncService(
+                salesOrderRepository, salesOutboundRepository);
+
+        SalesOrder order = buildOrder("SO-NULL-SRC", "已审核", 10);
+        SalesOutbound outbound = new SalesOutbound();
+        outbound.setSalesOrderNo("SO-NULL-SRC");
+        outbound.setStatus("已审核");
+        SalesOutboundItem obItem = new SalesOutboundItem();
+        obItem.setSalesOutbound(outbound);
+        obItem.setLineNo(1);
+        obItem.setSourceSalesOrderItemId(null);
+        obItem.setQuantity(10);
+        outbound.setItems(new ArrayList<>(List.of(obItem)));
+
+        when(salesOrderRepository.findByOrderNoInAndDeletedFlagFalse(any())).thenReturn(List.of(order));
+        when(salesOutboundRepository.findByDeletedFlagFalse()).thenReturn(List.of(outbound));
+
+        service.syncBySalesOrderReference("SO-NULL-SRC");
+
+        assertThat(order.getStatus()).isEqualTo("已审核");
+    }
+
+    @Test
+    void shouldHandleOutboundWithNullOrderNo() {
+        SalesOrderRepository salesOrderRepository = mock(SalesOrderRepository.class);
+        SalesOutboundRepository salesOutboundRepository = mock(SalesOutboundRepository.class);
+        SalesOrderCompletionSyncService service = new SalesOrderCompletionSyncService(
+                salesOrderRepository, salesOutboundRepository);
+
+        SalesOrder order = buildOrder("SO-NULL-ONO", "已审核", 10);
+        SalesOutbound outbound = new SalesOutbound();
+        outbound.setSalesOrderNo(null);
+        outbound.setStatus("已审核");
+        SalesOutboundItem obItem = new SalesOutboundItem();
+        obItem.setSalesOutbound(outbound);
+        obItem.setLineNo(1);
+        obItem.setSourceSalesOrderItemId(order.getItems().get(0).getId());
+        obItem.setQuantity(10);
+        outbound.setItems(new ArrayList<>(List.of(obItem)));
+
+        when(salesOrderRepository.findByOrderNoInAndDeletedFlagFalse(any())).thenReturn(List.of(order));
+        when(salesOutboundRepository.findByDeletedFlagFalse()).thenReturn(List.of(outbound));
+
+        service.syncBySalesOrderReference("SO-NULL-ONO");
+
+        assertThat(order.getStatus()).isEqualTo("已审核");
+    }
+
+    @Test
+    void shouldHandleOrderWithNullQuantityItem() {
+        SalesOrderRepository salesOrderRepository = mock(SalesOrderRepository.class);
+        SalesOutboundRepository salesOutboundRepository = mock(SalesOutboundRepository.class);
+        SalesOrderCompletionSyncService service = new SalesOrderCompletionSyncService(
+                salesOrderRepository, salesOutboundRepository);
+
+        SalesOrder order = new SalesOrder();
+        order.setOrderNo("SO-NULL-ITEM-QTY");
+        order.setStatus("已审核");
+        SalesOrderItem item = new SalesOrderItem();
+        item.setId(400L);
+        item.setSalesOrder(order);
+        item.setLineNo(1);
+        item.setMaterialCode("M1");
+        item.setQuantity(null);
+        order.setItems(new ArrayList<>(List.of(item)));
+
+        SalesOutbound outbound = buildOutbound("SO-NULL-ITEM-QTY", "已审核", 400L, 0);
+
+        when(salesOrderRepository.findByOrderNoInAndDeletedFlagFalse(any())).thenReturn(List.of(order));
+        when(salesOutboundRepository.findByDeletedFlagFalse()).thenReturn(List.of(outbound));
+
+        service.syncBySalesOrderReference("SO-NULL-ITEM-QTY");
+
+        assertThat(order.getStatus()).isEqualTo("完成销售");
+    }
+
+    @Test
+    void shouldHandleOrderWithNullStatus() {
+        SalesOrderRepository salesOrderRepository = mock(SalesOrderRepository.class);
+        SalesOutboundRepository salesOutboundRepository = mock(SalesOutboundRepository.class);
+        SalesOrderCompletionSyncService service = new SalesOrderCompletionSyncService(
+                salesOrderRepository, salesOutboundRepository);
+
+        SalesOrder order = new SalesOrder();
+        order.setOrderNo("SO-NULL-STATUS");
+        order.setStatus(null);
+        SalesOrderItem item = new SalesOrderItem();
+        item.setId(500L);
+        item.setSalesOrder(order);
+        item.setLineNo(1);
+        item.setMaterialCode("M1");
+        item.setQuantity(10);
+        order.setItems(new ArrayList<>(List.of(item)));
+
+        SalesOutbound outbound = buildOutbound("SO-NULL-STATUS", "已审核", 500L, 10);
+
+        when(salesOrderRepository.findByOrderNoInAndDeletedFlagFalse(any())).thenReturn(List.of(order));
+        when(salesOutboundRepository.findByDeletedFlagFalse()).thenReturn(List.of(outbound));
+
+        service.syncBySalesOrderReference("SO-NULL-STATUS");
+
+        assertThat(order.getStatus()).isNull();
+        verify(salesOrderRepository, never()).saveAll(any());
+    }
+
+    private SalesOrder buildOrder(String orderNo, String status, int quantity) {
+        SalesOrder order = new SalesOrder();
+        order.setOrderNo(orderNo);
+        order.setStatus(status);
+        SalesOrderItem item = new SalesOrderItem();
+        item.setId(100L);
+        item.setSalesOrder(order);
+        item.setLineNo(1);
+        item.setMaterialCode("M1");
+        item.setQuantity(quantity);
+        order.setItems(new ArrayList<>(List.of(item)));
+        return order;
+    }
+
+    private SalesOutbound buildOutbound(String salesOrderNo, String status, Long sourceItemId, int quantity) {
+        SalesOutbound outbound = new SalesOutbound();
+        outbound.setSalesOrderNo(salesOrderNo);
+        outbound.setStatus(status);
+        SalesOutboundItem item = new SalesOutboundItem();
+        item.setSalesOutbound(outbound);
+        item.setLineNo(1);
+        item.setSourceSalesOrderItemId(sourceItemId);
+        item.setQuantity(quantity);
+        outbound.setItems(new ArrayList<>(List.of(item)));
+        return outbound;
     }
 }

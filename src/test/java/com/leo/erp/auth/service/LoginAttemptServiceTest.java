@@ -46,4 +46,126 @@ class LoginAttemptServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("登录失败次数过多");
     }
+
+    @Test
+    void shouldAllowLoginWhenNotLocked() {
+        StringRedisTemplate redisTemplate = mock(StringRedisTemplate.class);
+        when(redisTemplate.hasKey("auth:login:lock:tester")).thenReturn(false);
+
+        AuthProperties properties = new AuthProperties();
+        LoginAttemptService service = new LoginAttemptService(redisTemplate, properties);
+
+        org.assertj.core.api.Assertions.assertThatCode(() -> service.ensureLoginAllowed("tester"))
+                .doesNotThrowAnyException();
+    }
+
+    @Test
+    void shouldAllowLoginWhenProtectionDisabled() {
+        AuthProperties properties = new AuthProperties();
+        properties.getLoginProtection().setEnabled(false);
+
+        LoginAttemptService service = new LoginAttemptService(mock(StringRedisTemplate.class), properties);
+
+        org.assertj.core.api.Assertions.assertThatCode(() -> service.ensureLoginAllowed("tester"))
+                .doesNotThrowAnyException();
+    }
+
+    @Test
+    void shouldSkipRecordFailureWhenProtectionDisabled() {
+        AuthProperties properties = new AuthProperties();
+        properties.getLoginProtection().setEnabled(false);
+
+        StringRedisTemplate redisTemplate = mock(StringRedisTemplate.class);
+        LoginAttemptService service = new LoginAttemptService(redisTemplate, properties);
+
+        service.recordFailure("tester");
+
+        verify(redisTemplate, org.mockito.Mockito.never()).opsForValue();
+    }
+
+    @Test
+    void shouldClearFailuresAndLock() {
+        StringRedisTemplate redisTemplate = mock(StringRedisTemplate.class);
+        when(redisTemplate.delete("auth:login:fail:tester")).thenReturn(true);
+        when(redisTemplate.delete("auth:login:lock:tester")).thenReturn(true);
+
+        AuthProperties properties = new AuthProperties();
+        LoginAttemptService service = new LoginAttemptService(redisTemplate, properties);
+
+        service.clearFailures("tester");
+
+        verify(redisTemplate).delete("auth:login:fail:tester");
+        verify(redisTemplate).delete("auth:login:lock:tester");
+    }
+
+    @Test
+    void shouldSkipClearFailuresWhenProtectionDisabled() {
+        AuthProperties properties = new AuthProperties();
+        properties.getLoginProtection().setEnabled(false);
+
+        StringRedisTemplate redisTemplate = mock(StringRedisTemplate.class);
+        LoginAttemptService service = new LoginAttemptService(redisTemplate, properties);
+
+        service.clearFailures("tester");
+
+        verify(redisTemplate, org.mockito.Mockito.never()).delete(org.mockito.ArgumentMatchers.anyString());
+    }
+
+    @Test
+    void shouldShowMinutesAndSecondsWhenLockDurationOver60() {
+        StringRedisTemplate redisTemplate = mock(StringRedisTemplate.class);
+        when(redisTemplate.hasKey("auth:login:lock:tester")).thenReturn(true);
+        when(redisTemplate.getExpire("auth:login:lock:tester", TimeUnit.SECONDS)).thenReturn(125L);
+
+        AuthProperties properties = new AuthProperties();
+        LoginAttemptService service = new LoginAttemptService(redisTemplate, properties);
+
+        assertThatThrownBy(() -> service.ensureLoginAllowed("tester"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("2 分钟 5 秒");
+    }
+
+    @Test
+    void shouldShowOnlyMinutesWhenSecondsIsZero() {
+        StringRedisTemplate redisTemplate = mock(StringRedisTemplate.class);
+        when(redisTemplate.hasKey("auth:login:lock:tester")).thenReturn(true);
+        when(redisTemplate.getExpire("auth:login:lock:tester", TimeUnit.SECONDS)).thenReturn(120L);
+
+        AuthProperties properties = new AuthProperties();
+        LoginAttemptService service = new LoginAttemptService(redisTemplate, properties);
+
+        assertThatThrownBy(() -> service.ensureLoginAllowed("tester"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("2 分钟")
+                .hasMessageNotContaining("0 秒");
+    }
+
+    @Test
+    void shouldShowSecondsWhenUnder60() {
+        StringRedisTemplate redisTemplate = mock(StringRedisTemplate.class);
+        when(redisTemplate.hasKey("auth:login:lock:tester")).thenReturn(true);
+        when(redisTemplate.getExpire("auth:login:lock:tester", TimeUnit.SECONDS)).thenReturn(45L);
+
+        AuthProperties properties = new AuthProperties();
+        LoginAttemptService service = new LoginAttemptService(redisTemplate, properties);
+
+        assertThatThrownBy(() -> service.ensureLoginAllowed("tester"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("45 秒");
+    }
+
+    @Test
+    void shouldHandleNullFailureCount() {
+        StringRedisTemplate redisTemplate = mock(StringRedisTemplate.class);
+        @SuppressWarnings("unchecked")
+        ValueOperations<String, String> valueOperations = mock(ValueOperations.class);
+        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+        when(valueOperations.increment("auth:login:fail:tester")).thenReturn(null);
+
+        AuthProperties properties = new AuthProperties();
+        LoginAttemptService service = new LoginAttemptService(redisTemplate, properties);
+
+        org.assertj.core.api.Assertions.assertThatCode(() -> service.recordFailure("tester"))
+                .doesNotThrowAnyException();
+    }
 }

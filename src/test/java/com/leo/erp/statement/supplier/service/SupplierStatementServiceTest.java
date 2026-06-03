@@ -1,5 +1,7 @@
 package com.leo.erp.statement.supplier.service;
 
+import com.leo.erp.common.api.PageFilter;
+import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.purchase.inbound.domain.entity.PurchaseInbound;
@@ -15,10 +17,14 @@ import com.leo.erp.statement.supplier.web.dto.SupplierStatementItemRequest;
 import com.leo.erp.statement.supplier.web.dto.SupplierStatementRequest;
 import com.leo.erp.statement.supplier.web.dto.SupplierStatementResponse;
 import org.junit.jupiter.api.Test;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -93,6 +99,190 @@ class SupplierStatementServiceTest {
         assertThatThrownBy(() -> service.create(buildRequest(new BigDecimal("1200.00"))))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("采购金额不能低于已付款金额");
+    }
+
+    @Test
+    void shouldReturnPage_whenCallingPage() {
+        SupplierStatementRepository repository = mock(SupplierStatementRepository.class);
+        SupplierStatementMapper mapper = mock(SupplierStatementMapper.class);
+        SupplierStatement statement = createSupplierStatement(1L, "GYDZ-001");
+        when(repository.findAll(any(Specification.class), any(Pageable.class))).thenReturn(
+                new PageImpl<>(List.of(statement))
+        );
+        when(mapper.toResponse(any(SupplierStatement.class))).thenAnswer(invocation -> {
+            SupplierStatement s = invocation.getArgument(0);
+            return new SupplierStatementResponse(
+                    s.getId(),
+                    s.getStatementNo(),
+                    s.getSupplierName(),
+                    s.getStartDate(),
+                    s.getEndDate(),
+                    s.getPurchaseAmount(),
+                    s.getPaymentAmount(),
+                    s.getClosingAmount(),
+                    s.getStatus(),
+                    s.getRemark(),
+                    List.of()
+            );
+        });
+
+        SupplierStatementService service = new SupplierStatementService(
+                repository,
+                new SnowflakeIdGenerator(0L),
+                mapper,
+                mock(PurchaseInboundRepository.class),
+                mock(PurchaseInboundItemQueryService.class),
+                mock(StatementSettlementSyncService.class),
+                mock(WorkflowTransitionGuard.class)
+        );
+
+        var result = service.page(new PageQuery(0, 10, "id", "desc"), PageFilter.of(null, null, null, null));
+        assertThat(result).isNotNull();
+        assertThat(result.getTotalElements()).isEqualTo(1);
+    }
+
+    @Test
+    void shouldReturnSearchResults_whenCallingSearch() {
+        SupplierStatementRepository repository = mock(SupplierStatementRepository.class);
+        SupplierStatementMapper mapper = mock(SupplierStatementMapper.class);
+        SupplierStatement statement = createSupplierStatement(1L, "GYDZ-001");
+        when(repository.findAll(any(Specification.class))).thenReturn(List.of(statement));
+        when(mapper.toResponse(any(SupplierStatement.class))).thenAnswer(invocation -> {
+            SupplierStatement s = invocation.getArgument(0);
+            return new SupplierStatementResponse(
+                    s.getId(),
+                    s.getStatementNo(),
+                    s.getSupplierName(),
+                    s.getStartDate(),
+                    s.getEndDate(),
+                    s.getPurchaseAmount(),
+                    s.getPaymentAmount(),
+                    s.getClosingAmount(),
+                    s.getStatus(),
+                    s.getRemark(),
+                    List.of()
+            );
+        });
+
+        SupplierStatementService service = new SupplierStatementService(
+                repository,
+                new SnowflakeIdGenerator(0L),
+                mapper,
+                mock(PurchaseInboundRepository.class),
+                mock(PurchaseInboundItemQueryService.class),
+                mock(StatementSettlementSyncService.class),
+                mock(WorkflowTransitionGuard.class)
+        );
+
+        var result = service.search("GYDZ", 10);
+        assertThat(result).isNotNull();
+    }
+
+    @Test
+    void shouldReturnException_whenCreateWithDuplicateStatementNo() {
+        SupplierStatementRepository repository = mock(SupplierStatementRepository.class);
+        when(repository.existsByStatementNoAndDeletedFlagFalse("GYDZ-001")).thenReturn(true);
+
+        SupplierStatementService service = new SupplierStatementService(
+                repository,
+                new SnowflakeIdGenerator(0L),
+                mock(SupplierStatementMapper.class),
+                mock(PurchaseInboundRepository.class),
+                mock(PurchaseInboundItemQueryService.class),
+                mock(StatementSettlementSyncService.class),
+                mock(WorkflowTransitionGuard.class)
+        );
+
+        assertThatThrownBy(() -> service.create(buildRequest(new BigDecimal("1000.00"))))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("供应商对账单号已存在");
+    }
+
+    @Test
+    void shouldReturnException_whenUpdateWithDuplicateStatementNo() {
+        SupplierStatementRepository repository = mock(SupplierStatementRepository.class);
+        SupplierStatement statement = createSupplierStatement(1L, "GYDZ-OLD");
+        when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(statement));
+        when(repository.existsByStatementNoAndDeletedFlagFalse("GYDZ-001")).thenReturn(true);
+
+        SupplierStatementService service = new SupplierStatementService(
+                repository,
+                new SnowflakeIdGenerator(0L),
+                mock(SupplierStatementMapper.class),
+                mock(PurchaseInboundRepository.class),
+                mock(PurchaseInboundItemQueryService.class),
+                mock(StatementSettlementSyncService.class),
+                mock(WorkflowTransitionGuard.class)
+        );
+
+        assertThatThrownBy(() -> service.update(1L, buildRequest(new BigDecimal("1000.00"))))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("供应商对账单号已存在");
+    }
+
+    @Test
+    void shouldRejectNegativePaymentAmount() {
+        SupplierStatementRepository repository = mock(SupplierStatementRepository.class);
+        PurchaseInboundItemQueryService purchaseInboundItemQueryService = mock(PurchaseInboundItemQueryService.class);
+        when(repository.existsByStatementNoAndDeletedFlagFalse("GYDZ-001")).thenReturn(false);
+        when(purchaseInboundItemQueryService.findAllActiveByIdIn(List.of(101L))).thenReturn(List.of(buildInboundItem()));
+
+        SupplierStatementService service = new SupplierStatementService(
+                repository,
+                new SnowflakeIdGenerator(0L),
+                mock(SupplierStatementMapper.class),
+                mock(PurchaseInboundRepository.class),
+                purchaseInboundItemQueryService,
+                mock(StatementSettlementSyncService.class),
+                mock(WorkflowTransitionGuard.class)
+        );
+
+        assertThatThrownBy(() -> service.create(buildRequest(new BigDecimal("-100.00"))))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("供应商对账单付款金额不能为负数");
+    }
+
+    @Test
+    void shouldMarkDeletedStatementStatusWhenDeleting() {
+        SupplierStatementRepository repository = mock(SupplierStatementRepository.class);
+        SupplierStatement statement = new SupplierStatement();
+        statement.setId(1L);
+        statement.setStatementNo("GYDZ-DELETE-001");
+        statement.setStatus("待确认");
+        statement.setDeletedFlag(false);
+        when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(statement));
+        when(repository.save(any(SupplierStatement.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        SupplierStatementService service = new SupplierStatementService(
+                repository,
+                new SnowflakeIdGenerator(0L),
+                mock(SupplierStatementMapper.class),
+                mock(PurchaseInboundRepository.class),
+                mock(PurchaseInboundItemQueryService.class),
+                mock(StatementSettlementSyncService.class),
+                mock(WorkflowTransitionGuard.class)
+        );
+
+        service.delete(1L);
+
+        assertThat(statement.isDeletedFlag()).isTrue();
+        assertThat(statement.getStatus()).isEqualTo("已删除");
+    }
+
+    private SupplierStatement createSupplierStatement(Long id, String statementNo) {
+        SupplierStatement statement = new SupplierStatement();
+        statement.setId(id);
+        statement.setStatementNo(statementNo);
+        statement.setSupplierName("供应商甲");
+        statement.setStartDate(LocalDate.of(2026, 5, 1));
+        statement.setEndDate(LocalDate.of(2026, 5, 6));
+        statement.setPurchaseAmount(new BigDecimal("1000.00"));
+        statement.setPaymentAmount(BigDecimal.ZERO);
+        statement.setClosingAmount(new BigDecimal("1000.00"));
+        statement.setStatus("待确认");
+        statement.setRemark("备注");
+        statement.setItems(List.of());
+        return statement;
     }
 
     private SupplierStatementRequest buildRequest(BigDecimal paymentAmount) {

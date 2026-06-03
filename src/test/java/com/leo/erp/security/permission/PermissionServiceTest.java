@@ -222,6 +222,196 @@ class PermissionServiceTest {
         assertThat(permissionQueries.get()).isEqualTo(1);
     }
 
+    @Test
+    void shouldReturnSortedPermissionListFromGetUserPermissions() {
+        RoleSetting role = role(10L, "READ_ALL", "全部数据");
+        RolePermission read = permission(10L, "material", "read");
+        RolePermission update = permission(10L, "material", "update");
+
+        PermissionService service = new PermissionService(
+                userRoleRepository(List.of(binding(1L, 10L))),
+                rolePermissionRepository(read, update),
+                null,
+                noOpRedisTemplate(),
+                roleSettingRepository(role),
+                new RedisTuningProperties()
+        );
+
+        var result = service.getUserPermissions(1L);
+        assertThat(result).hasSize(1);
+        assertThat(result.getFirst().resource()).isEqualTo("material");
+        assertThat(result.getFirst().actions()).containsExactlyInAnyOrder("read", "update");
+    }
+
+    @Test
+    void shouldReturnDataScopesPerResource() {
+        RoleSetting readRole = role(10L, "READ_ALL", "全部数据");
+        RoleSetting updateRole = role(20L, "UPDATE_SELF", "本人");
+        RolePermission readMat = permission(10L, "material", "read");
+        RolePermission updateMat = permission(20L, "material", "update");
+
+        PermissionService service = new PermissionService(
+                userRoleRepository(List.of(binding(1L, 10L), binding(1L, 20L))),
+                rolePermissionRepository(readMat, updateMat),
+                null,
+                noOpRedisTemplate(),
+                roleSettingRepository(readRole, updateRole),
+                new RedisTuningProperties()
+        );
+
+        Map<String, String> scopes = service.getUserDataScopes(1L);
+        assertThat(scopes).containsEntry("material", ResourcePermissionCatalog.SCOPE_ALL);
+    }
+
+    @Test
+    void shouldReturnSelfPermissionWhenNoDataScopeForResource() {
+        PermissionService service = new PermissionService(
+                userRoleRepository(List.of()),
+                rolePermissionRepository(),
+                null,
+                noOpRedisTemplate(),
+                roleSettingRepository(),
+                new RedisTuningProperties()
+        );
+
+        assertThat(service.getUserDataScope(1L, "unknown")).isEqualTo(ResourcePermissionCatalog.SCOPE_SELF);
+    }
+
+    @Test
+    void shouldDelegateGetDataScopeOwnerUserIds() {
+        PermissionService service = new PermissionService(
+                userRoleRepository(List.of()),
+                rolePermissionRepository(),
+                null,
+                noOpRedisTemplate(),
+                roleSettingRepository(),
+                new RedisTuningProperties()
+        );
+
+        assertThat(service.getDataScopeOwnerUserIds(1L, ResourcePermissionCatalog.SCOPE_SELF)).containsExactly(1L);
+    }
+
+    @Test
+    void shouldDelegateGetVisibleMenuCodes() {
+        RoleSetting role = role(10L, "ADMIN", "全部数据");
+        RolePermission perm = permission(10L, "material", "read");
+
+        com.leo.erp.system.menu.domain.entity.Menu m = new com.leo.erp.system.menu.domain.entity.Menu();
+        m.setMenuCode("material");
+        m.setMenuName("商品管理");
+        m.setStatus("正常");
+        m.setSortOrder(1);
+
+        PermissionService service = new PermissionService(
+                userRoleRepository(List.of(binding(1L, 10L))),
+                rolePermissionRepository(perm),
+                menuRepository(m),
+                noOpRedisTemplate(),
+                roleSettingRepository(role),
+                new RedisTuningProperties()
+        );
+
+        assertThat(service.getVisibleMenuCodes(1L)).contains("material");
+    }
+
+    @Test
+    void shouldDelegateGetActiveMenus() {
+        com.leo.erp.system.menu.domain.entity.Menu m = menu("order", "订单管理");
+
+        PermissionService service = new PermissionService(
+                null,
+                null,
+                menuRepository(m),
+                noOpRedisTemplate(),
+                null,
+                new RedisTuningProperties()
+        );
+
+        assertThat(service.getActiveMenus()).hasSize(1);
+    }
+
+    @Test
+    void shouldDelegateEvictCache() {
+        Map<String, Map<Object, Object>> hashes = new java.util.LinkedHashMap<>();
+        List<String> deletedKeys = new ArrayList<>();
+        StringRedisTemplate redis = evictableRedisTemplate(hashes, deletedKeys);
+
+        PermissionService service = new PermissionService(
+                null, null, null, redis, null, new RedisTuningProperties()
+        );
+
+        service.evictCache(1L);
+        assertThat(deletedKeys).isNotEmpty();
+    }
+
+    @Test
+    void shouldDelegateEvictUserCaches() {
+        Map<String, Map<Object, Object>> hashes = new java.util.LinkedHashMap<>();
+        List<String> deletedKeys = new ArrayList<>();
+        StringRedisTemplate redis = evictableRedisTemplate(hashes, deletedKeys);
+
+        PermissionService service = new PermissionService(
+                null, null, null, redis, null, new RedisTuningProperties()
+        );
+
+        service.evictUserCaches(List.of(1L, 2L));
+        assertThat(deletedKeys).hasSize(4);
+    }
+
+    @Test
+    void shouldDelegateEvictMetadataCache() {
+        Map<String, Map<Object, Object>> hashes = new java.util.LinkedHashMap<>();
+        List<String> deletedKeys = new ArrayList<>();
+        StringRedisTemplate redis = evictableRedisTemplate(hashes, deletedKeys);
+
+        com.leo.erp.common.support.RedisJsonCacheSupport cacheSupport =
+                new com.leo.erp.common.support.RedisJsonCacheSupport(redis, new com.fasterxml.jackson.databind.ObjectMapper(), new RedisTuningProperties());
+
+        PermissionService service = new PermissionService(
+                null, null, null, redis, null,
+                java.util.Optional.of(cacheSupport),
+                new RedisTuningProperties()
+        );
+
+        service.evictMetadataCache();
+        assertThat(deletedKeys).isNotEmpty();
+    }
+
+    @Test
+    void shouldResolveBlankResourceToSelfScope() {
+        RoleSetting role = role(10L, "READ_ALL", "全部数据");
+        RolePermission perm = permission(10L, " ", "read");
+
+        PermissionService service = new PermissionService(
+                userRoleRepository(List.of(binding(1L, 10L))),
+                rolePermissionRepository(perm),
+                null,
+                noOpRedisTemplate(),
+                roleSettingRepository(role),
+                new RedisTuningProperties()
+        );
+
+        Map<String, String> scopes = service.getUserDataScopes(1L);
+        assertThat(scopes).doesNotContainKey("");
+    }
+
+    @Test
+    void shouldUseConstructorWithRedisJsonCacheSupport() {
+        RoleSetting role = role(10L, "ADMIN", "全部数据");
+        RolePermission perm = permission(10L, "material", "read");
+
+        PermissionService service = new PermissionService(
+                userRoleRepository(List.of(binding(1L, 10L))),
+                rolePermissionRepository(perm),
+                null,
+                noOpRedisTemplate(),
+                roleSettingRepository(role),
+                new RedisTuningProperties()
+        );
+
+        assertThat(service.can(1L, "material", "read")).isTrue();
+    }
+
     private static final class RecordingStringRedisTemplate extends StringRedisTemplate {
 
         private final RedisConnectionFactory connectionFactory;
@@ -470,6 +660,78 @@ class PermissionServiceTest {
         action.setActionCode(actionCode);
         action.setActionName(actionName);
         return action;
+    }
+
+    @SuppressWarnings("unchecked")
+    private StringRedisTemplate evictableRedisTemplate(Map<String, Map<Object, Object>> hashes, List<String> deletedKeys) {
+        return new StringRedisTemplate() {
+            { try { afterPropertiesSet(); } catch (Exception ignored) {} }
+            private final HashOperations<String, Object, Object> hashOperations =
+                    (HashOperations<String, Object, Object>) Proxy.newProxyInstance(
+                            HashOperations.class.getClassLoader(),
+                            new Class[]{HashOperations.class},
+                            (proxy, method, args) -> switch (method.getName()) {
+                                case "entries" -> hashes.getOrDefault((String) args[0], Map.of());
+                                case "putAll" -> {
+                                    hashes.computeIfAbsent((String) args[0], key -> new java.util.LinkedHashMap<>())
+                                            .putAll((Map<?, ?>) args[1]);
+                                    yield null;
+                                }
+                                case "delete" -> {
+                                    hashes.remove((String) args[0]);
+                                    yield null;
+                                }
+                                case "toString" -> "HashOperationsStub";
+                                case "hashCode" -> System.identityHashCode(proxy);
+                                case "equals" -> proxy == args[0];
+                                default -> throw new UnsupportedOperationException(method.getName());
+                            }
+                    );
+
+            @Override
+            public HashOperations<String, Object, Object> opsForHash() {
+                return hashOperations;
+            }
+
+            @Override
+            public SetOperations<String, String> opsForSet() {
+                return (SetOperations<String, String>) Proxy.newProxyInstance(
+                        SetOperations.class.getClassLoader(),
+                        new Class[]{SetOperations.class},
+                        (p, m, a) -> switch (m.getName()) {
+                            case "add" -> 1L;
+                            case "remove" -> 1L;
+                            case "toString" -> "SetOperationsStub";
+                            case "hashCode" -> System.identityHashCode(p);
+                            case "equals" -> p == a[0];
+                            default -> throw new UnsupportedOperationException(m.getName());
+                        });
+            }
+
+            @Override
+            public Boolean hasKey(String key) {
+                return hashes.containsKey(key);
+            }
+
+            @Override
+            public Boolean delete(String key) {
+                deletedKeys.add(key);
+                hashes.remove(key);
+                return Boolean.TRUE;
+            }
+
+            @Override
+            public Long delete(Collection<String> keys) {
+                deletedKeys.addAll(keys);
+                keys.forEach(hashes::remove);
+                return (long) keys.size();
+            }
+
+            @Override
+            public Boolean expire(String key, long timeout, java.util.concurrent.TimeUnit unit) {
+                return Boolean.TRUE;
+            }
+        };
     }
 
     private static final class ByteArrayCursor implements Cursor<byte[]> {
