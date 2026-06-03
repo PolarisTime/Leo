@@ -117,7 +117,7 @@ class FreightStatementServiceTest {
 
         assertThatThrownBy(() -> svc.create(command))
                 .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("物流对账单来源物流单不能为空");
+                .hasMessageContaining("物流对账单号已存在");
     }
 
     @Test

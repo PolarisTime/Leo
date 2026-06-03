@@ -280,7 +280,7 @@ class CustomerStatementServiceTest {
 
         assertThatThrownBy(() -> service.create(buildRequest(new BigDecimal("1000.00"))))
                 .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("客户对账单来源销售订单不能为空");
+                .hasMessageContaining("客户对账单号已存在");
     }
 
     @Test

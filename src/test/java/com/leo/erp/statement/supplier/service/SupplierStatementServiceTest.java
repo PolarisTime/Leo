@@ -196,7 +196,7 @@ class SupplierStatementServiceTest {
 
         assertThatThrownBy(() -> service.create(buildRequest(new BigDecimal("1000.00"))))
                 .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("供应商对账单来源采购入库单不能为空");
+                .hasMessageContaining("供应商对账单号已存在");
     }
 
     @Test
