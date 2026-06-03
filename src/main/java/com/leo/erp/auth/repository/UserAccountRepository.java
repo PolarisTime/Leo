@@ -22,9 +22,11 @@ public interface UserAccountRepository extends JpaRepository<UserAccount, Long>,
 
     boolean existsByLoginNameAndDeletedFlagFalse(String loginName);
 
-    long countByDepartmentIdAndDeletedFlagFalse(Long departmentId);
+    @Query("SELECT COUNT(u) FROM UserAccount u WHERE u.departmentId = :departmentId AND u.deletedFlag = false")
+    long countByDepartmentIdAndDeletedFlagFalse(@Param("departmentId") Long departmentId);
 
-    List<UserAccount> findByDepartmentIdAndDeletedFlagFalse(Long departmentId);
+    @Query("SELECT u FROM UserAccount u WHERE u.departmentId = :departmentId AND u.deletedFlag = false")
+    List<UserAccount> findByDepartmentIdAndDeletedFlagFalse(@Param("departmentId") Long departmentId);
 
     List<UserAccount> findByTotpSecretIsNotNullAndDeletedFlagFalse();
 

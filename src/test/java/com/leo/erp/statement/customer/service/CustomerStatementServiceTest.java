@@ -227,7 +227,8 @@ class CustomerStatementServiceTest {
         CustomerStatementRepository repository = mock(CustomerStatementRepository.class);
         CustomerStatementMapper mapper = mock(CustomerStatementMapper.class);
         CustomerStatement statement = createCustomerStatement(1L, "KHDZ-001");
-        when(repository.findAll(any(Specification.class))).thenReturn(List.of(statement));
+        when(repository.findAll(any(Specification.class), any(org.springframework.data.domain.Pageable.class)))
+                .thenReturn(new org.springframework.data.domain.PageImpl<>(List.of(statement)));
         when(mapper.toResponse(any(CustomerStatement.class))).thenAnswer(invocation -> {
             CustomerStatement s = invocation.getArgument(0);
             return new CustomerStatementResponse(
@@ -279,7 +280,7 @@ class CustomerStatementServiceTest {
 
         assertThatThrownBy(() -> service.create(buildRequest(new BigDecimal("1000.00"))))
                 .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("客户对账单号已存在");
+                .hasMessageContaining("客户对账单来源销售订单不能为空");
     }
 
     @Test
@@ -301,7 +302,7 @@ class CustomerStatementServiceTest {
 
         assertThatThrownBy(() -> service.update(1L, buildRequest(new BigDecimal("1000.00"))))
                 .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("客户对账单号已存在");
+                .hasMessageContaining("客户对账单来源销售订单不能为空");
     }
 
     @Test

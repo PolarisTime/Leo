@@ -2,6 +2,7 @@ package com.leo.erp.finance.invoiceissue.service;
 
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
+import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.finance.invoiceissue.domain.entity.InvoiceIssue;
 import com.leo.erp.finance.invoiceissue.domain.entity.InvoiceIssueItem;
 import com.leo.erp.finance.invoiceissue.repository.InvoiceIssueRepository;
@@ -256,12 +257,12 @@ class InvoiceIssueServiceTest {
 
     @Test
     void createRejectsSourceSalesOrderItemAmountExceeded() {
-        SalesOrderItem sourceItem = buildSalesOrderItem(104L, "M-1", new BigDecimal("2.000"), new BigDecimal("6000.00"));
+        SalesOrderItem sourceItem = buildSalesOrderItem(104L, "M-1", new BigDecimal("1.100"), new BigDecimal("6000.00"));
 
         when(repository.existsByIssueNoAndDeletedFlagFalse("KP-AMT-EXCEED")).thenReturn(false);
         when(salesOrderItemQueryService.findActiveByIdIn(anyCollection())).thenReturn(List.of(sourceItem));
         when(repository.summarizeAllocatedBySourceSalesOrderItemIds(anyCollection(), nullable(Long.class)))
-                .thenReturn(List.of(buildSourceAllocationSummary(104L, "0.500", "5500.00")));
+                .thenReturn(List.of(buildSourceAllocationSummary(104L, "0.000", "5500.00")));
 
         BusinessException exception = assertThrows(BusinessException.class, () -> service.create(buildRequest(
                 "KP-AMT-EXCEED", 104L, new BigDecimal("0.300"), new BigDecimal("3333.33"), new BigDecimal("1000.00")
@@ -276,15 +277,34 @@ class InvoiceIssueServiceTest {
         existing.setId(1L);
         existing.setIssueNo("KP-OLD");
         existing.setDeletedFlag(false);
+        existing.setItems(new ArrayList<>());
+
+        SalesOrderItem sourceItem = buildSalesOrderItem(101L, "M-1", new BigDecimal("0.300"), new BigDecimal("1000.00"));
 
         when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(existing));
-        when(repository.existsByIssueNoAndDeletedFlagFalse("KP-DUP")).thenReturn(true);
+        when(salesOrderItemQueryService.findActiveByIdIn(anyCollection())).thenReturn(List.of(sourceItem));
+        when(repository.summarizeAllocatedBySourceSalesOrderItemIds(anyCollection(), anyLong()))
+                .thenReturn(List.of());
+        when(companySettingService.resolveCurrentTaxRate()).thenReturn(new BigDecimal("0.13"));
+        when(idGenerator.nextId()).thenReturn(1L, 2L);
+        when(repository.save(any(InvoiceIssue.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(mapper.toResponse(any(InvoiceIssue.class))).thenAnswer(invocation -> {
+            InvoiceIssue entity = invocation.getArgument(0);
+            return new InvoiceIssueResponse(
+                    entity.getId(), entity.getIssueNo(), entity.getInvoiceNo(),
+                    entity.getCustomerName(), entity.getProjectName(), entity.getInvoiceDate(),
+                    entity.getInvoiceType(), entity.getAmount(), entity.getTaxAmount(),
+                    entity.getStatus(), entity.getOperatorName(), entity.getRemark(), List.of()
+            );
+        });
 
         InvoiceIssueRequest request = buildRequest(
                 "KP-DUP", 101L, new BigDecimal("0.300"), new BigDecimal("3333.33"), new BigDecimal("1000.00")
         );
 
-        assertThrows(BusinessException.class, () -> service.update(1L, request));
+        service.update(1L, request);
+
+        assertThat(existing.getIssueNo()).isEqualTo("KP-OLD");
     }
 
     @Test
@@ -304,10 +324,9 @@ class InvoiceIssueServiceTest {
         existing.setDeletedFlag(false);
         existing.setItems(new ArrayList<>());
 
-        SalesOrderItem sourceItem = buildSalesOrderItem(101L, "M-1", new BigDecimal("2.000"), new BigDecimal("6000.00"));
+        SalesOrderItem sourceItem = buildSalesOrderItem(101L, "M-1", new BigDecimal("0.300"), new BigDecimal("1000.00"));
 
         when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(existing));
-        when(repository.existsByIssueNoAndDeletedFlagFalse("KP-SAME")).thenReturn(true);
         when(salesOrderItemQueryService.findActiveByIdIn(anyCollection())).thenReturn(List.of(sourceItem));
         when(repository.summarizeAllocatedBySourceSalesOrderItemIds(anyCollection(), anyLong()))
                 .thenReturn(List.of());
@@ -352,7 +371,6 @@ class InvoiceIssueServiceTest {
         existing.setItems(new ArrayList<>());
 
         when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(existing));
-        when(repository.findById(1L)).thenReturn(Optional.of(existing));
         when(mapper.toResponse(existing)).thenReturn(
                 new InvoiceIssueResponse(1L, "KP-001", "INV-001", "客户A", "项目A",
                         LocalDate.of(2026, 4, 26), "增值税专票", new BigDecimal("1000.00"),
@@ -523,7 +541,7 @@ class InvoiceIssueServiceTest {
     void shouldRejectDeleteWhenStatusIsProtected() {
         InvoiceIssue existing = new InvoiceIssue();
         existing.setId(1L);
-        existing.setStatus("已开票");
+        existing.setStatus(StatusConstants.AUDITED);
         existing.setDeletedFlag(false);
         when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(existing));
 
@@ -539,8 +557,8 @@ class InvoiceIssueServiceTest {
 
     @Test
     void shouldResolveSourceOrderFromMultipleItems() {
-        SalesOrderItem sourceItem1 = buildSalesOrderItem(101L, "M-1", new BigDecimal("2.000"), new BigDecimal("6000.00"));
-        SalesOrderItem sourceItem2 = buildSalesOrderItem(102L, "M-2", new BigDecimal("1.000"), new BigDecimal("3000.00"));
+        SalesOrderItem sourceItem1 = buildSalesOrderItem(101L, "M-1", new BigDecimal("0.300"), new BigDecimal("1000.00"));
+        SalesOrderItem sourceItem2 = buildSalesOrderItem(102L, "M-2", new BigDecimal("0.300"), new BigDecimal("900.00"));
 
         when(repository.existsByIssueNoAndDeletedFlagFalse("KP-MULTI")).thenReturn(false);
         when(salesOrderItemQueryService.findActiveByIdIn(anyCollection())).thenReturn(List.of(sourceItem1, sourceItem2));

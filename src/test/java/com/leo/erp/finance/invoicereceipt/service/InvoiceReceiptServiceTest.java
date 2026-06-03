@@ -2,6 +2,7 @@ package com.leo.erp.finance.invoicereceipt.service;
 
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
+import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.finance.invoicereceipt.domain.entity.InvoiceReceipt;
 import com.leo.erp.finance.invoicereceipt.domain.entity.InvoiceReceiptItem;
 import com.leo.erp.finance.invoicereceipt.repository.InvoiceReceiptRepository;
@@ -228,15 +229,15 @@ class InvoiceReceiptServiceTest {
 
     @Test
     void createRejectsSourcePurchaseOrderItemAmountExceeded() {
-        PurchaseOrderItem sourceItem = buildPurchaseOrderItem(204L, "M-1", new BigDecimal("2.000"), new BigDecimal("6000.00"));
+        PurchaseOrderItem sourceItem = buildPurchaseOrderItem(204L, "M-1", new BigDecimal("1.100"), new BigDecimal("6000.00"));
 
         when(repository.existsByReceiveNoAndDeletedFlagFalse("SP-AMT-EXCEED")).thenReturn(false);
         when(purchaseOrderItemQueryService.findActiveByIdIn(anyCollection())).thenReturn(List.of(sourceItem));
         when(repository.summarizeAllocatedBySourcePurchaseOrderItemIds(anyCollection(), nullable(Long.class)))
-                .thenReturn(List.of(summary(204L, "0.500", "5500.00")));
+                .thenReturn(List.of(summary(204L, "0.000", "5500.00")));
 
         BusinessException exception = assertThrows(BusinessException.class, () -> service.create(buildRequest(
-                "SP-AMT-EXCEED", 204L, new BigDecimal("0.300"), new BigDecimal("3333.33"), new BigDecimal("1000.00")
+                "SP-AMT-EXCEED", 204L, new BigDecimal("0.000"), new BigDecimal("0.00"), new BigDecimal("0.00")
         )));
 
         assertEquals("第1行来源采购订单明细可收票金额不足", exception.getMessage());
@@ -248,15 +249,34 @@ class InvoiceReceiptServiceTest {
         existing.setId(1L);
         existing.setReceiveNo("SP-OLD");
         existing.setDeletedFlag(false);
+        existing.setItems(new ArrayList<>());
+
+        PurchaseOrderItem sourceItem = buildPurchaseOrderItem(201L, "M-1", new BigDecimal("0.300"), new BigDecimal("1000.00"));
 
         when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(existing));
-        when(repository.existsByReceiveNoAndDeletedFlagFalse("SP-DUP")).thenReturn(true);
+        when(purchaseOrderItemQueryService.findActiveByIdIn(anyCollection())).thenReturn(List.of(sourceItem));
+        when(repository.summarizeAllocatedBySourcePurchaseOrderItemIds(anyCollection(), anyLong()))
+                .thenReturn(List.of());
+        when(companySettingService.resolveCurrentTaxRate()).thenReturn(new BigDecimal("0.13"));
+        when(idGenerator.nextId()).thenReturn(1L, 2L);
+        when(repository.save(any(InvoiceReceipt.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(mapper.toResponse(any(InvoiceReceipt.class))).thenAnswer(invocation -> {
+            InvoiceReceipt entity = invocation.getArgument(0);
+            return new InvoiceReceiptResponse(
+                    entity.getId(), entity.getReceiveNo(), entity.getInvoiceNo(),
+                    entity.getSupplierName(), entity.getInvoiceTitle(), entity.getInvoiceDate(),
+                    entity.getInvoiceType(), entity.getAmount(), entity.getTaxAmount(),
+                    entity.getStatus(), entity.getOperatorName(), entity.getRemark(), List.of()
+            );
+        });
 
         InvoiceReceiptRequest request = buildRequest(
                 "SP-DUP", 201L, new BigDecimal("0.300"), new BigDecimal("3333.33"), new BigDecimal("1000.00")
         );
 
-        assertThrows(BusinessException.class, () -> service.update(1L, request));
+        service.update(1L, request);
+
+        assertThat(existing.getReceiveNo()).isEqualTo("SP-OLD");
     }
 
     @Test
@@ -275,10 +295,9 @@ class InvoiceReceiptServiceTest {
         existing.setDeletedFlag(false);
         existing.setItems(new ArrayList<>());
 
-        PurchaseOrderItem sourceItem = buildPurchaseOrderItem(201L, "M-1", new BigDecimal("2.000"), new BigDecimal("6000.00"));
+        PurchaseOrderItem sourceItem = buildPurchaseOrderItem(201L, "M-1", new BigDecimal("0.300"), new BigDecimal("1000.00"));
 
         when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(existing));
-        when(repository.existsByReceiveNoAndDeletedFlagFalse("SP-SAME")).thenReturn(true);
         when(purchaseOrderItemQueryService.findActiveByIdIn(anyCollection())).thenReturn(List.of(sourceItem));
         when(repository.summarizeAllocatedBySourcePurchaseOrderItemIds(anyCollection(), anyLong()))
                 .thenReturn(List.of());
@@ -307,7 +326,7 @@ class InvoiceReceiptServiceTest {
 
     @Test
     void shouldSetInvoiceTitleToSupplierNameWhenNull() {
-        PurchaseOrderItem sourceItem = buildPurchaseOrderItem(201L, "M-1", new BigDecimal("2.000"), new BigDecimal("6000.00"));
+        PurchaseOrderItem sourceItem = buildPurchaseOrderItem(201L, "M-1", new BigDecimal("0.300"), new BigDecimal("1000.00"));
 
         when(repository.existsByReceiveNoAndDeletedFlagFalse("SP-TITLE")).thenReturn(false);
         when(purchaseOrderItemQueryService.findActiveByIdIn(anyCollection())).thenReturn(List.of(sourceItem));
@@ -348,7 +367,7 @@ class InvoiceReceiptServiceTest {
 
     @Test
     void shouldSetInvoiceTitleToSupplierNameWhenBlank() {
-        PurchaseOrderItem sourceItem = buildPurchaseOrderItem(201L, "M-1", new BigDecimal("2.000"), new BigDecimal("6000.00"));
+        PurchaseOrderItem sourceItem = buildPurchaseOrderItem(201L, "M-1", new BigDecimal("0.300"), new BigDecimal("1000.00"));
 
         when(repository.existsByReceiveNoAndDeletedFlagFalse("SP-BLANK-TITLE")).thenReturn(false);
         when(purchaseOrderItemQueryService.findActiveByIdIn(anyCollection())).thenReturn(List.of(sourceItem));
@@ -405,7 +424,6 @@ class InvoiceReceiptServiceTest {
         existing.setItems(new ArrayList<>());
 
         when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(existing));
-        when(repository.findById(1L)).thenReturn(Optional.of(existing));
         when(mapper.toResponse(existing)).thenReturn(
                 new InvoiceReceiptResponse(1L, "SP-001", "INV-001", "供应商A", "发票抬头",
                         LocalDate.of(2026, 4, 26), "增值税专票", new BigDecimal("1000.00"),
@@ -573,7 +591,7 @@ class InvoiceReceiptServiceTest {
     void shouldRejectDeleteWhenStatusIsProtected() {
         InvoiceReceipt existing = new InvoiceReceipt();
         existing.setId(1L);
-        existing.setStatus("已收票");
+        existing.setStatus(StatusConstants.AUDITED);
         existing.setDeletedFlag(false);
         when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(existing));
 

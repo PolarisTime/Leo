@@ -24,6 +24,7 @@ class PublicAccessRequestMatcherTest {
         PublicAccessRequestMatcher matcher = new PublicAccessRequestMatcher(handlerMapping);
 
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/public/test");
+        request.setServletPath("/api/public/test");
         assertThat(matcher.matches(request)).isTrue();
     }
 
@@ -60,6 +61,7 @@ class PublicAccessRequestMatcherTest {
         PublicAccessRequestMatcher matcher = new PublicAccessRequestMatcher(handlerMapping);
 
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/public/123");
+        request.setServletPath("/api/public/123");
         assertThat(matcher.matches(request)).isTrue();
     }
 

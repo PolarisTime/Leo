@@ -254,7 +254,7 @@ class PurchaseOrderItemPieceWeightServiceTest {
         PurchaseOrderItemPieceWeightRepository repository = mock(PurchaseOrderItemPieceWeightRepository.class);
         PurchaseOrderItemPieceWeightService service = new PurchaseOrderItemPieceWeightService(repository, mock(JdbcTemplate.class));
 
-        service.releaseSalesOrderItems(List.of(301L, null, 302L));
+        service.releaseSalesOrderItems(java.util.Arrays.asList(301L, null, 302L));
 
         verify(repository).releaseBySalesOrderItemIdIn(List.of(301L, 302L));
     }

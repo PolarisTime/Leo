@@ -755,6 +755,7 @@ class ReceiptServiceTest {
         CustomerStatementQueryService customerStatementQueryService = mock(CustomerStatementQueryService.class);
         ApplicationEventPublisher eventPublisher = mock(ApplicationEventPublisher.class);
         ResourceRecordAccessGuard resourceRecordAccessGuard = mock(ResourceRecordAccessGuard.class);
+        ReceiptMapper receiptMapper = mock(ReceiptMapper.class);
 
         CustomerStatement statement = new CustomerStatement();
         statement.setId(21L);
@@ -769,10 +770,19 @@ class ReceiptServiceTest {
             r.setId(3L);
             return r;
         });
+        when(receiptMapper.toResponse(any(Receipt.class))).thenAnswer(inv -> {
+            Receipt r = inv.getArgument(0);
+            return new com.leo.erp.finance.receipt.web.dto.ReceiptResponse(
+                    r.getId(), r.getReceiptNo(), r.getCustomerCode(), r.getCustomerName(),
+                    r.getProjectId(), r.getProjectName(), r.getSourceStatementId(),
+                    r.getReceiptDate(), r.getPayType(), r.getAmount(), r.getStatus(),
+                    r.getOperatorName(), r.getRemark(), List.of()
+            );
+        });
 
         ReceiptService service = new ReceiptService(
                 receiptRepository, mock(ReceiptAllocationRepository.class),
-                new SnowflakeIdGenerator(0L), mock(ReceiptMapper.class),
+                new SnowflakeIdGenerator(0L), receiptMapper,
                 customerStatementQueryService, eventPublisher, resourceRecordAccessGuard,
                 mock(WorkflowTransitionGuard.class)
         );

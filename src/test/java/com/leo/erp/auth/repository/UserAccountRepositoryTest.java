@@ -1,12 +1,15 @@
 package com.leo.erp.auth.repository;
 
 import com.leo.erp.auth.domain.entity.UserAccount;
+import com.leo.erp.auth.domain.enums.UserStatus;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
 import org.springframework.boot.test.autoconfigure.orm.jpa.TestEntityManager;
 import org.springframework.test.context.ActiveProfiles;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -24,11 +27,21 @@ class UserAccountRepositoryTest {
 
     private long nextId = 1;
 
+    @BeforeEach
+    void cleanUp() {
+        repository.deleteAll();
+        entityManager.flush();
+    }
+
     private UserAccount createUser(String loginName, String userName, boolean deleted) {
         UserAccount user = new UserAccount();
         user.setId(nextId++);
         user.setLoginName(loginName);
+        user.setPasswordHash("$2a$10$dummyHashForTesting");
         user.setUserName(userName);
+        user.setStatus(UserStatus.NORMAL);
+        user.setCreatedBy(0L);
+        user.setCreatedAt(LocalDateTime.now());
         user.setDeletedFlag(deleted);
         return user;
     }
