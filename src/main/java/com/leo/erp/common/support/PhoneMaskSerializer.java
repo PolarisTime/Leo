@@ -10,13 +10,21 @@ public class PhoneMaskSerializer extends JsonSerializer<String> {
 
     @Override
     public void serialize(String value, JsonGenerator gen, SerializerProvider serializers) throws IOException {
-        if (value == null || value.isBlank()) {
+        if (value == null) {
+            gen.writeNull();
+            return;
+        }
+        if (value.isBlank()) {
             gen.writeString(value);
             return;
         }
         String trimmed = value.trim();
         if (trimmed.length() <= 4) {
             gen.writeString(trimmed);
+            return;
+        }
+        if (trimmed.length() <= 7) {
+            gen.writeString(trimmed.substring(0, 3) + "****");
             return;
         }
         gen.writeString(trimmed.substring(0, 3) + "****" + trimmed.substring(trimmed.length() - 4));
