@@ -128,7 +128,7 @@ class OperationLogArchiveServiceTest {
                 LocalDateTime.of(2026, 5, 1, 0, 0),
                 nonExistentDir,
                 1000
-        )).isInstanceOf(IOException.class);
+        )).isInstanceOf(RuntimeException.class);
     }
 
     @Test
