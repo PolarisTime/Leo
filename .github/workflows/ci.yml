@@ -15,10 +15,41 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  backend:
-    name: Backend / Leo
+  static-analysis:
+    name: Static Analysis
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
 
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+          cache-dependency-path: pom.xml
+
+      - name: Static analysis
+        run: mvn -B -ntp -DskipTests checkstyle:check spotbugs:spotbugs
+
+  unit-tests:
+    name: Test / ${{ matrix.batch }}
+    needs: static-analysis
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        batch:
+          - system            # ~50 classes
+          - auth              # ~40 classes
+          - security          # ~42 classes
+          - common            # ~57 classes
+          - master-attachment # ~63 classes
+          - business          # ~55 classes
     services:
       postgres:
         image: postgres:16-alpine
@@ -71,11 +102,85 @@ jobs:
           cache: maven
           cache-dependency-path: pom.xml
 
-      - name: Static analysis
-        run: mvn -B -ntp -DskipTests checkstyle:check spotbugs:spotbugs
+      - name: Test (system)
+        if: matrix.batch == 'system'
+        run: mvn -B -ntp test -Dtest="com.leo.erp.system.**"
 
-      - name: Test
-        run: mvn -B -ntp test
+      - name: Test (auth)
+        if: matrix.batch == 'auth'
+        run: mvn -B -ntp test -Dtest="com.leo.erp.auth.**"
+
+      - name: Test (security)
+        if: matrix.batch == 'security'
+        run: mvn -B -ntp test -Dtest="com.leo.erp.security.**"
+
+      - name: Test (common)
+        if: matrix.batch == 'common'
+        run: mvn -B -ntp test -Dtest="com.leo.erp.common.**"
+
+      - name: Test (master-attachment)
+        if: matrix.batch == 'master-attachment'
+        run: mvn -B -ntp test -Dtest="com.leo.erp.master.**,com.leo.erp.attachment.**"
+
+      - name: Test (business)
+        if: matrix.batch == 'business'
+        run: mvn -B -ntp test -Dtest="com.leo.erp.finance.**,com.leo.erp.sales.**,com.leo.erp.statement.**,com.leo.erp.contract.**,com.leo.erp.purchase.**,com.leo.erp.report.**,com.leo.erp.logistics.**,com.leo.erp.allocation.**,com.leo.erp.config.**,com.leo.erp.search.**"
+
+  package:
+    name: Package & Smoke
+    needs: unit-tests
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: leo
+          POSTGRES_USER: leo
+          POSTGRES_PASSWORD: leo_ci_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U leo -d leo"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    defaults:
+      run:
+        shell: bash
+
+    env:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/leo
+      SPRING_DATASOURCE_USERNAME: leo
+      SPRING_DATASOURCE_PASSWORD: leo_ci_password
+      SPRING_DATA_REDIS_HOST: localhost
+      SPRING_DATA_REDIS_PORT: 6379
+      SPRING_DATA_REDIS_DATABASE: 3
+      SPRING_DATA_REDIS_PASSWORD: ""
+      LEO_JWT_SECRET: ci-jwt-secret-ci-jwt-secret-ci-jwt-secret
+      TOTP_ENCRYPTION_KEY: ci-totp-secret-ci-totp-secret-ci-totp
+      LEO_MACHINE_ID: 1
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+          cache-dependency-path: pom.xml
 
       - name: Inspect Flyway migrations
         continue-on-error: true
