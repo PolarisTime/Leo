@@ -1,5 +1,6 @@
 package com.leo.erp.common.support;
 
+import com.leo.erp.common.error.BusinessException;
 import org.junit.jupiter.api.Test;
 
 import java.io.ByteArrayInputStream;
@@ -23,6 +24,7 @@ class ExternalProcessRunnerTest {
         ExternalProcessRunner.ProcessResult result = runner.run(new ProcessBuilder("echo", "ok"), Duration.ofMillis(100), "echo");
 
         assertThat(result.output()).isEqualTo("ok");
+        assertThat(result.exitCode()).isEqualTo(0);
     }
 
     @Test
@@ -34,6 +36,49 @@ class ExternalProcessRunnerTest {
                 .isInstanceOf(IOException.class)
                 .hasMessageContaining("超时");
         assertThat(process.destroyedForcibly).isTrue();
+    }
+
+    @Test
+    void shouldThrowWhenProcessExitsWithNonZeroCode() {
+        FakeProcess process = new FakeProcess(true, 1, "error output");
+        ExternalProcessRunner runner = new TestRunner(process);
+
+        assertThatThrownBy(() -> runner.run(new ProcessBuilder("cmd"), Duration.ofSeconds(5), "test-cmd"))
+                .isInstanceOf(IOException.class)
+                .hasMessageContaining("失败")
+                .hasMessageContaining("error output");
+    }
+
+    @Test
+    void shouldThrowWhenOutputReadFailsWithIoException() {
+        FakeProcess process = new FakeProcess(true, 0, "ok") {
+            @Override
+            public InputStream getInputStream() {
+                return new InputStream() {
+                    @Override
+                    public int read() throws IOException {
+                        throw new IOException("stream broken");
+                    }
+
+                    @Override
+                    public byte[] readAllBytes() throws IOException {
+                        throw new IOException("stream broken");
+                    }
+                };
+            }
+        };
+        ExternalProcessRunner runner = new TestRunner(process);
+
+        assertThatThrownBy(() -> runner.run(new ProcessBuilder("cmd"), Duration.ofSeconds(5), "test"))
+                .isInstanceOf(IOException.class)
+                .hasMessageContaining("读取进程输出失败");
+    }
+
+    @Test
+    void processResultShouldContainExitCodeAndOutput() {
+        ExternalProcessRunner.ProcessResult result = new ExternalProcessRunner.ProcessResult(0, "hello");
+        assertThat(result.exitCode()).isEqualTo(0);
+        assertThat(result.output()).isEqualTo("hello");
     }
 
     private static final class TestRunner extends ExternalProcessRunner {
@@ -50,7 +95,7 @@ class ExternalProcessRunnerTest {
         }
     }
 
-    private static final class FakeProcess extends Process {
+    private static class FakeProcess extends Process {
 
         private final boolean finished;
         private final int exitCode;

@@ -1,5 +1,6 @@
 package com.leo.erp.purchase.order.service;
 
+import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.TradeItemMaterialSupport;
@@ -510,6 +511,573 @@ class PurchaseOrderServiceTest {
                 null,
                 List.of()
         );
+    }
+
+    @Test
+    void shouldRejectDuplicateOrderNoWhenCreating() {
+        PurchaseOrderRepository repository = mock(PurchaseOrderRepository.class);
+        PurchaseOrderService service = new PurchaseOrderService(
+                repository,
+                mock(SnowflakeIdGenerator.class),
+                mock(PurchaseOrderMapper.class),
+                mock(TradeItemMaterialSupport.class),
+                mock(WarehouseSelectionSupport.class),
+                mock(SupplierRepository.class),
+                mock(PurchaseInboundItemQueryService.class),
+                mock(ItemAllocationNativeRepository.class),
+                mock(PurchaseOrderItemPieceWeightService.class),
+                mock(WorkflowTransitionGuard.class),
+                mock(JdbcTemplate.class)
+        );
+
+        when(repository.existsByOrderNoAndDeletedFlagFalse("PO-001")).thenReturn(true);
+
+        assertThatThrownBy(() -> service.create(buildRequest(null, "草稿")))
+                .hasMessageContaining("采购订单号已存在");
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    void shouldCreateOrderSuccessfully() {
+        PurchaseOrderRepository repository = mock(PurchaseOrderRepository.class);
+        SnowflakeIdGenerator idGenerator = mock(SnowflakeIdGenerator.class);
+        PurchaseOrderMapper mapper = mock(PurchaseOrderMapper.class);
+        TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
+        WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
+        SupplierRepository supplierRepository = mock(SupplierRepository.class);
+        PurchaseInboundItemQueryService purchaseInboundItemQueryService = mock(PurchaseInboundItemQueryService.class);
+        PurchaseOrderService service = new PurchaseOrderService(
+                repository, idGenerator, mapper, materialSupport, warehouseSelectionSupport,
+                supplierRepository, purchaseInboundItemQueryService,
+                mock(ItemAllocationNativeRepository.class),
+                mock(PurchaseOrderItemPieceWeightService.class),
+                mock(WorkflowTransitionGuard.class),
+                mock(JdbcTemplate.class)
+        );
+
+        when(repository.existsByOrderNoAndDeletedFlagFalse("PO-001")).thenReturn(false);
+        when(supplierRepository.findFirstBySupplierNameAndDeletedFlagFalseOrderBySupplierCodeAsc("供应商A"))
+                .thenReturn(Optional.of(supplier("供应商A")));
+        when(idGenerator.nextId()).thenReturn(1L, 11L);
+        when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(Map.of("M1", new Material()));
+        when(materialSupport.normalizeBatchNo(any(), anyString(), anyInt(), eq(false))).thenReturn("B1");
+        when(warehouseSelectionSupport.normalizeWarehouseName("一号库", 1, true)).thenReturn("一号库");
+        when(purchaseInboundItemQueryService.summarizeWeightAdjustmentBySourcePurchaseOrderItemIds(any()))
+                .thenReturn(Map.of());
+        when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(mapper.toResponse(any())).thenReturn(summaryResponse("草稿"));
+
+        PurchaseOrderResponse response = service.create(buildRequest(null, "草稿"));
+
+        assertThat(response.status()).isEqualTo("草稿");
+        verify(repository).save(any());
+    }
+
+    @Test
+    void shouldDeleteDraftOrder() {
+        PurchaseOrderRepository repository = mock(PurchaseOrderRepository.class);
+        PurchaseOrderService service = new PurchaseOrderService(
+                repository,
+                mock(SnowflakeIdGenerator.class),
+                mock(PurchaseOrderMapper.class),
+                mock(TradeItemMaterialSupport.class),
+                mock(WarehouseSelectionSupport.class),
+                mock(SupplierRepository.class),
+                mock(PurchaseInboundItemQueryService.class),
+                mock(ItemAllocationNativeRepository.class),
+                mock(PurchaseOrderItemPieceWeightService.class),
+                mock(WorkflowTransitionGuard.class),
+                mock(JdbcTemplate.class)
+        );
+
+        PurchaseOrder order = buildOrder();
+        when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(order));
+
+        service.delete(1L);
+
+        assertThat(order.isDeletedFlag()).isTrue();
+        verify(repository).save(order);
+    }
+
+    @Test
+    void shouldRejectDeletingNonDraftOrder() {
+        PurchaseOrderRepository repository = mock(PurchaseOrderRepository.class);
+        PurchaseOrderService service = new PurchaseOrderService(
+                repository,
+                mock(SnowflakeIdGenerator.class),
+                mock(PurchaseOrderMapper.class),
+                mock(TradeItemMaterialSupport.class),
+                mock(WarehouseSelectionSupport.class),
+                mock(SupplierRepository.class),
+                mock(PurchaseInboundItemQueryService.class),
+                mock(ItemAllocationNativeRepository.class),
+                mock(PurchaseOrderItemPieceWeightService.class),
+                mock(WorkflowTransitionGuard.class),
+                mock(JdbcTemplate.class)
+        );
+
+        PurchaseOrder order = buildOrder();
+        order.setStatus("已审核");
+        when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(order));
+
+        assertThatThrownBy(() -> service.delete(1L))
+                .hasMessageContaining("当前单据状态为「已审核」，不能删除");
+    }
+
+    @Test
+    void shouldDetailWithEmptyItems() {
+        PurchaseOrderRepository repository = mock(PurchaseOrderRepository.class);
+        PurchaseOrderMapper mapper = mock(PurchaseOrderMapper.class);
+        PurchaseOrderService service = new PurchaseOrderService(
+                repository,
+                mock(SnowflakeIdGenerator.class),
+                mapper,
+                mock(TradeItemMaterialSupport.class),
+                mock(WarehouseSelectionSupport.class),
+                mock(SupplierRepository.class),
+                mock(PurchaseInboundItemQueryService.class),
+                mock(ItemAllocationNativeRepository.class),
+                mock(PurchaseOrderItemPieceWeightService.class),
+                mock(WorkflowTransitionGuard.class),
+                mock(JdbcTemplate.class)
+        );
+
+        PurchaseOrder order = buildOrder();
+        when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(order));
+        when(mapper.toResponse(order)).thenReturn(new PurchaseOrderResponse(
+                1L, "PO-001", "供应商A", LocalDateTime.of(2026, 4, 26, 0, 0), "李四",
+                new BigDecimal("1.000"), new BigDecimal("4000.00"), "草稿", null, List.of()
+        ));
+
+        PurchaseOrderResponse response = service.detail(1L);
+
+        assertThat(response.orderNo()).isEqualTo("PO-001");
+        assertThat(response.items()).isEmpty();
+    }
+
+    @Test
+    void shouldRejectUpdateWithDuplicateOrderNo() {
+        PurchaseOrderRepository repository = mock(PurchaseOrderRepository.class);
+        PurchaseOrderService service = new PurchaseOrderService(
+                repository,
+                mock(SnowflakeIdGenerator.class),
+                mock(PurchaseOrderMapper.class),
+                mock(TradeItemMaterialSupport.class),
+                mock(WarehouseSelectionSupport.class),
+                mock(SupplierRepository.class),
+                mock(PurchaseInboundItemQueryService.class),
+                mock(ItemAllocationNativeRepository.class),
+                mock(PurchaseOrderItemPieceWeightService.class),
+                mock(WorkflowTransitionGuard.class),
+                mock(JdbcTemplate.class)
+        );
+
+        PurchaseOrder order = buildOrder();
+        when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(order));
+        when(repository.existsByOrderNoAndDeletedFlagFalse("PO-002")).thenReturn(true);
+
+        PurchaseOrderRequest request = new PurchaseOrderRequest(
+                "PO-002", "供应商A",
+                LocalDateTime.of(2026, 4, 26, 0, 0), "李四",
+                "草稿", null, List.of()
+        );
+
+        assertThatThrownBy(() -> service.update(1L, request))
+                .hasMessageContaining("采购订单号已存在");
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    void shouldReturnEmptyPageWhenImportCandidatesHaveNoResults() {
+        PurchaseOrderRepository repository = mock(PurchaseOrderRepository.class);
+        PurchaseOrderService service = new PurchaseOrderService(
+                repository,
+                mock(SnowflakeIdGenerator.class),
+                mock(PurchaseOrderMapper.class),
+                mock(TradeItemMaterialSupport.class),
+                mock(WarehouseSelectionSupport.class),
+                mock(SupplierRepository.class),
+                mock(PurchaseInboundItemQueryService.class),
+                mock(ItemAllocationNativeRepository.class),
+                mock(PurchaseOrderItemPieceWeightService.class),
+                mock(WorkflowTransitionGuard.class),
+                mock(JdbcTemplate.class)
+        );
+
+        when(repository.findAll(any(Specification.class), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of()));
+
+        var page = service.importCandidates(PageQuery.of(0, 20, null, null), "", "purchase-inbound");
+
+        assertThat(page.getContent()).isEmpty();
+        verify(repository, never()).findByIdInAndDeletedFlagFalse(any());
+    }
+
+    @Test
+    void shouldRejectInvalidImportCandidateUsage() {
+        PurchaseOrderRepository repository = mock(PurchaseOrderRepository.class);
+        PurchaseOrderService service = new PurchaseOrderService(
+                repository,
+                mock(SnowflakeIdGenerator.class),
+                mock(PurchaseOrderMapper.class),
+                mock(TradeItemMaterialSupport.class),
+                mock(WarehouseSelectionSupport.class),
+                mock(SupplierRepository.class),
+                mock(PurchaseInboundItemQueryService.class),
+                mock(ItemAllocationNativeRepository.class),
+                mock(PurchaseOrderItemPieceWeightService.class),
+                mock(WorkflowTransitionGuard.class),
+                mock(JdbcTemplate.class)
+        );
+
+        assertThatThrownBy(() -> service.importCandidates(PageQuery.of(0, 20, null, null), "", "invalid"))
+                .hasMessageContaining("usage 不支持当前导入场景");
+    }
+
+    @Test
+    void shouldQueryPieceWeightsByJdbc() {
+        PurchaseOrderService service = new PurchaseOrderService(
+                mock(PurchaseOrderRepository.class),
+                mock(SnowflakeIdGenerator.class),
+                mock(PurchaseOrderMapper.class),
+                mock(TradeItemMaterialSupport.class),
+                mock(WarehouseSelectionSupport.class),
+                mock(SupplierRepository.class),
+                mock(PurchaseInboundItemQueryService.class),
+                mock(ItemAllocationNativeRepository.class),
+                mock(PurchaseOrderItemPieceWeightService.class),
+                mock(WorkflowTransitionGuard.class),
+                mock(JdbcTemplate.class)
+        );
+
+        JdbcTemplate jdbc = mock(JdbcTemplate.class);
+        service = new PurchaseOrderService(
+                mock(PurchaseOrderRepository.class),
+                mock(SnowflakeIdGenerator.class),
+                mock(PurchaseOrderMapper.class),
+                mock(TradeItemMaterialSupport.class),
+                mock(WarehouseSelectionSupport.class),
+                mock(SupplierRepository.class),
+                mock(PurchaseInboundItemQueryService.class),
+                mock(ItemAllocationNativeRepository.class),
+                mock(PurchaseOrderItemPieceWeightService.class),
+                mock(WorkflowTransitionGuard.class),
+                jdbc
+        );
+
+        when(jdbc.query(anyString(), any(org.springframework.jdbc.core.RowMapper.class), eq(7L)))
+                .thenReturn(List.of(
+                        new com.leo.erp.purchase.order.web.dto.PieceWeightResponse(1, new BigDecimal("2.037"), "SO-001"),
+                        new com.leo.erp.purchase.order.web.dto.PieceWeightResponse(2, new BigDecimal("2.037"), "")
+                ));
+
+        var result = service.getPieceWeights(7L);
+
+        assertThat(result).hasSize(2);
+        assertThat(result.get(0).pieceNo()).isEqualTo(1);
+        assertThat(result.get(0).salesOrderNo()).isEqualTo("SO-001");
+    }
+
+    @Test
+    void shouldQueryPieceWeightsBySalesOrderItemId() {
+        JdbcTemplate jdbc = mock(JdbcTemplate.class);
+        PurchaseOrderService service = new PurchaseOrderService(
+                mock(PurchaseOrderRepository.class),
+                mock(SnowflakeIdGenerator.class),
+                mock(PurchaseOrderMapper.class),
+                mock(TradeItemMaterialSupport.class),
+                mock(WarehouseSelectionSupport.class),
+                mock(SupplierRepository.class),
+                mock(PurchaseInboundItemQueryService.class),
+                mock(ItemAllocationNativeRepository.class),
+                mock(PurchaseOrderItemPieceWeightService.class),
+                mock(WorkflowTransitionGuard.class),
+                jdbc
+        );
+
+        when(jdbc.query(anyString(), any(org.springframework.jdbc.core.RowMapper.class), eq(301L)))
+                .thenReturn(List.of(
+                        new com.leo.erp.purchase.order.web.dto.PieceWeightResponse(1, new BigDecimal("2.037"), "SO-001")
+                ));
+
+        var result = service.getPieceWeightsBySalesOrderItemId(301L);
+
+        assertThat(result).singleElement().satisfies(pw ->
+                assertThat(pw.weightTon()).isEqualByComparingTo("2.037")
+        );
+    }
+
+    @Test
+    void shouldFallbackToZeroSalesRemainingWeightWhenNoPieceWeightMap() {
+        PurchaseOrderRepository repository = mock(PurchaseOrderRepository.class);
+        PurchaseOrderMapper mapper = mock(PurchaseOrderMapper.class);
+        PurchaseInboundItemQueryService purchaseInboundItemQueryService = mock(PurchaseInboundItemQueryService.class);
+        ItemAllocationNativeRepository itemAllocationRepo = mock(ItemAllocationNativeRepository.class);
+        PurchaseOrderItemPieceWeightService pieceWeightService = mock(PurchaseOrderItemPieceWeightService.class);
+        PurchaseOrderService service = new PurchaseOrderService(
+                repository,
+                mock(SnowflakeIdGenerator.class),
+                mapper,
+                mock(TradeItemMaterialSupport.class),
+                mock(WarehouseSelectionSupport.class),
+                mock(SupplierRepository.class),
+                purchaseInboundItemQueryService,
+                itemAllocationRepo,
+                pieceWeightService,
+                mock(WorkflowTransitionGuard.class),
+                mock(JdbcTemplate.class)
+        );
+
+        PurchaseOrder order = buildOrder();
+        PurchaseOrderItem item = buildItem(7L, order);
+        order.getItems().add(item);
+
+        when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(order));
+        when(mapper.toResponse(order)).thenReturn(new PurchaseOrderResponse(
+                1L, "PO-001", "供应商A", LocalDateTime.of(2026, 4, 26, 0, 0), "李四",
+                new BigDecimal("2.000"), new BigDecimal("8000.00"), "草稿", null, List.of()
+        ));
+        when(purchaseInboundItemQueryService.summarizeAllocatedQuantityBySourcePurchaseOrderItemIds(List.of(7L)))
+                .thenReturn(Map.of());
+        when(itemAllocationRepo.summarizeSalesByPurchaseOrderItems(List.of(7L), null))
+                .thenReturn(List.of());
+        when(pieceWeightService.summarizeRemainingWeightByPurchaseOrderItemIds(List.of(7L)))
+                .thenReturn(Map.of());
+
+        PurchaseOrderResponse response = service.detail(1L);
+
+        assertThat(response.items()).singleElement().satisfies(detailItem ->
+                assertThat(detailItem.salesRemainingWeightTon()).isEqualByComparingTo("1.000")
+        );
+    }
+
+    @Test
+    void shouldCalculateSalesRemainingWeightWhenPartialAllocation() {
+        PurchaseOrderRepository repository = mock(PurchaseOrderRepository.class);
+        PurchaseOrderMapper mapper = mock(PurchaseOrderMapper.class);
+        PurchaseInboundItemQueryService purchaseInboundItemQueryService = mock(PurchaseInboundItemQueryService.class);
+        ItemAllocationNativeRepository itemAllocationRepo = mock(ItemAllocationNativeRepository.class);
+        PurchaseOrderItemPieceWeightService pieceWeightService = mock(PurchaseOrderItemPieceWeightService.class);
+        PurchaseOrderService service = new PurchaseOrderService(
+                repository,
+                mock(SnowflakeIdGenerator.class),
+                mapper,
+                mock(TradeItemMaterialSupport.class),
+                mock(WarehouseSelectionSupport.class),
+                mock(SupplierRepository.class),
+                purchaseInboundItemQueryService,
+                itemAllocationRepo,
+                pieceWeightService,
+                mock(WorkflowTransitionGuard.class),
+                mock(JdbcTemplate.class)
+        );
+
+        PurchaseOrder order = buildOrder();
+        PurchaseOrderItem item = buildItem(7L, order);
+        order.getItems().add(item);
+
+        when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(order));
+        when(mapper.toResponse(order)).thenReturn(new PurchaseOrderResponse(
+                1L, "PO-001", "供应商A", LocalDateTime.of(2026, 4, 26, 0, 0), "李四",
+                new BigDecimal("2.000"), new BigDecimal("8000.00"), "草稿", null, List.of()
+        ));
+        when(purchaseInboundItemQueryService.summarizeAllocatedQuantityBySourcePurchaseOrderItemIds(List.of(7L)))
+                .thenReturn(Map.of());
+        when(itemAllocationRepo.summarizeSalesByPurchaseOrderItems(List.of(7L), null))
+                .thenReturn(List.of(allocationProjection(7L, 3L)));
+        when(pieceWeightService.summarizeRemainingWeightByPurchaseOrderItemIds(List.of(7L)))
+                .thenReturn(Map.of());
+
+        PurchaseOrderResponse response = service.detail(1L);
+
+        assertThat(response.items()).singleElement().satisfies(detailItem -> {
+            assertThat(detailItem.salesRemainingQuantity()).isEqualTo(7);
+            assertThat(detailItem.salesRemainingWeightTon()).isEqualByComparingTo("0.700");
+        });
+    }
+
+    @Test
+    void shouldPageOrdersWithFilters() {
+        PurchaseOrderRepository repository = mock(PurchaseOrderRepository.class);
+        PurchaseOrderMapper mapper = mock(PurchaseOrderMapper.class);
+        PurchaseOrderService service = new PurchaseOrderService(
+                repository,
+                mock(SnowflakeIdGenerator.class),
+                mapper,
+                mock(TradeItemMaterialSupport.class),
+                mock(WarehouseSelectionSupport.class),
+                mock(SupplierRepository.class),
+                mock(PurchaseInboundItemQueryService.class),
+                mock(ItemAllocationNativeRepository.class),
+                mock(PurchaseOrderItemPieceWeightService.class),
+                mock(WorkflowTransitionGuard.class),
+                mock(JdbcTemplate.class)
+        );
+
+        PurchaseOrder order = buildOrder();
+        when(repository.findAll(any(Specification.class), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(order)));
+        when(mapper.toResponse(order)).thenReturn(summaryResponse("草稿"));
+
+        var page = service.page(
+                PageQuery.of(0, 20, null, null),
+                PageFilter.of("PO", null, null, null)
+        );
+
+        assertThat(page.getContent()).singleElement().satisfies(r ->
+                assertThat(r.orderNo()).isEqualTo("PO-001")
+        );
+    }
+
+    @Test
+    void shouldSearchOrders() {
+        PurchaseOrderRepository repository = mock(PurchaseOrderRepository.class);
+        PurchaseOrderMapper mapper = mock(PurchaseOrderMapper.class);
+        PurchaseOrderService service = new PurchaseOrderService(
+                repository,
+                mock(SnowflakeIdGenerator.class),
+                mapper,
+                mock(TradeItemMaterialSupport.class),
+                mock(WarehouseSelectionSupport.class),
+                mock(SupplierRepository.class),
+                mock(PurchaseInboundItemQueryService.class),
+                mock(ItemAllocationNativeRepository.class),
+                mock(PurchaseOrderItemPieceWeightService.class),
+                mock(WorkflowTransitionGuard.class),
+                mock(JdbcTemplate.class)
+        );
+
+        PurchaseOrder order = buildOrder();
+        when(repository.findAll(any(Specification.class), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(order)));
+        when(mapper.toResponse(order)).thenReturn(summaryResponse("草稿"));
+
+        List<PurchaseOrderResponse> results = service.search("PO", 100);
+
+        assertThat(results).singleElement().satisfies(r ->
+                assertThat(r.orderNo()).isEqualTo("PO-001")
+        );
+    }
+
+    @Test
+    void shouldCheckAuditPermissionWhenUpdatingToAuditedStatus() {
+        PurchaseOrderRepository repository = mock(PurchaseOrderRepository.class);
+        SnowflakeIdGenerator idGenerator = mock(SnowflakeIdGenerator.class);
+        PurchaseOrderMapper mapper = mock(PurchaseOrderMapper.class);
+        TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
+        WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
+        SupplierRepository supplierRepository = mock(SupplierRepository.class);
+        PurchaseInboundItemQueryService purchaseInboundItemQueryService = mock(PurchaseInboundItemQueryService.class);
+        WorkflowTransitionGuard workflowTransitionGuard = mock(WorkflowTransitionGuard.class);
+        PurchaseOrderService service = new PurchaseOrderService(
+                repository, idGenerator, mapper, materialSupport, warehouseSelectionSupport,
+                supplierRepository, purchaseInboundItemQueryService,
+                mock(ItemAllocationNativeRepository.class),
+                mock(PurchaseOrderItemPieceWeightService.class),
+                workflowTransitionGuard, mock(JdbcTemplate.class)
+        );
+
+        PurchaseOrder order = buildOrder();
+        order.setStatus("草稿");
+        PurchaseOrderItem existingItem = buildItem(11L, order);
+        order.getItems().add(existingItem);
+
+        when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(order));
+        when(supplierRepository.findFirstBySupplierNameAndDeletedFlagFalseOrderBySupplierCodeAsc("供应商A"))
+                .thenReturn(Optional.of(supplier("供应商A")));
+        when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(Map.of("M1", new Material()));
+        when(materialSupport.normalizeBatchNo(any(), anyString(), anyInt(), eq(false))).thenReturn("B1");
+        when(warehouseSelectionSupport.normalizeWarehouseName("一号库", 1, true)).thenReturn("一号库");
+        when(purchaseInboundItemQueryService.summarizeWeightAdjustmentBySourcePurchaseOrderItemIds(any()))
+                .thenReturn(Map.of());
+        when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(mapper.toResponse(any())).thenReturn(summaryResponse("已审核"));
+
+        service.update(1L, buildRequest(11L, "已审核"));
+
+        verify(workflowTransitionGuard).assertAuditPermissionForProtectedValue(
+                "purchase-order", "草稿", "已审核", "已审核", "完成采购"
+        );
+    }
+
+    @Test
+    void shouldApplyWeightAdjustmentFromInboundWhenUpdating() {
+        PurchaseOrderRepository repository = mock(PurchaseOrderRepository.class);
+        SnowflakeIdGenerator idGenerator = mock(SnowflakeIdGenerator.class);
+        PurchaseOrderMapper mapper = mock(PurchaseOrderMapper.class);
+        TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
+        WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
+        SupplierRepository supplierRepository = mock(SupplierRepository.class);
+        PurchaseInboundItemQueryService purchaseInboundItemQueryService = mock(PurchaseInboundItemQueryService.class);
+        WorkflowTransitionGuard workflowTransitionGuard = mock(WorkflowTransitionGuard.class);
+        PurchaseOrderService service = new PurchaseOrderService(
+                repository, idGenerator, mapper, materialSupport, warehouseSelectionSupport,
+                supplierRepository, purchaseInboundItemQueryService,
+                mock(ItemAllocationNativeRepository.class),
+                mock(PurchaseOrderItemPieceWeightService.class),
+                workflowTransitionGuard, mock(JdbcTemplate.class)
+        );
+
+        PurchaseOrder order = buildOrder();
+        PurchaseOrderItem existingItem = buildItem(11L, order);
+        existingItem.setWeightTon(new BigDecimal("1.000"));
+        order.getItems().add(existingItem);
+
+        when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(order));
+        when(supplierRepository.findFirstBySupplierNameAndDeletedFlagFalseOrderBySupplierCodeAsc("供应商A"))
+                .thenReturn(Optional.of(supplier("供应商A")));
+        when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(Map.of("M1", new Material()));
+        when(materialSupport.normalizeBatchNo(any(), anyString(), anyInt(), eq(false))).thenReturn("B1");
+        when(warehouseSelectionSupport.normalizeWarehouseName("一号库", 1, true)).thenReturn("一号库");
+        when(purchaseInboundItemQueryService.summarizeWeightAdjustmentBySourcePurchaseOrderItemIds(List.of(11L)))
+                .thenReturn(Map.of(11L, new BigDecimal("0.030")));
+        when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(mapper.toResponse(any())).thenReturn(summaryResponse("草稿"));
+
+        service.update(1L, buildRequest(11L, "草稿"));
+
+        var captor = org.mockito.ArgumentCaptor.forClass(PurchaseOrder.class);
+        verify(repository).save(captor.capture());
+        PurchaseOrderItem savedItem = captor.getValue().getItems().get(0);
+        assertThat(savedItem.getWeightTon()).isEqualByComparingTo("1.030");
+    }
+
+    @Test
+    void shouldCreateNewItemsWhenIdIsNull() {
+        PurchaseOrderRepository repository = mock(PurchaseOrderRepository.class);
+        SnowflakeIdGenerator idGenerator = mock(SnowflakeIdGenerator.class);
+        PurchaseOrderMapper mapper = mock(PurchaseOrderMapper.class);
+        TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
+        WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
+        SupplierRepository supplierRepository = mock(SupplierRepository.class);
+        PurchaseInboundItemQueryService purchaseInboundItemQueryService = mock(PurchaseInboundItemQueryService.class);
+        WorkflowTransitionGuard workflowTransitionGuard = mock(WorkflowTransitionGuard.class);
+        PurchaseOrderService service = new PurchaseOrderService(
+                repository, idGenerator, mapper, materialSupport, warehouseSelectionSupport,
+                supplierRepository, purchaseInboundItemQueryService,
+                mock(ItemAllocationNativeRepository.class),
+                mock(PurchaseOrderItemPieceWeightService.class),
+                workflowTransitionGuard, mock(JdbcTemplate.class)
+        );
+
+        PurchaseOrder order = buildOrder();
+        when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(order));
+        when(supplierRepository.findFirstBySupplierNameAndDeletedFlagFalseOrderBySupplierCodeAsc("供应商A"))
+                .thenReturn(Optional.of(supplier("供应商A")));
+        when(idGenerator.nextId()).thenReturn(100L);
+        when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(Map.of("M1", new Material()));
+        when(materialSupport.normalizeBatchNo(any(), anyString(), anyInt(), eq(false))).thenReturn("B1");
+        when(warehouseSelectionSupport.normalizeWarehouseName("一号库", 1, true)).thenReturn("一号库");
+        when(purchaseInboundItemQueryService.summarizeWeightAdjustmentBySourcePurchaseOrderItemIds(any()))
+                .thenReturn(Map.of());
+        when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(mapper.toResponse(any())).thenReturn(summaryResponse("草稿"));
+
+        service.update(1L, buildRequest(null, "草稿"));
+
+        assertThat(order.getItems()).singleElement()
+                .extracting(PurchaseOrderItem::getId)
+                .isEqualTo(100L);
     }
 
     private ItemAllocationNativeRepository.AllocationProjection allocationProjection(Long sourceItemId, Long totalQuantity) {

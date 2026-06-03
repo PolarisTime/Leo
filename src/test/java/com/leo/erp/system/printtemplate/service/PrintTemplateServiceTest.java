@@ -7,9 +7,11 @@ import com.leo.erp.system.printtemplate.repository.PrintTemplateRepository;
 import com.leo.erp.system.printtemplate.mapper.PrintTemplateMapper;
 import com.leo.erp.system.printtemplate.web.dto.PrintTemplateRequest;
 import org.junit.jupiter.api.Test;
+import org.mapstruct.factory.Mappers;
 
 import java.lang.reflect.Proxy;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class PrintTemplateServiceTest {
@@ -83,19 +85,74 @@ class PrintTemplateServiceTest {
     }
 
     private PrintTemplateMapper mapper() {
-        return new PrintTemplateMapper() {
-            @Override
-            public com.leo.erp.system.printtemplate.web.dto.PrintTemplateResponse toResponse(com.leo.erp.system.printtemplate.domain.entity.PrintTemplate entity) {
-                return new com.leo.erp.system.printtemplate.web.dto.PrintTemplateResponse(
-                        entity.getId(),
-                        entity.getTemplateName(),
-                        entity.getTemplateHtml(),
-                        entity.getBillType(),
-                        entity.getTemplateType(),
-                        entity.getCreatedAt(),
-                        entity.getUpdatedAt()
-                );
-            }
-        };
+        return Mappers.getMapper(PrintTemplateMapper.class);
+    }
+
+    @Test
+    void shouldRejectEmptyBillType() {
+        PrintTemplateService service = new PrintTemplateService(
+                repository(), new SnowflakeIdGenerator(0L), mapper(), new ModuleCatalog());
+
+        assertThatThrownBy(() -> service.create(new PrintTemplateRequest("", "模板A", "<div/>", null)))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("适用页面不能为空");
+    }
+
+    @Test
+    void shouldRejectNullTemplateName() {
+        PrintTemplateService service = new PrintTemplateService(
+                repository(), new SnowflakeIdGenerator(0L), mapper(), new ModuleCatalog());
+
+        assertThatThrownBy(() -> service.create(new PrintTemplateRequest("purchase-order", null, "<div/>", null)))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("模板名称不能为空");
+    }
+
+    @Test
+    void shouldRejectEmptyTemplateHtml() {
+        PrintTemplateService service = new PrintTemplateService(
+                repository(), new SnowflakeIdGenerator(0L), mapper(), new ModuleCatalog());
+
+        assertThatThrownBy(() -> service.create(new PrintTemplateRequest("purchase-order", "模板A", "", null)))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("模板内容不能为空");
+    }
+
+    @Test
+    void shouldRejectInvalidTemplateType() {
+        PrintTemplateService service = new PrintTemplateService(
+                repository(), new SnowflakeIdGenerator(0L), mapper(), new ModuleCatalog());
+
+        assertThatThrownBy(() -> service.create(new PrintTemplateRequest("purchase-order", "模板A", "<div/>", "INVALID")))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("模板类型仅支持");
+    }
+
+    @Test
+    void shouldAllowPdfFormTypeWithDangerousHtml() {
+        PrintTemplateService service = new PrintTemplateService(
+                repository(), new SnowflakeIdGenerator(0L), mapper(), new ModuleCatalog());
+
+        // PDF_FORM 类型不检查危险 HTML
+        var result = service.create(new PrintTemplateRequest("purchase-order", "模板A", "<script>alert(1)</script>", "PDF_FORM"));
+        assertThat(result).isNotNull();
+    }
+
+    @Test
+    void shouldCreateValidTemplate() {
+        PrintTemplateService service = new PrintTemplateService(
+                repository(), new SnowflakeIdGenerator(0L), mapper(), new ModuleCatalog());
+
+        var result = service.create(new PrintTemplateRequest("purchase-order", "模板A", "<div>安全内容</div>", null));
+        assertThat(result).isNotNull();
+    }
+
+    @Test
+    void shouldListByBillType() {
+        PrintTemplateService service = new PrintTemplateService(
+                repository(), new SnowflakeIdGenerator(0L), mapper(), new ModuleCatalog());
+
+        var result = service.listByBillType("purchase-order");
+        assertThat(result).isNotNull();
     }
 }

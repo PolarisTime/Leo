@@ -2,51 +2,31 @@ package com.leo.erp.auth.service;
 
 import com.leo.erp.common.config.RedisTuningProperties;
 import com.leo.erp.auth.config.AuthProperties;
-import com.leo.erp.common.config.RedisTuningProperties;
 import com.leo.erp.auth.domain.entity.UserAccount;
-import com.leo.erp.common.config.RedisTuningProperties;
 import com.leo.erp.auth.domain.enums.UserStatus;
-import com.leo.erp.common.config.RedisTuningProperties;
 import com.leo.erp.auth.repository.UserAccountRepository;
-import com.leo.erp.common.config.RedisTuningProperties;
 import com.leo.erp.auth.mapper.UserAccountAdminMapper;
-import com.leo.erp.common.config.RedisTuningProperties;
 import com.leo.erp.auth.web.dto.LoginNameAvailabilityResponse;
-import com.leo.erp.common.config.RedisTuningProperties;
+import com.leo.erp.auth.web.dto.TotpEnableRequest;
+import com.leo.erp.auth.web.dto.TotpSetupResponse;
 import com.leo.erp.auth.web.dto.UserAccountCreateResponse;
-import com.leo.erp.common.config.RedisTuningProperties;
-import com.leo.erp.common.error.BusinessException;
-import com.leo.erp.common.config.RedisTuningProperties;
 import com.leo.erp.auth.web.dto.UserAccountAdminResponse;
-import com.leo.erp.common.config.RedisTuningProperties;
+import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.security.jwt.AuthenticatedUserCacheService;
-import com.leo.erp.common.config.RedisTuningProperties;
 import com.leo.erp.system.department.domain.entity.Department;
-import com.leo.erp.common.config.RedisTuningProperties;
 import com.leo.erp.system.department.repository.DepartmentRepository;
-import com.leo.erp.common.config.RedisTuningProperties;
 import com.leo.erp.system.norule.service.SystemSwitchService;
-import com.leo.erp.common.config.RedisTuningProperties;
 import com.leo.erp.system.role.domain.entity.RoleSetting;
-import com.leo.erp.common.config.RedisTuningProperties;
 import org.junit.jupiter.api.Test;
 
-import com.leo.erp.common.config.RedisTuningProperties;
 import java.lang.reflect.Proxy;
-import com.leo.erp.common.config.RedisTuningProperties;
 import java.time.LocalDateTime;
-import com.leo.erp.common.config.RedisTuningProperties;
 import java.util.List;
-import com.leo.erp.common.config.RedisTuningProperties;
 import java.util.Optional;
-import com.leo.erp.common.config.RedisTuningProperties;
 import java.util.concurrent.atomic.AtomicReference;
 
-import com.leo.erp.common.config.RedisTuningProperties;
 import static org.assertj.core.api.Assertions.assertThat;
-import com.leo.erp.common.config.RedisTuningProperties;
 import static org.assertj.core.api.Assertions.assertThatCode;
-import com.leo.erp.common.config.RedisTuningProperties;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class UserAccountAdminServiceTest {
@@ -71,6 +51,29 @@ class UserAccountAdminServiceTest {
                 redisJsonCacheSupport, authenticatedUserCacheService, dashboardSummaryService, permissionService);
         return new UserAccountAdminService(repository, idGenerator, passwordEncoder, mapper,
                 totpService, userRoleBindingService, permissionService, validationService, cacheService, null);
+    }
+
+    private static UserAccountAdminService createServiceWithConflictRepo(
+            UserAccountRepository repository,
+            com.leo.erp.common.support.SnowflakeIdGenerator idGenerator,
+            org.springframework.security.crypto.password.PasswordEncoder passwordEncoder,
+            UserAccountAdminMapper mapper,
+            TotpService totpService,
+            UserRoleBindingService userRoleBindingService,
+            com.leo.erp.security.permission.PermissionService permissionService,
+            AuthProperties authProperties,
+            SystemSwitchService systemSwitchService,
+            AuthenticatedUserCacheService authenticatedUserCacheService,
+            com.leo.erp.system.dashboard.service.DashboardSummaryService dashboardSummaryService,
+            com.leo.erp.common.support.RedisJsonCacheSupport redisJsonCacheSupport,
+            DepartmentRepository departmentRepository,
+            com.leo.erp.system.role.repository.RoleConflictRepository roleConflictRepository) {
+        UserAccountValidationService validationService = new UserAccountValidationService(
+                repository, departmentRepository, redisJsonCacheSupport, systemSwitchService);
+        UserAccountCacheService cacheService = new UserAccountCacheService(
+                redisJsonCacheSupport, authenticatedUserCacheService, dashboardSummaryService, permissionService);
+        return new UserAccountAdminService(repository, idGenerator, passwordEncoder, mapper,
+                totpService, userRoleBindingService, permissionService, validationService, cacheService, roleConflictRepository);
     }
 
     @Test
@@ -390,6 +393,547 @@ class UserAccountAdminServiceTest {
         assertThat(response.message()).isNull();
     }
 
+    @Test
+    void shouldUpdateUserWithNewDetails() {
+        UserAccount existing = new UserAccount();
+        existing.setId(42L);
+        existing.setLoginName("old-name");
+        existing.setUserName("旧名字");
+        existing.setDepartmentId(10L);
+        existing.setStatus(UserStatus.NORMAL);
+
+        RoleSetting role = new RoleSetting();
+        role.setId(11L);
+        role.setRoleName("采购专员");
+        role.setRoleCode("PURCHASER");
+        role.setStatus("正常");
+
+        AtomicReference<UserAccount> savedUser = new AtomicReference<>();
+        UserAccountAdminService service = createService(
+                repositoryForUpdate(existing, savedUser),
+                new FixedIdGenerator(100L),
+                new StubPasswordEncoder(),
+                mapper(),
+                null,
+                new StubUserRoleBindingService(List.of(role)),
+                new StubPermissionService("采购订单-编辑"),
+                authProperties(),
+                null,
+                authenticatedUserCacheService(),
+                null,
+                null,
+                departmentRepository()
+        );
+
+        UserAccountAdminResponse response = service.update(42L, new com.leo.erp.auth.web.dto.UserAccountAdminRequest(
+                "new-name",
+                null,
+                "新名字",
+                "13900000000",
+                10L,
+                List.of("采购专员"), null,
+                "本部门",
+                "",
+                "正常",
+                "备注"
+        ));
+
+        assertThat(response.loginName()).isEqualTo("new-name");
+        assertThat(response.userName()).isEqualTo("新名字");
+        assertThat(savedUser.get()).isNotNull();
+        assertThat(savedUser.get().getLoginName()).isEqualTo("new-name");
+    }
+
+    @Test
+    void shouldDeleteUserAndEvictCaches() {
+        UserAccount existing = new UserAccount();
+        existing.setId(42L);
+        existing.setLoginName("to-delete");
+        existing.setDepartmentId(10L);
+
+        AtomicReference<UserAccount> savedUser = new AtomicReference<>();
+        UserAccountAdminService service = createService(
+                repositoryForDelete(existing, savedUser),
+                new FixedIdGenerator(100L),
+                new StubPasswordEncoder(),
+                mapper(),
+                null,
+                new StubUserRoleBindingService(List.of()),
+                new StubPermissionService(""),
+                authProperties(),
+                null,
+                authenticatedUserCacheService(),
+                null,
+                null,
+                null
+        );
+
+        service.delete(42L);
+
+        assertThat(savedUser.get()).isNotNull();
+        assertThat(savedUser.get().isDeletedFlag()).isTrue();
+    }
+
+    @Test
+    void shouldThrowWhenDeletingNonExistentUser() {
+        UserAccountAdminService service = createService(
+                repositoryForNotFound(),
+                new FixedIdGenerator(100L),
+                new StubPasswordEncoder(),
+                mapper(),
+                null,
+                new StubUserRoleBindingService(List.of()),
+                new StubPermissionService(""),
+                authProperties(),
+                null,
+                authenticatedUserCacheService(),
+                null,
+                null,
+                null
+        );
+
+        assertThatThrownBy(() -> service.delete(999L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("用户不存在");
+    }
+
+    @Test
+    void shouldSetup2faAndReturnQrCode() {
+        UserAccount existing = new UserAccount();
+        existing.setId(42L);
+        existing.setLoginName("tester");
+
+        AtomicReference<UserAccount> savedUser = new AtomicReference<>();
+        StubTotpService totpService = new StubTotpService();
+
+        UserAccountAdminService service = createService(
+                repositoryForWrite(existing, savedUser),
+                new FixedIdGenerator(100L),
+                new StubPasswordEncoder(),
+                mapper(),
+                totpService,
+                new StubUserRoleBindingService(List.of()),
+                new StubPermissionService(""),
+                authProperties(),
+                null,
+                authenticatedUserCacheService(),
+                null,
+                null,
+                null
+        );
+
+        TotpSetupResponse response = service.setup2fa(42L);
+
+        assertThat(response.qrCodeBase64()).isNotBlank();
+        assertThat(response.secret()).isEqualTo("test-secret");
+        assertThat(savedUser.get().getTotpSecret()).isEqualTo("encrypted:test-secret");
+        assertThat(savedUser.get().getTotpEnabled()).isFalse();
+    }
+
+    @Test
+    void shouldEnable2faWhenValidCodeProvided() {
+        UserAccount existing = new UserAccount();
+        existing.setId(42L);
+        existing.setLoginName("tester");
+        existing.setTotpSecret("encrypted-secret");
+
+        AtomicReference<UserAccount> savedUser = new AtomicReference<>();
+        StubTotpService totpService = new StubTotpService();
+        totpService.setVerifyResult(true);
+
+        UserAccountAdminService service = createService(
+                repositoryForWrite(existing, savedUser),
+                new FixedIdGenerator(100L),
+                new StubPasswordEncoder(),
+                mapper(),
+                totpService,
+                new StubUserRoleBindingService(List.of()),
+                new StubPermissionService(""),
+                authProperties(),
+                null,
+                authenticatedUserCacheService(),
+                null,
+                null,
+                null
+        );
+
+        UserAccountAdminResponse response = service.enable2fa(42L, new TotpEnableRequest("123456"));
+
+        assertThat(response.totpEnabled()).isTrue();
+        assertThat(savedUser.get().getTotpEnabled()).isTrue();
+        assertThat(savedUser.get().getRequireTotpSetup()).isFalse();
+    }
+
+    @Test
+    void shouldRejectEnable2faWhenNoSecret() {
+        UserAccount existing = new UserAccount();
+        existing.setId(42L);
+        existing.setTotpSecret(null);
+
+        UserAccountAdminService service = createService(
+                userAccountRepository(existing),
+                new FixedIdGenerator(100L),
+                new StubPasswordEncoder(),
+                mapper(),
+                new StubTotpService(),
+                new StubUserRoleBindingService(List.of()),
+                new StubPermissionService(""),
+                authProperties(),
+                null,
+                authenticatedUserCacheService(),
+                null,
+                null,
+                null
+        );
+
+        assertThatThrownBy(() -> service.enable2fa(42L, new TotpEnableRequest("123456")))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("请先生成2FA密钥");
+    }
+
+    @Test
+    void shouldRejectEnable2faWhenCodeInvalid() {
+        UserAccount existing = new UserAccount();
+        existing.setId(42L);
+        existing.setTotpSecret("encrypted-secret");
+
+        StubTotpService totpService = new StubTotpService();
+        totpService.setVerifyResult(false);
+
+        UserAccountAdminService service = createService(
+                userAccountRepository(existing),
+                new FixedIdGenerator(100L),
+                new StubPasswordEncoder(),
+                mapper(),
+                totpService,
+                new StubUserRoleBindingService(List.of()),
+                new StubPermissionService(""),
+                authProperties(),
+                null,
+                authenticatedUserCacheService(),
+                null,
+                null,
+                null
+        );
+
+        assertThatThrownBy(() -> service.enable2fa(42L, new TotpEnableRequest("000000")))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("验证码错误或已过期");
+    }
+
+    @Test
+    void shouldDisable2faAndClearSecret() {
+        UserAccount existing = new UserAccount();
+        existing.setId(42L);
+        existing.setLoginName("tester");
+        existing.setTotpSecret("encrypted-secret");
+        existing.setTotpEnabled(Boolean.TRUE);
+
+        AtomicReference<UserAccount> savedUser = new AtomicReference<>();
+        UserAccountAdminService service = createService(
+                repositoryForWrite(existing, savedUser),
+                new FixedIdGenerator(100L),
+                new StubPasswordEncoder(),
+                mapper(),
+                new StubTotpService(),
+                new StubUserRoleBindingService(List.of()),
+                new StubPermissionService(""),
+                authProperties(),
+                null,
+                authenticatedUserCacheService(),
+                null,
+                null,
+                null
+        );
+
+        UserAccountAdminResponse response = service.disable2fa(42L);
+
+        assertThat(response.totpEnabled()).isFalse();
+        assertThat(savedUser.get().getTotpSecret()).isNull();
+        assertThat(savedUser.get().getTotpEnabled()).isFalse();
+    }
+
+    @Test
+    void shouldRejectConflictingRoles() {
+        RoleSetting roleA = new RoleSetting();
+        roleA.setId(11L);
+        roleA.setRoleName("采购专员");
+        roleA.setRoleCode("PURCHASER");
+        roleA.setStatus("正常");
+
+        RoleSetting roleB = new RoleSetting();
+        roleB.setId(12L);
+        roleB.setRoleName("销售专员");
+        roleB.setRoleCode("SALESMAN");
+        roleB.setStatus("正常");
+
+        com.leo.erp.system.role.domain.entity.RoleConflict conflict =
+                new com.leo.erp.system.role.domain.entity.RoleConflict();
+        conflict.setRoleId(11L);
+        conflict.setConflictRoleId(12L);
+
+        com.leo.erp.system.role.repository.RoleConflictRepository conflictRepo =
+                roleConflictRepository(List.of(conflict));
+
+        UserAccountAdminService service = createServiceWithConflictRepo(
+                repositoryForWrite(),
+                new FixedIdGenerator(100L),
+                new StubPasswordEncoder(),
+                mapper(),
+                null,
+                new StubUserRoleBindingService(List.of(roleA, roleB)),
+                new StubPermissionService(""),
+                authProperties(),
+                null,
+                authenticatedUserCacheService(),
+                null,
+                null,
+                departmentRepository(),
+                conflictRepo
+        );
+
+        assertThatThrownBy(() -> service.create(new com.leo.erp.auth.web.dto.UserAccountAdminRequest(
+                "tester",
+                "Init@123",
+                "测试用户",
+                "13800000000",
+                10L,
+                List.of("采购专员", "销售专员"), null,
+                "全部数据",
+                "",
+                "正常",
+                ""
+        )))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("互斥");
+    }
+
+    @Test
+    void shouldResolveRolesByIdsWhenProvided() {
+        RoleSetting role = new RoleSetting();
+        role.setId(11L);
+        role.setRoleName("采购专员");
+        role.setRoleCode("PURCHASER");
+        role.setStatus("正常");
+
+        AtomicReference<UserAccount> savedUser = new AtomicReference<>();
+        UserAccountAdminService service = createService(
+                repositoryForWrite(savedUser),
+                new FixedIdGenerator(100L),
+                new StubPasswordEncoder(),
+                mapper(),
+                null,
+                new StubUserRoleBindingService(List.of(role)),
+                new StubPermissionService(""),
+                authProperties(),
+                null,
+                authenticatedUserCacheService(),
+                null,
+                null,
+                departmentRepository()
+        );
+
+        UserAccountCreateResponse response = service.create(new com.leo.erp.auth.web.dto.UserAccountAdminRequest(
+                "tester",
+                "Init@123",
+                "测试用户",
+                "13800000000",
+                10L,
+                null, List.of(11L),
+                "全部数据",
+                "",
+                "正常",
+                ""
+        ));
+
+        assertThat(response).isNotNull();
+        assertThat(savedUser.get()).isNotNull();
+    }
+
+    @Test
+    void shouldHandleDataIntegrityViolationAsLoginNameConflict() {
+        RoleSetting role = new RoleSetting();
+        role.setId(11L);
+        role.setRoleName("采购专员");
+        role.setRoleCode("PURCHASER");
+        role.setStatus("正常");
+
+        UserAccountAdminService service = createService(
+                repositoryWithDataIntegrityViolation("sys_user_login_name_key"),
+                new FixedIdGenerator(100L),
+                new StubPasswordEncoder(),
+                mapper(),
+                null,
+                new StubUserRoleBindingService(List.of(role)),
+                new StubPermissionService(""),
+                authProperties(),
+                null,
+                authenticatedUserCacheService(),
+                null,
+                null,
+                departmentRepository()
+        );
+
+        assertThatThrownBy(() -> service.create(new com.leo.erp.auth.web.dto.UserAccountAdminRequest(
+                "tester",
+                "Init@123",
+                "测试用户",
+                "13800000000",
+                10L,
+                List.of("采购专员"), null,
+                "全部数据",
+                "",
+                "正常",
+                ""
+        )))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("登录账号已存在");
+    }
+
+    private UserAccountRepository repositoryForUpdate(UserAccount existing, AtomicReference<UserAccount> savedUser) {
+        return (UserAccountRepository) Proxy.newProxyInstance(
+                UserAccountRepository.class.getClassLoader(),
+                new Class[]{UserAccountRepository.class},
+                (proxy, method, args) -> switch (method.getName()) {
+                    case "findByIdAndDeletedFlagFalse" -> Optional.of(existing);
+                    case "findByLoginNameAndDeletedFlagFalse", "findByLoginName" -> Optional.empty();
+                    case "existsByLoginNameAndDeletedFlagFalse", "existsByLoginName" -> false;
+                    case "save" -> {
+                        savedUser.set((UserAccount) args[0]);
+                        yield args[0];
+                    }
+                    case "toString" -> "UserAccountRepositoryUpdateStub";
+                    case "hashCode" -> System.identityHashCode(proxy);
+                    case "equals" -> proxy == args[0];
+                    default -> throw new UnsupportedOperationException(method.getName());
+                }
+        );
+    }
+
+    private UserAccountRepository repositoryForDelete(UserAccount existing, AtomicReference<UserAccount> savedUser) {
+        return (UserAccountRepository) Proxy.newProxyInstance(
+                UserAccountRepository.class.getClassLoader(),
+                new Class[]{UserAccountRepository.class},
+                (proxy, method, args) -> switch (method.getName()) {
+                    case "findByIdAndDeletedFlagFalse" -> Optional.of(existing);
+                    case "save" -> {
+                        savedUser.set((UserAccount) args[0]);
+                        yield args[0];
+                    }
+                    case "toString" -> "UserAccountRepositoryDeleteStub";
+                    case "hashCode" -> System.identityHashCode(proxy);
+                    case "equals" -> proxy == args[0];
+                    default -> throw new UnsupportedOperationException(method.getName());
+                }
+        );
+    }
+
+    private UserAccountRepository repositoryForNotFound() {
+        return (UserAccountRepository) Proxy.newProxyInstance(
+                UserAccountRepository.class.getClassLoader(),
+                new Class[]{UserAccountRepository.class},
+                (proxy, method, args) -> switch (method.getName()) {
+                    case "findByIdAndDeletedFlagFalse" -> Optional.empty();
+                    case "toString" -> "UserAccountRepositoryNotFoundStub";
+                    case "hashCode" -> System.identityHashCode(proxy);
+                    case "equals" -> proxy == args[0];
+                    default -> throw new UnsupportedOperationException(method.getName());
+                }
+        );
+    }
+
+    private UserAccountRepository repositoryForWrite(UserAccount existing, AtomicReference<UserAccount> savedUser) {
+        return (UserAccountRepository) Proxy.newProxyInstance(
+                UserAccountRepository.class.getClassLoader(),
+                new Class[]{UserAccountRepository.class},
+                (proxy, method, args) -> switch (method.getName()) {
+                    case "findByIdAndDeletedFlagFalse" -> Optional.of(existing);
+                    case "findByLoginNameAndDeletedFlagFalse", "findByLoginName" -> Optional.empty();
+                    case "existsByLoginNameAndDeletedFlagFalse", "existsByLoginName" -> false;
+                    case "save" -> {
+                        savedUser.set((UserAccount) args[0]);
+                        yield args[0];
+                    }
+                    case "toString" -> "UserAccountRepositoryWriteExistingStub";
+                    case "hashCode" -> System.identityHashCode(proxy);
+                    case "equals" -> proxy == args[0];
+                    default -> throw new UnsupportedOperationException(method.getName());
+                }
+        );
+    }
+
+    private UserAccountRepository repositoryWithDataIntegrityViolation(String constraintMessage) {
+        return (UserAccountRepository) Proxy.newProxyInstance(
+                UserAccountRepository.class.getClassLoader(),
+                new Class[]{UserAccountRepository.class},
+                (proxy, method, args) -> switch (method.getName()) {
+                    case "findByIdAndDeletedFlagFalse" -> Optional.empty();
+                    case "findByLoginNameAndDeletedFlagFalse", "findByLoginName" -> Optional.empty();
+                    case "existsByLoginNameAndDeletedFlagFalse", "existsByLoginName" -> false;
+                    case "save" -> {
+                        throw new org.springframework.dao.DataIntegrityViolationException(
+                                "Duplicate entry for key " + constraintMessage);
+                    }
+                    case "toString" -> "UserAccountRepositoryConflictStub";
+                    case "hashCode" -> System.identityHashCode(proxy);
+                    case "equals" -> proxy == args[0];
+                    default -> throw new UnsupportedOperationException(method.getName());
+                }
+        );
+    }
+
+    private com.leo.erp.system.role.repository.RoleConflictRepository roleConflictRepository(
+            java.util.List<com.leo.erp.system.role.domain.entity.RoleConflict> conflicts) {
+        return (com.leo.erp.system.role.repository.RoleConflictRepository) Proxy.newProxyInstance(
+                com.leo.erp.system.role.repository.RoleConflictRepository.class.getClassLoader(),
+                new Class[]{com.leo.erp.system.role.repository.RoleConflictRepository.class},
+                (proxy, method, args) -> switch (method.getName()) {
+                    case "findConflictsByRoleIds" -> conflicts;
+                    case "toString" -> "RoleConflictRepositoryStub";
+                    case "hashCode" -> System.identityHashCode(proxy);
+                    case "equals" -> proxy == args[0];
+                    default -> throw new UnsupportedOperationException(method.getName());
+                }
+        );
+    }
+
+    private static final class StubTotpService extends TotpService {
+        private boolean verifyResult = false;
+
+        private StubTotpService() {
+            super(new com.leo.erp.security.totp.TotpProperties("test", null), null, null);
+        }
+
+        @Override
+        public String generateSecret() {
+            return "test-secret";
+        }
+
+        @Override
+        public String encryptSecret(String plainSecret) {
+            return "encrypted:" + plainSecret;
+        }
+
+        @Override
+        public String decryptSecret(String encryptedSecret) {
+            return "decrypted-secret";
+        }
+
+        @Override
+        public boolean verifyCode(String secret, String code) {
+            return verifyResult;
+        }
+
+        @Override
+        public byte[] generateQrCodeImage(String secret, String loginName) {
+            return "fake-qr-bytes".getBytes();
+        }
+
+        void setVerifyResult(boolean result) {
+            this.verifyResult = result;
+        }
+    }
+
     private UserAccountRepository userAccountRepository(UserAccount entity) {
         return (UserAccountRepository) Proxy.newProxyInstance(
                 UserAccountRepository.class.getClassLoader(),
@@ -528,6 +1072,11 @@ class UserAccountAdminServiceTest {
 
         @Override
         public List<RoleSetting> resolveRoles(java.util.Collection<String> roleIdentifiers) {
+            return roles;
+        }
+
+        @Override
+        public List<RoleSetting> resolveRolesByIds(java.util.Collection<Long> roleIds) {
             return roles;
         }
 

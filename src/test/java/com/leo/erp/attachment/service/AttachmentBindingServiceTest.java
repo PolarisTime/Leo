@@ -68,6 +68,366 @@ class AttachmentBindingServiceTest {
                 .hasMessageContaining("附件列表存在重复项");
     }
 
+    @Test
+    void shouldReturnEmptyList_whenPageUploadDisabled_forList() {
+        AttachmentBindingService service = new AttachmentBindingService(
+                bindingRepository(List.of(), new AtomicReference<>(List.of()), new AtomicReference<>(List.of()), new AtomicReference<>(false)),
+                attachmentService(Map.of()),
+                disabledUploadRuleService(),
+                new FixedIdGenerator(),
+                new ModuleCatalog()
+        );
+
+        List<AttachmentView> result = service.list("sales-order", 9L);
+
+        assertThat(result).isEmpty();
+    }
+
+    @Test
+    void shouldReturnAttachments_whenPageUploadEnabled_forList() {
+        List<AttachmentBinding> bindings = List.of(binding(1L, "sales-order", 9L, 10L, 1));
+        Map<Long, AttachmentView> attachments = new LinkedHashMap<>();
+        attachments.put(10L, attachment(10L, "test.pdf"));
+
+        AttachmentBindingService service = new AttachmentBindingService(
+                bindingRepository(bindings, new AtomicReference<>(List.of()), new AtomicReference<>(List.of()), new AtomicReference<>(false)),
+                attachmentService(attachments),
+                enabledUploadRuleService(),
+                new FixedIdGenerator(),
+                new ModuleCatalog()
+        );
+
+        List<AttachmentView> result = service.list("sales-order", 9L);
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).id()).isEqualTo(10L);
+    }
+
+    @Test
+    void shouldReturnEmptyList_whenPageUploadDisabled_forReplace() {
+        AttachmentBindingService service = new AttachmentBindingService(
+                bindingRepository(List.of(), new AtomicReference<>(List.of()), new AtomicReference<>(List.of()), new AtomicReference<>(false)),
+                attachmentService(Map.of()),
+                disabledUploadRuleService(),
+                new FixedIdGenerator(),
+                new ModuleCatalog()
+        );
+
+        List<AttachmentView> result = service.replace("sales-order", 9L, List.of(10L));
+
+        assertThat(result).isEmpty();
+    }
+
+    @Test
+    void shouldReplaceWithEmptyList_whenNoNewAttachments() {
+        AtomicReference<List<AttachmentBinding>> savedBindings = new AtomicReference<>(List.of());
+        AtomicReference<List<AttachmentBinding>> deletedBindings = new AtomicReference<>(List.of());
+        AtomicReference<Boolean> flushCalled = new AtomicReference<>(false);
+        List<AttachmentBinding> existingBindings = List.of(binding(90L, "sales-order", 9L, 10L, 1));
+
+        AttachmentBindingService service = new AttachmentBindingService(
+                bindingRepository(existingBindings, savedBindings, deletedBindings, flushCalled),
+                attachmentService(Map.of()),
+                enabledUploadRuleService(),
+                new FixedIdGenerator(),
+                new ModuleCatalog()
+        );
+
+        List<AttachmentView> result = service.replace("sales-order", 9L, List.of());
+
+        assertThat(deletedBindings.get()).containsExactlyElementsOf(existingBindings);
+        assertThat(savedBindings.get()).isEmpty();
+        assertThat(result).isEmpty();
+    }
+
+    @Test
+    void shouldNotDelete_whenNoExistingBindings() {
+        AtomicReference<List<AttachmentBinding>> savedBindings = new AtomicReference<>(List.of());
+        AtomicReference<List<AttachmentBinding>> deletedBindings = new AtomicReference<>(List.of());
+        AtomicReference<Boolean> flushCalled = new AtomicReference<>(false);
+        Map<Long, AttachmentView> attachments = new LinkedHashMap<>();
+        attachments.put(10L, attachment(10L, "test.pdf"));
+
+        AttachmentBindingService service = new AttachmentBindingService(
+                bindingRepository(List.of(), savedBindings, deletedBindings, flushCalled),
+                attachmentService(attachments),
+                enabledUploadRuleService(),
+                new FixedIdGenerator(101L),
+                new ModuleCatalog()
+        );
+
+        List<AttachmentView> result = service.replace("sales-order", 9L, List.of(10L));
+
+        assertThat(deletedBindings.get()).isEmpty();
+        assertThat(flushCalled.get()).isFalse();
+        assertThat(savedBindings.get()).hasSize(1);
+        assertThat(result).hasSize(1);
+    }
+
+    @Test
+    void shouldReturnAttachmentIds_forListAttachmentIds() {
+        List<AttachmentBinding> bindings = List.of(
+                binding(1L, "sales-order", 9L, 10L, 1),
+                binding(2L, "sales-order", 9L, 11L, 2)
+        );
+
+        AttachmentBindingService service = new AttachmentBindingService(
+                bindingRepository(bindings, new AtomicReference<>(List.of()), new AtomicReference<>(List.of()), new AtomicReference<>(false)),
+                attachmentService(Map.of()),
+                enabledUploadRuleService(),
+                new FixedIdGenerator(),
+                new ModuleCatalog()
+        );
+
+        List<Long> result = service.listAttachmentIds("sales-order", 9L);
+
+        assertThat(result).containsExactly(10L, 11L);
+    }
+
+    @Test
+    void shouldReturnEmptyList_forListAttachmentIds_whenNoBindings() {
+        AttachmentBindingService service = new AttachmentBindingService(
+                bindingRepository(List.of(), new AtomicReference<>(List.of()), new AtomicReference<>(List.of()), new AtomicReference<>(false)),
+                attachmentService(Map.of()),
+                enabledUploadRuleService(),
+                new FixedIdGenerator(),
+                new ModuleCatalog()
+        );
+
+        List<Long> result = service.listAttachmentIds("sales-order", 9L);
+
+        assertThat(result).isEmpty();
+    }
+
+    @Test
+    void shouldReturnEmptyMap_forListByRecordIds_whenRecordIdsNull() {
+        AttachmentBindingService service = new AttachmentBindingService(
+                bindingRepository(List.of(), new AtomicReference<>(List.of()), new AtomicReference<>(List.of()), new AtomicReference<>(false)),
+                attachmentService(Map.of()),
+                enabledUploadRuleService(),
+                new FixedIdGenerator(),
+                new ModuleCatalog()
+        );
+
+        Map<Long, List<AttachmentView>> result = service.listByRecordIds("sales-order", null);
+
+        assertThat(result).isEmpty();
+    }
+
+    @Test
+    void shouldReturnEmptyMap_forListByRecordIds_whenRecordIdsEmpty() {
+        AttachmentBindingService service = new AttachmentBindingService(
+                bindingRepository(List.of(), new AtomicReference<>(List.of()), new AtomicReference<>(List.of()), new AtomicReference<>(false)),
+                attachmentService(Map.of()),
+                enabledUploadRuleService(),
+                new FixedIdGenerator(),
+                new ModuleCatalog()
+        );
+
+        Map<Long, List<AttachmentView>> result = service.listByRecordIds("sales-order", List.of());
+
+        assertThat(result).isEmpty();
+    }
+
+    @Test
+    void shouldReturnEmptyMap_forListByRecordIds_whenAllIdsInvalid() {
+        AttachmentBindingService service = new AttachmentBindingService(
+                bindingRepository(List.of(), new AtomicReference<>(List.of()), new AtomicReference<>(List.of()), new AtomicReference<>(false)),
+                attachmentService(Map.of()),
+                enabledUploadRuleService(),
+                new FixedIdGenerator(),
+                new ModuleCatalog()
+        );
+
+        Map<Long, List<AttachmentView>> result = service.listByRecordIds("sales-order", List.of(null, 0L, -1L));
+
+        assertThat(result).isEmpty();
+    }
+
+    @Test
+    void shouldReturnGroupedAttachments_forListByRecordIds() {
+        List<AttachmentBinding> bindings = List.of(
+                binding(1L, "sales-order", 1L, 10L, 1),
+                binding(2L, "sales-order", 1L, 11L, 2),
+                binding(3L, "sales-order", 2L, 12L, 1)
+        );
+        Map<Long, AttachmentView> attachments = new LinkedHashMap<>();
+        attachments.put(10L, attachment(10L, "A.pdf"));
+        attachments.put(11L, attachment(11L, "B.pdf"));
+        attachments.put(12L, attachment(12L, "C.pdf"));
+
+        AttachmentBindingService service = new AttachmentBindingService(
+                bindingRepository(bindings, new AtomicReference<>(List.of()), new AtomicReference<>(List.of()), new AtomicReference<>(false)),
+                attachmentService(attachments),
+                enabledUploadRuleService(),
+                new FixedIdGenerator(),
+                new ModuleCatalog()
+        );
+
+        Map<Long, List<AttachmentView>> result = service.listByRecordIds("sales-order", List.of(1L, 2L, 3L));
+
+        assertThat(result).hasSize(2);
+        assertThat(result.get(1L)).extracting(AttachmentView::id).containsExactly(10L, 11L);
+        assertThat(result.get(2L)).extracting(AttachmentView::id).containsExactly(12L);
+    }
+
+    @Test
+    void shouldDeduplicateRecordIds_forListByRecordIds() {
+        List<AttachmentBinding> bindings = List.of(
+                binding(1L, "sales-order", 1L, 10L, 1)
+        );
+        Map<Long, AttachmentView> attachments = new LinkedHashMap<>();
+        attachments.put(10L, attachment(10L, "A.pdf"));
+
+        AttachmentBindingService service = new AttachmentBindingService(
+                bindingRepository(bindings, new AtomicReference<>(List.of()), new AtomicReference<>(List.of()), new AtomicReference<>(false)),
+                attachmentService(attachments),
+                enabledUploadRuleService(),
+                new FixedIdGenerator(),
+                new ModuleCatalog()
+        );
+
+        Map<Long, List<AttachmentView>> result = service.listByRecordIds("sales-order", List.of(1L, 1L, 1L));
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(1L)).hasSize(1);
+    }
+
+    @Test
+    void shouldRejectNullModuleKey() {
+        AttachmentBindingService service = new AttachmentBindingService(
+                bindingRepository(List.of(), new AtomicReference<>(List.of()), new AtomicReference<>(List.of()), new AtomicReference<>(false)),
+                attachmentService(Map.of()),
+                enabledUploadRuleService(),
+                new FixedIdGenerator(),
+                new ModuleCatalog()
+        );
+
+        assertThatThrownBy(() -> service.list(null, 1L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("缺少模块标识");
+    }
+
+    @Test
+    void shouldRejectBlankModuleKey() {
+        AttachmentBindingService service = new AttachmentBindingService(
+                bindingRepository(List.of(), new AtomicReference<>(List.of()), new AtomicReference<>(List.of()), new AtomicReference<>(false)),
+                attachmentService(Map.of()),
+                enabledUploadRuleService(),
+                new FixedIdGenerator(),
+                new ModuleCatalog()
+        );
+
+        assertThatThrownBy(() -> service.list("  ", 1L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("缺少模块标识");
+    }
+
+    @Test
+    void shouldRejectInvalidModuleKey() {
+        AttachmentBindingService service = new AttachmentBindingService(
+                bindingRepository(List.of(), new AtomicReference<>(List.of()), new AtomicReference<>(List.of()), new AtomicReference<>(false)),
+                attachmentService(Map.of()),
+                enabledUploadRuleService(),
+                new FixedIdGenerator(),
+                new ModuleCatalog()
+        );
+
+        assertThatThrownBy(() -> service.list("non-existent-module", 1L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("模块标识不合法");
+    }
+
+    @Test
+    void shouldRejectNullRecordId() {
+        AttachmentBindingService service = new AttachmentBindingService(
+                bindingRepository(List.of(), new AtomicReference<>(List.of()), new AtomicReference<>(List.of()), new AtomicReference<>(false)),
+                attachmentService(Map.of()),
+                enabledUploadRuleService(),
+                new FixedIdGenerator(),
+                new ModuleCatalog()
+        );
+
+        assertThatThrownBy(() -> service.list("sales-order", null))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("缺少业务记录标识");
+    }
+
+    @Test
+    void shouldRejectZeroRecordId() {
+        AttachmentBindingService service = new AttachmentBindingService(
+                bindingRepository(List.of(), new AtomicReference<>(List.of()), new AtomicReference<>(List.of()), new AtomicReference<>(false)),
+                attachmentService(Map.of()),
+                enabledUploadRuleService(),
+                new FixedIdGenerator(),
+                new ModuleCatalog()
+        );
+
+        assertThatThrownBy(() -> service.list("sales-order", 0L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("缺少业务记录标识");
+    }
+
+    @Test
+    void shouldRejectNegativeRecordId() {
+        AttachmentBindingService service = new AttachmentBindingService(
+                bindingRepository(List.of(), new AtomicReference<>(List.of()), new AtomicReference<>(List.of()), new AtomicReference<>(false)),
+                attachmentService(Map.of()),
+                enabledUploadRuleService(),
+                new FixedIdGenerator(),
+                new ModuleCatalog()
+        );
+
+        assertThatThrownBy(() -> service.list("sales-order", -1L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("缺少业务记录标识");
+    }
+
+    @Test
+    void shouldRejectNullAttachmentIds_forReplace() {
+        AttachmentBindingService service = new AttachmentBindingService(
+                bindingRepository(List.of(), new AtomicReference<>(List.of()), new AtomicReference<>(List.of()), new AtomicReference<>(false)),
+                attachmentService(Map.of()),
+                enabledUploadRuleService(),
+                new FixedIdGenerator(),
+                new ModuleCatalog()
+        );
+
+        assertThatThrownBy(() -> service.replace("sales-order", 1L, null))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("附件列表不能为空");
+    }
+
+    @Test
+    void shouldRejectNullAttachmentIdInList_forReplace() {
+        AttachmentBindingService service = new AttachmentBindingService(
+                bindingRepository(List.of(), new AtomicReference<>(List.of()), new AtomicReference<>(List.of()), new AtomicReference<>(false)),
+                attachmentService(Map.of()),
+                enabledUploadRuleService(),
+                new FixedIdGenerator(),
+                new ModuleCatalog()
+        );
+
+        assertThatThrownBy(() -> service.replace("sales-order", 1L, List.of(1L, null)))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("附件ID不合法");
+    }
+
+    @Test
+    void shouldRejectZeroAttachmentIdInList_forReplace() {
+        AttachmentBindingService service = new AttachmentBindingService(
+                bindingRepository(List.of(), new AtomicReference<>(List.of()), new AtomicReference<>(List.of()), new AtomicReference<>(false)),
+                attachmentService(Map.of()),
+                enabledUploadRuleService(),
+                new FixedIdGenerator(),
+                new ModuleCatalog()
+        );
+
+        assertThatThrownBy(() -> service.replace("sales-order", 1L, List.of(1L, 0L)))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("附件ID不合法");
+    }
+
     @SuppressWarnings("unchecked")
     private AttachmentBindingRepository bindingRepository(List<AttachmentBinding> existingBindings,
                                                           AtomicReference<List<AttachmentBinding>> savedBindings,
@@ -137,6 +497,12 @@ class AttachmentBindingServiceTest {
     private UploadRuleService enabledUploadRuleService() {
         UploadRuleService service = Mockito.mock(UploadRuleService.class);
         Mockito.when(service.isPageUploadEnabled(Mockito.anyString())).thenReturn(true);
+        return service;
+    }
+
+    private UploadRuleService disabledUploadRuleService() {
+        UploadRuleService service = Mockito.mock(UploadRuleService.class);
+        Mockito.when(service.isPageUploadEnabled(Mockito.anyString())).thenReturn(false);
         return service;
     }
 

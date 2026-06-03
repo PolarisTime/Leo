@@ -9,6 +9,7 @@ import com.leo.erp.common.config.RedisTuningProperties;
 import com.leo.erp.security.support.SecurityPrincipal;
 import com.leo.erp.system.role.domain.entity.RoleSetting;
 import org.junit.jupiter.api.Test;
+import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.core.SetOperations;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
@@ -16,6 +17,7 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority;
 
 import java.lang.reflect.Proxy;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -93,6 +95,170 @@ class AuthenticatedUserCacheServiceTest {
         assertThat(redisTemplate.values.get("auth:user:snapshot:2")).contains("\"forceTotpSetup\":true");
     }
 
+    @Test
+    void shouldReturnEmptyWhenUserIdIsNull() {
+        StubRedisTemplate redisTemplate = new StubRedisTemplate(new HashMap<>());
+        AuthenticatedUserCacheService service = new AuthenticatedUserCacheService(
+                redisTemplate,
+                new ObjectMapper(),
+                repository(userId -> Optional.empty()),
+                roleBindingService(List.of()),
+                new RedisTuningProperties()
+        );
+
+        assertThat(service.getActivePrincipal(null)).isEmpty();
+    }
+
+    @Test
+    void shouldReturnEmptyWhenUserNotInRepository() {
+        StubRedisTemplate redisTemplate = new StubRedisTemplate(new HashMap<>());
+        AuthenticatedUserCacheService service = new AuthenticatedUserCacheService(
+                redisTemplate,
+                new ObjectMapper(),
+                repository(userId -> Optional.empty()),
+                roleBindingService(List.of()),
+                new RedisTuningProperties()
+        );
+
+        assertThat(service.getActivePrincipal(999L)).isEmpty();
+    }
+
+    @Test
+    void shouldReturnEmptyWhenUserStatusIsNotNormal() {
+        StubRedisTemplate redisTemplate = new StubRedisTemplate(new HashMap<>());
+        UserAccount user = new UserAccount();
+        user.setId(5L);
+        user.setLoginName("disabled");
+        user.setStatus(UserStatus.DISABLED);
+
+        AuthenticatedUserCacheService service = new AuthenticatedUserCacheService(
+                redisTemplate,
+                new ObjectMapper(),
+                repository(userId -> Optional.of(user)),
+                roleBindingService(List.of()),
+                new RedisTuningProperties()
+        );
+
+        assertThat(service.getActivePrincipal(5L)).isEmpty();
+    }
+
+    @Test
+    void shouldDeleteCacheAndFallbackWhenCachedJsonIsMalformed() {
+        StubRedisTemplate redisTemplate = new StubRedisTemplate(new HashMap<>(
+                Map.of("auth:user:snapshot:10", "not-valid-json{{{")
+        ));
+        UserAccount user = new UserAccount();
+        user.setId(10L);
+        user.setLoginName("valid");
+        user.setStatus(UserStatus.NORMAL);
+
+        AuthenticatedUserCacheService service = new AuthenticatedUserCacheService(
+                redisTemplate,
+                new ObjectMapper(),
+                repository(userId -> Optional.of(user)),
+                roleBindingService(List.of()),
+                new RedisTuningProperties()
+        );
+
+        Optional<SecurityPrincipal> principal = service.getActivePrincipal(10L);
+
+        assertThat(principal).isPresent();
+        assertThat(principal.orElseThrow().getUsername()).isEqualTo("valid");
+        assertThat(redisTemplate.deletedKeys).contains("auth:user:snapshot:10");
+    }
+
+    @Test
+    void shouldDeleteCacheEntryOnEvict() {
+        StubRedisTemplate redisTemplate = new StubRedisTemplate(new HashMap<>(
+                Map.of("auth:user:snapshot:7", "{\"userId\":7}")
+        ));
+        AuthenticatedUserCacheService service = new AuthenticatedUserCacheService(
+                redisTemplate,
+                new ObjectMapper(),
+                repository(userId -> Optional.empty()),
+                roleBindingService(List.of()),
+                new RedisTuningProperties()
+        );
+
+        service.evict(7L);
+
+        assertThat(redisTemplate.values).doesNotContainKey("auth:user:snapshot:7");
+    }
+
+    @Test
+    void shouldSkipEvictWhenUserIdIsNull() {
+        StubRedisTemplate redisTemplate = new StubRedisTemplate(new HashMap<>());
+        AuthenticatedUserCacheService service = new AuthenticatedUserCacheService(
+                redisTemplate,
+                new ObjectMapper(),
+                repository(userId -> Optional.empty()),
+                roleBindingService(List.of()),
+                new RedisTuningProperties()
+        );
+
+        service.evict(null);
+        assertThat(redisTemplate.deletedKeys).isEmpty();
+    }
+
+    @Test
+    void shouldEvictAllWhenIndexKeyMissing() {
+        StubRedisTemplate redisTemplate = new StubRedisTemplate(new HashMap<>());
+        redisTemplate.hasIndexKey = false;
+
+        AuthenticatedUserCacheService service = new AuthenticatedUserCacheService(
+                redisTemplate,
+                new ObjectMapper(),
+                repository(userId -> Optional.empty()),
+                roleBindingService(List.of()),
+                new RedisTuningProperties()
+        );
+
+        service.evictAll();
+        assertThat(redisTemplate.scanFallbackTriggered).isTrue();
+    }
+
+    @Test
+    void shouldNotCrashWhenEvictAllWithNullConnectionFactory() {
+        StubRedisTemplate redisTemplate = new StubRedisTemplate(new HashMap<>());
+        redisTemplate.hasIndexKey = false;
+        redisTemplate.nullConnectionFactory = true;
+
+        AuthenticatedUserCacheService service = new AuthenticatedUserCacheService(
+                redisTemplate,
+                new ObjectMapper(),
+                repository(userId -> Optional.empty()),
+                roleBindingService(List.of()),
+                new RedisTuningProperties()
+        );
+
+        service.evictAll();
+    }
+
+    @Test
+    void shouldSetTotpEnabledTrueWhenUserHasTotpEnabled() {
+        StubRedisTemplate redisTemplate = new StubRedisTemplate(new HashMap<>());
+        UserAccount user = new UserAccount();
+        user.setId(6L);
+        user.setLoginName("totpuser");
+        user.setStatus(UserStatus.NORMAL);
+        user.setTotpEnabled(Boolean.TRUE);
+        user.setRequireTotpSetup(Boolean.FALSE);
+
+        AuthenticatedUserCacheService service = new AuthenticatedUserCacheService(
+                redisTemplate,
+                new ObjectMapper(),
+                repository(userId -> Optional.of(user)),
+                roleBindingService(List.of()),
+                new RedisTuningProperties()
+        );
+
+        Optional<SecurityPrincipal> principal = service.getActivePrincipal(6L);
+
+        assertThat(principal).isPresent();
+        assertThat(principal.orElseThrow().totpEnabled()).isTrue();
+        assertThat(principal.orElseThrow().forceTotpSetup()).isFalse();
+    }
+
     private UserAccountRepository repository(UserLoader loader) {
         return (UserAccountRepository) Proxy.newProxyInstance(
                 UserAccountRepository.class.getClassLoader(),
@@ -134,6 +300,10 @@ class AuthenticatedUserCacheServiceTest {
 
         private final Map<String, String> values;
         private final ValueOperations<String, String> valueOperations;
+        private final List<String> deletedKeys = new ArrayList<>();
+        private boolean hasIndexKey = true;
+        private boolean nullConnectionFactory;
+        private boolean scanFallbackTriggered;
         private String lastSetKey;
         private Duration lastSetTtl;
 
@@ -166,6 +336,7 @@ class AuthenticatedUserCacheServiceTest {
         @Override
         public Boolean delete(String key) {
             values.remove(key);
+            deletedKeys.add(key);
             return Boolean.TRUE;
         }
 
@@ -192,7 +363,23 @@ class AuthenticatedUserCacheServiceTest {
 
         @Override
         public Boolean hasKey(String key) {
+            if ("auth:user:snapshot:index".equals(key)) {
+                return hasIndexKey;
+            }
             return values.containsKey(key);
+        }
+
+        @Override
+        public Long delete(java.util.Collection<String> keys) {
+            deletedKeys.addAll(keys);
+            keys.forEach(values::remove);
+            return (long) keys.size();
+        }
+
+        @Override
+        public RedisConnectionFactory getConnectionFactory() {
+            scanFallbackTriggered = true;
+            return nullConnectionFactory ? null : super.getConnectionFactory();
         }
     }
 }

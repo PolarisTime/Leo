@@ -2,7 +2,9 @@ package com.leo.erp.sales.order.service;
 
 import com.leo.erp.allocation.appservice.PurchaseItemQueryAppService;
 import com.leo.erp.allocation.appservice.PurchaseItemPieceWeightAppService;
+import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
+import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.support.TradeItemMaterialSupport;
 import com.leo.erp.common.support.WarehouseSelectionSupport;
 import com.leo.erp.master.material.domain.entity.Material;
@@ -21,10 +23,12 @@ import com.leo.erp.sales.order.web.dto.SalesOrderResponse;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.InOrder;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -60,35 +64,21 @@ class SalesOrderServiceTest {
         SalesOrderItemRepository salesOrderItemRepository = mock(SalesOrderItemRepository.class);
         WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
         SalesOrderService service = new SalesOrderService(
-                repository,
-                idGenerator,
-                mapper,
-                materialSupport,
-                purchaseItemQueryAppService,
-                pieceWeightAppService,
-                salesOrderItemRepository,
-                warehouseSelectionSupport,
-                stubbedSalesOrderItemMapper(),
-                mock(WorkflowTransitionGuard.class)
+                repository, idGenerator, mapper, materialSupport,
+                purchaseItemQueryAppService, pieceWeightAppService,
+                salesOrderItemRepository, warehouseSelectionSupport,
+                stubbedSalesOrderItemMapper(), mock(WorkflowTransitionGuard.class)
         );
 
         SalesOrderRequest request = new SalesOrderRequest(
-                "SO-001",
-                "PI-001",
-                "客户A",
-                "项目A",
-                LocalDate.of(2026, 4, 26),
-                "张三",
-                "草稿",
-                null,
-                List.of(
-                        new SalesOrderItemRequest(
-                                "M1", "宝钢", "螺纹钢", "HRB400", "18", "12m", "吨",
-                                101L, "一号库", "B1", 4, "支",
-                                new BigDecimal("0.100"), 1, new BigDecimal("0.400"),
-                                new BigDecimal("4000.00"), new BigDecimal("1600.00")
-                        )
-                )
+                "SO-001", "PI-001", "客户A", "项目A",
+                LocalDate.of(2026, 4, 26), "张三", "草稿", null,
+                List.of(new SalesOrderItemRequest(
+                        "M1", "宝钢", "螺纹钢", "HRB400", "18", "12m", "吨",
+                        101L, "一号库", "B1", 4, "支",
+                        new BigDecimal("0.100"), 1, new BigDecimal("0.400"),
+                        new BigDecimal("4000.00"), new BigDecimal("1600.00")
+                ))
         );
 
         PurchaseInbound inbound = new PurchaseInbound();
@@ -130,28 +120,15 @@ class SalesOrderServiceTest {
         SalesOrderItemRepository salesOrderItemRepository = mock(SalesOrderItemRepository.class);
         WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
         SalesOrderService service = new SalesOrderService(
-                repository,
-                idGenerator,
-                mapper,
-                materialSupport,
-                purchaseItemQueryAppService,
-                pieceWeightAppService,
-                salesOrderItemRepository,
-                warehouseSelectionSupport,
-                stubbedSalesOrderItemMapper(),
-                mock(WorkflowTransitionGuard.class)
+                repository, idGenerator, mapper, materialSupport,
+                purchaseItemQueryAppService, pieceWeightAppService,
+                salesOrderItemRepository, warehouseSelectionSupport,
+                stubbedSalesOrderItemMapper(), mock(WorkflowTransitionGuard.class)
         );
 
         SalesOrderRequest request = new SalesOrderRequest(
-                "SO-003",
-                null,
-                "PO-001",
-                "客户A",
-                "项目A",
-                LocalDate.of(2026, 4, 26),
-                "张三",
-                "草稿",
-                null,
+                "SO-003", null, "PO-001", "客户A", "项目A",
+                LocalDate.of(2026, 4, 26), "张三", "草稿", null,
                 List.of(new SalesOrderItemRequest(
                         "M1", "宝钢", "螺纹钢", "HRB400", "18", "12m", "吨",
                         null, 201L, "一号库", "B1", 3, "件",
@@ -205,434 +182,194 @@ class SalesOrderServiceTest {
     }
 
     @Test
-    void shouldUsePurchaseOrderActualAverageWeightForPartialSalesAllocation() {
+    void shouldRejectDuplicateOrderNoOnCreate() {
         SalesOrderRepository repository = mock(SalesOrderRepository.class);
-        SnowflakeIdGenerator idGenerator = mock(SnowflakeIdGenerator.class);
-        SalesOrderMapper mapper = mock(SalesOrderMapper.class);
-        TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
-        PurchaseItemQueryAppService purchaseItemQueryAppService = mock(PurchaseItemQueryAppService.class);
-        PurchaseItemPieceWeightAppService pieceWeightAppService = mock(PurchaseItemPieceWeightAppService.class);
-        SalesOrderItemRepository salesOrderItemRepository = mock(SalesOrderItemRepository.class);
-        WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
         SalesOrderService service = new SalesOrderService(
-                repository,
-                idGenerator,
-                mapper,
-                materialSupport,
-                purchaseItemQueryAppService,
-                pieceWeightAppService,
-                salesOrderItemRepository,
-                warehouseSelectionSupport,
-                stubbedSalesOrderItemMapper(),
+                repository, mock(SnowflakeIdGenerator.class), mock(SalesOrderMapper.class),
+                mock(TradeItemMaterialSupport.class), mock(PurchaseItemQueryAppService.class),
+                mock(PurchaseItemPieceWeightAppService.class), mock(SalesOrderItemRepository.class),
+                mock(WarehouseSelectionSupport.class), stubbedSalesOrderItemMapper(),
                 mock(WorkflowTransitionGuard.class)
         );
 
         SalesOrderRequest request = new SalesOrderRequest(
-                "SO-004",
-                null,
-                "PO-001",
-                "客户A",
-                "项目A",
-                LocalDate.of(2026, 4, 26),
-                "张三",
-                "草稿",
-                null,
+                "DUP-001", null, "客户A", "项目A",
+                LocalDate.of(2026, 4, 26), "张三", "草稿", null,
                 List.of(new SalesOrderItemRequest(
                         "M1", "宝钢", "盘螺", "HRB400", "8", null, "吨",
-                        null, 201L, "一号库", "B1", 2, "件",
-                        new BigDecimal("2.400"), 1, null,
-                        new BigDecimal("3000.00"), null
+                        null, null, "一号库", null, 1, "件",
+                        new BigDecimal("2.000"), 1, new BigDecimal("2.000"),
+                        new BigDecimal("3000.00"), new BigDecimal("6000.00")
                 ))
         );
 
-        PurchaseOrderItem sourceItem = new PurchaseOrderItem();
-        sourceItem.setId(201L);
-        sourceItem.setQuantity(10);
-        sourceItem.setWeightTon(new BigDecimal("23.550"));
+        when(repository.existsByOrderNoAndDeletedFlagFalse("DUP-001")).thenReturn(true);
 
-        when(repository.existsByOrderNoAndDeletedFlagFalse("SO-004")).thenReturn(false);
-        when(idGenerator.nextId()).thenReturn(1L, 11L);
-        when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(Map.of("M1", new Material()));
-        when(materialSupport.normalizeBatchNo(any(), eq("B1"), eq(1), eq(true))).thenReturn("B1");
-        when(warehouseSelectionSupport.normalizeWarehouseName("一号库", 1, true)).thenReturn("一号库");
-        when(purchaseItemQueryAppService.findSourcePurchaseOrderItemsByIds(List.of(201L))).thenReturn(List.of(sourcePurchaseOrderRecord(sourceItem.getId(), sourceItem.getQuantity(), sourceItem.getWeightTon())));
-        when(salesOrderItemRepository.summarizeAllocatedQuantityBySourcePurchaseOrderItemIds(eq(List.of(201L)), any()))
-                .thenReturn(List.of());
-        when(repository.saveAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));
-        when(pieceWeightAppService.allocateForSalesOrderItem(eq(sourceItem.getId()), eq(2), any(), eq(1)))
-                .thenReturn(new BigDecimal("4.710"));
-        when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
-        when(mapper.toResponse(any())).thenReturn(new SalesOrderResponse(
-                1L, "SO-004", null, "PO-001", "客户A", "项目A", LocalDate.of(2026, 4, 26),
-                "张三", new BigDecimal("4.710"), new BigDecimal("14130.00"), "草稿", null, List.of()
-        ));
-
-        service.create(request);
-
-        var orderCaptor = forClass(com.leo.erp.sales.order.domain.entity.SalesOrder.class);
-        verify(repository).save(orderCaptor.capture());
-        var savedItem = orderCaptor.getValue().getItems().get(0);
-        assertThat(savedItem.getPieceWeightTon()).isEqualByComparingTo("2.355");
-        assertThat(savedItem.getWeightTon()).isEqualByComparingTo("4.710");
-        assertThat(savedItem.getAmount()).isEqualByComparingTo("14130.00");
+        assertThatThrownBy(() -> service.create(request))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("销售订单号已存在");
     }
 
     @Test
-    void shouldUsePurchaseOrderResidualAverageWeightWhenExactlyRepresentable() {
+    void shouldDeleteOrderAndReleasePieceWeights() {
         SalesOrderRepository repository = mock(SalesOrderRepository.class);
-        SnowflakeIdGenerator idGenerator = mock(SnowflakeIdGenerator.class);
-        SalesOrderMapper mapper = mock(SalesOrderMapper.class);
-        TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
-        PurchaseItemQueryAppService purchaseItemQueryAppService = mock(PurchaseItemQueryAppService.class);
         PurchaseItemPieceWeightAppService pieceWeightAppService = mock(PurchaseItemPieceWeightAppService.class);
-        SalesOrderItemRepository salesOrderItemRepository = mock(SalesOrderItemRepository.class);
-        WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
         SalesOrderService service = new SalesOrderService(
-                repository,
-                idGenerator,
-                mapper,
-                materialSupport,
-                purchaseItemQueryAppService,
-                pieceWeightAppService,
-                salesOrderItemRepository,
-                warehouseSelectionSupport,
-                stubbedSalesOrderItemMapper(),
+                repository, mock(SnowflakeIdGenerator.class), mock(SalesOrderMapper.class),
+                mock(TradeItemMaterialSupport.class), mock(PurchaseItemQueryAppService.class),
+                pieceWeightAppService, mock(SalesOrderItemRepository.class),
+                mock(WarehouseSelectionSupport.class), stubbedSalesOrderItemMapper(),
+                mock(WorkflowTransitionGuard.class)
+        );
+
+        com.leo.erp.sales.order.domain.entity.SalesOrder order = new com.leo.erp.sales.order.domain.entity.SalesOrder();
+        order.setId(1L);
+        order.setOrderNo("SO-DEL-001");
+        order.setDeletedFlag(false);
+        order.setCustomerName("C");
+        order.setProjectName("P");
+        order.setDeliveryDate(LocalDate.now());
+        order.setSalesName("S");
+        order.setTotalWeight(BigDecimal.ZERO);
+        order.setTotalAmount(BigDecimal.ZERO);
+
+        SalesOrderItem item = new SalesOrderItem();
+        item.setId(11L);
+        item.setSalesOrder(order);
+        order.setItems(new ArrayList<>(List.of(item)));
+
+        when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(order));
+        when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(mock(SalesOrderMapper.class).toResponse(any())).thenReturn(
+                new SalesOrderResponse(1L, "SO-DEL-001", null, "C", "P",
+                        LocalDate.now(), "S", BigDecimal.ZERO, BigDecimal.ZERO, "草稿", null, List.of()));
+
+        service.delete(1L);
+
+        assertThat(order.isDeletedFlag()).isTrue();
+        verify(pieceWeightAppService).releaseSalesOrderItems(List.of(11L));
+        verify(repository).save(order);
+    }
+
+    @Test
+    void shouldUpdateStatusToAudited() {
+        SalesOrderRepository repository = mock(SalesOrderRepository.class);
+        SalesOrderMapper mapper = mock(SalesOrderMapper.class);
+        SalesOrderService service = new SalesOrderService(
+                repository, mock(SnowflakeIdGenerator.class), mapper,
+                mock(TradeItemMaterialSupport.class), mock(PurchaseItemQueryAppService.class),
+                mock(PurchaseItemPieceWeightAppService.class), mock(SalesOrderItemRepository.class),
+                mock(WarehouseSelectionSupport.class), stubbedSalesOrderItemMapper(),
+                mock(WorkflowTransitionGuard.class)
+        );
+
+        com.leo.erp.sales.order.domain.entity.SalesOrder order = new com.leo.erp.sales.order.domain.entity.SalesOrder();
+        order.setId(1L);
+        order.setOrderNo("SO-STS-001");
+        order.setStatus("草稿");
+        order.setCustomerName("C");
+        order.setProjectName("P");
+        order.setDeliveryDate(LocalDate.now());
+        order.setSalesName("S");
+        order.setTotalWeight(BigDecimal.ZERO);
+        order.setTotalAmount(BigDecimal.ZERO);
+        order.setItems(new ArrayList<>());
+
+        when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(order));
+        when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(mapper.toResponse(any())).thenReturn(new SalesOrderResponse(
+                1L, "SO-STS-001", null, "C", "P",
+                LocalDate.now(), "S", BigDecimal.ZERO, BigDecimal.ZERO, "已审核", null, List.of()));
+
+        SalesOrderResponse response = service.updateStatus(1L, StatusConstants.AUDITED);
+
+        assertThat(order.getStatus()).isEqualTo("已审核");
+        verify(repository).save(order);
+    }
+
+    @Test
+    void shouldRejectWhenSourcePurchaseOrderItemNotFound() {
+        SalesOrderRepository repository = mock(SalesOrderRepository.class);
+        PurchaseItemQueryAppService purchaseItemQueryAppService = mock(PurchaseItemQueryAppService.class);
+        SalesOrderService service = new SalesOrderService(
+                repository, mock(SnowflakeIdGenerator.class), mock(SalesOrderMapper.class),
+                mock(TradeItemMaterialSupport.class), purchaseItemQueryAppService,
+                mock(PurchaseItemPieceWeightAppService.class), mock(SalesOrderItemRepository.class),
+                mock(WarehouseSelectionSupport.class), stubbedSalesOrderItemMapper(),
                 mock(WorkflowTransitionGuard.class)
         );
 
         SalesOrderRequest request = new SalesOrderRequest(
-                "SO-004A",
-                null,
-                "PO-001",
-                "客户A",
-                "项目A",
-                LocalDate.of(2026, 4, 26),
-                "张三",
-                "草稿",
-                null,
+                "SO-NF-001", null, "PO-001", "客户A", "项目A",
+                LocalDate.of(2026, 4, 26), "张三", "草稿", null,
                 List.of(new SalesOrderItemRequest(
                         "M1", "宝钢", "盘螺", "HRB400", "8", null, "吨",
-                        null, 201L, "一号库", "B1", 2, "件",
-                        new BigDecimal("2.249"), 1, null,
-                        new BigDecimal("3000.00"), null
+                        null, 999L, "一号库", "B1", 1, "件",
+                        new BigDecimal("2.000"), 1, new BigDecimal("2.000"),
+                        new BigDecimal("3000.00"), new BigDecimal("6000.00")
                 ))
         );
 
-        PurchaseOrderItem sourceItem = new PurchaseOrderItem();
-        sourceItem.setId(201L);
-        sourceItem.setQuantity(5);
-        sourceItem.setWeightTon(new BigDecimal("11.243"));
+        when(repository.existsByOrderNoAndDeletedFlagFalse("SO-NF-001")).thenReturn(false);
+        when(purchaseItemQueryAppService.findSourcePurchaseOrderItemsByIds(List.of(999L))).thenReturn(List.of());
 
-        SalesOrderItemRepository.SourcePurchaseOrderAllocationSummary allocationSummary =
-                mock(SalesOrderItemRepository.SourcePurchaseOrderAllocationSummary.class);
-        when(allocationSummary.getSourcePurchaseOrderItemId()).thenReturn(201L);
-        when(allocationSummary.getTotalQuantity()).thenReturn(3L);
-        when(allocationSummary.getTotalWeightTon()).thenReturn(new BigDecimal("6.747"));
-
-        when(repository.existsByOrderNoAndDeletedFlagFalse("SO-004A")).thenReturn(false);
-        when(idGenerator.nextId()).thenReturn(1L, 11L);
-        when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(Map.of("M1", new Material()));
-        when(materialSupport.normalizeBatchNo(any(), eq("B1"), eq(1), eq(true))).thenReturn("B1");
-        when(warehouseSelectionSupport.normalizeWarehouseName("一号库", 1, true)).thenReturn("一号库");
-        when(purchaseItemQueryAppService.findSourcePurchaseOrderItemsByIds(List.of(201L))).thenReturn(List.of(sourcePurchaseOrderRecord(sourceItem.getId(), sourceItem.getQuantity(), sourceItem.getWeightTon())));
-        when(salesOrderItemRepository.summarizeAllocatedQuantityBySourcePurchaseOrderItemIds(eq(List.of(201L)), any()))
-                .thenReturn(List.of(allocationSummary));
-        when(pieceWeightAppService.summarizeRemainingWeightByPurchaseOrderItemIds(List.of(201L)))
-                .thenReturn(Map.of(201L, new BigDecimal("4.496")));
-        when(repository.saveAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));
-        when(pieceWeightAppService.allocateForSalesOrderItem(eq(sourceItem.getId()), eq(2), any(), eq(1)))
-                .thenReturn(new BigDecimal("4.496"));
-        when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
-        when(mapper.toResponse(any())).thenReturn(new SalesOrderResponse(
-                1L, "SO-004A", null, "PO-001", "客户A", "项目A", LocalDate.of(2026, 4, 26),
-                "张三", new BigDecimal("4.496"), new BigDecimal("13488.00"), "草稿", null, List.of()
-        ));
-
-        service.create(request);
-
-        var orderCaptor = forClass(com.leo.erp.sales.order.domain.entity.SalesOrder.class);
-        verify(repository).save(orderCaptor.capture());
-        var savedItem = orderCaptor.getValue().getItems().get(0);
-        assertThat(savedItem.getPieceWeightTon()).isEqualByComparingTo("2.248");
-        assertThat(savedItem.getWeightTon()).isEqualByComparingTo("4.496");
-        assertThat(savedItem.getAmount()).isEqualByComparingTo("13488.00");
+        assertThatThrownBy(() -> service.create(request))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("来源采购订单明细不存在");
     }
 
     @Test
-    void shouldKeepSourceAverageWeightWhenResidualAverageCannotBeRepresentedExactly() {
+    void shouldRejectWhenSourceInboundItemNotFound() {
         SalesOrderRepository repository = mock(SalesOrderRepository.class);
-        SnowflakeIdGenerator idGenerator = mock(SnowflakeIdGenerator.class);
-        SalesOrderMapper mapper = mock(SalesOrderMapper.class);
-        TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
         PurchaseItemQueryAppService purchaseItemQueryAppService = mock(PurchaseItemQueryAppService.class);
-        PurchaseItemPieceWeightAppService pieceWeightAppService = mock(PurchaseItemPieceWeightAppService.class);
-        SalesOrderItemRepository salesOrderItemRepository = mock(SalesOrderItemRepository.class);
-        WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
         SalesOrderService service = new SalesOrderService(
-                repository,
-                idGenerator,
-                mapper,
-                materialSupport,
-                purchaseItemQueryAppService,
-                pieceWeightAppService,
-                salesOrderItemRepository,
-                warehouseSelectionSupport,
-                stubbedSalesOrderItemMapper(),
+                repository, mock(SnowflakeIdGenerator.class), mock(SalesOrderMapper.class),
+                mock(TradeItemMaterialSupport.class), purchaseItemQueryAppService,
+                mock(PurchaseItemPieceWeightAppService.class), mock(SalesOrderItemRepository.class),
+                mock(WarehouseSelectionSupport.class), stubbedSalesOrderItemMapper(),
                 mock(WorkflowTransitionGuard.class)
         );
 
         SalesOrderRequest request = new SalesOrderRequest(
-                "SO-004B",
-                null,
-                "PO-001",
-                "客户A",
-                "项目A",
-                LocalDate.of(2026, 4, 26),
-                "张三",
-                "草稿",
-                null,
+                "SO-NF-002", "PI-001", "客户A", "项目A",
+                LocalDate.of(2026, 4, 26), "张三", "草稿", null,
                 List.of(new SalesOrderItemRequest(
                         "M1", "宝钢", "盘螺", "HRB400", "8", null, "吨",
-                        null, 201L, "一号库", "B1", 2, "件",
-                        new BigDecimal("0.333"), 1, null,
-                        new BigDecimal("3000.00"), null
+                        888L, "一号库", "B1", 1, "件",
+                        new BigDecimal("2.000"), 1, new BigDecimal("2.000"),
+                        new BigDecimal("3000.00"), new BigDecimal("6000.00")
                 ))
         );
 
-        PurchaseOrderItem sourceItem = new PurchaseOrderItem();
-        sourceItem.setId(201L);
-        sourceItem.setQuantity(3);
-        sourceItem.setWeightTon(new BigDecimal("1.000"));
+        when(repository.existsByOrderNoAndDeletedFlagFalse("SO-NF-002")).thenReturn(false);
+        when(purchaseItemQueryAppService.findSourceInboundItemsByIds(List.of(888L))).thenReturn(List.of());
 
-        SalesOrderItemRepository.SourcePurchaseOrderAllocationSummary allocationSummary =
-                mock(SalesOrderItemRepository.SourcePurchaseOrderAllocationSummary.class);
-        when(allocationSummary.getSourcePurchaseOrderItemId()).thenReturn(201L);
-        when(allocationSummary.getTotalQuantity()).thenReturn(1L);
-        when(allocationSummary.getTotalWeightTon()).thenReturn(new BigDecimal("0.333"));
-
-        when(repository.existsByOrderNoAndDeletedFlagFalse("SO-004B")).thenReturn(false);
-        when(idGenerator.nextId()).thenReturn(1L, 11L);
-        when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(Map.of("M1", new Material()));
-        when(materialSupport.normalizeBatchNo(any(), eq("B1"), eq(1), eq(true))).thenReturn("B1");
-        when(warehouseSelectionSupport.normalizeWarehouseName("一号库", 1, true)).thenReturn("一号库");
-        when(purchaseItemQueryAppService.findSourcePurchaseOrderItemsByIds(List.of(201L))).thenReturn(List.of(sourcePurchaseOrderRecord(sourceItem.getId(), sourceItem.getQuantity(), sourceItem.getWeightTon())));
-        when(salesOrderItemRepository.summarizeAllocatedQuantityBySourcePurchaseOrderItemIds(eq(List.of(201L)), any()))
-                .thenReturn(List.of(allocationSummary));
-        when(pieceWeightAppService.summarizeRemainingWeightByPurchaseOrderItemIds(List.of(201L)))
-                .thenReturn(Map.of(201L, new BigDecimal("0.667")));
-        when(repository.saveAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));
-        when(pieceWeightAppService.allocateForSalesOrderItem(eq(sourceItem.getId()), eq(2), any(), eq(1)))
-                .thenReturn(new BigDecimal("0.667"));
-        when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
-        when(mapper.toResponse(any())).thenReturn(new SalesOrderResponse(
-                1L, "SO-004B", null, "PO-001", "客户A", "项目A", LocalDate.of(2026, 4, 26),
-                "张三", new BigDecimal("0.667"), new BigDecimal("2001.00"), "草稿", null, List.of()
-        ));
-
-        service.create(request);
-
-        var orderCaptor = forClass(com.leo.erp.sales.order.domain.entity.SalesOrder.class);
-        verify(repository).save(orderCaptor.capture());
-        var savedItem = orderCaptor.getValue().getItems().get(0);
-        assertThat(savedItem.getPieceWeightTon()).isEqualByComparingTo("0.333");
-        assertThat(savedItem.getWeightTon()).isEqualByComparingTo("0.667");
-        assertThat(savedItem.getAmount()).isEqualByComparingTo("2001.00");
+        assertThatThrownBy(() -> service.create(request))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("来源采购入库明细不存在");
     }
 
     @Test
-    void shouldUseAllocatedPieceWeightForSinglePiecePurchaseOrderSalesAllocation() {
+    void shouldRejectWhenAllocatedQuantityExceedsSource() {
         SalesOrderRepository repository = mock(SalesOrderRepository.class);
-        SnowflakeIdGenerator idGenerator = mock(SnowflakeIdGenerator.class);
-        SalesOrderMapper mapper = mock(SalesOrderMapper.class);
-        TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
         PurchaseItemQueryAppService purchaseItemQueryAppService = mock(PurchaseItemQueryAppService.class);
-        PurchaseItemPieceWeightAppService pieceWeightAppService = mock(PurchaseItemPieceWeightAppService.class);
         SalesOrderItemRepository salesOrderItemRepository = mock(SalesOrderItemRepository.class);
-        WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
         SalesOrderService service = new SalesOrderService(
-                repository,
-                idGenerator,
-                mapper,
-                materialSupport,
-                purchaseItemQueryAppService,
-                pieceWeightAppService,
-                salesOrderItemRepository,
-                warehouseSelectionSupport,
-                stubbedSalesOrderItemMapper(),
+                repository, mock(SnowflakeIdGenerator.class), mock(SalesOrderMapper.class),
+                mock(TradeItemMaterialSupport.class), purchaseItemQueryAppService,
+                mock(PurchaseItemPieceWeightAppService.class), salesOrderItemRepository,
+                mock(WarehouseSelectionSupport.class), stubbedSalesOrderItemMapper(),
                 mock(WorkflowTransitionGuard.class)
         );
 
         SalesOrderRequest request = new SalesOrderRequest(
-                "SO-004C",
-                null,
-                "PO-001",
-                "客户A",
-                "项目A",
-                LocalDate.of(2026, 4, 26),
-                "张三",
-                "草稿",
-                null,
+                "SO-OVER-001", "PI-001", "客户A", "项目A",
+                LocalDate.of(2026, 4, 26), "张三", "草稿", null,
                 List.of(new SalesOrderItemRequest(
                         "M1", "宝钢", "盘螺", "HRB400", "8", null, "吨",
-                        null, 201L, "一号库", "B1", 1, "件",
-                        new BigDecimal("2.249"), 1, null,
-                        new BigDecimal("3111.00"), null
-                ))
-        );
-
-        PurchaseOrderItem sourceItem = new PurchaseOrderItem();
-        sourceItem.setId(201L);
-        sourceItem.setQuantity(5);
-        sourceItem.setWeightTon(new BigDecimal("11.243"));
-
-        SalesOrderItemRepository.SourcePurchaseOrderAllocationSummary allocationSummary =
-                mock(SalesOrderItemRepository.SourcePurchaseOrderAllocationSummary.class);
-        when(allocationSummary.getSourcePurchaseOrderItemId()).thenReturn(201L);
-        when(allocationSummary.getTotalQuantity()).thenReturn(3L);
-        when(allocationSummary.getTotalWeightTon()).thenReturn(new BigDecimal("6.747"));
-
-        when(repository.existsByOrderNoAndDeletedFlagFalse("SO-004C")).thenReturn(false);
-        when(idGenerator.nextId()).thenReturn(1L, 11L);
-        when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(Map.of("M1", new Material()));
-        when(materialSupport.normalizeBatchNo(any(), eq("B1"), eq(1), eq(true))).thenReturn("B1");
-        when(warehouseSelectionSupport.normalizeWarehouseName("一号库", 1, true)).thenReturn("一号库");
-        when(purchaseItemQueryAppService.findSourcePurchaseOrderItemsByIds(List.of(201L))).thenReturn(List.of(sourcePurchaseOrderRecord(sourceItem.getId(), sourceItem.getQuantity(), sourceItem.getWeightTon())));
-        when(salesOrderItemRepository.summarizeAllocatedQuantityBySourcePurchaseOrderItemIds(eq(List.of(201L)), any()))
-                .thenReturn(List.of(allocationSummary));
-        when(pieceWeightAppService.summarizeRemainingWeightByPurchaseOrderItemIds(List.of(201L)))
-                .thenReturn(Map.of(201L, new BigDecimal("4.496")));
-        when(repository.saveAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));
-        when(pieceWeightAppService.allocateForSalesOrderItem(eq(sourceItem.getId()), eq(1), any(), eq(1)))
-                .thenReturn(new BigDecimal("2.248"));
-        when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
-        when(mapper.toResponse(any())).thenReturn(new SalesOrderResponse(
-                1L, "SO-004C", null, "PO-001", "客户A", "项目A", LocalDate.of(2026, 4, 26),
-                "张三", new BigDecimal("2.248"), new BigDecimal("6993.53"), "草稿", null, List.of()
-        ));
-
-        service.create(request);
-
-        var orderCaptor = forClass(com.leo.erp.sales.order.domain.entity.SalesOrder.class);
-        verify(repository).save(orderCaptor.capture());
-        var savedItem = orderCaptor.getValue().getItems().get(0);
-        assertThat(savedItem.getPieceWeightTon()).isEqualByComparingTo("2.248");
-        assertThat(savedItem.getWeightTon()).isEqualByComparingTo("2.248");
-        assertThat(savedItem.getAmount()).isEqualByComparingTo("6993.53");
-    }
-
-    @Test
-    void shouldUsePurchaseOrderActualTotalWeightForFullSalesAllocation() {
-        SalesOrderRepository repository = mock(SalesOrderRepository.class);
-        SnowflakeIdGenerator idGenerator = mock(SnowflakeIdGenerator.class);
-        SalesOrderMapper mapper = mock(SalesOrderMapper.class);
-        TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
-        PurchaseItemQueryAppService purchaseItemQueryAppService = mock(PurchaseItemQueryAppService.class);
-        PurchaseItemPieceWeightAppService pieceWeightAppService = mock(PurchaseItemPieceWeightAppService.class);
-        SalesOrderItemRepository salesOrderItemRepository = mock(SalesOrderItemRepository.class);
-        WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
-        SalesOrderService service = new SalesOrderService(
-                repository,
-                idGenerator,
-                mapper,
-                materialSupport,
-                purchaseItemQueryAppService,
-                pieceWeightAppService,
-                salesOrderItemRepository,
-                warehouseSelectionSupport,
-                stubbedSalesOrderItemMapper(),
-                mock(WorkflowTransitionGuard.class)
-        );
-
-        SalesOrderRequest request = new SalesOrderRequest(
-                "SO-005",
-                null,
-                "PO-001",
-                "客户A",
-                "项目A",
-                LocalDate.of(2026, 4, 26),
-                "张三",
-                "草稿",
-                null,
-                List.of(new SalesOrderItemRequest(
-                        "M1", "宝钢", "盘螺", "HRB400", "8", null, "吨",
-                        null, 201L, "一号库", "B1", 7, "件",
-                        new BigDecimal("2.037"), 1, null,
-                        new BigDecimal("3000.00"), null
-                ))
-        );
-
-        PurchaseOrderItem sourceItem = new PurchaseOrderItem();
-        sourceItem.setId(201L);
-        sourceItem.setQuantity(7);
-        sourceItem.setWeightTon(new BigDecimal("14.258"));
-
-        when(repository.existsByOrderNoAndDeletedFlagFalse("SO-005")).thenReturn(false);
-        when(idGenerator.nextId()).thenReturn(1L, 11L);
-        when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(Map.of("M1", new Material()));
-        when(materialSupport.normalizeBatchNo(any(), eq("B1"), eq(1), eq(true))).thenReturn("B1");
-        when(warehouseSelectionSupport.normalizeWarehouseName("一号库", 1, true)).thenReturn("一号库");
-        when(purchaseItemQueryAppService.findSourcePurchaseOrderItemsByIds(List.of(201L))).thenReturn(List.of(sourcePurchaseOrderRecord(sourceItem.getId(), sourceItem.getQuantity(), sourceItem.getWeightTon())));
-        when(salesOrderItemRepository.summarizeAllocatedQuantityBySourcePurchaseOrderItemIds(eq(List.of(201L)), any()))
-                .thenReturn(List.of());
-        when(repository.saveAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));
-        when(pieceWeightAppService.allocateForSalesOrderItem(eq(sourceItem.getId()), eq(7), any(), eq(1)))
-                .thenReturn(new BigDecimal("14.258"));
-        when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
-        when(mapper.toResponse(any())).thenReturn(new SalesOrderResponse(
-                1L, "SO-005", null, "PO-001", "客户A", "项目A", LocalDate.of(2026, 4, 26),
-                "张三", new BigDecimal("14.258"), new BigDecimal("42774.00"), "草稿", null, List.of()
-        ));
-
-        service.create(request);
-
-        var orderCaptor = forClass(com.leo.erp.sales.order.domain.entity.SalesOrder.class);
-        verify(repository).save(orderCaptor.capture());
-        var savedOrder = orderCaptor.getValue();
-        var savedItem = savedOrder.getItems().get(0);
-        assertThat(savedItem.getPieceWeightTon()).isEqualByComparingTo("2.037");
-        assertThat(savedItem.getWeightTon()).isEqualByComparingTo("14.258");
-        assertThat(savedItem.getAmount()).isEqualByComparingTo("42774.00");
-        assertThat(savedOrder.getTotalWeight()).isEqualByComparingTo("14.258");
-        assertThat(savedOrder.getTotalAmount()).isEqualByComparingTo("42774.00");
-    }
-
-    @Test
-    void shouldUseActualWeighResidualForLastSalesAllocation() {
-        SalesOrderRepository repository = mock(SalesOrderRepository.class);
-        SnowflakeIdGenerator idGenerator = mock(SnowflakeIdGenerator.class);
-        SalesOrderMapper mapper = mock(SalesOrderMapper.class);
-        TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
-        PurchaseItemQueryAppService purchaseItemQueryAppService = mock(PurchaseItemQueryAppService.class);
-        PurchaseItemPieceWeightAppService pieceWeightAppService = mock(PurchaseItemPieceWeightAppService.class);
-        SalesOrderItemRepository salesOrderItemRepository = mock(SalesOrderItemRepository.class);
-        WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
-        SalesOrderService service = new SalesOrderService(
-                repository,
-                idGenerator,
-                mapper,
-                materialSupport,
-                purchaseItemQueryAppService,
-                pieceWeightAppService,
-                salesOrderItemRepository,
-                warehouseSelectionSupport,
-                stubbedSalesOrderItemMapper(),
-                mock(WorkflowTransitionGuard.class)
-        );
-
-        SalesOrderRequest request = new SalesOrderRequest(
-                "SO-002",
-                "PI-002",
-                "客户A",
-                "项目A",
-                LocalDate.of(2026, 4, 26),
-                "张三",
-                "草稿",
-                null,
-                List.of(new SalesOrderItemRequest(
-                        "M1", "宝钢", "盘螺", "HRB400", "18", "12m", "吨",
-                        101L, "一号库", "B1", 1, "件",
-                        new BigDecimal("0.108"), 1, null,
-                        new BigDecimal("4000.00"), null
+                        101L, "一号库", "B1", 8, "件",
+                        new BigDecimal("2.000"), 1, new BigDecimal("16.000"),
+                        new BigDecimal("3000.00"), new BigDecimal("48000.00")
                 ))
         );
 
@@ -641,65 +378,112 @@ class SalesOrderServiceTest {
         PurchaseInboundItem inboundItem = new PurchaseInboundItem();
         inboundItem.setId(101L);
         inboundItem.setPurchaseInbound(inbound);
-        inboundItem.setQuantity(4);
-        inboundItem.setPieceWeightTon(new BigDecimal("0.108"));
-        inboundItem.setWeightTon(new BigDecimal("0.432"));
-        inboundItem.setWeighWeightTon(new BigDecimal("0.430"));
+        inboundItem.setQuantity(10);
 
         SalesOrderItemRepository.SourceInboundAllocationSummary allocationSummary =
                 mock(SalesOrderItemRepository.SourceInboundAllocationSummary.class);
         when(allocationSummary.getSourceInboundItemId()).thenReturn(101L);
-        when(allocationSummary.getTotalQuantity()).thenReturn(3L);
-        when(allocationSummary.getTotalWeightTon()).thenReturn(new BigDecimal("0.324"));
+        when(allocationSummary.getTotalQuantity()).thenReturn(5L);
 
-        when(repository.existsByOrderNoAndDeletedFlagFalse("SO-002")).thenReturn(false);
-        when(idGenerator.nextId()).thenReturn(1L, 11L);
-        when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(Map.of("M1", new Material()));
-        when(materialSupport.normalizeBatchNo(any(), eq("B1"), eq(1), eq(true))).thenReturn("B1");
-        when(warehouseSelectionSupport.normalizeWarehouseName("一号库", 1, true)).thenReturn("一号库");
-        when(purchaseItemQueryAppService.findSourceInboundItemsByIds(List.of(101L))).thenReturn(List.of(sourceInboundRecord(101L, inbound.getWarehouseName(), inboundItem.getQuantity())));
+        when(repository.existsByOrderNoAndDeletedFlagFalse("SO-OVER-001")).thenReturn(false);
+        when(purchaseItemQueryAppService.findSourceInboundItemsByIds(List.of(101L))).thenReturn(List.of(sourceInboundRecord(101L, "一号库", 10)));
         when(salesOrderItemRepository.summarizeAllocatedQuantityBySourceInboundItemIds(eq(List.of(101L)), any()))
                 .thenReturn(List.of(allocationSummary));
+
+        assertThatThrownBy(() -> service.create(request))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("可关联数量不足");
+    }
+
+    @Test
+    void shouldNotChangeStatusWhenUpdateStatusSameValue() {
+        SalesOrderRepository repository = mock(SalesOrderRepository.class);
+        SalesOrderMapper mapper = mock(SalesOrderMapper.class);
+        SalesOrderService service = new SalesOrderService(
+                repository, mock(SnowflakeIdGenerator.class), mapper,
+                mock(TradeItemMaterialSupport.class), mock(PurchaseItemQueryAppService.class),
+                mock(PurchaseItemPieceWeightAppService.class), mock(SalesOrderItemRepository.class),
+                mock(WarehouseSelectionSupport.class), stubbedSalesOrderItemMapper(),
+                mock(WorkflowTransitionGuard.class)
+        );
+
+        com.leo.erp.sales.order.domain.entity.SalesOrder order = new com.leo.erp.sales.order.domain.entity.SalesOrder();
+        order.setId(1L);
+        order.setOrderNo("SO-SAME-001");
+        order.setStatus("已审核");
+        order.setCustomerName("C");
+        order.setProjectName("P");
+        order.setDeliveryDate(LocalDate.now());
+        order.setSalesName("S");
+        order.setTotalWeight(BigDecimal.ZERO);
+        order.setTotalAmount(BigDecimal.ZERO);
+        order.setItems(new ArrayList<>());
+
+        when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(order));
         when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
         when(mapper.toResponse(any())).thenReturn(new SalesOrderResponse(
-                1L, "SO-002", "PI-002", "客户A", "项目A", LocalDate.of(2026, 4, 26),
-                "张三", new BigDecimal("0.106"), new BigDecimal("424.00"), "草稿", null, List.of()
-        ));
+                1L, "SO-SAME-001", null, "C", "P",
+                LocalDate.now(), "S", BigDecimal.ZERO, BigDecimal.ZERO, "已审核", null, List.of()));
 
-        service.create(request);
+        SalesOrderResponse response = service.updateStatus(1L, StatusConstants.AUDITED);
 
-        var orderCaptor = forClass(com.leo.erp.sales.order.domain.entity.SalesOrder.class);
-        verify(repository).save(orderCaptor.capture());
-        var savedOrder = orderCaptor.getValue();
-        var savedItem = savedOrder.getItems().get(0);
-        assertThat(savedItem.getWeightTon()).isEqualByComparingTo("0.108");
-        assertThat(savedItem.getAmount()).isEqualByComparingTo("432.00");
-        assertThat(savedOrder.getTotalWeight()).isEqualByComparingTo("0.108");
-        assertThat(savedOrder.getTotalAmount()).isEqualByComparingTo("432.00");
+        assertThat(order.getStatus()).isEqualTo("已审核");
+    }
+
+    @Test
+    void shouldCreateOrderWithoutSourceItemIds() {
+        SalesOrderRepository repository = mock(SalesOrderRepository.class);
+        SnowflakeIdGenerator idGenerator = mock(SnowflakeIdGenerator.class);
+        SalesOrderMapper mapper = mock(SalesOrderMapper.class);
+        TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
+        WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
+        SalesOrderService service = new SalesOrderService(
+                repository, idGenerator, mapper, materialSupport,
+                mock(PurchaseItemQueryAppService.class), mock(PurchaseItemPieceWeightAppService.class),
+                mock(SalesOrderItemRepository.class), warehouseSelectionSupport,
+                stubbedSalesOrderItemMapper(), mock(WorkflowTransitionGuard.class)
+        );
+
+        SalesOrderRequest request = new SalesOrderRequest(
+                "SO-NO-SRC-001", null, null, "客户A", "项目A",
+                LocalDate.of(2026, 4, 26), "张三", "草稿", null,
+                List.of(new SalesOrderItemRequest(
+                        "M1", "宝钢", "盘螺", "HRB400", "8", null, "吨",
+                        null, null, "一号库", null, 2, "件",
+                        new BigDecimal("2.000"), 1, new BigDecimal("4.000"),
+                        new BigDecimal("3000.00"), new BigDecimal("12000.00")
+                ))
+        );
+
+        when(repository.existsByOrderNoAndDeletedFlagFalse("SO-NO-SRC-001")).thenReturn(false);
+        when(idGenerator.nextId()).thenReturn(1L, 11L);
+        when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(Map.of("M1", new Material()));
+        when(materialSupport.normalizeBatchNo(any(), eq(null), eq(1), eq(true))).thenReturn("AUTO");
+        when(warehouseSelectionSupport.normalizeWarehouseName("一号库", 1, true)).thenReturn("一号库");
+        when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(mapper.toResponse(any())).thenReturn(new SalesOrderResponse(
+                1L, "SO-NO-SRC-001", null, "客户A", "项目A",
+                LocalDate.of(2026, 4, 26), "张三", new BigDecimal("4.000"),
+                new BigDecimal("12000.00"), "草稿", null, List.of()));
+
+        SalesOrderResponse response = service.create(request);
+
+        assertThat(response.orderNo()).isEqualTo("SO-NO-SRC-001");
+        verify(repository).save(any());
     }
 
     @Test
     void shouldAllowReverseAuditWhenOnlySalesOrderStatusChanges() {
         SalesOrderRepository repository = mock(SalesOrderRepository.class);
-        SnowflakeIdGenerator idGenerator = mock(SnowflakeIdGenerator.class);
         SalesOrderMapper mapper = mock(SalesOrderMapper.class);
         TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
-        PurchaseItemQueryAppService purchaseItemQueryAppService = mock(PurchaseItemQueryAppService.class);
-        PurchaseItemPieceWeightAppService pieceWeightAppService = mock(PurchaseItemPieceWeightAppService.class);
-        SalesOrderItemRepository salesOrderItemRepository = mock(SalesOrderItemRepository.class);
-        WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
         WorkflowTransitionGuard workflowTransitionGuard = mock(WorkflowTransitionGuard.class);
+        WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
         SalesOrderService service = new SalesOrderService(
-                repository,
-                idGenerator,
-                mapper,
-                materialSupport,
-                purchaseItemQueryAppService,
-                pieceWeightAppService,
-                salesOrderItemRepository,
-                warehouseSelectionSupport,
-                stubbedSalesOrderItemMapper(),
-                workflowTransitionGuard
+                repository, mock(SnowflakeIdGenerator.class), mapper, materialSupport,
+                mock(PurchaseItemQueryAppService.class), mock(PurchaseItemPieceWeightAppService.class),
+                mock(SalesOrderItemRepository.class), warehouseSelectionSupport,
+                stubbedSalesOrderItemMapper(), workflowTransitionGuard
         );
 
         var order = new com.leo.erp.sales.order.domain.entity.SalesOrder();
@@ -711,6 +495,8 @@ class SalesOrderServiceTest {
         order.setSalesName("张三");
         order.setStatus("已审核");
         order.setRemark("备注");
+        order.setTotalWeight(new BigDecimal("4.496"));
+        order.setTotalAmount(new BigDecimal("13488.00"));
         var item = new com.leo.erp.sales.order.domain.entity.SalesOrderItem();
         item.setId(11L);
         item.setSalesOrder(order);
@@ -734,18 +520,10 @@ class SalesOrderServiceTest {
         order.setItems(new java.util.ArrayList<>(List.of(item)));
 
         SalesOrderRequest request = new SalesOrderRequest(
-                "SO-REV-001",
-                null,
-                null,
-                "客户A",
-                "项目A",
-                LocalDate.of(2026, 4, 26),
-                "张三",
-                "草稿",
-                "备注",
+                "SO-REV-001", null, null, "客户A", "项目A",
+                LocalDate.of(2026, 4, 26), "张三", "草稿", "备注",
                 List.of(new SalesOrderItemRequest(
-                        11L,
-                        "M1", "宝钢", "盘螺", "HRB400", "8", "12m", "吨",
+                        11L, "M1", "宝钢", "盘螺", "HRB400", "8", "12m", "吨",
                         null, null, "一号库", "B1", 2, "件",
                         new BigDecimal("2.248"), 1, new BigDecimal("4.496"),
                         new BigDecimal("3000.00"), new BigDecimal("13488.00")
@@ -765,11 +543,7 @@ class SalesOrderServiceTest {
         service.update(1L, request);
 
         verify(workflowTransitionGuard).assertAuditPermissionForProtectedValue(
-                "sales-order",
-                "已审核",
-                "草稿",
-                "已审核",
-                "完成销售"
+                "sales-order", "已审核", "草稿", "已审核", "完成销售"
         );
         verify(repository).save(any());
         assertThat(order.getStatus()).isEqualTo("草稿");
@@ -778,25 +552,12 @@ class SalesOrderServiceTest {
     @Test
     void shouldRejectReverseAuditWhenSalesOrderPayloadChangesOtherFields() {
         SalesOrderRepository repository = mock(SalesOrderRepository.class);
-        SnowflakeIdGenerator idGenerator = mock(SnowflakeIdGenerator.class);
-        SalesOrderMapper mapper = mock(SalesOrderMapper.class);
-        TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
-        PurchaseItemQueryAppService purchaseItemQueryAppService = mock(PurchaseItemQueryAppService.class);
-        PurchaseItemPieceWeightAppService pieceWeightAppService = mock(PurchaseItemPieceWeightAppService.class);
-        SalesOrderItemRepository salesOrderItemRepository = mock(SalesOrderItemRepository.class);
-        WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
-        WorkflowTransitionGuard workflowTransitionGuard = mock(WorkflowTransitionGuard.class);
         SalesOrderService service = new SalesOrderService(
-                repository,
-                idGenerator,
-                mapper,
-                materialSupport,
-                purchaseItemQueryAppService,
-                pieceWeightAppService,
-                salesOrderItemRepository,
-                warehouseSelectionSupport,
-                stubbedSalesOrderItemMapper(),
-                workflowTransitionGuard
+                repository, mock(SnowflakeIdGenerator.class), mock(SalesOrderMapper.class),
+                mock(TradeItemMaterialSupport.class), mock(PurchaseItemQueryAppService.class),
+                mock(PurchaseItemPieceWeightAppService.class), mock(SalesOrderItemRepository.class),
+                mock(WarehouseSelectionSupport.class), stubbedSalesOrderItemMapper(),
+                mock(WorkflowTransitionGuard.class)
         );
 
         var order = new com.leo.erp.sales.order.domain.entity.SalesOrder();
@@ -807,6 +568,8 @@ class SalesOrderServiceTest {
         order.setDeliveryDate(LocalDate.of(2026, 4, 26));
         order.setSalesName("张三");
         order.setStatus("已审核");
+        order.setTotalWeight(new BigDecimal("4.496"));
+        order.setTotalAmount(new BigDecimal("13488.00"));
         var item = new com.leo.erp.sales.order.domain.entity.SalesOrderItem();
         item.setId(11L);
         item.setSalesOrder(order);
@@ -828,18 +591,10 @@ class SalesOrderServiceTest {
         order.setItems(new java.util.ArrayList<>(List.of(item)));
 
         SalesOrderRequest request = new SalesOrderRequest(
-                "SO-REV-002",
-                null,
-                null,
-                "客户A",
-                "项目A",
-                LocalDate.of(2026, 4, 27),
-                "张三",
-                "草稿",
-                null,
+                "SO-REV-002", null, null, "客户A", "项目A",
+                LocalDate.of(2026, 4, 27), "张三", "草稿", null,
                 List.of(new SalesOrderItemRequest(
-                        11L,
-                        "M1", "宝钢", "盘螺", "HRB400", "8", null, "吨",
+                        11L, "M1", "宝钢", "盘螺", "HRB400", "8", null, "吨",
                         null, null, "一号库", null, 2, "件",
                         new BigDecimal("2.248"), 1, new BigDecimal("4.496"),
                         new BigDecimal("3000.00"), new BigDecimal("13488.00")
@@ -851,6 +606,580 @@ class SalesOrderServiceTest {
         assertThatThrownBy(() -> service.update(1L, request))
                 .hasMessageContaining("当前单据状态为「已审核」，不能编辑");
         verify(repository, never()).save(any());
+    }
+
+    @Test
+    void shouldSearchByKeyword() {
+        SalesOrderRepository repository = mock(SalesOrderRepository.class);
+        SalesOrderMapper mapper = mock(SalesOrderMapper.class);
+        SalesOrderService service = new SalesOrderService(
+                repository, mock(SnowflakeIdGenerator.class), mapper,
+                mock(TradeItemMaterialSupport.class), mock(PurchaseItemQueryAppService.class),
+                mock(PurchaseItemPieceWeightAppService.class), mock(SalesOrderItemRepository.class),
+                mock(WarehouseSelectionSupport.class), stubbedSalesOrderItemMapper(),
+                mock(WorkflowTransitionGuard.class)
+        );
+
+        when(repository.findAll(any(Specification.class), any(org.springframework.data.domain.Pageable.class)))
+                .thenReturn(new org.springframework.data.domain.PageImpl<>(List.of()));
+        when(mapper.toResponse(any())).thenReturn(new SalesOrderResponse(
+                1L, "SO-001", null, null, "客户A", "项目A", LocalDate.now(),
+                "张三", BigDecimal.ZERO, BigDecimal.ZERO, "草稿", null, List.of()));
+
+        service.search("test", 10);
+
+        verify(repository).findAll(any(Specification.class), any(org.springframework.data.domain.Pageable.class));
+    }
+
+    @Test
+    void shouldRejectDuplicateOrderNoOnUpdateWhenOrderNoChanges() {
+        SalesOrderRepository repository = mock(SalesOrderRepository.class);
+        SalesOrderService service = new SalesOrderService(
+                repository, mock(SnowflakeIdGenerator.class), mock(SalesOrderMapper.class),
+                mock(TradeItemMaterialSupport.class), mock(PurchaseItemQueryAppService.class),
+                mock(PurchaseItemPieceWeightAppService.class), mock(SalesOrderItemRepository.class),
+                mock(WarehouseSelectionSupport.class), stubbedSalesOrderItemMapper(),
+                mock(WorkflowTransitionGuard.class)
+        );
+
+        SalesOrderRequest request = new SalesOrderRequest(
+                "SO-NEW", null, null, "C", "P",
+                LocalDate.now(), "S", "草稿", null,
+                List.of(new SalesOrderItemRequest(
+                        "M1", "宝钢", "盘螺", "HRB400", "8", null, "吨",
+                        null, null, "一号库", null, 1, "件",
+                        new BigDecimal("2.000"), 1, new BigDecimal("2.000"),
+                        new BigDecimal("3000.00"), new BigDecimal("6000.00")
+                ))
+        );
+
+        when(repository.existsByOrderNoAndDeletedFlagFalse("SO-NEW")).thenReturn(true);
+
+        assertThatThrownBy(() -> service.create(request))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("销售订单号已存在");
+    }
+
+    @Test
+    void shouldAllowUpdateWhenOrderNoUnchanged() {
+        SalesOrderRepository repository = mock(SalesOrderRepository.class);
+        SalesOrderMapper mapper = mock(SalesOrderMapper.class);
+        TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
+        WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
+        SalesOrderService service = new SalesOrderService(
+                repository, mock(SnowflakeIdGenerator.class), mapper, materialSupport,
+                mock(PurchaseItemQueryAppService.class), mock(PurchaseItemPieceWeightAppService.class),
+                mock(SalesOrderItemRepository.class), warehouseSelectionSupport,
+                stubbedSalesOrderItemMapper(), mock(WorkflowTransitionGuard.class)
+        );
+
+        com.leo.erp.sales.order.domain.entity.SalesOrder order = new com.leo.erp.sales.order.domain.entity.SalesOrder();
+        order.setId(1L);
+        order.setOrderNo("SO-SAME");
+        order.setStatus("草稿");
+        order.setCustomerName("C");
+        order.setProjectName("P");
+        order.setDeliveryDate(LocalDate.now());
+        order.setSalesName("S");
+        order.setTotalWeight(BigDecimal.ZERO);
+        order.setTotalAmount(BigDecimal.ZERO);
+        order.setItems(new ArrayList<>());
+
+        SalesOrderRequest request = new SalesOrderRequest(
+                "SO-SAME", null, null, "C", "P",
+                LocalDate.now(), "S", "草稿", null,
+                List.of(new SalesOrderItemRequest(
+                        "M1", "宝钢", "盘螺", "HRB400", "8", null, "吨",
+                        null, null, "一号库", null, 1, "件",
+                        new BigDecimal("2.000"), 1, new BigDecimal("2.000"),
+                        new BigDecimal("3000.00"), new BigDecimal("6000.00")
+                ))
+        );
+
+        when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(order));
+        when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(Map.of("M1", new Material()));
+        when(materialSupport.normalizeBatchNo(any(), eq(null), eq(1), eq(true))).thenReturn("AUTO");
+        when(warehouseSelectionSupport.normalizeWarehouseName("一号库", 1, true)).thenReturn("一号库");
+        when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(mapper.toResponse(any())).thenReturn(new SalesOrderResponse(
+                1L, "SO-SAME", null, null, "C", "P", LocalDate.now(),
+                "S", BigDecimal.ZERO, BigDecimal.ZERO, "草稿", null, List.of()));
+
+        service.update(1L, request);
+
+        verify(repository).save(any());
+    }
+
+    @Test
+    void shouldHandleMatchesStatusOnlyUpdateWithNullEntity() {
+        SalesOrderRepository repository = mock(SalesOrderRepository.class);
+        SalesOrderService service = new SalesOrderService(
+                repository, mock(SnowflakeIdGenerator.class), mock(SalesOrderMapper.class),
+                mock(TradeItemMaterialSupport.class), mock(PurchaseItemQueryAppService.class),
+                mock(PurchaseItemPieceWeightAppService.class), mock(SalesOrderItemRepository.class),
+                mock(WarehouseSelectionSupport.class), stubbedSalesOrderItemMapper(),
+                mock(WorkflowTransitionGuard.class)
+        );
+
+        var order = new com.leo.erp.sales.order.domain.entity.SalesOrder();
+        order.setId(1L);
+        order.setOrderNo("SO-NULL");
+        order.setStatus("已审核");
+        order.setCustomerName("C");
+        order.setProjectName("P");
+        order.setDeliveryDate(LocalDate.now());
+        order.setSalesName("S");
+        order.setTotalWeight(BigDecimal.ZERO);
+        order.setTotalAmount(BigDecimal.ZERO);
+        order.setItems(new ArrayList<>());
+
+        SalesOrderRequest request = new SalesOrderRequest(
+                "SO-NULL", null, null, "C", "P",
+                LocalDate.now(), "S", "草稿", null,
+                List.of(new SalesOrderItemRequest(
+                        "M1", "宝钢", "盘螺", "HRB400", "8", null, "吨",
+                        null, null, "一号库", null, 1, "件",
+                        new BigDecimal("2.000"), 1, new BigDecimal("2.000"),
+                        new BigDecimal("3000.00"), new BigDecimal("6000.00")
+                ))
+        );
+
+        when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(order));
+
+        assertThatThrownBy(() -> service.update(1L, request))
+                .hasMessageContaining("当前单据状态为「已审核」，不能编辑");
+    }
+
+    @Test
+    void shouldCreateOrderWithSourcePurchaseOrderAndRemainingWeight() {
+        SalesOrderRepository repository = mock(SalesOrderRepository.class);
+        SnowflakeIdGenerator idGenerator = mock(SnowflakeIdGenerator.class);
+        SalesOrderMapper mapper = mock(SalesOrderMapper.class);
+        TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
+        PurchaseItemQueryAppService purchaseItemQueryAppService = mock(PurchaseItemQueryAppService.class);
+        PurchaseItemPieceWeightAppService pieceWeightAppService = mock(PurchaseItemPieceWeightAppService.class);
+        SalesOrderItemRepository salesOrderItemRepository = mock(SalesOrderItemRepository.class);
+        WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
+        SalesOrderService service = new SalesOrderService(
+                repository, idGenerator, mapper, materialSupport,
+                purchaseItemQueryAppService, pieceWeightAppService,
+                salesOrderItemRepository, warehouseSelectionSupport,
+                stubbedSalesOrderItemMapper(), mock(WorkflowTransitionGuard.class)
+        );
+
+        SalesOrderRequest request = new SalesOrderRequest(
+                "SO-REM-001", null, "PO-001", "客户A", "项目A",
+                LocalDate.of(2026, 4, 26), "张三", "草稿", null,
+                List.of(new SalesOrderItemRequest(
+                        "M1", "宝钢", "盘螺", "HRB400", "8", null, "吨",
+                        null, 201L, "一号库", "B1", 3, "件",
+                        new BigDecimal("0.100"), 1, null,
+                        new BigDecimal("4000.00"), null
+                ))
+        );
+
+        PurchaseOrderItem sourceItem = new PurchaseOrderItem();
+        sourceItem.setId(201L);
+        sourceItem.setQuantity(10);
+        sourceItem.setWeightTon(new BigDecimal("1.000"));
+
+        when(repository.existsByOrderNoAndDeletedFlagFalse("SO-REM-001")).thenReturn(false);
+        when(idGenerator.nextId()).thenReturn(1L, 11L);
+        when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(Map.of("M1", new Material()));
+        when(materialSupport.normalizeBatchNo(any(), eq("B1"), eq(1), eq(true))).thenReturn("B1");
+        when(warehouseSelectionSupport.normalizeWarehouseName("一号库", 1, true)).thenReturn("一号库");
+        when(purchaseItemQueryAppService.findSourcePurchaseOrderItemsByIds(List.of(201L))).thenReturn(
+                List.of(sourcePurchaseOrderRecord(sourceItem.getId(), sourceItem.getQuantity(), sourceItem.getWeightTon())));
+        when(salesOrderItemRepository.summarizeAllocatedQuantityBySourcePurchaseOrderItemIds(eq(List.of(201L)), any()))
+                .thenReturn(List.of());
+        when(pieceWeightAppService.summarizeRemainingWeightByPurchaseOrderItemIds(List.of(201L)))
+                .thenReturn(Map.of(201L, new BigDecimal("0.300")));
+        when(repository.saveAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(pieceWeightAppService.allocateForSalesOrderItem(eq(201L), eq(3), any(), eq(1)))
+                .thenReturn(new BigDecimal("0.300"));
+        when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(mapper.toResponse(any())).thenReturn(new SalesOrderResponse(
+                1L, "SO-REM-001", null, "PO-001", "客户A", "项目A", LocalDate.of(2026, 4, 26),
+                "张三", new BigDecimal("0.300"), new BigDecimal("1200.00"), "草稿", null, List.of()));
+
+        service.create(request);
+
+        verify(repository).saveAndFlush(any());
+        verify(pieceWeightAppService).allocateForSalesOrderItem(eq(201L), eq(3), any(), eq(1));
+    }
+
+    @Test
+    void shouldSaveDirectlyWhenNoPurchaseOrderBackedItems() {
+        SalesOrderRepository repository = mock(SalesOrderRepository.class);
+        SnowflakeIdGenerator idGenerator = mock(SnowflakeIdGenerator.class);
+        SalesOrderMapper mapper = mock(SalesOrderMapper.class);
+        TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
+        PurchaseItemQueryAppService purchaseItemQueryAppService = mock(PurchaseItemQueryAppService.class);
+        SalesOrderItemRepository salesOrderItemRepository = mock(SalesOrderItemRepository.class);
+        WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
+        SalesOrderService service = new SalesOrderService(
+                repository, idGenerator, mapper, materialSupport,
+                purchaseItemQueryAppService, mock(PurchaseItemPieceWeightAppService.class),
+                salesOrderItemRepository, warehouseSelectionSupport,
+                stubbedSalesOrderItemMapper(), mock(WorkflowTransitionGuard.class)
+        );
+
+        SalesOrderRequest request = new SalesOrderRequest(
+                "SO-DIRECT-001", "PI-001", "客户A", "项目A",
+                LocalDate.of(2026, 4, 26), "张三", "草稿", null,
+                List.of(new SalesOrderItemRequest(
+                        "M1", "宝钢", "盘螺", "HRB400", "8", null, "吨",
+                        101L, "一号库", "B1", 2, "件",
+                        new BigDecimal("2.000"), 1, new BigDecimal("4.000"),
+                        new BigDecimal("3000.00"), new BigDecimal("12000.00")
+                ))
+        );
+
+        PurchaseInbound inbound = new PurchaseInbound();
+        inbound.setWarehouseName("一号库");
+        PurchaseInboundItem inboundItem = new PurchaseInboundItem();
+        inboundItem.setId(101L);
+        inboundItem.setPurchaseInbound(inbound);
+        inboundItem.setQuantity(10);
+
+        when(repository.existsByOrderNoAndDeletedFlagFalse("SO-DIRECT-001")).thenReturn(false);
+        when(idGenerator.nextId()).thenReturn(1L, 11L);
+        when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(Map.of("M1", new Material()));
+        when(materialSupport.normalizeBatchNo(any(), eq("B1"), eq(1), eq(true))).thenReturn("B1");
+        when(warehouseSelectionSupport.normalizeWarehouseName("一号库", 1, true)).thenReturn("一号库");
+        when(purchaseItemQueryAppService.findSourceInboundItemsByIds(List.of(101L))).thenReturn(
+                List.of(sourceInboundRecord(101L, "一号库", 10)));
+        when(salesOrderItemRepository.summarizeAllocatedQuantityBySourceInboundItemIds(eq(List.of(101L)), any()))
+                .thenReturn(List.of());
+        when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(mapper.toResponse(any())).thenReturn(new SalesOrderResponse(
+                1L, "SO-DIRECT-001", "PI-001", null, "客户A", "项目A", LocalDate.of(2026, 4, 26),
+                "张三", new BigDecimal("4.000"), new BigDecimal("12000.00"), "草稿", null, List.of()));
+
+        service.create(request);
+
+        verify(repository).save(any());
+        verify(repository, org.mockito.Mockito.never()).saveAndFlush(any());
+    }
+
+    @Test
+    void shouldFinalizePurchaseOrderAllocationsWhenSourceItemNotFound() {
+        SalesOrderRepository repository = mock(SalesOrderRepository.class);
+        SnowflakeIdGenerator idGenerator = mock(SnowflakeIdGenerator.class);
+        SalesOrderMapper mapper = mock(SalesOrderMapper.class);
+        TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
+        PurchaseItemQueryAppService purchaseItemQueryAppService = mock(PurchaseItemQueryAppService.class);
+        PurchaseItemPieceWeightAppService pieceWeightAppService = mock(PurchaseItemPieceWeightAppService.class);
+        SalesOrderItemRepository salesOrderItemRepository = mock(SalesOrderItemRepository.class);
+        WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
+        SalesOrderService service = new SalesOrderService(
+                repository, idGenerator, mapper, materialSupport,
+                purchaseItemQueryAppService, pieceWeightAppService,
+                salesOrderItemRepository, warehouseSelectionSupport,
+                stubbedSalesOrderItemMapper(), mock(WorkflowTransitionGuard.class)
+        );
+
+        SalesOrderRequest request = new SalesOrderRequest(
+                "SO-FINALIZE-ERR", null, "PO-ERR", "客户A", "项目A",
+                LocalDate.of(2026, 4, 26), "张三", "草稿", null,
+                List.of(new SalesOrderItemRequest(
+                        "M1", "宝钢", "盘螺", "HRB400", "8", null, "吨",
+                        null, 999L, "一号库", "B1", 3, "件",
+                        new BigDecimal("0.100"), 1, new BigDecimal("0.300"),
+                        new BigDecimal("4000.00"), new BigDecimal("1200.00")
+                ))
+        );
+
+        when(repository.existsByOrderNoAndDeletedFlagFalse("SO-FINALIZE-ERR")).thenReturn(false);
+        when(idGenerator.nextId()).thenReturn(1L, 11L);
+        when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(Map.of("M1", new Material()));
+        when(materialSupport.normalizeBatchNo(any(), eq("B1"), eq(1), eq(true))).thenReturn("B1");
+        when(warehouseSelectionSupport.normalizeWarehouseName("一号库", 1, true)).thenReturn("一号库");
+        when(purchaseItemQueryAppService.findSourcePurchaseOrderItemsByIds(List.of(999L))).thenReturn(List.of());
+        when(salesOrderItemRepository.summarizeAllocatedQuantityBySourcePurchaseOrderItemIds(eq(List.of(999L)), any()))
+                .thenReturn(List.of());
+        when(pieceWeightAppService.summarizeRemainingWeightByPurchaseOrderItemIds(List.of(999L)))
+                .thenReturn(Map.of());
+
+        assertThatThrownBy(() -> service.create(request))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("来源采购订单明细不存在");
+    }
+
+    @Test
+    void shouldHandleMultipleItemsWithMixedSourceTypes() {
+        SalesOrderRepository repository = mock(SalesOrderRepository.class);
+        SnowflakeIdGenerator idGenerator = mock(SnowflakeIdGenerator.class);
+        SalesOrderMapper mapper = mock(SalesOrderMapper.class);
+        TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
+        PurchaseItemQueryAppService purchaseItemQueryAppService = mock(PurchaseItemQueryAppService.class);
+        PurchaseItemPieceWeightAppService pieceWeightAppService = mock(PurchaseItemPieceWeightAppService.class);
+        SalesOrderItemRepository salesOrderItemRepository = mock(SalesOrderItemRepository.class);
+        WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
+        SalesOrderService service = new SalesOrderService(
+                repository, idGenerator, mapper, materialSupport,
+                purchaseItemQueryAppService, pieceWeightAppService,
+                salesOrderItemRepository, warehouseSelectionSupport,
+                stubbedSalesOrderItemMapper(), mock(WorkflowTransitionGuard.class)
+        );
+
+        SalesOrderRequest request = new SalesOrderRequest(
+                "SO-MIX-001", "PI-MIX", "PO-MIX", "客户A", "项目A",
+                LocalDate.of(2026, 4, 26), "张三", "草稿", null,
+                List.of(
+                        new SalesOrderItemRequest(
+                                "M1", "宝钢", "盘螺", "HRB400", "8", null, "吨",
+                                101L, "一号库", "B1", 2, "件",
+                                new BigDecimal("2.000"), 1, new BigDecimal("4.000"),
+                                new BigDecimal("3000.00"), new BigDecimal("12000.00")
+                        ),
+                        new SalesOrderItemRequest(
+                                "M2", "沙钢", "螺纹钢", "HRB400", "16", null, "吨",
+                                null, 201L, "二号库", "B2", 3, "件",
+                                new BigDecimal("1.500"), 1, new BigDecimal("4.500"),
+                                new BigDecimal("4000.00"), new BigDecimal("18000.00")
+                        )
+                )
+        );
+
+        PurchaseInbound inbound = new PurchaseInbound();
+        inbound.setWarehouseName("一号库");
+        PurchaseInboundItem inboundItem = new PurchaseInboundItem();
+        inboundItem.setId(101L);
+        inboundItem.setPurchaseInbound(inbound);
+        inboundItem.setQuantity(10);
+
+        when(repository.existsByOrderNoAndDeletedFlagFalse("SO-MIX-001")).thenReturn(false);
+        when(idGenerator.nextId()).thenReturn(1L, 2L, 11L, 12L);
+        when(materialSupport.loadMaterialMap(List.of("M1", "M2"))).thenReturn(Map.of("M1", new Material(), "M2", new Material()));
+        when(materialSupport.normalizeBatchNo(any(), eq("B1"), eq(1), eq(true))).thenReturn("B1");
+        when(materialSupport.normalizeBatchNo(any(), eq("B2"), eq(2), eq(true))).thenReturn("B2");
+        when(warehouseSelectionSupport.normalizeWarehouseName("一号库", 1, true)).thenReturn("一号库");
+        when(warehouseSelectionSupport.normalizeWarehouseName("二号库", 2, true)).thenReturn("二号库");
+        when(purchaseItemQueryAppService.findSourceInboundItemsByIds(List.of(101L))).thenReturn(
+                List.of(sourceInboundRecord(101L, "一号库", 10)));
+        when(purchaseItemQueryAppService.findSourcePurchaseOrderItemsByIds(List.of(201L))).thenReturn(
+                List.of(sourcePurchaseOrderRecord(201L, 10, new BigDecimal("1.500"))));
+        when(salesOrderItemRepository.summarizeAllocatedQuantityBySourceInboundItemIds(eq(List.of(101L)), any()))
+                .thenReturn(List.of());
+        when(salesOrderItemRepository.summarizeAllocatedQuantityBySourcePurchaseOrderItemIds(eq(List.of(201L)), any()))
+                .thenReturn(List.of());
+        when(pieceWeightAppService.summarizeRemainingWeightByPurchaseOrderItemIds(List.of(201L)))
+                .thenReturn(Map.of());
+        when(repository.saveAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(pieceWeightAppService.allocateForSalesOrderItem(eq(201L), eq(3), any(), eq(2)))
+                .thenReturn(new BigDecimal("0.450"));
+        doAnswer(invocation -> null).when(pieceWeightAppService).releaseSalesOrderItems(any());
+        when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(mapper.toResponse(any())).thenReturn(new SalesOrderResponse(
+                1L, "SO-MIX-001", "PI-MIX", "PO-MIX", "客户A", "项目A", LocalDate.of(2026, 4, 26),
+                "张三", new BigDecimal("8.500"), new BigDecimal("30000.00"), "草稿", null, List.of()));
+
+        service.create(request);
+
+        var orderCaptor = forClass(com.leo.erp.sales.order.domain.entity.SalesOrder.class);
+        verify(repository).save(orderCaptor.capture());
+        var savedOrder = orderCaptor.getValue();
+        assertThat(savedOrder.getPurchaseInboundNo()).isEqualTo("PI-MIX");
+        assertThat(savedOrder.getPurchaseOrderNo()).isEqualTo("PO-MIX");
+        assertThat(savedOrder.getItems()).hasSize(2);
+    }
+
+    @Test
+    void shouldResolvePieceWeightTonFromPurchaseOrderSource() {
+        SalesOrderRepository repository = mock(SalesOrderRepository.class);
+        SnowflakeIdGenerator idGenerator = mock(SnowflakeIdGenerator.class);
+        SalesOrderMapper mapper = mock(SalesOrderMapper.class);
+        TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
+        PurchaseItemQueryAppService purchaseItemQueryAppService = mock(PurchaseItemQueryAppService.class);
+        PurchaseItemPieceWeightAppService pieceWeightAppService = mock(PurchaseItemPieceWeightAppService.class);
+        SalesOrderItemRepository salesOrderItemRepository = mock(SalesOrderItemRepository.class);
+        WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
+        SalesOrderService service = new SalesOrderService(
+                repository, idGenerator, mapper, materialSupport,
+                purchaseItemQueryAppService, pieceWeightAppService,
+                salesOrderItemRepository, warehouseSelectionSupport,
+                stubbedSalesOrderItemMapper(), mock(WorkflowTransitionGuard.class)
+        );
+
+        SalesOrderRequest request = new SalesOrderRequest(
+                "SO-PW-001", null, "PO-PW", "客户A", "项目A",
+                LocalDate.of(2026, 4, 26), "张三", "草稿", null,
+                List.of(new SalesOrderItemRequest(
+                        "M1", "宝钢", "盘螺", "HRB400", "8", null, "吨",
+                        null, 301L, "一号库", "B1", 5, "件",
+                        new BigDecimal("0.200"), 1, null,
+                        new BigDecimal("4000.00"), null
+                ))
+        );
+
+        when(repository.existsByOrderNoAndDeletedFlagFalse("SO-PW-001")).thenReturn(false);
+        when(idGenerator.nextId()).thenReturn(1L, 11L);
+        when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(Map.of("M1", new Material()));
+        when(materialSupport.normalizeBatchNo(any(), eq("B1"), eq(1), eq(true))).thenReturn("B1");
+        when(warehouseSelectionSupport.normalizeWarehouseName("一号库", 1, true)).thenReturn("一号库");
+        when(purchaseItemQueryAppService.findSourcePurchaseOrderItemsByIds(List.of(301L))).thenReturn(
+                List.of(sourcePurchaseOrderRecord(301L, 10, new BigDecimal("2.000"))));
+        when(salesOrderItemRepository.summarizeAllocatedQuantityBySourcePurchaseOrderItemIds(eq(List.of(301L)), any()))
+                .thenReturn(List.of());
+        when(pieceWeightAppService.summarizeRemainingWeightByPurchaseOrderItemIds(List.of(301L)))
+                .thenReturn(Map.of(301L, new BigDecimal("1.000")));
+        when(repository.saveAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(pieceWeightAppService.allocateForSalesOrderItem(eq(301L), eq(5), any(), eq(1)))
+                .thenReturn(new BigDecimal("1.000"));
+        when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(mapper.toResponse(any())).thenReturn(new SalesOrderResponse(
+                1L, "SO-PW-001", null, "PO-PW", "客户A", "项目A", LocalDate.of(2026, 4, 26),
+                "张三", new BigDecimal("1.000"), new BigDecimal("4000.00"), "草稿", null, List.of()));
+
+        service.create(request);
+
+        verify(repository).saveAndFlush(any());
+    }
+
+    @Test
+    void shouldResolveWeightTonFromInboundWeighWeight() {
+        SalesOrderRepository repository = mock(SalesOrderRepository.class);
+        SnowflakeIdGenerator idGenerator = mock(SnowflakeIdGenerator.class);
+        SalesOrderMapper mapper = mock(SalesOrderMapper.class);
+        TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
+        PurchaseItemQueryAppService purchaseItemQueryAppService = mock(PurchaseItemQueryAppService.class);
+        SalesOrderItemRepository salesOrderItemRepository = mock(SalesOrderItemRepository.class);
+        WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
+        SalesOrderService service = new SalesOrderService(
+                repository, idGenerator, mapper, materialSupport,
+                purchaseItemQueryAppService, mock(PurchaseItemPieceWeightAppService.class),
+                salesOrderItemRepository, warehouseSelectionSupport,
+                stubbedSalesOrderItemMapper(), mock(WorkflowTransitionGuard.class)
+        );
+
+        SalesOrderRequest request = new SalesOrderRequest(
+                "SO-WEIGH-001", "PI-WEIGH", "客户A", "项目A",
+                LocalDate.of(2026, 4, 26), "张三", "草稿", null,
+                List.of(new SalesOrderItemRequest(
+                        "M1", "宝钢", "盘螺", "HRB400", "8", null, "吨",
+                        401L, "一号库", "B1", 10, "件",
+                        new BigDecimal("1.000"), 1, new BigDecimal("10.000"),
+                        new BigDecimal("3000.00"), new BigDecimal("30000.00")
+                ))
+        );
+
+        PurchaseInboundItem inboundItem = new PurchaseInboundItem();
+        inboundItem.setId(401L);
+        inboundItem.setQuantity(10);
+        inboundItem.setWeighWeightTon(new BigDecimal("9.876"));
+
+        when(repository.existsByOrderNoAndDeletedFlagFalse("SO-WEIGH-001")).thenReturn(false);
+        when(idGenerator.nextId()).thenReturn(1L, 11L);
+        when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(Map.of("M1", new Material()));
+        when(materialSupport.normalizeBatchNo(any(), eq("B1"), eq(1), eq(true))).thenReturn("B1");
+        when(warehouseSelectionSupport.normalizeWarehouseName("一号库", 1, true)).thenReturn("一号库");
+        when(purchaseItemQueryAppService.findSourceInboundItemsByIds(List.of(401L))).thenReturn(
+                List.of(new PurchaseItemQueryAppService.SourceInboundItemRecord(
+                        401L, null, null, 10, new BigDecimal("9.876"),
+                        null, null, null, null, null, null, "一号库", null)));
+        when(salesOrderItemRepository.summarizeAllocatedQuantityBySourceInboundItemIds(eq(List.of(401L)), any()))
+                .thenReturn(List.of());
+        when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(mapper.toResponse(any())).thenReturn(new SalesOrderResponse(
+                1L, "SO-WEIGH-001", "PI-WEIGH", null, "客户A", "项目A", LocalDate.of(2026, 4, 26),
+                "张三", new BigDecimal("9.876"), new BigDecimal("29628.00"), "草稿", null, List.of()));
+
+        service.create(request);
+
+        var orderCaptor = forClass(com.leo.erp.sales.order.domain.entity.SalesOrder.class);
+        verify(repository).save(orderCaptor.capture());
+        var savedItem = orderCaptor.getValue().getItems().get(0);
+        assertThat(savedItem.getWeightTon()).isEqualByComparingTo("9.876");
+    }
+
+    @Test
+    void shouldRejectWhenAllocatedQuantityExceedsPurchaseOrderSource() {
+        SalesOrderRepository repository = mock(SalesOrderRepository.class);
+        PurchaseItemQueryAppService purchaseItemQueryAppService = mock(PurchaseItemQueryAppService.class);
+        SalesOrderItemRepository salesOrderItemRepository = mock(SalesOrderItemRepository.class);
+        SalesOrderService service = new SalesOrderService(
+                repository, mock(SnowflakeIdGenerator.class), mock(SalesOrderMapper.class),
+                mock(TradeItemMaterialSupport.class), purchaseItemQueryAppService,
+                mock(PurchaseItemPieceWeightAppService.class), salesOrderItemRepository,
+                mock(WarehouseSelectionSupport.class), stubbedSalesOrderItemMapper(),
+                mock(WorkflowTransitionGuard.class)
+        );
+
+        SalesOrderRequest request = new SalesOrderRequest(
+                "SO-OVER-PO", null, "PO-OVER", "客户A", "项目A",
+                LocalDate.of(2026, 4, 26), "张三", "草稿", null,
+                List.of(new SalesOrderItemRequest(
+                        "M1", "宝钢", "盘螺", "HRB400", "8", null, "吨",
+                        null, 501L, "一号库", "B1", 8, "件",
+                        new BigDecimal("2.000"), 1, new BigDecimal("16.000"),
+                        new BigDecimal("3000.00"), new BigDecimal("48000.00")
+                ))
+        );
+
+        SalesOrderItemRepository.SourcePurchaseOrderAllocationSummary allocationSummary =
+                mock(SalesOrderItemRepository.SourcePurchaseOrderAllocationSummary.class);
+        when(allocationSummary.getSourcePurchaseOrderItemId()).thenReturn(501L);
+        when(allocationSummary.getTotalQuantity()).thenReturn(5L);
+        when(allocationSummary.getTotalWeightTon()).thenReturn(new BigDecimal("1.000"));
+
+        when(repository.existsByOrderNoAndDeletedFlagFalse("SO-OVER-PO")).thenReturn(false);
+        when(purchaseItemQueryAppService.findSourcePurchaseOrderItemsByIds(List.of(501L))).thenReturn(
+                List.of(sourcePurchaseOrderRecord(501L, 10, new BigDecimal("2.000"))));
+        when(salesOrderItemRepository.summarizeAllocatedQuantityBySourcePurchaseOrderItemIds(eq(List.of(501L)), any()))
+                .thenReturn(List.of(allocationSummary));
+
+        assertThatThrownBy(() -> service.create(request))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("可关联数量不足");
+    }
+
+    @Test
+    void shouldNotAllocateWhenSourcePurchaseOrderItemQuantityZero() {
+        SalesOrderRepository repository = mock(SalesOrderRepository.class);
+        SnowflakeIdGenerator idGenerator = mock(SnowflakeIdGenerator.class);
+        SalesOrderMapper mapper = mock(SalesOrderMapper.class);
+        TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
+        PurchaseItemQueryAppService purchaseItemQueryAppService = mock(PurchaseItemQueryAppService.class);
+        SalesOrderItemRepository salesOrderItemRepository = mock(SalesOrderItemRepository.class);
+        WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
+        SalesOrderService service = new SalesOrderService(
+                repository, idGenerator, mapper, materialSupport,
+                purchaseItemQueryAppService, mock(PurchaseItemPieceWeightAppService.class),
+                salesOrderItemRepository, warehouseSelectionSupport,
+                stubbedSalesOrderItemMapper(), mock(WorkflowTransitionGuard.class)
+        );
+
+        SalesOrderRequest request = new SalesOrderRequest(
+                "SO-ZERO-QTY", null, "PO-ZERO", "客户A", "项目A",
+                LocalDate.of(2026, 4, 26), "张三", "草稿", null,
+                List.of(new SalesOrderItemRequest(
+                        "M1", "宝钢", "盘螺", "HRB400", "8", null, "吨",
+                        null, 601L, "一号库", "B1", 2, "件",
+                        new BigDecimal("2.000"), 1, new BigDecimal("4.000"),
+                        new BigDecimal("3000.00"), new BigDecimal("12000.00")
+                ))
+        );
+
+        SalesOrderItemRepository.SourcePurchaseOrderAllocationSummary allocationSummary =
+                mock(SalesOrderItemRepository.SourcePurchaseOrderAllocationSummary.class);
+        when(allocationSummary.getSourcePurchaseOrderItemId()).thenReturn(601L);
+        when(allocationSummary.getTotalQuantity()).thenReturn(2L);
+        when(allocationSummary.getTotalWeightTon()).thenReturn(new BigDecimal("0.400"));
+
+        when(repository.existsByOrderNoAndDeletedFlagFalse("SO-ZERO-QTY")).thenReturn(false);
+        when(idGenerator.nextId()).thenReturn(1L, 11L);
+        when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(Map.of("M1", new Material()));
+        when(materialSupport.normalizeBatchNo(any(), eq("B1"), eq(1), eq(true))).thenReturn("B1");
+        when(warehouseSelectionSupport.normalizeWarehouseName("一号库", 1, true)).thenReturn("一号库");
+        when(purchaseItemQueryAppService.findSourcePurchaseOrderItemsByIds(List.of(601L))).thenReturn(
+                List.of(sourcePurchaseOrderRecord(601L, 2, new BigDecimal("0.400"))));
+        when(salesOrderItemRepository.summarizeAllocatedQuantityBySourcePurchaseOrderItemIds(eq(List.of(601L)), any()))
+                .thenReturn(List.of(allocationSummary));
+
+        assertThatThrownBy(() -> service.create(request))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("可关联数量不足");
     }
 
     private PurchaseItemQueryAppService.SourceInboundItemRecord sourceInboundRecord(

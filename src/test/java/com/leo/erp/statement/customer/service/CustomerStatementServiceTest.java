@@ -179,6 +179,170 @@ class CustomerStatementServiceTest {
         assertThat(candidates.get(0).status()).isEqualTo("待完善");
     }
 
+    @Test
+    void shouldReturnPage_whenCallingPage() {
+        CustomerStatementRepository repository = mock(CustomerStatementRepository.class);
+        CustomerStatementMapper mapper = mock(CustomerStatementMapper.class);
+        CustomerStatement statement = createCustomerStatement(1L, "KHDZ-001");
+        when(repository.findAll(any(Specification.class), any(Pageable.class))).thenReturn(
+                new PageImpl<>(List.of(statement))
+        );
+        when(mapper.toResponse(any(CustomerStatement.class))).thenAnswer(invocation -> {
+            CustomerStatement s = invocation.getArgument(0);
+            return new CustomerStatementResponse(
+                    s.getId(),
+                    s.getStatementNo(),
+                    s.getCustomerCode(),
+                    s.getCustomerName(),
+                    s.getProjectId(),
+                    s.getProjectName(),
+                    s.getStartDate(),
+                    s.getEndDate(),
+                    s.getSalesAmount(),
+                    s.getReceiptAmount(),
+                    s.getClosingAmount(),
+                    s.getStatus(),
+                    s.getRemark(),
+                    List.of()
+            );
+        });
+
+        CustomerStatementService service = new CustomerStatementService(
+                repository,
+                new SnowflakeIdGenerator(0L),
+                mapper,
+                mock(SalesOrderRepository.class),
+                mock(SalesOrderItemQueryService.class),
+                mock(StatementSettlementSyncService.class),
+                mock(WorkflowTransitionGuard.class)
+        );
+
+        var result = service.page(new PageQuery(0, 10, "id", "desc"), PageFilter.of(null, null, null, null));
+        assertThat(result).isNotNull();
+        assertThat(result.getTotalElements()).isEqualTo(1);
+    }
+
+    @Test
+    void shouldReturnSearchResults_whenCallingSearch() {
+        CustomerStatementRepository repository = mock(CustomerStatementRepository.class);
+        CustomerStatementMapper mapper = mock(CustomerStatementMapper.class);
+        CustomerStatement statement = createCustomerStatement(1L, "KHDZ-001");
+        when(repository.findAll(any(Specification.class))).thenReturn(List.of(statement));
+        when(mapper.toResponse(any(CustomerStatement.class))).thenAnswer(invocation -> {
+            CustomerStatement s = invocation.getArgument(0);
+            return new CustomerStatementResponse(
+                    s.getId(),
+                    s.getStatementNo(),
+                    s.getCustomerCode(),
+                    s.getCustomerName(),
+                    s.getProjectId(),
+                    s.getProjectName(),
+                    s.getStartDate(),
+                    s.getEndDate(),
+                    s.getSalesAmount(),
+                    s.getReceiptAmount(),
+                    s.getClosingAmount(),
+                    s.getStatus(),
+                    s.getRemark(),
+                    List.of()
+            );
+        });
+
+        CustomerStatementService service = new CustomerStatementService(
+                repository,
+                new SnowflakeIdGenerator(0L),
+                mapper,
+                mock(SalesOrderRepository.class),
+                mock(SalesOrderItemQueryService.class),
+                mock(StatementSettlementSyncService.class),
+                mock(WorkflowTransitionGuard.class)
+        );
+
+        var result = service.search("KHDZ", 10);
+        assertThat(result).isNotNull();
+    }
+
+    @Test
+    void shouldReturnException_whenCreateWithDuplicateStatementNo() {
+        CustomerStatementRepository repository = mock(CustomerStatementRepository.class);
+        when(repository.existsByStatementNoAndDeletedFlagFalse("KHDZ-001")).thenReturn(true);
+
+        CustomerStatementService service = new CustomerStatementService(
+                repository,
+                new SnowflakeIdGenerator(0L),
+                mock(CustomerStatementMapper.class),
+                mock(SalesOrderRepository.class),
+                mock(SalesOrderItemQueryService.class),
+                mock(StatementSettlementSyncService.class),
+                mock(WorkflowTransitionGuard.class)
+        );
+
+        assertThatThrownBy(() -> service.create(buildRequest(new BigDecimal("1000.00"))))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("客户对账单号已存在");
+    }
+
+    @Test
+    void shouldReturnException_whenUpdateWithDuplicateStatementNo() {
+        CustomerStatementRepository repository = mock(CustomerStatementRepository.class);
+        CustomerStatement statement = createCustomerStatement(1L, "KHDZ-OLD");
+        when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(statement));
+        when(repository.existsByStatementNoAndDeletedFlagFalse("KHDZ-001")).thenReturn(true);
+
+        CustomerStatementService service = new CustomerStatementService(
+                repository,
+                new SnowflakeIdGenerator(0L),
+                mock(CustomerStatementMapper.class),
+                mock(SalesOrderRepository.class),
+                mock(SalesOrderItemQueryService.class),
+                mock(StatementSettlementSyncService.class),
+                mock(WorkflowTransitionGuard.class)
+        );
+
+        assertThatThrownBy(() -> service.update(1L, buildRequest(new BigDecimal("1000.00"))))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("客户对账单号已存在");
+    }
+
+    @Test
+    void shouldRejectNegativeReceiptAmount() {
+        CustomerStatementRepository repository = mock(CustomerStatementRepository.class);
+        SalesOrderItemQueryService salesOrderItemQueryService = mock(SalesOrderItemQueryService.class);
+        when(repository.existsByStatementNoAndDeletedFlagFalse("KHDZ-001")).thenReturn(false);
+        when(salesOrderItemQueryService.findActiveByIdIn(List.of(201L))).thenReturn(List.of(buildSalesOrderItem()));
+
+        CustomerStatementService service = new CustomerStatementService(
+                repository,
+                new SnowflakeIdGenerator(0L),
+                mock(CustomerStatementMapper.class),
+                mock(SalesOrderRepository.class),
+                salesOrderItemQueryService,
+                mock(StatementSettlementSyncService.class),
+                mock(WorkflowTransitionGuard.class)
+        );
+
+        assertThatThrownBy(() -> service.create(buildRequest(new BigDecimal("-100.00"))))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("客户对账单收款金额不能为负数");
+    }
+
+    private CustomerStatement createCustomerStatement(Long id, String statementNo) {
+        CustomerStatement statement = new CustomerStatement();
+        statement.setId(id);
+        statement.setStatementNo(statementNo);
+        statement.setCustomerName("客户甲");
+        statement.setProjectName("项目A");
+        statement.setStartDate(LocalDate.of(2026, 5, 1));
+        statement.setEndDate(LocalDate.of(2026, 5, 6));
+        statement.setSalesAmount(new BigDecimal("1000.00"));
+        statement.setReceiptAmount(BigDecimal.ZERO);
+        statement.setClosingAmount(new BigDecimal("1000.00"));
+        statement.setStatus("待确认");
+        statement.setRemark("备注");
+        statement.setItems(List.of());
+        return statement;
+    }
+
     private CustomerStatementRequest buildRequest(BigDecimal receiptAmount) {
         return new CustomerStatementRequest(
                 "KHDZ-001",
