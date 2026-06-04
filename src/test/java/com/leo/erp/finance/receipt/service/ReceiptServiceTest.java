@@ -284,6 +284,7 @@ class ReceiptServiceTest {
         CustomerStatementQueryService customerStatementQueryService = mock(CustomerStatementQueryService.class);
         CustomerStatement statement = new CustomerStatement();
         statement.setId(21L);
+        statement.setCustomerCode("C-001");
         statement.setCustomerName("客户A");
         statement.setProjectName("项目A");
         statement.setSalesAmount(new BigDecimal("1000.00"));
@@ -326,6 +327,44 @@ class ReceiptServiceTest {
 
         assertThat(result).isNotNull();
         assertThat(result.status()).isEqualTo(StatusConstants.DRAFT);
+        assertThat(result.customerCode()).isEqualTo("C-001");
+    }
+
+    @Test
+    void shouldRejectCustomerCodeMismatchBetweenReceiptAndStatement() {
+        ReceiptRepository receiptRepository = mock(ReceiptRepository.class);
+        CustomerStatementQueryService customerStatementQueryService = mock(CustomerStatementQueryService.class);
+        CustomerStatement statement = new CustomerStatement();
+        statement.setId(21L);
+        statement.setCustomerCode("C-001");
+        statement.setCustomerName("客户A");
+        statement.setProjectName("项目A");
+        statement.setSalesAmount(new BigDecimal("1000.00"));
+        when(customerStatementQueryService.requireActiveById(21L)).thenReturn(statement);
+        when(receiptRepository.existsByReceiptNoAndDeletedFlagFalse("SK-001")).thenReturn(false);
+
+        ReceiptService service = new ReceiptService(
+                receiptRepository,
+                mock(ReceiptAllocationRepository.class),
+                new SnowflakeIdGenerator(0L),
+                mock(ReceiptMapper.class),
+                customerStatementQueryService,
+                mock(ApplicationEventPublisher.class),
+                mock(ResourceRecordAccessGuard.class),
+                mock(WorkflowTransitionGuard.class)
+        );
+
+        assertThatThrownBy(() -> service.create(buildRequest(
+                "C-OTHER",
+                21L,
+                "客户A",
+                "项目A",
+                new BigDecimal("100.00"),
+                "草稿",
+                List.of(new ReceiptAllocationRequest(null, 21L, new BigDecimal("100.00")))
+        )))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("对账单客户编码与收款单客户编码不一致");
     }
 
     @Test
@@ -1202,9 +1241,19 @@ class ReceiptServiceTest {
                                         BigDecimal amount,
                                         String status,
                                         List<ReceiptAllocationRequest> items) {
+        return buildRequest(null, sourceStatementId, customerName, projectName, amount, status, items);
+    }
+
+    private ReceiptRequest buildRequest(String customerCode,
+                                        Long sourceStatementId,
+                                        String customerName,
+                                        String projectName,
+                                        BigDecimal amount,
+                                        String status,
+                                        List<ReceiptAllocationRequest> items) {
         return new ReceiptRequest(
                 "SK-001",
-                null,
+                customerCode,
                 customerName,
                 null,
                 projectName,

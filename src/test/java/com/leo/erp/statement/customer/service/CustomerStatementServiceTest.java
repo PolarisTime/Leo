@@ -4,6 +4,8 @@ import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
+import com.leo.erp.master.customer.domain.entity.Customer;
+import com.leo.erp.master.customer.repository.CustomerRepository;
 import com.leo.erp.sales.order.domain.entity.SalesOrder;
 import com.leo.erp.sales.order.domain.entity.SalesOrderItem;
 import com.leo.erp.sales.order.service.SalesOrderItemQueryService;
@@ -82,7 +84,83 @@ class CustomerStatementServiceTest {
         assertThat(response.salesAmount()).isEqualByComparingTo("1000.00");
         assertThat(response.receiptAmount()).isEqualByComparingTo("1000.00");
         assertThat(response.closingAmount()).isEqualByComparingTo("0.00");
+        assertThat(response.customerCode()).isEqualTo("C-001");
         verifyNoInteractions(syncService);
+    }
+
+    @Test
+    void shouldResolveCustomerCodeFromMasterDataWhenSourceOrderHasNoCode() {
+        CustomerStatementRepository repository = mock(CustomerStatementRepository.class);
+        CustomerStatementMapper mapper = mock(CustomerStatementMapper.class);
+        SalesOrderItemQueryService salesOrderItemQueryService = mock(SalesOrderItemQueryService.class);
+        CustomerRepository customerRepository = mock(CustomerRepository.class);
+        SalesOrderItem sourceItem = buildSalesOrderItem();
+        sourceItem.getSalesOrder().setCustomerCode(null);
+        Customer customer = new Customer();
+        customer.setCustomerCode("C-MD-001");
+        when(repository.existsByStatementNoAndDeletedFlagFalse("KHDZ-001")).thenReturn(false);
+        when(repository.save(any(CustomerStatement.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(salesOrderItemQueryService.findActiveByIdIn(List.of(201L))).thenReturn(List.of(sourceItem));
+        when(customerRepository.findFirstByCustomerNameAndProjectNameAndDeletedFlagFalseOrderByCustomerCodeAsc(
+                "客户甲",
+                "项目A"
+        )).thenReturn(Optional.of(customer));
+        when(mapper.toResponse(any(CustomerStatement.class))).thenAnswer(invocation -> {
+            CustomerStatement statement = invocation.getArgument(0);
+            return new CustomerStatementResponse(
+                    statement.getId(),
+                    statement.getStatementNo(),
+                    statement.getCustomerCode(),
+                    statement.getCustomerName(),
+                    statement.getProjectId(),
+                    statement.getProjectName(),
+                    statement.getStartDate(),
+                    statement.getEndDate(),
+                    statement.getSalesAmount(),
+                    statement.getReceiptAmount(),
+                    statement.getClosingAmount(),
+                    statement.getStatus(),
+                    statement.getRemark(),
+                    List.of()
+            );
+        });
+
+        CustomerStatementService service = new CustomerStatementService(
+                repository,
+                new SnowflakeIdGenerator(0L),
+                mapper,
+                mock(SalesOrderRepository.class),
+                salesOrderItemQueryService,
+                mock(StatementSettlementSyncService.class),
+                mock(WorkflowTransitionGuard.class),
+                customerRepository
+        );
+
+        CustomerStatementResponse response = service.create(buildRequest(new BigDecimal("0.00")));
+
+        assertThat(response.customerCode()).isEqualTo("C-MD-001");
+    }
+
+    @Test
+    void shouldRejectCustomerCodeMismatchWithSourceOrder() {
+        CustomerStatementRepository repository = mock(CustomerStatementRepository.class);
+        SalesOrderItemQueryService salesOrderItemQueryService = mock(SalesOrderItemQueryService.class);
+        when(repository.existsByStatementNoAndDeletedFlagFalse("KHDZ-001")).thenReturn(false);
+        when(salesOrderItemQueryService.findActiveByIdIn(List.of(201L))).thenReturn(List.of(buildSalesOrderItem()));
+
+        CustomerStatementService service = new CustomerStatementService(
+                repository,
+                new SnowflakeIdGenerator(0L),
+                mock(CustomerStatementMapper.class),
+                mock(SalesOrderRepository.class),
+                salesOrderItemQueryService,
+                mock(StatementSettlementSyncService.class),
+                mock(WorkflowTransitionGuard.class)
+        );
+
+        assertThatThrownBy(() -> service.create(buildRequest("C-OTHER", new BigDecimal("0.00"))))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("客户编码与客户对账单客户编码不一致");
     }
 
     @Test
@@ -345,9 +423,13 @@ class CustomerStatementServiceTest {
     }
 
     private CustomerStatementRequest buildRequest(BigDecimal receiptAmount) {
+        return buildRequest(null, receiptAmount);
+    }
+
+    private CustomerStatementRequest buildRequest(String customerCode, BigDecimal receiptAmount) {
         return new CustomerStatementRequest(
                 "KHDZ-001",
-                null,
+                customerCode,
                 "客户甲",
                 null,
                 "项目A",
@@ -383,6 +465,7 @@ class CustomerStatementServiceTest {
     private SalesOrderItem buildSalesOrderItem() {
         SalesOrder order = new SalesOrder();
         order.setOrderNo("SO-001");
+        order.setCustomerCode("C-001");
         order.setCustomerName("客户甲");
         order.setProjectName("项目A");
         order.setStatus("完成销售");

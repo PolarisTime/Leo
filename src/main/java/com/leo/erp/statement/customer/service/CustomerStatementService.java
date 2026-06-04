@@ -11,6 +11,7 @@ import com.leo.erp.common.support.ManagedEntityItemSupport;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.support.TradeItemCalculator;
+import com.leo.erp.master.customer.repository.CustomerRepository;
 import com.leo.erp.sales.order.domain.entity.SalesOrder;
 import com.leo.erp.sales.order.domain.entity.SalesOrderItem;
 import com.leo.erp.sales.order.repository.SalesOrderRepository;
@@ -32,6 +33,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.beans.factory.annotation.Autowired;
 
 import java.math.BigDecimal;
 import java.util.LinkedHashSet;
@@ -58,6 +60,26 @@ public class CustomerStatementService extends AbstractCrudService<CustomerStatem
     private final SalesOrderItemQueryService salesOrderItemQueryService;
     private final StatementSettlementSyncService statementSettlementSyncService;
     private final WorkflowTransitionGuard workflowTransitionGuard;
+    private final CustomerRepository customerRepository;
+
+    @Autowired
+    public CustomerStatementService(CustomerStatementRepository repository,
+                                    SnowflakeIdGenerator idGenerator,
+                                    CustomerStatementMapper customerStatementMapper,
+                                    SalesOrderRepository salesOrderRepository,
+                                    SalesOrderItemQueryService salesOrderItemQueryService,
+                                    StatementSettlementSyncService statementSettlementSyncService,
+                                    WorkflowTransitionGuard workflowTransitionGuard,
+                                    CustomerRepository customerRepository) {
+        super(idGenerator);
+        this.repository = repository;
+        this.customerStatementMapper = customerStatementMapper;
+        this.salesOrderRepository = salesOrderRepository;
+        this.salesOrderItemQueryService = salesOrderItemQueryService;
+        this.statementSettlementSyncService = statementSettlementSyncService;
+        this.workflowTransitionGuard = workflowTransitionGuard;
+        this.customerRepository = customerRepository;
+    }
 
     public CustomerStatementService(CustomerStatementRepository repository,
                                     SnowflakeIdGenerator idGenerator,
@@ -66,13 +88,8 @@ public class CustomerStatementService extends AbstractCrudService<CustomerStatem
                                     SalesOrderItemQueryService salesOrderItemQueryService,
                                     StatementSettlementSyncService statementSettlementSyncService,
                                     WorkflowTransitionGuard workflowTransitionGuard) {
-        super(idGenerator);
-        this.repository = repository;
-        this.customerStatementMapper = customerStatementMapper;
-        this.salesOrderRepository = salesOrderRepository;
-        this.salesOrderItemQueryService = salesOrderItemQueryService;
-        this.statementSettlementSyncService = statementSettlementSyncService;
-        this.workflowTransitionGuard = workflowTransitionGuard;
+        this(repository, idGenerator, customerStatementMapper, salesOrderRepository, salesOrderItemQueryService,
+                statementSettlementSyncService, workflowTransitionGuard, null);
     }
 
     @Transactional(readOnly = true)
@@ -235,7 +252,6 @@ public class CustomerStatementService extends AbstractCrudService<CustomerStatem
         entity.setStatementNo(request.statementNo());
         entity.setCustomerName(request.customerName());
         entity.setProjectName(request.projectName());
-        entity.setCustomerCode(request.customerCode());
         entity.setProjectId(request.projectId());
         entity.setStartDate(request.startDate());
         entity.setEndDate(request.endDate());
@@ -245,6 +261,12 @@ public class CustomerStatementService extends AbstractCrudService<CustomerStatem
         BigDecimal salesAmount = BigDecimal.ZERO;
         Map<Long, SalesOrderItem> sourceSalesOrderItemMap = loadSourceSalesOrderItemMap(request.items());
         validateSourceSalesOrders(request, sourceSalesOrderItemMap, entity.getId());
+        entity.setCustomerCode(resolveCustomerCode(
+                request.customerCode(),
+                request.customerName(),
+                request.projectName(),
+                sourceSalesOrderItemMap
+        ));
         List<CustomerStatementItem> items = ManagedEntityItemSupport.syncById(
                 entity.getItems(),
                 request.items(),
@@ -417,6 +439,47 @@ public class CustomerStatementService extends AbstractCrudService<CustomerStatem
                 .filter(item -> matchesLegacyCustomerItem(source, item))
                 .findFirst()
                 .orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行来源销售订单明细不存在"));
+    }
+
+    private String resolveCustomerCode(String requestCustomerCode,
+                                       String customerName,
+                                       String projectName,
+                                       Map<Long, SalesOrderItem> sourceSalesOrderItemMap) {
+        String resolvedCode = trimToNull(requestCustomerCode);
+        for (SalesOrderItem item : sourceSalesOrderItemMap.values()) {
+            resolvedCode = mergeCustomerCode(resolvedCode, trimToNull(item.getSalesOrder().getCustomerCode()));
+        }
+        if (resolvedCode != null || customerRepository == null) {
+            return resolvedCode;
+        }
+        String normalizedCustomerName = trimToNull(customerName);
+        String normalizedProjectName = trimToNull(projectName);
+        if (normalizedCustomerName == null || normalizedProjectName == null) {
+            return null;
+        }
+        return customerRepository.findFirstByCustomerNameAndProjectNameAndDeletedFlagFalseOrderByCustomerCodeAsc(
+                        normalizedCustomerName,
+                        normalizedProjectName
+                )
+                .map(com.leo.erp.master.customer.domain.entity.Customer::getCustomerCode)
+                .orElse(null);
+    }
+
+    private String mergeCustomerCode(String currentCode, String nextCode) {
+        if (currentCode == null) {
+            return nextCode;
+        }
+        if (nextCode == null || currentCode.equals(nextCode)) {
+            return currentCode;
+        }
+        throw new BusinessException(ErrorCode.BUSINESS_ERROR, "来源销售订单客户编码与客户对账单客户编码不一致");
+    }
+
+    private String trimToNull(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        return value.trim();
     }
 
     private boolean matchesLegacyCustomerItem(CustomerStatementItemRequest source, SalesOrderItem item) {

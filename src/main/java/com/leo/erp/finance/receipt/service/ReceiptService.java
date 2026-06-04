@@ -189,9 +189,11 @@ public class ReceiptService extends AbstractCrudService<Receipt, ReceiptRequest,
                 entity.getAmount()
         );
         Map<Long, BigDecimal> requestAllocatedAmountMap = new HashMap<>();
+        String resolvedCustomerCode = null;
         for (int i = 0; i < entity.getItems().size(); i++) {
             ReceiptAllocation item = entity.getItems().get(i);
             CustomerStatement statement = requireAccessibleCustomerStatement(item.getSourceStatementId());
+            resolvedCustomerCode = mergeCustomerCode(resolvedCustomerCode, statement.getCustomerCode());
             validateLinkedCustomerStatement(
                     request,
                     nextStatus,
@@ -202,6 +204,7 @@ public class ReceiptService extends AbstractCrudService<Receipt, ReceiptRequest,
                     i + 1
             );
         }
+        entity.setCustomerCode(mergeCustomerCode(entity.getCustomerCode(), resolvedCustomerCode));
     }
 
     @Override
@@ -248,7 +251,7 @@ public class ReceiptService extends AbstractCrudService<Receipt, ReceiptRequest,
         entity.setReceiptNo(request.receiptNo());
         entity.setCustomerName(request.customerName());
         entity.setProjectName(request.projectName());
-        entity.setCustomerCode(request.customerCode());
+        entity.setCustomerCode(trimToNull(request.customerCode()));
         entity.setProjectId(request.projectId());
         entity.setReceiptDate(request.receiptDate());
         entity.setPayType(request.payType());
@@ -256,7 +259,7 @@ public class ReceiptService extends AbstractCrudService<Receipt, ReceiptRequest,
         entity.setStatus(nextStatus);
         entity.setOperatorName(request.operatorName());
         entity.setRemark(request.remark());
-        applyAllocations(entity, request, nextStatus);
+        entity.setCustomerCode(mergeCustomerCode(entity.getCustomerCode(), applyAllocations(entity, request, nextStatus)));
         entity.setSourceStatementId(resolveLegacySourceStatementId(entity.getItems()));
     }
 
@@ -278,8 +281,9 @@ public class ReceiptService extends AbstractCrudService<Receipt, ReceiptRequest,
         }
     }
 
-    private void applyAllocations(Receipt entity, ReceiptRequest request, String nextStatus) {
+    private String applyAllocations(Receipt entity, ReceiptRequest request, String nextStatus) {
         List<ReceiptAllocationRequest> allocationRequests = normalizeAllocationRequests(request);
+        String resolvedCustomerCode = null;
         BigDecimal totalAllocatedAmount = BigDecimal.ZERO;
         Map<Long, CustomerStatement> statementMap = new HashMap<>();
         Map<Long, BigDecimal> requestAllocatedAmountMap = new HashMap<>();
@@ -300,6 +304,7 @@ public class ReceiptService extends AbstractCrudService<Receipt, ReceiptRequest,
                     source.sourceStatementId(),
                     this::requireAccessibleCustomerStatement
             );
+            resolvedCustomerCode = mergeCustomerCode(resolvedCustomerCode, statement.getCustomerCode());
             validateLinkedCustomerStatement(
                     request,
                     nextStatus,
@@ -323,6 +328,7 @@ public class ReceiptService extends AbstractCrudService<Receipt, ReceiptRequest,
         }
         assertSettlementAllocationsComplete(nextStatus, allocationRequests.isEmpty(), totalAllocatedAmount, entity.getAmount());
         entity.getItems().sort(java.util.Comparator.comparing(ReceiptAllocation::getLineNo));
+        return resolvedCustomerCode;
     }
 
     private void assertSettlementAllocationsComplete(String nextStatus,
@@ -404,6 +410,7 @@ public class ReceiptService extends AbstractCrudService<Receipt, ReceiptRequest,
         if (!statement.getProjectName().equals(request.projectName())) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行对账单项目与收款单项目不一致");
         }
+        validateCustomerCode(request.customerCode(), statement.getCustomerCode(), lineNo);
         if (requestAllocatedAmountMap.containsKey(statement.getId())) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "同一收款单不能重复核销同一客户对账单");
         }
@@ -421,6 +428,36 @@ public class ReceiptService extends AbstractCrudService<Receipt, ReceiptRequest,
             }
         }
         requestAllocatedAmountMap.put(statement.getId(), allocatedAmount);
+    }
+
+    private void validateCustomerCode(String requestCustomerCode, String statementCustomerCode, int lineNo) {
+        String normalizedRequestCode = trimToNull(requestCustomerCode);
+        String normalizedStatementCode = trimToNull(statementCustomerCode);
+        if (normalizedRequestCode == null || normalizedStatementCode == null) {
+            return;
+        }
+        if (!normalizedRequestCode.equals(normalizedStatementCode)) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行对账单客户编码与收款单客户编码不一致");
+        }
+    }
+
+    private String mergeCustomerCode(String currentCode, String nextCode) {
+        String normalizedCurrentCode = trimToNull(currentCode);
+        String normalizedNextCode = trimToNull(nextCode);
+        if (normalizedCurrentCode == null) {
+            return normalizedNextCode;
+        }
+        if (normalizedNextCode == null || normalizedCurrentCode.equals(normalizedNextCode)) {
+            return normalizedCurrentCode;
+        }
+        throw new BusinessException(ErrorCode.BUSINESS_ERROR, "同一收款单不能核销不同客户编码的对账单");
+    }
+
+    private String trimToNull(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        return value.trim();
     }
 
     private BigDecimal normalizeAllocatedAmount(BigDecimal allocatedAmount, int lineNo) {
