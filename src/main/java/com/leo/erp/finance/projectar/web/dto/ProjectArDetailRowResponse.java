@@ -4,6 +4,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 
 public record ProjectArDetailRowResponse(
+        Long sourceDocumentId,
         String sourceDocumentNo,
         String documentType,
         LocalDate businessDate,
