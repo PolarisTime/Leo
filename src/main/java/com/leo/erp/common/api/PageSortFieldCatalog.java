@@ -36,9 +36,7 @@ public final class PageSortFieldCatalog {
             Map.entry("inventory-report", Set.of("brand", "category", "warehouseName", "quantity", "weightTon")),
             Map.entry("io-report", Set.of("businessDate", "businessType", "sourceNo", "materialCode", "warehouseName")),
             Map.entry("receivable-payable", Set.of("counterpartyName", "direction", "counterpartyType", "recognizedAmount", "settledAmount", "balanceAmount", "days0To30Amount", "days31To60Amount", "days61To90Amount", "daysOver90Amount", "entryCount", "status")),
-            Map.entry("project", Set.of("id", "projectCode", "projectName", "projectNameAbbr", "customerCode", "projectManager", "status")),
-            Map.entry("project-ar", Set.of("customerCode", "customerName", "projectName", "projectNameAbbr", "projectManager", "completedSalesAmount", "receivedAmount", "unreceivedAmount", "prepaymentBalance", "netUnreceivedAmount", "unreconciledDocumentCount", "reconciledDocumentCount", "latestBusinessDate")),
-            Map.entry("project-ar-detail", Set.of("sourceDocumentNo", "businessDate", "customerCode", "customerName", "amount", "writtenOffAmount", "unwrittenOffAmount", "reconciliationStatus", "receiptStatus", "operatorName"))
+            Map.entry("project", Set.of("id", "projectCode", "projectName", "projectNameAbbr", "customerCode", "projectManager", "status"))
     );
 
     private PageSortFieldCatalog() {
