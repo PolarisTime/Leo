@@ -317,6 +317,115 @@ class PaymentServiceTest {
     }
 
     @Test
+    void shouldRejectPaidSupplierPaymentWithoutAllocations() {
+        PaymentRepository paymentRepository = mock(PaymentRepository.class);
+        when(paymentRepository.existsByPaymentNoAndDeletedFlagFalse("FK-001")).thenReturn(false);
+
+        PaymentService service = new PaymentService(
+                paymentRepository,
+                mock(PaymentAllocationRepository.class),
+                new SnowflakeIdGenerator(0L),
+                mock(PaymentMapper.class),
+                mock(SupplierStatementQueryService.class),
+                mock(FreightStatementQueryService.class),
+                mock(ApplicationEventPublisher.class),
+                mock(ResourceRecordAccessGuard.class),
+                mock(WorkflowTransitionGuard.class)
+        );
+
+        assertThatThrownBy(() -> service.create(buildRequest(
+                "供应商",
+                null,
+                "供应商A",
+                new BigDecimal("100.00"),
+                "已付款",
+                List.of()
+        )))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("已付款状态必须填写核销明细");
+    }
+
+    @Test
+    void shouldRejectPaidUnsupportedBusinessTypeWithoutAllocations() {
+        PaymentRepository paymentRepository = mock(PaymentRepository.class);
+        when(paymentRepository.existsByPaymentNoAndDeletedFlagFalse("FK-001")).thenReturn(false);
+
+        PaymentService service = new PaymentService(
+                paymentRepository,
+                mock(PaymentAllocationRepository.class),
+                new SnowflakeIdGenerator(0L),
+                mock(PaymentMapper.class),
+                mock(SupplierStatementQueryService.class),
+                mock(FreightStatementQueryService.class),
+                mock(ApplicationEventPublisher.class),
+                mock(ResourceRecordAccessGuard.class),
+                mock(WorkflowTransitionGuard.class)
+        );
+
+        assertThatThrownBy(() -> service.create(buildRequest(
+                "其他",
+                null,
+                "往来单位A",
+                new BigDecimal("100.00"),
+                "已付款",
+                List.of()
+        )))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("已付款状态必须关联供应商或物流商对账单核销");
+    }
+
+    @Test
+    void shouldAllowDraftSupplierPaymentWithPartialAllocation() {
+        PaymentRepository paymentRepository = mock(PaymentRepository.class);
+        PaymentMapper paymentMapper = mock(PaymentMapper.class);
+        SupplierStatementQueryService supplierStatementQueryService = mock(SupplierStatementQueryService.class);
+        SupplierStatement statement = new SupplierStatement();
+        statement.setId(11L);
+        statement.setSupplierName("供应商A");
+        statement.setPurchaseAmount(new BigDecimal("1000.00"));
+        when(supplierStatementQueryService.requireActiveById(11L)).thenReturn(statement);
+        when(paymentRepository.existsByPaymentNoAndDeletedFlagFalse("FK-001")).thenReturn(false);
+        when(paymentRepository.save(any(Payment.class))).thenAnswer(inv -> {
+            Payment payment = inv.getArgument(0);
+            payment.setId(1L);
+            return payment;
+        });
+        when(paymentMapper.toResponse(any(Payment.class))).thenAnswer(inv -> {
+            Payment payment = inv.getArgument(0);
+            return new PaymentResponse(
+                    payment.getId(), payment.getPaymentNo(), payment.getBusinessType(), payment.getCounterpartyCode(),
+                    payment.getCounterpartyName(), payment.getSourceStatementId(), payment.getPaymentDate(),
+                    payment.getPayType(), payment.getAmount(), payment.getStatus(), payment.getOperatorName(),
+                    payment.getRemark(), List.of()
+            );
+        });
+
+        PaymentService service = new PaymentService(
+                paymentRepository,
+                mock(PaymentAllocationRepository.class),
+                new SnowflakeIdGenerator(0L),
+                paymentMapper,
+                supplierStatementQueryService,
+                mock(FreightStatementQueryService.class),
+                mock(ApplicationEventPublisher.class),
+                mock(ResourceRecordAccessGuard.class),
+                mock(WorkflowTransitionGuard.class)
+        );
+
+        PaymentResponse result = service.create(buildRequest(
+                "供应商",
+                11L,
+                "供应商A",
+                new BigDecimal("100.00"),
+                "草稿",
+                List.of(new PaymentAllocationRequest(null, 11L, new BigDecimal("80.00")))
+        ));
+
+        assertThat(result).isNotNull();
+        assertThat(result.status()).isEqualTo(StatusConstants.DRAFT);
+    }
+
+    @Test
     void shouldRejectOverPaymentAgainstSupplierStatement() {
         PaymentRepository paymentRepository = mock(PaymentRepository.class);
         PaymentAllocationRepository allocationRepository = mock(PaymentAllocationRepository.class);
@@ -874,6 +983,34 @@ class PaymentServiceTest {
 
         assertThat(result).isNotNull();
         assertThat(result.status()).isEqualTo(StatusConstants.PAID);
+    }
+
+    @Test
+    void shouldRejectStatusTransitionToPaidWithoutAllocations() {
+        PaymentRepository paymentRepository = mock(PaymentRepository.class);
+        Payment existing = buildPaymentEntity(1L, "FK-001");
+        existing.setStatus(StatusConstants.DRAFT);
+        existing.setDeletedFlag(false);
+        existing.setBusinessType("供应商");
+        existing.setCounterpartyName("供应商A");
+        existing.setAmount(new BigDecimal("100.00"));
+        when(paymentRepository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(existing));
+
+        PaymentService service = new PaymentService(
+                paymentRepository,
+                mock(PaymentAllocationRepository.class),
+                new SnowflakeIdGenerator(0L),
+                mock(PaymentMapper.class),
+                mock(SupplierStatementQueryService.class),
+                mock(FreightStatementQueryService.class),
+                mock(ApplicationEventPublisher.class),
+                mock(ResourceRecordAccessGuard.class),
+                mock(WorkflowTransitionGuard.class)
+        );
+
+        assertThatThrownBy(() -> service.updateStatus(1L, StatusConstants.PAID))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("已付款状态必须填写核销明细");
     }
 
     @Test

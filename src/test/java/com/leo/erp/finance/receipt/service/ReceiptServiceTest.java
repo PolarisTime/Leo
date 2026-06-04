@@ -250,6 +250,85 @@ class ReceiptServiceTest {
     }
 
     @Test
+    void shouldRejectReceivedReceiptWithoutAllocations() {
+        ReceiptRepository receiptRepository = mock(ReceiptRepository.class);
+        when(receiptRepository.existsByReceiptNoAndDeletedFlagFalse("SK-001")).thenReturn(false);
+
+        ReceiptService service = new ReceiptService(
+                receiptRepository,
+                mock(ReceiptAllocationRepository.class),
+                new SnowflakeIdGenerator(0L),
+                mock(ReceiptMapper.class),
+                mock(CustomerStatementQueryService.class),
+                mock(ApplicationEventPublisher.class),
+                mock(ResourceRecordAccessGuard.class),
+                mock(WorkflowTransitionGuard.class)
+        );
+
+        assertThatThrownBy(() -> service.create(buildRequest(
+                null,
+                "客户A",
+                "项目A",
+                new BigDecimal("100.00"),
+                "已收款",
+                List.of()
+        )))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("已收款状态必须填写核销明细");
+    }
+
+    @Test
+    void shouldAllowDraftReceiptWithPartialAllocation() {
+        ReceiptRepository receiptRepository = mock(ReceiptRepository.class);
+        ReceiptMapper receiptMapper = mock(ReceiptMapper.class);
+        CustomerStatementQueryService customerStatementQueryService = mock(CustomerStatementQueryService.class);
+        CustomerStatement statement = new CustomerStatement();
+        statement.setId(21L);
+        statement.setCustomerName("客户A");
+        statement.setProjectName("项目A");
+        statement.setSalesAmount(new BigDecimal("1000.00"));
+        when(customerStatementQueryService.requireActiveById(21L)).thenReturn(statement);
+        when(receiptRepository.existsByReceiptNoAndDeletedFlagFalse("SK-001")).thenReturn(false);
+        when(receiptRepository.save(any(Receipt.class))).thenAnswer(inv -> {
+            Receipt receipt = inv.getArgument(0);
+            receipt.setId(1L);
+            return receipt;
+        });
+        when(receiptMapper.toResponse(any(Receipt.class))).thenAnswer(inv -> {
+            Receipt receipt = inv.getArgument(0);
+            return new ReceiptResponse(
+                    receipt.getId(), receipt.getReceiptNo(), receipt.getCustomerCode(), receipt.getCustomerName(),
+                    receipt.getProjectId(), receipt.getProjectName(), receipt.getSourceStatementId(),
+                    receipt.getReceiptDate(), receipt.getPayType(), receipt.getAmount(), receipt.getStatus(),
+                    receipt.getOperatorName(), receipt.getRemark(), List.of()
+            );
+        });
+
+        ReceiptService service = new ReceiptService(
+                receiptRepository,
+                mock(ReceiptAllocationRepository.class),
+                new SnowflakeIdGenerator(0L),
+                receiptMapper,
+                customerStatementQueryService,
+                mock(ApplicationEventPublisher.class),
+                mock(ResourceRecordAccessGuard.class),
+                mock(WorkflowTransitionGuard.class)
+        );
+
+        ReceiptResponse result = service.create(buildRequest(
+                21L,
+                "客户A",
+                "项目A",
+                new BigDecimal("100.00"),
+                "草稿",
+                List.of(new ReceiptAllocationRequest(null, 21L, new BigDecimal("80.00")))
+        ));
+
+        assertThat(result).isNotNull();
+        assertThat(result.status()).isEqualTo(StatusConstants.DRAFT);
+    }
+
+    @Test
     void shouldRejectOverReceiptAgainstCustomerStatement() {
         ReceiptRepository receiptRepository = mock(ReceiptRepository.class);
         ReceiptAllocationRepository allocationRepository = mock(ReceiptAllocationRepository.class);
@@ -701,6 +780,31 @@ class ReceiptServiceTest {
 
         assertThat(result).isNotNull();
         assertThat(result.status()).isEqualTo(StatusConstants.RECEIVED);
+    }
+
+    @Test
+    void shouldRejectStatusTransitionToReceivedWithoutAllocations() {
+        ReceiptRepository receiptRepository = mock(ReceiptRepository.class);
+        Receipt existing = buildReceiptEntity(1L, "SK-001");
+        existing.setStatus(StatusConstants.DRAFT);
+        existing.setDeletedFlag(false);
+        existing.setAmount(new BigDecimal("100.00"));
+        when(receiptRepository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(existing));
+
+        ReceiptService service = new ReceiptService(
+                receiptRepository,
+                mock(ReceiptAllocationRepository.class),
+                new SnowflakeIdGenerator(0L),
+                mock(ReceiptMapper.class),
+                mock(CustomerStatementQueryService.class),
+                mock(ApplicationEventPublisher.class),
+                mock(ResourceRecordAccessGuard.class),
+                mock(WorkflowTransitionGuard.class)
+        );
+
+        assertThatThrownBy(() -> service.updateStatus(1L, StatusConstants.RECEIVED))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("已收款状态必须填写核销明细");
     }
 
     @Test
