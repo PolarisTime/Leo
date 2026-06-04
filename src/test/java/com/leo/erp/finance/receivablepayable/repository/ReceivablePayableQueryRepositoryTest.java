@@ -255,6 +255,21 @@ class ReceivablePayableQueryRepositoryTest {
     }
 
     @Test
+    void shouldIncludeAuditedLedgerAdjustmentsInLedgerSource() {
+        RecordingNamedParameterJdbcTemplate jdbcTemplate = new RecordingNamedParameterJdbcTemplate();
+        jdbcTemplate.detailItems = List.of(buildDetailItem());
+        ReceivablePayableQueryRepository repository = new ReceivablePayableQueryRepository(jdbcTemplate);
+
+        repository.detailItems("应收", "客户", "abc123");
+
+        assertThat(jdbcTemplate.dataSql).contains("fm_ledger_adjustment");
+        assertThat(jdbcTemplate.dataSql).contains("adjustment.status = '已审核'");
+        assertThat(jdbcTemplate.dataSql).contains("'台账调整单' AS source_type");
+        assertThat(jdbcTemplate.dataSql).contains("adjustment.effect = '增加余额'");
+        assertThat(jdbcTemplate.dataSql).contains("adjustment.effect = '减少余额'");
+    }
+
+    @Test
     void shouldApplyDataScopeEmptyInPage() {
         try {
             DataScopeContext.set(1L, "receipt", "self", Set.of());

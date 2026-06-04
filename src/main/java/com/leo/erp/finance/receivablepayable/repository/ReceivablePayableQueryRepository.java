@@ -449,6 +449,40 @@ public class ReceivablePayableQueryRepository {
                           supplier_statement.id IS NOT NULL
                           OR freight_statement.id IS NOT NULL
                       )
+                    UNION ALL
+                    SELECT
+                        adjustment.direction,
+                        adjustment.counterparty_type,
+                        adjustment.counterparty_code,
+                        adjustment.counterparty_name,
+                        COALESCE(NULLIF(BTRIM(adjustment.counterparty_code), ''), CONCAT('name:', MD5(adjustment.counterparty_name))) AS counterparty_key,
+                        CASE
+                            WHEN adjustment.effect = '增加余额' THEN 'RECOGNITION'
+                            ELSE 'SETTLEMENT'
+                        END AS entry_role,
+                        '台账调整单' AS source_type,
+                        adjustment.id AS source_document_id,
+                        adjustment.adjustment_no AS document_no,
+                        adjustment.adjustment_type AS source_no,
+                        adjustment.project_name,
+                        adjustment.adjustment_date::date AS accounting_date,
+                        adjustment.adjustment_date::date AS due_date,
+                        CASE
+                            WHEN adjustment.direction = '应收' AND adjustment.effect = '增加余额' THEN COALESCE(adjustment.amount, 0)
+                            WHEN adjustment.direction = '应付' AND adjustment.effect = '减少余额' THEN COALESCE(adjustment.amount, 0)
+                            ELSE CAST(0 AS NUMERIC(14, 2))
+                        END AS debit_amount,
+                        CASE
+                            WHEN adjustment.direction = '应付' AND adjustment.effect = '增加余额' THEN COALESCE(adjustment.amount, 0)
+                            WHEN adjustment.direction = '应收' AND adjustment.effect = '减少余额' THEN COALESCE(adjustment.amount, 0)
+                            ELSE CAST(0 AS NUMERIC(14, 2))
+                        END AS credit_amount,
+                        adjustment.status,
+                        adjustment.remark,
+                        adjustment.created_by
+                    FROM fm_ledger_adjustment adjustment
+                    WHERE adjustment.deleted_flag = FALSE
+                      AND adjustment.status = '已审核'
                 ),
                 ledger AS (
                     SELECT *

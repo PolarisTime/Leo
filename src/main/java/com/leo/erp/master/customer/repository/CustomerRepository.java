@@ -17,6 +17,8 @@ public interface CustomerRepository extends JpaRepository<Customer, Long>, JpaSp
 
     Optional<Customer> findByIdAndDeletedFlagFalse(Long id);
 
+    Optional<Customer> findByCustomerCodeAndDeletedFlagFalse(String customerCode);
+
     Optional<Customer> findFirstByCustomerNameAndProjectNameAndDeletedFlagFalseOrderByCustomerCodeAsc(String customerName,
                                                                                                       String projectName);
 

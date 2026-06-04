@@ -25,6 +25,7 @@ class ResourcePermissionCatalogTest {
     void shouldIdentifyKnownResource() {
         assertThat(ResourcePermissionCatalog.isKnownResource("material")).isTrue();
         assertThat(ResourcePermissionCatalog.isKnownResource("purchase-order")).isTrue();
+        assertThat(ResourcePermissionCatalog.isKnownResource("ledger-adjustment")).isTrue();
     }
 
     @Test
@@ -36,6 +37,7 @@ class ResourcePermissionCatalogTest {
     void shouldIdentifyBusinessResource() {
         assertThat(ResourcePermissionCatalog.isBusinessResource("material")).isTrue();
         assertThat(ResourcePermissionCatalog.isBusinessResource("purchase-order")).isTrue();
+        assertThat(ResourcePermissionCatalog.isBusinessResource("ledger-adjustment")).isTrue();
     }
 
     @Test
@@ -47,6 +49,7 @@ class ResourcePermissionCatalogTest {
     void shouldCheckAllowedAction() {
         assertThat(ResourcePermissionCatalog.isAllowed("material", "read")).isTrue();
         assertThat(ResourcePermissionCatalog.isAllowed("material", "create")).isTrue();
+        assertThat(ResourcePermissionCatalog.isAllowed("ledger-adjustment", "audit")).isTrue();
         assertThat(ResourcePermissionCatalog.isAllowed("material", "unknown")).isFalse();
     }
 
@@ -71,12 +74,16 @@ class ResourcePermissionCatalogTest {
     void shouldResolveResourceByMenuCode() {
         assertThat(ResourcePermissionCatalog.resolveResourceByMenuCode("material")).isPresent();
         assertThat(ResourcePermissionCatalog.resolveResourceByMenuCode("material-categories")).isPresent();
+        assertThat(ResourcePermissionCatalog.resolveResourceByMenuCode("ledger-adjustment"))
+                .contains("ledger-adjustment");
     }
 
     @Test
     void shouldResolveResourceByPath() {
         assertThat(ResourcePermissionCatalog.resolveResourceByPath("/material")).isPresent();
         assertThat(ResourcePermissionCatalog.resolveResourceByPath("/purchase-order/123")).isPresent();
+        assertThat(ResourcePermissionCatalog.resolveResourceByPath("/ledger-adjustments/123"))
+                .contains("ledger-adjustment");
     }
 
     @Test
@@ -89,12 +96,13 @@ class ResourcePermissionCatalogTest {
     void shouldResolveVisibleMenuCodes() {
         Map<String, Set<String>> permissionMap = Map.of(
                 "material", Set.of("read", "create"),
-                "supplier", Set.of("read")
+                "supplier", Set.of("read"),
+                "ledger-adjustment", Set.of("read")
         );
 
         Set<String> menuCodes = ResourcePermissionCatalog.resolveVisibleMenuCodes(permissionMap);
 
-        assertThat(menuCodes).contains("material", "supplier");
+        assertThat(menuCodes).contains("material", "supplier", "ledger-adjustment");
     }
 
     @Test
@@ -144,7 +152,7 @@ class ResourcePermissionCatalogTest {
     void shouldHaveAllowedResourceCodes() {
         Set<String> codes = ResourcePermissionCatalog.allowedResourceCodes();
         assertThat(codes).isNotEmpty();
-        assertThat(codes).contains("material", "supplier", "customer");
+        assertThat(codes).contains("material", "supplier", "customer", "ledger-adjustment");
     }
 
     @Test

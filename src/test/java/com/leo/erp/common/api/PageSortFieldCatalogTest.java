@@ -38,6 +38,21 @@ class PageSortFieldCatalogTest {
     }
 
     @Test
+    void shouldReturnFieldsForLedgerAdjustment() {
+        var fields = PageSortFieldCatalog.fields("ledger-adjustment");
+        assertThat(fields).contains(
+                "id",
+                "adjustmentNo",
+                "direction",
+                "counterpartyCode",
+                "counterpartyName",
+                "adjustmentDate",
+                "amount",
+                "status"
+        );
+    }
+
+    @Test
     void shouldThrowForUnknownKey() {
         assertThatThrownBy(() -> PageSortFieldCatalog.fields("unknown-key"))
                 .isInstanceOf(IllegalArgumentException.class)
@@ -50,5 +65,6 @@ class PageSortFieldCatalogTest {
         assertThat(PageSortFieldCatalog.fields("department")).isNotEmpty();
         assertThat(PageSortFieldCatalog.fields("user-account")).isNotEmpty();
         assertThat(PageSortFieldCatalog.fields("role-setting")).isNotEmpty();
+        assertThat(PageSortFieldCatalog.fields("ledger-adjustment")).isNotEmpty();
     }
 }
