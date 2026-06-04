@@ -40,6 +40,9 @@ public class Payment extends AbstractAuditableEntity {
     @Column(name = "counterparty_name", nullable = false, length = 128)
     private String counterpartyName;
 
+    @Column(name = "counterparty_code", length = 64)
+    private String counterpartyCode;
+
     @Column(name = "source_statement_id")
     private Long sourceStatementId;
 

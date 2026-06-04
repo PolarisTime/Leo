@@ -8,6 +8,7 @@ public record PaymentResponse(
         Long id,
         String paymentNo,
         String businessType,
+        String counterpartyCode,
         String counterpartyName,
         Long sourceStatementId,
         LocalDate paymentDate,
@@ -18,4 +19,18 @@ public record PaymentResponse(
         String remark,
         List<PaymentAllocationResponse> items
 ) {
+    public PaymentResponse(Long id,
+                           String paymentNo,
+                           String businessType,
+                           String counterpartyName,
+                           Long sourceStatementId,
+                           LocalDate paymentDate,
+                           String payType,
+                           BigDecimal amount,
+                           String status,
+                           String operatorName,
+                           String remark,
+                           List<PaymentAllocationResponse> items) {
+        this(id, paymentNo, businessType, null, counterpartyName, sourceStatementId, paymentDate, payType, amount, status, operatorName, remark, items);
+    }
 }

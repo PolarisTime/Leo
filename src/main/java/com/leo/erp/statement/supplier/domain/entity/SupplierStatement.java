@@ -34,6 +34,9 @@ public class SupplierStatement extends AbstractAuditableEntity {
     @Column(name = "supplier_name", nullable = false, length = 128)
     private String supplierName;
 
+    @Column(name = "supplier_code", length = 64)
+    private String supplierCode;
+
     @Column(name = "start_date", nullable = false)
     private LocalDate startDate;
 

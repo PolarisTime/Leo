@@ -18,11 +18,11 @@ public final class PageSortFieldCatalog {
             Map.entry("freight-bill", Set.of("id", "billNo", "carrierName", "vehiclePlate", "customerName", "projectName", "billTime", "unitPrice", "totalWeight", "totalFreight", "status", "deliveryStatus")),
             Map.entry("purchase-contract", Set.of("id", "contractNo", "supplierName", "signDate", "effectiveDate", "expireDate", "buyerName", "totalWeight", "totalAmount", "status")),
             Map.entry("sales-contract", Set.of("id", "contractNo", "customerName", "projectName", "signDate", "effectiveDate", "expireDate", "salesName", "totalWeight", "totalAmount", "status")),
-            Map.entry("supplier-statement", Set.of("id", "statementNo", "supplierName", "startDate", "endDate", "purchaseAmount", "paymentAmount", "closingAmount", "status")),
+            Map.entry("supplier-statement", Set.of("id", "statementNo", "supplierCode", "supplierName", "startDate", "endDate", "purchaseAmount", "paymentAmount", "closingAmount", "status")),
             Map.entry("customer-statement", Set.of("id", "statementNo", "customerName", "projectName", "startDate", "endDate", "salesAmount", "receiptAmount", "closingAmount", "status")),
-            Map.entry("freight-statement", Set.of("id", "statementNo", "carrierName", "startDate", "endDate", "totalWeight", "totalFreight", "paidAmount", "unpaidAmount", "status", "signStatus")),
+            Map.entry("freight-statement", Set.of("id", "statementNo", "carrierCode", "carrierName", "startDate", "endDate", "totalWeight", "totalFreight", "paidAmount", "unpaidAmount", "status", "signStatus")),
             Map.entry("receipt", Set.of("id", "receiptNo", "customerName", "projectName", "receiptDate", "payType", "amount", "status", "operatorName")),
-            Map.entry("payment", Set.of("id", "paymentNo", "businessType", "counterpartyName", "paymentDate", "payType", "amount", "status", "operatorName")),
+            Map.entry("payment", Set.of("id", "paymentNo", "businessType", "counterpartyCode", "counterpartyName", "paymentDate", "payType", "amount", "status", "operatorName")),
             Map.entry("invoice-receipt", Set.of("id", "receiveNo", "invoiceNo", "supplierName", "invoiceDate", "invoiceType", "amount", "taxAmount", "status", "operatorName")),
             Map.entry("invoice-issue", Set.of("id", "issueNo", "invoiceNo", "customerName", "projectName", "invoiceDate", "invoiceType", "amount", "taxAmount", "status", "operatorName")),
             Map.entry("pending-invoice-receipt-report", Set.of("orderNo", "supplierName", "orderDate", "materialCode", "pendingInvoiceWeightTon", "pendingInvoiceAmount")),
@@ -35,7 +35,7 @@ public final class PageSortFieldCatalog {
             Map.entry("operation-log", Set.of("id", "logNo", "operatorName", "loginName", "moduleName", "actionType", "businessNo", "requestMethod", "requestPath", "clientIp", "resultStatus", "operationTime")),
             Map.entry("inventory-report", Set.of("brand", "category", "warehouseName", "quantity", "weightTon")),
             Map.entry("io-report", Set.of("businessDate", "businessType", "sourceNo", "materialCode", "warehouseName")),
-            Map.entry("receivable-payable", Set.of("counterpartyName", "direction", "counterpartyType", "recognizedAmount", "settledAmount", "balanceAmount", "days0To30Amount", "days31To60Amount", "days61To90Amount", "daysOver90Amount", "entryCount", "status")),
+            Map.entry("receivable-payable", Set.of("counterpartyCode", "counterpartyName", "direction", "counterpartyType", "recognizedAmount", "settledAmount", "balanceAmount", "days0To30Amount", "days31To60Amount", "days61To90Amount", "daysOver90Amount", "entryCount", "status")),
             Map.entry("project", Set.of("id", "projectCode", "projectName", "projectNameAbbr", "customerCode", "projectManager", "status"))
     );
 

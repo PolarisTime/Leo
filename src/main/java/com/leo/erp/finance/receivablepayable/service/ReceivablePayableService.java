@@ -61,6 +61,7 @@ public class ReceivablePayableService {
                 summary.id(),
                 summary.direction(),
                 summary.counterpartyType(),
+                summary.counterpartyCode(),
                 summary.counterpartyName(),
                 safe(summary.recognizedAmount()),
                 safe(summary.settledAmount()),
@@ -152,14 +153,32 @@ public class ReceivablePayableService {
         String direction = validateDirection(parts[0]);
         String counterpartyType = validateCounterpartyType(parts[1]);
         String counterpartyKey = parts[2] == null ? "" : parts[2].trim();
-        if (direction == null || counterpartyType == null || !counterpartyKey.matches("[a-fA-F0-9]{32}")) {
+        if (direction == null || counterpartyType == null || !isValidCounterpartyKey(counterpartyKey)) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "应收应付汇总ID不合法");
         }
         if (("客户".equals(counterpartyType) && !"应收".equals(direction))
                 || (("供应商".equals(counterpartyType) || "物流商".equals(counterpartyType)) && !"应付".equals(direction))) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "应收应付汇总ID方向不合法");
         }
-        return new SummaryKey(direction, counterpartyType, counterpartyKey.toLowerCase());
+        return new SummaryKey(direction, counterpartyType, normalizeCounterpartyKey(counterpartyKey));
+    }
+
+    private boolean isValidCounterpartyKey(String value) {
+        if (value == null || value.isBlank()) {
+            return false;
+        }
+        String normalized = value.trim();
+        return normalized.matches("[A-Za-z0-9._-]{1,64}")
+                || normalized.matches("[a-fA-F0-9]{32}")
+                || normalized.matches("name:[a-fA-F0-9]{32}");
+    }
+
+    private String normalizeCounterpartyKey(String value) {
+        String normalized = value.trim();
+        if (normalized.matches("name:[a-fA-F0-9]{32}")) {
+            return "name:" + normalized.substring("name:".length()).toLowerCase();
+        }
+        return normalized;
     }
 
     private BigDecimal safe(BigDecimal value) {
