@@ -95,6 +95,7 @@ public class ProjectArQueryRepository {
 
     private static final RowMapper<ProjectArDetailRowResponse> DETAIL_ROW_MAPPER =
             (rs, rowNum) -> new ProjectArDetailRowResponse(
+            rs.getLong("source_document_id"),
             rs.getString("source_document_no"),
             rs.getString("document_type"),
             rs.getDate("business_date") != null ? rs.getDate("business_date").toLocalDate() : null,
@@ -211,6 +212,7 @@ public class ProjectArQueryRepository {
 
         String dataSql = """
                 SELECT
+                    so.id                    AS source_document_id,
                     so.order_no              AS source_document_no,
                     '销售订单'                AS document_type,
                     so.delivery_date          AS business_date,
@@ -258,7 +260,8 @@ public class ProjectArQueryRepository {
         }
 
         String dataSql = """
-                SELECT DISTINCT ON (so.id)
+                SELECT
+                    so.id                    AS source_document_id,
                     so.order_no              AS source_document_no,
                     '销售订单'                AS document_type,
                     so.delivery_date          AS business_date,
@@ -267,11 +270,13 @@ public class ProjectArQueryRepository {
                     so.total_amount           AS amount,
                     CAST(0 AS NUMERIC(14, 2)) AS written_off_amount,
                     so.total_amount           AS unwritten_off_amount,
-                    cs.status                 AS reconciliation_status,
+                    '已确认'                  AS reconciliation_status,
                     so.status                 AS receipt_status,
                     so.created_name           AS operator_name,
                     so.remark
                 """ + baseFrom + """
+                GROUP BY so.id, so.order_no, so.delivery_date, so.customer_code, so.customer_name,
+                         so.total_amount, so.status, so.created_name, so.remark
                 ORDER BY %s %s, so.id DESC
                 LIMIT :limit OFFSET :offset
                 """.formatted(sortDetailColumn(query.sortBy()), sortDirection(query.direction()));

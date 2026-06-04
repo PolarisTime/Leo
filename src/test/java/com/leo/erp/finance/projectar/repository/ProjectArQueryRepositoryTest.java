@@ -214,6 +214,32 @@ class ProjectArQueryRepositoryTest {
         assertThat(jdbcTemplate.dataSql).contains(expectedColumn + " DESC");
     }
 
+    @Test
+    void shouldDeduplicateReconciledRowsWithoutDistinctOnOrderingConstraint() {
+        RecordingJdbcTemplate jdbcTemplate = new RecordingJdbcTemplate();
+        jdbcTemplate.total = 1L;
+        jdbcTemplate.detailRows = List.of(buildDetailRow());
+        var repository = new ProjectArQueryRepository(jdbcTemplate);
+
+        repository.pageReconciled(1L, new PageQuery(0, 10, "sourceDocumentNo", "asc"));
+
+        assertThat(jdbcTemplate.dataSql).doesNotContain("DISTINCT ON");
+        assertThat(jdbcTemplate.dataSql).contains("GROUP BY so.id");
+        assertThat(jdbcTemplate.dataSql).contains("ORDER BY so.order_no ASC, so.id DESC");
+    }
+
+    @Test
+    void shouldSelectSourceDocumentIdForDetailRows() {
+        RecordingJdbcTemplate jdbcTemplate = new RecordingJdbcTemplate();
+        jdbcTemplate.total = 1L;
+        jdbcTemplate.detailRows = List.of(buildDetailRow());
+        var repository = new ProjectArQueryRepository(jdbcTemplate);
+
+        repository.pageUnreconciled(1L, new PageQuery(0, 10, null, null));
+
+        assertThat(jdbcTemplate.dataSql).contains("so.id                    AS source_document_id");
+    }
+
     @ParameterizedTest
     @NullSource
     @ValueSource(strings = {"", "  "})
@@ -239,7 +265,7 @@ class ProjectArQueryRepositoryTest {
 
     private ProjectArDetailRowResponse buildDetailRow() {
         return new ProjectArDetailRowResponse(
-                "SO-001", "销售订单",
+                1L, "SO-001", "销售订单",
                 LocalDate.of(2026, 4, 26),
                 "C001", "客户A",
                 new BigDecimal("1000.00"), BigDecimal.ZERO,
