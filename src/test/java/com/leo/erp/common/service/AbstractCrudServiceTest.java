@@ -21,7 +21,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
-import com.leo.erp.common.support.StatusConstants;
 
 class AbstractCrudServiceTest {
 
@@ -138,9 +137,29 @@ class AbstractCrudServiceTest {
     }
 
     @Test
+    void deleteShouldThrowWhenStatusConfirmed() {
+        TestCrudService service = new TestCrudService();
+        service.addEntity(1L, StatusConstants.CONFIRMED);
+
+        assertThatThrownBy(() -> service.delete(1L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("不能删除");
+    }
+
+    @Test
     void updateShouldThrowWhenStatusProtected() {
         TestCrudService service = new TestCrudService();
         service.addEntity(1L, StatusConstants.COMPLETED);
+
+        assertThatThrownBy(() -> service.update(1L, "req"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("不能编辑");
+    }
+
+    @Test
+    void updateShouldThrowWhenStatusConfirmed() {
+        TestCrudService service = new TestCrudService();
+        service.addEntity(1L, StatusConstants.CONFIRMED);
 
         assertThatThrownBy(() -> service.update(1L, "req"))
                 .isInstanceOf(BusinessException.class)
