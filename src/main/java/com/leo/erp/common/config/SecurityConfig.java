@@ -3,6 +3,7 @@ package com.leo.erp.common.config;
 import com.leo.erp.security.jwt.ApiKeyAuthenticationFilter;
 import com.leo.erp.security.jwt.ForceTotpSetupFilter;
 import com.leo.erp.security.jwt.JwtAuthenticationFilter;
+import com.leo.erp.common.idempotent.HttpIdempotencyFilter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -44,7 +45,8 @@ public class SecurityConfig {
                                                    WebSecurityProperties webSecurityProperties,
                                                    JwtAuthenticationFilter jwtAuthenticationFilter,
                                                    ApiKeyAuthenticationFilter apiKeyAuthenticationFilter,
-                                                   ForceTotpSetupFilter forceTotpSetupFilter) throws Exception {
+                                                   ForceTotpSetupFilter forceTotpSetupFilter,
+                                                   HttpIdempotencyFilter httpIdempotencyFilter) throws Exception {
         http
                 .csrf(AbstractHttpConfigurer::disable)
                 .cors(Customizer.withDefaults())
@@ -82,7 +84,8 @@ public class SecurityConfig {
                 })
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
                 .addFilterAfter(apiKeyAuthenticationFilter, JwtAuthenticationFilter.class)
-                .addFilterAfter(forceTotpSetupFilter, ApiKeyAuthenticationFilter.class);
+                .addFilterAfter(forceTotpSetupFilter, ApiKeyAuthenticationFilter.class)
+                .addFilterAfter(httpIdempotencyFilter, ForceTotpSetupFilter.class);
 
         return http.build();
     }
@@ -122,6 +125,14 @@ public class SecurityConfig {
     public FilterRegistrationBean<ForceTotpSetupFilter> forceTotpSetupFilterRegistration(
             ForceTotpSetupFilter forceTotpSetupFilter) {
         FilterRegistrationBean<ForceTotpSetupFilter> registration = new FilterRegistrationBean<>(forceTotpSetupFilter);
+        registration.setEnabled(false);
+        return registration;
+    }
+
+    @Bean
+    public FilterRegistrationBean<HttpIdempotencyFilter> httpIdempotencyFilterRegistration(
+            HttpIdempotencyFilter httpIdempotencyFilter) {
+        FilterRegistrationBean<HttpIdempotencyFilter> registration = new FilterRegistrationBean<>(httpIdempotencyFilter);
         registration.setEnabled(false);
         return registration;
     }
