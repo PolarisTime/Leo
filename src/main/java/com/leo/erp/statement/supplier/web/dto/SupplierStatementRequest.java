@@ -11,6 +11,7 @@ import java.util.List;
 
 public record SupplierStatementRequest(
         String statementNo,
+        String supplierCode,
         @jakarta.validation.constraints.NotBlank String supplierName,
         @NotNull LocalDate startDate,
         @NotNull LocalDate endDate,
@@ -21,4 +22,16 @@ public record SupplierStatementRequest(
         String remark,
         @Valid @NotEmpty List<SupplierStatementItemRequest> items
 ) {
+    public SupplierStatementRequest(String statementNo,
+                                    String supplierName,
+                                    LocalDate startDate,
+                                    LocalDate endDate,
+                                    BigDecimal purchaseAmount,
+                                    BigDecimal paymentAmount,
+                                    BigDecimal closingAmount,
+                                    String status,
+                                    String remark,
+                                    List<SupplierStatementItemRequest> items) {
+        this(statementNo, null, supplierName, startDate, endDate, purchaseAmount, paymentAmount, closingAmount, status, remark, items);
+    }
 }

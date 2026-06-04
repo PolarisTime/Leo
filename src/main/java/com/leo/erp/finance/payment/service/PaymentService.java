@@ -111,6 +111,7 @@ public class PaymentService extends AbstractCrudService<Payment, PaymentRequest,
         return new PaymentRequest(
                 resolveCreateBusinessNo("payment", request.paymentNo(), entityId),
                 request.businessType(),
+                request.counterpartyCode(),
                 request.counterpartyName(),
                 request.sourceStatementId(),
                 request.paymentDate(),
@@ -128,6 +129,7 @@ public class PaymentService extends AbstractCrudService<Payment, PaymentRequest,
         return new PaymentRequest(
                 entity.getPaymentNo(),
                 request.businessType(),
+                request.counterpartyCode(),
                 request.counterpartyName(),
                 request.sourceStatementId(),
                 request.paymentDate(),
@@ -222,6 +224,7 @@ public class PaymentService extends AbstractCrudService<Payment, PaymentRequest,
                 response.id(),
                 response.paymentNo(),
                 response.businessType(),
+                response.counterpartyCode(),
                 response.counterpartyName(),
                 response.sourceStatementId(),
                 response.paymentDate(),
@@ -257,13 +260,14 @@ public class PaymentService extends AbstractCrudService<Payment, PaymentRequest,
         entity.setPaymentNo(request.paymentNo());
         entity.setBusinessType(request.businessType());
         entity.setCounterpartyName(request.counterpartyName());
+        entity.setCounterpartyCode(trimToNull(request.counterpartyCode()));
         entity.setPaymentDate(request.paymentDate());
         entity.setPayType(request.payType());
         entity.setAmount(TradeItemCalculator.scaleAmount(request.amount()));
         entity.setStatus(nextStatus);
         entity.setOperatorName(request.operatorName());
         entity.setRemark(request.remark());
-        applyAllocations(entity, request, nextStatus);
+        entity.setCounterpartyCode(mergeCounterpartyCode(entity.getCounterpartyCode(), applyAllocations(entity, request, nextStatus)));
         entity.setSourceStatementId(resolveLegacySourceStatementId(entity.getItems()));
     }
 
@@ -285,16 +289,17 @@ public class PaymentService extends AbstractCrudService<Payment, PaymentRequest,
         }
     }
 
-    private void applyAllocations(Payment entity, PaymentRequest request, String nextStatus) {
+    private String applyAllocations(Payment entity, PaymentRequest request, String nextStatus) {
         List<PaymentAllocationRequest> allocationRequests = normalizeAllocationRequests(request);
         if (!SUPPLIER_PAYMENT_TYPE.equals(request.businessType()) && !FREIGHT_PAYMENT_TYPE.equals(request.businessType())) {
             if (!allocationRequests.isEmpty()) {
                 throw new BusinessException(ErrorCode.VALIDATION_ERROR, "当前业务类型不支持对账单核销");
             }
             entity.getItems().clear();
-            return;
+            return null;
         }
 
+        String resolvedCounterpartyCode = null;
         BigDecimal totalAllocatedAmount = BigDecimal.ZERO;
         Map<Long, BigDecimal> requestAllocatedAmountMap = new HashMap<>();
         List<PaymentAllocation> items = ManagedEntityItemSupport.syncById(
@@ -317,6 +322,7 @@ public class PaymentService extends AbstractCrudService<Payment, PaymentRequest,
             item.setAllocatedAmount(allocatedAmount);
             if (SUPPLIER_PAYMENT_TYPE.equals(request.businessType())) {
                 SupplierStatement statement = requireAccessibleSupplierStatement(source.sourceStatementId());
+                resolvedCounterpartyCode = mergeCounterpartyCode(resolvedCounterpartyCode, statement.getSupplierCode());
                 validateLinkedSupplierStatement(
                         request,
                         nextStatus,
@@ -328,6 +334,7 @@ public class PaymentService extends AbstractCrudService<Payment, PaymentRequest,
                 );
             } else {
                 FreightStatement statement = requireAccessibleFreightStatement(source.sourceStatementId());
+                resolvedCounterpartyCode = mergeCounterpartyCode(resolvedCounterpartyCode, statement.getCarrierCode());
                 validateLinkedFreightStatement(
                         request,
                         nextStatus,
@@ -349,6 +356,7 @@ public class PaymentService extends AbstractCrudService<Payment, PaymentRequest,
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "付款金额必须等于核销金额合计");
         }
         entity.getItems().sort(java.util.Comparator.comparing(PaymentAllocation::getLineNo));
+        return resolvedCounterpartyCode;
     }
 
     private List<PaymentAllocationRequest> normalizeAllocationRequests(PaymentRequest request) {
@@ -365,6 +373,7 @@ public class PaymentService extends AbstractCrudService<Payment, PaymentRequest,
         return new PaymentRequest(
                 entity.getPaymentNo(),
                 entity.getBusinessType(),
+                entity.getCounterpartyCode(),
                 entity.getCounterpartyName(),
                 entity.getSourceStatementId(),
                 entity.getPaymentDate(),
@@ -413,6 +422,7 @@ public class PaymentService extends AbstractCrudService<Payment, PaymentRequest,
         if (!statement.getSupplierName().equals(request.counterpartyName())) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行对账单供应商与付款单往来单位不一致");
         }
+        validateCounterpartyCode(request.counterpartyCode(), statement.getSupplierCode(), lineNo, "供应商");
         if (requestAllocatedAmountMap.containsKey(statement.getId())) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "同一付款单不能重复核销同一供应商对账单");
         }
@@ -443,6 +453,7 @@ public class PaymentService extends AbstractCrudService<Payment, PaymentRequest,
         if (!statement.getCarrierName().equals(request.counterpartyName())) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行对账单物流商与付款单往来单位不一致");
         }
+        validateCounterpartyCode(request.counterpartyCode(), statement.getCarrierCode(), lineNo, "物流商");
         if (requestAllocatedAmountMap.containsKey(statement.getId())) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "同一付款单不能重复核销同一物流对账单");
         }
@@ -469,6 +480,36 @@ public class PaymentService extends AbstractCrudService<Payment, PaymentRequest,
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行核销金额必须大于0");
         }
         return TradeItemCalculator.scaleAmount(normalized);
+    }
+
+    private void validateCounterpartyCode(String requestCode, String statementCode, int lineNo, String counterpartyType) {
+        String normalizedRequestCode = trimToNull(requestCode);
+        String normalizedStatementCode = trimToNull(statementCode);
+        if (normalizedRequestCode == null || normalizedStatementCode == null) {
+            return;
+        }
+        if (!normalizedRequestCode.equals(normalizedStatementCode)) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行对账单" + counterpartyType + "编码与付款单往来单位编码不一致");
+        }
+    }
+
+    private String mergeCounterpartyCode(String currentCode, String nextCode) {
+        String normalizedCurrentCode = trimToNull(currentCode);
+        String normalizedNextCode = trimToNull(nextCode);
+        if (normalizedCurrentCode == null) {
+            return normalizedNextCode;
+        }
+        if (normalizedNextCode == null || normalizedCurrentCode.equals(normalizedNextCode)) {
+            return normalizedCurrentCode;
+        }
+        throw new BusinessException(ErrorCode.BUSINESS_ERROR, "同一付款单不能核销不同往来单位编码的对账单");
+    }
+
+    private String trimToNull(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        return value.trim();
     }
 
     private void captureOriginalAllocationState(Payment entity) {

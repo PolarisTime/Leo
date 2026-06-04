@@ -216,9 +216,41 @@ class ReceivablePayableServiceTest {
         var excelExportService = mock(ExcelExportService.class);
         var service = new ReceivablePayableService(queryRepository, excelExportService);
 
-        assertThatThrownBy(() -> service.detail("应收:客户:not-a-valid-hex-key"))
+        assertThatThrownBy(() -> service.detail("应收:客户:bad key!"))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("应收应付汇总ID不合法");
+    }
+
+    @Test
+    void shouldReturnDetail_whenCounterpartyCodeKeyValid() {
+        var codeKey = "应收:客户:CUS001";
+        var summary = buildResponse(codeKey, "应收", "客户", "客户A");
+        var queryRepository = mock(ReceivablePayableQueryRepository.class);
+        when(queryRepository.findSummary(anyString(), anyString(), anyString())).thenReturn(summary);
+        when(queryRepository.detailItems(anyString(), anyString(), anyString())).thenReturn(List.of());
+        var excelExportService = mock(ExcelExportService.class);
+        var service = new ReceivablePayableService(queryRepository, excelExportService);
+
+        var result = service.detail(codeKey);
+
+        assertThat(result).isNotNull();
+        assertThat(result.id()).isEqualTo(codeKey);
+    }
+
+    @Test
+    void shouldReturnDetail_whenLegacyNameHashKeyValid() {
+        var nameHashKey = "应收:客户:name:abcdefabcdefabcdefabcdef12345678";
+        var summary = buildResponse(nameHashKey, "应收", "客户", "客户A");
+        var queryRepository = mock(ReceivablePayableQueryRepository.class);
+        when(queryRepository.findSummary(anyString(), anyString(), anyString())).thenReturn(summary);
+        when(queryRepository.detailItems(anyString(), anyString(), anyString())).thenReturn(List.of());
+        var excelExportService = mock(ExcelExportService.class);
+        var service = new ReceivablePayableService(queryRepository, excelExportService);
+
+        var result = service.detail(nameHashKey);
+
+        assertThat(result).isNotNull();
+        assertThat(result.id()).isEqualTo(nameHashKey);
     }
 
     @Test

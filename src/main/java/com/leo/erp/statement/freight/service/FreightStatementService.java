@@ -15,6 +15,7 @@ import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.support.TradeItemCalculator;
 import com.leo.erp.logistics.bill.domain.entity.FreightBill;
 import com.leo.erp.logistics.bill.repository.FreightBillRepository;
+import com.leo.erp.master.carrier.repository.CarrierRepository;
 import com.leo.erp.security.permission.DataScopeContext;
 import com.leo.erp.security.permission.WorkflowTransitionGuard;
 import com.leo.erp.statement.freight.domain.entity.FreightStatement;
@@ -26,6 +27,7 @@ import com.leo.erp.statement.freight.web.dto.FreightStatementRequest;
 import com.leo.erp.statement.freight.web.dto.FreightStatementResponse;
 import com.leo.erp.statement.service.StatementCandidateSupport;
 import com.leo.erp.statement.service.StatementSettlementSyncService;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.jpa.domain.Specification;
@@ -60,6 +62,26 @@ public class FreightStatementService extends AbstractCrudService<FreightStatemen
     private final StatementSettlementSyncService statementSettlementSyncService;
     private final WorkflowTransitionGuard workflowTransitionGuard;
     private final FreightStatementWebMapper freightStatementWebMapper;
+    private final CarrierRepository carrierRepository;
+
+    @Autowired
+    public FreightStatementService(FreightStatementRepository repository,
+                                   SnowflakeIdGenerator idGenerator,
+                                   FreightBillRepository freightBillRepository,
+                                   AttachmentBindingService attachmentBindingService,
+                                   StatementSettlementSyncService statementSettlementSyncService,
+                                   WorkflowTransitionGuard workflowTransitionGuard,
+                                   FreightStatementWebMapper freightStatementWebMapper,
+                                   CarrierRepository carrierRepository) {
+        super(idGenerator);
+        this.repository = repository;
+        this.freightBillRepository = freightBillRepository;
+        this.attachmentBindingService = attachmentBindingService;
+        this.statementSettlementSyncService = statementSettlementSyncService;
+        this.workflowTransitionGuard = workflowTransitionGuard;
+        this.freightStatementWebMapper = freightStatementWebMapper;
+        this.carrierRepository = carrierRepository;
+    }
 
     public FreightStatementService(FreightStatementRepository repository,
                                    SnowflakeIdGenerator idGenerator,
@@ -68,13 +90,8 @@ public class FreightStatementService extends AbstractCrudService<FreightStatemen
                                    StatementSettlementSyncService statementSettlementSyncService,
                                    WorkflowTransitionGuard workflowTransitionGuard,
                                    FreightStatementWebMapper freightStatementWebMapper) {
-        super(idGenerator);
-        this.repository = repository;
-        this.freightBillRepository = freightBillRepository;
-        this.attachmentBindingService = attachmentBindingService;
-        this.statementSettlementSyncService = statementSettlementSyncService;
-        this.workflowTransitionGuard = workflowTransitionGuard;
-        this.freightStatementWebMapper = freightStatementWebMapper;
+        this(repository, idGenerator, freightBillRepository, attachmentBindingService, statementSettlementSyncService,
+                workflowTransitionGuard, freightStatementWebMapper, null);
     }
 
     @Transactional(readOnly = true)
@@ -178,6 +195,7 @@ public class FreightStatementService extends AbstractCrudService<FreightStatemen
     protected FreightStatementCommand normalizeCreateRequest(FreightStatementCommand command, long entityId) {
         return new FreightStatementCommand(
                 resolveCreateBusinessNo("freight-statement", command.statementNo(), entityId),
+                command.carrierCode(),
                 command.carrierName(),
                 command.startDate(),
                 command.endDate(),
@@ -197,6 +215,7 @@ public class FreightStatementService extends AbstractCrudService<FreightStatemen
     protected FreightStatementCommand normalizeUpdateRequest(FreightStatement entity, FreightStatementCommand command) {
         return new FreightStatementCommand(
                 entity.getStatementNo(),
+                command.carrierCode(),
                 command.carrierName(),
                 command.startDate(),
                 command.endDate(),
@@ -279,6 +298,7 @@ public class FreightStatementService extends AbstractCrudService<FreightStatemen
         List<FreightBill> sourceBills = loadSourceBills(command, entity.getId());
         entity.setStatementNo(command.statementNo());
         entity.setCarrierName(command.carrierName());
+        entity.setCarrierCode(resolveCarrierCode(command.carrierCode(), command.carrierName()));
         entity.setStartDate(command.startDate());
         entity.setEndDate(command.endDate());
         entity.setStatus(nextStatus);
@@ -354,6 +374,7 @@ public class FreightStatementService extends AbstractCrudService<FreightStatemen
         return new FreightStatementView(
                 entity.getId(),
                 entity.getStatementNo(),
+                entity.getCarrierCode(),
                 entity.getCarrierName(),
                 entity.getStartDate(),
                 entity.getEndDate(),
@@ -504,5 +525,26 @@ public class FreightStatementService extends AbstractCrudService<FreightStatemen
                 .map(AttachmentView::name)
                 .filter(name -> name != null && !name.isBlank())
                 .collect(Collectors.joining(", "));
+    }
+
+    private String resolveCarrierCode(String requestCarrierCode, String carrierName) {
+        String explicitCode = trimToNull(requestCarrierCode);
+        if (explicitCode != null || carrierRepository == null) {
+            return explicitCode;
+        }
+        String normalizedCarrierName = trimToNull(carrierName);
+        if (normalizedCarrierName == null) {
+            return null;
+        }
+        return carrierRepository.findFirstByCarrierNameAndDeletedFlagFalseOrderByCarrierCodeAsc(normalizedCarrierName)
+                .map(com.leo.erp.master.carrier.domain.entity.Carrier::getCarrierCode)
+                .orElse(null);
+    }
+
+    private String trimToNull(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        return value.trim();
     }
 }

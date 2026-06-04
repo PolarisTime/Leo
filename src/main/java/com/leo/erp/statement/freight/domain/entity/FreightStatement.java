@@ -34,6 +34,9 @@ public class FreightStatement extends AbstractAuditableEntity {
     @Column(name = "carrier_name", nullable = false, length = 128)
     private String carrierName;
 
+    @Column(name = "carrier_code", length = 64)
+    private String carrierCode;
+
     @Column(name = "start_date", nullable = false)
     private LocalDate startDate;
 

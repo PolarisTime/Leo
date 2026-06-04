@@ -12,6 +12,7 @@ public record PaymentRequest(
         String paymentNo,
         @jakarta.validation.constraints.NotBlank(message = "业务类型不能为空")
         String businessType,
+        String counterpartyCode,
         @jakarta.validation.constraints.NotBlank(message = "往来单位不能为空")
         String counterpartyName,
         Long sourceStatementId,
@@ -30,4 +31,17 @@ public record PaymentRequest(
         @Valid
         List<PaymentAllocationRequest> items
 ) {
+    public PaymentRequest(String paymentNo,
+                          String businessType,
+                          String counterpartyName,
+                          Long sourceStatementId,
+                          LocalDate paymentDate,
+                          String payType,
+                          BigDecimal amount,
+                          String status,
+                          String operatorName,
+                          String remark,
+                          List<PaymentAllocationRequest> items) {
+        this(paymentNo, businessType, null, counterpartyName, sourceStatementId, paymentDate, payType, amount, status, operatorName, remark, items);
+    }
 }

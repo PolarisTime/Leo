@@ -220,8 +220,9 @@ class ReceivablePayableQueryRepositoryTest {
         var result = repository.detailItems("应收", "客户", "abc123");
 
         assertThat(result).hasSize(1);
-        assertThat(jdbcTemplate.dataSql).contains("fm_invoice_issue");
-        assertThat(jdbcTemplate.dataSql).contains("fm_receipt");
+        assertThat(jdbcTemplate.dataSql).contains("st_customer_statement");
+        assertThat(jdbcTemplate.dataSql).contains("fm_receipt_allocation");
+        assertThat(jdbcTemplate.dataSql).doesNotContain("fm_invoice_issue");
         assertThat(jdbcTemplate.lastParams.getValue("counterpartyKey")).isEqualTo("abc123");
     }
 
@@ -234,8 +235,9 @@ class ReceivablePayableQueryRepositoryTest {
         var result = repository.detailItems("应付", "供应商", "def456");
 
         assertThat(result).hasSize(1);
-        assertThat(jdbcTemplate.dataSql).contains("fm_invoice_receipt");
-        assertThat(jdbcTemplate.dataSql).contains("fm_payment");
+        assertThat(jdbcTemplate.dataSql).contains("st_supplier_statement");
+        assertThat(jdbcTemplate.dataSql).contains("fm_payment_allocation");
+        assertThat(jdbcTemplate.dataSql).doesNotContain("fm_invoice_receipt");
         assertThat(jdbcTemplate.lastParams.getValue("counterpartyKey")).isEqualTo("def456");
     }
 

@@ -11,6 +11,8 @@ public interface CarrierRepository extends JpaRepository<Carrier, Long>, JpaSpec
 
     boolean existsByCarrierCodeAndDeletedFlagFalse(String carrierCode);
 
+    Optional<Carrier> findFirstByCarrierNameAndDeletedFlagFalseOrderByCarrierCodeAsc(String carrierName);
+
     List<Carrier> findByDeletedFlagFalseOrderByCarrierCodeAsc();
 
     List<Carrier> findByDeletedFlagFalseAndStatusOrderByCarrierCodeAsc(String status);

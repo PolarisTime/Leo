@@ -11,6 +11,7 @@ import com.leo.erp.common.support.ManagedEntityItemSupport;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.support.TradeItemCalculator;
+import com.leo.erp.master.supplier.repository.SupplierRepository;
 import com.leo.erp.purchase.inbound.domain.entity.PurchaseInbound;
 import com.leo.erp.purchase.inbound.domain.entity.PurchaseInboundItem;
 import com.leo.erp.purchase.inbound.repository.PurchaseInboundRepository;
@@ -28,6 +29,7 @@ import com.leo.erp.statement.supplier.web.dto.SupplierStatementRequest;
 import com.leo.erp.statement.supplier.web.dto.SupplierStatementResponse;
 import com.leo.erp.statement.service.StatementCandidateSupport;
 import com.leo.erp.statement.service.StatementSettlementSyncService;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
@@ -56,6 +58,26 @@ public class SupplierStatementService extends AbstractCrudService<SupplierStatem
     private final PurchaseInboundItemQueryService purchaseInboundItemQueryService;
     private final StatementSettlementSyncService statementSettlementSyncService;
     private final WorkflowTransitionGuard workflowTransitionGuard;
+    private final SupplierRepository supplierRepository;
+
+    @Autowired
+    public SupplierStatementService(SupplierStatementRepository repository,
+                                    SnowflakeIdGenerator idGenerator,
+                                    SupplierStatementMapper supplierStatementMapper,
+                                    PurchaseInboundRepository purchaseInboundRepository,
+                                    PurchaseInboundItemQueryService purchaseInboundItemQueryService,
+                                    StatementSettlementSyncService statementSettlementSyncService,
+                                    WorkflowTransitionGuard workflowTransitionGuard,
+                                    SupplierRepository supplierRepository) {
+        super(idGenerator);
+        this.repository = repository;
+        this.supplierStatementMapper = supplierStatementMapper;
+        this.purchaseInboundRepository = purchaseInboundRepository;
+        this.purchaseInboundItemQueryService = purchaseInboundItemQueryService;
+        this.statementSettlementSyncService = statementSettlementSyncService;
+        this.workflowTransitionGuard = workflowTransitionGuard;
+        this.supplierRepository = supplierRepository;
+    }
 
     public SupplierStatementService(SupplierStatementRepository repository,
                                     SnowflakeIdGenerator idGenerator,
@@ -64,13 +86,8 @@ public class SupplierStatementService extends AbstractCrudService<SupplierStatem
                                     PurchaseInboundItemQueryService purchaseInboundItemQueryService,
                                     StatementSettlementSyncService statementSettlementSyncService,
                                     WorkflowTransitionGuard workflowTransitionGuard) {
-        super(idGenerator);
-        this.repository = repository;
-        this.supplierStatementMapper = supplierStatementMapper;
-        this.purchaseInboundRepository = purchaseInboundRepository;
-        this.purchaseInboundItemQueryService = purchaseInboundItemQueryService;
-        this.statementSettlementSyncService = statementSettlementSyncService;
-        this.workflowTransitionGuard = workflowTransitionGuard;
+        this(repository, idGenerator, supplierStatementMapper, purchaseInboundRepository, purchaseInboundItemQueryService,
+                statementSettlementSyncService, workflowTransitionGuard, null);
     }
 
     @Transactional(readOnly = true)
@@ -111,6 +128,7 @@ public class SupplierStatementService extends AbstractCrudService<SupplierStatem
         return new SupplierStatementResponse(
                 response.id(),
                 response.statementNo(),
+                response.supplierCode(),
                 response.supplierName(),
                 response.startDate(),
                 response.endDate(),
@@ -147,6 +165,7 @@ public class SupplierStatementService extends AbstractCrudService<SupplierStatem
     protected SupplierStatementRequest normalizeCreateRequest(SupplierStatementRequest request, long entityId) {
         return new SupplierStatementRequest(
                 resolveCreateBusinessNo("supplier-statement", request.statementNo(), entityId),
+                request.supplierCode(),
                 request.supplierName(),
                 request.startDate(),
                 request.endDate(),
@@ -163,6 +182,7 @@ public class SupplierStatementService extends AbstractCrudService<SupplierStatem
     protected SupplierStatementRequest normalizeUpdateRequest(SupplierStatement entity, SupplierStatementRequest request) {
         return new SupplierStatementRequest(
                 entity.getStatementNo(),
+                request.supplierCode(),
                 request.supplierName(),
                 request.startDate(),
                 request.endDate(),
@@ -221,6 +241,7 @@ public class SupplierStatementService extends AbstractCrudService<SupplierStatem
         );
         entity.setStatementNo(request.statementNo());
         entity.setSupplierName(request.supplierName());
+        entity.setSupplierCode(resolveSupplierCode(request.supplierCode(), request.supplierName()));
         entity.setStartDate(request.startDate());
         entity.setEndDate(request.endDate());
         entity.setStatus(nextStatus);
@@ -419,6 +440,27 @@ public class SupplierStatementService extends AbstractCrudService<SupplierStatem
                 && item.getQuantity().equals(source.quantity())
                 && TradeItemCalculator.normalizeQuantityUnit(item.getQuantityUnit())
                 .equals(TradeItemCalculator.normalizeQuantityUnit(source.quantityUnit()));
+    }
+
+    private String resolveSupplierCode(String requestSupplierCode, String supplierName) {
+        String explicitCode = trimToNull(requestSupplierCode);
+        if (explicitCode != null || supplierRepository == null) {
+            return explicitCode;
+        }
+        String normalizedSupplierName = trimToNull(supplierName);
+        if (normalizedSupplierName == null) {
+            return null;
+        }
+        return supplierRepository.findFirstBySupplierNameAndDeletedFlagFalseOrderBySupplierCodeAsc(normalizedSupplierName)
+                .map(com.leo.erp.master.supplier.domain.entity.Supplier::getSupplierCode)
+                .orElse(null);
+    }
+
+    private String trimToNull(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        return value.trim();
     }
 
     private SupplierStatementCandidateResponse toCandidateResponse(PurchaseInbound inbound) {
