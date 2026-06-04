@@ -32,9 +32,9 @@ class ReceivablePayableControllerTest {
         ReceivablePayableResponse item = mock(ReceivablePayableResponse.class);
         Page<ReceivablePayableResponse> page = new PageImpl<>(List.of(item));
         PageQuery query = new PageQuery(0, 20, null, null);
-        when(receivablePayableService.page(any(), eq("in"), eq("customer"), eq("active"), eq("test"))).thenReturn(page);
+        when(receivablePayableService.page(any(), eq("in"), eq("customer"), eq("reconciled"), eq("active"), eq("test"))).thenReturn(page);
 
-        ApiResponse<PageResponse<ReceivablePayableResponse>> response = controller.page(query, "in", "customer", "active", "test");
+        ApiResponse<PageResponse<ReceivablePayableResponse>> response = controller.page(query, "in", "customer", "reconciled", "active", "test");
 
         assertThat(response.code()).isEqualTo(0);
         assertThat(response.data().content()).hasSize(1);
@@ -55,12 +55,12 @@ class ReceivablePayableControllerTest {
     void exportReturnsFileDownload() {
         byte[] content = "test".getBytes();
         FileDownloadResponse file = new FileDownloadResponse("test.xlsx", MediaType.APPLICATION_OCTET_STREAM, content);
-        when(receivablePayableService.exportExcel(eq("in"), eq("customer"), eq("active"), eq("test"))).thenReturn(file);
+        when(receivablePayableService.exportExcel(eq("in"), eq("customer"), eq("reconciled"), eq("active"), eq("test"))).thenReturn(file);
 
-        ResponseEntity<byte[]> response = controller.export("in", "customer", "active", "test");
+        ResponseEntity<byte[]> response = controller.export("in", "customer", "reconciled", "active", "test");
 
         assertThat(response.getStatusCode().is2xxSuccessful()).isTrue();
         assertThat(response.getBody()).isEqualTo(content);
-        verify(receivablePayableService).exportExcel("in", "customer", "active", "test");
+        verify(receivablePayableService).exportExcel("in", "customer", "reconciled", "active", "test");
     }
 }

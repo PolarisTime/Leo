@@ -43,11 +43,12 @@ public class ReceivablePayableController {
             @BindPageQuery(sortFieldKey = "receivable-payable", directionParam = "sortDirection") PageQuery query,
             @RequestParam(name = "direction", required = false) String businessDirection,
             @RequestParam(required = false) String counterpartyType,
+            @RequestParam(required = false) String reconciliationStatus,
             @RequestParam(required = false) String status,
             @RequestParam(required = false) String keyword
     ) {
         return ApiResponse.success(PageResponse.from(
-                receivablePayableService.page(query, businessDirection, counterpartyType, status, keyword)
+                receivablePayableService.page(query, businessDirection, counterpartyType, reconciliationStatus, status, keyword)
         ));
     }
 
@@ -64,12 +65,14 @@ public class ReceivablePayableController {
     public ResponseEntity<byte[]> export(
             @RequestParam(name = "direction", required = false) String businessDirection,
             @RequestParam(required = false) String counterpartyType,
+            @RequestParam(required = false) String reconciliationStatus,
             @RequestParam(required = false) String status,
             @RequestParam(required = false) String keyword
     ) {
         return toDownloadResponse(receivablePayableService.exportExcel(
                 businessDirection,
                 counterpartyType,
+                reconciliationStatus,
                 status,
                 keyword
         ));

@@ -9,6 +9,7 @@ public record ReceivablePayableDetailResponse(
         String counterpartyType,
         String counterpartyCode,
         String counterpartyName,
+        String reconciliationStatus,
         BigDecimal recognizedAmount,
         BigDecimal settledAmount,
         BigDecimal balanceAmount,
@@ -36,7 +37,7 @@ public record ReceivablePayableDetailResponse(
                                            String status,
                                            String remark,
                                            List<ReceivablePayableDetailItemResponse> items) {
-        this(id, direction, counterpartyType, null, counterpartyName, recognizedAmount, settledAmount, balanceAmount,
+        this(id, direction, counterpartyType, null, counterpartyName, "未对账", recognizedAmount, settledAmount, balanceAmount,
                 days0To30Amount, days31To60Amount, days61To90Amount, daysOver90Amount, entryCount, status, remark, items);
     }
 }

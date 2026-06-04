@@ -53,6 +53,20 @@ class PageSortFieldCatalogTest {
     }
 
     @Test
+    void shouldReturnFieldsForReceivablePayable() {
+        var fields = PageSortFieldCatalog.fields("receivable-payable");
+        assertThat(fields).contains(
+                "counterpartyCode",
+                "counterpartyName",
+                "reconciliationStatus",
+                "recognizedAmount",
+                "settledAmount",
+                "balanceAmount",
+                "status"
+        );
+    }
+
+    @Test
     void shouldThrowForUnknownKey() {
         assertThatThrownBy(() -> PageSortFieldCatalog.fields("unknown-key"))
                 .isInstanceOf(IllegalArgumentException.class)

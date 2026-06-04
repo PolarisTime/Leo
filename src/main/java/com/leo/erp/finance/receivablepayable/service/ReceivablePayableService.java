@@ -24,6 +24,7 @@ public class ReceivablePayableService {
     private static final Set<String> ALLOWED_DIRECTIONS = Set.of("应收", "应付");
     private static final Set<String> ALLOWED_COUNTERPARTY_TYPES = Set.of("客户", "供应商", "物流商");
     private static final Set<String> ALLOWED_STATUSES = Set.of("未结清", "已结清");
+    private static final Set<String> ALLOWED_RECONCILIATION_STATUSES = Set.of("未对账", "已对账");
 
     private final ReceivablePayableQueryRepository queryRepository;
     private final ExcelExportService excelExportService;
@@ -38,12 +39,14 @@ public class ReceivablePayableService {
     public Page<ReceivablePayableResponse> page(PageQuery query,
                                                 String businessDirection,
                                                 String counterpartyType,
+                                                String reconciliationStatus,
                                                 String status,
                                                 String keyword) {
         String normalizedDirection = validateDirection(businessDirection);
         String normalizedCounterpartyType = validateCounterpartyType(counterpartyType);
+        String normalizedReconciliationStatus = validateReconciliationStatus(reconciliationStatus);
         String normalizedStatus = validateStatus(status);
-        return queryRepository.page(query, normalizedDirection, normalizedCounterpartyType, normalizedStatus, keyword);
+        return queryRepository.page(query, normalizedDirection, normalizedCounterpartyType, normalizedReconciliationStatus, normalizedStatus, keyword);
     }
 
     @Transactional(readOnly = true)
@@ -52,7 +55,8 @@ public class ReceivablePayableService {
         ReceivablePayableResponse summary = queryRepository.findSummary(
                 key.direction(),
                 key.counterpartyType(),
-                key.counterpartyKey()
+                key.counterpartyKey(),
+                key.reconciliationStatus()
         );
         if (summary == null) {
             throw new BusinessException(ErrorCode.NOT_FOUND, "应收应付汇总不存在");
@@ -63,6 +67,7 @@ public class ReceivablePayableService {
                 summary.counterpartyType(),
                 summary.counterpartyCode(),
                 summary.counterpartyName(),
+                summary.reconciliationStatus(),
                 safe(summary.recognizedAmount()),
                 safe(summary.settledAmount()),
                 safe(summary.balanceAmount()),
@@ -76,7 +81,8 @@ public class ReceivablePayableService {
                 queryRepository.detailItems(
                         key.direction(),
                         key.counterpartyType(),
-                        key.counterpartyKey()
+                        key.counterpartyKey(),
+                        key.reconciliationStatus()
                 )
         );
     }
@@ -84,14 +90,17 @@ public class ReceivablePayableService {
     @Transactional(readOnly = true)
     public FileDownloadResponse exportExcel(String businessDirection,
                                             String counterpartyType,
+                                            String reconciliationStatus,
                                             String status,
                                             String keyword) {
         String normalizedDirection = validateDirection(businessDirection);
         String normalizedCounterpartyType = validateCounterpartyType(counterpartyType);
+        String normalizedReconciliationStatus = validateReconciliationStatus(reconciliationStatus);
         String normalizedStatus = validateStatus(status);
         List<ReceivablePayableExportRow> rows = queryRepository.listForExport(
                         normalizedDirection,
                         normalizedCounterpartyType,
+                        normalizedReconciliationStatus,
                         normalizedStatus,
                         keyword
                 )
@@ -138,6 +147,17 @@ public class ReceivablePayableService {
         return normalized;
     }
 
+    private String validateReconciliationStatus(String value) {
+        String normalized = normalize(value);
+        if (normalized == null) {
+            return null;
+        }
+        if (!ALLOWED_RECONCILIATION_STATUSES.contains(normalized)) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "reconciliationStatus 不合法");
+        }
+        return normalized;
+    }
+
     private String normalize(String value) {
         return value == null || value.isBlank() ? null : value.trim();
     }
@@ -146,21 +166,22 @@ public class ReceivablePayableService {
         if (id == null || id.isBlank()) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "应收应付汇总ID不能为空");
         }
-        String[] parts = id.split(":", 3);
-        if (parts.length != 3) {
+        String[] parts = id.split(":", 4);
+        if (parts.length != 4) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "应收应付汇总ID不合法");
         }
         String direction = validateDirection(parts[0]);
         String counterpartyType = validateCounterpartyType(parts[1]);
-        String counterpartyKey = parts[2] == null ? "" : parts[2].trim();
-        if (direction == null || counterpartyType == null || !isValidCounterpartyKey(counterpartyKey)) {
+        String reconciliationStatus = validateReconciliationStatus(parts[2]);
+        String counterpartyKey = parts[3] == null ? "" : parts[3].trim();
+        if (direction == null || counterpartyType == null || reconciliationStatus == null || !isValidCounterpartyKey(counterpartyKey)) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "应收应付汇总ID不合法");
         }
         if (("客户".equals(counterpartyType) && !"应收".equals(direction))
                 || (("供应商".equals(counterpartyType) || "物流商".equals(counterpartyType)) && !"应付".equals(direction))) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "应收应付汇总ID方向不合法");
         }
-        return new SummaryKey(direction, counterpartyType, normalizeCounterpartyKey(counterpartyKey));
+        return new SummaryKey(direction, counterpartyType, reconciliationStatus, normalizeCounterpartyKey(counterpartyKey));
     }
 
     private boolean isValidCounterpartyKey(String value) {
@@ -185,6 +206,6 @@ public class ReceivablePayableService {
         return value == null ? BigDecimal.ZERO : value;
     }
 
-    private record SummaryKey(String direction, String counterpartyType, String counterpartyKey) {
+    private record SummaryKey(String direction, String counterpartyType, String reconciliationStatus, String counterpartyKey) {
     }
 }

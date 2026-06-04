@@ -11,6 +11,7 @@ public record ReceivablePayableDetailItemResponse(
         String documentNo,
         String sourceNo,
         String projectName,
+        String reconciliationStatus,
         LocalDate accountingDate,
         LocalDate dueDate,
         BigDecimal debitAmount,
