@@ -59,6 +59,39 @@ class ReceivablePayableQueryRepositoryTest {
     }
 
     @Test
+    void shouldBuildSamePagedSqlAndParamsWhenCalledRepeatedly() {
+        RecordingNamedParameterJdbcTemplate jdbcTemplate = new RecordingNamedParameterJdbcTemplate();
+        jdbcTemplate.total = 1L;
+        jdbcTemplate.rows = List.of(buildResponse());
+        ReceivablePayableQueryRepository repository = new ReceivablePayableQueryRepository(jdbcTemplate);
+        PageQuery query = new PageQuery(0, 10, "counterpartyType", "asc");
+
+        var firstPage = repository.page(query, "应收", "客户", "未对账", "未结清", " AcMe ");
+        String firstCountSql = jdbcTemplate.countSql;
+        String firstDataSql = jdbcTemplate.dataSql;
+        Object firstDirection = jdbcTemplate.lastParams.getValue("direction");
+        Object firstCounterpartyType = jdbcTemplate.lastParams.getValue("counterpartyType");
+        Object firstReconciliationStatus = jdbcTemplate.lastParams.getValue("reconciliationStatus");
+        Object firstStatus = jdbcTemplate.lastParams.getValue("status");
+        Object firstKeyword = jdbcTemplate.lastParams.getValue("keyword");
+
+        var secondPage = repository.page(query, "应收", "客户", "未对账", "未结清", " AcMe ");
+
+        assertThat(secondPage.getContent()).isEqualTo(firstPage.getContent());
+        assertThat(jdbcTemplate.countSql).isEqualTo(firstCountSql);
+        assertThat(jdbcTemplate.dataSql).isEqualTo(firstDataSql);
+        assertThat(jdbcTemplate.countSql).containsOnlyOnce("rp.direction = :direction");
+        assertThat(jdbcTemplate.countSql).containsOnlyOnce("rp.counterparty_type = :counterpartyType");
+        assertThat(jdbcTemplate.countSql).containsOnlyOnce("rp.reconciliation_status = :reconciliationStatus");
+        assertThat(jdbcTemplate.countSql).containsOnlyOnce("rp.status = :status");
+        assertThat(jdbcTemplate.lastParams.getValue("direction")).isEqualTo(firstDirection);
+        assertThat(jdbcTemplate.lastParams.getValue("counterpartyType")).isEqualTo(firstCounterpartyType);
+        assertThat(jdbcTemplate.lastParams.getValue("reconciliationStatus")).isEqualTo(firstReconciliationStatus);
+        assertThat(jdbcTemplate.lastParams.getValue("status")).isEqualTo(firstStatus);
+        assertThat(jdbcTemplate.lastParams.getValue("keyword")).isEqualTo(firstKeyword);
+    }
+
+    @Test
     void shouldSkipDataQueryWhenNoRowsMatched() {
         RecordingNamedParameterJdbcTemplate jdbcTemplate = new RecordingNamedParameterJdbcTemplate();
         ReceivablePayableQueryRepository repository = new ReceivablePayableQueryRepository(jdbcTemplate);
@@ -303,6 +336,29 @@ class ReceivablePayableQueryRepositoryTest {
         assertThat(jdbcTemplate.dataSql).contains("sales_order.status = '完成销售'");
         assertThat(jdbcTemplate.dataSql).contains("inbound.status IN ('完成入库', '完成采购')");
         assertThat(jdbcTemplate.dataSql).contains("bill.status = '已审核'");
+    }
+
+    @Test
+    void shouldBuildSameDetailSqlAndIdsWhenCalledRepeatedly() {
+        RecordingNamedParameterJdbcTemplate jdbcTemplate = new RecordingNamedParameterJdbcTemplate();
+        jdbcTemplate.detailItems = List.of(buildDetailItem());
+        ReceivablePayableQueryRepository repository = new ReceivablePayableQueryRepository(jdbcTemplate);
+
+        var firstItems = repository.detailItems("应收", "客户", "abc123", "未对账");
+        String firstDataSql = jdbcTemplate.dataSql;
+        Object firstCounterpartyKey = jdbcTemplate.lastParams.getValue("counterpartyKey");
+        Object firstReconciliationStatus = jdbcTemplate.lastParams.getValue("reconciliationStatus");
+
+        var secondItems = repository.detailItems("应收", "客户", "abc123", "未对账");
+
+        assertThat(secondItems).isEqualTo(firstItems);
+        assertThat(jdbcTemplate.dataSql).isEqualTo(firstDataSql);
+        assertThat(jdbcTemplate.dataSql).contains("ledger.reconciliation_status");
+        assertThat(jdbcTemplate.dataSql).contains("COALESCE(ledger.source_line_id::TEXT, '')");
+        assertThat(jdbcTemplate.dataSql).contains("ledger.source_no");
+        assertThat(jdbcTemplate.dataSql).containsOnlyOnce("ledger.reconciliation_status = :reconciliationStatus");
+        assertThat(jdbcTemplate.lastParams.getValue("counterpartyKey")).isEqualTo(firstCounterpartyKey);
+        assertThat(jdbcTemplate.lastParams.getValue("reconciliationStatus")).isEqualTo(firstReconciliationStatus);
     }
 
     @Test

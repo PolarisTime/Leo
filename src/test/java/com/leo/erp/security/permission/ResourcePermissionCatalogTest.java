@@ -162,6 +162,21 @@ class ResourcePermissionCatalogTest {
     }
 
     @Test
+    void shouldKeepReceivablePayableReadOnlyReportActions() {
+        var actions = ResourcePermissionCatalog.actionsForResource("receivable-payable");
+
+        assertThat(actions).containsExactly("read", "export", "print");
+        assertThat(actions).doesNotContain("create", "update", "delete", "audit");
+        assertThat(ResourcePermissionCatalog.isAllowed("receivable-payable", "read")).isTrue();
+        assertThat(ResourcePermissionCatalog.isAllowed("receivable-payable", "export")).isTrue();
+        assertThat(ResourcePermissionCatalog.isAllowed("receivable-payable", "print")).isTrue();
+        assertThat(ResourcePermissionCatalog.isAllowed("receivable-payable", "create")).isFalse();
+        assertThat(ResourcePermissionCatalog.isAllowed("receivable-payable", "update")).isFalse();
+        assertThat(ResourcePermissionCatalog.isAllowed("receivable-payable", "delete")).isFalse();
+        assertThat(ResourcePermissionCatalog.isAllowed("receivable-payable", "audit")).isFalse();
+    }
+
+    @Test
     void shouldReturnEmptyActionsForUnknownResource() {
         assertThat(ResourcePermissionCatalog.actionsForResource("unknown")).isEmpty();
     }
