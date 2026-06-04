@@ -113,6 +113,8 @@ public final class ResourcePermissionCatalog {
             entry("payment", "付款单", "财务", true, List.of("/payment"), BUSINESS_ACTIONS),
             entry("invoice-receipt", "收票单", "财务", true, List.of("/invoice-receipt"), BUSINESS_ACTIONS),
             entry("invoice-issue", "开票单", "财务", true, List.of("/invoice-issue"), BUSINESS_ACTIONS),
+            entry("ledger-adjustment", "台账调整单", "财务", true,
+                    List.of("/ledger-adjustment", "/ledger-adjustments"), BUSINESS_ACTIONS),
             entry("receivable-payable", "应收应付", "财务", true, List.of("/receivable-payable"), BUSINESS_ACTIONS),
             entry("general-setting", "通用设置", "系统", false,
                     List.of("/general-setting", "/general-setting/upload-rule"), List.of(action(READ, "查看"), action(UPDATE, "编辑"))),

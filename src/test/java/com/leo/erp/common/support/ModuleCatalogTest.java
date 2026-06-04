@@ -31,6 +31,7 @@ class ModuleCatalogTest {
     void shouldContainKnownModule() {
         assertThat(catalog.containsModule("material")).isTrue();
         assertThat(catalog.containsModule("purchase-order")).isTrue();
+        assertThat(catalog.containsModule("ledger-adjustment")).isTrue();
     }
 
     @Test
@@ -49,7 +50,8 @@ class ModuleCatalogTest {
         assertThat(keys).contains(
                 "material", "supplier", "customer", "project",
                 "purchase-order", "sales-order", "warehouse",
-                "permission", "user-account", "role-setting"
+                "permission", "user-account", "role-setting",
+                "ledger-adjustment"
         );
     }
 }

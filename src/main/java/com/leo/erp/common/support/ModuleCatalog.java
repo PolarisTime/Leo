@@ -48,6 +48,7 @@ public class ModuleCatalog {
         modules.put("invoice-receipt", "收票单");
         modules.put("invoice-issue", "开票单");
         modules.put("pending-invoice-receipt-report", "未收票报表");
+        modules.put("ledger-adjustment", "台账调整单");
         modules.put("receivable-payable", "应收应付");
         modules.put("general-setting", "通用设置");
         modules.put("company-setting", "公司信息");
