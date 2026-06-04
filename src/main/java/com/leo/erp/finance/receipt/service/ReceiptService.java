@@ -182,6 +182,12 @@ public class ReceiptService extends AbstractCrudService<Receipt, ReceiptRequest,
             return;
         }
         ReceiptRequest request = toStatusOnlyRequest(entity);
+        assertSettlementAllocationsComplete(
+                nextStatus,
+                entity.getItems().isEmpty(),
+                totalAllocatedAmount(entity.getItems()),
+                entity.getAmount()
+        );
         Map<Long, BigDecimal> requestAllocatedAmountMap = new HashMap<>();
         for (int i = 0; i < entity.getItems().size(); i++) {
             ReceiptAllocation item = entity.getItems().get(i);
@@ -315,11 +321,30 @@ public class ReceiptService extends AbstractCrudService<Receipt, ReceiptRequest,
         if (totalAllocatedAmount.compareTo(TradeItemCalculator.safeBigDecimal(entity.getAmount())) > 0) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "核销金额合计不能超过收款金额");
         }
-        if (!allocationRequests.isEmpty()
-                && totalAllocatedAmount.compareTo(TradeItemCalculator.safeBigDecimal(entity.getAmount())) != 0) {
+        assertSettlementAllocationsComplete(nextStatus, allocationRequests.isEmpty(), totalAllocatedAmount, entity.getAmount());
+        entity.getItems().sort(java.util.Comparator.comparing(ReceiptAllocation::getLineNo));
+    }
+
+    private void assertSettlementAllocationsComplete(String nextStatus,
+                                                     boolean allocationEmpty,
+                                                     BigDecimal totalAllocatedAmount,
+                                                     BigDecimal receiptAmount) {
+        if (!RECEIPT_STATUS_SETTLED.equals(nextStatus)) {
+            return;
+        }
+        if (allocationEmpty) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "已收款状态必须填写核销明细");
+        }
+        if (totalAllocatedAmount.compareTo(TradeItemCalculator.safeBigDecimal(receiptAmount)) != 0) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "收款金额必须等于核销金额合计");
         }
-        entity.getItems().sort(java.util.Comparator.comparing(ReceiptAllocation::getLineNo));
+    }
+
+    private BigDecimal totalAllocatedAmount(List<ReceiptAllocation> items) {
+        return items.stream()
+                .map(ReceiptAllocation::getAllocatedAmount)
+                .map(TradeItemCalculator::safeBigDecimal)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
     private List<ReceiptAllocationRequest> normalizeAllocationRequests(ReceiptRequest request) {

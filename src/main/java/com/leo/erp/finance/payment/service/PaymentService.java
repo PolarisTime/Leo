@@ -186,7 +186,14 @@ public class PaymentService extends AbstractCrudService<Payment, PaymentRequest,
         if (!PAYMENT_STATUS_SETTLED.equals(nextStatus)) {
             return;
         }
+        assertBusinessTypeSupportsSettlement(entity.getBusinessType());
         PaymentRequest request = toStatusOnlyRequest(entity);
+        assertSettlementAllocationsComplete(
+                nextStatus,
+                entity.getItems().isEmpty(),
+                totalAllocatedAmount(entity.getItems()),
+                entity.getAmount()
+        );
         Map<Long, BigDecimal> requestAllocatedAmountMap = new HashMap<>();
         for (int i = 0; i < entity.getItems().size(); i++) {
             PaymentAllocation item = entity.getItems().get(i);
@@ -202,7 +209,7 @@ public class PaymentService extends AbstractCrudService<Payment, PaymentRequest,
                         requestAllocatedAmountMap,
                         i + 1
                 );
-            } else {
+            } else if (FREIGHT_PAYMENT_TYPE.equals(entity.getBusinessType())) {
                 FreightStatement statement = requireAccessibleFreightStatement(item.getSourceStatementId());
                 validateLinkedFreightStatement(
                         request,
@@ -292,6 +299,9 @@ public class PaymentService extends AbstractCrudService<Payment, PaymentRequest,
     private String applyAllocations(Payment entity, PaymentRequest request, String nextStatus) {
         List<PaymentAllocationRequest> allocationRequests = normalizeAllocationRequests(request);
         if (!SUPPLIER_PAYMENT_TYPE.equals(request.businessType()) && !FREIGHT_PAYMENT_TYPE.equals(request.businessType())) {
+            if (PAYMENT_STATUS_SETTLED.equals(nextStatus)) {
+                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "已付款状态必须关联供应商或物流商对账单核销");
+            }
             if (!allocationRequests.isEmpty()) {
                 throw new BusinessException(ErrorCode.VALIDATION_ERROR, "当前业务类型不支持对账单核销");
             }
@@ -351,12 +361,38 @@ public class PaymentService extends AbstractCrudService<Payment, PaymentRequest,
         if (totalAllocatedAmount.compareTo(TradeItemCalculator.safeBigDecimal(entity.getAmount())) > 0) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "核销金额合计不能超过付款金额");
         }
-        if (!allocationRequests.isEmpty()
-                && totalAllocatedAmount.compareTo(TradeItemCalculator.safeBigDecimal(entity.getAmount())) != 0) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "付款金额必须等于核销金额合计");
-        }
+        assertSettlementAllocationsComplete(nextStatus, allocationRequests.isEmpty(), totalAllocatedAmount, entity.getAmount());
         entity.getItems().sort(java.util.Comparator.comparing(PaymentAllocation::getLineNo));
         return resolvedCounterpartyCode;
+    }
+
+    private void assertBusinessTypeSupportsSettlement(String businessType) {
+        if (SUPPLIER_PAYMENT_TYPE.equals(businessType) || FREIGHT_PAYMENT_TYPE.equals(businessType)) {
+            return;
+        }
+        throw new BusinessException(ErrorCode.BUSINESS_ERROR, "已付款状态必须关联供应商或物流商对账单核销");
+    }
+
+    private void assertSettlementAllocationsComplete(String nextStatus,
+                                                     boolean allocationEmpty,
+                                                     BigDecimal totalAllocatedAmount,
+                                                     BigDecimal paymentAmount) {
+        if (!PAYMENT_STATUS_SETTLED.equals(nextStatus)) {
+            return;
+        }
+        if (allocationEmpty) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "已付款状态必须填写核销明细");
+        }
+        if (totalAllocatedAmount.compareTo(TradeItemCalculator.safeBigDecimal(paymentAmount)) != 0) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "付款金额必须等于核销金额合计");
+        }
+    }
+
+    private BigDecimal totalAllocatedAmount(List<PaymentAllocation> items) {
+        return items.stream()
+                .map(PaymentAllocation::getAllocatedAmount)
+                .map(TradeItemCalculator::safeBigDecimal)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
     private List<PaymentAllocationRequest> normalizeAllocationRequests(PaymentRequest request) {
