@@ -106,7 +106,6 @@ public final class ResourcePermissionCatalog {
             entry("io-report", "出入库报表", "报表", true, List.of("/io-report"), REPORT_ACTIONS),
             entry("pending-invoice-receipt-report", "未收票报表", "报表", true,
                     List.of("/pending-invoice-receipt-report"), REPORT_ACTIONS),
-            entry("project-ar", "项目应收", "财务", true, List.of("/project-ar"), READ_ONLY_ACTIONS),
             entry("supplier-statement", "供应商对账单", "对账", true, List.of("/supplier-statement"), BUSINESS_ACTIONS),
             entry("customer-statement", "客户对账单", "对账", true, List.of("/customer-statement"), BUSINESS_ACTIONS),
             entry("freight-statement", "物流对账单", "对账", true, List.of("/freight-statement"), BUSINESS_ACTIONS),

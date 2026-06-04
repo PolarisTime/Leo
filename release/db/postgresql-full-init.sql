@@ -2698,7 +2698,6 @@ COPY public.sys_menu (id, menu_code, menu_name, parent_code, route_path, icon, s
 9004	invoice-receipt	收票单	finance	/invoice-receipt	FileTextOutlined	4	菜单	正常	0	system	2026-06-01 11:55:10.19854	\N	\N	\N	f
 9005	invoice-issue	开票单	finance	/invoice-issue	FileDoneOutlined	5	菜单	正常	0	system	2026-06-01 11:55:10.19854	\N	\N	\N	f
 9003	receivable-payable	应收应付	finance	/receivable-payable	CalculatorOutlined	3	菜单	正常	0	system	2026-06-01 11:55:09.808174	\N	\N	\N	f
-9007	project-ar	项目应收	finance	/project-ar	ProfileOutlined	9	菜单	正常	0	system	2026-06-01 11:55:11.353486	\N	\N	\N	f
 2007	material-categories	商品类别	master	/material-categories	TagsOutlined	7	菜单	正常	0	system	2026-06-01 11:55:10.46423	\N	\N	\N	f
 90001	number-rules	编号规则	system	/number-rules	ProfileOutlined	2	菜单	正常	1	system	2026-06-01 11:55:11.360832	\N	\N	2026-06-01 11:55:11.485289	f
 10001	general-setting	通用设置	system	/general-setting	SettingOutlined	1	菜单	正常	0	system	2026-06-01 11:55:09.808174	\N	\N	2026-06-01 11:55:11.485289	f
@@ -2910,7 +2909,6 @@ COPY public.sys_menu_action (id, menu_code, action_code, action_name, created_by
 200702	material-category	create	新增	0	system	2026-06-01 11:55:10.46423	\N	\N	\N	f
 200703	material-category	update	编辑	0	system	2026-06-01 11:55:10.46423	\N	\N	\N	f
 200704	material-category	delete	删除	0	system	2026-06-01 11:55:10.46423	\N	\N	\N	f
-90071	project-ar	READ	查看	0	system	2026-06-01 11:55:11.353486	\N	\N	\N	f
 \.
 
 
@@ -3205,7 +3203,6 @@ COPY public.sys_role_action (id, role_id, menu_code, action_code, created_by, cr
 183	700520000000000001	warehouse	EXPORT	0	system	2026-06-01 11:55:10.374665	\N	\N	\N	f
 184	700520000000000001	warehouse	PRINT	0	system	2026-06-01 11:55:10.374665	\N	\N	\N	f
 185	700520000000000001	warehouse	VIEW	0	system	2026-06-01 11:55:10.374665	\N	\N	\N	f
-186	700520000000000001	project-ar	READ	0	system	2026-06-01 11:55:11.353486	\N	\N	\N	f
 \.
 
 
@@ -3576,7 +3573,6 @@ COPY public.sys_role_permission (id, role_id, resource_code, action_code, create
 352	700520000000000001	project	delete	0	system	2026-06-01 11:55:11.353486	\N	\N	\N	f
 353	700520000000000001	project	read	0	system	2026-06-01 11:55:11.353486	\N	\N	\N	f
 354	700520000000000001	project	update	0	system	2026-06-01 11:55:11.353486	\N	\N	\N	f
-355	700520000000000001	project-ar	read	0	system	2026-06-01 11:55:11.353486	\N	\N	\N	f
 \.
 
 

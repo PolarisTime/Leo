@@ -49,7 +49,6 @@ public class ModuleCatalog {
         modules.put("invoice-issue", "开票单");
         modules.put("pending-invoice-receipt-report", "未收票报表");
         modules.put("receivable-payable", "应收应付");
-        modules.put("project-ar", "项目应收");
         modules.put("general-setting", "通用设置");
         modules.put("company-setting", "公司信息");
         modules.put("permission", "权限管理");
