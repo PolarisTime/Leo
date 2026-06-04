@@ -7,11 +7,14 @@ public record ReceivablePayableResponse(
         String direction,
         String counterpartyType,
         String counterpartyName,
-        BigDecimal openingAmount,
-        BigDecimal currentAmount,
+        BigDecimal recognizedAmount,
         BigDecimal settledAmount,
         BigDecimal balanceAmount,
-        Long documentCount,
+        BigDecimal days0To30Amount,
+        BigDecimal days31To60Amount,
+        BigDecimal days61To90Amount,
+        BigDecimal daysOver90Amount,
+        Long entryCount,
         String status,
         String remark
 ) {

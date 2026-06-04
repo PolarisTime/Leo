@@ -11,17 +11,23 @@ public record ReceivablePayableExportRow(
         String counterpartyType,
         @ExportColumn(header = "往来单位", order = 3)
         String counterpartyName,
-        @ExportColumn(header = "期初余额", order = 4, format = "0.00")
-        BigDecimal openingAmount,
-        @ExportColumn(header = "发生金额", order = 5, format = "0.00")
-        BigDecimal currentAmount,
-        @ExportColumn(header = "已结算金额", order = 6, format = "0.00")
+        @ExportColumn(header = "确认金额", order = 4, format = "0.00")
+        BigDecimal recognizedAmount,
+        @ExportColumn(header = "已结算金额", order = 5, format = "0.00")
         BigDecimal settledAmount,
-        @ExportColumn(header = "余额", order = 7, format = "0.00")
+        @ExportColumn(header = "余额", order = 6, format = "0.00")
         BigDecimal balanceAmount,
-        @ExportColumn(header = "来源单据数", order = 8)
-        Long documentCount,
-        @ExportColumn(header = "状态", order = 9)
+        @ExportColumn(header = "0-30天", order = 7, format = "0.00")
+        BigDecimal days0To30Amount,
+        @ExportColumn(header = "31-60天", order = 8, format = "0.00")
+        BigDecimal days31To60Amount,
+        @ExportColumn(header = "61-90天", order = 9, format = "0.00")
+        BigDecimal days61To90Amount,
+        @ExportColumn(header = "90天以上", order = 10, format = "0.00")
+        BigDecimal daysOver90Amount,
+        @ExportColumn(header = "账簿分录数", order = 11)
+        Long entryCount,
+        @ExportColumn(header = "状态", order = 12)
         String status
 ) {
     public static ReceivablePayableExportRow from(ReceivablePayableResponse row) {
@@ -29,11 +35,14 @@ public record ReceivablePayableExportRow(
                 row.direction(),
                 row.counterpartyType(),
                 row.counterpartyName(),
-                row.openingAmount(),
-                row.currentAmount(),
+                row.recognizedAmount(),
                 row.settledAmount(),
                 row.balanceAmount(),
-                row.documentCount(),
+                row.days0To30Amount(),
+                row.days31To60Amount(),
+                row.days61To90Amount(),
+                row.daysOver90Amount(),
+                row.entryCount(),
                 row.status()
         );
     }

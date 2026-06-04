@@ -23,7 +23,7 @@ public class ReceivablePayableService {
 
     private static final Set<String> ALLOWED_DIRECTIONS = Set.of("应收", "应付");
     private static final Set<String> ALLOWED_COUNTERPARTY_TYPES = Set.of("客户", "供应商", "物流商");
-    private static final Set<String> ALLOWED_STATUSES = Set.of("待确认", "已确认", "待审核", "已审核");
+    private static final Set<String> ALLOWED_STATUSES = Set.of("未结清", "已结清");
 
     private final ReceivablePayableQueryRepository queryRepository;
     private final ExcelExportService excelExportService;
@@ -62,11 +62,14 @@ public class ReceivablePayableService {
                 summary.direction(),
                 summary.counterpartyType(),
                 summary.counterpartyName(),
-                safe(summary.openingAmount()),
-                safe(summary.currentAmount()),
+                safe(summary.recognizedAmount()),
                 safe(summary.settledAmount()),
                 safe(summary.balanceAmount()),
-                summary.documentCount(),
+                safe(summary.days0To30Amount()),
+                safe(summary.days31To60Amount()),
+                safe(summary.days61To90Amount()),
+                safe(summary.daysOver90Amount()),
+                summary.entryCount(),
                 summary.status(),
                 summary.remark(),
                 queryRepository.detailItems(
