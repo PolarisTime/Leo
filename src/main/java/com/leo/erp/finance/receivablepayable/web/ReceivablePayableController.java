@@ -38,7 +38,7 @@ public class ReceivablePayableController {
 
     @GetMapping
     @RequiresPermission(resource = "receivable-payable", action = "read")
-    @Operation(summary = "分页查询应收应付")
+    @Operation(summary = "分页查询应收应付账簿汇总")
     public ApiResponse<PageResponse<ReceivablePayableResponse>> page(
             @BindPageQuery(sortFieldKey = "receivable-payable", directionParam = "sortDirection") PageQuery query,
             @RequestParam(name = "direction", required = false) String businessDirection,
@@ -53,14 +53,14 @@ public class ReceivablePayableController {
 
     @GetMapping("/{id}")
     @RequiresPermission(resource = "receivable-payable", action = "read")
-    @Operation(summary = "查询应收应付明细")
+    @Operation(summary = "查询应收应付账簿明细")
     public ApiResponse<ReceivablePayableDetailResponse> detail(@PathVariable String id) {
         return ApiResponse.success(receivablePayableService.detail(id));
     }
 
     @PostMapping("/export")
     @RequiresPermission(resource = "receivable-payable", action = "export")
-    @Operation(summary = "导出应收应付汇总")
+    @Operation(summary = "导出应收应付账簿汇总")
     public ResponseEntity<byte[]> export(
             @RequestParam(name = "direction", required = false) String businessDirection,
             @RequestParam(required = false) String counterpartyType,

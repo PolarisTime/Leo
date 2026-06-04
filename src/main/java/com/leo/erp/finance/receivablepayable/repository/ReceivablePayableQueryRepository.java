@@ -20,80 +20,19 @@ import java.util.Set;
 @Repository
 public class ReceivablePayableQueryRepository {
 
-    private static final String VALID_STATEMENT_SQL = """
-            FROM (
-                SELECT
-                    id,
-                    statement_no,
-                    '应收' AS direction,
-                    '客户' AS counterparty_type,
-                    customer_name AS counterparty_name,
-                    project_name,
-                    start_date,
-                    end_date,
-                    CAST(0 AS NUMERIC(14, 2)) AS opening_amount,
-                    sales_amount AS current_amount,
-                    receipt_amount AS settled_amount,
-                    closing_amount AS balance_amount,
-                    status,
-                    remark,
-                    created_by
-                FROM st_customer_statement
-                WHERE deleted_flag = FALSE
-                  AND status = '已确认'
-                UNION ALL
-                SELECT
-                    id,
-                    statement_no,
-                    '应付' AS direction,
-                    '供应商' AS counterparty_type,
-                    supplier_name AS counterparty_name,
-                    CAST(NULL AS VARCHAR) AS project_name,
-                    start_date,
-                    end_date,
-                    CAST(0 AS NUMERIC(14, 2)) AS opening_amount,
-                    purchase_amount AS current_amount,
-                    payment_amount AS settled_amount,
-                    closing_amount AS balance_amount,
-                    status,
-                    remark,
-                    created_by
-                FROM st_supplier_statement
-                WHERE deleted_flag = FALSE
-                  AND status = '已确认'
-                UNION ALL
-                SELECT
-                    id,
-                    statement_no,
-                    '应付' AS direction,
-                    '物流商' AS counterparty_type,
-                    carrier_name AS counterparty_name,
-                    CAST(NULL AS VARCHAR) AS project_name,
-                    start_date,
-                    end_date,
-                    CAST(0 AS NUMERIC(14, 2)) AS opening_amount,
-                    total_freight AS current_amount,
-                    paid_amount AS settled_amount,
-                    unpaid_amount AS balance_amount,
-                    status,
-                    remark,
-                    created_by
-                FROM st_freight_statement
-                WHERE deleted_flag = FALSE
-                  AND status = '已审核'
-            ) AS source
-            """;
-
     private static final RowMapper<ReceivablePayableResponse> ROW_MAPPER = (rs, rowNum) -> new ReceivablePayableResponse(
             rs.getString("id"),
             rs.getString("direction"),
             rs.getString("counterparty_type"),
             rs.getString("counterparty_name"),
-            rs.getBigDecimal("opening_amount"),
-            rs.getBigDecimal("current_amount"),
+            rs.getBigDecimal("recognized_amount"),
             rs.getBigDecimal("settled_amount"),
             rs.getBigDecimal("balance_amount"),
-            rs.getLong("document_count"),
+            rs.getBigDecimal("days_0_to_30_amount"),
+            rs.getBigDecimal("days_31_to_60_amount"),
+            rs.getBigDecimal("days_61_to_90_amount"),
+            rs.getBigDecimal("days_over_90_amount"),
+            rs.getLong("entry_count"),
             rs.getString("status"),
             rs.getString("remark")
     );
@@ -101,16 +40,18 @@ public class ReceivablePayableQueryRepository {
     private static final RowMapper<ReceivablePayableDetailItemResponse> DETAIL_ITEM_ROW_MAPPER =
             (rs, rowNum) -> new ReceivablePayableDetailItemResponse(
                     rs.getString("id"),
-                    rs.getLong("statement_id"),
-                    rs.getString("statement_no"),
+                    rs.getString("entry_role"),
+                    rs.getString("source_type"),
+                    rs.getLong("source_document_id"),
+                    rs.getString("document_no"),
                     rs.getString("source_no"),
                     rs.getString("project_name"),
-                    rs.getDate("business_date") == null ? null : rs.getDate("business_date").toLocalDate(),
-                    rs.getDate("period_start") == null ? null : rs.getDate("period_start").toLocalDate(),
-                    rs.getDate("period_end") == null ? null : rs.getDate("period_end").toLocalDate(),
-                    rs.getBigDecimal("current_amount"),
-                    rs.getBigDecimal("statement_settled_amount"),
-                    rs.getBigDecimal("statement_balance_amount"),
+                    rs.getDate("accounting_date") == null ? null : rs.getDate("accounting_date").toLocalDate(),
+                    rs.getDate("due_date") == null ? null : rs.getDate("due_date").toLocalDate(),
+                    rs.getBigDecimal("debit_amount"),
+                    rs.getBigDecimal("credit_amount"),
+                    rs.getBigDecimal("balance_amount"),
+                    rs.getInt("age_days"),
                     rs.getString("status"),
                     rs.getString("remark")
             );
@@ -133,26 +74,19 @@ public class ReceivablePayableQueryRepository {
         String sourceWhereSql = buildSourceDataScopeClause(params);
         String whereSql = buildWhereClause(params, direction, counterpartyType, status, normalizedKeyword);
 
-        Number totalNumber = jdbcTemplate.queryForObject("SELECT COUNT(1) " + groupedSql(sourceWhereSql) + whereSql, params, Number.class);
+        String countSql = ledgerCte(sourceWhereSql) + """
+                SELECT COUNT(1)
+                FROM (
+                """ + summarySelectSql() + """
+                ) AS rp
+                """ + whereSql;
+        Number totalNumber = jdbcTemplate.queryForObject(countSql, params, Number.class);
         long total = totalNumber == null ? 0L : totalNumber.longValue();
         if (total == 0) {
             return new PageImpl<>(List.of(), PageRequest.of(query.page(), query.size()), 0);
         }
 
-        String dataSql = """
-                SELECT
-                    rp.id,
-                    rp.direction,
-                    rp.counterparty_type,
-                    rp.counterparty_name,
-                    rp.opening_amount,
-                    rp.current_amount,
-                    rp.settled_amount,
-                    rp.balance_amount,
-                    rp.document_count,
-                    rp.status,
-                    rp.remark
-                """ + groupedSql(sourceWhereSql) + whereSql + """
+        String dataSql = ledgerCte(sourceWhereSql) + summaryQuerySql() + whereSql + """
                 ORDER BY %s %s, rp.id DESC
                 LIMIT :limit OFFSET :offset
                 """.formatted(sortColumn(query.sortBy()), sortDirection(query.direction()));
@@ -169,21 +103,8 @@ public class ReceivablePayableQueryRepository {
         MapSqlParameterSource params = new MapSqlParameterSource();
         String sourceWhereSql = buildSourceDataScopeClause(params);
         String whereSql = buildWhereClause(params, direction, counterpartyType, status, normalizedKeyword);
-        String dataSql = """
-                SELECT
-                    rp.id,
-                    rp.direction,
-                    rp.counterparty_type,
-                    rp.counterparty_name,
-                    rp.opening_amount,
-                    rp.current_amount,
-                    rp.settled_amount,
-                    rp.balance_amount,
-                    rp.document_count,
-                    rp.status,
-                    rp.remark
-                """ + groupedSql(sourceWhereSql) + whereSql + """
-                ORDER BY rp.counterparty_name ASC, rp.id DESC
+        String dataSql = ledgerCte(sourceWhereSql) + summaryQuerySql() + whereSql + """
+                ORDER BY rp.direction ASC, rp.counterparty_type ASC, rp.counterparty_name ASC
                 """;
         return jdbcTemplate.query(dataSql, params, ROW_MAPPER);
     }
@@ -196,25 +117,11 @@ public class ReceivablePayableQueryRepository {
                 .addValue("counterpartyType", counterpartyType)
                 .addValue("counterpartyKey", counterpartyKey);
         String sourceWhereSql = buildSourceDataScopeClause(params);
-        List<String> clauses = new ArrayList<>();
-        clauses.add("rp.direction = :direction");
-        clauses.add("rp.counterparty_type = :counterpartyType");
-        clauses.add("MD5(rp.counterparty_name) = :counterpartyKey");
-        String whereSql = "\nWHERE " + String.join("\n  AND ", clauses);
-        String dataSql = """
-                SELECT
-                    rp.id,
-                    rp.direction,
-                    rp.counterparty_type,
-                    rp.counterparty_name,
-                    rp.opening_amount,
-                    rp.current_amount,
-                    rp.settled_amount,
-                    rp.balance_amount,
-                    rp.document_count,
-                    rp.status,
-                    rp.remark
-                """ + groupedSql(sourceWhereSql) + whereSql;
+        String dataSql = ledgerCte(sourceWhereSql) + summaryQuerySql() + """
+                WHERE rp.direction = :direction
+                  AND rp.counterparty_type = :counterpartyType
+                  AND MD5(rp.counterparty_name) = :counterpartyKey
+                """;
         List<ReceivablePayableResponse> rows = jdbcTemplate.query(dataSql, params, ROW_MAPPER);
         return rows.isEmpty() ? null : rows.get(0);
     }
@@ -223,19 +130,47 @@ public class ReceivablePayableQueryRepository {
                                                                  String counterpartyType,
                                                                  String counterpartyKey) {
         MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("direction", direction)
+                .addValue("counterpartyType", counterpartyType)
                 .addValue("counterpartyKey", counterpartyKey);
-        String sql = switch (counterpartyType) {
-            case "客户" -> customerDetailSql();
-            case "供应商" -> supplierDetailSql();
-            case "物流商" -> freightDetailSql();
-            default -> throw new IllegalArgumentException("Unsupported counterparty type: " + counterpartyType);
-        };
-        List<String> clauses = new ArrayList<>();
-        addDataScopeClauseForAlias(params, clauses, "detail");
-        if (!clauses.isEmpty()) {
-            sql = "SELECT * FROM (" + sql + ") AS detail\nWHERE " + String.join("\n  AND ", clauses);
-        }
-        return jdbcTemplate.query(sql, params, DETAIL_ITEM_ROW_MAPPER);
+        String sourceWhereSql = buildSourceDataScopeClause(params);
+        String dataSql = ledgerCte(sourceWhereSql) + """
+                SELECT
+                    CONCAT(
+                        ledger.direction,
+                        ':',
+                        ledger.counterparty_type,
+                        ':',
+                        ledger.entry_role,
+                        ':',
+                        ledger.source_type,
+                        ':',
+                        ledger.source_document_id
+                    ) AS id,
+                    ledger.entry_role,
+                    ledger.source_type,
+                    ledger.source_document_id,
+                    ledger.document_no,
+                    ledger.source_no,
+                    ledger.project_name,
+                    ledger.accounting_date,
+                    ledger.due_date,
+                    ledger.debit_amount,
+                    ledger.credit_amount,
+                    CASE
+                        WHEN ledger.direction = '应收' THEN ledger.debit_amount - ledger.credit_amount
+                        ELSE ledger.credit_amount - ledger.debit_amount
+                    END AS balance_amount,
+                    GREATEST(CURRENT_DATE - ledger.due_date, 0) AS age_days,
+                    ledger.status,
+                    ledger.remark
+                FROM ledger
+                WHERE ledger.direction = :direction
+                  AND ledger.counterparty_type = :counterpartyType
+                  AND MD5(ledger.counterparty_name) = :counterpartyKey
+                ORDER BY ledger.accounting_date DESC, ledger.source_type ASC, ledger.source_no DESC
+                """;
+        return jdbcTemplate.query(dataSql, params, DETAIL_ITEM_ROW_MAPPER);
     }
 
     private String buildWhereClause(MapSqlParameterSource params,
@@ -254,7 +189,7 @@ public class ReceivablePayableQueryRepository {
         }
         if (status != null) {
             params.addValue("status", status);
-            clauses.add("POSITION(:status IN rp.source_statuses) > 0");
+            clauses.add("rp.status = :status");
         }
         if (keyword != null) {
             params.addValue("keyword", keyword);
@@ -268,7 +203,7 @@ public class ReceivablePayableQueryRepository {
         if (clauses.isEmpty()) {
             return "";
         }
-        return "\nWHERE " + String.join("\n  AND ", clauses);
+        return "\nWHERE " + String.join("\n  AND ", clauses) + "\n";
     }
 
     private String buildSourceDataScopeClause(MapSqlParameterSource params) {
@@ -281,19 +216,6 @@ public class ReceivablePayableQueryRepository {
         }
         params.addValue("dataScopeOwnerUserIds", ownerUserIds);
         return "\nWHERE source.created_by IN (:dataScopeOwnerUserIds)\n";
-    }
-
-    private void addDataScopeClauseForAlias(MapSqlParameterSource params, List<String> clauses, String alias) {
-        Set<Long> ownerUserIds = DataScopeContext.allowedOwnerUserIds();
-        if (ownerUserIds == null) {
-            return;
-        }
-        if (ownerUserIds.isEmpty()) {
-            clauses.add("1 = 0");
-            return;
-        }
-        params.addValue("dataScopeOwnerUserIds", ownerUserIds);
-        clauses.add(alias + ".created_by IN (:dataScopeOwnerUserIds)");
     }
 
     private String normalizeKeyword(String keyword) {
@@ -311,197 +233,284 @@ public class ReceivablePayableQueryRepository {
         return switch (sortBy == null ? "" : sortBy.trim()) {
             case "direction" -> "rp.direction";
             case "counterpartyType" -> "rp.counterparty_type";
-            case "currentAmount" -> "rp.current_amount";
+            case "recognizedAmount" -> "rp.recognized_amount";
+            case "settledAmount" -> "rp.settled_amount";
             case "balanceAmount" -> "rp.balance_amount";
-            case "documentCount" -> "rp.document_count";
+            case "days0To30Amount" -> "rp.days_0_to_30_amount";
+            case "days31To60Amount" -> "rp.days_31_to_60_amount";
+            case "days61To90Amount" -> "rp.days_61_to_90_amount";
+            case "daysOver90Amount" -> "rp.days_over_90_amount";
+            case "entryCount" -> "rp.entry_count";
             case "status" -> "rp.status";
             default -> "rp.counterparty_name";
         };
     }
 
-    private String groupedSql(String sourceWhereSql) {
+    private String summaryQuerySql() {
         return """
+                SELECT *
                 FROM (
-                    SELECT
-                        CONCAT(
-                            source.direction,
-                            ':',
-                            source.counterparty_type,
-                            ':',
-                            MD5(source.counterparty_name)
-                        ) AS id,
-                        source.direction,
-                        source.counterparty_type,
-                        source.counterparty_name,
-                        SUM(source.opening_amount) AS opening_amount,
-                        SUM(source.current_amount) AS current_amount,
-                        SUM(source.settled_amount) AS settled_amount,
-                        SUM(source.balance_amount) AS balance_amount,
-                        SUM(source.document_count) AS document_count,
-                        '有效' AS status,
-                        CAST(NULL AS VARCHAR) AS remark,
-                        MIN(source.created_by) AS created_by,
-                        STRING_AGG(DISTINCT source.status, ',') AS source_statuses
-                    FROM (
-                        SELECT
-                            source.id,
-                            source.direction,
-                            source.counterparty_type,
-                            source.counterparty_name,
-                            source.opening_amount,
-                            source.current_amount,
-                            source.settled_amount,
-                            source.balance_amount,
-                            source.status,
-                            source.created_by,
-                            COUNT(DISTINCT detail_sources.source_no) AS document_count
-                        """ + VALID_STATEMENT_SQL + """
-                        LEFT JOIN (
-                            SELECT statement_id, source_no FROM st_customer_statement_item
-                            UNION ALL
-                            SELECT statement_id, source_no FROM st_supplier_statement_item
-                            UNION ALL
-                            SELECT statement_id, source_no FROM st_freight_statement_item
-                        ) AS detail_sources ON detail_sources.statement_id = source.id
-                        """ + sourceWhereSql + """
-                        GROUP BY
-                            source.id,
-                            source.direction,
-                            source.counterparty_type,
-                            source.counterparty_name,
-                            source.opening_amount,
-                            source.current_amount,
-                            source.settled_amount,
-                            source.balance_amount,
-                            source.status,
-                            source.created_by
-                    ) AS source
-                    GROUP BY source.direction, source.counterparty_type, source.counterparty_name
+                """ + summarySelectSql() + """
                 ) AS rp
                 """;
     }
 
-    private String customerDetailSql() {
+    private String summarySelectSql() {
         return """
                 SELECT
-                    CONCAT('customer:', s.id, ':', item.source_no) AS id,
-                    s.id AS statement_id,
-                    s.statement_no,
-                    item.source_no,
-                    s.project_name,
-                    so.delivery_date AS business_date,
-                    s.start_date AS period_start,
-                    s.end_date AS period_end,
-                    SUM(item.amount) AS current_amount,
-                    s.receipt_amount AS statement_settled_amount,
-                    s.closing_amount AS statement_balance_amount,
-                    s.status,
-                    s.remark,
-                    s.created_by
-                FROM st_customer_statement s
-                JOIN st_customer_statement_item item ON item.statement_id = s.id
-                LEFT JOIN so_sales_order so
-                       ON so.order_no = item.source_no
-                      AND so.deleted_flag = FALSE
-                WHERE s.deleted_flag = FALSE
-                  AND s.status = '已确认'
-                  AND MD5(s.customer_name) = :counterpartyKey
-                GROUP BY
-                    s.id,
-                    s.statement_no,
-                    item.source_no,
-                    s.project_name,
-                    so.delivery_date,
-                    s.start_date,
-                    s.end_date,
-                    s.receipt_amount,
-                    s.closing_amount,
-                    s.status,
-                    s.remark,
-                    s.created_by
-                ORDER BY business_date DESC NULLS LAST, statement_no DESC, source_no DESC
+                    CONCAT(
+                        pt.direction,
+                        ':',
+                        pt.counterparty_type,
+                        ':',
+                        MD5(pt.counterparty_name)
+                    ) AS id,
+                    pt.direction,
+                    pt.counterparty_type,
+                    pt.counterparty_name,
+                    pt.recognized_amount,
+                    pt.settled_amount,
+                    pt.balance_amount,
+                    COALESCE(ag.days_0_to_30_amount, 0) AS days_0_to_30_amount,
+                    COALESCE(ag.days_31_to_60_amount, 0) AS days_31_to_60_amount,
+                    COALESCE(ag.days_61_to_90_amount, 0) AS days_61_to_90_amount,
+                    COALESCE(ag.days_over_90_amount, 0) AS days_over_90_amount,
+                    pt.entry_count,
+                    CASE
+                        WHEN pt.balance_amount = 0 THEN '已结清'
+                        ELSE '未结清'
+                    END AS status,
+                    CAST(NULL AS VARCHAR) AS remark
+                FROM party_totals pt
+                LEFT JOIN aged_balances ag
+                    ON ag.direction = pt.direction
+                   AND ag.counterparty_type = pt.counterparty_type
+                   AND ag.counterparty_name = pt.counterparty_name
                 """;
     }
 
-    private String supplierDetailSql() {
+    private String ledgerCte(String sourceWhereSql) {
         return """
-                SELECT
-                    CONCAT('supplier:', s.id, ':', item.source_no) AS id,
-                    s.id AS statement_id,
-                    s.statement_no,
-                    item.source_no,
-                    CAST(NULL AS VARCHAR) AS project_name,
-                    inbound.inbound_date AS business_date,
-                    s.start_date AS period_start,
-                    s.end_date AS period_end,
-                    SUM(item.amount) AS current_amount,
-                    s.payment_amount AS statement_settled_amount,
-                    s.closing_amount AS statement_balance_amount,
-                    s.status,
-                    s.remark,
-                    s.created_by
-                FROM st_supplier_statement s
-                JOIN st_supplier_statement_item item ON item.statement_id = s.id
-                LEFT JOIN po_purchase_inbound inbound
-                       ON inbound.inbound_no = item.source_no
-                      AND inbound.deleted_flag = FALSE
-                WHERE s.deleted_flag = FALSE
-                  AND s.status = '已确认'
-                  AND MD5(s.supplier_name) = :counterpartyKey
-                GROUP BY
-                    s.id,
-                    s.statement_no,
-                    item.source_no,
-                    inbound.inbound_date,
-                    s.start_date,
-                    s.end_date,
-                    s.payment_amount,
-                    s.closing_amount,
-                    s.status,
-                    s.remark,
-                    s.created_by
-                ORDER BY business_date DESC NULLS LAST, statement_no DESC, source_no DESC
-                """;
-    }
-
-    private String freightDetailSql() {
-        return """
-                SELECT
-                    CONCAT('freight:', s.id, ':', item.source_no) AS id,
-                    s.id AS statement_id,
-                    s.statement_no,
-                    item.source_no,
-                    MAX(item.project_name) AS project_name,
-                    bill.bill_time AS business_date,
-                    s.start_date AS period_start,
-                    s.end_date AS period_end,
-                    MAX(bill.total_freight) AS current_amount,
-                    s.paid_amount AS statement_settled_amount,
-                    s.unpaid_amount AS statement_balance_amount,
-                    s.status,
-                    s.remark,
-                    s.created_by
-                FROM st_freight_statement s
-                JOIN st_freight_statement_item item ON item.statement_id = s.id
-                LEFT JOIN lg_freight_bill bill
-                       ON bill.bill_no = item.source_no
-                      AND bill.deleted_flag = FALSE
-                WHERE s.deleted_flag = FALSE
-                  AND s.status = '已审核'
-                  AND MD5(s.carrier_name) = :counterpartyKey
-                GROUP BY
-                    s.id,
-                    s.statement_no,
-                    item.source_no,
-                    bill.bill_time,
-                    s.start_date,
-                    s.end_date,
-                    s.paid_amount,
-                    s.unpaid_amount,
-                    s.status,
-                    s.remark,
-                    s.created_by
-                ORDER BY business_date DESC NULLS LAST, statement_no DESC, source_no DESC
+                WITH ledger_source AS (
+                    SELECT
+                        '应收' AS direction,
+                        '客户' AS counterparty_type,
+                        issue.customer_name AS counterparty_name,
+                        'RECOGNITION' AS entry_role,
+                        '开票单' AS source_type,
+                        issue.id AS source_document_id,
+                        issue.issue_no AS document_no,
+                        issue.invoice_no AS source_no,
+                        issue.project_name,
+                        issue.invoice_date::date AS accounting_date,
+                        issue.invoice_date::date AS due_date,
+                        COALESCE(issue.amount, 0) + COALESCE(issue.tax_amount, 0) AS debit_amount,
+                        CAST(0 AS NUMERIC(14, 2)) AS credit_amount,
+                        issue.status,
+                        issue.remark,
+                        issue.created_by
+                    FROM fm_invoice_issue issue
+                    WHERE issue.deleted_flag = FALSE
+                      AND issue.status = '已开票'
+                    UNION ALL
+                    SELECT
+                        '应收' AS direction,
+                        '客户' AS counterparty_type,
+                        receipt.customer_name AS counterparty_name,
+                        'SETTLEMENT' AS entry_role,
+                        '收款单' AS source_type,
+                        receipt.id AS source_document_id,
+                        receipt.receipt_no AS document_no,
+                        receipt.receipt_no AS source_no,
+                        receipt.project_name,
+                        receipt.receipt_date::date AS accounting_date,
+                        receipt.receipt_date::date AS due_date,
+                        CAST(0 AS NUMERIC(14, 2)) AS debit_amount,
+                        COALESCE(receipt.amount, 0) AS credit_amount,
+                        receipt.status,
+                        receipt.remark,
+                        receipt.created_by
+                    FROM fm_receipt receipt
+                    WHERE receipt.deleted_flag = FALSE
+                      AND receipt.status = '已收款'
+                    UNION ALL
+                    SELECT
+                        '应付' AS direction,
+                        '供应商' AS counterparty_type,
+                        invoice.supplier_name AS counterparty_name,
+                        'RECOGNITION' AS entry_role,
+                        '收票单' AS source_type,
+                        invoice.id AS source_document_id,
+                        invoice.receive_no AS document_no,
+                        invoice.invoice_no AS source_no,
+                        CAST(NULL AS VARCHAR) AS project_name,
+                        invoice.invoice_date::date AS accounting_date,
+                        invoice.invoice_date::date AS due_date,
+                        CAST(0 AS NUMERIC(14, 2)) AS debit_amount,
+                        COALESCE(invoice.amount, 0) + COALESCE(invoice.tax_amount, 0) AS credit_amount,
+                        invoice.status,
+                        invoice.remark,
+                        invoice.created_by
+                    FROM fm_invoice_receipt invoice
+                    WHERE invoice.deleted_flag = FALSE
+                      AND invoice.status = '已收票'
+                    UNION ALL
+                    SELECT
+                        '应付' AS direction,
+                        '物流商' AS counterparty_type,
+                        freight.carrier_name AS counterparty_name,
+                        'RECOGNITION' AS entry_role,
+                        '物流账单' AS source_type,
+                        freight.id AS source_document_id,
+                        freight.statement_no AS document_no,
+                        freight.statement_no AS source_no,
+                        CAST(NULL AS VARCHAR) AS project_name,
+                        freight.end_date::date AS accounting_date,
+                        freight.end_date::date AS due_date,
+                        CAST(0 AS NUMERIC(14, 2)) AS debit_amount,
+                        COALESCE(freight.total_freight, 0) AS credit_amount,
+                        freight.status,
+                        freight.remark,
+                        freight.created_by
+                    FROM st_freight_statement freight
+                    WHERE freight.deleted_flag = FALSE
+                      AND freight.status = '已审核'
+                    UNION ALL
+                    SELECT
+                        '应付' AS direction,
+                        payment.business_type AS counterparty_type,
+                        payment.counterparty_name,
+                        'SETTLEMENT' AS entry_role,
+                        '付款单' AS source_type,
+                        payment.id AS source_document_id,
+                        payment.payment_no AS document_no,
+                        payment.payment_no AS source_no,
+                        CAST(NULL AS VARCHAR) AS project_name,
+                        payment.payment_date::date AS accounting_date,
+                        payment.payment_date::date AS due_date,
+                        COALESCE(payment.amount, 0) AS debit_amount,
+                        CAST(0 AS NUMERIC(14, 2)) AS credit_amount,
+                        payment.status,
+                        payment.remark,
+                        payment.created_by
+                    FROM fm_payment payment
+                    WHERE payment.deleted_flag = FALSE
+                      AND payment.status = '已付款'
+                      AND payment.business_type IN ('供应商', '物流商')
+                ),
+                ledger AS (
+                    SELECT *
+                    FROM ledger_source source
+                    """ + sourceWhereSql + """
+                ),
+                party_totals AS (
+                    SELECT
+                        ledger.direction,
+                        ledger.counterparty_type,
+                        ledger.counterparty_name,
+                        SUM(
+                            CASE
+                                WHEN ledger.entry_role = 'RECOGNITION' AND ledger.direction = '应收' THEN ledger.debit_amount
+                                WHEN ledger.entry_role = 'RECOGNITION' AND ledger.direction = '应付' THEN ledger.credit_amount
+                                ELSE 0
+                            END
+                        ) AS recognized_amount,
+                        SUM(
+                            CASE
+                                WHEN ledger.entry_role = 'SETTLEMENT' AND ledger.direction = '应收' THEN ledger.credit_amount
+                                WHEN ledger.entry_role = 'SETTLEMENT' AND ledger.direction = '应付' THEN ledger.debit_amount
+                                ELSE 0
+                            END
+                        ) AS settled_amount,
+                        SUM(
+                            CASE
+                                WHEN ledger.direction = '应收' THEN ledger.debit_amount - ledger.credit_amount
+                                ELSE ledger.credit_amount - ledger.debit_amount
+                            END
+                        ) AS balance_amount,
+                        COUNT(1) AS entry_count
+                    FROM ledger
+                    GROUP BY ledger.direction, ledger.counterparty_type, ledger.counterparty_name
+                ),
+                recognition_entries AS (
+                    SELECT
+                        ledger.direction,
+                        ledger.counterparty_type,
+                        ledger.counterparty_name,
+                        ledger.source_document_id,
+                        ledger.due_date,
+                        CASE
+                            WHEN ledger.direction = '应收' THEN ledger.debit_amount
+                            ELSE ledger.credit_amount
+                        END AS recognized_amount,
+                        COALESCE(pt.settled_amount, 0) AS settled_amount,
+                        COALESCE(SUM(
+                            CASE
+                                WHEN ledger.direction = '应收' THEN ledger.debit_amount
+                                ELSE ledger.credit_amount
+                            END
+                        ) OVER (
+                            PARTITION BY ledger.direction, ledger.counterparty_type, ledger.counterparty_name
+                            ORDER BY ledger.due_date ASC, ledger.source_document_id ASC
+                            ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING
+                        ), 0) AS recognized_before
+                    FROM ledger
+                    JOIN party_totals pt
+                        ON pt.direction = ledger.direction
+                       AND pt.counterparty_type = ledger.counterparty_type
+                       AND pt.counterparty_name = ledger.counterparty_name
+                    WHERE ledger.entry_role = 'RECOGNITION'
+                ),
+                open_recognition_entries AS (
+                    SELECT
+                        recognition_entries.direction,
+                        recognition_entries.counterparty_type,
+                        recognition_entries.counterparty_name,
+                        recognition_entries.due_date,
+                        GREATEST(
+                            recognition_entries.recognized_amount
+                            - LEAST(
+                                recognition_entries.recognized_amount,
+                                GREATEST(recognition_entries.settled_amount - recognition_entries.recognized_before, 0)
+                            ),
+                            0
+                        ) AS open_amount
+                    FROM recognition_entries
+                ),
+                aged_balances AS (
+                    SELECT
+                        open_recognition_entries.direction,
+                        open_recognition_entries.counterparty_type,
+                        open_recognition_entries.counterparty_name,
+                        SUM(
+                            CASE
+                                WHEN CURRENT_DATE - open_recognition_entries.due_date <= 30 THEN open_recognition_entries.open_amount
+                                ELSE 0
+                            END
+                        ) AS days_0_to_30_amount,
+                        SUM(
+                            CASE
+                                WHEN CURRENT_DATE - open_recognition_entries.due_date BETWEEN 31 AND 60 THEN open_recognition_entries.open_amount
+                                ELSE 0
+                            END
+                        ) AS days_31_to_60_amount,
+                        SUM(
+                            CASE
+                                WHEN CURRENT_DATE - open_recognition_entries.due_date BETWEEN 61 AND 90 THEN open_recognition_entries.open_amount
+                                ELSE 0
+                            END
+                        ) AS days_61_to_90_amount,
+                        SUM(
+                            CASE
+                                WHEN CURRENT_DATE - open_recognition_entries.due_date > 90 THEN open_recognition_entries.open_amount
+                                ELSE 0
+                            END
+                        ) AS days_over_90_amount
+                    FROM open_recognition_entries
+                    GROUP BY open_recognition_entries.direction,
+                             open_recognition_entries.counterparty_type,
+                             open_recognition_entries.counterparty_name
+                )
                 """;
     }
 }

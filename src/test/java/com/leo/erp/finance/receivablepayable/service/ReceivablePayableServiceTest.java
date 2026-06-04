@@ -2,11 +2,8 @@ package com.leo.erp.finance.receivablepayable.service;
 
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.excel.service.ExcelExportService;
-import com.leo.erp.common.web.dto.FileDownloadResponse;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.finance.receivablepayable.repository.ReceivablePayableQueryRepository;
-import com.leo.erp.finance.receivablepayable.web.dto.ReceivablePayableDetailItemResponse;
-import com.leo.erp.finance.receivablepayable.web.dto.ReceivablePayableDetailResponse;
 import com.leo.erp.finance.receivablepayable.web.dto.ReceivablePayableResponse;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentMatchers;
@@ -40,11 +37,11 @@ class ReceivablePayableServiceTest {
     @Test
     void shouldReturnPage_whenFiltersProvided() {
         var queryRepository = mock(ReceivablePayableQueryRepository.class);
-        when(queryRepository.page(new PageQuery(0, 10, "id", "desc"), "应收", "客户", "已确认", "test")).thenReturn(org.springframework.data.domain.Page.empty());
+        when(queryRepository.page(new PageQuery(0, 10, "id", "desc"), "应收", "客户", "未结清", "test")).thenReturn(org.springframework.data.domain.Page.empty());
         var excelExportService = mock(ExcelExportService.class);
         var service = new ReceivablePayableService(queryRepository, excelExportService);
 
-        var result = service.page(new PageQuery(0, 10, "id", "desc"), "应收", "客户", "已确认", "test");
+        var result = service.page(new PageQuery(0, 10, "id", "desc"), "应收", "客户", "未结清", "test");
 
         assertThat(result).isNotNull();
     }
@@ -84,8 +81,7 @@ class ReceivablePayableServiceTest {
 
     @Test
     void shouldReturnDetail_whenValidCompositeKey() {
-        var summary = new ReceivablePayableResponse(VALID_COMPOSITE_KEY, "应收", "客户", "客户A",
-                BigDecimal.ZERO, BigDecimal.TEN, BigDecimal.ZERO, BigDecimal.TEN, 1L, "有效", null);
+        var summary = buildResponse(VALID_COMPOSITE_KEY, "应收", "客户", "客户A");
         var queryRepository = mock(ReceivablePayableQueryRepository.class);
         when(queryRepository.findSummary(anyString(), anyString(), anyString())).thenReturn(summary);
         when(queryRepository.detailItems(anyString(), anyString(), anyString())).thenReturn(List.of());
@@ -169,8 +165,7 @@ class ReceivablePayableServiceTest {
     void shouldExportExcel_whenValidParams() {
         var queryRepository = mock(ReceivablePayableQueryRepository.class);
         when(queryRepository.listForExport(anyString(), anyString(), anyString(), anyString())).thenReturn(List.of(
-                new ReceivablePayableResponse("id1", "应收", "客户", "客户A",
-                        BigDecimal.ZERO, BigDecimal.TEN, BigDecimal.ZERO, BigDecimal.TEN, 1L, "有效", null)
+                buildResponse("id1", "应收", "客户", "客户A")
         ));
         var excelExportService = mock(ExcelExportService.class);
         when(excelExportService.export(anyList(), ArgumentMatchers.any(Class.class))).thenReturn(new byte[0]);
@@ -251,8 +246,7 @@ class ReceivablePayableServiceTest {
     @Test
     void shouldReturnDetail_whenSupplierCompositeKeyValid() {
         var supplierKey = "应付:供应商:abcdefabcdefabcdefabcdef12345678";
-        var summary = new ReceivablePayableResponse(supplierKey, "应付", "供应商", "供应商A",
-                BigDecimal.ZERO, BigDecimal.TEN, BigDecimal.ZERO, BigDecimal.TEN, 1L, "有效", null);
+        var summary = buildResponse(supplierKey, "应付", "供应商", "供应商A");
         var queryRepository = mock(ReceivablePayableQueryRepository.class);
         when(queryRepository.findSummary(anyString(), anyString(), anyString())).thenReturn(summary);
         when(queryRepository.detailItems(anyString(), anyString(), anyString())).thenReturn(List.of());
@@ -268,8 +262,7 @@ class ReceivablePayableServiceTest {
     @Test
     void shouldReturnDetail_whenFreightCompositeKeyValid() {
         var freightKey = "应付:物流商:abcdefabcdefabcdefabcdef12345678";
-        var summary = new ReceivablePayableResponse(freightKey, "应付", "物流商", "物流商A",
-                BigDecimal.ZERO, BigDecimal.TEN, BigDecimal.ZERO, BigDecimal.TEN, 1L, "有效", null);
+        var summary = buildResponse(freightKey, "应付", "物流商", "物流商A");
         var queryRepository = mock(ReceivablePayableQueryRepository.class);
         when(queryRepository.findSummary(anyString(), anyString(), anyString())).thenReturn(summary);
         when(queryRepository.detailItems(anyString(), anyString(), anyString())).thenReturn(List.of());
@@ -286,16 +279,37 @@ class ReceivablePayableServiceTest {
     void shouldExportExcel_whenFiltersProvided() {
         var queryRepository = mock(ReceivablePayableQueryRepository.class);
         when(queryRepository.listForExport(anyString(), anyString(), anyString(), anyString())).thenReturn(List.of(
-                new ReceivablePayableResponse("id1", "应收", "客户", "客户A",
-                        BigDecimal.ZERO, BigDecimal.TEN, BigDecimal.ZERO, BigDecimal.TEN, 1L, "有效", null)
+                buildResponse("id1", "应收", "客户", "客户A")
         ));
         var excelExportService = mock(ExcelExportService.class);
         when(excelExportService.export(anyList(), ArgumentMatchers.any(Class.class))).thenReturn(new byte[0]);
         var service = new ReceivablePayableService(queryRepository, excelExportService);
 
-        var result = service.exportExcel("应收", "客户", "已确认", "test");
+        var result = service.exportExcel("应收", "客户", "未结清", "test");
 
         assertThat(result).isNotNull();
         assertThat(result.filename()).contains("应收应付汇总");
+    }
+
+    private ReceivablePayableResponse buildResponse(String id,
+                                                    String direction,
+                                                    String counterpartyType,
+                                                    String counterpartyName) {
+        return new ReceivablePayableResponse(
+                id,
+                direction,
+                counterpartyType,
+                counterpartyName,
+                BigDecimal.TEN,
+                BigDecimal.ZERO,
+                BigDecimal.TEN,
+                BigDecimal.TEN,
+                BigDecimal.ZERO,
+                BigDecimal.ZERO,
+                BigDecimal.ZERO,
+                1L,
+                "未结清",
+                null
+        );
     }
 }
