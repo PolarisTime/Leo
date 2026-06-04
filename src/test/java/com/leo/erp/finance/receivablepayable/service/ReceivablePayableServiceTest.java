@@ -4,6 +4,7 @@ import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.excel.service.ExcelExportService;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.finance.receivablepayable.repository.ReceivablePayableQueryRepository;
+import com.leo.erp.finance.receivablepayable.web.dto.ReceivablePayableDetailItemResponse;
 import com.leo.erp.finance.receivablepayable.web.dto.ReceivablePayableResponse;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentMatchers;
@@ -16,7 +17,10 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class ReceivablePayableServiceTest {
@@ -105,6 +109,46 @@ class ReceivablePayableServiceTest {
 
         assertThat(result).isNotNull();
         assertThat(result.id()).isEqualTo(VALID_COMPOSITE_KEY);
+    }
+
+    @Test
+    void shouldReturnSameDetailWhenCalledRepeatedly() {
+        var summary = buildResponse(VALID_COMPOSITE_KEY, "应收", "客户", "客户A");
+        var item = new ReceivablePayableDetailItemResponse(
+                "item-1",
+                "RECOGNITION",
+                "销售订单",
+                100L,
+                "SO-001",
+                "SO-001-1",
+                "项目A",
+                "已对账",
+                null,
+                null,
+                BigDecimal.TEN,
+                BigDecimal.ZERO,
+                BigDecimal.TEN,
+                0,
+                "完成销售",
+                null
+        );
+        var queryRepository = mock(ReceivablePayableQueryRepository.class);
+        when(queryRepository.findSummary(eq("应收"), eq("客户"), eq("abcdefabcdefabcdefabcdef12345678"), eq("已对账")))
+                .thenReturn(summary);
+        when(queryRepository.detailItems(eq("应收"), eq("客户"), eq("abcdefabcdefabcdefabcdef12345678"), eq("已对账")))
+                .thenReturn(List.of(item));
+        var excelExportService = mock(ExcelExportService.class);
+        var service = new ReceivablePayableService(queryRepository, excelExportService);
+
+        var first = service.detail(VALID_COMPOSITE_KEY);
+        var second = service.detail(VALID_COMPOSITE_KEY);
+
+        assertThat(second).isEqualTo(first);
+        assertThat(second.items()).containsExactly(item);
+        verify(queryRepository, times(2))
+                .findSummary("应收", "客户", "abcdefabcdefabcdefabcdef12345678", "已对账");
+        verify(queryRepository, times(2))
+                .detailItems("应收", "客户", "abcdefabcdefabcdefabcdef12345678", "已对账");
     }
 
     @Test
