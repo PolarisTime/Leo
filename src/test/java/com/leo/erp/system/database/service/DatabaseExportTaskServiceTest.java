@@ -12,6 +12,7 @@ import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.lang.reflect.Proxy;
+import java.nio.file.Files;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -146,10 +147,75 @@ class DatabaseExportTaskServiceTest {
     }
 
     @Test
+    void shouldReturnDownloadLinkResponseWithContextPath() throws Exception {
+        var repo = (DatabaseExportTaskRepository) Proxy.newProxyInstance(
+                DatabaseExportTaskRepository.class.getClassLoader(),
+                new Class[]{DatabaseExportTaskRepository.class},
+                (proxy, method, args) -> switch (method.getName()) {
+                    case "findByIdAndDeletedFlagFalse" -> Optional.of(createCompletedTask(1L));
+                    case "findByStatusAndExpiresAtBeforeAndDeletedFlagFalse" -> List.of();
+                    case "save" -> args[0];
+                    case "toString" -> "DatabaseExportTaskRepositoryStub";
+                    case "hashCode" -> System.identityHashCode(proxy);
+                    case "equals" -> proxy == args[0];
+                    default -> throw new UnsupportedOperationException(method.getName());
+                }
+        );
+        var svc = new DatabaseExportTaskService(
+                repo, databaseBackupService, backupProperties, exportTaskMapper, snowflakeIdGenerator
+        );
+        setContextPath(svc, "/api");
+
+        var result = svc.generateDownloadLinkResponse(1L);
+
+        assertThat(result.downloadUrl())
+                .startsWith("/api/system/database/export-task/1/download?token=");
+        assertThat(result.expiresAt()).isAfter(LocalDateTime.now());
+    }
+
+    @Test
     void shouldThrowException_whenDownloadTaskNotCompleted() {
         assertThatThrownBy(() -> service.generateDownloadLink(1L))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("尚未完成");
+    }
+
+    @Test
+    void shouldThrowException_whenGeneratingLinkForMissingFile() {
+        var task = createTask(1L, "DBEXP001", "已完成");
+        task.setFilePath("/tmp/leo-missing-export-file.sql");
+        task.setExpiresAt(LocalDateTime.now().plusDays(1));
+        var repo = repositoryReturning(task, 1);
+        var svc = new DatabaseExportTaskService(
+                repo, databaseBackupService, backupProperties, exportTaskMapper, snowflakeIdGenerator
+        );
+
+        assertThatThrownBy(() -> svc.generateDownloadLink(1L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("备份文件不存在");
+    }
+
+    @Test
+    void shouldThrowException_whenTaskNotFound() {
+        var repo = (DatabaseExportTaskRepository) Proxy.newProxyInstance(
+                DatabaseExportTaskRepository.class.getClassLoader(),
+                new Class[]{DatabaseExportTaskRepository.class},
+                (proxy, method, args) -> switch (method.getName()) {
+                    case "findByIdAndDeletedFlagFalse" -> Optional.empty();
+                    case "findByStatusAndExpiresAtBeforeAndDeletedFlagFalse" -> List.of();
+                    case "toString" -> "DatabaseExportTaskRepositoryStub";
+                    case "hashCode" -> System.identityHashCode(proxy);
+                    case "equals" -> proxy == args[0];
+                    default -> throw new UnsupportedOperationException(method.getName());
+                }
+        );
+        var svc = new DatabaseExportTaskService(
+                repo, databaseBackupService, backupProperties, exportTaskMapper, snowflakeIdGenerator
+        );
+
+        assertThatThrownBy(() -> svc.getTask(404L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("导出任务不存在");
     }
 
     @Test
@@ -174,6 +240,141 @@ class DatabaseExportTaskServiceTest {
         assertThatThrownBy(() -> svc.generateDownloadLink(1L))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("已过期");
+    }
+
+    @Test
+    void shouldReturnDownloadPayloadAndConsumeToken() throws Exception {
+        var task = createCompletedTask(1L);
+        task.setDownloadToken("token");
+        task.setFileName("备份 文件.sql");
+        task.setFileSize(123L);
+        var repo = repositoryReturning(task, 1);
+        var svc = new DatabaseExportTaskService(
+                repo, databaseBackupService, backupProperties, exportTaskMapper, snowflakeIdGenerator
+        );
+
+        var payload = svc.getDownloadPayload(1L, "token");
+
+        assertThat(payload.filePath()).isEqualTo(java.nio.file.Path.of(task.getFilePath()));
+        assertThat(payload.fileName()).isEqualTo("备份 文件.sql");
+        assertThat(payload.fileSize()).isEqualTo(123L);
+    }
+
+    @Test
+    void shouldThrowException_whenDownloadLinkExpired() throws Exception {
+        var task = createCompletedTask(1L);
+        task.setDownloadToken("token");
+        task.setExpiresAt(LocalDateTime.now().minusSeconds(1));
+        var repo = repositoryReturning(task, 1);
+        var svc = new DatabaseExportTaskService(
+                repo, databaseBackupService, backupProperties, exportTaskMapper, snowflakeIdGenerator
+        );
+
+        assertThatThrownBy(() -> svc.getDownloadPayload(1L, "token"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("下载链接已过期");
+    }
+
+    @Test
+    void shouldThrowException_whenDownloadTokenIsInvalid() throws Exception {
+        var task = createCompletedTask(1L);
+        task.setDownloadToken("token");
+        var repo = repositoryReturning(task, 1);
+        var svc = new DatabaseExportTaskService(
+                repo, databaseBackupService, backupProperties, exportTaskMapper, snowflakeIdGenerator
+        );
+
+        assertThatThrownBy(() -> svc.getDownloadPayload(1L, null))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("下载令牌无效");
+        assertThatThrownBy(() -> svc.getDownloadPayload(1L, "bad-token"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("下载令牌无效");
+    }
+
+    @Test
+    void shouldThrowException_whenDownloadTokenConsumeFails() throws Exception {
+        var task = createCompletedTask(1L);
+        task.setDownloadToken("token");
+        var repo = repositoryReturning(task, 0);
+        var svc = new DatabaseExportTaskService(
+                repo, databaseBackupService, backupProperties, exportTaskMapper, snowflakeIdGenerator
+        );
+
+        assertThatThrownBy(() -> svc.getDownloadPayload(1L, "token"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("下载令牌无效");
+    }
+
+    @Test
+    void shouldThrowException_whenDownloadPayloadFileMissing() {
+        var task = createTask(1L, "DBEXP001", "已完成");
+        task.setDownloadToken("token");
+        task.setFilePath("/tmp/leo-missing-download-file.sql");
+        task.setExpiresAt(LocalDateTime.now().plusDays(1));
+        var repo = repositoryReturning(task, 1);
+        var svc = new DatabaseExportTaskService(
+                repo, databaseBackupService, backupProperties, exportTaskMapper, snowflakeIdGenerator
+        );
+
+        assertThatThrownBy(() -> svc.getDownloadPayload(1L, "token"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("备份文件不存在");
+    }
+
+    @Test
+    void shouldReturnDownloadResourceWithEncodedFilenameAndDefaultSize() throws Exception {
+        var task = createCompletedTask(1L);
+        task.setDownloadToken("token");
+        task.setFileName("备份 文件.sql");
+        task.setFileSize(null);
+        var repo = repositoryReturning(task, 1);
+        var svc = new DatabaseExportTaskService(
+                repo, databaseBackupService, backupProperties, exportTaskMapper, snowflakeIdGenerator
+        );
+
+        var resource = svc.getDownloadResource(1L, "token");
+
+        assertThat(resource.resource().exists()).isTrue();
+        assertThat(resource.contentType().toString()).isEqualTo("application/octet-stream");
+        assertThat(resource.contentLength()).isZero();
+        assertThat(resource.contentDisposition()).contains("%E5%A4%87%E4%BB%BD%20%E6%96%87%E4%BB%B6.sql");
+    }
+
+    @Test
+    void shouldCleanupExpiredTasksOnlyOnce() throws Exception {
+        var expiredFile = Files.createTempFile("expired-export", ".sql");
+        var expiredTask = createTask(1L, "DBEXP001", "已完成");
+        expiredTask.setFilePath(expiredFile.toString());
+        expiredTask.setFileSize(12L);
+        expiredTask.setDownloadToken("token");
+        expiredTask.setExpiresAt(LocalDateTime.now().minusDays(1));
+        var alreadyExpiredTask = createTask(2L, "DBEXP002", "已过期");
+        alreadyExpiredTask.setFilePath(Files.createTempFile("already-expired-export", ".sql").toString());
+        var repo = (DatabaseExportTaskRepository) Proxy.newProxyInstance(
+                DatabaseExportTaskRepository.class.getClassLoader(),
+                new Class[]{DatabaseExportTaskRepository.class},
+                (proxy, method, args) -> switch (method.getName()) {
+                    case "findByStatusAndExpiresAtBeforeAndDeletedFlagFalse" -> List.of(expiredTask, alreadyExpiredTask);
+                    case "save" -> args[0];
+                    case "toString" -> "DatabaseExportTaskRepositoryStub";
+                    case "hashCode" -> System.identityHashCode(proxy);
+                    case "equals" -> proxy == args[0];
+                    default -> throw new UnsupportedOperationException(method.getName());
+                }
+        );
+        var svc = new DatabaseExportTaskService(
+                repo, databaseBackupService, backupProperties, exportTaskMapper, snowflakeIdGenerator
+        );
+
+        svc.cleanupExpiredTasks();
+
+        assertThat(Files.exists(expiredFile)).isFalse();
+        assertThat(expiredTask.getStatus()).isEqualTo("已过期");
+        assertThat(expiredTask.getDownloadToken()).isNull();
+        assertThat(expiredTask.getFilePath()).isNull();
+        assertThat(expiredTask.getFileSize()).isNull();
+        assertThat(alreadyExpiredTask.getFilePath()).isNotNull();
     }
 
     @Test
@@ -210,6 +411,35 @@ class DatabaseExportTaskServiceTest {
         var task = createTask(1L, "DBEXP001", "已完成");
         task.setExpiresAt(LocalDateTime.now().plusDays(1));
         assertThat(service.isExpired(task)).isFalse();
+    }
+
+    @Test
+    void shouldReturnNotExpired_whenExpiresAtIsNull() {
+        var task = createTask(1L, "DBEXP001", "已完成");
+        assertThat(service.isExpired(task)).isFalse();
+    }
+
+    private static DatabaseExportTaskRepository repositoryReturning(DatabaseExportTask task, int consumedRows) {
+        return (DatabaseExportTaskRepository) Proxy.newProxyInstance(
+                DatabaseExportTaskRepository.class.getClassLoader(),
+                new Class[]{DatabaseExportTaskRepository.class},
+                (proxy, method, args) -> switch (method.getName()) {
+                    case "findByIdAndDeletedFlagFalse" -> Optional.of(task);
+                    case "findByStatusAndExpiresAtBeforeAndDeletedFlagFalse" -> List.of();
+                    case "save" -> args[0];
+                    case "consumeDownloadToken" -> consumedRows;
+                    case "toString" -> "DatabaseExportTaskRepositoryStub";
+                    case "hashCode" -> System.identityHashCode(proxy);
+                    case "equals" -> proxy == args[0];
+                    default -> throw new UnsupportedOperationException(method.getName());
+                }
+        );
+    }
+
+    private static void setContextPath(DatabaseExportTaskService service, String contextPath) throws Exception {
+        var field = DatabaseExportTaskService.class.getDeclaredField("contextPath");
+        field.setAccessible(true);
+        field.set(service, contextPath);
     }
 
     private static DatabaseExportTask createTask(Long id, String taskNo, String status) {
