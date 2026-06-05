@@ -1,5 +1,7 @@
 package com.leo.erp.system.norule.service;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.leo.erp.common.support.RedisJsonCacheSupport;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.setting.PageUploadRuleQueryService;
 import com.leo.erp.common.setting.PageUploadRuleSummary;
@@ -11,10 +13,18 @@ import com.leo.erp.system.norule.web.dto.NoRuleResponse;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Proxy;
+import java.time.Duration;
+import java.util.Collection;
 import java.util.List;
 import java.util.Set;
+import java.util.function.Supplier;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 class GeneralSettingQueryServiceTest {
 
@@ -95,6 +105,165 @@ class GeneralSettingQueryServiceTest {
     }
 
     @Test
+    void shouldFilterUploadRulesByKeywordAcrossAllSearchableFields() {
+        GeneralSettingQueryService service = new GeneralSettingQueryService(
+                noRuleRepository(List.of()),
+                mapper(),
+                () -> List.of(
+                        uploadRule(2L, "purchase-order", "采购订单", "PAGE_UPLOAD_PO", "采购规则", "{po}", "正常", "采购备注", "po.pdf"),
+                        uploadRule(3L, "sales-order", "销售订单", "PAGE_UPLOAD_SO", "销售规则", "{so}", "正常", "销售备注", "so.pdf"),
+                        uploadRule(4L, "invoice", "发票", "PAGE_UPLOAD_INV", "开票规则", "{inv}", "正常", null, "invoice.pdf")
+                )
+        );
+
+        assertThat(settingCodes(service.page(PageQuery.of(0, 20, null, null), "page_upload_po", null).getContent()))
+                .containsExactly("PAGE_UPLOAD_PO");
+        assertThat(settingCodes(service.page(PageQuery.of(0, 20, null, null), "销售规则", null).getContent()))
+                .containsExactly("PAGE_UPLOAD_SO");
+        assertThat(settingCodes(service.page(PageQuery.of(0, 20, null, null), "{INV}", null).getContent()))
+                .containsExactly("PAGE_UPLOAD_INV");
+        assertThat(service.page(PageQuery.of(0, 20, null, null), "missing", null).getContent()).isEmpty();
+    }
+
+    @Test
+    void shouldPageMergedGeneralSettingsAfterSorting() {
+        NoRule defaultPageSize = noRule(
+                6L,
+                SystemSwitchService.DEFAULT_LIST_PAGE_SIZE_SETTING,
+                "列表分页条数",
+                "列表页",
+                "50",
+                "正常"
+        );
+        NoRule unknown = noRule(7L, "ZZ_UNKNOWN", "未知设置", null, null, "正常");
+
+        GeneralSettingQueryService service = new GeneralSettingQueryService(
+                noRuleRepository(List.of(unknown, defaultPageSize)),
+                mapper(),
+                () -> List.of(
+                        uploadRule(8L, "sales-order", "销售订单", "PAGE_UPLOAD_SALES_ORDER", "销售上传", "{so}", "正常", null, "so.pdf")
+                )
+        );
+
+        List<GeneralSettingResponse> pageOne = service.page(PageQuery.of(0, 2, null, null), null, " 正常 ").getContent();
+        List<GeneralSettingResponse> pageTwo = service.page(PageQuery.of(1, 2, null, null), null, " 正常 ").getContent();
+        List<GeneralSettingResponse> emptyPage = service.page(PageQuery.of(2, 2, null, null), null, " 正常 ").getContent();
+
+        assertThat(settingCodes(pageOne)).containsExactly(
+                SystemSwitchService.DEFAULT_LIST_PAGE_SIZE_SETTING,
+                "ZZ_UNKNOWN"
+        );
+        assertThat(settingCodes(pageTwo)).containsExactly("PAGE_UPLOAD_SALES_ORDER");
+        assertThat(emptyPage).isEmpty();
+    }
+
+    @Test
+    void shouldLoadPublicDisplaySwitchesWithoutRedis() {
+        NoRule hideAuditedSwitch = noRule(
+                5L,
+                SystemSwitchService.HIDE_AUDITED_LIST_RECORDS_SWITCH,
+                "隐藏已审核单据",
+                "列表页",
+                "ON",
+                "正常"
+        );
+        NoRule clientOnlySwitch = noRule(
+                6L,
+                SystemSwitchService.DEFAULT_LIST_PAGE_SIZE_SETTING,
+                "列表分页条数",
+                "列表页",
+                "50",
+                "正常"
+        );
+        GeneralSettingQueryService service = new GeneralSettingQueryService(
+                noRuleRepository(List.of(clientOnlySwitch, hideAuditedSwitch)),
+                mapper(),
+                stubUploadRuleService()
+        );
+
+        List<String> settingCodes = settingCodes(service.publicDisplaySwitches());
+
+        assertThat(settingCodes).containsExactly(SystemSwitchService.HIDE_AUDITED_LIST_RECORDS_SWITCH);
+    }
+
+    @Test
+    void shouldUseRedisForPublicDisplayAndClientSettings() {
+        NoRule showSnowflakeId = noRule(
+                5L,
+                SystemSwitchService.SHOW_SNOWFLAKE_ID_SWITCH,
+                "显示雪花ID",
+                "列表页",
+                "ON",
+                "正常"
+        );
+        RedisJsonCacheSupport redisJsonCacheSupport = mock(RedisJsonCacheSupport.class);
+        when(redisJsonCacheSupport.getOrLoad(
+                eq(GeneralSettingQueryService.PUBLIC_DISPLAY_SWITCHES_CACHE_KEY),
+                any(Duration.class),
+                any(TypeReference.class),
+                any(Supplier.class)
+        )).thenAnswer(invocation -> ((Supplier<?>) invocation.getArgument(3)).get());
+        when(redisJsonCacheSupport.getOrLoad(
+                eq(GeneralSettingQueryService.PUBLIC_CLIENT_SETTINGS_CACHE_KEY),
+                any(Duration.class),
+                any(TypeReference.class),
+                any(Supplier.class)
+        )).thenAnswer(invocation -> ((Supplier<?>) invocation.getArgument(3)).get());
+        GeneralSettingQueryService service = new GeneralSettingQueryService(
+                noRuleRepository(List.of(showSnowflakeId)),
+                mapper(),
+                stubUploadRuleService(),
+                redisJsonCacheSupport
+        );
+
+        assertThat(settingCodes(service.publicDisplaySwitches()))
+                .containsExactly(SystemSwitchService.SHOW_SNOWFLAKE_ID_SWITCH);
+        assertThat(settingCodes(service.publicClientSettings()))
+                .containsExactly(SystemSwitchService.SHOW_SNOWFLAKE_ID_SWITCH);
+
+        verify(redisJsonCacheSupport).getOrLoad(
+                eq(GeneralSettingQueryService.PUBLIC_DISPLAY_SWITCHES_CACHE_KEY),
+                any(Duration.class),
+                any(TypeReference.class),
+                any(Supplier.class)
+        );
+        verify(redisJsonCacheSupport).getOrLoad(
+                eq(GeneralSettingQueryService.PUBLIC_CLIENT_SETTINGS_CACHE_KEY),
+                any(Duration.class),
+                any(TypeReference.class),
+                any(Supplier.class)
+        );
+    }
+
+    @Test
+    void shouldEvictPublicDisplaySwitchesCacheWhenRedisIsAvailable() {
+        RedisJsonCacheSupport redisJsonCacheSupport = mock(RedisJsonCacheSupport.class);
+        GeneralSettingQueryService service = new GeneralSettingQueryService(
+                noRuleRepository(List.of()),
+                mapper(),
+                stubUploadRuleService(),
+                redisJsonCacheSupport
+        );
+
+        service.evictPublicDisplaySwitchesCache();
+
+        verify(redisJsonCacheSupport).delete(GeneralSettingQueryService.PUBLIC_DISPLAY_SWITCHES_CACHE_KEY);
+    }
+
+    @Test
+    void shouldIgnoreCacheEvictionWhenRedisIsUnavailable() {
+        GeneralSettingQueryService service = new GeneralSettingQueryService(
+                noRuleRepository(List.of()),
+                mapper(),
+                stubUploadRuleService()
+        );
+
+        service.evictPublicDisplaySwitchesCache();
+
+        assertThat(service.publicDisplaySwitches()).isEmpty();
+    }
+
+    @Test
     void shouldKeepBusinessStatementSwitchesOutOfPublicClientSettings() {
         NoRule customerSwitch = new NoRule();
         customerSwitch.setId(3L);
@@ -160,7 +329,7 @@ class GeneralSettingQueryServiceTest {
                     case "findAll" -> rules;
                     case "findBySettingCodeInAndDeletedFlagFalse" -> {
                         @SuppressWarnings("unchecked")
-                        var settingCodes = (java.util.Collection<String>) args[0];
+                        var settingCodes = (Collection<String>) args[0];
                         yield rules.stream()
                                 .filter(rule -> settingCodes.contains(rule.getSettingCode()))
                                 .toList();
@@ -191,17 +360,48 @@ class GeneralSettingQueryServiceTest {
 
     private PageUploadRuleQueryService stubUploadRuleService() {
         return () -> List.of(
-                new PageUploadRuleSummary(
-                        2L,
-                        "sales-order",
-                        "销售订单",
-                        "PAGE_UPLOAD_SALES_ORDER",
-                        "销售订单上传命名规则",
-                        "{yyyyMMddHHmmss}_{random8}",
-                        "正常",
-                        "适用于销售订单页面上传",
-                        "upload_sales_order.pdf"
-                )
+                uploadRule(2L, "sales-order", "销售订单", "PAGE_UPLOAD_SALES_ORDER",
+                        "销售订单上传命名规则", "{yyyyMMddHHmmss}_{random8}", "正常",
+                        "适用于销售订单页面上传", "upload_sales_order.pdf")
         );
+    }
+
+    private NoRule noRule(Long id, String settingCode, String settingName, String billName, String sampleNo, String status) {
+        NoRule rule = new NoRule();
+        rule.setId(id);
+        rule.setSettingCode(settingCode);
+        rule.setSettingName(settingName);
+        rule.setBillName(billName);
+        rule.setSampleNo(sampleNo);
+        rule.setStatus(status);
+        return rule;
+    }
+
+    private PageUploadRuleSummary uploadRule(
+            Long id,
+            String moduleKey,
+            String moduleName,
+            String ruleCode,
+            String ruleName,
+            String renamePattern,
+            String status,
+            String remark,
+            String previewFileName
+    ) {
+        return new PageUploadRuleSummary(
+                id,
+                moduleKey,
+                moduleName,
+                ruleCode,
+                ruleName,
+                renamePattern,
+                status,
+                remark,
+                previewFileName
+        );
+    }
+
+    private List<String> settingCodes(List<GeneralSettingResponse> records) {
+        return records.stream().map(GeneralSettingResponse::settingCode).toList();
     }
 }
