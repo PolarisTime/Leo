@@ -1,6 +1,8 @@
 package com.leo.erp.auth.service;
 
+import com.leo.erp.auth.domain.entity.ApiKey;
 import com.leo.erp.auth.domain.entity.UserAccount;
+import com.leo.erp.auth.domain.enums.ApiKeyStatus;
 import com.leo.erp.auth.domain.enums.UserStatus;
 import com.leo.erp.auth.repository.ApiKeyRepository;
 import com.leo.erp.auth.repository.UserAccountRepository;
@@ -13,6 +15,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.lang.reflect.Proxy;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -157,6 +160,203 @@ class ApiKeyAdminServiceTest {
         } finally {
             SecurityContextHolder.clearContext();
         }
+    }
+
+    @Test
+    void detailShouldFallbackToUserIdWhenUserMissing() {
+        ApiKeyRepository apiKeyRepository = mock(ApiKeyRepository.class);
+        UserAccountRepository userAccountRepository = mock(UserAccountRepository.class);
+        ApiKey apiKey = apiKey(99L, 42L, ApiKeyStatus.ACTIVE, null);
+        apiKey.setAllowedResources("purchase-order,sales-order");
+        apiKey.setAllowedActions("read,print");
+        when(apiKeyRepository.findByIdAndDeletedFlagFalse(99L)).thenReturn(Optional.of(apiKey));
+        when(userAccountRepository.findByIdAndDeletedFlagFalse(42L)).thenReturn(Optional.empty());
+
+        ApiKeyAdminService service = service(apiKeyRepository, userAccountRepository);
+
+        var response = service.detail(99L);
+
+        assertThat(response.id()).isEqualTo(99L);
+        assertThat(response.loginName()).isEqualTo("42");
+        assertThat(response.userName()).isEqualTo("--");
+        assertThat(response.allowedResources()).containsExactly("purchase-order", "sales-order");
+        assertThat(response.allowedActions()).containsExactly("read", "print");
+        assertThat(response.status()).isEqualTo("有效");
+    }
+
+    @Test
+    void detailShouldResolveExpiredStatus() {
+        ApiKeyRepository apiKeyRepository = mock(ApiKeyRepository.class);
+        UserAccountRepository userAccountRepository = mock(UserAccountRepository.class);
+        ApiKey apiKey = apiKey(100L, 1L, ApiKeyStatus.ACTIVE, LocalDateTime.now().minusSeconds(1));
+        when(apiKeyRepository.findByIdAndDeletedFlagFalse(100L)).thenReturn(Optional.of(apiKey));
+        when(userAccountRepository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(user(1L, UserStatus.NORMAL, true)));
+
+        ApiKeyAdminService service = service(apiKeyRepository, userAccountRepository);
+
+        assertThat(service.detail(100L).status()).isEqualTo("已过期");
+    }
+
+    @Test
+    void revokeShouldDisableActiveKey() {
+        ApiKeyRepository apiKeyRepository = mock(ApiKeyRepository.class);
+        UserAccountRepository userAccountRepository = mock(UserAccountRepository.class);
+        ApiKey apiKey = apiKey(101L, 1L, ApiKeyStatus.ACTIVE, LocalDateTime.now().plusDays(1));
+        when(apiKeyRepository.findByIdAndDeletedFlagFalse(101L)).thenReturn(Optional.of(apiKey));
+
+        ApiKeyAdminService service = service(apiKeyRepository, userAccountRepository);
+
+        service.revoke(101L);
+
+        assertThat(apiKey.getStatus()).isEqualTo(ApiKeyStatus.DISABLED);
+        verify(apiKeyRepository).save(apiKey);
+    }
+
+    @Test
+    void revokeShouldRejectDisabledOrExpiredKey() {
+        ApiKeyRepository apiKeyRepository = mock(ApiKeyRepository.class);
+        UserAccountRepository userAccountRepository = mock(UserAccountRepository.class);
+        when(apiKeyRepository.findByIdAndDeletedFlagFalse(1L))
+                .thenReturn(Optional.of(apiKey(1L, 1L, ApiKeyStatus.DISABLED, null)));
+        when(apiKeyRepository.findByIdAndDeletedFlagFalse(2L))
+                .thenReturn(Optional.of(apiKey(2L, 1L, ApiKeyStatus.ACTIVE, LocalDateTime.now().minusDays(1))));
+
+        ApiKeyAdminService service = service(apiKeyRepository, userAccountRepository);
+
+        assertThatThrownBy(() -> service.revoke(1L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("已被禁用");
+        assertThatThrownBy(() -> service.revoke(2L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("已过期");
+    }
+
+    @Test
+    void generateShouldRejectMissingOrDisabledUser() {
+        ApiKeyRepository apiKeyRepository = mock(ApiKeyRepository.class);
+        UserAccountRepository userAccountRepository = mock(UserAccountRepository.class);
+        when(userAccountRepository.findByIdAndDeletedFlagFalse(404L)).thenReturn(Optional.empty());
+        when(userAccountRepository.findByIdAndDeletedFlagFalse(2L)).thenReturn(Optional.of(user(2L, UserStatus.DISABLED, true)));
+
+        ApiKeyAdminService service = service(apiKeyRepository, userAccountRepository);
+
+        assertThatThrownBy(() -> service.generate(404L, validRequest()))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("目标用户不存在");
+        assertThatThrownBy(() -> service.generate(2L, validRequest()))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("目标用户已禁用");
+    }
+
+    @Test
+    void generateShouldValidateKeyNameAndExpireDays() {
+        ApiKeyRepository apiKeyRepository = mock(ApiKeyRepository.class);
+        UserAccountRepository userAccountRepository = mock(UserAccountRepository.class);
+        when(userAccountRepository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(user(1L, UserStatus.NORMAL, true)));
+
+        ApiKeyAdminService service = service(apiKeyRepository, userAccountRepository);
+
+        assertThatThrownBy(() -> service.generate(1L, new ApiKeyRequest(
+                " ",
+                "全部接口",
+                List.of(),
+                List.of("read"),
+                null
+        )))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("密钥名称不能为空");
+        assertThatThrownBy(() -> service.generate(1L, new ApiKeyRequest(
+                "x".repeat(65),
+                "全部接口",
+                List.of(),
+                List.of("read"),
+                null
+        )))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("密钥名称长度不能超过64");
+        assertThatThrownBy(() -> service.generate(1L, new ApiKeyRequest(
+                "测试密钥",
+                "全部接口",
+                List.of(),
+                List.of("read"),
+                0L
+        )))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("有效天数必须大于0");
+        assertThatThrownBy(() -> service.generate(1L, new ApiKeyRequest(
+                "测试密钥",
+                "全部接口",
+                List.of(),
+                List.of("read"),
+                3651L
+        )))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("有效天数不能超过3650");
+    }
+
+    @Test
+    void generateShouldNormalizeAndPersistPayload() {
+        ApiKeyRepository apiKeyRepository = mock(ApiKeyRepository.class);
+        UserAccountRepository userAccountRepository = mock(UserAccountRepository.class);
+        when(userAccountRepository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(user(1L, UserStatus.NORMAL, true)));
+
+        ApiKeyAdminService service = service(apiKeyRepository, userAccountRepository);
+
+        var response = service.generate(1L, new ApiKeyRequest(
+                "  集成密钥  ",
+                " 全部接口 ",
+                List.of(" purchase-order ", "purchase-order", "sales-order"),
+                List.of(" READ ", "print", "read"),
+                7L
+        ));
+
+        assertThat(response.keyName()).isEqualTo("集成密钥");
+        assertThat(response.usageScope()).isEqualTo("全部接口");
+        assertThat(response.allowedResources()).containsExactly("purchase-order", "sales-order");
+        assertThat(response.allowedActions()).containsExactly("read", "print");
+        assertThat(response.expiresAt()).isAfter(LocalDateTime.now().plusDays(6));
+        assertThat(response.rawKey()).startsWith("leo_");
+        verify(apiKeyRepository).save(any(ApiKey.class));
+    }
+
+    private ApiKeyAdminService service(ApiKeyRepository apiKeyRepository, UserAccountRepository userAccountRepository) {
+        return new ApiKeyAdminService(
+                apiKeyRepository,
+                userAccountRepository,
+                new com.leo.erp.common.support.SnowflakeIdGenerator(0L)
+        );
+    }
+
+    private ApiKeyRequest validRequest() {
+        return new ApiKeyRequest("测试密钥", "全部接口", List.of(), List.of("read"), null);
+    }
+
+    private ApiKey apiKey(Long id, Long userId, ApiKeyStatus status, LocalDateTime expiresAt) {
+        ApiKey apiKey = new ApiKey();
+        apiKey.setId(id);
+        apiKey.setUserId(userId);
+        apiKey.setKeyName("测试密钥");
+        apiKey.setUsageScope("全部接口");
+        apiKey.setAllowedResources("");
+        apiKey.setAllowedActions("read");
+        apiKey.setKeyPrefix("leo_1234");
+        apiKey.setKeyHash("hash");
+        apiKey.setStatus(status);
+        apiKey.setExpiresAt(expiresAt);
+        apiKey.setCreatedAt(LocalDateTime.now().minusDays(1));
+        return apiKey;
+    }
+
+    private UserAccount user(Long id, UserStatus status, boolean totpEnabled) {
+        UserAccount user = new UserAccount();
+        user.setId(id);
+        user.setLoginName("demo" + id);
+        user.setUserName("Demo " + id);
+        user.setMobile("1380000000" + id);
+        user.setStatus(status);
+        user.setTotpEnabled(totpEnabled);
+        user.setTotpSecret(totpEnabled ? "totp-secret" : null);
+        return user;
     }
 
     @SuppressWarnings("unchecked")
