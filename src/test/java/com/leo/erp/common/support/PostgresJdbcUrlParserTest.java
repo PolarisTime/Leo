@@ -36,4 +36,27 @@ class PostgresJdbcUrlParserTest {
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("JDBC URL");
     }
+
+    @Test
+    void shouldRejectBlankOrIncompleteJdbcUrls() {
+        assertThatThrownBy(() -> PostgresJdbcUrlParser.parse(null))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("JDBC URL");
+        assertThatThrownBy(() -> PostgresJdbcUrlParser.parse(" "))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("JDBC URL");
+        assertThatThrownBy(() -> PostgresJdbcUrlParser.parse("jdbc:postgresql://localhost"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("JDBC URL");
+        assertThatThrownBy(() -> PostgresJdbcUrlParser.parse("jdbc:postgresql://localhost/"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("JDBC URL");
+    }
+
+    @Test
+    void shouldRejectMalformedJdbcUrl() {
+        assertThatThrownBy(() -> PostgresJdbcUrlParser.parse("jdbc:postgresql://[bad-host]/leo"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("JDBC URL");
+    }
 }
