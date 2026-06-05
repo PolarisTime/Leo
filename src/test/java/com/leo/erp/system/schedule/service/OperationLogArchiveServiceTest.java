@@ -102,7 +102,7 @@ class OperationLogArchiveServiceTest {
     }
 
     @Test
-    void shouldDeleteTempFileOnIOException() throws Exception {
+    void shouldDeleteTempFileOnRuntimeException() throws Exception {
         JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
 
         Timestamp opTime = Timestamp.valueOf("2026-04-15 10:30:00");
@@ -118,7 +118,8 @@ class OperationLogArchiveServiceTest {
                     return batch.stream().map(rs -> {
                         try { return mapper.mapRow(rs, 0); } catch (SQLException e) { throw new RuntimeException(e); }
                     }).toList();
-                });
+                })
+                .thenThrow(new RuntimeException("archive query failed"));
 
         OperationLogArchiveService service = new OperationLogArchiveService(jdbcTemplate);
 
@@ -129,6 +130,7 @@ class OperationLogArchiveServiceTest {
                 nonExistentDir,
                 1000
         )).isInstanceOf(RuntimeException.class);
+        assertThat(nonExistentDir).isEmptyDirectory();
     }
 
     @Test
