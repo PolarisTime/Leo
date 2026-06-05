@@ -9,8 +9,10 @@ import com.leo.erp.finance.ledgeradjustment.repository.LedgerAdjustmentRepositor
 import com.leo.erp.finance.ledgeradjustment.web.dto.LedgerAdjustmentRequest;
 import com.leo.erp.finance.ledgeradjustment.web.dto.LedgerAdjustmentResponse;
 import com.leo.erp.master.carrier.repository.CarrierRepository;
+import com.leo.erp.master.carrier.domain.entity.Carrier;
 import com.leo.erp.master.customer.domain.entity.Customer;
 import com.leo.erp.master.customer.repository.CustomerRepository;
+import com.leo.erp.master.project.domain.entity.Project;
 import com.leo.erp.master.project.repository.ProjectRepository;
 import com.leo.erp.master.supplier.domain.entity.Supplier;
 import com.leo.erp.master.supplier.repository.SupplierRepository;
@@ -46,7 +48,7 @@ class LedgerAdjustmentServiceTest {
             return toResponse(adjustment);
         });
 
-        LedgerAdjustmentService service = newService(repository, mapper, customerRepository, null, null);
+        LedgerAdjustmentService service = newService(repository, mapper, customerRepository, null, null, null);
 
         LedgerAdjustmentResponse response = service.create(new LedgerAdjustmentRequest(
                 "LA-001",
@@ -80,7 +82,8 @@ class LedgerAdjustmentServiceTest {
                 mock(LedgerAdjustmentMapper.class),
                 mock(CustomerRepository.class),
                 mock(SupplierRepository.class),
-                mock(CarrierRepository.class)
+                mock(CarrierRepository.class),
+                mock(ProjectRepository.class)
         );
 
         assertThatThrownBy(() -> service.create(new LedgerAdjustmentRequest(
@@ -115,7 +118,8 @@ class LedgerAdjustmentServiceTest {
                 mock(LedgerAdjustmentMapper.class),
                 mock(CustomerRepository.class),
                 supplierRepository,
-                mock(CarrierRepository.class)
+                mock(CarrierRepository.class),
+                mock(ProjectRepository.class)
         );
 
         assertThatThrownBy(() -> service.create(new LedgerAdjustmentRequest(
@@ -156,7 +160,8 @@ class LedgerAdjustmentServiceTest {
                 mapper,
                 mock(CustomerRepository.class),
                 supplierRepository,
-                mock(CarrierRepository.class)
+                mock(CarrierRepository.class),
+                mock(ProjectRepository.class)
         );
 
         LedgerAdjustmentResponse response = service.create(new LedgerAdjustmentRequest(
@@ -180,11 +185,130 @@ class LedgerAdjustmentServiceTest {
         assertThat(response.counterpartyName()).isEqualTo("供应商A");
     }
 
+    @Test
+    void shouldResolveCarrierAndProjectById() {
+        LedgerAdjustmentRepository repository = mock(LedgerAdjustmentRepository.class);
+        CarrierRepository carrierRepository = mock(CarrierRepository.class);
+        ProjectRepository projectRepository = mock(ProjectRepository.class);
+        LedgerAdjustmentMapper mapper = mock(LedgerAdjustmentMapper.class);
+        Carrier carrier = new Carrier();
+        carrier.setCarrierCode("L-001");
+        carrier.setCarrierName("物流商A");
+        Project project = new Project();
+        project.setId(11L);
+        project.setProjectName("项目A");
+        when(repository.existsByAdjustmentNoAndDeletedFlagFalse("LA-003")).thenReturn(false);
+        when(repository.save(any(LedgerAdjustment.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(carrierRepository.findByCarrierCodeAndDeletedFlagFalse("L-001")).thenReturn(Optional.of(carrier));
+        when(projectRepository.findByIdAndDeletedFlagFalse(11L)).thenReturn(Optional.of(project));
+        when(mapper.toResponse(any(LedgerAdjustment.class))).thenAnswer(invocation -> toResponse(invocation.getArgument(0)));
+
+        LedgerAdjustmentService service = newService(
+                repository,
+                mapper,
+                mock(CustomerRepository.class),
+                mock(SupplierRepository.class),
+                carrierRepository,
+                projectRepository
+        );
+
+        LedgerAdjustmentResponse response = service.create(new LedgerAdjustmentRequest(
+                "LA-003",
+                "应付",
+                "物流商",
+                "L-001",
+                "请求中的物流商",
+                11L,
+                "请求中的项目名",
+                LocalDate.of(2026, 6, 1),
+                new BigDecimal("66.00"),
+                "其他调整",
+                "增加余额",
+                StatusConstants.DRAFT,
+                "财务A",
+                " 备注 "
+        ));
+
+        assertThat(response.counterpartyName()).isEqualTo("物流商A");
+        assertThat(response.projectId()).isEqualTo(11L);
+        assertThat(response.projectName()).isEqualTo("项目A");
+        assertThat(response.remark()).isEqualTo("备注");
+    }
+
+    @Test
+    void shouldRejectDuplicateAdjustmentNoOnCreate() {
+        LedgerAdjustmentRepository repository = mock(LedgerAdjustmentRepository.class);
+        when(repository.existsByAdjustmentNoAndDeletedFlagFalse("LA-001")).thenReturn(true);
+        LedgerAdjustmentService service = newService(
+                repository,
+                mock(LedgerAdjustmentMapper.class),
+                mock(CustomerRepository.class),
+                mock(SupplierRepository.class),
+                mock(CarrierRepository.class),
+                mock(ProjectRepository.class)
+        );
+
+        assertThatThrownBy(() -> service.create(validRequest()))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("调整单号已存在");
+    }
+
+    @Test
+    void shouldRejectInvalidDirectionAndNonPositiveAmount() {
+        LedgerAdjustmentService service = newService(
+                mock(LedgerAdjustmentRepository.class),
+                mock(LedgerAdjustmentMapper.class),
+                mock(CustomerRepository.class),
+                mock(SupplierRepository.class),
+                mock(CarrierRepository.class),
+                mock(ProjectRepository.class)
+        );
+
+        assertThatThrownBy(() -> service.create(new LedgerAdjustmentRequest(
+                "LA-001",
+                "其他",
+                "客户",
+                "C-001",
+                "客户A",
+                null,
+                null,
+                LocalDate.of(2026, 6, 1),
+                new BigDecimal("10.00"),
+                "其他调整",
+                "增加余额",
+                StatusConstants.DRAFT,
+                "财务A",
+                null
+        )))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("方向不合法");
+
+        assertThatThrownBy(() -> service.create(new LedgerAdjustmentRequest(
+                "LA-001",
+                "应收",
+                "客户",
+                "C-001",
+                "客户A",
+                null,
+                null,
+                LocalDate.of(2026, 6, 1),
+                BigDecimal.ZERO,
+                "其他调整",
+                "增加余额",
+                StatusConstants.DRAFT,
+                "财务A",
+                null
+        )))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("金额必须大于0");
+    }
+
     private LedgerAdjustmentService newService(LedgerAdjustmentRepository repository,
                                                LedgerAdjustmentMapper mapper,
                                                CustomerRepository customerRepository,
                                                SupplierRepository supplierRepository,
-                                               CarrierRepository carrierRepository) {
+                                               CarrierRepository carrierRepository,
+                                               ProjectRepository projectRepository) {
         return new LedgerAdjustmentService(
                 repository,
                 mapper,
@@ -192,8 +316,27 @@ class LedgerAdjustmentServiceTest {
                 customerRepository == null ? mock(CustomerRepository.class) : customerRepository,
                 supplierRepository == null ? mock(SupplierRepository.class) : supplierRepository,
                 carrierRepository == null ? mock(CarrierRepository.class) : carrierRepository,
-                mock(ProjectRepository.class),
+                projectRepository == null ? mock(ProjectRepository.class) : projectRepository,
                 mock(WorkflowTransitionGuard.class)
+        );
+    }
+
+    private LedgerAdjustmentRequest validRequest() {
+        return new LedgerAdjustmentRequest(
+                "LA-001",
+                "应收",
+                "客户",
+                "C-001",
+                "客户A",
+                null,
+                null,
+                LocalDate.of(2026, 6, 1),
+                new BigDecimal("100.00"),
+                "其他调整",
+                "增加余额",
+                StatusConstants.DRAFT,
+                "财务A",
+                null
         );
     }
 
