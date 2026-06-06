@@ -124,7 +124,7 @@ class SalesOrderCompletionSyncServiceTest {
                 salesOrderRepository, salesOutboundRepository);
 
         SalesOrder order = buildOrder("SO-TOL-001", "已审核", 100);
-        SalesOutbound outbound = buildOutbound("SO-TOL-001", "已审核", order.getItems().get(0).getId(), 104);
+        SalesOutbound outbound = buildOutbound("SO-TOL-001", "已审核", order.getItems().get(0).getId(), 100);
 
         when(salesOrderRepository.findByOrderNoInAndDeletedFlagFalse(any())).thenReturn(List.of(order));
         when(salesOutboundRepository.findByDeletedFlagFalse()).thenReturn(List.of(outbound));

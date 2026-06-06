@@ -52,7 +52,7 @@ public class SalesOrderCompletionSyncService {
         List<SalesOutbound> allOutbounds = salesOutboundRepository.findByDeletedFlagFalse();
         for (SalesOrder order : orders) {
             String normalizedOrderNo = normalize(order.getOrderNo());
-            // 计算该SO每项明细的已出库总量
+            syncItemWeightAndAmount(order, allOutbounds, normalizedOrderNo);
             boolean fullyOutbounded = isFullyOutbounded(order, allOutbounds, normalizedOrderNo);
             applyCompletedStatus(order, fullyOutbounded);
         }
@@ -62,6 +62,45 @@ public class SalesOrderCompletionSyncService {
         if (!changedOrders.isEmpty()) {
             salesOrderRepository.saveAll(changedOrders);
         }
+    }
+
+    private void syncItemWeightAndAmount(
+            SalesOrder order,
+            List<SalesOutbound> allOutbounds,
+            String normalizedOrderNo
+    ) {
+        Map<Long, BigDecimal> cumulativeWeightByItemId = allOutbounds.stream()
+                .filter(ob -> StatusConstants.AUDITED.equals(normalize(ob.getStatus())))
+                .filter(ob -> parseSalesOrderNos(ob.getSalesOrderNo())
+                        .contains(normalizedOrderNo))
+                .flatMap(ob -> ob.getItems().stream())
+                .filter(obi -> obi.getSourceSalesOrderItemId() != null && obi.getWeightTon() != null)
+                .collect(Collectors.groupingBy(
+                        obi -> obi.getSourceSalesOrderItemId(),
+                        Collectors.reducing(
+                                BigDecimal.ZERO,
+                                obi -> obi.getWeightTon(),
+                                BigDecimal::add
+                        )
+                ));
+
+        order.getItems().forEach(item -> {
+            BigDecimal cumulativeWeight = cumulativeWeightByItemId.getOrDefault(
+                    item.getId(), BigDecimal.ZERO);
+            if (cumulativeWeight.compareTo(BigDecimal.ZERO) <= 0) {
+                return;
+            }
+            // 首次反写前保存原始计划重量
+            if (item.getOriginalWeightTon() == null
+                    && cumulativeWeight.compareTo(item.getWeightTon()) != 0) {
+                item.setOriginalWeightTon(item.getWeightTon());
+            }
+            item.setWeightTon(cumulativeWeight);
+            if (item.getUnitPrice() != null) {
+                item.setAmount(cumulativeWeight.multiply(item.getUnitPrice())
+                        .setScale(2, RoundingMode.HALF_UP));
+            }
+        });
     }
 
     private boolean isFullyOutbounded(
