@@ -4,6 +4,7 @@ import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
+import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.master.customer.domain.entity.Customer;
 import com.leo.erp.master.customer.repository.CustomerRepository;
 import com.leo.erp.sales.order.domain.entity.SalesOrder;
@@ -403,6 +404,56 @@ class CustomerStatementServiceTest {
         assertThatThrownBy(() -> service.create(buildRequest(new BigDecimal("-100.00"))))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("客户对账单收款金额不能为负数");
+    }
+
+    @Test
+    void shouldUpdateStatusToConfirmedWithAuditGuard() {
+        CustomerStatementRepository repository = mock(CustomerStatementRepository.class);
+        CustomerStatementMapper mapper = mock(CustomerStatementMapper.class);
+        WorkflowTransitionGuard workflowTransitionGuard = mock(WorkflowTransitionGuard.class);
+        CustomerStatement statement = createCustomerStatement(1L, "KHDZ-001");
+        when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(statement));
+        when(repository.save(any(CustomerStatement.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(mapper.toResponse(any(CustomerStatement.class))).thenAnswer(invocation -> {
+            CustomerStatement s = invocation.getArgument(0);
+            return new CustomerStatementResponse(
+                    s.getId(),
+                    s.getStatementNo(),
+                    s.getCustomerCode(),
+                    s.getCustomerName(),
+                    s.getProjectId(),
+                    s.getProjectName(),
+                    s.getStartDate(),
+                    s.getEndDate(),
+                    s.getSalesAmount(),
+                    s.getReceiptAmount(),
+                    s.getClosingAmount(),
+                    s.getStatus(),
+                    s.getRemark(),
+                    List.of()
+            );
+        });
+
+        CustomerStatementService service = new CustomerStatementService(
+                repository,
+                new SnowflakeIdGenerator(0L),
+                mapper,
+                mock(SalesOrderRepository.class),
+                mock(SalesOrderItemQueryService.class),
+                mock(StatementSettlementSyncService.class),
+                workflowTransitionGuard
+        );
+
+        CustomerStatementResponse response = service.updateStatus(1L, StatusConstants.CONFIRMED);
+
+        assertThat(response.status()).isEqualTo(StatusConstants.CONFIRMED);
+        verify(workflowTransitionGuard).assertAuditPermissionForProtectedValue(
+                "customer-statement",
+                StatusConstants.PENDING_CONFIRM,
+                StatusConstants.CONFIRMED,
+                StatusConstants.CONFIRMED
+        );
+        verify(repository).save(argThat(saved -> StatusConstants.CONFIRMED.equals(saved.getStatus())));
     }
 
     private CustomerStatement createCustomerStatement(Long id, String statementNo) {

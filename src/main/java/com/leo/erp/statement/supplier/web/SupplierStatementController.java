@@ -6,6 +6,7 @@ import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.api.PageResponse;
 import com.leo.erp.common.web.BindPageQuery;
+import com.leo.erp.common.web.dto.StatusUpdateRequest;
 import com.leo.erp.security.permission.RequiresPermission;
 import com.leo.erp.statement.supplier.service.SupplierStatementService;
 import com.leo.erp.statement.supplier.web.dto.SupplierStatementCandidateResponse;
@@ -16,6 +17,7 @@ import java.time.LocalDate;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -100,6 +102,13 @@ public class SupplierStatementController {
     @RequiresPermission(resource = "supplier-statement", action = "update")
     public ApiResponse<SupplierStatementResponse> update(@PathVariable Long id, @Valid @RequestBody SupplierStatementRequest request) {
         return ApiResponse.success("更新成功", supplierStatementService.update(id, request));
+    }
+
+    @Operation(summary = "更新供应商对账单状态")
+    @PatchMapping("/{id}/status")
+    @RequiresPermission(resource = "supplier-statement", action = "audit")
+    public ApiResponse<SupplierStatementResponse> updateStatus(@PathVariable Long id, @Valid @RequestBody StatusUpdateRequest request) {
+        return ApiResponse.success("状态更新成功", supplierStatementService.updateStatus(id, request.status()));
     }
 
     @Operation(summary = "删除供应商对账单")

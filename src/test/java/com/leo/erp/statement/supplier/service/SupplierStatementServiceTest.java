@@ -4,6 +4,7 @@ import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
+import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.purchase.inbound.domain.entity.PurchaseInbound;
 import com.leo.erp.purchase.inbound.domain.entity.PurchaseInboundItem;
 import com.leo.erp.purchase.inbound.service.PurchaseInboundItemQueryService;
@@ -29,7 +30,9 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
@@ -268,6 +271,54 @@ class SupplierStatementServiceTest {
 
         assertThat(statement.isDeletedFlag()).isTrue();
         assertThat(statement.getStatus()).isEqualTo("已删除");
+    }
+
+    @Test
+    void shouldUpdateStatusToConfirmedWithAuditGuard() {
+        SupplierStatementRepository repository = mock(SupplierStatementRepository.class);
+        SupplierStatementMapper mapper = mock(SupplierStatementMapper.class);
+        WorkflowTransitionGuard workflowTransitionGuard = mock(WorkflowTransitionGuard.class);
+        SupplierStatement statement = createSupplierStatement(1L, "GYDZ-001");
+        when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(statement));
+        when(repository.save(any(SupplierStatement.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(mapper.toResponse(any(SupplierStatement.class))).thenAnswer(invocation -> {
+            SupplierStatement s = invocation.getArgument(0);
+            return new SupplierStatementResponse(
+                    s.getId(),
+                    s.getStatementNo(),
+                    s.getSupplierCode(),
+                    s.getSupplierName(),
+                    s.getStartDate(),
+                    s.getEndDate(),
+                    s.getPurchaseAmount(),
+                    s.getPaymentAmount(),
+                    s.getClosingAmount(),
+                    s.getStatus(),
+                    s.getRemark(),
+                    List.of()
+            );
+        });
+
+        SupplierStatementService service = new SupplierStatementService(
+                repository,
+                new SnowflakeIdGenerator(0L),
+                mapper,
+                mock(PurchaseInboundRepository.class),
+                mock(PurchaseInboundItemQueryService.class),
+                mock(StatementSettlementSyncService.class),
+                workflowTransitionGuard
+        );
+
+        SupplierStatementResponse response = service.updateStatus(1L, StatusConstants.CONFIRMED);
+
+        assertThat(response.status()).isEqualTo(StatusConstants.CONFIRMED);
+        verify(workflowTransitionGuard).assertAuditPermissionForProtectedValue(
+                "supplier-statement",
+                StatusConstants.PENDING_CONFIRM,
+                StatusConstants.CONFIRMED,
+                StatusConstants.CONFIRMED
+        );
+        verify(repository).save(argThat(saved -> StatusConstants.CONFIRMED.equals(saved.getStatus())));
     }
 
     private SupplierStatement createSupplierStatement(Long id, String statementNo) {

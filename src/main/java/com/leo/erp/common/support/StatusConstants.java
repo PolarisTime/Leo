@@ -64,6 +64,10 @@ public final class StatusConstants {
             DRAFT + "->" + AUDITED,
             AUDITED + "->" + DRAFT
     );
+    public static final Set<String> STATEMENT_CONFIRM_TRANSITIONS = Set.of(
+            PENDING_CONFIRM + "->" + CONFIRMED,
+            CONFIRMED + "->" + PENDING_CONFIRM
+    );
     public static final Set<String> FREIGHT_BILL_AUDIT_TRANSITIONS = Set.of(
             UNAUDITED + "->" + AUDITED,
             AUDITED + "->" + UNAUDITED

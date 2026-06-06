@@ -3,6 +3,7 @@ package com.leo.erp.statement.supplier.web;
 import com.leo.erp.common.api.ApiResponse;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.api.PageResponse;
+import com.leo.erp.common.web.dto.StatusUpdateRequest;
 import com.leo.erp.statement.supplier.service.SupplierStatementService;
 import com.leo.erp.statement.supplier.web.dto.SupplierStatementCandidateResponse;
 import com.leo.erp.statement.supplier.web.dto.SupplierStatementRequest;
@@ -109,6 +110,19 @@ class SupplierStatementControllerTest {
         assertThat(response.code()).isEqualTo(0);
         assertThat(response.message()).isEqualTo("更新成功");
         verify(supplierStatementService).update(1L, request);
+    }
+
+    @Test
+    void updateStatusReturnsUpdatedStatement() {
+        StatusUpdateRequest request = new StatusUpdateRequest("已确认");
+        SupplierStatementResponse updated = mock(SupplierStatementResponse.class);
+        when(supplierStatementService.updateStatus(1L, "已确认")).thenReturn(updated);
+
+        ApiResponse<SupplierStatementResponse> response = controller.updateStatus(1L, request);
+
+        assertThat(response.code()).isEqualTo(0);
+        assertThat(response.message()).isEqualTo("状态更新成功");
+        verify(supplierStatementService).updateStatus(1L, "已确认");
     }
 
     @Test
