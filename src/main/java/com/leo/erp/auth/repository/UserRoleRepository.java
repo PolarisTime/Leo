@@ -1,6 +1,7 @@
 package com.leo.erp.auth.repository;
 
 import com.leo.erp.auth.domain.entity.UserRole;
+import com.leo.erp.auth.domain.enums.UserStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -26,6 +27,21 @@ public interface UserRoleRepository extends JpaRepository<UserRole, Long> {
               and userAccount.deletedFlag = false
             """)
     long countActiveUsersByRoleId(@Param("roleId") Long roleId);
+
+    @Query("""
+            select count(userRole)
+            from UserRole userRole
+            join UserAccount userAccount on userAccount.id = userRole.userId
+            where userRole.roleId = :roleId
+              and userRole.deletedFlag = false
+              and userAccount.deletedFlag = false
+              and userAccount.status = :status
+              and userAccount.id <> :excludedUserId
+            """)
+    long countUsersByRoleIdAndStatusExcludingUserId(
+            @Param("roleId") Long roleId,
+            @Param("status") UserStatus status,
+            @Param("excludedUserId") Long excludedUserId);
 
     @Query("""
             select userAccount

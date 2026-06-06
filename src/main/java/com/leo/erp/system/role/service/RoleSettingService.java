@@ -41,6 +41,7 @@ import java.util.stream.Collectors;
 @Service
 public class RoleSettingService extends AbstractCrudService<RoleSetting, RoleSettingRequest, RoleSettingResponse> {
 
+    private static final String ADMIN_ROLE_CODE = "ADMIN";
     private static final Set<String> ALLOWED_ROLE_TYPES = Set.of("平台角色", "系统角色", "业务角色", "财务角色");
     private static final Set<String> ALLOWED_DATA_SCOPES = Set.of("全部数据", "全部", "本部门", "本人");
 
@@ -127,9 +128,17 @@ public class RoleSettingService extends AbstractCrudService<RoleSetting, RoleSet
 
     @Override
     protected void validateUpdate(RoleSetting entity, RoleSettingRequest request) {
+        assertAdminRoleNotChanged(entity, request);
         if (!entity.getRoleCode().equals(request.roleCode())
                 && repository.existsByRoleCodeAndDeletedFlagFalse(request.roleCode())) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "角色编码已存在");
+        }
+    }
+
+    @Override
+    protected void beforeDelete(RoleSetting entity) {
+        if (isAdminRole(entity)) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "系统管理员角色不能删除");
         }
     }
 
@@ -359,6 +368,22 @@ public class RoleSettingService extends AbstractCrudService<RoleSetting, RoleSet
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "角色状态不合法");
         }
         return normalized;
+    }
+
+    private void assertAdminRoleNotChanged(RoleSetting entity, RoleSettingRequest request) {
+        if (!isAdminRole(entity)) {
+            return;
+        }
+        if (!ADMIN_ROLE_CODE.equals(normalizeRoleCode(request.roleCode()))) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "系统管理员角色编码不能修改");
+        }
+        if (!StatusConstants.NORMAL.equals(normalizeStatus(request.status()))) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "系统管理员角色不能禁用");
+        }
+    }
+
+    private boolean isAdminRole(RoleSetting role) {
+        return role != null && ADMIN_ROLE_CODE.equals(role.getRoleCode());
     }
 
     private String normalizeAllowedValue(String value, Set<String> allowedValues, String fieldName) {
