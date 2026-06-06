@@ -70,6 +70,9 @@ public class SalesOrderItem {
     @Column(name = "weight_ton", nullable = false, precision = 14, scale = 3)
     private BigDecimal weightTon;
 
+    @Column(name = "original_weight_ton", precision = 14, scale = 3)
+    private BigDecimal originalWeightTon;
+
     @Column(name = "unit_price", nullable = false, precision = 12, scale = 2)
     private BigDecimal unitPrice;
 
