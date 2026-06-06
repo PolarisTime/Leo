@@ -27,4 +27,20 @@ class SettlementIdempotencyMigrationTest {
         assertThat(sql).contains("uk_st_supplier_statement_item_source_line");
         assertThat(sql).contains("WHERE source_inbound_item_id IS NOT NULL");
     }
+
+    @Test
+    void migrationChecksDuplicateSettlementRowsBeforeCreatingIndexes() throws IOException {
+        String sql = new String(
+                getClass().getResourceAsStream(
+                        "/db/migration/V173__add_settlement_idempotency_constraints.sql"
+                ).readAllBytes(),
+                StandardCharsets.UTF_8
+        );
+
+        assertThat(sql).contains("HAVING COUNT(*) > 1");
+        assertThat(sql).contains("Duplicate fm_receipt_allocation receipt_id/source_statement_id rows");
+        assertThat(sql).contains("Duplicate fm_payment_allocation payment_id/source_statement_id rows");
+        assertThat(sql).contains("Duplicate st_customer_statement_item statement_id/source_sales_order_item_id rows");
+        assertThat(sql).contains("Duplicate st_supplier_statement_item statement_id/source_inbound_item_id rows");
+    }
 }
