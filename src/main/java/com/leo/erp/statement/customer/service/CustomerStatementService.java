@@ -236,6 +236,21 @@ public class CustomerStatementService extends AbstractCrudService<CustomerStatem
     }
 
     @Override
+    protected Set<String> allowedStatusTransitions() {
+        return StatusConstants.STATEMENT_CONFIRM_TRANSITIONS;
+    }
+
+    @Override
+    protected void beforeStatusUpdate(CustomerStatement entity, String currentStatus, String nextStatus) {
+        workflowTransitionGuard.assertAuditPermissionForProtectedValue(
+                "customer-statement",
+                currentStatus,
+                nextStatus,
+                StatusConstants.CONFIRMED
+        );
+    }
+
+    @Override
     protected void apply(CustomerStatement entity, CustomerStatementRequest request) {
         String nextStatus = BusinessStatusValidator.normalizeWithDefault(
                 request.status(),

@@ -3,6 +3,7 @@ package com.leo.erp.statement.customer.web;
 import com.leo.erp.common.api.ApiResponse;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.api.PageResponse;
+import com.leo.erp.common.web.dto.StatusUpdateRequest;
 import com.leo.erp.statement.customer.service.CustomerStatementService;
 import com.leo.erp.statement.customer.web.dto.CustomerStatementCandidateResponse;
 import com.leo.erp.statement.customer.web.dto.CustomerStatementRequest;
@@ -109,6 +110,19 @@ class CustomerStatementControllerTest {
         assertThat(response.code()).isEqualTo(0);
         assertThat(response.message()).isEqualTo("更新成功");
         verify(customerStatementService).update(1L, request);
+    }
+
+    @Test
+    void updateStatusReturnsUpdatedStatement() {
+        StatusUpdateRequest request = new StatusUpdateRequest("已确认");
+        CustomerStatementResponse updated = mock(CustomerStatementResponse.class);
+        when(customerStatementService.updateStatus(1L, "已确认")).thenReturn(updated);
+
+        ApiResponse<CustomerStatementResponse> response = controller.updateStatus(1L, request);
+
+        assertThat(response.code()).isEqualTo(0);
+        assertThat(response.message()).isEqualTo("状态更新成功");
+        verify(customerStatementService).updateStatus(1L, "已确认");
     }
 
     @Test

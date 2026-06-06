@@ -6,6 +6,7 @@ import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.api.PageResponse;
 import com.leo.erp.common.web.BindPageQuery;
+import com.leo.erp.common.web.dto.StatusUpdateRequest;
 import com.leo.erp.security.permission.RequiresPermission;
 import com.leo.erp.statement.customer.service.CustomerStatementService;
 import com.leo.erp.statement.customer.web.dto.CustomerStatementCandidateResponse;
@@ -16,6 +17,7 @@ import java.time.LocalDate;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -101,6 +103,13 @@ public class CustomerStatementController {
     @RequiresPermission(resource = "customer-statement", action = "update")
     public ApiResponse<CustomerStatementResponse> update(@PathVariable Long id, @Valid @RequestBody CustomerStatementRequest request) {
         return ApiResponse.success("更新成功", customerStatementService.update(id, request));
+    }
+
+    @Operation(summary = "更新客户对账单状态")
+    @PatchMapping("/{id}/status")
+    @RequiresPermission(resource = "customer-statement", action = "audit")
+    public ApiResponse<CustomerStatementResponse> updateStatus(@PathVariable Long id, @Valid @RequestBody StatusUpdateRequest request) {
+        return ApiResponse.success("状态更新成功", customerStatementService.updateStatus(id, request.status()));
     }
 
     @Operation(summary = "删除客户对账单")

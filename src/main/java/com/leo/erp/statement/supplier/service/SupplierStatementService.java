@@ -226,6 +226,21 @@ public class SupplierStatementService extends AbstractCrudService<SupplierStatem
     }
 
     @Override
+    protected Set<String> allowedStatusTransitions() {
+        return StatusConstants.STATEMENT_CONFIRM_TRANSITIONS;
+    }
+
+    @Override
+    protected void beforeStatusUpdate(SupplierStatement entity, String currentStatus, String nextStatus) {
+        workflowTransitionGuard.assertAuditPermissionForProtectedValue(
+                "supplier-statement",
+                currentStatus,
+                nextStatus,
+                StatusConstants.CONFIRMED
+        );
+    }
+
+    @Override
     protected void apply(SupplierStatement entity, SupplierStatementRequest request) {
         String nextStatus = BusinessStatusValidator.normalizeWithDefault(
                 request.status(),

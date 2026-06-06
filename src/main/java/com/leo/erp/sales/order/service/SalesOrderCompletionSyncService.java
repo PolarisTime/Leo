@@ -21,8 +21,9 @@ import java.util.stream.Collectors;
 public class SalesOrderCompletionSyncService {
 
     /**
-     * Fulfillment tolerance: allow 5% over-fulfillment.
-     * E.g., if expected=100, actual can be 95-105.
+     * Fulfillment tolerance: allow up to 5% under-fulfillment.
+     * Over-fulfillment is not tolerated (upper bound = exact match).
+     * E.g., if expected=100, actual can be 95–100.
      */
     private static final BigDecimal FULFILLMENT_TOLERANCE = new BigDecimal("0.05");
 
@@ -92,11 +93,12 @@ public class SalesOrderCompletionSyncService {
                 return actual == 0;
             }
 
-            // Calculate fulfillment ratio with tolerance
+            // Calculate fulfillment ratio — only allow under-fulfillment tolerance (≤5%);
+            // over-fulfillment is not allowed for piece-count items
             BigDecimal ratio = BigDecimal.valueOf(actual)
                     .divide(BigDecimal.valueOf(expected), 4, RoundingMode.HALF_UP);
             BigDecimal lowerBound = BigDecimal.ONE.subtract(FULFILLMENT_TOLERANCE);
-            BigDecimal upperBound = BigDecimal.ONE.add(FULFILLMENT_TOLERANCE);
+            BigDecimal upperBound = BigDecimal.ONE;
 
             return ratio.compareTo(lowerBound) >= 0
                     && ratio.compareTo(upperBound) <= 0;

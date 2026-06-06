@@ -4,7 +4,6 @@ import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.finance.receivablepayable.web.dto.ReceivablePayableDetailItemResponse;
 import com.leo.erp.finance.receivablepayable.web.dto.ReceivablePayableResponse;
 import com.leo.erp.security.permission.DataScopeContext;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
@@ -444,16 +443,21 @@ class ReceivablePayableQueryRepositoryTest {
     }
 
     @Test
-    @Disabled("Native SQL comparison too fragile for CI")
     void shouldNotApplyDataScopeWhenOwnerUserIdsIsNull() {
-        RecordingNamedParameterJdbcTemplate jdbcTemplate = new RecordingNamedParameterJdbcTemplate();
-        jdbcTemplate.total = 0L;
-        ReceivablePayableQueryRepository repository = new ReceivablePayableQueryRepository(jdbcTemplate);
+        try {
+            DataScopeContext.clear();
+            RecordingNamedParameterJdbcTemplate jdbcTemplate = new RecordingNamedParameterJdbcTemplate();
+            jdbcTemplate.total = 0L;
+            ReceivablePayableQueryRepository repository = new ReceivablePayableQueryRepository(jdbcTemplate);
 
-        repository.page(new PageQuery(0, 10, "id", "desc"), null, null, null, null, null);
+            repository.page(new PageQuery(0, 10, "id", "desc"), null, null, null, null, null);
 
-        assertThat(jdbcTemplate.countSql).doesNotContain("created_by");
-        assertThat(jdbcTemplate.countSql).doesNotContain("1 = 0");
+            assertThat(jdbcTemplate.countSql).doesNotContain("source.created_by IN (:dataScopeOwnerUserIds)");
+            assertThat(jdbcTemplate.countSql).doesNotContain("WHERE 1 = 0");
+            assertThat(jdbcTemplate.lastParams.getValues()).doesNotContainKey("dataScopeOwnerUserIds");
+        } finally {
+            DataScopeContext.clear();
+        }
     }
 
     private ReceivablePayableResponse buildResponse() {
