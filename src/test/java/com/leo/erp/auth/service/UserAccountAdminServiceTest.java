@@ -5,6 +5,7 @@ import com.leo.erp.auth.config.AuthProperties;
 import com.leo.erp.auth.domain.entity.UserAccount;
 import com.leo.erp.auth.domain.enums.UserStatus;
 import com.leo.erp.auth.repository.UserAccountRepository;
+import com.leo.erp.auth.repository.UserRoleRepository;
 import com.leo.erp.auth.mapper.UserAccountAdminMapper;
 import com.leo.erp.auth.web.dto.LoginNameAvailabilityResponse;
 import com.leo.erp.auth.web.dto.TotpEnableRequest;
@@ -17,6 +18,7 @@ import com.leo.erp.system.department.domain.entity.Department;
 import com.leo.erp.system.department.repository.DepartmentRepository;
 import com.leo.erp.system.norule.service.SystemSwitchService;
 import com.leo.erp.system.role.domain.entity.RoleSetting;
+import com.leo.erp.system.role.repository.RoleSettingRepository;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Proxy;
@@ -50,7 +52,7 @@ class UserAccountAdminServiceTest {
         UserAccountCacheService cacheService = new UserAccountCacheService(
                 redisJsonCacheSupport, authenticatedUserCacheService, dashboardSummaryService, permissionService);
         return new UserAccountAdminService(repository, idGenerator, passwordEncoder, mapper,
-                totpService, userRoleBindingService, permissionService, validationService, cacheService, null);
+                totpService, userRoleBindingService, permissionService, validationService, cacheService, null, null, null);
     }
 
     private static UserAccountAdminService createServiceWithConflictRepo(
@@ -73,7 +75,25 @@ class UserAccountAdminServiceTest {
         UserAccountCacheService cacheService = new UserAccountCacheService(
                 redisJsonCacheSupport, authenticatedUserCacheService, dashboardSummaryService, permissionService);
         return new UserAccountAdminService(repository, idGenerator, passwordEncoder, mapper,
-                totpService, userRoleBindingService, permissionService, validationService, cacheService, roleConflictRepository);
+                totpService, userRoleBindingService, permissionService, validationService, cacheService,
+                roleConflictRepository, null, null);
+    }
+
+    private UserAccountAdminService createServiceWithAdminGuard(
+            UserAccountRepository repository,
+            UserAccountAdminMapper mapper,
+            UserRoleBindingService userRoleBindingService,
+            com.leo.erp.security.permission.PermissionService permissionService,
+            DepartmentRepository departmentRepository,
+            RoleSettingRepository roleSettingRepository,
+            UserRoleRepository userRoleRepository) {
+        UserAccountValidationService validationService = new UserAccountValidationService(
+                repository, departmentRepository, null, null);
+        UserAccountCacheService cacheService = new UserAccountCacheService(
+                null, authenticatedUserCacheService(), null, permissionService);
+        return new UserAccountAdminService(repository, new FixedIdGenerator(100L), new StubPasswordEncoder(), mapper,
+                null, userRoleBindingService, permissionService, validationService, cacheService,
+                null, roleSettingRepository, userRoleRepository);
     }
 
     @Test
@@ -442,6 +462,132 @@ class UserAccountAdminServiceTest {
         assertThat(response.userName()).isEqualTo("新名字");
         assertThat(savedUser.get()).isNotNull();
         assertThat(savedUser.get().getLoginName()).isEqualTo("new-name");
+    }
+
+    @Test
+    void shouldPreserveRolesWhenUpdatePayloadOmitsRoleFields() {
+        UserAccount existing = new UserAccount();
+        existing.setId(42L);
+        existing.setLoginName("admin");
+        existing.setUserName("系统管理员");
+        existing.setDepartmentId(1L);
+        existing.setStatus(UserStatus.NORMAL);
+
+        RoleSetting adminRole = adminRole();
+        StubUserRoleBindingService roleBindingService = new StubUserRoleBindingService(List.of(adminRole));
+        AtomicReference<UserAccount> savedUser = new AtomicReference<>();
+        UserAccountAdminService service = createService(
+                repositoryForUpdate(existing, savedUser),
+                new FixedIdGenerator(100L),
+                new StubPasswordEncoder(),
+                mapper(),
+                null,
+                roleBindingService,
+                new StubPermissionService("全部权限"),
+                authProperties(),
+                null,
+                authenticatedUserCacheService(),
+                null,
+                null,
+                departmentRepository()
+        );
+
+        service.update(42L, new com.leo.erp.auth.web.dto.UserAccountAdminRequest(
+                "admin",
+                null,
+                "系统管理员",
+                "",
+                10L,
+                null, null,
+                "全部数据",
+                "",
+                "正常",
+                ""
+        ));
+
+        assertThat(savedUser.get()).isNotNull();
+        assertThat(savedUser.get().getDepartmentId()).isEqualTo(10L);
+        assertThat(roleBindingService.replaceCalled()).isFalse();
+    }
+
+    @Test
+    void shouldRejectRemovingLastActiveAdminRole() {
+        UserAccount existing = adminUser();
+        StubUserRoleBindingService roleBindingService = new StubUserRoleBindingService(List.of(adminRole())) {
+            @Override
+            public List<RoleSetting> resolveRoles(java.util.Collection<String> roleIdentifiers) {
+                return List.of();
+            }
+        };
+        UserAccountAdminService service = createServiceWithAdminGuard(
+                repositoryForUpdate(existing, new AtomicReference<>()),
+                mapper(),
+                roleBindingService,
+                new StubPermissionService(""),
+                departmentRepository(),
+                roleSettingRepository(adminRole()),
+                userRoleRepositoryWithOtherActiveAdmins(0)
+        );
+
+        assertThatThrownBy(() -> service.update(42L, new com.leo.erp.auth.web.dto.UserAccountAdminRequest(
+                "admin",
+                null,
+                "系统管理员",
+                "",
+                10L,
+                List.of(), null,
+                "本人",
+                "",
+                "正常",
+                ""
+        ))).isInstanceOf(BusinessException.class)
+                .hasMessageContaining("至少保留一个正常状态的系统管理员");
+    }
+
+    @Test
+    void shouldRejectDisablingLastActiveAdmin() {
+        UserAccount existing = adminUser();
+        UserAccountAdminService service = createServiceWithAdminGuard(
+                repositoryForUpdate(existing, new AtomicReference<>()),
+                mapper(),
+                new StubUserRoleBindingService(List.of(adminRole())),
+                new StubPermissionService(""),
+                departmentRepository(),
+                roleSettingRepository(adminRole()),
+                userRoleRepositoryWithOtherActiveAdmins(0)
+        );
+
+        assertThatThrownBy(() -> service.update(42L, new com.leo.erp.auth.web.dto.UserAccountAdminRequest(
+                "admin",
+                null,
+                "系统管理员",
+                "",
+                10L,
+                null, List.of(11L),
+                "全部数据",
+                "",
+                "禁用",
+                ""
+        ))).isInstanceOf(BusinessException.class)
+                .hasMessageContaining("至少保留一个正常状态的系统管理员");
+    }
+
+    @Test
+    void shouldRejectDeletingLastActiveAdmin() {
+        UserAccount existing = adminUser();
+        UserAccountAdminService service = createServiceWithAdminGuard(
+                repositoryForDelete(existing, new AtomicReference<>()),
+                mapper(),
+                new StubUserRoleBindingService(List.of(adminRole())),
+                new StubPermissionService(""),
+                null,
+                roleSettingRepository(adminRole()),
+                userRoleRepositoryWithOtherActiveAdmins(0)
+        );
+
+        assertThatThrownBy(() -> service.delete(42L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("至少保留一个正常状态的系统管理员");
     }
 
     @Test
@@ -1033,6 +1179,53 @@ class UserAccountAdminServiceTest {
         );
     }
 
+    private UserAccount adminUser() {
+        UserAccount existing = new UserAccount();
+        existing.setId(42L);
+        existing.setLoginName("admin");
+        existing.setUserName("系统管理员");
+        existing.setDepartmentId(10L);
+        existing.setStatus(UserStatus.NORMAL);
+        return existing;
+    }
+
+    private RoleSetting adminRole() {
+        RoleSetting role = new RoleSetting();
+        role.setId(11L);
+        role.setRoleName("系统管理员");
+        role.setRoleCode("ADMIN");
+        role.setStatus("正常");
+        return role;
+    }
+
+    private RoleSettingRepository roleSettingRepository(RoleSetting role) {
+        return (RoleSettingRepository) Proxy.newProxyInstance(
+                RoleSettingRepository.class.getClassLoader(),
+                new Class[]{RoleSettingRepository.class},
+                (proxy, method, args) -> switch (method.getName()) {
+                    case "findByRoleCodeAndDeletedFlagFalse" -> Optional.of(role);
+                    case "toString" -> "RoleSettingRepositoryStub";
+                    case "hashCode" -> System.identityHashCode(proxy);
+                    case "equals" -> proxy == args[0];
+                    default -> throw new UnsupportedOperationException(method.getName());
+                }
+        );
+    }
+
+    private UserRoleRepository userRoleRepositoryWithOtherActiveAdmins(long count) {
+        return (UserRoleRepository) Proxy.newProxyInstance(
+                UserRoleRepository.class.getClassLoader(),
+                new Class[]{UserRoleRepository.class},
+                (proxy, method, args) -> switch (method.getName()) {
+                    case "countUsersByRoleIdAndStatusExcludingUserId" -> count;
+                    case "toString" -> "UserRoleRepositoryStub";
+                    case "hashCode" -> System.identityHashCode(proxy);
+                    case "equals" -> proxy == args[0];
+                    default -> throw new UnsupportedOperationException(method.getName());
+                }
+        );
+    }
+
     private UserAccountAdminMapper mapper() {
         return new UserAccountAdminMapper() {
             @Override
@@ -1056,9 +1249,11 @@ class UserAccountAdminServiceTest {
         };
     }
 
-    private static final class StubUserRoleBindingService extends UserRoleBindingService {
+    private static class StubUserRoleBindingService extends UserRoleBindingService {
 
         private final List<RoleSetting> roles;
+        private boolean replaceCalled;
+        private java.util.Collection<RoleSetting> replacedRoles;
 
         private StubUserRoleBindingService(List<RoleSetting> roles) {
             super(null, null, null);
@@ -1082,6 +1277,16 @@ class UserAccountAdminServiceTest {
 
         @Override
         public void replaceUserRoles(Long userId, java.util.Collection<RoleSetting> roles) {
+            this.replaceCalled = true;
+            this.replacedRoles = roles;
+        }
+
+        boolean replaceCalled() {
+            return replaceCalled;
+        }
+
+        java.util.Collection<RoleSetting> replacedRoles() {
+            return replacedRoles;
         }
     }
 

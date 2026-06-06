@@ -22,6 +22,7 @@ public record SalesOrderItemResponse(
         Integer piecesPerBundle,
         BigDecimal weightTon,
         BigDecimal unitPrice,
-        BigDecimal amount
+        BigDecimal amount,
+        BigDecimal originalWeightTon
 ) {
 }

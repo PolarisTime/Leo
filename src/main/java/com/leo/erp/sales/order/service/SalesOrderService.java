@@ -104,7 +104,8 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
                         item.getSpec(), item.getLength(), item.getUnit(), item.getSourceInboundItemId(), item.getSourcePurchaseOrderItemId(), item.getWarehouseName(), item.getBatchNo(),
                         item.getQuantity(), item.getQuantityUnit(), item.getPieceWeightTon(),
                         item.getPiecesPerBundle(), item.getWeightTon(),
-                        item.getUnitPrice(), item.getAmount()
+                        item.getUnitPrice(), item.getAmount(),
+                        item.getOriginalWeightTon()
                 )).toList()
         );
     }

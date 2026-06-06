@@ -268,11 +268,11 @@ class RoleSettingServiceTest {
         );
 
         var result = service.create(new RoleSettingRequest(
-                "ADMIN", "管理员", "系统角色", "全部数据", null, null, "正常", null
+                "PURCHASER", "采购员", "业务角色", "全部数据", null, null, "正常", null
         ));
         assertThat(result).isNotNull();
         assertThat(savedRole.get()).isNotNull();
-        assertThat(savedRole.get().getRoleCode()).isEqualTo("ADMIN");
+        assertThat(savedRole.get().getRoleCode()).isEqualTo("PURCHASER");
     }
 
     @Test
@@ -287,7 +287,7 @@ class RoleSettingServiceTest {
         );
 
         assertThatThrownBy(() -> service.create(new RoleSettingRequest(
-                "ADMIN", "管理员", "无效角色类型", "全部数据", null, null, "正常", null
+                "PURCHASER", "采购员", "无效角色类型", "全部数据", null, null, "正常", null
         ))).isInstanceOf(BusinessException.class)
                 .hasMessageContaining("角色类型不合法");
     }
@@ -304,7 +304,7 @@ class RoleSettingServiceTest {
         );
 
         assertThatThrownBy(() -> service.create(new RoleSettingRequest(
-                "ADMIN", "管理员", "系统角色", "无效数据范围", null, null, "正常", null
+                "PURCHASER", "采购员", "业务角色", "无效数据范围", null, null, "正常", null
         ))).isInstanceOf(BusinessException.class)
                 .hasMessageContaining("数据范围不合法");
     }
@@ -321,7 +321,7 @@ class RoleSettingServiceTest {
         );
 
         assertThatThrownBy(() -> service.create(new RoleSettingRequest(
-                "ADMIN", "管理员", "系统角色", "全部数据", null, null, "无效状态", null
+                "PURCHASER", "采购员", "业务角色", "全部数据", null, null, "无效状态", null
         ))).isInstanceOf(BusinessException.class)
                 .hasMessageContaining("角色状态不合法");
     }
@@ -338,7 +338,7 @@ class RoleSettingServiceTest {
         );
 
         assertThatThrownBy(() -> service.create(new RoleSettingRequest(
-                "", "管理员", "系统角色", "全部数据", null, null, "正常", null
+                "", "采购员", "业务角色", "全部数据", null, null, "正常", null
         ))).isInstanceOf(BusinessException.class)
                 .hasMessageContaining("角色编码不能为空");
     }
@@ -355,7 +355,7 @@ class RoleSettingServiceTest {
         );
 
         assertThatThrownBy(() -> service.create(new RoleSettingRequest(
-                "ADMIN", "", "系统角色", "全部数据", null, null, "正常", null
+                "PURCHASER", "", "业务角色", "全部数据", null, null, "正常", null
         ))).isInstanceOf(BusinessException.class)
                 .hasMessageContaining("角色名称不能为空");
     }
@@ -401,6 +401,31 @@ class RoleSettingServiceTest {
                     case "findByIdAndDeletedFlagFalse" -> Optional.of(new RoleSetting());
                     case "existsByRoleCodeAndDeletedFlagFalse" -> false;
                     case "toString" -> "RoleSettingRepositoryStub";
+                    case "hashCode" -> System.identityHashCode(proxy);
+                    case "equals" -> proxy == args[0];
+                    default -> throw new UnsupportedOperationException(method.getName());
+                }
+        );
+    }
+
+    private RoleSettingRepository roleRepositoryWithRole(String roleCode) {
+        return (RoleSettingRepository) Proxy.newProxyInstance(
+                RoleSettingRepository.class.getClassLoader(),
+                new Class[]{RoleSettingRepository.class},
+                (proxy, method, args) -> switch (method.getName()) {
+                    case "findByIdAndDeletedFlagFalse" -> {
+                        RoleSetting role = new RoleSetting();
+                        role.setId(1L);
+                        role.setRoleCode(roleCode);
+                        role.setRoleName("管理员");
+                        role.setRoleType("系统角色");
+                        role.setDataScope("全部数据");
+                        role.setStatus("正常");
+                        yield Optional.of(role);
+                    }
+                    case "existsByRoleCodeAndDeletedFlagFalse" -> false;
+                    case "save" -> args[0];
+                    case "toString" -> "RoleSettingRepositoryWithRoleStub";
                     case "hashCode" -> System.identityHashCode(proxy);
                     case "equals" -> proxy == args[0];
                     default -> throw new UnsupportedOperationException(method.getName());
@@ -497,7 +522,7 @@ class RoleSettingServiceTest {
                     case "findByIdAndDeletedFlagFalse" -> {
                         var role = new RoleSetting();
                         role.setId(1L);
-                        role.setRoleCode("ADMIN");
+                        role.setRoleCode("PURCHASER");
                         yield java.util.Optional.of(role);
                     }
                     case "existsByRoleCodeAndDeletedFlagFalse" -> false;
@@ -517,11 +542,35 @@ class RoleSettingServiceTest {
                 new SnowflakeIdGenerator(0L), permissionService(), mock(AuthenticatedUserCacheService.class));
 
         var result = service.update(1L, new RoleSettingRequest(
-                "ADMIN", "管理员V2", "系统角色", "全部数据", null, null, "正常", "更新"
+                "PURCHASER", "采购员V2", "业务角色", "全部数据", null, null, "正常", "更新"
         ));
         assertThat(result).isNotNull();
         assertThat(savedRole.get()).isNotNull();
-        assertThat(savedRole.get().getRoleName()).isEqualTo("管理员V2");
+        assertThat(savedRole.get().getRoleName()).isEqualTo("采购员V2");
+    }
+
+    @Test
+    void shouldRejectChangingAdminRoleCode() {
+        RoleSettingService service = new RoleSettingService(
+                roleRepositoryWithRole("ADMIN"), rolePermissionRepository(), repository(UserRoleRepository.class),
+                new SnowflakeIdGenerator(0L), permissionService(), mock(AuthenticatedUserCacheService.class));
+
+        assertThatThrownBy(() -> service.update(1L, new RoleSettingRequest(
+                "ADMIN2", "管理员", "系统角色", "全部数据", null, null, "正常", null
+        ))).isInstanceOf(BusinessException.class)
+                .hasMessageContaining("系统管理员角色编码不能修改");
+    }
+
+    @Test
+    void shouldRejectDisablingAdminRole() {
+        RoleSettingService service = new RoleSettingService(
+                roleRepositoryWithRole("ADMIN"), rolePermissionRepository(), repository(UserRoleRepository.class),
+                new SnowflakeIdGenerator(0L), permissionService(), mock(AuthenticatedUserCacheService.class));
+
+        assertThatThrownBy(() -> service.update(1L, new RoleSettingRequest(
+                "ADMIN", "管理员", "系统角色", "全部数据", null, null, "禁用", null
+        ))).isInstanceOf(BusinessException.class)
+                .hasMessageContaining("系统管理员角色不能禁用");
     }
 
     @Test
@@ -533,7 +582,7 @@ class RoleSettingServiceTest {
                     case "findByIdAndDeletedFlagFalse" -> {
                         var role = new RoleSetting();
                         role.setId(1L);
-                        role.setRoleCode("ADMIN");
+                        role.setRoleCode("PURCHASER");
                         yield java.util.Optional.of(role);
                     }
                     case "save" -> args[0];
@@ -549,6 +598,18 @@ class RoleSettingServiceTest {
                 new SnowflakeIdGenerator(0L), permissionService(), mock(AuthenticatedUserCacheService.class));
 
         service.delete(1L);
+    }
+
+    @Test
+    void shouldRejectDeletingAdminRole() {
+        RoleSettingRepository roleRepository = roleRepositoryWithRole("ADMIN");
+        RoleSettingService service = new RoleSettingService(
+                roleRepository, rolePermissionRepository(), repository(UserRoleRepository.class),
+                new SnowflakeIdGenerator(0L), permissionService(), mock(AuthenticatedUserCacheService.class));
+
+        assertThatThrownBy(() -> service.delete(1L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("系统管理员角色不能删除");
     }
 
     @Test

@@ -14,10 +14,13 @@ import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
+import com.leo.erp.auth.domain.enums.UserStatus;
+import com.leo.erp.auth.repository.UserRoleRepository;
 import com.leo.erp.security.permission.PermissionService;
 import com.leo.erp.system.role.domain.entity.RoleConflict;
 import com.leo.erp.system.role.domain.entity.RoleSetting;
 import com.leo.erp.system.role.repository.RoleConflictRepository;
+import com.leo.erp.system.role.repository.RoleSettingRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
@@ -32,6 +35,8 @@ import java.util.List;
 @Service
 public class UserAccountAdminService {
 
+    private static final String ADMIN_ROLE_CODE = "ADMIN";
+
     private final UserAccountRepository repository;
     private final SnowflakeIdGenerator idGenerator;
     private final PasswordEncoder passwordEncoder;
@@ -42,6 +47,8 @@ public class UserAccountAdminService {
     private final UserAccountValidationService validationService;
     private final UserAccountCacheService cacheService;
     private final RoleConflictRepository roleConflictRepository;
+    private final RoleSettingRepository roleSettingRepository;
+    private final UserRoleRepository userRoleRepository;
 
     @Autowired
     public UserAccountAdminService(
@@ -54,7 +61,9 @@ public class UserAccountAdminService {
             PermissionService permissionService,
             UserAccountValidationService validationService,
             UserAccountCacheService cacheService,
-            RoleConflictRepository roleConflictRepository) {
+            RoleConflictRepository roleConflictRepository,
+            RoleSettingRepository roleSettingRepository,
+            UserRoleRepository userRoleRepository) {
         this.repository = repository;
         this.idGenerator = idGenerator;
         this.passwordEncoder = passwordEncoder;
@@ -65,6 +74,8 @@ public class UserAccountAdminService {
         this.validationService = validationService;
         this.cacheService = cacheService;
         this.roleConflictRepository = roleConflictRepository;
+        this.roleSettingRepository = roleSettingRepository;
+        this.userRoleRepository = userRoleRepository;
     }
 
     @Transactional(readOnly = true)
@@ -113,6 +124,7 @@ public class UserAccountAdminService {
     @Transactional
     public void delete(Long id) {
         UserAccount entity = getEntity(id);
+        assertNotLastActiveAdmin(entity, List.of(), UserStatus.DISABLED, true);
         entity.setDeletedFlag(true);
         repository.save(entity);
         cacheService.evictLoginNameCache(entity.getLoginName());
@@ -197,12 +209,17 @@ public class UserAccountAdminService {
     private UserAccountAdminResponse saveWithRoles(UserAccount entity, UserAccountAdminRequest request) {
         String previousLoginName = entity.getLoginName();
         Long previousDepartmentId = entity.getDepartmentId();
-        List<RoleSetting> roles = resolveRolesFromRequest(request);
+        boolean roleUpdateRequested = hasRolePayload(request);
+        List<RoleSetting> roles = resolveRolesFromRequest(entity, request);
         assertNoRoleConflict(roles);
+        UserStatus nextStatus = validationService.toStatus(request.status());
+        assertNotLastActiveAdmin(entity, roles, nextStatus, false);
         apply(entity, request, roles);
         try {
             UserAccount saved = repository.save(entity);
-            userRoleBindingService.replaceUserRoles(saved.getId(), roles);
+            if (roleUpdateRequested) {
+                userRoleBindingService.replaceUserRoles(saved.getId(), roles);
+            }
             cacheService.evictLoginNameCache(previousLoginName, saved.getLoginName());
             cacheService.evictPermissionCache(saved.getId());
             cacheService.evictDepartmentUserCaches(previousDepartmentId, saved.getDepartmentId());
@@ -216,6 +233,10 @@ public class UserAccountAdminService {
             }
             throw ex;
         }
+    }
+
+    private boolean hasRolePayload(UserAccountAdminRequest request) {
+        return request.roleIds() != null || request.roleNames() != null;
     }
 
     private void assertNoRoleConflict(List<RoleSetting> roles) {
@@ -237,9 +258,12 @@ public class UserAccountAdminService {
         }
     }
 
-    private List<RoleSetting> resolveRolesFromRequest(UserAccountAdminRequest request) {
+    private List<RoleSetting> resolveRolesFromRequest(UserAccount entity, UserAccountAdminRequest request) {
         if (request.roleIds() != null && !request.roleIds().isEmpty()) {
             return userRoleBindingService.resolveRolesByIds(request.roleIds());
+        }
+        if (request.roleIds() == null && request.roleNames() == null && entity.getId() != null) {
+            return userRoleBindingService.resolveRolesForUser(entity.getId());
         }
         return userRoleBindingService.resolveRoles(request.roleNames());
     }
@@ -253,6 +277,48 @@ public class UserAccountAdminService {
         entity.setPermissionSummary("");
         entity.setStatus(validationService.toStatus(request.status()));
         entity.setRemark(validationService.normalizeOptionalValue(request.remark()));
+    }
+
+    private void assertNotLastActiveAdmin(
+            UserAccount entity,
+            List<RoleSetting> nextRoles,
+            UserStatus nextStatus,
+            boolean deleting) {
+        if (entity.getId() == null || !currentlyHasAdminRole(entity.getId())) {
+            return;
+        }
+        boolean keepsAdmin = !deleting
+                && nextStatus == UserStatus.NORMAL
+                && nextRoles.stream().anyMatch(this::isAdminRole);
+        if (keepsAdmin) {
+            return;
+        }
+        Long adminRoleId = resolveAdminRoleId();
+        if (adminRoleId == null) {
+            return;
+        }
+        long otherActiveAdmins = userRoleRepository
+                .countUsersByRoleIdAndStatusExcludingUserId(adminRoleId, UserStatus.NORMAL, entity.getId());
+        if (otherActiveAdmins == 0) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "至少保留一个正常状态的系统管理员");
+        }
+    }
+
+    private boolean currentlyHasAdminRole(Long userId) {
+        return userRoleBindingService.resolveRolesForUser(userId).stream().anyMatch(this::isAdminRole);
+    }
+
+    private boolean isAdminRole(RoleSetting role) {
+        return role != null && ADMIN_ROLE_CODE.equals(role.getRoleCode());
+    }
+
+    private Long resolveAdminRoleId() {
+        if (roleSettingRepository == null) {
+            return null;
+        }
+        return roleSettingRepository.findByRoleCodeAndDeletedFlagFalse(ADMIN_ROLE_CODE)
+                .map(RoleSetting::getId)
+                .orElse(null);
     }
 
     private boolean isLoginNameConflict(DataIntegrityViolationException ex) {
