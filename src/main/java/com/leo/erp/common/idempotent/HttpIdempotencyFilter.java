@@ -16,7 +16,6 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StreamUtils;
 import org.springframework.web.filter.OncePerRequestFilter;
-import org.springframework.web.util.ContentCachingRequestWrapper;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -55,9 +54,7 @@ public class HttpIdempotencyFilter extends OncePerRequestFilter {
         }
 
         byte[] body = StreamUtils.copyToByteArray(request.getInputStream());
-        HttpServletRequest replayableRequest = new ContentCachingRequestWrapper(
-                new ReplayableBodyHttpServletRequest(request, body)
-        );
+        HttpServletRequest replayableRequest = new ReplayableBodyHttpServletRequest(request, body);
         String scopedKey = scopedKey(request, idempotencyKey);
         String fingerprint = fingerprint(request, body);
         HttpIdempotencyService.Decision decision =
@@ -72,7 +69,10 @@ public class HttpIdempotencyFilter extends OncePerRequestFilter {
     }
 
     private boolean shouldEnforce(HttpServletRequest request, String idempotencyKey) {
-        return WRITE_METHODS.contains(request.getMethod()) && idempotencyKey != null && !idempotencyKey.isBlank();
+        return WRITE_METHODS.contains(request.getMethod())
+                && idempotencyKey != null
+                && !idempotencyKey.isBlank()
+                && !isMultipart(request);
     }
 
     private String resolveIdempotencyKey(HttpServletRequest request) {
@@ -93,10 +93,10 @@ public class HttpIdempotencyFilter extends OncePerRequestFilter {
             if (response.getStatus() >= 200 && response.getStatus() < 400) {
                 idempotencyService.markCompleted(scopedKey, fingerprint, DEFAULT_TTL);
             } else {
-                idempotencyService.release(scopedKey);
+                idempotencyService.release(scopedKey, fingerprint);
             }
         } catch (ServletException | IOException | RuntimeException ex) {
-            idempotencyService.release(scopedKey);
+            idempotencyService.release(scopedKey, fingerprint);
             throw ex;
         }
     }
@@ -133,7 +133,7 @@ public class HttpIdempotencyFilter extends OncePerRequestFilter {
     private String fingerprint(HttpServletRequest request, byte[] body) {
         String raw = request.getMethod() + "\n"
                 + normalizedPath(request) + "\n"
-                + normalizeQuery(request.getQueryString()) + "\n"
+                + queryStringOrEmpty(request.getQueryString()) + "\n"
                 + sha256Hex(body);
         return sha256Hex(raw.getBytes(StandardCharsets.UTF_8));
     }
@@ -147,8 +147,13 @@ public class HttpIdempotencyFilter extends OncePerRequestFilter {
         return requestUri;
     }
 
-    private String normalizeQuery(String queryString) {
+    private String queryStringOrEmpty(String queryString) {
         return queryString == null ? "" : queryString;
+    }
+
+    private boolean isMultipart(HttpServletRequest request) {
+        String contentType = request.getContentType();
+        return contentType != null && contentType.toLowerCase().startsWith(MediaType.MULTIPART_FORM_DATA_VALUE);
     }
 
     private String principalScope() {

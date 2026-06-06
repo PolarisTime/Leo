@@ -8,6 +8,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
+import org.springframework.http.MediaType;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 
@@ -82,7 +83,23 @@ class HttpIdempotencyFilterTest {
 
         assertThat(chainInvoked.get()).isTrue();
         verify(service).markCompleted(any(), any(), eq(Duration.ofHours(24)));
-        verify(service, never()).release(any());
+        verify(service, never()).release(any(), any());
+    }
+
+    @Test
+    void releasesKeyWhenResponseIsNotSuccessful() throws Exception {
+        HttpIdempotencyService service = mock(HttpIdempotencyService.class);
+        when(service.start(any(), any(), eq(Duration.ofHours(24))))
+                .thenReturn(new HttpIdempotencyService.Decision(HttpIdempotencyService.Status.ACQUIRED));
+        HttpIdempotencyFilter filter = new HttpIdempotencyFilter(service, objectMapper);
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        filter.doFilterInternal(postRequest("{}"), response, (req, res) ->
+                ((MockHttpServletResponse) res).setStatus(500)
+        );
+
+        verify(service).release(any(), any());
+        verify(service, never()).markCompleted(any(), any(), any());
     }
 
     @Test
@@ -149,7 +166,23 @@ class HttpIdempotencyFilterTest {
         assertThatThrownBy(() -> filter.doFilterInternal(postRequest("{}"), response, (req, res) -> {
             throw new IllegalStateException("boom");
         })).isInstanceOf(IllegalStateException.class);
-        verify(service).release(any());
+        verify(service).release(any(), any());
+    }
+
+    @Test
+    void skipsMultipartWriteRequestEvenWithIdempotencyHeader() throws Exception {
+        HttpIdempotencyService service = mock(HttpIdempotencyService.class);
+        HttpIdempotencyFilter filter = new HttpIdempotencyFilter(service, objectMapper);
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/upload");
+        request.addHeader(HttpIdempotencyFilter.HEADER, "key-1");
+        request.setContentType(MediaType.MULTIPART_FORM_DATA_VALUE + "; boundary=abc");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        FilterChain chain = mock(FilterChain.class);
+
+        filter.doFilterInternal(request, response, chain);
+
+        verify(chain).doFilter(request, response);
+        verify(service, never()).start(any(), any(), any());
     }
 
     @Test

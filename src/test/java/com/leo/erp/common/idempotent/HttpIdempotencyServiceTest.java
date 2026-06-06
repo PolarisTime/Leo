@@ -2,9 +2,10 @@ package com.leo.erp.common.idempotent;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.data.redis.core.ValueOperations;
+import org.springframework.data.redis.core.script.RedisScript;
 
 import java.time.Duration;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.any;
@@ -15,18 +16,12 @@ import static org.mockito.Mockito.when;
 
 class HttpIdempotencyServiceTest {
 
-    @SuppressWarnings("unchecked")
-    private final ValueOperations<String, String> ops = mock(ValueOperations.class);
     private final StringRedisTemplate redisTemplate = mock(StringRedisTemplate.class);
-
-    {
-        when(redisTemplate.opsForValue()).thenReturn(ops);
-    }
 
     @Test
     void startAcquiresMissingKey() {
-        when(ops.setIfAbsent(eq("http-idempotency:scope-1"), eq("PENDING:fingerprint-1"), any(Duration.class)))
-                .thenReturn(true);
+        when(redisTemplate.execute(any(RedisScript.class), eq(List.of("http-idempotency:scope-1")), any(), any(), any(), any(), any()))
+                .thenReturn("ACQUIRED");
         HttpIdempotencyService service = new HttpIdempotencyService(redisTemplate);
 
         HttpIdempotencyService.Decision decision =
@@ -37,9 +32,8 @@ class HttpIdempotencyServiceTest {
 
     @Test
     void startReturnsDuplicatePendingForSamePendingFingerprint() {
-        when(ops.setIfAbsent(eq("http-idempotency:scope-1"), eq("PENDING:fingerprint-1"), any(Duration.class)))
-                .thenReturn(false);
-        when(ops.get("http-idempotency:scope-1")).thenReturn("PENDING:fingerprint-1");
+        when(redisTemplate.execute(any(RedisScript.class), eq(List.of("http-idempotency:scope-1")), any(), any(), any(), any(), any()))
+                .thenReturn("DUPLICATE_PENDING");
         HttpIdempotencyService service = new HttpIdempotencyService(redisTemplate);
 
         HttpIdempotencyService.Decision decision =
@@ -50,9 +44,8 @@ class HttpIdempotencyServiceTest {
 
     @Test
     void startReturnsDuplicateCompletedForSameCompletedFingerprint() {
-        when(ops.setIfAbsent(eq("http-idempotency:scope-1"), eq("PENDING:fingerprint-1"), any(Duration.class)))
-                .thenReturn(false);
-        when(ops.get("http-idempotency:scope-1")).thenReturn("COMPLETED:fingerprint-1");
+        when(redisTemplate.execute(any(RedisScript.class), eq(List.of("http-idempotency:scope-1")), any(), any(), any(), any(), any()))
+                .thenReturn("DUPLICATE_COMPLETED");
         HttpIdempotencyService service = new HttpIdempotencyService(redisTemplate);
 
         HttpIdempotencyService.Decision decision =
@@ -63,9 +56,8 @@ class HttpIdempotencyServiceTest {
 
     @Test
     void startReturnsMismatchForDifferentFingerprint() {
-        when(ops.setIfAbsent(eq("http-idempotency:scope-1"), eq("PENDING:fingerprint-1"), any(Duration.class)))
-                .thenReturn(false);
-        when(ops.get("http-idempotency:scope-1")).thenReturn("PENDING:fingerprint-2");
+        when(redisTemplate.execute(any(RedisScript.class), eq(List.of("http-idempotency:scope-1")), any(), any(), any(), any(), any()))
+                .thenReturn("PARAMETER_MISMATCH");
         HttpIdempotencyService service = new HttpIdempotencyService(redisTemplate);
 
         HttpIdempotencyService.Decision decision =
@@ -76,7 +68,7 @@ class HttpIdempotencyServiceTest {
 
     @Test
     void startFallsThroughWhenRedisUnavailable() {
-        when(ops.setIfAbsent(eq("http-idempotency:scope-1"), eq("PENDING:fingerprint-1"), any(Duration.class)))
+        when(redisTemplate.execute(any(RedisScript.class), eq(List.of("http-idempotency:scope-1")), any(), any(), any(), any(), any()))
                 .thenThrow(new IllegalStateException("redis down"));
         HttpIdempotencyService service = new HttpIdempotencyService(redisTemplate);
 
@@ -92,15 +84,25 @@ class HttpIdempotencyServiceTest {
 
         service.markCompleted("scope-1", "fingerprint-1", Duration.ofHours(1));
 
-        verify(ops).set("http-idempotency:scope-1", "COMPLETED:fingerprint-1", Duration.ofHours(1));
+        verify(redisTemplate).execute(
+                any(RedisScript.class),
+                eq(List.of("http-idempotency:scope-1")),
+                eq("PENDING:fingerprint-1"),
+                eq("COMPLETED:fingerprint-1"),
+                eq("3600000")
+        );
     }
 
     @Test
-    void releaseDeletesKey() {
+    void releaseDeletesOnlyMatchingPendingKey() {
         HttpIdempotencyService service = new HttpIdempotencyService(redisTemplate);
 
-        service.release("scope-1");
+        service.release("scope-1", "fingerprint-1");
 
-        verify(redisTemplate).delete("http-idempotency:scope-1");
+        verify(redisTemplate).execute(
+                any(RedisScript.class),
+                eq(List.of("http-idempotency:scope-1")),
+                eq("PENDING:fingerprint-1")
+        );
     }
 }

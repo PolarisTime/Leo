@@ -53,6 +53,18 @@ class ReplayableBodyHttpServletRequestTest {
     }
 
     @Test
+    void shouldFallbackToUtf8WhenRequestEncodingIsInvalid() throws Exception {
+        MockHttpServletRequest delegate = new MockHttpServletRequest();
+        delegate.setCharacterEncoding("bad charset");
+        ReplayableBodyHttpServletRequest request = new ReplayableBodyHttpServletRequest(
+                delegate,
+                "中文".getBytes(StandardCharsets.UTF_8)
+        );
+
+        assertThat(request.getReader().readLine()).isEqualTo("中文");
+    }
+
+    @Test
     void shouldTreatNullBodyAsEmpty() throws Exception {
         ReplayableBodyHttpServletRequest request = new ReplayableBodyHttpServletRequest(
                 new MockHttpServletRequest(),
