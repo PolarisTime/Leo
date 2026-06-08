@@ -1,7 +1,9 @@
 package com.leo.erp.system.printtemplate.web;
 
 import com.leo.erp.common.api.ApiResponse;
+import com.leo.erp.security.permission.ModulePermissionGuard;
 import com.leo.erp.security.permission.RequiresPermission;
+import com.leo.erp.security.support.SecurityPrincipal;
 import com.leo.erp.system.operationlog.support.OperationLoggable;
 import com.leo.erp.system.printtemplate.service.PrintTemplateService;
 import com.leo.erp.system.printtemplate.web.dto.PrintTemplateRequest;
@@ -11,6 +13,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 import org.springframework.validation.annotation.Validated;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -29,14 +32,24 @@ import java.util.List;
 public class PrintTemplateController {
 
     private final PrintTemplateService printTemplateService;
+    private final ModulePermissionGuard modulePermissionGuard;
 
-    public PrintTemplateController(PrintTemplateService printTemplateService) {
+    public PrintTemplateController(PrintTemplateService printTemplateService,
+                                   ModulePermissionGuard modulePermissionGuard) {
         this.printTemplateService = printTemplateService;
+        this.modulePermissionGuard = modulePermissionGuard;
     }
 
     @GetMapping
-    @RequiresPermission(resource = "print-template", action = "read")
-    public ApiResponse<List<PrintTemplateResponse>> list(@RequestParam @NotBlank @Size(max = 64) String billType) {
+    @RequiresPermission(authenticatedOnly = true)
+    public ApiResponse<List<PrintTemplateResponse>> list(@AuthenticationPrincipal SecurityPrincipal principal,
+                                                         @RequestParam @NotBlank @Size(max = 64) String billType) {
+        modulePermissionGuard.requireResourcePermissionAny(
+                principal,
+                billType,
+                "print",
+                "read"
+        );
         return ApiResponse.success(printTemplateService.listByBillType(billType));
     }
 

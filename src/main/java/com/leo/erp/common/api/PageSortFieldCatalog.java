@@ -15,7 +15,7 @@ public final class PageSortFieldCatalog {
             Map.entry("purchase-inbound", Set.of("id", "inboundNo", "purchaseOrderNo", "supplierName", "warehouseName", "inboundDate", "settlementMode", "totalWeight", "totalAmount", "status")),
             Map.entry("sales-order", Set.of("id", "orderNo", "purchaseInboundNo", "purchaseOrderNo", "customerName", "projectName", "deliveryDate", "salesName", "totalWeight", "totalAmount", "status")),
             Map.entry("sales-outbound", Set.of("id", "outboundNo", "salesOrderNo", "customerName", "projectName", "warehouseName", "outboundDate", "totalWeight", "totalAmount", "status")),
-            Map.entry("freight-bill", Set.of("id", "billNo", "carrierName", "vehiclePlate", "customerName", "projectName", "billTime", "unitPrice", "totalWeight", "totalFreight", "status", "deliveryStatus")),
+            Map.entry("freight-bill", Set.of("id", "billNo", "carrierName", "vehiclePlate", "customerName", "projectName", "billTime", "unitPrice", "totalWeight", "totalFreight", "status")),
             Map.entry("purchase-contract", Set.of("id", "contractNo", "supplierName", "signDate", "effectiveDate", "expireDate", "buyerName", "totalWeight", "totalAmount", "status")),
             Map.entry("sales-contract", Set.of("id", "contractNo", "customerName", "projectName", "signDate", "effectiveDate", "expireDate", "salesName", "totalWeight", "totalAmount", "status")),
             Map.entry("supplier-statement", Set.of("id", "statementNo", "supplierCode", "supplierName", "startDate", "endDate", "purchaseAmount", "paymentAmount", "closingAmount", "status")),

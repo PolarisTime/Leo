@@ -20,6 +20,9 @@ import com.leo.erp.sales.order.service.SalesOrderItemMapper;
 import com.leo.erp.sales.order.web.dto.SalesOrderItemRequest;
 import com.leo.erp.sales.order.web.dto.SalesOrderRequest;
 import com.leo.erp.sales.order.web.dto.SalesOrderResponse;
+import com.leo.erp.sales.outbound.domain.entity.SalesOutbound;
+import com.leo.erp.sales.outbound.domain.entity.SalesOutboundItem;
+import com.leo.erp.sales.outbound.repository.SalesOutboundRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.InOrder;
@@ -609,6 +612,176 @@ class SalesOrderServiceTest {
     }
 
     @Test
+    void shouldAllowAuditedSalesOrderPricingUpdateAndSyncAuditedOutboundAmounts() {
+        SalesOrderRepository repository = mock(SalesOrderRepository.class);
+        SalesOrderMapper mapper = mock(SalesOrderMapper.class);
+        PurchaseItemPieceWeightAppService pieceWeightAppService = mock(PurchaseItemPieceWeightAppService.class);
+        SalesOutboundRepository salesOutboundRepository = mock(SalesOutboundRepository.class);
+        SalesOrderCompletionSyncService completionSyncService = mock(SalesOrderCompletionSyncService.class);
+        SalesOrderService service = new SalesOrderService(
+                repository, mock(SnowflakeIdGenerator.class), mapper,
+                mock(TradeItemMaterialSupport.class), mock(PurchaseItemQueryAppService.class),
+                pieceWeightAppService, mock(SalesOrderItemRepository.class),
+                mock(WarehouseSelectionSupport.class), stubbedSalesOrderItemMapper(),
+                mock(WorkflowTransitionGuard.class), salesOutboundRepository, completionSyncService
+        );
+
+        var order = auditedSalesOrder("SO-PRICE-002", StatusConstants.AUDITED, BigDecimal.ZERO);
+        var outbound = auditedOutbound("SO-PRICE-002", order.getItems().get(0).getId(), new BigDecimal("4.500"), BigDecimal.ZERO);
+        SalesOrderRequest request = pricingUpdateRequest(order, new BigDecimal("3888.00"), StatusConstants.AUDITED);
+
+        when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(order));
+        when(salesOutboundRepository.findAllByStatusAndSourceSalesOrderItemIds(
+                eq(StatusConstants.AUDITED),
+                eq(List.of(order.getItems().get(0).getId()))
+        )).thenReturn(List.of(outbound));
+        when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(mapper.toResponse(any())).thenReturn(new SalesOrderResponse(
+                1L, "SO-PRICE-002", null, null, "客户A", "项目A", LocalDate.of(2026, 4, 26),
+                "张三", new BigDecimal("4.500"), new BigDecimal("17496.00"), StatusConstants.AUDITED, "备注", List.of()
+        ));
+
+        service.update(1L, request);
+
+        assertThat(order.getStatus()).isEqualTo(StatusConstants.AUDITED);
+        assertThat(order.getItems().get(0).getUnitPrice()).isEqualByComparingTo("3888.00");
+        assertThat(order.getItems().get(0).getAmount()).isEqualByComparingTo("17496.00");
+        assertThat(order.getTotalAmount()).isEqualByComparingTo("17496.00");
+        assertThat(outbound.getItems().get(0).getUnitPrice()).isEqualByComparingTo("3888.00");
+        assertThat(outbound.getItems().get(0).getAmount()).isEqualByComparingTo("17496.00");
+        assertThat(outbound.getTotalAmount()).isEqualByComparingTo("17496.00");
+        verify(salesOutboundRepository).saveAll(List.of(outbound));
+        verify(completionSyncService).syncBySalesOrderReference("SO-PRICE-002");
+        verify(pieceWeightAppService, never()).releaseSalesOrderItems(any());
+    }
+
+    @Test
+    void shouldAllowAuditedSalesOrderDateRemarkAndPricingUpdateWithoutReallocatingPurchasePieces() {
+        SalesOrderRepository repository = mock(SalesOrderRepository.class);
+        SalesOrderMapper mapper = mock(SalesOrderMapper.class);
+        PurchaseItemPieceWeightAppService pieceWeightAppService = mock(PurchaseItemPieceWeightAppService.class);
+        SalesOutboundRepository salesOutboundRepository = mock(SalesOutboundRepository.class);
+        SalesOrderCompletionSyncService completionSyncService = mock(SalesOrderCompletionSyncService.class);
+        SalesOrderService service = new SalesOrderService(
+                repository, mock(SnowflakeIdGenerator.class), mapper,
+                mock(TradeItemMaterialSupport.class), mock(PurchaseItemQueryAppService.class),
+                pieceWeightAppService, mock(SalesOrderItemRepository.class),
+                mock(WarehouseSelectionSupport.class), stubbedSalesOrderItemMapper(),
+                mock(WorkflowTransitionGuard.class), salesOutboundRepository, completionSyncService
+        );
+
+        var order = auditedSalesOrder("SO-PRICE-005", StatusConstants.AUDITED, new BigDecimal("3300.00"));
+        SalesOrderItem item = order.getItems().get(0);
+        item.setSourcePurchaseOrderItemId(501L);
+        order.setPurchaseOrderNo("PO-005");
+        SalesOrderRequest baseRequest = pricingUpdateRequest(order, new BigDecimal("3500.00"), StatusConstants.AUDITED);
+        SalesOrderRequest request = new SalesOrderRequest(
+                baseRequest.orderNo(), baseRequest.purchaseInboundNo(), baseRequest.purchaseOrderNo(),
+                baseRequest.customerCode(), baseRequest.customerName(), baseRequest.projectId(),
+                baseRequest.projectName(), LocalDate.of(2026, 4, 28),
+                baseRequest.salesName(), baseRequest.status(), "改价备注",
+                baseRequest.items()
+        );
+
+        when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(order));
+        when(salesOutboundRepository.findAllByStatusAndSourceSalesOrderItemIds(
+                eq(StatusConstants.AUDITED),
+                eq(List.of(item.getId()))
+        )).thenReturn(List.of());
+        when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(mapper.toResponse(any())).thenReturn(new SalesOrderResponse(
+                1L, "SO-PRICE-005", null, "PO-005", "客户A", "项目A",
+                LocalDate.of(2026, 4, 28), "张三", new BigDecimal("4.500"),
+                new BigDecimal("15750.00"), StatusConstants.AUDITED, "改价备注", List.of()
+        ));
+
+        service.update(1L, request);
+
+        assertThat(order.getDeliveryDate()).isEqualTo(LocalDate.of(2026, 4, 28));
+        assertThat(order.getRemark()).isEqualTo("改价备注");
+        assertThat(item.getUnitPrice()).isEqualByComparingTo("3500.00");
+        assertThat(item.getAmount()).isEqualByComparingTo("15750.00");
+        assertThat(order.getTotalAmount()).isEqualByComparingTo("15750.00");
+        verify(repository).save(order);
+        verify(repository, never()).saveAndFlush(any());
+        verify(pieceWeightAppService, never()).releaseSalesOrderItems(any());
+        verify(pieceWeightAppService, never()).allocateForSalesOrderItem(any(), any(), any(), anyInt());
+        verify(completionSyncService).syncBySalesOrderReference("SO-PRICE-005");
+    }
+
+    @Test
+    void shouldRejectAuditedSalesOrderPricingUpdateWhenStructureChanges() {
+        SalesOrderRepository repository = mock(SalesOrderRepository.class);
+        SalesOrderService service = new SalesOrderService(
+                repository, mock(SnowflakeIdGenerator.class), mock(SalesOrderMapper.class),
+                mock(TradeItemMaterialSupport.class), mock(PurchaseItemQueryAppService.class),
+                mock(PurchaseItemPieceWeightAppService.class), mock(SalesOrderItemRepository.class),
+                mock(WarehouseSelectionSupport.class), stubbedSalesOrderItemMapper(),
+                mock(WorkflowTransitionGuard.class), mock(SalesOutboundRepository.class),
+                mock(SalesOrderCompletionSyncService.class)
+        );
+
+        var order = auditedSalesOrder("SO-PRICE-003", StatusConstants.AUDITED, BigDecimal.ZERO);
+        SalesOrderRequest request = pricingUpdateRequest(order, new BigDecimal("3888.00"), StatusConstants.AUDITED);
+        SalesOrderRequest changedQuantity = new SalesOrderRequest(
+                request.orderNo(), request.purchaseInboundNo(), request.purchaseOrderNo(), request.customerCode(),
+                request.customerName(), request.projectId(), request.projectName(), request.deliveryDate(),
+                request.salesName(), request.status(), request.remark(),
+                List.of(new SalesOrderItemRequest(
+                        request.items().get(0).id(),
+                        request.items().get(0).materialCode(),
+                        request.items().get(0).brand(),
+                        request.items().get(0).category(),
+                        request.items().get(0).material(),
+                        request.items().get(0).spec(),
+                        request.items().get(0).length(),
+                        request.items().get(0).unit(),
+                        request.items().get(0).sourceInboundItemId(),
+                        request.items().get(0).sourcePurchaseOrderItemId(),
+                        request.items().get(0).warehouseName(),
+                        request.items().get(0).batchNo(),
+                        9,
+                        request.items().get(0).quantityUnit(),
+                        request.items().get(0).pieceWeightTon(),
+                        request.items().get(0).piecesPerBundle(),
+                        request.items().get(0).weightTon(),
+                        request.items().get(0).unitPrice(),
+                        request.items().get(0).amount()
+                ))
+        );
+
+        when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(order));
+
+        assertThatThrownBy(() -> service.update(1L, changedQuantity))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("当前单据状态为「已审核」，不能编辑");
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    void shouldRejectPricingUpdateWhenSalesOrderCompleted() {
+        SalesOrderRepository repository = mock(SalesOrderRepository.class);
+        SalesOrderService service = new SalesOrderService(
+                repository, mock(SnowflakeIdGenerator.class), mock(SalesOrderMapper.class),
+                mock(TradeItemMaterialSupport.class), mock(PurchaseItemQueryAppService.class),
+                mock(PurchaseItemPieceWeightAppService.class), mock(SalesOrderItemRepository.class),
+                mock(WarehouseSelectionSupport.class), stubbedSalesOrderItemMapper(),
+                mock(WorkflowTransitionGuard.class), mock(SalesOutboundRepository.class),
+                mock(SalesOrderCompletionSyncService.class)
+        );
+
+        var order = auditedSalesOrder("SO-PRICE-004", StatusConstants.SALES_COMPLETED, new BigDecimal("3000.00"));
+        SalesOrderRequest request = pricingUpdateRequest(order, new BigDecimal("3888.00"), StatusConstants.SALES_COMPLETED);
+
+        when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(order));
+
+        assertThatThrownBy(() -> service.update(1L, request))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("当前单据状态为「完成销售」，不能编辑");
+        verify(repository, never()).save(any());
+    }
+
+    @Test
     void shouldSearchByKeyword() {
         SalesOrderRepository repository = mock(SalesOrderRepository.class);
         SalesOrderMapper mapper = mock(SalesOrderMapper.class);
@@ -1194,6 +1367,111 @@ class SalesOrderServiceTest {
         return new PurchaseItemQueryAppService.SourcePurchaseOrderItemRecord(
                 id, quantity, weightTon, null,
                 null, null, null, null, null, null, null, null);
+    }
+
+    private com.leo.erp.sales.order.domain.entity.SalesOrder auditedSalesOrder(
+            String orderNo,
+            String status,
+            BigDecimal unitPrice
+    ) {
+        var order = new com.leo.erp.sales.order.domain.entity.SalesOrder();
+        order.setId(1L);
+        order.setOrderNo(orderNo);
+        order.setCustomerName("客户A");
+        order.setProjectName("项目A");
+        order.setDeliveryDate(LocalDate.of(2026, 4, 26));
+        order.setSalesName("张三");
+        order.setStatus(status);
+        order.setRemark("备注");
+        order.setTotalWeight(new BigDecimal("4.500"));
+        order.setTotalAmount(new BigDecimal("4.500").multiply(unitPrice));
+
+        SalesOrderItem item = new SalesOrderItem();
+        item.setId(11L);
+        item.setSalesOrder(order);
+        item.setLineNo(1);
+        item.setMaterialCode("M1");
+        item.setBrand("宝钢");
+        item.setCategory("盘螺");
+        item.setMaterial("HRB400");
+        item.setSpec("8");
+        item.setLength("12m");
+        item.setUnit("吨");
+        item.setWarehouseName("一号库");
+        item.setBatchNo("B1");
+        item.setQuantity(3);
+        item.setQuantityUnit("件");
+        item.setPieceWeightTon(new BigDecimal("1.500"));
+        item.setPiecesPerBundle(1);
+        item.setWeightTon(new BigDecimal("4.500"));
+        item.setUnitPrice(unitPrice);
+        item.setAmount(new BigDecimal("4.500").multiply(unitPrice));
+        order.setItems(new ArrayList<>(List.of(item)));
+        return order;
+    }
+
+    private SalesOrderRequest pricingUpdateRequest(
+            com.leo.erp.sales.order.domain.entity.SalesOrder order,
+            BigDecimal unitPrice,
+            String status
+    ) {
+        SalesOrderItem item = order.getItems().get(0);
+        return new SalesOrderRequest(
+                order.getOrderNo(), order.getPurchaseInboundNo(), order.getPurchaseOrderNo(), order.getCustomerCode(),
+                order.getCustomerName(), order.getProjectId(), order.getProjectName(), order.getDeliveryDate(),
+                order.getSalesName(), status, order.getRemark(),
+                List.of(new SalesOrderItemRequest(
+                        item.getId(), item.getMaterialCode(), item.getBrand(), item.getCategory(),
+                        item.getMaterial(), item.getSpec(), item.getLength(), item.getUnit(),
+                        item.getSourceInboundItemId(), item.getSourcePurchaseOrderItemId(),
+                        item.getWarehouseName(), item.getBatchNo(), item.getQuantity(),
+                        item.getQuantityUnit(), item.getPieceWeightTon(), item.getPiecesPerBundle(),
+                        item.getWeightTon(), unitPrice, null
+                ))
+        );
+    }
+
+    private SalesOutbound auditedOutbound(
+            String salesOrderNo,
+            Long sourceSalesOrderItemId,
+            BigDecimal weightTon,
+            BigDecimal unitPrice
+    ) {
+        SalesOutbound outbound = new SalesOutbound();
+        outbound.setId(21L);
+        outbound.setOutboundNo("OB-PRICE-001");
+        outbound.setSalesOrderNo(salesOrderNo);
+        outbound.setCustomerName("客户A");
+        outbound.setProjectName("项目A");
+        outbound.setWarehouseName("一号库");
+        outbound.setOutboundDate(LocalDate.of(2026, 4, 27));
+        outbound.setStatus(StatusConstants.AUDITED);
+        outbound.setTotalWeight(weightTon);
+        outbound.setTotalAmount(weightTon.multiply(unitPrice));
+
+        SalesOutboundItem item = new SalesOutboundItem();
+        item.setId(22L);
+        item.setSalesOutbound(outbound);
+        item.setLineNo(1);
+        item.setSourceSalesOrderItemId(sourceSalesOrderItemId);
+        item.setMaterialCode("M1");
+        item.setBrand("宝钢");
+        item.setCategory("盘螺");
+        item.setMaterial("HRB400");
+        item.setSpec("8");
+        item.setLength("12m");
+        item.setUnit("吨");
+        item.setWarehouseName("一号库");
+        item.setBatchNo("B1");
+        item.setQuantity(3);
+        item.setQuantityUnit("件");
+        item.setPieceWeightTon(new BigDecimal("1.500"));
+        item.setPiecesPerBundle(1);
+        item.setWeightTon(weightTon);
+        item.setUnitPrice(unitPrice);
+        item.setAmount(weightTon.multiply(unitPrice));
+        outbound.setItems(new ArrayList<>(List.of(item)));
+        return outbound;
     }
 
     private SalesOrderItemMapper stubbedSalesOrderItemMapper() {

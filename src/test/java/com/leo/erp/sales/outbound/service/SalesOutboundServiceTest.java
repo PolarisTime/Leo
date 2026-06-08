@@ -143,6 +143,49 @@ class SalesOutboundServiceTest {
     }
 
     @Test
+    void shouldAllowZeroUnitPriceWhenOutboundUsesAuditedSalesOrderItem() {
+        SalesOutboundRepository repository = mock(SalesOutboundRepository.class);
+        SalesOutboundMapper mapper = mock(SalesOutboundMapper.class);
+        TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
+        WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
+        SalesOrderItemQueryService salesOrderItemQueryService = mock(SalesOrderItemQueryService.class);
+        SalesOutboundService service = createService(repository, mapper, materialSupport,
+                warehouseSelectionSupport, salesOrderItemQueryService);
+
+        SalesOutboundRequest request = new SalesOutboundRequest(
+                "SOO-ZERO-PRICE", "SO-ZERO-PRICE", "客户A", "项目A", null,
+                LocalDate.of(2026, 4, 30), "草稿", null,
+                List.of(new SalesOutboundItemRequest(
+                        "SO-ZERO-PRICE", 9009L, "M1", "宝钢", "盘螺", "HRB400", "10", null, "吨",
+                        "一号码头", "B1", 1, "件",
+                        new BigDecimal("2.500"), 0, new BigDecimal("2.500"),
+                        BigDecimal.ZERO, null
+                ))
+        );
+        SalesOrderItem sourceSalesOrderItem = buildSalesOrderItem(9009L, "SO-ZERO-PRICE");
+
+        when(repository.existsByOutboundNoAndDeletedFlagFalse("SOO-ZERO-PRICE")).thenReturn(false);
+        when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(Map.of("M1", new Material()));
+        when(materialSupport.normalizeBatchNo(any(), eq("B1"), eq(1), eq(true))).thenReturn("B1");
+        when(warehouseSelectionSupport.normalizeWarehouseName("一号码头", 1, true)).thenReturn("一号码头");
+        when(salesOrderItemQueryService.findActiveByIdIn(anyCollection())).thenReturn(List.of(sourceSalesOrderItem));
+        when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        stubMapper(mapper);
+
+        service.create(request);
+
+        var outboundCaptor = forClass(SalesOutbound.class);
+        verify(repository).save(outboundCaptor.capture());
+        SalesOutbound saved = outboundCaptor.getValue();
+        assertThat(saved.getSalesOrderNo()).isEqualTo("SO-ZERO-PRICE");
+        assertThat(saved.getTotalAmount()).isEqualByComparingTo("0.00");
+        assertThat(saved.getItems()).singleElement().satisfies(item -> {
+            assertThat(item.getUnitPrice()).isEqualByComparingTo("0.00");
+            assertThat(item.getAmount()).isEqualByComparingTo("0.00");
+        });
+    }
+
+    @Test
     void shouldPreservePersistedSourceSalesOrderItemOnUpdateWhenClientOmitsIt() {
         SalesOutboundRepository repository = mock(SalesOutboundRepository.class);
         SalesOutboundMapper mapper = mock(SalesOutboundMapper.class);

@@ -1,7 +1,9 @@
 package com.leo.erp.sales.order.service;
 
 import com.leo.erp.common.support.StatusConstants;
+import com.leo.erp.common.support.TradeItemCalculator;
 import com.leo.erp.sales.order.domain.entity.SalesOrder;
+import com.leo.erp.sales.order.domain.entity.SalesOrderItem;
 import com.leo.erp.sales.order.repository.SalesOrderRepository;
 import com.leo.erp.sales.outbound.domain.entity.SalesOutbound;
 import com.leo.erp.sales.outbound.repository.SalesOutboundRepository;
@@ -54,7 +56,7 @@ public class SalesOrderCompletionSyncService {
             String normalizedOrderNo = normalize(order.getOrderNo());
             syncItemWeightAndAmount(order, allOutbounds, normalizedOrderNo);
             boolean fullyOutbounded = isFullyOutbounded(order, allOutbounds, normalizedOrderNo);
-            applyCompletedStatus(order, fullyOutbounded);
+            applyCompletedStatus(order, fullyOutbounded && isPriced(order));
         }
         List<SalesOrder> changedOrders = orders.stream()
                 .filter(order -> order.getStatus() != null)
@@ -101,6 +103,22 @@ public class SalesOrderCompletionSyncService {
                         .setScale(2, RoundingMode.HALF_UP));
             }
         });
+        recalculateTotals(order);
+    }
+
+    private void recalculateTotals(SalesOrder order) {
+        BigDecimal totalWeight = BigDecimal.ZERO;
+        BigDecimal totalAmount = BigDecimal.ZERO;
+        for (SalesOrderItem item : order.getItems()) {
+            if (item.getWeightTon() != null) {
+                totalWeight = totalWeight.add(item.getWeightTon());
+            }
+            if (item.getAmount() != null) {
+                totalAmount = totalAmount.add(item.getAmount());
+            }
+        }
+        order.setTotalWeight(TradeItemCalculator.scaleWeightTon(totalWeight));
+        order.setTotalAmount(TradeItemCalculator.scaleAmount(totalAmount));
     }
 
     private boolean isFullyOutbounded(
@@ -162,6 +180,12 @@ public class SalesOrderCompletionSyncService {
         }
         order.setStatus(StatusConstants.AUDITED);
         return true;
+    }
+
+    private boolean isPriced(SalesOrder order) {
+        return order.getItems().stream()
+                .allMatch(item -> item.getUnitPrice() != null
+                        && item.getUnitPrice().compareTo(BigDecimal.ZERO) > 0);
     }
 
     private Set<String> parseSalesOrderNos(String salesOrderReference) {

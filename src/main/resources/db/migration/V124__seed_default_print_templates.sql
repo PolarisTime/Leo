@@ -90,7 +90,7 @@ VALUES (700540000000000013, 'freight-bill', '物流单默认模板',
 <tr><th>客户名称</th><td>{{customerName}}</td><th>项目名称</th><td>{{projectName}}</td></tr>
 <tr><th>关联出库单</th><td>{{outboundNo}}</td><th>单价</th><td>{{unitPrice}}</td></tr>
 <tr><th>总重量（吨）</th><td>{{totalWeight}}</td><th>总运费</th><td>{{totalFreight}}</td></tr>
-<tr><th>审核状态</th><td>{{status}}</td><th>送达状态</th><td>{{deliveryStatus}}</td></tr>
+<tr><th>审核状态</th><td colspan="3">{{status}}</td></tr>
 <tr><th>备注</th><td colspan="3">{{remark}}</td></tr>
 </tbody></table>
 <div class="print-block"><table><thead><tr>

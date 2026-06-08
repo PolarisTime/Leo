@@ -15,6 +15,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.when;
 
 class PreallocatedBusinessNoServiceTest {
@@ -42,6 +43,27 @@ class PreallocatedBusinessNoServiceTest {
         service.consumeOrThrow("purchase-order", 123L, principal);
 
         verify(redisTemplate).delete("leo:business-no:preallocated:purchase-order:123");
+    }
+
+    @Test
+    void shouldAssertReservationWithoutConsuming() {
+        StringRedisTemplate redisTemplate = mock(StringRedisTemplate.class);
+        @SuppressWarnings("unchecked")
+        ValueOperations<String, String> valueOperations = mock(ValueOperations.class);
+
+        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+        when(valueOperations.get("leo:business-no:preallocated:purchase-order:123"))
+                .thenReturn("1");
+
+        PreallocatedBusinessNoService service = new PreallocatedBusinessNoService(redisTemplate);
+
+        service.assertReservedByPrincipal(
+                "purchase-order",
+                123L,
+                SecurityPrincipal.authenticated(1L, "tester", List.of())
+        );
+
+        verify(redisTemplate, never()).delete("leo:business-no:preallocated:purchase-order:123");
     }
 
     @Test

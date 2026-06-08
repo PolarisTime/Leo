@@ -276,7 +276,8 @@ public class MaterialService extends AbstractCrudService<Material, MaterialReque
         int updatedCount = 0;
         List<Material> successRows = new ArrayList<>();
         for (MaterialImportDTO dto : dtoList) {
-            Material material = materialRepository.findByMaterialCode(dto.materialCode())
+            String materialCode = resolveImportMaterialCode(dto.materialCode());
+            Material material = materialRepository.findByMaterialCode(materialCode)
                     .orElseGet(() -> {
                         Material entity = new Material();
                         entity.setId(nextId());
@@ -284,7 +285,7 @@ public class MaterialService extends AbstractCrudService<Material, MaterialReque
                     });
             boolean exists = material.getId() != null && materialRepository.existsById(material.getId());
             material.setDeletedFlag(false);
-            applyImportDTO(material, dto);
+            applyImportDTO(material, dto, materialCode);
             materialRepository.save(material);
             successRows.add(material);
             if (exists) {
@@ -302,8 +303,8 @@ public class MaterialService extends AbstractCrudService<Material, MaterialReque
         );
     }
 
-    private void applyImportDTO(Material entity, MaterialImportDTO dto) {
-        entity.setMaterialCode(dto.materialCode());
+    private void applyImportDTO(Material entity, MaterialImportDTO dto, String materialCode) {
+        entity.setMaterialCode(materialCode);
         entity.setBrand(dto.brand());
         entity.setMaterial(dto.material());
         entity.setCategory(dto.category());
@@ -366,9 +367,9 @@ public class MaterialService extends AbstractCrudService<Material, MaterialReque
             }
             totalRows++;
             int rowNumber = i + 1;
-            String materialCode = optionalValue(row, headerIndexes, "materialCode");
+            String materialCode = resolveImportMaterialCode(optionalValue(row, headerIndexes, "materialCode"));
             try {
-                MaterialRequest request = toMaterialRequest(row, headerIndexes, rowNumber);
+                MaterialRequest request = toMaterialRequest(row, headerIndexes, rowNumber, materialCode);
                 Material material = materialRepository.findByMaterialCode(request.materialCode())
                         .orElseGet(() -> {
                             Material entity = new Material();
@@ -449,11 +450,19 @@ public class MaterialService extends AbstractCrudService<Material, MaterialReque
         }
     }
 
-    private MaterialRequest toMaterialRequest(List<String> row, Map<String, Integer> headerIndexes, int rowNumber) {
+    private String resolveImportMaterialCode(String rawMaterialCode) {
+        String materialCode = rawMaterialCode == null ? "" : rawMaterialCode.trim();
+        return materialCode.isBlank() ? String.valueOf(nextId()) : materialCode;
+    }
+
+    private MaterialRequest toMaterialRequest(List<String> row,
+                                              Map<String, Integer> headerIndexes,
+                                              int rowNumber,
+                                              String materialCode) {
         String category = requiredValue(row, headerIndexes, "category", "类别", rowNumber);
         Integer piecesPerBundle = parsePiecesPerBundle(row, headerIndexes, rowNumber, category);
         MaterialRequest request = new MaterialRequest(
-                requiredValue(row, headerIndexes, "materialCode", "商品编码", rowNumber),
+                materialCode,
                 requiredValue(row, headerIndexes, "brand", "品牌", rowNumber),
                 requiredValue(row, headerIndexes, "material", "材质", rowNumber),
                 category,

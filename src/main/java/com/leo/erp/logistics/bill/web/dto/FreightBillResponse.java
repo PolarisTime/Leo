@@ -16,7 +16,6 @@ public record FreightBillResponse(
         BigDecimal totalWeight,
         BigDecimal totalFreight,
         String status,
-        String deliveryStatus,
         String remark,
         List<FreightBillItemResponse> items
 ) {

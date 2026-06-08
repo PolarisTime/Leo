@@ -27,7 +27,6 @@ class FreightBillRequestValidationTest {
                 LocalDate.of(2026, 4, 25),
                 BigDecimal.valueOf(100.00),
                 "草稿",
-                "未发货",
                 "备注",
                 List.of(validItem())
         );
@@ -50,7 +49,6 @@ class FreightBillRequestValidationTest {
                 LocalDate.of(2026, 4, 25),
                 BigDecimal.valueOf(100.00),
                 "草稿",
-                "未发货",
                 "备注",
                 List.of(validItem())
         );
@@ -73,7 +71,6 @@ class FreightBillRequestValidationTest {
                 LocalDate.of(2026, 4, 25),
                 BigDecimal.valueOf(100.00),
                 "草稿",
-                "未发货",
                 "备注",
                 List.of(validItem())
         );
@@ -96,7 +93,6 @@ class FreightBillRequestValidationTest {
                 null,
                 BigDecimal.valueOf(100.00),
                 "草稿",
-                "未发货",
                 "备注",
                 List.of(validItem())
         );
@@ -119,7 +115,6 @@ class FreightBillRequestValidationTest {
                 LocalDate.of(2026, 4, 25),
                 null,
                 "草稿",
-                "未发货",
                 "备注",
                 List.of(validItem())
         );
@@ -142,7 +137,6 @@ class FreightBillRequestValidationTest {
                 LocalDate.of(2026, 4, 25),
                 BigDecimal.valueOf(-100.00),
                 "草稿",
-                "未发货",
                 "备注",
                 List.of(validItem())
         );
@@ -165,7 +159,6 @@ class FreightBillRequestValidationTest {
                 LocalDate.of(2026, 4, 25),
                 BigDecimal.valueOf(100.00),
                 "草稿",
-                "未发货",
                 "备注",
                 List.of()
         );
@@ -208,7 +201,6 @@ class FreightBillRequestValidationTest {
                 LocalDate.of(2026, 4, 25),
                 BigDecimal.valueOf(100.00),
                 "草稿",
-                "未发货",
                 "备注",
                 List.of(invalidItem)
         );
@@ -231,7 +223,6 @@ class FreightBillRequestValidationTest {
                 LocalDate.of(2026, 4, 25),
                 BigDecimal.valueOf(100.00),
                 "草稿",
-                "未发货",
                 "备注",
                 List.of(validItem())
         );
@@ -253,7 +244,6 @@ class FreightBillRequestValidationTest {
                 "项目名称",
                 LocalDate.of(2026, 4, 25),
                 BigDecimal.valueOf(100.00),
-                null,
                 null,
                 null,
                 List.of(validItem())

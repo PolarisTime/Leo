@@ -4,6 +4,8 @@ import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.persistence.AbstractAuditableEntity;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
+import com.leo.erp.security.support.SecurityPrincipal;
+import com.leo.erp.system.norule.service.PreallocatedBusinessNoService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockHttpServletRequest;
@@ -20,6 +22,8 @@ import java.util.Set;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class AbstractCrudServiceTest {
@@ -217,6 +221,51 @@ class AbstractCrudServiceTest {
 
         var result = service.create("request");
         assertThat(result).isEqualTo("response");
+    }
+
+    @Test
+    void createShouldConsumePreallocatedIdAfterSuccessfulCreate() {
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.addHeader("X-Business-Module-Key", "sales-order");
+        request.addHeader("X-Preallocated-Id", "123456789");
+        RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(request));
+        setupAdminPrincipal();
+        PreallocatedBusinessNoService preallocatedBusinessNoService = mock(PreallocatedBusinessNoService.class);
+        TestCrudService service = new TestCrudService();
+        service.setPreallocatedBusinessNoServiceForTest(preallocatedBusinessNoService);
+
+        var result = service.create("request");
+
+        assertThat(result).isEqualTo("response");
+        verify(preallocatedBusinessNoService).assertReservedByPrincipal(
+                org.mockito.ArgumentMatchers.eq("sales-order"),
+                org.mockito.ArgumentMatchers.eq(123456789L),
+                org.mockito.ArgumentMatchers.any(SecurityPrincipal.class)
+        );
+        verify(preallocatedBusinessNoService).consume("sales-order", 123456789L);
+    }
+
+    @Test
+    void createShouldNotConsumePreallocatedIdWhenSaveFails() {
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.addHeader("X-Business-Module-Key", "sales-order");
+        request.addHeader("X-Preallocated-Id", "123456789");
+        RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(request));
+        setupAdminPrincipal();
+        PreallocatedBusinessNoService preallocatedBusinessNoService = mock(PreallocatedBusinessNoService.class);
+        TestCrudService service = new TestCrudService();
+        service.setPreallocatedBusinessNoServiceForTest(preallocatedBusinessNoService);
+        service.failOnSave();
+
+        assertThatThrownBy(() -> service.create("request"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("save failed");
+        verify(preallocatedBusinessNoService).assertReservedByPrincipal(
+                org.mockito.ArgumentMatchers.eq("sales-order"),
+                org.mockito.ArgumentMatchers.eq(123456789L),
+                org.mockito.ArgumentMatchers.any(SecurityPrincipal.class)
+        );
+        verify(preallocatedBusinessNoService, never()).consume("sales-order", 123456789L);
     }
 
     @Test
@@ -490,6 +539,7 @@ class AbstractCrudServiceTest {
         private Set<String> transitions = Set.of();
         private boolean useSnowflakeIdAsBusinessNo = false;
         private boolean adminViewDeleted = false;
+        private boolean failOnSave = false;
 
         TestCrudService() {
             super(new SnowflakeIdGenerator(0L));
@@ -522,8 +572,16 @@ class AbstractCrudServiceTest {
             setNoRuleSequenceService(service);
         }
 
+        void setPreallocatedBusinessNoServiceForTest(PreallocatedBusinessNoService service) {
+            setPreallocatedBusinessNoService(service);
+        }
+
         void enableAdminViewDeleted() {
             this.adminViewDeleted = true;
+        }
+
+        void failOnSave() {
+            this.failOnSave = true;
         }
 
         @Override
@@ -556,6 +614,9 @@ class AbstractCrudServiceTest {
 
         @Override
         protected TestEntity saveEntity(TestEntity entity) {
+            if (failOnSave) {
+                throw new IllegalStateException("save failed");
+            }
             store.put(entity.getId(), entity);
             return entity;
         }

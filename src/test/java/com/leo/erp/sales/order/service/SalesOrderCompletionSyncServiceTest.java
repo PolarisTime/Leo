@@ -41,6 +41,56 @@ class SalesOrderCompletionSyncServiceTest {
     }
 
     @Test
+    void shouldKeepAuditedWhenFullyOutboundedButUnitPriceIsZero() {
+        SalesOrderRepository salesOrderRepository = mock(SalesOrderRepository.class);
+        SalesOutboundRepository salesOutboundRepository = mock(SalesOutboundRepository.class);
+        SalesOrderCompletionSyncService service = new SalesOrderCompletionSyncService(
+                salesOrderRepository, salesOutboundRepository);
+
+        SalesOrder order = buildOrder("SO-PRICE-001", "已审核", 10);
+        order.getItems().get(0).setUnitPrice(BigDecimal.ZERO);
+        SalesOutbound outbound = buildOutbound("SO-PRICE-001", "已审核", order.getItems().get(0).getId(), 10);
+
+        when(salesOrderRepository.findByOrderNoInAndDeletedFlagFalse(any())).thenReturn(List.of(order));
+        when(salesOutboundRepository.findByDeletedFlagFalse()).thenReturn(List.of(outbound));
+
+        service.syncBySalesOrderReference("SO-PRICE-001");
+
+        assertThat(order.getStatus()).isEqualTo("已审核");
+    }
+
+    @Test
+    void shouldRecalculateHeaderTotalsFromAuditedOutboundWeightAndPricing() {
+        SalesOrderRepository salesOrderRepository = mock(SalesOrderRepository.class);
+        SalesOutboundRepository salesOutboundRepository = mock(SalesOutboundRepository.class);
+        SalesOrderCompletionSyncService service = new SalesOrderCompletionSyncService(
+                salesOrderRepository, salesOutboundRepository);
+
+        SalesOrder order = buildOrder("SO-TOTAL-001", "已审核", 2);
+        order.setTotalWeight(new BigDecimal("5.000"));
+        order.setTotalAmount(new BigDecimal("15000.00"));
+        SalesOrderItem orderItem = order.getItems().get(0);
+        orderItem.setWeightTon(new BigDecimal("5.000"));
+        orderItem.setUnitPrice(new BigDecimal("3000.00"));
+        orderItem.setAmount(new BigDecimal("15000.00"));
+
+        SalesOutbound outbound = buildOutbound("SO-TOTAL-001", "已审核", orderItem.getId(), 2);
+        outbound.getItems().get(0).setWeightTon(new BigDecimal("4.500"));
+
+        when(salesOrderRepository.findByOrderNoInAndDeletedFlagFalse(any())).thenReturn(List.of(order));
+        when(salesOutboundRepository.findByDeletedFlagFalse()).thenReturn(List.of(outbound));
+
+        service.syncBySalesOrderReference("SO-TOTAL-001");
+
+        assertThat(orderItem.getOriginalWeightTon()).isEqualByComparingTo("5.000");
+        assertThat(orderItem.getWeightTon()).isEqualByComparingTo("4.500");
+        assertThat(orderItem.getAmount()).isEqualByComparingTo("13500.00");
+        assertThat(order.getTotalWeight()).isEqualByComparingTo("4.500");
+        assertThat(order.getTotalAmount()).isEqualByComparingTo("13500.00");
+        assertThat(order.getStatus()).isEqualTo("完成销售");
+    }
+
+    @Test
     void shouldRevertCompletedSalesOrderWhenNoAuditedOutboundRemains() {
         SalesOrderRepository salesOrderRepository = mock(SalesOrderRepository.class);
         SalesOutboundRepository salesOutboundRepository = mock(SalesOutboundRepository.class);
@@ -324,12 +374,14 @@ class SalesOrderCompletionSyncServiceTest {
         item1.setLineNo(1);
         item1.setMaterialCode("M1");
         item1.setQuantity(10);
+        item1.setUnitPrice(BigDecimal.ONE);
         SalesOrderItem item2 = new SalesOrderItem();
         item2.setId(201L);
         item2.setSalesOrder(order);
         item2.setLineNo(2);
         item2.setMaterialCode("M2");
         item2.setQuantity(5);
+        item2.setUnitPrice(BigDecimal.ONE);
         order.setItems(new ArrayList<>(List.of(item1, item2)));
 
         SalesOutbound outbound = new SalesOutbound();
@@ -371,12 +423,14 @@ class SalesOrderCompletionSyncServiceTest {
         item1.setLineNo(1);
         item1.setMaterialCode("M1");
         item1.setQuantity(10);
+        item1.setUnitPrice(BigDecimal.ONE);
         SalesOrderItem item2 = new SalesOrderItem();
         item2.setId(301L);
         item2.setSalesOrder(order);
         item2.setLineNo(2);
         item2.setMaterialCode("M2");
         item2.setQuantity(5);
+        item2.setUnitPrice(BigDecimal.ONE);
         order.setItems(new ArrayList<>(List.of(item1, item2)));
 
         SalesOutbound outbound = new SalesOutbound();
@@ -484,6 +538,7 @@ class SalesOrderCompletionSyncServiceTest {
         item.setLineNo(1);
         item.setMaterialCode("M1");
         item.setQuantity(null);
+        item.setUnitPrice(BigDecimal.ONE);
         order.setItems(new ArrayList<>(List.of(item)));
 
         SalesOutbound outbound = buildOutbound("SO-NULL-ITEM-QTY", "已审核", 400L, 0);
@@ -512,6 +567,7 @@ class SalesOrderCompletionSyncServiceTest {
         item.setLineNo(1);
         item.setMaterialCode("M1");
         item.setQuantity(10);
+        item.setUnitPrice(BigDecimal.ONE);
         order.setItems(new ArrayList<>(List.of(item)));
 
         SalesOutbound outbound = buildOutbound("SO-NULL-STATUS", "已审核", 500L, 10);
@@ -535,6 +591,7 @@ class SalesOrderCompletionSyncServiceTest {
         item.setLineNo(1);
         item.setMaterialCode("M1");
         item.setQuantity(quantity);
+        item.setUnitPrice(BigDecimal.ONE);
         order.setItems(new ArrayList<>(List.of(item)));
         return order;
     }

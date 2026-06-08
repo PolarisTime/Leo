@@ -29,7 +29,6 @@ class FreightBillMapperTest {
         entity.setTotalWeight(new BigDecimal("2.500"));
         entity.setTotalFreight(new BigDecimal("50.00"));
         entity.setStatus("未审核");
-        entity.setDeliveryStatus("未送达");
         entity.setRemark("测试备注");
 
         FreightBillResponse response = mapper.toResponse(entity);
@@ -45,7 +44,6 @@ class FreightBillMapperTest {
         assertThat(response.totalWeight()).isEqualByComparingTo("2.500");
         assertThat(response.totalFreight()).isEqualByComparingTo("50.00");
         assertThat(response.status()).isEqualTo("未审核");
-        assertThat(response.deliveryStatus()).isEqualTo("未送达");
         assertThat(response.remark()).isEqualTo("测试备注");
     }
 
@@ -62,7 +60,6 @@ class FreightBillMapperTest {
         entity.setTotalWeight(new BigDecimal("1.000"));
         entity.setTotalFreight(new BigDecimal("10.00"));
         entity.setStatus("未审核");
-        entity.setDeliveryStatus("未送达");
 
         FreightBillResponse response = mapper.toResponse(entity);
 

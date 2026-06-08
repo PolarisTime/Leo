@@ -19,8 +19,13 @@ class PrintTemplateMapperTest {
         entity.setId(1L);
         entity.setBillType("purchase-order");
         entity.setTemplateName("采购订单模板");
+        entity.setTemplateCode("PURCHASE_ORDER_DEFAULT");
         entity.setTemplateHtml("<div>模板内容</div>");
         entity.setTemplateType("HTML");
+        entity.setEngine("BROWSER_HTML");
+        entity.setAssetRef(null);
+        entity.setVersionNo(3);
+        entity.setStatus("ACTIVE");
         entity.setIsDefault(false);
         entity.setCreatedAt(LocalDateTime.of(2026, 1, 15, 10, 0, 0));
         entity.setUpdatedAt(LocalDateTime.of(2026, 1, 16, 12, 0, 0));
@@ -31,7 +36,13 @@ class PrintTemplateMapperTest {
         assertThat(response.id()).isEqualTo(1L);
         assertThat(response.billType()).isEqualTo("purchase-order");
         assertThat(response.templateName()).isEqualTo("采购订单模板");
+        assertThat(response.templateCode()).isEqualTo("PURCHASE_ORDER_DEFAULT");
+        assertThat(response.templateHtml()).isEqualTo("<div>模板内容</div>");
         assertThat(response.templateType()).isEqualTo("HTML");
+        assertThat(response.engine()).isEqualTo("BROWSER_HTML");
+        assertThat(response.assetRef()).isNull();
+        assertThat(response.versionNo()).isEqualTo(3);
+        assertThat(response.status()).isEqualTo("ACTIVE");
         assertThat(response.createTime()).isEqualTo(LocalDateTime.of(2026, 1, 15, 10, 0, 0));
         assertThat(response.updateTime()).isEqualTo(LocalDateTime.of(2026, 1, 16, 12, 0, 0));
     }
@@ -42,6 +53,7 @@ class PrintTemplateMapperTest {
         entity.setId(2L);
         entity.setBillType("sales-order");
         entity.setTemplateName("销售订单模板");
+        entity.setTemplateCode("SALES_ORDER_DEFAULT");
         entity.setTemplateHtml("<div>销售模板</div>");
         entity.setIsDefault(true);
 

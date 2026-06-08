@@ -1,10 +1,14 @@
 package com.leo.erp.system.printtemplate.web;
 
 import com.leo.erp.common.api.ApiResponse;
+import com.leo.erp.security.permission.ModulePermissionGuard;
+import com.leo.erp.security.permission.PermissionService;
+import com.leo.erp.security.support.SecurityPrincipal;
 import com.leo.erp.system.printtemplate.service.PrintTemplateService;
 import com.leo.erp.system.printtemplate.web.dto.PrintTemplateRequest;
 import com.leo.erp.system.printtemplate.web.dto.PrintTemplateResponse;
 import org.junit.jupiter.api.Test;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 
 import java.util.List;
 
@@ -17,17 +21,33 @@ import static org.mockito.Mockito.when;
 class PrintTemplateControllerTest {
 
     private final PrintTemplateService printTemplateService = mock(PrintTemplateService.class);
-    private final PrintTemplateController controller = new PrintTemplateController(printTemplateService);
+    private final PermissionService permissionService = mock(PermissionService.class);
+    private final ModulePermissionGuard modulePermissionGuard = new ModulePermissionGuard(permissionService);
+    private final PrintTemplateController controller = new PrintTemplateController(printTemplateService, modulePermissionGuard);
 
     @Test
     void listReturnsTemplatesByBillType() {
         PrintTemplateResponse item = mock(PrintTemplateResponse.class);
+        when(permissionService.can(1L, "sales-order", "print")).thenReturn(true);
         when(printTemplateService.listByBillType(eq("sales-order"))).thenReturn(List.of(item));
 
-        ApiResponse<List<PrintTemplateResponse>> response = controller.list("sales-order");
+        ApiResponse<List<PrintTemplateResponse>> response = controller.list(principal(), "sales-order");
 
         assertThat(response.code()).isEqualTo(0);
         assertThat(response.data()).hasSize(1);
+    }
+
+    @Test
+    void listAllowsReadPermissionWhenPrintPermissionMissing() {
+        PrintTemplateResponse item = mock(PrintTemplateResponse.class);
+        when(permissionService.can(1L, "sales-order", "read")).thenReturn(true);
+        when(printTemplateService.listByBillType(eq("sales-order"))).thenReturn(List.of(item));
+
+        ApiResponse<List<PrintTemplateResponse>> response = controller.list(principal(), "sales-order");
+
+        assertThat(response.code()).isEqualTo(0);
+        verify(permissionService).can(1L, "sales-order", "print");
+        verify(permissionService).can(1L, "sales-order", "read");
     }
 
     @Test
@@ -63,5 +83,10 @@ class PrintTemplateControllerTest {
         assertThat(response.code()).isEqualTo(0);
         assertThat(response.message()).isEqualTo("删除成功");
         verify(printTemplateService).delete(1L);
+    }
+
+    private SecurityPrincipal principal() {
+        return new SecurityPrincipal(1L, "slc", "encoded", true,
+                List.of(new SimpleGrantedAuthority("ROLE_USER")));
     }
 }

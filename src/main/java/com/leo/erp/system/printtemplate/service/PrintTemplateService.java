@@ -14,6 +14,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.regex.Pattern;
@@ -38,6 +39,9 @@ public class PrintTemplateService extends AbstractCrudService<PrintTemplate, Pri
             Pattern.compile("\\b(window|document|localStorage|sessionStorage|location|history|navigator)\\b", Pattern.CASE_INSENSITIVE),
             Pattern.compile("\\b(fetch|XMLHttpRequest|WebSocket)\\b", Pattern.CASE_INSENSITIVE)
     );
+    private static final Set<String> ALLOWED_TEMPLATE_TYPES = Set.of("HTML", "COORD", "PDF_FORM");
+    private static final Set<String> ALLOWED_ENGINES = Set.of("BROWSER_HTML", "LODOP", "PDF_FORM");
+    private static final Set<String> ALLOWED_STATUSES = Set.of("ACTIVE", "DISABLED");
 
     private final PrintTemplateRepository repository;
     private final PrintTemplateMapper printTemplateMapper;
@@ -65,8 +69,12 @@ public class PrintTemplateService extends AbstractCrudService<PrintTemplate, Pri
     protected void validateCreate(PrintTemplateRequest request) {
         String billType = normalizeBillType(request.billType());
         String templateName = normalizeTemplateName(request.templateName());
+        String templateCode = normalizeTemplateCode(request.templateCode());
         if (repository.existsByBillTypeAndTemplateNameAndDeletedFlagFalse(billType, templateName)) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "同一单据已存在同名打印模板");
+        }
+        if (repository.existsByBillTypeAndTemplateCodeAndDeletedFlagFalse(billType, templateCode)) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "同一单据已存在同编码打印模板");
         }
     }
 
@@ -74,10 +82,16 @@ public class PrintTemplateService extends AbstractCrudService<PrintTemplate, Pri
     protected void validateUpdate(PrintTemplate entity, PrintTemplateRequest request) {
         String billType = normalizeBillType(request.billType());
         String templateName = normalizeTemplateName(request.templateName());
-        boolean duplicated = repository.existsByBillTypeAndTemplateNameAndDeletedFlagFalse(billType, templateName)
+        String templateCode = normalizeTemplateCode(request.templateCode());
+        boolean duplicatedName = repository.existsByBillTypeAndTemplateNameAndDeletedFlagFalse(billType, templateName)
                 && !(entity.getBillType().equals(billType) && entity.getTemplateName().equals(templateName));
-        if (duplicated) {
+        if (duplicatedName) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "同一单据已存在同名打印模板");
+        }
+        boolean duplicatedCode = repository.existsByBillTypeAndTemplateCodeAndDeletedFlagFalse(billType, templateCode)
+                && !(entity.getBillType().equals(billType) && Objects.equals(entity.getTemplateCode(), templateCode));
+        if (duplicatedCode) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "同一单据已存在同编码打印模板");
         }
     }
 
@@ -97,16 +111,56 @@ public class PrintTemplateService extends AbstractCrudService<PrintTemplate, Pri
     }
 
     @Override
+    protected PrintTemplateRequest normalizeCreateRequest(PrintTemplateRequest request, long entityId) {
+        String templateCode = request.templateCode();
+        return new PrintTemplateRequest(
+                request.billType(),
+                request.templateName(),
+                templateCode == null || templateCode.isBlank() ? "TPL_" + entityId : templateCode,
+                request.templateHtml(),
+                request.templateType(),
+                request.engine(),
+                request.assetRef(),
+                request.versionNo(),
+                request.status()
+        );
+    }
+
+    @Override
+    protected PrintTemplateRequest normalizeUpdateRequest(PrintTemplate entity, PrintTemplateRequest request) {
+        String templateCode = request.templateCode();
+        return new PrintTemplateRequest(
+                request.billType(),
+                request.templateName(),
+                templateCode == null || templateCode.isBlank() ? entity.getTemplateCode() : templateCode,
+                request.templateHtml(),
+                request.templateType(),
+                request.engine(),
+                request.assetRef(),
+                request.versionNo(),
+                request.status()
+        );
+    }
+
+    @Override
     protected String notFoundMessage() {
         return "打印模板不存在";
     }
 
     @Override
     protected void apply(PrintTemplate entity, PrintTemplateRequest request) {
+        String templateType = normalizeTemplateType(request.templateType());
+        String engine = normalizeEngine(request.engine(), templateType);
+        String assetRef = normalizeAssetRef(request.assetRef(), templateType);
         entity.setBillType(normalizeBillType(request.billType()));
         entity.setTemplateName(normalizeTemplateName(request.templateName()));
-        entity.setTemplateHtml(normalizeTemplateHtml(request.templateHtml(), request.templateType()));
-        entity.setTemplateType(normalizeTemplateType(request.templateType()));
+        entity.setTemplateCode(normalizeTemplateCode(request.templateCode()));
+        entity.setTemplateHtml(normalizeTemplateHtml(request.templateHtml(), templateType, assetRef));
+        entity.setTemplateType(templateType);
+        entity.setEngine(engine);
+        entity.setAssetRef(assetRef);
+        entity.setVersionNo(normalizeVersionNo(request.versionNo()));
+        entity.setStatus(normalizeStatus(request.status()));
     }
 
     private String normalizeBillType(String billType) {
@@ -127,7 +181,21 @@ public class PrintTemplateService extends AbstractCrudService<PrintTemplate, Pri
         return templateName.trim();
     }
 
-    private String normalizeTemplateHtml(String templateHtml, String templateType) {
+    private String normalizeTemplateCode(String templateCode) {
+        if (templateCode == null || templateCode.isBlank()) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "模板编码不能为空");
+        }
+        String normalized = templateCode.trim().toUpperCase().replaceAll("[^A-Z0-9_\\-]", "_");
+        if (normalized.isBlank()) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "模板编码不合法");
+        }
+        return normalized;
+    }
+
+    private String normalizeTemplateHtml(String templateHtml, String templateType, String assetRef) {
+        if ("PDF_FORM".equals(templateType)) {
+            return "{\"form\":\"YINGJIE_A4_REMARK\",\"template\":\"" + assetRef + "\"}";
+        }
         if (templateHtml == null || templateHtml.isBlank()) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "模板内容不能为空");
         }
@@ -140,7 +208,7 @@ public class PrintTemplateService extends AbstractCrudService<PrintTemplate, Pri
         if ("PDF_FORM".equals(normalizeTemplateType(templateType))) {
             return;
         }
-        boolean isCoord = "COORD".equals(templateType);
+        boolean isCoord = "COORD".equals(normalizeTemplateType(templateType));
         List<Pattern> patterns = isCoord ? DANGEROUS_LODOP_PATTERNS : DANGEROUS_HTML_PATTERNS;
         for (Pattern pattern : patterns) {
             if (pattern.matcher(templateHtml).find()) {
@@ -154,8 +222,65 @@ public class PrintTemplateService extends AbstractCrudService<PrintTemplate, Pri
             return "HTML";
         }
         String normalized = templateType.trim().toUpperCase();
-        if (!Set.of("HTML", "COORD", "PDF_FORM").contains(normalized)) {
+        if (!ALLOWED_TEMPLATE_TYPES.contains(normalized)) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "模板类型仅支持 HTML、COORD 或 PDF_FORM");
+        }
+        return normalized;
+    }
+
+    private String normalizeEngine(String engine, String templateType) {
+        String normalized = engine == null || engine.isBlank() ? defaultEngine(templateType) : engine.trim().toUpperCase();
+        if (!ALLOWED_ENGINES.contains(normalized)) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "渲染引擎仅支持 BROWSER_HTML、LODOP 或 PDF_FORM");
+        }
+        if ("PDF_FORM".equals(templateType) && !"PDF_FORM".equals(normalized)) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "PDF_FORM 模板必须使用 PDF_FORM 引擎");
+        }
+        if ("COORD".equals(templateType) && !"LODOP".equals(normalized)) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "COORD 模板必须使用 LODOP 引擎");
+        }
+        if ("HTML".equals(templateType) && !"BROWSER_HTML".equals(normalized)) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "HTML 模板必须使用 BROWSER_HTML 引擎");
+        }
+        return normalized;
+    }
+
+    private String defaultEngine(String templateType) {
+        return switch (templateType) {
+            case "COORD" -> "LODOP";
+            case "PDF_FORM" -> "PDF_FORM";
+            default -> "BROWSER_HTML";
+        };
+    }
+
+    private String normalizeAssetRef(String assetRef, String templateType) {
+        if (!"PDF_FORM".equals(templateType)) {
+            return null;
+        }
+        if (assetRef == null || assetRef.isBlank()) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "PDF_FORM 模板必须配置 PDF 底版资源");
+        }
+        String normalized = assetRef.trim();
+        if (normalized.contains("..") || normalized.startsWith("/") || !normalized.toLowerCase().endsWith(".pdf")) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "PDF 底版资源路径不合法");
+        }
+        return normalized;
+    }
+
+    private Integer normalizeVersionNo(Integer versionNo) {
+        if (versionNo == null) {
+            return 1;
+        }
+        if (versionNo < 1) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "模板版本号必须大于 0");
+        }
+        return versionNo;
+    }
+
+    private String normalizeStatus(String status) {
+        String normalized = status == null || status.isBlank() ? "ACTIVE" : status.trim().toUpperCase();
+        if (!ALLOWED_STATUSES.contains(normalized)) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "模板状态仅支持 ACTIVE 或 DISABLED");
         }
         return normalized;
     }

@@ -34,7 +34,7 @@ public class PreallocatedBusinessNoService {
         }
     }
 
-    public void consumeOrThrow(String moduleKey, long id, SecurityPrincipal principal) {
+    public void assertReservedByPrincipal(String moduleKey, long id, SecurityPrincipal principal) {
         if (redisTemplate == null) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "预分配雪花ID服务不可用");
         }
@@ -44,6 +44,18 @@ public class PreallocatedBusinessNoService {
         if (!Objects.equals(expectedValue, actualValue)) {
             throw new BusinessException(ErrorCode.FORBIDDEN, "预分配雪花ID无效或不属于当前用户");
         }
+    }
+
+    public void consumeOrThrow(String moduleKey, long id, SecurityPrincipal principal) {
+        assertReservedByPrincipal(moduleKey, id, principal);
+        redisTemplate.delete(buildKey(moduleKey, id));
+    }
+
+    public void consume(String moduleKey, long id) {
+        if (redisTemplate == null) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "预分配雪花ID服务不可用");
+        }
+        String key = buildKey(moduleKey, id);
         redisTemplate.delete(key);
     }
 

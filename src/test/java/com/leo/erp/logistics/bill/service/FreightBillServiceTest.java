@@ -90,7 +90,6 @@ class FreightBillServiceTest {
                 new BigDecimal("20.00"),
                 null,
                 null,
-                null,
                 List.of(items)
         );
     }
@@ -113,7 +112,6 @@ class FreightBillServiceTest {
                 "项目甲",
                 LocalDate.of(2026, 5, 4),
                 new BigDecimal("20.00"),
-                null,
                 null,
                 null,
                 List.of(new FreightBillItemRequest(
@@ -180,7 +178,7 @@ class FreightBillServiceTest {
         FreightBillRequest request = new FreightBillRequest(
                 "FB-002", "物流甲", null, "客户甲", "项目甲",
                 LocalDate.of(2026, 5, 4), new BigDecimal("15.00"),
-                null, null, null, List.of(item1, item2)
+                null, null, List.of(item1, item2)
         );
 
         FreightBillResponse response = service.create(request);
@@ -240,7 +238,7 @@ class FreightBillServiceTest {
         FreightBillRequest request = new FreightBillRequest(
                 "FB-005", "物流甲", "   ", "客户甲", "项目甲",
                 LocalDate.of(2026, 5, 4), new BigDecimal("20.00"),
-                null, null, null, List.of(buildItemRequest("OB-001"))
+                null, null, List.of(buildItemRequest("OB-001"))
         );
 
         FreightBillResponse response = service.create(request);
@@ -263,21 +261,6 @@ class FreightBillServiceTest {
         ArgumentCaptor<FreightBill> billCaptor = ArgumentCaptor.forClass(FreightBill.class);
         verify(repository).save(billCaptor.capture());
         assertThat(billCaptor.getValue().getStatus()).isEqualTo(StatusConstants.UNAUDITED);
-    }
-
-    @Test
-    void shouldSetDefaultDeliveryStatusToUndelivered() {
-        FreightBillRepository repository = mock(FreightBillRepository.class);
-        when(repository.existsByBillNoAndDeletedFlagFalse("FB-007")).thenReturn(false);
-        when(repository.save(any(FreightBill.class))).thenAnswer(invocation -> invocation.getArgument(0));
-
-        FreightBillService service = createService(repository);
-
-        service.create(buildRequest("FB-007", buildItemRequest("OB-001")));
-
-        ArgumentCaptor<FreightBill> billCaptor = ArgumentCaptor.forClass(FreightBill.class);
-        verify(repository).save(billCaptor.capture());
-        assertThat(billCaptor.getValue().getDeliveryStatus()).isEqualTo(StatusConstants.UNDELIVERED);
     }
 
     @Test
@@ -320,7 +303,7 @@ class FreightBillServiceTest {
         service.create(new FreightBillRequest(
                 "FB-009", "物流甲", null, "客户甲", "项目甲",
                 LocalDate.of(2026, 5, 4), new BigDecimal("20.00"),
-                null, null, null, List.of(item1, item2)
+                null, null, List.of(item1, item2)
         ));
 
         ArgumentCaptor<FreightBill> billCaptor = ArgumentCaptor.forClass(FreightBill.class);
@@ -350,7 +333,7 @@ class FreightBillServiceTest {
         service.create(new FreightBillRequest(
                 "FB-010", "物流甲", null, "客户甲", "项目甲",
                 LocalDate.of(2026, 5, 4), new BigDecimal("20.00"),
-                null, null, null, List.of(item1, item2)
+                null, null, List.of(item1, item2)
         ));
 
         ArgumentCaptor<FreightBill> billCaptor = ArgumentCaptor.forClass(FreightBill.class);
@@ -379,7 +362,7 @@ class FreightBillServiceTest {
         service.create(new FreightBillRequest(
                 "FB-011", "物流甲", null, "客户甲", "项目甲",
                 LocalDate.of(2026, 5, 4), new BigDecimal("20.00"),
-                null, null, null, List.of(item1, item2)
+                null, null, List.of(item1, item2)
         ));
 
         ArgumentCaptor<FreightBill> billCaptor = ArgumentCaptor.forClass(FreightBill.class);
@@ -399,7 +382,7 @@ class FreightBillServiceTest {
         FreightBillRequest request = new FreightBillRequest(
                 "FB-012", "物流乙", "苏B99999", "客户乙", "项目乙",
                 LocalDate.of(2026, 6, 1), new BigDecimal("25.50"),
-                null, null, "备注信息", List.of(buildItemRequest("OB-001"))
+                null, "备注信息", List.of(buildItemRequest("OB-001"))
         );
 
         FreightBillResponse response = service.create(request);
@@ -420,7 +403,6 @@ class FreightBillServiceTest {
         existing.setId(1L);
         existing.setBillNo("FB-OLD");
         existing.setStatus(StatusConstants.UNAUDITED);
-        existing.setDeliveryStatus(StatusConstants.UNDELIVERED);
         existing.setItems(new ArrayList<>());
 
         when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(existing));
@@ -432,7 +414,7 @@ class FreightBillServiceTest {
         FreightBillRequest request = new FreightBillRequest(
                 "FB-NEW", "物流丙", "苏C11111", "客户丙", "项目丙",
                 LocalDate.of(2026, 7, 1), new BigDecimal("30.00"),
-                null, null, null, List.of(buildItemRequest("OB-010"))
+                null, null, List.of(buildItemRequest("OB-010"))
         );
 
         service.update(1L, request);
@@ -449,7 +431,6 @@ class FreightBillServiceTest {
         existing.setId(1L);
         existing.setBillNo("FB-OLD");
         existing.setStatus(StatusConstants.UNAUDITED);
-        existing.setDeliveryStatus(StatusConstants.UNDELIVERED);
         existing.setItems(new ArrayList<>());
 
         when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(existing));
@@ -473,7 +454,6 @@ class FreightBillServiceTest {
         existing.setId(1L);
         existing.setBillNo("FB-OLD");
         existing.setStatus(StatusConstants.UNAUDITED);
-        existing.setDeliveryStatus(StatusConstants.UNDELIVERED);
         existing.setItems(new ArrayList<>());
 
         when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(existing));
@@ -519,7 +499,6 @@ class FreightBillServiceTest {
         entity.setTotalWeight(new BigDecimal("2.500"));
         entity.setTotalFreight(new BigDecimal("50.00"));
         entity.setStatus(StatusConstants.UNAUDITED);
-        entity.setDeliveryStatus(StatusConstants.UNDELIVERED);
 
         FreightBillItem item = new FreightBillItem();
         item.setId(100L);
@@ -571,7 +550,6 @@ class FreightBillServiceTest {
         entity.setTotalWeight(new BigDecimal("2.500"));
         entity.setTotalFreight(new BigDecimal("50.00"));
         entity.setStatus(StatusConstants.UNAUDITED);
-        entity.setDeliveryStatus(StatusConstants.UNDELIVERED);
 
         FreightBillItem item = new FreightBillItem();
         item.setId(100L);
@@ -622,7 +600,6 @@ class FreightBillServiceTest {
         FreightBill existing = new FreightBill();
         existing.setId(1L);
         existing.setStatus(StatusConstants.UNAUDITED);
-        existing.setDeliveryStatus(StatusConstants.UNDELIVERED);
 
         when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(existing));
         when(repository.save(any(FreightBill.class))).thenAnswer(invocation -> invocation.getArgument(0));
@@ -656,7 +633,6 @@ class FreightBillServiceTest {
         FreightBill existing = new FreightBill();
         existing.setId(1L);
         existing.setStatus(StatusConstants.UNAUDITED);
-        existing.setDeliveryStatus(StatusConstants.UNDELIVERED);
         existing.setItems(new ArrayList<>());
 
         when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(existing));
@@ -678,7 +654,6 @@ class FreightBillServiceTest {
         existing.setId(1L);
         existing.setBillNo("FB-001");
         existing.setStatus(StatusConstants.AUDITED);
-        existing.setDeliveryStatus(StatusConstants.UNDELIVERED);
         existing.setItems(new ArrayList<>());
 
         when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(existing));
@@ -696,7 +671,6 @@ class FreightBillServiceTest {
         FreightBill existing = new FreightBill();
         existing.setId(1L);
         existing.setStatus(StatusConstants.AUDITED);
-        existing.setDeliveryStatus(StatusConstants.UNDELIVERED);
         existing.setItems(new ArrayList<>());
 
         when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(existing));
@@ -822,7 +796,7 @@ class FreightBillServiceTest {
         FreightBillRequest request = new FreightBillRequest(
                 "FB-STS", "物流甲", null, "客户甲", "项目甲",
                 LocalDate.of(2026, 5, 4), new BigDecimal("20.00"),
-                StatusConstants.AUDITED, null, null, List.of(buildItemRequest("OB-001"))
+                StatusConstants.AUDITED, null, List.of(buildItemRequest("OB-001"))
         );
 
         service.create(request);
@@ -830,27 +804,6 @@ class FreightBillServiceTest {
         ArgumentCaptor<FreightBill> billCaptor = ArgumentCaptor.forClass(FreightBill.class);
         verify(repository).save(billCaptor.capture());
         assertThat(billCaptor.getValue().getStatus()).isEqualTo(StatusConstants.AUDITED);
-    }
-
-    @Test
-    void shouldPreserveExplicitDeliveryStatusOnCreate() {
-        FreightBillRepository repository = mock(FreightBillRepository.class);
-        when(repository.existsByBillNoAndDeletedFlagFalse("FB-DLV")).thenReturn(false);
-        when(repository.save(any(FreightBill.class))).thenAnswer(invocation -> invocation.getArgument(0));
-
-        FreightBillService service = createService(repository);
-
-        FreightBillRequest request = new FreightBillRequest(
-                "FB-DLV", "物流甲", null, "客户甲", "项目甲",
-                LocalDate.of(2026, 5, 4), new BigDecimal("20.00"),
-                null, StatusConstants.DELIVERED, null, List.of(buildItemRequest("OB-001"))
-        );
-
-        service.create(request);
-
-        ArgumentCaptor<FreightBill> billCaptor = ArgumentCaptor.forClass(FreightBill.class);
-        verify(repository).save(billCaptor.capture());
-        assertThat(billCaptor.getValue().getDeliveryStatus()).isEqualTo(StatusConstants.DELIVERED);
     }
 
     // ======================== precision / rounding tests ========================
@@ -871,7 +824,7 @@ class FreightBillServiceTest {
         FreightBillRequest request = new FreightBillRequest(
                 "FB-PRC", "物流甲", null, "客户甲", "项目甲",
                 LocalDate.of(2026, 5, 4), new BigDecimal("17.50"),
-                null, null, null, List.of(item)
+                null, null, List.of(item)
         );
 
         FreightBillResponse response = service.create(request);
@@ -890,7 +843,6 @@ class FreightBillServiceTest {
         existing.setId(1L);
         existing.setBillNo("FB-SYNC");
         existing.setStatus(StatusConstants.UNAUDITED);
-        existing.setDeliveryStatus(StatusConstants.UNDELIVERED);
 
         FreightBillItem existingItem = new FreightBillItem();
         existingItem.setId(500L);
@@ -924,7 +876,7 @@ class FreightBillServiceTest {
         FreightBillRequest request = new FreightBillRequest(
                 "FB-SYNC", "物流甲", null, "客户甲", "项目甲",
                 LocalDate.of(2026, 5, 4), new BigDecimal("20.00"),
-                null, null, null, List.of(newItem)
+                null, null, List.of(newItem)
         );
 
         service.update(1L, request);
@@ -945,7 +897,6 @@ class FreightBillServiceTest {
         existing.setId(1L);
         existing.setBillNo("FB-ADD");
         existing.setStatus(StatusConstants.UNAUDITED);
-        existing.setDeliveryStatus(StatusConstants.UNDELIVERED);
         existing.setItems(new ArrayList<>());
 
         when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(existing));
@@ -1050,7 +1001,6 @@ class FreightBillServiceTest {
         existing.setId(1L);
         existing.setBillNo("FB-KEEP");
         existing.setStatus(StatusConstants.UNAUDITED);
-        existing.setDeliveryStatus(StatusConstants.UNDELIVERED);
         existing.setItems(new ArrayList<>());
 
         when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(existing));

@@ -18,7 +18,6 @@ public record FreightBillRequest(
         @NotNull LocalDate billTime,
         @NotNull @DecimalMin("0.00") BigDecimal unitPrice,
         String status,
-        String deliveryStatus,
         String remark,
         @Valid @NotEmpty List<FreightBillItemRequest> items
 ) {

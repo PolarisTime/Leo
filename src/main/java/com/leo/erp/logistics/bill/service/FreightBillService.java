@@ -72,7 +72,7 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
                 response.carrierName(), response.vehiclePlate(),
                 response.customerName(), response.projectName(),
                 response.billTime(), response.unitPrice(), response.totalWeight(),
-                response.totalFreight(), response.status(), response.deliveryStatus(),
+                response.totalFreight(), response.status(),
                 response.remark(),
                 entity.getItems().stream().map(item -> new FreightBillItemResponse(
                         item.getId(), item.getLineNo(), item.getSourceNo(),
@@ -110,7 +110,6 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
                 request.billTime(),
                 request.unitPrice(),
                 request.status(),
-                request.deliveryStatus(),
                 request.remark(),
                 request.items()
         );
@@ -127,7 +126,6 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
                 request.billTime(),
                 request.unitPrice(),
                 request.status(),
-                request.deliveryStatus(),
                 request.remark(),
                 request.items()
         );
@@ -176,23 +174,11 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
                 "物流单状态",
                 StatusConstants.ALLOWED_FREIGHT_BILL_STATUS
         );
-        String nextDeliveryStatus = BusinessStatusValidator.normalizeWithDefault(
-                request.deliveryStatus(),
-                StatusConstants.UNDELIVERED,
-                "物流单送达状态",
-                StatusConstants.ALLOWED_DELIVERY_STATUS
-        );
         workflowTransitionGuard.assertAuditPermissionForProtectedValue(
                 "freight-bill",
                 entity.getStatus(),
                 nextStatus,
                 StatusConstants.AUDITED
-        );
-        workflowTransitionGuard.assertAuditPermissionForProtectedValue(
-                "freight-bill",
-                entity.getDeliveryStatus(),
-                nextDeliveryStatus,
-                StatusConstants.DELIVERED
         );
         entity.setBillNo(request.billNo());
         entity.setCarrierName(request.carrierName());
@@ -200,7 +186,6 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
         entity.setBillTime(request.billTime());
         entity.setUnitPrice(request.unitPrice());
         entity.setStatus(nextStatus);
-        entity.setDeliveryStatus(nextDeliveryStatus);
         entity.setRemark(request.remark());
 
         assertSourceOutboundsNotOccupied(request, entity.getId());

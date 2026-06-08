@@ -4,7 +4,7 @@ import com.leo.erp.common.excel.annotation.ExportColumn;
 import com.leo.erp.common.excel.annotation.ImportColumn;
 
 public record MaterialImportDTO(
-        @ImportColumn(header = "商品编码", required = true, order = 1, example = "RB400-18-12")
+        @ImportColumn(header = "商品编码", required = false, order = 1, example = "RB400-18-12")
         @ExportColumn(header = "商品编码", order = 1)
         String materialCode,
 

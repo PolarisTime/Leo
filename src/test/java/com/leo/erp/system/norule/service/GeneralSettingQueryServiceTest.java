@@ -5,6 +5,7 @@ import com.leo.erp.common.support.RedisJsonCacheSupport;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.setting.PageUploadRuleQueryService;
 import com.leo.erp.common.setting.PageUploadRuleSummary;
+import com.leo.erp.system.company.service.CompanySettingService;
 import com.leo.erp.system.norule.domain.entity.NoRule;
 import com.leo.erp.system.norule.repository.NoRuleRepository;
 import com.leo.erp.system.norule.mapper.NoRuleMapper;
@@ -264,17 +265,17 @@ class GeneralSettingQueryServiceTest {
     }
 
     @Test
-    void shouldKeepBusinessStatementSwitchesOutOfPublicClientSettings() {
+    void shouldExposeBusinessStatementSwitchesInPublicClientSettings() {
         NoRule customerSwitch = new NoRule();
         customerSwitch.setId(3L);
-        customerSwitch.setSettingCode("SYS_CUSTOMER_STATEMENT_RECEIPT_ZERO_FROM_SALES_ORDER");
+        customerSwitch.setSettingCode(SystemSwitchService.CUSTOMER_STATEMENT_RECEIPT_ZERO_FROM_SALES_ORDER_SWITCH);
         customerSwitch.setSettingName("客户对账单生成");
         customerSwitch.setBillName("客户对账单");
         customerSwitch.setStatus("正常");
 
         NoRule supplierSwitch = new NoRule();
         supplierSwitch.setId(4L);
-        supplierSwitch.setSettingCode("SYS_SUPPLIER_STATEMENT_FULL_PAYMENT_FROM_PURCHASE");
+        supplierSwitch.setSettingCode(SystemSwitchService.SUPPLIER_STATEMENT_FULL_PAYMENT_FROM_PURCHASE_SWITCH);
         supplierSwitch.setSettingName("供应商对账单生成");
         supplierSwitch.setBillName("供应商对账单");
         supplierSwitch.setStatus("正常");
@@ -302,8 +303,23 @@ class GeneralSettingQueryServiceTest {
         snowflakeBusinessNoSwitch.setSampleNo("ON");
         snowflakeBusinessNoSwitch.setStatus("正常");
 
+        NoRule defaultTaxRateSetting = new NoRule();
+        defaultTaxRateSetting.setId(8L);
+        defaultTaxRateSetting.setSettingCode(CompanySettingService.DEFAULT_TAX_RATE_SETTING_CODE);
+        defaultTaxRateSetting.setSettingName("默认税率");
+        defaultTaxRateSetting.setBillName("系统参数");
+        defaultTaxRateSetting.setSampleNo("0.13");
+        defaultTaxRateSetting.setStatus("正常");
+
         GeneralSettingQueryService service = new GeneralSettingQueryService(
-                noRuleRepository(List.of(customerSwitch, supplierSwitch, hideAuditedSwitch, defaultPageSizeSetting, snowflakeBusinessNoSwitch)),
+                noRuleRepository(List.of(
+                        customerSwitch,
+                        supplierSwitch,
+                        hideAuditedSwitch,
+                        defaultPageSizeSetting,
+                        snowflakeBusinessNoSwitch,
+                        defaultTaxRateSetting
+                )),
                 mapper(),
                 stubUploadRuleService()
         );
@@ -313,10 +329,13 @@ class GeneralSettingQueryServiceTest {
                 .collect(java.util.stream.Collectors.toSet());
 
         assertThat(settingCodes).contains(SystemSwitchService.DEFAULT_LIST_PAGE_SIZE_SETTING);
+        assertThat(settingCodes).contains(CompanySettingService.DEFAULT_TAX_RATE_SETTING_CODE);
         assertThat(settingCodes).contains(SystemSwitchService.USE_SNOWFLAKE_ID_AS_BUSINESS_NO_SWITCH);
+        assertThat(settingCodes).contains(
+                SystemSwitchService.CUSTOMER_STATEMENT_RECEIPT_ZERO_FROM_SALES_ORDER_SWITCH,
+                SystemSwitchService.SUPPLIER_STATEMENT_FULL_PAYMENT_FROM_PURCHASE_SWITCH
+        );
         assertThat(settingCodes).doesNotContain(
-                "SYS_CUSTOMER_STATEMENT_RECEIPT_ZERO_FROM_SALES_ORDER",
-                "SYS_SUPPLIER_STATEMENT_FULL_PAYMENT_FROM_PURCHASE",
                 SystemSwitchService.HIDE_AUDITED_LIST_RECORDS_SWITCH
         );
     }

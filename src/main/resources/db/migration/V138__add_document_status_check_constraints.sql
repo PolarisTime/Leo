@@ -55,11 +55,6 @@ ALTER TABLE lg_freight_bill DROP CONSTRAINT IF EXISTS chk_freight_bill_status;
 ALTER TABLE lg_freight_bill ADD CONSTRAINT chk_freight_bill_status
     CHECK (status IN ('未审核', '已审核')) NOT VALID;
 
--- Freight Bill delivery_status: 未送达 → 已送达
-ALTER TABLE lg_freight_bill DROP CONSTRAINT IF EXISTS chk_delivery_status;
-ALTER TABLE lg_freight_bill ADD CONSTRAINT chk_delivery_status
-    CHECK (delivery_status IN ('未送达', '已送达')) NOT VALID;
-
 -- Payment: 草稿 → 已付款
 ALTER TABLE fm_payment DROP CONSTRAINT IF EXISTS chk_payment_status;
 ALTER TABLE fm_payment ADD CONSTRAINT chk_payment_status
