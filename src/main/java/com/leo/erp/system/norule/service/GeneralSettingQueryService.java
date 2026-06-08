@@ -6,6 +6,7 @@ import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.support.RedisJsonCacheSupport;
 import com.leo.erp.common.setting.PageUploadRuleQueryService;
 import com.leo.erp.common.setting.PageUploadRuleSummary;
+import com.leo.erp.system.company.service.CompanySettingService;
 import com.leo.erp.system.norule.repository.NoRuleRepository;
 import com.leo.erp.system.norule.mapper.NoRuleMapper;
 import com.leo.erp.system.norule.web.dto.GeneralSettingResponse;
@@ -58,12 +59,12 @@ public class GeneralSettingQueryService {
             Map.entry("RULE_SP", 190),
             Map.entry("RULE_KP", 200),
             Map.entry("RULE_BATCH_NO", 210),
-            Map.entry("SYS_DEFAULT_TAX_RATE", 95),
+            Map.entry(CompanySettingService.DEFAULT_TAX_RATE_SETTING_CODE, 95),
             Map.entry(SystemSwitchService.DEFAULT_LIST_PAGE_SIZE_SETTING, 98),
             Map.entry("UI_WEIGHT_ONLY_PURCHASE_INBOUNDS", 100),
             Map.entry("UI_WEIGHT_ONLY_SALES_OUTBOUNDS", 110),
-            Map.entry("SYS_CUSTOMER_STATEMENT_RECEIPT_ZERO_FROM_SALES_ORDER", 120),
-            Map.entry("SYS_SUPPLIER_STATEMENT_FULL_PAYMENT_FROM_PURCHASE", 130),
+            Map.entry(SystemSwitchService.CUSTOMER_STATEMENT_RECEIPT_ZERO_FROM_SALES_ORDER_SWITCH, 120),
+            Map.entry(SystemSwitchService.SUPPLIER_STATEMENT_FULL_PAYMENT_FROM_PURCHASE_SWITCH, 130),
             Map.entry("SYS_OPERATION_LOG_RECORD_ALL_WRITE", 140),
             Map.entry("SYS_OPERATION_LOG_DETAILED_PAGE_ACTIONS", 150),
             Map.entry("SYS_OPERATION_LOG_RECORD_AUTH_EVENTS", 160),
@@ -92,6 +93,9 @@ public class GeneralSettingQueryService {
     private static final Set<String> PUBLIC_CLIENT_SETTING_CODES = Set.of(
             "UI_WEIGHT_ONLY_PURCHASE_INBOUNDS",
             "UI_WEIGHT_ONLY_SALES_OUTBOUNDS",
+            CompanySettingService.DEFAULT_TAX_RATE_SETTING_CODE,
+            SystemSwitchService.CUSTOMER_STATEMENT_RECEIPT_ZERO_FROM_SALES_ORDER_SWITCH,
+            SystemSwitchService.SUPPLIER_STATEMENT_FULL_PAYMENT_FROM_PURCHASE_SWITCH,
             SystemSwitchService.SHOW_SNOWFLAKE_ID_SWITCH,
             SystemSwitchService.DEFAULT_LIST_PAGE_SIZE_SETTING,
             SystemSwitchService.USE_SNOWFLAKE_ID_AS_BUSINESS_NO_SWITCH,

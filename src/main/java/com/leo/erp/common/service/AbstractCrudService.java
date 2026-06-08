@@ -22,6 +22,8 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.context.request.RequestAttributes;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
@@ -44,8 +46,7 @@ public abstract class AbstractCrudService<E extends AbstractAuditableEntity, Req
             StatusConstants.CONFIRMED,
             StatusConstants.PAID,
             StatusConstants.RECEIVED,
-            StatusConstants.SIGNED,
-            StatusConstants.DELIVERED
+            StatusConstants.SIGNED
     );
 
     private static final Set<String> PROTECTED_DELETE_STATUSES = Set.of(
@@ -57,8 +58,7 @@ public abstract class AbstractCrudService<E extends AbstractAuditableEntity, Req
             StatusConstants.CONFIRMED,
             StatusConstants.PAID,
             StatusConstants.RECEIVED,
-            StatusConstants.SIGNED,
-            StatusConstants.DELIVERED
+            StatusConstants.SIGNED
     );
 
     private final SnowflakeIdGenerator idGenerator;
@@ -93,12 +93,14 @@ public abstract class AbstractCrudService<E extends AbstractAuditableEntity, Req
         return LoggerFactory.getLogger(getClass());
     }
 
-    private long resolveCreateEntityId() {
-        Long preallocatedId = resolvePreallocatedIdFromRequest();
-        return preallocatedId != null ? preallocatedId : idGen().nextId();
+    private CreateEntityId resolveCreateEntityId() {
+        PreallocatedEntityId preallocatedId = resolvePreallocatedIdFromRequest();
+        return preallocatedId != null
+                ? new CreateEntityId(preallocatedId.id(), preallocatedId.moduleKey())
+                : new CreateEntityId(idGen().nextId(), null);
     }
 
-    private Long resolvePreallocatedIdFromRequest() {
+    private PreallocatedEntityId resolvePreallocatedIdFromRequest() {
         RequestAttributes requestAttributes = RequestContextHolder.getRequestAttributes();
         if (!(requestAttributes instanceof ServletRequestAttributes servletRequestAttributes)) {
             return null;
@@ -110,12 +112,38 @@ public abstract class AbstractCrudService<E extends AbstractAuditableEntity, Req
         try {
             long parsedValue = Long.parseLong(rawValue.trim());
             if (parsedValue > 0 && preallocatedBusinessNoService != null) {
-                preallocatedBusinessNoService.consumeOrThrow(resolveBusinessModuleKey(), parsedValue, currentPrincipal());
+                String moduleKey = resolveBusinessModuleKey();
+                preallocatedBusinessNoService.assertReservedByPrincipal(moduleKey, parsedValue, currentPrincipal());
+                return new PreallocatedEntityId(parsedValue, moduleKey);
             }
-            return parsedValue > 0 ? parsedValue : null;
+            return parsedValue > 0 ? new PreallocatedEntityId(parsedValue, null) : null;
         } catch (NumberFormatException ex) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "预分配雪花ID格式不正确");
         }
+    }
+
+    private void consumePreallocatedIdAfterCommit(CreateEntityId createEntityId) {
+        if (createEntityId.preallocatedModuleKey() == null || preallocatedBusinessNoService == null) {
+            return;
+        }
+        Runnable consume = () -> {
+            try {
+                preallocatedBusinessNoService.consume(createEntityId.preallocatedModuleKey(), createEntityId.id());
+            } catch (RuntimeException ex) {
+                logger().warn("Failed to consume preallocated business id: moduleKey={}, id={}, reason={}",
+                        createEntityId.preallocatedModuleKey(), createEntityId.id(), ex.getMessage());
+            }
+        };
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            consume.run();
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                consume.run();
+            }
+        });
     }
 
     private SecurityPrincipal currentPrincipal() {
@@ -204,14 +232,21 @@ public abstract class AbstractCrudService<E extends AbstractAuditableEntity, Req
     @Transactional
     public Res create(Req request) {
         E entity = newEntity();
-        long id = resolveCreateEntityId();
-        assignId(entity, id);
-        request = normalizeCreateRequest(request, id);
+        CreateEntityId createEntityId = resolveCreateEntityId();
+        assignId(entity, createEntityId.id());
+        request = normalizeCreateRequest(request, createEntityId.id());
         validateCreate(request);
         apply(entity, request);
         Res response = toSavedResponse(saveEntity(entity));
-        logger().info("{} created: id={}", entity.getClass().getSimpleName(), id);
+        consumePreallocatedIdAfterCommit(createEntityId);
+        logger().info("{} created: id={}", entity.getClass().getSimpleName(), createEntityId.id());
         return response;
+    }
+
+    private record PreallocatedEntityId(Long id, String moduleKey) {
+    }
+
+    private record CreateEntityId(long id, String preallocatedModuleKey) {
     }
 
     @Transactional
@@ -221,7 +256,7 @@ public abstract class AbstractCrudService<E extends AbstractAuditableEntity, Req
         assertEditAllowedByStatus(entity, request);
         validateUpdate(entity, request);
         apply(entity, request);
-        Res response = toSavedResponse(saveEntity(entity));
+        Res response = toSavedResponse(saveUpdatedEntity(entity, request));
         logger().info("{} updated: id={}", entity.getClass().getSimpleName(), id);
         return response;
     }
@@ -328,6 +363,10 @@ public abstract class AbstractCrudService<E extends AbstractAuditableEntity, Req
     }
 
     protected E saveStatusEntity(E entity) {
+        return saveEntity(entity);
+    }
+
+    protected E saveUpdatedEntity(E entity, Req request) {
         return saveEntity(entity);
     }
 

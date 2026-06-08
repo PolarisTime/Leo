@@ -49,9 +49,6 @@ public class FreightBill extends AbstractAuditableEntity {
     @Column(name = "status", nullable = false, length = 16)
     private String status;
 
-    @Column(name = "delivery_status", nullable = false, length = 16)
-    private String deliveryStatus;
-
     @Column(name = "remark", length = 255)
     private String remark;
 

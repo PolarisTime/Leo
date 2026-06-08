@@ -5,6 +5,7 @@ import com.leo.erp.common.error.BusinessException;
 import org.junit.jupiter.api.Test;
 
 import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -17,7 +18,11 @@ class PrintPdfFormServiceTest {
     @Test
     void generateFromPayloadShouldThrowWhenTemplateTypeNotPdfForm() {
         PrintScriptService printScriptService = mock(PrintScriptService.class);
-        PrintPdfFormService service = new PrintPdfFormService(printScriptService, objectMapper);
+        PrintPdfFormService service = new PrintPdfFormService(
+                printScriptService,
+                objectMapper,
+                List.of(new YingjieA4RemarkPdfFormRenderer())
+        );
 
         Map<String, Object> payload = Map.of("templateType", "HTML");
 
@@ -28,7 +33,11 @@ class PrintPdfFormServiceTest {
     @Test
     void generateFromPayloadShouldThrowWhenTemplateConfigInvalid() {
         PrintScriptService printScriptService = mock(PrintScriptService.class);
-        PrintPdfFormService service = new PrintPdfFormService(printScriptService, objectMapper);
+        PrintPdfFormService service = new PrintPdfFormService(
+                printScriptService,
+                objectMapper,
+                List.of(new YingjieA4RemarkPdfFormRenderer())
+        );
 
         Map<String, Object> payload = Map.of(
                 "templateType", "PDF_FORM",
@@ -44,7 +53,11 @@ class PrintPdfFormServiceTest {
     @Test
     void generateFromPayloadShouldThrowWhenFormTypeUnsupported() {
         PrintScriptService printScriptService = mock(PrintScriptService.class);
-        PrintPdfFormService service = new PrintPdfFormService(printScriptService, objectMapper);
+        PrintPdfFormService service = new PrintPdfFormService(
+                printScriptService,
+                objectMapper,
+                List.of(new YingjieA4RemarkPdfFormRenderer())
+        );
 
         Map<String, Object> payload = Map.of(
                 "templateType", "PDF_FORM",

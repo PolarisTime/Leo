@@ -25,7 +25,6 @@ class FreightBillTest {
         assertThat(entity.getTotalWeight()).isNull();
         assertThat(entity.getTotalFreight()).isNull();
         assertThat(entity.getStatus()).isNull();
-        assertThat(entity.getDeliveryStatus()).isNull();
         assertThat(entity.getRemark()).isNull();
         assertThat(entity.getItems()).isNotNull().isEmpty();
     }
@@ -106,13 +105,6 @@ class FreightBillTest {
         var entity = new FreightBill();
         entity.setStatus(StatusConstants.DRAFT);
         assertThat(entity.getStatus()).isEqualTo(StatusConstants.DRAFT);
-    }
-
-    @Test
-    void shouldSetAndGetDeliveryStatus() {
-        var entity = new FreightBill();
-        entity.setDeliveryStatus("PENDING");
-        assertThat(entity.getDeliveryStatus()).isEqualTo("PENDING");
     }
 
     @Test

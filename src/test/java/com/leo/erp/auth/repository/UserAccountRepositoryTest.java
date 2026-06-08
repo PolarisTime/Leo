@@ -184,4 +184,26 @@ class UserAccountRepositoryTest {
 
         assertThat(count).isEqualTo(2);
     }
+
+    @Test
+    void updatePreferencesJson_shouldPersistJsonbPayload() {
+        UserAccount user = createUser("preference-user", "偏好用户", false);
+        entityManager.persistAndFlush(user);
+        entityManager.clear();
+
+        int updated = repository.updatePreferencesJson(
+                user.getId(),
+                "{\"pages\":{\"sales-order\":{\"orderedKeys\":[\"orderNo\"],\"hiddenKeys\":[\"status\"]}}}"
+        );
+        entityManager.flush();
+        entityManager.clear();
+
+        UserAccount result = repository.findByIdAndDeletedFlagFalse(user.getId()).orElseThrow();
+
+        assertThat(updated).isEqualTo(1);
+        assertThat(result.getPreferencesJson())
+                .contains("\"sales-order\"")
+                .contains("\"orderedKeys\"")
+                .contains("\"hiddenKeys\"");
+    }
 }

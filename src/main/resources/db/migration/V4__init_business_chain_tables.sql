@@ -153,7 +153,6 @@ CREATE TABLE IF NOT EXISTS lg_freight_bill (
     total_weight NUMERIC(14, 3) NOT NULL,
     total_freight NUMERIC(14, 2) NOT NULL,
     status VARCHAR(16) NOT NULL,
-    delivery_status VARCHAR(16) NOT NULL,
     remark VARCHAR(255),
     created_by BIGINT NOT NULL DEFAULT 0,
     created_name VARCHAR(64) NOT NULL DEFAULT 'system',
@@ -165,7 +164,7 @@ CREATE TABLE IF NOT EXISTS lg_freight_bill (
 );
 
 CREATE INDEX IF NOT EXISTS idx_lg_freight_bill_carrier_date ON lg_freight_bill (carrier_name, bill_time);
-CREATE INDEX IF NOT EXISTS idx_lg_freight_bill_status ON lg_freight_bill (status, delivery_status);
+CREATE INDEX IF NOT EXISTS idx_lg_freight_bill_status ON lg_freight_bill (status);
 
 CREATE TABLE IF NOT EXISTS lg_freight_bill_item (
     id BIGINT PRIMARY KEY,

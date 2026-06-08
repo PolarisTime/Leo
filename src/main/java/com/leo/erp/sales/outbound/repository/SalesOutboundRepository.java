@@ -35,4 +35,17 @@ public interface SalesOutboundRepository extends JpaRepository<SalesOutbound, Lo
             @Param("sourceSalesOrderItemIds") Collection<Long> sourceSalesOrderItemIds,
             @Param("currentOutboundId") Long currentOutboundId
     );
+
+    @Query("""
+            select distinct outbound
+            from SalesOutbound outbound
+            join fetch outbound.items item
+            where outbound.deletedFlag = false
+              and outbound.status = :status
+              and item.sourceSalesOrderItemId in :sourceSalesOrderItemIds
+            """)
+    List<SalesOutbound> findAllByStatusAndSourceSalesOrderItemIds(
+            @Param("status") String status,
+            @Param("sourceSalesOrderItemIds") Collection<Long> sourceSalesOrderItemIds
+    );
 }

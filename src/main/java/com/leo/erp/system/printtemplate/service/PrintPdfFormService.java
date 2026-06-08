@@ -26,23 +26,19 @@ import org.springframework.stereotype.Service;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Service
 public class PrintPdfFormService {
 
-    private static final String YINGJIE_A4_REMARK_FORM = "YINGJIE_A4_REMARK";
-    private static final String YINGJIE_A4_REMARK_PDF = "print-forms/yingjie-a4-remark.pdf";
-    private static final int MAX_DETAIL_ROWS = 10;
     private static final List<String> SIMSUN_FONT_CANDIDATES = List.of(
             "/usr/share/fonts/truetype/windows/simsun.ttc",
             "/usr/share/fonts/truetype/windows/simsun.ttf",
@@ -73,10 +69,17 @@ public class PrintPdfFormService {
 
     private final PrintScriptService printScriptService;
     private final ObjectMapper objectMapper;
+    private final Map<String, PdfFormRenderer> renderers;
 
-    public PrintPdfFormService(PrintScriptService printScriptService, ObjectMapper objectMapper) {
+    public PrintPdfFormService(
+            PrintScriptService printScriptService,
+            ObjectMapper objectMapper,
+            List<PdfFormRenderer> renderers
+    ) {
         this.printScriptService = printScriptService;
         this.objectMapper = objectMapper;
+        this.renderers = renderers.stream()
+                .collect(Collectors.toUnmodifiableMap(PdfFormRenderer::formCode, Function.identity()));
     }
 
     public byte[] generateFromRecord(String templateId, String moduleKey, Long recordId) {
@@ -90,7 +93,8 @@ public class PrintPdfFormService {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "当前模板不是 PDF_FORM 类型");
         }
         PdfFormTemplateConfig config = parseTemplateConfig(String.valueOf(payload.getOrDefault("templateHtml", "")));
-        if (!YINGJIE_A4_REMARK_FORM.equals(config.form())) {
+        PdfFormRenderer renderer = renderers.get(config.form());
+        if (renderer == null) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "不支持的 PDF 表单模板");
         }
         @SuppressWarnings("unchecked")
@@ -100,7 +104,7 @@ public class PrintPdfFormService {
                 "items",
                 Collections.emptyList()
         );
-        return fillYingjieA4Remark(config.template(), data, items);
+        return fillPdfForm(renderer, config.template(), data, items);
     }
 
     private PdfFormTemplateConfig parseTemplateConfig(String templateHtml) {
@@ -115,13 +119,14 @@ public class PrintPdfFormService {
         }
     }
 
-    private byte[] fillYingjieA4Remark(
+    private byte[] fillPdfForm(
+            PdfFormRenderer renderer,
             String templatePath,
             Map<String, String> data,
             List<Map<String, String>> items
     ) {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
-        String pdfTemplatePath = templatePath.isBlank() ? YINGJIE_A4_REMARK_PDF : templatePath;
+        String pdfTemplatePath = templatePath.isBlank() ? renderer.defaultTemplatePath() : templatePath;
         try (InputStream templateStream = new ClassPathResource(pdfTemplatePath).getInputStream();
              PdfDocument pdf = new PdfDocument(new PdfReader(templateStream), new PdfWriter(out))) {
             PdfAcroForm form = PdfAcroForm.getAcroForm(pdf, false);
@@ -129,7 +134,7 @@ public class PrintPdfFormService {
                 throw new BusinessException(ErrorCode.INTERNAL_ERROR, "PDF 表单底版缺少 AcroForm 字段");
             }
             PdfFont font = createChineseFont();
-            drawFields(pdf, form, buildYingjieA4RemarkFields(data, items), font);
+            drawFields(pdf, form, renderer.buildFields(data, items), font);
             removeFormFields(pdf, form);
         } catch (IOException ex) {
             throw new BusinessException(ErrorCode.INTERNAL_ERROR, "生成 PDF 表单失败");
@@ -367,56 +372,6 @@ public class PrintPdfFormService {
         pdf.getCatalog().remove(PdfName.AcroForm);
     }
 
-    private Map<String, String> buildYingjieA4RemarkFields(
-            Map<String, String> data,
-            List<Map<String, String>> items
-    ) {
-        Map<String, String> values = new HashMap<>();
-        values.put("remark", value(data, "remark"));
-        values.put("customerName", value(data, "customerName"));
-        values.put("billNo", resolveBillNo(data));
-        values.put("projectName", value(data, "projectName"));
-        values.put("billDate", resolveBillDate(data));
-        values.put("projectAddress", value(data, "projectAddress"));
-        values.put("vehiclePlate", value(data, "vehiclePlate"));
-
-        Totals totals = new Totals();
-        int rowCount = Math.min(items.size(), MAX_DETAIL_ROWS);
-        for (int i = 0; i < MAX_DETAIL_ROWS; i++) {
-            if (i < rowCount) {
-                putItemFields(values, i, items.get(i), totals);
-            } else if (i == rowCount) {
-                values.put(itemField(i, "emptyMarker"), "----------------以下无内容----------------");
-            }
-        }
-        String totalQuantity = formatTotalQuantity(totals.quantity);
-        String totalWeight = formatTotalWeight(totals.weight);
-        values.put("totalQuantity", totalQuantity);
-        values.put("totalWeight", totalWeight);
-        values.put("totalSummary", totalSummary(totalQuantity, totalWeight));
-        return values;
-    }
-
-    private void putItemFields(Map<String, String> values, int rowIndex, Map<String, String> item, Totals totals) {
-        String quantity = value(item, "quantity");
-        String weight = displayWeight(item);
-        totals.quantity = totals.quantity.add(decimal(quantity));
-        totals.weight = totals.weight.add(decimal(weight));
-
-        values.put(itemField(rowIndex, "brand"), value(item, "brand"));
-        values.put(itemField(rowIndex, "category"), value(item, "category"));
-        values.put(itemField(rowIndex, "material"), value(item, "material"));
-        values.put(itemField(rowIndex, "spec"), value(item, "spec"));
-        values.put(itemField(rowIndex, "length"), value(item, "length"));
-        values.put(itemField(rowIndex, "quantity"), quantity);
-        values.put(itemField(rowIndex, "pieceWeight"), displayPieceWeight(item));
-        values.put(itemField(rowIndex, "weight"), weight);
-    }
-
-    private String itemField(int rowIndex, String fieldName) {
-        return "item_" + rowIndex + "_" + fieldName;
-    }
-
     private PdfFont createChineseFont() throws IOException {
         for (String fontPath : SIMSUN_FONT_CANDIDATES) {
             PdfFont font = createFontFromPath(fontPath);
@@ -457,62 +412,6 @@ public class PrintPdfFormService {
         }
     }
 
-    private String resolveBillNo(Map<String, String> data) {
-        String outboundNo = value(data, "outboundNo");
-        if (!outboundNo.isBlank()) {
-            return outboundNo;
-        }
-        String orderNo = value(data, "orderNo");
-        if (!orderNo.isBlank()) {
-            return orderNo;
-        }
-        return value(data, "billNo");
-    }
-
-    private String resolveBillDate(Map<String, String> data) {
-        return value(data, "deliveryDate", "outboundDate", "orderDate");
-    }
-
-    private String displayPieceWeight(Map<String, String> item) {
-        return value(item, "pieceWeightTon");
-    }
-
-    private String displayWeight(Map<String, String> item) {
-        return value(item, "weightTon");
-    }
-
-    private BigDecimal decimal(String value) {
-        if (value == null || value.isBlank()) {
-            return BigDecimal.ZERO;
-        }
-        try {
-            return new BigDecimal(value.trim());
-        } catch (NumberFormatException ignored) {
-            return BigDecimal.ZERO;
-        }
-    }
-
-    private String formatTotalWeight(BigDecimal value) {
-        return value.compareTo(BigDecimal.ZERO) == 0
-                ? ""
-                : value.setScale(3, RoundingMode.HALF_UP).toPlainString();
-    }
-
-    private String formatTotalQuantity(BigDecimal value) {
-        return value.compareTo(BigDecimal.ZERO) == 0
-                ? ""
-                : value.stripTrailingZeros().toPlainString();
-    }
-
-    private String totalSummary(String totalQuantity, String totalWeight) {
-        if (totalQuantity.isBlank() && totalWeight.isBlank()) {
-            return "";
-        }
-        String quantity = totalQuantity.isBlank() ? "0" : totalQuantity;
-        String weight = totalWeight.isBlank() ? "0" : totalWeight;
-        return "合计件数：" + quantity + "    合计重量：" + weight + " 吨";
-    }
-
     private String value(Map<String, String> data, String... keys) {
         for (String key : keys) {
             String value = data.get(key);
@@ -521,11 +420,6 @@ public class PrintPdfFormService {
             }
         }
         return "";
-    }
-
-    private static class Totals {
-        private BigDecimal quantity = BigDecimal.ZERO;
-        private BigDecimal weight = BigDecimal.ZERO;
     }
 
     private enum VerticalPosition {

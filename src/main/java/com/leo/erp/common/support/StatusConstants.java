@@ -26,11 +26,9 @@ public final class StatusConstants {
     public static final String SALES_COMPLETED = "完成销售";
     public static final String INBOUND_COMPLETED = "完成入库";
 
-    // 签署/送达状态
+    // 签署状态
     public static final String SIGNED = "已签署";
-    public static final String DELIVERED = "已送达";
     public static final String UNSIGNED = "未签署";
-    public static final String UNDELIVERED = "未送达";
     public static final String UNAUDITED = "未审核";
     public static final String ISSUED = "已开票";
     public static final String INVOICE_RECEIVED = "已收票";
@@ -54,7 +52,6 @@ public final class StatusConstants {
     public static final Set<String> ALLOWED_FREIGHT_STATEMENT_STATUS = Set.of(PENDING_AUDIT, AUDITED);
     public static final Set<String> ALLOWED_SIGN_STATUS = Set.of(UNSIGNED, SIGNED);
     public static final Set<String> ALLOWED_FREIGHT_BILL_STATUS = Set.of(UNAUDITED, AUDITED);
-    public static final Set<String> ALLOWED_DELIVERY_STATUS = Set.of(UNDELIVERED, DELIVERED);
     public static final Set<String> ALLOWED_PAYMENT_STATUS = Set.of(DRAFT, PAID);
     public static final Set<String> ALLOWED_RECEIPT_STATUS = Set.of(DRAFT, RECEIVED);
     public static final Set<String> ALLOWED_INVOICE_ISSUE_STATUS = Set.of(DRAFT, ISSUED);

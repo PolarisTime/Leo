@@ -123,10 +123,10 @@ ON CONFLICT (id) DO NOTHING;
 
 -- 更多物流单
 INSERT INTO lg_freight_bill (
-    id, bill_no, outbound_no, carrier_name, customer_name, project_name, bill_time, unit_price, total_weight, total_freight, status, delivery_status, remark
+    id, bill_no, outbound_no, carrier_name, customer_name, project_name, bill_time, unit_price, total_weight, total_freight, status, remark
 ) VALUES
-    (700690000000000001, '2026FB000003', '2026OB000003', '安徽皖通物流有限公司', '上海建工集团股份有限公司', '浦东新区商业综合体', DATE '2026-04-17', 95.00, 12.000, 1140.00, '已审核', '已送达', '跨省长途运输'),
-    (700690000000000002, '2026FB000004', '2026OB000004', '南京恒通运输有限公司', '安徽建工集团有限公司', '合肥地铁4号线', DATE '2026-04-21', 75.00, 6.000, 450.00, '已审核', '已送达', '省内短途运输')
+    (700690000000000001, '2026FB000003', '2026OB000003', '安徽皖通物流有限公司', '上海建工集团股份有限公司', '浦东新区商业综合体', DATE '2026-04-17', 95.00, 12.000, 1140.00, '已审核', '跨省长途运输'),
+    (700690000000000002, '2026FB000004', '2026OB000004', '南京恒通运输有限公司', '安徽建工集团有限公司', '合肥地铁4号线', DATE '2026-04-21', 75.00, 6.000, 450.00, '已审核', '省内短途运输')
 ON CONFLICT (bill_no) DO NOTHING;
 
 -- 物流单明细

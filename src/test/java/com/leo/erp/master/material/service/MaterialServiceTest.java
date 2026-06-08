@@ -414,10 +414,14 @@ class MaterialServiceTest {
     }
 
     @Test
-    void shouldImportCsvWithMissingRequiredField() throws Exception {
-        var tradeItemMaterialSupport = mock(TradeItemMaterialSupport.class);
+    void shouldImportCsvWithBlankMaterialCodeGeneratedFromSnowflakeId() throws Exception {
+        MaterialRepository materialRepository = mock(MaterialRepository.class);
+        TradeItemMaterialSupport tradeItemMaterialSupport = mock(TradeItemMaterialSupport.class);
+        when(materialRepository.findByMaterialCode(anyString())).thenReturn(Optional.empty());
+        when(materialRepository.save(any(Material.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(tradeItemMaterialSupport.normalizeBatchNoEnabled(false)).thenReturn(false);
         MaterialService service = new MaterialService(
-                mock(MaterialRepository.class), new SnowflakeIdGenerator(1L), null,
+                materialRepository, new SnowflakeIdGenerator(1L), null,
                 tradeItemMaterialSupport, null, null, null, null
         );
 
@@ -427,8 +431,12 @@ class MaterialServiceTest {
 
         MaterialImportResultResponse result = service.importCsv(file);
 
-        assertThat(result.failedCount()).isEqualTo(1);
-        assertThat(result.failures().get(0).reason()).contains("商品编码");
+        assertThat(result.successCount()).isEqualTo(1);
+        assertThat(result.createdCount()).isEqualTo(1);
+        assertThat(result.failedCount()).isZero();
+        ArgumentCaptor<Material> materialCaptor = ArgumentCaptor.forClass(Material.class);
+        verify(materialRepository).save(materialCaptor.capture());
+        assertThat(materialCaptor.getValue().getMaterialCode()).matches("\\d+");
     }
 
     @Test
@@ -735,6 +743,33 @@ class MaterialServiceTest {
         assertThat(result.createdCount()).isEqualTo(1);
         assertThat(result.updatedCount()).isEqualTo(0);
         verify(tradeItemMaterialSupport).evictCache();
+    }
+
+    @Test
+    void shouldImportExcelWithBlankMaterialCodeGeneratedFromSnowflakeId() throws Exception {
+        MaterialRepository materialRepository = mock(MaterialRepository.class);
+        TradeItemMaterialSupport tradeItemMaterialSupport = mock(TradeItemMaterialSupport.class);
+        when(materialRepository.findByMaterialCode(anyString())).thenReturn(Optional.empty());
+        when(materialRepository.save(any(Material.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(tradeItemMaterialSupport.normalizeBatchNoEnabled(false)).thenReturn(false);
+
+        ExcelImportService excelImportService = mock(ExcelImportService.class);
+        List<MaterialImportDTO> dtos = List.of(new MaterialImportDTO(
+                " ", "宝钢", "Q235B", "板材", "10mm", "6m", "吨", "支",
+                "1.000", "10", "500.00", "否", "备注"
+        ));
+        when(excelImportService.parseAndValidate(any(MultipartFile.class), eq(MaterialImportDTO.class))).thenReturn(dtos);
+
+        var service = new MaterialService(materialRepository, new SnowflakeIdGenerator(1), null,
+                tradeItemMaterialSupport, null, excelImportService, null, null);
+
+        MockMultipartFile file = new MockMultipartFile("file", "test.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", new byte[0]);
+        ImportResult result = service.importExcel(file);
+
+        assertThat(result.createdCount()).isEqualTo(1);
+        ArgumentCaptor<Material> materialCaptor = ArgumentCaptor.forClass(Material.class);
+        verify(materialRepository).save(materialCaptor.capture());
+        assertThat(materialCaptor.getValue().getMaterialCode()).matches("\\d+");
     }
 
     @Test

@@ -122,7 +122,11 @@ class PrintScriptServiceTest {
                 "PDF_FORM",
                 "{\"form\":\"YINGJIE_A4_REMARK\",\"template\":\"print-forms/yingjie-a4-remark.pdf\"}"
         ), jdbc);
-        PrintPdfFormService pdfFormService = new PrintPdfFormService(scriptService, new ObjectMapper());
+        PrintPdfFormService pdfFormService = new PrintPdfFormService(
+                scriptService,
+                new ObjectMapper(),
+                List.of(new YingjieA4RemarkPdfFormRenderer())
+        );
 
         when(jdbc.queryForMap(anyString(), eq(1L))).thenReturn(Map.of(
                 "id", 1L,
@@ -151,7 +155,7 @@ class PrintScriptServiceTest {
         try (PdfDocument document = new PdfDocument(new PdfReader(new ByteArrayInputStream(pdf)))) {
             assertThat(PdfAcroForm.getAcroForm(document, false)).isNull();
             String text = PdfTextExtractor.getTextFromPage(document.getFirstPage());
-            assertThat(text).contains("客户A", "SO-001", "抚顺新钢", "螺纹钢");
+            assertThat(text).contains("客户A", "SO-001", "2026年05月31日", "抚顺新钢", "螺纹钢");
         }
     }
 

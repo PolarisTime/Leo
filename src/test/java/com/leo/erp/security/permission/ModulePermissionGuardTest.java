@@ -75,6 +75,32 @@ class ModulePermissionGuardTest {
         assertThat(check.action()).isEqualTo("read");
     }
 
+    @Test
+    void shouldAllowAnyConfiguredAction() {
+        SecurityPrincipal principal = createPrincipal(1L);
+        when(permissionService.can(1L, "sales-order", "read")).thenReturn(true);
+
+        ModulePermissionGuard.PermissionCheck check = guard.requireResourcePermissionAny(
+                principal,
+                "sales-order",
+                "print",
+                "read"
+        );
+
+        assertThat(check.resource()).isEqualTo("sales-order");
+        assertThat(check.action()).isEqualTo("read");
+    }
+
+    @Test
+    void shouldThrowWhenNoAnyActionPermission() {
+        SecurityPrincipal principal = createPrincipal(1L);
+        when(permissionService.can(anyLong(), anyString(), anyString())).thenReturn(false);
+
+        assertThatThrownBy(() -> guard.requireResourcePermissionAny(principal, "sales-order", "print", "read"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("无操作权限");
+    }
+
     private SecurityPrincipal createPrincipal(Long id) {
         return new SecurityPrincipal(id, "user", "encoded", true,
                 List.of(new SimpleGrantedAuthority("ROLE_USER")));

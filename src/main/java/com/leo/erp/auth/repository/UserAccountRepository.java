@@ -33,7 +33,7 @@ public interface UserAccountRepository extends JpaRepository<UserAccount, Long>,
     @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query(value = """
             UPDATE sys_user
-               SET preferences_json = :preferencesJson::jsonb
+               SET preferences_json = CAST(:preferencesJson AS jsonb)
              WHERE id = :id
                AND deleted_flag = false
             """, nativeQuery = true)

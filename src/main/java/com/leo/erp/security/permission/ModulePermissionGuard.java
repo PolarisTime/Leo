@@ -8,6 +8,9 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 
+import java.util.Arrays;
+import java.util.List;
+
 @Component
 public class ModulePermissionGuard {
 
@@ -25,6 +28,10 @@ public class ModulePermissionGuard {
     }
 
     public PermissionCheck requireResourcePermission(SecurityPrincipal principal, String moduleKey, String actionCode) {
+        return requireResourcePermissionAny(principal, moduleKey, actionCode);
+    }
+
+    public PermissionCheck requireResourcePermissionAny(SecurityPrincipal principal, String moduleKey, String... actionCodes) {
         if (principal == null) {
             throw new BusinessException(ErrorCode.UNAUTHORIZED, "未登录");
         }
@@ -34,7 +41,14 @@ public class ModulePermissionGuard {
         }
         String resource = ResourcePermissionCatalog.resolveResourceByMenuCode(normalizedModuleKey)
                 .orElseGet(() -> ResourcePermissionCatalog.normalizeResource(normalizedModuleKey));
-        String action = ResourcePermissionCatalog.normalizeAction(actionCode);
+        List<String> actions = Arrays.stream(actionCodes == null ? new String[0] : actionCodes)
+                .map(ResourcePermissionCatalog::normalizeAction)
+                .filter(action -> !action.isBlank())
+                .distinct()
+                .toList();
+        if (actions.isEmpty()) {
+            throw new BusinessException(ErrorCode.INTERNAL_ERROR, "权限动作配置错误");
+        }
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         if (authentication != null && authentication.getDetails() instanceof ApiKeyAuthenticationDetails details) {
             if (!details.allowedResources().isEmpty() && !details.allowedResources().contains(resource)) {
@@ -43,13 +57,17 @@ public class ModulePermissionGuard {
             if (details.allowedActions().isEmpty()) {
                 throw new BusinessException(ErrorCode.FORBIDDEN, "API Key 未配置动作权限");
             }
-            if (!details.allowedActions().contains(action)) {
+            if (actions.stream().noneMatch(details.allowedActions()::contains)) {
                 throw new BusinessException(ErrorCode.FORBIDDEN, "API Key 未开通该动作权限");
             }
         }
-        if (!permissionService.can(principal.id(), resource, action)) {
+        String allowedAction = actions.stream()
+                .filter(action -> permissionService.can(principal.id(), resource, action))
+                .findFirst()
+                .orElse(null);
+        if (allowedAction == null) {
             throw new BusinessException(ErrorCode.FORBIDDEN, "无操作权限");
         }
-        return new PermissionCheck(normalizedModuleKey, resource, action);
+        return new PermissionCheck(normalizedModuleKey, resource, allowedAction);
     }
 }
