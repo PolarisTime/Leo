@@ -58,29 +58,50 @@ public class PrintTemplateController {
     @PostMapping
     @RequiresPermission(resource = "print-template", action = "create")
     @OperationLoggable(moduleName = "打印模板", actionType = "新增", businessNoFields = {"billType", "templateName"})
-    public ApiResponse<PrintTemplateResponse> create(@Valid @RequestBody PrintTemplateRequest request) {
+    public ApiResponse<PrintTemplateResponse> create(@AuthenticationPrincipal SecurityPrincipal principal,
+                                                     @Valid @RequestBody PrintTemplateRequest request) {
+        modulePermissionGuard.requireResourcePermission(principal, request.billType(), "update");
         return ApiResponse.success("创建成功", printTemplateService.create(request));
     }
 
     @PutMapping("/{id}")
     @RequiresPermission(resource = "print-template", action = "update")
     @OperationLoggable(moduleName = "打印模板", actionType = "编辑", businessNoFields = {"billType", "templateName"})
-    public ApiResponse<PrintTemplateResponse> update(@PathVariable @Positive Long id, @Valid @RequestBody PrintTemplateRequest request) {
+    public ApiResponse<PrintTemplateResponse> update(@AuthenticationPrincipal SecurityPrincipal principal,
+                                                     @PathVariable @Positive Long id,
+                                                     @Valid @RequestBody PrintTemplateRequest request) {
+        String currentBillType = printTemplateService.getBillType(id);
+        modulePermissionGuard.requireResourcePermission(principal, currentBillType, "update");
+        if (!currentBillType.equals(request.billType())) {
+            modulePermissionGuard.requireResourcePermission(principal, request.billType(), "update");
+        }
         return ApiResponse.success("更新成功", printTemplateService.update(id, request));
     }
 
     @PostMapping(value = "/{id}/upload-json", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @RequiresPermission(resource = "print-template", action = "update")
     @OperationLoggable(moduleName = "打印模板", actionType = "上传 JSON", businessNoFields = {"id"})
-    public ApiResponse<PrintTemplateResponse> uploadJson(@PathVariable @Positive Long id,
+    public ApiResponse<PrintTemplateResponse> uploadJson(@AuthenticationPrincipal SecurityPrincipal principal,
+                                                         @PathVariable @Positive Long id,
                                                          @RequestParam("file") MultipartFile file) {
+        modulePermissionGuard.requireResourcePermissionAny(
+                principal,
+                printTemplateService.getBillType(id),
+                "update"
+        );
         return ApiResponse.success("上传成功", printTemplateService.uploadJson(id, file));
     }
 
     @DeleteMapping("/{id}")
     @RequiresPermission(resource = "print-template", action = "delete")
     @OperationLoggable(moduleName = "打印模板", actionType = "删除")
-    public ApiResponse<Void> delete(@PathVariable @Positive Long id) {
+    public ApiResponse<Void> delete(@AuthenticationPrincipal SecurityPrincipal principal,
+                                    @PathVariable @Positive Long id) {
+        modulePermissionGuard.requireResourcePermissionAny(
+                principal,
+                printTemplateService.getBillType(id),
+                "update"
+        );
         printTemplateService.delete(id);
         return ApiResponse.success("删除成功");
     }

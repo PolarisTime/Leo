@@ -1,6 +1,7 @@
 package com.leo.erp.system.printtemplate.web;
 
 import com.leo.erp.common.api.ApiResponse;
+import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.security.permission.ModulePermissionGuard;
 import com.leo.erp.security.permission.PermissionService;
 import com.leo.erp.security.support.SecurityPrincipal;
@@ -15,8 +16,10 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -54,11 +57,12 @@ class PrintTemplateControllerTest {
 
     @Test
     void createReturnsCreatedTemplate() {
-        PrintTemplateRequest request = mock(PrintTemplateRequest.class);
+        PrintTemplateRequest request = request("sales-order");
         PrintTemplateResponse created = mock(PrintTemplateResponse.class);
+        when(permissionService.can(1L, "sales-order", "update")).thenReturn(true);
         when(printTemplateService.create(request)).thenReturn(created);
 
-        ApiResponse<PrintTemplateResponse> response = controller.create(request);
+        ApiResponse<PrintTemplateResponse> response = controller.create(principal(), request);
 
         assertThat(response.code()).isEqualTo(0);
         assertThat(response.message()).isEqualTo("创建成功");
@@ -67,14 +71,44 @@ class PrintTemplateControllerTest {
 
     @Test
     void updateReturnsUpdatedTemplate() {
-        PrintTemplateRequest request = mock(PrintTemplateRequest.class);
+        PrintTemplateRequest request = request("sales-order");
         PrintTemplateResponse updated = mock(PrintTemplateResponse.class);
+        when(printTemplateService.getBillType(1L)).thenReturn("sales-order");
+        when(permissionService.can(1L, "sales-order", "update")).thenReturn(true);
         when(printTemplateService.update(1L, request)).thenReturn(updated);
 
-        ApiResponse<PrintTemplateResponse> response = controller.update(1L, request);
+        ApiResponse<PrintTemplateResponse> response = controller.update(principal(), 1L, request);
 
         assertThat(response.code()).isEqualTo(0);
         assertThat(response.message()).isEqualTo("更新成功");
+        verify(printTemplateService).update(1L, request);
+    }
+
+    @Test
+    void updateChecksCurrentBillTypeBeforeRequestedBillType() {
+        PrintTemplateRequest request = request("sales-order");
+        when(printTemplateService.getBillType(1L)).thenReturn("purchase-order");
+        when(permissionService.can(1L, "sales-order", "update")).thenReturn(true);
+
+        assertThatThrownBy(() -> controller.update(principal(), 1L, request))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("无操作权限");
+        verify(printTemplateService, never()).update(1L, request);
+        verify(permissionService).can(1L, "purchase-order", "update");
+    }
+
+    @Test
+    void updateChecksRequestedBillTypeWhenMovingTemplate() {
+        PrintTemplateRequest request = request("sales-order");
+        PrintTemplateResponse updated = mock(PrintTemplateResponse.class);
+        when(printTemplateService.getBillType(1L)).thenReturn("purchase-order");
+        when(permissionService.can(1L, "purchase-order", "update")).thenReturn(true);
+        when(permissionService.can(1L, "sales-order", "update")).thenReturn(true);
+        when(printTemplateService.update(1L, request)).thenReturn(updated);
+
+        ApiResponse<PrintTemplateResponse> response = controller.update(principal(), 1L, request);
+
+        assertThat(response.code()).isEqualTo(0);
         verify(printTemplateService).update(1L, request);
     }
 
@@ -87,9 +121,11 @@ class PrintTemplateControllerTest {
                 "{\"page\":{}}".getBytes(StandardCharsets.UTF_8)
         );
         PrintTemplateResponse updated = mock(PrintTemplateResponse.class);
+        when(printTemplateService.getBillType(1L)).thenReturn("sales-order");
+        when(permissionService.can(1L, "sales-order", "update")).thenReturn(true);
         when(printTemplateService.uploadJson(1L, file)).thenReturn(updated);
 
-        ApiResponse<PrintTemplateResponse> response = controller.uploadJson(1L, file);
+        ApiResponse<PrintTemplateResponse> response = controller.uploadJson(principal(), 1L, file);
 
         assertThat(response.code()).isEqualTo(0);
         assertThat(response.message()).isEqualTo("上传成功");
@@ -99,15 +135,58 @@ class PrintTemplateControllerTest {
 
     @Test
     void deleteCallsServiceDelete() {
-        ApiResponse<Void> response = controller.delete(1L);
+        when(printTemplateService.getBillType(1L)).thenReturn("sales-order");
+        when(permissionService.can(1L, "sales-order", "update")).thenReturn(true);
+
+        ApiResponse<Void> response = controller.delete(principal(), 1L);
 
         assertThat(response.code()).isEqualTo(0);
         assertThat(response.message()).isEqualTo("删除成功");
         verify(printTemplateService).delete(1L);
     }
 
+    @Test
+    void createRejectsWhenPrincipalCannotManageTargetBillType() {
+        PrintTemplateRequest request = request("sales-order");
+
+        assertThatThrownBy(() -> controller.create(principal(), request))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("无操作权限");
+        verify(printTemplateService, never()).create(request);
+    }
+
+    @Test
+    void uploadJsonChecksTemplateBillTypeBeforeUpdating() {
+        MockMultipartFile file = new MockMultipartFile(
+                "file",
+                "layout.json",
+                "application/json",
+                "{\"page\":{}}".getBytes(StandardCharsets.UTF_8)
+        );
+        when(printTemplateService.getBillType(1L)).thenReturn("purchase-order");
+
+        assertThatThrownBy(() -> controller.uploadJson(principal(), 1L, file))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("无操作权限");
+        verify(printTemplateService, never()).uploadJson(1L, file);
+    }
+
     private SecurityPrincipal principal() {
         return new SecurityPrincipal(1L, "slc", "encoded", true,
                 List.of(new SimpleGrantedAuthority("ROLE_USER")));
+    }
+
+    private PrintTemplateRequest request(String billType) {
+        return new PrintTemplateRequest(
+                billType,
+                "模板A",
+                "TPL_A",
+                "LODOP.PRINT_INIT('safe');",
+                "COORD",
+                "LODOP",
+                null,
+                1,
+                "ACTIVE"
+        );
     }
 }

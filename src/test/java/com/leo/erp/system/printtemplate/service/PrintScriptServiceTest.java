@@ -293,6 +293,17 @@ class PrintScriptServiceTest {
         verify(jdbc, never()).queryForMap(anyString(), eq(1L));
     }
 
+    @Test
+    void shouldRejectDisabledTemplateBeforeLoadingPrintData() {
+        JdbcTemplate jdbc = mock(JdbcTemplate.class);
+        PrintScriptService service = printScriptService(repository("sales-order", "COORD", "LODOP.PRINT_INIT('模板');", "DISABLED"), jdbc);
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.generateFromRecord("1", "sales-order", 1L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("打印模板已禁用");
+        verify(jdbc, never()).queryForMap(anyString(), eq(1L));
+    }
+
     private PrintTemplateRepository repository(String billType) {
         return repository(billType, "COORD", "LODOP.PRINT_INIT('模板');");
     }
@@ -310,12 +321,17 @@ class PrintScriptServiceTest {
     }
 
     private PrintTemplateRepository repository(String billType, String templateType, String templateHtml) {
+        return repository(billType, templateType, templateHtml, "ACTIVE");
+    }
+
+    private PrintTemplateRepository repository(String billType, String templateType, String templateHtml, String status) {
         PrintTemplate template = new PrintTemplate();
         template.setId(1L);
         template.setBillType(billType);
         template.setTemplateName("模板");
         template.setTemplateHtml(templateHtml);
         template.setTemplateType(templateType);
+        template.setStatus(status);
 
         PrintTemplateRepository repository = mock(PrintTemplateRepository.class);
         when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(template));
