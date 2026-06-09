@@ -107,6 +107,9 @@ public class PrintScriptService {
     public Map<String, Object> generateFromRecord(String templateId, String moduleKey, Long recordId) {
         PrintTemplate template = templateRepository.findByIdAndDeletedFlagFalse(Long.parseLong(templateId))
                 .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "打印模板不存在"));
+        if (!"ACTIVE".equals(template.getStatus())) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "打印模板已禁用");
+        }
 
         PrintRecordSource source = MODULE_SOURCES.get(moduleKey);
         if (source == null) {

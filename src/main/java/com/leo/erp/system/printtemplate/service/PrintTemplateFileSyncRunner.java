@@ -18,11 +18,17 @@ import java.util.List;
 public class PrintTemplateFileSyncRunner implements ApplicationRunner {
 
     static final String SYNC_MODE_FILE = "FILE";
+    private static final String TEMPLATE_TYPE_PDF_FORM = "PDF_FORM";
+    private static final String SOURCE_REF_PREFIX = "print-forms/";
+    private static final String SOURCE_REF_SUFFIX = ".layout.json";
 
     private final PrintTemplateRepository repository;
+    private final PrintPdfFormTemplateValidator pdfFormTemplateValidator;
 
-    public PrintTemplateFileSyncRunner(PrintTemplateRepository repository) {
+    public PrintTemplateFileSyncRunner(PrintTemplateRepository repository,
+                                       PrintPdfFormTemplateValidator pdfFormTemplateValidator) {
         this.repository = repository;
+        this.pdfFormTemplateValidator = pdfFormTemplateValidator;
     }
 
     @Override
@@ -52,6 +58,7 @@ public class PrintTemplateFileSyncRunner implements ApplicationRunner {
 
         String normalizedSourceRef = normalizeSourceRef(sourceRef);
         String content = readClasspathText(normalizedSourceRef);
+        validateContent(template, content);
         String checksum = PrintTemplateChecksum.sha256(content);
         if (checksum.equals(template.getSourceChecksum()) && content.equals(template.getTemplateHtml())) {
             return false;
@@ -71,7 +78,16 @@ public class PrintTemplateFileSyncRunner implements ApplicationRunner {
         if (normalized.startsWith("/") || normalized.contains("..") || normalized.contains("\\")) {
             throw new IllegalStateException("打印模板源文件路径不合法: " + sourceRef);
         }
+        if (!normalized.startsWith(SOURCE_REF_PREFIX) || !normalized.endsWith(SOURCE_REF_SUFFIX)) {
+            throw new IllegalStateException("打印模板源文件路径不合法: " + sourceRef);
+        }
         return normalized;
+    }
+
+    private void validateContent(PrintTemplate template, String content) {
+        if (TEMPLATE_TYPE_PDF_FORM.equals(template.getTemplateType())) {
+            pdfFormTemplateValidator.validate(content);
+        }
     }
 
     private String readClasspathText(String sourceRef) {

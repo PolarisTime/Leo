@@ -9,6 +9,7 @@ import org.mapstruct.Mapping;
 @Mapper(config = StrictMapperConfig.class)
 public interface PrintTemplateMapper {
 
+    @Mapping(target = "id", expression = "java(template.getId() == null ? null : String.valueOf(template.getId()))")
     @Mapping(target = "createTime", source = "createdAt")
     @Mapping(target = "updateTime", source = "updatedAt")
     PrintTemplateResponse toResponse(PrintTemplate template);

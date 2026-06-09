@@ -145,6 +145,20 @@ class PrintTemplateServiceTest {
         );
     }
 
+    private PrintTemplateRequest pdfRequest(String billType) {
+        return request(
+                billType,
+                "默认 PDF",
+                "PDF_" + billType,
+                null,
+                "PDF_FORM",
+                "PDF_FORM",
+                null,
+                null,
+                "ACTIVE"
+        );
+    }
+
     @Test
     void shouldRejectEmptyBillType() {
         PrintTemplateService service = service(repository());
@@ -205,6 +219,21 @@ class PrintTemplateServiceTest {
         assertThat(result.versionNo()).isEqualTo(2);
         assertThat(result.templateHtml()).contains("\"page\"");
         assertThat(result.templateHtml()).contains("\"static\"");
+    }
+
+    @Test
+    void shouldUseBillTypeSpecificDefaultPdfFormLayout() {
+        PrintTemplateService service = service(repository());
+
+        var purchase = service.create(pdfRequest("purchase-order"));
+        var sales = service.create(pdfRequest("sales-order"));
+        var logistics = service.create(pdfRequest("freight-bill"));
+        var statement = service.create(pdfRequest("customer-statement"));
+
+        assertThat(purchase.templateHtml()).contains("采购单");
+        assertThat(sales.templateHtml()).contains("销售单");
+        assertThat(logistics.templateHtml()).contains("物流配送单");
+        assertThat(statement.templateHtml()).contains("对账单");
     }
 
     @Test

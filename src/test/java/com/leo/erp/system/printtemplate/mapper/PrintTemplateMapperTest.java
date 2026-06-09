@@ -33,7 +33,7 @@ class PrintTemplateMapperTest {
         PrintTemplateResponse response = mapper.toResponse(entity);
 
         assertThat(response).isNotNull();
-        assertThat(response.id()).isEqualTo(1L);
+        assertThat(response.id()).isEqualTo("1");
         assertThat(response.billType()).isEqualTo("purchase-order");
         assertThat(response.templateName()).isEqualTo("采购订单模板");
         assertThat(response.templateCode()).isEqualTo("PURCHASE_ORDER_DEFAULT");

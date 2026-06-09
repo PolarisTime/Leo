@@ -38,6 +38,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.util.Objects;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -723,6 +724,8 @@ public class PurchaseInboundService extends AbstractCrudService<
     private void validateSourcePurchaseOrderAllocation(
             PurchaseInboundItemRequest source,
             int lineNo,
+            String headerSupplierName,
+            String headerWarehouseName,
             Map<Long, PurchaseOrderItem> sourcePurchaseOrderItemMap,
             Map<Long, Integer> allocatedQuantityMap,
             Map<Long, Integer> requestAllocatedQuantityMap
@@ -735,6 +738,7 @@ public class PurchaseInboundService extends AbstractCrudService<
         if (sourcePurchaseOrderItem == null) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行来源采购订单明细不存在");
         }
+        validateSourcePurchaseOrderItemFields(source, sourcePurchaseOrderItem, headerSupplierName, headerWarehouseName, lineNo);
         int allocatedQuantity = allocatedQuantityMap.getOrDefault(sourcePurchaseOrderItemId, 0);
         int requestedQuantity = requestAllocatedQuantityMap.getOrDefault(sourcePurchaseOrderItemId, 0);
         int availableQuantity = sourcePurchaseOrderItem.getQuantity() - allocatedQuantity;
@@ -745,6 +749,79 @@ public class PurchaseInboundService extends AbstractCrudService<
             );
         }
         requestAllocatedQuantityMap.merge(sourcePurchaseOrderItemId, source.quantity(), Integer::sum);
+    }
+
+    private void validateSourcePurchaseOrderItemFields(PurchaseInboundItemRequest request,
+                                                       PurchaseOrderItem sourceItem,
+                                                       String headerSupplierName,
+                                                       String headerWarehouseName,
+                                                       int lineNo) {
+        PurchaseOrder sourceOrder = sourceItem.getPurchaseOrder();
+        String sourceStatus = sourceOrder == null ? null : sourceOrder.getStatus();
+        if (!StatusConstants.AUDITED.equals(normalizeText(sourceStatus))) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行来源采购订单未审核，不能作为来源单据");
+        }
+        assertSourceOrderText(headerSupplierName, sourceOrder == null ? null : sourceOrder.getSupplierName(), lineNo, "供应商");
+        assertSourceText(request.materialCode(), sourceItem.getMaterialCode(), lineNo, "物料编码");
+        assertSourceText(request.brand(), sourceItem.getBrand(), lineNo, "品牌");
+        assertSourceText(request.category(), sourceItem.getCategory(), lineNo, "品类");
+        assertSourceText(request.material(), sourceItem.getMaterial(), lineNo, "材质");
+        assertSourceText(request.spec(), sourceItem.getSpec(), lineNo, "规格");
+        assertSourceText(request.length(), sourceItem.getLength(), lineNo, "长度");
+        assertSourceText(request.unit(), sourceItem.getUnit(), lineNo, "单位");
+        String requestedWarehouseName = trimToNull(request.warehouseName()) == null
+                ? headerWarehouseName : request.warehouseName();
+        assertSourceText(requestedWarehouseName, sourceItem.getWarehouseName(), lineNo, "仓库");
+        assertSourceText(request.batchNo(), sourceItem.getBatchNo(), lineNo, "批号");
+        assertSourceText(
+                TradeItemCalculator.normalizeQuantityUnit(request.quantityUnit()),
+                TradeItemCalculator.normalizeQuantityUnit(sourceItem.getQuantityUnit()),
+                lineNo,
+                "数量单位"
+        );
+        assertSourceDecimal(request.pieceWeightTon(), sourceItem.getPieceWeightTon(), lineNo, "件重");
+        assertSourceInteger(request.piecesPerBundle(), sourceItem.getPiecesPerBundle(), lineNo, "每捆支数");
+        assertSourceDecimal(request.unitPrice(), sourceItem.getUnitPrice(), lineNo, "单价");
+    }
+
+    private void assertSourceOrderText(String requestedValue, String sourceValue, int lineNo, String fieldName) {
+        if (!normalizeText(requestedValue).equals(normalizeText(sourceValue))) {
+            throw new BusinessException(
+                    ErrorCode.BUSINESS_ERROR,
+                    "第" + lineNo + "行来源采购订单" + fieldName + "与请求不一致"
+            );
+        }
+    }
+
+    private void assertSourceText(String requestedValue, String sourceValue, int lineNo, String fieldName) {
+        if (!normalizeText(requestedValue).equals(normalizeText(sourceValue))) {
+            throw new BusinessException(
+                    ErrorCode.BUSINESS_ERROR,
+                    "第" + lineNo + "行来源采购订单明细" + fieldName + "与请求不一致"
+            );
+        }
+    }
+
+    private void assertSourceInteger(Integer requestedValue, Integer sourceValue, int lineNo, String fieldName) {
+        if (!Objects.equals(requestedValue, sourceValue)) {
+            throw new BusinessException(
+                    ErrorCode.BUSINESS_ERROR,
+                    "第" + lineNo + "行来源采购订单明细" + fieldName + "与请求不一致"
+            );
+        }
+    }
+
+    private void assertSourceDecimal(BigDecimal requestedValue, BigDecimal sourceValue, int lineNo, String fieldName) {
+        if (requestedValue == null || sourceValue == null || requestedValue.compareTo(sourceValue) != 0) {
+            throw new BusinessException(
+                    ErrorCode.BUSINESS_ERROR,
+                    "第" + lineNo + "行来源采购订单明细" + fieldName + "与请求不一致"
+            );
+        }
+    }
+
+    private String normalizeText(String value) {
+        return value == null ? "" : value.trim();
     }
 
     @Override
@@ -893,7 +970,7 @@ public class PurchaseInboundService extends AbstractCrudService<
             int lineNo = i + 1;
 
             validateSourcePurchaseOrderAllocation(
-                    source, lineNo, sourcePurchaseOrderItemMap,
+                    source, lineNo, request.supplierName(), request.warehouseName(), sourcePurchaseOrderItemMap,
                     allocatedQuantityMap, requestAllocatedQuantityMap
             );
             WeightSettlementResult weightSettlement = resolveWeightSettlement(

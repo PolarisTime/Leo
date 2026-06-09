@@ -3,7 +3,9 @@ package com.leo.erp.system.printtemplate.service;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.itextpdf.io.font.PdfEncodings;
 import com.itextpdf.io.font.constants.StandardFonts;
+import com.itextpdf.kernel.colors.Color;
 import com.itextpdf.kernel.colors.ColorConstants;
+import com.itextpdf.kernel.colors.DeviceRgb;
 import com.itextpdf.kernel.font.PdfFont;
 import com.itextpdf.kernel.font.PdfFontFactory;
 import com.itextpdf.kernel.font.PdfFontFactory.EmbeddingStrategy;
@@ -202,6 +204,7 @@ public class PrintPdfFormService {
                         number(element, "top", 0f),
                         number(element, "width", 1f),
                         number(element, "height", 1f),
+                        element,
                         pageMetrics
                 );
                 continue;
@@ -221,6 +224,7 @@ public class PrintPdfFormService {
                         number(element, "height", number(element, "fontSize", 9f) + 4f),
                         number(element, "fontSize", 9f),
                         alignment(text(element, "align", "left")),
+                        color(element, "color", ColorConstants.BLACK),
                         pageMetrics
                 );
             }
@@ -231,9 +235,23 @@ public class PrintPdfFormService {
         float left = number(tableConfig, "left", 28f);
         float top = number(tableConfig, "top", 176f);
         float headerHeight = number(tableConfig, "headerHeight", 28f);
+        Color headerFillColor = color(tableConfig, "headerFillColor", null);
+        Color borderColor = color(tableConfig, "borderColor", ColorConstants.BLACK);
+        Color textColor = color(tableConfig, "headerTextColor", color(tableConfig, "textColor", ColorConstants.BLACK));
+        float lineWidth = number(tableConfig, "lineWidth", 1f);
         for (JsonNode column : columns) {
             float width = number(column, "width", 60f);
-            drawRect(canvas, left, top, width, headerHeight, pageMetrics);
+            drawRect(
+                    canvas,
+                    left,
+                    top,
+                    width,
+                    headerHeight,
+                    headerFillColor,
+                    color(column, "borderColor", borderColor),
+                    number(column, "lineWidth", lineWidth),
+                    pageMetrics
+            );
             drawCanvasText(
                     canvas,
                     font,
@@ -244,6 +262,7 @@ public class PrintPdfFormService {
                     16,
                     number(column, "headerFontSize", 9f),
                     TextAlignment.CENTER,
+                    color(column, "headerTextColor", textColor),
                     pageMetrics
             );
             left += width;
@@ -262,11 +281,24 @@ public class PrintPdfFormService {
     ) {
         float left = number(tableConfig, "left", 28f);
         float rowHeight = number(tableConfig, "rowHeight", 26f);
+        Color borderColor = color(tableConfig, "borderColor", ColorConstants.BLACK);
+        Color textColor = color(tableConfig, "textColor", ColorConstants.BLACK);
+        float lineWidth = number(tableConfig, "lineWidth", 1f);
         for (JsonNode column : columns) {
             float width = number(column, "width", 60f);
             String value = itemValue(item, column);
             PdfFont cellFont = "latinIfAscii".equals(text(column, "font", "")) && isAsciiText(value) ? latinFont : font;
-            drawRect(canvas, left, top, width, rowHeight, pageMetrics);
+            drawRect(
+                    canvas,
+                    left,
+                    top,
+                    width,
+                    rowHeight,
+                    null,
+                    color(column, "borderColor", borderColor),
+                    number(column, "lineWidth", lineWidth),
+                    pageMetrics
+            );
             drawCanvasText(
                     canvas,
                     cellFont,
@@ -277,6 +309,7 @@ public class PrintPdfFormService {
                     12,
                     number(column, "fontSize", 8f),
                     alignment(text(column, "align", "center")),
+                    color(column, "textColor", textColor),
                     pageMetrics
             );
             left += width;
@@ -287,7 +320,17 @@ public class PrintPdfFormService {
         float left = number(tableConfig, "left", 28f);
         float width = tableWidth(tableConfig);
         float rowHeight = number(tableConfig, "rowHeight", 26f);
-        drawRect(canvas, left, top, width, rowHeight, pageMetrics);
+        drawRect(
+                canvas,
+                left,
+                top,
+                width,
+                rowHeight,
+                color(tableConfig, "emptyFillColor", null),
+                color(tableConfig, "borderColor", ColorConstants.BLACK),
+                number(tableConfig, "lineWidth", 1f),
+                pageMetrics
+        );
         drawCanvasText(
                 canvas,
                 font,
@@ -298,6 +341,7 @@ public class PrintPdfFormService {
                 12,
                 number(tableConfig, "emptyFontSize", 8f),
                 TextAlignment.CENTER,
+                color(tableConfig, "emptyTextColor", color(tableConfig, "textColor", ColorConstants.BLACK)),
                 pageMetrics
         );
     }
@@ -318,7 +362,17 @@ public class PrintPdfFormService {
         float width = tableWidth(tableConfig);
         float height = number(summaryConfig, "height", number(tableConfig, "rowHeight", 26f));
         if (bool(summaryConfig, "border", true)) {
-            drawRect(canvas, left, top, width, height, pageMetrics);
+            drawRect(
+                    canvas,
+                    left,
+                    top,
+                    width,
+                    height,
+                    color(summaryConfig, "fillColor", null),
+                    color(summaryConfig, "borderColor", color(tableConfig, "borderColor", ColorConstants.BLACK)),
+                    number(summaryConfig, "lineWidth", number(tableConfig, "lineWidth", 1f)),
+                    pageMetrics
+            );
         }
         drawCanvasText(
                 canvas,
@@ -330,6 +384,7 @@ public class PrintPdfFormService {
                 12,
                 number(summaryConfig, "fontSize", 8.5f),
                 alignment(text(summaryConfig, "align", "left")),
+                color(summaryConfig, "color", color(summaryConfig, "textColor", ColorConstants.BLACK)),
                 pageMetrics
         );
         return top + height;
@@ -355,6 +410,7 @@ public class PrintPdfFormService {
                 number(clausesConfig, "height", 96f),
                 number(clausesConfig, "fontSize", 7.8f),
                 number(clausesConfig, "lineHeight", 1.28f),
+                color(clausesConfig, "color", color(clausesConfig, "textColor", ColorConstants.BLACK)),
                 pageMetrics
         );
     }
@@ -389,7 +445,7 @@ public class PrintPdfFormService {
         float textX = textX(font, text, fontSize, textRectangle, style.alignment());
 
         canvas.saveState()
-                .setFillColor(ColorConstants.BLACK)
+                .setFillColor(style.color())
                 .beginText()
                 .setFontAndSize(font, fontSize)
                 .moveText(textX, baselineY)
@@ -414,7 +470,7 @@ public class PrintPdfFormService {
         float firstBaselineY = firstBaselineY(rectangle, fontSize, lineHeight, lines.size(), style.verticalPosition());
 
         canvas.saveState()
-                .setFillColor(ColorConstants.BLACK)
+                .setFillColor(style.color())
                 .beginText()
                 .setFontAndSize(font, fontSize);
         for (int i = 0; i < lines.size(); i++) {
@@ -565,18 +621,56 @@ public class PrintPdfFormService {
                 alignment(text(fieldConfig, "align", "left")),
                 verticalPosition(text(fieldConfig, "vertical", defaultMultiline ? "top" : "middle")),
                 bool(fieldConfig, "multiline", defaultMultiline),
-                number(fieldConfig, "lineHeight", 1.2f)
+                number(fieldConfig, "lineHeight", 1.2f),
+                color(fieldConfig, "color", ColorConstants.BLACK)
         );
     }
 
-    private void drawRect(PdfCanvas canvas, float left, float top, float width, float height, PageMetrics pageMetrics) {
-        canvas.rectangle(left, topY(top + height, pageMetrics), width, height).stroke();
+    private void drawRect(PdfCanvas canvas, float left, float top, float width, float height, JsonNode config, PageMetrics pageMetrics) {
+        drawRect(
+                canvas,
+                left,
+                top,
+                width,
+                height,
+                color(config, "fillColor", null),
+                color(config, "strokeColor", ColorConstants.BLACK),
+                number(config, "lineWidth", 1f),
+                pageMetrics
+        );
+    }
+
+    private void drawRect(
+            PdfCanvas canvas,
+            float left,
+            float top,
+            float width,
+            float height,
+            Color fillColor,
+            Color strokeColor,
+            float lineWidth,
+            PageMetrics pageMetrics
+    ) {
+        canvas.saveState();
+        canvas.setLineWidth(Math.max(0.1f, lineWidth));
+        canvas.setStrokeColor(strokeColor);
+        canvas.rectangle(left, topY(top + height, pageMetrics), width, height);
+        if (fillColor != null) {
+            canvas.setFillColor(fillColor).fillStroke();
+        } else {
+            canvas.stroke();
+        }
+        canvas.restoreState();
     }
 
     private void drawLine(PdfCanvas canvas, JsonNode line, PageMetrics pageMetrics) {
-        canvas.moveTo(number(line, "x1", 0f), topY(number(line, "y1", 0f), pageMetrics))
+        canvas.saveState()
+                .setLineWidth(Math.max(0.1f, number(line, "lineWidth", 1f)))
+                .setStrokeColor(color(line, "strokeColor", ColorConstants.BLACK))
+                .moveTo(number(line, "x1", 0f), topY(number(line, "y1", 0f), pageMetrics))
                 .lineTo(number(line, "x2", 0f), topY(number(line, "y2", 0f), pageMetrics))
-                .stroke();
+                .stroke()
+                .restoreState();
     }
 
     private void drawCanvasText(
@@ -589,6 +683,7 @@ public class PrintPdfFormService {
             float height,
             float fontSize,
             TextAlignment alignment,
+            Color textColor,
             PageMetrics pageMetrics
     ) {
         String value = text == null ? "" : text;
@@ -602,7 +697,7 @@ public class PrintPdfFormService {
         };
         float y = topY(top, pageMetrics) - height / 2 - effectiveFontSize * 0.32f;
         canvas.saveState()
-                .setFillColor(ColorConstants.BLACK)
+                .setFillColor(textColor)
                 .beginText()
                 .setFontAndSize(font, effectiveFontSize)
                 .moveText(x, y)
@@ -621,13 +716,14 @@ public class PrintPdfFormService {
             float height,
             float fontSize,
             float lineHeightMultiplier,
+            Color textColor,
             PageMetrics pageMetrics
     ) {
         float y = topY(top, pageMetrics) - fontSize;
         float minY = topY(top + height, pageMetrics) + fontSize;
         float lineHeight = fontSize * lineHeightMultiplier;
         canvas.saveState()
-                .setFillColor(ColorConstants.BLACK)
+                .setFillColor(textColor)
                 .beginText()
                 .setFontAndSize(font, fontSize);
         for (String paragraph : paragraphs) {
@@ -848,6 +944,28 @@ public class PrintPdfFormService {
         return child.isBoolean() ? child.asBoolean() : fallback;
     }
 
+    private Color color(JsonNode node, String field, Color fallback) {
+        String value = text(node, field, "");
+        if (value.isBlank()) {
+            return fallback;
+        }
+        String normalized = value.trim();
+        if (normalized.startsWith("#")) {
+            normalized = normalized.substring(1);
+        }
+        if (normalized.length() != 6) {
+            return fallback;
+        }
+        try {
+            int red = Integer.parseInt(normalized.substring(0, 2), 16);
+            int green = Integer.parseInt(normalized.substring(2, 4), 16);
+            int blue = Integer.parseInt(normalized.substring(4, 6), 16);
+            return new DeviceRgb(red, green, blue);
+        } catch (NumberFormatException ignored) {
+            return fallback;
+        }
+    }
+
     private PageMetrics pageMetrics(JsonNode pageConfig) {
         return new PageMetrics(
                 number(pageConfig, "width", DEFAULT_PAGE_WIDTH),
@@ -930,7 +1048,8 @@ public class PrintPdfFormService {
             TextAlignment alignment,
             VerticalPosition verticalPosition,
             boolean multiline,
-            float lineHeightMultiplier
+            float lineHeightMultiplier,
+            Color color
     ) {
     }
 

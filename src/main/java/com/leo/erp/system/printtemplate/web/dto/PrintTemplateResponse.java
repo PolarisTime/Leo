@@ -3,7 +3,7 @@ package com.leo.erp.system.printtemplate.web.dto;
 import java.time.LocalDateTime;
 
 public record PrintTemplateResponse(
-        Long id,
+        String id,
         String templateName,
         String templateCode,
         String templateHtml,
