@@ -433,28 +433,7 @@ public class SupplierStatementService extends AbstractCrudService<SupplierStatem
             }
             return sourceInboundItem;
         }
-        String sourceNo = source.sourceNo() == null ? "" : source.sourceNo().trim();
-        if (sourceNo.isEmpty()) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行来源采购入库明细不能为空");
-        }
-        return purchaseInboundRepository.findAllByDeletedFlagFalse().stream()
-                .filter(inbound -> sourceNo.equals(inbound.getInboundNo()))
-                .flatMap(inbound -> inbound.getItems().stream())
-                .filter(item -> matchesLegacySupplierItem(source, item))
-                .findFirst()
-                .orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行来源采购入库明细不存在"));
-    }
-
-    private boolean matchesLegacySupplierItem(SupplierStatementItemRequest source, PurchaseInboundItem item) {
-        return item.getMaterialCode().equals(source.materialCode())
-                && item.getBrand().equals(source.brand())
-                && item.getCategory().equals(source.category())
-                && item.getMaterial().equals(source.material())
-                && item.getSpec().equals(source.spec())
-                && java.util.Objects.equals(item.getLength(), source.length())
-                && item.getQuantity().equals(source.quantity())
-                && TradeItemCalculator.normalizeQuantityUnit(item.getQuantityUnit())
-                .equals(TradeItemCalculator.normalizeQuantityUnit(source.quantityUnit()));
+        throw new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行来源采购入库明细不能为空");
     }
 
     private String resolveSupplierCode(String requestSupplierCode, String supplierName) {

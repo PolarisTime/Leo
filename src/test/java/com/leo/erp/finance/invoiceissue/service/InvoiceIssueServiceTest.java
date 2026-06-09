@@ -192,6 +192,51 @@ class InvoiceIssueServiceTest {
     }
 
     @Test
+    void createRejectsUnauditedSourceSalesOrder() {
+        SalesOrderItem sourceItem = buildSalesOrderItem(102L, "M-1", new BigDecimal("0.300"), new BigDecimal("1000.00"));
+        sourceItem.getSalesOrder().setStatus(StatusConstants.DRAFT);
+
+        when(repository.existsByIssueNoAndDeletedFlagFalse("KP-DRAFT-SO")).thenReturn(false);
+        when(salesOrderItemQueryService.findActiveByIdIn(anyCollection())).thenReturn(List.of(sourceItem));
+
+        BusinessException exception = assertThrows(BusinessException.class, () -> service.create(buildRequest(
+                "KP-DRAFT-SO", 102L, new BigDecimal("0.300"), new BigDecimal("3333.33"), new BigDecimal("1000.00")
+        )));
+
+        assertEquals("第1行来源销售订单未审核，不能开票", exception.getMessage());
+    }
+
+    @Test
+    void createRejectsSourceSalesOrderCustomerMismatch() {
+        SalesOrderItem sourceItem = buildSalesOrderItem(103L, "M-1", new BigDecimal("0.300"), new BigDecimal("1000.00"));
+        sourceItem.getSalesOrder().setCustomerName("客户B");
+
+        when(repository.existsByIssueNoAndDeletedFlagFalse("KP-CUSTOMER")).thenReturn(false);
+        when(salesOrderItemQueryService.findActiveByIdIn(anyCollection())).thenReturn(List.of(sourceItem));
+
+        BusinessException exception = assertThrows(BusinessException.class, () -> service.create(buildRequest(
+                "KP-CUSTOMER", 103L, new BigDecimal("0.300"), new BigDecimal("3333.33"), new BigDecimal("1000.00")
+        )));
+
+        assertEquals("第1行来源销售订单客户与开票单不一致", exception.getMessage());
+    }
+
+    @Test
+    void createRejectsSourceSalesOrderProjectMismatch() {
+        SalesOrderItem sourceItem = buildSalesOrderItem(105L, "M-1", new BigDecimal("0.300"), new BigDecimal("1000.00"));
+        sourceItem.getSalesOrder().setProjectName("项目B");
+
+        when(repository.existsByIssueNoAndDeletedFlagFalse("KP-PROJECT")).thenReturn(false);
+        when(salesOrderItemQueryService.findActiveByIdIn(anyCollection())).thenReturn(List.of(sourceItem));
+
+        BusinessException exception = assertThrows(BusinessException.class, () -> service.create(buildRequest(
+                "KP-PROJECT", 105L, new BigDecimal("0.300"), new BigDecimal("3333.33"), new BigDecimal("1000.00")
+        )));
+
+        assertEquals("第1行来源销售订单项目与开票单不一致", exception.getMessage());
+    }
+
+    @Test
     void createRejectsSourceSalesOrderWithBlankOrderNo() {
         SalesOrderItem sourceItem = new SalesOrderItem();
         sourceItem.setId(102L);
@@ -628,6 +673,9 @@ class InvoiceIssueServiceTest {
         SalesOrder order = new SalesOrder();
         order.setId(1000L + id);
         order.setOrderNo("SO-001");
+        order.setStatus(StatusConstants.AUDITED);
+        order.setCustomerName("客户A");
+        order.setProjectName("项目A");
         item.setSalesOrder(order);
         item.setMaterialCode(materialCode);
         item.setBrand("品牌A");

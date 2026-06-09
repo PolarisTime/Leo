@@ -196,6 +196,36 @@ class InvoiceReceiptServiceTest {
     }
 
     @Test
+    void createRejectsUnauditedSourcePurchaseOrder() {
+        PurchaseOrderItem sourceItem = buildPurchaseOrderItem(202L, "M-1", new BigDecimal("0.300"), new BigDecimal("1000.00"));
+        sourceItem.getPurchaseOrder().setStatus(StatusConstants.DRAFT);
+
+        when(repository.existsByReceiveNoAndDeletedFlagFalse("SP-DRAFT-PO")).thenReturn(false);
+        when(purchaseOrderItemQueryService.findActiveByIdIn(anyCollection())).thenReturn(List.of(sourceItem));
+
+        BusinessException exception = assertThrows(BusinessException.class, () -> service.create(buildRequest(
+                "SP-DRAFT-PO", 202L, new BigDecimal("0.300"), new BigDecimal("3333.33"), new BigDecimal("1000.00")
+        )));
+
+        assertEquals("第1行来源采购订单未审核，不能收票", exception.getMessage());
+    }
+
+    @Test
+    void createRejectsSourcePurchaseOrderSupplierMismatch() {
+        PurchaseOrderItem sourceItem = buildPurchaseOrderItem(203L, "M-1", new BigDecimal("0.300"), new BigDecimal("1000.00"));
+        sourceItem.getPurchaseOrder().setSupplierName("供应商B");
+
+        when(repository.existsByReceiveNoAndDeletedFlagFalse("SP-SUPPLIER")).thenReturn(false);
+        when(purchaseOrderItemQueryService.findActiveByIdIn(anyCollection())).thenReturn(List.of(sourceItem));
+
+        BusinessException exception = assertThrows(BusinessException.class, () -> service.create(buildRequest(
+                "SP-SUPPLIER", 203L, new BigDecimal("0.300"), new BigDecimal("3333.33"), new BigDecimal("1000.00")
+        )));
+
+        assertEquals("第1行来源采购订单供应商与收票单不一致", exception.getMessage());
+    }
+
+    @Test
     void createRejectsSourcePurchaseOrderWithBlankOrderNo() {
         PurchaseOrderItem sourceItem = new PurchaseOrderItem();
         sourceItem.setId(202L);
@@ -611,6 +641,8 @@ class InvoiceReceiptServiceTest {
         PurchaseOrder order = new PurchaseOrder();
         order.setId(2000L + id);
         order.setOrderNo("PO-001");
+        order.setStatus(StatusConstants.AUDITED);
+        order.setSupplierName("供应商A");
         item.setPurchaseOrder(order);
         item.setMaterialCode(materialCode);
         item.setBrand("品牌A");

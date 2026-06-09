@@ -231,9 +231,10 @@ class SalesOutboundServiceTest {
     @Test
     void shouldRejectDuplicateOutboundNoOnCreate() {
         SalesOutboundRepository repository = mock(SalesOutboundRepository.class);
+        SalesOrderItemQueryService salesOrderItemQueryService = mock(SalesOrderItemQueryService.class);
         SalesOutboundService service = createService(repository, mock(SalesOutboundMapper.class),
                 mock(TradeItemMaterialSupport.class), mock(WarehouseSelectionSupport.class),
-                mock(SalesOrderItemQueryService.class));
+                salesOrderItemQueryService);
 
         SalesOutboundRequest request = new SalesOutboundRequest(
                 "DUP-001", null, "客户A", "项目A", "一号库",
@@ -256,9 +257,12 @@ class SalesOutboundServiceTest {
     @Test
     void shouldRejectWhenSourceSalesOrderItemOccupied() {
         SalesOutboundRepository repository = mock(SalesOutboundRepository.class);
+        SalesOrderItemQueryService salesOrderItemQueryService = mock(SalesOrderItemQueryService.class);
+        TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
+        WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
         SalesOutboundService service = createService(repository, mock(SalesOutboundMapper.class),
-                mock(TradeItemMaterialSupport.class), mock(WarehouseSelectionSupport.class),
-                mock(SalesOrderItemQueryService.class));
+                materialSupport, warehouseSelectionSupport,
+                salesOrderItemQueryService);
 
         SalesOutboundRequest request = new SalesOutboundRequest(
                 "SOO-OCC-001", null, "客户A", "项目A", "一号库",
@@ -278,6 +282,13 @@ class SalesOutboundServiceTest {
         occupiedOutbound.setItems(new ArrayList<>(List.of(occupiedItem)));
 
         when(repository.existsByOutboundNoAndDeletedFlagFalse("SOO-OCC-001")).thenReturn(false);
+        when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(Map.of("M1", new Material()));
+        when(materialSupport.normalizeBatchNo(any(), eq(null), eq(1), eq(true))).thenReturn("AUTO");
+        when(warehouseSelectionSupport.normalizeWarehouseName("一号库", 1, true)).thenReturn("一号库");
+        SalesOrderItem sourceSalesOrderItem = buildSalesOrderItem(9001L, "SO-OCC-001");
+        sourceSalesOrderItem.setWarehouseName("一号库");
+        sourceSalesOrderItem.setBatchNo("AUTO");
+        when(salesOrderItemQueryService.findActiveByIdIn(anyCollection())).thenReturn(List.of(sourceSalesOrderItem));
         when(repository.findAllBySourceSalesOrderItemIdsExcludingCurrentOutbound(any(), any()))
                 .thenReturn(List.of(occupiedOutbound));
 
@@ -411,7 +422,7 @@ class SalesOutboundServiceTest {
     }
 
     @Test
-    void shouldCalculateWeightFromPieceWeightWhenWeightTonNull() {
+    void shouldRejectMissingSourceSalesOrderItemWhenWeightTonNull() {
         SalesOutboundRepository repository = mock(SalesOutboundRepository.class);
         SalesOutboundMapper mapper = mock(SalesOutboundMapper.class);
         TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
@@ -432,20 +443,10 @@ class SalesOutboundServiceTest {
         );
 
         when(repository.existsByOutboundNoAndDeletedFlagFalse("SOO-CALC-001")).thenReturn(false);
-        when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(Map.of("M1", new Material()));
-        when(materialSupport.normalizeBatchNo(any(), eq(null), eq(1), eq(true))).thenReturn("AUTO");
-        when(warehouseSelectionSupport.normalizeWarehouseName("一号库", 1, true)).thenReturn("一号库");
-        when(salesOrderItemQueryService.findActiveByIdIn(anyCollection())).thenReturn(List.of());
-        when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
-        stubMapper(mapper);
 
-        service.create(request);
-
-        var outboundCaptor = forClass(SalesOutbound.class);
-        verify(repository).save(outboundCaptor.capture());
-        SalesOutbound saved = outboundCaptor.getValue();
-        assertThat(saved.getItems().get(0).getWeightTon()).isEqualByComparingTo("7.500");
-        assertThat(saved.getTotalWeight()).isEqualByComparingTo("7.500");
+        assertThatThrownBy(() -> service.create(request))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("来源销售订单明细不能为空");
     }
 
     @Test
@@ -622,7 +623,7 @@ class SalesOutboundServiceTest {
     }
 
     @Test
-    void shouldFallbackToPieceWeightCalculationWhenNoSourceSalesOrderItemId() {
+    void shouldRejectMissingSourceSalesOrderItemId() {
         SalesOutboundRepository repository = mock(SalesOutboundRepository.class);
         SalesOutboundMapper mapper = mock(SalesOutboundMapper.class);
         TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
@@ -648,24 +649,15 @@ class SalesOutboundServiceTest {
         );
 
         when(repository.existsByOutboundNoAndDeletedFlagFalse("SOO-NO-SRC-001")).thenReturn(false);
-        when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(Map.of("M1", new Material()));
-        when(materialSupport.normalizeBatchNo(any(), eq(null), eq(1), eq(true))).thenReturn("AUTO");
-        when(warehouseSelectionSupport.normalizeWarehouseName(any(), eq(1), eq(true))).thenReturn("一号码头");
-        when(salesOrderItemQueryService.findActiveByIdIn(anyCollection())).thenReturn(List.of());
-        when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
-        stubMapper(mapper);
 
-        service.create(request);
-
-        var outboundCaptor = forClass(SalesOutbound.class);
-        verify(repository).save(outboundCaptor.capture());
-        SalesOutbound saved = outboundCaptor.getValue();
-        assertThat(saved.getItems().get(0).getWeightTon()).isEqualByComparingTo("7.500");
+        assertThatThrownBy(() -> service.create(request))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("来源销售订单明细不能为空");
         verify(jdbc, never()).query(any(String.class), any(org.springframework.jdbc.core.RowMapper.class), any());
     }
 
     @Test
-    void shouldCollectSourceSalesOrderNoFromSourceNoWhenNoSourceItemId() {
+    void shouldRejectSourceNoWithoutSourceSalesOrderItemId() {
         SalesOutboundRepository repository = mock(SalesOutboundRepository.class);
         SalesOutboundMapper mapper = mock(SalesOutboundMapper.class);
         TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
@@ -686,18 +678,10 @@ class SalesOutboundServiceTest {
         );
 
         when(repository.existsByOutboundNoAndDeletedFlagFalse("SOO-SRC-NO-001")).thenReturn(false);
-        when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(Map.of("M1", new Material()));
-        when(materialSupport.normalizeBatchNo(any(), eq("B1"), eq(1), eq(true))).thenReturn("B1");
-        when(warehouseSelectionSupport.normalizeWarehouseName(any(), eq(1), eq(true))).thenReturn("一号码头");
-        when(salesOrderItemQueryService.findActiveByIdIn(anyCollection())).thenReturn(List.of());
-        when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
-        stubMapper(mapper);
 
-        service.create(request);
-
-        var outboundCaptor = forClass(SalesOutbound.class);
-        verify(repository).save(outboundCaptor.capture());
-        assertThat(outboundCaptor.getValue().getSalesOrderNo()).isEqualTo("SO-MANUAL");
+        assertThatThrownBy(() -> service.create(request))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("来源销售订单明细不能为空");
     }
 
     @Test
@@ -966,7 +950,7 @@ class SalesOutboundServiceTest {
     }
 
     @Test
-    void shouldHandleAssertSourceSalesOrderItemsNotOccupiedWithEmptyItems() {
+    void shouldRejectMissingSourceBeforeOccupationCheck() {
         SalesOutboundRepository repository = mock(SalesOutboundRepository.class);
         SalesOutboundMapper mapper = mock(SalesOutboundMapper.class);
         TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
@@ -987,17 +971,11 @@ class SalesOutboundServiceTest {
         );
 
         when(repository.existsByOutboundNoAndDeletedFlagFalse("SOO-EMPTY-001")).thenReturn(false);
-        when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(Map.of("M1", new Material()));
-        when(materialSupport.normalizeBatchNo(any(), eq(null), eq(1), eq(true))).thenReturn("AUTO");
-        when(warehouseSelectionSupport.normalizeWarehouseName(any(), eq(1), eq(true))).thenReturn("一号码头");
-        when(salesOrderItemQueryService.findActiveByIdIn(anyCollection())).thenReturn(List.of());
-        when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
-        stubMapper(mapper);
 
-        service.create(request);
-
+        assertThatThrownBy(() -> service.create(request))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("来源销售订单明细不能为空");
         verify(repository, never()).findAllBySourceSalesOrderItemIdsExcludingCurrentOutbound(any(), any());
-        verify(repository).save(any());
     }
 
     @Test
@@ -1101,6 +1079,8 @@ class SalesOutboundServiceTest {
         salesOrder.setId(itemId + 1000);
         salesOrder.setOrderNo(orderNo);
         salesOrder.setStatus(StatusConstants.AUDITED);
+        salesOrder.setCustomerName("客户A");
+        salesOrder.setProjectName("项目A");
         SalesOrderItem item = new SalesOrderItem();
         item.setId(itemId);
         item.setSalesOrder(salesOrder);

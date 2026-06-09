@@ -10,6 +10,7 @@ import java.math.BigDecimal;
 public record SalesOutboundItemRequest(
         Long id,
         String sourceNo,
+        @NotNull(message = "来源销售订单明细不能为空")
         Long sourceSalesOrderItemId,
         @NotBlank String materialCode,
         @NotBlank String brand,

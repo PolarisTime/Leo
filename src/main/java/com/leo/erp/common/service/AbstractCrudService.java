@@ -46,7 +46,10 @@ public abstract class AbstractCrudService<E extends AbstractAuditableEntity, Req
             StatusConstants.CONFIRMED,
             StatusConstants.PAID,
             StatusConstants.RECEIVED,
-            StatusConstants.SIGNED
+            StatusConstants.SIGNED,
+            StatusConstants.ISSUED,
+            StatusConstants.INVOICE_RECEIVED,
+            StatusConstants.ARCHIVED
     );
 
     private static final Set<String> PROTECTED_DELETE_STATUSES = Set.of(
@@ -58,7 +61,10 @@ public abstract class AbstractCrudService<E extends AbstractAuditableEntity, Req
             StatusConstants.CONFIRMED,
             StatusConstants.PAID,
             StatusConstants.RECEIVED,
-            StatusConstants.SIGNED
+            StatusConstants.SIGNED,
+            StatusConstants.ISSUED,
+            StatusConstants.INVOICE_RECEIVED,
+            StatusConstants.ARCHIVED
     );
 
     private final SnowflakeIdGenerator idGenerator;
