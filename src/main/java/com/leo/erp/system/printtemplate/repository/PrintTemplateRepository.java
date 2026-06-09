@@ -10,6 +10,8 @@ public interface PrintTemplateRepository extends JpaRepository<PrintTemplate, Lo
 
     List<PrintTemplate> findAllByBillTypeAndDeletedFlagFalseOrderByUpdatedAtDescIdDesc(String billType);
 
+    List<PrintTemplate> findAllBySyncModeAndDeletedFlagFalse(String syncMode);
+
     Optional<PrintTemplate> findByIdAndDeletedFlagFalse(Long id);
 
     boolean existsByBillTypeAndTemplateNameAndDeletedFlagFalse(String billType, String templateName);

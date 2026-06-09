@@ -44,6 +44,15 @@ public class PrintTemplate extends AbstractAuditableEntity {
     @Column(name = "status", nullable = false, length = 16)
     private String status = "ACTIVE";
 
+    @Column(name = "sync_mode", nullable = false, length = 16)
+    private String syncMode = "MANUAL";
+
+    @Column(name = "source_ref", length = 255)
+    private String sourceRef;
+
+    @Column(name = "source_checksum", length = 64)
+    private String sourceChecksum;
+
     @Column(name = "is_default", nullable = false)
     private Boolean isDefault = Boolean.FALSE;
 }

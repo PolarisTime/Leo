@@ -39,6 +39,7 @@ public class PrintTemplateService extends AbstractCrudService<PrintTemplate, Pri
     private static final Set<String> ALLOWED_TEMPLATE_TYPES = Set.of("COORD", "PDF_FORM");
     private static final Set<String> ALLOWED_ENGINES = Set.of("LODOP", "PDF_FORM");
     private static final Set<String> ALLOWED_STATUSES = Set.of("ACTIVE", "DISABLED");
+    private static final String SYNC_MODE_FILE = "FILE";
     private static final String DEFAULT_PDF_FORM_LAYOUT = "print-forms/yingjie-a4-remark.layout.json";
 
     private final PrintTemplateRepository repository;
@@ -126,6 +127,9 @@ public class PrintTemplateService extends AbstractCrudService<PrintTemplate, Pri
 
     @Override
     protected PrintTemplateRequest normalizeUpdateRequest(PrintTemplate entity, PrintTemplateRequest request) {
+        if (SYNC_MODE_FILE.equals(entity.getSyncMode())) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "文件托管模板请修改源文件后重启同步");
+        }
         String templateCode = request.templateCode();
         return new PrintTemplateRequest(
                 request.billType(),
