@@ -225,6 +225,8 @@ public class InvoiceIssueService extends AbstractCrudService<InvoiceIssue, Invoi
                 .toList();
         List<Long> sourceItemIds = extractSourceItemIds(items);
         validateSourceSalesOrderAllocations(
+                entity.getCustomerName(),
+                entity.getProjectName(),
                 items,
                 loadSourceSalesOrderItemMap(sourceItemIds),
                 loadAllocatedProgressMap(sourceItemIds, entity.getId())
@@ -271,7 +273,13 @@ public class InvoiceIssueService extends AbstractCrudService<InvoiceIssue, Invoi
         BigDecimal amount = BigDecimal.ZERO;
         for (int i = 0; i < request.items().size(); i++) {
             InvoiceIssueItemRequest source = request.items().get(i);
-            ResolvedInvoiceIssueItem resolvedItem = resolveItem(source, sourceSalesOrderItemMap, i + 1);
+            ResolvedInvoiceIssueItem resolvedItem = resolveItem(
+                    source,
+                    sourceSalesOrderItemMap,
+                    i + 1,
+                    request.customerName(),
+                    request.projectName()
+            );
             validateSourceSalesOrderAllocation(
                     source,
                     i + 1,
@@ -352,6 +360,8 @@ public class InvoiceIssueService extends AbstractCrudService<InvoiceIssue, Invoi
     }
 
     private void validateSourceSalesOrderAllocations(
+            String headerCustomerName,
+            String headerProjectName,
             List<InvoiceIssueItemRequest> items,
             Map<Long, SalesOrderItem> sourceSalesOrderItemMap,
             Map<Long, AllocationProgress> allocatedProgressMap
@@ -362,7 +372,7 @@ public class InvoiceIssueService extends AbstractCrudService<InvoiceIssue, Invoi
             validateSourceSalesOrderAllocation(
                     source,
                     i + 1,
-                    resolveItem(source, sourceSalesOrderItemMap, i + 1),
+                    resolveItem(source, sourceSalesOrderItemMap, i + 1, headerCustomerName, headerProjectName),
                     sourceSalesOrderItemMap,
                     allocatedProgressMap,
                     requestProgressMap
@@ -417,7 +427,9 @@ public class InvoiceIssueService extends AbstractCrudService<InvoiceIssue, Invoi
 
     private ResolvedInvoiceIssueItem resolveItem(InvoiceIssueItemRequest source,
                                                  Map<Long, SalesOrderItem> sourceSalesOrderItemMap,
-                                                 int lineNo) {
+                                                 int lineNo,
+                                                 String headerCustomerName,
+                                                 String headerProjectName) {
         Long sourceSalesOrderItemId = source.sourceSalesOrderItemId();
         if (sourceSalesOrderItemId == null) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行来源销售订单明细不能为空");
@@ -430,6 +442,7 @@ public class InvoiceIssueService extends AbstractCrudService<InvoiceIssue, Invoi
         if (sourceSalesOrder == null || sourceSalesOrder.getOrderNo() == null || sourceSalesOrder.getOrderNo().isBlank()) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行来源销售订单不存在");
         }
+        validateSourceSalesOrder(sourceSalesOrder, headerCustomerName, headerProjectName, lineNo);
         BigDecimal pieceWeightTon = TradeItemCalculator.scaleWeightTon(sourceSalesOrderItem.getPieceWeightTon());
         BigDecimal unitPrice = TradeItemCalculator.scaleAmount(sourceSalesOrderItem.getUnitPrice());
         BigDecimal weightTon = TradeItemCalculator.calculateWeightTon(source.quantity(), pieceWeightTon);
@@ -452,6 +465,31 @@ public class InvoiceIssueService extends AbstractCrudService<InvoiceIssue, Invoi
                 weightTon,
                 amount
         );
+    }
+
+    private void validateSourceSalesOrder(SalesOrder sourceSalesOrder,
+                                          String headerCustomerName,
+                                          String headerProjectName,
+                                          int lineNo) {
+        String sourceStatus = normalizeText(sourceSalesOrder.getStatus());
+        if (!StatusConstants.AUDITED.equals(sourceStatus) && !StatusConstants.SALES_COMPLETED.equals(sourceStatus)) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行来源销售订单未审核，不能开票");
+        }
+        assertSameSourceOrderText(headerCustomerName, sourceSalesOrder.getCustomerName(), lineNo, "客户");
+        assertSameSourceOrderText(headerProjectName, sourceSalesOrder.getProjectName(), lineNo, "项目");
+    }
+
+    private void assertSameSourceOrderText(String requestedValue, String sourceValue, int lineNo, String fieldName) {
+        if (!normalizeText(requestedValue).equals(normalizeText(sourceValue))) {
+            throw new BusinessException(
+                    ErrorCode.BUSINESS_ERROR,
+                    "第" + lineNo + "行来源销售订单" + fieldName + "与开票单不一致"
+            );
+        }
+    }
+
+    private String normalizeText(String value) {
+        return value == null ? "" : value.trim();
     }
 
     private InvoiceIssueItemResponse toItemResponse(InvoiceIssueItem item) {

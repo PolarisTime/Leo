@@ -11,6 +11,7 @@ public record InvoiceReceiptItemRequest(
         Long id,
         @NotBlank(message = "来源采购订单号不能为空")
         String sourceNo,
+        @NotNull(message = "来源采购订单明细不能为空")
         Long sourcePurchaseOrderItemId,
         @NotBlank(message = "商品编码不能为空")
         String materialCode,

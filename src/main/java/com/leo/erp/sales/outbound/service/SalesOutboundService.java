@@ -37,7 +37,6 @@ import java.util.Collection;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Optional;
 
 @Service
@@ -214,8 +213,6 @@ public class SalesOutboundService extends AbstractCrudService<SalesOutbound, Sal
         entity.setStatus(nextStatus);
         entity.setRemark(request.remark());
 
-        assertSourceSalesOrderItemsNotOccupied(request.items(), entity.getId());
-
         BigDecimal totalWeight = BigDecimal.ZERO;
         BigDecimal totalAmount = BigDecimal.ZERO;
         String firstLineWarehouseName = null;
@@ -234,6 +231,7 @@ public class SalesOutboundService extends AbstractCrudService<SalesOutbound, Sal
         Map<Long, SalesOrderItem> sourceSalesOrderItemMap = loadSourceSalesOrderItemMap(request.items(), items);
         Map<Long, Integer> requestSourceQuantityMap = new java.util.HashMap<>();
         LinkedHashSet<String> sourceSalesOrderNos = new LinkedHashSet<>();
+        LinkedHashSet<Long> sourceSalesOrderItemIds = new LinkedHashSet<>();
         for (int i = 0; i < request.items().size(); i++) {
             SalesOutboundItemRequest source = request.items().get(i);
             Material material = materialMap.get(source.materialCode());
@@ -241,7 +239,8 @@ public class SalesOutboundService extends AbstractCrudService<SalesOutbound, Sal
             int lineNo = i + 1;
             item.setSalesOutbound(entity);
             item.setLineNo(lineNo);
-            Long sourceSalesOrderItemId = resolveSourceSalesOrderItemId(source, item);
+            Long sourceSalesOrderItemId = resolveSourceSalesOrderItemId(source, item, lineNo);
+            sourceSalesOrderItemIds.add(sourceSalesOrderItemId);
             SalesOrderItem sourceSalesOrderItem = resolveSourceSalesOrderItem(sourceSalesOrderItemMap, sourceSalesOrderItemId, lineNo);
             item.setSourceSalesOrderItemId(sourceSalesOrderItemId);
             item.setMaterialCode(source.materialCode());
@@ -263,9 +262,10 @@ public class SalesOutboundService extends AbstractCrudService<SalesOutbound, Sal
             item.setBatchNo(tradeItemMaterialSupport.normalizeBatchNo(material, source.batchNo(), lineNo, true));
             item.setQuantity(source.quantity());
             item.setQuantityUnit(TradeItemCalculator.normalizeQuantityUnit(source.quantityUnit()));
-            validateSourceSalesOrderItem(source, sourceSalesOrderItem, sourceSalesOrderItemId, warehouseName,
-                    item.getBatchNo(), requestSourceQuantityMap, lineNo);
-            BigDecimal weightTon = resolveOutboundWeightTon(source, sourceSalesOrderItem, lineNo);
+            validateSourceSalesOrderItem(source, sourceSalesOrderItem, sourceSalesOrderItemId,
+                    request.customerName(), request.projectName(), warehouseName, item.getBatchNo(),
+                    requestSourceQuantityMap, lineNo);
+            BigDecimal weightTon = resolveOutboundWeightTon(source, sourceSalesOrderItem, sourceSalesOrderItemId, lineNo);
             BigDecimal pieceWeightTon = TradeItemCalculator.calculateRepresentableAveragePieceWeightTon(source.quantity(), weightTon);
             item.setPieceWeightTon(pieceWeightTon != null ? pieceWeightTon : TradeItemCalculator.scaleWeightTon(source.pieceWeightTon()));
             item.setPiecesPerBundle(source.piecesPerBundle());
@@ -277,6 +277,7 @@ public class SalesOutboundService extends AbstractCrudService<SalesOutbound, Sal
             totalWeight = totalWeight.add(weightTon);
             totalAmount = totalAmount.add(amount);
         }
+        assertSourceSalesOrderItemsNotOccupied(sourceSalesOrderItemIds, entity.getId());
         entity.getItems().sort(java.util.Comparator.comparing(SalesOutboundItem::getLineNo));
         entity.setSalesOrderNo(sourceSalesOrderNos.isEmpty()
                 ? trimToNull(request.salesOrderNo())
@@ -292,8 +293,8 @@ public class SalesOutboundService extends AbstractCrudService<SalesOutbound, Sal
      */
     private BigDecimal resolveOutboundWeightTon(SalesOutboundItemRequest source,
                                                 SalesOrderItem sourceSalesOrderItem,
+                                                Long sourceSalesOrderItemId,
                                                 int lineNo) {
-        Long sourceSalesOrderItemId = source.sourceSalesOrderItemId();
         if (sourceSalesOrderItemId == null || source.quantity() == null || source.quantity() <= 0) {
             return fallbackWeightTon(source);
         }
@@ -342,13 +343,9 @@ public class SalesOutboundService extends AbstractCrudService<SalesOutbound, Sal
     }
 
     private void assertSourceSalesOrderItemsNotOccupied(
-            Collection<SalesOutboundItemRequest> items,
+            Collection<Long> sourceSalesOrderItemIds,
             Long currentOutboundId
     ) {
-        LinkedHashSet<Long> sourceSalesOrderItemIds = items.stream()
-                .map(SalesOutboundItemRequest::sourceSalesOrderItemId)
-                .filter(Objects::nonNull)
-                .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
         if (sourceSalesOrderItemIds.isEmpty()) {
             return;
         }
@@ -429,18 +426,22 @@ public class SalesOutboundService extends AbstractCrudService<SalesOutbound, Sal
                 .collect(java.util.stream.Collectors.toMap(SalesOrderItem::getId, item -> item));
     }
 
-    private Long resolveSourceSalesOrderItemId(SalesOutboundItemRequest source, SalesOutboundItem item) {
+    private Long resolveSourceSalesOrderItemId(SalesOutboundItemRequest source, SalesOutboundItem item, int lineNo) {
         if (source.sourceSalesOrderItemId() != null) {
             return source.sourceSalesOrderItemId();
         }
-        return item.getSourceSalesOrderItemId();
+        Long persistedSourceSalesOrderItemId = item.getSourceSalesOrderItemId();
+        if (persistedSourceSalesOrderItemId == null) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行来源销售订单明细不能为空");
+        }
+        return persistedSourceSalesOrderItemId;
     }
 
     private SalesOrderItem resolveSourceSalesOrderItem(Map<Long, SalesOrderItem> sourceSalesOrderItemMap,
                                                        Long sourceSalesOrderItemId,
                                                        int lineNo) {
         if (sourceSalesOrderItemId == null) {
-            return null;
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行来源销售订单明细不能为空");
         }
         SalesOrderItem sourceSalesOrderItem = sourceSalesOrderItemMap.get(sourceSalesOrderItemId);
         if (sourceSalesOrderItem == null || sourceSalesOrderItem.getSalesOrder() == null) {
@@ -452,17 +453,22 @@ public class SalesOutboundService extends AbstractCrudService<SalesOutbound, Sal
     private void validateSourceSalesOrderItem(SalesOutboundItemRequest request,
                                               SalesOrderItem sourceSalesOrderItem,
                                               Long sourceSalesOrderItemId,
+                                              String headerCustomerName,
+                                              String headerProjectName,
                                               String warehouseName,
                                               String batchNo,
                                               Map<Long, Integer> requestSourceQuantityMap,
                                               int lineNo) {
         if (sourceSalesOrderItemId == null) {
-            return;
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行来源销售订单明细不能为空");
         }
-        String sourceStatus = sourceSalesOrderItem.getSalesOrder() == null ? null : sourceSalesOrderItem.getSalesOrder().getStatus();
+        var sourceSalesOrder = sourceSalesOrderItem.getSalesOrder();
+        String sourceStatus = sourceSalesOrder == null ? null : sourceSalesOrder.getStatus();
         if (!StatusConstants.AUDITED.equals(normalize(sourceStatus))) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行来源销售订单未审核，不能作为来源单据");
         }
+        assertSameOrderText(headerCustomerName, sourceSalesOrder == null ? null : sourceSalesOrder.getCustomerName(), lineNo, "客户");
+        assertSameOrderText(headerProjectName, sourceSalesOrder == null ? null : sourceSalesOrder.getProjectName(), lineNo, "项目");
         assertSameText(request.materialCode(), sourceSalesOrderItem.getMaterialCode(), lineNo, "物料编码");
         assertSameText(request.brand(), sourceSalesOrderItem.getBrand(), lineNo, "品牌");
         assertSameText(request.category(), sourceSalesOrderItem.getCategory(), lineNo, "品类");
@@ -489,6 +495,15 @@ public class SalesOutboundService extends AbstractCrudService<SalesOutbound, Sal
             throw new BusinessException(
                     ErrorCode.BUSINESS_ERROR,
                     "第" + lineNo + "行来源销售订单明细" + fieldName + "与请求不一致"
+            );
+        }
+    }
+
+    private void assertSameOrderText(String requestedValue, String sourceValue, int lineNo, String fieldName) {
+        if (!normalize(requestedValue).equals(normalize(sourceValue))) {
+            throw new BusinessException(
+                    ErrorCode.BUSINESS_ERROR,
+                    "第" + lineNo + "行来源销售订单" + fieldName + "与请求不一致"
             );
         }
     }

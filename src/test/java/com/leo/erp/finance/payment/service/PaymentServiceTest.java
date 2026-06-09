@@ -75,6 +75,7 @@ class PaymentServiceTest {
         SupplierStatementQueryService supplierStatementQueryService = mock(SupplierStatementQueryService.class);
         ResourceRecordAccessGuard resourceRecordAccessGuard = mock(ResourceRecordAccessGuard.class);
         SupplierStatement statement = new SupplierStatement();
+        statement.setStatus(StatusConstants.CONFIRMED);
         statement.setId(11L);
         statement.setSupplierName("供应商B");
         statement.setPurchaseAmount(new BigDecimal("1000.00"));
@@ -111,6 +112,7 @@ class PaymentServiceTest {
         FreightStatementQueryService freightStatementQueryService = mock(FreightStatementQueryService.class);
         ResourceRecordAccessGuard resourceRecordAccessGuard = mock(ResourceRecordAccessGuard.class);
         FreightStatement statement = new FreightStatement();
+        statement.setStatus(StatusConstants.AUDITED);
         statement.setId(31L);
         statement.setCarrierName("物流商B");
         statement.setTotalFreight(new BigDecimal("500.00"));
@@ -146,6 +148,7 @@ class PaymentServiceTest {
         PaymentRepository paymentRepository = mock(PaymentRepository.class);
         SupplierStatementQueryService supplierStatementQueryService = mock(SupplierStatementQueryService.class);
         SupplierStatement statement = new SupplierStatement();
+        statement.setStatus(StatusConstants.CONFIRMED);
         statement.setId(11L);
         statement.setSupplierName("供应商A");
         statement.setPurchaseAmount(new BigDecimal("1000.00"));
@@ -184,6 +187,7 @@ class PaymentServiceTest {
         PaymentRepository paymentRepository = mock(PaymentRepository.class);
         FreightStatementQueryService freightStatementQueryService = mock(FreightStatementQueryService.class);
         FreightStatement statement = new FreightStatement();
+        statement.setStatus(StatusConstants.AUDITED);
         statement.setId(31L);
         statement.setCarrierName("物流商A");
         statement.setTotalFreight(new BigDecimal("500.00"));
@@ -251,6 +255,7 @@ class PaymentServiceTest {
         PaymentRepository paymentRepository = mock(PaymentRepository.class);
         SupplierStatementQueryService supplierStatementQueryService = mock(SupplierStatementQueryService.class);
         SupplierStatement statement = new SupplierStatement();
+        statement.setStatus(StatusConstants.CONFIRMED);
         statement.setId(11L);
         statement.setSupplierName("供应商A");
         statement.setPurchaseAmount(new BigDecimal("1000.00"));
@@ -286,6 +291,7 @@ class PaymentServiceTest {
         PaymentRepository paymentRepository = mock(PaymentRepository.class);
         SupplierStatementQueryService supplierStatementQueryService = mock(SupplierStatementQueryService.class);
         SupplierStatement statement = new SupplierStatement();
+        statement.setStatus(StatusConstants.CONFIRMED);
         statement.setId(11L);
         statement.setSupplierName("供应商A");
         statement.setPurchaseAmount(new BigDecimal("1000.00"));
@@ -375,11 +381,84 @@ class PaymentServiceTest {
     }
 
     @Test
+    void shouldRejectPaidSupplierPaymentWithUnconfirmedStatement() {
+        PaymentRepository paymentRepository = mock(PaymentRepository.class);
+        SupplierStatementQueryService supplierStatementQueryService = mock(SupplierStatementQueryService.class);
+        SupplierStatement statement = new SupplierStatement();
+        statement.setStatus(StatusConstants.PENDING_CONFIRM);
+        statement.setId(11L);
+        statement.setSupplierName("供应商A");
+        statement.setPurchaseAmount(new BigDecimal("1000.00"));
+        when(supplierStatementQueryService.requireActiveById(11L)).thenReturn(statement);
+        when(paymentRepository.existsByPaymentNoAndDeletedFlagFalse("FK-001")).thenReturn(false);
+
+        PaymentService service = new PaymentService(
+                paymentRepository,
+                mock(PaymentAllocationRepository.class),
+                new SnowflakeIdGenerator(0L),
+                mock(PaymentMapper.class),
+                supplierStatementQueryService,
+                mock(FreightStatementQueryService.class),
+                mock(ApplicationEventPublisher.class),
+                mock(ResourceRecordAccessGuard.class),
+                mock(WorkflowTransitionGuard.class)
+        );
+
+        assertThatThrownBy(() -> service.create(buildRequest(
+                "供应商",
+                11L,
+                "供应商A",
+                new BigDecimal("100.00"),
+                "已付款",
+                List.of(new PaymentAllocationRequest(null, 11L, new BigDecimal("100.00")))
+        )))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("供应商对账单未确认，不能付款");
+    }
+
+    @Test
+    void shouldRejectPaidFreightPaymentWithUnauditedStatement() {
+        PaymentRepository paymentRepository = mock(PaymentRepository.class);
+        FreightStatementQueryService freightStatementQueryService = mock(FreightStatementQueryService.class);
+        FreightStatement statement = new FreightStatement();
+        statement.setStatus(StatusConstants.PENDING_AUDIT);
+        statement.setId(31L);
+        statement.setCarrierName("物流商A");
+        statement.setTotalFreight(new BigDecimal("500.00"));
+        when(freightStatementQueryService.requireActiveById(31L)).thenReturn(statement);
+        when(paymentRepository.existsByPaymentNoAndDeletedFlagFalse("FK-001")).thenReturn(false);
+
+        PaymentService service = new PaymentService(
+                paymentRepository,
+                mock(PaymentAllocationRepository.class),
+                new SnowflakeIdGenerator(0L),
+                mock(PaymentMapper.class),
+                mock(SupplierStatementQueryService.class),
+                freightStatementQueryService,
+                mock(ApplicationEventPublisher.class),
+                mock(ResourceRecordAccessGuard.class),
+                mock(WorkflowTransitionGuard.class)
+        );
+
+        assertThatThrownBy(() -> service.create(buildRequest(
+                "物流商",
+                31L,
+                "物流商A",
+                new BigDecimal("100.00"),
+                "已付款",
+                List.of(new PaymentAllocationRequest(null, 31L, new BigDecimal("100.00")))
+        )))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("物流对账单未审核，不能付款");
+    }
+
+    @Test
     void shouldAllowDraftSupplierPaymentWithPartialAllocation() {
         PaymentRepository paymentRepository = mock(PaymentRepository.class);
         PaymentMapper paymentMapper = mock(PaymentMapper.class);
         SupplierStatementQueryService supplierStatementQueryService = mock(SupplierStatementQueryService.class);
         SupplierStatement statement = new SupplierStatement();
+        statement.setStatus(StatusConstants.CONFIRMED);
         statement.setId(11L);
         statement.setSupplierName("供应商A");
         statement.setPurchaseAmount(new BigDecimal("1000.00"));
@@ -431,6 +510,7 @@ class PaymentServiceTest {
         PaymentAllocationRepository allocationRepository = mock(PaymentAllocationRepository.class);
         SupplierStatementQueryService supplierStatementQueryService = mock(SupplierStatementQueryService.class);
         SupplierStatement statement = new SupplierStatement();
+        statement.setStatus(StatusConstants.CONFIRMED);
         statement.setId(11L);
         statement.setSupplierName("供应商A");
         statement.setPurchaseAmount(new BigDecimal("1000.00"));
@@ -473,6 +553,7 @@ class PaymentServiceTest {
         PaymentAllocationRepository allocationRepository = mock(PaymentAllocationRepository.class);
         SupplierStatementQueryService supplierStatementQueryService = mock(SupplierStatementQueryService.class);
         SupplierStatement statement = new SupplierStatement();
+        statement.setStatus(StatusConstants.CONFIRMED);
         statement.setId(11L);
         statement.setSupplierName("供应商A");
         statement.setPurchaseAmount(new BigDecimal("1000.00"));
@@ -515,6 +596,7 @@ class PaymentServiceTest {
         PaymentAllocationRepository allocationRepository = mock(PaymentAllocationRepository.class);
         FreightStatementQueryService freightStatementQueryService = mock(FreightStatementQueryService.class);
         FreightStatement statement = new FreightStatement();
+        statement.setStatus(StatusConstants.AUDITED);
         statement.setId(31L);
         statement.setCarrierName("物流商A");
         statement.setTotalFreight(new BigDecimal("500.00"));
@@ -556,6 +638,7 @@ class PaymentServiceTest {
         PaymentRepository paymentRepository = mock(PaymentRepository.class);
         SupplierStatementQueryService supplierStatementQueryService = mock(SupplierStatementQueryService.class);
         SupplierStatement statement = new SupplierStatement();
+        statement.setStatus(StatusConstants.CONFIRMED);
         statement.setId(11L);
         statement.setSupplierName("供应商A");
         statement.setPurchaseAmount(new BigDecimal("1000.00"));
@@ -592,6 +675,7 @@ class PaymentServiceTest {
         SupplierStatementQueryService supplierStatementQueryService = mock(SupplierStatementQueryService.class);
         ResourceRecordAccessGuard resourceRecordAccessGuard = mock(ResourceRecordAccessGuard.class);
         SupplierStatement statement = new SupplierStatement();
+        statement.setStatus(StatusConstants.CONFIRMED);
         statement.setId(11L);
         statement.setSupplierName("供应商A");
         statement.setPurchaseAmount(new BigDecimal("1000.00"));
@@ -631,6 +715,7 @@ class PaymentServiceTest {
         FreightStatementQueryService freightStatementQueryService = mock(FreightStatementQueryService.class);
         ResourceRecordAccessGuard resourceRecordAccessGuard = mock(ResourceRecordAccessGuard.class);
         FreightStatement statement = new FreightStatement();
+        statement.setStatus(StatusConstants.AUDITED);
         statement.setId(31L);
         statement.setCarrierName("物流商A");
         statement.setTotalFreight(new BigDecimal("500.00"));
@@ -674,6 +759,7 @@ class PaymentServiceTest {
         ResourceRecordAccessGuard resourceRecordAccessGuard = mock(ResourceRecordAccessGuard.class);
 
         SupplierStatement statement = new SupplierStatement();
+        statement.setStatus(StatusConstants.CONFIRMED);
         statement.setId(11L);
         statement.setSupplierName("供应商A");
         statement.setPurchaseAmount(new BigDecimal("1000.00"));
@@ -718,6 +804,7 @@ class PaymentServiceTest {
         ResourceRecordAccessGuard resourceRecordAccessGuard = mock(ResourceRecordAccessGuard.class);
 
         FreightStatement statement = new FreightStatement();
+        statement.setStatus(StatusConstants.AUDITED);
         statement.setId(31L);
         statement.setCarrierName("物流商A");
         statement.setTotalFreight(new BigDecimal("500.00"));
@@ -951,6 +1038,7 @@ class PaymentServiceTest {
         existing.setAmount(new BigDecimal("100.00"));
 
         SupplierStatement statement = new SupplierStatement();
+        statement.setStatus(StatusConstants.CONFIRMED);
         statement.setId(11L);
         statement.setSupplierName("供应商A");
         statement.setPurchaseAmount(new BigDecimal("1000.00"));
@@ -1028,6 +1116,7 @@ class PaymentServiceTest {
         existing.setAmount(new BigDecimal("100.00"));
 
         FreightStatement statement = new FreightStatement();
+        statement.setStatus(StatusConstants.AUDITED);
         statement.setId(31L);
         statement.setCarrierName("物流商A");
         statement.setTotalFreight(new BigDecimal("500.00"));
@@ -1189,6 +1278,7 @@ class PaymentServiceTest {
         PaymentRepository paymentRepository = mock(PaymentRepository.class);
         SupplierStatementQueryService supplierStatementQueryService = mock(SupplierStatementQueryService.class);
         SupplierStatement statement = new SupplierStatement();
+        statement.setStatus(StatusConstants.CONFIRMED);
         statement.setId(11L);
         statement.setSupplierName("供应商A");
         statement.setPurchaseAmount(new BigDecimal("1000.00"));
@@ -1216,6 +1306,7 @@ class PaymentServiceTest {
         PaymentRepository paymentRepository = mock(PaymentRepository.class);
         FreightStatementQueryService freightStatementQueryService = mock(FreightStatementQueryService.class);
         FreightStatement statement = new FreightStatement();
+        statement.setStatus(StatusConstants.AUDITED);
         statement.setId(31L);
         statement.setCarrierName("物流商A");
         statement.setTotalFreight(new BigDecimal("500.00"));
@@ -1243,6 +1334,7 @@ class PaymentServiceTest {
         PaymentRepository paymentRepository = mock(PaymentRepository.class);
         FreightStatementQueryService freightStatementQueryService = mock(FreightStatementQueryService.class);
         FreightStatement statement = new FreightStatement();
+        statement.setStatus(StatusConstants.AUDITED);
         statement.setId(31L);
         statement.setCarrierName("物流商A");
         statement.setTotalFreight(new BigDecimal("500.00"));

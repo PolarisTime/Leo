@@ -463,6 +463,9 @@ public class PaymentService extends AbstractCrudService<Payment, PaymentRequest,
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "同一付款单不能重复核销同一供应商对账单");
         }
         if (PAYMENT_STATUS_SETTLED.equals(normalizedStatus)) {
+            if (!StatusConstants.CONFIRMED.equals(statement.getStatus())) {
+                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行供应商对账单未确认，不能付款");
+            }
             BigDecimal settledAmount = TradeItemCalculator.safeBigDecimal(
                     paymentAllocationRepository.sumAllocatedAmountBySourceStatementIdAndBusinessTypeAndStatusExcludingPaymentId(
                             statement.getId(),
@@ -494,6 +497,9 @@ public class PaymentService extends AbstractCrudService<Payment, PaymentRequest,
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "同一付款单不能重复核销同一物流对账单");
         }
         if (PAYMENT_STATUS_SETTLED.equals(normalizedStatus)) {
+            if (!StatusConstants.AUDITED.equals(statement.getStatus())) {
+                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行物流对账单未审核，不能付款");
+            }
             BigDecimal settledAmount = TradeItemCalculator.safeBigDecimal(
                     paymentAllocationRepository.sumAllocatedAmountBySourceStatementIdAndBusinessTypeAndStatusExcludingPaymentId(
                             statement.getId(),

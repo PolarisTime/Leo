@@ -445,15 +445,7 @@ public class CustomerStatementService extends AbstractCrudService<CustomerStatem
             }
             return sourceSalesOrderItem;
         }
-        String sourceNo = source.sourceNo() == null ? "" : source.sourceNo().trim();
-        if (sourceNo.isEmpty()) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行来源销售订单明细不能为空");
-        }
-        return salesOrderRepository.findByOrderNoInAndDeletedFlagFalse(List.of(sourceNo)).stream()
-                .flatMap(order -> order.getItems().stream())
-                .filter(item -> matchesLegacyCustomerItem(source, item))
-                .findFirst()
-                .orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行来源销售订单明细不存在"));
+        throw new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行来源销售订单明细不能为空");
     }
 
     private String resolveCustomerCode(String requestCustomerCode,
@@ -495,18 +487,6 @@ public class CustomerStatementService extends AbstractCrudService<CustomerStatem
             return null;
         }
         return value.trim();
-    }
-
-    private boolean matchesLegacyCustomerItem(CustomerStatementItemRequest source, SalesOrderItem item) {
-        return item.getMaterialCode().equals(source.materialCode())
-                && item.getBrand().equals(source.brand())
-                && item.getCategory().equals(source.category())
-                && item.getMaterial().equals(source.material())
-                && item.getSpec().equals(source.spec())
-                && java.util.Objects.equals(item.getLength(), source.length())
-                && item.getQuantity().equals(source.quantity())
-                && TradeItemCalculator.normalizeQuantityUnit(item.getQuantityUnit())
-                .equals(TradeItemCalculator.normalizeQuantityUnit(source.quantityUnit()));
     }
 
     private CustomerStatementCandidateResponse toCandidateResponse(SalesOrder order) {

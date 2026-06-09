@@ -356,7 +356,7 @@ class PurchaseInboundServiceTest {
     }
 
     @Test
-    void shouldKeepManualInboundWeightWhenItMatchesWeighWeight() {
+    void shouldRejectManualInboundWithoutSourcePurchaseOrderItem() {
         PurchaseInboundRepository repository = mock(PurchaseInboundRepository.class);
         PurchaseInboundMapper mapper = mock(PurchaseInboundMapper.class);
         TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
@@ -396,22 +396,10 @@ class PurchaseInboundServiceTest {
         );
 
         when(repository.existsByInboundNoAndDeletedFlagFalse("PI-004")).thenReturn(false);
-        when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(Map.of("M1", new Material()));
-        when(materialSupport.normalizeBatchNo(any(), eq("B1"), eq(1), eq(true))).thenReturn("B1");
-        when(warehouseSelectionSupport.normalizeWarehouseName("一号库", 1, true)).thenReturn("一号库");
-        when(materialCategoryRepository.findByCategoryNameInAndDeletedFlagFalse(List.of("盘螺"))).thenReturn(List.of(purchaseWeighCategory("盘螺")));
-        when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
-        when(mapper.toResponse(any())).thenReturn(response());
 
-        service.create(request);
-
-        var inboundCaptor = forClass(PurchaseInbound.class);
-        verify(repository).save(inboundCaptor.capture());
-        PurchaseInboundItem savedItem = inboundCaptor.getValue().getItems().get(0);
-        assertThat(savedItem.getWeightTon()).isEqualByComparingTo("14.100");
-        assertThat(savedItem.getWeighWeightTon()).isEqualByComparingTo("14.258");
-        assertThat(savedItem.getPieceWeightTon()).isEqualByComparingTo("4.753");
-        assertThat(savedItem.getAmount()).isEqualByComparingTo("42300.00");
+        assertThatThrownBy(() -> service.create(request))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("来源采购订单明细不能为空");
     }
 
     @Test
@@ -1157,15 +1145,28 @@ class PurchaseInboundServiceTest {
     @Test
     void shouldRejectWhenLineSettlementModeAndHeaderSettlementModeBothNull() {
         PurchaseInboundRepository repository = mock(PurchaseInboundRepository.class);
-        PurchaseInboundService service = newService(repository, mock(PurchaseInboundMapper.class),
-                mock(ItemAllocationNativeRepository.class));
+        PurchaseOrderItemQueryService purchaseOrderItemQueryService = mock(PurchaseOrderItemQueryService.class);
+        PurchaseInboundService service = new PurchaseInboundService(
+                repository,
+                mock(SnowflakeIdGenerator.class),
+                mock(PurchaseInboundMapper.class),
+                mock(TradeItemMaterialSupport.class),
+                mock(WarehouseSelectionSupport.class),
+                mock(MaterialCategoryRepository.class),
+                mock(PurchaseInboundItemRepository.class),
+                mock(PurchaseOrderRepository.class),
+                mock(PurchaseOrderItemPieceWeightService.class),
+                purchaseOrderItemQueryService,
+                mock(ItemAllocationNativeRepository.class),
+                stubbedInboundItemMapper(), mock(WorkflowTransitionGuard.class)
+        );
 
         PurchaseInboundRequest request = new PurchaseInboundRequest(
                 "PI-003", null, "供应商A", null,
                 LocalDate.of(2026, 4, 26), null, "草稿", null,
                 List.of(new PurchaseInboundItemRequest(
                         null, "M1", "宝钢", "螺纹钢", "HRB400", "18", "12m", "吨",
-                        null, "一号库", null, "B1", 4, "支",
+                        201L, "一号库", null, "B1", 4, "支",
                         new BigDecimal("0.100"), 1, new BigDecimal("0.400"),
                         null, null, null,
                         new BigDecimal("4000.00"), null
@@ -1173,6 +1174,7 @@ class PurchaseInboundServiceTest {
         );
 
         when(repository.existsByInboundNoAndDeletedFlagFalse("PI-003")).thenReturn(false);
+        when(purchaseOrderItemQueryService.findActiveByIdIn(List.of(201L))).thenReturn(List.of(sourcePurchaseOrderItem()));
 
         assertThatThrownBy(() -> service.create(request))
                 .isInstanceOf(BusinessException.class)

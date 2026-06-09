@@ -415,6 +415,9 @@ public class ReceiptService extends AbstractCrudService<Receipt, ReceiptRequest,
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "同一收款单不能重复核销同一客户对账单");
         }
         if (RECEIPT_STATUS_SETTLED.equals(normalizedStatus)) {
+            if (!StatusConstants.CONFIRMED.equals(statement.getStatus())) {
+                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行客户对账单未确认，不能收款");
+            }
             BigDecimal settledAmount = TradeItemCalculator.safeBigDecimal(
                     receiptAllocationRepository.sumAllocatedAmountBySourceStatementIdAndReceiptStatusExcludingReceiptId(
                             statement.getId(),

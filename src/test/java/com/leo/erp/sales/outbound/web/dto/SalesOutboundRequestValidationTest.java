@@ -29,7 +29,7 @@ class SalesOutboundRequestValidationTest {
                 "备注",
                 List.of(new SalesOutboundItemRequest(
                         null,
-                        null,
+                        101L,
                         "M001",
                         "宝钢",
                         "板材",
@@ -69,7 +69,7 @@ class SalesOutboundRequestValidationTest {
                 "备注",
                 List.of(new SalesOutboundItemRequest(
                         null,
-                        null,
+                        101L,
                         "M001",
                         "宝钢",
                         "板材",
@@ -109,7 +109,7 @@ class SalesOutboundRequestValidationTest {
                 "备注",
                 List.of(new SalesOutboundItemRequest(
                         null,
-                        null,
+                        101L,
                         "M001",
                         "宝钢",
                         "板材",
@@ -220,7 +220,7 @@ class SalesOutboundRequestValidationTest {
                 "备注",
                 List.of(new SalesOutboundItemRequest(
                         null,
-                        null,
+                        101L,
                         "M001",
                         "宝钢",
                         "板材",

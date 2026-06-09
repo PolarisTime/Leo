@@ -16,6 +16,7 @@ public record PurchaseInboundItemRequest(
         @NotBlank String spec,
         String length,
         @NotBlank String unit,
+        @NotNull(message = "来源采购订单明细不能为空")
         Long sourcePurchaseOrderItemId,
         String warehouseName,
         String settlementMode,

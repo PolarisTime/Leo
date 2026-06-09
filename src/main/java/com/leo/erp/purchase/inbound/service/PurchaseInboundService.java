@@ -732,7 +732,7 @@ public class PurchaseInboundService extends AbstractCrudService<
     ) {
         Long sourcePurchaseOrderItemId = source.sourcePurchaseOrderItemId();
         if (sourcePurchaseOrderItemId == null) {
-            return;
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行来源采购订单明细不能为空");
         }
         PurchaseOrderItem sourcePurchaseOrderItem = sourcePurchaseOrderItemMap.get(sourcePurchaseOrderItemId);
         if (sourcePurchaseOrderItem == null) {
