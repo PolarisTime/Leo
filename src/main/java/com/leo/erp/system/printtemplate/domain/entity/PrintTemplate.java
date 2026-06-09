@@ -30,10 +30,10 @@ public class PrintTemplate extends AbstractAuditableEntity {
     private String templateHtml;
 
     @Column(name = "template_type", nullable = false, length = 16)
-    private String templateType = "HTML";
+    private String templateType = "COORD";
 
     @Column(name = "engine", nullable = false, length = 32)
-    private String engine = "BROWSER_HTML";
+    private String engine = "LODOP";
 
     @Column(name = "asset_ref", length = 255)
     private String assetRef;

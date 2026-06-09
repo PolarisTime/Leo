@@ -84,10 +84,16 @@ public class PrintScriptService {
 
     private final PrintTemplateRepository templateRepository;
     private final JdbcTemplate jdbc;
+    private final PrintLayoutLodopRenderer layoutLodopRenderer;
 
-    public PrintScriptService(PrintTemplateRepository templateRepository, JdbcTemplate jdbc) {
+    public PrintScriptService(
+            PrintTemplateRepository templateRepository,
+            JdbcTemplate jdbc,
+            PrintLayoutLodopRenderer layoutLodopRenderer
+    ) {
         this.templateRepository = templateRepository;
         this.jdbc = jdbc;
+        this.layoutLodopRenderer = layoutLodopRenderer;
     }
 
     /** Load record + items from DB, return raw template + data for frontend rendering. */
@@ -121,11 +127,19 @@ public class PrintScriptService {
 
         Map<String, Object> result = new HashMap<>();
         result.put("templateName", template.getTemplateName());
-        result.put("templateHtml", template.getTemplateHtml());
-        result.put("templateType", template.getTemplateType() != null ? template.getTemplateType() : "HTML");
+        result.put("templateHtml", renderTemplateHtml(template, data, items));
+        result.put("templateType", template.getTemplateType() != null ? template.getTemplateType() : "COORD");
         result.put("data", data);
         result.put("items", items);
         return result;
+    }
+
+    private String renderTemplateHtml(PrintTemplate template, Map<String, String> data, List<Map<String, String>> items) {
+        String templateHtml = template.getTemplateHtml();
+        if ("COORD".equals(template.getTemplateType()) && layoutLodopRenderer.supports(templateHtml)) {
+            return layoutLodopRenderer.render(template.getTemplateName(), templateHtml, data, items);
+        }
+        return templateHtml;
     }
 
     private List<Map<String, String>> loadItems(PrintRecordSource source, Long recordId) {

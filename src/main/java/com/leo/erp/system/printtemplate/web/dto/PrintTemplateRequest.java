@@ -9,9 +9,9 @@ public record PrintTemplateRequest(
         @NotBlank @Size(max = 128) String templateName,
         @Size(max = 96) String templateCode,
         @Size(max = 200000) String templateHtml,
-        @Pattern(regexp = "HTML|COORD|PDF_FORM", message = "模板类型仅支持 HTML、COORD 或 PDF_FORM")
+        @Pattern(regexp = "COORD|PDF_FORM", message = "模板类型仅支持 COORD 或 PDF_FORM")
         String templateType,
-        @Pattern(regexp = "BROWSER_HTML|LODOP|PDF_FORM", message = "渲染引擎仅支持 BROWSER_HTML、LODOP 或 PDF_FORM")
+        @Pattern(regexp = "LODOP|PDF_FORM", message = "渲染引擎仅支持 LODOP 或 PDF_FORM")
         String engine,
         @Size(max = 255) String assetRef,
         Integer versionNo,

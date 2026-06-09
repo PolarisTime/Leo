@@ -3,16 +3,19 @@ package com.leo.erp.system.printtemplate.service;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.service.AbstractCrudService;
-import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.ModuleCatalog;
+import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.system.printtemplate.domain.entity.PrintTemplate;
 import com.leo.erp.system.printtemplate.repository.PrintTemplateRepository;
 import com.leo.erp.system.printtemplate.mapper.PrintTemplateMapper;
 import com.leo.erp.system.printtemplate.web.dto.PrintTemplateRequest;
 import com.leo.erp.system.printtemplate.web.dto.PrintTemplateResponse;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -28,20 +31,15 @@ public class PrintTemplateService extends AbstractCrudService<PrintTemplate, Pri
             "supplier-statement", "customer-statement", "freight-statement",
             "receipt", "payment", "invoice-receipt", "invoice-issue"
     );
-    private static final List<Pattern> DANGEROUS_HTML_PATTERNS = List.of(
-            Pattern.compile("<\\s*script\\b", Pattern.CASE_INSENSITIVE),
-            Pattern.compile("<\\s*(iframe|object|embed|base|meta|link|form)\\b", Pattern.CASE_INSENSITIVE),
-            Pattern.compile("\\son[a-z-]+\\s*=", Pattern.CASE_INSENSITIVE),
-            Pattern.compile("(href|src|action)\\s*=\\s*['\"]?\\s*(javascript:|data:text/html)", Pattern.CASE_INSENSITIVE)
-    );
     private static final List<Pattern> DANGEROUS_LODOP_PATTERNS = List.of(
             Pattern.compile("\\b(eval|Function)\\s*\\(", Pattern.CASE_INSENSITIVE),
             Pattern.compile("\\b(window|document|localStorage|sessionStorage|location|history|navigator)\\b", Pattern.CASE_INSENSITIVE),
             Pattern.compile("\\b(fetch|XMLHttpRequest|WebSocket)\\b", Pattern.CASE_INSENSITIVE)
     );
-    private static final Set<String> ALLOWED_TEMPLATE_TYPES = Set.of("HTML", "COORD", "PDF_FORM");
-    private static final Set<String> ALLOWED_ENGINES = Set.of("BROWSER_HTML", "LODOP", "PDF_FORM");
+    private static final Set<String> ALLOWED_TEMPLATE_TYPES = Set.of("COORD", "PDF_FORM");
+    private static final Set<String> ALLOWED_ENGINES = Set.of("LODOP", "PDF_FORM");
     private static final Set<String> ALLOWED_STATUSES = Set.of("ACTIVE", "DISABLED");
+    private static final String DEFAULT_PDF_FORM_LAYOUT = "print-forms/yingjie-a4-remark.layout.json";
 
     private final PrintTemplateRepository repository;
     private final PrintTemplateMapper printTemplateMapper;
@@ -194,7 +192,12 @@ public class PrintTemplateService extends AbstractCrudService<PrintTemplate, Pri
 
     private String normalizeTemplateHtml(String templateHtml, String templateType, String assetRef) {
         if ("PDF_FORM".equals(templateType)) {
-            return "{\"form\":\"YINGJIE_A4_REMARK\",\"template\":\"" + assetRef + "\"}";
+            if (templateHtml != null && !templateHtml.isBlank()) {
+                String normalized = templateHtml.trim();
+                validateTemplateContent(normalized, templateType);
+                return normalized;
+            }
+            return defaultPdfFormTemplate();
         }
         if (templateHtml == null || templateHtml.isBlank()) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "模板内容不能为空");
@@ -206,24 +209,34 @@ public class PrintTemplateService extends AbstractCrudService<PrintTemplate, Pri
 
     private void validateTemplateContent(String templateHtml, String templateType) {
         if ("PDF_FORM".equals(normalizeTemplateType(templateType))) {
+            String normalized = templateHtml == null ? "" : templateHtml.trim();
+            if (!normalized.startsWith("{") || !normalized.endsWith("}")) {
+                throw new BusinessException(ErrorCode.VALIDATION_ERROR, "PDF_FORM 模板配置必须是 JSON 对象");
+            }
             return;
         }
-        boolean isCoord = "COORD".equals(normalizeTemplateType(templateType));
-        List<Pattern> patterns = isCoord ? DANGEROUS_LODOP_PATTERNS : DANGEROUS_HTML_PATTERNS;
-        for (Pattern pattern : patterns) {
+        for (Pattern pattern : DANGEROUS_LODOP_PATTERNS) {
             if (pattern.matcher(templateHtml).find()) {
                 throw new BusinessException(ErrorCode.VALIDATION_ERROR, "模板内容包含不允许的脚本或危险标签");
             }
         }
     }
 
+    private String defaultPdfFormTemplate() {
+        try {
+            return new ClassPathResource(DEFAULT_PDF_FORM_LAYOUT).getContentAsString(StandardCharsets.UTF_8).trim();
+        } catch (IOException ex) {
+            throw new BusinessException(ErrorCode.INTERNAL_ERROR, "读取 PDF_FORM 默认布局失败");
+        }
+    }
+
     private String normalizeTemplateType(String templateType) {
         if (templateType == null || templateType.isBlank()) {
-            return "HTML";
+            return "COORD";
         }
         String normalized = templateType.trim().toUpperCase();
         if (!ALLOWED_TEMPLATE_TYPES.contains(normalized)) {
-            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "模板类型仅支持 HTML、COORD 或 PDF_FORM");
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "模板类型仅支持 COORD 或 PDF_FORM");
         }
         return normalized;
     }
@@ -231,7 +244,7 @@ public class PrintTemplateService extends AbstractCrudService<PrintTemplate, Pri
     private String normalizeEngine(String engine, String templateType) {
         String normalized = engine == null || engine.isBlank() ? defaultEngine(templateType) : engine.trim().toUpperCase();
         if (!ALLOWED_ENGINES.contains(normalized)) {
-            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "渲染引擎仅支持 BROWSER_HTML、LODOP 或 PDF_FORM");
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "渲染引擎仅支持 LODOP 或 PDF_FORM");
         }
         if ("PDF_FORM".equals(templateType) && !"PDF_FORM".equals(normalized)) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "PDF_FORM 模板必须使用 PDF_FORM 引擎");
@@ -239,17 +252,13 @@ public class PrintTemplateService extends AbstractCrudService<PrintTemplate, Pri
         if ("COORD".equals(templateType) && !"LODOP".equals(normalized)) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "COORD 模板必须使用 LODOP 引擎");
         }
-        if ("HTML".equals(templateType) && !"BROWSER_HTML".equals(normalized)) {
-            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "HTML 模板必须使用 BROWSER_HTML 引擎");
-        }
         return normalized;
     }
 
     private String defaultEngine(String templateType) {
         return switch (templateType) {
-            case "COORD" -> "LODOP";
             case "PDF_FORM" -> "PDF_FORM";
-            default -> "BROWSER_HTML";
+            default -> "LODOP";
         };
     }
 
@@ -258,7 +267,7 @@ public class PrintTemplateService extends AbstractCrudService<PrintTemplate, Pri
             return null;
         }
         if (assetRef == null || assetRef.isBlank()) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "PDF_FORM 模板必须配置 PDF 底版资源");
+            return null;
         }
         String normalized = assetRef.trim();
         if (normalized.contains("..") || normalized.startsWith("/") || !normalized.toLowerCase().endsWith(".pdf")) {

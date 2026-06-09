@@ -83,8 +83,8 @@ class PrintTemplateRepositoryTest {
         template.setId(id);
         template.setBillType(billType);
         template.setTemplateName(templateName);
-        template.setTemplateHtml("<div>模板</div>");
-        template.setTemplateType("HTML");
+        template.setTemplateHtml("LODOP.PRINT_INIT('模板');");
+        template.setTemplateType("COORD");
         return template;
     }
 }
