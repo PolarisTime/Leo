@@ -3,6 +3,7 @@ package com.leo.erp.system.printtemplate.service;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.support.ModuleCatalog;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
+import com.leo.erp.system.printtemplate.domain.entity.PrintTemplate;
 import com.leo.erp.system.printtemplate.repository.PrintTemplateRepository;
 import com.leo.erp.system.printtemplate.mapper.PrintTemplateMapper;
 import com.leo.erp.system.printtemplate.web.dto.PrintTemplateRequest;
@@ -10,6 +11,7 @@ import org.junit.jupiter.api.Test;
 import org.mapstruct.factory.Mappers;
 
 import java.lang.reflect.Proxy;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -76,6 +78,23 @@ class PrintTemplateServiceTest {
                     case "existsByBillTypeAndTemplateNameAndDeletedFlagFalse" -> false;
                     case "existsByBillTypeAndTemplateCodeAndDeletedFlagFalse" -> false;
                     case "findAllByBillTypeAndDeletedFlagFalseOrderByUpdatedAtDescIdDesc" -> java.util.List.of();
+                    case "save" -> args[0];
+                    case "toString" -> "PrintTemplateRepositoryStub";
+                    case "hashCode" -> System.identityHashCode(proxy);
+                    case "equals" -> proxy == args[0];
+                    default -> throw new UnsupportedOperationException(method.getName());
+                }
+        );
+    }
+
+    private PrintTemplateRepository repository(PrintTemplate template) {
+        return (PrintTemplateRepository) Proxy.newProxyInstance(
+                PrintTemplateRepository.class.getClassLoader(),
+                new Class[]{PrintTemplateRepository.class},
+                (proxy, method, args) -> switch (method.getName()) {
+                    case "existsByBillTypeAndTemplateNameAndDeletedFlagFalse" -> false;
+                    case "existsByBillTypeAndTemplateCodeAndDeletedFlagFalse" -> false;
+                    case "findByIdAndDeletedFlagFalse" -> Optional.of(template);
                     case "save" -> args[0];
                     case "toString" -> "PrintTemplateRepositoryStub";
                     case "hashCode" -> System.identityHashCode(proxy);
@@ -255,5 +274,38 @@ class PrintTemplateServiceTest {
 
         var result = service.listByBillType("purchase-order");
         assertThat(result).isNotNull();
+    }
+
+    @Test
+    void shouldRejectUpdateForFileManagedTemplate() {
+        PrintTemplate template = new PrintTemplate();
+        template.setId(1L);
+        template.setBillType("sales-order");
+        template.setTemplateName("颖捷A4打印_带备注 PDF");
+        template.setTemplateCode("SALES_ORDER_YINGJIE_A4_REMARK_PDF");
+        template.setTemplateHtml("{}");
+        template.setTemplateType("PDF_FORM");
+        template.setEngine("PDF_FORM");
+        template.setVersionNo(1);
+        template.setStatus("ACTIVE");
+        template.setSyncMode("FILE");
+        template.setSourceRef("print-forms/yingjie-a4-remark.layout.json");
+
+        PrintTemplateService service = new PrintTemplateService(
+                repository(template), new SnowflakeIdGenerator(0L), mapper(), new ModuleCatalog());
+
+        assertThatThrownBy(() -> service.update(1L, request(
+                "sales-order",
+                "颖捷A4打印_带备注 PDF",
+                "SALES_ORDER_YINGJIE_A4_REMARK_PDF",
+                "{\"page\":{}}",
+                "PDF_FORM",
+                "PDF_FORM",
+                null,
+                1,
+                "ACTIVE"
+        )))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("文件托管模板请修改源文件后重启同步");
     }
 }

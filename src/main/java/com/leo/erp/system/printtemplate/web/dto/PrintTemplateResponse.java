@@ -13,6 +13,9 @@ public record PrintTemplateResponse(
         String assetRef,
         Integer versionNo,
         String status,
+        String syncMode,
+        String sourceRef,
+        String sourceChecksum,
         LocalDateTime createTime,
         LocalDateTime updateTime
 ) {
