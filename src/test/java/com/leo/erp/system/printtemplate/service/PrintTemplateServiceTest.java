@@ -1,5 +1,6 @@
 package com.leo.erp.system.printtemplate.service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.support.ModuleCatalog;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
@@ -9,8 +10,10 @@ import com.leo.erp.system.printtemplate.mapper.PrintTemplateMapper;
 import com.leo.erp.system.printtemplate.web.dto.PrintTemplateRequest;
 import org.junit.jupiter.api.Test;
 import org.mapstruct.factory.Mappers;
+import org.springframework.mock.web.MockMultipartFile;
 
 import java.lang.reflect.Proxy;
+import java.nio.charset.StandardCharsets;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -20,12 +23,7 @@ class PrintTemplateServiceTest {
 
     @Test
     void shouldRejectUnsupportedBillType() {
-        PrintTemplateService service = new PrintTemplateService(
-                repository(),
-                new SnowflakeIdGenerator(0L),
-                mapper(),
-                new ModuleCatalog()
-        );
+        PrintTemplateService service = service(repository());
 
         assertThatThrownBy(() -> service.create(request("permission-management", "模板A", "<div/>", null)))
                 .isInstanceOf(BusinessException.class)
@@ -34,12 +32,7 @@ class PrintTemplateServiceTest {
 
     @Test
     void shouldRejectHtmlTemplateType() {
-        PrintTemplateService service = new PrintTemplateService(
-                repository(),
-                new SnowflakeIdGenerator(0L),
-                mapper(),
-                new ModuleCatalog()
-        );
+        PrintTemplateService service = service(repository());
 
         assertThatThrownBy(() -> service.create(request(
                 "purchase-order",
@@ -53,12 +46,7 @@ class PrintTemplateServiceTest {
 
     @Test
     void shouldRejectDangerousLodopTemplate() {
-        PrintTemplateService service = new PrintTemplateService(
-                repository(),
-                new SnowflakeIdGenerator(0L),
-                mapper(),
-                new ModuleCatalog()
-        );
+        PrintTemplateService service = service(repository());
 
         assertThatThrownBy(() -> service.create(request(
                 "purchase-order",
@@ -108,6 +96,17 @@ class PrintTemplateServiceTest {
         return Mappers.getMapper(PrintTemplateMapper.class);
     }
 
+    private PrintTemplateService service(PrintTemplateRepository repository) {
+        ObjectMapper objectMapper = new ObjectMapper();
+        return new PrintTemplateService(
+                repository,
+                new SnowflakeIdGenerator(0L),
+                mapper(),
+                new ModuleCatalog(),
+                new PrintPdfFormTemplateValidator(objectMapper)
+        );
+    }
+
     private PrintTemplateRequest request(String billType, String templateName, String templateHtml, String templateType) {
         return new PrintTemplateRequest(
                 billType,
@@ -148,8 +147,7 @@ class PrintTemplateServiceTest {
 
     @Test
     void shouldRejectEmptyBillType() {
-        PrintTemplateService service = new PrintTemplateService(
-                repository(), new SnowflakeIdGenerator(0L), mapper(), new ModuleCatalog());
+        PrintTemplateService service = service(repository());
 
         assertThatThrownBy(() -> service.create(request("", "模板A", "<div/>", null)))
                 .isInstanceOf(BusinessException.class)
@@ -158,8 +156,7 @@ class PrintTemplateServiceTest {
 
     @Test
     void shouldRejectNullTemplateName() {
-        PrintTemplateService service = new PrintTemplateService(
-                repository(), new SnowflakeIdGenerator(0L), mapper(), new ModuleCatalog());
+        PrintTemplateService service = service(repository());
 
         assertThatThrownBy(() -> service.create(request("purchase-order", null, "<div/>", null)))
                 .isInstanceOf(BusinessException.class)
@@ -168,8 +165,7 @@ class PrintTemplateServiceTest {
 
     @Test
     void shouldRejectEmptyTemplateHtml() {
-        PrintTemplateService service = new PrintTemplateService(
-                repository(), new SnowflakeIdGenerator(0L), mapper(), new ModuleCatalog());
+        PrintTemplateService service = service(repository());
 
         assertThatThrownBy(() -> service.create(request("purchase-order", "模板A", "", null)))
                 .isInstanceOf(BusinessException.class)
@@ -178,8 +174,7 @@ class PrintTemplateServiceTest {
 
     @Test
     void shouldRejectInvalidTemplateType() {
-        PrintTemplateService service = new PrintTemplateService(
-                repository(), new SnowflakeIdGenerator(0L), mapper(), new ModuleCatalog());
+        PrintTemplateService service = service(repository());
 
         assertThatThrownBy(() -> service.create(request("purchase-order", "模板A", "<div/>", "INVALID")))
                 .isInstanceOf(BusinessException.class)
@@ -188,8 +183,7 @@ class PrintTemplateServiceTest {
 
     @Test
     void shouldAllowPdfFormTypeWithoutTemplateHtmlOrAssetRef() {
-        PrintTemplateService service = new PrintTemplateService(
-                repository(), new SnowflakeIdGenerator(0L), mapper(), new ModuleCatalog());
+        PrintTemplateService service = service(repository());
 
         var result = service.create(request(
                 "purchase-order",
@@ -215,8 +209,7 @@ class PrintTemplateServiceTest {
 
     @Test
     void shouldRejectPdfFormWithInvalidAssetRef() {
-        PrintTemplateService service = new PrintTemplateService(
-                repository(), new SnowflakeIdGenerator(0L), mapper(), new ModuleCatalog());
+        PrintTemplateService service = service(repository());
 
         assertThatThrownBy(() -> service.create(request(
                 "purchase-order",
@@ -235,8 +228,7 @@ class PrintTemplateServiceTest {
 
     @Test
     void shouldRejectHtmlEngine() {
-        PrintTemplateService service = new PrintTemplateService(
-                repository(), new SnowflakeIdGenerator(0L), mapper(), new ModuleCatalog());
+        PrintTemplateService service = service(repository());
 
         assertThatThrownBy(() -> service.create(request(
                 "purchase-order",
@@ -255,8 +247,7 @@ class PrintTemplateServiceTest {
 
     @Test
     void shouldCreateValidTemplate() {
-        PrintTemplateService service = new PrintTemplateService(
-                repository(), new SnowflakeIdGenerator(0L), mapper(), new ModuleCatalog());
+        PrintTemplateService service = service(repository());
 
         var result = service.create(request("purchase-order", "模板A", "LODOP.PRINT_INIT('安全内容');", null));
         assertThat(result).isNotNull();
@@ -269,8 +260,7 @@ class PrintTemplateServiceTest {
 
     @Test
     void shouldListByBillType() {
-        PrintTemplateService service = new PrintTemplateService(
-                repository(), new SnowflakeIdGenerator(0L), mapper(), new ModuleCatalog());
+        PrintTemplateService service = service(repository());
 
         var result = service.listByBillType("purchase-order");
         assertThat(result).isNotNull();
@@ -278,21 +268,11 @@ class PrintTemplateServiceTest {
 
     @Test
     void shouldRejectUpdateForFileManagedTemplate() {
-        PrintTemplate template = new PrintTemplate();
-        template.setId(1L);
-        template.setBillType("sales-order");
-        template.setTemplateName("颖捷A4打印_带备注 PDF");
-        template.setTemplateCode("SALES_ORDER_YINGJIE_A4_REMARK_PDF");
-        template.setTemplateHtml("{}");
-        template.setTemplateType("PDF_FORM");
-        template.setEngine("PDF_FORM");
-        template.setVersionNo(1);
-        template.setStatus("ACTIVE");
+        PrintTemplate template = pdfTemplate();
         template.setSyncMode("FILE");
         template.setSourceRef("print-forms/yingjie-a4-remark.layout.json");
 
-        PrintTemplateService service = new PrintTemplateService(
-                repository(template), new SnowflakeIdGenerator(0L), mapper(), new ModuleCatalog());
+        PrintTemplateService service = service(repository(template));
 
         assertThatThrownBy(() -> service.update(1L, request(
                 "sales-order",
@@ -306,6 +286,163 @@ class PrintTemplateServiceTest {
                 "ACTIVE"
         )))
                 .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("文件托管模板请修改源文件后重启同步");
+                .hasMessageContaining("文件托管模板请通过上传 JSON 或修改源文件后重启同步");
+    }
+
+    @Test
+    void shouldUploadJsonForPdfFormTemplateAndDisableFileSync() {
+        PrintTemplate template = pdfTemplate();
+        template.setVersionNo(3);
+        template.setSyncMode("FILE");
+        template.setSourceRef("print-forms/yingjie-a4-remark.layout.json");
+        template.setSourceChecksum("old-checksum");
+        PrintTemplateService service = service(repository(template));
+        String content = minimalPdfFormLayout();
+
+        var response = service.uploadJson(1L, jsonFile("layout.json", content));
+
+        assertThat(response.templateHtml()).isEqualTo(content);
+        assertThat(response.versionNo()).isEqualTo(4);
+        assertThat(response.syncMode()).isEqualTo("MANUAL");
+        assertThat(response.sourceRef()).isNull();
+        assertThat(response.sourceChecksum()).isNull();
+    }
+
+    @Test
+    void shouldRejectUploadForNonPdfFormTemplate() {
+        PrintTemplate template = pdfTemplate();
+        template.setTemplateType("COORD");
+        template.setEngine("LODOP");
+
+        PrintTemplateService service = service(repository(template));
+
+        assertThatThrownBy(() -> service.uploadJson(1L, jsonFile("layout.json", "{\"page\":{}}")))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("仅 PDF_FORM 模板支持上传 JSON");
+    }
+
+    @Test
+    void shouldRejectUploadWhenTemplateMissing() {
+        PrintTemplateService service = service(repository(Optional.empty()));
+
+        assertThatThrownBy(() -> service.uploadJson(1L, jsonFile("layout.json", "{\"page\":{}}")))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("打印模板不存在");
+    }
+
+    @Test
+    void shouldRejectUploadWhenJsonIsNotObject() {
+        PrintTemplateService service = service(repository(pdfTemplate()));
+
+        assertThatThrownBy(() -> service.uploadJson(1L, jsonFile("layout.json", "[]")))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("JSON 对象");
+    }
+
+    @Test
+    void shouldRejectUploadWhenJsonHasTrailingTokens() {
+        PrintTemplateService service = service(repository(pdfTemplate()));
+
+        assertThatThrownBy(() -> service.uploadJson(1L, jsonFile("layout.json", minimalPdfFormLayout() + "\n{}")))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("不是合法 JSON");
+    }
+
+    @Test
+    void shouldRejectUploadWhenPdfFormLayoutIsLegacyFormConfig() {
+        PrintTemplateService service = service(repository(pdfTemplate()));
+
+        assertThatThrownBy(() -> service.uploadJson(
+                1L,
+                jsonFile("layout.json", "{\"form\":\"YINGJIE_A4_REMARK\"}")
+        ))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("不支持 form 专用配置");
+    }
+
+    @Test
+    void shouldRejectUploadWhenPdfFormLayoutHasNoRenderableContent() {
+        PrintTemplateService service = service(repository(pdfTemplate()));
+
+        assertThatThrownBy(() -> service.uploadJson(1L, jsonFile("layout.json", "{\"page\":{\"width\":595}}")))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("必须配置通用字段或明细布局");
+    }
+
+    @Test
+    void shouldRejectUploadWhenUtf8IsInvalid() {
+        PrintTemplateService service = service(repository(pdfTemplate()));
+        MockMultipartFile file = new MockMultipartFile(
+                "file",
+                "layout.json",
+                "application/json",
+                new byte[]{(byte) 0xC3, (byte) 0x28}
+        );
+
+        assertThatThrownBy(() -> service.uploadJson(1L, file))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("UTF-8");
+    }
+
+    @Test
+    void shouldRejectUploadWhenFileIsTooLarge() {
+        PrintTemplateService service = service(repository(pdfTemplate()));
+        byte[] bytes = new byte[1024 * 1024 + 1];
+        MockMultipartFile file = new MockMultipartFile("file", "layout.json", "application/json", bytes);
+
+        assertThatThrownBy(() -> service.uploadJson(1L, file))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("不能超过 1MB");
+    }
+
+    @Test
+    void shouldRejectUploadWhenFilenameIsNotJson() {
+        PrintTemplateService service = service(repository(pdfTemplate()));
+
+        assertThatThrownBy(() -> service.uploadJson(1L, jsonFile("layout.txt", "{\"page\":{}}")))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("请上传 JSON 文件");
+    }
+
+    private PrintTemplateRepository repository(Optional<PrintTemplate> template) {
+        return (PrintTemplateRepository) Proxy.newProxyInstance(
+                PrintTemplateRepository.class.getClassLoader(),
+                new Class[]{PrintTemplateRepository.class},
+                (proxy, method, args) -> switch (method.getName()) {
+                    case "findByIdAndDeletedFlagFalse" -> template;
+                    case "save" -> args[0];
+                    case "toString" -> "PrintTemplateRepositoryStub";
+                    case "hashCode" -> System.identityHashCode(proxy);
+                    case "equals" -> proxy == args[0];
+                    default -> throw new UnsupportedOperationException(method.getName());
+                }
+        );
+    }
+
+    private PrintTemplate pdfTemplate() {
+        PrintTemplate template = new PrintTemplate();
+        template.setId(1L);
+        template.setBillType("sales-order");
+        template.setTemplateName("颖捷A4打印_带备注 PDF");
+        template.setTemplateCode("SALES_ORDER_YINGJIE_A4_REMARK_PDF");
+        template.setTemplateHtml("{}");
+        template.setTemplateType("PDF_FORM");
+        template.setEngine("PDF_FORM");
+        template.setVersionNo(1);
+        template.setStatus("ACTIVE");
+        return template;
+    }
+
+    private MockMultipartFile jsonFile(String filename, String content) {
+        return new MockMultipartFile(
+                "file",
+                filename,
+                "application/json",
+                content.getBytes(StandardCharsets.UTF_8)
+        );
+    }
+
+    private String minimalPdfFormLayout() {
+        return "{\"static\":[{\"type\":\"text\",\"text\":\"测试\",\"left\":20,\"top\":20,\"width\":100,\"height\":20}]}";
     }
 }

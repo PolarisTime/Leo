@@ -19,7 +19,7 @@ class PrintPdfFormServiceTest {
     @Test
     void generateFromPayloadShouldThrowWhenTemplateTypeNotPdfForm() {
         PrintScriptService printScriptService = mock(PrintScriptService.class);
-        PrintPdfFormService service = new PrintPdfFormService(printScriptService, objectMapper);
+        PrintPdfFormService service = service(printScriptService);
 
         Map<String, Object> payload = Map.of("templateType", "HTML");
 
@@ -30,7 +30,7 @@ class PrintPdfFormServiceTest {
     @Test
     void generateFromPayloadShouldThrowWhenTemplateConfigInvalid() {
         PrintScriptService printScriptService = mock(PrintScriptService.class);
-        PrintPdfFormService service = new PrintPdfFormService(printScriptService, objectMapper);
+        PrintPdfFormService service = service(printScriptService);
 
         Map<String, Object> payload = Map.of(
                 "templateType", "PDF_FORM",
@@ -46,7 +46,7 @@ class PrintPdfFormServiceTest {
     @Test
     void generateFromPayloadShouldGeneratePdfWithoutBaseTemplate() {
         PrintScriptService printScriptService = mock(PrintScriptService.class);
-        PrintPdfFormService service = new PrintPdfFormService(printScriptService, objectMapper);
+        PrintPdfFormService service = service(printScriptService);
 
         Map<String, Object> payload = Map.of(
                 "templateType", "PDF_FORM",
@@ -77,7 +77,7 @@ class PrintPdfFormServiceTest {
     @Test
     void generateFromPayloadShouldRejectLegacyFormConfig() {
         PrintScriptService printScriptService = mock(PrintScriptService.class);
-        PrintPdfFormService service = new PrintPdfFormService(printScriptService, objectMapper);
+        PrintPdfFormService service = service(printScriptService);
 
         Map<String, Object> payload = Map.of(
                 "templateType", "PDF_FORM",
@@ -89,5 +89,29 @@ class PrintPdfFormServiceTest {
         assertThatThrownBy(() -> service.generateFromPayload(payload))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("不支持 form 专用配置");
+    }
+
+    @Test
+    void generateFromPayloadShouldRejectTrailingJsonTokens() {
+        PrintScriptService printScriptService = mock(PrintScriptService.class);
+        PrintPdfFormService service = service(printScriptService);
+
+        Map<String, Object> payload = Map.of(
+                "templateType", "PDF_FORM",
+                "templateHtml", "{\"static\":[]} {}",
+                "data", Collections.emptyMap(),
+                "items", Collections.emptyList()
+        );
+
+        assertThatThrownBy(() -> service.generateFromPayload(payload))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("不是合法 JSON");
+    }
+
+    private PrintPdfFormService service(PrintScriptService printScriptService) {
+        return new PrintPdfFormService(
+                printScriptService,
+                new PrintPdfFormTemplateValidator(objectMapper)
+        );
     }
 }

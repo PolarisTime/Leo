@@ -8,8 +8,10 @@ import com.leo.erp.system.printtemplate.service.PrintTemplateService;
 import com.leo.erp.system.printtemplate.web.dto.PrintTemplateRequest;
 import com.leo.erp.system.printtemplate.web.dto.PrintTemplateResponse;
 import org.junit.jupiter.api.Test;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -74,6 +76,25 @@ class PrintTemplateControllerTest {
         assertThat(response.code()).isEqualTo(0);
         assertThat(response.message()).isEqualTo("更新成功");
         verify(printTemplateService).update(1L, request);
+    }
+
+    @Test
+    void uploadJsonReturnsUpdatedTemplate() {
+        MockMultipartFile file = new MockMultipartFile(
+                "file",
+                "layout.json",
+                "application/json",
+                "{\"page\":{}}".getBytes(StandardCharsets.UTF_8)
+        );
+        PrintTemplateResponse updated = mock(PrintTemplateResponse.class);
+        when(printTemplateService.uploadJson(1L, file)).thenReturn(updated);
+
+        ApiResponse<PrintTemplateResponse> response = controller.uploadJson(1L, file);
+
+        assertThat(response.code()).isEqualTo(0);
+        assertThat(response.message()).isEqualTo("上传成功");
+        assertThat(response.data()).isSameAs(updated);
+        verify(printTemplateService).uploadJson(1L, file);
     }
 
     @Test

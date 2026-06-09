@@ -11,9 +11,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.util.HexFormat;
 import java.util.List;
 
 @Slf4j
@@ -55,7 +52,7 @@ public class PrintTemplateFileSyncRunner implements ApplicationRunner {
 
         String normalizedSourceRef = normalizeSourceRef(sourceRef);
         String content = readClasspathText(normalizedSourceRef);
-        String checksum = sha256(content);
+        String checksum = PrintTemplateChecksum.sha256(content);
         if (checksum.equals(template.getSourceChecksum()) && content.equals(template.getTemplateHtml())) {
             return false;
         }
@@ -89,12 +86,4 @@ public class PrintTemplateFileSyncRunner implements ApplicationRunner {
         }
     }
 
-    private String sha256(String content) {
-        try {
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            return HexFormat.of().formatHex(digest.digest(content.getBytes(StandardCharsets.UTF_8)));
-        } catch (NoSuchAlgorithmException ex) {
-            throw new IllegalStateException("当前运行环境不支持 SHA-256", ex);
-        }
-    }
 }
