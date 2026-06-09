@@ -72,4 +72,37 @@ class StatusConstantsTest {
         assertThat(StatusConstants.ALLOWED_RECEIPT_STATUS)
                 .containsExactlyInAnyOrder("草稿", "已收款");
     }
+
+    @Test
+    void shouldHaveProtectedDocumentStatus() {
+        assertThat(StatusConstants.PROTECTED_DOCUMENT_STATUS)
+                .containsExactlyInAnyOrder(
+                        "已审核",
+                        "已完成",
+                        "完成采购",
+                        "完成入库",
+                        "完成销售",
+                        "已确认",
+                        "已付款",
+                        "已收款",
+                        "已签署",
+                        "已开票",
+                        "已收票",
+                        "已归档"
+                );
+    }
+
+    @Test
+    void shouldHaveFinanceSourceStatusPolicies() {
+        assertThat(StatusConstants.INVOICEABLE_SALES_ORDER_STATUS)
+                .containsExactlyInAnyOrder("已审核", "完成销售");
+        assertThat(StatusConstants.INVOICEABLE_PURCHASE_ORDER_STATUS)
+                .containsExactlyInAnyOrder("已审核", "完成采购");
+        assertThat(StatusConstants.SETTLEABLE_CUSTOMER_STATEMENT_STATUS)
+                .containsExactlyInAnyOrder("已确认");
+        assertThat(StatusConstants.SETTLEABLE_SUPPLIER_STATEMENT_STATUS)
+                .containsExactlyInAnyOrder("已确认");
+        assertThat(StatusConstants.SETTLEABLE_FREIGHT_STATEMENT_STATUS)
+                .containsExactlyInAnyOrder("已审核");
+    }
 }

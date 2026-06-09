@@ -57,6 +57,26 @@ public final class StatusConstants {
     public static final Set<String> ALLOWED_INVOICE_ISSUE_STATUS = Set.of(DRAFT, ISSUED);
     public static final Set<String> ALLOWED_INVOICE_RECEIPT_STATUS = Set.of(DRAFT, INVOICE_RECEIVED);
 
+    public static final Set<String> PROTECTED_DOCUMENT_STATUS = Set.of(
+            AUDITED,
+            COMPLETED,
+            PURCHASE_COMPLETED,
+            INBOUND_COMPLETED,
+            SALES_COMPLETED,
+            CONFIRMED,
+            PAID,
+            RECEIVED,
+            SIGNED,
+            ISSUED,
+            INVOICE_RECEIVED,
+            ARCHIVED
+    );
+    public static final Set<String> INVOICEABLE_SALES_ORDER_STATUS = Set.of(AUDITED, SALES_COMPLETED);
+    public static final Set<String> INVOICEABLE_PURCHASE_ORDER_STATUS = Set.of(AUDITED, PURCHASE_COMPLETED);
+    public static final Set<String> SETTLEABLE_CUSTOMER_STATEMENT_STATUS = Set.of(CONFIRMED);
+    public static final Set<String> SETTLEABLE_SUPPLIER_STATEMENT_STATUS = Set.of(CONFIRMED);
+    public static final Set<String> SETTLEABLE_FREIGHT_STATEMENT_STATUS = Set.of(AUDITED);
+
     public static final Set<String> DRAFT_AUDIT_TRANSITIONS = Set.of(
             DRAFT + "->" + AUDITED,
             AUDITED + "->" + DRAFT

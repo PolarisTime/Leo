@@ -6,6 +6,7 @@ import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.service.AbstractCrudService;
+import com.leo.erp.common.support.BusinessDocumentValidator;
 import com.leo.erp.common.support.BusinessStatusValidator;
 import com.leo.erp.common.support.ManagedEntityItemSupport;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
@@ -251,7 +252,7 @@ public class ReceiptService extends AbstractCrudService<Receipt, ReceiptRequest,
         entity.setReceiptNo(request.receiptNo());
         entity.setCustomerName(request.customerName());
         entity.setProjectName(request.projectName());
-        entity.setCustomerCode(trimToNull(request.customerCode()));
+        entity.setCustomerCode(BusinessDocumentValidator.trimToNull(request.customerCode()));
         entity.setProjectId(request.projectId());
         entity.setReceiptDate(request.receiptDate());
         entity.setPayType(request.payType());
@@ -404,20 +405,30 @@ public class ReceiptService extends AbstractCrudService<Receipt, ReceiptRequest,
                                                  BigDecimal allocatedAmount,
                                                  Map<Long, BigDecimal> requestAllocatedAmountMap,
                                                  int lineNo) {
-        if (!statement.getCustomerName().equals(request.customerName())) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行对账单客户与收款单客户不一致");
-        }
-        if (!statement.getProjectName().equals(request.projectName())) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行对账单项目与收款单项目不一致");
-        }
-        validateCustomerCode(request.customerCode(), statement.getCustomerCode(), lineNo);
+        BusinessDocumentValidator.requireSameText(
+                request.customerName(),
+                statement.getCustomerName(),
+                "第" + lineNo + "行对账单客户与收款单客户不一致"
+        );
+        BusinessDocumentValidator.requireSameText(
+                request.projectName(),
+                statement.getProjectName(),
+                "第" + lineNo + "行对账单项目与收款单项目不一致"
+        );
+        BusinessDocumentValidator.requireSameOptionalCode(
+                request.customerCode(),
+                statement.getCustomerCode(),
+                "第" + lineNo + "行对账单客户编码与收款单客户编码不一致"
+        );
         if (requestAllocatedAmountMap.containsKey(statement.getId())) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "同一收款单不能重复核销同一客户对账单");
         }
         if (RECEIPT_STATUS_SETTLED.equals(normalizedStatus)) {
-            if (!StatusConstants.CONFIRMED.equals(statement.getStatus())) {
-                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行客户对账单未确认，不能收款");
-            }
+            BusinessDocumentValidator.requireStatusIn(
+                    statement.getStatus(),
+                    StatusConstants.SETTLEABLE_CUSTOMER_STATEMENT_STATUS,
+                    "第" + lineNo + "行客户对账单未确认，不能收款"
+            );
             BigDecimal settledAmount = TradeItemCalculator.safeBigDecimal(
                     receiptAllocationRepository.sumAllocatedAmountBySourceStatementIdAndReceiptStatusExcludingReceiptId(
                             statement.getId(),
@@ -433,20 +444,9 @@ public class ReceiptService extends AbstractCrudService<Receipt, ReceiptRequest,
         requestAllocatedAmountMap.put(statement.getId(), allocatedAmount);
     }
 
-    private void validateCustomerCode(String requestCustomerCode, String statementCustomerCode, int lineNo) {
-        String normalizedRequestCode = trimToNull(requestCustomerCode);
-        String normalizedStatementCode = trimToNull(statementCustomerCode);
-        if (normalizedRequestCode == null || normalizedStatementCode == null) {
-            return;
-        }
-        if (!normalizedRequestCode.equals(normalizedStatementCode)) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行对账单客户编码与收款单客户编码不一致");
-        }
-    }
-
     private String mergeCustomerCode(String currentCode, String nextCode) {
-        String normalizedCurrentCode = trimToNull(currentCode);
-        String normalizedNextCode = trimToNull(nextCode);
+        String normalizedCurrentCode = BusinessDocumentValidator.trimToNull(currentCode);
+        String normalizedNextCode = BusinessDocumentValidator.trimToNull(nextCode);
         if (normalizedCurrentCode == null) {
             return normalizedNextCode;
         }
@@ -454,13 +454,6 @@ public class ReceiptService extends AbstractCrudService<Receipt, ReceiptRequest,
             return normalizedCurrentCode;
         }
         throw new BusinessException(ErrorCode.BUSINESS_ERROR, "同一收款单不能核销不同客户编码的对账单");
-    }
-
-    private String trimToNull(String value) {
-        if (value == null || value.isBlank()) {
-            return null;
-        }
-        return value.trim();
     }
 
     private BigDecimal normalizeAllocatedAmount(BigDecimal allocatedAmount, int lineNo) {
