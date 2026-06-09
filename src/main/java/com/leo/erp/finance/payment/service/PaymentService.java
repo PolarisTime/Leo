@@ -6,6 +6,7 @@ import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.service.AbstractCrudService;
+import com.leo.erp.common.support.BusinessDocumentValidator;
 import com.leo.erp.common.support.BusinessStatusValidator;
 import com.leo.erp.common.support.ManagedEntityItemSupport;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
@@ -267,7 +268,7 @@ public class PaymentService extends AbstractCrudService<Payment, PaymentRequest,
         entity.setPaymentNo(request.paymentNo());
         entity.setBusinessType(request.businessType());
         entity.setCounterpartyName(request.counterpartyName());
-        entity.setCounterpartyCode(trimToNull(request.counterpartyCode()));
+        entity.setCounterpartyCode(BusinessDocumentValidator.trimToNull(request.counterpartyCode()));
         entity.setPaymentDate(request.paymentDate());
         entity.setPayType(request.payType());
         entity.setAmount(TradeItemCalculator.scaleAmount(request.amount()));
@@ -455,17 +456,25 @@ public class PaymentService extends AbstractCrudService<Payment, PaymentRequest,
                                                  BigDecimal allocatedAmount,
                                                  Map<Long, BigDecimal> requestAllocatedAmountMap,
                                                  int lineNo) {
-        if (!statement.getSupplierName().equals(request.counterpartyName())) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行对账单供应商与付款单往来单位不一致");
-        }
-        validateCounterpartyCode(request.counterpartyCode(), statement.getSupplierCode(), lineNo, "供应商");
+        BusinessDocumentValidator.requireSameText(
+                request.counterpartyName(),
+                statement.getSupplierName(),
+                "第" + lineNo + "行对账单供应商与付款单往来单位不一致"
+        );
+        BusinessDocumentValidator.requireSameOptionalCode(
+                request.counterpartyCode(),
+                statement.getSupplierCode(),
+                "第" + lineNo + "行对账单供应商编码与付款单往来单位编码不一致"
+        );
         if (requestAllocatedAmountMap.containsKey(statement.getId())) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "同一付款单不能重复核销同一供应商对账单");
         }
         if (PAYMENT_STATUS_SETTLED.equals(normalizedStatus)) {
-            if (!StatusConstants.CONFIRMED.equals(statement.getStatus())) {
-                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行供应商对账单未确认，不能付款");
-            }
+            BusinessDocumentValidator.requireStatusIn(
+                    statement.getStatus(),
+                    StatusConstants.SETTLEABLE_SUPPLIER_STATEMENT_STATUS,
+                    "第" + lineNo + "行供应商对账单未确认，不能付款"
+            );
             BigDecimal settledAmount = TradeItemCalculator.safeBigDecimal(
                     paymentAllocationRepository.sumAllocatedAmountBySourceStatementIdAndBusinessTypeAndStatusExcludingPaymentId(
                             statement.getId(),
@@ -489,17 +498,25 @@ public class PaymentService extends AbstractCrudService<Payment, PaymentRequest,
                                                 BigDecimal allocatedAmount,
                                                 Map<Long, BigDecimal> requestAllocatedAmountMap,
                                                 int lineNo) {
-        if (!statement.getCarrierName().equals(request.counterpartyName())) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行对账单物流商与付款单往来单位不一致");
-        }
-        validateCounterpartyCode(request.counterpartyCode(), statement.getCarrierCode(), lineNo, "物流商");
+        BusinessDocumentValidator.requireSameText(
+                request.counterpartyName(),
+                statement.getCarrierName(),
+                "第" + lineNo + "行对账单物流商与付款单往来单位不一致"
+        );
+        BusinessDocumentValidator.requireSameOptionalCode(
+                request.counterpartyCode(),
+                statement.getCarrierCode(),
+                "第" + lineNo + "行对账单物流商编码与付款单往来单位编码不一致"
+        );
         if (requestAllocatedAmountMap.containsKey(statement.getId())) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "同一付款单不能重复核销同一物流对账单");
         }
         if (PAYMENT_STATUS_SETTLED.equals(normalizedStatus)) {
-            if (!StatusConstants.AUDITED.equals(statement.getStatus())) {
-                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行物流对账单未审核，不能付款");
-            }
+            BusinessDocumentValidator.requireStatusIn(
+                    statement.getStatus(),
+                    StatusConstants.SETTLEABLE_FREIGHT_STATEMENT_STATUS,
+                    "第" + lineNo + "行物流对账单未审核，不能付款"
+            );
             BigDecimal settledAmount = TradeItemCalculator.safeBigDecimal(
                     paymentAllocationRepository.sumAllocatedAmountBySourceStatementIdAndBusinessTypeAndStatusExcludingPaymentId(
                             statement.getId(),
@@ -524,20 +541,9 @@ public class PaymentService extends AbstractCrudService<Payment, PaymentRequest,
         return TradeItemCalculator.scaleAmount(normalized);
     }
 
-    private void validateCounterpartyCode(String requestCode, String statementCode, int lineNo, String counterpartyType) {
-        String normalizedRequestCode = trimToNull(requestCode);
-        String normalizedStatementCode = trimToNull(statementCode);
-        if (normalizedRequestCode == null || normalizedStatementCode == null) {
-            return;
-        }
-        if (!normalizedRequestCode.equals(normalizedStatementCode)) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行对账单" + counterpartyType + "编码与付款单往来单位编码不一致");
-        }
-    }
-
     private String mergeCounterpartyCode(String currentCode, String nextCode) {
-        String normalizedCurrentCode = trimToNull(currentCode);
-        String normalizedNextCode = trimToNull(nextCode);
+        String normalizedCurrentCode = BusinessDocumentValidator.trimToNull(currentCode);
+        String normalizedNextCode = BusinessDocumentValidator.trimToNull(nextCode);
         if (normalizedCurrentCode == null) {
             return normalizedNextCode;
         }
@@ -545,13 +551,6 @@ public class PaymentService extends AbstractCrudService<Payment, PaymentRequest,
             return normalizedCurrentCode;
         }
         throw new BusinessException(ErrorCode.BUSINESS_ERROR, "同一付款单不能核销不同往来单位编码的对账单");
-    }
-
-    private String trimToNull(String value) {
-        if (value == null || value.isBlank()) {
-            return null;
-        }
-        return value.trim();
     }
 
     private void captureOriginalAllocationState(Payment entity) {

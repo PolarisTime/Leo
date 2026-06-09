@@ -6,6 +6,7 @@ import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.service.AbstractCrudService;
+import com.leo.erp.common.support.BusinessDocumentValidator;
 import com.leo.erp.common.support.BusinessStatusValidator;
 import com.leo.erp.common.support.InvoiceAllocationSupport;
 import com.leo.erp.common.support.InvoiceAllocationSupport.AllocationProgress;
@@ -471,25 +472,21 @@ public class InvoiceIssueService extends AbstractCrudService<InvoiceIssue, Invoi
                                           String headerCustomerName,
                                           String headerProjectName,
                                           int lineNo) {
-        String sourceStatus = normalizeText(sourceSalesOrder.getStatus());
-        if (!StatusConstants.AUDITED.equals(sourceStatus) && !StatusConstants.SALES_COMPLETED.equals(sourceStatus)) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行来源销售订单未审核，不能开票");
-        }
-        assertSameSourceOrderText(headerCustomerName, sourceSalesOrder.getCustomerName(), lineNo, "客户");
-        assertSameSourceOrderText(headerProjectName, sourceSalesOrder.getProjectName(), lineNo, "项目");
-    }
-
-    private void assertSameSourceOrderText(String requestedValue, String sourceValue, int lineNo, String fieldName) {
-        if (!normalizeText(requestedValue).equals(normalizeText(sourceValue))) {
-            throw new BusinessException(
-                    ErrorCode.BUSINESS_ERROR,
-                    "第" + lineNo + "行来源销售订单" + fieldName + "与开票单不一致"
-            );
-        }
-    }
-
-    private String normalizeText(String value) {
-        return value == null ? "" : value.trim();
+        BusinessDocumentValidator.requireStatusIn(
+                sourceSalesOrder.getStatus(),
+                StatusConstants.INVOICEABLE_SALES_ORDER_STATUS,
+                "第" + lineNo + "行来源销售订单未审核，不能开票"
+        );
+        BusinessDocumentValidator.requireSameText(
+                headerCustomerName,
+                sourceSalesOrder.getCustomerName(),
+                "第" + lineNo + "行来源销售订单客户与开票单不一致"
+        );
+        BusinessDocumentValidator.requireSameText(
+                headerProjectName,
+                sourceSalesOrder.getProjectName(),
+                "第" + lineNo + "行来源销售订单项目与开票单不一致"
+        );
     }
 
     private InvoiceIssueItemResponse toItemResponse(InvoiceIssueItem item) {

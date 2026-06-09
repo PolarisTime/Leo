@@ -37,36 +37,6 @@ public abstract class AbstractCrudService<E extends AbstractAuditableEntity, Req
     private static final String PREALLOCATED_ID_HEADER = "X-Preallocated-Id";
     private static final String BUSINESS_MODULE_KEY_HEADER = "X-Business-Module-Key";
 
-    private static final Set<String> PROTECTED_EDIT_STATUSES = Set.of(
-            StatusConstants.AUDITED,
-            StatusConstants.COMPLETED,
-            StatusConstants.PURCHASE_COMPLETED,
-            StatusConstants.INBOUND_COMPLETED,
-            StatusConstants.SALES_COMPLETED,
-            StatusConstants.CONFIRMED,
-            StatusConstants.PAID,
-            StatusConstants.RECEIVED,
-            StatusConstants.SIGNED,
-            StatusConstants.ISSUED,
-            StatusConstants.INVOICE_RECEIVED,
-            StatusConstants.ARCHIVED
-    );
-
-    private static final Set<String> PROTECTED_DELETE_STATUSES = Set.of(
-            StatusConstants.AUDITED,
-            StatusConstants.COMPLETED,
-            StatusConstants.PURCHASE_COMPLETED,
-            StatusConstants.INBOUND_COMPLETED,
-            StatusConstants.SALES_COMPLETED,
-            StatusConstants.CONFIRMED,
-            StatusConstants.PAID,
-            StatusConstants.RECEIVED,
-            StatusConstants.SIGNED,
-            StatusConstants.ISSUED,
-            StatusConstants.INVOICE_RECEIVED,
-            StatusConstants.ARCHIVED
-    );
-
     private final SnowflakeIdGenerator idGenerator;
     private SystemSwitchService systemSwitchService;
     private NoRuleSequenceService noRuleSequenceService;
@@ -432,7 +402,7 @@ public abstract class AbstractCrudService<E extends AbstractAuditableEntity, Req
 
     private void assertEditAllowedByStatus(E entity, Req request) {
         resolveStatus(entity).ifPresent(status -> {
-            if (PROTECTED_EDIT_STATUSES.contains(status) && !allowProtectedStatusUpdate(entity, request)) {
+            if (StatusConstants.PROTECTED_DOCUMENT_STATUS.contains(status) && !allowProtectedStatusUpdate(entity, request)) {
                 throw new BusinessException(
                         ErrorCode.BUSINESS_ERROR,
                         "当前单据状态为「" + status + "」，不能编辑"
@@ -443,7 +413,7 @@ public abstract class AbstractCrudService<E extends AbstractAuditableEntity, Req
 
     private void assertDeleteAllowedByStatus(E entity) {
         resolveStatus(entity).ifPresent(status -> {
-            if (PROTECTED_DELETE_STATUSES.contains(status)) {
+            if (StatusConstants.PROTECTED_DOCUMENT_STATUS.contains(status)) {
                 throw new BusinessException(
                         ErrorCode.BUSINESS_ERROR,
                         "当前单据状态为「" + status + "」，不能删除"
@@ -465,7 +435,7 @@ public abstract class AbstractCrudService<E extends AbstractAuditableEntity, Req
 
     private void assertRequestDidNotWriteFinalStatus(E entity) {
         resolveStatus(entity).ifPresent(status -> {
-            if (PROTECTED_EDIT_STATUSES.contains(status) && !StatusConstants.AUDITED.equals(status)) {
+            if (StatusConstants.PROTECTED_DOCUMENT_STATUS.contains(status) && !StatusConstants.AUDITED.equals(status)) {
                 throw new BusinessException(
                         ErrorCode.BUSINESS_ERROR,
                         "完成态状态必须通过专用状态接口变更"

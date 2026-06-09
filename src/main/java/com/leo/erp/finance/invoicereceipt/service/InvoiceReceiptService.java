@@ -6,6 +6,7 @@ import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.service.AbstractCrudService;
+import com.leo.erp.common.support.BusinessDocumentValidator;
 import com.leo.erp.common.support.BusinessStatusValidator;
 import com.leo.erp.common.support.InvoiceAllocationSupport;
 import com.leo.erp.common.support.InvoiceAllocationSupport.AllocationProgress;
@@ -462,17 +463,16 @@ public class InvoiceReceiptService extends AbstractCrudService<InvoiceReceipt, I
     private void validateSourcePurchaseOrder(PurchaseOrder sourcePurchaseOrder,
                                              String headerSupplierName,
                                              int lineNo) {
-        String sourceStatus = normalizeText(sourcePurchaseOrder.getStatus());
-        if (!StatusConstants.AUDITED.equals(sourceStatus) && !StatusConstants.PURCHASE_COMPLETED.equals(sourceStatus)) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行来源采购订单未审核，不能收票");
-        }
-        if (!normalizeText(headerSupplierName).equals(normalizeText(sourcePurchaseOrder.getSupplierName()))) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行来源采购订单供应商与收票单不一致");
-        }
-    }
-
-    private String normalizeText(String value) {
-        return value == null ? "" : value.trim();
+        BusinessDocumentValidator.requireStatusIn(
+                sourcePurchaseOrder.getStatus(),
+                StatusConstants.INVOICEABLE_PURCHASE_ORDER_STATUS,
+                "第" + lineNo + "行来源采购订单未审核，不能收票"
+        );
+        BusinessDocumentValidator.requireSameText(
+                headerSupplierName,
+                sourcePurchaseOrder.getSupplierName(),
+                "第" + lineNo + "行来源采购订单供应商与收票单不一致"
+        );
     }
 
     private InvoiceReceiptItemResponse toItemResponse(InvoiceReceiptItem item) {
