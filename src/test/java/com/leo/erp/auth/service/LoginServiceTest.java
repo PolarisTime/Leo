@@ -25,6 +25,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -52,7 +53,8 @@ class LoginServiceTest {
         LoginService service = new LoginService(
                 userRepo, encoder, mock(TotpService.class), attemptService,
                 mock(StringRedisTemplate.class), tokenIssuance,
-                mock(OperationLogService.class), mock(SystemSwitchService.class)
+                mock(OperationLogService.class), mock(SystemSwitchService.class),
+                mock(CaptchaService.class)
         );
 
         LoginResponseBody response = service.login(new LoginRequest("admin", "secret", null, null), CTX);
@@ -81,7 +83,8 @@ class LoginServiceTest {
         LoginService service = new LoginService(
                 userRepo, encoder, mock(TotpService.class), mock(LoginAttemptService.class),
                 redis, mock(TokenIssuanceService.class),
-                mock(OperationLogService.class), mock(SystemSwitchService.class)
+                mock(OperationLogService.class), mock(SystemSwitchService.class),
+                mock(CaptchaService.class)
         );
 
         LoginResponseBody response = service.login(new LoginRequest("admin", "secret", null, null), CTX);
@@ -98,7 +101,8 @@ class LoginServiceTest {
         LoginService service = new LoginService(
                 userRepo, mock(PasswordEncoder.class), mock(TotpService.class), mock(LoginAttemptService.class),
                 mock(StringRedisTemplate.class), mock(TokenIssuanceService.class),
-                mock(OperationLogService.class), mock(SystemSwitchService.class)
+                mock(OperationLogService.class), mock(SystemSwitchService.class),
+                mock(CaptchaService.class)
         );
 
         assertThatThrownBy(() -> service.login(new LoginRequest("unknown", "pass", null, null), CTX))
@@ -119,7 +123,8 @@ class LoginServiceTest {
         LoginService service = new LoginService(
                 userRepo, encoder, mock(TotpService.class), mock(LoginAttemptService.class),
                 mock(StringRedisTemplate.class), mock(TokenIssuanceService.class),
-                mock(OperationLogService.class), mock(SystemSwitchService.class)
+                mock(OperationLogService.class), mock(SystemSwitchService.class),
+                mock(CaptchaService.class)
         );
 
         assertThatThrownBy(() -> service.login(new LoginRequest("admin", "secret", null, null), CTX))
@@ -142,7 +147,8 @@ class LoginServiceTest {
         LoginService service = new LoginService(
                 userRepo, encoder, mock(TotpService.class), attemptService,
                 mock(StringRedisTemplate.class), mock(TokenIssuanceService.class),
-                mock(OperationLogService.class), mock(SystemSwitchService.class)
+                mock(OperationLogService.class), mock(SystemSwitchService.class),
+                mock(CaptchaService.class)
         );
 
         assertThatThrownBy(() -> service.login(new LoginRequest("admin", "wrong", null, null), CTX))
@@ -163,7 +169,8 @@ class LoginServiceTest {
         LoginService service = new LoginService(
                 null, null, mock(TotpService.class), mock(LoginAttemptService.class),
                 redis, mock(TokenIssuanceService.class),
-                mock(OperationLogService.class), mock(SystemSwitchService.class)
+                mock(OperationLogService.class), mock(SystemSwitchService.class),
+                mock(CaptchaService.class)
         );
 
         assertThatThrownBy(() -> service.verifyTotpAndIssueTokens("expired-token", "123456", CTX))
@@ -197,7 +204,8 @@ class LoginServiceTest {
         LoginService service = new LoginService(
                 userRepo, mock(PasswordEncoder.class), totpService, attemptService,
                 redis, tokenIssuance,
-                mock(OperationLogService.class), mock(SystemSwitchService.class)
+                mock(OperationLogService.class), mock(SystemSwitchService.class),
+                mock(CaptchaService.class)
         );
 
         TokenResponse response = service.verifyTotpAndIssueTokens("valid-token", "123456", CTX);
@@ -221,7 +229,8 @@ class LoginServiceTest {
         LoginService service = new LoginService(
                 userRepo, mock(PasswordEncoder.class), mock(TotpService.class), mock(LoginAttemptService.class),
                 redis, mock(TokenIssuanceService.class),
-                mock(OperationLogService.class), mock(SystemSwitchService.class)
+                mock(OperationLogService.class), mock(SystemSwitchService.class),
+                mock(CaptchaService.class)
         );
 
         assertThatThrownBy(() -> service.verifyTotpAndIssueTokens("valid-token", "123456", CTX))
@@ -248,7 +257,8 @@ class LoginServiceTest {
         LoginService service = new LoginService(
                 userRepo, mock(PasswordEncoder.class), mock(TotpService.class), mock(LoginAttemptService.class),
                 redis, mock(TokenIssuanceService.class),
-                mock(OperationLogService.class), mock(SystemSwitchService.class)
+                mock(OperationLogService.class), mock(SystemSwitchService.class),
+                mock(CaptchaService.class)
         );
 
         assertThatThrownBy(() -> service.verifyTotpAndIssueTokens("valid-token", "123456", CTX))
@@ -281,7 +291,8 @@ class LoginServiceTest {
         LoginService service = new LoginService(
                 userRepo, mock(PasswordEncoder.class), totpService, attemptService,
                 redis, mock(TokenIssuanceService.class),
-                mock(OperationLogService.class), mock(SystemSwitchService.class)
+                mock(OperationLogService.class), mock(SystemSwitchService.class),
+                mock(CaptchaService.class)
         );
 
         assertThatThrownBy(() -> service.verifyTotpAndIssueTokens("valid-token", "000000", CTX))
@@ -300,7 +311,8 @@ class LoginServiceTest {
         LoginService service = new LoginService(
                 userRepo, mock(PasswordEncoder.class), mock(TotpService.class), attemptService,
                 mock(StringRedisTemplate.class), mock(TokenIssuanceService.class),
-                mock(OperationLogService.class), mock(SystemSwitchService.class)
+                mock(OperationLogService.class), mock(SystemSwitchService.class),
+                mock(CaptchaService.class)
         );
 
         assertThatThrownBy(() -> service.login(new LoginRequest("  ", "pass", null, null), CTX))
@@ -310,9 +322,33 @@ class LoginServiceTest {
     }
 
     @Test
+    void loginShouldRejectWhenCaptchaRequiredButInvalid() {
+        LoginAttemptService attemptService = mock(LoginAttemptService.class);
+        SystemSwitchService switchService = mock(SystemSwitchService.class);
+        when(switchService.shouldRequireLoginCaptcha()).thenReturn(true);
+        CaptchaService captchaService = mock(CaptchaService.class);
+        when(captchaService.verify("captcha-id", "wrong")).thenReturn(false);
+        UserAccountRepository userRepo = mock(UserAccountRepository.class);
+
+        LoginService service = new LoginService(
+                userRepo, mock(PasswordEncoder.class), mock(TotpService.class), attemptService,
+                mock(StringRedisTemplate.class), mock(TokenIssuanceService.class),
+                mock(OperationLogService.class), switchService,
+                captchaService
+        );
+
+        assertThatThrownBy(() -> service.login(new LoginRequest("admin", "secret", "captcha-id", "wrong"), CTX))
+                .isInstanceOf(BadCredentialsException.class)
+                .hasMessageContaining("图形验证码错误或已过期");
+
+        verify(attemptService).ensureLoginAllowed("admin");
+        verify(userRepo, never()).findByLoginNameAndDeletedFlagFalse("admin");
+    }
+
+    @Test
     void recordAuthenticationLogShouldSkipWhenServiceNull() {
         LoginService service = new LoginService(
-                null, null, null, null, null, null, null, null
+                null, null, null, null, null, null, null, null, null
         );
 
         org.assertj.core.api.Assertions.assertThatCode(() ->
@@ -328,7 +364,7 @@ class LoginServiceTest {
         OperationLogService logService = mock(OperationLogService.class);
 
         LoginService service = new LoginService(
-                null, null, null, null, null, null, logService, switchService
+                null, null, null, null, null, null, logService, switchService, null
         );
 
         service.recordAuthenticationLog("登录", null, "admin", CTX, "成功", "测试");
@@ -348,7 +384,7 @@ class LoginServiceTest {
         };
 
         LoginService service = new LoginService(
-                null, null, null, null, null, null, logService, switchService
+                null, null, null, null, null, null, logService, switchService, null
         );
 
         LoginService.AuthRequestContext ctxNoMethod = new LoginService.AuthRequestContext(
@@ -373,7 +409,7 @@ class LoginServiceTest {
         };
 
         LoginService service = new LoginService(
-                null, null, null, null, null, null, logService, switchService
+                null, null, null, null, null, null, logService, switchService, null
         );
 
         LoginService.AuthRequestContext ctxNoPath = new LoginService.AuthRequestContext(

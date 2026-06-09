@@ -109,14 +109,11 @@ public class ApiKeyAuthenticationFilter extends OncePerRequestFilter {
 
     private boolean isResourceAllowed(ApiKey apiKey, HttpServletRequest request, String requestPath) {
         var allowedResources = ApiKeySupport.parseAllowedResources(apiKey.getAllowedResources());
-        if (allowedResources.isEmpty()) {
-            return true;
-        }
         String resolvedCode = resolveResourceCode(request, requestPath);
         if ("/auth/ping".equals(requestPath)) {
             return true;
         }
-        return resolvedCode != null && allowedResources.contains(resolvedCode);
+        return !allowedResources.isEmpty() && resolvedCode != null && allowedResources.contains(resolvedCode);
     }
 
     private boolean hasConfiguredActions(ApiKey apiKey) {

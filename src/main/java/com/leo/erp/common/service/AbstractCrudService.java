@@ -237,6 +237,7 @@ public abstract class AbstractCrudService<E extends AbstractAuditableEntity, Req
         request = normalizeCreateRequest(request, createEntityId.id());
         validateCreate(request);
         apply(entity, request);
+        assertRequestDidNotWriteFinalStatus(entity);
         Res response = toSavedResponse(saveEntity(entity));
         consumePreallocatedIdAfterCommit(createEntityId);
         logger().info("{} created: id={}", entity.getClass().getSimpleName(), createEntityId.id());
@@ -255,7 +256,10 @@ public abstract class AbstractCrudService<E extends AbstractAuditableEntity, Req
         request = normalizeUpdateRequest(entity, request);
         assertEditAllowedByStatus(entity, request);
         validateUpdate(entity, request);
+        Optional<String> currentStatus = resolveStatus(entity);
         apply(entity, request);
+        assertRequestStatusTransitionAllowed(entity, currentStatus);
+        assertRequestDidNotWriteFinalStatus(entity);
         Res response = toSavedResponse(saveUpdatedEntity(entity, request));
         logger().info("{} updated: id={}", entity.getClass().getSimpleName(), id);
         return response;
@@ -437,6 +441,28 @@ public abstract class AbstractCrudService<E extends AbstractAuditableEntity, Req
                 throw new BusinessException(
                         ErrorCode.BUSINESS_ERROR,
                         "当前单据状态为「" + status + "」，不能删除"
+                );
+            }
+        });
+    }
+
+    private void assertRequestStatusTransitionAllowed(E entity, Optional<String> currentStatus) {
+        if (allowedStatusTransitions().isEmpty()) {
+            return;
+        }
+        Optional<String> nextStatus = resolveStatus(entity);
+        if (currentStatus.isEmpty() || nextStatus.isEmpty() || currentStatus.get().equals(nextStatus.get())) {
+            return;
+        }
+        validateStatusTransition(entity, currentStatus.get(), nextStatus.get());
+    }
+
+    private void assertRequestDidNotWriteFinalStatus(E entity) {
+        resolveStatus(entity).ifPresent(status -> {
+            if (PROTECTED_EDIT_STATUSES.contains(status) && !StatusConstants.AUDITED.equals(status)) {
+                throw new BusinessException(
+                        ErrorCode.BUSINESS_ERROR,
+                        "完成态状态必须通过专用状态接口变更"
                 );
             }
         });

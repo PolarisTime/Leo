@@ -232,14 +232,17 @@ public class SalesOutboundService extends AbstractCrudService<SalesOutbound, Sal
                 SalesOutboundItem::setId
         );
         Map<Long, SalesOrderItem> sourceSalesOrderItemMap = loadSourceSalesOrderItemMap(request.items(), items);
+        Map<Long, Integer> requestSourceQuantityMap = new java.util.HashMap<>();
         LinkedHashSet<String> sourceSalesOrderNos = new LinkedHashSet<>();
         for (int i = 0; i < request.items().size(); i++) {
             SalesOutboundItemRequest source = request.items().get(i);
             Material material = materialMap.get(source.materialCode());
             SalesOutboundItem item = items.get(i);
+            int lineNo = i + 1;
             item.setSalesOutbound(entity);
-            item.setLineNo(i + 1);
+            item.setLineNo(lineNo);
             Long sourceSalesOrderItemId = resolveSourceSalesOrderItemId(source, item);
+            SalesOrderItem sourceSalesOrderItem = resolveSourceSalesOrderItem(sourceSalesOrderItemMap, sourceSalesOrderItemId, lineNo);
             item.setSourceSalesOrderItemId(sourceSalesOrderItemId);
             item.setMaterialCode(source.materialCode());
             item.setBrand(source.brand());
@@ -250,17 +253,19 @@ public class SalesOutboundService extends AbstractCrudService<SalesOutbound, Sal
             item.setUnit(source.unit());
             String warehouseName = warehouseSelectionSupport.normalizeWarehouseName(
                     source.warehouseName() == null || source.warehouseName().isBlank() ? request.warehouseName() : source.warehouseName(),
-                    i + 1,
+                    lineNo,
                     true
             );
             if (firstLineWarehouseName == null) {
                 firstLineWarehouseName = warehouseName;
             }
             item.setWarehouseName(warehouseName);
-            item.setBatchNo(tradeItemMaterialSupport.normalizeBatchNo(material, source.batchNo(), i + 1, true));
+            item.setBatchNo(tradeItemMaterialSupport.normalizeBatchNo(material, source.batchNo(), lineNo, true));
             item.setQuantity(source.quantity());
             item.setQuantityUnit(TradeItemCalculator.normalizeQuantityUnit(source.quantityUnit()));
-            BigDecimal weightTon = resolveOutboundWeightTon(source, i + 1);
+            validateSourceSalesOrderItem(source, sourceSalesOrderItem, sourceSalesOrderItemId, warehouseName,
+                    item.getBatchNo(), requestSourceQuantityMap, lineNo);
+            BigDecimal weightTon = resolveOutboundWeightTon(source, sourceSalesOrderItem, lineNo);
             BigDecimal pieceWeightTon = TradeItemCalculator.calculateRepresentableAveragePieceWeightTon(source.quantity(), weightTon);
             item.setPieceWeightTon(pieceWeightTon != null ? pieceWeightTon : TradeItemCalculator.scaleWeightTon(source.pieceWeightTon()));
             item.setPiecesPerBundle(source.piecesPerBundle());
@@ -285,7 +290,9 @@ public class SalesOutboundService extends AbstractCrudService<SalesOutbound, Sal
      * 从逐件重量表中按重量降序取件，实现"先出重件"的 FIFO 原则。
      * 若无逐件记录则回退使用销售订单明细的平均重量。
      */
-    private BigDecimal resolveOutboundWeightTon(SalesOutboundItemRequest source, int lineNo) {
+    private BigDecimal resolveOutboundWeightTon(SalesOutboundItemRequest source,
+                                                SalesOrderItem sourceSalesOrderItem,
+                                                int lineNo) {
         Long sourceSalesOrderItemId = source.sourceSalesOrderItemId();
         if (sourceSalesOrderItemId == null || source.quantity() == null || source.quantity() <= 0) {
             return fallbackWeightTon(source);
@@ -296,8 +303,8 @@ public class SalesOutboundService extends AbstractCrudService<SalesOutbound, Sal
                 (rs, rowNum) -> rs.getBigDecimal("weight_ton"),
                 sourceSalesOrderItemId);
         if (weights.size() < source.quantity()) {
-            logger.warn("第{}行逐件记录不足: 需要{}件, 实际{}件, 回退平均值", lineNo, source.quantity(), weights.size());
-            return fallbackWeightTon(source);
+            logger.warn("第{}行逐件记录不足: 需要{}件, 实际{}件, 使用来源销售订单明细均重", lineNo, source.quantity(), weights.size());
+            return sourceBackedWeightTon(source, sourceSalesOrderItem, lineNo);
         }
         BigDecimal total = BigDecimal.ZERO;
         for (int i = 0; i < source.quantity(); i++) {
@@ -310,6 +317,28 @@ public class SalesOutboundService extends AbstractCrudService<SalesOutbound, Sal
         return source.weightTon() == null
                 ? TradeItemCalculator.calculateWeightTon(source.quantity(), source.pieceWeightTon())
                 : TradeItemCalculator.scaleWeightTon(source.weightTon());
+    }
+
+    private BigDecimal sourceBackedWeightTon(SalesOutboundItemRequest source,
+                                             SalesOrderItem sourceSalesOrderItem,
+                                             int lineNo) {
+        if (sourceSalesOrderItem == null
+                || sourceSalesOrderItem.getQuantity() == null
+                || sourceSalesOrderItem.getQuantity() <= 0
+                || sourceSalesOrderItem.getWeightTon() == null) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行来源销售订单明细重量不可用");
+        }
+        BigDecimal sourcePieceWeightTon = TradeItemCalculator.calculateRepresentableAveragePieceWeightTon(
+                sourceSalesOrderItem.getQuantity(),
+                sourceSalesOrderItem.getWeightTon()
+        );
+        if (sourcePieceWeightTon == null) {
+            sourcePieceWeightTon = TradeItemCalculator.calculateAveragePieceWeightTon(
+                    sourceSalesOrderItem.getQuantity(),
+                    sourceSalesOrderItem.getWeightTon()
+            );
+        }
+        return TradeItemCalculator.calculateWeightTon(source.quantity(), sourcePieceWeightTon);
     }
 
     private void assertSourceSalesOrderItemsNotOccupied(
@@ -407,6 +436,63 @@ public class SalesOutboundService extends AbstractCrudService<SalesOutbound, Sal
         return item.getSourceSalesOrderItemId();
     }
 
+    private SalesOrderItem resolveSourceSalesOrderItem(Map<Long, SalesOrderItem> sourceSalesOrderItemMap,
+                                                       Long sourceSalesOrderItemId,
+                                                       int lineNo) {
+        if (sourceSalesOrderItemId == null) {
+            return null;
+        }
+        SalesOrderItem sourceSalesOrderItem = sourceSalesOrderItemMap.get(sourceSalesOrderItemId);
+        if (sourceSalesOrderItem == null || sourceSalesOrderItem.getSalesOrder() == null) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行来源销售订单明细不存在");
+        }
+        return sourceSalesOrderItem;
+    }
+
+    private void validateSourceSalesOrderItem(SalesOutboundItemRequest request,
+                                              SalesOrderItem sourceSalesOrderItem,
+                                              Long sourceSalesOrderItemId,
+                                              String warehouseName,
+                                              String batchNo,
+                                              Map<Long, Integer> requestSourceQuantityMap,
+                                              int lineNo) {
+        if (sourceSalesOrderItemId == null) {
+            return;
+        }
+        String sourceStatus = sourceSalesOrderItem.getSalesOrder() == null ? null : sourceSalesOrderItem.getSalesOrder().getStatus();
+        if (!StatusConstants.AUDITED.equals(normalize(sourceStatus))) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行来源销售订单未审核，不能作为来源单据");
+        }
+        assertSameText(request.materialCode(), sourceSalesOrderItem.getMaterialCode(), lineNo, "物料编码");
+        assertSameText(request.brand(), sourceSalesOrderItem.getBrand(), lineNo, "品牌");
+        assertSameText(request.category(), sourceSalesOrderItem.getCategory(), lineNo, "品类");
+        assertSameText(request.material(), sourceSalesOrderItem.getMaterial(), lineNo, "材质");
+        assertSameText(request.spec(), sourceSalesOrderItem.getSpec(), lineNo, "规格");
+        assertSameText(request.unit(), sourceSalesOrderItem.getUnit(), lineNo, "单位");
+        assertSameText(warehouseName, sourceSalesOrderItem.getWarehouseName(), lineNo, "仓库");
+        assertSameText(batchNo, sourceSalesOrderItem.getBatchNo(), lineNo, "批号");
+
+        int currentQuantity = request.quantity() == null ? 0 : request.quantity();
+        int requestedQuantity = requestSourceQuantityMap.getOrDefault(sourceSalesOrderItemId, 0);
+        int sourceQuantity = sourceSalesOrderItem.getQuantity() == null ? 0 : sourceSalesOrderItem.getQuantity();
+        if (requestedQuantity + currentQuantity > sourceQuantity) {
+            throw new BusinessException(
+                    ErrorCode.BUSINESS_ERROR,
+                    "第" + lineNo + "行来源销售订单明细可出库数量不足，剩余可用 " + Math.max(sourceQuantity - requestedQuantity, 0) + " 件"
+            );
+        }
+        requestSourceQuantityMap.put(sourceSalesOrderItemId, requestedQuantity + currentQuantity);
+    }
+
+    private void assertSameText(String requestedValue, String sourceValue, int lineNo, String fieldName) {
+        if (!normalize(requestedValue).equals(normalize(sourceValue))) {
+            throw new BusinessException(
+                    ErrorCode.BUSINESS_ERROR,
+                    "第" + lineNo + "行来源销售订单明细" + fieldName + "与请求不一致"
+            );
+        }
+    }
+
     private void collectSourceSalesOrderNos(LinkedHashSet<String> sourceSalesOrderNos,
                                             SalesOutboundItemRequest source,
                                             Map<Long, SalesOrderItem> sourceSalesOrderItemMap,
@@ -434,5 +520,9 @@ public class SalesOutboundService extends AbstractCrudService<SalesOutbound, Sal
             return null;
         }
         return sourceSalesOrderItem.getSalesOrder().getOrderNo();
+    }
+
+    private String normalize(String value) {
+        return value == null ? "" : value.trim();
     }
 }

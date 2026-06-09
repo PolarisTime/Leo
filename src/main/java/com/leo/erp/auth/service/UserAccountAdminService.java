@@ -31,6 +31,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Base64;
 import java.util.List;
+import java.util.Locale;
 
 @Service
 public class UserAccountAdminService {
@@ -211,6 +212,9 @@ public class UserAccountAdminService {
         Long previousDepartmentId = entity.getDepartmentId();
         boolean roleUpdateRequested = hasRolePayload(request);
         List<RoleSetting> roles = resolveRolesFromRequest(entity, request);
+        if (roleUpdateRequested) {
+            userRoleBindingService.assertCurrentPrincipalCanBindRoles(entity.getId(), roles);
+        }
         assertNoRoleConflict(roles);
         UserStatus nextStatus = validationService.toStatus(request.status());
         assertNotLastActiveAdmin(entity, roles, nextStatus, false);
@@ -218,7 +222,7 @@ public class UserAccountAdminService {
         try {
             UserAccount saved = repository.save(entity);
             if (roleUpdateRequested) {
-                userRoleBindingService.replaceUserRoles(saved.getId(), roles);
+                userRoleBindingService.replaceUserRolesWithinCurrentPrincipalBounds(saved.getId(), roles);
             }
             cacheService.evictLoginNameCache(previousLoginName, saved.getLoginName());
             cacheService.evictPermissionCache(saved.getId());
@@ -309,7 +313,7 @@ public class UserAccountAdminService {
     }
 
     private boolean isAdminRole(RoleSetting role) {
-        return role != null && ADMIN_ROLE_CODE.equals(role.getRoleCode());
+        return role != null && ADMIN_ROLE_CODE.equals(normalizeRoleCode(role.getRoleCode()));
     }
 
     private Long resolveAdminRoleId() {
@@ -331,5 +335,9 @@ public class UserAccountAdminService {
             cause = cause.getCause();
         }
         return false;
+    }
+
+    private String normalizeRoleCode(String value) {
+        return value == null ? null : value.trim().toUpperCase(Locale.ROOT);
     }
 }

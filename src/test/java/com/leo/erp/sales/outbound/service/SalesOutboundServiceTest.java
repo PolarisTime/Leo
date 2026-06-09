@@ -87,13 +87,13 @@ class SalesOutboundServiceTest {
         SalesOutbound saved = outboundCaptor.getValue();
         assertThat(saved.getSalesOrderNo()).isEqualTo("SO-001");
         assertThat(saved.getWarehouseName()).isEqualTo("一号码头");
-        assertThat(saved.getTotalWeight()).isEqualByComparingTo("14.258");
-        assertThat(saved.getTotalAmount()).isEqualByComparingTo("42774.00");
+        assertThat(saved.getTotalWeight()).isEqualByComparingTo("14.000");
+        assertThat(saved.getTotalAmount()).isEqualByComparingTo("42000.00");
         assertThat(saved.getItems()).singleElement().satisfies(item -> {
             assertThat(item.getSourceSalesOrderItemId()).isEqualTo(9001L);
             assertThat(item.getWarehouseName()).isEqualTo("一号码头");
-            assertThat(item.getWeightTon()).isEqualByComparingTo("14.258");
-            assertThat(item.getAmount()).isEqualByComparingTo("42774.00");
+            assertThat(item.getWeightTon()).isEqualByComparingTo("14.000");
+            assertThat(item.getAmount()).isEqualByComparingTo("42000.00");
         });
     }
 
@@ -132,13 +132,13 @@ class SalesOutboundServiceTest {
         var outboundCaptor = forClass(SalesOutbound.class);
         verify(repository).save(outboundCaptor.capture());
         SalesOutbound saved = outboundCaptor.getValue();
-        assertThat(saved.getTotalWeight()).isEqualByComparingTo("2.248");
-        assertThat(saved.getTotalAmount()).isEqualByComparingTo("6993.53");
+        assertThat(saved.getTotalWeight()).isEqualByComparingTo("2.000");
+        assertThat(saved.getTotalAmount()).isEqualByComparingTo("6222.00");
         assertThat(saved.getItems()).singleElement().satisfies(item -> {
             assertThat(item.getSourceSalesOrderItemId()).isEqualTo(9002L);
-            assertThat(item.getPieceWeightTon()).isEqualByComparingTo("2.248");
-            assertThat(item.getWeightTon()).isEqualByComparingTo("2.248");
-            assertThat(item.getAmount()).isEqualByComparingTo("6993.53");
+            assertThat(item.getPieceWeightTon()).isEqualByComparingTo("2.000");
+            assertThat(item.getWeightTon()).isEqualByComparingTo("2.000");
+            assertThat(item.getAmount()).isEqualByComparingTo("6222.00");
         });
     }
 
@@ -1100,9 +1100,20 @@ class SalesOutboundServiceTest {
         SalesOrder salesOrder = new SalesOrder();
         salesOrder.setId(itemId + 1000);
         salesOrder.setOrderNo(orderNo);
+        salesOrder.setStatus(StatusConstants.AUDITED);
         SalesOrderItem item = new SalesOrderItem();
         item.setId(itemId);
         item.setSalesOrder(salesOrder);
+        item.setMaterialCode("M1");
+        item.setBrand("宝钢");
+        item.setCategory("盘螺");
+        item.setMaterial("HRB400");
+        item.setSpec("10");
+        item.setUnit("吨");
+        item.setWarehouseName("一号码头");
+        item.setBatchNo("B1");
+        item.setQuantity(100);
+        item.setWeightTon(new BigDecimal("200.000"));
         return item;
     }
 

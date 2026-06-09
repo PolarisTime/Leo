@@ -157,6 +157,11 @@ public class PurchaseContractService extends AbstractCrudService<PurchaseContrac
     }
 
     @Override
+    protected java.util.Set<String> allowedStatusTransitions() {
+        return StatusConstants.CONTRACT_TRANSITIONS;
+    }
+
+    @Override
     protected void apply(PurchaseContract entity, PurchaseContractRequest request) {
         String nextStatus = BusinessStatusValidator.normalizeWithDefault(
                 request.status(),

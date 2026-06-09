@@ -41,6 +41,7 @@ public class LoginService {
     private final TokenIssuanceService tokenIssuanceService;
     private final OperationLogService operationLogService;
     private final SystemSwitchService systemSwitchService;
+    private final CaptchaService captchaService;
 
     public LoginService(
             UserAccountRepository userAccountRepository,
@@ -50,7 +51,8 @@ public class LoginService {
             StringRedisTemplate redisTemplate,
             TokenIssuanceService tokenIssuanceService,
             OperationLogService operationLogService,
-            SystemSwitchService systemSwitchService
+            SystemSwitchService systemSwitchService,
+            CaptchaService captchaService
     ) {
         this.userAccountRepository = userAccountRepository;
         this.passwordEncoder = passwordEncoder;
@@ -60,6 +62,7 @@ public class LoginService {
         this.tokenIssuanceService = tokenIssuanceService;
         this.operationLogService = operationLogService;
         this.systemSwitchService = systemSwitchService;
+        this.captchaService = captchaService;
     }
 
     @Transactional
@@ -67,6 +70,7 @@ public class LoginService {
         String normalizedLoginName = request.loginName() == null ? "" : request.loginName().trim();
 
         loginAttemptService.ensureLoginAllowed(normalizedLoginName);
+        verifyCaptchaIfRequired(request, normalizedLoginName, ctx);
 
         UserAccount user = userAccountRepository.findByLoginNameAndDeletedFlagFalse(normalizedLoginName)
                 .orElseThrow(() -> invalidCredentials(normalizedLoginName, ctx));
@@ -90,6 +94,16 @@ public class LoginService {
         TokenResponse response = tokenIssuanceService.issueTokens(user, ctx.loginIp(), ctx.userAgent());
         recordLoginSuccess(user, ctx);
         return response;
+    }
+
+    private void verifyCaptchaIfRequired(LoginRequest request, String loginName, AuthRequestContext ctx) {
+        if (systemSwitchService == null || !systemSwitchService.shouldRequireLoginCaptcha()) {
+            return;
+        }
+        if (captchaService == null || !captchaService.verify(request.captchaId(), request.captchaCode())) {
+            recordAuthenticationLog("登录失败", null, loginName, ctx, "失败", "图形验证码错误或已过期");
+            throw new BadCredentialsException("图形验证码错误或已过期");
+        }
     }
 
     @Transactional

@@ -81,7 +81,7 @@ public class AttachmentController {
                                              @RequestParam String moduleKey,
                                              @RequestParam String accessKey) {
         modulePermissionGuard.requirePermission(principal, moduleKey, "read");
-        attachmentRecordAccessService.assertAttachmentAccessible(principal, moduleKey, "read", id);
+        attachmentRecordAccessService.assertAttachmentAccessible(principal, "read", id);
         boolean watermark = systemSwitchService.shouldWatermarkAttachments() && !isAdmin(principal);
         return buildFileResponse(attachmentService.loadDownloadResource(
                 id, accessKey, false, watermark, principal.getUsername()));
@@ -94,7 +94,7 @@ public class AttachmentController {
                                             @RequestParam String moduleKey,
                                             @RequestParam String accessKey) {
         modulePermissionGuard.requirePermission(principal, moduleKey, "read");
-        attachmentRecordAccessService.assertAttachmentAccessible(principal, moduleKey, "read", id);
+        attachmentRecordAccessService.assertAttachmentAccessible(principal, "read", id);
         boolean watermark = systemSwitchService.shouldWatermarkAttachments() && !isAdmin(principal);
         return buildFileResponse(attachmentService.loadDownloadResource(
                 id, accessKey, true, watermark, principal.getUsername()));

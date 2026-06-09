@@ -12,6 +12,7 @@ import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.security.jwt.AuthenticatedUserCacheService;
 import com.leo.erp.security.permission.PermissionService;
 import com.leo.erp.security.permission.ResourcePermissionCatalog;
+import com.leo.erp.security.support.SecurityPrincipal;
 import com.leo.erp.system.dashboard.service.DashboardSummaryService;
 import com.leo.erp.system.role.domain.entity.RolePermission;
 import com.leo.erp.system.role.domain.entity.RoleSetting;
@@ -25,6 +26,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.jpa.domain.Specification;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -32,6 +36,7 @@ import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -121,7 +126,9 @@ public class RoleSettingService extends AbstractCrudService<RoleSetting, RoleSet
 
     @Override
     protected void validateCreate(RoleSettingRequest request) {
-        if (repository.existsByRoleCodeAndDeletedFlagFalse(request.roleCode())) {
+        String roleCode = normalizeRoleCode(request.roleCode());
+        assertCurrentPrincipalCanManageRoleCode(roleCode);
+        if (repository.existsByRoleCodeAndDeletedFlagFalse(roleCode)) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "角色编码已存在");
         }
     }
@@ -129,8 +136,15 @@ public class RoleSettingService extends AbstractCrudService<RoleSetting, RoleSet
     @Override
     protected void validateUpdate(RoleSetting entity, RoleSettingRequest request) {
         assertAdminRoleNotChanged(entity, request);
-        if (!entity.getRoleCode().equals(request.roleCode())
-                && repository.existsByRoleCodeAndDeletedFlagFalse(request.roleCode())) {
+        String nextRoleCode = normalizeRoleCode(request.roleCode());
+        assertCurrentPrincipalCanManageRoleCode(entity.getRoleCode());
+        assertCurrentPrincipalCanManageRoleCode(nextRoleCode);
+        assertCurrentPrincipalCanGrantDataScope(
+                normalizeAllowedValue(request.dataScope(), ALLOWED_DATA_SCOPES, "数据范围"),
+                rolePermissionRepository.findByRoleIdAndDeletedFlagFalse(entity.getId())
+        );
+        if (!Objects.equals(entity.getRoleCode(), nextRoleCode)
+                && repository.existsByRoleCodeAndDeletedFlagFalse(nextRoleCode)) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "角色编码已存在");
         }
     }
@@ -186,10 +200,15 @@ public class RoleSettingService extends AbstractCrudService<RoleSetting, RoleSet
 
     @Transactional
     public void saveRolePermissions(Long roleId, List<RolePermissionItem> permissions) {
-        requireEntity(roleId);
+        RoleSetting role = requireEntity(roleId);
+        if (isAdminRole(role)) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "系统管理员角色权限不能修改");
+        }
         if (permissions == null) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "权限列表不能为空");
         }
+        String roleDataScope = normalizeAllowedValue(role.getDataScope(), ALLOWED_DATA_SCOPES, "数据范围");
+        Map<String, Set<String>> currentPermissionMap = currentPrincipalPermissionUpperBound();
         Set<String> seen = new LinkedHashSet<>();
         Map<String, Set<String>> actionsByResource = new LinkedHashMap<>();
         rolePermissionRepository.deleteActiveByRoleId(roleId);
@@ -220,6 +239,9 @@ public class RoleSettingService extends AbstractCrudService<RoleSetting, RoleSet
                 resource -> "user-account".equals(resource) || "permission".equals(resource) || "role".equals(resource))) {
             actionsByResource.computeIfAbsent("access-control", k -> new LinkedHashSet<>()).add(ResourcePermissionCatalog.READ);
         }
+        assertCurrentPrincipalCanGrantDataScope(roleDataScope, actionsByResource);
+        actionsByResource.forEach((resource, actions) ->
+                actions.forEach(action -> assertWithinCurrentPrincipalPermissions(currentPermissionMap, resource, action)));
         List<RolePermission> toSave = new java.util.ArrayList<>(actionsByResource.values().stream().mapToInt(Set::size).sum());
         actionsByResource.forEach((resource, actions) -> actions.forEach(action -> {
             RolePermission permission = new RolePermission();
@@ -345,7 +367,7 @@ public class RoleSettingService extends AbstractCrudService<RoleSetting, RoleSet
         if (normalized.length() > 64) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "角色编码长度不能超过64");
         }
-        return normalized;
+        return normalized.toUpperCase(Locale.ROOT);
     }
 
     private String normalizeStatus(String value) {
@@ -383,7 +405,105 @@ public class RoleSettingService extends AbstractCrudService<RoleSetting, RoleSet
     }
 
     private boolean isAdminRole(RoleSetting role) {
-        return role != null && ADMIN_ROLE_CODE.equals(role.getRoleCode());
+        return role != null && ADMIN_ROLE_CODE.equals(normalizeNullableRoleCode(role.getRoleCode()));
+    }
+
+    private String normalizeNullableRoleCode(String value) {
+        String normalized = normalizeOptionalValue(value);
+        return normalized == null ? null : normalized.toUpperCase(Locale.ROOT);
+    }
+
+    private void assertCurrentPrincipalCanManageRoleCode(String roleCode) {
+        if (ADMIN_ROLE_CODE.equals(normalizeNullableRoleCode(roleCode)) && currentPrincipalIsNotAdmin()) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "非系统管理员不能管理系统管理员角色");
+        }
+    }
+
+    private Map<String, Set<String>> currentPrincipalPermissionUpperBound() {
+        SecurityPrincipal principal = currentPrincipal().orElse(null);
+        if (principal == null || currentPrincipalIsAdmin()) {
+            return Map.of();
+        }
+        return permissionService.getUserPermissionMap(principal.id());
+    }
+
+    private void assertWithinCurrentPrincipalPermissions(Map<String, Set<String>> currentPermissionMap,
+                                                         String resource,
+                                                         String action) {
+        if (currentPermissionMap.isEmpty() && currentPrincipalIsAdmin()) {
+            return;
+        }
+        if (currentPermissionMap.isEmpty() && currentPrincipal().isEmpty()) {
+            return;
+        }
+        Set<String> allowedActions = currentPermissionMap.get(resource);
+        if (allowedActions == null || !allowedActions.contains(action)) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "不能授予超出自身权限范围的权限");
+        }
+    }
+
+    private void assertCurrentPrincipalCanGrantDataScope(String requestedDataScope, List<RolePermission> permissions) {
+        if (permissions == null || permissions.isEmpty()) {
+            assertCurrentPrincipalCanGrantDataScope(requestedDataScope, Map.of());
+            return;
+        }
+        Map<String, Set<String>> actionsByResource = new LinkedHashMap<>();
+        for (RolePermission permission : permissions) {
+            String resource = ResourcePermissionCatalog.normalizeResource(permission.getResourceCode());
+            String action = ResourcePermissionCatalog.normalizeAction(permission.getActionCode());
+            if (ResourcePermissionCatalog.isAllowed(resource, action)) {
+                actionsByResource.computeIfAbsent(resource, key -> new LinkedHashSet<>()).add(action);
+            }
+        }
+        assertCurrentPrincipalCanGrantDataScope(requestedDataScope, actionsByResource);
+    }
+
+    private void assertCurrentPrincipalCanGrantDataScope(String requestedDataScope,
+                                                         Map<String, Set<String>> actionsByResource) {
+        SecurityPrincipal principal = currentPrincipal().orElse(null);
+        if (principal == null || currentPrincipalIsAdmin()) {
+            return;
+        }
+        String normalizedRequestedScope = ResourcePermissionCatalog.normalizeDataScope(requestedDataScope);
+        if (actionsByResource == null || actionsByResource.isEmpty()) {
+            assertDataScopeWithinCurrentPrincipal(normalizedRequestedScope, ResourcePermissionCatalog.SCOPE_SELF);
+            return;
+        }
+        for (Map.Entry<String, Set<String>> entry : actionsByResource.entrySet()) {
+            for (String action : entry.getValue()) {
+                String currentScope = permissionService.getUserDataScope(principal.id(), entry.getKey(), action);
+                assertDataScopeWithinCurrentPrincipal(normalizedRequestedScope, currentScope);
+            }
+        }
+    }
+
+    private void assertDataScopeWithinCurrentPrincipal(String requestedScope, String currentScope) {
+        String normalizedCurrentScope = ResourcePermissionCatalog.normalizeDataScope(currentScope);
+        if (!Objects.equals(ResourcePermissionCatalog.broaderDataScope(requestedScope, normalizedCurrentScope), normalizedCurrentScope)) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "不能授予超出自身数据范围的角色");
+        }
+    }
+
+    private boolean currentPrincipalIsNotAdmin() {
+        return currentPrincipal().isPresent() && !currentPrincipalIsAdmin();
+    }
+
+    private boolean currentPrincipalIsAdmin() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || authentication.getAuthorities() == null) {
+            return false;
+        }
+        return authentication.getAuthorities().stream()
+                .map(GrantedAuthority::getAuthority)
+                .anyMatch("ROLE_ADMIN"::equals);
+    }
+
+    private Optional<SecurityPrincipal> currentPrincipal() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || !(authentication.getPrincipal() instanceof SecurityPrincipal principal)) {
+            return Optional.empty();
+        }
+        return Optional.of(principal);
     }
 
     private String normalizeAllowedValue(String value, Set<String> allowedValues, String fieldName) {

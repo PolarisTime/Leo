@@ -41,6 +41,7 @@ public class PurchaseItemQueryAppServiceImpl implements PurchaseItemQueryAppServ
         return new SourceInboundItemRecord(
                 item.getId(),
                 inbound != null ? inbound.getInboundNo() : null,
+                inbound != null ? inbound.getStatus() : null,
                 inbound != null ? inbound.getPurchaseOrderNo() : null,
                 item.getQuantity(),
                 item.getWeighWeightTon(),
@@ -57,6 +58,7 @@ public class PurchaseItemQueryAppServiceImpl implements PurchaseItemQueryAppServ
                 item.getQuantity(),
                 item.getWeightTon(),
                 order != null ? order.getOrderNo() : null,
+                order != null ? order.getStatus() : null,
                 item.getBrand(), item.getMaterial(), item.getSpec(),
                 item.getMaterialCode(), item.getCategory(), item.getUnit(),
                 item.getWarehouseName(), item.getBatchNo()

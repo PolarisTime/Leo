@@ -6,10 +6,17 @@ import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
+import com.leo.erp.security.permission.PermissionService;
+import com.leo.erp.security.support.SecurityPrincipal;
+import com.leo.erp.system.role.domain.entity.RolePermission;
 import com.leo.erp.system.role.domain.entity.RoleSetting;
+import com.leo.erp.system.role.repository.RolePermissionRepository;
 import com.leo.erp.system.role.repository.RoleSettingRepository;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -23,22 +30,38 @@ import java.util.Locale;
 import java.util.stream.Collectors;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 
 @Service
 public class UserRoleBindingService {
 
+    private static final String ADMIN_ROLE_CODE = "ADMIN";
+    private static final String ADMIN_AUTHORITY = "ROLE_ADMIN";
     private static final String ROLE_STATUS_NORMAL = StatusConstants.NORMAL;
 
     private final UserRoleRepository userRoleRepository;
     private final RoleSettingRepository roleSettingRepository;
     private final SnowflakeIdGenerator idGenerator;
+    private final RolePermissionRepository rolePermissionRepository;
+    private final PermissionService permissionService;
+
+    @Autowired
+    public UserRoleBindingService(UserRoleRepository userRoleRepository,
+                                  RoleSettingRepository roleSettingRepository,
+                                  SnowflakeIdGenerator idGenerator,
+                                  RolePermissionRepository rolePermissionRepository,
+                                  PermissionService permissionService) {
+        this.userRoleRepository = userRoleRepository;
+        this.roleSettingRepository = roleSettingRepository;
+        this.idGenerator = idGenerator;
+        this.rolePermissionRepository = rolePermissionRepository;
+        this.permissionService = permissionService;
+    }
 
     public UserRoleBindingService(UserRoleRepository userRoleRepository,
                                   RoleSettingRepository roleSettingRepository,
                                   SnowflakeIdGenerator idGenerator) {
-        this.userRoleRepository = userRoleRepository;
-        this.roleSettingRepository = roleSettingRepository;
-        this.idGenerator = idGenerator;
+        this(userRoleRepository, roleSettingRepository, idGenerator, null, null);
     }
 
     @Transactional(readOnly = true)
@@ -94,6 +117,27 @@ public class UserRoleBindingService {
             bindings.add(binding);
         }
         userRoleRepository.saveAll(bindings);
+    }
+
+    @Transactional
+    public void replaceUserRolesWithinCurrentPrincipalBounds(Long userId, Collection<RoleSetting> roles) {
+        assertCurrentPrincipalCanBindRoles(userId, roles);
+        replaceUserRoles(userId, roles);
+    }
+
+    public void assertCurrentPrincipalCanBindRoles(Long targetUserId, Collection<RoleSetting> roles) {
+        Optional<SecurityPrincipal> principal = currentPrincipal();
+        if (principal.isEmpty() || currentPrincipalIsAdmin()) {
+            return;
+        }
+        if (Objects.equals(principal.get().id(), targetUserId)) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "不能修改自己的角色集合");
+        }
+        List<RoleSetting> requestedRoles = roles == null ? List.of() : new ArrayList<>(roles);
+        if (requestedRoles.stream().anyMatch(this::isAdminRole)) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "非系统管理员不能授予系统管理员角色");
+        }
+        assertRolesWithinCurrentPrincipalPermissions(principal.get().id(), requestedRoles);
     }
 
     public String joinRoleNames(Collection<RoleSetting> roles) {
@@ -160,6 +204,78 @@ public class UserRoleBindingService {
         roleSettingRepository.findByRoleNameInAndDeletedFlagFalse(normalizedIdentifiers)
                 .forEach(role -> resolved.putIfAbsent(role.getRoleName().trim().toLowerCase(Locale.ROOT), role));
         return resolved;
+    }
+
+    private void assertRolesWithinCurrentPrincipalPermissions(Long principalId, List<RoleSetting> requestedRoles) {
+        if (requestedRoles.isEmpty() || rolePermissionRepository == null || permissionService == null) {
+            return;
+        }
+        Map<String, Set<String>> currentPermissionMap = permissionService.getUserPermissionMap(principalId);
+        List<Long> requestedRoleIds = requestedRoles.stream()
+                .map(RoleSetting::getId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        if (requestedRoleIds.isEmpty()) {
+            return;
+        }
+        for (RolePermission permission : rolePermissionRepository.findByRoleIdInAndDeletedFlagFalse(requestedRoleIds)) {
+            String resource = permission.getResourceCode();
+            String action = permission.getActionCode();
+            Set<String> allowedActions = currentPermissionMap.get(resource);
+            if (allowedActions == null || !allowedActions.contains(action)) {
+                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "不能授予超出自身权限范围的角色");
+            }
+            assertRoleDataScopeWithinCurrentPrincipal(principalId, requestedRoles, permission);
+        }
+    }
+
+    private void assertRoleDataScopeWithinCurrentPrincipal(Long principalId,
+                                                           List<RoleSetting> requestedRoles,
+                                                           RolePermission permission) {
+        RoleSetting role = requestedRoles.stream()
+                .filter(candidate -> Objects.equals(candidate.getId(), permission.getRoleId()))
+                .findFirst()
+                .orElse(null);
+        if (role == null) {
+            return;
+        }
+        String resource = com.leo.erp.security.permission.ResourcePermissionCatalog.normalizeResource(permission.getResourceCode());
+        String action = com.leo.erp.security.permission.ResourcePermissionCatalog.normalizeAction(permission.getActionCode());
+        String requestedScope = com.leo.erp.security.permission.ResourcePermissionCatalog.normalizeDataScope(role.getDataScope());
+        String currentScope = permissionService.getUserDataScope(principalId, resource, action);
+        String normalizedCurrentScope = com.leo.erp.security.permission.ResourcePermissionCatalog.normalizeDataScope(currentScope);
+        if (!Objects.equals(
+                com.leo.erp.security.permission.ResourcePermissionCatalog.broaderDataScope(requestedScope, normalizedCurrentScope),
+                normalizedCurrentScope)) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "不能授予超出自身数据范围的角色");
+        }
+    }
+
+    private boolean isAdminRole(RoleSetting role) {
+        return role != null && ADMIN_ROLE_CODE.equals(normalizeRoleCode(role.getRoleCode()));
+    }
+
+    private String normalizeRoleCode(String value) {
+        return value == null ? null : value.trim().toUpperCase(Locale.ROOT);
+    }
+
+    private boolean currentPrincipalIsAdmin() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || authentication.getAuthorities() == null) {
+            return false;
+        }
+        return authentication.getAuthorities().stream()
+                .map(GrantedAuthority::getAuthority)
+                .anyMatch(ADMIN_AUTHORITY::equals);
+    }
+
+    private Optional<SecurityPrincipal> currentPrincipal() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || !(authentication.getPrincipal() instanceof SecurityPrincipal principal)) {
+            return Optional.empty();
+        }
+        return Optional.of(principal);
     }
 
     private List<String> normalizeIdentifiers(Collection<String> roleIdentifiers) {

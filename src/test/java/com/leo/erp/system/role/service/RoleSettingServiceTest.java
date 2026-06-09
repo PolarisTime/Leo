@@ -7,21 +7,28 @@ import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.security.jwt.AuthenticatedUserCacheService;
 import com.leo.erp.security.permission.PermissionService;
+import com.leo.erp.security.support.SecurityPrincipal;
 import com.leo.erp.system.role.domain.entity.RolePermission;
 import com.leo.erp.system.role.domain.entity.RoleSetting;
 import com.leo.erp.system.role.repository.RolePermissionRepository;
 import com.leo.erp.system.role.repository.RoleSettingRepository;
 import com.leo.erp.system.role.web.dto.RolePermissionItem;
 import com.leo.erp.system.role.web.dto.RoleSettingRequest;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
 
 import java.lang.reflect.Proxy;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -31,6 +38,11 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 class RoleSettingServiceTest {
+
+    @AfterEach
+    void tearDown() {
+        SecurityContextHolder.clearContext();
+    }
 
     @Test
     void shouldRejectDuplicateRolePermissions() {
@@ -216,7 +228,7 @@ class RoleSettingServiceTest {
                 RoleSettingRepository.class.getClassLoader(),
                 new Class[]{RoleSettingRepository.class},
                 (proxy, method, args) -> switch (method.getName()) {
-                    case "existsByRoleCodeAndDeletedFlagFalse" -> true;
+                    case "existsByRoleCodeAndDeletedFlagFalse" -> "ADMIN".equals(args[0]);
                     case "toString" -> "RoleSettingRepositoryStub";
                     case "hashCode" -> System.identityHashCode(proxy);
                     case "equals" -> proxy == args[0];
@@ -234,9 +246,27 @@ class RoleSettingServiceTest {
         );
 
         assertThatThrownBy(() -> service.create(new RoleSettingRequest(
-                "ADMIN", "管理员", "系统角色", "全部数据", null, null, "正常", null
+                " admin ", "管理员", "系统角色", "全部数据", null, null, "正常", null
         ))).isInstanceOf(BusinessException.class)
                 .hasMessageContaining("角色编码已存在");
+    }
+
+    @Test
+    void shouldRejectNonAdminCreatingAdminRoleWithDifferentCase() {
+        authenticate(7L, "operator", List.of(new SimpleGrantedAuthority("ROLE_USER")));
+        RoleSettingService service = new RoleSettingService(
+                roleRepository(),
+                rolePermissionRepository(),
+                repository(UserRoleRepository.class),
+                new SnowflakeIdGenerator(0L),
+                permissionService(),
+                mock(AuthenticatedUserCacheService.class)
+        );
+
+        assertThatThrownBy(() -> service.create(new RoleSettingRequest(
+                " admin ", "管理员", "系统角色", "全部数据", null, null, "正常", null
+        ))).isInstanceOf(BusinessException.class)
+                .hasMessageContaining("非系统管理员不能管理系统管理员角色");
     }
 
     @Test
@@ -268,7 +298,7 @@ class RoleSettingServiceTest {
         );
 
         var result = service.create(new RoleSettingRequest(
-                "PURCHASER", "采购员", "业务角色", "全部数据", null, null, "正常", null
+                " purchaser ", "采购员", "业务角色", "全部数据", null, null, "正常", null
         ));
         assertThat(result).isNotNull();
         assertThat(savedRole.get()).isNotNull();
@@ -398,7 +428,16 @@ class RoleSettingServiceTest {
                 RoleSettingRepository.class.getClassLoader(),
                 new Class[]{RoleSettingRepository.class},
                 (proxy, method, args) -> switch (method.getName()) {
-                    case "findByIdAndDeletedFlagFalse" -> Optional.of(new RoleSetting());
+                    case "findByIdAndDeletedFlagFalse" -> {
+                        RoleSetting role = new RoleSetting();
+                        role.setId((Long) args[0]);
+                        role.setRoleCode("PURCHASER");
+                        role.setRoleName("采购员");
+                        role.setRoleType("业务角色");
+                        role.setDataScope("全部数据");
+                        role.setStatus("正常");
+                        yield Optional.of(role);
+                    }
                     case "existsByRoleCodeAndDeletedFlagFalse" -> false;
                     case "toString" -> "RoleSettingRepositoryStub";
                     case "hashCode" -> System.identityHashCode(proxy);
@@ -409,6 +448,10 @@ class RoleSettingServiceTest {
     }
 
     private RoleSettingRepository roleRepositoryWithRole(String roleCode) {
+        return roleRepositoryWithRole(roleCode, "全部数据");
+    }
+
+    private RoleSettingRepository roleRepositoryWithRole(String roleCode, String dataScope) {
         return (RoleSettingRepository) Proxy.newProxyInstance(
                 RoleSettingRepository.class.getClassLoader(),
                 new Class[]{RoleSettingRepository.class},
@@ -419,7 +462,7 @@ class RoleSettingServiceTest {
                         role.setRoleCode(roleCode);
                         role.setRoleName("管理员");
                         role.setRoleType("系统角色");
-                        role.setDataScope("全部数据");
+                        role.setDataScope(dataScope);
                         role.setStatus("正常");
                         yield Optional.of(role);
                     }
@@ -435,6 +478,23 @@ class RoleSettingServiceTest {
 
     private RolePermissionRepository rolePermissionRepository() {
         return rolePermissionRepository(new AtomicReference<>(List.of()));
+    }
+
+    private RolePermissionRepository rolePermissionRepository(List<RolePermission> permissions) {
+        return (RolePermissionRepository) Proxy.newProxyInstance(
+                RolePermissionRepository.class.getClassLoader(),
+                new Class[]{RolePermissionRepository.class},
+                (proxy, method, args) -> switch (method.getName()) {
+                    case "findByRoleIdAndDeletedFlagFalse", "findByRoleIdInAndDeletedFlagFalse" -> permissions;
+                    case "deleteActiveByRoleId" -> 0;
+                    case "flush" -> null;
+                    case "saveAll" -> args[0];
+                    case "toString" -> "RolePermissionRepositoryListStub";
+                    case "hashCode" -> System.identityHashCode(proxy);
+                    case "equals" -> proxy == args[0];
+                    default -> throw new UnsupportedOperationException(method.getName());
+                }
+        );
     }
 
     @SuppressWarnings("unchecked")
@@ -475,11 +535,44 @@ class RoleSettingServiceTest {
     }
 
     private PermissionService permissionService() {
+        return permissionService(Map.of());
+    }
+
+    private PermissionService permissionService(Map<String, Set<String>> permissionMap) {
+        return permissionService(permissionMap, Map.of());
+    }
+
+    private PermissionService permissionService(Map<String, Set<String>> permissionMap, Map<String, String> dataScopeMap) {
         return new PermissionService(null, null, null, null, null, null) {
+            @Override
+            public Map<String, Set<String>> getUserPermissionMap(Long userId) {
+                return permissionMap;
+            }
+
+            @Override
+            public String getUserDataScope(Long userId, String resourceCode, String actionCode) {
+                return dataScopeMap.getOrDefault(resourceCode + ":" + actionCode, "all");
+            }
+
             @Override
             public void evictAllCache() {
             }
         };
+    }
+
+    private RolePermission rolePermission(Long roleId, String resource, String action) {
+        RolePermission permission = new RolePermission();
+        permission.setRoleId(roleId);
+        permission.setResourceCode(resource);
+        permission.setActionCode(action);
+        return permission;
+    }
+
+    private void authenticate(Long userId, String username, List<SimpleGrantedAuthority> authorities) {
+        SecurityPrincipal principal = SecurityPrincipal.authenticated(userId, username, authorities);
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken(principal, null, principal.getAuthorities())
+        );
     }
 
     @Test
@@ -571,6 +664,82 @@ class RoleSettingServiceTest {
                 "ADMIN", "管理员", "系统角色", "全部数据", null, null, "禁用", null
         ))).isInstanceOf(BusinessException.class)
                 .hasMessageContaining("系统管理员角色不能禁用");
+    }
+
+    @Test
+    void shouldRejectChangingAdminRolePermissions() {
+        RoleSettingService service = new RoleSettingService(
+                roleRepositoryWithRole("ADMIN"), rolePermissionRepository(), repository(UserRoleRepository.class),
+                new SnowflakeIdGenerator(0L), permissionService(), mock(AuthenticatedUserCacheService.class));
+
+        assertThatThrownBy(() -> service.saveRolePermissions(1L, List.of(new RolePermissionItem("material", "read"))))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("系统管理员角色权限不能修改");
+    }
+
+    @Test
+    void shouldRejectSavingPermissionOutsideCurrentPrincipalUpperBound() {
+        authenticate(7L, "operator", List.of(new SimpleGrantedAuthority("ROLE_USER")));
+        RoleSettingService service = new RoleSettingService(
+                roleRepositoryWithRole("PURCHASER"), rolePermissionRepository(), repository(UserRoleRepository.class),
+                new SnowflakeIdGenerator(0L),
+                permissionService(Map.of("material", Set.of("read"))),
+                mock(AuthenticatedUserCacheService.class));
+
+        assertThatThrownBy(() -> service.saveRolePermissions(1L, List.of(new RolePermissionItem("material", "update"))))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("不能授予超出自身权限范围的权限");
+    }
+
+    @Test
+    void shouldRejectSavingPermissionOutsideCurrentPrincipalDataScope() {
+        authenticate(7L, "operator", List.of(new SimpleGrantedAuthority("ROLE_USER")));
+        RoleSettingService service = new RoleSettingService(
+                roleRepositoryWithRole("PURCHASER", "全部数据"), rolePermissionRepository(), repository(UserRoleRepository.class),
+                new SnowflakeIdGenerator(0L),
+                permissionService(Map.of("material", Set.of("read")), Map.of("material:read", "department")),
+                mock(AuthenticatedUserCacheService.class));
+
+        assertThatThrownBy(() -> service.saveRolePermissions(1L, List.of(new RolePermissionItem("material", "read"))))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("不能授予超出自身数据范围的角色");
+    }
+
+    @Test
+    void shouldRejectUpdatingRoleToDataScopeOutsideCurrentPrincipal() {
+        authenticate(7L, "operator", List.of(new SimpleGrantedAuthority("ROLE_USER")));
+        RoleSettingService service = new RoleSettingService(
+                roleRepositoryWithRole("PURCHASER", "本部门"),
+                rolePermissionRepository(List.of(rolePermission(1L, "material", "read"))),
+                repository(UserRoleRepository.class),
+                new SnowflakeIdGenerator(0L),
+                permissionService(Map.of("material", Set.of("read")), Map.of("material:read", "department")),
+                mock(AuthenticatedUserCacheService.class));
+
+        assertThatThrownBy(() -> service.update(1L, new RoleSettingRequest(
+                "PURCHASER", "采购员", "业务角色", "全部数据", null, null, "正常", null
+        ))).isInstanceOf(BusinessException.class)
+                .hasMessageContaining("不能授予超出自身数据范围的角色");
+    }
+
+    @Test
+    void shouldAllowSavingPermissionWithinCurrentPrincipalUpperBound() {
+        authenticate(7L, "operator", List.of(new SimpleGrantedAuthority("ROLE_USER")));
+        AtomicReference<List<RolePermission>> saved = new AtomicReference<>(List.of());
+        RoleSettingService service = new RoleSettingService(
+                roleRepositoryWithRole("PURCHASER", "本部门"), rolePermissionRepository(saved), repository(UserRoleRepository.class),
+                new SnowflakeIdGenerator(0L),
+                permissionService(Map.of("material", Set.of("read", "update")), Map.of(
+                        "material:read", "department",
+                        "material:update", "department"
+                )),
+                mock(AuthenticatedUserCacheService.class));
+
+        service.saveRolePermissions(1L, List.of(new RolePermissionItem("material", "update")));
+
+        assertThat(saved.get())
+                .extracting(permission -> permission.getResourceCode() + ":" + permission.getActionCode())
+                .containsExactly("material:update", "material:read");
     }
 
     @Test

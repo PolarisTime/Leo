@@ -62,7 +62,7 @@ public final class ApiKeySupport {
 
     public static List<String> normalizeAllowedResources(List<String> allowedResources) {
         if (allowedResources == null || allowedResources.isEmpty()) {
-            return List.of();
+            throw new IllegalArgumentException("API Key 允许访问资源不能为空");
         }
         Set<String> normalized = new LinkedHashSet<>();
         for (String allowedResource : allowedResources) {
@@ -75,12 +75,15 @@ public final class ApiKeySupport {
             }
             normalized.add(code);
         }
+        if (normalized.isEmpty()) {
+            throw new IllegalArgumentException("API Key 允许访问资源不能为空");
+        }
         return List.copyOf(normalized);
     }
 
     public static List<String> normalizeAllowedActions(List<String> allowedActions) {
         if (allowedActions == null || allowedActions.isEmpty()) {
-            return List.of();
+            throw new IllegalArgumentException("API Key 允许动作不能为空");
         }
         Set<String> normalized = new LinkedHashSet<>();
         for (String allowedAction : allowedActions) {
@@ -92,6 +95,9 @@ public final class ApiKeySupport {
                 throw new IllegalArgumentException("API Key 允许动作不合法");
             }
             normalized.add(code);
+        }
+        if (normalized.isEmpty()) {
+            throw new IllegalArgumentException("API Key 允许动作不能为空");
         }
         return List.copyOf(normalized);
     }

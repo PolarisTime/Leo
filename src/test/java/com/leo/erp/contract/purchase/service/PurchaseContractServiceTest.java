@@ -127,8 +127,16 @@ class PurchaseContractServiceTest {
         var svc = new PurchaseContractService(repo, new SnowflakeIdGenerator(1), purchaseContractMapper, workflowTransitionGuard);
 
         var result = svc.update(1L, new PurchaseContractRequest("PC-001", "供应商A", LocalDate.now(),
-                LocalDate.now(), LocalDate.now().plusYears(1), "采购甲", "草稿", "备注", List.of()));
+                LocalDate.now(), LocalDate.now().plusYears(1), "采购甲", "执行中", "备注", List.of()));
         assertThat(result).isNotNull();
+    }
+
+    @Test
+    void shouldRejectForgedTerminalStatusTransitionOnUpdate() {
+        assertThatThrownBy(() -> service.update(1L, new PurchaseContractRequest("PC-001", "供应商A", LocalDate.now(),
+                LocalDate.now(), LocalDate.now().plusYears(1), "采购甲", "已签署", "备注", List.of())))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("不能从");
     }
 
     @Test

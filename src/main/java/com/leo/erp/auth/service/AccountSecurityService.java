@@ -54,6 +54,9 @@ public class AccountSecurityService {
     @Transactional
     public TotpSetupResponse setup2fa(Long userId) {
         UserAccount account = getAccount(userId);
+        if (Boolean.TRUE.equals(account.getTotpEnabled())) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "2FA 已启用，请先关闭 2FA 后再重新绑定");
+        }
         String secret = totpService.generateSecret();
         account.setTotpSecret(totpService.encryptSecret(secret));
         account.setTotpEnabled(Boolean.FALSE);
