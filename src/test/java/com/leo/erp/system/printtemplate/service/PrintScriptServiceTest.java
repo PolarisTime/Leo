@@ -150,7 +150,7 @@ class PrintScriptServiceTest {
         ), jdbc);
         PrintPdfFormService pdfFormService = new PrintPdfFormService(
                 scriptService,
-                new ObjectMapper()
+                new PrintPdfFormTemplateValidator(new ObjectMapper())
         );
         String projectName = "海宁市高新区启辉路西侧之江北路北侧地块项目1号楼2号楼配电房地下室工程";
 

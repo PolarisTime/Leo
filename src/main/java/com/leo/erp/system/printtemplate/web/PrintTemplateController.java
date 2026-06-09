@@ -13,6 +13,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 import org.springframework.validation.annotation.Validated;
+import org.springframework.http.MediaType;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -23,6 +24,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
@@ -65,6 +67,14 @@ public class PrintTemplateController {
     @OperationLoggable(moduleName = "打印模板", actionType = "编辑", businessNoFields = {"billType", "templateName"})
     public ApiResponse<PrintTemplateResponse> update(@PathVariable @Positive Long id, @Valid @RequestBody PrintTemplateRequest request) {
         return ApiResponse.success("更新成功", printTemplateService.update(id, request));
+    }
+
+    @PostMapping(value = "/{id}/upload-json", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @RequiresPermission(resource = "print-template", action = "update")
+    @OperationLoggable(moduleName = "打印模板", actionType = "上传 JSON", businessNoFields = {"id"})
+    public ApiResponse<PrintTemplateResponse> uploadJson(@PathVariable @Positive Long id,
+                                                         @RequestParam("file") MultipartFile file) {
+        return ApiResponse.success("上传成功", printTemplateService.uploadJson(id, file));
     }
 
     @DeleteMapping("/{id}")

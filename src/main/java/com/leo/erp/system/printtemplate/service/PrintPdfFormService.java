@@ -1,7 +1,6 @@
 package com.leo.erp.system.printtemplate.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.itextpdf.io.font.PdfEncodings;
 import com.itextpdf.io.font.constants.StandardFonts;
 import com.itextpdf.kernel.colors.ColorConstants;
@@ -58,11 +57,11 @@ public class PrintPdfFormService {
             "/usr/share/fonts/wenquanyi/wqy-microhei/wqy-microhei.ttc"
     );
     private final PrintScriptService printScriptService;
-    private final ObjectMapper objectMapper;
+    private final PrintPdfFormTemplateValidator templateValidator;
 
-    public PrintPdfFormService(PrintScriptService printScriptService, ObjectMapper objectMapper) {
+    public PrintPdfFormService(PrintScriptService printScriptService, PrintPdfFormTemplateValidator templateValidator) {
         this.printScriptService = printScriptService;
-        this.objectMapper = objectMapper;
+        this.templateValidator = templateValidator;
     }
 
     public byte[] generateFromRecord(String templateId, String moduleKey, Long recordId) {
@@ -87,21 +86,7 @@ public class PrintPdfFormService {
     }
 
     private PdfFormTemplateConfig parseTemplateConfig(String templateHtml) {
-        try {
-            JsonNode config = objectMapper.readTree(templateHtml);
-            if (config == null || !config.isObject()) {
-                throw new BusinessException(ErrorCode.VALIDATION_ERROR, "PDF 表单模板配置不是合法 JSON");
-            }
-            if (config.has("form")) {
-                throw new BusinessException(ErrorCode.VALIDATION_ERROR, "PDF_FORM 模板不支持 form 专用配置，请使用通用布局 JSON");
-            }
-            if (!config.path("static").isArray() && !config.path("fields").isObject() && !config.path("table").isObject()) {
-                throw new BusinessException(ErrorCode.VALIDATION_ERROR, "PDF_FORM 模板必须配置通用字段或明细布局");
-            }
-            return new PdfFormTemplateConfig(config);
-        } catch (IOException ex) {
-            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "PDF 表单模板配置不是合法 JSON");
-        }
+        return new PdfFormTemplateConfig(templateValidator.validate(templateHtml));
     }
 
     private byte[] fillPdfForm(PdfFormTemplateConfig config, Map<String, String> data, List<Map<String, String>> items) {

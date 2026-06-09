@@ -13,10 +13,15 @@ import com.leo.erp.system.printtemplate.web.dto.PrintTemplateResponse;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.nio.charset.CharacterCodingException;
+import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
@@ -39,21 +44,27 @@ public class PrintTemplateService extends AbstractCrudService<PrintTemplate, Pri
     private static final Set<String> ALLOWED_TEMPLATE_TYPES = Set.of("COORD", "PDF_FORM");
     private static final Set<String> ALLOWED_ENGINES = Set.of("LODOP", "PDF_FORM");
     private static final Set<String> ALLOWED_STATUSES = Set.of("ACTIVE", "DISABLED");
+    private static final String TEMPLATE_TYPE_PDF_FORM = "PDF_FORM";
+    private static final String SYNC_MODE_MANUAL = "MANUAL";
     private static final String SYNC_MODE_FILE = "FILE";
+    private static final long MAX_UPLOAD_JSON_BYTES = 1024L * 1024L;
     private static final String DEFAULT_PDF_FORM_LAYOUT = "print-forms/yingjie-a4-remark.layout.json";
 
     private final PrintTemplateRepository repository;
     private final PrintTemplateMapper printTemplateMapper;
     private final ModuleCatalog moduleCatalog;
+    private final PrintPdfFormTemplateValidator pdfFormTemplateValidator;
 
     public PrintTemplateService(PrintTemplateRepository repository,
                                 SnowflakeIdGenerator idGenerator,
                                 PrintTemplateMapper printTemplateMapper,
-                                ModuleCatalog moduleCatalog) {
+                                ModuleCatalog moduleCatalog,
+                                PrintPdfFormTemplateValidator pdfFormTemplateValidator) {
         super(idGenerator);
         this.repository = repository;
         this.printTemplateMapper = printTemplateMapper;
         this.moduleCatalog = moduleCatalog;
+        this.pdfFormTemplateValidator = pdfFormTemplateValidator;
     }
 
     @Transactional(readOnly = true)
@@ -62,6 +73,22 @@ public class PrintTemplateService extends AbstractCrudService<PrintTemplate, Pri
                 .stream()
                 .map(printTemplateMapper::toResponse)
                 .toList();
+    }
+
+    @Transactional
+    public PrintTemplateResponse uploadJson(Long id, MultipartFile file) {
+        PrintTemplate template = requireEntity(id);
+        if (!TEMPLATE_TYPE_PDF_FORM.equals(normalizeTemplateType(template.getTemplateType()))) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "仅 PDF_FORM 模板支持上传 JSON");
+        }
+
+        String content = readUploadJson(file);
+        template.setTemplateHtml(content);
+        template.setVersionNo(Math.max(template.getVersionNo() == null ? 1 : template.getVersionNo(), 1) + 1);
+        template.setSyncMode(SYNC_MODE_MANUAL);
+        template.setSourceRef(null);
+        template.setSourceChecksum(null);
+        return toSavedResponse(saveEntity(template));
     }
 
     @Override
@@ -128,7 +155,7 @@ public class PrintTemplateService extends AbstractCrudService<PrintTemplate, Pri
     @Override
     protected PrintTemplateRequest normalizeUpdateRequest(PrintTemplate entity, PrintTemplateRequest request) {
         if (SYNC_MODE_FILE.equals(entity.getSyncMode())) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "文件托管模板请修改源文件后重启同步");
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "文件托管模板请通过上传 JSON 或修改源文件后重启同步");
         }
         String templateCode = request.templateCode();
         return new PrintTemplateRequest(
@@ -195,7 +222,7 @@ public class PrintTemplateService extends AbstractCrudService<PrintTemplate, Pri
     }
 
     private String normalizeTemplateHtml(String templateHtml, String templateType, String assetRef) {
-        if ("PDF_FORM".equals(templateType)) {
+        if (TEMPLATE_TYPE_PDF_FORM.equals(templateType)) {
             if (templateHtml != null && !templateHtml.isBlank()) {
                 String normalized = templateHtml.trim();
                 validateTemplateContent(normalized, templateType);
@@ -212,11 +239,9 @@ public class PrintTemplateService extends AbstractCrudService<PrintTemplate, Pri
     }
 
     private void validateTemplateContent(String templateHtml, String templateType) {
-        if ("PDF_FORM".equals(normalizeTemplateType(templateType))) {
+        if (TEMPLATE_TYPE_PDF_FORM.equals(normalizeTemplateType(templateType))) {
             String normalized = templateHtml == null ? "" : templateHtml.trim();
-            if (!normalized.startsWith("{") || !normalized.endsWith("}")) {
-                throw new BusinessException(ErrorCode.VALIDATION_ERROR, "PDF_FORM 模板配置必须是 JSON 对象");
-            }
+            pdfFormTemplateValidator.validate(normalized);
             return;
         }
         for (Pattern pattern : DANGEROUS_LODOP_PATTERNS) {
@@ -250,7 +275,7 @@ public class PrintTemplateService extends AbstractCrudService<PrintTemplate, Pri
         if (!ALLOWED_ENGINES.contains(normalized)) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "渲染引擎仅支持 LODOP 或 PDF_FORM");
         }
-        if ("PDF_FORM".equals(templateType) && !"PDF_FORM".equals(normalized)) {
+        if (TEMPLATE_TYPE_PDF_FORM.equals(templateType) && !TEMPLATE_TYPE_PDF_FORM.equals(normalized)) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "PDF_FORM 模板必须使用 PDF_FORM 引擎");
         }
         if ("COORD".equals(templateType) && !"LODOP".equals(normalized)) {
@@ -267,7 +292,7 @@ public class PrintTemplateService extends AbstractCrudService<PrintTemplate, Pri
     }
 
     private String normalizeAssetRef(String assetRef, String templateType) {
-        if (!"PDF_FORM".equals(templateType)) {
+        if (!TEMPLATE_TYPE_PDF_FORM.equals(templateType)) {
             return null;
         }
         if (assetRef == null || assetRef.isBlank()) {
@@ -296,6 +321,75 @@ public class PrintTemplateService extends AbstractCrudService<PrintTemplate, Pri
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "模板状态仅支持 ACTIVE 或 DISABLED");
         }
         return normalized;
+    }
+
+    private String readUploadJson(MultipartFile file) {
+        validateUploadFile(file);
+        byte[] bytes;
+        try {
+            bytes = file.getBytes();
+        } catch (IOException ex) {
+            throw new BusinessException(ErrorCode.INTERNAL_ERROR, "读取上传 JSON 文件失败");
+        }
+        if (bytes.length == 0) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "上传 JSON 文件不能为空");
+        }
+        if (bytes.length > MAX_UPLOAD_JSON_BYTES) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "上传 JSON 文件不能超过 1MB");
+        }
+
+        String content = decodeUtf8(bytes).trim();
+        content = stripUtf8Bom(content).trim();
+        if (content.isBlank()) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "上传 JSON 文件不能为空");
+        }
+        pdfFormTemplateValidator.validate(content);
+        return content;
+    }
+
+    private void validateUploadFile(MultipartFile file) {
+        if (file == null || file.isEmpty()) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "上传 JSON 文件不能为空");
+        }
+        if (file.getSize() > MAX_UPLOAD_JSON_BYTES) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "上传 JSON 文件不能超过 1MB");
+        }
+        validateJsonFilename(file.getOriginalFilename());
+    }
+
+    private void validateJsonFilename(String originalFilename) {
+        if (originalFilename == null || originalFilename.isBlank()) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "请上传 JSON 文件");
+        }
+        String filename = simpleFilename(originalFilename);
+        if (!filename.toLowerCase(Locale.ROOT).endsWith(".json")) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "请上传 JSON 文件");
+        }
+    }
+
+    private String decodeUtf8(byte[] bytes) {
+        try {
+            return StandardCharsets.UTF_8.newDecoder()
+                    .onMalformedInput(CodingErrorAction.REPORT)
+                    .onUnmappableCharacter(CodingErrorAction.REPORT)
+                    .decode(ByteBuffer.wrap(bytes))
+                    .toString();
+        } catch (CharacterCodingException ex) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "上传 JSON 文件必须使用 UTF-8 编码");
+        }
+    }
+
+    private String stripUtf8Bom(String content) {
+        if (!content.isEmpty() && content.charAt(0) == '\uFEFF') {
+            return content.substring(1);
+        }
+        return content;
+    }
+
+    private String simpleFilename(String originalFilename) {
+        String normalized = originalFilename.replace('\\', '/');
+        int slashIndex = normalized.lastIndexOf('/');
+        return slashIndex >= 0 ? normalized.substring(slashIndex + 1) : normalized;
     }
 
     @Override
