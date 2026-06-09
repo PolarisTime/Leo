@@ -1,44 +1,44 @@
 package com.leo.erp.system.printtemplate.service;
 
-import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.itextpdf.forms.PdfAcroForm;
-import com.itextpdf.forms.fields.PdfFormField;
 import com.itextpdf.io.font.PdfEncodings;
+import com.itextpdf.io.font.constants.StandardFonts;
 import com.itextpdf.kernel.colors.ColorConstants;
 import com.itextpdf.kernel.font.PdfFont;
 import com.itextpdf.kernel.font.PdfFontFactory;
 import com.itextpdf.kernel.font.PdfFontFactory.EmbeddingStrategy;
+import com.itextpdf.kernel.geom.PageSize;
 import com.itextpdf.kernel.geom.Rectangle;
 import com.itextpdf.kernel.pdf.PdfDocument;
-import com.itextpdf.kernel.pdf.PdfName;
-import com.itextpdf.kernel.pdf.PdfPage;
-import com.itextpdf.kernel.pdf.PdfReader;
 import com.itextpdf.kernel.pdf.PdfWriter;
-import com.itextpdf.kernel.pdf.annot.PdfWidgetAnnotation;
 import com.itextpdf.kernel.pdf.canvas.PdfCanvas;
 import com.itextpdf.layout.properties.TextAlignment;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
-import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Service;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.io.InputStream;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
-import java.util.function.Function;
-import java.util.stream.Collectors;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @Service
 public class PrintPdfFormService {
 
+    private static final Pattern TEMPLATE_PLACEHOLDER = Pattern.compile("\\$\\{([A-Za-z0-9_]+)}");
+    private static final float DEFAULT_PAGE_WIDTH = 595f;
+    private static final float DEFAULT_PAGE_HEIGHT = 842f;
     private static final List<String> SIMSUN_FONT_CANDIDATES = List.of(
             "/usr/share/fonts/truetype/windows/simsun.ttc",
             "/usr/share/fonts/truetype/windows/simsun.ttf",
@@ -57,29 +57,12 @@ public class PrintPdfFormService {
             "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
             "/usr/share/fonts/wenquanyi/wqy-microhei/wqy-microhei.ttc"
     );
-    private static final Set<String> CENTER_ALIGNED_FIELDS = Set.of(
-            "totalQuantity",
-            "totalWeight"
-    );
-    private static final Set<String> TOP_ALIGNED_FIELDS = Set.of(
-            "remark"
-    );
-    private static final TypeReference<Map<String, String>> CONFIG_TYPE = new TypeReference<>() {
-    };
-
     private final PrintScriptService printScriptService;
     private final ObjectMapper objectMapper;
-    private final Map<String, PdfFormRenderer> renderers;
 
-    public PrintPdfFormService(
-            PrintScriptService printScriptService,
-            ObjectMapper objectMapper,
-            List<PdfFormRenderer> renderers
-    ) {
+    public PrintPdfFormService(PrintScriptService printScriptService, ObjectMapper objectMapper) {
         this.printScriptService = printScriptService;
         this.objectMapper = objectMapper;
-        this.renderers = renderers.stream()
-                .collect(Collectors.toUnmodifiableMap(PdfFormRenderer::formCode, Function.identity()));
     }
 
     public byte[] generateFromRecord(String templateId, String moduleKey, Long recordId) {
@@ -93,10 +76,6 @@ public class PrintPdfFormService {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "当前模板不是 PDF_FORM 类型");
         }
         PdfFormTemplateConfig config = parseTemplateConfig(String.valueOf(payload.getOrDefault("templateHtml", "")));
-        PdfFormRenderer renderer = renderers.get(config.form());
-        if (renderer == null) {
-            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "不支持的 PDF 表单模板");
-        }
         @SuppressWarnings("unchecked")
         Map<String, String> data = (Map<String, String>) payload.getOrDefault("data", Collections.emptyMap());
         @SuppressWarnings("unchecked")
@@ -104,76 +83,326 @@ public class PrintPdfFormService {
                 "items",
                 Collections.emptyList()
         );
-        return fillPdfForm(renderer, config.template(), data, items);
+        return fillPdfForm(config, data, items);
     }
 
     private PdfFormTemplateConfig parseTemplateConfig(String templateHtml) {
         try {
-            Map<String, String> config = objectMapper.readValue(templateHtml, CONFIG_TYPE);
-            return new PdfFormTemplateConfig(
-                    value(config, "form"),
-                    value(config, "template", "templatePath", "pdf")
-            );
+            JsonNode config = objectMapper.readTree(templateHtml);
+            if (config == null || !config.isObject()) {
+                throw new BusinessException(ErrorCode.VALIDATION_ERROR, "PDF 表单模板配置不是合法 JSON");
+            }
+            if (config.has("form")) {
+                throw new BusinessException(ErrorCode.VALIDATION_ERROR, "PDF_FORM 模板不支持 form 专用配置，请使用通用布局 JSON");
+            }
+            if (!config.path("static").isArray() && !config.path("fields").isObject() && !config.path("table").isObject()) {
+                throw new BusinessException(ErrorCode.VALIDATION_ERROR, "PDF_FORM 模板必须配置通用字段或明细布局");
+            }
+            return new PdfFormTemplateConfig(config);
         } catch (IOException ex) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "PDF 表单模板配置不是合法 JSON");
         }
     }
 
-    private byte[] fillPdfForm(
-            PdfFormRenderer renderer,
-            String templatePath,
-            Map<String, String> data,
-            List<Map<String, String>> items
-    ) {
+    private byte[] fillPdfForm(PdfFormTemplateConfig config, Map<String, String> data, List<Map<String, String>> items) {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
-        String pdfTemplatePath = templatePath.isBlank() ? renderer.defaultTemplatePath() : templatePath;
-        try (InputStream templateStream = new ClassPathResource(pdfTemplatePath).getInputStream();
-             PdfDocument pdf = new PdfDocument(new PdfReader(templateStream), new PdfWriter(out))) {
-            PdfAcroForm form = PdfAcroForm.getAcroForm(pdf, false);
-            if (form == null) {
-                throw new BusinessException(ErrorCode.INTERNAL_ERROR, "PDF 表单底版缺少 AcroForm 字段");
-            }
+        try (PdfDocument pdf = new PdfDocument(new PdfWriter(out))) {
             PdfFont font = createChineseFont();
-            drawFields(pdf, form, renderer.buildFields(data, items), font);
-            removeFormFields(pdf, form);
+            drawContent(pdf, font, config.root(), data, items);
         } catch (IOException ex) {
             throw new BusinessException(ErrorCode.INTERNAL_ERROR, "生成 PDF 表单失败");
         }
         return out.toByteArray();
     }
 
-    private void drawFields(PdfDocument pdf, PdfAcroForm form, Map<String, String> values, PdfFont font) {
-        Map<String, PdfFormField> fields = form.getAllFormFields();
-        for (Map.Entry<String, String> entry : values.entrySet()) {
-            String value = entry.getValue();
+    private void drawFields(
+            PdfCanvas canvas,
+            JsonNode fieldsConfig,
+            Map<String, String> data,
+            PdfFont font,
+            PageMetrics pageMetrics
+    ) {
+        if (!fieldsConfig.isObject()) {
+            return;
+        }
+        Iterator<Map.Entry<String, JsonNode>> configuredFields = fieldsConfig.fields();
+        while (configuredFields.hasNext()) {
+            Map.Entry<String, JsonNode> entry = configuredFields.next();
+            String fieldName = entry.getKey();
+            JsonNode fieldConfig = entry.getValue();
+            String value = resolveValue(data, fieldConfig.path("source"), fieldName);
+            value = formatValue(value, text(fieldConfig, "format", ""));
             if (value == null || value.isBlank()) {
                 continue;
             }
-            PdfFormField field = fields.get(entry.getKey());
-            if (field == null) {
-                continue;
-            }
-            List<PdfWidgetAnnotation> widgets = field.getWidgets();
-            for (PdfWidgetAnnotation widget : widgets) {
-                Rectangle rectangle = widget.getRectangle().toRectangle();
-                PdfPage page = widget.getPage() == null ? pdf.getFirstPage() : widget.getPage();
-                drawText(page, rectangle, entry.getKey(), value, font);
+            Rectangle rectangle = configuredRectangle(fieldConfig, pageMetrics);
+            if (rectangle != null) {
+                drawText(canvas, rectangle, fieldName, fieldConfig, value, font);
             }
         }
     }
 
-    private void drawText(PdfPage page, Rectangle fieldRectangle, String fieldName, String text, PdfFont font) {
-        TextStyle style = textStyle(fieldName);
+    private void drawContent(
+            PdfDocument pdf,
+            PdfFont font,
+            JsonNode root,
+            Map<String, String> data,
+            List<Map<String, String>> items
+    ) {
+        JsonNode tableConfig = root.path("table");
+        JsonNode fieldsConfig = root.path("fields");
+        if (!tableConfig.isObject() && !fieldsConfig.isObject() && !root.path("static").isArray()) {
+            return;
+        }
+
+        PdfFont latinFont = createLatinFont(font);
+        Totals totals = totals(items);
+        Map<String, String> variables = new HashMap<>(data);
+        variables.put("totalQuantity", formatQuantity(totals.quantity()));
+        variables.put("totalWeight", formatDecimal(totals.weight(), 3));
+
+        PageMetrics pageMetrics = pageMetrics(root.path("page"));
+        float tableTop = number(tableConfig, "top", 176f);
+        float rowHeight = number(tableConfig, "rowHeight", 26f);
+        float headerHeight = number(tableConfig, "headerHeight", 28f);
+        int maxRowsPerPage = Math.max(1, integer(tableConfig, "maxRowsPerPage", 16));
+        List<JsonNode> columns = childObjects(tableConfig.path("columns"));
+
+        int pageIndex = 0;
+        int itemIndex = 0;
+        do {
+            PdfCanvas canvas = new PdfCanvas(pdf.addNewPage(new PageSize(pageMetrics.width(), pageMetrics.height())));
+            drawStatic(canvas, font, root.path("static"), pageMetrics);
+            drawFields(canvas, fieldsConfig, data, font, pageMetrics);
+            int rowsOnPage = 0;
+            if (tableConfig.isObject()) {
+                rowsOnPage = Math.min(items.size() - itemIndex, maxRowsPerPage);
+                boolean lastPage = itemIndex + rowsOnPage >= items.size();
+                drawTableHeader(canvas, font, tableConfig, columns, pageMetrics);
+                for (int row = 0; row < rowsOnPage; row++) {
+                    drawItemRow(
+                            canvas,
+                            font,
+                            latinFont,
+                            tableConfig,
+                            columns,
+                            tableTop + headerHeight + row * rowHeight,
+                            items.get(itemIndex + row),
+                            pageMetrics
+                    );
+                }
+                float nextTop = tableTop + headerHeight + rowsOnPage * rowHeight;
+                if (items.isEmpty()) {
+                    drawNoContentRow(canvas, font, tableConfig, nextTop, pageMetrics);
+                    nextTop += rowHeight;
+                }
+                if (lastPage) {
+                    nextTop = drawSummary(canvas, font, root.path("summary"), tableConfig, variables, nextTop, pageMetrics);
+                    drawClauses(canvas, font, root.path("clauses"), tableConfig, nextTop, pageMetrics);
+                }
+            }
+            canvas.release();
+            itemIndex += rowsOnPage;
+            pageIndex++;
+        } while (tableConfig.isObject() && itemIndex < items.size());
+    }
+
+    private void drawStatic(PdfCanvas canvas, PdfFont font, JsonNode staticConfig, PageMetrics pageMetrics) {
+        for (JsonNode element : childObjects(staticConfig)) {
+            String type = text(element, "type", "text").trim().toLowerCase();
+            if ("rect".equals(type)) {
+                drawRect(
+                        canvas,
+                        number(element, "left", 0f),
+                        number(element, "top", 0f),
+                        number(element, "width", 1f),
+                        number(element, "height", 1f),
+                        pageMetrics
+                );
+                continue;
+            }
+            if ("line".equals(type)) {
+                drawLine(canvas, element, pageMetrics);
+                continue;
+            }
+            if ("text".equals(type)) {
+                drawCanvasText(
+                        canvas,
+                        font,
+                        text(element, "text", ""),
+                        number(element, "left", 0f),
+                        number(element, "top", 0f),
+                        number(element, "width", 100f),
+                        number(element, "height", number(element, "fontSize", 9f) + 4f),
+                        number(element, "fontSize", 9f),
+                        alignment(text(element, "align", "left")),
+                        pageMetrics
+                );
+            }
+        }
+    }
+
+    private void drawTableHeader(PdfCanvas canvas, PdfFont font, JsonNode tableConfig, List<JsonNode> columns, PageMetrics pageMetrics) {
+        float left = number(tableConfig, "left", 28f);
+        float top = number(tableConfig, "top", 176f);
+        float headerHeight = number(tableConfig, "headerHeight", 28f);
+        for (JsonNode column : columns) {
+            float width = number(column, "width", 60f);
+            drawRect(canvas, left, top, width, headerHeight, pageMetrics);
+            drawCanvasText(
+                    canvas,
+                    font,
+                    text(column, "label", ""),
+                    left + 2,
+                    top + 6,
+                    width - 4,
+                    16,
+                    number(column, "headerFontSize", 9f),
+                    TextAlignment.CENTER,
+                    pageMetrics
+            );
+            left += width;
+        }
+    }
+
+    private void drawItemRow(
+            PdfCanvas canvas,
+            PdfFont font,
+            PdfFont latinFont,
+            JsonNode tableConfig,
+            List<JsonNode> columns,
+            float top,
+            Map<String, String> item,
+            PageMetrics pageMetrics
+    ) {
+        float left = number(tableConfig, "left", 28f);
+        float rowHeight = number(tableConfig, "rowHeight", 26f);
+        for (JsonNode column : columns) {
+            float width = number(column, "width", 60f);
+            String value = itemValue(item, column);
+            PdfFont cellFont = "latinIfAscii".equals(text(column, "font", "")) && isAsciiText(value) ? latinFont : font;
+            drawRect(canvas, left, top, width, rowHeight, pageMetrics);
+            drawCanvasText(
+                    canvas,
+                    cellFont,
+                    value,
+                    left + 2,
+                    top + 7,
+                    width - 4,
+                    12,
+                    number(column, "fontSize", 8f),
+                    alignment(text(column, "align", "center")),
+                    pageMetrics
+            );
+            left += width;
+        }
+    }
+
+    private void drawNoContentRow(PdfCanvas canvas, PdfFont font, JsonNode tableConfig, float top, PageMetrics pageMetrics) {
+        float left = number(tableConfig, "left", 28f);
+        float width = tableWidth(tableConfig);
+        float rowHeight = number(tableConfig, "rowHeight", 26f);
+        drawRect(canvas, left, top, width, rowHeight, pageMetrics);
+        drawCanvasText(
+                canvas,
+                font,
+                text(tableConfig, "emptyText", "----------------以下无内容----------------"),
+                left,
+                top + 7,
+                width,
+                12,
+                number(tableConfig, "emptyFontSize", 8f),
+                TextAlignment.CENTER,
+                pageMetrics
+        );
+    }
+
+    private float drawSummary(
+            PdfCanvas canvas,
+            PdfFont font,
+            JsonNode summaryConfig,
+            JsonNode tableConfig,
+            Map<String, String> variables,
+            float top,
+            PageMetrics pageMetrics
+    ) {
+        if (!summaryConfig.isObject()) {
+            return top;
+        }
+        float left = number(tableConfig, "left", 28f);
+        float width = tableWidth(tableConfig);
+        float height = number(summaryConfig, "height", number(tableConfig, "rowHeight", 26f));
+        if (bool(summaryConfig, "border", true)) {
+            drawRect(canvas, left, top, width, height, pageMetrics);
+        }
+        drawCanvasText(
+                canvas,
+                font,
+                applyTemplate(text(summaryConfig, "template", ""), variables),
+                left + number(summaryConfig, "paddingLeft", 6f),
+                top + number(summaryConfig, "paddingTop", 7f),
+                width - number(summaryConfig, "paddingLeft", 6f) * 2,
+                12,
+                number(summaryConfig, "fontSize", 8.5f),
+                alignment(text(summaryConfig, "align", "left")),
+                pageMetrics
+        );
+        return top + height;
+    }
+
+    private void drawClauses(PdfCanvas canvas, PdfFont font, JsonNode clausesConfig, JsonNode tableConfig, float top, PageMetrics pageMetrics) {
+        if (!clausesConfig.isObject()) {
+            return;
+        }
+        List<String> paragraphs = childTextValues(clausesConfig.path("lines"));
+        if (paragraphs.isEmpty()) {
+            return;
+        }
+        float left = number(clausesConfig, "left", number(tableConfig, "left", 28f));
+        float width = number(clausesConfig, "width", tableWidth(tableConfig));
+        drawParagraphs(
+                canvas,
+                font,
+                paragraphs,
+                left,
+                top + number(clausesConfig, "paddingTop", 8f),
+                width,
+                number(clausesConfig, "height", 96f),
+                number(clausesConfig, "fontSize", 7.8f),
+                number(clausesConfig, "lineHeight", 1.28f),
+                pageMetrics
+        );
+    }
+
+    private Rectangle configuredRectangle(JsonNode fieldConfig, PageMetrics pageMetrics) {
+        if (!fieldConfig.has("left") || !fieldConfig.has("top") || !fieldConfig.has("width") || !fieldConfig.has("height")) {
+            return null;
+        }
+        float left = number(fieldConfig, "left", 0f);
+        float top = number(fieldConfig, "top", 0f);
+        float width = number(fieldConfig, "width", 1f);
+        float height = number(fieldConfig, "height", 1f);
+        return new Rectangle(left, topY(top + height, pageMetrics), width, height);
+    }
+
+    private void drawText(
+            PdfCanvas canvas,
+            Rectangle fieldRectangle,
+            String fieldName,
+            JsonNode fieldConfig,
+            String text,
+            PdfFont font
+    ) {
+        TextStyle style = textStyle(fieldName, fieldConfig);
         Rectangle textRectangle = shrink(fieldRectangle, style.horizontalPadding(), style.verticalPadding());
         if (style.multiline()) {
-            drawWrappedText(page, textRectangle, text, font, style);
+            drawWrappedText(canvas, textRectangle, text, font, style);
             return;
         }
         float fontSize = fitFontSize(font, text, textRectangle.getWidth(), style.fontSize(), style.minimumFontSize());
         float baselineY = baselineY(textRectangle, fontSize, style.verticalPosition());
         float textX = textX(font, text, fontSize, textRectangle, style.alignment());
 
-        PdfCanvas canvas = new PdfCanvas(page);
         canvas.saveState()
                 .setFillColor(ColorConstants.BLACK)
                 .beginText()
@@ -181,11 +410,10 @@ public class PrintPdfFormService {
                 .moveText(textX, baselineY)
                 .showText(text)
                 .endText()
-                .restoreState()
-                .release();
+                .restoreState();
     }
 
-    private void drawWrappedText(PdfPage page, Rectangle rectangle, String text, PdfFont font, TextStyle style) {
+    private void drawWrappedText(PdfCanvas canvas, Rectangle rectangle, String text, PdfFont font, TextStyle style) {
         float fontSize = fitMultilineFontSize(font, text, rectangle, style);
         float lineHeight = fontSize * style.lineHeightMultiplier();
         List<String> lines = limitLines(
@@ -200,7 +428,6 @@ public class PrintPdfFormService {
         }
         float firstBaselineY = firstBaselineY(rectangle, fontSize, lineHeight, lines.size(), style.verticalPosition());
 
-        PdfCanvas canvas = new PdfCanvas(page);
         canvas.saveState()
                 .setFillColor(ColorConstants.BLACK)
                 .beginText()
@@ -211,8 +438,7 @@ public class PrintPdfFormService {
                     .showText(line);
         }
         canvas.endText()
-                .restoreState()
-                .release();
+                .restoreState();
     }
 
     private Rectangle shrink(Rectangle rectangle, float horizontalPadding, float verticalPadding) {
@@ -342,34 +568,318 @@ public class PrintPdfFormService {
         return result + suffix;
     }
 
-    private TextStyle textStyle(String fieldName) {
-        if (fieldName.startsWith("item_")) {
-            if (fieldName.endsWith("_emptyMarker")) {
-                return new TextStyle(8f, 6.5f, 2, 1, TextAlignment.CENTER, VerticalPosition.MIDDLE, false, 1.2f);
-            }
-            return new TextStyle(8f, 6.5f, 1.5f, 1, TextAlignment.CENTER, VerticalPosition.MIDDLE, false, 1.2f);
-        }
-        if (CENTER_ALIGNED_FIELDS.contains(fieldName)) {
-            return new TextStyle(8.5f, 6.5f, 2, 1, TextAlignment.CENTER, VerticalPosition.MIDDLE, false, 1.2f);
-        }
-        if (TOP_ALIGNED_FIELDS.contains(fieldName)) {
-            return new TextStyle(8.5f, 6.5f, 2, 1, TextAlignment.LEFT, VerticalPosition.TOP, true, 1.25f);
-        }
-        if ("projectName".equals(fieldName) || "customerName".equals(fieldName) || "projectAddress".equals(fieldName)) {
-            return new TextStyle(9f, 7f, 2, 3, TextAlignment.LEFT, VerticalPosition.MIDDLE, true, 1.2f);
-        }
-        if ("totalSummary".equals(fieldName)) {
-            return new TextStyle(9f, 7f, 2, 1, TextAlignment.LEFT, VerticalPosition.MIDDLE, false, 1.2f);
-        }
-        return new TextStyle(9f, 7f, 2, 2, TextAlignment.LEFT, VerticalPosition.MIDDLE, false, 1.2f);
+    private TextStyle textStyle(String fieldName, JsonNode fieldConfig) {
+        boolean defaultMultiline = "projectName".equals(fieldName)
+                || "customerName".equals(fieldName)
+                || "projectAddress".equals(fieldName);
+        return new TextStyle(
+                number(fieldConfig, "fontSize", 9f),
+                number(fieldConfig, "minimumFontSize", 7f),
+                number(fieldConfig, "horizontalPadding", 2f),
+                number(fieldConfig, "verticalPadding", defaultMultiline ? 3f : 2f),
+                alignment(text(fieldConfig, "align", "left")),
+                verticalPosition(text(fieldConfig, "vertical", defaultMultiline ? "top" : "middle")),
+                bool(fieldConfig, "multiline", defaultMultiline),
+                number(fieldConfig, "lineHeight", 1.2f)
+        );
     }
 
-    private void removeFormFields(PdfDocument pdf, PdfAcroForm form) {
-        List<String> fieldNames = new ArrayList<>(form.getAllFormFields().keySet());
-        for (String fieldName : fieldNames) {
-            form.removeField(fieldName);
+    private void drawRect(PdfCanvas canvas, float left, float top, float width, float height, PageMetrics pageMetrics) {
+        canvas.rectangle(left, topY(top + height, pageMetrics), width, height).stroke();
+    }
+
+    private void drawLine(PdfCanvas canvas, JsonNode line, PageMetrics pageMetrics) {
+        canvas.moveTo(number(line, "x1", 0f), topY(number(line, "y1", 0f), pageMetrics))
+                .lineTo(number(line, "x2", 0f), topY(number(line, "y2", 0f), pageMetrics))
+                .stroke();
+    }
+
+    private void drawCanvasText(
+            PdfCanvas canvas,
+            PdfFont font,
+            String text,
+            float left,
+            float top,
+            float width,
+            float height,
+            float fontSize,
+            TextAlignment alignment,
+            PageMetrics pageMetrics
+    ) {
+        String value = text == null ? "" : text;
+        float maxWidth = Math.max(1, width - 2);
+        float effectiveFontSize = fitFontSize(font, value, maxWidth, fontSize, 6.5f);
+        float textWidth = font.getWidth(value, effectiveFontSize);
+        float x = switch (alignment) {
+            case CENTER -> left + Math.max(0, (width - textWidth) / 2);
+            case RIGHT -> left + width - textWidth;
+            default -> left + 1;
+        };
+        float y = topY(top, pageMetrics) - height / 2 - effectiveFontSize * 0.32f;
+        canvas.saveState()
+                .setFillColor(ColorConstants.BLACK)
+                .beginText()
+                .setFontAndSize(font, effectiveFontSize)
+                .moveText(x, y)
+                .showText(value)
+                .endText()
+                .restoreState();
+    }
+
+    private void drawParagraphs(
+            PdfCanvas canvas,
+            PdfFont font,
+            List<String> paragraphs,
+            float left,
+            float top,
+            float width,
+            float height,
+            float fontSize,
+            float lineHeightMultiplier,
+            PageMetrics pageMetrics
+    ) {
+        float y = topY(top, pageMetrics) - fontSize;
+        float minY = topY(top + height, pageMetrics) + fontSize;
+        float lineHeight = fontSize * lineHeightMultiplier;
+        canvas.saveState()
+                .setFillColor(ColorConstants.BLACK)
+                .beginText()
+                .setFontAndSize(font, fontSize);
+        for (String paragraph : paragraphs) {
+            StringBuilder line = new StringBuilder();
+            for (int offset = 0; offset < paragraph.length();) {
+                int codePoint = paragraph.codePointAt(offset);
+                String next = new String(Character.toChars(codePoint));
+                if (!line.isEmpty() && font.getWidth(line + next, fontSize) > width) {
+                    canvas.setTextMatrix(left, y).showText(line.toString());
+                    y -= lineHeight;
+                    line.setLength(0);
+                }
+                line.append(next);
+                offset += Character.charCount(codePoint);
+                if (y < minY) {
+                    break;
+                }
+            }
+            if (!line.isEmpty() && y >= minY) {
+                canvas.setTextMatrix(left, y).showText(line.toString());
+                y -= lineHeight;
+            }
+            if (y < minY) {
+                break;
+            }
         }
-        pdf.getCatalog().remove(PdfName.AcroForm);
+        canvas.endText().restoreState();
+    }
+
+    private float topY(float top, PageMetrics pageMetrics) {
+        return pageMetrics.height() - top;
+    }
+
+    private float tableWidth(JsonNode tableConfig) {
+        if (tableConfig.has("width")) {
+            return number(tableConfig, "width", 539f);
+        }
+        float width = 0f;
+        for (JsonNode column : childObjects(tableConfig.path("columns"))) {
+            width += number(column, "width", 60f);
+        }
+        return width;
+    }
+
+    private String itemValue(Map<String, String> item, JsonNode column) {
+        String value = resolveValue(item, column.path("source"), text(column, "key", ""));
+        if ("compactAscii".equals(text(column, "normalize", ""))) {
+            return compactAsciiToken(value);
+        }
+        return value;
+    }
+
+    private String resolveValue(Map<String, String> data, JsonNode source, String fallbackKey) {
+        if (source.isArray()) {
+            for (JsonNode key : source) {
+                String value = data.get(key.asText(""));
+                if (value != null && !value.isBlank()) {
+                    return value;
+                }
+            }
+            return "";
+        }
+        String key = source.isTextual() ? source.asText() : fallbackKey;
+        return data.getOrDefault(key, "");
+    }
+
+    private String formatValue(String value, String format) {
+        if ("chineseDate".equals(format)) {
+            return formatChineseDate(value);
+        }
+        return value;
+    }
+
+    private String formatChineseDate(String rawDate) {
+        if (rawDate == null || rawDate.isBlank()) {
+            return "";
+        }
+        String datePart = rawDate.trim().split("[T\\s]", 2)[0];
+        if (datePart.contains("年")) {
+            return datePart;
+        }
+        String[] parts = datePart.split("[-/]");
+        if (parts.length < 3) {
+            return rawDate;
+        }
+        String month = parts[1].length() == 1 ? "0" + parts[1] : parts[1];
+        String day = parts[2].length() == 1 ? "0" + parts[2] : parts[2];
+        return parts[0] + "年" + month + "月" + day + "日";
+    }
+
+    private Totals totals(List<Map<String, String>> items) {
+        BigDecimal quantity = BigDecimal.ZERO;
+        BigDecimal weight = BigDecimal.ZERO;
+        for (Map<String, String> item : items) {
+            quantity = quantity.add(decimal(item.get("quantity")));
+            weight = weight.add(decimal(item.get("weightTon")));
+        }
+        return new Totals(quantity, weight);
+    }
+
+    private BigDecimal decimal(String value) {
+        if (value == null || value.isBlank() || "-".equals(value)) {
+            return BigDecimal.ZERO;
+        }
+        try {
+            return new BigDecimal(value.trim());
+        } catch (NumberFormatException ignored) {
+            return BigDecimal.ZERO;
+        }
+    }
+
+    private String formatDecimal(BigDecimal value, int scale) {
+        return value.compareTo(BigDecimal.ZERO) == 0
+                ? "0"
+                : value.setScale(scale, RoundingMode.HALF_UP).toPlainString();
+    }
+
+    private String formatQuantity(BigDecimal value) {
+        return value.compareTo(BigDecimal.ZERO) == 0 ? "0" : value.stripTrailingZeros().toPlainString();
+    }
+
+    private String applyTemplate(String template, Map<String, String> variables) {
+        if (template == null || template.isEmpty()) {
+            return "";
+        }
+        Matcher matcher = TEMPLATE_PLACEHOLDER.matcher(template);
+        StringBuilder result = new StringBuilder();
+        while (matcher.find()) {
+            String key = matcher.group(1);
+            matcher.appendReplacement(result, Matcher.quoteReplacement(templateValue(key, variables.get(key))));
+        }
+        matcher.appendTail(result);
+        return result.toString();
+    }
+
+    private String templateValue(String key, String value) {
+        if ("remark".equals(key) && (value == null || value.isBlank())) {
+            return "无";
+        }
+        return value == null ? "" : value;
+    }
+
+    private String compactAsciiToken(String value) {
+        return value == null ? "" : value.replaceAll("(?<=[A-Za-z0-9])\\s+(?=[A-Za-z0-9])", "");
+    }
+
+    private boolean isAsciiText(String value) {
+        if (value == null || value.isBlank()) {
+            return false;
+        }
+        for (int i = 0; i < value.length(); i++) {
+            if (value.charAt(i) > 127) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private PdfFont createLatinFont(PdfFont fallback) {
+        try {
+            return PdfFontFactory.createFont(StandardFonts.HELVETICA);
+        } catch (IOException ex) {
+            return fallback;
+        }
+    }
+
+    private List<JsonNode> childObjects(JsonNode node) {
+        List<JsonNode> result = new ArrayList<>();
+        if (node.isArray()) {
+            for (JsonNode item : node) {
+                if (item.isObject()) {
+                    result.add(item);
+                }
+            }
+        }
+        return result;
+    }
+
+    private List<String> childTextValues(JsonNode node) {
+        List<String> result = new ArrayList<>();
+        if (node.isArray()) {
+            for (JsonNode item : node) {
+                if (!item.asText("").isBlank()) {
+                    result.add(item.asText());
+                }
+            }
+        }
+        return result;
+    }
+
+    private String text(JsonNode node, String field, String fallback) {
+        JsonNode child = node.path(field);
+        return child.isMissingNode() || child.isNull() ? fallback : child.asText(fallback);
+    }
+
+    private String value(JsonNode node, String... keys) {
+        for (String key : keys) {
+            String value = text(node, key, "");
+            if (!value.isBlank()) {
+                return value;
+            }
+        }
+        return "";
+    }
+
+    private float number(JsonNode node, String field, float fallback) {
+        JsonNode child = node.path(field);
+        return child.isNumber() ? (float) child.asDouble() : fallback;
+    }
+
+    private int integer(JsonNode node, String field, int fallback) {
+        JsonNode child = node.path(field);
+        return child.isInt() ? child.asInt() : fallback;
+    }
+
+    private boolean bool(JsonNode node, String field, boolean fallback) {
+        JsonNode child = node.path(field);
+        return child.isBoolean() ? child.asBoolean() : fallback;
+    }
+
+    private PageMetrics pageMetrics(JsonNode pageConfig) {
+        return new PageMetrics(
+                number(pageConfig, "width", DEFAULT_PAGE_WIDTH),
+                number(pageConfig, "height", DEFAULT_PAGE_HEIGHT)
+        );
+    }
+
+    private TextAlignment alignment(String value) {
+        return switch (value == null ? "" : value.trim().toLowerCase()) {
+            case "center" -> TextAlignment.CENTER;
+            case "right" -> TextAlignment.RIGHT;
+            default -> TextAlignment.LEFT;
+        };
+    }
+
+    private VerticalPosition verticalPosition(String value) {
+        return "top".equalsIgnoreCase(value) ? VerticalPosition.TOP : VerticalPosition.MIDDLE;
     }
 
     private PdfFont createChineseFont() throws IOException {
@@ -439,6 +949,12 @@ public class PrintPdfFormService {
     ) {
     }
 
-    private record PdfFormTemplateConfig(String form, String template) {
+    private record Totals(BigDecimal quantity, BigDecimal weight) {
+    }
+
+    private record PageMetrics(float width, float height) {
+    }
+
+    private record PdfFormTemplateConfig(JsonNode root) {
     }
 }

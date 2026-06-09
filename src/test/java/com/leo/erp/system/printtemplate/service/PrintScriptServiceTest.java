@@ -11,7 +11,10 @@ import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.io.InputStream;
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
 import java.sql.Date;
 import java.util.List;
 import java.util.Map;
@@ -29,7 +32,7 @@ class PrintScriptServiceTest {
     @Test
     void shouldEnrichSalesOutboundPrintDataWithCurrentFields() {
         JdbcTemplate jdbc = mock(JdbcTemplate.class);
-        PrintScriptService service = new PrintScriptService(repository("sales-outbound"), jdbc);
+        PrintScriptService service = printScriptService(repository("sales-outbound"), jdbc);
 
         when(jdbc.queryForMap(anyString(), eq(317377016682774528L))).thenReturn(Map.of(
                 "id", 317377016682774528L,
@@ -55,7 +58,7 @@ class PrintScriptServiceTest {
     @Test
     void shouldEnrichCustomerStatementItemsWithBillTime() {
         JdbcTemplate jdbc = mock(JdbcTemplate.class);
-        PrintScriptService service = new PrintScriptService(repository("customer-statement"), jdbc);
+        PrintScriptService service = printScriptService(repository("customer-statement"), jdbc);
 
         when(jdbc.queryForMap(anyString(), anyLong())).thenReturn(Map.of(
                 "id", 1L,
@@ -82,7 +85,7 @@ class PrintScriptServiceTest {
     @Test
     void shouldEnrichFreightStatementItemsWithSourceBillValues() {
         JdbcTemplate jdbc = mock(JdbcTemplate.class);
-        PrintScriptService service = new PrintScriptService(repository("freight-statement"), jdbc);
+        PrintScriptService service = printScriptService(repository("freight-statement"), jdbc);
 
         when(jdbc.queryForMap(anyString(), anyLong())).thenReturn(Map.of(
                 "id", 1L,
@@ -115,25 +118,26 @@ class PrintScriptServiceTest {
     }
 
     @Test
-    void shouldFillAndFlattenYingjieA4RemarkPdfForm() throws Exception {
+    void shouldFillAndFlattenPdfFormFromSharedLayout() throws Exception {
         JdbcTemplate jdbc = mock(JdbcTemplate.class);
-        PrintScriptService scriptService = new PrintScriptService(repository(
+        PrintScriptService scriptService = printScriptService(repository(
                 "sales-order",
                 "PDF_FORM",
-                "{\"form\":\"YINGJIE_A4_REMARK\",\"template\":\"print-forms/yingjie-a4-remark.pdf\"}"
+                yingjieA4RemarkLayout()
         ), jdbc);
         PrintPdfFormService pdfFormService = new PrintPdfFormService(
                 scriptService,
-                new ObjectMapper(),
-                List.of(new YingjieA4RemarkPdfFormRenderer())
+                new ObjectMapper()
         );
+        String projectName = "海宁市高新区启辉路西侧之江北路北侧地块项目1号楼2号楼配电房地下室工程";
 
         when(jdbc.queryForMap(anyString(), eq(1L))).thenReturn(Map.of(
                 "id", 1L,
                 "order_no", "SO-001",
                 "customer_name", "客户A",
-                "project_name", "项目A",
+                "project_name", projectName,
                 "delivery_date", Date.valueOf("2026-05-31"),
+                "remark", "6月4日报单",
                 "deleted_flag", false
         ));
         when(jdbc.queryForList(anyString(), eq(1L))).thenReturn(List.of(Map.of(
@@ -146,7 +150,7 @@ class PrintScriptServiceTest {
                 "weight_ton", new BigDecimal("2.345")
         )));
         when(jdbc.queryForList(anyString(), eq(String.class), eq("SO-001"))).thenReturn(List.of());
-        when(jdbc.queryForList(anyString(), eq(String.class), eq("项目A"))).thenReturn(List.of("项目地址A"));
+        when(jdbc.queryForList(anyString(), eq(String.class), eq(projectName))).thenReturn(List.of("项目地址A"));
 
         byte[] pdf = pdfFormService.generateFromRecord("1", "sales-order", 1L);
 
@@ -156,11 +160,108 @@ class PrintScriptServiceTest {
             assertThat(PdfAcroForm.getAcroForm(document, false)).isNull();
             String text = PdfTextExtractor.getTextFromPage(document.getFirstPage());
             assertThat(text).contains("客户A", "SO-001", "2026年05月31日", "抚顺新钢", "螺纹钢");
+            assertThat(text).contains("地下室工程");
+            assertThat(text).contains("单据备注：6月4日报单", "合计件数：2件", "合计重量：2.345吨");
         }
+    }
+
+    @Test
+    void shouldRenderCoordScriptFromSharedLayoutConfig() {
+        JdbcTemplate jdbc = mock(JdbcTemplate.class);
+        PrintScriptService service = printScriptService(repository(
+                "sales-order",
+                "COORD",
+                """
+                        {
+                          "fields": {
+                            "customerName": {"source": "customerName", "left": 10, "top": 20, "width": 120, "height": 18}
+                          },
+                          "table": {
+                            "left": 10,
+                            "top": 50,
+                            "headerHeight": 20,
+                            "rowHeight": 18,
+                            "columns": [
+                              {"key": "material", "label": "材质", "width": 80, "normalize": "compactAscii"}
+                            ]
+                          },
+                          "summary": {
+                            "height": 18,
+                            "template": "合计件数：${totalQuantity}件    |    合计重量：${totalWeight}吨"
+                          }
+                        }
+                        """
+        ), jdbc);
+
+        when(jdbc.queryForMap(anyString(), eq(1L))).thenReturn(Map.of(
+                "id", 1L,
+                "order_no", "SO-001",
+                "customer_name", "客户A",
+                "deleted_flag", false
+        ));
+        when(jdbc.queryForList(anyString(), eq(1L))).thenReturn(List.of(Map.of(
+                "line_no", 1,
+                "material", "H R B 4 0 0 E",
+                "quantity", 2,
+                "weight_ton", new BigDecimal("2.345")
+        )));
+        when(jdbc.queryForList(anyString(), eq(String.class), eq("SO-001"))).thenReturn(List.of());
+
+        Map<String, Object> result = service.generateFromRecord("1", "sales-order", 1L);
+
+        assertThat(result.get("templateHtml").toString()).contains(
+                "LODOP.PRINT_INIT",
+                "LODOP.ADD_PRINT_TEXT",
+                "客户A",
+                "HRB400E",
+                "合计件数：2件    |    合计重量：2.345吨"
+        );
+    }
+
+    @Test
+    void shouldRenderEmptyRemarkAsNoneInSharedLayoutSummary() {
+        JdbcTemplate jdbc = mock(JdbcTemplate.class);
+        PrintScriptService service = printScriptService(repository(
+                "sales-order",
+                "COORD",
+                """
+                        {
+                          "table": {
+                            "left": 10,
+                            "top": 50,
+                            "headerHeight": 20,
+                            "rowHeight": 18,
+                            "columns": [
+                              {"key": "quantity", "label": "件数", "width": 80}
+                            ]
+                          },
+                          "summary": {
+                            "height": 18,
+                            "template": "单据备注：${remark}    |    合计件数：${totalQuantity}件"
+                          }
+                        }
+                        """
+        ), jdbc);
+
+        when(jdbc.queryForMap(anyString(), eq(1L))).thenReturn(Map.of(
+                "id", 1L,
+                "order_no", "SO-001",
+                "deleted_flag", false
+        ));
+        when(jdbc.queryForList(anyString(), eq(1L))).thenReturn(List.of(Map.of("quantity", 2)));
+        when(jdbc.queryForList(anyString(), eq(String.class), eq("SO-001"))).thenReturn(List.of());
+
+        Map<String, Object> result = service.generateFromRecord("1", "sales-order", 1L);
+
+        assertThat(result.get("templateHtml").toString()).contains("单据备注：无    |    合计件数：2件");
     }
 
     private PrintTemplateRepository repository(String billType) {
         return repository(billType, "COORD", "LODOP.PRINT_INIT('模板');");
+    }
+
+    private PrintScriptService printScriptService(PrintTemplateRepository repository, JdbcTemplate jdbc) {
+        return new PrintScriptService(repository, jdbc, new PrintLayoutLodopRenderer(new ObjectMapper()));
     }
 
     private PrintTemplateRepository repository(String billType, String templateType, String templateHtml) {
@@ -174,5 +275,18 @@ class PrintScriptServiceTest {
         PrintTemplateRepository repository = mock(PrintTemplateRepository.class);
         when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(template));
         return repository;
+    }
+
+    private String yingjieA4RemarkLayout() {
+        try (InputStream input = getClass()
+                .getClassLoader()
+                .getResourceAsStream("print-forms/yingjie-a4-remark.layout.json")) {
+            if (input == null) {
+                throw new AssertionError("缺少 PDF JSON 模板资源");
+            }
+            return new String(input.readAllBytes(), StandardCharsets.UTF_8);
+        } catch (IOException ex) {
+            throw new AssertionError("读取 PDF JSON 模板资源失败", ex);
+        }
     }
 }

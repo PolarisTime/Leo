@@ -36,7 +36,7 @@ public class PrintScriptController {
         this.modulePermissionGuard = modulePermissionGuard;
     }
 
-    /** 统一打印接口：COORD/HTML 返回模板与数据，PDF_FORM 返回 PDF base64。 */
+    /** 统一打印接口：COORD 返回套打脚本与数据，PDF_FORM 返回 PDF base64。 */
     @PostMapping("/record")
     @RequiresPermission(authenticatedOnly = true)
     public ApiResponse<Map<String, Object>> fromRecord(

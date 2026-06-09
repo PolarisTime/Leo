@@ -20,9 +20,9 @@ class PrintTemplateMapperTest {
         entity.setBillType("purchase-order");
         entity.setTemplateName("采购订单模板");
         entity.setTemplateCode("PURCHASE_ORDER_DEFAULT");
-        entity.setTemplateHtml("<div>模板内容</div>");
-        entity.setTemplateType("HTML");
-        entity.setEngine("BROWSER_HTML");
+        entity.setTemplateHtml("LODOP.PRINT_INIT('模板内容');");
+        entity.setTemplateType("COORD");
+        entity.setEngine("LODOP");
         entity.setAssetRef(null);
         entity.setVersionNo(3);
         entity.setStatus("ACTIVE");
@@ -37,9 +37,9 @@ class PrintTemplateMapperTest {
         assertThat(response.billType()).isEqualTo("purchase-order");
         assertThat(response.templateName()).isEqualTo("采购订单模板");
         assertThat(response.templateCode()).isEqualTo("PURCHASE_ORDER_DEFAULT");
-        assertThat(response.templateHtml()).isEqualTo("<div>模板内容</div>");
-        assertThat(response.templateType()).isEqualTo("HTML");
-        assertThat(response.engine()).isEqualTo("BROWSER_HTML");
+        assertThat(response.templateHtml()).isEqualTo("LODOP.PRINT_INIT('模板内容');");
+        assertThat(response.templateType()).isEqualTo("COORD");
+        assertThat(response.engine()).isEqualTo("LODOP");
         assertThat(response.assetRef()).isNull();
         assertThat(response.versionNo()).isEqualTo(3);
         assertThat(response.status()).isEqualTo("ACTIVE");
@@ -54,7 +54,7 @@ class PrintTemplateMapperTest {
         entity.setBillType("sales-order");
         entity.setTemplateName("销售订单模板");
         entity.setTemplateCode("SALES_ORDER_DEFAULT");
-        entity.setTemplateHtml("<div>销售模板</div>");
+        entity.setTemplateHtml("LODOP.PRINT_INIT('销售模板');");
         entity.setIsDefault(true);
 
         PrintTemplateResponse response = mapper.toResponse(entity);

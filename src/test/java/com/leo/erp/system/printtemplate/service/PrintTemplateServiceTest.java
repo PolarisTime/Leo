@@ -31,7 +31,7 @@ class PrintTemplateServiceTest {
     }
 
     @Test
-    void shouldRejectDangerousHtmlTemplate() {
+    void shouldRejectHtmlTemplateType() {
         PrintTemplateService service = new PrintTemplateService(
                 repository(),
                 new SnowflakeIdGenerator(0L),
@@ -43,10 +43,10 @@ class PrintTemplateServiceTest {
                 "purchase-order",
                 "模板A",
                 "<img src=x onerror=alert(1)>",
-                null
+                "HTML"
         )))
                 .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("模板内容包含不允许的脚本或危险标签");
+                .hasMessageContaining("模板类型仅支持 COORD 或 PDF_FORM");
     }
 
     @Test
@@ -168,7 +168,7 @@ class PrintTemplateServiceTest {
     }
 
     @Test
-    void shouldAllowPdfFormTypeWithoutTemplateHtmlWhenAssetRefConfigured() {
+    void shouldAllowPdfFormTypeWithoutTemplateHtmlOrAssetRef() {
         PrintTemplateService service = new PrintTemplateService(
                 repository(), new SnowflakeIdGenerator(0L), mapper(), new ModuleCatalog());
 
@@ -179,7 +179,7 @@ class PrintTemplateServiceTest {
                 null,
                 "PDF_FORM",
                 "PDF_FORM",
-                "print-forms/yingjie-a4-remark.pdf",
+                null,
                 2,
                 "ACTIVE"
         ));
@@ -188,29 +188,10 @@ class PrintTemplateServiceTest {
         assertThat(result.templateCode()).isEqualTo("PDF_CODE");
         assertThat(result.templateType()).isEqualTo("PDF_FORM");
         assertThat(result.engine()).isEqualTo("PDF_FORM");
-        assertThat(result.assetRef()).isEqualTo("print-forms/yingjie-a4-remark.pdf");
+        assertThat(result.assetRef()).isNull();
         assertThat(result.versionNo()).isEqualTo(2);
-        assertThat(result.templateHtml()).contains("print-forms/yingjie-a4-remark.pdf");
-    }
-
-    @Test
-    void shouldRejectPdfFormWithoutAssetRef() {
-        PrintTemplateService service = new PrintTemplateService(
-                repository(), new SnowflakeIdGenerator(0L), mapper(), new ModuleCatalog());
-
-        assertThatThrownBy(() -> service.create(request(
-                "purchase-order",
-                "模板A",
-                null,
-                null,
-                "PDF_FORM",
-                null,
-                null,
-                null,
-                null
-        )))
-                .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("PDF_FORM 模板必须配置 PDF 底版资源");
+        assertThat(result.templateHtml()).contains("\"page\"");
+        assertThat(result.templateHtml()).contains("\"static\"");
     }
 
     @Test
@@ -234,7 +215,7 @@ class PrintTemplateServiceTest {
     }
 
     @Test
-    void shouldRejectEngineMismatch() {
+    void shouldRejectHtmlEngine() {
         PrintTemplateService service = new PrintTemplateService(
                 repository(), new SnowflakeIdGenerator(0L), mapper(), new ModuleCatalog());
 
@@ -250,7 +231,7 @@ class PrintTemplateServiceTest {
                 null
         )))
                 .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("HTML 模板必须使用 BROWSER_HTML 引擎");
+                .hasMessageContaining("模板类型仅支持 COORD 或 PDF_FORM");
     }
 
     @Test
@@ -258,11 +239,11 @@ class PrintTemplateServiceTest {
         PrintTemplateService service = new PrintTemplateService(
                 repository(), new SnowflakeIdGenerator(0L), mapper(), new ModuleCatalog());
 
-        var result = service.create(request("purchase-order", "模板A", "<div>安全内容</div>", null));
+        var result = service.create(request("purchase-order", "模板A", "LODOP.PRINT_INIT('安全内容');", null));
         assertThat(result).isNotNull();
         assertThat(result.templateCode()).startsWith("TPL_");
-        assertThat(result.templateType()).isEqualTo("HTML");
-        assertThat(result.engine()).isEqualTo("BROWSER_HTML");
+        assertThat(result.templateType()).isEqualTo("COORD");
+        assertThat(result.engine()).isEqualTo("LODOP");
         assertThat(result.versionNo()).isEqualTo(1);
         assertThat(result.status()).isEqualTo("ACTIVE");
     }
