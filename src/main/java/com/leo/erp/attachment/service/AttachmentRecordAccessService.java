@@ -1,7 +1,10 @@
 package com.leo.erp.attachment.service;
 
 import com.leo.erp.attachment.domain.entity.AttachmentBinding;
+import com.leo.erp.attachment.domain.entity.AttachmentFile;
 import com.leo.erp.attachment.repository.AttachmentBindingRepository;
+import com.leo.erp.attachment.repository.AttachmentFileRepository;
+import com.leo.erp.security.jwt.ApiKeyAuthenticationDetails;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.AbstractAuditableEntity;
@@ -11,6 +14,8 @@ import com.leo.erp.security.permission.PermissionService;
 import com.leo.erp.security.permission.ResourcePermissionCatalog;
 import com.leo.erp.security.support.SecurityPrincipal;
 import jakarta.persistence.EntityManager;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -22,13 +27,16 @@ public class AttachmentRecordAccessService {
     private final EntityManager entityManager;
     private final PermissionService permissionService;
     private final AttachmentBindingRepository attachmentBindingRepository;
+    private final AttachmentFileRepository attachmentFileRepository;
 
     public AttachmentRecordAccessService(EntityManager entityManager,
                                          PermissionService permissionService,
-                                         AttachmentBindingRepository attachmentBindingRepository) {
+                                         AttachmentBindingRepository attachmentBindingRepository,
+                                         AttachmentFileRepository attachmentFileRepository) {
         this.entityManager = entityManager;
         this.permissionService = permissionService;
         this.attachmentBindingRepository = attachmentBindingRepository;
+        this.attachmentFileRepository = attachmentFileRepository;
     }
 
     @Transactional(readOnly = true)
@@ -70,6 +78,25 @@ public class AttachmentRecordAccessService {
         }
     }
 
+    @Transactional(readOnly = true)
+    public void assertAttachmentAccessible(SecurityPrincipal principal, String actionCode, Long attachmentId) {
+        long normalizedAttachmentId = normalizeRecordId(attachmentId);
+        List<AttachmentBinding> bindings = attachmentBindingRepository
+                .findByAttachmentIdAndDeletedFlagFalseOrderByModuleKeyAscRecordIdAscSortOrderAscIdAsc(normalizedAttachmentId);
+        if (bindings.isEmpty()) {
+            AttachmentFile attachment = attachmentFileRepository.findByIdAndDeletedFlagFalse(normalizedAttachmentId)
+                    .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "附件不存在或已删除"));
+            if (principal == null || !principal.id().equals(attachment.getCreatedBy())) {
+                throw new BusinessException(ErrorCode.FORBIDDEN, "无附件访问权限");
+            }
+            return;
+        }
+        boolean accessible = bindings.stream().anyMatch(binding -> canAccessBinding(principal, actionCode, binding));
+        if (!accessible) {
+            throw new BusinessException(ErrorCode.FORBIDDEN, "无数据权限");
+        }
+    }
+
     private void assertCanAccess(SecurityPrincipal principal, String moduleKey, String actionCode, AbstractAuditableEntity entity) {
         if (!canAccess(principal, moduleKey, actionCode, entity)) {
             throw new BusinessException(ErrorCode.FORBIDDEN, "无数据权限");
@@ -77,9 +104,15 @@ public class AttachmentRecordAccessService {
     }
 
     private boolean canAccess(SecurityPrincipal principal, String moduleKey, String actionCode, AbstractAuditableEntity entity) {
+        if (principal == null) {
+            return false;
+        }
         DataScopeContext.Context previous = DataScopeContext.current();
         String resource = resolveResource(moduleKey);
         String action = ResourcePermissionCatalog.normalizeAction(actionCode);
+        if (!permissionService.can(principal.id(), resource, action) || !apiKeyAllows(resource, action)) {
+            return false;
+        }
         String dataScope = permissionService.getUserDataScope(principal.id(), resource, action);
         try {
             DataScopeContext.set(
@@ -92,6 +125,26 @@ public class AttachmentRecordAccessService {
         } finally {
             restore(previous);
         }
+    }
+
+    private boolean apiKeyAllows(String resource, String action) {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || !(authentication.getDetails() instanceof ApiKeyAuthenticationDetails details)) {
+            return true;
+        }
+        return details.allowedResources() != null
+                && details.allowedActions() != null
+                && details.allowedResources().contains(resource)
+                && details.allowedActions().contains(action);
+    }
+
+    private boolean canAccessBinding(SecurityPrincipal principal, String actionCode, AttachmentBinding binding) {
+        String moduleKey = normalizeModuleKey(binding.getModuleKey());
+        if (!isBusinessModule(moduleKey)) {
+            return false;
+        }
+        AbstractAuditableEntity entity = loadBusinessEntity(moduleKey, binding.getRecordId());
+        return entity != null && !entity.isDeletedFlag() && canAccess(principal, moduleKey, actionCode, entity);
     }
 
     private AbstractAuditableEntity loadBusinessEntity(String moduleKey, Long recordId) {

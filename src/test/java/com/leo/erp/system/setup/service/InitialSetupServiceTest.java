@@ -24,10 +24,14 @@ import com.leo.erp.system.setup.web.dto.InitialSetupTotpSetupRequest;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.lang.reflect.Proxy;
 import java.math.BigDecimal;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -48,6 +52,7 @@ class InitialSetupServiceTest {
     private DepartmentRepository departmentRepository;
     private PasswordEncoder passwordEncoder;
     private TotpService totpService;
+    private StringRedisTemplate redisTemplate;
     private InitialSetupService service;
 
     @BeforeEach
@@ -163,11 +168,12 @@ class InitialSetupServiceTest {
         when(totpService.generateQrCodeImage(anyString(), anyString())).thenReturn(new byte[100]);
         when(totpService.verifyCode(anyString(), anyString())).thenReturn(true);
         when(totpService.encryptSecret(anyString())).thenReturn("encrypted-secret");
+        redisTemplate = redisTemplate();
         service = new InitialSetupService(
                 userAccountRepository, userRoleRepository, userRoleBindingService,
                 roleSettingRepository, companySettingRepository, noRuleRepository,
                 departmentRepository, passwordEncoder, new SnowflakeIdGenerator(1),
-                new ObjectMapper(), totpService
+                new ObjectMapper(), totpService, redisTemplate
         );
     }
 
@@ -206,7 +212,7 @@ class InitialSetupServiceTest {
                 userAccountRepository, urRepo, userRoleBindingService,
                 roleSettingRepository, repo, noRuleRepository,
                 departmentRepository, passwordEncoder, new SnowflakeIdGenerator(1),
-                new ObjectMapper(), totpService
+                new ObjectMapper(), totpService, redisTemplate
         );
 
         assertThatThrownBy(() -> svc.initialize(new InitialSetupSubmitRequest(null, null)))
@@ -247,7 +253,7 @@ class InitialSetupServiceTest {
                 userAccountRepository, urRepo, userRoleBindingService,
                 repo, companySettingRepository, noRuleRepository,
                 departmentRepository, passwordEncoder, new SnowflakeIdGenerator(1),
-                new ObjectMapper(), totpService
+                new ObjectMapper(), totpService, redisTemplate
         );
 
         assertThatThrownBy(() -> svc.setupAdminTotp(new InitialSetupTotpSetupRequest("admin")))
@@ -260,6 +266,15 @@ class InitialSetupServiceTest {
         var result = service.setupAdminTotp(new InitialSetupTotpSetupRequest("admin"));
         assertThat(result).isNotNull();
         assertThat(result.secret()).isEqualTo("JBSWY3DPEHPK3PXP");
+    }
+
+    @Test
+    void shouldRejectConfigureAdminWhenServerSideTotpSecretMissing() {
+        assertThatThrownBy(() -> service.configureAdmin(new InitialSetupAdminSubmitRequest(
+                new InitialSetupAdminRequest("admin", "12345678", "管理员", "13800138000"),
+                "client-secret", "123456"
+        ))).isInstanceOf(BusinessException.class)
+                .hasMessageContaining("请先生成并绑定管理员 2FA");
     }
 
     @Test
@@ -302,7 +317,7 @@ class InitialSetupServiceTest {
                 userAccountRepository, urRepo, userRoleBindingService,
                 repo, companySettingRepository, noRuleRepository,
                 departmentRepository, passwordEncoder, new SnowflakeIdGenerator(1),
-                new ObjectMapper(), totpService
+                new ObjectMapper(), totpService, redisTemplate
         );
 
         assertThatThrownBy(() -> svc.configureAdmin(new InitialSetupAdminSubmitRequest(
@@ -321,6 +336,7 @@ class InitialSetupServiceTest {
 
     @Test
     void shouldInitializeSuccessfully_whenNoAdminAndNoCompany() {
+        service.setupAdminTotp(new InitialSetupTotpSetupRequest("admin"));
         var result = service.initialize(new InitialSetupSubmitRequest(
                 new InitialSetupAdminSubmitRequest(
                         new InitialSetupAdminRequest("admin", "12345678", "管理员", "13800138000"),
@@ -335,6 +351,7 @@ class InitialSetupServiceTest {
 
     @Test
     void shouldConfigureAdminSuccessfully() {
+        service.setupAdminTotp(new InitialSetupTotpSetupRequest("admin"));
         var result = service.configureAdmin(new InitialSetupAdminSubmitRequest(
                 new InitialSetupAdminRequest("admin", "12345678", "管理员", "13800138000"),
                 "JBSWY3DPEHPK3PXP", "123456"
@@ -342,6 +359,19 @@ class InitialSetupServiceTest {
         assertThat(result).isNotNull();
         assertThat(result.adminLoginName()).isEqualTo("admin");
         assertThat(result.companyName()).isNull();
+    }
+
+    @Test
+    void shouldUseServerSideTotpSecretWhenConfigureAdmin() {
+        service.setupAdminTotp(new InitialSetupTotpSetupRequest("admin"));
+
+        service.configureAdmin(new InitialSetupAdminSubmitRequest(
+                new InitialSetupAdminRequest("admin", "12345678", "管理员", "13800138000"),
+                "attacker-secret", "123456"
+        ));
+
+        org.mockito.Mockito.verify(totpService).verifyCode("JBSWY3DPEHPK3PXP", "123456");
+        org.mockito.Mockito.verify(totpService).encryptSecret("JBSWY3DPEHPK3PXP");
     }
 
     @Test
@@ -366,7 +396,7 @@ class InitialSetupServiceTest {
                 userAccountRepository, urRepo, userRoleBindingService,
                 roleSettingRepository, companySettingRepository, noRuleRepository,
                 departmentRepository, passwordEncoder, new SnowflakeIdGenerator(1),
-                new ObjectMapper(), totpService
+                new ObjectMapper(), totpService, redisTemplate
         );
 
         var result = svc.configureCompany(new InitialSetupCompanyRequest(
@@ -399,7 +429,7 @@ class InitialSetupServiceTest {
                 userAccountRepository, urRepo, userRoleBindingService,
                 roleSettingRepository, companySettingRepository, noRuleRepository,
                 departmentRepository, passwordEncoder, new SnowflakeIdGenerator(1),
-                new ObjectMapper(), totpService
+                new ObjectMapper(), totpService, redisTemplate
         );
 
         var result = svc.configureCompany(new InitialSetupCompanyRequest(
@@ -431,7 +461,7 @@ class InitialSetupServiceTest {
                 userAccountRepository, urRepo, userRoleBindingService,
                 roleSettingRepository, companySettingRepository, noRuleRepository,
                 departmentRepository, passwordEncoder, new SnowflakeIdGenerator(1),
-                new ObjectMapper(), totpService
+                new ObjectMapper(), totpService, redisTemplate
         );
 
         var result = svc.configureCompany(new InitialSetupCompanyRequest(
@@ -439,5 +469,20 @@ class InitialSetupServiceTest {
         ));
         assertThat(result).isNotNull();
         assertThat(result.companyName()).isEqualTo("公司A");
+    }
+
+    @SuppressWarnings("unchecked")
+    private StringRedisTemplate redisTemplate() {
+        Map<String, String> values = new HashMap<>();
+        ValueOperations<String, String> valueOperations = mock(ValueOperations.class);
+        StringRedisTemplate redis = mock(StringRedisTemplate.class);
+        when(redis.opsForValue()).thenReturn(valueOperations);
+        org.mockito.Mockito.doAnswer(invocation -> {
+            values.put(invocation.getArgument(0), invocation.getArgument(1));
+            return null;
+        }).when(valueOperations).set(anyString(), anyString(), any(java.time.Duration.class));
+        when(valueOperations.get(anyString())).thenAnswer(invocation -> values.get(invocation.getArgument(0)));
+        when(redis.delete(anyString())).thenAnswer(invocation -> values.remove(invocation.getArgument(0)) != null);
+        return redis;
     }
 }

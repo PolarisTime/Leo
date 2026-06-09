@@ -1,13 +1,17 @@
 package com.leo.erp.attachment.service;
 
 import com.leo.erp.attachment.domain.entity.AttachmentBinding;
+import com.leo.erp.attachment.domain.entity.AttachmentFile;
 import com.leo.erp.attachment.repository.AttachmentBindingRepository;
+import com.leo.erp.attachment.repository.AttachmentFileRepository;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.support.ModuleCatalog;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -23,17 +27,20 @@ public class AttachmentBindingService {
     private final UploadRuleService uploadRuleService;
     private final SnowflakeIdGenerator idGenerator;
     private final ModuleCatalog moduleCatalog;
+    private final AttachmentFileRepository attachmentFileRepository;
 
     public AttachmentBindingService(AttachmentBindingRepository repository,
                                     AttachmentService attachmentService,
                                     UploadRuleService uploadRuleService,
                                     SnowflakeIdGenerator idGenerator,
-                                    ModuleCatalog moduleCatalog) {
+                                    ModuleCatalog moduleCatalog,
+                                    AttachmentFileRepository attachmentFileRepository) {
         this.repository = repository;
         this.attachmentService = attachmentService;
         this.uploadRuleService = uploadRuleService;
         this.idGenerator = idGenerator;
         this.moduleCatalog = moduleCatalog;
+        this.attachmentFileRepository = attachmentFileRepository;
     }
 
     @Transactional(readOnly = true)
@@ -61,6 +68,7 @@ public class AttachmentBindingService {
         }
         List<Long> normalizedAttachmentIds = normalizeAttachmentIds(attachmentIds);
         attachmentService.validateAttachmentIds(normalizedAttachmentIds);
+        assertAttachmentsBindable(normalizedModuleKey, normalizedRecordId, normalizedAttachmentIds);
 
         List<AttachmentBinding> existingBindings = repository
                 .findByModuleKeyAndRecordIdAndDeletedFlagFalseOrderBySortOrderAscIdAsc(normalizedModuleKey, normalizedRecordId);
@@ -172,5 +180,36 @@ public class AttachmentBindingService {
             normalized.add(attachmentId);
         }
         return normalized;
+    }
+
+    private void assertAttachmentsBindable(String moduleKey, Long recordId, List<Long> attachmentIds) {
+        if (attachmentIds.isEmpty()) {
+            return;
+        }
+        Long currentUserId = currentUserId();
+        List<AttachmentFile> uploadedByCurrentUser = attachmentFileRepository
+                .findAllByIdInAndCreatedByAndDeletedFlagFalse(attachmentIds, currentUserId);
+        List<Long> currentUserAttachmentIds = uploadedByCurrentUser.stream()
+                .map(AttachmentFile::getId)
+                .toList();
+        for (Long attachmentId : attachmentIds) {
+            List<AttachmentBinding> bindings = repository
+                    .findByAttachmentIdAndDeletedFlagFalseOrderByModuleKeyAscRecordIdAscSortOrderAscIdAsc(attachmentId);
+            boolean boundToSameRecord = bindings.stream()
+                    .filter(binding -> moduleKey.equals(binding.getModuleKey()))
+                    .anyMatch(binding -> recordId.equals(binding.getRecordId()));
+            if (boundToSameRecord || bindings.isEmpty() && currentUserAttachmentIds.contains(attachmentId)) {
+                continue;
+            }
+            throw new BusinessException(ErrorCode.FORBIDDEN, "附件不属于当前用户或当前业务记录");
+        }
+    }
+
+    private Long currentUserId() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication != null && authentication.getPrincipal() instanceof com.leo.erp.security.support.SecurityPrincipal principal) {
+            return principal.id();
+        }
+        throw new BusinessException(ErrorCode.UNAUTHORIZED, "未登录");
     }
 }

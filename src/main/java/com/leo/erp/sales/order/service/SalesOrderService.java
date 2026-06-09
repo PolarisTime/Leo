@@ -581,11 +581,16 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
             Map<Long, SourceAllocation> requestPurchaseOrderAllocatedMap
     ) {
         Long sourcePurchaseOrderItemId = source.sourcePurchaseOrderItemId();
+        if (source.sourceInboundItemId() != null && sourcePurchaseOrderItemId != null) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行来源采购入库明细和来源采购订单明细不能同时填写");
+        }
         if (sourcePurchaseOrderItemId != null) {
             SourcePurchaseOrderItemRecord sourcePurchaseOrderItem = sourcePurchaseOrderItemMap.get(sourcePurchaseOrderItemId);
             if (sourcePurchaseOrderItem == null) {
                 throw new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行来源采购订单明细不存在");
             }
+            assertSourceParentStatus(sourcePurchaseOrderItem.orderStatus(), StatusConstants.AUDITED, lineNo, "来源采购订单");
+            assertSourceFieldsMatch(source, sourcePurchaseOrderItem, lineNo, "来源采购订单明细");
             int allocatedQuantity = purchaseOrderAllocatedMap.getOrDefault(sourcePurchaseOrderItemId, SourceAllocation.ZERO).quantity();
             int requestedQuantity = requestPurchaseOrderAllocatedMap.getOrDefault(sourcePurchaseOrderItemId, SourceAllocation.ZERO).quantity();
             validateAvailableQuantity(source.quantity(), sourcePurchaseOrderItem.quantity(), allocatedQuantity, requestedQuantity, lineNo);
@@ -600,9 +605,61 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
         if (sourceInboundItem == null) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行来源采购入库明细不存在");
         }
+        assertSourceParentStatus(sourceInboundItem.inboundStatus(), StatusConstants.AUDITED, lineNo, "来源采购入库单");
+        assertSourceFieldsMatch(source, sourceInboundItem, lineNo, "来源采购入库明细");
         int allocatedQuantity = inboundAllocatedMap.getOrDefault(sourceInboundItemId, SourceAllocation.ZERO).quantity();
         int requestedQuantity = requestInboundAllocatedMap.getOrDefault(sourceInboundItemId, SourceAllocation.ZERO).quantity();
         validateAvailableQuantity(source.quantity(), sourceInboundItem.quantity(), allocatedQuantity, requestedQuantity, lineNo);
+    }
+
+    private void assertSourceParentStatus(String actualStatus, String requiredStatus, int lineNo, String sourceName) {
+        if (!requiredStatus.equals(normalize(actualStatus))) {
+            throw new BusinessException(
+                    ErrorCode.BUSINESS_ERROR,
+                    "第" + lineNo + "行" + sourceName + "未审核，不能作为来源单据"
+            );
+        }
+    }
+
+    private void assertSourceFieldsMatch(SalesOrderItemRequest request,
+                                         SourceInboundItemRecord source,
+                                         int lineNo,
+                                         String sourceName) {
+        assertSameText(request.materialCode(), source.materialCode(), lineNo, sourceName, "物料编码");
+        assertSameText(request.brand(), source.brand(), lineNo, sourceName, "品牌");
+        assertSameText(request.category(), source.category(), lineNo, sourceName, "品类");
+        assertSameText(request.material(), source.material(), lineNo, sourceName, "材质");
+        assertSameText(request.spec(), source.spec(), lineNo, sourceName, "规格");
+        assertSameText(request.unit(), source.unit(), lineNo, sourceName, "单位");
+        assertSameText(request.warehouseName(), source.warehouseName(), lineNo, sourceName, "仓库");
+        assertSameText(request.batchNo(), source.batchNo(), lineNo, sourceName, "批号");
+    }
+
+    private void assertSourceFieldsMatch(SalesOrderItemRequest request,
+                                         SourcePurchaseOrderItemRecord source,
+                                         int lineNo,
+                                         String sourceName) {
+        assertSameText(request.materialCode(), source.materialCode(), lineNo, sourceName, "物料编码");
+        assertSameText(request.brand(), source.brand(), lineNo, sourceName, "品牌");
+        assertSameText(request.category(), source.category(), lineNo, sourceName, "品类");
+        assertSameText(request.material(), source.material(), lineNo, sourceName, "材质");
+        assertSameText(request.spec(), source.spec(), lineNo, sourceName, "规格");
+        assertSameText(request.unit(), source.unit(), lineNo, sourceName, "单位");
+        assertSameText(request.warehouseName(), source.warehouseName(), lineNo, sourceName, "仓库");
+        assertSameText(request.batchNo(), source.batchNo(), lineNo, sourceName, "批号");
+    }
+
+    private void assertSameText(String requestedValue,
+                                String sourceValue,
+                                int lineNo,
+                                String sourceName,
+                                String fieldName) {
+        if (!normalize(requestedValue).equals(normalize(sourceValue))) {
+            throw new BusinessException(
+                    ErrorCode.BUSINESS_ERROR,
+                    "第" + lineNo + "行" + sourceName + fieldName + "与请求不一致"
+            );
+        }
     }
 
     private void validateAvailableQuantity(Integer requestedQuantityValue,

@@ -1,10 +1,14 @@
 package com.leo.erp.system.printtemplate.service;
 
+import com.leo.erp.attachment.service.AttachmentRecordAccessService;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
+import com.leo.erp.security.support.SecurityPrincipal;
 import com.leo.erp.system.printtemplate.domain.entity.PrintTemplate;
 import com.leo.erp.system.printtemplate.repository.PrintTemplateRepository;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -85,15 +89,18 @@ public class PrintScriptService {
     private final PrintTemplateRepository templateRepository;
     private final JdbcTemplate jdbc;
     private final PrintLayoutLodopRenderer layoutLodopRenderer;
+    private final AttachmentRecordAccessService recordAccessService;
 
     public PrintScriptService(
             PrintTemplateRepository templateRepository,
             JdbcTemplate jdbc,
-            PrintLayoutLodopRenderer layoutLodopRenderer
+            PrintLayoutLodopRenderer layoutLodopRenderer,
+            AttachmentRecordAccessService recordAccessService
     ) {
         this.templateRepository = templateRepository;
         this.jdbc = jdbc;
         this.layoutLodopRenderer = layoutLodopRenderer;
+        this.recordAccessService = recordAccessService;
     }
 
     /** Load record + items from DB, return raw template + data for frontend rendering. */
@@ -108,6 +115,7 @@ public class PrintScriptService {
         if (!moduleKey.equals(template.getBillType())) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "打印模板与当前模块不匹配");
         }
+        recordAccessService.assertRecordAccessible(currentPrincipal(), moduleKey, "read", recordId);
         Map<String, Object> row = jdbc.queryForMap(
                 "SELECT * FROM " + source.tableName() + " WHERE id = ? AND deleted_flag = FALSE", recordId);
         Map<String, String> data = toCamelStringMap(row);
@@ -132,6 +140,14 @@ public class PrintScriptService {
         result.put("data", data);
         result.put("items", items);
         return result;
+    }
+
+    private SecurityPrincipal currentPrincipal() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication != null && authentication.getPrincipal() instanceof SecurityPrincipal principal) {
+            return principal;
+        }
+        throw new BusinessException(ErrorCode.UNAUTHORIZED, "未登录");
     }
 
     private String renderTemplateHtml(PrintTemplate template, Map<String, String> data, List<Map<String, String>> items) {

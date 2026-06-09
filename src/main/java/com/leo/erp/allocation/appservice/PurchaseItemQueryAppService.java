@@ -20,6 +20,7 @@ public interface PurchaseItemQueryAppService {
     record SourceInboundItemRecord(
             Long id,
             String inboundNo,
+            String inboundStatus,
             String purchaseOrderNo,
             Integer quantity,
             BigDecimal weighWeightTon,
@@ -31,13 +32,33 @@ public interface PurchaseItemQueryAppService {
             String unit,
             String warehouseName,
             String batchNo
-    ) {}
+    ) {
+        public SourceInboundItemRecord(
+                Long id,
+                String inboundNo,
+                String purchaseOrderNo,
+                Integer quantity,
+                BigDecimal weighWeightTon,
+                String brand,
+                String material,
+                String spec,
+                String materialCode,
+                String category,
+                String unit,
+                String warehouseName,
+                String batchNo
+        ) {
+            this(id, inboundNo, null, purchaseOrderNo, quantity, weighWeightTon, brand, material, spec,
+                    materialCode, category, unit, warehouseName, batchNo);
+        }
+    }
 
     record SourcePurchaseOrderItemRecord(
             Long id,
             Integer quantity,
             BigDecimal weightTon,
             String orderNo,
+            String orderStatus,
             String brand,
             String material,
             String spec,
@@ -46,7 +67,25 @@ public interface PurchaseItemQueryAppService {
             String unit,
             String warehouseName,
             String batchNo
-    ) {}
+    ) {
+        public SourcePurchaseOrderItemRecord(
+                Long id,
+                Integer quantity,
+                BigDecimal weightTon,
+                String orderNo,
+                String brand,
+                String material,
+                String spec,
+                String materialCode,
+                String category,
+                String unit,
+                String warehouseName,
+                String batchNo
+        ) {
+            this(id, quantity, weightTon, orderNo, null, brand, material, spec, materialCode, category, unit,
+                    warehouseName, batchNo);
+        }
+    }
 
     record PieceWeightSummary(Long purchaseOrderItemId, BigDecimal remainingWeight) {}
 }

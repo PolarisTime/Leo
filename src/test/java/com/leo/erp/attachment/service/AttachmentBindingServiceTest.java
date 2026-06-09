@@ -1,12 +1,19 @@
 package com.leo.erp.attachment.service;
 
 import com.leo.erp.attachment.domain.entity.AttachmentBinding;
+import com.leo.erp.attachment.domain.entity.AttachmentFile;
 import com.leo.erp.attachment.repository.AttachmentBindingRepository;
+import com.leo.erp.attachment.repository.AttachmentFileRepository;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.support.ModuleCatalog;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
+import com.leo.erp.security.support.SecurityPrincipal;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
 
 import java.lang.reflect.Proxy;
 import java.time.LocalDateTime;
@@ -21,6 +28,16 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class AttachmentBindingServiceTest {
+
+    @BeforeEach
+    void setUp() {
+        authenticate(1L);
+    }
+
+    @AfterEach
+    void tearDown() {
+        SecurityContextHolder.clearContext();
+    }
 
     @Test
     void shouldReplaceBindingsAndPreserveAttachmentOrder() {
@@ -37,7 +54,8 @@ class AttachmentBindingServiceTest {
                 attachmentService(attachments),
                 enabledUploadRuleService(),
                 new FixedIdGenerator(101L, 102L),
-                new ModuleCatalog()
+                new ModuleCatalog(),
+                attachmentFileRepository()
         );
 
         List<AttachmentView> result = service.replace("sales-order", 9L, List.of(12L, 11L));
@@ -60,7 +78,8 @@ class AttachmentBindingServiceTest {
                 attachmentService(Map.of()),
                 enabledUploadRuleService(),
                 new FixedIdGenerator(101L),
-                new ModuleCatalog()
+                new ModuleCatalog(),
+                attachmentFileRepository()
         );
 
         assertThatThrownBy(() -> service.replace("sales-order", 9L, List.of(12L, 12L)))
@@ -75,7 +94,8 @@ class AttachmentBindingServiceTest {
                 attachmentService(Map.of()),
                 disabledUploadRuleService(),
                 new FixedIdGenerator(),
-                new ModuleCatalog()
+                new ModuleCatalog(),
+                attachmentFileRepository()
         );
 
         List<AttachmentView> result = service.list("sales-order", 9L);
@@ -94,7 +114,8 @@ class AttachmentBindingServiceTest {
                 attachmentService(attachments),
                 enabledUploadRuleService(),
                 new FixedIdGenerator(),
-                new ModuleCatalog()
+                new ModuleCatalog(),
+                attachmentFileRepository()
         );
 
         List<AttachmentView> result = service.list("sales-order", 9L);
@@ -110,7 +131,8 @@ class AttachmentBindingServiceTest {
                 attachmentService(Map.of()),
                 disabledUploadRuleService(),
                 new FixedIdGenerator(),
-                new ModuleCatalog()
+                new ModuleCatalog(),
+                attachmentFileRepository()
         );
 
         List<AttachmentView> result = service.replace("sales-order", 9L, List.of(10L));
@@ -130,7 +152,8 @@ class AttachmentBindingServiceTest {
                 attachmentService(Map.of()),
                 enabledUploadRuleService(),
                 new FixedIdGenerator(),
-                new ModuleCatalog()
+                new ModuleCatalog(),
+                attachmentFileRepository()
         );
 
         List<AttachmentView> result = service.replace("sales-order", 9L, List.of());
@@ -153,7 +176,8 @@ class AttachmentBindingServiceTest {
                 attachmentService(attachments),
                 enabledUploadRuleService(),
                 new FixedIdGenerator(101L),
-                new ModuleCatalog()
+                new ModuleCatalog(),
+                attachmentFileRepository()
         );
 
         List<AttachmentView> result = service.replace("sales-order", 9L, List.of(10L));
@@ -176,7 +200,8 @@ class AttachmentBindingServiceTest {
                 attachmentService(Map.of()),
                 enabledUploadRuleService(),
                 new FixedIdGenerator(),
-                new ModuleCatalog()
+                new ModuleCatalog(),
+                attachmentFileRepository()
         );
 
         List<Long> result = service.listAttachmentIds("sales-order", 9L);
@@ -191,7 +216,8 @@ class AttachmentBindingServiceTest {
                 attachmentService(Map.of()),
                 enabledUploadRuleService(),
                 new FixedIdGenerator(),
-                new ModuleCatalog()
+                new ModuleCatalog(),
+                attachmentFileRepository()
         );
 
         List<Long> result = service.listAttachmentIds("sales-order", 9L);
@@ -206,7 +232,8 @@ class AttachmentBindingServiceTest {
                 attachmentService(Map.of()),
                 enabledUploadRuleService(),
                 new FixedIdGenerator(),
-                new ModuleCatalog()
+                new ModuleCatalog(),
+                attachmentFileRepository()
         );
 
         Map<Long, List<AttachmentView>> result = service.listByRecordIds("sales-order", null);
@@ -221,7 +248,8 @@ class AttachmentBindingServiceTest {
                 attachmentService(Map.of()),
                 enabledUploadRuleService(),
                 new FixedIdGenerator(),
-                new ModuleCatalog()
+                new ModuleCatalog(),
+                attachmentFileRepository()
         );
 
         Map<Long, List<AttachmentView>> result = service.listByRecordIds("sales-order", List.of());
@@ -236,7 +264,8 @@ class AttachmentBindingServiceTest {
                 attachmentService(Map.of()),
                 enabledUploadRuleService(),
                 new FixedIdGenerator(),
-                new ModuleCatalog()
+                new ModuleCatalog(),
+                attachmentFileRepository()
         );
 
         Map<Long, List<AttachmentView>> result = service.listByRecordIds("sales-order", List.of(0L, -1L));
@@ -261,7 +290,8 @@ class AttachmentBindingServiceTest {
                 attachmentService(attachments),
                 enabledUploadRuleService(),
                 new FixedIdGenerator(),
-                new ModuleCatalog()
+                new ModuleCatalog(),
+                attachmentFileRepository()
         );
 
         Map<Long, List<AttachmentView>> result = service.listByRecordIds("sales-order", List.of(1L, 2L, 3L));
@@ -284,7 +314,8 @@ class AttachmentBindingServiceTest {
                 attachmentService(attachments),
                 enabledUploadRuleService(),
                 new FixedIdGenerator(),
-                new ModuleCatalog()
+                new ModuleCatalog(),
+                attachmentFileRepository()
         );
 
         Map<Long, List<AttachmentView>> result = service.listByRecordIds("sales-order", List.of(1L, 1L, 1L));
@@ -300,7 +331,8 @@ class AttachmentBindingServiceTest {
                 attachmentService(Map.of()),
                 enabledUploadRuleService(),
                 new FixedIdGenerator(),
-                new ModuleCatalog()
+                new ModuleCatalog(),
+                attachmentFileRepository()
         );
 
         assertThatThrownBy(() -> service.list(null, 1L))
@@ -315,7 +347,8 @@ class AttachmentBindingServiceTest {
                 attachmentService(Map.of()),
                 enabledUploadRuleService(),
                 new FixedIdGenerator(),
-                new ModuleCatalog()
+                new ModuleCatalog(),
+                attachmentFileRepository()
         );
 
         assertThatThrownBy(() -> service.list("  ", 1L))
@@ -330,7 +363,8 @@ class AttachmentBindingServiceTest {
                 attachmentService(Map.of()),
                 enabledUploadRuleService(),
                 new FixedIdGenerator(),
-                new ModuleCatalog()
+                new ModuleCatalog(),
+                attachmentFileRepository()
         );
 
         assertThatThrownBy(() -> service.list("non-existent-module", 1L))
@@ -345,7 +379,8 @@ class AttachmentBindingServiceTest {
                 attachmentService(Map.of()),
                 enabledUploadRuleService(),
                 new FixedIdGenerator(),
-                new ModuleCatalog()
+                new ModuleCatalog(),
+                attachmentFileRepository()
         );
 
         assertThatThrownBy(() -> service.list("sales-order", null))
@@ -360,7 +395,8 @@ class AttachmentBindingServiceTest {
                 attachmentService(Map.of()),
                 enabledUploadRuleService(),
                 new FixedIdGenerator(),
-                new ModuleCatalog()
+                new ModuleCatalog(),
+                attachmentFileRepository()
         );
 
         assertThatThrownBy(() -> service.list("sales-order", 0L))
@@ -375,7 +411,8 @@ class AttachmentBindingServiceTest {
                 attachmentService(Map.of()),
                 enabledUploadRuleService(),
                 new FixedIdGenerator(),
-                new ModuleCatalog()
+                new ModuleCatalog(),
+                attachmentFileRepository()
         );
 
         assertThatThrownBy(() -> service.list("sales-order", -1L))
@@ -390,7 +427,8 @@ class AttachmentBindingServiceTest {
                 attachmentService(Map.of()),
                 enabledUploadRuleService(),
                 new FixedIdGenerator(),
-                new ModuleCatalog()
+                new ModuleCatalog(),
+                attachmentFileRepository()
         );
 
         assertThatThrownBy(() -> service.replace("sales-order", 1L, null))
@@ -405,7 +443,8 @@ class AttachmentBindingServiceTest {
                 attachmentService(Map.of()),
                 enabledUploadRuleService(),
                 new FixedIdGenerator(),
-                new ModuleCatalog()
+                new ModuleCatalog(),
+                attachmentFileRepository()
         );
 
         assertThatThrownBy(() -> service.replace("sales-order", 1L, java.util.Arrays.asList(1L, null)))
@@ -420,12 +459,67 @@ class AttachmentBindingServiceTest {
                 attachmentService(Map.of()),
                 enabledUploadRuleService(),
                 new FixedIdGenerator(),
-                new ModuleCatalog()
+                new ModuleCatalog(),
+                attachmentFileRepository()
         );
 
         assertThatThrownBy(() -> service.replace("sales-order", 1L, List.of(1L, 0L)))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("附件ID不合法");
+    }
+
+    @Test
+    void shouldRejectBindingUnboundAttachmentUploadedByOtherUser() {
+        Map<Long, AttachmentView> attachments = Map.of(10L, attachment(10L, "test.pdf"));
+        AttachmentBindingService service = new AttachmentBindingService(
+                bindingRepository(List.of(), new AtomicReference<>(List.of()), new AtomicReference<>(List.of()), new AtomicReference<>(false)),
+                attachmentService(attachments),
+                enabledUploadRuleService(),
+                new FixedIdGenerator(101L),
+                new ModuleCatalog(),
+                attachmentFileRepository(List.of(attachmentFile(10L, 2L)))
+        );
+
+        assertThatThrownBy(() -> service.replace("sales-order", 9L, List.of(10L)))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("附件不属于当前用户或当前业务记录");
+    }
+
+    @Test
+    void shouldRejectBindingAttachmentFromAnotherRecord() {
+        Map<Long, AttachmentView> attachments = Map.of(10L, attachment(10L, "test.pdf"));
+        AttachmentBindingService service = new AttachmentBindingService(
+                bindingRepository(List.of(binding(90L, "sales-order", 8L, 10L, 1)), new AtomicReference<>(List.of()), new AtomicReference<>(List.of()), new AtomicReference<>(false)),
+                attachmentService(attachments),
+                enabledUploadRuleService(),
+                new FixedIdGenerator(101L),
+                new ModuleCatalog(),
+                attachmentFileRepository(List.of(attachmentFile(10L, 1L)))
+        );
+
+        assertThatThrownBy(() -> service.replace("sales-order", 9L, List.of(10L)))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("附件不属于当前用户或当前业务记录");
+    }
+
+    @Test
+    void shouldAllowRebindingAttachmentAlreadyOnSameRecord() {
+        AtomicReference<List<AttachmentBinding>> savedBindings = new AtomicReference<>(List.of());
+        List<AttachmentBinding> existingBindings = List.of(binding(90L, "sales-order", 9L, 10L, 1));
+        Map<Long, AttachmentView> attachments = Map.of(10L, attachment(10L, "test.pdf"));
+        AttachmentBindingService service = new AttachmentBindingService(
+                bindingRepository(existingBindings, savedBindings, new AtomicReference<>(List.of()), new AtomicReference<>(false)),
+                attachmentService(attachments),
+                enabledUploadRuleService(),
+                new FixedIdGenerator(101L),
+                new ModuleCatalog(),
+                attachmentFileRepository(List.of(attachmentFile(10L, 2L)))
+        );
+
+        List<AttachmentView> result = service.replace("sales-order", 9L, List.of(10L));
+
+        assertThat(result).extracting(AttachmentView::id).containsExactly(10L);
+        assertThat(savedBindings.get()).hasSize(1);
     }
 
     @SuppressWarnings("unchecked")
@@ -439,6 +533,12 @@ class AttachmentBindingServiceTest {
                 (proxy, method, args) -> switch (method.getName()) {
                     case "findByModuleKeyAndRecordIdAndDeletedFlagFalseOrderBySortOrderAscIdAsc" -> existingBindings;
                     case "findByModuleKeyAndRecordIdInAndDeletedFlagFalseOrderByRecordIdAscSortOrderAscIdAsc" -> existingBindings;
+                    case "findByAttachmentIdAndDeletedFlagFalseOrderByModuleKeyAscRecordIdAscSortOrderAscIdAsc" -> {
+                        Long attachmentId = (Long) args[0];
+                        yield existingBindings.stream()
+                                .filter(binding -> attachmentId.equals(binding.getAttachmentId()))
+                                .toList();
+                    }
                     case "deleteAllInBatch" -> {
                         deletedBindings.set(new ArrayList<>((Collection<AttachmentBinding>) args[0]));
                         yield null;
@@ -459,6 +559,34 @@ class AttachmentBindingServiceTest {
         );
     }
 
+    private AttachmentFileRepository attachmentFileRepository() {
+        return attachmentFileRepository(List.of());
+    }
+
+    @SuppressWarnings("unchecked")
+    private AttachmentFileRepository attachmentFileRepository(List<AttachmentFile> files) {
+        return (AttachmentFileRepository) Proxy.newProxyInstance(
+                AttachmentFileRepository.class.getClassLoader(),
+                new Class[]{AttachmentFileRepository.class},
+                (proxy, method, args) -> switch (method.getName()) {
+                    case "findAllByIdInAndCreatedByAndDeletedFlagFalse" -> {
+                        Collection<Long> ids = (Collection<Long>) args[0];
+                        Long createdBy = (Long) args[1];
+                        if (files.isEmpty()) {
+                            yield ids.stream().map(id -> attachmentFile(id, createdBy)).toList();
+                        }
+                        yield files.stream()
+                                .filter(file -> ids.contains(file.getId()) && createdBy.equals(file.getCreatedBy()))
+                                .toList();
+                    }
+                    case "toString" -> "AttachmentFileRepositoryStub";
+                    case "hashCode" -> System.identityHashCode(proxy);
+                    case "equals" -> proxy == args[0];
+                    default -> throw new UnsupportedOperationException(method.getName());
+                }
+        );
+    }
+
     private AttachmentBinding binding(Long id, String moduleKey, Long recordId, Long attachmentId, Integer sortOrder) {
         AttachmentBinding binding = new AttachmentBinding();
         binding.setId(id);
@@ -467,6 +595,20 @@ class AttachmentBindingServiceTest {
         binding.setAttachmentId(attachmentId);
         binding.setSortOrder(sortOrder);
         return binding;
+    }
+
+    private AttachmentFile attachmentFile(Long id, Long createdBy) {
+        AttachmentFile file = new AttachmentFile();
+        file.setId(id);
+        file.setCreatedBy(createdBy);
+        return file;
+    }
+
+    private void authenticate(Long userId) {
+        SecurityPrincipal principal = SecurityPrincipal.authenticated(userId, "tester", List.of());
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken(principal, null, principal.getAuthorities())
+        );
     }
 
     private AttachmentService attachmentService(Map<Long, AttachmentView> attachments) {

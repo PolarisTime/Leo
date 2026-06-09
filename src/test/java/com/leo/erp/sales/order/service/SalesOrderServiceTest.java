@@ -96,7 +96,9 @@ class SalesOrderServiceTest {
         when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(Map.of("M1", new Material()));
         when(materialSupport.normalizeBatchNo(any(), eq("B1"), eq(1), eq(true))).thenReturn("B1");
         when(warehouseSelectionSupport.normalizeWarehouseName("一号库", 1, true)).thenReturn("一号库");
-        when(purchaseItemQueryAppService.findSourceInboundItemsByIds(List.of(101L))).thenReturn(List.of(sourceInboundRecord(101L, inbound.getWarehouseName(), inboundItem.getQuantity())));
+        when(purchaseItemQueryAppService.findSourceInboundItemsByIds(List.of(101L))).thenReturn(List.of(
+                sourceInboundRecord(101L, inbound.getWarehouseName(), inboundItem.getQuantity(),
+                        "M1", "宝钢", "螺纹钢", "HRB400", "18", "吨", "B1")));
         when(salesOrderItemRepository.summarizeAllocatedQuantityBySourceInboundItemIds(eq(List.of(101L)), any()))
                 .thenReturn(List.of());
         when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
@@ -156,7 +158,9 @@ class SalesOrderServiceTest {
         when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(Map.of("M1", new Material()));
         when(materialSupport.normalizeBatchNo(any(), eq("B1"), eq(1), eq(true))).thenReturn("B1");
         when(warehouseSelectionSupport.normalizeWarehouseName("一号库", 1, true)).thenReturn("一号库");
-        when(purchaseItemQueryAppService.findSourcePurchaseOrderItemsByIds(List.of(201L))).thenReturn(List.of(sourcePurchaseOrderRecord(sourceItem.getId(), sourceItem.getQuantity(), sourceItem.getWeightTon())));
+        when(purchaseItemQueryAppService.findSourcePurchaseOrderItemsByIds(List.of(201L))).thenReturn(List.of(
+                sourcePurchaseOrderRecord(sourceItem.getId(), sourceItem.getQuantity(), sourceItem.getWeightTon(),
+                        "M1", "宝钢", "螺纹钢", "HRB400", "18", "吨", "一号库", "B1")));
         when(salesOrderItemRepository.summarizeAllocatedQuantityBySourcePurchaseOrderItemIds(eq(List.of(201L)), any()))
                 .thenReturn(List.of(allocationSummary));
         when(repository.saveAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));
@@ -1132,7 +1136,8 @@ class SalesOrderServiceTest {
         when(purchaseItemQueryAppService.findSourceInboundItemsByIds(List.of(101L))).thenReturn(
                 List.of(sourceInboundRecord(101L, "一号库", 10)));
         when(purchaseItemQueryAppService.findSourcePurchaseOrderItemsByIds(List.of(201L))).thenReturn(
-                List.of(sourcePurchaseOrderRecord(201L, 10, new BigDecimal("1.500"))));
+                List.of(sourcePurchaseOrderRecord(201L, 10, new BigDecimal("1.500"),
+                        "M2", "沙钢", "螺纹钢", "HRB400", "16", "吨", "二号库", "B2")));
         when(salesOrderItemRepository.summarizeAllocatedQuantityBySourceInboundItemIds(eq(List.of(101L)), any()))
                 .thenReturn(List.of());
         when(salesOrderItemRepository.summarizeAllocatedQuantityBySourcePurchaseOrderItemIds(eq(List.of(201L)), any()))
@@ -1249,8 +1254,8 @@ class SalesOrderServiceTest {
         when(warehouseSelectionSupport.normalizeWarehouseName("一号库", 1, true)).thenReturn("一号库");
         when(purchaseItemQueryAppService.findSourceInboundItemsByIds(List.of(401L))).thenReturn(
                 List.of(new PurchaseItemQueryAppService.SourceInboundItemRecord(
-                        401L, null, null, 10, new BigDecimal("9.876"),
-                        null, null, null, null, null, null, "一号库", null)));
+                        401L, null, StatusConstants.AUDITED, null, 10, new BigDecimal("9.876"),
+                        "宝钢", "HRB400", "8", "M1", "盘螺", "吨", "一号库", "B1")));
         when(salesOrderItemRepository.summarizeAllocatedQuantityBySourceInboundItemIds(eq(List.of(401L)), any()))
                 .thenReturn(List.of());
         when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
@@ -1357,16 +1362,47 @@ class SalesOrderServiceTest {
 
     private PurchaseItemQueryAppService.SourceInboundItemRecord sourceInboundRecord(
             Long id, String warehouseName, Integer quantity) {
+        return sourceInboundRecord(id, warehouseName, quantity,
+                "M1", "宝钢", "盘螺", "HRB400", "8", "吨", "B1");
+    }
+
+    private PurchaseItemQueryAppService.SourceInboundItemRecord sourceInboundRecord(
+            Long id,
+            String warehouseName,
+            Integer quantity,
+            String materialCode,
+            String brand,
+            String category,
+            String material,
+            String spec,
+            String unit,
+            String batchNo) {
         return new PurchaseItemQueryAppService.SourceInboundItemRecord(
-                id, null, null, quantity, null,
-                null, null, null, null, null, null, warehouseName, null);
+                id, null, StatusConstants.AUDITED, null, quantity, null,
+                brand, material, spec, materialCode, category, unit, warehouseName, batchNo);
     }
 
     private PurchaseItemQueryAppService.SourcePurchaseOrderItemRecord sourcePurchaseOrderRecord(
             Long id, Integer quantity, java.math.BigDecimal weightTon) {
+        return sourcePurchaseOrderRecord(id, quantity, weightTon,
+                "M1", "宝钢", "盘螺", "HRB400", "8", "吨", "一号库", "B1");
+    }
+
+    private PurchaseItemQueryAppService.SourcePurchaseOrderItemRecord sourcePurchaseOrderRecord(
+            Long id,
+            Integer quantity,
+            java.math.BigDecimal weightTon,
+            String materialCode,
+            String brand,
+            String category,
+            String material,
+            String spec,
+            String unit,
+            String warehouseName,
+            String batchNo) {
         return new PurchaseItemQueryAppService.SourcePurchaseOrderItemRecord(
-                id, quantity, weightTon, null,
-                null, null, null, null, null, null, null, null);
+                id, quantity, weightTon, null, StatusConstants.AUDITED,
+                brand, material, spec, materialCode, category, unit, warehouseName, batchNo);
     }
 
     private com.leo.erp.sales.order.domain.entity.SalesOrder auditedSalesOrder(

@@ -70,6 +70,7 @@ class AttachmentControllerTest {
 
         assertThat(response.getStatusCode().is2xxSuccessful()).isTrue();
         assertThat(response.getBody()).isEqualTo(resource);
+        verify(attachmentRecordAccessService).assertAttachmentAccessible(principal, "read", 1L);
     }
 
     @Test
@@ -88,6 +89,7 @@ class AttachmentControllerTest {
 
         assertThat(response.getStatusCode().is2xxSuccessful()).isTrue();
         assertThat(response.getBody()).isEqualTo(resource);
+        verify(attachmentRecordAccessService).assertAttachmentAccessible(principal, "read", 1L);
     }
 
     @Test

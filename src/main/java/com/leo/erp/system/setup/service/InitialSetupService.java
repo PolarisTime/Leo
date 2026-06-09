@@ -33,10 +33,12 @@ import com.leo.erp.system.setup.web.dto.InitialSetupSubmitResponse;
 import com.leo.erp.system.setup.web.dto.InitialSetupTotpSetupRequest;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.util.Base64;
 
 @Service
@@ -46,6 +48,8 @@ public class InitialSetupService {
     private static final String DEFAULT_ADMIN_SCOPE = "全部数据";
     private static final String DEFAULT_COMPANY_STATUS = StatusConstants.NORMAL;
     private static final String SETUP_REMARK = "网页首次初始化创建";
+    private static final String OOBE_TOTP_SECRET_PREFIX = "setup:admin:totp:";
+    private static final Duration OOBE_TOTP_SECRET_TTL = Duration.ofMinutes(10);
 
     private final UserAccountRepository userAccountRepository;
     private final UserRoleRepository userRoleRepository;
@@ -58,6 +62,7 @@ public class InitialSetupService {
     private final SnowflakeIdGenerator snowflakeIdGenerator;
     private final ObjectMapper objectMapper;
     private final TotpService totpService;
+    private final StringRedisTemplate redisTemplate;
 
     public InitialSetupService(UserAccountRepository userAccountRepository,
                                UserRoleRepository userRoleRepository,
@@ -69,7 +74,8 @@ public class InitialSetupService {
                                PasswordEncoder passwordEncoder,
                                SnowflakeIdGenerator snowflakeIdGenerator,
                                ObjectMapper objectMapper,
-                               TotpService totpService) {
+                               TotpService totpService,
+                               StringRedisTemplate redisTemplate) {
         this.userAccountRepository = userAccountRepository;
         this.userRoleRepository = userRoleRepository;
         this.userRoleBindingService = userRoleBindingService;
@@ -81,6 +87,7 @@ public class InitialSetupService {
         this.snowflakeIdGenerator = snowflakeIdGenerator;
         this.objectMapper = objectMapper;
         this.totpService = totpService;
+        this.redisTemplate = redisTemplate;
     }
 
     @Transactional(readOnly = true)
@@ -93,7 +100,7 @@ public class InitialSetupService {
     }
 
     @Transactional
-    public InitialSetupSubmitResponse initialize(InitialSetupSubmitRequest request) {
+    public synchronized InitialSetupSubmitResponse initialize(InitialSetupSubmitRequest request) {
         assertOobeNotCompleted();
         boolean adminConfigured = isAdminConfigured();
         boolean companyConfigured = companySettingRepository.existsByDeletedFlagFalse();
@@ -106,6 +113,7 @@ public class InitialSetupService {
 
         if (!adminConfigured) {
             InitialSetupAdminSubmitRequest adminRequest = request == null ? null : request.admin();
+            assertAdminNotConfigured();
             adminLoginName = createAdmin(adminRequest);
         } else {
             adminLoginName = resolveExistingAdminLoginName();
@@ -135,6 +143,7 @@ public class InitialSetupService {
         }
         String loginName = requireText(request == null ? null : request.loginName(), "管理员登录账号不能为空");
         String secret = totpService.generateSecret();
+        cacheAdminTotpSecret(loginName, secret);
         byte[] qrCode = totpService.generateQrCodeImage(secret, loginName);
         return new TotpSetupResponse(Base64.getEncoder().encodeToString(qrCode), secret);
     }
@@ -145,6 +154,7 @@ public class InitialSetupService {
         if (isAdminConfigured()) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "管理员账号已完成初始化");
         }
+        assertAdminNotConfigured();
         return new InitialSetupSubmitResponse(createAdmin(request), null);
     }
 
@@ -167,6 +177,12 @@ public class InitialSetupService {
     private void assertOobeNotCompleted() {
         if (!isSetupRequired()) {
             throw new BusinessException(ErrorCode.FORBIDDEN, "系统已完成初始化，该接口已禁用");
+        }
+    }
+
+    private void assertAdminNotConfigured() {
+        if (isAdminConfigured()) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "管理员账号已完成初始化");
         }
     }
 
@@ -196,11 +212,11 @@ public class InitialSetupService {
         String password = requireText(request.admin().password(), "管理员密码不能为空");
         String userName = requireText(request.admin().userName(), "管理员姓名不能为空");
         String mobile = trimToEmpty(request.admin().mobile());
-        String totpSecret = requireText(request.totpSecret(), "请先生成并绑定管理员 2FA");
         String totpCode = requireText(request.totpCode(), "请输入管理员 2FA 验证码");
         if (password.length() < 8) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "管理员密码至少8位");
         }
+        String totpSecret = resolveCachedAdminTotpSecret(loginName);
         if (!totpService.verifyCode(totpSecret, totpCode)) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "管理员 2FA 验证码不正确");
         }
@@ -240,9 +256,34 @@ public class InitialSetupService {
         try {
             userAccountRepository.saveAndFlush(admin);
             userRoleBindingService.replaceUserRoles(admin.getId(), java.util.List.of(adminRole));
+            evictCachedAdminTotpSecret(loginName);
             return admin.getLoginName();
         } catch (DataIntegrityViolationException ex) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "管理员登录账号已存在");
+        }
+    }
+
+    private void cacheAdminTotpSecret(String loginName, String secret) {
+        if (redisTemplate == null) {
+            return;
+        }
+        redisTemplate.opsForValue().set(OOBE_TOTP_SECRET_PREFIX + loginName, secret, OOBE_TOTP_SECRET_TTL);
+    }
+
+    private String resolveCachedAdminTotpSecret(String loginName) {
+        if (redisTemplate == null) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "请先生成并绑定管理员 2FA");
+        }
+        String secret = redisTemplate.opsForValue().get(OOBE_TOTP_SECRET_PREFIX + loginName);
+        if (secret == null || secret.isBlank()) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "请先生成并绑定管理员 2FA");
+        }
+        return secret;
+    }
+
+    private void evictCachedAdminTotpSecret(String loginName) {
+        if (redisTemplate != null) {
+            redisTemplate.delete(OOBE_TOTP_SECRET_PREFIX + loginName);
         }
     }
 

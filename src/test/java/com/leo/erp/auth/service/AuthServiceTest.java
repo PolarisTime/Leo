@@ -297,7 +297,8 @@ class AuthServiceTest {
                 redisTemplate != null ? redisTemplate : stringRedisTemplate(),
                 tokenIssuance,
                 operationLogService(loggedCommands),
-                systemSwitchService(true)
+                systemSwitchService(true),
+                captchaService()
         );
     }
 
@@ -523,6 +524,9 @@ class AuthServiceTest {
         return new SystemSwitchService(null) {
             @Override
             public boolean shouldRecordAuthenticationOperationLogs() { return enabled; }
+
+            @Override
+            public boolean shouldRequireLoginCaptcha() { return false; }
         };
     }
 
@@ -642,7 +646,8 @@ class AuthServiceTest {
                 tokenIssuanceServiceStub(userRepo, loginRefreshTokenSessionRepository(),
                         blacklistService(new ArrayList<>(), new AtomicBoolean(false)), null),
                 operationLogService(new ArrayList<>()),
-                systemSwitchService(true)
+                systemSwitchService(true),
+                captchaService()
         );
 
         org.assertj.core.api.Assertions.assertThatThrownBy(() ->

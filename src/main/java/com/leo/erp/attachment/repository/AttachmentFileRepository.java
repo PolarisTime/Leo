@@ -12,4 +12,6 @@ public interface AttachmentFileRepository extends JpaRepository<AttachmentFile, 
     Optional<AttachmentFile> findByIdAndDeletedFlagFalse(Long id);
 
     List<AttachmentFile> findAllByIdInAndDeletedFlagFalse(Collection<Long> ids);
+
+    List<AttachmentFile> findAllByIdInAndCreatedByAndDeletedFlagFalse(Collection<Long> ids, Long createdBy);
 }

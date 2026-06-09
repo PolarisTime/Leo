@@ -61,6 +61,13 @@ public final class StatusConstants {
             DRAFT + "->" + AUDITED,
             AUDITED + "->" + DRAFT
     );
+    public static final Set<String> CONTRACT_TRANSITIONS = Set.of(
+            DRAFT + "->" + EXECUTING,
+            EXECUTING + "->" + DRAFT,
+            EXECUTING + "->" + SIGNED,
+            SIGNED + "->" + EXECUTING,
+            SIGNED + "->" + ARCHIVED
+    );
     public static final Set<String> STATEMENT_CONFIRM_TRANSITIONS = Set.of(
             PENDING_CONFIRM + "->" + CONFIRMED,
             CONFIRMED + "->" + PENDING_CONFIRM

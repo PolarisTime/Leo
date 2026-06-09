@@ -601,29 +601,81 @@ public class PurchaseInboundService extends AbstractCrudService<
                         )
                 ));
 
-        // Check each order item against pre-computed map with tolerance
         boolean allFulfilled = purchaseOrder.getItems().stream().allMatch(item -> {
             int expected = item.getQuantity() != null ? item.getQuantity() : 0;
             int actual = receivedQtyByItemId.getOrDefault(item.getId(), 0);
-
-            // Zero-quantity items: must match exactly
-            if (expected == 0) {
-                return actual == 0;
-            }
-
-            // Calculate fulfillment ratio with tolerance
-            BigDecimal ratio = BigDecimal.valueOf(actual)
-                    .divide(BigDecimal.valueOf(expected), 4, RoundingMode.HALF_UP);
-            BigDecimal lowerBound = BigDecimal.ONE.subtract(FULFILLMENT_TOLERANCE);
-            BigDecimal upperBound = BigDecimal.ONE.add(FULFILLMENT_TOLERANCE);
-
-            return ratio.compareTo(lowerBound) >= 0
-                    && ratio.compareTo(upperBound) <= 0;
+            return quantityWithinTolerance(expected, actual);
         });
 
         if (allFulfilled) {
             purchaseOrder.setStatus(StatusConstants.PURCHASE_COMPLETED);
         }
+    }
+
+    private boolean shouldCompleteInbound(PurchaseInbound inbound) {
+        if (!StatusConstants.AUDITED.equals(inbound.getStatus())) {
+            return false;
+        }
+        List<Long> sourcePurchaseOrderItemIds = inbound.getItems().stream()
+                .map(PurchaseInboundItem::getSourcePurchaseOrderItemId)
+                .filter(id -> id != null)
+                .distinct()
+                .toList();
+        if (sourcePurchaseOrderItemIds.isEmpty()) {
+            return false;
+        }
+        Map<Long, PurchaseOrderItem> sourcePurchaseOrderItemMap =
+                loadSourcePurchaseOrderItemMap(sourcePurchaseOrderItemIds);
+        if (sourcePurchaseOrderItemMap.isEmpty()) {
+            return false;
+        }
+        Map<Long, Integer> allocatedQuantityMap = loadAllocatedQuantityMap(
+                sourcePurchaseOrderItemIds,
+                inbound.getId()
+        );
+        Map<Long, Integer> currentInboundQuantityMap = inbound.getItems().stream()
+                .filter(item -> item.getSourcePurchaseOrderItemId() != null)
+                .collect(Collectors.groupingBy(
+                        PurchaseInboundItem::getSourcePurchaseOrderItemId,
+                        Collectors.summingInt(item -> item.getQuantity() != null ? item.getQuantity() : 0)
+                ));
+        return sourcePurchaseOrderItemIds.stream().allMatch(sourceItemId -> {
+            PurchaseOrderItem sourceItem = sourcePurchaseOrderItemMap.get(sourceItemId);
+            if (sourceItem == null) {
+                return false;
+            }
+            int expected = sourceItem.getQuantity() != null ? sourceItem.getQuantity() : 0;
+            int actual = allocatedQuantityMap.getOrDefault(sourceItemId, 0)
+                    + currentInboundQuantityMap.getOrDefault(sourceItemId, 0);
+            return quantityWithinTolerance(expected, actual);
+        });
+    }
+
+    private void completeSourcePurchaseOrders(PurchaseInbound inbound) {
+        List<Long> sourcePurchaseOrderItemIds = inbound.getItems().stream()
+                .map(PurchaseInboundItem::getSourcePurchaseOrderItemId)
+                .filter(id -> id != null)
+                .distinct()
+                .toList();
+        if (sourcePurchaseOrderItemIds.isEmpty()) {
+            return;
+        }
+        loadSourcePurchaseOrderItemMap(sourcePurchaseOrderItemIds).values().stream()
+                .map(PurchaseOrderItem::getPurchaseOrder)
+                .filter(order -> order != null)
+                .distinct()
+                .forEach(this::maybeCompletePurchaseOrder);
+    }
+
+    private boolean quantityWithinTolerance(int expected, int actual) {
+        if (expected == 0) {
+            return actual == 0;
+        }
+        BigDecimal ratio = BigDecimal.valueOf(actual)
+                .divide(BigDecimal.valueOf(expected), 4, RoundingMode.HALF_UP);
+        BigDecimal lowerBound = BigDecimal.ONE.subtract(FULFILLMENT_TOLERANCE);
+        BigDecimal upperBound = BigDecimal.ONE.add(FULFILLMENT_TOLERANCE);
+        return ratio.compareTo(lowerBound) >= 0 && ratio.compareTo(upperBound) <= 0;
     }
 
     private void refreshPurchaseOrderTotals(PurchaseOrder purchaseOrder) {
@@ -889,13 +941,6 @@ public class PurchaseInboundService extends AbstractCrudService<
                 fallbackSourcePieceWeightMap,
                 sourcePurchaseOrderItemMap
         );
-        if (StatusConstants.INBOUND_COMPLETED.equals(nextStatus)) {
-            sourcePurchaseOrderItemMap.values().stream()
-                    .map(PurchaseOrderItem::getPurchaseOrder)
-                    .filter(order -> order != null)
-                    .distinct()
-                    .forEach(this::maybeCompletePurchaseOrder);
-        }
     }
 
     @Override
@@ -921,6 +966,19 @@ public class PurchaseInboundService extends AbstractCrudService<
     @Override
     protected PurchaseInbound saveEntity(PurchaseInbound entity) {
         return repository.save(entity);
+    }
+
+    @Override
+    protected PurchaseInbound saveUpdatedEntity(PurchaseInbound entity, PurchaseInboundRequest request) {
+        boolean completedByServer = shouldCompleteInbound(entity);
+        if (completedByServer) {
+            entity.setStatus(StatusConstants.INBOUND_COMPLETED);
+        }
+        PurchaseInbound saved = saveEntity(entity);
+        if (completedByServer) {
+            completeSourcePurchaseOrders(saved);
+        }
+        return saved;
     }
 
     @Override

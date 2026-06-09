@@ -1,6 +1,8 @@
 package com.leo.erp.auth.web.support;
 
 import com.leo.erp.auth.config.AuthCookieProperties;
+import com.leo.erp.common.error.BusinessException;
+import com.leo.erp.common.error.ErrorCode;
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -42,9 +44,17 @@ public class AuthTokenCookieSupport {
     }
 
     public String resolveRefreshToken(HttpServletRequest request, String fallbackToken) {
-        if (fallbackToken != null && !fallbackToken.isBlank()) {
-            return fallbackToken;
+        String cookieToken = resolveCookieRefreshToken(request);
+        if (cookieToken != null) {
+            if (fallbackToken != null && !fallbackToken.isBlank() && !cookieToken.equals(fallbackToken)) {
+                throw new BusinessException(ErrorCode.FORBIDDEN, "刷新令牌来源不一致，请重新登录");
+            }
+            return cookieToken;
         }
+        return fallbackToken == null || fallbackToken.isBlank() ? null : fallbackToken;
+    }
+
+    private String resolveCookieRefreshToken(HttpServletRequest request) {
         Cookie[] cookies = request.getCookies();
         if (cookies == null) {
             return null;

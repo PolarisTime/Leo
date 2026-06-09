@@ -5,10 +5,18 @@ import com.itextpdf.forms.PdfAcroForm;
 import com.itextpdf.kernel.pdf.PdfDocument;
 import com.itextpdf.kernel.pdf.PdfReader;
 import com.itextpdf.kernel.pdf.canvas.parser.PdfTextExtractor;
+import com.leo.erp.attachment.service.AttachmentRecordAccessService;
+import com.leo.erp.common.error.BusinessException;
+import com.leo.erp.common.error.ErrorCode;
+import com.leo.erp.security.support.SecurityPrincipal;
 import com.leo.erp.system.printtemplate.domain.entity.PrintTemplate;
 import com.leo.erp.system.printtemplate.repository.PrintTemplateRepository;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
@@ -25,9 +33,24 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class PrintScriptServiceTest {
+
+    @BeforeEach
+    void setUp() {
+        SecurityPrincipal principal = SecurityPrincipal.authenticated(1L, "tester", List.of());
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken(principal, null, principal.getAuthorities())
+        );
+    }
+
+    @AfterEach
+    void tearDown() {
+        SecurityContextHolder.clearContext();
+    }
 
     @Test
     void shouldEnrichSalesOutboundPrintDataWithCurrentFields() {
@@ -256,12 +279,34 @@ class PrintScriptServiceTest {
         assertThat(result.get("templateHtml").toString()).contains("单据备注：无    |    合计件数：2件");
     }
 
+    @Test
+    void shouldCheckRecordAccessBeforeLoadingPrintData() {
+        JdbcTemplate jdbc = mock(JdbcTemplate.class);
+        AttachmentRecordAccessService accessService = mock(AttachmentRecordAccessService.class);
+        PrintScriptService service = printScriptService(repository("sales-order"), jdbc, accessService);
+        org.mockito.Mockito.doThrow(new BusinessException(ErrorCode.FORBIDDEN, "无数据权限"))
+                .when(accessService).assertRecordAccessible(org.mockito.ArgumentMatchers.any(), eq("sales-order"), eq("read"), eq(1L));
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.generateFromRecord("1", "sales-order", 1L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("无数据权限");
+        verify(jdbc, never()).queryForMap(anyString(), eq(1L));
+    }
+
     private PrintTemplateRepository repository(String billType) {
         return repository(billType, "COORD", "LODOP.PRINT_INIT('模板');");
     }
 
     private PrintScriptService printScriptService(PrintTemplateRepository repository, JdbcTemplate jdbc) {
-        return new PrintScriptService(repository, jdbc, new PrintLayoutLodopRenderer(new ObjectMapper()));
+        return printScriptService(repository, jdbc, mock(AttachmentRecordAccessService.class));
+    }
+
+    private PrintScriptService printScriptService(
+            PrintTemplateRepository repository,
+            JdbcTemplate jdbc,
+            AttachmentRecordAccessService accessService
+    ) {
+        return new PrintScriptService(repository, jdbc, new PrintLayoutLodopRenderer(new ObjectMapper()), accessService);
     }
 
     private PrintTemplateRepository repository(String billType, String templateType, String templateHtml) {

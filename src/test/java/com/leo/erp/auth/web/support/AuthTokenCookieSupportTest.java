@@ -1,6 +1,7 @@
 package com.leo.erp.auth.web.support;
 
 import com.leo.erp.auth.config.AuthCookieProperties;
+import com.leo.erp.common.error.BusinessException;
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -15,6 +16,7 @@ import org.springframework.http.HttpHeaders;
 import java.time.Duration;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -72,9 +74,32 @@ class AuthTokenCookieSupportTest {
     }
 
     @Test
-    void shouldResolveRefreshTokenFromFallback() {
+    void shouldResolveRefreshTokenFromFallbackWhenCookieMissing() {
+        when(request.getCookies()).thenReturn(null);
+
         String result = authTokenCookieSupport.resolveRefreshToken(request, "fallback-token");
         assertThat(result).isEqualTo("fallback-token");
+    }
+
+    @Test
+    void shouldResolveRefreshTokenFromCookieWhenFallbackMatches() {
+        when(cookieProperties.refreshTokenName()).thenReturn("refresh_token");
+        Cookie cookie = new Cookie("refresh_token", "same-token");
+        when(request.getCookies()).thenReturn(new Cookie[]{cookie});
+
+        String result = authTokenCookieSupport.resolveRefreshToken(request, "same-token");
+        assertThat(result).isEqualTo("same-token");
+    }
+
+    @Test
+    void shouldRejectRefreshTokenWhenCookieAndFallbackConflict() {
+        when(cookieProperties.refreshTokenName()).thenReturn("refresh_token");
+        Cookie cookie = new Cookie("refresh_token", "cookie-token");
+        when(request.getCookies()).thenReturn(new Cookie[]{cookie});
+
+        assertThatThrownBy(() -> authTokenCookieSupport.resolveRefreshToken(request, "body-token"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("刷新令牌来源不一致");
     }
 
     @Test

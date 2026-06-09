@@ -18,18 +18,24 @@ import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.support.PrecisionConstants;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
+import com.leo.erp.security.permission.PermissionService;
 import com.leo.erp.security.permission.ResourcePermissionCatalog;
+import com.leo.erp.security.support.SecurityPrincipal;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.domain.Page;
 import org.springframework.data.jpa.domain.Specification;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.security.SecureRandom;
 import java.time.LocalDateTime;
 import java.util.Base64;
+import java.util.Collection;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -44,27 +50,37 @@ public class ApiKeyAdminService {
             EXPIRED_STATUS,
             ApiKeyStatus.DISABLED.displayName()
     );
+    private static final String ROLE_ADMIN = "ROLE_ADMIN";
     private static final long MAX_EXPIRE_DAYS = 3650L;
 
     private final ApiKeyRepository apiKeyRepository;
     private final UserAccountRepository userAccountRepository;
     private final SnowflakeIdGenerator idGenerator;
+    private final PermissionService permissionService;
 
     public ApiKeyAdminService(ApiKeyRepository apiKeyRepository,
                               UserAccountRepository userAccountRepository,
-                              SnowflakeIdGenerator idGenerator) {
+                              SnowflakeIdGenerator idGenerator,
+                              PermissionService permissionService) {
         this.apiKeyRepository = apiKeyRepository;
         this.userAccountRepository = userAccountRepository;
         this.idGenerator = idGenerator;
+        this.permissionService = permissionService;
     }
 
     @Transactional(readOnly = true)
     public Page<ApiKeyResponse> page(PageQuery query, String keyword, Long userId, String status, String usageScope) {
+        SecurityPrincipal operator = currentPrincipal();
+        boolean adminOperator = isAdmin(operator);
         Specification<ApiKey> spec = Specs.<ApiKey>notDeleted()
                 .and(Specs.keywordLike(keyword, "keyName", "keyPrefix"));
-        if (userId != null) {
+        if (userId != null && !adminOperator && !operator.id().equals(userId)) {
+            throw new BusinessException(ErrorCode.FORBIDDEN, "只能查看自己的 API Key");
+        }
+        Long effectiveUserId = adminOperator ? userId : operator.id();
+        if (effectiveUserId != null) {
             spec = spec.and((root, criteriaQuery, criteriaBuilder) ->
-                    criteriaBuilder.equal(root.get("userId"), userId));
+                    criteriaBuilder.equal(root.get("userId"), effectiveUserId));
         }
         if (status != null && !status.isBlank()) {
             spec = spec.and(buildStatusSpec(status));
@@ -84,6 +100,7 @@ public class ApiKeyAdminService {
     @Transactional(readOnly = true)
     public ApiKeyResponse detail(Long id) {
         ApiKey entity = getEntity(id);
+        assertCurrentPrincipalCanManageApiKey(entity, "只能查看自己的 API Key");
         Map<Long, UserAccount> userMap = loadUserMap(List.of(entity));
         return toResponse(entity, userMap, null);
     }
@@ -128,6 +145,12 @@ public class ApiKeyAdminService {
 
     @Transactional
     public ApiKeyResponse generate(Long userId, ApiKeyRequest request) {
+        SecurityPrincipal operator = currentPrincipal();
+        boolean adminOperator = isAdmin(operator);
+        if (!adminOperator && !operator.id().equals(userId)) {
+            throw new BusinessException(ErrorCode.FORBIDDEN, "只能为当前登录用户生成 API Key");
+        }
+
         UserAccount user = userAccountRepository.findByIdAndDeletedFlagFalse(userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "目标用户不存在"));
         if (user.getStatus() != UserStatus.NORMAL) {
@@ -135,6 +158,12 @@ public class ApiKeyAdminService {
         }
         if (!Boolean.TRUE.equals(user.getTotpEnabled()) || user.getTotpSecret() == null || user.getTotpSecret().isBlank()) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "目标用户未启用2FA，不能生成 API Key");
+        }
+        List<String> allowedResources = normalizeAllowedResourceList(request.allowedResources());
+        List<String> allowedActions = normalizeAllowedActionList(request.allowedActions());
+        ensurePermissionUpperBound(userId, allowedResources, allowedActions, "目标用户权限不足，不能生成包含该资源或动作的 API Key");
+        if (!operator.id().equals(userId)) {
+            ensurePermissionUpperBound(operator.id(), allowedResources, allowedActions, "当前操作者权限不足，不能生成包含该资源或动作的 API Key");
         }
 
         String rawKey = "leo_" + Base64.getUrlEncoder().withoutPadding().encodeToString(
@@ -147,8 +176,8 @@ public class ApiKeyAdminService {
         entity.setUserId(userId);
         entity.setKeyName(normalizeKeyName(request.keyName()));
         entity.setUsageScope(normalizeUsageScope(request.usageScope()));
-        entity.setAllowedResources(normalizeAllowedResources(request.allowedResources()));
-        entity.setAllowedActions(normalizeAllowedActions(request.allowedActions()));
+        entity.setAllowedResources(ApiKeySupport.joinAllowedResources(allowedResources));
+        entity.setAllowedActions(ApiKeySupport.joinAllowedActions(allowedActions));
         entity.setKeyPrefix(keyPrefix);
         entity.setKeyHash(keyHash);
         entity.setStatus(ApiKeyStatus.ACTIVE);
@@ -166,6 +195,7 @@ public class ApiKeyAdminService {
     @Transactional
     public void revoke(Long id) {
         ApiKey entity = getEntity(id);
+        assertCurrentPrincipalCanManageApiKey(entity, "只能禁用自己的 API Key");
         String displayStatus = resolveStatus(entity);
         if (ApiKeyStatus.DISABLED.displayName().equals(displayStatus)) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "API Key 已被禁用");
@@ -288,7 +318,7 @@ public class ApiKeyAdminService {
 
     private String normalizeAllowedResources(List<String> allowedResources) {
         try {
-            return ApiKeySupport.joinAllowedResources(ApiKeySupport.normalizeAllowedResources(allowedResources));
+            return ApiKeySupport.joinAllowedResources(normalizeAllowedResourceList(allowedResources));
         } catch (IllegalArgumentException ex) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, ex.getMessage());
         }
@@ -296,14 +326,67 @@ public class ApiKeyAdminService {
 
     private String normalizeAllowedActions(List<String> allowedActions) {
         try {
-            List<String> normalized = ApiKeySupport.normalizeAllowedActions(allowedActions);
-            if (normalized.isEmpty()) {
-                throw new BusinessException(ErrorCode.VALIDATION_ERROR, "API Key 允许动作不能为空");
-            }
-            return ApiKeySupport.joinAllowedActions(normalized);
+            return ApiKeySupport.joinAllowedActions(normalizeAllowedActionList(allowedActions));
         } catch (IllegalArgumentException ex) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, ex.getMessage());
         }
+    }
+
+    private List<String> normalizeAllowedResourceList(List<String> allowedResources) {
+        try {
+            return ApiKeySupport.normalizeAllowedResources(allowedResources);
+        } catch (IllegalArgumentException ex) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, ex.getMessage());
+        }
+    }
+
+    private List<String> normalizeAllowedActionList(List<String> allowedActions) {
+        try {
+            return ApiKeySupport.normalizeAllowedActions(allowedActions);
+        } catch (IllegalArgumentException ex) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, ex.getMessage());
+        }
+    }
+
+    private void ensurePermissionUpperBound(Long userId,
+                                            List<String> allowedResources,
+                                            List<String> allowedActions,
+                                            String message) {
+        Map<String, Set<String>> permissionMap = permissionService.getUserPermissionMap(userId);
+        for (String resource : allowedResources) {
+            Set<String> userActions = permissionMap.get(resource);
+            if (userActions == null || userActions.isEmpty()) {
+                throw new BusinessException(ErrorCode.FORBIDDEN, message);
+            }
+            for (String action : allowedActions) {
+                if (!ResourcePermissionCatalog.isAllowed(resource, action) || !userActions.contains(action)) {
+                    throw new BusinessException(ErrorCode.FORBIDDEN, message);
+                }
+            }
+        }
+    }
+
+    private SecurityPrincipal currentPrincipal() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || !(authentication.getPrincipal() instanceof SecurityPrincipal principal)) {
+            throw new BusinessException(ErrorCode.UNAUTHORIZED, "未登录");
+        }
+        return principal;
+    }
+
+    private void assertCurrentPrincipalCanManageApiKey(ApiKey entity, String message) {
+        SecurityPrincipal operator = currentPrincipal();
+        if (!isAdmin(operator) && !operator.id().equals(entity.getUserId())) {
+            throw new BusinessException(ErrorCode.FORBIDDEN, message);
+        }
+    }
+
+    private boolean isAdmin(SecurityPrincipal principal) {
+        return principal.getAuthorities().stream()
+                .map(authority -> authority.getAuthority())
+                .filter(authority -> authority != null)
+                .map(authority -> authority.trim().toUpperCase(Locale.ROOT))
+                .anyMatch(ROLE_ADMIN::equals);
     }
 
     private String normalizeUsageScope(String usageScope) {

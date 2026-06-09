@@ -142,6 +142,26 @@ class AccountSecurityServiceTest {
     }
 
     @Test
+    void shouldRejectSetup2faWhenAlreadyEnabled() {
+        UserAccount account = user(1L, "leo", "encoded:pass");
+        account.setTotpSecret("encrypted-secret");
+        account.setTotpEnabled(Boolean.TRUE);
+
+        AccountSecurityService service = new AccountSecurityService(
+                repository(account, new AtomicReference<>()),
+                new StubPasswordEncoder(),
+                new StubTotpService(),
+                authenticatedUserCacheService(),
+                null,
+                null
+        );
+
+        assertThatThrownBy(() -> service.setup2fa(1L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("2FA 已启用");
+    }
+
+    @Test
     void shouldEnable2faWhenValidCodeProvided() {
         UserAccount account = user(1L, "leo", "encoded:pass");
         account.setTotpSecret("encrypted-secret");
