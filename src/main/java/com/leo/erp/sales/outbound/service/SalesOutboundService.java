@@ -6,6 +6,7 @@ import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.service.AbstractCrudService;
+import com.leo.erp.common.support.BusinessDocumentValidator;
 import com.leo.erp.common.support.BusinessStatusValidator;
 import com.leo.erp.common.support.ManagedEntityItemSupport;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
@@ -370,14 +371,6 @@ public class SalesOutboundService extends AbstractCrudService<SalesOutbound, Sal
         }
     }
 
-    private String trimToNull(String value) {
-        if (value == null) {
-            return null;
-        }
-        String normalized = value.trim();
-        return normalized.isEmpty() ? null : normalized;
-    }
-
     @Override
     protected SalesOutbound saveEntity(SalesOutbound entity) {
         SalesOutbound saved = repository.save(entity);
@@ -464,19 +457,21 @@ public class SalesOutboundService extends AbstractCrudService<SalesOutbound, Sal
         }
         var sourceSalesOrder = sourceSalesOrderItem.getSalesOrder();
         String sourceStatus = sourceSalesOrder == null ? null : sourceSalesOrder.getStatus();
-        if (!StatusConstants.AUDITED.equals(normalize(sourceStatus))) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行来源销售订单未审核，不能作为来源单据");
-        }
+        BusinessDocumentValidator.requireStatusIn(
+                sourceStatus,
+                java.util.Set.of(StatusConstants.AUDITED),
+                "第" + lineNo + "行来源销售订单未审核，不能作为来源单据"
+        );
         assertSameOrderText(headerCustomerName, sourceSalesOrder == null ? null : sourceSalesOrder.getCustomerName(), lineNo, "客户");
         assertSameOrderText(headerProjectName, sourceSalesOrder == null ? null : sourceSalesOrder.getProjectName(), lineNo, "项目");
-        assertSameText(request.materialCode(), sourceSalesOrderItem.getMaterialCode(), lineNo, "物料编码");
-        assertSameText(request.brand(), sourceSalesOrderItem.getBrand(), lineNo, "品牌");
-        assertSameText(request.category(), sourceSalesOrderItem.getCategory(), lineNo, "品类");
-        assertSameText(request.material(), sourceSalesOrderItem.getMaterial(), lineNo, "材质");
-        assertSameText(request.spec(), sourceSalesOrderItem.getSpec(), lineNo, "规格");
-        assertSameText(request.unit(), sourceSalesOrderItem.getUnit(), lineNo, "单位");
-        assertSameText(warehouseName, sourceSalesOrderItem.getWarehouseName(), lineNo, "仓库");
-        assertSameText(batchNo, sourceSalesOrderItem.getBatchNo(), lineNo, "批号");
+        BusinessDocumentValidator.requireSameSourceText(request.materialCode(), sourceSalesOrderItem.getMaterialCode(), lineNo, "来源销售订单明细", "物料编码");
+        BusinessDocumentValidator.requireSameSourceText(request.brand(), sourceSalesOrderItem.getBrand(), lineNo, "来源销售订单明细", "品牌");
+        BusinessDocumentValidator.requireSameSourceText(request.category(), sourceSalesOrderItem.getCategory(), lineNo, "来源销售订单明细", "品类");
+        BusinessDocumentValidator.requireSameSourceText(request.material(), sourceSalesOrderItem.getMaterial(), lineNo, "来源销售订单明细", "材质");
+        BusinessDocumentValidator.requireSameSourceText(request.spec(), sourceSalesOrderItem.getSpec(), lineNo, "来源销售订单明细", "规格");
+        BusinessDocumentValidator.requireSameSourceText(request.unit(), sourceSalesOrderItem.getUnit(), lineNo, "来源销售订单明细", "单位");
+        BusinessDocumentValidator.requireSameSourceText(warehouseName, sourceSalesOrderItem.getWarehouseName(), lineNo, "来源销售订单明细", "仓库");
+        BusinessDocumentValidator.requireSameSourceText(batchNo, sourceSalesOrderItem.getBatchNo(), lineNo, "来源销售订单明细", "批号");
 
         int currentQuantity = request.quantity() == null ? 0 : request.quantity();
         int requestedQuantity = requestSourceQuantityMap.getOrDefault(sourceSalesOrderItemId, 0);
@@ -490,22 +485,14 @@ public class SalesOutboundService extends AbstractCrudService<SalesOutbound, Sal
         requestSourceQuantityMap.put(sourceSalesOrderItemId, requestedQuantity + currentQuantity);
     }
 
-    private void assertSameText(String requestedValue, String sourceValue, int lineNo, String fieldName) {
-        if (!normalize(requestedValue).equals(normalize(sourceValue))) {
-            throw new BusinessException(
-                    ErrorCode.BUSINESS_ERROR,
-                    "第" + lineNo + "行来源销售订单明细" + fieldName + "与请求不一致"
-            );
-        }
-    }
-
     private void assertSameOrderText(String requestedValue, String sourceValue, int lineNo, String fieldName) {
-        if (!normalize(requestedValue).equals(normalize(sourceValue))) {
-            throw new BusinessException(
-                    ErrorCode.BUSINESS_ERROR,
-                    "第" + lineNo + "行来源销售订单" + fieldName + "与请求不一致"
-            );
-        }
+        BusinessDocumentValidator.requireSameSourceText(
+                requestedValue,
+                sourceValue,
+                lineNo,
+                "来源销售订单",
+                fieldName
+        );
     }
 
     private void collectSourceSalesOrderNos(LinkedHashSet<String> sourceSalesOrderNos,
@@ -537,7 +524,7 @@ public class SalesOutboundService extends AbstractCrudService<SalesOutbound, Sal
         return sourceSalesOrderItem.getSalesOrder().getOrderNo();
     }
 
-    private String normalize(String value) {
-        return value == null ? "" : value.trim();
+    private String trimToNull(String value) {
+        return BusinessDocumentValidator.trimToNull(value);
     }
 }

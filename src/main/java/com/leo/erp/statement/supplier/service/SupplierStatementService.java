@@ -6,6 +6,7 @@ import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.service.AbstractCrudService;
+import com.leo.erp.common.support.BusinessDocumentValidator;
 import com.leo.erp.common.support.BusinessStatusValidator;
 import com.leo.erp.common.support.ManagedEntityItemSupport;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
@@ -378,12 +379,16 @@ public class SupplierStatementService extends AbstractCrudService<SupplierStatem
             PurchaseInbound inbound = item.getPurchaseInbound();
             DataScopeContext.assertCanAccess(inbound);
             requestedInboundNos.add(inbound.getInboundNo());
-            if (!request.supplierName().trim().equals(inbound.getSupplierName())) {
-                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "来源采购入库单存在不同供应商，不能合并生成供应商对账单");
-            }
-            if (!StatusConstants.PURCHASE_COMPLETED.equals(inbound.getStatus())) {
-                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "来源采购入库单" + inbound.getInboundNo() + "未完成采购，不能生成供应商对账单");
-            }
+            BusinessDocumentValidator.requireSameText(
+                    request.supplierName(),
+                    inbound.getSupplierName(),
+                    "来源采购入库单存在不同供应商，不能合并生成供应商对账单"
+            );
+            BusinessDocumentValidator.requireStatusIn(
+                    inbound.getStatus(),
+                    Set.of(StatusConstants.PURCHASE_COMPLETED),
+                    "来源采购入库单" + inbound.getInboundNo() + "未完成采购，不能生成供应商对账单"
+            );
         }
         if (requestedInboundNos.isEmpty()) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "供应商对账单来源采购入库单不能为空");
@@ -451,10 +456,7 @@ public class SupplierStatementService extends AbstractCrudService<SupplierStatem
     }
 
     private String trimToNull(String value) {
-        if (value == null || value.isBlank()) {
-            return null;
-        }
-        return value.trim();
+        return BusinessDocumentValidator.trimToNull(value);
     }
 
     private SupplierStatementCandidateResponse toCandidateResponse(PurchaseInbound inbound) {

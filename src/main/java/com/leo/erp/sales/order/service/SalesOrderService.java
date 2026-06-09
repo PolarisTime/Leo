@@ -6,6 +6,7 @@ import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.service.AbstractCrudService;
+import com.leo.erp.common.support.BusinessDocumentValidator;
 import com.leo.erp.common.support.ManagedEntityItemSupport;
 import com.leo.erp.common.support.PrecisionConstants;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
@@ -613,12 +614,11 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
     }
 
     private void assertSourceParentStatus(String actualStatus, String requiredStatus, int lineNo, String sourceName) {
-        if (!requiredStatus.equals(normalize(actualStatus))) {
-            throw new BusinessException(
-                    ErrorCode.BUSINESS_ERROR,
-                    "第" + lineNo + "行" + sourceName + "未审核，不能作为来源单据"
-            );
-        }
+        BusinessDocumentValidator.requireStatusIn(
+                actualStatus,
+                java.util.Set.of(requiredStatus),
+                "第" + lineNo + "行" + sourceName + "未审核，不能作为来源单据"
+        );
     }
 
     private void assertSourceFieldsMatch(SalesOrderItemRequest request,
@@ -654,12 +654,13 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
                                 int lineNo,
                                 String sourceName,
                                 String fieldName) {
-        if (!normalize(requestedValue).equals(normalize(sourceValue))) {
-            throw new BusinessException(
-                    ErrorCode.BUSINESS_ERROR,
-                    "第" + lineNo + "行" + sourceName + fieldName + "与请求不一致"
-            );
-        }
+        BusinessDocumentValidator.requireSameSourceText(
+                requestedValue,
+                sourceValue,
+                lineNo,
+                sourceName,
+                fieldName
+        );
     }
 
     private void validateAvailableQuantity(Integer requestedQuantityValue,

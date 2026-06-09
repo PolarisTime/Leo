@@ -6,6 +6,7 @@ import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.service.AbstractCrudService;
+import com.leo.erp.common.support.BusinessDocumentValidator;
 import com.leo.erp.common.support.ManagedEntityItemSupport;
 import com.leo.erp.common.support.PrecisionConstants;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
@@ -339,14 +340,6 @@ public class PurchaseInboundService extends AbstractCrudService<
 
     private boolean isPurchaseWeighSettlement(String settlementMode) {
         return "过磅".equals(settlementMode == null ? "" : settlementMode.trim());
-    }
-
-    private String trimToNull(String value) {
-        if (value == null) {
-            return null;
-        }
-        String normalized = value.trim();
-        return normalized.isEmpty() ? null : normalized;
     }
 
     private String resolveLineSettlementMode(
@@ -755,73 +748,79 @@ public class PurchaseInboundService extends AbstractCrudService<
                                                        PurchaseOrderItem sourceItem,
                                                        String headerSupplierName,
                                                        String headerWarehouseName,
-                                                       int lineNo) {
+        int lineNo) {
         PurchaseOrder sourceOrder = sourceItem.getPurchaseOrder();
         String sourceStatus = sourceOrder == null ? null : sourceOrder.getStatus();
-        if (!StatusConstants.AUDITED.equals(normalizeText(sourceStatus))) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行来源采购订单未审核，不能作为来源单据");
-        }
+        BusinessDocumentValidator.requireStatusIn(
+                sourceStatus,
+                Set.of(StatusConstants.AUDITED),
+                "第" + lineNo + "行来源采购订单未审核，不能作为来源单据"
+        );
         assertSourceOrderText(headerSupplierName, sourceOrder == null ? null : sourceOrder.getSupplierName(), lineNo, "供应商");
-        assertSourceText(request.materialCode(), sourceItem.getMaterialCode(), lineNo, "物料编码");
-        assertSourceText(request.brand(), sourceItem.getBrand(), lineNo, "品牌");
-        assertSourceText(request.category(), sourceItem.getCategory(), lineNo, "品类");
-        assertSourceText(request.material(), sourceItem.getMaterial(), lineNo, "材质");
-        assertSourceText(request.spec(), sourceItem.getSpec(), lineNo, "规格");
-        assertSourceText(request.length(), sourceItem.getLength(), lineNo, "长度");
-        assertSourceText(request.unit(), sourceItem.getUnit(), lineNo, "单位");
+        assertSourceItemText(request.materialCode(), sourceItem.getMaterialCode(), lineNo, "物料编码");
+        assertSourceItemText(request.brand(), sourceItem.getBrand(), lineNo, "品牌");
+        assertSourceItemText(request.category(), sourceItem.getCategory(), lineNo, "品类");
+        assertSourceItemText(request.material(), sourceItem.getMaterial(), lineNo, "材质");
+        assertSourceItemText(request.spec(), sourceItem.getSpec(), lineNo, "规格");
+        assertSourceItemText(request.length(), sourceItem.getLength(), lineNo, "长度");
+        assertSourceItemText(request.unit(), sourceItem.getUnit(), lineNo, "单位");
         String requestedWarehouseName = trimToNull(request.warehouseName()) == null
                 ? headerWarehouseName : request.warehouseName();
-        assertSourceText(requestedWarehouseName, sourceItem.getWarehouseName(), lineNo, "仓库");
-        assertSourceText(request.batchNo(), sourceItem.getBatchNo(), lineNo, "批号");
-        assertSourceText(
+        assertSourceItemText(requestedWarehouseName, sourceItem.getWarehouseName(), lineNo, "仓库");
+        assertSourceItemText(request.batchNo(), sourceItem.getBatchNo(), lineNo, "批号");
+        assertSourceItemText(
                 TradeItemCalculator.normalizeQuantityUnit(request.quantityUnit()),
                 TradeItemCalculator.normalizeQuantityUnit(sourceItem.getQuantityUnit()),
                 lineNo,
                 "数量单位"
         );
-        assertSourceDecimal(request.pieceWeightTon(), sourceItem.getPieceWeightTon(), lineNo, "件重");
-        assertSourceInteger(request.piecesPerBundle(), sourceItem.getPiecesPerBundle(), lineNo, "每捆支数");
-        assertSourceDecimal(request.unitPrice(), sourceItem.getUnitPrice(), lineNo, "单价");
+        assertSourceItemDecimal(request.pieceWeightTon(), sourceItem.getPieceWeightTon(), lineNo, "件重");
+        assertSourceItemInteger(request.piecesPerBundle(), sourceItem.getPiecesPerBundle(), lineNo, "每捆支数");
+        assertSourceItemDecimal(request.unitPrice(), sourceItem.getUnitPrice(), lineNo, "单价");
     }
 
     private void assertSourceOrderText(String requestedValue, String sourceValue, int lineNo, String fieldName) {
-        if (!normalizeText(requestedValue).equals(normalizeText(sourceValue))) {
-            throw new BusinessException(
-                    ErrorCode.BUSINESS_ERROR,
-                    "第" + lineNo + "行来源采购订单" + fieldName + "与请求不一致"
-            );
-        }
+        BusinessDocumentValidator.requireSameSourceText(
+                requestedValue,
+                sourceValue,
+                lineNo,
+                "来源采购订单",
+                fieldName
+        );
     }
 
-    private void assertSourceText(String requestedValue, String sourceValue, int lineNo, String fieldName) {
-        if (!normalizeText(requestedValue).equals(normalizeText(sourceValue))) {
-            throw new BusinessException(
-                    ErrorCode.BUSINESS_ERROR,
-                    "第" + lineNo + "行来源采购订单明细" + fieldName + "与请求不一致"
-            );
-        }
+    private void assertSourceItemText(String requestedValue, String sourceValue, int lineNo, String fieldName) {
+        BusinessDocumentValidator.requireSameSourceText(
+                requestedValue,
+                sourceValue,
+                lineNo,
+                "来源采购订单明细",
+                fieldName
+        );
     }
 
-    private void assertSourceInteger(Integer requestedValue, Integer sourceValue, int lineNo, String fieldName) {
-        if (!Objects.equals(requestedValue, sourceValue)) {
-            throw new BusinessException(
-                    ErrorCode.BUSINESS_ERROR,
-                    "第" + lineNo + "行来源采购订单明细" + fieldName + "与请求不一致"
-            );
-        }
+    private void assertSourceItemInteger(Integer requestedValue, Integer sourceValue, int lineNo, String fieldName) {
+        BusinessDocumentValidator.requireSameSourceInteger(
+                requestedValue,
+                sourceValue,
+                lineNo,
+                "来源采购订单明细",
+                fieldName
+        );
     }
 
-    private void assertSourceDecimal(BigDecimal requestedValue, BigDecimal sourceValue, int lineNo, String fieldName) {
-        if (requestedValue == null || sourceValue == null || requestedValue.compareTo(sourceValue) != 0) {
-            throw new BusinessException(
-                    ErrorCode.BUSINESS_ERROR,
-                    "第" + lineNo + "行来源采购订单明细" + fieldName + "与请求不一致"
-            );
-        }
+    private void assertSourceItemDecimal(BigDecimal requestedValue, BigDecimal sourceValue, int lineNo, String fieldName) {
+        BusinessDocumentValidator.requireSameSourceDecimal(
+                requestedValue,
+                sourceValue,
+                lineNo,
+                "来源采购订单明细",
+                fieldName
+        );
     }
 
-    private String normalizeText(String value) {
-        return value == null ? "" : value.trim();
+    private String trimToNull(String value) {
+        return BusinessDocumentValidator.trimToNull(value);
     }
 
     @Override

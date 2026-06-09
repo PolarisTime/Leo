@@ -6,6 +6,7 @@ import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.service.AbstractCrudService;
+import com.leo.erp.common.support.BusinessDocumentValidator;
 import com.leo.erp.common.support.BusinessStatusValidator;
 import com.leo.erp.common.support.ManagedEntityItemSupport;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
@@ -387,15 +388,21 @@ public class CustomerStatementService extends AbstractCrudService<CustomerStatem
             SalesOrder order = item.getSalesOrder();
             DataScopeContext.assertCanAccess(order);
             requestedOrderNos.add(order.getOrderNo());
-            if (!request.customerName().trim().equals(order.getCustomerName())) {
-                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "来源销售订单存在不同客户，不能合并生成客户对账单");
-            }
-            if (!request.projectName().trim().equals(order.getProjectName())) {
-                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "来源销售订单存在不同项目，不能合并生成客户对账单");
-            }
-            if (!StatusConstants.SALES_COMPLETED.equals(order.getStatus())) {
-                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "来源销售订单" + order.getOrderNo() + "未完成销售，不能生成客户对账单");
-            }
+            BusinessDocumentValidator.requireSameText(
+                    request.customerName(),
+                    order.getCustomerName(),
+                    "来源销售订单存在不同客户，不能合并生成客户对账单"
+            );
+            BusinessDocumentValidator.requireSameText(
+                    request.projectName(),
+                    order.getProjectName(),
+                    "来源销售订单存在不同项目，不能合并生成客户对账单"
+            );
+            BusinessDocumentValidator.requireStatusIn(
+                    order.getStatus(),
+                    Set.of(StatusConstants.SALES_COMPLETED),
+                    "来源销售订单" + order.getOrderNo() + "未完成销售，不能生成客户对账单"
+            );
         }
         if (requestedOrderNos.isEmpty()) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "客户对账单来源销售订单不能为空");
@@ -483,10 +490,7 @@ public class CustomerStatementService extends AbstractCrudService<CustomerStatem
     }
 
     private String trimToNull(String value) {
-        if (value == null || value.isBlank()) {
-            return null;
-        }
-        return value.trim();
+        return BusinessDocumentValidator.trimToNull(value);
     }
 
     private CustomerStatementCandidateResponse toCandidateResponse(SalesOrder order) {
