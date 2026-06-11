@@ -6,6 +6,8 @@ import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.service.AbstractCrudService;
+import com.leo.erp.common.support.MasterDataReferenceGuard;
+import com.leo.erp.common.support.MasterDataReferenceGuard.ReferenceCheck;
 import com.leo.erp.common.support.RedisJsonCacheSupport;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
@@ -43,25 +45,36 @@ public class CarrierService extends AbstractCrudService<Carrier, CarrierRequest,
     private final VehicleRepository vehicleRepository;
     private final CarrierMapper carrierMapper;
     private final RedisJsonCacheSupport redisJsonCacheSupport;
+    private final MasterDataReferenceGuard referenceGuard;
 
     @Autowired
     public CarrierService(CarrierRepository carrierRepository,
                           VehicleRepository vehicleRepository,
                           SnowflakeIdGenerator snowflakeIdGenerator,
                           CarrierMapper carrierMapper,
-                          RedisJsonCacheSupport redisJsonCacheSupport) {
+                          RedisJsonCacheSupport redisJsonCacheSupport,
+                          MasterDataReferenceGuard referenceGuard) {
         super(snowflakeIdGenerator);
         this.carrierRepository = carrierRepository;
         this.vehicleRepository = vehicleRepository;
         this.carrierMapper = carrierMapper;
         this.redisJsonCacheSupport = redisJsonCacheSupport;
+        this.referenceGuard = referenceGuard;
     }
 
     public CarrierService(CarrierRepository carrierRepository,
                           VehicleRepository vehicleRepository,
                           SnowflakeIdGenerator snowflakeIdGenerator,
                           CarrierMapper carrierMapper) {
-        this(carrierRepository, vehicleRepository, snowflakeIdGenerator, carrierMapper, null);
+        this(carrierRepository, vehicleRepository, snowflakeIdGenerator, carrierMapper, null, null);
+    }
+
+    public CarrierService(CarrierRepository carrierRepository,
+                          VehicleRepository vehicleRepository,
+                          SnowflakeIdGenerator snowflakeIdGenerator,
+                          CarrierMapper carrierMapper,
+                          RedisJsonCacheSupport redisJsonCacheSupport) {
+        this(carrierRepository, vehicleRepository, snowflakeIdGenerator, carrierMapper, redisJsonCacheSupport, null);
     }
 
     @org.springframework.transaction.annotation.Transactional(readOnly = true)
@@ -89,6 +102,14 @@ public class CarrierService extends AbstractCrudService<Carrier, CarrierRequest,
         if (!entity.getCarrierCode().equals(request.carrierCode())) {
             ensureCarrierCodeUnique(request.carrierCode());
         }
+    }
+
+    @Override
+    protected void beforeDelete(Carrier entity) {
+        if (referenceGuard == null) {
+            return;
+        }
+        referenceGuard.assertNoReferences("该物流商", carrierReferences(entity));
     }
 
     @Override
@@ -161,6 +182,51 @@ public class CarrierService extends AbstractCrudService<Carrier, CarrierRequest,
         if (carrierRepository.existsByCarrierCodeAndDeletedFlagFalse(carrierCode)) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "物流方编码已存在");
         }
+    }
+
+    private List<ReferenceCheck> carrierReferences(Carrier entity) {
+        String carrierCode = entity.getCarrierCode();
+        String carrierName = entity.getCarrierName();
+        return List.of(
+                ReferenceCheck.active("st_freight_statement", "carrier_code", carrierCode),
+                ReferenceCheck.activeWhen(
+                        "fm_payment",
+                        "counterparty_code",
+                        carrierCode,
+                        "business_type IN (?, ?)",
+                        "物流商",
+                        "物流付款"
+                ),
+                ReferenceCheck.activeWhen(
+                        "fm_ledger_adjustment",
+                        "counterparty_code",
+                        carrierCode,
+                        "counterparty_type = ?",
+                        "物流商"
+                ),
+                ReferenceCheck.active("lg_freight_bill", "carrier_name", carrierName),
+                ReferenceCheck.activeWhen(
+                        "st_freight_statement",
+                        "carrier_name",
+                        carrierName,
+                        "(carrier_code IS NULL OR BTRIM(carrier_code) = '')"
+                ),
+                ReferenceCheck.activeWhen(
+                        "fm_payment",
+                        "counterparty_name",
+                        carrierName,
+                        "business_type IN (?, ?) AND (counterparty_code IS NULL OR BTRIM(counterparty_code) = '')",
+                        "物流商",
+                        "物流付款"
+                ),
+                ReferenceCheck.activeWhen(
+                        "fm_ledger_adjustment",
+                        "counterparty_name",
+                        carrierName,
+                        "counterparty_type = ? AND (counterparty_code IS NULL OR BTRIM(counterparty_code) = '')",
+                        "物流商"
+                )
+        );
     }
 
     private List<CarrierResponse> loadCachedResponses() {

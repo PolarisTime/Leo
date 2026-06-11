@@ -6,6 +6,8 @@ import com.leo.erp.common.excel.service.ExcelExportService;
 import com.leo.erp.common.excel.service.ExcelImportService;
 import com.leo.erp.common.excel.service.ExcelTemplateService;
 import com.leo.erp.common.error.BusinessException;
+import com.leo.erp.common.error.ErrorCode;
+import com.leo.erp.common.support.MasterDataReferenceGuard;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.TradeItemMaterialSupport;
 import com.leo.erp.common.web.dto.FileDownloadResponse;
@@ -37,6 +39,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -814,12 +817,13 @@ class MaterialServiceTest {
                     default -> throw new UnsupportedOperationException(method.getName());
                 }
         );
-        org.springframework.jdbc.core.JdbcTemplate jdbc = mock(org.springframework.jdbc.core.JdbcTemplate.class);
-        when(jdbc.queryForObject(anyString(), eq(Integer.class), any())).thenReturn(0);
+        var referenceGuard = mock(MasterDataReferenceGuard.class);
         var tradeItemMaterialSupport = mock(TradeItemMaterialSupport.class);
-        var service = new MaterialService(repository, new SnowflakeIdGenerator(1), null, tradeItemMaterialSupport, null, null, null, jdbc);
+        var service = new MaterialService(repository, new SnowflakeIdGenerator(1), null, tradeItemMaterialSupport, null, null, null, referenceGuard);
 
         service.delete(1L);
+
+        verify(referenceGuard).assertNoReferences(eq("该商品"), any(List.class));
     }
 
     @Test
@@ -836,14 +840,15 @@ class MaterialServiceTest {
                     default -> throw new UnsupportedOperationException(method.getName());
                 }
         );
-        org.springframework.jdbc.core.JdbcTemplate jdbc = mock(org.springframework.jdbc.core.JdbcTemplate.class);
-        when(jdbc.queryForObject(anyString(), eq(Integer.class), any())).thenReturn(5);
+        var referenceGuard = mock(MasterDataReferenceGuard.class);
+        doThrow(new BusinessException(ErrorCode.BUSINESS_ERROR, "该商品已被业务或主数据引用"))
+                .when(referenceGuard).assertNoReferences(eq("该商品"), any(List.class));
         var tradeItemMaterialSupport = mock(TradeItemMaterialSupport.class);
-        var service = new MaterialService(repository, new SnowflakeIdGenerator(1), null, tradeItemMaterialSupport, null, null, null, jdbc);
+        var service = new MaterialService(repository, new SnowflakeIdGenerator(1), null, tradeItemMaterialSupport, null, null, null, referenceGuard);
 
         assertThatThrownBy(() -> service.delete(1L))
                 .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("该商品已被业务单据引用");
+                .hasMessageContaining("该商品已被业务或主数据引用");
     }
 
     @Test
