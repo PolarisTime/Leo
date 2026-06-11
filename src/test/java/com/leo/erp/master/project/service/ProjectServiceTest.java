@@ -2,6 +2,8 @@ package com.leo.erp.master.project.service;
 
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.error.BusinessException;
+import com.leo.erp.common.error.ErrorCode;
+import com.leo.erp.common.support.MasterDataReferenceGuard;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.master.project.domain.entity.Project;
 import com.leo.erp.master.project.mapper.ProjectMapper;
@@ -15,6 +17,11 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 
 class ProjectServiceTest {
 
@@ -251,9 +258,36 @@ class ProjectServiceTest {
                     default -> throw new UnsupportedOperationException(method.getName());
                 }
         );
-        var service = new ProjectService(new SnowflakeIdGenerator(1), repository, null);
+        var referenceGuard = mock(MasterDataReferenceGuard.class);
+        var service = new ProjectService(new SnowflakeIdGenerator(1), repository, null, referenceGuard);
 
         service.delete(1L);
+
+        verify(referenceGuard).assertNoReferences(eq("该项目"), any(java.util.List.class));
+    }
+
+    @Test
+    void shouldThrowException_whenDeleteWithReferences() {
+        var repository = (ProjectRepository) Proxy.newProxyInstance(
+                ProjectRepository.class.getClassLoader(),
+                new Class[]{ProjectRepository.class},
+                (proxy, method, args) -> switch (method.getName()) {
+                    case "findByIdAndDeletedFlagFalse" -> Optional.of(createProject(1L, "P001"));
+                    case "findById" -> Optional.of(createProject(1L, "P001"));
+                    case "toString" -> "ProjectRepositoryStub";
+                    case "hashCode" -> System.identityHashCode(proxy);
+                    case "equals" -> proxy == args[0];
+                    default -> throw new UnsupportedOperationException(method.getName());
+                }
+        );
+        var referenceGuard = mock(MasterDataReferenceGuard.class);
+        doThrow(new BusinessException(ErrorCode.BUSINESS_ERROR, "该项目已被业务或主数据引用"))
+                .when(referenceGuard).assertNoReferences(eq("该项目"), any(java.util.List.class));
+        var service = new ProjectService(new SnowflakeIdGenerator(1), repository, null, referenceGuard);
+
+        assertThatThrownBy(() -> service.delete(1L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("该项目已被业务或主数据引用");
     }
 
     private static Project createProject(Long id, String code) {

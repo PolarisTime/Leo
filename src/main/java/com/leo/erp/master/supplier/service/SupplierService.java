@@ -6,6 +6,8 @@ import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.service.AbstractCrudService;
+import com.leo.erp.common.support.MasterDataReferenceGuard;
+import com.leo.erp.common.support.MasterDataReferenceGuard.ReferenceCheck;
 import com.leo.erp.common.support.RedisJsonCacheSupport;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
@@ -35,22 +37,32 @@ public class SupplierService extends AbstractCrudService<Supplier, SupplierReque
     private final SupplierRepository supplierRepository;
     private final SupplierMapper supplierMapper;
     private final RedisJsonCacheSupport redisJsonCacheSupport;
+    private final MasterDataReferenceGuard referenceGuard;
 
     @Autowired
     public SupplierService(SupplierRepository supplierRepository,
                            SnowflakeIdGenerator snowflakeIdGenerator,
                            SupplierMapper supplierMapper,
-                           RedisJsonCacheSupport redisJsonCacheSupport) {
+                           RedisJsonCacheSupport redisJsonCacheSupport,
+                           MasterDataReferenceGuard referenceGuard) {
         super(snowflakeIdGenerator);
         this.supplierRepository = supplierRepository;
         this.supplierMapper = supplierMapper;
         this.redisJsonCacheSupport = redisJsonCacheSupport;
+        this.referenceGuard = referenceGuard;
     }
 
     public SupplierService(SupplierRepository supplierRepository,
                            SnowflakeIdGenerator snowflakeIdGenerator,
                            SupplierMapper supplierMapper) {
-        this(supplierRepository, snowflakeIdGenerator, supplierMapper, null);
+        this(supplierRepository, snowflakeIdGenerator, supplierMapper, null, null);
+    }
+
+    public SupplierService(SupplierRepository supplierRepository,
+                           SnowflakeIdGenerator snowflakeIdGenerator,
+                           SupplierMapper supplierMapper,
+                           RedisJsonCacheSupport redisJsonCacheSupport) {
+        this(supplierRepository, snowflakeIdGenerator, supplierMapper, redisJsonCacheSupport, null);
     }
 
     @Transactional(readOnly = true)
@@ -90,6 +102,14 @@ public class SupplierService extends AbstractCrudService<Supplier, SupplierReque
         if (!entity.getSupplierCode().equals(request.supplierCode())) {
             ensureSupplierCodeUnique(request.supplierCode());
         }
+    }
+
+    @Override
+    protected void beforeDelete(Supplier entity) {
+        if (referenceGuard == null) {
+            return;
+        }
+        referenceGuard.assertNoReferences("该供应商", supplierReferences(entity));
     }
 
     @Override
@@ -139,6 +159,54 @@ public class SupplierService extends AbstractCrudService<Supplier, SupplierReque
         if (supplierRepository.existsBySupplierCodeAndDeletedFlagFalse(supplierCode)) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "供应商编码已存在");
         }
+    }
+
+    private List<ReferenceCheck> supplierReferences(Supplier entity) {
+        String supplierCode = entity.getSupplierCode();
+        String supplierName = entity.getSupplierName();
+        return List.of(
+                ReferenceCheck.active("st_supplier_statement", "supplier_code", supplierCode),
+                ReferenceCheck.activeWhen(
+                        "fm_payment",
+                        "counterparty_code",
+                        supplierCode,
+                        "business_type IN (?, ?)",
+                        "供应商",
+                        "供应商付款"
+                ),
+                ReferenceCheck.activeWhen(
+                        "fm_ledger_adjustment",
+                        "counterparty_code",
+                        supplierCode,
+                        "counterparty_type = ?",
+                        "供应商"
+                ),
+                ReferenceCheck.active("po_purchase_order", "supplier_name", supplierName),
+                ReferenceCheck.active("po_purchase_inbound", "supplier_name", supplierName),
+                ReferenceCheck.active("ct_purchase_contract", "supplier_name", supplierName),
+                ReferenceCheck.activeWhen(
+                        "st_supplier_statement",
+                        "supplier_name",
+                        supplierName,
+                        "(supplier_code IS NULL OR BTRIM(supplier_code) = '')"
+                ),
+                ReferenceCheck.active("fm_invoice_receipt", "supplier_name", supplierName),
+                ReferenceCheck.activeWhen(
+                        "fm_payment",
+                        "counterparty_name",
+                        supplierName,
+                        "business_type IN (?, ?) AND (counterparty_code IS NULL OR BTRIM(counterparty_code) = '')",
+                        "供应商",
+                        "供应商付款"
+                ),
+                ReferenceCheck.activeWhen(
+                        "fm_ledger_adjustment",
+                        "counterparty_name",
+                        supplierName,
+                        "counterparty_type = ? AND (counterparty_code IS NULL OR BTRIM(counterparty_code) = '')",
+                        "供应商"
+                )
+        );
     }
 
     private void evictCache() {

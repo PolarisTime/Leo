@@ -6,6 +6,8 @@ import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.service.AbstractCrudService;
+import com.leo.erp.common.support.MasterDataReferenceGuard;
+import com.leo.erp.common.support.MasterDataReferenceGuard.ReferenceCheck;
 import com.leo.erp.common.support.RedisJsonCacheSupport;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
@@ -35,22 +37,32 @@ public class CustomerService extends AbstractCrudService<Customer, CustomerReque
     private final CustomerRepository customerRepository;
     private final CustomerMapper customerMapper;
     private final RedisJsonCacheSupport redisJsonCacheSupport;
+    private final MasterDataReferenceGuard referenceGuard;
 
     @Autowired
     public CustomerService(CustomerRepository customerRepository,
                            SnowflakeIdGenerator snowflakeIdGenerator,
                            CustomerMapper customerMapper,
-                           RedisJsonCacheSupport redisJsonCacheSupport) {
+                           RedisJsonCacheSupport redisJsonCacheSupport,
+                           MasterDataReferenceGuard referenceGuard) {
         super(snowflakeIdGenerator);
         this.customerRepository = customerRepository;
         this.customerMapper = customerMapper;
         this.redisJsonCacheSupport = redisJsonCacheSupport;
+        this.referenceGuard = referenceGuard;
     }
 
     public CustomerService(CustomerRepository customerRepository,
                            SnowflakeIdGenerator snowflakeIdGenerator,
                            CustomerMapper customerMapper) {
-        this(customerRepository, snowflakeIdGenerator, customerMapper, null);
+        this(customerRepository, snowflakeIdGenerator, customerMapper, null, null);
+    }
+
+    public CustomerService(CustomerRepository customerRepository,
+                           SnowflakeIdGenerator snowflakeIdGenerator,
+                           CustomerMapper customerMapper,
+                           RedisJsonCacheSupport redisJsonCacheSupport) {
+        this(customerRepository, snowflakeIdGenerator, customerMapper, redisJsonCacheSupport, null);
     }
 
     @Transactional(readOnly = true)
@@ -109,6 +121,14 @@ public class CustomerService extends AbstractCrudService<Customer, CustomerReque
     }
 
     @Override
+    protected void beforeDelete(Customer entity) {
+        if (referenceGuard == null) {
+            return;
+        }
+        referenceGuard.assertNoReferences("该客户", customerReferences(entity));
+    }
+
+    @Override
     protected Customer newEntity() {
         return new Customer();
     }
@@ -159,6 +179,77 @@ public class CustomerService extends AbstractCrudService<Customer, CustomerReque
         if (customerRepository.existsByCustomerCodeAndDeletedFlagFalse(customerCode)) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "客户编码已存在");
         }
+    }
+
+    private List<ReferenceCheck> customerReferences(Customer entity) {
+        String customerCode = entity.getCustomerCode();
+        String customerName = entity.getCustomerName();
+        return List.of(
+                ReferenceCheck.active("md_project", "customer_code", customerCode),
+                ReferenceCheck.active("so_sales_order", "customer_code", customerCode),
+                ReferenceCheck.active("fm_receipt", "customer_code", customerCode),
+                ReferenceCheck.active("st_customer_statement", "customer_code", customerCode),
+                ReferenceCheck.when(
+                        "st_customer_statement_item",
+                        "customer_code",
+                        customerCode,
+                        "EXISTS (SELECT 1 FROM st_customer_statement parent "
+                                + "WHERE parent.id = st_customer_statement_item.statement_id "
+                                + "AND parent.deleted_flag = false)"
+                ),
+                ReferenceCheck.activeWhen(
+                        "fm_ledger_adjustment",
+                        "counterparty_code",
+                        customerCode,
+                        "counterparty_type = ?",
+                        "客户"
+                ),
+                ReferenceCheck.activeWhen(
+                        "so_sales_order",
+                        "customer_name",
+                        customerName,
+                        "(customer_code IS NULL OR BTRIM(customer_code) = '')"
+                ),
+                ReferenceCheck.active("so_sales_outbound", "customer_name", customerName),
+                ReferenceCheck.active("lg_freight_bill", "customer_name", customerName),
+                ReferenceCheck.when(
+                        "lg_freight_bill_item",
+                        "customer_name",
+                        customerName,
+                        "EXISTS (SELECT 1 FROM lg_freight_bill parent "
+                                + "WHERE parent.id = lg_freight_bill_item.bill_id "
+                                + "AND parent.deleted_flag = false)"
+                ),
+                ReferenceCheck.active("ct_sales_contract", "customer_name", customerName),
+                ReferenceCheck.activeWhen(
+                        "st_customer_statement",
+                        "customer_name",
+                        customerName,
+                        "(customer_code IS NULL OR BTRIM(customer_code) = '')"
+                ),
+                ReferenceCheck.when(
+                        "st_freight_statement_item",
+                        "customer_name",
+                        customerName,
+                        "EXISTS (SELECT 1 FROM st_freight_statement parent "
+                                + "WHERE parent.id = st_freight_statement_item.statement_id "
+                                + "AND parent.deleted_flag = false)"
+                ),
+                ReferenceCheck.activeWhen(
+                        "fm_receipt",
+                        "customer_name",
+                        customerName,
+                        "(customer_code IS NULL OR BTRIM(customer_code) = '')"
+                ),
+                ReferenceCheck.active("fm_invoice_issue", "customer_name", customerName),
+                ReferenceCheck.activeWhen(
+                        "fm_ledger_adjustment",
+                        "counterparty_name",
+                        customerName,
+                        "counterparty_type = ? AND (counterparty_code IS NULL OR BTRIM(counterparty_code) = '')",
+                        "客户"
+                )
+        );
     }
 
     private void evictCache() {

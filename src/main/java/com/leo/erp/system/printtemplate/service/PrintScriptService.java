@@ -6,6 +6,7 @@ import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.security.support.SecurityPrincipal;
 import com.leo.erp.system.printtemplate.domain.entity.PrintTemplate;
 import com.leo.erp.system.printtemplate.repository.PrintTemplateRepository;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -24,6 +25,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.regex.Pattern;
 
+@Slf4j
 @Service
 public class PrintScriptService {
 
@@ -203,7 +205,9 @@ public class PrintScriptService {
                 if (!plates.isEmpty()) {
                     data.put("vehiclePlate", String.join(", ", plates));
                 }
-            } catch (Exception ignored) { }
+            } catch (Exception ex) {
+                log.debug("补充销售订单车牌号失败, orderNo={}", orderNo, ex);
+            }
         }
     }
 
@@ -223,7 +227,9 @@ public class PrintScriptService {
                 if (!plates.isEmpty()) {
                     data.put("vehiclePlate", String.join(", ", plates));
                 }
-            } catch (Exception ignored) { }
+            } catch (Exception ex) {
+                log.debug("补充销售出库车牌号失败, outboundNo={}", outboundNo, ex);
+            }
         }
     }
 
@@ -238,7 +244,9 @@ public class PrintScriptService {
                     data.put("projectAddress", addr);
                     return;
                 }
-            } catch (Exception ignored) { }
+            } catch (Exception ex) {
+                log.debug("补充项目地址失败, projectId={}", projectId, ex);
+            }
         }
 
         String projectName = data.get("projectName");
@@ -252,7 +260,9 @@ public class PrintScriptService {
                 if (!addrs.isEmpty()) {
                     data.put("projectAddress", addrs.get(0));
                 }
-            } catch (Exception ignored) { }
+            } catch (Exception ex) {
+                log.debug("补充项目地址失败, projectName={}", projectName, ex);
+            }
         }
     }
 
@@ -284,7 +294,9 @@ public class PrintScriptService {
                     billTimes.put(stringValue(orderNo), stringValue(deliveryDate));
                 }
             }
-        } catch (Exception ignored) { }
+        } catch (Exception ex) {
+            log.debug("补充客户对账单销售订单日期失败, sourceNos={}", sourceNos, ex);
+        }
 
         for (Map<String, String> item : items) {
             putIfPresent(item, "billTime", billTimes.get(value(item, "sourceNo")));
@@ -318,7 +330,9 @@ public class PrintScriptService {
                     bills.put(stringValue(billNo), row);
                 }
             }
-        } catch (Exception ignored) { }
+        } catch (Exception ex) {
+            log.debug("补充物流对账单信息失败, sourceNos={}", sourceNos, ex);
+        }
 
         for (Map<String, String> item : items) {
             Map<String, Object> bill = bills.get(value(item, "sourceNo"));

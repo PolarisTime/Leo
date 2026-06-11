@@ -3,6 +3,8 @@ package com.leo.erp.master.customer.service;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.error.BusinessException;
+import com.leo.erp.common.error.ErrorCode;
+import com.leo.erp.common.support.MasterDataReferenceGuard;
 import com.leo.erp.common.support.RedisJsonCacheSupport;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
@@ -27,6 +29,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -341,9 +344,36 @@ class CustomerServiceTest {
                     default -> throw new UnsupportedOperationException(method.getName());
                 }
         );
-        var service = new CustomerService(repository, new SnowflakeIdGenerator(1), null);
+        var referenceGuard = mock(MasterDataReferenceGuard.class);
+        var service = new CustomerService(repository, new SnowflakeIdGenerator(1), null, null, referenceGuard);
 
         service.delete(1L);
+
+        verify(referenceGuard).assertNoReferences(eq("该客户"), any(List.class));
+    }
+
+    @Test
+    void shouldThrowException_whenDeleteWithReferences() {
+        var repository = (CustomerRepository) Proxy.newProxyInstance(
+                CustomerRepository.class.getClassLoader(),
+                new Class[]{CustomerRepository.class},
+                (proxy, method, args) -> switch (method.getName()) {
+                    case "findByIdAndDeletedFlagFalse" -> Optional.of(createCustomer(1L, "C001"));
+                    case "findById" -> Optional.of(createCustomer(1L, "C001"));
+                    case "toString" -> "CustomerRepositoryStub";
+                    case "hashCode" -> System.identityHashCode(proxy);
+                    case "equals" -> proxy == args[0];
+                    default -> throw new UnsupportedOperationException(method.getName());
+                }
+        );
+        var referenceGuard = mock(MasterDataReferenceGuard.class);
+        doThrow(new BusinessException(ErrorCode.BUSINESS_ERROR, "该客户已被业务或主数据引用"))
+                .when(referenceGuard).assertNoReferences(eq("该客户"), any(List.class));
+        var service = new CustomerService(repository, new SnowflakeIdGenerator(1), null, null, referenceGuard);
+
+        assertThatThrownBy(() -> service.delete(1L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("该客户已被业务或主数据引用");
     }
 
     @Test
