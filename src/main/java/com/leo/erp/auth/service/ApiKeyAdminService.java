@@ -44,6 +44,9 @@ import java.util.stream.Collectors;
 public class ApiKeyAdminService {
 
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
+    private static final int USER_OPTION_LIST_PAGE_SIZE = 20;
+    private static final int API_KEY_RANDOM_BYTES = 32;
+    private static final int MAX_KEY_NAME_LENGTH = 64;
     private static final String EXPIRED_STATUS = "已过期";
     private static final Set<String> ALLOWED_STATUS = Set.of(
             ApiKeyStatus.ACTIVE.displayName(),
@@ -117,7 +120,7 @@ public class ApiKeyAdminService {
                 .and(Specs.keywordLike(keyword, "loginName", "userName", "mobile"));
         return userAccountRepository.findAll(
                         spec,
-                        PageRequest.of(0, 20, Sort.by(Sort.Direction.ASC, "loginName"))
+                        PageRequest.of(0, USER_OPTION_LIST_PAGE_SIZE, Sort.by(Sort.Direction.ASC, "loginName"))
                 )
                 .stream()
                 .map(user -> new ApiKeyUserOptionResponse(
@@ -167,7 +170,7 @@ public class ApiKeyAdminService {
         }
 
         String rawKey = "leo_" + Base64.getUrlEncoder().withoutPadding().encodeToString(
-                generateRandomBytes(32));
+                generateRandomBytes(API_KEY_RANDOM_BYTES));
         String keyHash = ApiKeySupport.hashKey(rawKey);
         String keyPrefix = rawKey.substring(0, PrecisionConstants.ID_PREFIX_LENGTH);
 
@@ -286,8 +289,8 @@ public class ApiKeyAdminService {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "密钥名称不能为空");
         }
         String normalized = keyName.trim();
-        if (normalized.length() > 64) {
-            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "密钥名称长度不能超过64");
+        if (normalized.length() > MAX_KEY_NAME_LENGTH) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "密钥名称长度不能超过" + MAX_KEY_NAME_LENGTH);
         }
         return normalized;
     }
