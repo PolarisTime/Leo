@@ -24,6 +24,9 @@ import java.util.Optional;
 @Service
 public class TokenIssuanceService {
 
+    private static final long MILLIS_PER_SECOND = 1000;
+    private static final String TOKEN_TYPE_BEARER = "Bearer";
+
     private final UserAccountRepository userAccountRepository;
     private final JwtTokenService jwtTokenService;
     private final PermissionService permissionService;
@@ -131,13 +134,13 @@ public class TokenIssuanceService {
 
         eventPublisher.publishEvent(new SessionInvalidatedEvent(user.getId(), sessionTokenId, false));
 
-        long refreshExpiresIn = jwtTokenService.getRefreshExpirationMs() / 1000;
+        long refreshExpiresIn = jwtTokenService.getRefreshExpirationMs() / MILLIS_PER_SECOND;
 
         return new TokenResponse(
                 accessToken,
                 rawRefreshToken,
-                "Bearer",
-                jwtTokenService.getAccessExpirationMs() / 1000,
+                TOKEN_TYPE_BEARER,
+                jwtTokenService.getAccessExpirationMs() / MILLIS_PER_SECOND,
                 refreshExpiresIn,
                 new AuthUserResponse(
                         user.getId(),
@@ -169,13 +172,13 @@ public class TokenIssuanceService {
         var permissions = permissionService.getUserPermissions(user.getId());
         Map<String, String> dataScopes = permissionService.getUserDataScopes(user.getId());
         String currentRoleNames = userRoleBindingService.joinRoleNames(boundRoles);
-        long refreshExpiresIn = jwtTokenService.getRefreshExpirationMs() / 1000;
+        long refreshExpiresIn = jwtTokenService.getRefreshExpirationMs() / MILLIS_PER_SECOND;
 
         return new TokenResponse(
                 accessToken,
                 rawRefreshToken,
-                "Bearer",
-                jwtTokenService.getAccessExpirationMs() / 1000,
+                TOKEN_TYPE_BEARER,
+                jwtTokenService.getAccessExpirationMs() / MILLIS_PER_SECOND,
                 refreshExpiresIn,
                 new AuthUserResponse(
                         user.getId(),

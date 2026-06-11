@@ -15,6 +15,7 @@ public class LoginAttemptService {
 
     private static final String FAILURE_KEY_PREFIX = "auth:login:fail:";
     private static final String LOCK_KEY_PREFIX = "auth:login:lock:";
+    private static final long SECONDS_PER_MINUTE = 60;
 
     private final StringRedisTemplate redisTemplate;
     private final AuthProperties authProperties;
@@ -87,11 +88,11 @@ public class LoginAttemptService {
     }
 
     private String formatWaitTime(long remainingSeconds) {
-        if (remainingSeconds < 60) {
+        if (remainingSeconds < SECONDS_PER_MINUTE) {
             return remainingSeconds + " 秒";
         }
-        long minutes = remainingSeconds / 60;
-        long seconds = remainingSeconds % 60;
+        long minutes = remainingSeconds / SECONDS_PER_MINUTE;
+        long seconds = remainingSeconds % SECONDS_PER_MINUTE;
         if (seconds == 0) {
             return minutes + " 分钟";
         }

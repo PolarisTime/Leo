@@ -17,6 +17,11 @@ import org.springframework.stereotype.Service;
 @Service
 public class TotpService {
 
+    private static final int TOTP_SECRET_LENGTH = 20;
+    private static final int TOTP_DIGITS = 6;
+    private static final int TOTP_PERIOD_SECONDS = 30;
+    private static final int QR_CODE_IMAGE_SIZE = 300;
+
     private final TotpProperties properties;
     private final SecurityKeyService securityKeyService;
     private final TotpSecretCryptor totpSecretCryptor;
@@ -30,8 +35,8 @@ public class TotpService {
         this.properties = properties;
         this.securityKeyService = securityKeyService;
         this.totpSecretCryptor = totpSecretCryptor;
-        this.secretGenerator = new DefaultSecretGenerator(20);
-        this.qrDataFactory = new QrDataFactory(HashingAlgorithm.SHA1, 6, 30);
+        this.secretGenerator = new DefaultSecretGenerator(TOTP_SECRET_LENGTH);
+        this.qrDataFactory = new QrDataFactory(HashingAlgorithm.SHA1, TOTP_DIGITS, TOTP_PERIOD_SECONDS);
         this.verifier = new DefaultCodeVerifier(new DefaultCodeGenerator(), new SystemTimeProvider());
     }
 
@@ -46,7 +51,7 @@ public class TotpService {
     public byte[] generateQrCodeImage(String secret, String loginName) {
         try {
             ZxingPngQrGenerator generator = new ZxingPngQrGenerator();
-            generator.setImageSize(300);
+            generator.setImageSize(QR_CODE_IMAGE_SIZE);
             return generator.generate(buildQrData(secret, loginName));
         } catch (QrGenerationException e) {
             throw new IllegalStateException("QR码生成失败", e);
@@ -71,8 +76,8 @@ public class TotpService {
                 .secret(secret)
                 .issuer(properties.getIssuer())
                 .algorithm(HashingAlgorithm.SHA1)
-                .digits(6)
-                .period(30)
+                .digits(TOTP_DIGITS)
+                .period(TOTP_PERIOD_SECONDS)
                 .build();
     }
 }

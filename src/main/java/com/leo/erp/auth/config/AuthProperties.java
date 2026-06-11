@@ -117,10 +117,13 @@ public class AuthProperties {
 
     public static class LoginProtection {
 
+        private static final long DEFAULT_FAILURE_WINDOW_SECONDS = 900;
+        private static final long DEFAULT_LOCK_DURATION_SECONDS = 900;
+
         private boolean enabled = true;
         private int maxFailures = 5;
-        private long failureWindowSeconds = 900;
-        private long lockDurationSeconds = 900;
+        private long failureWindowSeconds = DEFAULT_FAILURE_WINDOW_SECONDS;
+        private long lockDurationSeconds = DEFAULT_LOCK_DURATION_SECONDS;
 
         public boolean isEnabled() {
             return enabled;
@@ -157,8 +160,10 @@ public class AuthProperties {
 
     public static class RefreshToken {
 
+        private static final long DEFAULT_REUSE_GRACE_SECONDS = 30;
+
         private boolean rotationEnabled = true;
-        private long reuseGraceSeconds = 30;
+        private long reuseGraceSeconds = DEFAULT_REUSE_GRACE_SECONDS;
 
         public boolean isRotationEnabled() {
             return rotationEnabled;

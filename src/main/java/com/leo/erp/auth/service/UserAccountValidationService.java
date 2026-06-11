@@ -30,6 +30,7 @@ public class UserAccountValidationService {
     private static final String DIGIT_PASSWORD_CHARS = "0123456789";
     private static final String ALL_PASSWORD_CHARS = UPPERCASE_PASSWORD_CHARS + LOWERCASE_PASSWORD_CHARS + DIGIT_PASSWORD_CHARS;
     private static final int GENERATED_PASSWORD_LENGTH = 8;
+    private static final int MAX_LOGIN_NAME_LENGTH = 64;
     private static final String LOGIN_NAME_OWNER_CACHE_PREFIX = "auth:user:login-name:owner:";
     private static final Duration LOGIN_NAME_OWNER_CACHE_TTL = Duration.ofMinutes(10);
     private static final Long LOGIN_NAME_NOT_FOUND = 0L;
@@ -53,8 +54,8 @@ public class UserAccountValidationService {
 
     public String normalizeLoginName(String loginName) {
         String normalized = normalizeRequiredValue(loginName, "登录账号");
-        if (normalized.length() > 64) {
-            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "登录账号长度不能超过64");
+        if (normalized.length() > MAX_LOGIN_NAME_LENGTH) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "登录账号长度不能超过" + MAX_LOGIN_NAME_LENGTH);
         }
         return normalized;
     }
