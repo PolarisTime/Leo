@@ -8,17 +8,17 @@
     {"type": "line", "x1": 28, "y1": 120, "x2": 567, "y2": 120, "strokeColor": "#d9d9d9", "lineWidth": 1},
     {"type": "text", "text": "物流商：", "left": 42, "top": 68, "width": 64, "height": 14, "fontSize": 11, "color": "#1677ff"},
     {"type": "text", "text": "物流单号：", "left": 400, "top": 68, "width": 70, "height": 14, "fontSize": 11, "color": "#1677ff"},
-    {"type": "text", "text": "客户名称：", "left": 42, "top": 99, "width": 64, "height": 14, "fontSize": 11, "color": "#1677ff"},
+    {"type": "text", "text": "单价：", "left": 42, "top": 99, "width": 64, "height": 14, "fontSize": 11, "color": "#1677ff"},
     {"type": "text", "text": "单据日期：", "left": 400, "top": 99, "width": 70, "height": 14, "fontSize": 11, "color": "#1677ff"},
-    {"type": "text", "text": "项目名称：", "left": 42, "top": 130, "width": 64, "height": 14, "fontSize": 11, "color": "#1677ff"},
+    {"type": "text", "text": "总金额：", "left": 42, "top": 130, "width": 64, "height": 14, "fontSize": 11, "color": "#1677ff"},
     {"type": "text", "text": "车号：", "left": 400, "top": 130, "width": 70, "height": 14, "fontSize": 11, "color": "#1677ff"}
   ],
   "fields": {
     "carrierName": {"source": "carrierName", "left": 108, "top": 64, "width": 266, "height": 22, "fontSize": 12, "color": "#1f1f1f"},
     "billNo": {"source": ["billNo", "deliveryNo", "orderNo"], "left": 472, "top": 64, "width": 82, "height": 22, "fontSize": 12, "minimumFontSize": 9, "color": "#1f1f1f"},
-    "customerName": {"source": "customerName", "left": 108, "top": 95, "width": 266, "height": 22, "fontSize": 12, "minimumFontSize": 9, "color": "#1f1f1f"},
+    "customerName": {"source": "unitPrice", "left": 108, "top": 95, "width": 266, "height": 22, "fontSize": 12, "minimumFontSize": 9, "color": "#1f1f1f"},
     "billDate": {"source": ["billTime", "billDate", "deliveryDate"], "format": "chineseDate", "left": 472, "top": 95, "width": 82, "height": 22, "fontSize": 12, "color": "#1f1f1f"},
-    "projectName": {"source": "projectName", "left": 108, "top": 126, "width": 266, "height": 22, "fontSize": 12, "minimumFontSize": 10, "multiline": true, "color": "#1f1f1f"},
+    "projectName": {"source": "totalAmount", "left": 108, "top": 126, "width": 266, "height": 22, "fontSize": 12, "minimumFontSize": 10, "multiline": true, "color": "#1f1f1f"},
     "vehiclePlate": {"source": "vehiclePlate", "left": 472, "top": 126, "width": 82, "height": 22, "fontSize": 12, "minimumFontSize": 10, "color": "#1f1f1f"}
   },
   "table": {
@@ -48,7 +48,7 @@
       {"key": "pieceWeightTon", "label": "件重", "width": 52, "headerFontSize": 9, "fontSize": 9},
       {"key": "weightTon", "label": "重量", "width": 52, "headerFontSize": 9, "fontSize": 9},
       {"key": "warehouseName", "label": "仓库", "width": 52, "headerFontSize": 9, "fontSize": 9},
-      {"key": "batchNo", "label": "批号", "width": 41, "headerFontSize": 9, "fontSize": 9}
+      {"key": "projectShortName", "label": "项目简称", "width": 52, "headerFontSize": 9, "fontSize": 9}
     ]
   },
   "summary": {
