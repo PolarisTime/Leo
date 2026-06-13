@@ -20,10 +20,12 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -135,6 +137,8 @@ public class PrintScriptService {
             enrichCustomerStatementItems(items);
         } else if ("freight-statement".equals(moduleKey)) {
             enrichFreightStatement(data, items);
+        } else if ("freight-bill".equals(moduleKey)) {
+            enrichFreightBillItems(items);
         }
         items = preparePrintItems(moduleKey, template.getTemplateName(), template.getTemplateHtml(), data, items);
 
@@ -229,6 +233,48 @@ public class PrintScriptService {
                 }
             } catch (Exception ex) {
                 log.debug("补充销售出库车牌号失败, outboundNo={}", outboundNo, ex);
+            }
+        }
+    }
+
+    /** 物流配送单打印数据补充：projectShortName（项目简称） */
+    private void enrichFreightBillItems(List<Map<String, String>> items) {
+        if (items == null || items.isEmpty()) {
+            return;
+        }
+        // 收集所有唯一的 projectName
+        Set<String> projectNames = new LinkedHashSet<>();
+        for (Map<String, String> item : items) {
+            String projectName = item.get("projectName");
+            if (projectName != null && !projectName.isBlank()) {
+                projectNames.add(projectName);
+            }
+        }
+        if (projectNames.isEmpty()) {
+            return;
+        }
+        // 批量查询项目简称
+        String placeholders = projectNames.stream().map(n -> "?").collect(Collectors.joining(", "));
+        List<Map<String, Object>> projects = jdbc.queryForList(
+                "SELECT project_name, project_name_abbr FROM md_project " +
+                        "WHERE project_name IN (" + placeholders + ") AND deleted_flag = FALSE",
+                projectNames.toArray());
+        Map<String, String> nameToAbbr = new HashMap<>();
+        for (Map<String, Object> row : projects) {
+            String name = String.valueOf(row.get("project_name"));
+            Object abbr = row.get("project_name_abbr");
+            if (abbr != null && !String.valueOf(abbr).isBlank()) {
+                nameToAbbr.put(name, String.valueOf(abbr));
+            }
+        }
+        // 回填 projectShortName
+        for (Map<String, String> item : items) {
+            String projectName = item.get("projectName");
+            if (projectName != null) {
+                String abbr = nameToAbbr.get(projectName);
+                if (abbr != null) {
+                    item.put("projectShortName", abbr);
+                }
             }
         }
     }
