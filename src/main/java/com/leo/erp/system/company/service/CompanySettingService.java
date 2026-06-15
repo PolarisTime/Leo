@@ -8,6 +8,7 @@ import com.leo.erp.common.service.AbstractCrudService;
 import com.leo.erp.common.support.RedisJsonCacheSupport;
 import com.leo.erp.common.support.PrecisionConstants;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
+import com.leo.erp.common.support.TaxRateProvider;
 import com.leo.erp.system.company.domain.entity.CompanySetting;
 import com.leo.erp.system.company.repository.CompanySettingRepository;
 import com.leo.erp.system.company.mapper.CompanySettingMapper;
@@ -37,7 +38,7 @@ import java.util.Optional;
 import java.util.Set;
 
 @Service
-public class CompanySettingService extends AbstractCrudService<CompanySetting, CompanySettingRequest, CompanySettingResponse> {
+public class CompanySettingService extends AbstractCrudService<CompanySetting, CompanySettingRequest, CompanySettingResponse> implements TaxRateProvider {
 
     public static final String DEFAULT_TAX_RATE_SETTING_CODE = "SYS_DEFAULT_TAX_RATE";
     public static final String CURRENT_COMPANY_CACHE_KEY = "leo:company:current";
@@ -107,6 +108,7 @@ public class CompanySettingService extends AbstractCrudService<CompanySetting, C
     }
 
     @Transactional(readOnly = true)
+    @Override
     public BigDecimal resolveCurrentTaxRate() {
         if (redisJsonCacheSupport == null) {
             return loadCurrentTaxRate();

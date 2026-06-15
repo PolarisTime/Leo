@@ -1,6 +1,5 @@
 package com.leo.erp.system.menu.service;
 
-import com.leo.erp.common.config.RedisTuningProperties;
 import com.leo.erp.security.permission.PermissionService;
 import com.leo.erp.system.menu.domain.entity.Menu;
 import com.leo.erp.system.menu.web.dto.MenuTreeResponse;
@@ -70,7 +69,6 @@ class MenuServiceTest {
         private StubPermissionService(List<Menu> activeMenus,
                                       Set<String> menuCodes,
                                       Map<String, Set<String>> permissionMap) {
-            super(null, null, null, null, null, new RedisTuningProperties());
             this.activeMenus = activeMenus;
             this.menuCodes = menuCodes;
             this.permissionMap = permissionMap;

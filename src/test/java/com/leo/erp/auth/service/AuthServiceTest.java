@@ -485,7 +485,7 @@ class AuthServiceTest {
     }
 
     private PermissionService permissionService() {
-        return new PermissionService(null, null, null, null, null, null) {
+        return new PermissionService() {
             @Override
             public void evictCache(Long userId) {}
             @Override

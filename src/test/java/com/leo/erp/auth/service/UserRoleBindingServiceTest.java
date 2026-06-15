@@ -301,7 +301,7 @@ class UserRoleBindingServiceTest {
     }
 
     private PermissionService permissionService(Map<String, Set<String>> permissionMap, Map<String, String> dataScopeMap) {
-        return new PermissionService(null, null, null, null, null, null) {
+        return new PermissionService() {
             @Override
             public Map<String, Set<String>> getUserPermissionMap(Long userId) {
                 return permissionMap;

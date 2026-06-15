@@ -6,6 +6,7 @@ import com.leo.erp.system.role.domain.entity.RolePermission;
 import com.leo.erp.system.role.domain.entity.RoleSetting;
 import com.leo.erp.system.role.repository.RolePermissionRepository;
 import com.leo.erp.system.role.repository.RoleSettingRepository;
+import com.leo.erp.system.menu.repository.MenuRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.data.redis.connection.RedisConnection;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
@@ -91,7 +92,7 @@ class PermissionServiceTest {
                 }
         );
         RecordingStringRedisTemplate redisTemplate = new RecordingStringRedisTemplate(connectionFactory);
-        PermissionService service = new PermissionService(null, null, null, redisTemplate, null, new RedisTuningProperties());
+        PermissionService service = permissionService(null, null, null, redisTemplate, null, new RedisTuningProperties());
 
         service.evictAllCache();
 
@@ -116,7 +117,7 @@ class PermissionServiceTest {
         action.setResourceCode("material");
         action.setActionCode("read");
 
-        PermissionService service = new PermissionService(
+        PermissionService service = permissionService(
                 userRoleRepository(List.of(binding(1L, 9L))),
                 rolePermissionRepository(action),
                 null,
@@ -140,7 +141,7 @@ class PermissionServiceTest {
         action.setResourceCode("material");
         action.setActionCode("read");
 
-        PermissionService service = new PermissionService(
+        PermissionService service = permissionService(
                 userRoleRepository(List.of()),
                 rolePermissionRepository(action),
                 null,
@@ -167,7 +168,7 @@ class PermissionServiceTest {
         edit.setResourceCode("material");
         edit.setActionCode("update");
 
-        PermissionService service = new PermissionService(
+        PermissionService service = permissionService(
                 null,
                 rolePermissionRepository(view, edit),
                 null,
@@ -186,7 +187,7 @@ class PermissionServiceTest {
         RolePermission read = permission(10L, "purchase-order", "read");
         RolePermission update = permission(20L, "purchase-order", "update");
 
-        PermissionService service = new PermissionService(
+        PermissionService service = permissionService(
                 userRoleRepository(List.of(binding(1L, 10L), binding(1L, 20L))),
                 rolePermissionRepository(read, update),
                 null,
@@ -207,7 +208,7 @@ class PermissionServiceTest {
         RolePermission update = permission(20L, "purchase-order", "update");
         AtomicInteger permissionQueries = new AtomicInteger();
 
-        PermissionService service = new PermissionService(
+        PermissionService service = permissionService(
                 userRoleRepository(List.of(binding(1L, 10L), binding(1L, 20L))),
                 countingRolePermissionRepository(permissionQueries, read, update),
                 null,
@@ -228,7 +229,7 @@ class PermissionServiceTest {
         RolePermission read = permission(10L, "material", "read");
         RolePermission update = permission(10L, "material", "update");
 
-        PermissionService service = new PermissionService(
+        PermissionService service = permissionService(
                 userRoleRepository(List.of(binding(1L, 10L))),
                 rolePermissionRepository(read, update),
                 null,
@@ -250,7 +251,7 @@ class PermissionServiceTest {
         RolePermission readMat = permission(10L, "material", "read");
         RolePermission updateMat = permission(20L, "material", "update");
 
-        PermissionService service = new PermissionService(
+        PermissionService service = permissionService(
                 userRoleRepository(List.of(binding(1L, 10L), binding(1L, 20L))),
                 rolePermissionRepository(readMat, updateMat),
                 null,
@@ -265,7 +266,7 @@ class PermissionServiceTest {
 
     @Test
     void shouldReturnSelfPermissionWhenNoDataScopeForResource() {
-        PermissionService service = new PermissionService(
+        PermissionService service = permissionService(
                 userRoleRepository(List.of()),
                 rolePermissionRepository(),
                 null,
@@ -279,7 +280,7 @@ class PermissionServiceTest {
 
     @Test
     void shouldDelegateGetDataScopeOwnerUserIds() {
-        PermissionService service = new PermissionService(
+        PermissionService service = permissionService(
                 userRoleRepository(List.of()),
                 rolePermissionRepository(),
                 null,
@@ -302,7 +303,7 @@ class PermissionServiceTest {
         m.setStatus("正常");
         m.setSortOrder(1);
 
-        PermissionService service = new PermissionService(
+        PermissionService service = permissionService(
                 userRoleRepository(List.of(binding(1L, 10L))),
                 rolePermissionRepository(perm),
                 menuRepository(m),
@@ -318,7 +319,7 @@ class PermissionServiceTest {
     void shouldDelegateGetActiveMenus() {
         com.leo.erp.system.menu.domain.entity.Menu m = menu("order", "订单管理");
 
-        PermissionService service = new PermissionService(
+        PermissionService service = permissionService(
                 null,
                 null,
                 menuRepository(m),
@@ -336,7 +337,7 @@ class PermissionServiceTest {
         List<String> deletedKeys = new ArrayList<>();
         StringRedisTemplate redis = evictableRedisTemplate(hashes, deletedKeys);
 
-        PermissionService service = new PermissionService(
+        PermissionService service = permissionService(
                 null, null, null, redis, null, new RedisTuningProperties()
         );
 
@@ -350,7 +351,7 @@ class PermissionServiceTest {
         List<String> deletedKeys = new ArrayList<>();
         StringRedisTemplate redis = evictableRedisTemplate(hashes, deletedKeys);
 
-        PermissionService service = new PermissionService(
+        PermissionService service = permissionService(
                 null, null, null, redis, null, new RedisTuningProperties()
         );
 
@@ -367,7 +368,7 @@ class PermissionServiceTest {
         com.leo.erp.common.support.RedisJsonCacheSupport cacheSupport =
                 new com.leo.erp.common.support.RedisJsonCacheSupport(redis, new com.fasterxml.jackson.databind.ObjectMapper(), new RedisTuningProperties());
 
-        PermissionService service = new PermissionService(
+        PermissionService service = permissionService(
                 null, null, null, redis, null,
                 java.util.Optional.of(cacheSupport),
                 new RedisTuningProperties()
@@ -382,7 +383,7 @@ class PermissionServiceTest {
         RoleSetting role = role(10L, "READ_ALL", "全部数据");
         RolePermission perm = permission(10L, " ", "read");
 
-        PermissionService service = new PermissionService(
+        PermissionService service = permissionService(
                 userRoleRepository(List.of(binding(1L, 10L))),
                 rolePermissionRepository(perm),
                 null,
@@ -400,7 +401,7 @@ class PermissionServiceTest {
         RoleSetting role = role(10L, "ADMIN", "全部数据");
         RolePermission perm = permission(10L, "material", "read");
 
-        PermissionService service = new PermissionService(
+        PermissionService service = permissionService(
                 userRoleRepository(List.of(binding(1L, 10L))),
                 rolePermissionRepository(perm),
                 null,
@@ -410,6 +411,39 @@ class PermissionServiceTest {
         );
 
         assertThat(service.can(1L, "material", "read")).isTrue();
+    }
+
+    private PermissionService permissionService(UserRoleRepository userRoleRepository,
+                                                RolePermissionRepository rolePermissionRepository,
+                                                MenuRepository menuRepository,
+                                                StringRedisTemplate redisTemplate,
+                                                RoleSettingRepository roleSettingRepository,
+                                                RedisTuningProperties redisTuningProperties) {
+        return permissionService(
+                userRoleRepository,
+                rolePermissionRepository,
+                menuRepository,
+                redisTemplate,
+                roleSettingRepository,
+                java.util.Optional.empty(),
+                redisTuningProperties
+        );
+    }
+
+    private PermissionService permissionService(UserRoleRepository userRoleRepository,
+                                                RolePermissionRepository rolePermissionRepository,
+                                                MenuRepository menuRepository,
+                                                StringRedisTemplate redisTemplate,
+                                                RoleSettingRepository roleSettingRepository,
+                                                java.util.Optional<com.leo.erp.common.support.RedisJsonCacheSupport> redisJsonCacheSupport,
+                                                RedisTuningProperties redisTuningProperties) {
+        PermissionCache cache = new PermissionCache(redisTemplate, redisJsonCacheSupport, redisTuningProperties);
+        return new PermissionService(
+                new PermissionResolver(userRoleRepository, rolePermissionRepository, roleSettingRepository, cache),
+                cache,
+                new MenuVisibilityService(menuRepository, redisJsonCacheSupport),
+                new DepartmentScopeResolver(java.util.Optional.empty(), java.util.Optional.empty())
+        );
     }
 
     private static final class RecordingStringRedisTemplate extends StringRedisTemplate {

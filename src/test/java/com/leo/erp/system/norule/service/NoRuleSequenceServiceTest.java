@@ -100,6 +100,7 @@ class NoRuleSequenceServiceTest {
             "payment,RULE_PM,FK{yyyy}{seq},yyyy,YEARLY,6,FK2026000001",
             "invoice-receipt,RULE_SP,SP{yyyy}{seq},yyyy,YEARLY,6,SP2026000001",
             "invoice-issue,RULE_KP,KP{yyyy}{seq},yyyy,YEARLY,6,KP2026000001",
+            "ledger-adjustment,RULE_LA,LA{yyyy}{seq},yyyy,YEARLY,6,LA2026000001",
             "department,RULE_DEPT,{yyyymmdd}-{seq},yyyyMMdd,DAILY,4,20260601-0001"
     })
     void shouldGenerateForCreatableModuleKeys(String moduleKey,

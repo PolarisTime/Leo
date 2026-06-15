@@ -67,6 +67,34 @@ class PreallocatedBusinessNoServiceTest {
     }
 
     @Test
+    void shouldReserveAndConsumeBusinessNoForSameUser() {
+        StringRedisTemplate redisTemplate = mock(StringRedisTemplate.class);
+        @SuppressWarnings("unchecked")
+        ValueOperations<String, String> valueOperations = mock(ValueOperations.class);
+
+        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+        when(valueOperations.setIfAbsent(
+                eq("leo:business-no:value:preallocated:purchase-order:PO-001"),
+                eq("1"),
+                any(Duration.class)
+        )).thenReturn(Boolean.TRUE);
+        when(valueOperations.get("leo:business-no:value:preallocated:purchase-order:PO-001"))
+                .thenReturn("1");
+
+        PreallocatedBusinessNoService service = new PreallocatedBusinessNoService(redisTemplate);
+        SecurityPrincipal principal = SecurityPrincipal.authenticated(1L, "tester", List.of());
+
+        service.reserveBusinessNo("purchase-order", "PO-001", principal);
+
+        org.assertj.core.api.Assertions.assertThat(
+                service.isBusinessNoReservedByPrincipal("purchase-order", "PO-001", principal)
+        ).isTrue();
+
+        service.consumeBusinessNo("purchase-order", "PO-001");
+        verify(redisTemplate).delete("leo:business-no:value:preallocated:purchase-order:PO-001");
+    }
+
+    @Test
     void shouldRejectConsumptionByAnotherUser() {
         StringRedisTemplate redisTemplate = mock(StringRedisTemplate.class);
         @SuppressWarnings("unchecked")
