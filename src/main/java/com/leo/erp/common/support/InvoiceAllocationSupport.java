@@ -2,10 +2,8 @@ package com.leo.erp.common.support;
 
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
-import com.leo.erp.system.company.service.CompanySettingService;
 
 import java.math.BigDecimal;
-import java.math.RoundingMode;
 
 public final class InvoiceAllocationSupport {
 
@@ -19,8 +17,8 @@ public final class InvoiceAllocationSupport {
         return TradeItemCalculator.calculateWeightTon(quantity, pieceWeightTon);
     }
 
-    public static BigDecimal calculateTaxAmount(BigDecimal amount, BigDecimal requestedTaxAmount, CompanySettingService companySettingService) {
-        BigDecimal taxRate = companySettingService.resolveCurrentTaxRate();
+    public static BigDecimal calculateTaxAmount(BigDecimal amount, BigDecimal requestedTaxAmount, TaxRateProvider taxRateProvider) {
+        BigDecimal taxRate = taxRateProvider.resolveCurrentTaxRate();
         if (taxRate.compareTo(BigDecimal.ZERO) <= 0) {
             return requestedTaxAmount == null ? BigDecimal.ZERO : requestedTaxAmount;
         }

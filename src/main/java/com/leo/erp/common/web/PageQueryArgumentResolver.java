@@ -2,7 +2,6 @@ package com.leo.erp.common.web;
 
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.api.PageSortFieldCatalog;
-import com.leo.erp.system.norule.service.SystemSwitchService;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.core.MethodParameter;
 import org.springframework.lang.Nullable;
@@ -15,10 +14,10 @@ import org.springframework.web.method.support.ModelAndViewContainer;
 @Component
 public class PageQueryArgumentResolver implements HandlerMethodArgumentResolver {
 
-    private final SystemSwitchService systemSwitchService;
+    private final PageQuerySettings pageQuerySettings;
 
-    public PageQueryArgumentResolver(SystemSwitchService systemSwitchService) {
-        this.systemSwitchService = systemSwitchService;
+    public PageQueryArgumentResolver(PageQuerySettings pageQuerySettings) {
+        this.pageQuerySettings = pageQuerySettings;
     }
 
     @Override
@@ -47,7 +46,7 @@ public class PageQueryArgumentResolver implements HandlerMethodArgumentResolver 
 
         return PageQuery.of(
                 toInteger(request.getParameter(pageParam)),
-                pageSize != null ? pageSize : systemSwitchService.getDefaultListPageSize(),
+                pageSize != null ? pageSize : pageQuerySettings.getDefaultListPageSize(),
                 request.getParameter(sortByParam),
                 request.getParameter(directionParam),
                 sortFieldKey.isBlank() ? null : PageSortFieldCatalog.fields(sortFieldKey)

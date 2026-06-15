@@ -4,14 +4,9 @@ import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.AbstractAuditableEntity;
-import com.leo.erp.security.permission.DataScopeContext;
-import com.leo.erp.security.permission.ResourcePermissionCatalog;
-import com.leo.erp.security.support.SecurityPrincipal;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
-import com.leo.erp.common.support.StatusConstants;
-import com.leo.erp.system.norule.service.SystemSwitchService;
-import com.leo.erp.system.norule.service.NoRuleSequenceService;
-import com.leo.erp.system.norule.service.PreallocatedBusinessNoService;
+import com.leo.erp.security.permission.DataScopeContext;
+import com.leo.erp.security.support.SecurityPrincipal;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -24,41 +19,37 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
-import org.springframework.web.context.request.RequestAttributes;
-import org.springframework.web.context.request.RequestContextHolder;
-import org.springframework.web.context.request.ServletRequestAttributes;
 
-import java.lang.reflect.Method;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
 public abstract class AbstractCrudService<E extends AbstractAuditableEntity, Req, Res> {
-    private static final String PREALLOCATED_ID_HEADER = "X-Preallocated-Id";
-    private static final String BUSINESS_MODULE_KEY_HEADER = "X-Business-Module-Key";
+    private static final CrudVisibilityPolicy VISIBILITY_POLICY = new CrudVisibilityPolicy();
 
     private final SnowflakeIdGenerator idGenerator;
-    private SystemSwitchService systemSwitchService;
-    private NoRuleSequenceService noRuleSequenceService;
-    private PreallocatedBusinessNoService preallocatedBusinessNoService;
+    private CrudRuntimeSettings crudRuntimeSettings;
+    private BusinessNumberAllocator businessNumberAllocator;
+    private BusinessPreallocationService businessPreallocationService;
+    private final CrudStatusGuard statusGuard = new CrudStatusGuard();
 
     protected AbstractCrudService(SnowflakeIdGenerator idGenerator) {
         this.idGenerator = idGenerator;
     }
 
     @Autowired(required = false)
-    protected void setSystemSwitchService(SystemSwitchService systemSwitchService) {
-        this.systemSwitchService = systemSwitchService;
+    protected void setCrudRuntimeSettings(CrudRuntimeSettings crudRuntimeSettings) {
+        this.crudRuntimeSettings = crudRuntimeSettings;
     }
 
     @Autowired(required = false)
-    protected void setNoRuleSequenceService(NoRuleSequenceService noRuleSequenceService) {
-        this.noRuleSequenceService = noRuleSequenceService;
+    protected void setBusinessNumberAllocator(BusinessNumberAllocator businessNumberAllocator) {
+        this.businessNumberAllocator = businessNumberAllocator;
     }
 
     @Autowired(required = false)
-    protected void setPreallocatedBusinessNoService(PreallocatedBusinessNoService preallocatedBusinessNoService) {
-        this.preallocatedBusinessNoService = preallocatedBusinessNoService;
+    protected void setBusinessPreallocationService(BusinessPreallocationService businessPreallocationService) {
+        this.businessPreallocationService = businessPreallocationService;
     }
 
     private SnowflakeIdGenerator idGen() {
@@ -69,135 +60,8 @@ public abstract class AbstractCrudService<E extends AbstractAuditableEntity, Req
         return LoggerFactory.getLogger(getClass());
     }
 
-    private CreateEntityId resolveCreateEntityId() {
-        PreallocatedEntityId preallocatedId = resolvePreallocatedIdFromRequest();
-        return preallocatedId != null
-                ? new CreateEntityId(preallocatedId.id(), preallocatedId.moduleKey())
-                : new CreateEntityId(idGen().nextId(), null);
-    }
-
-    private PreallocatedEntityId resolvePreallocatedIdFromRequest() {
-        RequestAttributes requestAttributes = RequestContextHolder.getRequestAttributes();
-        if (!(requestAttributes instanceof ServletRequestAttributes servletRequestAttributes)) {
-            return null;
-        }
-        String rawValue = servletRequestAttributes.getRequest().getHeader(PREALLOCATED_ID_HEADER);
-        if (rawValue == null || rawValue.isBlank()) {
-            return null;
-        }
-        try {
-            long parsedValue = Long.parseLong(rawValue.trim());
-            if (parsedValue > 0 && preallocatedBusinessNoService != null) {
-                String moduleKey = resolveBusinessModuleKey();
-                preallocatedBusinessNoService.assertReservedByPrincipal(moduleKey, parsedValue, currentPrincipal());
-                return new PreallocatedEntityId(parsedValue, moduleKey);
-            }
-            return parsedValue > 0 ? new PreallocatedEntityId(parsedValue, null) : null;
-        } catch (NumberFormatException ex) {
-            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "预分配雪花ID格式不正确");
-        }
-    }
-
-    private void consumePreallocatedIdAfterCommit(CreateEntityId createEntityId) {
-        if (createEntityId.preallocatedModuleKey() == null || preallocatedBusinessNoService == null) {
-            return;
-        }
-        Runnable consume = () -> {
-            try {
-                preallocatedBusinessNoService.consume(createEntityId.preallocatedModuleKey(), createEntityId.id());
-            } catch (RuntimeException ex) {
-                logger().warn("Failed to consume preallocated business id: moduleKey={}, id={}, reason={}",
-                        createEntityId.preallocatedModuleKey(), createEntityId.id(), ex.getMessage());
-            }
-        };
-        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
-            consume.run();
-            return;
-        }
-        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-            @Override
-            public void afterCommit() {
-                consume.run();
-            }
-        });
-    }
-
-    private SecurityPrincipal currentPrincipal() {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        if (authentication == null || !(authentication.getPrincipal() instanceof SecurityPrincipal principal)) {
-            throw new BusinessException(ErrorCode.UNAUTHORIZED, "未登录");
-        }
-        return principal;
-    }
-
-    private String resolveBusinessModuleKey() {
-        String headerModuleKey = resolveBusinessModuleKeyFromHeader();
-        if (!headerModuleKey.isBlank()) {
-            assertBusinessModuleKeyMatchesCurrentResource(headerModuleKey);
-            return headerModuleKey;
-        }
-
-        RequestAttributes requestAttributes = RequestContextHolder.getRequestAttributes();
-        if (!(requestAttributes instanceof ServletRequestAttributes servletRequestAttributes)) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "无法识别当前请求模块");
-        }
-        String uri = servletRequestAttributes.getRequest().getRequestURI();
-        if (uri == null || uri.isBlank()) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "无法识别当前请求模块");
-        }
-        String path = uri.startsWith("/api/") ? uri.substring(5) : uri;
-        int slashIndex = path.indexOf('/');
-        return normalizeRestCollectionModuleKey(slashIndex >= 0 ? path.substring(0, slashIndex) : path);
-    }
-
-    private String resolveBusinessModuleKeyFromHeader() {
-        RequestAttributes requestAttributes = RequestContextHolder.getRequestAttributes();
-        if (!(requestAttributes instanceof ServletRequestAttributes servletRequestAttributes)) {
-            return "";
-        }
-        String rawValue = servletRequestAttributes.getRequest().getHeader(BUSINESS_MODULE_KEY_HEADER);
-        return rawValue == null ? "" : rawValue.trim();
-    }
-
-    private void assertBusinessModuleKeyMatchesCurrentResource(String moduleKey) {
-        DataScopeContext.Context context = DataScopeContext.current();
-        if (context == null || context.resource() == null || context.resource().isBlank()) {
-            return;
-        }
-        String expectedResource = ResourcePermissionCatalog.normalizeResource(context.resource());
-        String moduleResource = ResourcePermissionCatalog.resolveResourceByMenuCode(moduleKey)
-                .orElseGet(() -> ResourcePermissionCatalog.normalizeResource(moduleKey));
-        if (!expectedResource.equals(moduleResource)) {
-            throw new BusinessException(ErrorCode.FORBIDDEN, "预分配雪花ID模块与当前接口不匹配");
-        }
-    }
-
-    private String normalizeRestCollectionModuleKey(String rawSegment) {
-        String segment = rawSegment == null ? "" : rawSegment.trim();
-        if (segment.isBlank()) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "无法识别当前请求模块");
-        }
-        if (isKnownModuleKey(segment)) {
-            return segment;
-        }
-        if (segment.endsWith("ies") && segment.length() > 3) {
-            String candidate = segment.substring(0, segment.length() - 3) + "y";
-            if (isKnownModuleKey(candidate)) {
-                return candidate;
-            }
-        }
-        if (segment.endsWith("s") && segment.length() > 1) {
-            String candidate = segment.substring(0, segment.length() - 1);
-            if (isKnownModuleKey(candidate)) {
-                return candidate;
-            }
-        }
-        return segment;
-    }
-
-    private boolean isKnownModuleKey(String moduleKey) {
-        return ResourcePermissionCatalog.isKnownResource(moduleKey)
-                || ResourcePermissionCatalog.resolveResourceByMenuCode(moduleKey).isPresent();
+    private BusinessCreateIdResolver createIdResolver() {
+        return new BusinessCreateIdResolver(idGenerator, businessPreallocationService, getClass());
     }
 
     @Transactional(readOnly = true)
@@ -208,22 +72,17 @@ public abstract class AbstractCrudService<E extends AbstractAuditableEntity, Req
     @Transactional
     public Res create(Req request) {
         E entity = newEntity();
-        CreateEntityId createEntityId = resolveCreateEntityId();
+        BusinessCreateIdResolver createIdResolver = createIdResolver();
+        CreateEntityId createEntityId = createIdResolver.resolve();
         assignId(entity, createEntityId.id());
         request = normalizeCreateRequest(request, createEntityId.id());
         validateCreate(request);
         apply(entity, request);
-        assertRequestDidNotWriteFinalStatus(entity);
+        statusGuard.assertRequestDidNotWriteFinalStatus(entity);
         Res response = toSavedResponse(saveEntity(entity));
-        consumePreallocatedIdAfterCommit(createEntityId);
+        createIdResolver.consumeAfterCommit(createEntityId);
         logger().info("{} created: id={}", entity.getClass().getSimpleName(), createEntityId.id());
         return response;
-    }
-
-    private record PreallocatedEntityId(Long id, String moduleKey) {
-    }
-
-    private record CreateEntityId(long id, String preallocatedModuleKey) {
     }
 
     @Transactional
@@ -232,10 +91,10 @@ public abstract class AbstractCrudService<E extends AbstractAuditableEntity, Req
         request = normalizeUpdateRequest(entity, request);
         assertEditAllowedByStatus(entity, request);
         validateUpdate(entity, request);
-        Optional<String> currentStatus = resolveStatus(entity);
+        Optional<String> currentStatus = statusGuard.resolveStatus(entity);
         apply(entity, request);
-        assertRequestStatusTransitionAllowed(entity, currentStatus);
-        assertRequestDidNotWriteFinalStatus(entity);
+        statusGuard.assertRequestStatusTransitionAllowed(entity, currentStatus, allowedStatusTransitions());
+        statusGuard.assertRequestDidNotWriteFinalStatus(entity);
         Res response = toSavedResponse(saveUpdatedEntity(entity, request));
         logger().info("{} updated: id={}", entity.getClass().getSimpleName(), id);
         return response;
@@ -244,14 +103,14 @@ public abstract class AbstractCrudService<E extends AbstractAuditableEntity, Req
     @Transactional
     public Res updateStatus(Long id, String status) {
         E entity = requireEntity(id);
-        String currentStatus = resolveStatus(entity).orElse("");
-        String nextStatus = normalizeRequiredStatus(status);
+        String currentStatus = statusGuard.resolveStatus(entity).orElse("");
+        String nextStatus = statusGuard.normalizeRequiredStatus(status);
         if (currentStatus.equals(nextStatus)) {
             return toSavedResponse(entity);
         }
-        validateStatusTransition(entity, currentStatus, nextStatus);
+        statusGuard.validateStatusTransition(allowedStatusTransitions(), currentStatus, nextStatus);
         beforeStatusUpdate(entity, currentStatus, nextStatus);
-        writeStatus(entity, nextStatus);
+        statusGuard.writeStatus(entity, nextStatus);
         Res response = toSavedResponse(saveStatusEntity(entity));
         logger().info(
                 "{} status updated: id={}, {} -> {}",
@@ -269,7 +128,7 @@ public abstract class AbstractCrudService<E extends AbstractAuditableEntity, Req
         assertDeleteAllowedByStatus(entity);
         beforeDelete(entity);
         entity.setDeletedFlag(true);
-        markDeletedStatus(entity);
+        statusGuard.markDeletedStatus(entity, allowAdminViewDeletedRecords());
         saveEntity(entity);
         logger().info("{} deleted: id={}", entity.getClass().getSimpleName(), id);
     }
@@ -362,10 +221,10 @@ public abstract class AbstractCrudService<E extends AbstractAuditableEntity, Req
     }
 
     protected final String nextBusinessNo(String moduleKey) {
-        if (noRuleSequenceService == null) {
+        if (businessNumberAllocator == null) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "编号规则服务不可用");
         }
-        String generatedNo = noRuleSequenceService.nextValueByModuleKey(moduleKey);
+        String generatedNo = businessNumberAllocator.nextValueByModuleKey(moduleKey);
         if (generatedNo == null || generatedNo.isBlank()) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "模块未配置编号规则: " + moduleKey);
         }
@@ -377,17 +236,21 @@ public abstract class AbstractCrudService<E extends AbstractAuditableEntity, Req
     }
 
     protected final String resolveCreateBusinessNo(String moduleKey, String requestedNo, Long entityId) {
-        if (systemSwitchService != null && systemSwitchService.shouldUseSnowflakeIdAsBusinessNo()) {
+        if (crudRuntimeSettings != null && crudRuntimeSettings.shouldUseSnowflakeIdAsBusinessNo()) {
             if (entityId == null || entityId <= 0) {
                 throw new BusinessException(ErrorCode.BUSINESS_ERROR, "业务单据雪花ID尚未分配");
             }
             return String.valueOf(entityId);
         }
-        if (noRuleSequenceService == null) {
+        if (businessNumberAllocator == null) {
             if (requestedNo == null || requestedNo.isBlank()) {
                 throw new BusinessException(ErrorCode.BUSINESS_ERROR, "编号规则服务不可用");
             }
             return requestedNo;
+        }
+        if (isReservedBusinessNo(moduleKey, requestedNo)) {
+            consumeReservedBusinessNoAfterCommit(moduleKey, requestedNo.trim());
+            return requestedNo.trim();
         }
         return nextBusinessNo(moduleKey);
     }
@@ -401,82 +264,19 @@ public abstract class AbstractCrudService<E extends AbstractAuditableEntity, Req
     }
 
     private void assertEditAllowedByStatus(E entity, Req request) {
-        resolveStatus(entity).ifPresent(status -> {
-            if (StatusConstants.PROTECTED_DOCUMENT_STATUS.contains(status) && !allowProtectedStatusUpdate(entity, request)) {
-                throw new BusinessException(
-                        ErrorCode.BUSINESS_ERROR,
-                        "当前单据状态为「" + status + "」，不能编辑"
-                );
-            }
-        });
+        statusGuard.assertEditAllowed(entity, allowProtectedStatusUpdate(entity, request));
     }
 
     private void assertDeleteAllowedByStatus(E entity) {
-        resolveStatus(entity).ifPresent(status -> {
-            if (StatusConstants.PROTECTED_DOCUMENT_STATUS.contains(status)) {
-                throw new BusinessException(
-                        ErrorCode.BUSINESS_ERROR,
-                        "当前单据状态为「" + status + "」，不能删除"
-                );
-            }
-        });
-    }
-
-    private void assertRequestStatusTransitionAllowed(E entity, Optional<String> currentStatus) {
-        if (allowedStatusTransitions().isEmpty()) {
-            return;
-        }
-        Optional<String> nextStatus = resolveStatus(entity);
-        if (currentStatus.isEmpty() || nextStatus.isEmpty() || currentStatus.get().equals(nextStatus.get())) {
-            return;
-        }
-        validateStatusTransition(entity, currentStatus.get(), nextStatus.get());
-    }
-
-    private void assertRequestDidNotWriteFinalStatus(E entity) {
-        resolveStatus(entity).ifPresent(status -> {
-            if (StatusConstants.PROTECTED_DOCUMENT_STATUS.contains(status) && !StatusConstants.AUDITED.equals(status)) {
-                throw new BusinessException(
-                        ErrorCode.BUSINESS_ERROR,
-                        "完成态状态必须通过专用状态接口变更"
-                );
-            }
-        });
+        statusGuard.assertDeleteAllowed(entity);
     }
 
     private Specification<E> applyListVisibilityPolicy(Specification<E> specification) {
-        if (systemSwitchService == null) {
-            return specification;
-        }
-        Set<String> hiddenStatuses = systemSwitchService.getHiddenAuditedStatuses();
-        if (hiddenStatuses.isEmpty()) {
-            return specification;
-        }
-        return combineSpecifications(specification, excludeStatuses(hiddenStatuses));
+        return VISIBILITY_POLICY.applyListVisibility(specification, crudRuntimeSettings);
     }
 
     protected final Specification<E> applyDeletedVisibilityPolicy(Specification<E> specification) {
-        if (shouldAdminViewDeletedRecords()) {
-            return specification;
-        }
-        Specification<E> activeOnly = (root, query, criteriaBuilder) ->
-                criteriaBuilder.isFalse(root.get("deletedFlag"));
-        return specification == null ? activeOnly : specification.and(activeOnly);
-    }
-
-    private Specification<E> excludeStatuses(Set<String> hiddenStatuses) {
-        return (root, query, criteriaBuilder) -> {
-            try {
-                root.getModel().getAttribute("status");
-            } catch (IllegalArgumentException ex) {
-                return criteriaBuilder.conjunction();
-            }
-            var statusPath = root.get("status");
-            return criteriaBuilder.or(
-                    criteriaBuilder.isNull(statusPath),
-                    criteriaBuilder.not(statusPath.in(hiddenStatuses))
-            );
-        };
+        return VISIBILITY_POLICY.applyDeletedVisibility(specification, shouldAdminViewDeletedRecords());
     }
 
     private Optional<E> resolveDetailEntity(Long id) {
@@ -488,8 +288,8 @@ public abstract class AbstractCrudService<E extends AbstractAuditableEntity, Req
 
     private boolean shouldAdminViewDeletedRecords() {
         return allowAdminViewDeletedRecords()
-                && systemSwitchService != null
-                && systemSwitchService.shouldAdminSeeDeletedRecords()
+                && crudRuntimeSettings != null
+                && crudRuntimeSettings.shouldAdminSeeDeletedRecords()
                 && currentUserIsAdmin();
     }
 
@@ -503,52 +303,42 @@ public abstract class AbstractCrudService<E extends AbstractAuditableEntity, Req
                 .anyMatch("ROLE_ADMIN"::equals);
     }
 
-    private Optional<String> resolveStatus(E entity) {
-        try {
-            Method getter = entity.getClass().getMethod("getStatus");
-            Object value = getter.invoke(entity);
-            if (value == null) {
-                return Optional.empty();
-            }
-            String status = String.valueOf(value).trim();
-            return status.isBlank() ? Optional.empty() : Optional.of(status);
-        } catch (NoSuchMethodException ignored) {
+    private Optional<SecurityPrincipal> currentPrincipal() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || !(authentication.getPrincipal() instanceof SecurityPrincipal principal)) {
             return Optional.empty();
-        } catch (ReflectiveOperationException ex) {
-            throw new IllegalStateException("读取单据状态失败", ex);
         }
+        return Optional.of(principal);
     }
 
-    private String normalizeRequiredStatus(String status) {
-        if (status == null || status.isBlank()) {
-            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "状态不能为空");
+    private boolean isReservedBusinessNo(String moduleKey, String requestedNo) {
+        if (businessPreallocationService == null || requestedNo == null || requestedNo.isBlank()) {
+            return false;
         }
-        return status.trim();
+        return currentPrincipal()
+                .map(principal -> businessPreallocationService.isBusinessNoReservedByPrincipal(
+                        moduleKey,
+                        requestedNo.trim(),
+                        principal
+                ))
+                .orElse(false);
     }
 
-    private void validateStatusTransition(E entity, String currentStatus, String nextStatus) {
-        Set<String> allowedTransitions = allowedStatusTransitions();
-        if (allowedTransitions.isEmpty()) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "当前模块不支持状态变更");
+    private void consumeReservedBusinessNoAfterCommit(String moduleKey, String businessNo) {
+        if (businessPreallocationService == null || businessNo == null || businessNo.isBlank()) {
+            return;
         }
-        String transition = currentStatus + "->" + nextStatus;
-        if (!allowedTransitions.contains(transition)) {
-            throw new BusinessException(
-                    ErrorCode.BUSINESS_ERROR,
-                    "当前单据状态不能从「" + currentStatus + "」变更为「" + nextStatus + "」"
-            );
+        Runnable consume = () -> businessPreallocationService.consumeBusinessNo(moduleKey, businessNo);
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            consume.run();
+            return;
         }
-    }
-
-    private void writeStatus(E entity, String status) {
-        try {
-            Method setter = entity.getClass().getMethod("setStatus", String.class);
-            setter.invoke(entity, status);
-        } catch (NoSuchMethodException ex) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "当前模块不支持状态变更");
-        } catch (ReflectiveOperationException ex) {
-            throw new IllegalStateException("写入单据状态失败", ex);
-        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                consume.run();
+            }
+        });
     }
 
     private Specification<E> combineSpecifications(Specification<E> left, Specification<E> right) {
@@ -559,20 +349,6 @@ public abstract class AbstractCrudService<E extends AbstractAuditableEntity, Req
             return left;
         }
         return left.and(right);
-    }
-
-    private void markDeletedStatus(E entity) {
-        if (!allowAdminViewDeletedRecords()) {
-            return;
-        }
-        try {
-            Method setter = entity.getClass().getMethod("setStatus", String.class);
-            setter.invoke(entity, StatusConstants.DELETED);
-        } catch (NoSuchMethodException ignored) {
-            // Entities without a main status field do not need deleted status tagging.
-        } catch (ReflectiveOperationException ex) {
-            throw new IllegalStateException("写入单据删除状态失败", ex);
-        }
     }
 
     protected Res toDetailResponse(E entity) {

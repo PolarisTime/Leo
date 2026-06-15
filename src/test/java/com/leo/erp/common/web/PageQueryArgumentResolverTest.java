@@ -1,7 +1,6 @@
 package com.leo.erp.common.web;
 
 import com.leo.erp.common.api.PageQuery;
-import com.leo.erp.system.norule.service.SystemSwitchService;
 import org.junit.jupiter.api.Test;
 import org.springframework.core.MethodParameter;
 import org.springframework.mock.web.MockHttpServletRequest;
@@ -17,8 +16,8 @@ import static org.mockito.Mockito.when;
 
 class PageQueryArgumentResolverTest {
 
-    private final SystemSwitchService systemSwitchService = mock(SystemSwitchService.class);
-    private final PageQueryArgumentResolver resolver = new PageQueryArgumentResolver(systemSwitchService);
+    private final PageQuerySettings pageQuerySettings = mock(PageQuerySettings.class);
+    private final PageQueryArgumentResolver resolver = new PageQueryArgumentResolver(pageQuerySettings);
 
     @Test
     void shouldSupportPageQueryParameter() throws NoSuchMethodException {
@@ -38,7 +37,7 @@ class PageQueryArgumentResolverTest {
 
     @Test
     void shouldResolvePageQueryWithDefaultValues() throws Exception {
-        when(systemSwitchService.getDefaultListPageSize()).thenReturn(20);
+        when(pageQuerySettings.getDefaultListPageSize()).thenReturn(20);
 
         Method method = TestController.class.getMethod("testMethod", PageQuery.class);
         MethodParameter parameter = new MethodParameter(method, 0);

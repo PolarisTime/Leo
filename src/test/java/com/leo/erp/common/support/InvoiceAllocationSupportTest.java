@@ -1,7 +1,6 @@
 package com.leo.erp.common.support;
 
 import com.leo.erp.common.error.BusinessException;
-import com.leo.erp.system.company.service.CompanySettingService;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
@@ -33,7 +32,7 @@ class InvoiceAllocationSupportTest {
 
     @Test
     void shouldCalculateTaxAmount() {
-        CompanySettingService service = mock(CompanySettingService.class);
+        TaxRateProvider service = mock(TaxRateProvider.class);
         when(service.resolveCurrentTaxRate()).thenReturn(new BigDecimal("0.1300"));
 
         BigDecimal result = InvoiceAllocationSupport.calculateTaxAmount(
@@ -44,7 +43,7 @@ class InvoiceAllocationSupportTest {
 
     @Test
     void shouldReturnRequestedTaxAmountWhenRateIsZero() {
-        CompanySettingService service = mock(CompanySettingService.class);
+        TaxRateProvider service = mock(TaxRateProvider.class);
         when(service.resolveCurrentTaxRate()).thenReturn(BigDecimal.ZERO);
 
         BigDecimal result = InvoiceAllocationSupport.calculateTaxAmount(
@@ -55,7 +54,7 @@ class InvoiceAllocationSupportTest {
 
     @Test
     void shouldReturnZeroWhenRateIsZeroAndNoRequestedAmount() {
-        CompanySettingService service = mock(CompanySettingService.class);
+        TaxRateProvider service = mock(TaxRateProvider.class);
         when(service.resolveCurrentTaxRate()).thenReturn(BigDecimal.ZERO);
 
         BigDecimal result = InvoiceAllocationSupport.calculateTaxAmount(

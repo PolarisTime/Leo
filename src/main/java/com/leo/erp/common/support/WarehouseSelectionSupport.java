@@ -4,7 +4,6 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.web.OptionResponse;
-import com.leo.erp.master.warehouse.repository.WarehouseRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
@@ -21,17 +20,17 @@ public class WarehouseSelectionSupport {
     private static final Duration WAREHOUSE_CACHE_TTL = Duration.ofMinutes(30);
     private static final TypeReference<List<String>> WAREHOUSE_LIST_TYPE = new TypeReference<>() { };
 
-    private final WarehouseRepository warehouseRepository;
+    private final WarehouseCatalog warehouseCatalog;
     private final RedisJsonCacheSupport redisJsonCacheSupport;
 
     @Autowired
-    public WarehouseSelectionSupport(WarehouseRepository warehouseRepository, RedisJsonCacheSupport redisJsonCacheSupport) {
-        this.warehouseRepository = warehouseRepository;
+    public WarehouseSelectionSupport(WarehouseCatalog warehouseCatalog, RedisJsonCacheSupport redisJsonCacheSupport) {
+        this.warehouseCatalog = warehouseCatalog;
         this.redisJsonCacheSupport = redisJsonCacheSupport;
     }
 
-    public WarehouseSelectionSupport(WarehouseRepository warehouseRepository) {
-        this(warehouseRepository, null);
+    public WarehouseSelectionSupport(WarehouseCatalog warehouseCatalog) {
+        this(warehouseCatalog, null);
     }
 
     public String normalizeWarehouseName(String warehouseName, int lineNo, boolean required) {
@@ -84,27 +83,24 @@ public class WarehouseSelectionSupport {
     }
 
     private List<String> loadActiveWarehouseNames() {
-        if (warehouseRepository == null) {
+        if (warehouseCatalog == null) {
             return List.of();
         }
         List<String> names;
         if (redisJsonCacheSupport == null) {
-            names = warehouseRepository.findByDeletedFlagFalseOrderByWarehouseNameAsc().stream()
-                    .map(warehouse -> warehouse.getWarehouseName() == null ? null : warehouse.getWarehouseName().trim())
-                    .filter(name -> name != null && !name.isBlank())
-                    .toList();
+            names = warehouseCatalog.listActiveWarehouseNames();
         } else {
             names = redisJsonCacheSupport.getOrLoad(
                     WAREHOUSE_CACHE_KEY,
                     WAREHOUSE_CACHE_TTL,
                     WAREHOUSE_LIST_TYPE,
-                    () -> warehouseRepository.findByDeletedFlagFalseOrderByWarehouseNameAsc().stream()
-                            .map(warehouse -> warehouse.getWarehouseName() == null ? null : warehouse.getWarehouseName().trim())
-                            .filter(name -> name != null && !name.isBlank())
-                            .toList()
+                    warehouseCatalog::listActiveWarehouseNames
             );
         }
-        return names;
+        return names.stream()
+                .filter(name -> name != null && !name.isBlank())
+                .map(String::trim)
+                .toList();
     }
 
     private Set<String> loadActiveWarehouseNameSet() {
