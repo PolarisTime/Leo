@@ -1,8 +1,8 @@
 package com.leo.erp.sales.order.service;
 
 import com.leo.erp.common.support.TradeItemMaterialSupport;
+import com.leo.erp.common.support.TradeMaterialSnapshot;
 import com.leo.erp.common.support.WarehouseSelectionSupport;
-import com.leo.erp.master.material.domain.entity.Material;
 import com.leo.erp.sales.order.domain.entity.SalesOrder;
 import com.leo.erp.sales.order.domain.entity.SalesOrderItem;
 import com.leo.erp.sales.order.web.dto.SalesOrderItemRequest;
@@ -36,7 +36,7 @@ class SalesOrderItemMapperTest {
         );
 
         SalesOrderItem item = new SalesOrderItem();
-        Material material = new Material();
+        TradeMaterialSnapshot material = material();
 
         when(warehouseSelectionSupport.normalizeWarehouseName("一号库", 1, true)).thenReturn("一号库");
         when(materialSupport.normalizeBatchNo(material, "B1", 1, true)).thenReturn("B1");
@@ -78,7 +78,7 @@ class SalesOrderItemMapperTest {
                 new BigDecimal("4000.00"), new BigDecimal("18000.00")
         );
         SalesOrderItem item = new SalesOrderItem();
-        Material material = new Material();
+        TradeMaterialSnapshot material = material();
 
         when(warehouseSelectionSupport.normalizeWarehouseName("仓库A", 2, true)).thenReturn("仓库A-normalized");
         when(materialSupport.normalizeBatchNo(material, null, 2, true)).thenReturn("AUTO-BATCH");
@@ -106,7 +106,7 @@ class SalesOrderItemMapperTest {
                 new BigDecimal("3500.00"), new BigDecimal("17500.00")
         );
         SalesOrderItem item = new SalesOrderItem();
-        Material material = new Material();
+        TradeMaterialSnapshot material = material();
 
         when(warehouseSelectionSupport.normalizeWarehouseName("一号库", 1, true)).thenReturn("一号库");
         when(materialSupport.normalizeBatchNo(any(), any(), eq(1), eq(true))).thenReturn("B1");
@@ -132,7 +132,7 @@ class SalesOrderItemMapperTest {
                 new BigDecimal("3000.00"), new BigDecimal("13488.00")
         );
         SalesOrderItem item = new SalesOrderItem();
-        Material material = new Material();
+        TradeMaterialSnapshot material = material();
 
         when(warehouseSelectionSupport.normalizeWarehouseName("一号库", 1, true)).thenReturn("一号库");
         when(materialSupport.normalizeBatchNo(material, "B1", 1, true)).thenReturn("B1");
@@ -142,5 +142,9 @@ class SalesOrderItemMapperTest {
 
         assertThat(item.getSourcePurchaseOrderItemId()).isEqualTo(201L);
         assertThat(item.getSourceInboundItemId()).isNull();
+    }
+
+    private TradeMaterialSnapshot material() {
+        return new TradeMaterialSnapshot("M1", Boolean.FALSE);
     }
 }

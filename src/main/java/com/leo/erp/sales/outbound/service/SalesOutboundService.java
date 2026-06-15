@@ -6,75 +6,44 @@ import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.service.AbstractCrudService;
-import com.leo.erp.common.support.BusinessDocumentValidator;
 import com.leo.erp.common.support.BusinessStatusValidator;
-import com.leo.erp.common.support.ManagedEntityItemSupport;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
-import com.leo.erp.common.support.TradeItemMaterialSupport;
 import com.leo.erp.common.support.StatusConstants;
-import com.leo.erp.common.support.TradeItemCalculator;
-import com.leo.erp.common.support.WarehouseSelectionSupport;
-import com.leo.erp.master.material.domain.entity.Material;
-import com.leo.erp.sales.order.domain.entity.SalesOrderItem;
-import com.leo.erp.sales.order.service.SalesOrderItemQueryService;
 import com.leo.erp.sales.outbound.domain.entity.SalesOutbound;
-import com.leo.erp.sales.outbound.domain.entity.SalesOutboundItem;
 import com.leo.erp.sales.outbound.repository.SalesOutboundRepository;
-import com.leo.erp.sales.outbound.mapper.SalesOutboundMapper;
 import com.leo.erp.security.permission.WorkflowTransitionGuard;
-import com.leo.erp.sales.order.service.SalesOrderCompletionSyncService;
 import com.leo.erp.sales.outbound.web.dto.*;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.jpa.domain.Specification;
-import com.leo.erp.purchase.order.service.PurchaseOrderItemPieceWeightService;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.math.BigDecimal;
-import java.util.Collection;
-import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 
 @Service
 public class SalesOutboundService extends AbstractCrudService<SalesOutbound, SalesOutboundRequest, SalesOutboundResponse> {
 
     private final SalesOutboundRepository repository;
-    private final SalesOutboundMapper salesOutboundMapper;
-    private final TradeItemMaterialSupport tradeItemMaterialSupport;
-    private final WarehouseSelectionSupport warehouseSelectionSupport;
     private final WorkflowTransitionGuard workflowTransitionGuard;
-    private final SalesOrderCompletionSyncService salesOrderCompletionSyncService;
-    private static final Logger logger = LoggerFactory.getLogger(SalesOutboundService.class);
+    private final SalesOutboundApplyService salesOutboundApplyService;
+    private final SalesOutboundResponseAssembler responseAssembler;
+    private final SalesOutboundSaveService saveService;
 
-    private final SalesOrderItemQueryService salesOrderItemQueryService;
-    private final PurchaseOrderItemPieceWeightService purchaseOrderItemPieceWeightService;
-    private final JdbcTemplate jdbc;
-
+    @Autowired
     public SalesOutboundService(SalesOutboundRepository repository,
                                 SnowflakeIdGenerator idGenerator,
-                                SalesOutboundMapper salesOutboundMapper,
-                                TradeItemMaterialSupport tradeItemMaterialSupport,
-                                WarehouseSelectionSupport warehouseSelectionSupport,
                                 WorkflowTransitionGuard workflowTransitionGuard,
-                                SalesOrderCompletionSyncService salesOrderCompletionSyncService,
-                                SalesOrderItemQueryService salesOrderItemQueryService,
-                                PurchaseOrderItemPieceWeightService purchaseOrderItemPieceWeightService,
-                                JdbcTemplate jdbc) {
+                                SalesOutboundApplyService salesOutboundApplyService,
+                                SalesOutboundResponseAssembler responseAssembler,
+                                SalesOutboundSaveService saveService) {
         super(idGenerator);
         this.repository = repository;
-        this.salesOutboundMapper = salesOutboundMapper;
-        this.tradeItemMaterialSupport = tradeItemMaterialSupport;
-        this.warehouseSelectionSupport = warehouseSelectionSupport;
         this.workflowTransitionGuard = workflowTransitionGuard;
-        this.salesOrderCompletionSyncService = salesOrderCompletionSyncService;
-        this.salesOrderItemQueryService = salesOrderItemQueryService;
-        this.purchaseOrderItemPieceWeightService = purchaseOrderItemPieceWeightService;
-        this.jdbc = jdbc;
+        this.salesOutboundApplyService = salesOutboundApplyService;
+        this.responseAssembler = responseAssembler;
+        this.saveService = saveService;
     }
 
     @Transactional(readOnly = true)
@@ -96,21 +65,7 @@ public class SalesOutboundService extends AbstractCrudService<SalesOutbound, Sal
 
     @Override
     protected SalesOutboundResponse toDetailResponse(SalesOutbound entity) {
-        SalesOutboundResponse response = salesOutboundMapper.toResponse(entity);
-        Map<Long, SalesOrderItem> sourceSalesOrderItemMap = loadSourceSalesOrderItemMap(entity.getItems());
-        return new SalesOutboundResponse(
-                response.id(), response.outboundNo(), response.salesOrderNo(),
-                response.customerName(), response.projectName(), response.warehouseName(),
-                response.outboundDate(), response.totalWeight(), response.totalAmount(),
-                response.status(), response.remark(),
-                entity.getItems().stream().map(item -> new SalesOutboundItemResponse(
-                        item.getId(), item.getLineNo(), resolveItemSourceNo(item, sourceSalesOrderItemMap), item.getSourceSalesOrderItemId(), item.getMaterialCode(),
-                        item.getBrand(), item.getCategory(), item.getMaterial(),
-                        item.getSpec(), item.getLength(), item.getUnit(), item.getWarehouseName(), item.getBatchNo(),
-                        item.getQuantity(), item.getQuantityUnit(), item.getPieceWeightTon(), item.getPiecesPerBundle(),
-                        item.getWeightTon(), item.getUnitPrice(), item.getAmount()
-                )).toList()
-        );
+        return responseAssembler.toDetailResponse(entity);
     }
 
     @Override
@@ -213,318 +168,21 @@ public class SalesOutboundService extends AbstractCrudService<SalesOutbound, Sal
         entity.setOutboundDate(request.outboundDate());
         entity.setStatus(nextStatus);
         entity.setRemark(request.remark());
-
-        BigDecimal totalWeight = BigDecimal.ZERO;
-        BigDecimal totalAmount = BigDecimal.ZERO;
-        String firstLineWarehouseName = null;
-        var materialMap = tradeItemMaterialSupport.loadMaterialMap(
-                request.items().stream().map(SalesOutboundItemRequest::materialCode).toList()
-        );
-        List<SalesOutboundItem> items = ManagedEntityItemSupport.syncById(
-                entity.getItems(),
-                request.items(),
-                SalesOutboundItem::getId,
-                SalesOutboundItemRequest::id,
-                SalesOutboundItem::new,
-                this::nextId,
-                SalesOutboundItem::setId
-        );
-        Map<Long, SalesOrderItem> sourceSalesOrderItemMap = loadSourceSalesOrderItemMap(request.items(), items);
-        Map<Long, Integer> requestSourceQuantityMap = new java.util.HashMap<>();
-        LinkedHashSet<String> sourceSalesOrderNos = new LinkedHashSet<>();
-        LinkedHashSet<Long> sourceSalesOrderItemIds = new LinkedHashSet<>();
-        for (int i = 0; i < request.items().size(); i++) {
-            SalesOutboundItemRequest source = request.items().get(i);
-            Material material = materialMap.get(source.materialCode());
-            SalesOutboundItem item = items.get(i);
-            int lineNo = i + 1;
-            item.setSalesOutbound(entity);
-            item.setLineNo(lineNo);
-            Long sourceSalesOrderItemId = resolveSourceSalesOrderItemId(source, item, lineNo);
-            sourceSalesOrderItemIds.add(sourceSalesOrderItemId);
-            SalesOrderItem sourceSalesOrderItem = resolveSourceSalesOrderItem(sourceSalesOrderItemMap, sourceSalesOrderItemId, lineNo);
-            item.setSourceSalesOrderItemId(sourceSalesOrderItemId);
-            item.setMaterialCode(source.materialCode());
-            item.setBrand(source.brand());
-            item.setCategory(source.category());
-            item.setMaterial(source.material());
-            item.setSpec(source.spec());
-            item.setLength(source.length());
-            item.setUnit(source.unit());
-            String warehouseName = warehouseSelectionSupport.normalizeWarehouseName(
-                    source.warehouseName() == null || source.warehouseName().isBlank() ? request.warehouseName() : source.warehouseName(),
-                    lineNo,
-                    true
-            );
-            if (firstLineWarehouseName == null) {
-                firstLineWarehouseName = warehouseName;
-            }
-            item.setWarehouseName(warehouseName);
-            item.setBatchNo(tradeItemMaterialSupport.normalizeBatchNo(material, source.batchNo(), lineNo, true));
-            item.setQuantity(source.quantity());
-            item.setQuantityUnit(TradeItemCalculator.normalizeQuantityUnit(source.quantityUnit()));
-            validateSourceSalesOrderItem(source, sourceSalesOrderItem, sourceSalesOrderItemId,
-                    request.customerName(), request.projectName(), warehouseName, item.getBatchNo(),
-                    requestSourceQuantityMap, lineNo);
-            BigDecimal weightTon = resolveOutboundWeightTon(source, sourceSalesOrderItem, sourceSalesOrderItemId, lineNo);
-            BigDecimal pieceWeightTon = TradeItemCalculator.calculateRepresentableAveragePieceWeightTon(source.quantity(), weightTon);
-            item.setPieceWeightTon(pieceWeightTon != null ? pieceWeightTon : TradeItemCalculator.scaleWeightTon(source.pieceWeightTon()));
-            item.setPiecesPerBundle(source.piecesPerBundle());
-            item.setWeightTon(weightTon);
-            item.setUnitPrice(source.unitPrice());
-            BigDecimal amount = TradeItemCalculator.calculateAmount(weightTon, source.unitPrice());
-            item.setAmount(amount);
-            collectSourceSalesOrderNos(sourceSalesOrderNos, source, sourceSalesOrderItemMap, sourceSalesOrderItemId);
-            totalWeight = totalWeight.add(weightTon);
-            totalAmount = totalAmount.add(amount);
-        }
-        assertSourceSalesOrderItemsNotOccupied(sourceSalesOrderItemIds, entity.getId());
-        entity.getItems().sort(java.util.Comparator.comparing(SalesOutboundItem::getLineNo));
-        entity.setSalesOrderNo(sourceSalesOrderNos.isEmpty()
-                ? trimToNull(request.salesOrderNo())
-                : String.join(", ", sourceSalesOrderNos));
-        entity.setWarehouseName(firstLineWarehouseName == null ? trimToNull(request.warehouseName()) : firstLineWarehouseName);
-        entity.setTotalWeight(totalWeight);
-        entity.setTotalAmount(totalAmount);
-    }
-
-    /**
-     * 从逐件重量表中按重量降序取件，实现"先出重件"的 FIFO 原则。
-     * 若无逐件记录则回退使用销售订单明细的平均重量。
-     */
-    private BigDecimal resolveOutboundWeightTon(SalesOutboundItemRequest source,
-                                                SalesOrderItem sourceSalesOrderItem,
-                                                Long sourceSalesOrderItemId,
-                                                int lineNo) {
-        if (sourceSalesOrderItemId == null || source.quantity() == null || source.quantity() <= 0) {
-            return fallbackWeightTon(source);
-        }
-        List<BigDecimal> weights = jdbc.query(
-                "SELECT pw.weight_ton FROM po_purchase_order_item_piece_weight pw" +
-                " WHERE pw.sales_order_item_id = ? ORDER BY pw.weight_ton DESC",
-                (rs, rowNum) -> rs.getBigDecimal("weight_ton"),
-                sourceSalesOrderItemId);
-        if (weights.size() < source.quantity()) {
-            logger.warn("第{}行逐件记录不足: 需要{}件, 实际{}件, 使用来源销售订单明细均重", lineNo, source.quantity(), weights.size());
-            return sourceBackedWeightTon(source, sourceSalesOrderItem, lineNo);
-        }
-        BigDecimal total = BigDecimal.ZERO;
-        for (int i = 0; i < source.quantity(); i++) {
-            total = total.add(weights.get(i));
-        }
-        return TradeItemCalculator.scaleWeightTon(total);
-    }
-
-    private BigDecimal fallbackWeightTon(SalesOutboundItemRequest source) {
-        return source.weightTon() == null
-                ? TradeItemCalculator.calculateWeightTon(source.quantity(), source.pieceWeightTon())
-                : TradeItemCalculator.scaleWeightTon(source.weightTon());
-    }
-
-    private BigDecimal sourceBackedWeightTon(SalesOutboundItemRequest source,
-                                             SalesOrderItem sourceSalesOrderItem,
-                                             int lineNo) {
-        if (sourceSalesOrderItem == null
-                || sourceSalesOrderItem.getQuantity() == null
-                || sourceSalesOrderItem.getQuantity() <= 0
-                || sourceSalesOrderItem.getWeightTon() == null) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行来源销售订单明细重量不可用");
-        }
-        BigDecimal sourcePieceWeightTon = TradeItemCalculator.calculateRepresentableAveragePieceWeightTon(
-                sourceSalesOrderItem.getQuantity(),
-                sourceSalesOrderItem.getWeightTon()
-        );
-        if (sourcePieceWeightTon == null) {
-            sourcePieceWeightTon = TradeItemCalculator.calculateAveragePieceWeightTon(
-                    sourceSalesOrderItem.getQuantity(),
-                    sourceSalesOrderItem.getWeightTon()
-            );
-        }
-        return TradeItemCalculator.calculateWeightTon(source.quantity(), sourcePieceWeightTon);
-    }
-
-    private void assertSourceSalesOrderItemsNotOccupied(
-            Collection<Long> sourceSalesOrderItemIds,
-            Long currentOutboundId
-    ) {
-        if (sourceSalesOrderItemIds.isEmpty()) {
-            return;
-        }
-
-        List<SalesOutbound> occupiedOutbounds =
-                repository.findAllBySourceSalesOrderItemIdsExcludingCurrentOutbound(
-                        sourceSalesOrderItemIds,
-                        currentOutboundId
-                );
-        for (Long sourceSalesOrderItemId : sourceSalesOrderItemIds) {
-            for (SalesOutbound occupiedOutbound : occupiedOutbounds) {
-                boolean matched = occupiedOutbound.getItems().stream()
-                        .anyMatch(item -> sourceSalesOrderItemId.equals(item.getSourceSalesOrderItemId()));
-                if (!matched) {
-                    continue;
-                }
-                throw new BusinessException(
-                        ErrorCode.BUSINESS_ERROR,
-                        "销售订单明细已被销售出库单" + occupiedOutbound.getOutboundNo() + "关联"
-                );
-            }
-        }
+        salesOutboundApplyService.applyItems(entity, request, this::nextId);
     }
 
     @Override
     protected SalesOutbound saveEntity(SalesOutbound entity) {
-        SalesOutbound saved = repository.save(entity);
-        salesOrderCompletionSyncService.syncBySalesOrderReference(saved.getSalesOrderNo());
-        return saved;
+        return saveService.save(entity);
     }
 
     @Override
     protected SalesOutboundResponse toResponse(SalesOutbound entity) {
-        return salesOutboundMapper.toResponse(entity);
+        return responseAssembler.toSummaryResponse(entity);
     }
 
     @Override
     protected SalesOutboundResponse toSavedResponse(SalesOutbound entity) {
         return toDetailResponse(entity);
-    }
-
-    private Map<Long, SalesOrderItem> loadSourceSalesOrderItemMap(List<SalesOutboundItemRequest> requestItems,
-                                                                  List<SalesOutboundItem> items) {
-        LinkedHashSet<Long> sourceSalesOrderItemIds = new LinkedHashSet<>();
-        requestItems.stream()
-                .map(SalesOutboundItemRequest::sourceSalesOrderItemId)
-                .filter(id -> id != null)
-                .forEach(sourceSalesOrderItemIds::add);
-        items.stream()
-                .map(SalesOutboundItem::getSourceSalesOrderItemId)
-                .filter(id -> id != null)
-                .forEach(sourceSalesOrderItemIds::add);
-        if (sourceSalesOrderItemIds.isEmpty()) {
-            return Map.of();
-        }
-        return salesOrderItemQueryService.findActiveByIdIn(sourceSalesOrderItemIds).stream()
-                .collect(java.util.stream.Collectors.toMap(SalesOrderItem::getId, item -> item));
-    }
-
-    private Map<Long, SalesOrderItem> loadSourceSalesOrderItemMap(List<SalesOutboundItem> items) {
-        List<Long> sourceSalesOrderItemIds = items.stream()
-                .map(SalesOutboundItem::getSourceSalesOrderItemId)
-                .filter(id -> id != null)
-                .distinct()
-                .toList();
-        if (sourceSalesOrderItemIds.isEmpty()) {
-            return Map.of();
-        }
-        return salesOrderItemQueryService.findActiveByIdIn(sourceSalesOrderItemIds).stream()
-                .collect(java.util.stream.Collectors.toMap(SalesOrderItem::getId, item -> item));
-    }
-
-    private Long resolveSourceSalesOrderItemId(SalesOutboundItemRequest source, SalesOutboundItem item, int lineNo) {
-        if (source.sourceSalesOrderItemId() != null) {
-            return source.sourceSalesOrderItemId();
-        }
-        Long persistedSourceSalesOrderItemId = item.getSourceSalesOrderItemId();
-        if (persistedSourceSalesOrderItemId == null) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行来源销售订单明细不能为空");
-        }
-        return persistedSourceSalesOrderItemId;
-    }
-
-    private SalesOrderItem resolveSourceSalesOrderItem(Map<Long, SalesOrderItem> sourceSalesOrderItemMap,
-                                                       Long sourceSalesOrderItemId,
-                                                       int lineNo) {
-        if (sourceSalesOrderItemId == null) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行来源销售订单明细不能为空");
-        }
-        SalesOrderItem sourceSalesOrderItem = sourceSalesOrderItemMap.get(sourceSalesOrderItemId);
-        if (sourceSalesOrderItem == null || sourceSalesOrderItem.getSalesOrder() == null) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行来源销售订单明细不存在");
-        }
-        return sourceSalesOrderItem;
-    }
-
-    private void validateSourceSalesOrderItem(SalesOutboundItemRequest request,
-                                              SalesOrderItem sourceSalesOrderItem,
-                                              Long sourceSalesOrderItemId,
-                                              String headerCustomerName,
-                                              String headerProjectName,
-                                              String warehouseName,
-                                              String batchNo,
-                                              Map<Long, Integer> requestSourceQuantityMap,
-                                              int lineNo) {
-        if (sourceSalesOrderItemId == null) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行来源销售订单明细不能为空");
-        }
-        var sourceSalesOrder = sourceSalesOrderItem.getSalesOrder();
-        String sourceStatus = sourceSalesOrder == null ? null : sourceSalesOrder.getStatus();
-        BusinessDocumentValidator.requireStatusIn(
-                sourceStatus,
-                java.util.Set.of(StatusConstants.AUDITED),
-                "第" + lineNo + "行来源销售订单未审核，不能作为来源单据"
-        );
-        assertSameOrderText(headerCustomerName, sourceSalesOrder == null ? null : sourceSalesOrder.getCustomerName(), lineNo, "客户");
-        assertSameOrderText(headerProjectName, sourceSalesOrder == null ? null : sourceSalesOrder.getProjectName(), lineNo, "项目");
-        BusinessDocumentValidator.requireSameSourceText(request.materialCode(), sourceSalesOrderItem.getMaterialCode(), lineNo, "来源销售订单明细", "物料编码");
-        BusinessDocumentValidator.requireSameSourceText(request.brand(), sourceSalesOrderItem.getBrand(), lineNo, "来源销售订单明细", "品牌");
-        BusinessDocumentValidator.requireSameSourceText(request.category(), sourceSalesOrderItem.getCategory(), lineNo, "来源销售订单明细", "品类");
-        BusinessDocumentValidator.requireSameSourceText(request.material(), sourceSalesOrderItem.getMaterial(), lineNo, "来源销售订单明细", "材质");
-        BusinessDocumentValidator.requireSameSourceText(request.spec(), sourceSalesOrderItem.getSpec(), lineNo, "来源销售订单明细", "规格");
-        BusinessDocumentValidator.requireSameSourceText(request.unit(), sourceSalesOrderItem.getUnit(), lineNo, "来源销售订单明细", "单位");
-        BusinessDocumentValidator.requireSameSourceText(warehouseName, sourceSalesOrderItem.getWarehouseName(), lineNo, "来源销售订单明细", "仓库");
-        BusinessDocumentValidator.requireSameSourceText(batchNo, sourceSalesOrderItem.getBatchNo(), lineNo, "来源销售订单明细", "批号");
-
-        int currentQuantity = request.quantity() == null ? 0 : request.quantity();
-        int requestedQuantity = requestSourceQuantityMap.getOrDefault(sourceSalesOrderItemId, 0);
-        int sourceQuantity = sourceSalesOrderItem.getQuantity() == null ? 0 : sourceSalesOrderItem.getQuantity();
-        if (requestedQuantity + currentQuantity > sourceQuantity) {
-            throw new BusinessException(
-                    ErrorCode.BUSINESS_ERROR,
-                    "第" + lineNo + "行来源销售订单明细可出库数量不足，剩余可用 " + Math.max(sourceQuantity - requestedQuantity, 0) + " 件"
-            );
-        }
-        requestSourceQuantityMap.put(sourceSalesOrderItemId, requestedQuantity + currentQuantity);
-    }
-
-    private void assertSameOrderText(String requestedValue, String sourceValue, int lineNo, String fieldName) {
-        BusinessDocumentValidator.requireSameSourceText(
-                requestedValue,
-                sourceValue,
-                lineNo,
-                "来源销售订单",
-                fieldName
-        );
-    }
-
-    private void collectSourceSalesOrderNos(LinkedHashSet<String> sourceSalesOrderNos,
-                                            SalesOutboundItemRequest source,
-                                            Map<Long, SalesOrderItem> sourceSalesOrderItemMap,
-                                            Long sourceSalesOrderItemId) {
-        if (sourceSalesOrderItemId != null) {
-            SalesOrderItem sourceSalesOrderItem = sourceSalesOrderItemMap.get(sourceSalesOrderItemId);
-            if (sourceSalesOrderItem == null || sourceSalesOrderItem.getSalesOrder() == null) {
-                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "来源销售订单明细不存在");
-            }
-            sourceSalesOrderNos.add(sourceSalesOrderItem.getSalesOrder().getOrderNo());
-            return;
-        }
-        String sourceNo = trimToNull(source.sourceNo());
-        if (sourceNo != null) {
-            sourceSalesOrderNos.add(sourceNo);
-        }
-    }
-
-    private String resolveItemSourceNo(SalesOutboundItem item, Map<Long, SalesOrderItem> sourceSalesOrderItemMap) {
-        if (item.getSourceSalesOrderItemId() == null) {
-            return null;
-        }
-        SalesOrderItem sourceSalesOrderItem = sourceSalesOrderItemMap.get(item.getSourceSalesOrderItemId());
-        if (sourceSalesOrderItem == null || sourceSalesOrderItem.getSalesOrder() == null) {
-            return null;
-        }
-        return sourceSalesOrderItem.getSalesOrder().getOrderNo();
-    }
-
-    private String trimToNull(String value) {
-        return BusinessDocumentValidator.trimToNull(value);
     }
 }
