@@ -1,8 +1,10 @@
 target/
+logs/
 *.class
 *.jar
 *.war
 *.log
+leo.zip
 .idea/
 *.iml
 *.iws
@@ -12,3 +14,9 @@ target/
 .classpath
 bin/
 .vscode/
+.codex
+.claude/
+.agents/
+scripts/__pycache__/
+__pycache__/
+*.pyc
