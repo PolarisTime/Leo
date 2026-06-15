@@ -15,6 +15,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class PurchaseInboundItemQueryServiceTest {
@@ -113,6 +114,7 @@ class PurchaseInboundItemQueryServiceTest {
         List<PurchaseInboundItem> result = service.findAllActiveByIdIn(List.of(1L, 2L));
 
         assertThat(result).hasSize(2);
+        verify(accessGuard).assertCurrentUserCanAccess("purchase-inbound", "read", inbound);
     }
 
     @Test
@@ -153,6 +155,7 @@ class PurchaseInboundItemQueryServiceTest {
         List<PurchaseInboundItem> result = service.findAllActiveBySourcePurchaseOrderItemIds(List.of(201L));
 
         assertThat(result).singleElement().isEqualTo(item);
+        verify(accessGuard).assertCurrentUserCanAccess("purchase-inbound", "read", inbound);
     }
 
     @Test

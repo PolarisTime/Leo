@@ -1,8 +1,8 @@
 package com.leo.erp.purchase.inbound.service;
 
 import com.leo.erp.common.support.TradeItemMaterialSupport;
+import com.leo.erp.common.support.TradeMaterialSnapshot;
 import com.leo.erp.common.support.WarehouseSelectionSupport;
-import com.leo.erp.master.material.domain.entity.Material;
 import com.leo.erp.purchase.inbound.domain.entity.PurchaseInbound;
 import com.leo.erp.purchase.inbound.domain.entity.PurchaseInboundItem;
 import com.leo.erp.purchase.inbound.web.dto.PurchaseInboundItemRequest;
@@ -55,7 +55,7 @@ class InboundItemMapperTest {
         );
 
         InboundItemMapper.ItemMappingResult result = mapper.applyItemFields(
-                inbound, source, item, 1, new Material(), Map.of(), ctx
+                inbound, source, item, 1, material(), Map.of(), ctx
         );
 
         assertThat(item.getLineNo()).isEqualTo(1);
@@ -111,7 +111,7 @@ class InboundItemMapperTest {
         InboundItemMapper.ItemMappingContext ctx = new InboundItemMapper.ItemMappingContext(ws, "一号库", "理算");
 
         InboundItemMapper.ItemMappingResult result = mapper.applyItemFields(
-                inbound, source, item, 1, new Material(), sourceMap, ctx
+                inbound, source, item, 1, material(), sourceMap, ctx
         );
 
         assertThat(result.sourceOrderNo()).isEqualTo("PO-001");
@@ -143,7 +143,7 @@ class InboundItemMapperTest {
         InboundItemMapper.ItemMappingContext ctx = new InboundItemMapper.ItemMappingContext(ws, "一号库", "理算");
 
         InboundItemMapper.ItemMappingResult result = mapper.applyItemFields(
-                inbound, source, item, 1, new Material(), Map.of(), ctx
+                inbound, source, item, 1, material(), Map.of(), ctx
         );
 
         assertThat(result.sourceOrderNo()).isNull();
@@ -174,7 +174,7 @@ class InboundItemMapperTest {
         );
         InboundItemMapper.ItemMappingContext ctx = new InboundItemMapper.ItemMappingContext(ws, "默认仓库", "理算");
 
-        mapper.applyItemFields(inbound, source, item, 1, new Material(), Map.of(), ctx);
+        mapper.applyItemFields(inbound, source, item, 1, material(), Map.of(), ctx);
 
         assertThat(item.getWarehouseName()).isEqualTo("默认仓库");
     }
@@ -204,7 +204,7 @@ class InboundItemMapperTest {
         );
         InboundItemMapper.ItemMappingContext ctx = new InboundItemMapper.ItemMappingContext(ws, "一号库", "过磅");
 
-        mapper.applyItemFields(inbound, source, item, 1, new Material(), Map.of(), ctx);
+        mapper.applyItemFields(inbound, source, item, 1, material(), Map.of(), ctx);
 
         assertThat(item.getWeighWeightTon()).isEqualByComparingTo("0.430");
         assertThat(item.getWeightAdjustmentTon()).isEqualByComparingTo("0.030");
@@ -235,8 +235,12 @@ class InboundItemMapperTest {
         );
         InboundItemMapper.ItemMappingContext ctx = new InboundItemMapper.ItemMappingContext(ws, "一号库", null);
 
-        mapper.applyItemFields(inbound, source, item, 1, new Material(), Map.of(), ctx);
+        mapper.applyItemFields(inbound, source, item, 1, material(), Map.of(), ctx);
 
         assertThat(item.getSettlementMode()).isEqualTo("现结");
+    }
+
+    private TradeMaterialSnapshot material() {
+        return new TradeMaterialSnapshot("M1", Boolean.FALSE);
     }
 }
