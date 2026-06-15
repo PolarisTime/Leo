@@ -2,8 +2,8 @@ package com.leo.erp.purchase.inbound.service;
 
 import com.leo.erp.common.support.TradeItemCalculator;
 import com.leo.erp.common.support.TradeItemMaterialSupport;
+import com.leo.erp.common.support.TradeMaterialSnapshot;
 import com.leo.erp.common.support.WarehouseSelectionSupport;
-import com.leo.erp.master.material.domain.entity.Material;
 import com.leo.erp.purchase.inbound.domain.entity.PurchaseInbound;
 import com.leo.erp.purchase.inbound.domain.entity.PurchaseInboundItem;
 import com.leo.erp.purchase.inbound.web.dto.PurchaseInboundItemRequest;
@@ -45,7 +45,7 @@ public class InboundItemMapper {
             PurchaseInboundItemRequest source,
             PurchaseInboundItem item,
             int lineNo,
-            Material material,
+            TradeMaterialSnapshot material,
             Map<Long, PurchaseOrderItem> sourcePurchaseOrderItemMap,
             ItemMappingContext ctx) {
 

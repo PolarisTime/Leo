@@ -5,9 +5,9 @@ import com.leo.erp.purchase.inbound.service.InboundItemMapper;
 
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.TradeItemMaterialSupport;
+import com.leo.erp.common.support.TradeMaterialSnapshot;
 import com.leo.erp.common.support.WarehouseSelectionSupport;
 import com.leo.erp.common.error.BusinessException;
-import com.leo.erp.master.material.domain.entity.Material;
 import com.leo.erp.master.material.domain.entity.MaterialCategory;
 import com.leo.erp.master.material.repository.MaterialCategoryRepository;
 import com.leo.erp.purchase.inbound.domain.entity.PurchaseInbound;
@@ -90,17 +90,17 @@ class PurchaseInboundServiceTest {
         PurchaseOrderItemQueryService purchaseOrderItemQueryService = mock(PurchaseOrderItemQueryService.class);
         var itemAllocationRepo = mock(ItemAllocationNativeRepository.class);
         var inboundItemMapper = stubbedInboundItemMapper();
-        PurchaseInboundService service = new PurchaseInboundService(
+        PurchaseInboundService service = service(
                 repository,
                 idGenerator,
                 mapper,
                 materialSupport,
                 warehouseSelectionSupport,
-                materialCategoryRepository,
+                new PurchaseInboundWeightSettlementService(materialCategoryRepository),
+                weightWriteBackService(purchaseInboundItemRepository, purchaseOrderRepository, mock(PurchaseOrderItemPieceWeightService.class)),
+                completionSyncService(repository, sourceValidator(purchaseOrderItemQueryService, purchaseInboundItemRepository)),
                 purchaseInboundItemRepository,
-                purchaseOrderRepository,
-                mock(PurchaseOrderItemPieceWeightService.class),
-                purchaseOrderItemQueryService,
+                sourceValidator(purchaseOrderItemQueryService, purchaseInboundItemRepository),
                 itemAllocationRepo,
                 stubbedInboundItemMapper(), mock(WorkflowTransitionGuard.class)
         );
@@ -110,7 +110,7 @@ class PurchaseInboundServiceTest {
 
         when(repository.existsByInboundNoAndDeletedFlagFalse("PI-001")).thenReturn(false);
         when(idGenerator.nextId()).thenReturn(1L, 11L);
-        when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(Map.of("M1", new Material()));
+        when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(materialMap("M1"));
         when(materialSupport.normalizeBatchNo(any(), eq("B1"), eq(1), eq(true))).thenReturn("B1");
         when(warehouseSelectionSupport.normalizeWarehouseName("一号库", 1, true)).thenReturn("一号库");
         when(materialCategoryRepository.findByCategoryNameInAndDeletedFlagFalse(List.of("螺纹钢"))).thenReturn(List.of());
@@ -149,17 +149,17 @@ class PurchaseInboundServiceTest {
         PurchaseInboundRepository repository = mock(PurchaseInboundRepository.class);
         PurchaseInboundMapper mapper = mock(PurchaseInboundMapper.class);
         PurchaseOrderItemQueryService purchaseOrderItemQueryService = mock(PurchaseOrderItemQueryService.class);
-        PurchaseInboundService service = new PurchaseInboundService(
+        PurchaseInboundService service = service(
                 repository,
                 mock(SnowflakeIdGenerator.class),
                 mapper,
                 mock(TradeItemMaterialSupport.class),
                 mock(WarehouseSelectionSupport.class),
-                mock(MaterialCategoryRepository.class),
+                new PurchaseInboundWeightSettlementService(mock(MaterialCategoryRepository.class)),
+                weightWriteBackService(mock(PurchaseInboundItemRepository.class), mock(PurchaseOrderRepository.class), mock(PurchaseOrderItemPieceWeightService.class)),
+                completionSyncService(repository, sourceValidator(purchaseOrderItemQueryService)),
                 mock(PurchaseInboundItemRepository.class),
-                mock(PurchaseOrderRepository.class),
-                mock(PurchaseOrderItemPieceWeightService.class),
-                purchaseOrderItemQueryService,
+                sourceValidator(purchaseOrderItemQueryService),
                 mock(ItemAllocationNativeRepository.class),
                 stubbedInboundItemMapper(), mock(WorkflowTransitionGuard.class)
         );
@@ -179,17 +179,17 @@ class PurchaseInboundServiceTest {
         PurchaseInboundRepository repository = mock(PurchaseInboundRepository.class);
         PurchaseInboundMapper mapper = mock(PurchaseInboundMapper.class);
         PurchaseOrderItemQueryService purchaseOrderItemQueryService = mock(PurchaseOrderItemQueryService.class);
-        PurchaseInboundService service = new PurchaseInboundService(
+        PurchaseInboundService service = service(
                 repository,
                 mock(SnowflakeIdGenerator.class),
                 mapper,
                 mock(TradeItemMaterialSupport.class),
                 mock(WarehouseSelectionSupport.class),
-                mock(MaterialCategoryRepository.class),
+                new PurchaseInboundWeightSettlementService(mock(MaterialCategoryRepository.class)),
+                weightWriteBackService(mock(PurchaseInboundItemRepository.class), mock(PurchaseOrderRepository.class), mock(PurchaseOrderItemPieceWeightService.class)),
+                completionSyncService(repository, sourceValidator(purchaseOrderItemQueryService)),
                 mock(PurchaseInboundItemRepository.class),
-                mock(PurchaseOrderRepository.class),
-                mock(PurchaseOrderItemPieceWeightService.class),
-                purchaseOrderItemQueryService,
+                sourceValidator(purchaseOrderItemQueryService),
                 mock(ItemAllocationNativeRepository.class),
                 stubbedInboundItemMapper(), mock(WorkflowTransitionGuard.class)
         );
@@ -209,17 +209,17 @@ class PurchaseInboundServiceTest {
         PurchaseInboundRepository repository = mock(PurchaseInboundRepository.class);
         PurchaseInboundMapper mapper = mock(PurchaseInboundMapper.class);
         PurchaseOrderItemQueryService purchaseOrderItemQueryService = mock(PurchaseOrderItemQueryService.class);
-        PurchaseInboundService service = new PurchaseInboundService(
+        PurchaseInboundService service = service(
                 repository,
                 mock(SnowflakeIdGenerator.class),
                 mapper,
                 mock(TradeItemMaterialSupport.class),
                 mock(WarehouseSelectionSupport.class),
-                mock(MaterialCategoryRepository.class),
+                new PurchaseInboundWeightSettlementService(mock(MaterialCategoryRepository.class)),
+                weightWriteBackService(mock(PurchaseInboundItemRepository.class), mock(PurchaseOrderRepository.class), mock(PurchaseOrderItemPieceWeightService.class)),
+                completionSyncService(repository, sourceValidator(purchaseOrderItemQueryService)),
                 mock(PurchaseInboundItemRepository.class),
-                mock(PurchaseOrderRepository.class),
-                mock(PurchaseOrderItemPieceWeightService.class),
-                purchaseOrderItemQueryService,
+                sourceValidator(purchaseOrderItemQueryService),
                 mock(ItemAllocationNativeRepository.class),
                 stubbedInboundItemMapper(), mock(WorkflowTransitionGuard.class)
         );
@@ -239,17 +239,17 @@ class PurchaseInboundServiceTest {
         PurchaseInboundRepository repository = mock(PurchaseInboundRepository.class);
         PurchaseInboundMapper mapper = mock(PurchaseInboundMapper.class);
         PurchaseOrderItemQueryService purchaseOrderItemQueryService = mock(PurchaseOrderItemQueryService.class);
-        PurchaseInboundService service = new PurchaseInboundService(
+        PurchaseInboundService service = service(
                 repository,
                 mock(SnowflakeIdGenerator.class),
                 mapper,
                 mock(TradeItemMaterialSupport.class),
                 mock(WarehouseSelectionSupport.class),
-                mock(MaterialCategoryRepository.class),
+                new PurchaseInboundWeightSettlementService(mock(MaterialCategoryRepository.class)),
+                weightWriteBackService(mock(PurchaseInboundItemRepository.class), mock(PurchaseOrderRepository.class), mock(PurchaseOrderItemPieceWeightService.class)),
+                completionSyncService(repository, sourceValidator(purchaseOrderItemQueryService)),
                 mock(PurchaseInboundItemRepository.class),
-                mock(PurchaseOrderRepository.class),
-                mock(PurchaseOrderItemPieceWeightService.class),
-                purchaseOrderItemQueryService,
+                sourceValidator(purchaseOrderItemQueryService),
                 mock(ItemAllocationNativeRepository.class),
                 stubbedInboundItemMapper(), mock(WorkflowTransitionGuard.class)
         );
@@ -275,17 +275,17 @@ class PurchaseInboundServiceTest {
         PurchaseInboundItemRepository purchaseInboundItemRepository = mock(PurchaseInboundItemRepository.class);
         PurchaseOrderRepository purchaseOrderRepository = mock(PurchaseOrderRepository.class);
         PurchaseOrderItemQueryService purchaseOrderItemQueryService = mock(PurchaseOrderItemQueryService.class);
-        PurchaseInboundService service = new PurchaseInboundService(
+        PurchaseInboundService service = service(
                 repository,
                 mock(SnowflakeIdGenerator.class),
                 mapper,
                 materialSupport,
                 warehouseSelectionSupport,
-                materialCategoryRepository,
+                new PurchaseInboundWeightSettlementService(materialCategoryRepository),
+                weightWriteBackService(purchaseInboundItemRepository, purchaseOrderRepository, mock(PurchaseOrderItemPieceWeightService.class)),
+                completionSyncService(repository, sourceValidator(purchaseOrderItemQueryService, purchaseInboundItemRepository)),
                 purchaseInboundItemRepository,
-                purchaseOrderRepository,
-                mock(PurchaseOrderItemPieceWeightService.class),
-                purchaseOrderItemQueryService,
+                sourceValidator(purchaseOrderItemQueryService, purchaseInboundItemRepository),
                 mock(ItemAllocationNativeRepository.class),
                 stubbedInboundItemMapper(), mock(WorkflowTransitionGuard.class)
         );
@@ -318,7 +318,7 @@ class PurchaseInboundServiceTest {
         MaterialCategory category = purchaseWeighCategory("盘螺");
 
         when(repository.existsByInboundNoAndDeletedFlagFalse("PI-002")).thenReturn(false);
-        when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(Map.of("M1", new Material()));
+        when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(materialMap("M1"));
         when(materialSupport.normalizeBatchNo(any(), eq("B1"), eq(1), eq(true))).thenReturn("B1");
         when(warehouseSelectionSupport.normalizeWarehouseName("一号库", 1, true)).thenReturn("一号库");
         when(materialCategoryRepository.findByCategoryNameInAndDeletedFlagFalse(List.of("盘螺"))).thenReturn(List.of(category));
@@ -362,17 +362,17 @@ class PurchaseInboundServiceTest {
         TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
         WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
         MaterialCategoryRepository materialCategoryRepository = mock(MaterialCategoryRepository.class);
-        PurchaseInboundService service = new PurchaseInboundService(
+        PurchaseInboundService service = service(
                 repository,
                 mock(SnowflakeIdGenerator.class),
                 mapper,
                 materialSupport,
                 warehouseSelectionSupport,
-                materialCategoryRepository,
+                new PurchaseInboundWeightSettlementService(materialCategoryRepository),
+                weightWriteBackService(mock(PurchaseInboundItemRepository.class), mock(PurchaseOrderRepository.class), mock(PurchaseOrderItemPieceWeightService.class)),
+                completionSyncService(mock(PurchaseInboundRepository.class), sourceValidator(mock(PurchaseOrderItemQueryService.class))),
                 mock(PurchaseInboundItemRepository.class),
-                mock(PurchaseOrderRepository.class),
-                mock(PurchaseOrderItemPieceWeightService.class),
-                mock(PurchaseOrderItemQueryService.class),
+                sourceValidator(mock(PurchaseOrderItemQueryService.class)),
                 mock(ItemAllocationNativeRepository.class),
                 stubbedInboundItemMapper(), mock(WorkflowTransitionGuard.class)
         );
@@ -412,17 +412,17 @@ class PurchaseInboundServiceTest {
         PurchaseInboundItemRepository purchaseInboundItemRepository = mock(PurchaseInboundItemRepository.class);
         PurchaseOrderRepository purchaseOrderRepository = mock(PurchaseOrderRepository.class);
         PurchaseOrderItemQueryService purchaseOrderItemQueryService = mock(PurchaseOrderItemQueryService.class);
-        PurchaseInboundService service = new PurchaseInboundService(
+        PurchaseInboundService service = service(
                 repository,
                 mock(SnowflakeIdGenerator.class),
                 mapper,
                 materialSupport,
                 warehouseSelectionSupport,
-                materialCategoryRepository,
+                new PurchaseInboundWeightSettlementService(materialCategoryRepository),
+                weightWriteBackService(purchaseInboundItemRepository, purchaseOrderRepository, mock(PurchaseOrderItemPieceWeightService.class)),
+                completionSyncService(repository, sourceValidator(purchaseOrderItemQueryService, purchaseInboundItemRepository)),
                 purchaseInboundItemRepository,
-                purchaseOrderRepository,
-                mock(PurchaseOrderItemPieceWeightService.class),
-                purchaseOrderItemQueryService,
+                sourceValidator(purchaseOrderItemQueryService, purchaseInboundItemRepository),
                 mock(ItemAllocationNativeRepository.class),
                 stubbedInboundItemMapper(), mock(WorkflowTransitionGuard.class)
         );
@@ -467,7 +467,7 @@ class PurchaseInboundServiceTest {
         );
 
         when(repository.existsByInboundNoAndDeletedFlagFalse("PI-005")).thenReturn(false);
-        when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(Map.of("M1", new Material()));
+        when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(materialMap("M1"));
         when(materialSupport.normalizeBatchNo(any(), eq("B1"), eq(1), eq(true))).thenReturn("B1");
         when(warehouseSelectionSupport.normalizeWarehouseName("一号库", 1, true)).thenReturn("一号库");
         when(materialCategoryRepository.findByCategoryNameInAndDeletedFlagFalse(List.of("盘螺"))).thenReturn(List.of(purchaseWeighCategory("盘螺")));
@@ -501,17 +501,17 @@ class PurchaseInboundServiceTest {
         PurchaseInboundItemRepository purchaseInboundItemRepository = mock(PurchaseInboundItemRepository.class);
         PurchaseOrderRepository purchaseOrderRepository = mock(PurchaseOrderRepository.class);
         PurchaseOrderItemQueryService purchaseOrderItemQueryService = mock(PurchaseOrderItemQueryService.class);
-        PurchaseInboundService service = new PurchaseInboundService(
+        PurchaseInboundService service = service(
                 repository,
                 mock(SnowflakeIdGenerator.class),
                 mapper,
                 materialSupport,
                 warehouseSelectionSupport,
-                materialCategoryRepository,
+                new PurchaseInboundWeightSettlementService(materialCategoryRepository),
+                weightWriteBackService(purchaseInboundItemRepository, purchaseOrderRepository, mock(PurchaseOrderItemPieceWeightService.class)),
+                completionSyncService(repository, sourceValidator(purchaseOrderItemQueryService, purchaseInboundItemRepository)),
                 purchaseInboundItemRepository,
-                purchaseOrderRepository,
-                mock(PurchaseOrderItemPieceWeightService.class),
-                purchaseOrderItemQueryService,
+                sourceValidator(purchaseOrderItemQueryService, purchaseInboundItemRepository),
                 mock(ItemAllocationNativeRepository.class),
                 stubbedInboundItemMapper(), mock(WorkflowTransitionGuard.class)
         );
@@ -536,7 +536,7 @@ class PurchaseInboundServiceTest {
         );
 
         when(repository.existsByInboundNoAndDeletedFlagFalse("PI-003")).thenReturn(false);
-        when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(Map.of("M1", new Material()));
+        when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(materialMap("M1"));
         when(materialSupport.normalizeBatchNo(any(), eq("B1"), eq(1), eq(true))).thenReturn("B1");
         when(warehouseSelectionSupport.normalizeWarehouseName("一号库", 1, true)).thenReturn("一号库");
         when(materialCategoryRepository.findByCategoryNameInAndDeletedFlagFalse(List.of("盘螺"))).thenReturn(List.of(purchaseWeighCategory("盘螺")));
@@ -566,17 +566,17 @@ class PurchaseInboundServiceTest {
     void shouldReturnPieceWeightsDistributedEvenly() {
         PurchaseInboundRepository repository = mock(PurchaseInboundRepository.class);
         PurchaseInboundItemRepository inboundItemRepository = mock(PurchaseInboundItemRepository.class);
-        PurchaseInboundService service = new PurchaseInboundService(
+        PurchaseInboundService service = service(
                 repository,
                 mock(SnowflakeIdGenerator.class),
                 mock(PurchaseInboundMapper.class),
                 mock(TradeItemMaterialSupport.class),
                 mock(WarehouseSelectionSupport.class),
-                mock(MaterialCategoryRepository.class),
+                new PurchaseInboundWeightSettlementService(mock(MaterialCategoryRepository.class)),
+                weightWriteBackService(inboundItemRepository, mock(PurchaseOrderRepository.class), mock(PurchaseOrderItemPieceWeightService.class)),
+                completionSyncService(mock(PurchaseInboundRepository.class), sourceValidator(mock(PurchaseOrderItemQueryService.class))),
                 inboundItemRepository,
-                mock(PurchaseOrderRepository.class),
-                mock(PurchaseOrderItemPieceWeightService.class),
-                mock(PurchaseOrderItemQueryService.class),
+                sourceValidator(mock(PurchaseOrderItemQueryService.class)),
                 mock(ItemAllocationNativeRepository.class),
                 stubbedInboundItemMapper(), mock(WorkflowTransitionGuard.class)
         );
@@ -602,17 +602,17 @@ class PurchaseInboundServiceTest {
     @Test
     void shouldReturnEmptyPieceWeightsWhenQuantityIsZero() {
         PurchaseInboundItemRepository inboundItemRepository = mock(PurchaseInboundItemRepository.class);
-        PurchaseInboundService service = new PurchaseInboundService(
+        PurchaseInboundService service = service(
                 mock(PurchaseInboundRepository.class),
                 mock(SnowflakeIdGenerator.class),
                 mock(PurchaseInboundMapper.class),
                 mock(TradeItemMaterialSupport.class),
                 mock(WarehouseSelectionSupport.class),
-                mock(MaterialCategoryRepository.class),
+                new PurchaseInboundWeightSettlementService(mock(MaterialCategoryRepository.class)),
+                weightWriteBackService(inboundItemRepository, mock(PurchaseOrderRepository.class), mock(PurchaseOrderItemPieceWeightService.class)),
+                completionSyncService(mock(PurchaseInboundRepository.class), sourceValidator(mock(PurchaseOrderItemQueryService.class))),
                 inboundItemRepository,
-                mock(PurchaseOrderRepository.class),
-                mock(PurchaseOrderItemPieceWeightService.class),
-                mock(PurchaseOrderItemQueryService.class),
+                sourceValidator(mock(PurchaseOrderItemQueryService.class)),
                 mock(ItemAllocationNativeRepository.class),
                 stubbedInboundItemMapper(), mock(WorkflowTransitionGuard.class)
         );
@@ -632,17 +632,17 @@ class PurchaseInboundServiceTest {
     @Test
     void shouldThrowWhenGettingPieceWeightsForNonexistentItem() {
         PurchaseInboundItemRepository inboundItemRepository = mock(PurchaseInboundItemRepository.class);
-        PurchaseInboundService service = new PurchaseInboundService(
+        PurchaseInboundService service = service(
                 mock(PurchaseInboundRepository.class),
                 mock(SnowflakeIdGenerator.class),
                 mock(PurchaseInboundMapper.class),
                 mock(TradeItemMaterialSupport.class),
                 mock(WarehouseSelectionSupport.class),
-                mock(MaterialCategoryRepository.class),
+                new PurchaseInboundWeightSettlementService(mock(MaterialCategoryRepository.class)),
+                weightWriteBackService(inboundItemRepository, mock(PurchaseOrderRepository.class), mock(PurchaseOrderItemPieceWeightService.class)),
+                completionSyncService(mock(PurchaseInboundRepository.class), sourceValidator(mock(PurchaseOrderItemQueryService.class))),
                 inboundItemRepository,
-                mock(PurchaseOrderRepository.class),
-                mock(PurchaseOrderItemPieceWeightService.class),
-                mock(PurchaseOrderItemQueryService.class),
+                sourceValidator(mock(PurchaseOrderItemQueryService.class)),
                 mock(ItemAllocationNativeRepository.class),
                 stubbedInboundItemMapper(), mock(WorkflowTransitionGuard.class)
         );
@@ -659,17 +659,17 @@ class PurchaseInboundServiceTest {
         PurchaseInboundRepository repository = mock(PurchaseInboundRepository.class);
         PurchaseInboundMapper mapper = mock(PurchaseInboundMapper.class);
         PurchaseInboundItemRepository inboundItemRepository = mock(PurchaseInboundItemRepository.class);
-        PurchaseInboundService service = new PurchaseInboundService(
+        PurchaseInboundService service = service(
                 repository,
                 mock(SnowflakeIdGenerator.class),
                 mapper,
                 mock(TradeItemMaterialSupport.class),
                 mock(WarehouseSelectionSupport.class),
-                mock(MaterialCategoryRepository.class),
+                new PurchaseInboundWeightSettlementService(mock(MaterialCategoryRepository.class)),
+                weightWriteBackService(inboundItemRepository, mock(PurchaseOrderRepository.class), mock(PurchaseOrderItemPieceWeightService.class)),
+                completionSyncService(mock(PurchaseInboundRepository.class), sourceValidator(mock(PurchaseOrderItemQueryService.class))),
                 inboundItemRepository,
-                mock(PurchaseOrderRepository.class),
-                mock(PurchaseOrderItemPieceWeightService.class),
-                mock(PurchaseOrderItemQueryService.class),
+                sourceValidator(mock(PurchaseOrderItemQueryService.class)),
                 mock(ItemAllocationNativeRepository.class),
                 stubbedInboundItemMapper(), mock(WorkflowTransitionGuard.class)
         );
@@ -691,20 +691,95 @@ class PurchaseInboundServiceTest {
     private PurchaseInboundService newService(PurchaseInboundRepository repository,
                                               PurchaseInboundMapper mapper,
                                               ItemAllocationNativeRepository itemAllocationRepo) {
-        return new PurchaseInboundService(
+        return service(
                 repository,
                 mock(SnowflakeIdGenerator.class),
                 mapper,
                 mock(TradeItemMaterialSupport.class),
                 mock(WarehouseSelectionSupport.class),
-                mock(MaterialCategoryRepository.class),
+                new PurchaseInboundWeightSettlementService(mock(MaterialCategoryRepository.class)),
+                weightWriteBackService(mock(PurchaseInboundItemRepository.class), mock(PurchaseOrderRepository.class), mock(PurchaseOrderItemPieceWeightService.class)),
+                completionSyncService(mock(PurchaseInboundRepository.class), sourceValidator(mock(PurchaseOrderItemQueryService.class))),
                 mock(PurchaseInboundItemRepository.class),
-                mock(PurchaseOrderRepository.class),
-                mock(PurchaseOrderItemPieceWeightService.class),
-                mock(PurchaseOrderItemQueryService.class),
+                sourceValidator(mock(PurchaseOrderItemQueryService.class)),
                 itemAllocationRepo,
                 stubbedInboundItemMapper(),
                 mock(WorkflowTransitionGuard.class)
+        );
+    }
+
+    private PurchaseInboundService service(PurchaseInboundRepository repository,
+                                           SnowflakeIdGenerator idGenerator,
+                                           PurchaseInboundMapper purchaseInboundMapper,
+                                           TradeItemMaterialSupport tradeItemMaterialSupport,
+                                           WarehouseSelectionSupport warehouseSelectionSupport,
+                                           PurchaseInboundWeightSettlementService weightSettlementService,
+                                           PurchaseInboundWeightWriteBackService weightWriteBackService,
+                                           PurchaseInboundCompletionSyncService completionSyncService,
+                                           PurchaseInboundItemRepository purchaseInboundItemRepository,
+                                           PurchaseInboundSourceValidator sourceValidator,
+                                           ItemAllocationNativeRepository itemAllocationRepo,
+                                           InboundItemMapper inboundItemMapper,
+                                           WorkflowTransitionGuard workflowTransitionGuard) {
+        return new PurchaseInboundService(
+                repository,
+                idGenerator,
+                purchaseInboundMapper,
+                new PurchaseInboundApplyService(
+                        tradeItemMaterialSupport,
+                        sourceValidator,
+                        weightSettlementService,
+                        weightWriteBackService,
+                        inboundItemMapper
+                ),
+                new PurchaseInboundDeleteService(sourceValidator, weightWriteBackService),
+                completionSyncService,
+                new PurchaseInboundResponseAssembler(
+                        purchaseInboundMapper,
+                        purchaseInboundItemRepository,
+                        itemAllocationRepo
+                ),
+                new PurchaseInboundPieceWeightService(new PurchaseInboundItemQueryService(purchaseInboundItemRepository, null)),
+                workflowTransitionGuard
+        );
+    }
+
+    private PurchaseInboundSourceValidator sourceValidator(PurchaseOrderItemQueryService purchaseOrderItemQueryService) {
+        return sourceValidator(purchaseOrderItemQueryService, mock(PurchaseInboundItemRepository.class));
+    }
+
+    private PurchaseInboundSourceValidator sourceValidator(PurchaseOrderItemQueryService purchaseOrderItemQueryService,
+                                                           PurchaseInboundItemRepository purchaseInboundItemRepository) {
+        when(purchaseInboundItemRepository.summarizeAllocatedQuantityBySourcePurchaseOrderItemIdsExcludingInbound(
+                any(),
+                any()
+        )).thenReturn(List.of());
+        return new PurchaseInboundSourceValidator(
+                purchaseOrderItemQueryService,
+                new PurchaseInboundAllocationService(purchaseInboundItemRepository)
+        );
+    }
+
+    private PurchaseInboundWeightWriteBackService weightWriteBackService(
+            PurchaseInboundItemRepository purchaseInboundItemRepository,
+            PurchaseOrderRepository purchaseOrderRepository,
+            PurchaseOrderItemPieceWeightService purchaseOrderItemPieceWeightService
+    ) {
+        return new PurchaseInboundWeightWriteBackService(
+                purchaseInboundItemRepository,
+                purchaseOrderRepository,
+                purchaseOrderItemPieceWeightService
+        );
+    }
+
+    private PurchaseInboundCompletionSyncService completionSyncService(
+            PurchaseInboundRepository repository,
+            PurchaseInboundSourceValidator sourceValidator
+    ) {
+        return new PurchaseInboundCompletionSyncService(
+                repository,
+                sourceValidator,
+                sourceValidator.allocationService()
         );
     }
 
@@ -880,17 +955,17 @@ class PurchaseInboundServiceTest {
         PurchaseInboundRepository repository = mock(PurchaseInboundRepository.class);
         PurchaseInboundMapper mapper = mock(PurchaseInboundMapper.class);
         PurchaseInboundItemRepository inboundItemRepository = mock(PurchaseInboundItemRepository.class);
-        PurchaseInboundService service = new PurchaseInboundService(
+        PurchaseInboundService service = service(
                 repository,
                 mock(SnowflakeIdGenerator.class),
                 mapper,
                 mock(TradeItemMaterialSupport.class),
                 mock(WarehouseSelectionSupport.class),
-                mock(MaterialCategoryRepository.class),
+                new PurchaseInboundWeightSettlementService(mock(MaterialCategoryRepository.class)),
+                weightWriteBackService(inboundItemRepository, mock(PurchaseOrderRepository.class), mock(PurchaseOrderItemPieceWeightService.class)),
+                completionSyncService(mock(PurchaseInboundRepository.class), sourceValidator(mock(PurchaseOrderItemQueryService.class))),
                 inboundItemRepository,
-                mock(PurchaseOrderRepository.class),
-                mock(PurchaseOrderItemPieceWeightService.class),
-                mock(PurchaseOrderItemQueryService.class),
+                sourceValidator(mock(PurchaseOrderItemQueryService.class)),
                 mock(ItemAllocationNativeRepository.class),
                 stubbedInboundItemMapper(), mock(WorkflowTransitionGuard.class)
         );
@@ -922,17 +997,17 @@ class PurchaseInboundServiceTest {
         PurchaseInboundItemRepository purchaseInboundItemRepository = mock(PurchaseInboundItemRepository.class);
         PurchaseOrderRepository purchaseOrderRepository = mock(PurchaseOrderRepository.class);
         PurchaseOrderItemQueryService purchaseOrderItemQueryService = mock(PurchaseOrderItemQueryService.class);
-        PurchaseInboundService service = new PurchaseInboundService(
+        PurchaseInboundService service = service(
                 repository,
                 mock(SnowflakeIdGenerator.class),
                 mapper,
                 materialSupport,
                 warehouseSelectionSupport,
-                materialCategoryRepository,
+                new PurchaseInboundWeightSettlementService(materialCategoryRepository),
+                weightWriteBackService(purchaseInboundItemRepository, purchaseOrderRepository, mock(PurchaseOrderItemPieceWeightService.class)),
+                completionSyncService(repository, sourceValidator(purchaseOrderItemQueryService, purchaseInboundItemRepository)),
                 purchaseInboundItemRepository,
-                purchaseOrderRepository,
-                mock(PurchaseOrderItemPieceWeightService.class),
-                purchaseOrderItemQueryService,
+                sourceValidator(purchaseOrderItemQueryService, purchaseInboundItemRepository),
                 mock(ItemAllocationNativeRepository.class),
                 stubbedInboundItemMapper(), mock(WorkflowTransitionGuard.class)
         );
@@ -943,7 +1018,7 @@ class PurchaseInboundServiceTest {
         existingInbound.getItems().add(existingItem);
 
         when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(existingInbound));
-        when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(Map.of("M1", new Material()));
+        when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(materialMap("M1"));
         when(materialSupport.normalizeBatchNo(any(), eq("B1"), eq(1), eq(true))).thenReturn("B1");
         when(warehouseSelectionSupport.normalizeWarehouseName("一号库", 1, true)).thenReturn("一号库");
         when(materialCategoryRepository.findByCategoryNameInAndDeletedFlagFalse(List.of("螺纹钢"))).thenReturn(List.of());
@@ -970,17 +1045,17 @@ class PurchaseInboundServiceTest {
         PurchaseOrderRepository purchaseOrderRepository = mock(PurchaseOrderRepository.class);
         PurchaseOrderItemQueryService purchaseOrderItemQueryService = mock(PurchaseOrderItemQueryService.class);
         PurchaseOrderItemPieceWeightService pieceWeightService = mock(PurchaseOrderItemPieceWeightService.class);
-        PurchaseInboundService service = new PurchaseInboundService(
+        PurchaseInboundService service = service(
                 repository,
                 mock(SnowflakeIdGenerator.class),
                 mapper,
                 mock(TradeItemMaterialSupport.class),
                 mock(WarehouseSelectionSupport.class),
-                mock(MaterialCategoryRepository.class),
+                new PurchaseInboundWeightSettlementService(mock(MaterialCategoryRepository.class)),
+                weightWriteBackService(purchaseInboundItemRepository, purchaseOrderRepository, pieceWeightService),
+                completionSyncService(repository, sourceValidator(purchaseOrderItemQueryService)),
                 purchaseInboundItemRepository,
-                purchaseOrderRepository,
-                pieceWeightService,
-                purchaseOrderItemQueryService,
+                sourceValidator(purchaseOrderItemQueryService),
                 mock(ItemAllocationNativeRepository.class),
                 stubbedInboundItemMapper(), mock(WorkflowTransitionGuard.class)
         );
@@ -1018,17 +1093,17 @@ class PurchaseInboundServiceTest {
         PurchaseInboundRepository repository = mock(PurchaseInboundRepository.class);
         MaterialCategoryRepository materialCategoryRepository = mock(MaterialCategoryRepository.class);
         PurchaseOrderItemQueryService purchaseOrderItemQueryService = mock(PurchaseOrderItemQueryService.class);
-        PurchaseInboundService service = new PurchaseInboundService(
+        PurchaseInboundService service = service(
                 repository,
                 mock(SnowflakeIdGenerator.class),
                 mock(PurchaseInboundMapper.class),
                 mock(TradeItemMaterialSupport.class),
                 mock(WarehouseSelectionSupport.class),
-                materialCategoryRepository,
+                new PurchaseInboundWeightSettlementService(materialCategoryRepository),
+                weightWriteBackService(mock(PurchaseInboundItemRepository.class), mock(PurchaseOrderRepository.class), mock(PurchaseOrderItemPieceWeightService.class)),
+                completionSyncService(repository, sourceValidator(purchaseOrderItemQueryService)),
                 mock(PurchaseInboundItemRepository.class),
-                mock(PurchaseOrderRepository.class),
-                mock(PurchaseOrderItemPieceWeightService.class),
-                purchaseOrderItemQueryService,
+                sourceValidator(purchaseOrderItemQueryService),
                 mock(ItemAllocationNativeRepository.class),
                 stubbedInboundItemMapper(), mock(WorkflowTransitionGuard.class)
         );
@@ -1061,17 +1136,17 @@ class PurchaseInboundServiceTest {
         PurchaseInboundRepository repository = mock(PurchaseInboundRepository.class);
         MaterialCategoryRepository materialCategoryRepository = mock(MaterialCategoryRepository.class);
         PurchaseOrderItemQueryService purchaseOrderItemQueryService = mock(PurchaseOrderItemQueryService.class);
-        PurchaseInboundService service = new PurchaseInboundService(
+        PurchaseInboundService service = service(
                 repository,
                 mock(SnowflakeIdGenerator.class),
                 mock(PurchaseInboundMapper.class),
                 mock(TradeItemMaterialSupport.class),
                 mock(WarehouseSelectionSupport.class),
-                materialCategoryRepository,
+                new PurchaseInboundWeightSettlementService(materialCategoryRepository),
+                weightWriteBackService(mock(PurchaseInboundItemRepository.class), mock(PurchaseOrderRepository.class), mock(PurchaseOrderItemPieceWeightService.class)),
+                completionSyncService(repository, sourceValidator(purchaseOrderItemQueryService)),
                 mock(PurchaseInboundItemRepository.class),
-                mock(PurchaseOrderRepository.class),
-                mock(PurchaseOrderItemPieceWeightService.class),
-                purchaseOrderItemQueryService,
+                sourceValidator(purchaseOrderItemQueryService),
                 mock(ItemAllocationNativeRepository.class),
                 stubbedInboundItemMapper(), mock(WorkflowTransitionGuard.class)
         );
@@ -1104,17 +1179,17 @@ class PurchaseInboundServiceTest {
         PurchaseInboundRepository repository = mock(PurchaseInboundRepository.class);
         MaterialCategoryRepository materialCategoryRepository = mock(MaterialCategoryRepository.class);
         PurchaseOrderItemQueryService purchaseOrderItemQueryService = mock(PurchaseOrderItemQueryService.class);
-        PurchaseInboundService service = new PurchaseInboundService(
+        PurchaseInboundService service = service(
                 repository,
                 mock(SnowflakeIdGenerator.class),
                 mock(PurchaseInboundMapper.class),
                 mock(TradeItemMaterialSupport.class),
                 mock(WarehouseSelectionSupport.class),
-                materialCategoryRepository,
+                new PurchaseInboundWeightSettlementService(materialCategoryRepository),
+                weightWriteBackService(mock(PurchaseInboundItemRepository.class), mock(PurchaseOrderRepository.class), mock(PurchaseOrderItemPieceWeightService.class)),
+                completionSyncService(repository, sourceValidator(purchaseOrderItemQueryService)),
                 mock(PurchaseInboundItemRepository.class),
-                mock(PurchaseOrderRepository.class),
-                mock(PurchaseOrderItemPieceWeightService.class),
-                purchaseOrderItemQueryService,
+                sourceValidator(purchaseOrderItemQueryService),
                 mock(ItemAllocationNativeRepository.class),
                 stubbedInboundItemMapper(), mock(WorkflowTransitionGuard.class)
         );
@@ -1146,17 +1221,17 @@ class PurchaseInboundServiceTest {
     void shouldRejectWhenLineSettlementModeAndHeaderSettlementModeBothNull() {
         PurchaseInboundRepository repository = mock(PurchaseInboundRepository.class);
         PurchaseOrderItemQueryService purchaseOrderItemQueryService = mock(PurchaseOrderItemQueryService.class);
-        PurchaseInboundService service = new PurchaseInboundService(
+        PurchaseInboundService service = service(
                 repository,
                 mock(SnowflakeIdGenerator.class),
                 mock(PurchaseInboundMapper.class),
                 mock(TradeItemMaterialSupport.class),
                 mock(WarehouseSelectionSupport.class),
-                mock(MaterialCategoryRepository.class),
+                new PurchaseInboundWeightSettlementService(mock(MaterialCategoryRepository.class)),
+                weightWriteBackService(mock(PurchaseInboundItemRepository.class), mock(PurchaseOrderRepository.class), mock(PurchaseOrderItemPieceWeightService.class)),
+                completionSyncService(repository, sourceValidator(purchaseOrderItemQueryService)),
                 mock(PurchaseInboundItemRepository.class),
-                mock(PurchaseOrderRepository.class),
-                mock(PurchaseOrderItemPieceWeightService.class),
-                purchaseOrderItemQueryService,
+                sourceValidator(purchaseOrderItemQueryService),
                 mock(ItemAllocationNativeRepository.class),
                 stubbedInboundItemMapper(), mock(WorkflowTransitionGuard.class)
         );
@@ -1184,17 +1259,17 @@ class PurchaseInboundServiceTest {
     @Test
     void shouldReturnPieceWeightsWithResidualDistribution() {
         PurchaseInboundItemRepository inboundItemRepository = mock(PurchaseInboundItemRepository.class);
-        PurchaseInboundService service = new PurchaseInboundService(
+        PurchaseInboundService service = service(
                 mock(PurchaseInboundRepository.class),
                 mock(SnowflakeIdGenerator.class),
                 mock(PurchaseInboundMapper.class),
                 mock(TradeItemMaterialSupport.class),
                 mock(WarehouseSelectionSupport.class),
-                mock(MaterialCategoryRepository.class),
+                new PurchaseInboundWeightSettlementService(mock(MaterialCategoryRepository.class)),
+                weightWriteBackService(inboundItemRepository, mock(PurchaseOrderRepository.class), mock(PurchaseOrderItemPieceWeightService.class)),
+                completionSyncService(mock(PurchaseInboundRepository.class), sourceValidator(mock(PurchaseOrderItemQueryService.class))),
                 inboundItemRepository,
-                mock(PurchaseOrderRepository.class),
-                mock(PurchaseOrderItemPieceWeightService.class),
-                mock(PurchaseOrderItemQueryService.class),
+                sourceValidator(mock(PurchaseOrderItemQueryService.class)),
                 mock(ItemAllocationNativeRepository.class),
                 stubbedInboundItemMapper(), mock(WorkflowTransitionGuard.class)
         );
@@ -1221,17 +1296,17 @@ class PurchaseInboundServiceTest {
     @Test
     void shouldReturnPieceWeightsWithWeighWeightTon() {
         PurchaseInboundItemRepository inboundItemRepository = mock(PurchaseInboundItemRepository.class);
-        PurchaseInboundService service = new PurchaseInboundService(
+        PurchaseInboundService service = service(
                 mock(PurchaseInboundRepository.class),
                 mock(SnowflakeIdGenerator.class),
                 mock(PurchaseInboundMapper.class),
                 mock(TradeItemMaterialSupport.class),
                 mock(WarehouseSelectionSupport.class),
-                mock(MaterialCategoryRepository.class),
+                new PurchaseInboundWeightSettlementService(mock(MaterialCategoryRepository.class)),
+                weightWriteBackService(inboundItemRepository, mock(PurchaseOrderRepository.class), mock(PurchaseOrderItemPieceWeightService.class)),
+                completionSyncService(mock(PurchaseInboundRepository.class), sourceValidator(mock(PurchaseOrderItemQueryService.class))),
                 inboundItemRepository,
-                mock(PurchaseOrderRepository.class),
-                mock(PurchaseOrderItemPieceWeightService.class),
-                mock(PurchaseOrderItemQueryService.class),
+                sourceValidator(mock(PurchaseOrderItemQueryService.class)),
                 mock(ItemAllocationNativeRepository.class),
                 stubbedInboundItemMapper(), mock(WorkflowTransitionGuard.class)
         );
@@ -1259,17 +1334,17 @@ class PurchaseInboundServiceTest {
     @Test
     void shouldReturnPieceWeightsWithNullQuantity() {
         PurchaseInboundItemRepository inboundItemRepository = mock(PurchaseInboundItemRepository.class);
-        PurchaseInboundService service = new PurchaseInboundService(
+        PurchaseInboundService service = service(
                 mock(PurchaseInboundRepository.class),
                 mock(SnowflakeIdGenerator.class),
                 mock(PurchaseInboundMapper.class),
                 mock(TradeItemMaterialSupport.class),
                 mock(WarehouseSelectionSupport.class),
-                mock(MaterialCategoryRepository.class),
+                new PurchaseInboundWeightSettlementService(mock(MaterialCategoryRepository.class)),
+                weightWriteBackService(inboundItemRepository, mock(PurchaseOrderRepository.class), mock(PurchaseOrderItemPieceWeightService.class)),
+                completionSyncService(mock(PurchaseInboundRepository.class), sourceValidator(mock(PurchaseOrderItemQueryService.class))),
                 inboundItemRepository,
-                mock(PurchaseOrderRepository.class),
-                mock(PurchaseOrderItemPieceWeightService.class),
-                mock(PurchaseOrderItemQueryService.class),
+                sourceValidator(mock(PurchaseOrderItemQueryService.class)),
                 mock(ItemAllocationNativeRepository.class),
                 stubbedInboundItemMapper(), mock(WorkflowTransitionGuard.class)
         );
@@ -1289,17 +1364,17 @@ class PurchaseInboundServiceTest {
     @Test
     void shouldReturnPieceWeightsWithNullPurchaseInbound() {
         PurchaseInboundItemRepository inboundItemRepository = mock(PurchaseInboundItemRepository.class);
-        PurchaseInboundService service = new PurchaseInboundService(
+        PurchaseInboundService service = service(
                 mock(PurchaseInboundRepository.class),
                 mock(SnowflakeIdGenerator.class),
                 mock(PurchaseInboundMapper.class),
                 mock(TradeItemMaterialSupport.class),
                 mock(WarehouseSelectionSupport.class),
-                mock(MaterialCategoryRepository.class),
+                new PurchaseInboundWeightSettlementService(mock(MaterialCategoryRepository.class)),
+                weightWriteBackService(inboundItemRepository, mock(PurchaseOrderRepository.class), mock(PurchaseOrderItemPieceWeightService.class)),
+                completionSyncService(mock(PurchaseInboundRepository.class), sourceValidator(mock(PurchaseOrderItemQueryService.class))),
                 inboundItemRepository,
-                mock(PurchaseOrderRepository.class),
-                mock(PurchaseOrderItemPieceWeightService.class),
-                mock(PurchaseOrderItemQueryService.class),
+                sourceValidator(mock(PurchaseOrderItemQueryService.class)),
                 mock(ItemAllocationNativeRepository.class),
                 stubbedInboundItemMapper(), mock(WorkflowTransitionGuard.class)
         );
@@ -1329,17 +1404,17 @@ class PurchaseInboundServiceTest {
         PurchaseOrderRepository purchaseOrderRepository = mock(PurchaseOrderRepository.class);
         PurchaseOrderItemQueryService purchaseOrderItemQueryService = mock(PurchaseOrderItemQueryService.class);
         PurchaseOrderItemPieceWeightService pieceWeightService = mock(PurchaseOrderItemPieceWeightService.class);
-        PurchaseInboundService service = new PurchaseInboundService(
+        PurchaseInboundService service = service(
                 repository,
                 mock(SnowflakeIdGenerator.class),
                 mapper,
                 materialSupport,
                 warehouseSelectionSupport,
-                materialCategoryRepository,
+                new PurchaseInboundWeightSettlementService(materialCategoryRepository),
+                weightWriteBackService(purchaseInboundItemRepository, purchaseOrderRepository, pieceWeightService),
+                completionSyncService(repository, sourceValidator(purchaseOrderItemQueryService)),
                 purchaseInboundItemRepository,
-                purchaseOrderRepository,
-                pieceWeightService,
-                purchaseOrderItemQueryService,
+                sourceValidator(purchaseOrderItemQueryService),
                 mock(ItemAllocationNativeRepository.class),
                 stubbedInboundItemMapper(), mock(WorkflowTransitionGuard.class)
         );
@@ -1378,7 +1453,7 @@ class PurchaseInboundServiceTest {
         );
 
         when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(completedInbound));
-        when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(Map.of("M1", new Material()));
+        when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(materialMap("M1"));
         when(materialSupport.normalizeBatchNo(any(), eq("B1"), eq(1), eq(true))).thenReturn("B1");
         when(warehouseSelectionSupport.normalizeWarehouseName("一号库", 1, true)).thenReturn("一号库");
         when(materialCategoryRepository.findByCategoryNameInAndDeletedFlagFalse(List.of("螺纹钢"))).thenReturn(List.of());
@@ -1411,17 +1486,17 @@ class PurchaseInboundServiceTest {
         PurchaseInboundItemRepository purchaseInboundItemRepository = mock(PurchaseInboundItemRepository.class);
         PurchaseOrderRepository purchaseOrderRepository = mock(PurchaseOrderRepository.class);
         PurchaseOrderItemQueryService purchaseOrderItemQueryService = mock(PurchaseOrderItemQueryService.class);
-        PurchaseInboundService service = new PurchaseInboundService(
+        PurchaseInboundService service = service(
                 repository,
                 mock(SnowflakeIdGenerator.class),
                 mapper,
                 materialSupport,
                 warehouseSelectionSupport,
-                materialCategoryRepository,
+                new PurchaseInboundWeightSettlementService(materialCategoryRepository),
+                weightWriteBackService(purchaseInboundItemRepository, purchaseOrderRepository, mock(PurchaseOrderItemPieceWeightService.class)),
+                completionSyncService(repository, sourceValidator(purchaseOrderItemQueryService)),
                 purchaseInboundItemRepository,
-                purchaseOrderRepository,
-                mock(PurchaseOrderItemPieceWeightService.class),
-                purchaseOrderItemQueryService,
+                sourceValidator(purchaseOrderItemQueryService),
                 mock(ItemAllocationNativeRepository.class),
                 stubbedInboundItemMapper(), mock(WorkflowTransitionGuard.class)
         );
@@ -1444,7 +1519,7 @@ class PurchaseInboundServiceTest {
         );
 
         when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(inbound));
-        when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(Map.of("M1", new Material()));
+        when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(materialMap("M1"));
         when(materialSupport.normalizeBatchNo(any(), eq("B1"), eq(1), eq(true))).thenReturn("B1");
         when(warehouseSelectionSupport.normalizeWarehouseName("一号库", 1, true)).thenReturn("一号库");
         when(materialCategoryRepository.findByCategoryNameInAndDeletedFlagFalse(List.of("螺纹钢"))).thenReturn(List.of());
@@ -1470,17 +1545,17 @@ class PurchaseInboundServiceTest {
         PurchaseInboundRepository repository = mock(PurchaseInboundRepository.class);
         PurchaseInboundMapper mapper = mock(PurchaseInboundMapper.class);
         PurchaseInboundItemRepository inboundItemRepository = mock(PurchaseInboundItemRepository.class);
-        PurchaseInboundService service = new PurchaseInboundService(
+        PurchaseInboundService service = service(
                 repository,
                 mock(SnowflakeIdGenerator.class),
                 mapper,
                 mock(TradeItemMaterialSupport.class),
                 mock(WarehouseSelectionSupport.class),
-                mock(MaterialCategoryRepository.class),
+                new PurchaseInboundWeightSettlementService(mock(MaterialCategoryRepository.class)),
+                weightWriteBackService(inboundItemRepository, mock(PurchaseOrderRepository.class), mock(PurchaseOrderItemPieceWeightService.class)),
+                completionSyncService(mock(PurchaseInboundRepository.class), sourceValidator(mock(PurchaseOrderItemQueryService.class))),
                 inboundItemRepository,
-                mock(PurchaseOrderRepository.class),
-                mock(PurchaseOrderItemPieceWeightService.class),
-                mock(PurchaseOrderItemQueryService.class),
+                sourceValidator(mock(PurchaseOrderItemQueryService.class)),
                 mock(ItemAllocationNativeRepository.class),
                 stubbedInboundItemMapper(), mock(WorkflowTransitionGuard.class)
         );
@@ -1512,17 +1587,17 @@ class PurchaseInboundServiceTest {
         MaterialCategoryRepository materialCategoryRepository = mock(MaterialCategoryRepository.class);
         PurchaseInboundItemRepository purchaseInboundItemRepository = mock(PurchaseInboundItemRepository.class);
         PurchaseOrderItemQueryService purchaseOrderItemQueryService = mock(PurchaseOrderItemQueryService.class);
-        PurchaseInboundService service = new PurchaseInboundService(
+        PurchaseInboundService service = service(
                 repository,
                 mock(SnowflakeIdGenerator.class),
                 mock(PurchaseInboundMapper.class),
                 mock(TradeItemMaterialSupport.class),
                 mock(WarehouseSelectionSupport.class),
-                materialCategoryRepository,
+                new PurchaseInboundWeightSettlementService(materialCategoryRepository),
+                weightWriteBackService(purchaseInboundItemRepository, mock(PurchaseOrderRepository.class), mock(PurchaseOrderItemPieceWeightService.class)),
+                completionSyncService(repository, sourceValidator(purchaseOrderItemQueryService, purchaseInboundItemRepository)),
                 purchaseInboundItemRepository,
-                mock(PurchaseOrderRepository.class),
-                mock(PurchaseOrderItemPieceWeightService.class),
-                purchaseOrderItemQueryService,
+                sourceValidator(purchaseOrderItemQueryService, purchaseInboundItemRepository),
                 mock(ItemAllocationNativeRepository.class),
                 stubbedInboundItemMapper(), mock(WorkflowTransitionGuard.class)
         );
@@ -1604,5 +1679,9 @@ class PurchaseInboundServiceTest {
             );
         });
         return mapper;
+    }
+
+    private Map<String, TradeMaterialSnapshot> materialMap(String materialCode) {
+        return Map.of(materialCode, new TradeMaterialSnapshot(materialCode, Boolean.FALSE));
     }
 }

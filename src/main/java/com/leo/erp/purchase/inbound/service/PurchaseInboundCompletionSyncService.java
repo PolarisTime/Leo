@@ -1,0 +1,132 @@
+package com.leo.erp.purchase.inbound.service;
+
+import com.leo.erp.common.support.StatusConstants;
+import com.leo.erp.purchase.inbound.domain.entity.PurchaseInbound;
+import com.leo.erp.purchase.inbound.domain.entity.PurchaseInboundItem;
+import com.leo.erp.purchase.inbound.repository.PurchaseInboundRepository;
+import com.leo.erp.purchase.order.domain.entity.PurchaseOrder;
+import com.leo.erp.purchase.order.domain.entity.PurchaseOrderItem;
+import org.springframework.stereotype.Service;
+
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
+
+@Service
+public class PurchaseInboundCompletionSyncService {
+
+    private static final BigDecimal FULFILLMENT_TOLERANCE = new BigDecimal("0.05");
+
+    private final PurchaseInboundRepository repository;
+    private final PurchaseInboundSourceValidator sourceValidator;
+    private final PurchaseInboundAllocationService allocationService;
+
+    public PurchaseInboundCompletionSyncService(PurchaseInboundRepository repository,
+                                                PurchaseInboundSourceValidator sourceValidator,
+                                                PurchaseInboundAllocationService allocationService) {
+        this.repository = repository;
+        this.sourceValidator = sourceValidator;
+        this.allocationService = allocationService;
+    }
+
+    boolean shouldCompleteInbound(PurchaseInbound inbound) {
+        if (!StatusConstants.AUDITED.equals(inbound.getStatus())) {
+            return false;
+        }
+        List<Long> sourcePurchaseOrderItemIds = sourcePurchaseOrderItemIds(inbound);
+        if (sourcePurchaseOrderItemIds.isEmpty()) {
+            return false;
+        }
+        Map<Long, PurchaseOrderItem> sourcePurchaseOrderItemMap =
+                sourceValidator.loadSourcePurchaseOrderItemMap(sourcePurchaseOrderItemIds);
+        if (sourcePurchaseOrderItemMap.isEmpty()) {
+            return false;
+        }
+        Map<Long, Integer> allocatedQuantityMap = allocationService.loadAllocatedQuantityMap(
+                sourcePurchaseOrderItemIds,
+                inbound.getId()
+        );
+        Map<Long, Integer> currentInboundQuantityMap = inbound.getItems().stream()
+                .filter(item -> item.getSourcePurchaseOrderItemId() != null)
+                .collect(Collectors.groupingBy(
+                        PurchaseInboundItem::getSourcePurchaseOrderItemId,
+                        Collectors.summingInt(item -> item.getQuantity() != null ? item.getQuantity() : 0)
+                ));
+        return sourcePurchaseOrderItemIds.stream().allMatch(sourceItemId -> {
+            PurchaseOrderItem sourceItem = sourcePurchaseOrderItemMap.get(sourceItemId);
+            if (sourceItem == null) {
+                return false;
+            }
+            int expected = sourceItem.getQuantity() != null ? sourceItem.getQuantity() : 0;
+            int actual = allocatedQuantityMap.getOrDefault(sourceItemId, 0)
+                    + currentInboundQuantityMap.getOrDefault(sourceItemId, 0);
+            return quantityWithinTolerance(expected, actual);
+        });
+    }
+
+    void completeSourcePurchaseOrders(PurchaseInbound inbound) {
+        List<Long> sourcePurchaseOrderItemIds = sourcePurchaseOrderItemIds(inbound);
+        if (sourcePurchaseOrderItemIds.isEmpty()) {
+            return;
+        }
+        sourceValidator.loadSourcePurchaseOrderItemMap(sourcePurchaseOrderItemIds).values().stream()
+                .map(PurchaseOrderItem::getPurchaseOrder)
+                .filter(order -> order != null)
+                .distinct()
+                .forEach(this::maybeCompletePurchaseOrder);
+    }
+
+    private List<Long> sourcePurchaseOrderItemIds(PurchaseInbound inbound) {
+        return inbound.getItems().stream()
+                .map(PurchaseInboundItem::getSourcePurchaseOrderItemId)
+                .filter(id -> id != null)
+                .distinct()
+                .toList();
+    }
+
+    private void maybeCompletePurchaseOrder(PurchaseOrder purchaseOrder) {
+        if (!StatusConstants.AUDITED.equals(purchaseOrder.getStatus())) {
+            return;
+        }
+        List<PurchaseInbound> allInbounds = repository
+                .findByPurchaseOrderNoAndDeletedFlagFalse(purchaseOrder.getOrderNo());
+        boolean allInboundCompleted = allInbounds.stream()
+                .allMatch(i -> StatusConstants.INBOUND_COMPLETED.equals(i.getStatus()));
+        if (!allInboundCompleted) {
+            return;
+        }
+
+        Map<Long, Integer> receivedQtyByItemId = allInbounds.stream()
+                .flatMap(inbound -> inbound.getItems().stream())
+                .filter(item -> item.getSourcePurchaseOrderItemId() != null)
+                .collect(Collectors.groupingBy(
+                        PurchaseInboundItem::getSourcePurchaseOrderItemId,
+                        Collectors.summingInt(
+                                item -> item.getQuantity() != null ? item.getQuantity() : 0
+                        )
+                ));
+
+        boolean allFulfilled = purchaseOrder.getItems().stream().allMatch(item -> {
+            int expected = item.getQuantity() != null ? item.getQuantity() : 0;
+            int actual = receivedQtyByItemId.getOrDefault(item.getId(), 0);
+            return quantityWithinTolerance(expected, actual);
+        });
+
+        if (allFulfilled) {
+            purchaseOrder.setStatus(StatusConstants.PURCHASE_COMPLETED);
+        }
+    }
+
+    private boolean quantityWithinTolerance(int expected, int actual) {
+        if (expected == 0) {
+            return actual == 0;
+        }
+        BigDecimal ratio = BigDecimal.valueOf(actual)
+                .divide(BigDecimal.valueOf(expected), 4, RoundingMode.HALF_UP);
+        BigDecimal lowerBound = BigDecimal.ONE.subtract(FULFILLMENT_TOLERANCE);
+        BigDecimal upperBound = BigDecimal.ONE.add(FULFILLMENT_TOLERANCE);
+        return ratio.compareTo(lowerBound) >= 0 && ratio.compareTo(upperBound) <= 0;
+    }
+}

@@ -2,6 +2,7 @@ package com.leo.erp.purchase.inbound.service;
 
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
+import com.leo.erp.purchase.inbound.domain.entity.PurchaseInbound;
 import com.leo.erp.purchase.inbound.domain.entity.PurchaseInboundItem;
 import com.leo.erp.purchase.inbound.repository.PurchaseInboundItemRepository;
 import com.leo.erp.security.permission.ResourceRecordAccessGuard;
@@ -9,9 +10,13 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.util.Collections;
 import java.util.Collection;
+import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
@@ -34,11 +39,7 @@ public class PurchaseInboundItemQueryService {
             return List.of();
         }
         List<PurchaseInboundItem> items = repository.findAllActiveByIdIn(ids);
-        for (PurchaseInboundItem item : items) {
-            if (item.getPurchaseInbound() != null) {
-                accessGuard.assertCurrentUserCanAccess(PARENT_MODULE_KEY, "read", item.getPurchaseInbound());
-            }
-        }
+        assertParentAccess(items);
         return items;
     }
 
@@ -55,12 +56,30 @@ public class PurchaseInboundItemQueryService {
             return List.of();
         }
         List<PurchaseInboundItem> items = repository.findAllActiveBySourcePurchaseOrderItemIds(sourcePurchaseOrderItemIds);
-        for (PurchaseInboundItem item : items) {
-            if (item.getPurchaseInbound() != null) {
-                accessGuard.assertCurrentUserCanAccess(PARENT_MODULE_KEY, "read", item.getPurchaseInbound());
-            }
-        }
+        assertParentAccess(items);
         return items;
+    }
+
+    private void assertParentAccess(List<PurchaseInboundItem> items) {
+        if (accessGuard == null) {
+            return;
+        }
+        Set<Long> checkedIds = new HashSet<>();
+        Set<PurchaseInbound> checkedTransientParents = Collections.newSetFromMap(new IdentityHashMap<>());
+        for (PurchaseInboundItem item : items) {
+            PurchaseInbound inbound = item.getPurchaseInbound();
+            if (inbound == null) {
+                continue;
+            }
+            Long inboundId = inbound.getId();
+            if (inboundId != null && !checkedIds.add(inboundId)) {
+                continue;
+            }
+            if (inboundId == null && !checkedTransientParents.add(inbound)) {
+                continue;
+            }
+            accessGuard.assertCurrentUserCanAccess(PARENT_MODULE_KEY, "read", inbound);
+        }
     }
 
     @Transactional(readOnly = true)
