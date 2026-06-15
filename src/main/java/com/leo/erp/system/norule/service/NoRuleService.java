@@ -60,9 +60,13 @@ public class NoRuleService extends AbstractCrudService<NoRule, NoRuleRequest, No
             preallocatedBusinessNoService.reserve(normalizedModuleKey, Long.parseLong(generatedId), principal);
             return new NoRuleGenerateResponse(normalizedModuleKey, generatedId, generatedId);
         }
+        String generatedNo = noRuleSequenceService.nextValueByModuleKey(normalizedModuleKey);
+        if (principal != null) {
+            preallocatedBusinessNoService.reserveBusinessNo(normalizedModuleKey, generatedNo, principal);
+        }
         return new NoRuleGenerateResponse(
                 normalizedModuleKey,
-                noRuleSequenceService.nextValueByModuleKey(normalizedModuleKey),
+                generatedNo,
                 null
         );
     }

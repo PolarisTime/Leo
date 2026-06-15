@@ -1295,7 +1295,6 @@ class UserAccountAdminServiceTest {
         private final String summary;
 
         private StubPermissionService(String summary) {
-            super(null, null, null, null, null, null);
             this.summary = summary;
         }
 

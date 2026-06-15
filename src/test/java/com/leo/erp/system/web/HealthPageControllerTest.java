@@ -137,7 +137,6 @@ class HealthPageControllerTest {
         private final boolean allowed;
 
         private StubPermissionService(boolean allowed) {
-            super(null, null, null, null, null, null);
             this.allowed = allowed;
         }
 

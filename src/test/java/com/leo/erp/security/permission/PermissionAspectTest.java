@@ -201,7 +201,7 @@ class PermissionAspectTest {
     }
 
     private PermissionService permissionService(boolean allowed) {
-        return new PermissionService(null, null, null, null, null, null) {
+        return new PermissionService() {
             @Override
             public boolean can(Long userId, String resourceCode, String actionCode) {
                 return allowed;
@@ -215,6 +215,11 @@ class PermissionAspectTest {
             @Override
             public String getUserDataScope(Long userId, String resourceCode, String actionCode) {
                 return "all";
+            }
+
+            @Override
+            public Set<Long> getDataScopeOwnerUserIds(Long userId, String scope) {
+                return ResourcePermissionCatalog.SCOPE_ALL.equals(scope) ? null : Set.of(userId);
             }
         };
     }

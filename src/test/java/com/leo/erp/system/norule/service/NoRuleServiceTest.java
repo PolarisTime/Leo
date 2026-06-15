@@ -15,7 +15,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class NoRuleServiceTest {
@@ -234,16 +236,19 @@ class NoRuleServiceTest {
         when(systemSwitchService.shouldUseSnowflakeIdAsBusinessNo()).thenReturn(false);
         NoRuleSequenceService noRuleSequenceService = mock(NoRuleSequenceService.class);
         when(noRuleSequenceService.nextValueByModuleKey("TEST")).thenReturn("TEST0001");
+        PreallocatedBusinessNoService preallocatedBusinessNoService = mock(PreallocatedBusinessNoService.class);
         NoRuleService service = new NoRuleService(
                 mock(NoRuleRepository.class), new SnowflakeIdGenerator(1), mock(NoRuleMapper.class),
                 noRuleSequenceService, systemSwitchService,
-                mock(PreallocatedBusinessNoService.class), null
+                preallocatedBusinessNoService, null
         );
+        var principal = com.leo.erp.security.support.SecurityPrincipal.authenticated(1L, "tester", java.util.List.of());
 
-        var result = service.nextNumber("TEST", null);
+        var result = service.nextNumber("TEST", principal);
         assertThat(result).isNotNull();
         assertThat(result.moduleKey()).isEqualTo("TEST");
         assertThat(result.generatedNo()).isEqualTo("TEST0001");
+        verify(preallocatedBusinessNoService).reserveBusinessNo(eq("TEST"), eq("TEST0001"), eq(principal));
     }
 
     @Test

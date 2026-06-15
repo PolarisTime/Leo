@@ -1,7 +1,10 @@
 package com.leo.erp.system.norule.service;
 
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.leo.erp.common.service.CrudRuntimeSettings;
 import com.leo.erp.common.support.RedisJsonCacheSupport;
+import com.leo.erp.common.support.TradeItemRuntimeSettings;
+import com.leo.erp.common.web.PageQuerySettings;
 import com.leo.erp.system.norule.repository.NoRuleRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -16,7 +19,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
-public class SystemSwitchService {
+public class SystemSwitchService implements CrudRuntimeSettings, PageQuerySettings, TradeItemRuntimeSettings {
 
     public static final String BATCH_NO_AUTO_GENERATE_SWITCH = "SYS_BATCH_NO_AUTO_GENERATE";
     public static final String OPERATION_LOG_RECORD_ALL_WRITE_SWITCH = "SYS_OPERATION_LOG_RECORD_ALL_WRITE";

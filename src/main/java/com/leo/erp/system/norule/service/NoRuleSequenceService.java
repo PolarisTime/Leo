@@ -2,6 +2,7 @@ package com.leo.erp.system.norule.service;
 
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
+import com.leo.erp.common.service.BusinessNumberAllocator;
 import com.leo.erp.system.norule.domain.entity.NoRule;
 import com.leo.erp.system.norule.repository.NoRuleRepository;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -18,7 +19,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 @Service
-public class NoRuleSequenceService {
+public class NoRuleSequenceService implements BusinessNumberAllocator {
 
     public static final String BATCH_NO_RULE_CODE = "RULE_BATCH_NO";
     private static final Map<String, String> MODULE_RULE_CODE_MAP = Map.ofEntries(
@@ -43,6 +44,7 @@ public class NoRuleSequenceService {
             Map.entry("payment", "RULE_PM"),
             Map.entry("invoice-receipt", "RULE_SP"),
             Map.entry("invoice-issue", "RULE_KP"),
+            Map.entry("ledger-adjustment", "RULE_LA"),
             Map.entry("department", "RULE_DEPT")
     );
     private static final DateTimeFormatter YEAR_FORMATTER = DateTimeFormatter.ofPattern("yyyy");

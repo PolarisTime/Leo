@@ -1,24 +1,15 @@
 package com.leo.erp.security.permission;
 
-import com.leo.erp.auth.repository.UserAccountRepository;
-import com.leo.erp.auth.repository.UserRoleRepository;
-import com.leo.erp.common.config.RedisTuningProperties;
 import com.leo.erp.auth.web.dto.ResourcePermissionResponse;
-import com.leo.erp.common.support.RedisJsonCacheSupport;
-import com.leo.erp.system.department.repository.DepartmentRepository;
 import com.leo.erp.system.menu.domain.entity.Menu;
-import com.leo.erp.system.menu.repository.MenuRepository;
 import com.leo.erp.system.role.domain.entity.RoleSetting;
-import com.leo.erp.system.role.repository.RolePermissionRepository;
-import com.leo.erp.system.role.repository.RoleSettingRepository;
-import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -34,50 +25,22 @@ public class PermissionService {
     private final MenuVisibilityService menuVisibility;
     private final DepartmentScopeResolver departmentScope;
 
-    @org.springframework.beans.factory.annotation.Autowired
-    public PermissionService(UserRoleRepository userRoleRepository,
-                             RolePermissionRepository rolePermissionRepository,
-                             MenuRepository menuRepository,
-                             StringRedisTemplate redisTemplate,
-                             RoleSettingRepository roleSettingRepository,
-                             Optional<RedisJsonCacheSupport> redisJsonCacheSupport,
-                             Optional<UserAccountRepository> userAccountRepository,
-                             Optional<DepartmentRepository> departmentRepository,
-                             RedisTuningProperties redisTuningProperties) {
-        this.cache = new PermissionCache(redisTemplate, redisJsonCacheSupport, redisTuningProperties);
-        this.resolver = new PermissionResolver(userRoleRepository, rolePermissionRepository, roleSettingRepository, cache);
-        this.menuVisibility = new MenuVisibilityService(menuRepository, redisJsonCacheSupport);
-        this.departmentScope = new DepartmentScopeResolver(userAccountRepository, departmentRepository);
+    @Autowired
+    public PermissionService(PermissionResolver resolver,
+                             PermissionCache cache,
+                             MenuVisibilityService menuVisibility,
+                             DepartmentScopeResolver departmentScope) {
+        this.resolver = resolver;
+        this.cache = cache;
+        this.menuVisibility = menuVisibility;
+        this.departmentScope = departmentScope;
     }
 
-    public PermissionService(UserRoleRepository userRoleRepository,
-                             RolePermissionRepository rolePermissionRepository,
-                             MenuRepository menuRepository,
-                             StringRedisTemplate redisTemplate,
-                             RoleSettingRepository roleSettingRepository,
-                             Optional<RedisJsonCacheSupport> redisJsonCacheSupport,
-                             Optional<UserAccountRepository> userAccountRepository,
-                             RedisTuningProperties redisTuningProperties) {
-        this(userRoleRepository, rolePermissionRepository, menuRepository, redisTemplate, roleSettingRepository, redisJsonCacheSupport, userAccountRepository, Optional.empty(), redisTuningProperties);
-    }
-
-    public PermissionService(UserRoleRepository userRoleRepository,
-                             RolePermissionRepository rolePermissionRepository,
-                             MenuRepository menuRepository,
-                             StringRedisTemplate redisTemplate,
-                             RoleSettingRepository roleSettingRepository,
-                             Optional<RedisJsonCacheSupport> redisJsonCacheSupport,
-                             RedisTuningProperties redisTuningProperties) {
-        this(userRoleRepository, rolePermissionRepository, menuRepository, redisTemplate, roleSettingRepository, redisJsonCacheSupport, Optional.empty(), Optional.empty(), redisTuningProperties);
-    }
-
-    public PermissionService(UserRoleRepository userRoleRepository,
-                             RolePermissionRepository rolePermissionRepository,
-                             MenuRepository menuRepository,
-                             StringRedisTemplate redisTemplate,
-                             RoleSettingRepository roleSettingRepository,
-                             RedisTuningProperties redisTuningProperties) {
-        this(userRoleRepository, rolePermissionRepository, menuRepository, redisTemplate, roleSettingRepository, Optional.empty(), Optional.empty(), Optional.empty(), redisTuningProperties);
+    protected PermissionService() {
+        this.resolver = null;
+        this.cache = null;
+        this.menuVisibility = null;
+        this.departmentScope = null;
     }
 
     // --- Public API ---
