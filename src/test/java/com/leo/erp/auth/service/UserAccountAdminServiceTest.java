@@ -1306,6 +1306,14 @@ class UserAccountAdminServiceTest {
         @Override
         public void evictCache(Long userId) {
         }
+
+        @Override
+        public void evictDepartmentUserCache(Long departmentId) {
+        }
+
+        @Override
+        public void evictAllCache() {
+        }
     }
 
     private static final class FixedIdGenerator extends com.leo.erp.common.support.SnowflakeIdGenerator {
