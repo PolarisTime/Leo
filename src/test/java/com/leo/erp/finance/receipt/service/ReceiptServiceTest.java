@@ -48,7 +48,7 @@ class ReceiptServiceTest {
         ReceiptRepository receiptRepository = mock(ReceiptRepository.class);
         when(receiptRepository.existsByReceiptNoAndDeletedFlagFalse("SK-DUP")).thenReturn(true);
 
-        ReceiptService service = new ReceiptService(
+        ReceiptService service = service(
                 receiptRepository,
                 mock(ReceiptAllocationRepository.class),
                 new SnowflakeIdGenerator(0L),
@@ -82,7 +82,7 @@ class ReceiptServiceTest {
         when(customerStatementQueryService.requireActiveById(21L)).thenReturn(statement);
         when(receiptRepository.existsByReceiptNoAndDeletedFlagFalse("SK-001")).thenReturn(false);
 
-        ReceiptService service = new ReceiptService(
+        ReceiptService service = service(
                 receiptRepository,
                 mock(ReceiptAllocationRepository.class),
                 new SnowflakeIdGenerator(0L),
@@ -119,7 +119,7 @@ class ReceiptServiceTest {
         when(customerStatementQueryService.requireActiveById(21L)).thenReturn(statement);
         when(receiptRepository.existsByReceiptNoAndDeletedFlagFalse("SK-001")).thenReturn(false);
 
-        ReceiptService service = new ReceiptService(
+        ReceiptService service = service(
                 receiptRepository,
                 mock(ReceiptAllocationRepository.class),
                 new SnowflakeIdGenerator(0L),
@@ -156,7 +156,7 @@ class ReceiptServiceTest {
         when(customerStatementQueryService.requireActiveById(21L)).thenReturn(statement);
         when(receiptRepository.existsByReceiptNoAndDeletedFlagFalse("SK-001")).thenReturn(false);
 
-        ReceiptService service = new ReceiptService(
+        ReceiptService service = service(
                 receiptRepository,
                 mock(ReceiptAllocationRepository.class),
                 new SnowflakeIdGenerator(0L),
@@ -195,7 +195,7 @@ class ReceiptServiceTest {
         when(customerStatementQueryService.requireActiveById(21L)).thenReturn(statement);
         when(receiptRepository.existsByReceiptNoAndDeletedFlagFalse("SK-001")).thenReturn(false);
 
-        ReceiptService service = new ReceiptService(
+        ReceiptService service = service(
                 receiptRepository,
                 mock(ReceiptAllocationRepository.class),
                 new SnowflakeIdGenerator(0L),
@@ -231,7 +231,7 @@ class ReceiptServiceTest {
         when(customerStatementQueryService.requireActiveById(21L)).thenReturn(statement);
         when(receiptRepository.existsByReceiptNoAndDeletedFlagFalse("SK-001")).thenReturn(false);
 
-        ReceiptService service = new ReceiptService(
+        ReceiptService service = service(
                 receiptRepository,
                 mock(ReceiptAllocationRepository.class),
                 new SnowflakeIdGenerator(0L),
@@ -267,7 +267,7 @@ class ReceiptServiceTest {
         when(customerStatementQueryService.requireActiveById(21L)).thenReturn(statement);
         when(receiptRepository.existsByReceiptNoAndDeletedFlagFalse("SK-001")).thenReturn(false);
 
-        ReceiptService service = new ReceiptService(
+        ReceiptService service = service(
                 receiptRepository,
                 mock(ReceiptAllocationRepository.class),
                 new SnowflakeIdGenerator(0L),
@@ -295,7 +295,7 @@ class ReceiptServiceTest {
         ReceiptRepository receiptRepository = mock(ReceiptRepository.class);
         when(receiptRepository.existsByReceiptNoAndDeletedFlagFalse("SK-001")).thenReturn(false);
 
-        ReceiptService service = new ReceiptService(
+        ReceiptService service = service(
                 receiptRepository,
                 mock(ReceiptAllocationRepository.class),
                 new SnowflakeIdGenerator(0L),
@@ -347,7 +347,7 @@ class ReceiptServiceTest {
             );
         });
 
-        ReceiptService service = new ReceiptService(
+        ReceiptService service = service(
                 receiptRepository,
                 mock(ReceiptAllocationRepository.class),
                 new SnowflakeIdGenerator(0L),
@@ -386,7 +386,7 @@ class ReceiptServiceTest {
         when(customerStatementQueryService.requireActiveById(21L)).thenReturn(statement);
         when(receiptRepository.existsByReceiptNoAndDeletedFlagFalse("SK-001")).thenReturn(false);
 
-        ReceiptService service = new ReceiptService(
+        ReceiptService service = service(
                 receiptRepository,
                 mock(ReceiptAllocationRepository.class),
                 new SnowflakeIdGenerator(0L),
@@ -429,7 +429,7 @@ class ReceiptServiceTest {
                 anyLong()
         )).thenReturn(new BigDecimal("950.00"));
 
-        ReceiptService service = new ReceiptService(
+        ReceiptService service = service(
                 receiptRepository,
                 allocationRepository,
                 new SnowflakeIdGenerator(0L),
@@ -471,7 +471,7 @@ class ReceiptServiceTest {
                 anyLong()
         )).thenReturn(new BigDecimal("950.00"));
 
-        ReceiptService service = new ReceiptService(
+        ReceiptService service = service(
                 receiptRepository,
                 allocationRepository,
                 new SnowflakeIdGenerator(0L),
@@ -507,7 +507,7 @@ class ReceiptServiceTest {
         when(customerStatementQueryService.requireActiveById(21L)).thenReturn(statement);
         when(receiptRepository.existsByReceiptNoAndDeletedFlagFalse("SK-001")).thenReturn(false);
 
-        ReceiptService service = new ReceiptService(
+        ReceiptService service = service(
                 receiptRepository,
                 mock(ReceiptAllocationRepository.class),
                 new SnowflakeIdGenerator(0L),
@@ -547,7 +547,7 @@ class ReceiptServiceTest {
                 .when(resourceRecordAccessGuard)
                 .assertCurrentUserCanAccess("customer-statement", "read", statement);
 
-        ReceiptService service = new ReceiptService(
+        ReceiptService service = service(
                 receiptRepository,
                 mock(ReceiptAllocationRepository.class),
                 new SnowflakeIdGenerator(0L),
@@ -608,7 +608,7 @@ class ReceiptServiceTest {
             );
         });
 
-        ReceiptService service = new ReceiptService(
+        ReceiptService service = service(
                 receiptRepository, allocationRepository, idGenerator, receiptMapper,
                 customerStatementQueryService, eventPublisher, resourceRecordAccessGuard, workflowTransitionGuard
         );
@@ -651,7 +651,7 @@ class ReceiptServiceTest {
                         "草稿", "财务A", null, null)
         );
 
-        ReceiptService service = new ReceiptService(
+        ReceiptService service = service(
                 receiptRepository, mock(ReceiptAllocationRepository.class),
                 new SnowflakeIdGenerator(0L), receiptMapper,
                 customerStatementQueryService, eventPublisher, resourceRecordAccessGuard,
@@ -686,7 +686,7 @@ class ReceiptServiceTest {
                         "草稿", "财务A", null, null)
         );
 
-        ReceiptService service = new ReceiptService(
+        ReceiptService service = service(
                 receiptRepository, mock(ReceiptAllocationRepository.class),
                 new SnowflakeIdGenerator(0L), receiptMapper,
                 mock(CustomerStatementQueryService.class), mock(ApplicationEventPublisher.class),
@@ -712,7 +712,7 @@ class ReceiptServiceTest {
         when(receiptRepository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(existing));
         when(receiptRepository.existsByReceiptNoAndDeletedFlagFalse("SK-DUP")).thenReturn(true);
 
-        ReceiptService service = new ReceiptService(
+        ReceiptService service = service(
                 receiptRepository, mock(ReceiptAllocationRepository.class),
                 new SnowflakeIdGenerator(0L), mock(ReceiptMapper.class),
                 mock(CustomerStatementQueryService.class), mock(ApplicationEventPublisher.class),
@@ -745,7 +745,7 @@ class ReceiptServiceTest {
                         "草稿", "财务A", null, null)
         );
 
-        ReceiptService service = new ReceiptService(
+        ReceiptService service = service(
                 receiptRepository, mock(ReceiptAllocationRepository.class),
                 new SnowflakeIdGenerator(0L), receiptMapper,
                 mock(CustomerStatementQueryService.class), mock(ApplicationEventPublisher.class),
@@ -773,7 +773,7 @@ class ReceiptServiceTest {
                         "草稿", "财务A", null, null)
         );
 
-        ReceiptService service = new ReceiptService(
+        ReceiptService service = service(
                 receiptRepository, mock(ReceiptAllocationRepository.class),
                 new SnowflakeIdGenerator(0L), receiptMapper,
                 mock(CustomerStatementQueryService.class), mock(ApplicationEventPublisher.class),
@@ -805,7 +805,7 @@ class ReceiptServiceTest {
                         "草稿", "财务A", null, null)
         );
 
-        ReceiptService service = new ReceiptService(
+        ReceiptService service = service(
                 receiptRepository, mock(ReceiptAllocationRepository.class),
                 new SnowflakeIdGenerator(0L), receiptMapper,
                 mock(CustomerStatementQueryService.class), mock(ApplicationEventPublisher.class),
@@ -858,7 +858,7 @@ class ReceiptServiceTest {
                         StatusConstants.RECEIVED, "财务A", null, null)
         );
 
-        ReceiptService service = new ReceiptService(
+        ReceiptService service = service(
                 receiptRepository, allocationRepository,
                 new SnowflakeIdGenerator(0L), receiptMapper,
                 customerStatementQueryService, eventPublisher,
@@ -880,7 +880,7 @@ class ReceiptServiceTest {
         existing.setAmount(new BigDecimal("100.00"));
         when(receiptRepository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(existing));
 
-        ReceiptService service = new ReceiptService(
+        ReceiptService service = service(
                 receiptRepository,
                 mock(ReceiptAllocationRepository.class),
                 new SnowflakeIdGenerator(0L),
@@ -904,7 +904,7 @@ class ReceiptServiceTest {
         existing.setDeletedFlag(false);
         when(receiptRepository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(existing));
 
-        ReceiptService service = new ReceiptService(
+        ReceiptService service = service(
                 receiptRepository, mock(ReceiptAllocationRepository.class),
                 new SnowflakeIdGenerator(0L), mock(ReceiptMapper.class),
                 mock(CustomerStatementQueryService.class), mock(ApplicationEventPublisher.class),
@@ -930,7 +930,7 @@ class ReceiptServiceTest {
                         "草稿", "财务A", null, null)
         );
 
-        ReceiptService service = new ReceiptService(
+        ReceiptService service = service(
                 receiptRepository, mock(ReceiptAllocationRepository.class),
                 new SnowflakeIdGenerator(0L), receiptMapper,
                 mock(CustomerStatementQueryService.class), mock(ApplicationEventPublisher.class),
@@ -974,7 +974,7 @@ class ReceiptServiceTest {
             );
         });
 
-        ReceiptService service = new ReceiptService(
+        ReceiptService service = service(
                 receiptRepository, mock(ReceiptAllocationRepository.class),
                 new SnowflakeIdGenerator(0L), receiptMapper,
                 customerStatementQueryService, eventPublisher, resourceRecordAccessGuard,
@@ -1002,7 +1002,7 @@ class ReceiptServiceTest {
         when(customerStatementQueryService.requireActiveById(21L)).thenReturn(statement);
         when(receiptRepository.existsByReceiptNoAndDeletedFlagFalse("SK-001")).thenReturn(false);
 
-        ReceiptService service = new ReceiptService(
+        ReceiptService service = service(
                 receiptRepository, mock(ReceiptAllocationRepository.class),
                 new SnowflakeIdGenerator(0L), mock(ReceiptMapper.class),
                 customerStatementQueryService, mock(ApplicationEventPublisher.class),
@@ -1051,7 +1051,7 @@ class ReceiptServiceTest {
                         "草稿", "财务A", null, null)
         );
 
-        ReceiptService service = new ReceiptService(
+        ReceiptService service = service(
                 receiptRepository, mock(ReceiptAllocationRepository.class),
                 new SnowflakeIdGenerator(0L), receiptMapper,
                 customerStatementQueryService, mock(ApplicationEventPublisher.class),
@@ -1089,7 +1089,7 @@ class ReceiptServiceTest {
                         "草稿", "财务A", null, null)
         );
 
-        ReceiptService service = new ReceiptService(
+        ReceiptService service = service(
                 receiptRepository, mock(ReceiptAllocationRepository.class),
                 new SnowflakeIdGenerator(0L), receiptMapper,
                 customerStatementQueryService, mock(ApplicationEventPublisher.class),
@@ -1118,7 +1118,7 @@ class ReceiptServiceTest {
                         StatusConstants.DRAFT, "财务A", null, null)
         );
 
-        ReceiptService service = new ReceiptService(
+        ReceiptService service = service(
                 receiptRepository, mock(ReceiptAllocationRepository.class),
                 new SnowflakeIdGenerator(0L), receiptMapper,
                 mock(CustomerStatementQueryService.class), mock(ApplicationEventPublisher.class),
@@ -1140,7 +1140,7 @@ class ReceiptServiceTest {
         when(receiptRepository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(existing));
         when(receiptRepository.save(any(Receipt.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        ReceiptService service = new ReceiptService(
+        ReceiptService service = service(
                 receiptRepository, mock(ReceiptAllocationRepository.class),
                 new SnowflakeIdGenerator(0L), mock(ReceiptMapper.class),
                 mock(CustomerStatementQueryService.class), mock(ApplicationEventPublisher.class),
@@ -1160,7 +1160,7 @@ class ReceiptServiceTest {
         existing.setDeletedFlag(false);
         when(receiptRepository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(existing));
 
-        ReceiptService service = new ReceiptService(
+        ReceiptService service = service(
                 receiptRepository, mock(ReceiptAllocationRepository.class),
                 new SnowflakeIdGenerator(0L), mock(ReceiptMapper.class),
                 mock(CustomerStatementQueryService.class), mock(ApplicationEventPublisher.class),
@@ -1180,7 +1180,7 @@ class ReceiptServiceTest {
         existing.setDeletedFlag(false);
         when(receiptRepository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(existing));
 
-        ReceiptService service = new ReceiptService(
+        ReceiptService service = service(
                 receiptRepository, mock(ReceiptAllocationRepository.class),
                 new SnowflakeIdGenerator(0L), mock(ReceiptMapper.class),
                 mock(CustomerStatementQueryService.class), mock(ApplicationEventPublisher.class),
@@ -1203,7 +1203,7 @@ class ReceiptServiceTest {
         ReceiptRepository receiptRepository = mock(ReceiptRepository.class);
         when(receiptRepository.findByIdAndDeletedFlagFalse(999L)).thenReturn(Optional.empty());
 
-        ReceiptService service = new ReceiptService(
+        ReceiptService service = service(
                 receiptRepository, mock(ReceiptAllocationRepository.class),
                 new SnowflakeIdGenerator(0L), mock(ReceiptMapper.class),
                 mock(CustomerStatementQueryService.class), mock(ApplicationEventPublisher.class),
@@ -1220,7 +1220,7 @@ class ReceiptServiceTest {
         ReceiptRepository receiptRepository = mock(ReceiptRepository.class);
         when(receiptRepository.findByIdAndDeletedFlagFalse(999L)).thenReturn(Optional.empty());
 
-        ReceiptService service = new ReceiptService(
+        ReceiptService service = service(
                 receiptRepository, mock(ReceiptAllocationRepository.class),
                 new SnowflakeIdGenerator(0L), mock(ReceiptMapper.class),
                 mock(CustomerStatementQueryService.class), mock(ApplicationEventPublisher.class),
@@ -1243,7 +1243,7 @@ class ReceiptServiceTest {
         ReceiptRepository receiptRepository = mock(ReceiptRepository.class);
         when(receiptRepository.findByIdAndDeletedFlagFalse(999L)).thenReturn(Optional.empty());
 
-        ReceiptService service = new ReceiptService(
+        ReceiptService service = service(
                 receiptRepository, mock(ReceiptAllocationRepository.class),
                 new SnowflakeIdGenerator(0L), mock(ReceiptMapper.class),
                 mock(CustomerStatementQueryService.class), mock(ApplicationEventPublisher.class),
@@ -1260,7 +1260,7 @@ class ReceiptServiceTest {
         ReceiptRepository receiptRepository = mock(ReceiptRepository.class);
         when(receiptRepository.findByIdAndDeletedFlagFalse(999L)).thenReturn(Optional.empty());
 
-        ReceiptService service = new ReceiptService(
+        ReceiptService service = service(
                 receiptRepository, mock(ReceiptAllocationRepository.class),
                 new SnowflakeIdGenerator(0L), mock(ReceiptMapper.class),
                 mock(CustomerStatementQueryService.class), mock(ApplicationEventPublisher.class),
@@ -1270,6 +1270,32 @@ class ReceiptServiceTest {
         assertThatThrownBy(() -> service.delete(999L))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("收款单不存在");
+    }
+
+    private ReceiptService service(ReceiptRepository receiptRepository,
+                                   ReceiptAllocationRepository receiptAllocationRepository,
+                                   SnowflakeIdGenerator snowflakeIdGenerator,
+                                   ReceiptMapper receiptMapper,
+                                   CustomerStatementQueryService customerStatementQueryService,
+                                   ApplicationEventPublisher eventPublisher,
+                                   ResourceRecordAccessGuard resourceRecordAccessGuard,
+                                   WorkflowTransitionGuard workflowTransitionGuard) {
+        ReceiptStatementAllocationValidator statementAllocationValidator = new ReceiptStatementAllocationValidator(
+                receiptAllocationRepository,
+                customerStatementQueryService,
+                resourceRecordAccessGuard
+        );
+        ReceiptAllocationService allocationService = new ReceiptAllocationService(statementAllocationValidator);
+        ReceiptSettlementSyncService settlementSyncService = new ReceiptSettlementSyncService(eventPublisher);
+        return new ReceiptService(
+                receiptRepository,
+                snowflakeIdGenerator,
+                receiptMapper,
+                new ReceiptApplyService(workflowTransitionGuard, allocationService, settlementSyncService),
+                allocationService,
+                new ReceiptAllocationResponseAssembler(customerStatementQueryService),
+                settlementSyncService
+        );
     }
 
     private Receipt buildReceiptEntity(Long id, String receiptNo) {

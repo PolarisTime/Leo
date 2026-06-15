@@ -15,10 +15,10 @@ import com.leo.erp.sales.order.domain.entity.SalesOrder;
 import com.leo.erp.sales.order.domain.entity.SalesOrderItem;
 import com.leo.erp.sales.order.service.SalesOrderItemQueryService;
 import com.leo.erp.system.company.service.CompanySettingService;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -66,8 +66,19 @@ class InvoiceIssueServiceTest {
     @Mock
     private WorkflowTransitionGuard workflowTransitionGuard;
 
-    @InjectMocks
     private InvoiceIssueService service;
+
+    @BeforeEach
+    void setUpService() {
+        service = service(
+                repository,
+                idGenerator,
+                mapper,
+                companySettingService,
+                workflowTransitionGuard,
+                salesOrderItemQueryService
+        );
+    }
 
     @Test
     void createRejectsOverAllocatedSalesOrderItem() {
@@ -691,6 +702,26 @@ class InvoiceIssueServiceTest {
         item.setUnitPrice(amount.divide(weightTon, 2, RoundingMode.HALF_UP));
         item.setAmount(amount);
         return item;
+    }
+
+    private InvoiceIssueService service(InvoiceIssueRepository repository,
+                                        SnowflakeIdGenerator idGenerator,
+                                        InvoiceIssueMapper mapper,
+                                        CompanySettingService companySettingService,
+                                        WorkflowTransitionGuard workflowTransitionGuard,
+                                        SalesOrderItemQueryService salesOrderItemQueryService) {
+        InvoiceIssueSourceService sourceService = new InvoiceIssueSourceService(repository, salesOrderItemQueryService);
+        com.leo.erp.finance.common.service.InvoiceAmountCalculator amountCalculator =
+                new com.leo.erp.finance.common.service.InvoiceAmountCalculator(
+                        new com.leo.erp.finance.common.service.TaxAmountCalculator(companySettingService)
+                );
+        return new InvoiceIssueService(
+                repository,
+                idGenerator,
+                new InvoiceIssueApplyService(workflowTransitionGuard, sourceService, amountCalculator),
+                sourceService,
+                new InvoiceIssueResponseAssembler(mapper)
+        );
     }
 
     private InvoiceIssueRequest buildRequest(String issueNo,

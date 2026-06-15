@@ -48,7 +48,7 @@ class PaymentServiceTest {
         PaymentRepository paymentRepository = mock(PaymentRepository.class);
         when(paymentRepository.existsByPaymentNoAndDeletedFlagFalse("FK-DUP")).thenReturn(true);
 
-        PaymentService service = new PaymentService(
+        PaymentService service = service(
                 paymentRepository,
                 mock(PaymentAllocationRepository.class),
                 new SnowflakeIdGenerator(0L),
@@ -82,7 +82,7 @@ class PaymentServiceTest {
         when(supplierStatementQueryService.requireActiveById(11L)).thenReturn(statement);
         when(paymentRepository.existsByPaymentNoAndDeletedFlagFalse("FK-001")).thenReturn(false);
 
-        PaymentService service = new PaymentService(
+        PaymentService service = service(
                 paymentRepository,
                 mock(PaymentAllocationRepository.class),
                 new SnowflakeIdGenerator(0L),
@@ -119,7 +119,7 @@ class PaymentServiceTest {
         when(freightStatementQueryService.requireActiveById(31L)).thenReturn(statement);
         when(paymentRepository.existsByPaymentNoAndDeletedFlagFalse("FK-001")).thenReturn(false);
 
-        PaymentService service = new PaymentService(
+        PaymentService service = service(
                 paymentRepository,
                 mock(PaymentAllocationRepository.class),
                 new SnowflakeIdGenerator(0L),
@@ -155,7 +155,7 @@ class PaymentServiceTest {
         when(supplierStatementQueryService.requireActiveById(11L)).thenReturn(statement);
         when(paymentRepository.existsByPaymentNoAndDeletedFlagFalse("FK-001")).thenReturn(false);
 
-        PaymentService service = new PaymentService(
+        PaymentService service = service(
                 paymentRepository,
                 mock(PaymentAllocationRepository.class),
                 new SnowflakeIdGenerator(0L),
@@ -194,7 +194,7 @@ class PaymentServiceTest {
         when(freightStatementQueryService.requireActiveById(31L)).thenReturn(statement);
         when(paymentRepository.existsByPaymentNoAndDeletedFlagFalse("FK-001")).thenReturn(false);
 
-        PaymentService service = new PaymentService(
+        PaymentService service = service(
                 paymentRepository,
                 mock(PaymentAllocationRepository.class),
                 new SnowflakeIdGenerator(0L),
@@ -226,7 +226,7 @@ class PaymentServiceTest {
         PaymentRepository paymentRepository = mock(PaymentRepository.class);
         when(paymentRepository.existsByPaymentNoAndDeletedFlagFalse("FK-001")).thenReturn(false);
 
-        PaymentService service = new PaymentService(
+        PaymentService service = service(
                 paymentRepository,
                 mock(PaymentAllocationRepository.class),
                 new SnowflakeIdGenerator(0L),
@@ -262,7 +262,7 @@ class PaymentServiceTest {
         when(supplierStatementQueryService.requireActiveById(11L)).thenReturn(statement);
         when(paymentRepository.existsByPaymentNoAndDeletedFlagFalse("FK-001")).thenReturn(false);
 
-        PaymentService service = new PaymentService(
+        PaymentService service = service(
                 paymentRepository,
                 mock(PaymentAllocationRepository.class),
                 new SnowflakeIdGenerator(0L),
@@ -298,7 +298,7 @@ class PaymentServiceTest {
         when(supplierStatementQueryService.requireActiveById(11L)).thenReturn(statement);
         when(paymentRepository.existsByPaymentNoAndDeletedFlagFalse("FK-001")).thenReturn(false);
 
-        PaymentService service = new PaymentService(
+        PaymentService service = service(
                 paymentRepository,
                 mock(PaymentAllocationRepository.class),
                 new SnowflakeIdGenerator(0L),
@@ -327,7 +327,7 @@ class PaymentServiceTest {
         PaymentRepository paymentRepository = mock(PaymentRepository.class);
         when(paymentRepository.existsByPaymentNoAndDeletedFlagFalse("FK-001")).thenReturn(false);
 
-        PaymentService service = new PaymentService(
+        PaymentService service = service(
                 paymentRepository,
                 mock(PaymentAllocationRepository.class),
                 new SnowflakeIdGenerator(0L),
@@ -356,7 +356,7 @@ class PaymentServiceTest {
         PaymentRepository paymentRepository = mock(PaymentRepository.class);
         when(paymentRepository.existsByPaymentNoAndDeletedFlagFalse("FK-001")).thenReturn(false);
 
-        PaymentService service = new PaymentService(
+        PaymentService service = service(
                 paymentRepository,
                 mock(PaymentAllocationRepository.class),
                 new SnowflakeIdGenerator(0L),
@@ -392,7 +392,7 @@ class PaymentServiceTest {
         when(supplierStatementQueryService.requireActiveById(11L)).thenReturn(statement);
         when(paymentRepository.existsByPaymentNoAndDeletedFlagFalse("FK-001")).thenReturn(false);
 
-        PaymentService service = new PaymentService(
+        PaymentService service = service(
                 paymentRepository,
                 mock(PaymentAllocationRepository.class),
                 new SnowflakeIdGenerator(0L),
@@ -428,7 +428,7 @@ class PaymentServiceTest {
         when(freightStatementQueryService.requireActiveById(31L)).thenReturn(statement);
         when(paymentRepository.existsByPaymentNoAndDeletedFlagFalse("FK-001")).thenReturn(false);
 
-        PaymentService service = new PaymentService(
+        PaymentService service = service(
                 paymentRepository,
                 mock(PaymentAllocationRepository.class),
                 new SnowflakeIdGenerator(0L),
@@ -479,7 +479,7 @@ class PaymentServiceTest {
             );
         });
 
-        PaymentService service = new PaymentService(
+        PaymentService service = service(
                 paymentRepository,
                 mock(PaymentAllocationRepository.class),
                 new SnowflakeIdGenerator(0L),
@@ -523,7 +523,7 @@ class PaymentServiceTest {
                 anyLong()
         )).thenReturn(new BigDecimal("900.00"));
 
-        PaymentService service = new PaymentService(
+        PaymentService service = service(
                 paymentRepository,
                 allocationRepository,
                 new SnowflakeIdGenerator(0L),
@@ -566,7 +566,7 @@ class PaymentServiceTest {
                 anyLong()
         )).thenReturn(new BigDecimal("900.00"));
 
-        PaymentService service = new PaymentService(
+        PaymentService service = service(
                 paymentRepository,
                 allocationRepository,
                 new SnowflakeIdGenerator(0L),
@@ -609,7 +609,7 @@ class PaymentServiceTest {
                 anyLong()
         )).thenReturn(new BigDecimal("450.00"));
 
-        PaymentService service = new PaymentService(
+        PaymentService service = service(
                 paymentRepository,
                 allocationRepository,
                 new SnowflakeIdGenerator(0L),
@@ -645,7 +645,7 @@ class PaymentServiceTest {
         when(supplierStatementQueryService.requireActiveById(11L)).thenReturn(statement);
         when(paymentRepository.existsByPaymentNoAndDeletedFlagFalse("FK-001")).thenReturn(false);
 
-        PaymentService service = new PaymentService(
+        PaymentService service = service(
                 paymentRepository,
                 mock(PaymentAllocationRepository.class),
                 new SnowflakeIdGenerator(0L),
@@ -685,7 +685,7 @@ class PaymentServiceTest {
                 .when(resourceRecordAccessGuard)
                 .assertCurrentUserCanAccess("supplier-statement", "read", statement);
 
-        PaymentService service = new PaymentService(
+        PaymentService service = service(
                 paymentRepository,
                 mock(PaymentAllocationRepository.class),
                 new SnowflakeIdGenerator(0L),
@@ -725,7 +725,7 @@ class PaymentServiceTest {
                 .when(resourceRecordAccessGuard)
                 .assertCurrentUserCanAccess("freight-statement", "read", statement);
 
-        PaymentService service = new PaymentService(
+        PaymentService service = service(
                 paymentRepository,
                 mock(PaymentAllocationRepository.class),
                 new SnowflakeIdGenerator(0L),
@@ -780,7 +780,7 @@ class PaymentServiceTest {
                         "草稿", "财务A", null, null)
         );
 
-        PaymentService service = new PaymentService(
+        PaymentService service = service(
                 paymentRepository, allocationRepository, new SnowflakeIdGenerator(0L),
                 paymentMapper, supplierStatementQueryService, mock(FreightStatementQueryService.class),
                 eventPublisher, resourceRecordAccessGuard, mock(WorkflowTransitionGuard.class)
@@ -825,7 +825,7 @@ class PaymentServiceTest {
                         "草稿", "财务A", null, null)
         );
 
-        PaymentService service = new PaymentService(
+        PaymentService service = service(
                 paymentRepository, mock(PaymentAllocationRepository.class),
                 new SnowflakeIdGenerator(0L), paymentMapper,
                 mock(SupplierStatementQueryService.class), freightStatementQueryService,
@@ -858,7 +858,7 @@ class PaymentServiceTest {
                         "草稿", "财务A", null, null)
         );
 
-        PaymentService service = new PaymentService(
+        PaymentService service = service(
                 paymentRepository, mock(PaymentAllocationRepository.class),
                 new SnowflakeIdGenerator(0L), paymentMapper,
                 mock(SupplierStatementQueryService.class), mock(FreightStatementQueryService.class),
@@ -890,7 +890,7 @@ class PaymentServiceTest {
                         "草稿", "财务A", null, null)
         );
 
-        PaymentService service = new PaymentService(
+        PaymentService service = service(
                 paymentRepository, mock(PaymentAllocationRepository.class),
                 new SnowflakeIdGenerator(0L), paymentMapper,
                 mock(SupplierStatementQueryService.class), mock(FreightStatementQueryService.class),
@@ -917,7 +917,7 @@ class PaymentServiceTest {
         when(paymentRepository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(existing));
         when(paymentRepository.existsByPaymentNoAndDeletedFlagFalse("FK-DUP")).thenReturn(true);
 
-        PaymentService service = new PaymentService(
+        PaymentService service = service(
                 paymentRepository, mock(PaymentAllocationRepository.class),
                 new SnowflakeIdGenerator(0L), mock(PaymentMapper.class),
                 mock(SupplierStatementQueryService.class), mock(FreightStatementQueryService.class),
@@ -950,7 +950,7 @@ class PaymentServiceTest {
                         "草稿", "财务A", null, null)
         );
 
-        PaymentService service = new PaymentService(
+        PaymentService service = service(
                 paymentRepository, mock(PaymentAllocationRepository.class),
                 new SnowflakeIdGenerator(0L), paymentMapper,
                 mock(SupplierStatementQueryService.class), mock(FreightStatementQueryService.class),
@@ -978,7 +978,7 @@ class PaymentServiceTest {
                         "草稿", "财务A", null, null)
         );
 
-        PaymentService service = new PaymentService(
+        PaymentService service = service(
                 paymentRepository, mock(PaymentAllocationRepository.class),
                 new SnowflakeIdGenerator(0L), paymentMapper,
                 mock(SupplierStatementQueryService.class), mock(FreightStatementQueryService.class),
@@ -1009,7 +1009,7 @@ class PaymentServiceTest {
                         "草稿", "财务A", null, null)
         );
 
-        PaymentService service = new PaymentService(
+        PaymentService service = service(
                 paymentRepository, mock(PaymentAllocationRepository.class),
                 new SnowflakeIdGenerator(0L), paymentMapper,
                 mock(SupplierStatementQueryService.class), mock(FreightStatementQueryService.class),
@@ -1059,7 +1059,7 @@ class PaymentServiceTest {
                         StatusConstants.PAID, "财务A", null, null)
         );
 
-        PaymentService service = new PaymentService(
+        PaymentService service = service(
                 paymentRepository, allocationRepository,
                 new SnowflakeIdGenerator(0L), paymentMapper,
                 supplierStatementQueryService, mock(FreightStatementQueryService.class),
@@ -1084,7 +1084,7 @@ class PaymentServiceTest {
         existing.setAmount(new BigDecimal("100.00"));
         when(paymentRepository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(existing));
 
-        PaymentService service = new PaymentService(
+        PaymentService service = service(
                 paymentRepository,
                 mock(PaymentAllocationRepository.class),
                 new SnowflakeIdGenerator(0L),
@@ -1137,7 +1137,7 @@ class PaymentServiceTest {
                         StatusConstants.PAID, "财务A", null, null)
         );
 
-        PaymentService service = new PaymentService(
+        PaymentService service = service(
                 paymentRepository, mock(PaymentAllocationRepository.class),
                 new SnowflakeIdGenerator(0L), paymentMapper,
                 mock(SupplierStatementQueryService.class), freightStatementQueryService,
@@ -1159,7 +1159,7 @@ class PaymentServiceTest {
         existing.setDeletedFlag(false);
         when(paymentRepository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(existing));
 
-        PaymentService service = new PaymentService(
+        PaymentService service = service(
                 paymentRepository, mock(PaymentAllocationRepository.class),
                 new SnowflakeIdGenerator(0L), mock(PaymentMapper.class),
                 mock(SupplierStatementQueryService.class), mock(FreightStatementQueryService.class),
@@ -1189,7 +1189,7 @@ class PaymentServiceTest {
                         StatusConstants.DRAFT, "财务A", null, null)
         );
 
-        PaymentService service = new PaymentService(
+        PaymentService service = service(
                 paymentRepository, mock(PaymentAllocationRepository.class),
                 new SnowflakeIdGenerator(0L), paymentMapper,
                 mock(SupplierStatementQueryService.class), mock(FreightStatementQueryService.class),
@@ -1212,7 +1212,7 @@ class PaymentServiceTest {
         when(paymentRepository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(existing));
         when(paymentRepository.save(any(Payment.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        PaymentService service = new PaymentService(
+        PaymentService service = service(
                 paymentRepository, mock(PaymentAllocationRepository.class),
                 new SnowflakeIdGenerator(0L), mock(PaymentMapper.class),
                 mock(SupplierStatementQueryService.class), mock(FreightStatementQueryService.class),
@@ -1233,7 +1233,7 @@ class PaymentServiceTest {
         existing.setDeletedFlag(false);
         when(paymentRepository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(existing));
 
-        PaymentService service = new PaymentService(
+        PaymentService service = service(
                 paymentRepository, mock(PaymentAllocationRepository.class),
                 new SnowflakeIdGenerator(0L), mock(PaymentMapper.class),
                 mock(SupplierStatementQueryService.class), mock(FreightStatementQueryService.class),
@@ -1254,7 +1254,7 @@ class PaymentServiceTest {
         existing.setDeletedFlag(false);
         when(paymentRepository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(existing));
 
-        PaymentService service = new PaymentService(
+        PaymentService service = service(
                 paymentRepository, mock(PaymentAllocationRepository.class),
                 new SnowflakeIdGenerator(0L), mock(PaymentMapper.class),
                 mock(SupplierStatementQueryService.class), mock(FreightStatementQueryService.class),
@@ -1285,7 +1285,7 @@ class PaymentServiceTest {
         when(supplierStatementQueryService.requireActiveById(11L)).thenReturn(statement);
         when(paymentRepository.existsByPaymentNoAndDeletedFlagFalse("FK-001")).thenReturn(false);
 
-        PaymentService service = new PaymentService(
+        PaymentService service = service(
                 paymentRepository, mock(PaymentAllocationRepository.class),
                 new SnowflakeIdGenerator(0L), mock(PaymentMapper.class),
                 supplierStatementQueryService, mock(FreightStatementQueryService.class),
@@ -1313,7 +1313,7 @@ class PaymentServiceTest {
         when(freightStatementQueryService.requireActiveById(31L)).thenReturn(statement);
         when(paymentRepository.existsByPaymentNoAndDeletedFlagFalse("FK-001")).thenReturn(false);
 
-        PaymentService service = new PaymentService(
+        PaymentService service = service(
                 paymentRepository, mock(PaymentAllocationRepository.class),
                 new SnowflakeIdGenerator(0L), mock(PaymentMapper.class),
                 mock(SupplierStatementQueryService.class), freightStatementQueryService,
@@ -1341,7 +1341,7 @@ class PaymentServiceTest {
         when(freightStatementQueryService.requireActiveById(31L)).thenReturn(statement);
         when(paymentRepository.existsByPaymentNoAndDeletedFlagFalse("FK-001")).thenReturn(false);
 
-        PaymentService service = new PaymentService(
+        PaymentService service = service(
                 paymentRepository, mock(PaymentAllocationRepository.class),
                 new SnowflakeIdGenerator(0L), mock(PaymentMapper.class),
                 mock(SupplierStatementQueryService.class), freightStatementQueryService,
@@ -1362,7 +1362,7 @@ class PaymentServiceTest {
         PaymentRepository paymentRepository = mock(PaymentRepository.class);
         when(paymentRepository.findByIdAndDeletedFlagFalse(999L)).thenReturn(Optional.empty());
 
-        PaymentService service = new PaymentService(
+        PaymentService service = service(
                 paymentRepository, mock(PaymentAllocationRepository.class),
                 new SnowflakeIdGenerator(0L), mock(PaymentMapper.class),
                 mock(SupplierStatementQueryService.class), mock(FreightStatementQueryService.class),
@@ -1373,6 +1373,37 @@ class PaymentServiceTest {
         assertThatThrownBy(() -> service.detail(999L))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("付款单不存在");
+    }
+
+    private PaymentService service(PaymentRepository paymentRepository,
+                                   PaymentAllocationRepository paymentAllocationRepository,
+                                   SnowflakeIdGenerator snowflakeIdGenerator,
+                                   PaymentMapper paymentMapper,
+                                   SupplierStatementQueryService supplierStatementQueryService,
+                                   FreightStatementQueryService freightStatementQueryService,
+                                   ApplicationEventPublisher eventPublisher,
+                                   ResourceRecordAccessGuard resourceRecordAccessGuard,
+                                   WorkflowTransitionGuard workflowTransitionGuard) {
+        PaymentStatementAllocationValidator statementAllocationValidator = new PaymentStatementAllocationValidator(
+                paymentAllocationRepository,
+                supplierStatementQueryService,
+                freightStatementQueryService,
+                resourceRecordAccessGuard
+        );
+        PaymentAllocationService allocationService = new PaymentAllocationService(statementAllocationValidator);
+        PaymentSettlementSyncService settlementSyncService = new PaymentSettlementSyncService(eventPublisher);
+        return new PaymentService(
+                paymentRepository,
+                snowflakeIdGenerator,
+                paymentMapper,
+                new PaymentApplyService(workflowTransitionGuard, allocationService, settlementSyncService),
+                allocationService,
+                new PaymentAllocationResponseAssembler(
+                        supplierStatementQueryService,
+                        freightStatementQueryService
+                ),
+                settlementSyncService
+        );
     }
 
     private Payment buildPaymentEntity(Long id, String paymentNo) {
