@@ -6,89 +6,46 @@ import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.service.AbstractCrudService;
-import com.leo.erp.common.support.BusinessDocumentValidator;
-import com.leo.erp.common.support.BusinessStatusValidator;
-import com.leo.erp.common.support.ManagedEntityItemSupport;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
-import com.leo.erp.common.support.TradeItemCalculator;
-import com.leo.erp.master.supplier.repository.SupplierRepository;
-import com.leo.erp.purchase.inbound.domain.entity.PurchaseInbound;
-import com.leo.erp.purchase.inbound.domain.entity.PurchaseInboundItem;
-import com.leo.erp.purchase.inbound.repository.PurchaseInboundRepository;
-import com.leo.erp.purchase.inbound.service.PurchaseInboundItemQueryService;
-import com.leo.erp.security.permission.DataScopeContext;
 import com.leo.erp.security.permission.WorkflowTransitionGuard;
 import com.leo.erp.statement.supplier.domain.entity.SupplierStatement;
-import com.leo.erp.statement.supplier.domain.entity.SupplierStatementItem;
-import com.leo.erp.statement.supplier.mapper.SupplierStatementMapper;
 import com.leo.erp.statement.supplier.repository.SupplierStatementRepository;
 import com.leo.erp.statement.supplier.web.dto.SupplierStatementCandidateResponse;
-import com.leo.erp.statement.supplier.web.dto.SupplierStatementItemRequest;
-import com.leo.erp.statement.supplier.web.dto.SupplierStatementItemResponse;
 import com.leo.erp.statement.supplier.web.dto.SupplierStatementRequest;
 import com.leo.erp.statement.supplier.web.dto.SupplierStatementResponse;
-import com.leo.erp.statement.service.StatementCandidateSupport;
-import com.leo.erp.statement.service.StatementSettlementSyncService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.math.BigDecimal;
-import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
 @Service
 public class SupplierStatementService extends AbstractCrudService<SupplierStatement, SupplierStatementRequest, SupplierStatementResponse> {
 
-    private static final String[] PURCHASE_INBOUND_CANDIDATE_SEARCH_FIELDS = {
-            "inboundNo",
-            "purchaseOrderNo",
-            "supplierName",
-            "warehouseName"
-    };
-
     private final SupplierStatementRepository repository;
-    private final SupplierStatementMapper supplierStatementMapper;
-    private final PurchaseInboundRepository purchaseInboundRepository;
-    private final PurchaseInboundItemQueryService purchaseInboundItemQueryService;
-    private final StatementSettlementSyncService statementSettlementSyncService;
+    private final SupplierStatementResponseAssembler responseAssembler;
     private final WorkflowTransitionGuard workflowTransitionGuard;
-    private final SupplierRepository supplierRepository;
+    private final SupplierStatementSourceService supplierStatementSourceService;
+    private final SupplierStatementApplyService applyService;
 
     @Autowired
     public SupplierStatementService(SupplierStatementRepository repository,
                                     SnowflakeIdGenerator idGenerator,
-                                    SupplierStatementMapper supplierStatementMapper,
-                                    PurchaseInboundRepository purchaseInboundRepository,
-                                    PurchaseInboundItemQueryService purchaseInboundItemQueryService,
-                                    StatementSettlementSyncService statementSettlementSyncService,
+                                    SupplierStatementResponseAssembler responseAssembler,
                                     WorkflowTransitionGuard workflowTransitionGuard,
-                                    SupplierRepository supplierRepository) {
+                                    SupplierStatementSourceService supplierStatementSourceService,
+                                    SupplierStatementApplyService applyService) {
         super(idGenerator);
         this.repository = repository;
-        this.supplierStatementMapper = supplierStatementMapper;
-        this.purchaseInboundRepository = purchaseInboundRepository;
-        this.purchaseInboundItemQueryService = purchaseInboundItemQueryService;
-        this.statementSettlementSyncService = statementSettlementSyncService;
+        this.responseAssembler = responseAssembler;
         this.workflowTransitionGuard = workflowTransitionGuard;
-        this.supplierRepository = supplierRepository;
-    }
-
-    public SupplierStatementService(SupplierStatementRepository repository,
-                                    SnowflakeIdGenerator idGenerator,
-                                    SupplierStatementMapper supplierStatementMapper,
-                                    PurchaseInboundRepository purchaseInboundRepository,
-                                    PurchaseInboundItemQueryService purchaseInboundItemQueryService,
-                                    StatementSettlementSyncService statementSettlementSyncService,
-                                    WorkflowTransitionGuard workflowTransitionGuard) {
-        this(repository, idGenerator, supplierStatementMapper, purchaseInboundRepository, purchaseInboundItemQueryService,
-                statementSettlementSyncService, workflowTransitionGuard, null);
+        this.supplierStatementSourceService = supplierStatementSourceService;
+        this.applyService = applyService;
     }
 
     @Transactional(readOnly = true)
@@ -112,34 +69,12 @@ public class SupplierStatementService extends AbstractCrudService<SupplierStatem
 
     @Transactional(readOnly = true)
     public Page<SupplierStatementCandidateResponse> candidatePage(PageQuery query, PageFilter filter) {
-        Set<String> occupiedInboundNos = collectOccupiedInboundNos(null);
-        Specification<PurchaseInbound> spec = Specs.<PurchaseInbound>notDeleted()
-                .and(Specs.keywordLike(filter.keyword(), PURCHASE_INBOUND_CANDIDATE_SEARCH_FIELDS))
-                .and(Specs.equalIfPresent("supplierName", filter.name()))
-                .and(Specs.equalIfPresent("status", StatusConstants.PURCHASE_COMPLETED))
-                .and(Specs.betweenIfPresent("inboundDate", filter.startDate(), filter.endDate()))
-                .and(StatementCandidateSupport.excludeFieldValues("inboundNo", occupiedInboundNos));
-        return purchaseInboundRepository.findAll(DataScopeContext.apply(spec), query.toPageable("id"))
-                .map(this::toCandidateResponse);
+        return supplierStatementSourceService.candidatePage(query, filter);
     }
 
     @Override
     protected SupplierStatementResponse toDetailResponse(SupplierStatement entity) {
-        SupplierStatementResponse response = supplierStatementMapper.toResponse(entity);
-        return new SupplierStatementResponse(
-                response.id(),
-                response.statementNo(),
-                response.supplierCode(),
-                response.supplierName(),
-                response.startDate(),
-                response.endDate(),
-                response.purchaseAmount(),
-                response.paymentAmount(),
-                response.closingAmount(),
-                response.status(),
-                response.remark(),
-                entity.getItems().stream().map(this::toItemResponse).toList()
-        );
+        return responseAssembler.toDetailResponse(entity);
     }
 
     @Override
@@ -243,82 +178,7 @@ public class SupplierStatementService extends AbstractCrudService<SupplierStatem
 
     @Override
     protected void apply(SupplierStatement entity, SupplierStatementRequest request) {
-        String nextStatus = BusinessStatusValidator.normalizeWithDefault(
-                request.status(),
-                StatusConstants.PENDING_CONFIRM,
-                "供应商对账单状态",
-                StatusConstants.ALLOWED_STATEMENT_STATUS
-        );
-        workflowTransitionGuard.assertAuditPermissionForProtectedValue(
-                "supplier-statement",
-                entity.getStatus(),
-                nextStatus,
-                StatusConstants.CONFIRMED
-        );
-        entity.setStatementNo(request.statementNo());
-        entity.setSupplierName(request.supplierName());
-        entity.setSupplierCode(resolveSupplierCode(request.supplierCode(), request.supplierName()));
-        entity.setStartDate(request.startDate());
-        entity.setEndDate(request.endDate());
-        entity.setStatus(nextStatus);
-        entity.setRemark(request.remark());
-
-        BigDecimal purchaseAmount = BigDecimal.ZERO;
-        Map<Long, PurchaseInboundItem> sourceInboundItemMap = loadSourceInboundItemMap(request.items());
-        validateSourceInbounds(request, sourceInboundItemMap, entity.getId());
-        List<SupplierStatementItem> items = ManagedEntityItemSupport.syncById(
-                entity.getItems(),
-                request.items(),
-                SupplierStatementItem::getId,
-                SupplierStatementItemRequest::id,
-                SupplierStatementItem::new,
-                this::nextId,
-                SupplierStatementItem::setId
-        );
-        for (int i = 0; i < request.items().size(); i++) {
-            SupplierStatementItemRequest source = request.items().get(i);
-            PurchaseInboundItem sourceInboundItem = resolveSourceInboundItem(source, sourceInboundItemMap, i + 1);
-            SupplierStatementItem item = items.get(i);
-            item.setSupplierStatement(entity);
-            item.setLineNo(i + 1);
-            item.setSourceNo(sourceInboundItem.getPurchaseInbound().getInboundNo());
-            item.setSourceInboundItemId(sourceInboundItem.getId());
-            item.setMaterialCode(sourceInboundItem.getMaterialCode());
-            item.setBrand(sourceInboundItem.getBrand());
-            item.setCategory(sourceInboundItem.getCategory());
-            item.setMaterial(sourceInboundItem.getMaterial());
-            item.setSpec(sourceInboundItem.getSpec());
-            item.setLength(sourceInboundItem.getLength());
-            item.setUnit(sourceInboundItem.getUnit());
-            item.setBatchNo(sourceInboundItem.getBatchNo());
-            item.setQuantity(sourceInboundItem.getQuantity());
-            item.setQuantityUnit(TradeItemCalculator.normalizeQuantityUnit(sourceInboundItem.getQuantityUnit()));
-            item.setPieceWeightTon(TradeItemCalculator.scaleWeightTon(sourceInboundItem.getPieceWeightTon()));
-            item.setPiecesPerBundle(sourceInboundItem.getPiecesPerBundle());
-            item.setWeightTon(TradeItemCalculator.scaleWeightTon(sourceInboundItem.getWeightTon()));
-            item.setWeighWeightTon(sourceInboundItem.getWeighWeightTon() == null
-                    ? null
-                    : TradeItemCalculator.scaleWeightTon(sourceInboundItem.getWeighWeightTon()));
-            item.setWeightAdjustmentTon(TradeItemCalculator.scaleWeightTon(sourceInboundItem.getWeightAdjustmentTon()));
-            item.setWeightAdjustmentAmount(TradeItemCalculator.scaleAmount(sourceInboundItem.getWeightAdjustmentAmount()));
-            item.setUnitPrice(TradeItemCalculator.scaleAmount(sourceInboundItem.getUnitPrice()));
-            BigDecimal amount = TradeItemCalculator.scaleAmount(sourceInboundItem.getAmount());
-            item.setAmount(amount);
-            purchaseAmount = purchaseAmount.add(amount);
-        }
-        entity.getItems().sort(java.util.Comparator.comparing(SupplierStatementItem::getLineNo));
-        BigDecimal paymentAmount = request.paymentAmount() == null
-                ? BigDecimal.ZERO
-                : TradeItemCalculator.scaleAmount(request.paymentAmount());
-        if (paymentAmount.compareTo(BigDecimal.ZERO) < 0) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "供应商对账单付款金额不能为负数");
-        }
-        if (paymentAmount.compareTo(purchaseAmount) > 0) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "供应商对账单采购金额不能低于已付款金额");
-        }
-        entity.setPurchaseAmount(purchaseAmount);
-        entity.setPaymentAmount(paymentAmount);
-        entity.setClosingAmount(TradeItemCalculator.scaleAmount(purchaseAmount.subtract(paymentAmount).max(BigDecimal.ZERO)));
+        applyService.apply(entity, request, this::nextId);
     }
 
     @Override
@@ -328,148 +188,7 @@ public class SupplierStatementService extends AbstractCrudService<SupplierStatem
 
     @Override
     protected SupplierStatementResponse toResponse(SupplierStatement entity) {
-        return supplierStatementMapper.toResponse(entity);
+        return responseAssembler.toSummaryResponse(entity);
     }
 
-    private SupplierStatementItemResponse toItemResponse(SupplierStatementItem item) {
-        return new SupplierStatementItemResponse(
-                item.getId(),
-                item.getLineNo(),
-                item.getSourceNo(),
-                item.getSourceInboundItemId(),
-                item.getMaterialCode(),
-                item.getBrand(),
-                item.getCategory(),
-                item.getMaterial(),
-                item.getSpec(),
-                item.getLength(),
-                item.getUnit(),
-                item.getBatchNo(),
-                item.getQuantity(),
-                item.getQuantityUnit(),
-                item.getPieceWeightTon(),
-                item.getPiecesPerBundle(),
-                item.getWeightTon(),
-                item.getWeighWeightTon(),
-                item.getWeightAdjustmentTon(),
-                item.getWeightAdjustmentAmount(),
-                item.getUnitPrice(),
-                item.getAmount()
-        );
-    }
-
-    private Map<Long, PurchaseInboundItem> loadSourceInboundItemMap(List<SupplierStatementItemRequest> items) {
-        List<Long> sourceInboundItemIds = items.stream()
-                .map(SupplierStatementItemRequest::sourceInboundItemId)
-                .filter(id -> id != null)
-                .distinct()
-                .toList();
-        if (sourceInboundItemIds.isEmpty()) {
-            return Map.of();
-        }
-        return purchaseInboundItemQueryService.findAllActiveByIdIn(sourceInboundItemIds).stream()
-                .collect(java.util.stream.Collectors.toMap(PurchaseInboundItem::getId, item -> item));
-    }
-
-    private void validateSourceInbounds(SupplierStatementRequest request,
-                                        Map<Long, PurchaseInboundItem> sourceInboundItemMap,
-                                        Long currentStatementId) {
-        Set<String> requestedInboundNos = new LinkedHashSet<>();
-        for (PurchaseInboundItem item : sourceInboundItemMap.values()) {
-            PurchaseInbound inbound = item.getPurchaseInbound();
-            DataScopeContext.assertCanAccess(inbound);
-            requestedInboundNos.add(inbound.getInboundNo());
-            BusinessDocumentValidator.requireSameText(
-                    request.supplierName(),
-                    inbound.getSupplierName(),
-                    "来源采购入库单存在不同供应商，不能合并生成供应商对账单"
-            );
-            BusinessDocumentValidator.requireStatusIn(
-                    inbound.getStatus(),
-                    Set.of(StatusConstants.PURCHASE_COMPLETED),
-                    "来源采购入库单" + inbound.getInboundNo() + "未完成采购，不能生成供应商对账单"
-            );
-        }
-        if (requestedInboundNos.isEmpty()) {
-            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "供应商对账单来源采购入库单不能为空");
-        }
-        assertSourceInboundsNotOccupied(requestedInboundNos, currentStatementId);
-    }
-
-    private void assertSourceInboundsNotOccupied(Set<String> requestedInboundNos, Long currentStatementId) {
-        List<SupplierStatement> occupiedStatements =
-                repository.findAllBySourceNosExcludingCurrentStatement(requestedInboundNos, currentStatementId);
-        Set<String> occupiedInboundNos = occupiedStatements.stream()
-                .flatMap(entity -> entity.getItems().stream())
-                .map(SupplierStatementItem::getSourceNo)
-                .filter(v -> v != null && !v.isBlank())
-                .map(String::trim)
-                .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
-        for (String inboundNo : requestedInboundNos) {
-            if (occupiedInboundNos.contains(inboundNo)) {
-                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "来源采购入库单" + inboundNo + "已生成供应商对账单");
-            }
-        }
-    }
-
-    private Set<String> collectOccupiedInboundNos(Long currentStatementId) {
-        Specification<SupplierStatement> spec = Specs.notDeleted();
-        if (currentStatementId != null) {
-            spec = spec.and((root, query, cb) -> cb.notEqual(root.get("id"), currentStatementId));
-        }
-        Set<String> occupiedInboundNos = new LinkedHashSet<>();
-        repository.findAll(spec).stream()
-                .flatMap(entity -> entity.getItems().stream())
-                .map(SupplierStatementItem::getSourceNo)
-                .filter(v -> v != null && !v.isBlank())
-                .map(String::trim)
-                .forEach(occupiedInboundNos::add);
-        return occupiedInboundNos;
-    }
-
-    private PurchaseInboundItem resolveSourceInboundItem(SupplierStatementItemRequest source,
-                                                         Map<Long, PurchaseInboundItem> sourceInboundItemMap,
-                                                         int lineNo) {
-        Long sourceInboundItemId = source.sourceInboundItemId();
-        if (sourceInboundItemId != null) {
-            PurchaseInboundItem sourceInboundItem = sourceInboundItemMap.get(sourceInboundItemId);
-            if (sourceInboundItem == null) {
-                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行来源采购入库明细不存在");
-            }
-            return sourceInboundItem;
-        }
-        throw new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行来源采购入库明细不能为空");
-    }
-
-    private String resolveSupplierCode(String requestSupplierCode, String supplierName) {
-        String explicitCode = trimToNull(requestSupplierCode);
-        if (explicitCode != null || supplierRepository == null) {
-            return explicitCode;
-        }
-        String normalizedSupplierName = trimToNull(supplierName);
-        if (normalizedSupplierName == null) {
-            return null;
-        }
-        return supplierRepository.findFirstBySupplierNameAndDeletedFlagFalseOrderBySupplierCodeAsc(normalizedSupplierName)
-                .map(com.leo.erp.master.supplier.domain.entity.Supplier::getSupplierCode)
-                .orElse(null);
-    }
-
-    private String trimToNull(String value) {
-        return BusinessDocumentValidator.trimToNull(value);
-    }
-
-    private SupplierStatementCandidateResponse toCandidateResponse(PurchaseInbound inbound) {
-        return new SupplierStatementCandidateResponse(
-                inbound.getId(),
-                inbound.getInboundNo(),
-                inbound.getSupplierName(),
-                inbound.getWarehouseName(),
-                inbound.getInboundDate(),
-                inbound.getSettlementMode(),
-                inbound.getTotalWeight(),
-                inbound.getTotalAmount(),
-                inbound.getStatus()
-        );
-    }
 }

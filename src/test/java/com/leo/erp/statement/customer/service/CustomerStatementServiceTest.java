@@ -19,7 +19,6 @@ import com.leo.erp.statement.customer.web.dto.CustomerStatementCandidateResponse
 import com.leo.erp.statement.customer.web.dto.CustomerStatementRequest;
 import com.leo.erp.statement.customer.web.dto.CustomerStatementResponse;
 import com.leo.erp.security.permission.WorkflowTransitionGuard;
-import com.leo.erp.statement.service.StatementSettlementSyncService;
 import org.junit.jupiter.api.Test;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
@@ -36,17 +35,15 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 class CustomerStatementServiceTest {
 
     @Test
-    void shouldPersistRequestedReceiptAmountWithoutImmediateSync() {
+    void shouldPersistRequestedReceiptAmount() {
         CustomerStatementRepository repository = mock(CustomerStatementRepository.class);
         CustomerStatementMapper mapper = mock(CustomerStatementMapper.class);
         SalesOrderItemQueryService salesOrderItemQueryService = mock(SalesOrderItemQueryService.class);
-        StatementSettlementSyncService syncService = mock(StatementSettlementSyncService.class);
         when(repository.existsByStatementNoAndDeletedFlagFalse("KHDZ-001")).thenReturn(false);
         when(repository.save(any(CustomerStatement.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(salesOrderItemQueryService.findActiveByIdIn(List.of(201L))).thenReturn(List.of(buildSalesOrderItem()));
@@ -70,13 +67,11 @@ class CustomerStatementServiceTest {
             );
         });
 
-        CustomerStatementService service = new CustomerStatementService(
+        CustomerStatementService service = service(
                 repository,
-                new SnowflakeIdGenerator(0L),
                 mapper,
                 mock(SalesOrderRepository.class),
                 salesOrderItemQueryService,
-                syncService,
                 mock(WorkflowTransitionGuard.class)
         );
 
@@ -86,7 +81,6 @@ class CustomerStatementServiceTest {
         assertThat(response.receiptAmount()).isEqualByComparingTo("1000.00");
         assertThat(response.closingAmount()).isEqualByComparingTo("0.00");
         assertThat(response.customerCode()).isEqualTo("C-001");
-        verifyNoInteractions(syncService);
     }
 
     @Test
@@ -126,13 +120,11 @@ class CustomerStatementServiceTest {
             );
         });
 
-        CustomerStatementService service = new CustomerStatementService(
+        CustomerStatementService service = service(
                 repository,
-                new SnowflakeIdGenerator(0L),
                 mapper,
                 mock(SalesOrderRepository.class),
                 salesOrderItemQueryService,
-                mock(StatementSettlementSyncService.class),
                 mock(WorkflowTransitionGuard.class),
                 customerRepository
         );
@@ -149,13 +141,11 @@ class CustomerStatementServiceTest {
         when(repository.existsByStatementNoAndDeletedFlagFalse("KHDZ-001")).thenReturn(false);
         when(salesOrderItemQueryService.findActiveByIdIn(List.of(201L))).thenReturn(List.of(buildSalesOrderItem()));
 
-        CustomerStatementService service = new CustomerStatementService(
+        CustomerStatementService service = service(
                 repository,
-                new SnowflakeIdGenerator(0L),
                 mock(CustomerStatementMapper.class),
                 mock(SalesOrderRepository.class),
                 salesOrderItemQueryService,
-                mock(StatementSettlementSyncService.class),
                 mock(WorkflowTransitionGuard.class)
         );
 
@@ -171,13 +161,11 @@ class CustomerStatementServiceTest {
         when(repository.existsByStatementNoAndDeletedFlagFalse("KHDZ-001")).thenReturn(false);
         when(salesOrderItemQueryService.findActiveByIdIn(List.of(201L))).thenReturn(List.of(buildSalesOrderItem()));
 
-        CustomerStatementService service = new CustomerStatementService(
+        CustomerStatementService service = service(
                 repository,
-                new SnowflakeIdGenerator(0L),
                 mock(CustomerStatementMapper.class),
                 mock(SalesOrderRepository.class),
                 salesOrderItemQueryService,
-                mock(StatementSettlementSyncService.class),
                 mock(WorkflowTransitionGuard.class)
         );
 
@@ -197,13 +185,11 @@ class CustomerStatementServiceTest {
         when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(statement));
         when(repository.save(any(CustomerStatement.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
-        CustomerStatementService service = new CustomerStatementService(
+        CustomerStatementService service = service(
                 repository,
-                new SnowflakeIdGenerator(0L),
                 mock(CustomerStatementMapper.class),
                 mock(SalesOrderRepository.class),
                 mock(SalesOrderItemQueryService.class),
-                mock(StatementSettlementSyncService.class),
                 mock(WorkflowTransitionGuard.class)
         );
 
@@ -221,7 +207,6 @@ class CustomerStatementServiceTest {
         CustomerStatementRepository repository = mock(CustomerStatementRepository.class);
         CustomerStatementMapper mapper = mock(CustomerStatementMapper.class);
         SalesOrderRepository salesOrderRepository = mock(SalesOrderRepository.class);
-        StatementSettlementSyncService syncService = mock(StatementSettlementSyncService.class);
 
         SalesOrder salesOrder = new SalesOrder();
         salesOrder.setId(1L);
@@ -239,13 +224,11 @@ class CustomerStatementServiceTest {
                 new PageImpl<>(List.of(salesOrder))
         );
 
-        CustomerStatementService service = new CustomerStatementService(
+        CustomerStatementService service = service(
                 repository,
-                new SnowflakeIdGenerator(0L),
                 mapper,
                 salesOrderRepository,
                 mock(SalesOrderItemQueryService.class),
-                syncService,
                 mock(WorkflowTransitionGuard.class)
         );
 
@@ -286,13 +269,11 @@ class CustomerStatementServiceTest {
             );
         });
 
-        CustomerStatementService service = new CustomerStatementService(
+        CustomerStatementService service = service(
                 repository,
-                new SnowflakeIdGenerator(0L),
                 mapper,
                 mock(SalesOrderRepository.class),
                 mock(SalesOrderItemQueryService.class),
-                mock(StatementSettlementSyncService.class),
                 mock(WorkflowTransitionGuard.class)
         );
 
@@ -328,13 +309,11 @@ class CustomerStatementServiceTest {
             );
         });
 
-        CustomerStatementService service = new CustomerStatementService(
+        CustomerStatementService service = service(
                 repository,
-                new SnowflakeIdGenerator(0L),
                 mapper,
                 mock(SalesOrderRepository.class),
                 mock(SalesOrderItemQueryService.class),
-                mock(StatementSettlementSyncService.class),
                 mock(WorkflowTransitionGuard.class)
         );
 
@@ -347,13 +326,11 @@ class CustomerStatementServiceTest {
         CustomerStatementRepository repository = mock(CustomerStatementRepository.class);
         when(repository.existsByStatementNoAndDeletedFlagFalse("KHDZ-001")).thenReturn(true);
 
-        CustomerStatementService service = new CustomerStatementService(
+        CustomerStatementService service = service(
                 repository,
-                new SnowflakeIdGenerator(0L),
                 mock(CustomerStatementMapper.class),
                 mock(SalesOrderRepository.class),
                 mock(SalesOrderItemQueryService.class),
-                mock(StatementSettlementSyncService.class),
                 mock(WorkflowTransitionGuard.class)
         );
 
@@ -369,13 +346,11 @@ class CustomerStatementServiceTest {
         when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(statement));
         when(repository.existsByStatementNoAndDeletedFlagFalse("KHDZ-001")).thenReturn(true);
 
-        CustomerStatementService service = new CustomerStatementService(
+        CustomerStatementService service = service(
                 repository,
-                new SnowflakeIdGenerator(0L),
                 mock(CustomerStatementMapper.class),
                 mock(SalesOrderRepository.class),
                 mock(SalesOrderItemQueryService.class),
-                mock(StatementSettlementSyncService.class),
                 mock(WorkflowTransitionGuard.class)
         );
 
@@ -391,13 +366,11 @@ class CustomerStatementServiceTest {
         when(repository.existsByStatementNoAndDeletedFlagFalse("KHDZ-001")).thenReturn(false);
         when(salesOrderItemQueryService.findActiveByIdIn(List.of(201L))).thenReturn(List.of(buildSalesOrderItem()));
 
-        CustomerStatementService service = new CustomerStatementService(
+        CustomerStatementService service = service(
                 repository,
-                new SnowflakeIdGenerator(0L),
                 mock(CustomerStatementMapper.class),
                 mock(SalesOrderRepository.class),
                 salesOrderItemQueryService,
-                mock(StatementSettlementSyncService.class),
                 mock(WorkflowTransitionGuard.class)
         );
 
@@ -434,13 +407,11 @@ class CustomerStatementServiceTest {
             );
         });
 
-        CustomerStatementService service = new CustomerStatementService(
+        CustomerStatementService service = service(
                 repository,
-                new SnowflakeIdGenerator(0L),
                 mapper,
                 mock(SalesOrderRepository.class),
                 mock(SalesOrderItemQueryService.class),
-                mock(StatementSettlementSyncService.class),
                 workflowTransitionGuard
         );
 
@@ -454,6 +425,39 @@ class CustomerStatementServiceTest {
                 StatusConstants.CONFIRMED
         );
         verify(repository).save(argThat(saved -> StatusConstants.CONFIRMED.equals(saved.getStatus())));
+    }
+
+    private CustomerStatementService service(CustomerStatementRepository repository,
+                                             CustomerStatementMapper mapper,
+                                             SalesOrderRepository salesOrderRepository,
+                                             SalesOrderItemQueryService salesOrderItemQueryService,
+                                             WorkflowTransitionGuard workflowTransitionGuard) {
+        return service(
+                repository,
+                mapper,
+                salesOrderRepository,
+                salesOrderItemQueryService,
+                workflowTransitionGuard,
+                null
+        );
+    }
+
+    private CustomerStatementService service(CustomerStatementRepository repository,
+                                             CustomerStatementMapper mapper,
+                                             SalesOrderRepository salesOrderRepository,
+                                             SalesOrderItemQueryService salesOrderItemQueryService,
+                                             WorkflowTransitionGuard workflowTransitionGuard,
+                                             CustomerRepository customerRepository) {
+        CustomerStatementSourceService sourceService =
+                new CustomerStatementSourceService(repository, salesOrderRepository, salesOrderItemQueryService, customerRepository);
+        return new CustomerStatementService(
+                repository,
+                new SnowflakeIdGenerator(0L),
+                new CustomerStatementResponseAssembler(mapper),
+                workflowTransitionGuard,
+                sourceService,
+                new CustomerStatementApplyService(workflowTransitionGuard, sourceService)
+        );
     }
 
     private CustomerStatement createCustomerStatement(Long id, String statementNo) {

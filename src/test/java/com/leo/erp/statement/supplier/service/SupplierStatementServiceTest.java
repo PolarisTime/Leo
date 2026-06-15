@@ -10,7 +10,6 @@ import com.leo.erp.purchase.inbound.domain.entity.PurchaseInboundItem;
 import com.leo.erp.purchase.inbound.service.PurchaseInboundItemQueryService;
 import com.leo.erp.purchase.inbound.repository.PurchaseInboundRepository;
 import com.leo.erp.security.permission.WorkflowTransitionGuard;
-import com.leo.erp.statement.service.StatementSettlementSyncService;
 import com.leo.erp.statement.supplier.domain.entity.SupplierStatement;
 import com.leo.erp.statement.supplier.mapper.SupplierStatementMapper;
 import com.leo.erp.statement.supplier.repository.SupplierStatementRepository;
@@ -33,17 +32,15 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 class SupplierStatementServiceTest {
 
     @Test
-    void shouldPersistRequestedPaymentAmountWithoutImmediateSync() {
+    void shouldPersistRequestedPaymentAmount() {
         SupplierStatementRepository repository = mock(SupplierStatementRepository.class);
         SupplierStatementMapper mapper = mock(SupplierStatementMapper.class);
         PurchaseInboundItemQueryService purchaseInboundItemQueryService = mock(PurchaseInboundItemQueryService.class);
-        StatementSettlementSyncService syncService = mock(StatementSettlementSyncService.class);
         when(repository.existsByStatementNoAndDeletedFlagFalse("GYDZ-001")).thenReturn(false);
         when(repository.save(any(SupplierStatement.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(purchaseInboundItemQueryService.findAllActiveByIdIn(List.of(101L))).thenReturn(List.of(buildInboundItem()));
@@ -64,13 +61,11 @@ class SupplierStatementServiceTest {
             );
         });
 
-        SupplierStatementService service = new SupplierStatementService(
+        SupplierStatementService service = service(
                 repository,
-                new SnowflakeIdGenerator(0L),
                 mapper,
                 mock(PurchaseInboundRepository.class),
                 purchaseInboundItemQueryService,
-                syncService,
                 mock(WorkflowTransitionGuard.class)
         );
 
@@ -79,7 +74,6 @@ class SupplierStatementServiceTest {
         assertThat(response.purchaseAmount()).isEqualByComparingTo("1000.00");
         assertThat(response.paymentAmount()).isEqualByComparingTo("1000.00");
         assertThat(response.closingAmount()).isEqualByComparingTo("0.00");
-        verifyNoInteractions(syncService);
     }
 
     @Test
@@ -89,13 +83,11 @@ class SupplierStatementServiceTest {
         when(repository.existsByStatementNoAndDeletedFlagFalse("GYDZ-001")).thenReturn(false);
         when(purchaseInboundItemQueryService.findAllActiveByIdIn(List.of(101L))).thenReturn(List.of(buildInboundItem()));
 
-        SupplierStatementService service = new SupplierStatementService(
+        SupplierStatementService service = service(
                 repository,
-                new SnowflakeIdGenerator(0L),
                 mock(SupplierStatementMapper.class),
                 mock(PurchaseInboundRepository.class),
                 purchaseInboundItemQueryService,
-                mock(StatementSettlementSyncService.class),
                 mock(WorkflowTransitionGuard.class)
         );
 
@@ -129,13 +121,11 @@ class SupplierStatementServiceTest {
             );
         });
 
-        SupplierStatementService service = new SupplierStatementService(
+        SupplierStatementService service = service(
                 repository,
-                new SnowflakeIdGenerator(0L),
                 mapper,
                 mock(PurchaseInboundRepository.class),
                 mock(PurchaseInboundItemQueryService.class),
-                mock(StatementSettlementSyncService.class),
                 mock(WorkflowTransitionGuard.class)
         );
 
@@ -168,13 +158,11 @@ class SupplierStatementServiceTest {
             );
         });
 
-        SupplierStatementService service = new SupplierStatementService(
+        SupplierStatementService service = service(
                 repository,
-                new SnowflakeIdGenerator(0L),
                 mapper,
                 mock(PurchaseInboundRepository.class),
                 mock(PurchaseInboundItemQueryService.class),
-                mock(StatementSettlementSyncService.class),
                 mock(WorkflowTransitionGuard.class)
         );
 
@@ -187,13 +175,11 @@ class SupplierStatementServiceTest {
         SupplierStatementRepository repository = mock(SupplierStatementRepository.class);
         when(repository.existsByStatementNoAndDeletedFlagFalse("GYDZ-001")).thenReturn(true);
 
-        SupplierStatementService service = new SupplierStatementService(
+        SupplierStatementService service = service(
                 repository,
-                new SnowflakeIdGenerator(0L),
                 mock(SupplierStatementMapper.class),
                 mock(PurchaseInboundRepository.class),
                 mock(PurchaseInboundItemQueryService.class),
-                mock(StatementSettlementSyncService.class),
                 mock(WorkflowTransitionGuard.class)
         );
 
@@ -209,13 +195,11 @@ class SupplierStatementServiceTest {
         when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(statement));
         when(repository.existsByStatementNoAndDeletedFlagFalse("GYDZ-001")).thenReturn(true);
 
-        SupplierStatementService service = new SupplierStatementService(
+        SupplierStatementService service = service(
                 repository,
-                new SnowflakeIdGenerator(0L),
                 mock(SupplierStatementMapper.class),
                 mock(PurchaseInboundRepository.class),
                 mock(PurchaseInboundItemQueryService.class),
-                mock(StatementSettlementSyncService.class),
                 mock(WorkflowTransitionGuard.class)
         );
 
@@ -231,13 +215,11 @@ class SupplierStatementServiceTest {
         when(repository.existsByStatementNoAndDeletedFlagFalse("GYDZ-001")).thenReturn(false);
         when(purchaseInboundItemQueryService.findAllActiveByIdIn(List.of(101L))).thenReturn(List.of(buildInboundItem()));
 
-        SupplierStatementService service = new SupplierStatementService(
+        SupplierStatementService service = service(
                 repository,
-                new SnowflakeIdGenerator(0L),
                 mock(SupplierStatementMapper.class),
                 mock(PurchaseInboundRepository.class),
                 purchaseInboundItemQueryService,
-                mock(StatementSettlementSyncService.class),
                 mock(WorkflowTransitionGuard.class)
         );
 
@@ -257,13 +239,11 @@ class SupplierStatementServiceTest {
         when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(statement));
         when(repository.save(any(SupplierStatement.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
-        SupplierStatementService service = new SupplierStatementService(
+        SupplierStatementService service = service(
                 repository,
-                new SnowflakeIdGenerator(0L),
                 mock(SupplierStatementMapper.class),
                 mock(PurchaseInboundRepository.class),
                 mock(PurchaseInboundItemQueryService.class),
-                mock(StatementSettlementSyncService.class),
                 mock(WorkflowTransitionGuard.class)
         );
 
@@ -299,13 +279,11 @@ class SupplierStatementServiceTest {
             );
         });
 
-        SupplierStatementService service = new SupplierStatementService(
+        SupplierStatementService service = service(
                 repository,
-                new SnowflakeIdGenerator(0L),
                 mapper,
                 mock(PurchaseInboundRepository.class),
                 mock(PurchaseInboundItemQueryService.class),
-                mock(StatementSettlementSyncService.class),
                 workflowTransitionGuard
         );
 
@@ -319,6 +297,23 @@ class SupplierStatementServiceTest {
                 StatusConstants.CONFIRMED
         );
         verify(repository).save(argThat(saved -> StatusConstants.CONFIRMED.equals(saved.getStatus())));
+    }
+
+    private SupplierStatementService service(SupplierStatementRepository repository,
+                                             SupplierStatementMapper mapper,
+                                             PurchaseInboundRepository purchaseInboundRepository,
+                                             PurchaseInboundItemQueryService purchaseInboundItemQueryService,
+                                             WorkflowTransitionGuard workflowTransitionGuard) {
+        SupplierStatementSourceService sourceService =
+                new SupplierStatementSourceService(repository, purchaseInboundRepository, purchaseInboundItemQueryService, null);
+        return new SupplierStatementService(
+                repository,
+                new SnowflakeIdGenerator(0L),
+                new SupplierStatementResponseAssembler(mapper),
+                workflowTransitionGuard,
+                sourceService,
+                new SupplierStatementApplyService(workflowTransitionGuard, sourceService)
+        );
     }
 
     private SupplierStatement createSupplierStatement(Long id, String statementNo) {

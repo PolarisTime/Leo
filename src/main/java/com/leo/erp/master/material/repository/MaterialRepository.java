@@ -1,6 +1,8 @@
 package com.leo.erp.master.material.repository;
 
 import com.leo.erp.master.material.domain.entity.Material;
+import com.leo.erp.common.support.MaterialCatalog;
+import com.leo.erp.common.support.TradeMaterialSnapshot;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
@@ -9,7 +11,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
-public interface MaterialRepository extends JpaRepository<Material, Long>, JpaSpecificationExecutor<Material> {
+public interface MaterialRepository extends JpaRepository<Material, Long>, JpaSpecificationExecutor<Material>, MaterialCatalog {
 
     boolean existsByMaterialCodeAndDeletedFlagFalse(String materialCode);
 
@@ -18,6 +20,15 @@ public interface MaterialRepository extends JpaRepository<Material, Long>, JpaSp
     List<Material> findByMaterialCodeInAndDeletedFlagFalse(Collection<String> materialCodes);
 
     List<Material> findByDeletedFlagFalseOrderByMaterialCodeAsc();
+
+    @Override
+    default List<TradeMaterialSnapshot> listActiveMaterials() {
+        return findByDeletedFlagFalseOrderByMaterialCodeAsc().stream()
+                .map(material -> new TradeMaterialSnapshot(
+                        material.getMaterialCode(),
+                        Boolean.TRUE.equals(material.getBatchNoEnabled())))
+                .toList();
+    }
 
     Optional<Material> findByIdAndDeletedFlagFalse(Long id);
 
