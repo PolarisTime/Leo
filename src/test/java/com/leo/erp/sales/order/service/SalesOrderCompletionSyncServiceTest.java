@@ -3,9 +3,6 @@ package com.leo.erp.sales.order.service;
 import com.leo.erp.sales.order.domain.entity.SalesOrder;
 import com.leo.erp.sales.order.domain.entity.SalesOrderItem;
 import com.leo.erp.sales.order.repository.SalesOrderRepository;
-import com.leo.erp.sales.outbound.domain.entity.SalesOutbound;
-import com.leo.erp.sales.outbound.domain.entity.SalesOutboundItem;
-import com.leo.erp.sales.outbound.repository.SalesOutboundRepository;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
@@ -24,15 +21,16 @@ class SalesOrderCompletionSyncServiceTest {
     @Test
     void shouldMarkSalesOrderCompletedWhenAuditedOutboundExists() {
         SalesOrderRepository salesOrderRepository = mock(SalesOrderRepository.class);
-        SalesOutboundRepository salesOutboundRepository = mock(SalesOutboundRepository.class);
+        SalesOrderOutboundQueryService outboundQueryService = mock(SalesOrderOutboundQueryService.class);
         SalesOrderCompletionSyncService service = new SalesOrderCompletionSyncService(
-                salesOrderRepository, salesOutboundRepository);
+                salesOrderRepository, outboundQueryService);
 
         SalesOrder order = buildOrder("SO-001", "已审核", 10);
-        SalesOutbound outbound = buildOutbound("SO-001", "已审核", order.getItems().get(0).getId(), 10);
+        SalesOrderOutboundQueryService.OutboundRecord outbound =
+                buildOutbound("SO-001", "已审核", order.getItems().get(0).getId(), 10);
 
         when(salesOrderRepository.findByOrderNoInAndDeletedFlagFalse(any())).thenReturn(List.of(order));
-        when(salesOutboundRepository.findByDeletedFlagFalse()).thenReturn(List.of(outbound));
+        when(outboundQueryService.findActiveOutbounds()).thenReturn(List.of(outbound));
 
         service.syncBySalesOrderReference("SO-001");
 
@@ -43,16 +41,17 @@ class SalesOrderCompletionSyncServiceTest {
     @Test
     void shouldKeepAuditedWhenFullyOutboundedButUnitPriceIsZero() {
         SalesOrderRepository salesOrderRepository = mock(SalesOrderRepository.class);
-        SalesOutboundRepository salesOutboundRepository = mock(SalesOutboundRepository.class);
+        SalesOrderOutboundQueryService outboundQueryService = mock(SalesOrderOutboundQueryService.class);
         SalesOrderCompletionSyncService service = new SalesOrderCompletionSyncService(
-                salesOrderRepository, salesOutboundRepository);
+                salesOrderRepository, outboundQueryService);
 
         SalesOrder order = buildOrder("SO-PRICE-001", "已审核", 10);
         order.getItems().get(0).setUnitPrice(BigDecimal.ZERO);
-        SalesOutbound outbound = buildOutbound("SO-PRICE-001", "已审核", order.getItems().get(0).getId(), 10);
+        SalesOrderOutboundQueryService.OutboundRecord outbound =
+                buildOutbound("SO-PRICE-001", "已审核", order.getItems().get(0).getId(), 10);
 
         when(salesOrderRepository.findByOrderNoInAndDeletedFlagFalse(any())).thenReturn(List.of(order));
-        when(salesOutboundRepository.findByDeletedFlagFalse()).thenReturn(List.of(outbound));
+        when(outboundQueryService.findActiveOutbounds()).thenReturn(List.of(outbound));
 
         service.syncBySalesOrderReference("SO-PRICE-001");
 
@@ -62,9 +61,9 @@ class SalesOrderCompletionSyncServiceTest {
     @Test
     void shouldRecalculateHeaderTotalsFromAuditedOutboundWeightAndPricing() {
         SalesOrderRepository salesOrderRepository = mock(SalesOrderRepository.class);
-        SalesOutboundRepository salesOutboundRepository = mock(SalesOutboundRepository.class);
+        SalesOrderOutboundQueryService outboundQueryService = mock(SalesOrderOutboundQueryService.class);
         SalesOrderCompletionSyncService service = new SalesOrderCompletionSyncService(
-                salesOrderRepository, salesOutboundRepository);
+                salesOrderRepository, outboundQueryService);
 
         SalesOrder order = buildOrder("SO-TOTAL-001", "已审核", 2);
         order.setTotalWeight(new BigDecimal("5.000"));
@@ -74,11 +73,11 @@ class SalesOrderCompletionSyncServiceTest {
         orderItem.setUnitPrice(new BigDecimal("3000.00"));
         orderItem.setAmount(new BigDecimal("15000.00"));
 
-        SalesOutbound outbound = buildOutbound("SO-TOTAL-001", "已审核", orderItem.getId(), 2);
-        outbound.getItems().get(0).setWeightTon(new BigDecimal("4.500"));
+        SalesOrderOutboundQueryService.OutboundRecord outbound =
+                buildOutbound("SO-TOTAL-001", "已审核", orderItem.getId(), 2, new BigDecimal("4.500"));
 
         when(salesOrderRepository.findByOrderNoInAndDeletedFlagFalse(any())).thenReturn(List.of(order));
-        when(salesOutboundRepository.findByDeletedFlagFalse()).thenReturn(List.of(outbound));
+        when(outboundQueryService.findActiveOutbounds()).thenReturn(List.of(outbound));
 
         service.syncBySalesOrderReference("SO-TOTAL-001");
 
@@ -93,15 +92,16 @@ class SalesOrderCompletionSyncServiceTest {
     @Test
     void shouldRevertCompletedSalesOrderWhenNoAuditedOutboundRemains() {
         SalesOrderRepository salesOrderRepository = mock(SalesOrderRepository.class);
-        SalesOutboundRepository salesOutboundRepository = mock(SalesOutboundRepository.class);
+        SalesOrderOutboundQueryService outboundQueryService = mock(SalesOrderOutboundQueryService.class);
         SalesOrderCompletionSyncService service = new SalesOrderCompletionSyncService(
-                salesOrderRepository, salesOutboundRepository);
+                salesOrderRepository, outboundQueryService);
 
         SalesOrder order = buildOrder("SO-002", "完成销售", 10);
-        SalesOutbound outbound = buildOutbound("SO-002", "草稿", order.getItems().get(0).getId(), 5);
+        SalesOrderOutboundQueryService.OutboundRecord outbound =
+                buildOutbound("SO-002", "草稿", order.getItems().get(0).getId(), 5);
 
         when(salesOrderRepository.findByOrderNoInAndDeletedFlagFalse(any())).thenReturn(List.of(order));
-        when(salesOutboundRepository.findByDeletedFlagFalse()).thenReturn(List.of(outbound));
+        when(outboundQueryService.findActiveOutbounds()).thenReturn(List.of(outbound));
 
         service.syncBySalesOrderReference("SO-002");
 
@@ -112,15 +112,16 @@ class SalesOrderCompletionSyncServiceTest {
     @Test
     void shouldSkipSaveWhenCompletedStatusDoesNotNeedChange() {
         SalesOrderRepository salesOrderRepository = mock(SalesOrderRepository.class);
-        SalesOutboundRepository salesOutboundRepository = mock(SalesOutboundRepository.class);
+        SalesOrderOutboundQueryService outboundQueryService = mock(SalesOrderOutboundQueryService.class);
         SalesOrderCompletionSyncService service = new SalesOrderCompletionSyncService(
-                salesOrderRepository, salesOutboundRepository);
+                salesOrderRepository, outboundQueryService);
 
         SalesOrder order = buildOrder("SO-003", "完成销售", 10);
-        SalesOutbound outbound = buildOutbound("SO-003", "已审核", order.getItems().get(0).getId(), 10);
+        SalesOrderOutboundQueryService.OutboundRecord outbound =
+                buildOutbound("SO-003", "已审核", order.getItems().get(0).getId(), 10);
 
         when(salesOrderRepository.findByOrderNoInAndDeletedFlagFalse(any())).thenReturn(List.of(order));
-        when(salesOutboundRepository.findByDeletedFlagFalse()).thenReturn(List.of(outbound));
+        when(outboundQueryService.findActiveOutbounds()).thenReturn(List.of(outbound));
 
         service.syncBySalesOrderReference("SO-003");
 
@@ -131,15 +132,16 @@ class SalesOrderCompletionSyncServiceTest {
     @Test
     void shouldKeepCompletedSalesOrderWhenAuditedOutboundStillExists() {
         SalesOrderRepository salesOrderRepository = mock(SalesOrderRepository.class);
-        SalesOutboundRepository salesOutboundRepository = mock(SalesOutboundRepository.class);
+        SalesOrderOutboundQueryService outboundQueryService = mock(SalesOrderOutboundQueryService.class);
         SalesOrderCompletionSyncService service = new SalesOrderCompletionSyncService(
-                salesOrderRepository, salesOutboundRepository);
+                salesOrderRepository, outboundQueryService);
 
         SalesOrder order = buildOrder("SO-003B", "完成销售", 10);
-        SalesOutbound outbound = buildOutbound("SO-003B", "已审核", order.getItems().get(0).getId(), 10);
+        SalesOrderOutboundQueryService.OutboundRecord outbound =
+                buildOutbound("SO-003B", "已审核", order.getItems().get(0).getId(), 10);
 
         when(salesOrderRepository.findByOrderNoInAndDeletedFlagFalse(any())).thenReturn(List.of(order));
-        when(salesOutboundRepository.findByDeletedFlagFalse()).thenReturn(List.of(outbound));
+        when(outboundQueryService.findActiveOutbounds()).thenReturn(List.of(outbound));
 
         service.syncBySalesOrderReference("SO-003B");
 
@@ -150,15 +152,16 @@ class SalesOrderCompletionSyncServiceTest {
     @Test
     void shouldSupportCommaSeparatedSalesOrderReferences() {
         SalesOrderRepository salesOrderRepository = mock(SalesOrderRepository.class);
-        SalesOutboundRepository salesOutboundRepository = mock(SalesOutboundRepository.class);
+        SalesOrderOutboundQueryService outboundQueryService = mock(SalesOrderOutboundQueryService.class);
         SalesOrderCompletionSyncService service = new SalesOrderCompletionSyncService(
-                salesOrderRepository, salesOutboundRepository);
+                salesOrderRepository, outboundQueryService);
 
         SalesOrder order = buildOrder("SO-004", "已审核", 10);
-        SalesOutbound outbound = buildOutbound("SO-004, SO-005", "已审核", order.getItems().get(0).getId(), 10);
+        SalesOrderOutboundQueryService.OutboundRecord outbound =
+                buildOutbound("SO-004, SO-005", "已审核", order.getItems().get(0).getId(), 10);
 
         when(salesOrderRepository.findByOrderNoInAndDeletedFlagFalse(any())).thenReturn(List.of(order));
-        when(salesOutboundRepository.findByDeletedFlagFalse()).thenReturn(List.of(outbound));
+        when(outboundQueryService.findActiveOutbounds()).thenReturn(List.of(outbound));
 
         service.syncBySalesOrderReference("SO-004");
 
@@ -169,15 +172,16 @@ class SalesOrderCompletionSyncServiceTest {
     @Test
     void shouldAcceptFulfillmentWithinTolerance() {
         SalesOrderRepository salesOrderRepository = mock(SalesOrderRepository.class);
-        SalesOutboundRepository salesOutboundRepository = mock(SalesOutboundRepository.class);
+        SalesOrderOutboundQueryService outboundQueryService = mock(SalesOrderOutboundQueryService.class);
         SalesOrderCompletionSyncService service = new SalesOrderCompletionSyncService(
-                salesOrderRepository, salesOutboundRepository);
+                salesOrderRepository, outboundQueryService);
 
         SalesOrder order = buildOrder("SO-TOL-001", "已审核", 100);
-        SalesOutbound outbound = buildOutbound("SO-TOL-001", "已审核", order.getItems().get(0).getId(), 100);
+        SalesOrderOutboundQueryService.OutboundRecord outbound =
+                buildOutbound("SO-TOL-001", "已审核", order.getItems().get(0).getId(), 100);
 
         when(salesOrderRepository.findByOrderNoInAndDeletedFlagFalse(any())).thenReturn(List.of(order));
-        when(salesOutboundRepository.findByDeletedFlagFalse()).thenReturn(List.of(outbound));
+        when(outboundQueryService.findActiveOutbounds()).thenReturn(List.of(outbound));
 
         service.syncBySalesOrderReference("SO-TOL-001");
 
@@ -187,15 +191,16 @@ class SalesOrderCompletionSyncServiceTest {
     @Test
     void shouldAcceptUnderFulfillmentWithinTolerance() {
         SalesOrderRepository salesOrderRepository = mock(SalesOrderRepository.class);
-        SalesOutboundRepository salesOutboundRepository = mock(SalesOutboundRepository.class);
+        SalesOrderOutboundQueryService outboundQueryService = mock(SalesOrderOutboundQueryService.class);
         SalesOrderCompletionSyncService service = new SalesOrderCompletionSyncService(
-                salesOrderRepository, salesOutboundRepository);
+                salesOrderRepository, outboundQueryService);
 
         SalesOrder order = buildOrder("SO-TOL-002", "已审核", 100);
-        SalesOutbound outbound = buildOutbound("SO-TOL-002", "已审核", order.getItems().get(0).getId(), 96);
+        SalesOrderOutboundQueryService.OutboundRecord outbound =
+                buildOutbound("SO-TOL-002", "已审核", order.getItems().get(0).getId(), 96);
 
         when(salesOrderRepository.findByOrderNoInAndDeletedFlagFalse(any())).thenReturn(List.of(order));
-        when(salesOutboundRepository.findByDeletedFlagFalse()).thenReturn(List.of(outbound));
+        when(outboundQueryService.findActiveOutbounds()).thenReturn(List.of(outbound));
 
         service.syncBySalesOrderReference("SO-TOL-002");
 
@@ -205,15 +210,16 @@ class SalesOrderCompletionSyncServiceTest {
     @Test
     void shouldRejectOverFulfillmentBeyondTolerance() {
         SalesOrderRepository salesOrderRepository = mock(SalesOrderRepository.class);
-        SalesOutboundRepository salesOutboundRepository = mock(SalesOutboundRepository.class);
+        SalesOrderOutboundQueryService outboundQueryService = mock(SalesOrderOutboundQueryService.class);
         SalesOrderCompletionSyncService service = new SalesOrderCompletionSyncService(
-                salesOrderRepository, salesOutboundRepository);
+                salesOrderRepository, outboundQueryService);
 
         SalesOrder order = buildOrder("SO-TOL-003", "已审核", 100);
-        SalesOutbound outbound = buildOutbound("SO-TOL-003", "已审核", order.getItems().get(0).getId(), 106);
+        SalesOrderOutboundQueryService.OutboundRecord outbound =
+                buildOutbound("SO-TOL-003", "已审核", order.getItems().get(0).getId(), 106);
 
         when(salesOrderRepository.findByOrderNoInAndDeletedFlagFalse(any())).thenReturn(List.of(order));
-        when(salesOutboundRepository.findByDeletedFlagFalse()).thenReturn(List.of(outbound));
+        when(outboundQueryService.findActiveOutbounds()).thenReturn(List.of(outbound));
 
         service.syncBySalesOrderReference("SO-TOL-003");
 
@@ -223,15 +229,16 @@ class SalesOrderCompletionSyncServiceTest {
     @Test
     void shouldRejectUnderFulfillmentBeyondTolerance() {
         SalesOrderRepository salesOrderRepository = mock(SalesOrderRepository.class);
-        SalesOutboundRepository salesOutboundRepository = mock(SalesOutboundRepository.class);
+        SalesOrderOutboundQueryService outboundQueryService = mock(SalesOrderOutboundQueryService.class);
         SalesOrderCompletionSyncService service = new SalesOrderCompletionSyncService(
-                salesOrderRepository, salesOutboundRepository);
+                salesOrderRepository, outboundQueryService);
 
         SalesOrder order = buildOrder("SO-TOL-004", "已审核", 100);
-        SalesOutbound outbound = buildOutbound("SO-TOL-004", "已审核", order.getItems().get(0).getId(), 94);
+        SalesOrderOutboundQueryService.OutboundRecord outbound =
+                buildOutbound("SO-TOL-004", "已审核", order.getItems().get(0).getId(), 94);
 
         when(salesOrderRepository.findByOrderNoInAndDeletedFlagFalse(any())).thenReturn(List.of(order));
-        when(salesOutboundRepository.findByDeletedFlagFalse()).thenReturn(List.of(outbound));
+        when(outboundQueryService.findActiveOutbounds()).thenReturn(List.of(outbound));
 
         service.syncBySalesOrderReference("SO-TOL-004");
 
@@ -241,15 +248,16 @@ class SalesOrderCompletionSyncServiceTest {
     @Test
     void shouldHandleZeroQuantityItemExactly() {
         SalesOrderRepository salesOrderRepository = mock(SalesOrderRepository.class);
-        SalesOutboundRepository salesOutboundRepository = mock(SalesOutboundRepository.class);
+        SalesOrderOutboundQueryService outboundQueryService = mock(SalesOrderOutboundQueryService.class);
         SalesOrderCompletionSyncService service = new SalesOrderCompletionSyncService(
-                salesOrderRepository, salesOutboundRepository);
+                salesOrderRepository, outboundQueryService);
 
         SalesOrder order = buildOrder("SO-ZERO-001", "已审核", 0);
-        SalesOutbound outbound = buildOutbound("SO-ZERO-001", "已审核", order.getItems().get(0).getId(), 0);
+        SalesOrderOutboundQueryService.OutboundRecord outbound =
+                buildOutbound("SO-ZERO-001", "已审核", order.getItems().get(0).getId(), 0);
 
         when(salesOrderRepository.findByOrderNoInAndDeletedFlagFalse(any())).thenReturn(List.of(order));
-        when(salesOutboundRepository.findByDeletedFlagFalse()).thenReturn(List.of(outbound));
+        when(outboundQueryService.findActiveOutbounds()).thenReturn(List.of(outbound));
 
         service.syncBySalesOrderReference("SO-ZERO-001");
 
@@ -259,15 +267,16 @@ class SalesOrderCompletionSyncServiceTest {
     @Test
     void shouldNotCompleteWhenZeroQuantityItemHasOutbound() {
         SalesOrderRepository salesOrderRepository = mock(SalesOrderRepository.class);
-        SalesOutboundRepository salesOutboundRepository = mock(SalesOutboundRepository.class);
+        SalesOrderOutboundQueryService outboundQueryService = mock(SalesOrderOutboundQueryService.class);
         SalesOrderCompletionSyncService service = new SalesOrderCompletionSyncService(
-                salesOrderRepository, salesOutboundRepository);
+                salesOrderRepository, outboundQueryService);
 
         SalesOrder order = buildOrder("SO-ZERO-002", "已审核", 0);
-        SalesOutbound outbound = buildOutbound("SO-ZERO-002", "已审核", order.getItems().get(0).getId(), 1);
+        SalesOrderOutboundQueryService.OutboundRecord outbound =
+                buildOutbound("SO-ZERO-002", "已审核", order.getItems().get(0).getId(), 1);
 
         when(salesOrderRepository.findByOrderNoInAndDeletedFlagFalse(any())).thenReturn(List.of(order));
-        when(salesOutboundRepository.findByDeletedFlagFalse()).thenReturn(List.of(outbound));
+        when(outboundQueryService.findActiveOutbounds()).thenReturn(List.of(outbound));
 
         service.syncBySalesOrderReference("SO-ZERO-002");
 
@@ -277,9 +286,9 @@ class SalesOrderCompletionSyncServiceTest {
     @Test
     void shouldReturnEarlyWhenReferenceIsBlank() {
         SalesOrderRepository salesOrderRepository = mock(SalesOrderRepository.class);
-        SalesOutboundRepository salesOutboundRepository = mock(SalesOutboundRepository.class);
+        SalesOrderOutboundQueryService outboundQueryService = mock(SalesOrderOutboundQueryService.class);
         SalesOrderCompletionSyncService service = new SalesOrderCompletionSyncService(
-                salesOrderRepository, salesOutboundRepository);
+                salesOrderRepository, outboundQueryService);
 
         service.syncBySalesOrderReference("");
         service.syncBySalesOrderReference(null);
@@ -291,29 +300,30 @@ class SalesOrderCompletionSyncServiceTest {
     @Test
     void shouldReturnEarlyWhenNoOrdersFound() {
         SalesOrderRepository salesOrderRepository = mock(SalesOrderRepository.class);
-        SalesOutboundRepository salesOutboundRepository = mock(SalesOutboundRepository.class);
+        SalesOrderOutboundQueryService outboundQueryService = mock(SalesOrderOutboundQueryService.class);
         SalesOrderCompletionSyncService service = new SalesOrderCompletionSyncService(
-                salesOrderRepository, salesOutboundRepository);
+                salesOrderRepository, outboundQueryService);
 
         when(salesOrderRepository.findByOrderNoInAndDeletedFlagFalse(any())).thenReturn(List.of());
 
         service.syncBySalesOrderReference("SO-NONEXIST");
 
-        verify(salesOutboundRepository, never()).findByDeletedFlagFalse();
+        verify(outboundQueryService, never()).findActiveOutbounds();
     }
 
     @Test
     void shouldNotChangeNonAuditedStatus() {
         SalesOrderRepository salesOrderRepository = mock(SalesOrderRepository.class);
-        SalesOutboundRepository salesOutboundRepository = mock(SalesOutboundRepository.class);
+        SalesOrderOutboundQueryService outboundQueryService = mock(SalesOrderOutboundQueryService.class);
         SalesOrderCompletionSyncService service = new SalesOrderCompletionSyncService(
-                salesOrderRepository, salesOutboundRepository);
+                salesOrderRepository, outboundQueryService);
 
         SalesOrder order = buildOrder("SO-DRAFT-001", "草稿", 10);
-        SalesOutbound outbound = buildOutbound("SO-DRAFT-001", "已审核", order.getItems().get(0).getId(), 10);
+        SalesOrderOutboundQueryService.OutboundRecord outbound =
+                buildOutbound("SO-DRAFT-001", "已审核", order.getItems().get(0).getId(), 10);
 
         when(salesOrderRepository.findByOrderNoInAndDeletedFlagFalse(any())).thenReturn(List.of(order));
-        when(salesOutboundRepository.findByDeletedFlagFalse()).thenReturn(List.of(outbound));
+        when(outboundQueryService.findActiveOutbounds()).thenReturn(List.of(outbound));
 
         service.syncBySalesOrderReference("SO-DRAFT-001");
 
@@ -323,17 +333,19 @@ class SalesOrderCompletionSyncServiceTest {
     @Test
     void shouldHandleMultipleOrders() {
         SalesOrderRepository salesOrderRepository = mock(SalesOrderRepository.class);
-        SalesOutboundRepository salesOutboundRepository = mock(SalesOutboundRepository.class);
+        SalesOrderOutboundQueryService outboundQueryService = mock(SalesOrderOutboundQueryService.class);
         SalesOrderCompletionSyncService service = new SalesOrderCompletionSyncService(
-                salesOrderRepository, salesOutboundRepository);
+                salesOrderRepository, outboundQueryService);
 
         SalesOrder order1 = buildOrder("SO-M-001", "已审核", 10);
         SalesOrder order2 = buildOrder("SO-M-002", "已审核", 5);
-        SalesOutbound outbound1 = buildOutbound("SO-M-001", "已审核", order1.getItems().get(0).getId(), 10);
-        SalesOutbound outbound2 = buildOutbound("SO-M-002", "已审核", order2.getItems().get(0).getId(), 5);
+        SalesOrderOutboundQueryService.OutboundRecord outbound1 =
+                buildOutbound("SO-M-001", "已审核", order1.getItems().get(0).getId(), 10);
+        SalesOrderOutboundQueryService.OutboundRecord outbound2 =
+                buildOutbound("SO-M-002", "已审核", order2.getItems().get(0).getId(), 5);
 
         when(salesOrderRepository.findByOrderNoInAndDeletedFlagFalse(any())).thenReturn(List.of(order1, order2));
-        when(salesOutboundRepository.findByDeletedFlagFalse()).thenReturn(List.of(outbound1, outbound2));
+        when(outboundQueryService.findActiveOutbounds()).thenReturn(List.of(outbound1, outbound2));
 
         service.syncBySalesOrderReference("SO-M-001, SO-M-002");
 
@@ -344,14 +356,14 @@ class SalesOrderCompletionSyncServiceTest {
     @Test
     void shouldNotSaveWhenNoStatusChanged() {
         SalesOrderRepository salesOrderRepository = mock(SalesOrderRepository.class);
-        SalesOutboundRepository salesOutboundRepository = mock(SalesOutboundRepository.class);
+        SalesOrderOutboundQueryService outboundQueryService = mock(SalesOrderOutboundQueryService.class);
         SalesOrderCompletionSyncService service = new SalesOrderCompletionSyncService(
-                salesOrderRepository, salesOutboundRepository);
+                salesOrderRepository, outboundQueryService);
 
         SalesOrder order = buildOrder("SO-NC-001", "草稿", 10);
 
         when(salesOrderRepository.findByOrderNoInAndDeletedFlagFalse(any())).thenReturn(List.of(order));
-        when(salesOutboundRepository.findByDeletedFlagFalse()).thenReturn(List.of());
+        when(outboundQueryService.findActiveOutbounds()).thenReturn(List.of());
 
         service.syncBySalesOrderReference("SO-NC-001");
 
@@ -361,9 +373,9 @@ class SalesOrderCompletionSyncServiceTest {
     @Test
     void shouldHandleMultipleItemsInOrder() {
         SalesOrderRepository salesOrderRepository = mock(SalesOrderRepository.class);
-        SalesOutboundRepository salesOutboundRepository = mock(SalesOutboundRepository.class);
+        SalesOrderOutboundQueryService outboundQueryService = mock(SalesOrderOutboundQueryService.class);
         SalesOrderCompletionSyncService service = new SalesOrderCompletionSyncService(
-                salesOrderRepository, salesOutboundRepository);
+                salesOrderRepository, outboundQueryService);
 
         SalesOrder order = new SalesOrder();
         order.setOrderNo("SO-MULTI-001");
@@ -384,23 +396,15 @@ class SalesOrderCompletionSyncServiceTest {
         item2.setUnitPrice(BigDecimal.ONE);
         order.setItems(new ArrayList<>(List.of(item1, item2)));
 
-        SalesOutbound outbound = new SalesOutbound();
-        outbound.setSalesOrderNo("SO-MULTI-001");
-        outbound.setStatus("已审核");
-        SalesOutboundItem obItem1 = new SalesOutboundItem();
-        obItem1.setSalesOutbound(outbound);
-        obItem1.setLineNo(1);
-        obItem1.setSourceSalesOrderItemId(200L);
-        obItem1.setQuantity(10);
-        SalesOutboundItem obItem2 = new SalesOutboundItem();
-        obItem2.setSalesOutbound(outbound);
-        obItem2.setLineNo(2);
-        obItem2.setSourceSalesOrderItemId(201L);
-        obItem2.setQuantity(5);
-        outbound.setItems(new ArrayList<>(List.of(obItem1, obItem2)));
+        SalesOrderOutboundQueryService.OutboundRecord outbound = outbound(
+                "SO-MULTI-001",
+                "已审核",
+                outboundItem(200L, 10),
+                outboundItem(201L, 5)
+        );
 
         when(salesOrderRepository.findByOrderNoInAndDeletedFlagFalse(any())).thenReturn(List.of(order));
-        when(salesOutboundRepository.findByDeletedFlagFalse()).thenReturn(List.of(outbound));
+        when(outboundQueryService.findActiveOutbounds()).thenReturn(List.of(outbound));
 
         service.syncBySalesOrderReference("SO-MULTI-001");
 
@@ -410,9 +414,9 @@ class SalesOrderCompletionSyncServiceTest {
     @Test
     void shouldNotCompleteWhenOneItemNotFullyOutbounded() {
         SalesOrderRepository salesOrderRepository = mock(SalesOrderRepository.class);
-        SalesOutboundRepository salesOutboundRepository = mock(SalesOutboundRepository.class);
+        SalesOrderOutboundQueryService outboundQueryService = mock(SalesOrderOutboundQueryService.class);
         SalesOrderCompletionSyncService service = new SalesOrderCompletionSyncService(
-                salesOrderRepository, salesOutboundRepository);
+                salesOrderRepository, outboundQueryService);
 
         SalesOrder order = new SalesOrder();
         order.setOrderNo("SO-PARTIAL-001");
@@ -433,18 +437,14 @@ class SalesOrderCompletionSyncServiceTest {
         item2.setUnitPrice(BigDecimal.ONE);
         order.setItems(new ArrayList<>(List.of(item1, item2)));
 
-        SalesOutbound outbound = new SalesOutbound();
-        outbound.setSalesOrderNo("SO-PARTIAL-001");
-        outbound.setStatus("已审核");
-        SalesOutboundItem obItem1 = new SalesOutboundItem();
-        obItem1.setSalesOutbound(outbound);
-        obItem1.setLineNo(1);
-        obItem1.setSourceSalesOrderItemId(300L);
-        obItem1.setQuantity(10);
-        outbound.setItems(new ArrayList<>(List.of(obItem1)));
+        SalesOrderOutboundQueryService.OutboundRecord outbound = outbound(
+                "SO-PARTIAL-001",
+                "已审核",
+                outboundItem(300L, 10)
+        );
 
         when(salesOrderRepository.findByOrderNoInAndDeletedFlagFalse(any())).thenReturn(List.of(order));
-        when(salesOutboundRepository.findByDeletedFlagFalse()).thenReturn(List.of(outbound));
+        when(outboundQueryService.findActiveOutbounds()).thenReturn(List.of(outbound));
 
         service.syncBySalesOrderReference("SO-PARTIAL-001");
 
@@ -454,16 +454,16 @@ class SalesOrderCompletionSyncServiceTest {
     @Test
     void shouldHandleOutboundWithNullQuantity() {
         SalesOrderRepository salesOrderRepository = mock(SalesOrderRepository.class);
-        SalesOutboundRepository salesOutboundRepository = mock(SalesOutboundRepository.class);
+        SalesOrderOutboundQueryService outboundQueryService = mock(SalesOrderOutboundQueryService.class);
         SalesOrderCompletionSyncService service = new SalesOrderCompletionSyncService(
-                salesOrderRepository, salesOutboundRepository);
+                salesOrderRepository, outboundQueryService);
 
         SalesOrder order = buildOrder("SO-NULL-QTY", "已审核", 10);
-        SalesOutbound outbound = buildOutbound("SO-NULL-QTY", "已审核", order.getItems().get(0).getId(), 0);
-        outbound.getItems().get(0).setQuantity(null);
+        SalesOrderOutboundQueryService.OutboundRecord outbound =
+                buildOutbound("SO-NULL-QTY", "已审核", order.getItems().get(0).getId(), null);
 
         when(salesOrderRepository.findByOrderNoInAndDeletedFlagFalse(any())).thenReturn(List.of(order));
-        when(salesOutboundRepository.findByDeletedFlagFalse()).thenReturn(List.of(outbound));
+        when(outboundQueryService.findActiveOutbounds()).thenReturn(List.of(outbound));
 
         service.syncBySalesOrderReference("SO-NULL-QTY");
 
@@ -473,23 +473,19 @@ class SalesOrderCompletionSyncServiceTest {
     @Test
     void shouldHandleOutboundWithNullSourceSalesOrderItemId() {
         SalesOrderRepository salesOrderRepository = mock(SalesOrderRepository.class);
-        SalesOutboundRepository salesOutboundRepository = mock(SalesOutboundRepository.class);
+        SalesOrderOutboundQueryService outboundQueryService = mock(SalesOrderOutboundQueryService.class);
         SalesOrderCompletionSyncService service = new SalesOrderCompletionSyncService(
-                salesOrderRepository, salesOutboundRepository);
+                salesOrderRepository, outboundQueryService);
 
         SalesOrder order = buildOrder("SO-NULL-SRC", "已审核", 10);
-        SalesOutbound outbound = new SalesOutbound();
-        outbound.setSalesOrderNo("SO-NULL-SRC");
-        outbound.setStatus("已审核");
-        SalesOutboundItem obItem = new SalesOutboundItem();
-        obItem.setSalesOutbound(outbound);
-        obItem.setLineNo(1);
-        obItem.setSourceSalesOrderItemId(null);
-        obItem.setQuantity(10);
-        outbound.setItems(new ArrayList<>(List.of(obItem)));
+        SalesOrderOutboundQueryService.OutboundRecord outbound = outbound(
+                "SO-NULL-SRC",
+                "已审核",
+                outboundItem(null, 10)
+        );
 
         when(salesOrderRepository.findByOrderNoInAndDeletedFlagFalse(any())).thenReturn(List.of(order));
-        when(salesOutboundRepository.findByDeletedFlagFalse()).thenReturn(List.of(outbound));
+        when(outboundQueryService.findActiveOutbounds()).thenReturn(List.of(outbound));
 
         service.syncBySalesOrderReference("SO-NULL-SRC");
 
@@ -499,23 +495,19 @@ class SalesOrderCompletionSyncServiceTest {
     @Test
     void shouldHandleOutboundWithNullOrderNo() {
         SalesOrderRepository salesOrderRepository = mock(SalesOrderRepository.class);
-        SalesOutboundRepository salesOutboundRepository = mock(SalesOutboundRepository.class);
+        SalesOrderOutboundQueryService outboundQueryService = mock(SalesOrderOutboundQueryService.class);
         SalesOrderCompletionSyncService service = new SalesOrderCompletionSyncService(
-                salesOrderRepository, salesOutboundRepository);
+                salesOrderRepository, outboundQueryService);
 
         SalesOrder order = buildOrder("SO-NULL-ONO", "已审核", 10);
-        SalesOutbound outbound = new SalesOutbound();
-        outbound.setSalesOrderNo(null);
-        outbound.setStatus("已审核");
-        SalesOutboundItem obItem = new SalesOutboundItem();
-        obItem.setSalesOutbound(outbound);
-        obItem.setLineNo(1);
-        obItem.setSourceSalesOrderItemId(order.getItems().get(0).getId());
-        obItem.setQuantity(10);
-        outbound.setItems(new ArrayList<>(List.of(obItem)));
+        SalesOrderOutboundQueryService.OutboundRecord outbound = outbound(
+                null,
+                "已审核",
+                outboundItem(order.getItems().get(0).getId(), 10)
+        );
 
         when(salesOrderRepository.findByOrderNoInAndDeletedFlagFalse(any())).thenReturn(List.of(order));
-        when(salesOutboundRepository.findByDeletedFlagFalse()).thenReturn(List.of(outbound));
+        when(outboundQueryService.findActiveOutbounds()).thenReturn(List.of(outbound));
 
         service.syncBySalesOrderReference("SO-NULL-ONO");
 
@@ -525,9 +517,9 @@ class SalesOrderCompletionSyncServiceTest {
     @Test
     void shouldHandleOrderWithNullQuantityItem() {
         SalesOrderRepository salesOrderRepository = mock(SalesOrderRepository.class);
-        SalesOutboundRepository salesOutboundRepository = mock(SalesOutboundRepository.class);
+        SalesOrderOutboundQueryService outboundQueryService = mock(SalesOrderOutboundQueryService.class);
         SalesOrderCompletionSyncService service = new SalesOrderCompletionSyncService(
-                salesOrderRepository, salesOutboundRepository);
+                salesOrderRepository, outboundQueryService);
 
         SalesOrder order = new SalesOrder();
         order.setOrderNo("SO-NULL-ITEM-QTY");
@@ -541,10 +533,11 @@ class SalesOrderCompletionSyncServiceTest {
         item.setUnitPrice(BigDecimal.ONE);
         order.setItems(new ArrayList<>(List.of(item)));
 
-        SalesOutbound outbound = buildOutbound("SO-NULL-ITEM-QTY", "已审核", 400L, 0);
+        SalesOrderOutboundQueryService.OutboundRecord outbound =
+                buildOutbound("SO-NULL-ITEM-QTY", "已审核", 400L, 0);
 
         when(salesOrderRepository.findByOrderNoInAndDeletedFlagFalse(any())).thenReturn(List.of(order));
-        when(salesOutboundRepository.findByDeletedFlagFalse()).thenReturn(List.of(outbound));
+        when(outboundQueryService.findActiveOutbounds()).thenReturn(List.of(outbound));
 
         service.syncBySalesOrderReference("SO-NULL-ITEM-QTY");
 
@@ -554,9 +547,9 @@ class SalesOrderCompletionSyncServiceTest {
     @Test
     void shouldHandleOrderWithNullStatus() {
         SalesOrderRepository salesOrderRepository = mock(SalesOrderRepository.class);
-        SalesOutboundRepository salesOutboundRepository = mock(SalesOutboundRepository.class);
+        SalesOrderOutboundQueryService outboundQueryService = mock(SalesOrderOutboundQueryService.class);
         SalesOrderCompletionSyncService service = new SalesOrderCompletionSyncService(
-                salesOrderRepository, salesOutboundRepository);
+                salesOrderRepository, outboundQueryService);
 
         SalesOrder order = new SalesOrder();
         order.setOrderNo("SO-NULL-STATUS");
@@ -570,10 +563,11 @@ class SalesOrderCompletionSyncServiceTest {
         item.setUnitPrice(BigDecimal.ONE);
         order.setItems(new ArrayList<>(List.of(item)));
 
-        SalesOutbound outbound = buildOutbound("SO-NULL-STATUS", "已审核", 500L, 10);
+        SalesOrderOutboundQueryService.OutboundRecord outbound =
+                buildOutbound("SO-NULL-STATUS", "已审核", 500L, 10);
 
         when(salesOrderRepository.findByOrderNoInAndDeletedFlagFalse(any())).thenReturn(List.of(order));
-        when(salesOutboundRepository.findByDeletedFlagFalse()).thenReturn(List.of(outbound));
+        when(outboundQueryService.findActiveOutbounds()).thenReturn(List.of(outbound));
 
         service.syncBySalesOrderReference("SO-NULL-STATUS");
 
@@ -596,16 +590,34 @@ class SalesOrderCompletionSyncServiceTest {
         return order;
     }
 
-    private SalesOutbound buildOutbound(String salesOrderNo, String status, Long sourceItemId, int quantity) {
-        SalesOutbound outbound = new SalesOutbound();
-        outbound.setSalesOrderNo(salesOrderNo);
-        outbound.setStatus(status);
-        SalesOutboundItem item = new SalesOutboundItem();
-        item.setSalesOutbound(outbound);
-        item.setLineNo(1);
-        item.setSourceSalesOrderItemId(sourceItemId);
-        item.setQuantity(quantity);
-        outbound.setItems(new ArrayList<>(List.of(item)));
-        return outbound;
+    private SalesOrderOutboundQueryService.OutboundRecord buildOutbound(String salesOrderNo,
+                                                                        String status,
+                                                                        Long sourceItemId,
+                                                                        Integer quantity) {
+        return buildOutbound(salesOrderNo, status, sourceItemId, quantity, null);
+    }
+
+    private SalesOrderOutboundQueryService.OutboundRecord buildOutbound(String salesOrderNo,
+                                                                        String status,
+                                                                        Long sourceItemId,
+                                                                        Integer quantity,
+                                                                        BigDecimal weightTon) {
+        return outbound(salesOrderNo, status, new SalesOrderOutboundQueryService.OutboundItemRecord(
+                sourceItemId,
+                quantity,
+                weightTon
+        ));
+    }
+
+    private SalesOrderOutboundQueryService.OutboundRecord outbound(
+            String salesOrderNo,
+            String status,
+            SalesOrderOutboundQueryService.OutboundItemRecord... items
+    ) {
+        return new SalesOrderOutboundQueryService.OutboundRecord(salesOrderNo, status, List.of(items));
+    }
+
+    private SalesOrderOutboundQueryService.OutboundItemRecord outboundItem(Long sourceItemId, Integer quantity) {
+        return new SalesOrderOutboundQueryService.OutboundItemRecord(sourceItemId, quantity, null);
     }
 }

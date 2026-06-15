@@ -2,8 +2,8 @@ package com.leo.erp.sales.order.service;
 
 import com.leo.erp.common.support.TradeItemCalculator;
 import com.leo.erp.common.support.TradeItemMaterialSupport;
+import com.leo.erp.common.support.TradeMaterialSnapshot;
 import com.leo.erp.common.support.WarehouseSelectionSupport;
-import com.leo.erp.master.material.domain.entity.Material;
 import com.leo.erp.sales.order.domain.entity.SalesOrder;
 import com.leo.erp.sales.order.domain.entity.SalesOrderItem;
 import com.leo.erp.sales.order.web.dto.SalesOrderItemRequest;
@@ -27,7 +27,7 @@ public class SalesOrderItemMapper {
     }
 
     void applyItemFields(SalesOrder entity, SalesOrderItemRequest source, SalesOrderItem item,
-                         int lineNo, Material material, BigDecimal weightTon, BigDecimal pieceWeightTon) {
+                         int lineNo, TradeMaterialSnapshot material, BigDecimal weightTon, BigDecimal pieceWeightTon) {
         item.setSalesOrder(entity);
         item.setLineNo(lineNo);
         item.setMaterialCode(source.materialCode());

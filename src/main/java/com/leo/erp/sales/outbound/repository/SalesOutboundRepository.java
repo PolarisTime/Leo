@@ -18,6 +18,9 @@ public interface SalesOutboundRepository extends JpaRepository<SalesOutbound, Lo
     List<SalesOutbound> findByDeletedFlagFalse();
 
     @EntityGraph(attributePaths = "items")
+    List<SalesOutbound> findByOutboundNoInAndDeletedFlagFalse(Collection<String> outboundNos);
+
+    @EntityGraph(attributePaths = "items")
     List<SalesOutbound> findAllByDeletedFlagFalse();
 
     @EntityGraph(attributePaths = "items")

@@ -5,8 +5,6 @@ import com.leo.erp.common.support.TradeItemCalculator;
 import com.leo.erp.sales.order.domain.entity.SalesOrder;
 import com.leo.erp.sales.order.domain.entity.SalesOrderItem;
 import com.leo.erp.sales.order.repository.SalesOrderRepository;
-import com.leo.erp.sales.outbound.domain.entity.SalesOutbound;
-import com.leo.erp.sales.outbound.repository.SalesOutboundRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -30,12 +28,12 @@ public class SalesOrderCompletionSyncService {
     private static final BigDecimal FULFILLMENT_TOLERANCE = new BigDecimal("0.05");
 
     private final SalesOrderRepository salesOrderRepository;
-    private final SalesOutboundRepository salesOutboundRepository;
+    private final SalesOrderOutboundQueryService outboundQueryService;
 
     public SalesOrderCompletionSyncService(SalesOrderRepository salesOrderRepository,
-                                           SalesOutboundRepository salesOutboundRepository) {
+                                           SalesOrderOutboundQueryService outboundQueryService) {
         this.salesOrderRepository = salesOrderRepository;
-        this.salesOutboundRepository = salesOutboundRepository;
+        this.outboundQueryService = outboundQueryService;
     }
 
     @Transactional
@@ -51,7 +49,7 @@ public class SalesOrderCompletionSyncService {
         }
 
         // 收集所有已审核出库中引用这些SO的明细
-        List<SalesOutbound> allOutbounds = salesOutboundRepository.findByDeletedFlagFalse();
+        List<SalesOrderOutboundQueryService.OutboundRecord> allOutbounds = outboundQueryService.findActiveOutbounds();
         for (SalesOrder order : orders) {
             String normalizedOrderNo = normalize(order.getOrderNo());
             syncItemWeightAndAmount(order, allOutbounds, normalizedOrderNo);
@@ -68,20 +66,20 @@ public class SalesOrderCompletionSyncService {
 
     private void syncItemWeightAndAmount(
             SalesOrder order,
-            List<SalesOutbound> allOutbounds,
+            List<SalesOrderOutboundQueryService.OutboundRecord> allOutbounds,
             String normalizedOrderNo
     ) {
         Map<Long, BigDecimal> cumulativeWeightByItemId = allOutbounds.stream()
-                .filter(ob -> StatusConstants.AUDITED.equals(normalize(ob.getStatus())))
-                .filter(ob -> parseSalesOrderNos(ob.getSalesOrderNo())
+                .filter(ob -> StatusConstants.AUDITED.equals(normalize(ob.status())))
+                .filter(ob -> parseSalesOrderNos(ob.salesOrderNo())
                         .contains(normalizedOrderNo))
-                .flatMap(ob -> ob.getItems().stream())
-                .filter(obi -> obi.getSourceSalesOrderItemId() != null && obi.getWeightTon() != null)
+                .flatMap(ob -> ob.items().stream())
+                .filter(obi -> obi.sourceSalesOrderItemId() != null && obi.weightTon() != null)
                 .collect(Collectors.groupingBy(
-                        obi -> obi.getSourceSalesOrderItemId(),
+                        SalesOrderOutboundQueryService.OutboundItemRecord::sourceSalesOrderItemId,
                         Collectors.reducing(
                                 BigDecimal.ZERO,
-                                obi -> obi.getWeightTon(),
+                                SalesOrderOutboundQueryService.OutboundItemRecord::weightTon,
                                 BigDecimal::add
                         )
                 ));
@@ -123,20 +121,20 @@ public class SalesOrderCompletionSyncService {
 
     private boolean isFullyOutbounded(
             SalesOrder order,
-            List<SalesOutbound> allOutbounds,
+            List<SalesOrderOutboundQueryService.OutboundRecord> allOutbounds,
             String normalizedOrderNo
     ) {
         // Pre-compute: aggregate outbound quantities by sales order item ID
         Map<Long, Integer> outboundQtyByItemId = allOutbounds.stream()
-                .filter(ob -> StatusConstants.AUDITED.equals(normalize(ob.getStatus())))
-                .filter(ob -> parseSalesOrderNos(ob.getSalesOrderNo())
+                .filter(ob -> StatusConstants.AUDITED.equals(normalize(ob.status())))
+                .filter(ob -> parseSalesOrderNos(ob.salesOrderNo())
                         .contains(normalizedOrderNo))
-                .flatMap(ob -> ob.getItems().stream())
-                .filter(obi -> obi.getSourceSalesOrderItemId() != null)
+                .flatMap(ob -> ob.items().stream())
+                .filter(obi -> obi.sourceSalesOrderItemId() != null)
                 .collect(Collectors.groupingBy(
-                        obi -> obi.getSourceSalesOrderItemId(),
+                        SalesOrderOutboundQueryService.OutboundItemRecord::sourceSalesOrderItemId,
                         Collectors.summingInt(
-                                obi -> obi.getQuantity() != null ? obi.getQuantity() : 0
+                                obi -> obi.quantity() != null ? obi.quantity() : 0
                         )
                 ));
 

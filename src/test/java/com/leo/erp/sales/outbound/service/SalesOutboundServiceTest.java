@@ -6,8 +6,8 @@ import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.sales.order.service.SalesOrderCompletionSyncService;
 import com.leo.erp.sales.order.service.SalesOrderItemQueryService;
 import com.leo.erp.common.support.TradeItemMaterialSupport;
+import com.leo.erp.common.support.TradeMaterialSnapshot;
 import com.leo.erp.common.support.WarehouseSelectionSupport;
-import com.leo.erp.master.material.domain.entity.Material;
 import com.leo.erp.sales.order.domain.entity.SalesOrder;
 import com.leo.erp.sales.order.domain.entity.SalesOrderItem;
 import com.leo.erp.sales.outbound.domain.entity.SalesOutbound;
@@ -73,7 +73,7 @@ class SalesOutboundServiceTest {
         SalesOrderItem sourceSalesOrderItem = buildSalesOrderItem(9001L, "SO-001");
 
         when(repository.existsByOutboundNoAndDeletedFlagFalse("SOO-001")).thenReturn(false);
-        when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(Map.of("M1", new Material()));
+        when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(materialMap("M1"));
         when(materialSupport.normalizeBatchNo(any(), eq("B1"), eq(1), eq(true))).thenReturn("B1");
         when(warehouseSelectionSupport.normalizeWarehouseName("一号码头", 1, true)).thenReturn("一号码头");
         when(salesOrderItemQueryService.findActiveByIdIn(anyCollection())).thenReturn(List.of(sourceSalesOrderItem));
@@ -120,7 +120,7 @@ class SalesOutboundServiceTest {
         SalesOrderItem sourceSalesOrderItem = buildSalesOrderItem(9002L, "SO-002");
 
         when(repository.existsByOutboundNoAndDeletedFlagFalse("SOO-002")).thenReturn(false);
-        when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(Map.of("M1", new Material()));
+        when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(materialMap("M1"));
         when(materialSupport.normalizeBatchNo(any(), eq("B1"), eq(1), eq(true))).thenReturn("B1");
         when(warehouseSelectionSupport.normalizeWarehouseName("一号码头", 1, true)).thenReturn("一号码头");
         when(salesOrderItemQueryService.findActiveByIdIn(anyCollection())).thenReturn(List.of(sourceSalesOrderItem));
@@ -165,7 +165,7 @@ class SalesOutboundServiceTest {
         SalesOrderItem sourceSalesOrderItem = buildSalesOrderItem(9009L, "SO-ZERO-PRICE");
 
         when(repository.existsByOutboundNoAndDeletedFlagFalse("SOO-ZERO-PRICE")).thenReturn(false);
-        when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(Map.of("M1", new Material()));
+        when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(materialMap("M1"));
         when(materialSupport.normalizeBatchNo(any(), eq("B1"), eq(1), eq(true))).thenReturn("B1");
         when(warehouseSelectionSupport.normalizeWarehouseName("一号码头", 1, true)).thenReturn("一号码头");
         when(salesOrderItemQueryService.findActiveByIdIn(anyCollection())).thenReturn(List.of(sourceSalesOrderItem));
@@ -211,7 +211,7 @@ class SalesOutboundServiceTest {
         SalesOrderItem sourceSalesOrderItem = buildSalesOrderItem(9003L, "SO-003");
 
         when(repository.findByIdAndDeletedFlagFalse(7001L)).thenReturn(Optional.of(existing));
-        when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(Map.of("M1", new Material()));
+        when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(materialMap("M1"));
         when(materialSupport.normalizeBatchNo(any(), eq("B1"), eq(1), eq(true))).thenReturn("B1");
         when(warehouseSelectionSupport.normalizeWarehouseName("一号码头", 1, true)).thenReturn("一号码头");
         when(salesOrderItemQueryService.findActiveByIdIn(anyCollection())).thenReturn(List.of(sourceSalesOrderItem));
@@ -282,7 +282,7 @@ class SalesOutboundServiceTest {
         occupiedOutbound.setItems(new ArrayList<>(List.of(occupiedItem)));
 
         when(repository.existsByOutboundNoAndDeletedFlagFalse("SOO-OCC-001")).thenReturn(false);
-        when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(Map.of("M1", new Material()));
+        when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(materialMap("M1"));
         when(materialSupport.normalizeBatchNo(any(), eq(null), eq(1), eq(true))).thenReturn("AUTO");
         when(warehouseSelectionSupport.normalizeWarehouseName("一号库", 1, true)).thenReturn("一号库");
         SalesOrderItem sourceSalesOrderItem = buildSalesOrderItem(9001L, "SO-OCC-001");
@@ -330,7 +330,7 @@ class SalesOutboundServiceTest {
         SalesOutboundRepository repository = mock(SalesOutboundRepository.class);
         SalesOrderCompletionSyncService syncService = mock(SalesOrderCompletionSyncService.class);
         SalesOutboundMapper mapper = mock(SalesOutboundMapper.class);
-        SalesOutboundService service = new SalesOutboundService(
+        SalesOutboundService service = createService(
                 repository, mock(SnowflakeIdGenerator.class), mapper,
                 mock(TradeItemMaterialSupport.class), mock(WarehouseSelectionSupport.class),
                 mock(WorkflowTransitionGuard.class), syncService,
@@ -519,7 +519,7 @@ class SalesOutboundServiceTest {
         SalesOrderItem sourceSalesOrderItem = buildSalesOrderItem(9004L, "SO-SAME");
 
         when(repository.findByIdAndDeletedFlagFalse(7002L)).thenReturn(Optional.of(existing));
-        when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(Map.of("M1", new Material()));
+        when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(materialMap("M1"));
         when(materialSupport.normalizeBatchNo(any(), eq("B1"), eq(1), eq(true))).thenReturn("B1");
         when(warehouseSelectionSupport.normalizeWarehouseName("一号码头", 1, true)).thenReturn("一号码头");
         when(salesOrderItemQueryService.findActiveByIdIn(anyCollection())).thenReturn(List.of(sourceSalesOrderItem));
@@ -540,7 +540,7 @@ class SalesOutboundServiceTest {
         WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
         SalesOrderItemQueryService salesOrderItemQueryService = mock(SalesOrderItemQueryService.class);
         JdbcTemplate jdbc = mock(JdbcTemplate.class);
-        SalesOutboundService service = new SalesOutboundService(
+        SalesOutboundService service = createService(
                 repository, mock(SnowflakeIdGenerator.class), mapper,
                 materialSupport, warehouseSelectionSupport,
                 mock(WorkflowTransitionGuard.class), mock(SalesOrderCompletionSyncService.class),
@@ -560,7 +560,7 @@ class SalesOutboundServiceTest {
         SalesOrderItem sourceSalesOrderItem = buildSalesOrderItem(9005L, "SO-PIECE");
 
         when(repository.existsByOutboundNoAndDeletedFlagFalse("SOO-PIECE-001")).thenReturn(false);
-        when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(Map.of("M1", new Material()));
+        when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(materialMap("M1"));
         when(materialSupport.normalizeBatchNo(any(), eq("B1"), eq(1), eq(true))).thenReturn("B1");
         when(warehouseSelectionSupport.normalizeWarehouseName(any(), eq(1), eq(true))).thenReturn("一号码头");
         when(salesOrderItemQueryService.findActiveByIdIn(anyCollection())).thenReturn(List.of(sourceSalesOrderItem));
@@ -585,7 +585,7 @@ class SalesOutboundServiceTest {
         WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
         SalesOrderItemQueryService salesOrderItemQueryService = mock(SalesOrderItemQueryService.class);
         JdbcTemplate jdbc = mock(JdbcTemplate.class);
-        SalesOutboundService service = new SalesOutboundService(
+        SalesOutboundService service = createService(
                 repository, mock(SnowflakeIdGenerator.class), mapper,
                 materialSupport, warehouseSelectionSupport,
                 mock(WorkflowTransitionGuard.class), mock(SalesOrderCompletionSyncService.class),
@@ -605,7 +605,7 @@ class SalesOutboundServiceTest {
         SalesOrderItem sourceSalesOrderItem = buildSalesOrderItem(9006L, "SO-FALLBACK");
 
         when(repository.existsByOutboundNoAndDeletedFlagFalse("SOO-FALLBACK-001")).thenReturn(false);
-        when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(Map.of("M1", new Material()));
+        when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(materialMap("M1"));
         when(materialSupport.normalizeBatchNo(any(), eq("B1"), eq(1), eq(true))).thenReturn("B1");
         when(warehouseSelectionSupport.normalizeWarehouseName(any(), eq(1), eq(true))).thenReturn("一号码头");
         when(salesOrderItemQueryService.findActiveByIdIn(anyCollection())).thenReturn(List.of(sourceSalesOrderItem));
@@ -630,7 +630,7 @@ class SalesOutboundServiceTest {
         WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
         SalesOrderItemQueryService salesOrderItemQueryService = mock(SalesOrderItemQueryService.class);
         JdbcTemplate jdbc = mock(JdbcTemplate.class);
-        SalesOutboundService service = new SalesOutboundService(
+        SalesOutboundService service = createService(
                 repository, mock(SnowflakeIdGenerator.class), mapper,
                 materialSupport, warehouseSelectionSupport,
                 mock(WorkflowTransitionGuard.class), mock(SalesOrderCompletionSyncService.class),
@@ -816,7 +816,7 @@ class SalesOutboundServiceTest {
         );
 
         when(repository.existsByOutboundNoAndDeletedFlagFalse("SOO-COLLECT-001")).thenReturn(false);
-        when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(Map.of("M1", new Material()));
+        when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(materialMap("M1"));
         when(materialSupport.normalizeBatchNo(any(), eq("B1"), eq(1), eq(true))).thenReturn("B1");
         when(warehouseSelectionSupport.normalizeWarehouseName(any(), eq(1), eq(true))).thenReturn("一号码头");
         when(salesOrderItemQueryService.findActiveByIdIn(anyCollection())).thenReturn(List.of(sourceItem));
@@ -852,7 +852,7 @@ class SalesOutboundServiceTest {
         );
 
         when(repository.existsByOutboundNoAndDeletedFlagFalse("SOO-NULL-SRC-001")).thenReturn(false);
-        when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(Map.of("M1", new Material()));
+        when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(materialMap("M1"));
         when(materialSupport.normalizeBatchNo(any(), eq("B1"), eq(1), eq(true))).thenReturn("B1");
         when(warehouseSelectionSupport.normalizeWarehouseName(any(), eq(1), eq(true))).thenReturn("一号码头");
         when(salesOrderItemQueryService.findActiveByIdIn(anyCollection())).thenReturn(List.of());
@@ -918,7 +918,7 @@ class SalesOutboundServiceTest {
         SalesOutboundRepository repository = mock(SalesOutboundRepository.class);
         SalesOrderCompletionSyncService syncService = mock(SalesOrderCompletionSyncService.class);
         SalesOutboundMapper mapper = mock(SalesOutboundMapper.class);
-        SalesOutboundService service = new SalesOutboundService(
+        SalesOutboundService service = createService(
                 repository, mock(SnowflakeIdGenerator.class), mapper,
                 mock(TradeItemMaterialSupport.class), mock(WarehouseSelectionSupport.class),
                 mock(WorkflowTransitionGuard.class), syncService,
@@ -1004,7 +1004,7 @@ class SalesOutboundServiceTest {
         SalesOrderItem sourceSalesOrderItem = buildSalesOrderItem(9008L, "SO-RESOLVE");
 
         when(repository.findByIdAndDeletedFlagFalse(7003L)).thenReturn(Optional.of(existing));
-        when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(Map.of("M1", new Material()));
+        when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(materialMap("M1"));
         when(materialSupport.normalizeBatchNo(any(), eq("B1"), eq(1), eq(true))).thenReturn("B1");
         when(warehouseSelectionSupport.normalizeWarehouseName("一号码头", 1, true)).thenReturn("一号码头");
         when(salesOrderItemQueryService.findActiveByIdIn(anyCollection())).thenReturn(List.of(sourceSalesOrderItem));
@@ -1021,7 +1021,7 @@ class SalesOutboundServiceTest {
                                                 TradeItemMaterialSupport materialSupport,
                                                 WarehouseSelectionSupport warehouseSelectionSupport,
                                                 SalesOrderItemQueryService salesOrderItemQueryService) {
-        return new SalesOutboundService(
+        return createService(
                 repository,
                 mock(SnowflakeIdGenerator.class),
                 mapper,
@@ -1032,6 +1032,32 @@ class SalesOutboundServiceTest {
                 salesOrderItemQueryService,
                 mock(PurchaseOrderItemPieceWeightService.class),
                 mock(JdbcTemplate.class)
+        );
+    }
+
+    private SalesOutboundService createService(SalesOutboundRepository repository,
+                                               SnowflakeIdGenerator idGenerator,
+                                               SalesOutboundMapper mapper,
+                                               TradeItemMaterialSupport materialSupport,
+                                               WarehouseSelectionSupport warehouseSelectionSupport,
+                                               WorkflowTransitionGuard workflowTransitionGuard,
+                                               SalesOrderCompletionSyncService syncService,
+                                               SalesOrderItemQueryService salesOrderItemQueryService,
+                                               PurchaseOrderItemPieceWeightService purchaseOrderItemPieceWeightService,
+                                               JdbcTemplate jdbc) {
+        SalesOutboundSourceService sourceService = new SalesOutboundSourceService(salesOrderItemQueryService, repository);
+        return new SalesOutboundService(
+                repository,
+                idGenerator,
+                workflowTransitionGuard,
+                new SalesOutboundApplyService(
+                        materialSupport,
+                        warehouseSelectionSupport,
+                        sourceService,
+                        new SalesOutboundWeightService(jdbc)
+                ),
+                new SalesOutboundResponseAssembler(mapper, sourceService),
+                new SalesOutboundSaveService(repository, syncService)
         );
     }
 
@@ -1115,5 +1141,9 @@ class SalesOutboundServiceTest {
                     List.of()
             );
         }).when(mapper).toResponse(any());
+    }
+
+    private Map<String, TradeMaterialSnapshot> materialMap(String materialCode) {
+        return Map.of(materialCode, new TradeMaterialSnapshot(materialCode, Boolean.FALSE));
     }
 }

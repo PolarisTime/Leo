@@ -6,8 +6,8 @@ import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.support.TradeItemMaterialSupport;
+import com.leo.erp.common.support.TradeMaterialSnapshot;
 import com.leo.erp.common.support.WarehouseSelectionSupport;
-import com.leo.erp.master.material.domain.entity.Material;
 import com.leo.erp.purchase.inbound.domain.entity.PurchaseInbound;
 import com.leo.erp.purchase.inbound.domain.entity.PurchaseInboundItem;
 import com.leo.erp.purchase.order.domain.entity.PurchaseOrderItem;
@@ -22,7 +22,6 @@ import com.leo.erp.sales.order.web.dto.SalesOrderRequest;
 import com.leo.erp.sales.order.web.dto.SalesOrderResponse;
 import com.leo.erp.sales.outbound.domain.entity.SalesOutbound;
 import com.leo.erp.sales.outbound.domain.entity.SalesOutboundItem;
-import com.leo.erp.sales.outbound.repository.SalesOutboundRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.InOrder;
@@ -66,7 +65,7 @@ class SalesOrderServiceTest {
         PurchaseItemPieceWeightAppService pieceWeightAppService = mock(PurchaseItemPieceWeightAppService.class);
         SalesOrderItemRepository salesOrderItemRepository = mock(SalesOrderItemRepository.class);
         WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
-        SalesOrderService service = new SalesOrderService(
+        SalesOrderService service = service(
                 repository, idGenerator, mapper, materialSupport,
                 purchaseItemQueryAppService, pieceWeightAppService,
                 salesOrderItemRepository, warehouseSelectionSupport,
@@ -93,7 +92,7 @@ class SalesOrderServiceTest {
 
         when(repository.existsByOrderNoAndDeletedFlagFalse("SO-001")).thenReturn(false);
         when(idGenerator.nextId()).thenReturn(1L, 11L);
-        when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(Map.of("M1", new Material()));
+        when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(materialMap("M1"));
         when(materialSupport.normalizeBatchNo(any(), eq("B1"), eq(1), eq(true))).thenReturn("B1");
         when(warehouseSelectionSupport.normalizeWarehouseName("一号库", 1, true)).thenReturn("一号库");
         when(purchaseItemQueryAppService.findSourceInboundItemsByIds(List.of(101L))).thenReturn(List.of(
@@ -124,7 +123,7 @@ class SalesOrderServiceTest {
         PurchaseItemPieceWeightAppService pieceWeightAppService = mock(PurchaseItemPieceWeightAppService.class);
         SalesOrderItemRepository salesOrderItemRepository = mock(SalesOrderItemRepository.class);
         WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
-        SalesOrderService service = new SalesOrderService(
+        SalesOrderService service = service(
                 repository, idGenerator, mapper, materialSupport,
                 purchaseItemQueryAppService, pieceWeightAppService,
                 salesOrderItemRepository, warehouseSelectionSupport,
@@ -155,7 +154,7 @@ class SalesOrderServiceTest {
 
         when(repository.existsByOrderNoAndDeletedFlagFalse("SO-003")).thenReturn(false);
         when(idGenerator.nextId()).thenReturn(1L, 11L);
-        when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(Map.of("M1", new Material()));
+        when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(materialMap("M1"));
         when(materialSupport.normalizeBatchNo(any(), eq("B1"), eq(1), eq(true))).thenReturn("B1");
         when(warehouseSelectionSupport.normalizeWarehouseName("一号库", 1, true)).thenReturn("一号库");
         when(purchaseItemQueryAppService.findSourcePurchaseOrderItemsByIds(List.of(201L))).thenReturn(List.of(
@@ -191,7 +190,7 @@ class SalesOrderServiceTest {
     @Test
     void shouldRejectDuplicateOrderNoOnCreate() {
         SalesOrderRepository repository = mock(SalesOrderRepository.class);
-        SalesOrderService service = new SalesOrderService(
+        SalesOrderService service = service(
                 repository, mock(SnowflakeIdGenerator.class), mock(SalesOrderMapper.class),
                 mock(TradeItemMaterialSupport.class), mock(PurchaseItemQueryAppService.class),
                 mock(PurchaseItemPieceWeightAppService.class), mock(SalesOrderItemRepository.class),
@@ -221,7 +220,7 @@ class SalesOrderServiceTest {
     void shouldDeleteOrderAndReleasePieceWeights() {
         SalesOrderRepository repository = mock(SalesOrderRepository.class);
         PurchaseItemPieceWeightAppService pieceWeightAppService = mock(PurchaseItemPieceWeightAppService.class);
-        SalesOrderService service = new SalesOrderService(
+        SalesOrderService service = service(
                 repository, mock(SnowflakeIdGenerator.class), mock(SalesOrderMapper.class),
                 mock(TradeItemMaterialSupport.class), mock(PurchaseItemQueryAppService.class),
                 pieceWeightAppService, mock(SalesOrderItemRepository.class),
@@ -262,7 +261,7 @@ class SalesOrderServiceTest {
     void shouldUpdateStatusToAudited() {
         SalesOrderRepository repository = mock(SalesOrderRepository.class);
         SalesOrderMapper mapper = mock(SalesOrderMapper.class);
-        SalesOrderService service = new SalesOrderService(
+        SalesOrderService service = service(
                 repository, mock(SnowflakeIdGenerator.class), mapper,
                 mock(TradeItemMaterialSupport.class), mock(PurchaseItemQueryAppService.class),
                 mock(PurchaseItemPieceWeightAppService.class), mock(SalesOrderItemRepository.class),
@@ -298,7 +297,7 @@ class SalesOrderServiceTest {
     void shouldRejectWhenSourcePurchaseOrderItemNotFound() {
         SalesOrderRepository repository = mock(SalesOrderRepository.class);
         PurchaseItemQueryAppService purchaseItemQueryAppService = mock(PurchaseItemQueryAppService.class);
-        SalesOrderService service = new SalesOrderService(
+        SalesOrderService service = service(
                 repository, mock(SnowflakeIdGenerator.class), mock(SalesOrderMapper.class),
                 mock(TradeItemMaterialSupport.class), purchaseItemQueryAppService,
                 mock(PurchaseItemPieceWeightAppService.class), mock(SalesOrderItemRepository.class),
@@ -329,7 +328,7 @@ class SalesOrderServiceTest {
     void shouldRejectWhenSourceInboundItemNotFound() {
         SalesOrderRepository repository = mock(SalesOrderRepository.class);
         PurchaseItemQueryAppService purchaseItemQueryAppService = mock(PurchaseItemQueryAppService.class);
-        SalesOrderService service = new SalesOrderService(
+        SalesOrderService service = service(
                 repository, mock(SnowflakeIdGenerator.class), mock(SalesOrderMapper.class),
                 mock(TradeItemMaterialSupport.class), purchaseItemQueryAppService,
                 mock(PurchaseItemPieceWeightAppService.class), mock(SalesOrderItemRepository.class),
@@ -361,7 +360,7 @@ class SalesOrderServiceTest {
         SalesOrderRepository repository = mock(SalesOrderRepository.class);
         PurchaseItemQueryAppService purchaseItemQueryAppService = mock(PurchaseItemQueryAppService.class);
         SalesOrderItemRepository salesOrderItemRepository = mock(SalesOrderItemRepository.class);
-        SalesOrderService service = new SalesOrderService(
+        SalesOrderService service = service(
                 repository, mock(SnowflakeIdGenerator.class), mock(SalesOrderMapper.class),
                 mock(TradeItemMaterialSupport.class), purchaseItemQueryAppService,
                 mock(PurchaseItemPieceWeightAppService.class), salesOrderItemRepository,
@@ -406,7 +405,7 @@ class SalesOrderServiceTest {
     void shouldNotChangeStatusWhenUpdateStatusSameValue() {
         SalesOrderRepository repository = mock(SalesOrderRepository.class);
         SalesOrderMapper mapper = mock(SalesOrderMapper.class);
-        SalesOrderService service = new SalesOrderService(
+        SalesOrderService service = service(
                 repository, mock(SnowflakeIdGenerator.class), mapper,
                 mock(TradeItemMaterialSupport.class), mock(PurchaseItemQueryAppService.class),
                 mock(PurchaseItemPieceWeightAppService.class), mock(SalesOrderItemRepository.class),
@@ -444,7 +443,7 @@ class SalesOrderServiceTest {
         SalesOrderMapper mapper = mock(SalesOrderMapper.class);
         TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
         WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
-        SalesOrderService service = new SalesOrderService(
+        SalesOrderService service = service(
                 repository, idGenerator, mapper, materialSupport,
                 mock(PurchaseItemQueryAppService.class), mock(PurchaseItemPieceWeightAppService.class),
                 mock(SalesOrderItemRepository.class), warehouseSelectionSupport,
@@ -464,7 +463,7 @@ class SalesOrderServiceTest {
 
         when(repository.existsByOrderNoAndDeletedFlagFalse("SO-NO-SRC-001")).thenReturn(false);
         when(idGenerator.nextId()).thenReturn(1L, 11L);
-        when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(Map.of("M1", new Material()));
+        when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(materialMap("M1"));
         when(materialSupport.normalizeBatchNo(any(), eq(null), eq(1), eq(true))).thenReturn("AUTO");
         when(warehouseSelectionSupport.normalizeWarehouseName("一号库", 1, true)).thenReturn("一号库");
         when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
@@ -486,7 +485,7 @@ class SalesOrderServiceTest {
         TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
         WorkflowTransitionGuard workflowTransitionGuard = mock(WorkflowTransitionGuard.class);
         WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
-        SalesOrderService service = new SalesOrderService(
+        SalesOrderService service = service(
                 repository, mock(SnowflakeIdGenerator.class), mapper, materialSupport,
                 mock(PurchaseItemQueryAppService.class), mock(PurchaseItemPieceWeightAppService.class),
                 mock(SalesOrderItemRepository.class), warehouseSelectionSupport,
@@ -538,7 +537,7 @@ class SalesOrderServiceTest {
         );
 
         when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(order));
-        when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(Map.of("M1", new Material()));
+        when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(materialMap("M1"));
         when(materialSupport.normalizeBatchNo(any(), eq("B1"), eq(1), eq(true))).thenReturn("B1");
         when(warehouseSelectionSupport.normalizeWarehouseName("一号库", 1, true)).thenReturn("一号库");
         when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
@@ -559,7 +558,7 @@ class SalesOrderServiceTest {
     @Test
     void shouldRejectReverseAuditWhenSalesOrderPayloadChangesOtherFields() {
         SalesOrderRepository repository = mock(SalesOrderRepository.class);
-        SalesOrderService service = new SalesOrderService(
+        SalesOrderService service = service(
                 repository, mock(SnowflakeIdGenerator.class), mock(SalesOrderMapper.class),
                 mock(TradeItemMaterialSupport.class), mock(PurchaseItemQueryAppService.class),
                 mock(PurchaseItemPieceWeightAppService.class), mock(SalesOrderItemRepository.class),
@@ -620,25 +619,20 @@ class SalesOrderServiceTest {
         SalesOrderRepository repository = mock(SalesOrderRepository.class);
         SalesOrderMapper mapper = mock(SalesOrderMapper.class);
         PurchaseItemPieceWeightAppService pieceWeightAppService = mock(PurchaseItemPieceWeightAppService.class);
-        SalesOutboundRepository salesOutboundRepository = mock(SalesOutboundRepository.class);
+        SalesOrderOutboundPricingSyncService outboundPricingSyncService = mock(SalesOrderOutboundPricingSyncService.class);
         SalesOrderCompletionSyncService completionSyncService = mock(SalesOrderCompletionSyncService.class);
-        SalesOrderService service = new SalesOrderService(
+        SalesOrderService service = service(
                 repository, mock(SnowflakeIdGenerator.class), mapper,
                 mock(TradeItemMaterialSupport.class), mock(PurchaseItemQueryAppService.class),
                 pieceWeightAppService, mock(SalesOrderItemRepository.class),
                 mock(WarehouseSelectionSupport.class), stubbedSalesOrderItemMapper(),
-                mock(WorkflowTransitionGuard.class), salesOutboundRepository, completionSyncService
+                mock(WorkflowTransitionGuard.class), outboundPricingSyncService, completionSyncService
         );
 
         var order = auditedSalesOrder("SO-PRICE-002", StatusConstants.AUDITED, BigDecimal.ZERO);
-        var outbound = auditedOutbound("SO-PRICE-002", order.getItems().get(0).getId(), new BigDecimal("4.500"), BigDecimal.ZERO);
         SalesOrderRequest request = pricingUpdateRequest(order, new BigDecimal("3888.00"), StatusConstants.AUDITED);
 
         when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(order));
-        when(salesOutboundRepository.findAllByStatusAndSourceSalesOrderItemIds(
-                eq(StatusConstants.AUDITED),
-                eq(List.of(order.getItems().get(0).getId()))
-        )).thenReturn(List.of(outbound));
         when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
         when(mapper.toResponse(any())).thenReturn(new SalesOrderResponse(
                 1L, "SO-PRICE-002", null, null, "客户A", "项目A", LocalDate.of(2026, 4, 26),
@@ -651,10 +645,10 @@ class SalesOrderServiceTest {
         assertThat(order.getItems().get(0).getUnitPrice()).isEqualByComparingTo("3888.00");
         assertThat(order.getItems().get(0).getAmount()).isEqualByComparingTo("17496.00");
         assertThat(order.getTotalAmount()).isEqualByComparingTo("17496.00");
-        assertThat(outbound.getItems().get(0).getUnitPrice()).isEqualByComparingTo("3888.00");
-        assertThat(outbound.getItems().get(0).getAmount()).isEqualByComparingTo("17496.00");
-        assertThat(outbound.getTotalAmount()).isEqualByComparingTo("17496.00");
-        verify(salesOutboundRepository).saveAll(List.of(outbound));
+        verify(outboundPricingSyncService).syncAuditedOutboundPricing(
+                eq(List.of(order.getItems().get(0).getId())),
+                eq(Map.of(order.getItems().get(0).getId(), new BigDecimal("3888.00")))
+        );
         verify(completionSyncService).syncBySalesOrderReference("SO-PRICE-002");
         verify(pieceWeightAppService, never()).releaseSalesOrderItems(any());
     }
@@ -664,14 +658,14 @@ class SalesOrderServiceTest {
         SalesOrderRepository repository = mock(SalesOrderRepository.class);
         SalesOrderMapper mapper = mock(SalesOrderMapper.class);
         PurchaseItemPieceWeightAppService pieceWeightAppService = mock(PurchaseItemPieceWeightAppService.class);
-        SalesOutboundRepository salesOutboundRepository = mock(SalesOutboundRepository.class);
+        SalesOrderOutboundPricingSyncService outboundPricingSyncService = mock(SalesOrderOutboundPricingSyncService.class);
         SalesOrderCompletionSyncService completionSyncService = mock(SalesOrderCompletionSyncService.class);
-        SalesOrderService service = new SalesOrderService(
+        SalesOrderService service = service(
                 repository, mock(SnowflakeIdGenerator.class), mapper,
                 mock(TradeItemMaterialSupport.class), mock(PurchaseItemQueryAppService.class),
                 pieceWeightAppService, mock(SalesOrderItemRepository.class),
                 mock(WarehouseSelectionSupport.class), stubbedSalesOrderItemMapper(),
-                mock(WorkflowTransitionGuard.class), salesOutboundRepository, completionSyncService
+                mock(WorkflowTransitionGuard.class), outboundPricingSyncService, completionSyncService
         );
 
         var order = auditedSalesOrder("SO-PRICE-005", StatusConstants.AUDITED, new BigDecimal("3300.00"));
@@ -688,10 +682,6 @@ class SalesOrderServiceTest {
         );
 
         when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(order));
-        when(salesOutboundRepository.findAllByStatusAndSourceSalesOrderItemIds(
-                eq(StatusConstants.AUDITED),
-                eq(List.of(item.getId()))
-        )).thenReturn(List.of());
         when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
         when(mapper.toResponse(any())).thenReturn(new SalesOrderResponse(
                 1L, "SO-PRICE-005", null, "PO-005", "客户A", "项目A",
@@ -707,6 +697,10 @@ class SalesOrderServiceTest {
         assertThat(item.getAmount()).isEqualByComparingTo("15750.00");
         assertThat(order.getTotalAmount()).isEqualByComparingTo("15750.00");
         verify(repository).save(order);
+        verify(outboundPricingSyncService).syncAuditedOutboundPricing(
+                eq(List.of(item.getId())),
+                eq(Map.of(item.getId(), new BigDecimal("3500.00")))
+        );
         verify(repository, never()).saveAndFlush(any());
         verify(pieceWeightAppService, never()).releaseSalesOrderItems(any());
         verify(pieceWeightAppService, never()).allocateForSalesOrderItem(any(), any(), any(), anyInt());
@@ -716,12 +710,12 @@ class SalesOrderServiceTest {
     @Test
     void shouldRejectAuditedSalesOrderPricingUpdateWhenStructureChanges() {
         SalesOrderRepository repository = mock(SalesOrderRepository.class);
-        SalesOrderService service = new SalesOrderService(
+        SalesOrderService service = service(
                 repository, mock(SnowflakeIdGenerator.class), mock(SalesOrderMapper.class),
                 mock(TradeItemMaterialSupport.class), mock(PurchaseItemQueryAppService.class),
                 mock(PurchaseItemPieceWeightAppService.class), mock(SalesOrderItemRepository.class),
                 mock(WarehouseSelectionSupport.class), stubbedSalesOrderItemMapper(),
-                mock(WorkflowTransitionGuard.class), mock(SalesOutboundRepository.class),
+                mock(WorkflowTransitionGuard.class), mock(SalesOrderOutboundPricingSyncService.class),
                 mock(SalesOrderCompletionSyncService.class)
         );
 
@@ -765,12 +759,12 @@ class SalesOrderServiceTest {
     @Test
     void shouldRejectPricingUpdateWhenSalesOrderCompleted() {
         SalesOrderRepository repository = mock(SalesOrderRepository.class);
-        SalesOrderService service = new SalesOrderService(
+        SalesOrderService service = service(
                 repository, mock(SnowflakeIdGenerator.class), mock(SalesOrderMapper.class),
                 mock(TradeItemMaterialSupport.class), mock(PurchaseItemQueryAppService.class),
                 mock(PurchaseItemPieceWeightAppService.class), mock(SalesOrderItemRepository.class),
                 mock(WarehouseSelectionSupport.class), stubbedSalesOrderItemMapper(),
-                mock(WorkflowTransitionGuard.class), mock(SalesOutboundRepository.class),
+                mock(WorkflowTransitionGuard.class), mock(SalesOrderOutboundPricingSyncService.class),
                 mock(SalesOrderCompletionSyncService.class)
         );
 
@@ -789,7 +783,7 @@ class SalesOrderServiceTest {
     void shouldSearchByKeyword() {
         SalesOrderRepository repository = mock(SalesOrderRepository.class);
         SalesOrderMapper mapper = mock(SalesOrderMapper.class);
-        SalesOrderService service = new SalesOrderService(
+        SalesOrderService service = service(
                 repository, mock(SnowflakeIdGenerator.class), mapper,
                 mock(TradeItemMaterialSupport.class), mock(PurchaseItemQueryAppService.class),
                 mock(PurchaseItemPieceWeightAppService.class), mock(SalesOrderItemRepository.class),
@@ -811,7 +805,7 @@ class SalesOrderServiceTest {
     @Test
     void shouldRejectDuplicateOrderNoOnUpdateWhenOrderNoChanges() {
         SalesOrderRepository repository = mock(SalesOrderRepository.class);
-        SalesOrderService service = new SalesOrderService(
+        SalesOrderService service = service(
                 repository, mock(SnowflakeIdGenerator.class), mock(SalesOrderMapper.class),
                 mock(TradeItemMaterialSupport.class), mock(PurchaseItemQueryAppService.class),
                 mock(PurchaseItemPieceWeightAppService.class), mock(SalesOrderItemRepository.class),
@@ -843,7 +837,7 @@ class SalesOrderServiceTest {
         SalesOrderMapper mapper = mock(SalesOrderMapper.class);
         TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
         WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
-        SalesOrderService service = new SalesOrderService(
+        SalesOrderService service = service(
                 repository, mock(SnowflakeIdGenerator.class), mapper, materialSupport,
                 mock(PurchaseItemQueryAppService.class), mock(PurchaseItemPieceWeightAppService.class),
                 mock(SalesOrderItemRepository.class), warehouseSelectionSupport,
@@ -874,7 +868,7 @@ class SalesOrderServiceTest {
         );
 
         when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(order));
-        when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(Map.of("M1", new Material()));
+        when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(materialMap("M1"));
         when(materialSupport.normalizeBatchNo(any(), eq(null), eq(1), eq(true))).thenReturn("AUTO");
         when(warehouseSelectionSupport.normalizeWarehouseName("一号库", 1, true)).thenReturn("一号库");
         when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
@@ -890,7 +884,7 @@ class SalesOrderServiceTest {
     @Test
     void shouldHandleMatchesStatusOnlyUpdateWithNullEntity() {
         SalesOrderRepository repository = mock(SalesOrderRepository.class);
-        SalesOrderService service = new SalesOrderService(
+        SalesOrderService service = service(
                 repository, mock(SnowflakeIdGenerator.class), mock(SalesOrderMapper.class),
                 mock(TradeItemMaterialSupport.class), mock(PurchaseItemQueryAppService.class),
                 mock(PurchaseItemPieceWeightAppService.class), mock(SalesOrderItemRepository.class),
@@ -937,7 +931,7 @@ class SalesOrderServiceTest {
         PurchaseItemPieceWeightAppService pieceWeightAppService = mock(PurchaseItemPieceWeightAppService.class);
         SalesOrderItemRepository salesOrderItemRepository = mock(SalesOrderItemRepository.class);
         WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
-        SalesOrderService service = new SalesOrderService(
+        SalesOrderService service = service(
                 repository, idGenerator, mapper, materialSupport,
                 purchaseItemQueryAppService, pieceWeightAppService,
                 salesOrderItemRepository, warehouseSelectionSupport,
@@ -962,7 +956,7 @@ class SalesOrderServiceTest {
 
         when(repository.existsByOrderNoAndDeletedFlagFalse("SO-REM-001")).thenReturn(false);
         when(idGenerator.nextId()).thenReturn(1L, 11L);
-        when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(Map.of("M1", new Material()));
+        when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(materialMap("M1"));
         when(materialSupport.normalizeBatchNo(any(), eq("B1"), eq(1), eq(true))).thenReturn("B1");
         when(warehouseSelectionSupport.normalizeWarehouseName("一号库", 1, true)).thenReturn("一号库");
         when(purchaseItemQueryAppService.findSourcePurchaseOrderItemsByIds(List.of(201L))).thenReturn(
@@ -994,7 +988,7 @@ class SalesOrderServiceTest {
         PurchaseItemQueryAppService purchaseItemQueryAppService = mock(PurchaseItemQueryAppService.class);
         SalesOrderItemRepository salesOrderItemRepository = mock(SalesOrderItemRepository.class);
         WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
-        SalesOrderService service = new SalesOrderService(
+        SalesOrderService service = service(
                 repository, idGenerator, mapper, materialSupport,
                 purchaseItemQueryAppService, mock(PurchaseItemPieceWeightAppService.class),
                 salesOrderItemRepository, warehouseSelectionSupport,
@@ -1021,7 +1015,7 @@ class SalesOrderServiceTest {
 
         when(repository.existsByOrderNoAndDeletedFlagFalse("SO-DIRECT-001")).thenReturn(false);
         when(idGenerator.nextId()).thenReturn(1L, 11L);
-        when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(Map.of("M1", new Material()));
+        when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(materialMap("M1"));
         when(materialSupport.normalizeBatchNo(any(), eq("B1"), eq(1), eq(true))).thenReturn("B1");
         when(warehouseSelectionSupport.normalizeWarehouseName("一号库", 1, true)).thenReturn("一号库");
         when(purchaseItemQueryAppService.findSourceInboundItemsByIds(List.of(101L))).thenReturn(
@@ -1049,7 +1043,7 @@ class SalesOrderServiceTest {
         PurchaseItemPieceWeightAppService pieceWeightAppService = mock(PurchaseItemPieceWeightAppService.class);
         SalesOrderItemRepository salesOrderItemRepository = mock(SalesOrderItemRepository.class);
         WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
-        SalesOrderService service = new SalesOrderService(
+        SalesOrderService service = service(
                 repository, idGenerator, mapper, materialSupport,
                 purchaseItemQueryAppService, pieceWeightAppService,
                 salesOrderItemRepository, warehouseSelectionSupport,
@@ -1069,7 +1063,7 @@ class SalesOrderServiceTest {
 
         when(repository.existsByOrderNoAndDeletedFlagFalse("SO-FINALIZE-ERR")).thenReturn(false);
         when(idGenerator.nextId()).thenReturn(1L, 11L);
-        when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(Map.of("M1", new Material()));
+        when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(materialMap("M1"));
         when(materialSupport.normalizeBatchNo(any(), eq("B1"), eq(1), eq(true))).thenReturn("B1");
         when(warehouseSelectionSupport.normalizeWarehouseName("一号库", 1, true)).thenReturn("一号库");
         when(purchaseItemQueryAppService.findSourcePurchaseOrderItemsByIds(List.of(999L))).thenReturn(List.of());
@@ -1093,7 +1087,7 @@ class SalesOrderServiceTest {
         PurchaseItemPieceWeightAppService pieceWeightAppService = mock(PurchaseItemPieceWeightAppService.class);
         SalesOrderItemRepository salesOrderItemRepository = mock(SalesOrderItemRepository.class);
         WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
-        SalesOrderService service = new SalesOrderService(
+        SalesOrderService service = service(
                 repository, idGenerator, mapper, materialSupport,
                 purchaseItemQueryAppService, pieceWeightAppService,
                 salesOrderItemRepository, warehouseSelectionSupport,
@@ -1128,7 +1122,7 @@ class SalesOrderServiceTest {
 
         when(repository.existsByOrderNoAndDeletedFlagFalse("SO-MIX-001")).thenReturn(false);
         when(idGenerator.nextId()).thenReturn(1L, 2L, 11L, 12L);
-        when(materialSupport.loadMaterialMap(List.of("M1", "M2"))).thenReturn(Map.of("M1", new Material(), "M2", new Material()));
+        when(materialSupport.loadMaterialMap(List.of("M1", "M2"))).thenReturn(materialMap("M1", "M2"));
         when(materialSupport.normalizeBatchNo(any(), eq("B1"), eq(1), eq(true))).thenReturn("B1");
         when(materialSupport.normalizeBatchNo(any(), eq("B2"), eq(2), eq(true))).thenReturn("B2");
         when(warehouseSelectionSupport.normalizeWarehouseName("一号库", 1, true)).thenReturn("一号库");
@@ -1173,7 +1167,7 @@ class SalesOrderServiceTest {
         PurchaseItemPieceWeightAppService pieceWeightAppService = mock(PurchaseItemPieceWeightAppService.class);
         SalesOrderItemRepository salesOrderItemRepository = mock(SalesOrderItemRepository.class);
         WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
-        SalesOrderService service = new SalesOrderService(
+        SalesOrderService service = service(
                 repository, idGenerator, mapper, materialSupport,
                 purchaseItemQueryAppService, pieceWeightAppService,
                 salesOrderItemRepository, warehouseSelectionSupport,
@@ -1193,7 +1187,7 @@ class SalesOrderServiceTest {
 
         when(repository.existsByOrderNoAndDeletedFlagFalse("SO-PW-001")).thenReturn(false);
         when(idGenerator.nextId()).thenReturn(1L, 11L);
-        when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(Map.of("M1", new Material()));
+        when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(materialMap("M1"));
         when(materialSupport.normalizeBatchNo(any(), eq("B1"), eq(1), eq(true))).thenReturn("B1");
         when(warehouseSelectionSupport.normalizeWarehouseName("一号库", 1, true)).thenReturn("一号库");
         when(purchaseItemQueryAppService.findSourcePurchaseOrderItemsByIds(List.of(301L))).thenReturn(
@@ -1224,7 +1218,7 @@ class SalesOrderServiceTest {
         PurchaseItemQueryAppService purchaseItemQueryAppService = mock(PurchaseItemQueryAppService.class);
         SalesOrderItemRepository salesOrderItemRepository = mock(SalesOrderItemRepository.class);
         WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
-        SalesOrderService service = new SalesOrderService(
+        SalesOrderService service = service(
                 repository, idGenerator, mapper, materialSupport,
                 purchaseItemQueryAppService, mock(PurchaseItemPieceWeightAppService.class),
                 salesOrderItemRepository, warehouseSelectionSupport,
@@ -1249,7 +1243,7 @@ class SalesOrderServiceTest {
 
         when(repository.existsByOrderNoAndDeletedFlagFalse("SO-WEIGH-001")).thenReturn(false);
         when(idGenerator.nextId()).thenReturn(1L, 11L);
-        when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(Map.of("M1", new Material()));
+        when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(materialMap("M1"));
         when(materialSupport.normalizeBatchNo(any(), eq("B1"), eq(1), eq(true))).thenReturn("B1");
         when(warehouseSelectionSupport.normalizeWarehouseName("一号库", 1, true)).thenReturn("一号库");
         when(purchaseItemQueryAppService.findSourceInboundItemsByIds(List.of(401L))).thenReturn(
@@ -1276,7 +1270,7 @@ class SalesOrderServiceTest {
         SalesOrderRepository repository = mock(SalesOrderRepository.class);
         PurchaseItemQueryAppService purchaseItemQueryAppService = mock(PurchaseItemQueryAppService.class);
         SalesOrderItemRepository salesOrderItemRepository = mock(SalesOrderItemRepository.class);
-        SalesOrderService service = new SalesOrderService(
+        SalesOrderService service = service(
                 repository, mock(SnowflakeIdGenerator.class), mock(SalesOrderMapper.class),
                 mock(TradeItemMaterialSupport.class), purchaseItemQueryAppService,
                 mock(PurchaseItemPieceWeightAppService.class), salesOrderItemRepository,
@@ -1321,7 +1315,7 @@ class SalesOrderServiceTest {
         PurchaseItemQueryAppService purchaseItemQueryAppService = mock(PurchaseItemQueryAppService.class);
         SalesOrderItemRepository salesOrderItemRepository = mock(SalesOrderItemRepository.class);
         WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
-        SalesOrderService service = new SalesOrderService(
+        SalesOrderService service = service(
                 repository, idGenerator, mapper, materialSupport,
                 purchaseItemQueryAppService, mock(PurchaseItemPieceWeightAppService.class),
                 salesOrderItemRepository, warehouseSelectionSupport,
@@ -1347,7 +1341,7 @@ class SalesOrderServiceTest {
 
         when(repository.existsByOrderNoAndDeletedFlagFalse("SO-ZERO-QTY")).thenReturn(false);
         when(idGenerator.nextId()).thenReturn(1L, 11L);
-        when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(Map.of("M1", new Material()));
+        when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(materialMap("M1"));
         when(materialSupport.normalizeBatchNo(any(), eq("B1"), eq(1), eq(true))).thenReturn("B1");
         when(warehouseSelectionSupport.normalizeWarehouseName("一号库", 1, true)).thenReturn("一号库");
         when(purchaseItemQueryAppService.findSourcePurchaseOrderItemsByIds(List.of(601L))).thenReturn(
@@ -1403,6 +1397,73 @@ class SalesOrderServiceTest {
         return new PurchaseItemQueryAppService.SourcePurchaseOrderItemRecord(
                 id, quantity, weightTon, null, StatusConstants.AUDITED,
                 brand, material, spec, materialCode, category, unit, warehouseName, batchNo);
+    }
+
+    private SalesOrderService service(SalesOrderRepository repository,
+                                      SnowflakeIdGenerator idGenerator,
+                                      SalesOrderMapper salesOrderMapper,
+                                      TradeItemMaterialSupport tradeItemMaterialSupport,
+                                      PurchaseItemQueryAppService purchaseItemQueryAppService,
+                                      PurchaseItemPieceWeightAppService purchaseItemPieceWeightAppService,
+                                      SalesOrderItemRepository salesOrderItemRepository,
+                                      WarehouseSelectionSupport warehouseSelectionSupport,
+                                      SalesOrderItemMapper salesOrderItemMapper,
+                                      WorkflowTransitionGuard workflowTransitionGuard) {
+        return service(
+                repository,
+                idGenerator,
+                salesOrderMapper,
+                tradeItemMaterialSupport,
+                purchaseItemQueryAppService,
+                purchaseItemPieceWeightAppService,
+                salesOrderItemRepository,
+                warehouseSelectionSupport,
+                salesOrderItemMapper,
+                workflowTransitionGuard,
+                null,
+                null
+        );
+    }
+
+    private SalesOrderService service(SalesOrderRepository repository,
+                                      SnowflakeIdGenerator idGenerator,
+                                      SalesOrderMapper salesOrderMapper,
+                                      TradeItemMaterialSupport tradeItemMaterialSupport,
+                                      PurchaseItemQueryAppService purchaseItemQueryAppService,
+                                      PurchaseItemPieceWeightAppService purchaseItemPieceWeightAppService,
+                                      SalesOrderItemRepository salesOrderItemRepository,
+                                      WarehouseSelectionSupport warehouseSelectionSupport,
+                                      SalesOrderItemMapper salesOrderItemMapper,
+                                      WorkflowTransitionGuard workflowTransitionGuard,
+                                      SalesOrderOutboundPricingSyncService outboundPricingSyncService,
+                                      SalesOrderCompletionSyncService completionSyncService) {
+        SalesOrderPurchaseAllocationService purchaseAllocationService =
+                new SalesOrderPurchaseAllocationService(purchaseItemQueryAppService, purchaseItemPieceWeightAppService);
+        SalesOrderAuditedPricingService auditedPricingService =
+                new SalesOrderAuditedPricingService(outboundPricingSyncService);
+        SalesOrderApplyService applyService = new SalesOrderApplyService(
+                tradeItemMaterialSupport,
+                new SalesOrderSourceAllocationService(purchaseItemQueryAppService, salesOrderItemRepository),
+                new SalesOrderWeightResolver(purchaseItemPieceWeightAppService),
+                purchaseAllocationService,
+                salesOrderItemMapper,
+                workflowTransitionGuard
+        );
+        return new SalesOrderService(
+                repository,
+                idGenerator,
+                new SalesOrderResponseAssembler(salesOrderMapper),
+                applyService,
+                purchaseAllocationService,
+                auditedPricingService,
+                new SalesOrderProtectedUpdatePolicy(auditedPricingService),
+                new SalesOrderSaveService(
+                        repository,
+                        purchaseAllocationService,
+                        completionSyncService,
+                        new SalesOrderCompletionPolicy()
+                )
+        );
     }
 
     private com.leo.erp.sales.order.domain.entity.SalesOrder auditedSalesOrder(
@@ -1538,5 +1599,13 @@ class SalesOrderServiceTest {
             return null;
         }).when(mapper).applyItemFields(any(), any(), any(), anyInt(), any(), any(), any());
         return mapper;
+    }
+
+    private Map<String, TradeMaterialSnapshot> materialMap(String... materialCodes) {
+        Map<String, TradeMaterialSnapshot> materialMap = new java.util.LinkedHashMap<>();
+        for (String materialCode : materialCodes) {
+            materialMap.put(materialCode, new TradeMaterialSnapshot(materialCode, Boolean.FALSE));
+        }
+        return materialMap;
     }
 }
