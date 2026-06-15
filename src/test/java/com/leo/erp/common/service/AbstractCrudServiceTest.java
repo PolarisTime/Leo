@@ -5,7 +5,6 @@ import com.leo.erp.common.persistence.AbstractAuditableEntity;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.security.support.SecurityPrincipal;
-import com.leo.erp.system.norule.service.PreallocatedBusinessNoService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockHttpServletRequest;
@@ -230,7 +229,7 @@ class AbstractCrudServiceTest {
         request.addHeader("X-Preallocated-Id", "123456789");
         RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(request));
         setupAdminPrincipal();
-        PreallocatedBusinessNoService preallocatedBusinessNoService = mock(PreallocatedBusinessNoService.class);
+        BusinessPreallocationService preallocatedBusinessNoService = mock(BusinessPreallocationService.class);
         TestCrudService service = new TestCrudService();
         service.setPreallocatedBusinessNoServiceForTest(preallocatedBusinessNoService);
 
@@ -252,7 +251,7 @@ class AbstractCrudServiceTest {
         request.addHeader("X-Preallocated-Id", "123456789");
         RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(request));
         setupAdminPrincipal();
-        PreallocatedBusinessNoService preallocatedBusinessNoService = mock(PreallocatedBusinessNoService.class);
+        BusinessPreallocationService preallocatedBusinessNoService = mock(BusinessPreallocationService.class);
         TestCrudService service = new TestCrudService();
         service.setPreallocatedBusinessNoServiceForTest(preallocatedBusinessNoService);
         service.failOnSave();
@@ -266,19 +265,6 @@ class AbstractCrudServiceTest {
                 org.mockito.ArgumentMatchers.any(SecurityPrincipal.class)
         );
         verify(preallocatedBusinessNoService, never()).consume("sales-order", 123456789L);
-    }
-
-    @Test
-    void createShouldThrowWhenPreallocatedIdInvalid() {
-        MockHttpServletRequest request = new MockHttpServletRequest();
-        request.addHeader("X-Preallocated-Id", "not-a-number");
-        RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(request));
-
-        TestCrudService service = new TestCrudService();
-
-        assertThatThrownBy(() -> service.create("request"))
-                .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("格式不正确");
     }
 
     @Test
@@ -312,7 +298,7 @@ class AbstractCrudServiceTest {
     void resolveCreateBusinessNoShouldUseSnowflakeIdWhenConfigured() {
         TestCrudService service = new TestCrudService();
         service.enableSnowflakeIdAsBusinessNo();
-        service.setSystemSwitchServiceForTest(mock(com.leo.erp.system.norule.service.SystemSwitchService.class,
+        service.setCrudRuntimeSettingsForTest(mock(CrudRuntimeSettings.class,
                 (invocation) -> {
                     if (invocation.getMethod().getName().equals("shouldUseSnowflakeIdAsBusinessNo")) return true;
                     return null;
@@ -327,7 +313,7 @@ class AbstractCrudServiceTest {
     void resolveCreateBusinessNoShouldThrowWhenSnowflakeIdInvalid() {
         TestCrudService service = new TestCrudService();
         service.enableSnowflakeIdAsBusinessNo();
-        service.setSystemSwitchServiceForTest(mock(com.leo.erp.system.norule.service.SystemSwitchService.class,
+        service.setCrudRuntimeSettingsForTest(mock(CrudRuntimeSettings.class,
                 (invocation) -> {
                     if (invocation.getMethod().getName().equals("shouldUseSnowflakeIdAsBusinessNo")) return true;
                     return null;
@@ -408,7 +394,7 @@ class AbstractCrudServiceTest {
         TestCrudService service = new TestCrudService();
         service.addEntity(1L, "DRAFT");
         service.enableAdminViewDeleted();
-        service.setSystemSwitchServiceForTest(mock(com.leo.erp.system.norule.service.SystemSwitchService.class,
+        service.setCrudRuntimeSettingsForTest(mock(CrudRuntimeSettings.class,
                 (invocation) -> {
                     if (invocation.getMethod().getName().equals("shouldAdminSeeDeletedRecords")) return true;
                     return null;
@@ -424,7 +410,7 @@ class AbstractCrudServiceTest {
         SecurityContextHolder.clearContext();
         TestCrudService service = new TestCrudService();
         service.enableAdminViewDeleted();
-        service.setSystemSwitchServiceForTest(mock(com.leo.erp.system.norule.service.SystemSwitchService.class,
+        service.setCrudRuntimeSettingsForTest(mock(CrudRuntimeSettings.class,
                 (invocation) -> {
                     if (invocation.getMethod().getName().equals("shouldAdminSeeDeletedRecords")) return true;
                     return null;
@@ -445,45 +431,9 @@ class AbstractCrudServiceTest {
     }
 
     @Test
-    void createShouldUsePreallocatedIdWhenNoConsumeService() {
-        MockHttpServletRequest request = new MockHttpServletRequest();
-        request.addHeader("X-Preallocated-Id", "999");
-        RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(request));
-
-        TestCrudService service = new TestCrudService();
-
-        var result = service.create("request");
-        assertThat(result).isEqualTo("response");
-    }
-
-    @Test
-    void createShouldIgnoreBlankPreallocatedId() {
-        MockHttpServletRequest request = new MockHttpServletRequest();
-        request.addHeader("X-Preallocated-Id", "  ");
-        RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(request));
-
-        TestCrudService service = new TestCrudService();
-
-        var result = service.create("request");
-        assertThat(result).isEqualTo("response");
-    }
-
-    @Test
-    void createShouldIgnoreNegativePreallocatedId() {
-        MockHttpServletRequest request = new MockHttpServletRequest();
-        request.addHeader("X-Preallocated-Id", "-5");
-        RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(request));
-
-        TestCrudService service = new TestCrudService();
-
-        var result = service.create("request");
-        assertThat(result).isEqualTo("response");
-    }
-
-    @Test
     void resolveCreateBusinessNoShouldCallNextBusinessNoWhenServiceAvailable() {
         TestCrudService service = new TestCrudService();
-        var noRuleService = mock(com.leo.erp.system.norule.service.NoRuleSequenceService.class);
+        var noRuleService = mock(BusinessNumberAllocator.class);
         when(noRuleService.nextValueByModuleKey("test")).thenReturn("NO-001");
         service.setNoRuleSequenceServiceForTest(noRuleService);
 
@@ -492,9 +442,31 @@ class AbstractCrudServiceTest {
     }
 
     @Test
+    void createShouldUseReservedBusinessNoFromRequest() {
+        setupAdminPrincipal();
+        TestCrudService service = new TestCrudService();
+        service.useBusinessNoAsRequest();
+        var noRuleService = mock(BusinessNumberAllocator.class);
+        service.setNoRuleSequenceServiceForTest(noRuleService);
+        BusinessPreallocationService preallocationService = mock(BusinessPreallocationService.class);
+        when(preallocationService.isBusinessNoReservedByPrincipal(
+                org.mockito.ArgumentMatchers.eq("test"),
+                org.mockito.ArgumentMatchers.eq("NO-001"),
+                org.mockito.ArgumentMatchers.any(SecurityPrincipal.class)
+        )).thenReturn(true);
+        service.setPreallocatedBusinessNoServiceForTest(preallocationService);
+
+        service.create("NO-001");
+
+        assertThat(service.lastAppliedRequest()).isEqualTo("NO-001");
+        verify(noRuleService, never()).nextValueByModuleKey("test");
+        verify(preallocationService).consumeBusinessNo("test", "NO-001");
+    }
+
+    @Test
     void resolveCreateBusinessNoShouldThrowWhenServiceReturnsBlank() {
         TestCrudService service = new TestCrudService();
-        var noRuleService = mock(com.leo.erp.system.norule.service.NoRuleSequenceService.class);
+        var noRuleService = mock(BusinessNumberAllocator.class);
         when(noRuleService.nextValueByModuleKey("test")).thenReturn("  ");
         service.setNoRuleSequenceServiceForTest(noRuleService);
 
@@ -506,7 +478,7 @@ class AbstractCrudServiceTest {
     @Test
     void resolveCreateBusinessNoShouldThrowWhenServiceReturnsNull() {
         TestCrudService service = new TestCrudService();
-        var noRuleService = mock(com.leo.erp.system.norule.service.NoRuleSequenceService.class);
+        var noRuleService = mock(BusinessNumberAllocator.class);
         when(noRuleService.nextValueByModuleKey("test")).thenReturn(null);
         service.setNoRuleSequenceServiceForTest(noRuleService);
 
@@ -540,6 +512,8 @@ class AbstractCrudServiceTest {
         private boolean useSnowflakeIdAsBusinessNo = false;
         private boolean adminViewDeleted = false;
         private boolean failOnSave = false;
+        private boolean useBusinessNoAsRequest = false;
+        private String lastAppliedRequest;
 
         TestCrudService() {
             super(new SnowflakeIdGenerator(0L));
@@ -564,16 +538,16 @@ class AbstractCrudServiceTest {
             this.useSnowflakeIdAsBusinessNo = true;
         }
 
-        void setSystemSwitchServiceForTest(com.leo.erp.system.norule.service.SystemSwitchService service) {
-            setSystemSwitchService(service);
+        void setCrudRuntimeSettingsForTest(CrudRuntimeSettings service) {
+            setCrudRuntimeSettings(service);
         }
 
-        void setNoRuleSequenceServiceForTest(com.leo.erp.system.norule.service.NoRuleSequenceService service) {
-            setNoRuleSequenceService(service);
+        void setNoRuleSequenceServiceForTest(BusinessNumberAllocator service) {
+            setBusinessNumberAllocator(service);
         }
 
-        void setPreallocatedBusinessNoServiceForTest(PreallocatedBusinessNoService service) {
-            setPreallocatedBusinessNoService(service);
+        void setPreallocatedBusinessNoServiceForTest(BusinessPreallocationService service) {
+            setBusinessPreallocationService(service);
         }
 
         void enableAdminViewDeleted() {
@@ -582,6 +556,21 @@ class AbstractCrudServiceTest {
 
         void failOnSave() {
             this.failOnSave = true;
+        }
+
+        void useBusinessNoAsRequest() {
+            this.useBusinessNoAsRequest = true;
+        }
+
+        String lastAppliedRequest() {
+            return lastAppliedRequest;
+        }
+
+        @Override
+        protected String normalizeCreateRequest(String request, long entityId) {
+            return useBusinessNoAsRequest
+                    ? resolveCreateBusinessNo("test", request, entityId)
+                    : super.normalizeCreateRequest(request, entityId);
         }
 
         @Override
@@ -610,6 +599,7 @@ class AbstractCrudServiceTest {
 
         @Override
         protected void apply(TestEntity entity, String request) {
+            lastAppliedRequest = request;
         }
 
         @Override

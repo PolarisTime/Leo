@@ -3,10 +3,7 @@ package com.leo.erp.common.support;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
-import com.leo.erp.master.material.domain.entity.Material;
-import com.leo.erp.master.material.repository.MaterialRepository;
-import com.leo.erp.system.norule.service.NoRuleSequenceService;
-import com.leo.erp.system.norule.service.SystemSwitchService;
+import com.leo.erp.common.service.BusinessNumberAllocator;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
@@ -22,29 +19,29 @@ public class TradeItemMaterialSupport {
 
     private static final String MATERIAL_CACHE_KEY = "leo:material:all";
     private static final Duration MATERIAL_CACHE_TTL = Duration.ofMinutes(10);
-    private static final TypeReference<List<MaterialSnapshot>> MATERIAL_LIST_TYPE = new TypeReference<>() { };
+    private static final TypeReference<List<TradeMaterialSnapshot>> MATERIAL_LIST_TYPE = new TypeReference<>() { };
 
-    private final MaterialRepository materialRepository;
+    private final MaterialCatalog materialCatalog;
     private final RedisJsonCacheSupport redisJsonCacheSupport;
-    private final SystemSwitchService systemSwitchService;
-    private final NoRuleSequenceService noRuleSequenceService;
+    private final TradeItemRuntimeSettings tradeItemRuntimeSettings;
+    private final BusinessNumberAllocator businessNumberAllocator;
 
     @Autowired
-    public TradeItemMaterialSupport(MaterialRepository materialRepository,
+    public TradeItemMaterialSupport(MaterialCatalog materialCatalog,
                                     RedisJsonCacheSupport redisJsonCacheSupport,
-                                    SystemSwitchService systemSwitchService,
-                                    NoRuleSequenceService noRuleSequenceService) {
-        this.materialRepository = materialRepository;
+                                    TradeItemRuntimeSettings tradeItemRuntimeSettings,
+                                    BusinessNumberAllocator businessNumberAllocator) {
+        this.materialCatalog = materialCatalog;
         this.redisJsonCacheSupport = redisJsonCacheSupport;
-        this.systemSwitchService = systemSwitchService;
-        this.noRuleSequenceService = noRuleSequenceService;
+        this.tradeItemRuntimeSettings = tradeItemRuntimeSettings;
+        this.businessNumberAllocator = businessNumberAllocator;
     }
 
-    public TradeItemMaterialSupport(MaterialRepository materialRepository) {
-        this(materialRepository, null, null, null);
+    public TradeItemMaterialSupport(MaterialCatalog materialCatalog) {
+        this(materialCatalog, null, null, null);
     }
 
-    public Map<String, Material> loadMaterialMap(Collection<String> materialCodes) {
+    public Map<String, TradeMaterialSnapshot> loadMaterialMap(Collection<String> materialCodes) {
         List<String> normalizedCodes = materialCodes == null ? List.of() : materialCodes.stream()
                 .filter(Objects::nonNull)
                 .map(String::trim)
@@ -55,10 +52,10 @@ public class TradeItemMaterialSupport {
             return Map.of();
         }
 
-        Map<String, Material> activeMaterialsByCode = loadActiveMaterialsByCode();
-        Map<String, Material> materialMap = new LinkedHashMap<>();
+        Map<String, TradeMaterialSnapshot> activeMaterialsByCode = loadActiveMaterialsByCode();
+        Map<String, TradeMaterialSnapshot> materialMap = new LinkedHashMap<>();
         normalizedCodes.forEach(code -> {
-            Material material = activeMaterialsByCode.get(code);
+            TradeMaterialSnapshot material = activeMaterialsByCode.get(code);
             if (material != null) {
                 materialMap.put(code, material);
             }
@@ -73,7 +70,7 @@ public class TradeItemMaterialSupport {
         return materialMap;
     }
 
-    public String normalizeBatchNo(Material material, String batchNo, int lineNo, boolean requiredWhenEnabled) {
+    public String normalizeBatchNo(TradeMaterialSnapshot material, String batchNo, int lineNo, boolean requiredWhenEnabled) {
         String normalized = batchNo == null ? null : batchNo.trim();
         if (normalized != null && normalized.isBlank()) {
             normalized = null;
@@ -108,49 +105,41 @@ public class TradeItemMaterialSupport {
         redisJsonCacheSupport.delete(MATERIAL_CACHE_KEY);
     }
 
-    private Map<String, Material> loadActiveMaterialsByCode() {
-        List<MaterialSnapshot> snapshots;
-        if (materialRepository == null) {
+    private Map<String, TradeMaterialSnapshot> loadActiveMaterialsByCode() {
+        List<TradeMaterialSnapshot> snapshots;
+        if (materialCatalog == null) {
             snapshots = List.of();
         } else if (redisJsonCacheSupport == null) {
-            snapshots = materialRepository.findByDeletedFlagFalseOrderByMaterialCodeAsc().stream()
-                    .map(material -> new MaterialSnapshot(material.getMaterialCode(), Boolean.TRUE.equals(material.getBatchNoEnabled())))
-                    .toList();
+            snapshots = materialCatalog.listActiveMaterials();
         } else {
             snapshots = redisJsonCacheSupport.getOrLoad(
                     MATERIAL_CACHE_KEY,
                     MATERIAL_CACHE_TTL,
                     MATERIAL_LIST_TYPE,
-                    () -> materialRepository.findByDeletedFlagFalseOrderByMaterialCodeAsc().stream()
-                            .map(material -> new MaterialSnapshot(material.getMaterialCode(), Boolean.TRUE.equals(material.getBatchNoEnabled())))
-                            .toList()
+                    materialCatalog::listActiveMaterials
             );
         }
 
-        Map<String, Material> materialsByCode = new LinkedHashMap<>();
+        Map<String, TradeMaterialSnapshot> materialsByCode = new LinkedHashMap<>();
         snapshots.forEach(snapshot -> {
-            Material material = new Material();
-            material.setMaterialCode(snapshot.materialCode());
-            material.setBatchNoEnabled(snapshot.batchNoEnabled());
-            materialsByCode.put(snapshot.materialCode(), material);
+            if (snapshot.materialCode() != null && !snapshot.materialCode().isBlank()) {
+                materialsByCode.put(snapshot.materialCode(), snapshot);
+            }
         });
         return materialsByCode;
     }
 
     private boolean shouldAutoGenerateBatchNo() {
-        return systemSwitchService != null
-                && noRuleSequenceService != null
-                && systemSwitchService.shouldAutoGenerateBatchNo();
+        return tradeItemRuntimeSettings != null
+                && businessNumberAllocator != null
+                && tradeItemRuntimeSettings.shouldAutoGenerateBatchNo();
     }
 
-    private boolean isBatchManaged(Material material) {
-        return Boolean.TRUE.equals(material.getBatchNoEnabled()) || shouldForceBatchManagement();
+    private boolean isBatchManaged(TradeMaterialSnapshot material) {
+        return Boolean.TRUE.equals(material.batchNoEnabled()) || shouldForceBatchManagement();
     }
 
     private boolean shouldForceBatchManagement() {
-        return systemSwitchService != null && systemSwitchService.shouldForceBatchManagement();
-    }
-
-    private record MaterialSnapshot(String materialCode, Boolean batchNoEnabled) {
+        return tradeItemRuntimeSettings != null && tradeItemRuntimeSettings.shouldForceBatchManagement();
     }
 }
