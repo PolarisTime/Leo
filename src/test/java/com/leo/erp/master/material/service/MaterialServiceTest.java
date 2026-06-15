@@ -819,7 +819,8 @@ class MaterialServiceTest {
         );
         var referenceGuard = mock(MasterDataReferenceGuard.class);
         var tradeItemMaterialSupport = mock(TradeItemMaterialSupport.class);
-        var service = new MaterialService(repository, new SnowflakeIdGenerator(1), null, tradeItemMaterialSupport, null, null, null, referenceGuard);
+        var service = new MaterialService(repository, new SnowflakeIdGenerator(1), null, tradeItemMaterialSupport,
+                null, null, null, new MaterialReferenceGuard(referenceGuard));
 
         service.delete(1L);
 
@@ -844,7 +845,8 @@ class MaterialServiceTest {
         doThrow(new BusinessException(ErrorCode.BUSINESS_ERROR, "该商品已被业务或主数据引用"))
                 .when(referenceGuard).assertNoReferences(eq("该商品"), any(List.class));
         var tradeItemMaterialSupport = mock(TradeItemMaterialSupport.class);
-        var service = new MaterialService(repository, new SnowflakeIdGenerator(1), null, tradeItemMaterialSupport, null, null, null, referenceGuard);
+        var service = new MaterialService(repository, new SnowflakeIdGenerator(1), null, tradeItemMaterialSupport,
+                null, null, null, new MaterialReferenceGuard(referenceGuard));
 
         assertThatThrownBy(() -> service.delete(1L))
                 .isInstanceOf(BusinessException.class)

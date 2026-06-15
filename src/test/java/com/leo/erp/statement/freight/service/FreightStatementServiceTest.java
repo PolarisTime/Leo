@@ -201,11 +201,21 @@ class FreightStatementServiceTest {
     private FreightStatementService service(FreightStatementRepository repo,
                                             FreightBillRepository billRepo,
                                             CarrierRepository carrierRepo) {
+        FreightStatementSourceService sourceService = new FreightStatementSourceService(repo, billRepo);
+        FreightStatementViewAssembler viewAssembler = new FreightStatementViewAssembler(attachmentBindingService);
         return new FreightStatementService(
-                repo, new SnowflakeIdGenerator(1),
-                billRepo, attachmentBindingService,
-                statementSettlementSyncService, workflowTransitionGuard,
-                freightStatementWebMapper, carrierRepo
+                repo,
+                new SnowflakeIdGenerator(1),
+                statementSettlementSyncService,
+                freightStatementWebMapper,
+                sourceService,
+                viewAssembler,
+                new FreightStatementPageAssembler(viewAssembler),
+                new FreightStatementApplyService(
+                        workflowTransitionGuard,
+                        new FreightStatementCarrierResolver(carrierRepo),
+                        sourceService
+                )
         );
     }
 

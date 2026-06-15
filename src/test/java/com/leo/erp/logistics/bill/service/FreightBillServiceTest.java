@@ -28,6 +28,7 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -49,10 +50,20 @@ class FreightBillServiceTest {
     }
 
     private FreightBillService createService(FreightBillRepository repository) {
+        FreightBillSourceService sourceService = mock(FreightBillSourceService.class);
+        when(sourceService.validateSources(any(FreightBillRequest.class), any()))
+                .thenReturn(new FreightBillSourceService.SourceValidationContext(Map.of()));
+        return createService(repository, sourceService);
+    }
+
+    private FreightBillService createService(FreightBillRepository repository,
+                                             FreightBillSourceService sourceService) {
         return new FreightBillService(
                 repository,
                 new SnowflakeIdGenerator(),
                 Mappers.getMapper(FreightBillMapper.class),
+                sourceService,
+                new FreightBillApplyService(),
                 mock(WorkflowTransitionGuard.class)
         );
     }
@@ -699,20 +710,13 @@ class FreightBillServiceTest {
     void shouldThrowWhenSourceOutboundAlreadyOccupied() {
         FreightBillRepository repository = mock(FreightBillRepository.class);
         when(repository.existsByBillNoAndDeletedFlagFalse("FB-OCC")).thenReturn(false);
-
-        FreightBill occupiedBill = new FreightBill();
-        occupiedBill.setId(2L);
-        occupiedBill.setBillNo("FB-OTHER");
-        occupiedBill.setCarrierName("物流乙");
-
-        FreightBillItem occupiedItem = new FreightBillItem();
-        occupiedItem.setSourceNo("OB-DUP");
-        occupiedBill.setItems(List.of(occupiedItem));
-
-        when(repository.findAllBySourceNosExcludingCurrentBill(anyCollection(), any()))
-                .thenReturn(List.of(occupiedBill));
-
-        FreightBillService service = createService(repository);
+        FreightBillSourceService sourceService = mock(FreightBillSourceService.class);
+        when(sourceService.validateSources(any(FreightBillRequest.class), any()))
+                .thenThrow(new BusinessException(
+                        com.leo.erp.common.error.ErrorCode.BUSINESS_ERROR,
+                        "销售出库单OB-DUP已归集到物流单FB-OTHER"
+                ));
+        FreightBillService service = createService(repository, sourceService);
 
         FreightBillItemRequest item = buildItemRequest("OB-DUP");
 
@@ -745,20 +749,13 @@ class FreightBillServiceTest {
     void shouldIncludeCarrierNameInOccupiedErrorMessage() {
         FreightBillRepository repository = mock(FreightBillRepository.class);
         when(repository.existsByBillNoAndDeletedFlagFalse("FB-OCC2")).thenReturn(false);
-
-        FreightBill occupiedBill = new FreightBill();
-        occupiedBill.setId(2L);
-        occupiedBill.setBillNo("FB-EXIST");
-        occupiedBill.setCarrierName("快速物流");
-
-        FreightBillItem occupiedItem = new FreightBillItem();
-        occupiedItem.setSourceNo("SRC-001");
-        occupiedBill.setItems(List.of(occupiedItem));
-
-        when(repository.findAllBySourceNosExcludingCurrentBill(anyCollection(), any()))
-                .thenReturn(List.of(occupiedBill));
-
-        FreightBillService service = createService(repository);
+        FreightBillSourceService sourceService = mock(FreightBillSourceService.class);
+        when(sourceService.validateSources(any(FreightBillRequest.class), any()))
+                .thenThrow(new BusinessException(
+                        com.leo.erp.common.error.ErrorCode.BUSINESS_ERROR,
+                        "销售出库单SRC-001已归集到物流单FB-EXIST（物流商：快速物流）"
+                ));
+        FreightBillService service = createService(repository, sourceService);
 
         FreightBillItemRequest item = buildItemRequest("SRC-001");
 

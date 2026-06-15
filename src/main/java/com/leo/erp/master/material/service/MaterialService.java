@@ -9,8 +9,6 @@ import com.leo.erp.common.excel.service.ExcelImportService;
 import com.leo.erp.common.excel.service.ExcelTemplateService;
 import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.service.AbstractCrudService;
-import com.leo.erp.common.support.MasterDataReferenceGuard;
-import com.leo.erp.common.support.MasterDataReferenceGuard.ReferenceCheck;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.TradeItemMaterialSupport;
 import com.leo.erp.common.support.TradeItemCalculator;
@@ -69,7 +67,7 @@ public class MaterialService extends AbstractCrudService<Material, MaterialReque
     private final ExcelExportService excelExportService;
     private final ExcelImportService excelImportService;
     private final ExcelTemplateService excelTemplateService;
-    private final MasterDataReferenceGuard referenceGuard;
+    private final MaterialReferenceGuard materialReferenceGuard;
 
     @Autowired
     public MaterialService(MaterialRepository materialRepository,
@@ -79,7 +77,7 @@ public class MaterialService extends AbstractCrudService<Material, MaterialReque
                            ExcelExportService excelExportService,
                            ExcelImportService excelImportService,
                            ExcelTemplateService excelTemplateService,
-                           MasterDataReferenceGuard referenceGuard) {
+                           MaterialReferenceGuard materialReferenceGuard) {
         super(snowflakeIdGenerator);
         this.materialRepository = materialRepository;
         this.materialMapper = materialMapper;
@@ -87,7 +85,7 @@ public class MaterialService extends AbstractCrudService<Material, MaterialReque
         this.excelExportService = excelExportService;
         this.excelImportService = excelImportService;
         this.excelTemplateService = excelTemplateService;
-        this.referenceGuard = referenceGuard;
+        this.materialReferenceGuard = materialReferenceGuard;
     }
 
     private static final String[] MATERIAL_SEARCH_FIELDS = {
@@ -145,10 +143,7 @@ public class MaterialService extends AbstractCrudService<Material, MaterialReque
 
     @Override
     protected void beforeDelete(Material entity) {
-        if (referenceGuard == null) {
-            return;
-        }
-        referenceGuard.assertNoReferences("该商品", materialReferences(entity));
+        materialReferenceGuard.assertNoReferences(entity);
     }
 
     @Override
@@ -432,92 +427,6 @@ public class MaterialService extends AbstractCrudService<Material, MaterialReque
         if (materialRepository.existsByMaterialCodeAndDeletedFlagFalse(materialCode)) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "商品编码已存在");
         }
-    }
-
-    private List<ReferenceCheck> materialReferences(Material entity) {
-        String materialCode = entity.getMaterialCode();
-        return List.of(
-                ReferenceCheck.when(
-                        "po_purchase_order_item",
-                        "material_code",
-                        materialCode,
-                        "EXISTS (SELECT 1 FROM po_purchase_order parent "
-                                + "WHERE parent.id = po_purchase_order_item.order_id "
-                                + "AND parent.deleted_flag = false)"
-                ),
-                ReferenceCheck.when(
-                        "po_purchase_inbound_item",
-                        "material_code",
-                        materialCode,
-                        "EXISTS (SELECT 1 FROM po_purchase_inbound parent "
-                                + "WHERE parent.id = po_purchase_inbound_item.inbound_id "
-                                + "AND parent.deleted_flag = false)"
-                ),
-                ReferenceCheck.when(
-                        "so_sales_order_item",
-                        "material_code",
-                        materialCode,
-                        "EXISTS (SELECT 1 FROM so_sales_order parent "
-                                + "WHERE parent.id = so_sales_order_item.order_id "
-                                + "AND parent.deleted_flag = false)"
-                ),
-                ReferenceCheck.when(
-                        "so_sales_outbound_item",
-                        "material_code",
-                        materialCode,
-                        "EXISTS (SELECT 1 FROM so_sales_outbound parent "
-                                + "WHERE parent.id = so_sales_outbound_item.outbound_id "
-                                + "AND parent.deleted_flag = false)"
-                ),
-                ReferenceCheck.when(
-                        "lg_freight_bill_item",
-                        "material_code",
-                        materialCode,
-                        "EXISTS (SELECT 1 FROM lg_freight_bill parent "
-                                + "WHERE parent.id = lg_freight_bill_item.bill_id "
-                                + "AND parent.deleted_flag = false)"
-                ),
-                ReferenceCheck.when(
-                        "ct_purchase_contract_item",
-                        "material_code",
-                        materialCode,
-                        "EXISTS (SELECT 1 FROM ct_purchase_contract parent "
-                                + "WHERE parent.id = ct_purchase_contract_item.contract_id "
-                                + "AND parent.deleted_flag = false)"
-                ),
-                ReferenceCheck.when(
-                        "ct_sales_contract_item",
-                        "material_code",
-                        materialCode,
-                        "EXISTS (SELECT 1 FROM ct_sales_contract parent "
-                                + "WHERE parent.id = ct_sales_contract_item.contract_id "
-                                + "AND parent.deleted_flag = false)"
-                ),
-                ReferenceCheck.when(
-                        "st_customer_statement_item",
-                        "material_code",
-                        materialCode,
-                        "EXISTS (SELECT 1 FROM st_customer_statement parent "
-                                + "WHERE parent.id = st_customer_statement_item.statement_id "
-                                + "AND parent.deleted_flag = false)"
-                ),
-                ReferenceCheck.when(
-                        "st_supplier_statement_item",
-                        "material_code",
-                        materialCode,
-                        "EXISTS (SELECT 1 FROM st_supplier_statement parent "
-                                + "WHERE parent.id = st_supplier_statement_item.statement_id "
-                                + "AND parent.deleted_flag = false)"
-                ),
-                ReferenceCheck.when(
-                        "st_freight_statement_item",
-                        "material_code",
-                        materialCode,
-                        "EXISTS (SELECT 1 FROM st_freight_statement parent "
-                                + "WHERE parent.id = st_freight_statement_item.statement_id "
-                                + "AND parent.deleted_flag = false)"
-                )
-        );
     }
 
     private String resolveImportMaterialCode(String rawMaterialCode) {

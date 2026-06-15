@@ -3,46 +3,46 @@ package com.leo.erp.logistics.bill.service;
 import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.error.BusinessException;
-import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.service.AbstractCrudService;
 import com.leo.erp.common.support.BusinessStatusValidator;
-import com.leo.erp.common.support.ManagedEntityItemSupport;
-import com.leo.erp.common.support.PrecisionConstants;
+import com.leo.erp.common.support.BusinessDocumentValidator;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
-import com.leo.erp.common.support.TradeItemCalculator;
 import com.leo.erp.logistics.bill.domain.entity.FreightBill;
 import com.leo.erp.logistics.bill.domain.entity.FreightBillItem;
 import com.leo.erp.logistics.bill.repository.FreightBillRepository;
 import com.leo.erp.logistics.bill.mapper.FreightBillMapper;
 import com.leo.erp.security.permission.WorkflowTransitionGuard;
 import com.leo.erp.logistics.bill.web.dto.*;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 
-import java.math.BigDecimal;
-import java.math.RoundingMode;
-import java.util.LinkedHashSet;
-import java.util.List;
 import java.util.Optional;
-import java.util.Set;
 
 @Service
 public class FreightBillService extends AbstractCrudService<FreightBill, FreightBillRequest, FreightBillResponse> {
 
     private final FreightBillRepository repository;
     private final FreightBillMapper freightBillMapper;
+    private final FreightBillSourceService freightBillSourceService;
+    private final FreightBillApplyService freightBillApplyService;
     private final WorkflowTransitionGuard workflowTransitionGuard;
 
+    @Autowired
     public FreightBillService(FreightBillRepository repository,
                               SnowflakeIdGenerator idGenerator,
                               FreightBillMapper freightBillMapper,
+                              FreightBillSourceService freightBillSourceService,
+                              FreightBillApplyService freightBillApplyService,
                               WorkflowTransitionGuard workflowTransitionGuard) {
         super(idGenerator);
         this.repository = repository;
         this.freightBillMapper = freightBillMapper;
+        this.freightBillSourceService = freightBillSourceService;
+        this.freightBillApplyService = freightBillApplyService;
         this.workflowTransitionGuard = workflowTransitionGuard;
     }
 
@@ -188,106 +188,12 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
         entity.setStatus(nextStatus);
         entity.setRemark(request.remark());
 
-        assertSourceOutboundsNotOccupied(request, entity.getId());
-
-        BigDecimal totalWeight = BigDecimal.ZERO;
-        LinkedHashSet<String> customerNames = new LinkedHashSet<>();
-        LinkedHashSet<String> projectNames = new LinkedHashSet<>();
-        List<FreightBillItem> items = ManagedEntityItemSupport.syncById(
-                entity.getItems(),
-                request.items(),
-                FreightBillItem::getId,
-                FreightBillItemRequest::id,
-                FreightBillItem::new,
-                this::nextId,
-                FreightBillItem::setId
-        );
-        for (int i = 0; i < request.items().size(); i++) {
-            FreightBillItemRequest source = request.items().get(i);
-            FreightBillItem item = items.get(i);
-            item.setFreightBill(entity);
-            item.setLineNo(i + 1);
-            item.setSourceNo(source.sourceNo());
-            item.setCustomerName(source.customerName());
-            customerNames.add(source.customerName());
-            item.setProjectName(source.projectName());
-            projectNames.add(source.projectName());
-            item.setMaterialCode(source.materialCode());
-            item.setMaterialName(resolveMaterialName(source));
-            item.setBrand(source.brand());
-            item.setCategory(source.category());
-            item.setMaterial(source.material());
-            item.setSpec(source.spec());
-            item.setLength(source.length());
-            item.setQuantity(source.quantity());
-            item.setQuantityUnit(TradeItemCalculator.normalizeQuantityUnit(source.quantityUnit()));
-            item.setPieceWeightTon(source.pieceWeightTon());
-            item.setPiecesPerBundle(source.piecesPerBundle());
-            item.setBatchNo(source.batchNo());
-            BigDecimal weightTon = TradeItemCalculator.calculateWeightTon(source.quantity(), source.pieceWeightTon());
-            item.setWeightTon(weightTon);
-            item.setWarehouseName(source.warehouseName());
-            totalWeight = totalWeight.add(weightTon);
-        }
-        entity.getItems().sort(java.util.Comparator.comparing(FreightBillItem::getLineNo));
-        entity.setCustomerName(resolveHeaderLabel(customerNames, "多客户"));
-        entity.setProjectName(resolveHeaderLabel(projectNames, "多项目"));
-        entity.setTotalWeight(totalWeight);
-        entity.setTotalFreight(totalWeight.multiply(request.unitPrice()).setScale(PrecisionConstants.AMOUNT_SCALE, PrecisionConstants.DEFAULT_ROUNDING));
-    }
-
-    private void assertSourceOutboundsNotOccupied(FreightBillRequest request, Long currentBillId) {
-        Set<String> sourceNos = request.items().stream()
-                .map(FreightBillItemRequest::sourceNo)
-                .map(this::emptyToNull)
-                .filter(java.util.Objects::nonNull)
-                .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
-        if (sourceNos.isEmpty()) {
-            return;
-        }
-
-        List<FreightBill> occupiedBills = repository.findAllBySourceNosExcludingCurrentBill(sourceNos, currentBillId);
-        for (String sourceNo : sourceNos) {
-            for (FreightBill occupiedBill : occupiedBills) {
-                boolean matched = occupiedBill.getItems().stream()
-                        .anyMatch(item -> sourceNo.equals(emptyToNull(item.getSourceNo())));
-                if (!matched) {
-                    continue;
-                }
-                String billNo = emptyToNull(occupiedBill.getBillNo());
-                String carrierName = emptyToNull(occupiedBill.getCarrierName());
-                StringBuilder msg = new StringBuilder("销售出库单").append(sourceNo).append("已归集到物流单");
-                if (billNo != null) {
-                    msg.append(billNo);
-                }
-                if (carrierName != null) {
-                    msg.append("（物流商：").append(carrierName).append("）");
-                }
-                throw new BusinessException(ErrorCode.BUSINESS_ERROR, msg.toString());
-            }
-        }
-    }
-
-    private String resolveHeaderLabel(Set<String> values, String multipleLabel) {
-        if (values.isEmpty()) {
-            return multipleLabel;
-        }
-        if (values.size() == 1) {
-            return values.iterator().next();
-        }
-        return multipleLabel;
+        freightBillSourceService.validateSources(request, entity.getId());
+        freightBillApplyService.applyItems(entity, request, this::nextId);
     }
 
     private String emptyToNull(String value) {
-        return value == null ? null : value.trim().isEmpty() ? null : value.trim();
-    }
-
-    private String resolveMaterialName(FreightBillItemRequest source) {
-        String explicitName = emptyToNull(source.materialName());
-        if (explicitName != null) {
-            return explicitName;
-        }
-        return emptyToNull(source.brand());
+        return BusinessDocumentValidator.trimToNull(value);
     }
 
     private String resolveMaterialName(FreightBillItem item) {
