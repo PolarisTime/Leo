@@ -61,6 +61,11 @@ public class PrintPdfDrawingSupport {
     private void drawWrappedText(PdfCanvas canvas, Rectangle rectangle, String text, PdfFont font, TextStyle style) {
         float fontSize = fitMultilineFontSize(font, text, rectangle, style);
         float lineHeight = fontSize * style.lineHeightMultiplier();
+        float singleLineFontSize = fitFontSize(font, text, rectangle.getWidth(), style.fontSize(), style.minimumFontSize());
+        if (font.getWidth(text, singleLineFontSize) <= rectangle.getWidth()) {
+            drawTextLine(canvas, rectangle, text, font, style, singleLineFontSize);
+            return;
+        }
         List<String> lines = limitLines(
                 wrapLines(font, text, fontSize, rectangle.getWidth()),
                 font,
@@ -83,6 +88,20 @@ public class PrintPdfDrawingSupport {
                     .showText(line);
         }
         canvas.endText()
+                .restoreState();
+    }
+
+    private void drawTextLine(PdfCanvas canvas, Rectangle rectangle, String text, PdfFont font, TextStyle style, float fontSize) {
+        canvas.saveState()
+                .setFillColor(style.color())
+                .beginText()
+                .setFontAndSize(font, fontSize)
+                .moveText(
+                        textX(font, text, fontSize, rectangle, style.alignment()),
+                        baselineY(rectangle, fontSize, style.verticalPosition())
+                )
+                .showText(text)
+                .endText()
                 .restoreState();
     }
 
