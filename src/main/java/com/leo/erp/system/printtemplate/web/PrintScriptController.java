@@ -5,10 +5,11 @@ import com.leo.erp.security.permission.ModulePermissionGuard;
 import com.leo.erp.security.permission.RequiresPermission;
 import com.leo.erp.security.support.SecurityPrincipal;
 import com.leo.erp.system.operationlog.support.OperationLoggable;
-import com.leo.erp.system.printtemplate.service.PrintOptions;
 import com.leo.erp.system.printtemplate.service.PrintPdfFormService;
 import com.leo.erp.system.printtemplate.service.PrintScriptService;
 import com.leo.erp.system.printtemplate.service.PrintScriptService.PrintRecordItem;
+import com.leo.erp.system.printtemplate.web.dto.PrintRecordRequest;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import org.springframework.http.MediaType;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -54,16 +55,14 @@ public class PrintScriptController {
     )
     public ApiResponse<Map<String, Object>> fromRecord(
             @AuthenticationPrincipal SecurityPrincipal principal,
-            @RequestBody @NotNull Map<String, Object> payload) {
-        String moduleKey = String.valueOf(payload.getOrDefault("moduleKey", ""));
+            @Valid @RequestBody @NotNull PrintRecordRequest payload) {
+        String moduleKey = payload.moduleKey();
         modulePermissionGuard.requirePermission(principal, moduleKey, "read");
-        String templateId = String.valueOf(payload.get("templateId"));
-        Long recordId = Long.valueOf(String.valueOf(payload.get("recordId")));
         Map<String, Object> result = printScriptService.generateFromRecord(
-                templateId,
+                payload.templateId(),
                 moduleKey,
-                recordId,
-                PrintOptions.from(payload.get("printOptions"))
+                payload.recordId(),
+                payload.resolvedPrintOptions()
         );
         if ("PDF_FORM".equals(String.valueOf(result.getOrDefault("templateType", "")))) {
             byte[] pdf = printPdfFormService.generateFromPayload(result);

@@ -440,7 +440,7 @@ class PrintScriptServiceTest {
                 "1",
                 "purchase-order",
                 1L,
-                new PrintOptions(true, true, "", Map.of("抚顺新钢", "沙钢"), Map.of(), List.of())
+                new PrintRenderOptions(true, true, "", Map.of("抚顺新钢", "沙钢"), Map.of(), List.of())
         );
 
         Map<?, ?> data = (Map<?, ?>) result.get("data");
@@ -483,7 +483,7 @@ class PrintScriptServiceTest {
                 "1",
                 "purchase-order",
                 1L,
-                new PrintOptions(false, false, "", Map.of(), Map.of("11", "沙钢"), List.of())
+                new PrintRenderOptions(false, false, "", Map.of(), Map.of("11", "沙钢"), List.of())
         );
 
         List<?> items = (List<?>) result.get("items");
@@ -529,7 +529,7 @@ class PrintScriptServiceTest {
                 "1",
                 "purchase-order",
                 1L,
-                new PrintOptions(false, false, "", Map.of(), Map.of(), List.of("13", "11"))
+                new PrintRenderOptions(false, false, "", Map.of(), Map.of(), List.of("13", "11"))
         );
 
         List<?> items = (List<?>) result.get("items");

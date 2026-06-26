@@ -3,7 +3,7 @@ package com.leo.erp.sales.order.service;
 import com.leo.erp.sales.order.domain.entity.SalesOrder;
 import com.leo.erp.sales.order.domain.entity.SalesOrderItem;
 import com.leo.erp.sales.order.repository.SalesOrderRepository;
-import com.leo.erp.system.printtemplate.service.PrintOptions;
+import com.leo.erp.sales.order.service.print.SalesOrderPrintDocumentFactory;
 import org.apache.poi.ss.usermodel.DataFormatter;
 import org.apache.poi.ss.usermodel.WorkbookFactory;
 import org.junit.jupiter.api.Test;
@@ -27,7 +27,7 @@ class SalesOrderPrintExportServiceTest {
         SalesOrder order = salesOrder(8);
         when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(order));
 
-        SalesOrderPrintExportService service = new SalesOrderPrintExportService(repository);
+        SalesOrderPrintExportService service = service(repository);
 
         var file = service.exportSalesOrderPrint(1L);
 
@@ -69,11 +69,11 @@ class SalesOrderPrintExportServiceTest {
         SalesOrder order = salesOrder(2);
         when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(order));
 
-        SalesOrderPrintExportService service = new SalesOrderPrintExportService(repository);
+        SalesOrderPrintExportService service = service(repository);
 
         var file = service.exportSalesOrderPrint(
                 1L,
-                new PrintOptions(true, true, "", Map.of(), Map.of("1", "抚新"), java.util.List.of())
+                new SalesOrderPrintXlsxOptions(true, true, "", Map.of(), Map.of("1", "抚新"), java.util.List.of())
         );
 
         try (var workbook = WorkbookFactory.create(new ByteArrayInputStream(file.content()))) {
@@ -93,11 +93,11 @@ class SalesOrderPrintExportServiceTest {
         SalesOrder order = salesOrder(3);
         when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(order));
 
-        SalesOrderPrintExportService service = new SalesOrderPrintExportService(repository);
+        SalesOrderPrintExportService service = service(repository);
 
         var file = service.exportSalesOrderPrint(
                 1L,
-                new PrintOptions(false, false, "", Map.of(), Map.of(), java.util.List.of("3", "1"))
+                new SalesOrderPrintXlsxOptions(false, false, "", Map.of(), Map.of(), java.util.List.of("3", "1"))
         );
 
         try (var workbook = WorkbookFactory.create(new ByteArrayInputStream(file.content()))) {
@@ -135,6 +135,10 @@ class SalesOrderPrintExportServiceTest {
             order.getItems().add(item);
         }
         return order;
+    }
+
+    private SalesOrderPrintExportService service(SalesOrderRepository repository) {
+        return new SalesOrderPrintExportService(repository, new SalesOrderPrintDocumentFactory());
     }
 
     private String text(DataFormatter formatter, org.apache.poi.ss.usermodel.Sheet sheet, int row, int col) {
