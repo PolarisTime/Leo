@@ -3,6 +3,8 @@ package com.leo.erp.sales.order.web;
 import com.leo.erp.common.api.ApiResponse;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.api.PageResponse;
+import com.leo.erp.common.web.dto.FileDownloadResponse;
+import com.leo.erp.sales.order.service.SalesOrderPrintExportService;
 import com.leo.erp.common.web.dto.StatusUpdateRequest;
 import com.leo.erp.sales.order.service.SalesOrderService;
 import com.leo.erp.sales.order.web.dto.SalesOrderRequest;
@@ -10,6 +12,7 @@ import com.leo.erp.sales.order.web.dto.SalesOrderResponse;
 import org.junit.jupiter.api.Test;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
+import org.springframework.http.MediaType;
 
 import java.util.List;
 
@@ -23,7 +26,8 @@ import static org.mockito.Mockito.when;
 class SalesOrderControllerTest {
 
     private final SalesOrderService service = mock(SalesOrderService.class);
-    private final SalesOrderController controller = new SalesOrderController(service);
+    private final SalesOrderPrintExportService printExportService = mock(SalesOrderPrintExportService.class);
+    private final SalesOrderController controller = new SalesOrderController(service, printExportService);
 
     @Test
     void searchReturnsSalesOrderList() {
@@ -78,6 +82,24 @@ class SalesOrderControllerTest {
 
         assertThat(response.code()).isEqualTo(0);
         assertThat(response.data()).isEqualTo(order);
+    }
+
+    @Test
+    void exportPrintXlsxReturnsDownloadResponse() {
+        byte[] content = new byte[]{1, 2, 3};
+        when(printExportService.exportSalesOrderPrint(1L)).thenReturn(new FileDownloadResponse(
+                "SO-001-套打.xlsx",
+                MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
+                content
+        ));
+
+        var response = controller.exportPrintXlsx(1L);
+
+        assertThat(response.getHeaders().getContentType().toString())
+                .isEqualTo("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+        assertThat(response.getHeaders().getContentDisposition().getFilename()).isEqualTo("SO-001-套打.xlsx");
+        assertThat(response.getBody()).isEqualTo(content);
+        verify(printExportService).exportSalesOrderPrint(1L);
     }
 
     @Test
