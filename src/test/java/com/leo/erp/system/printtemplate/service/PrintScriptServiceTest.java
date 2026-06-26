@@ -242,6 +242,143 @@ class PrintScriptServiceTest {
     }
 
     @Test
+    void shouldPaginateSalesOrderA5WithoutTruncatingRows() {
+        JdbcTemplate jdbc = mock(JdbcTemplate.class);
+        PrintScriptService service = printScriptService(repositoryWithTemplateName(
+                "sales-order",
+                "A5套打模版",
+                "COORD",
+                """
+                        LODOP.PRINT_INIT("A5套打模版");
+                        {{#each details}}
+                        {{#if needsNewPage}}LODOP.NewPage();{{/if}}
+                        LODOP.ADD_PRINT_TEXT({{rowTop}},10,80,16,"{{index}}");
+                        {{/each}}
+                        """
+        ), jdbc);
+
+        when(jdbc.queryForMap(anyString(), eq(1L))).thenReturn(Map.of(
+                "id", 1L,
+                "order_no", "SO-001",
+                "project_name", "项目A",
+                "deleted_flag", false
+        ));
+        when(jdbc.queryForList(anyString(), eq(1L))).thenReturn(List.of(
+                Map.of("line_no", 1, "quantity", 1, "weight_ton", new BigDecimal("1.000")),
+                Map.of("line_no", 2, "quantity", 2, "weight_ton", new BigDecimal("2.000")),
+                Map.of("line_no", 3, "quantity", 3, "weight_ton", new BigDecimal("3.000")),
+                Map.of("line_no", 4, "quantity", 4, "weight_ton", new BigDecimal("4.000")),
+                Map.of("line_no", 5, "quantity", 5, "weight_ton", new BigDecimal("5.000")),
+                Map.of("line_no", 6, "quantity", 6, "weight_ton", new BigDecimal("6.000")),
+                Map.of("line_no", 7, "quantity", 7, "weight_ton", new BigDecimal("7.000")),
+                Map.of("line_no", 8, "quantity", 8, "weight_ton", new BigDecimal("8.000"))
+        ));
+        when(jdbc.queryForList(anyString(), eq(String.class), eq("SO-001"))).thenReturn(List.of());
+
+        Map<String, Object> result = service.generateFromRecord("1", "sales-order", 1L);
+
+        List<?> items = (List<?>) result.get("items");
+        assertThat(items).hasSize(8);
+        Map<?, ?> seventhItem = (Map<?, ?>) items.get(6);
+        assertThat(seventhItem.get("index")).isEqualTo("7");
+        assertThat(seventhItem.get("rowTop")).isEqualTo("407");
+        Map<?, ?> eighthItem = (Map<?, ?>) items.get(7);
+        assertThat(eighthItem.get("index")).isEqualTo("8");
+        assertThat(eighthItem.get("rowTop")).isEqualTo("161");
+        assertThat(eighthItem.get("needsNewPage")).isEqualTo("true");
+        assertThat(eighthItem.get("totalQuantity")).isEqualTo("36");
+        assertThat(eighthItem.get("totalWeight")).isEqualTo("36.000");
+        Map<?, ?> data = (Map<?, ?>) result.get("data");
+        assertThat(data.get("totalQuantity")).isEqualTo("36");
+        assertThat(data.get("totalWeight")).isEqualTo("36.000");
+        assertThat(data.get("projectNameTop")).isEqualTo("90");
+        assertThat(data.get("projectNameHeight")).isEqualTo("20");
+        assertThat(data.get("projectNameFontSize")).isEqualTo("12");
+        assertThat(data.get("projectNameWordBreak")).isEqualTo("0");
+    }
+
+    @Test
+    void shouldAdaptSalesOrderA5ProjectNameLayoutByDisplayWidth() {
+        JdbcTemplate jdbc = mock(JdbcTemplate.class);
+        PrintScriptService service = printScriptService(repository("sales-order"), jdbc);
+        String longProjectName = "海宁市高新区启辉路西侧之江北路北侧地块项目（1#-20#楼、1#裙房配电房）";
+
+        when(jdbc.queryForMap(anyString(), eq(1L))).thenReturn(Map.of(
+                "id", 1L,
+                "order_no", "SO-001",
+                "project_name", longProjectName,
+                "deleted_flag", false
+        ));
+        when(jdbc.queryForList(anyString(), eq(1L))).thenReturn(List.of());
+        when(jdbc.queryForList(anyString(), eq(String.class), eq("SO-001"))).thenReturn(List.of());
+
+        Map<String, Object> longResult = service.generateFromRecord("1", "sales-order", 1L);
+
+        Map<?, ?> longData = (Map<?, ?>) longResult.get("data");
+        assertThat(longData.get("projectNameMultiline")).isEqualTo("true");
+        assertThat(longData.get("projectNameTop")).isEqualTo("78");
+        assertThat(longData.get("projectNameHeight")).isEqualTo("42");
+        assertThat(longData.get("projectNameFontSize")).isEqualTo("12");
+        assertThat(longData.get("projectNameWordBreak")).isEqualTo("1");
+
+        String veryLongProjectName = "海宁市高新区启辉路西侧之江北路北侧地块项目（1#-20#楼、1#裙房配电房地下室及配套工程施工总承包项目）";
+        when(jdbc.queryForMap(anyString(), eq(3L))).thenReturn(Map.of(
+                "id", 3L,
+                "order_no", "SO-003",
+                "project_name", veryLongProjectName,
+                "deleted_flag", false
+        ));
+        when(jdbc.queryForList(anyString(), eq(3L))).thenReturn(List.of());
+        when(jdbc.queryForList(anyString(), eq(String.class), eq("SO-003"))).thenReturn(List.of());
+
+        Map<String, Object> veryLongResult = service.generateFromRecord("1", "sales-order", 3L);
+
+        Map<?, ?> veryLongData = (Map<?, ?>) veryLongResult.get("data");
+        assertThat(veryLongData.get("projectNameMultiline")).isEqualTo("true");
+        assertThat(veryLongData.get("projectNameTop")).isEqualTo("70");
+        assertThat(veryLongData.get("projectNameHeight")).isEqualTo("54");
+        assertThat(veryLongData.get("projectNameFontSize")).isEqualTo("10");
+        assertThat(veryLongData.get("projectNameWordBreak")).isEqualTo("1");
+
+        String extraLongProjectName = veryLongProjectName + veryLongProjectName;
+        when(jdbc.queryForMap(anyString(), eq(4L))).thenReturn(Map.of(
+                "id", 4L,
+                "order_no", "SO-004",
+                "project_name", extraLongProjectName,
+                "deleted_flag", false
+        ));
+        when(jdbc.queryForList(anyString(), eq(4L))).thenReturn(List.of());
+        when(jdbc.queryForList(anyString(), eq(String.class), eq("SO-004"))).thenReturn(List.of());
+
+        Map<String, Object> extraLongResult = service.generateFromRecord("1", "sales-order", 4L);
+
+        Map<?, ?> extraLongData = (Map<?, ?>) extraLongResult.get("data");
+        assertThat(extraLongData.get("projectNameMultiline")).isEqualTo("true");
+        assertThat(extraLongData.get("projectNameTop")).isEqualTo("62");
+        assertThat(extraLongData.get("projectNameHeight")).isEqualTo("58");
+        assertThat(extraLongData.get("projectNameFontSize")).isEqualTo("9");
+        assertThat(extraLongData.get("projectNameWordBreak")).isEqualTo("1");
+
+        when(jdbc.queryForMap(anyString(), eq(2L))).thenReturn(Map.of(
+                "id", 2L,
+                "order_no", "SO-002",
+                "project_name", "项目A",
+                "deleted_flag", false
+        ));
+        when(jdbc.queryForList(anyString(), eq(2L))).thenReturn(List.of());
+        when(jdbc.queryForList(anyString(), eq(String.class), eq("SO-002"))).thenReturn(List.of());
+
+        Map<String, Object> shortResult = service.generateFromRecord("1", "sales-order", 2L);
+
+        Map<?, ?> shortData = (Map<?, ?>) shortResult.get("data");
+        assertThat(shortData.get("projectNameMultiline")).isEqualTo("");
+        assertThat(shortData.get("projectNameTop")).isEqualTo("90");
+        assertThat(shortData.get("projectNameHeight")).isEqualTo("20");
+        assertThat(shortData.get("projectNameFontSize")).isEqualTo("12");
+        assertThat(shortData.get("projectNameWordBreak")).isEqualTo("0");
+    }
+
+    @Test
     void shouldRenderEmptyRemarkAsNoneInSharedLayoutSummary() {
         JdbcTemplate jdbc = mock(JdbcTemplate.class);
         PrintScriptService service = printScriptService(repository(
@@ -277,6 +414,133 @@ class PrintScriptServiceTest {
         Map<String, Object> result = service.generateFromRecord("1", "sales-order", 1L);
 
         assertThat(result.get("templateHtml").toString()).contains("单据备注：无    |    合计件数：2件");
+    }
+
+    @Test
+    void shouldHideUnitPriceWhenPrintOptionEnabled() {
+        JdbcTemplate jdbc = mock(JdbcTemplate.class);
+        PrintScriptService service = printScriptService(repository("purchase-order"), jdbc);
+
+        when(jdbc.queryForMap(anyString(), eq(1L))).thenReturn(Map.of(
+                "id", 1L,
+                "order_no", "PO-001",
+                "deleted_flag", false
+        ));
+        when(jdbc.queryForList(anyString(), eq(1L))).thenReturn(List.of(Map.of(
+                "line_no", 1,
+                "brand", "抚顺新钢",
+                "quantity", 2,
+                "unit_price", new BigDecimal("12.50"),
+                "amount", new BigDecimal("25.00")
+        )));
+
+        Map<String, Object> result = service.generateFromRecord(
+                "1",
+                "purchase-order",
+                1L,
+                new PrintOptions(true, "", Map.of("抚顺新钢", "沙钢"), Map.of())
+        );
+
+        List<?> items = (List<?>) result.get("items");
+        Map<?, ?> item = (Map<?, ?>) items.get(0);
+        assertThat(item.get("unitPrice")).isEqualTo("");
+        assertThat(item.get("brand")).isEqualTo("沙钢");
+        assertThat(item.get("amount")).isEqualTo("25.00");
+    }
+
+    @Test
+    void shouldOverrideBrandByItemId() {
+        JdbcTemplate jdbc = mock(JdbcTemplate.class);
+        PrintScriptService service = printScriptService(repository("purchase-order"), jdbc);
+
+        when(jdbc.queryForMap(anyString(), eq(1L))).thenReturn(Map.of(
+                "id", 1L,
+                "order_no", "PO-001",
+                "deleted_flag", false
+        ));
+        when(jdbc.queryForList(anyString(), eq(1L))).thenReturn(List.of(
+                Map.of(
+                        "id", 11L,
+                        "line_no", 1,
+                        "brand", "抚顺新钢",
+                        "quantity", 2,
+                        "weight_ton", new BigDecimal("2.000")
+                ),
+                Map.of(
+                        "id", 12L,
+                        "line_no", 2,
+                        "brand", "抚顺新钢",
+                        "quantity", 3,
+                        "weight_ton", new BigDecimal("3.000")
+                )
+        ));
+
+        Map<String, Object> result = service.generateFromRecord(
+                "1",
+                "purchase-order",
+                1L,
+                new PrintOptions(false, "", Map.of(), Map.of("11", "沙钢"))
+        );
+
+        List<?> items = (List<?>) result.get("items");
+        assertThat(((Map<?, ?>) items.get(0)).get("brand")).isEqualTo("沙钢");
+        assertThat(((Map<?, ?>) items.get(1)).get("brand")).isEqualTo("抚顺新钢");
+    }
+
+    @Test
+    void shouldListBrandsFromSelectedRecords() {
+        JdbcTemplate jdbc = mock(JdbcTemplate.class);
+        AttachmentRecordAccessService accessService = mock(AttachmentRecordAccessService.class);
+        PrintScriptService service = printScriptService(repository("sales-order"), jdbc, accessService);
+
+        when(jdbc.queryForList(anyString(), eq(String.class), eq(1L), eq(2L))).thenReturn(List.of(" 抚顺新钢 ", "沙钢"));
+
+        List<String> brands = service.listBrands("sales-order", List.of(1L, 2L));
+
+        assertThat(brands).containsExactly("抚顺新钢", "沙钢");
+        verify(accessService).assertRecordAccessible(org.mockito.ArgumentMatchers.any(), eq("sales-order"), eq("read"), eq(1L));
+        verify(accessService).assertRecordAccessible(org.mockito.ArgumentMatchers.any(), eq("sales-order"), eq("read"), eq(2L));
+    }
+
+    @Test
+    void shouldListPrintItemsFromSelectedRecords() {
+        JdbcTemplate jdbc = mock(JdbcTemplate.class);
+        AttachmentRecordAccessService accessService = mock(AttachmentRecordAccessService.class);
+        PrintScriptService service = printScriptService(repository("sales-order"), jdbc, accessService);
+
+        when(jdbc.queryForList(anyString(), eq(1L))).thenReturn(List.of(Map.ofEntries(
+                Map.entry("id", 11L),
+                Map.entry("record_id", 1L),
+                Map.entry("brand", "中杭"),
+                Map.entry("category", "螺纹钢"),
+                Map.entry("material", "HRB400E"),
+                Map.entry("spec", "Ф18"),
+                Map.entry("quantity", 12),
+                Map.entry("piece_weight_ton", new BigDecimal("0.123")),
+                Map.entry("weight_ton", new BigDecimal("1.476")),
+                Map.entry("unit_price", new BigDecimal("3300.00")),
+                Map.entry("amount", new BigDecimal("4870.80"))
+        )));
+
+        List<PrintScriptService.PrintRecordItem> items = service.listPrintItems("sales-order", List.of(1L));
+
+        assertThat(items).containsExactly(new PrintScriptService.PrintRecordItem(
+                "11", "1", "中杭", "螺纹钢", "HRB400E", "Ф18", "12", "0.123", "1.476", "3300.00", "4870.80"
+        ));
+        verify(accessService).assertRecordAccessible(org.mockito.ArgumentMatchers.any(), eq("sales-order"), eq("read"), eq(1L));
+    }
+
+    @Test
+    void shouldUseProjectNameLabelAndCenteredAdaptiveProjectNameInYingjieLayout() {
+        String layout = yingjieA4RemarkLayout();
+
+        assertThat(layout)
+                .contains("\"text\": \"项目名称：\"")
+                .doesNotContain("\"text\": \"工程名称：\"");
+        assertThat(layout)
+                .contains("\"projectName\"")
+                .contains("\"minimumFontSize\": 7")
+                .contains("\"vertical\": \"middle\"");
     }
 
     @Test
@@ -322,6 +586,20 @@ class PrintScriptServiceTest {
 
     private PrintTemplateRepository repository(String billType, String templateType, String templateHtml) {
         return repository(billType, templateType, templateHtml, "ACTIVE");
+    }
+
+    private PrintTemplateRepository repositoryWithTemplateName(String billType, String templateName, String templateType, String templateHtml) {
+        PrintTemplate template = new PrintTemplate();
+        template.setId(1L);
+        template.setBillType(billType);
+        template.setTemplateName(templateName);
+        template.setTemplateHtml(templateHtml);
+        template.setTemplateType(templateType);
+        template.setStatus("ACTIVE");
+
+        PrintTemplateRepository repository = mock(PrintTemplateRepository.class);
+        when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(template));
+        return repository;
     }
 
     private PrintTemplateRepository repository(String billType, String templateType, String templateHtml, String status) {
