@@ -11,6 +11,7 @@ import com.leo.erp.master.material.web.dto.MaterialCategoryRequest;
 import com.leo.erp.master.material.web.dto.MaterialCategoryResponse;
 import org.junit.jupiter.api.Test;
 
+import java.math.BigDecimal;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 import java.util.List;
@@ -38,8 +39,8 @@ class MaterialCategoryServiceTest {
                 MaterialCategoryMapper.class.getClassLoader(),
                 new Class[]{MaterialCategoryMapper.class},
                 (proxy, method, args) -> switch (method.getName()) {
-                    case "toResponse" -> new MaterialCategoryResponse(null, null, null, null, null, null, null);
-                    case "toOptionResponse" -> new MaterialCategoryOptionResponse(null, null, null);
+                    case "toResponse" -> new MaterialCategoryResponse(null, null, null, null, null, null, null, null, null);
+                    case "toOptionResponse" -> new MaterialCategoryOptionResponse(null, null, null, null, null);
                     case "toString" -> "MaterialCategoryMapperStub";
                     case "hashCode" -> System.identityHashCode(proxy);
                     case "equals" -> proxy == args[0];
@@ -70,7 +71,7 @@ class MaterialCategoryServiceTest {
                 MaterialCategoryMapper.class.getClassLoader(),
                 new Class[]{MaterialCategoryMapper.class},
                 (proxy, method, args) -> switch (method.getName()) {
-                    case "toOptionResponse" -> new MaterialCategoryOptionResponse("C001", "钢材", null);
+                    case "toOptionResponse" -> new MaterialCategoryOptionResponse("C001", "钢材", null, null, null);
                     case "toString" -> "MaterialCategoryMapperStub";
                     case "hashCode" -> System.identityHashCode(proxy);
                     case "equals" -> proxy == args[0];
@@ -100,7 +101,7 @@ class MaterialCategoryServiceTest {
         );
         var service = new MaterialCategoryService(repository, new SnowflakeIdGenerator(1), null);
 
-        assertThatThrownBy(() -> service.create(new MaterialCategoryRequest("C001", null, null, null, null, null)))
+        assertThatThrownBy(() -> service.create(new MaterialCategoryRequest("C001", null, null, null, null, null, null, null)))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("类别编码已存在");
     }
@@ -121,7 +122,7 @@ class MaterialCategoryServiceTest {
         );
         var service = new MaterialCategoryService(repository, new SnowflakeIdGenerator(1), null);
 
-        assertThatThrownBy(() -> service.update(1L, new MaterialCategoryRequest("C002", null, null, null, null, null)))
+        assertThatThrownBy(() -> service.update(1L, new MaterialCategoryRequest("C002", null, null, null, null, null, null, null)))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("类别编码已存在");
     }
@@ -141,7 +142,7 @@ class MaterialCategoryServiceTest {
         );
         var service = new MaterialCategoryService(repository, new SnowflakeIdGenerator(1), null);
 
-        assertThatThrownBy(() -> service.create(new MaterialCategoryRequest(null, null, null, null, null, null)))
+        assertThatThrownBy(() -> service.create(new MaterialCategoryRequest(null, null, null, null, null, null, null, null)))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("类别编码不能为空");
     }
@@ -173,12 +174,17 @@ class MaterialCategoryServiceTest {
         );
         var service = new MaterialCategoryService(repository, new SnowflakeIdGenerator(1), mapper);
 
-        var request = new MaterialCategoryRequest("C001", "钢材", 1, true, "正常", "备注");
+        var request = new MaterialCategoryRequest(
+                "C001", "钢材", 1, true,
+                new BigDecimal("3.00"), new BigDecimal("4.00"),
+                "正常", "备注");
         var result = service.create(request);
 
         assertThat(result).isNotNull();
         assertThat(result.categoryCode()).isEqualTo("C001");
         assertThat(result.categoryName()).isEqualTo("钢材");
+        assertThat(result.purchaseWeighOverTolerancePercent()).isEqualByComparingTo("3.00");
+        assertThat(result.purchaseWeighUnderTolerancePercent()).isEqualByComparingTo("4.00");
     }
 
     @Test
@@ -208,7 +214,7 @@ class MaterialCategoryServiceTest {
         );
         var service = new MaterialCategoryService(repository, new SnowflakeIdGenerator(1), mapper);
 
-        var request = new MaterialCategoryRequest("C001", "新钢材", 2, false, "停用", "新备注");
+        var request = new MaterialCategoryRequest("C001", "新钢材", 2, false, null, null, "停用", "新备注");
         var result = service.update(1L, request);
 
         assertThat(result).isNotNull();
@@ -243,7 +249,7 @@ class MaterialCategoryServiceTest {
         );
         var service = new MaterialCategoryService(repository, new SnowflakeIdGenerator(1), mapper);
 
-        var request = new MaterialCategoryRequest("C002", "钢材", 1, false, "正常", null);
+        var request = new MaterialCategoryRequest("C002", "钢材", 1, false, null, null, "正常", null);
         var result = service.update(1L, request);
 
         assertThat(result).isNotNull();
@@ -316,7 +322,7 @@ class MaterialCategoryServiceTest {
         var service = new MaterialCategoryService(repository, new SnowflakeIdGenerator(1), mapper);
 
         String longCode = "A".repeat(50);
-        var request = new MaterialCategoryRequest(longCode, "钢材", 1, false, null, null);
+        var request = new MaterialCategoryRequest(longCode, "钢材", 1, false, null, null, null, null);
         var result = service.create(request);
 
         assertThat(result.categoryCode()).hasSize(32);
@@ -349,10 +355,12 @@ class MaterialCategoryServiceTest {
         );
         var service = new MaterialCategoryService(repository, new SnowflakeIdGenerator(1), mapper);
 
-        var request = new MaterialCategoryRequest("C001", "钢材", null, null, null, "  ");
+        var request = new MaterialCategoryRequest("C001", "钢材", null, null, null, null, null, "  ");
         var result = service.create(request);
 
         assertThat(result).isNotNull();
+        assertThat(result.purchaseWeighOverTolerancePercent()).isEqualByComparingTo("5.00");
+        assertThat(result.purchaseWeighUnderTolerancePercent()).isEqualByComparingTo("5.00");
     }
 
     @Test
@@ -370,7 +378,7 @@ class MaterialCategoryServiceTest {
         );
         var service = new MaterialCategoryService(repository, new SnowflakeIdGenerator(1), null);
 
-        assertThatThrownBy(() -> service.create(new MaterialCategoryRequest("C001", null, null, null, null, null)))
+        assertThatThrownBy(() -> service.create(new MaterialCategoryRequest("C001", null, null, null, null, null, null, null)))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("类别名称不能为空");
     }
@@ -429,6 +437,8 @@ class MaterialCategoryServiceTest {
         return new MaterialCategoryResponse(
                 c.getId(), c.getCategoryCode(), c.getCategoryName(),
                 c.getSortOrder(), c.getPurchaseWeighRequired(),
+                c.getPurchaseWeighOverTolerancePercent(),
+                c.getPurchaseWeighUnderTolerancePercent(),
                 c.getStatus(), c.getRemark()
         );
     }

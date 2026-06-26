@@ -57,6 +57,7 @@ public class PurchaseItemQueryAppServiceImpl implements PurchaseItemQueryAppServ
                 item.getId(),
                 item.getQuantity(),
                 item.getWeightTon(),
+                item.getPieceWeightTon(),
                 order != null ? order.getOrderNo() : null,
                 order != null ? order.getStatus() : null,
                 item.getBrand(), item.getMaterial(), item.getSpec(),

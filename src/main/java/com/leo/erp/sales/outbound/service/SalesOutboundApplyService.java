@@ -145,8 +145,7 @@ public class SalesOutboundApplyService {
                 sourceSalesOrderItemId,
                 lineNo
         );
-        BigDecimal pieceWeightTon = TradeItemCalculator.calculateRepresentableAveragePieceWeightTon(source.quantity(), weightTon);
-        item.setPieceWeightTon(pieceWeightTon != null ? pieceWeightTon : TradeItemCalculator.scaleWeightTon(source.pieceWeightTon()));
+        item.setPieceWeightTon(TradeItemCalculator.scaleWeightTon(source.pieceWeightTon()));
         item.setPiecesPerBundle(source.piecesPerBundle());
         item.setWeightTon(weightTon);
         item.setUnitPrice(source.unitPrice());

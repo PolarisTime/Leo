@@ -37,30 +37,11 @@ public class SalesOrderWeightResolver {
         if (sourcePurchaseOrderItem == null) {
             return TradeItemCalculator.scaleWeightTon(source.pieceWeightTon());
         }
-        int sourceQuantity = sourcePurchaseOrderItem.quantity() == null ? 0 : sourcePurchaseOrderItem.quantity();
-        BigDecimal sourceWeightTon = TradeItemCalculator.scaleWeightTon(sourcePurchaseOrderItem.weightTon());
-        if (sourceQuantity <= 0 || sourceWeightTon.compareTo(BigDecimal.ZERO) <= 0) {
+        BigDecimal sourcePieceWeightTon = TradeItemCalculator.scaleWeightTon(sourcePurchaseOrderItem.pieceWeightTon());
+        if (sourcePieceWeightTon.compareTo(BigDecimal.ZERO) <= 0) {
             return TradeItemCalculator.scaleWeightTon(source.pieceWeightTon());
         }
-        BigDecimal defaultPieceWeightTon = TradeItemCalculator.calculateAveragePieceWeightTon(sourceQuantity, sourceWeightTon);
-        BigDecimal remainingWeightTon = context.purchaseOrderRemainingWeightMap().get(sourcePurchaseOrderItemId);
-        if (remainingWeightTon == null || source.quantity() == null || source.quantity() <= 0) {
-            return defaultPieceWeightTon;
-        }
-        SalesOrderSourceAllocation persistedAllocation =
-                context.purchaseOrderAllocatedMap().getOrDefault(sourcePurchaseOrderItemId, SalesOrderSourceAllocation.ZERO);
-        SalesOrderSourceAllocation requestAllocation =
-                context.requestPurchaseOrderAllocatedMap().getOrDefault(sourcePurchaseOrderItemId, SalesOrderSourceAllocation.ZERO);
-        int availableQuantity = sourceQuantity - persistedAllocation.quantity() - requestAllocation.quantity();
-        if (source.quantity() != availableQuantity) {
-            return defaultPieceWeightTon;
-        }
-        BigDecimal currentRemainingWeightTon = TradeItemCalculator.scaleWeightTon(
-                remainingWeightTon.subtract(requestAllocation.weightTon())
-        );
-        BigDecimal exactResidualPieceWeightTon =
-                TradeItemCalculator.calculateRepresentableAveragePieceWeightTon(availableQuantity, currentRemainingWeightTon);
-        return exactResidualPieceWeightTon != null ? exactResidualPieceWeightTon : defaultPieceWeightTon;
+        return sourcePieceWeightTon;
     }
 
     BigDecimal resolveWeightTon(

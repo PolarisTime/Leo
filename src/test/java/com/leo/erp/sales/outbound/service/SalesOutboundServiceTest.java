@@ -98,7 +98,7 @@ class SalesOutboundServiceTest {
     }
 
     @Test
-    void shouldUseRepresentableAveragePieceWeightFromActualOutboundWeight() {
+    void shouldKeepSourcePieceWeightWhenActualOutboundWeightChanges() {
         SalesOutboundRepository repository = mock(SalesOutboundRepository.class);
         SalesOutboundMapper mapper = mock(SalesOutboundMapper.class);
         TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
@@ -136,7 +136,7 @@ class SalesOutboundServiceTest {
         assertThat(saved.getTotalAmount()).isEqualByComparingTo("6222.00");
         assertThat(saved.getItems()).singleElement().satisfies(item -> {
             assertThat(item.getSourceSalesOrderItemId()).isEqualTo(9002L);
-            assertThat(item.getPieceWeightTon()).isEqualByComparingTo("2.000");
+            assertThat(item.getPieceWeightTon()).isEqualByComparingTo("2.24900000");
             assertThat(item.getWeightTon()).isEqualByComparingTo("2.000");
             assertThat(item.getAmount()).isEqualByComparingTo("6222.00");
         });
