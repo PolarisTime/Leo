@@ -5,8 +5,10 @@ import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.api.PageResponse;
 import com.leo.erp.common.web.BindPageQuery;
+import com.leo.erp.common.web.dto.FileDownloadResponse;
 import com.leo.erp.common.web.dto.StatusUpdateRequest;
 import com.leo.erp.security.permission.RequiresPermission;
+import com.leo.erp.sales.order.service.SalesOrderPrintExportService;
 import com.leo.erp.sales.order.service.SalesOrderService;
 import com.leo.erp.sales.order.web.dto.SalesOrderRequest;
 import com.leo.erp.sales.order.web.dto.SalesOrderResponse;
@@ -14,6 +16,9 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -26,6 +31,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 
 @Tag(name = "销售订单")
@@ -35,9 +41,11 @@ import java.time.LocalDate;
 public class SalesOrderController {
 
     private final SalesOrderService service;
+    private final SalesOrderPrintExportService printExportService;
 
-    public SalesOrderController(SalesOrderService service) {
+    public SalesOrderController(SalesOrderService service, SalesOrderPrintExportService printExportService) {
         this.service = service;
+        this.printExportService = printExportService;
     }
 
     @Operation(summary = "搜索销售订单")
@@ -74,6 +82,13 @@ public class SalesOrderController {
         return ApiResponse.success(service.detail(id));
     }
 
+    @Operation(summary = "导出销售订单套打 Excel")
+    @GetMapping("/{id}/print-xlsx")
+    @RequiresPermission(resource = "sales-order", action = "print")
+    public ResponseEntity<byte[]> exportPrintXlsx(@PathVariable Long id) {
+        return toDownloadResponse(printExportService.exportSalesOrderPrint(id));
+    }
+
     @Operation(summary = "创建销售订单")
     @PostMapping
     @RequiresPermission(resource = "sales-order", action = "create")
@@ -101,5 +116,16 @@ public class SalesOrderController {
     public ApiResponse<Void> delete(@PathVariable Long id) {
         service.delete(id);
         return ApiResponse.success("删除成功");
+    }
+
+    private ResponseEntity<byte[]> toDownloadResponse(FileDownloadResponse file) {
+        return ResponseEntity.ok()
+                .contentType(file.contentType())
+                .contentLength(file.content().length)
+                .header(
+                        HttpHeaders.CONTENT_DISPOSITION,
+                        ContentDisposition.attachment().filename(file.filename(), StandardCharsets.UTF_8).build().toString()
+                )
+                .body(file.content());
     }
 }
