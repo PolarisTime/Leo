@@ -19,7 +19,7 @@ import static org.mockito.Mockito.when;
 class SalesOrderWeightResolverTest {
 
     @Test
-    void shouldResolvePieceWeightFromPurchaseOrderRemainingWeightWhenLastAllocation() {
+    void shouldResolvePieceWeightFromSourcePurchaseOrderItem() {
         PurchaseItemPieceWeightAppService pieceWeightAppService = mock(PurchaseItemPieceWeightAppService.class);
         SalesOrderWeightResolver resolver = new SalesOrderWeightResolver(pieceWeightAppService);
         SalesOrderSourceContext context = context(
@@ -41,7 +41,7 @@ class SalesOrderWeightResolverTest {
                 contextWithWeights
         );
 
-        assertThat(pieceWeightTon).isEqualByComparingTo("0.250");
+        assertThat(pieceWeightTon).isEqualByComparingTo("0.210");
     }
 
     @Test

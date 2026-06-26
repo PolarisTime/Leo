@@ -4,6 +4,7 @@ import jakarta.validation.Validator;
 import org.junit.jupiter.api.Test;
 import org.springframework.validation.beanvalidation.LocalValidatorFactoryBean;
 
+import java.math.BigDecimal;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -20,6 +21,8 @@ class MaterialCategoryRequestValidationTest {
                 "",
                 0,
                 Boolean.FALSE,
+                null,
+                null,
                 "正常",
                 null
         );
@@ -38,6 +41,8 @@ class MaterialCategoryRequestValidationTest {
                 "B".repeat(65),
                 -1,
                 Boolean.TRUE,
+                new BigDecimal("-0.01"),
+                new BigDecimal("100.01"),
                 "X".repeat(17),
                 "C".repeat(256)
         );
@@ -46,7 +51,14 @@ class MaterialCategoryRequestValidationTest {
                 .map(violation -> violation.getPropertyPath().toString())
                 .collect(Collectors.toSet());
 
-        assertThat(violations).contains("categoryCode", "categoryName", "sortOrder", "status", "remark");
+        assertThat(violations).contains(
+                "categoryCode",
+                "categoryName",
+                "sortOrder",
+                "purchaseWeighOverTolerancePercent",
+                "purchaseWeighUnderTolerancePercent",
+                "status",
+                "remark");
     }
 
     private static Validator validator() {

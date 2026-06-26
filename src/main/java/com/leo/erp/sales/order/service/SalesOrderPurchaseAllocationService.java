@@ -67,13 +67,6 @@ public class SalesOrderPurchaseAllocationService {
                         item.getId(),
                         lineNo
                 );
-                BigDecimal exactPieceWeightTon = TradeItemCalculator.calculateRepresentableAveragePieceWeightTon(
-                        item.getQuantity(),
-                        weightTon
-                );
-                if (exactPieceWeightTon != null) {
-                    item.setPieceWeightTon(exactPieceWeightTon);
-                }
                 item.setWeightTon(weightTon);
             }
             BigDecimal amount = TradeItemCalculator.calculateAmount(weightTon, item.getUnitPrice());
