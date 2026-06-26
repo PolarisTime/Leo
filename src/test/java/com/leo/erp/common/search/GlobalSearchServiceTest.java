@@ -2,6 +2,8 @@ package com.leo.erp.search.service;
 
 import com.leo.erp.contract.purchase.service.PurchaseContractService;
 import com.leo.erp.contract.sales.service.SalesContractService;
+import com.leo.erp.common.error.BusinessException;
+import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.finance.invoiceissue.service.InvoiceIssueService;
 import com.leo.erp.finance.invoicereceipt.service.InvoiceReceiptService;
 import com.leo.erp.finance.payment.service.PaymentService;
@@ -21,6 +23,7 @@ import com.leo.erp.statement.freight.service.FreightStatementService;
 import com.leo.erp.statement.supplier.service.SupplierStatementService;
 import com.leo.erp.logistics.bill.service.FreightBillService;
 import com.leo.erp.search.web.GlobalSearchResponse;
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Set;
 import org.junit.jupiter.api.AfterEach;
@@ -28,6 +31,8 @@ import org.junit.jupiter.api.Test;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyInt;
@@ -45,6 +50,16 @@ class GlobalSearchServiceTest {
     void tearDown() {
         SecurityContextHolder.clearContext();
         DataScopeContext.clear();
+    }
+
+    @Test
+    void searchSuspendsOuterTransactionToKeepModuleFailuresIsolated() throws Exception {
+        Transactional annotation = GlobalSearchService.class
+                .getMethod("search", String.class, int.class, List.class)
+                .getAnnotation(Transactional.class);
+
+        assertThat(annotation).isNotNull();
+        assertThat(annotation.propagation()).isEqualTo(Propagation.NOT_SUPPORTED);
     }
 
     @Test
@@ -137,6 +152,61 @@ class GlobalSearchServiceTest {
             assertThat(item.matchedByTrackId()).isTrue();
         });
         assertThat(DataScopeContext.current()).isNull();
+    }
+
+    @Test
+    void trackIdSearchSkipsFailedDetailLookupAndContinuesNextModule() {
+        PermissionService permissionService = mock(PermissionService.class);
+        PurchaseOrderService purchaseOrderService = mock(PurchaseOrderService.class);
+        SalesOrderService salesOrderService = mock(SalesOrderService.class);
+        GlobalSearchService service = createService(
+                permissionService,
+                purchaseOrderService,
+                salesOrderService
+        );
+        authenticate(1L);
+
+        when(permissionService.can(anyLong(), anyString(), anyString())).thenReturn(false);
+        when(permissionService.can(1L, "purchase-order", ResourcePermissionCatalog.READ)).thenReturn(true);
+        when(permissionService.can(1L, "sales-order", ResourcePermissionCatalog.READ)).thenReturn(true);
+        when(permissionService.getUserDataScope(anyLong(), anyString(), anyString()))
+                .thenReturn(ResourcePermissionCatalog.SCOPE_SELF);
+        when(permissionService.getDataScopeOwnerUserIds(1L, ResourcePermissionCatalog.SCOPE_SELF))
+                .thenReturn(Set.of(1L));
+        when(purchaseOrderService.detail(317340436135936000L))
+                .thenThrow(new BusinessException(ErrorCode.NOT_FOUND, "采购订单不存在"));
+        when(salesOrderService.detail(317340436135936000L)).thenReturn(new com.leo.erp.sales.order.web.dto.SalesOrderResponse(
+                317340436135936000L,
+                "XS20260001",
+                null,
+                null,
+                null,
+                "客户甲",
+                null,
+                null,
+                null,
+                null,
+                BigDecimal.ZERO,
+                BigDecimal.ZERO,
+                "已审核",
+                null,
+                List.of()
+        ));
+
+        List<GlobalSearchResponse> results = service.search(
+                "317340436135936000",
+                20,
+                List.of("purchase-order", "sales-order")
+        );
+
+        verify(purchaseOrderService).detail(317340436135936000L);
+        verify(salesOrderService).detail(317340436135936000L);
+        assertThat(results).singleElement().satisfies(item -> {
+            assertThat(item.moduleKey()).isEqualTo("sales-order");
+            assertThat(item.trackId()).isEqualTo("317340436135936000");
+            assertThat(item.primaryNo()).isEqualTo("XS20260001");
+            assertThat(item.matchedByTrackId()).isTrue();
+        });
     }
 
     @Test

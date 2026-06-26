@@ -36,6 +36,7 @@ import java.util.stream.Collectors;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 @Slf4j
@@ -96,12 +97,12 @@ public class GlobalSearchService {
         );
     }
 
-    @Transactional(readOnly = true)
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public List<GlobalSearchResponse> search(String keyword, int limit) {
         return search(keyword, limit, null);
     }
 
-    @Transactional(readOnly = true)
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public List<GlobalSearchResponse> search(String keyword, int limit, List<String> moduleKeys) {
         String normalizedKeyword = keyword == null ? "" : keyword.trim();
         if (normalizedKeyword.isBlank()) {
