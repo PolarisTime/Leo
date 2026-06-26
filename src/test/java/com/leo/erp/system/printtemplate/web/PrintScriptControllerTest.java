@@ -3,11 +3,12 @@ package com.leo.erp.system.printtemplate.web;
 import com.leo.erp.common.api.ApiResponse;
 import com.leo.erp.security.permission.ModulePermissionGuard;
 import com.leo.erp.security.support.SecurityPrincipal;
-import com.leo.erp.system.printtemplate.service.PrintOptions;
+import com.leo.erp.system.printtemplate.service.PrintRenderOptions;
 import com.leo.erp.system.printtemplate.service.PrintPdfFormService;
 import com.leo.erp.system.printtemplate.service.PrintScriptService;
 import com.leo.erp.system.printtemplate.service.PrintScriptService.PrintRecordItem;
 import com.leo.erp.system.operationlog.support.OperationLoggable;
+import com.leo.erp.system.printtemplate.web.dto.PrintRecordRequest;
 import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
@@ -31,39 +32,38 @@ class PrintScriptControllerTest {
     @Test
     void fromRecordReturnsGeneratedResult() {
         SecurityPrincipal principal = mock(SecurityPrincipal.class);
-        Map<String, Object> payload = new HashMap<>();
-        payload.put("moduleKey", "sales-order");
-        payload.put("templateId", "template-1");
-        payload.put("recordId", "1");
+        PrintRecordRequest payload = new PrintRecordRequest("sales-order", "template-1", 1L, null);
 
         Map<String, Object> result = new HashMap<>();
         result.put("templateType", "COORD");
         result.put("data", "test");
 
         when(modulePermissionGuard.requirePermission(principal, "sales-order", "read")).thenReturn("sales-order");
-        when(printScriptService.generateFromRecord(eq("template-1"), eq("sales-order"), eq(1L), any(PrintOptions.class))).thenReturn(result);
+        when(printScriptService.generateFromRecord(eq("template-1"), eq("sales-order"), eq(1L), any(PrintRenderOptions.class))).thenReturn(result);
 
         ApiResponse<Map<String, Object>> response = controller.fromRecord(principal, payload);
 
         assertThat(response.code()).isEqualTo(0);
         assertThat(response.data()).isEqualTo(result);
-        verify(printScriptService).generateFromRecord("template-1", "sales-order", 1L, PrintOptions.defaults());
+        verify(printScriptService).generateFromRecord("template-1", "sales-order", 1L, PrintRenderOptions.defaults());
     }
 
     @Test
     void fromRecordPassesPrintOptions() {
         SecurityPrincipal principal = mock(SecurityPrincipal.class);
-        Map<String, Object> payload = new HashMap<>();
-        payload.put("moduleKey", "sales-order");
-        payload.put("templateId", "template-1");
-        payload.put("recordId", "1");
-        payload.put("printOptions", Map.of(
-                "hideUnitPrice", true,
-                "hideRemark", true,
-                "brandOverrides", Map.of("抚顺新钢", " 抚新 "),
-                "brandOverridesByItemId", Map.of("11", " 沙钢 "),
-                "itemOrder", List.of("12", "11")
-        ));
+        PrintRecordRequest payload = new PrintRecordRequest(
+                "sales-order",
+                "template-1",
+                1L,
+                new PrintRenderOptions(
+                        true,
+                        true,
+                        "",
+                        Map.of("抚顺新钢", " 抚新 "),
+                        Map.of("11", " 沙钢 "),
+                        List.of("12", "11")
+                )
+        );
 
         Map<String, Object> result = new HashMap<>();
         result.put("templateType", "COORD");
@@ -73,7 +73,7 @@ class PrintScriptControllerTest {
                 eq("template-1"),
                 eq("sales-order"),
                 eq(1L),
-                eq(new PrintOptions(true, true, "", Map.of("抚顺新钢", "抚新"), Map.of("11", "沙钢"), List.of("12", "11")))
+                eq(new PrintRenderOptions(true, true, "", Map.of("抚顺新钢", "抚新"), Map.of("11", "沙钢"), List.of("12", "11")))
         )).thenReturn(result);
 
         ApiResponse<Map<String, Object>> response = controller.fromRecord(principal, payload);
@@ -83,7 +83,7 @@ class PrintScriptControllerTest {
                 "template-1",
                 "sales-order",
                 1L,
-                new PrintOptions(true, true, "", Map.of("抚顺新钢", "抚新"), Map.of("11", "沙钢"), List.of("12", "11"))
+                new PrintRenderOptions(true, true, "", Map.of("抚顺新钢", "抚新"), Map.of("11", "沙钢"), List.of("12", "11"))
         );
     }
 
@@ -125,17 +125,14 @@ class PrintScriptControllerTest {
     @Test
     void fromRecordWithPdfFormReturnsPdfBase64() {
         SecurityPrincipal principal = mock(SecurityPrincipal.class);
-        Map<String, Object> payload = new HashMap<>();
-        payload.put("moduleKey", "sales-order");
-        payload.put("templateId", "template-1");
-        payload.put("recordId", "1");
+        PrintRecordRequest payload = new PrintRecordRequest("sales-order", "template-1", 1L, null);
 
         Map<String, Object> result = new HashMap<>();
         result.put("templateType", "PDF_FORM");
         result.put("templateName", "Test Template");
 
         when(modulePermissionGuard.requirePermission(principal, "sales-order", "read")).thenReturn("sales-order");
-        when(printScriptService.generateFromRecord(eq("template-1"), eq("sales-order"), eq(1L), any(PrintOptions.class))).thenReturn(result);
+        when(printScriptService.generateFromRecord(eq("template-1"), eq("sales-order"), eq(1L), any(PrintRenderOptions.class))).thenReturn(result);
         when(printPdfFormService.generateFromPayload(any())).thenReturn("pdf-content".getBytes());
 
         ApiResponse<Map<String, Object>> response = controller.fromRecord(principal, payload);
@@ -148,7 +145,7 @@ class PrintScriptControllerTest {
     @Test
     void fromRecordHasOperationLogAnnotation() throws Exception {
         OperationLoggable annotation = PrintScriptController.class
-                .getMethod("fromRecord", SecurityPrincipal.class, Map.class)
+                .getMethod("fromRecord", SecurityPrincipal.class, PrintRecordRequest.class)
                 .getAnnotation(OperationLoggable.class);
 
         assertThat(annotation).isNotNull();

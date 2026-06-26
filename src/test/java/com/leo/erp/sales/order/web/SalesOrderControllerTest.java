@@ -6,12 +6,13 @@ import com.leo.erp.common.api.PageResponse;
 import com.leo.erp.common.web.dto.FileDownloadResponse;
 import com.leo.erp.sales.order.service.SalesOrderPrintExportService;
 import com.leo.erp.common.web.dto.StatusUpdateRequest;
+import com.leo.erp.sales.order.service.SalesOrderPrintXlsxOptions;
 import com.leo.erp.sales.order.service.SalesOrderService;
+import com.leo.erp.sales.order.web.dto.SalesOrderPrintXlsxRequest;
 import com.leo.erp.sales.order.web.dto.SalesOrderRequest;
 import com.leo.erp.sales.order.web.dto.SalesOrderResponse;
 import com.leo.erp.system.operationlog.support.OperationLogResultCollector;
 import com.leo.erp.system.operationlog.support.OperationLoggable;
-import com.leo.erp.system.printtemplate.service.PrintOptions;
 import org.junit.jupiter.api.Test;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
@@ -93,7 +94,7 @@ class SalesOrderControllerTest {
     @Test
     void exportPrintXlsxReturnsDownloadResponse() {
         byte[] content = new byte[]{1, 2, 3};
-        when(printExportService.exportSalesOrderPrint(1L, PrintOptions.defaults())).thenReturn(new FileDownloadResponse(
+        when(printExportService.exportSalesOrderPrint(1L, SalesOrderPrintXlsxOptions.defaults())).thenReturn(new FileDownloadResponse(
                 "SO-001-套打.xlsx",
                 MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
                 content
@@ -105,7 +106,7 @@ class SalesOrderControllerTest {
                 .isEqualTo("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
         assertThat(response.getHeaders().getContentDisposition().getFilename()).isEqualTo("SO-001-套打.xlsx");
         assertThat(response.getBody()).isEqualTo(content);
-        verify(printExportService).exportSalesOrderPrint(1L, PrintOptions.defaults());
+        verify(printExportService).exportSalesOrderPrint(1L, SalesOrderPrintXlsxOptions.defaults());
         verify(request).setAttribute(OperationLogResultCollector.BUSINESS_NO_ATTRIBUTE, null);
         verify(request).setAttribute(OperationLogResultCollector.RECORD_ID_ATTRIBUTE, null);
         verify(request).setAttribute(OperationLogResultCollector.MODULE_KEY_ATTRIBUTE, null);
@@ -114,21 +115,25 @@ class SalesOrderControllerTest {
     @Test
     void exportPrintXlsxPassesPrintOptions() {
         byte[] content = new byte[]{1, 2, 3};
-        PrintOptions options = new PrintOptions(true, true, "", Map.of(), Map.of("11", "抚新"), List.of("12", "11"));
+        SalesOrderPrintXlsxOptions options = new SalesOrderPrintXlsxOptions(true, true, "", Map.of(), Map.of("11", "抚新"), List.of("12", "11"));
         when(printExportService.exportSalesOrderPrint(1L, options)).thenReturn(new FileDownloadResponse(
                 "SO-001-套打.xlsx",
                 MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
                 content
         ));
 
-        var response = controller.exportPrintXlsx(1L, Map.of(
-                "printOptions", Map.of(
-                        "hideUnitPrice", true,
-                        "hideRemark", true,
-                        "brandOverridesByItemId", Map.of("11", " 抚新 "),
-                        "itemOrder", List.of("12", "11")
-                )
-        ), request);
+        var response = controller.exportPrintXlsx(
+                1L,
+                new SalesOrderPrintXlsxRequest(new SalesOrderPrintXlsxOptions(
+                        true,
+                        true,
+                        "",
+                        Map.of(),
+                        Map.of("11", " 抚新 "),
+                        List.of("12", "11")
+                )),
+                request
+        );
 
         assertThat(response.getBody()).isEqualTo(content);
         verify(printExportService).exportSalesOrderPrint(1L, options);
@@ -137,7 +142,7 @@ class SalesOrderControllerTest {
     @Test
     void exportPrintXlsxHasOperationLogAnnotation() throws Exception {
         OperationLoggable annotation = SalesOrderController.class
-                .getMethod("exportPrintXlsx", Long.class, Map.class, HttpServletRequest.class)
+                .getMethod("exportPrintXlsx", Long.class, SalesOrderPrintXlsxRequest.class, HttpServletRequest.class)
                 .getAnnotation(OperationLoggable.class);
 
         assertThat(annotation).isNotNull();
