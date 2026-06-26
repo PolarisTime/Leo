@@ -1,5 +1,7 @@
 package com.leo.erp.common.api;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leo.erp.common.error.ErrorCode;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -11,6 +13,8 @@ import org.springframework.web.context.request.ServletRequestAttributes;
 import static org.assertj.core.api.Assertions.assertThat;
 
 class ApiResponseTest {
+
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     @AfterEach
     void tearDown() {
@@ -30,6 +34,40 @@ class ApiResponseTest {
         assertThat(response.rateLimit().limit()).isEqualTo(150);
         assertThat(response.rateLimit().remaining()).isEqualTo(149);
         assertThat(response.rateLimit().retryAfterSeconds()).isNull();
+    }
+
+    @Test
+    void successRateLimitJsonOmitsRetryFieldsWhenAllowed() throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(request));
+        RateLimitContext.set(request, RateLimitContext.Snapshot.allowed(150, 149));
+
+        JsonNode rateLimit = objectMapper
+                .readTree(objectMapper.writeValueAsString(ApiResponse.success("成功", "ok")))
+                .path("rateLimit");
+
+        assertThat(rateLimit.path("limit").asLong()).isEqualTo(150);
+        assertThat(rateLimit.path("remaining").asLong()).isEqualTo(149);
+        assertThat(rateLimit.has("resetSeconds")).isFalse();
+        assertThat(rateLimit.has("retryAfterSeconds")).isFalse();
+    }
+
+    @Test
+    void failureRateLimitJsonKeepsRetryFieldsWhenRejected() throws Exception {
+        ApiResponse<Void> response = ApiResponse.failure(
+                com.leo.erp.common.error.ErrorCode.RATE_LIMITED,
+                "limited",
+                RateLimitContext.Snapshot.rejected(10, 3)
+        );
+
+        JsonNode rateLimit = objectMapper
+                .readTree(objectMapper.writeValueAsString(response))
+                .path("rateLimit");
+
+        assertThat(rateLimit.path("limit").asLong()).isEqualTo(10);
+        assertThat(rateLimit.path("remaining").asLong()).isZero();
+        assertThat(rateLimit.path("resetSeconds").asLong()).isEqualTo(3);
+        assertThat(rateLimit.path("retryAfterSeconds").asLong()).isEqualTo(3);
     }
 
     @Test
