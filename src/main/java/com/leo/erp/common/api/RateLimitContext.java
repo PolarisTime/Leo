@@ -1,5 +1,6 @@
 package com.leo.erp.common.api;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
@@ -38,6 +39,7 @@ public final class RateLimitContext {
         return snapshot instanceof Snapshot rateLimit ? rateLimit : null;
     }
 
+    @JsonInclude(JsonInclude.Include.NON_NULL)
     public record Snapshot(
             long limit,
             long remaining,
