@@ -64,4 +64,48 @@ class PrintOutputTest {
         assertThat(json.has("data")).isFalse();
         assertThat(json.has("items")).isFalse();
     }
+
+    @Test
+    void shouldNormalizeInvalidPayloadFields() {
+        PrintOutput output = PrintOutput.fromPayload(Map.of(
+                "recordId", "not-a-number",
+                "data", "not-a-map",
+                "items", "not-a-list"
+        ));
+
+        assertThat(output.kind()).isEqualTo(PrintOutput.Kind.LODOP_SCRIPT);
+        assertThat(output.templateType()).isEqualTo("COORD");
+        assertThat(output.recordId()).isNull();
+        assertThat(output.data()).isNull();
+        assertThat(output.items()).isNull();
+    }
+
+    @Test
+    void shouldNormalizeStringAndMissingRecordIds() {
+        PrintOutput stringRecordIdOutput = PrintOutput.fromPayload(Map.of(
+                "recordId", "42"
+        ));
+        PrintOutput missingRecordIdOutput = PrintOutput.fromPayload(Map.of());
+
+        assertThat(stringRecordIdOutput.recordId()).isEqualTo(42L);
+        assertThat(missingRecordIdOutput.recordId()).isNull();
+    }
+
+    @Test
+    void shouldCopyOnlyStringEntriesFromPayloadMaps() {
+        PrintOutput output = PrintOutput.fromPayload(Map.of(
+                "data", Map.of(
+                        "customerName", "客户甲",
+                        "invalidNumber", 12
+                ),
+                "items", List.of(
+                        Map.of("brand", "中杭", "ignored", 1),
+                        "not-a-map"
+                )
+        ));
+
+        assertThat(output.data())
+                .containsExactlyEntriesOf(Map.of("customerName", "客户甲"));
+        assertThat(output.items()).containsExactly(Map.of("brand", "中杭"));
+    }
 }

@@ -147,6 +147,23 @@ class PrintScriptControllerTest {
     }
 
     @Test
+    void itemsUsesEmptyRecordIdsForInvalidPayload() {
+        SecurityPrincipal principal = mock(SecurityPrincipal.class);
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("moduleKey", "sales-order");
+        payload.put("recordIds", "1");
+
+        when(modulePermissionGuard.requirePermission(principal, "sales-order", "read")).thenReturn("sales-order");
+        when(printScriptService.listPrintItems("sales-order", List.of())).thenReturn(List.of());
+
+        ApiResponse<List<PrintRecordItem>> response = controller.items(principal, payload);
+
+        assertThat(response.code()).isEqualTo(0);
+        assertThat(response.data()).isEmpty();
+        verify(printScriptService).listPrintItems("sales-order", List.of());
+    }
+
+    @Test
     void fromRecordWithPdfFormReturnsPdfBase64() {
         SecurityPrincipal principal = mock(SecurityPrincipal.class);
         PrintRecordRequest payload = new PrintRecordRequest("sales-order", "template-1", 1L, null);
