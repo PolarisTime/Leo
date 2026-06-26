@@ -1,33 +1,19 @@
 package com.leo.erp.search.service;
 
-import com.leo.erp.contract.purchase.service.PurchaseContractService;
-import com.leo.erp.contract.sales.service.SalesContractService;
-import com.leo.erp.common.error.BusinessException;
-import com.leo.erp.common.error.ErrorCode;
-import com.leo.erp.finance.invoiceissue.service.InvoiceIssueService;
-import com.leo.erp.finance.invoicereceipt.service.InvoiceReceiptService;
-import com.leo.erp.finance.payment.service.PaymentService;
-import com.leo.erp.finance.receipt.service.ReceiptService;
-import com.leo.erp.purchase.inbound.service.PurchaseInboundService;
-import com.leo.erp.purchase.order.service.PurchaseOrderService;
-import com.leo.erp.purchase.order.web.dto.PurchaseOrderResponse;
-import com.leo.erp.sales.order.service.SalesOrderService;
-import com.leo.erp.sales.outbound.service.SalesOutboundService;
+import com.leo.erp.search.repository.GlobalSearchDocument;
+import com.leo.erp.search.repository.GlobalSearchDocumentRepository;
+import com.leo.erp.search.repository.GlobalSearchModuleAccess;
+import com.leo.erp.search.web.GlobalSearchResponse;
 import com.leo.erp.security.permission.DataScopeContext;
 import com.leo.erp.security.permission.ModulePermissionGuard;
 import com.leo.erp.security.permission.PermissionService;
 import com.leo.erp.security.permission.ResourcePermissionCatalog;
 import com.leo.erp.security.support.SecurityPrincipal;
-import com.leo.erp.statement.customer.service.CustomerStatementService;
-import com.leo.erp.statement.freight.service.FreightStatementService;
-import com.leo.erp.statement.supplier.service.SupplierStatementService;
-import com.leo.erp.logistics.bill.service.FreightBillService;
-import com.leo.erp.search.web.GlobalSearchResponse;
-import java.math.BigDecimal;
 import java.util.List;
 import java.util.Set;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -36,12 +22,14 @@ import org.springframework.transaction.annotation.Transactional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 class GlobalSearchServiceTest {
@@ -53,7 +41,7 @@ class GlobalSearchServiceTest {
     }
 
     @Test
-    void searchSuspendsOuterTransactionToKeepModuleFailuresIsolated() throws Exception {
+    void searchSuspendsOuterTransactionToKeepSearchFailuresIsolated() throws Exception {
         Transactional annotation = GlobalSearchService.class
                 .getMethod("search", String.class, int.class, List.class)
                 .getAnnotation(Transactional.class);
@@ -65,9 +53,8 @@ class GlobalSearchServiceTest {
     @Test
     void searchAppliesPerModulePermissionAndDataScope() {
         PermissionService permissionService = mock(PermissionService.class);
-        PurchaseOrderService purchaseOrderService = mock(PurchaseOrderService.class);
-        SalesOrderService salesOrderService = mock(SalesOrderService.class);
-        GlobalSearchService service = createService(permissionService, purchaseOrderService, salesOrderService);
+        GlobalSearchDocumentRepository documentRepository = mock(GlobalSearchDocumentRepository.class);
+        GlobalSearchService service = createService(permissionService, documentRepository);
         authenticate(1L);
 
         when(permissionService.can(anyLong(), anyString(), anyString())).thenReturn(false);
@@ -76,50 +63,37 @@ class GlobalSearchServiceTest {
                 .thenReturn(ResourcePermissionCatalog.SCOPE_DEPARTMENT);
         when(permissionService.getDataScopeOwnerUserIds(1L, ResourcePermissionCatalog.SCOPE_DEPARTMENT))
                 .thenReturn(Set.of(1L, 2L));
+        when(documentRepository.search(eq("CG20260001"), isNull(), eq(20), anyList()))
+                .thenReturn(List.of(new GlobalSearchDocument(
+                        "purchase-order",
+                        1L,
+                        "CG20260001",
+                        "供应商甲 / 采购A / 已审核",
+                        false
+                )));
 
-        when(purchaseOrderService.search("CG20260001", 6)).thenAnswer(invocation -> {
-            DataScopeContext.Context context = DataScopeContext.current();
-            assertThat(context).isNotNull();
-            assertThat(context.resource()).isEqualTo("purchase-order");
-            assertThat(context.scope()).isEqualTo(ResourcePermissionCatalog.SCOPE_DEPARTMENT);
-            assertThat(context.ownerUserIds()).containsExactlyInAnyOrder(1L, 2L);
-            return List.of(new PurchaseOrderResponse(
-                    1L,
-                    "CG20260001",
-                    "供应商甲",
-                    null,
-                    "采购A",
-                    null,
-                    null,
-                    "已审核",
-                    null,
-                    List.of()
-            ));
+        List<GlobalSearchResponse> results = service.search("CG20260001", 20, List.of("purchase-order", "sales-order"));
+
+        ArgumentCaptor<List<GlobalSearchModuleAccess>> accessCaptor = ArgumentCaptor.forClass(List.class);
+        verify(documentRepository).search(eq("CG20260001"), isNull(), eq(20), accessCaptor.capture());
+        assertThat(accessCaptor.getValue()).singleElement().satisfies(access -> {
+            assertThat(access.moduleKey()).isEqualTo("purchase-order");
+            assertThat(access.ownerUserIds()).containsExactlyInAnyOrder(1L, 2L);
         });
-
-        List<GlobalSearchResponse> results = service.search("CG20260001", 20);
-
         assertThat(results).singleElement().satisfies(item -> {
             assertThat(item.moduleKey()).isEqualTo("purchase-order");
             assertThat(item.primaryNo()).isEqualTo("CG20260001");
             assertThat(item.summary()).isEqualTo("供应商甲 / 采购A / 已审核");
             assertThat(item.matchedByTrackId()).isFalse();
         });
-        verify(purchaseOrderService).search("CG20260001", 6);
-        verifyNoInteractions(salesOrderService);
         assertThat(DataScopeContext.current()).isNull();
     }
 
     @Test
-    void searchUsesDetailLookupForTrackId() {
+    void searchUsesRepositoryTrackIdLookupForLongNumericKeyword() {
         PermissionService permissionService = mock(PermissionService.class);
-        PurchaseOrderService purchaseOrderService = mock(PurchaseOrderService.class);
-        SalesOrderService salesOrderService = mock(SalesOrderService.class);
-        GlobalSearchService service = createService(
-                permissionService,
-                purchaseOrderService,
-                salesOrderService
-        );
+        GlobalSearchDocumentRepository documentRepository = mock(GlobalSearchDocumentRepository.class);
+        GlobalSearchService service = createService(permissionService, documentRepository);
         authenticate(1L);
 
         when(permissionService.can(anyLong(), anyString(), anyString())).thenReturn(false);
@@ -128,24 +102,18 @@ class GlobalSearchServiceTest {
                 .thenReturn(ResourcePermissionCatalog.SCOPE_SELF);
         when(permissionService.getDataScopeOwnerUserIds(1L, ResourcePermissionCatalog.SCOPE_SELF))
                 .thenReturn(Set.of(1L));
-        when(purchaseOrderService.detail(1914876201459236001L)).thenReturn(new PurchaseOrderResponse(
-                1914876201459236001L,
-                "CG20260001",
-                "供应商甲",
-                null,
-                "采购A",
-                null,
-                null,
-                "已审核",
-                null,
-                List.of()
-        ));
+        when(documentRepository.search(eq("1914876201459236001"), eq(1914876201459236001L), eq(20), anyList()))
+                .thenReturn(List.of(new GlobalSearchDocument(
+                        "purchase-order",
+                        1914876201459236001L,
+                        "CG20260001",
+                        "供应商甲 / 采购A / 已审核",
+                        true
+                )));
 
-        List<GlobalSearchResponse> results = service.search("1914876201459236001", 20);
+        List<GlobalSearchResponse> results = service.search("1914876201459236001", 20, List.of("purchase-order"));
 
-        verify(purchaseOrderService, never()).search(anyString(), anyInt());
-        verify(purchaseOrderService).detail(1914876201459236001L);
-        verifyNoInteractions(salesOrderService);
+        verify(documentRepository).search(eq("1914876201459236001"), eq(1914876201459236001L), eq(20), anyList());
         assertThat(results).singleElement().satisfies(item -> {
             assertThat(item.trackId()).isEqualTo("1914876201459236001");
             assertThat(item.primaryNo()).isEqualTo("CG20260001");
@@ -155,115 +123,92 @@ class GlobalSearchServiceTest {
     }
 
     @Test
-    void trackIdSearchSkipsFailedDetailLookupAndContinuesNextModule() {
+    void searchSkipsRepositoryForOverflowTrackId() {
         PermissionService permissionService = mock(PermissionService.class);
-        PurchaseOrderService purchaseOrderService = mock(PurchaseOrderService.class);
-        SalesOrderService salesOrderService = mock(SalesOrderService.class);
-        GlobalSearchService service = createService(
-                permissionService,
-                purchaseOrderService,
-                salesOrderService
-        );
-        authenticate(1L);
+        GlobalSearchDocumentRepository documentRepository = mock(GlobalSearchDocumentRepository.class);
+        GlobalSearchService service = createService(permissionService, documentRepository);
 
-        when(permissionService.can(anyLong(), anyString(), anyString())).thenReturn(false);
-        when(permissionService.can(1L, "purchase-order", ResourcePermissionCatalog.READ)).thenReturn(true);
-        when(permissionService.can(1L, "sales-order", ResourcePermissionCatalog.READ)).thenReturn(true);
-        when(permissionService.getUserDataScope(anyLong(), anyString(), anyString()))
-                .thenReturn(ResourcePermissionCatalog.SCOPE_SELF);
-        when(permissionService.getDataScopeOwnerUserIds(1L, ResourcePermissionCatalog.SCOPE_SELF))
-                .thenReturn(Set.of(1L));
-        when(purchaseOrderService.detail(317340436135936000L))
-                .thenThrow(new BusinessException(ErrorCode.NOT_FOUND, "采购订单不存在"));
-        when(salesOrderService.detail(317340436135936000L)).thenReturn(new com.leo.erp.sales.order.web.dto.SalesOrderResponse(
-                317340436135936000L,
-                "XS20260001",
-                null,
-                null,
-                null,
-                "客户甲",
-                null,
-                null,
-                null,
-                null,
-                BigDecimal.ZERO,
-                BigDecimal.ZERO,
-                "已审核",
-                null,
-                List.of()
-        ));
+        List<GlobalSearchResponse> results = service.search("999999999999999999999999", 20, List.of("purchase-order"));
 
-        List<GlobalSearchResponse> results = service.search(
-                "317340436135936000",
-                20,
-                List.of("purchase-order", "sales-order")
-        );
-
-        verify(purchaseOrderService).detail(317340436135936000L);
-        verify(salesOrderService).detail(317340436135936000L);
-        assertThat(results).singleElement().satisfies(item -> {
-            assertThat(item.moduleKey()).isEqualTo("sales-order");
-            assertThat(item.trackId()).isEqualTo("317340436135936000");
-            assertThat(item.primaryNo()).isEqualTo("XS20260001");
-            assertThat(item.matchedByTrackId()).isTrue();
-        });
+        assertThat(results).isEmpty();
+        verify(documentRepository, never()).search(anyString(), anyLong(), anyInt(), anyList());
     }
 
     @Test
     void searchHonorsRequestedModuleKeys() {
         PermissionService permissionService = mock(PermissionService.class);
-        PurchaseOrderService purchaseOrderService = mock(PurchaseOrderService.class);
-        SalesOrderService salesOrderService = mock(SalesOrderService.class);
-        GlobalSearchService service = createService(permissionService, purchaseOrderService, salesOrderService);
+        GlobalSearchDocumentRepository documentRepository = mock(GlobalSearchDocumentRepository.class);
+        GlobalSearchService service = createService(permissionService, documentRepository);
         authenticate(1L);
 
         when(permissionService.can(anyLong(), anyString(), anyString())).thenReturn(false);
-        when(permissionService.can(1L, "purchase-order", ResourcePermissionCatalog.READ)).thenReturn(true);
-        when(permissionService.getUserDataScope(1L, "purchase-order", ResourcePermissionCatalog.READ))
+        when(permissionService.can(1L, "sales-order", ResourcePermissionCatalog.READ)).thenReturn(true);
+        when(permissionService.getUserDataScope(1L, "sales-order", ResourcePermissionCatalog.READ))
+                .thenReturn(ResourcePermissionCatalog.SCOPE_ALL);
+        when(documentRepository.search(eq("XS20260001"), isNull(), eq(20), anyList()))
+                .thenReturn(List.of(new GlobalSearchDocument(
+                        "sales-order",
+                        2L,
+                        "XS20260001",
+                        "客户甲 / 项目甲 / 已审核",
+                        false
+                )));
+
+        List<GlobalSearchResponse> results = service.search("XS20260001", 20, List.of("sales-order"));
+
+        ArgumentCaptor<List<GlobalSearchModuleAccess>> accessCaptor = ArgumentCaptor.forClass(List.class);
+        verify(documentRepository).search(eq("XS20260001"), isNull(), eq(20), accessCaptor.capture());
+        assertThat(accessCaptor.getValue()).singleElement().satisfies(access -> {
+            assertThat(access.moduleKey()).isEqualTo("sales-order");
+            assertThat(access.ownerUserIds()).isNull();
+        });
+        assertThat(results).singleElement().satisfies(item ->
+                assertThat(item.moduleKey()).isEqualTo("sales-order"));
+    }
+
+    @Test
+    void searchIncludesLedgerAdjustmentModule() {
+        PermissionService permissionService = mock(PermissionService.class);
+        GlobalSearchDocumentRepository documentRepository = mock(GlobalSearchDocumentRepository.class);
+        GlobalSearchService service = createService(permissionService, documentRepository);
+        authenticate(1L);
+
+        when(permissionService.can(anyLong(), anyString(), anyString())).thenReturn(false);
+        when(permissionService.can(1L, "ledger-adjustment", ResourcePermissionCatalog.READ)).thenReturn(true);
+        when(permissionService.getUserDataScope(1L, "ledger-adjustment", ResourcePermissionCatalog.READ))
                 .thenReturn(ResourcePermissionCatalog.SCOPE_SELF);
         when(permissionService.getDataScopeOwnerUserIds(1L, ResourcePermissionCatalog.SCOPE_SELF))
                 .thenReturn(Set.of(1L));
-        when(purchaseOrderService.search("CG20260001", 6)).thenReturn(List.of(new PurchaseOrderResponse(
-                1L,
-                "CG20260001",
-                "供应商甲",
-                null,
-                "采购A",
-                null,
-                null,
-                "已审核",
-                null,
-                List.of()
-        )));
+        when(documentRepository.search(eq("TZ20260001"), isNull(), eq(20), anyList()))
+                .thenReturn(List.of(new GlobalSearchDocument(
+                        "ledger-adjustment",
+                        3L,
+                        "TZ20260001",
+                        "客户甲 / 项目甲 / 已审核",
+                        false
+                )));
 
-        List<GlobalSearchResponse> results = service.search("CG20260001", 20, List.of("purchase-order"));
+        List<GlobalSearchResponse> results = service.search("TZ20260001", 20, List.of("ledger-adjustment"));
 
-        assertThat(results).singleElement().satisfies(item ->
-                assertThat(item.moduleKey()).isEqualTo("purchase-order"));
-        verify(purchaseOrderService).search("CG20260001", 6);
-        verifyNoInteractions(salesOrderService);
+        ArgumentCaptor<List<GlobalSearchModuleAccess>> accessCaptor = ArgumentCaptor.forClass(List.class);
+        verify(documentRepository).search(eq("TZ20260001"), isNull(), eq(20), accessCaptor.capture());
+        assertThat(accessCaptor.getValue()).singleElement().satisfies(access -> {
+            assertThat(access.moduleKey()).isEqualTo("ledger-adjustment");
+            assertThat(access.ownerUserIds()).containsExactly(1L);
+        });
+        assertThat(results).singleElement().satisfies(item -> {
+            assertThat(item.moduleKey()).isEqualTo("ledger-adjustment");
+            assertThat(item.title()).isEqualTo("台账调整单");
+            assertThat(item.primaryNo()).isEqualTo("TZ20260001");
+        });
     }
 
     private GlobalSearchService createService(PermissionService permissionService,
-                                              PurchaseOrderService purchaseOrderService,
-                                              SalesOrderService salesOrderService) {
+                                              GlobalSearchDocumentRepository documentRepository) {
         return new GlobalSearchService(
                 permissionService,
                 new ModulePermissionGuard(permissionService),
-                purchaseOrderService,
-                mock(PurchaseInboundService.class),
-                salesOrderService,
-                mock(SalesOutboundService.class),
-                mock(FreightBillService.class),
-                mock(PurchaseContractService.class),
-                mock(SalesContractService.class),
-                mock(SupplierStatementService.class),
-                mock(CustomerStatementService.class),
-                mock(FreightStatementService.class),
-                mock(ReceiptService.class),
-                mock(PaymentService.class),
-                mock(InvoiceReceiptService.class),
-                mock(InvoiceIssueService.class)
+                documentRepository
         );
     }
 
