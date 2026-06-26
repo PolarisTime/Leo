@@ -5,13 +5,13 @@ import com.leo.erp.security.permission.ModulePermissionGuard;
 import com.leo.erp.security.permission.RequiresPermission;
 import com.leo.erp.security.support.SecurityPrincipal;
 import com.leo.erp.system.operationlog.support.OperationLoggable;
-import com.leo.erp.system.printtemplate.service.PrintPdfFormService;
+import com.leo.erp.system.printtemplate.service.PrintOutput;
+import com.leo.erp.system.printtemplate.service.PrintOutputService;
 import com.leo.erp.system.printtemplate.service.PrintScriptService;
 import com.leo.erp.system.printtemplate.service.PrintScriptService.PrintRecordItem;
 import com.leo.erp.system.printtemplate.web.dto.PrintRecordRequest;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
-import org.springframework.http.MediaType;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -19,8 +19,6 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.Base64;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -31,18 +29,18 @@ import java.util.Objects;
 public class PrintScriptController {
 
     private final PrintScriptService printScriptService;
-    private final PrintPdfFormService printPdfFormService;
+    private final PrintOutputService printOutputService;
     private final ModulePermissionGuard modulePermissionGuard;
 
     public PrintScriptController(PrintScriptService printScriptService,
-                                 PrintPdfFormService printPdfFormService,
+                                 PrintOutputService printOutputService,
                                  ModulePermissionGuard modulePermissionGuard) {
         this.printScriptService = printScriptService;
-        this.printPdfFormService = printPdfFormService;
+        this.printOutputService = printOutputService;
         this.modulePermissionGuard = modulePermissionGuard;
     }
 
-    /** 统一打印接口：COORD 返回套打脚本与数据，PDF_FORM 返回 PDF base64。 */
+    /** 统一打印接口：由输出服务封装 PDF 与坐标套打响应。 */
     @PostMapping("/record")
     @RequiresPermission(authenticatedOnly = true)
     @OperationLoggable(
@@ -53,30 +51,17 @@ public class PrintScriptController {
             recordIdField = "recordId",
             moduleKeyField = "moduleKey"
     )
-    public ApiResponse<Map<String, Object>> fromRecord(
+    public ApiResponse<PrintOutput> fromRecord(
             @AuthenticationPrincipal SecurityPrincipal principal,
             @Valid @RequestBody @NotNull PrintRecordRequest payload) {
         String moduleKey = payload.moduleKey();
         modulePermissionGuard.requirePermission(principal, moduleKey, "read");
-        Map<String, Object> result = printScriptService.generateFromRecord(
+        PrintOutput result = printOutputService.generateFromRecord(
                 payload.templateId(),
                 moduleKey,
                 payload.recordId(),
                 payload.resolvedPrintOptions()
         );
-        if ("PDF_FORM".equals(String.valueOf(result.getOrDefault("templateType", "")))) {
-            byte[] pdf = printPdfFormService.generateFromPayload(result);
-            Map<String, Object> pdfResult = new HashMap<>();
-            pdfResult.put("templateName", result.get("templateName"));
-            pdfResult.put("templateType", "PDF_FORM");
-            pdfResult.put("contentType", MediaType.APPLICATION_PDF_VALUE);
-            pdfResult.put("fileName", "print.pdf");
-            pdfResult.put("pdfBase64", Base64.getEncoder().encodeToString(pdf));
-            pdfResult.put("businessNo", result.get("businessNo"));
-            pdfResult.put("recordId", result.get("recordId"));
-            pdfResult.put("moduleKey", result.get("moduleKey"));
-            result = pdfResult;
-        }
         return ApiResponse.success(result);
     }
 
