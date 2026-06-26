@@ -338,42 +338,52 @@ public class PrintPdfDrawingSupport {
             float width,
             float height,
             float fontSize,
+            float minimumFontSize,
             float lineHeightMultiplier,
             Color textColor,
             PageMetrics pageMetrics
     ) {
-        float y = topY(top, pageMetrics) - fontSize;
-        float minY = topY(top + height, pageMetrics) + fontSize;
-        float lineHeight = fontSize * lineHeightMultiplier;
+        float effectiveFontSize = fitParagraphFontSize(font, paragraphs, width, height, fontSize, minimumFontSize, lineHeightMultiplier);
+        float lineHeight = effectiveFontSize * lineHeightMultiplier;
+        List<String> lines = wrapParagraphs(font, paragraphs, effectiveFontSize, width);
+        int maxLineCount = maxLineCount(new Rectangle(0, 0, width, height), effectiveFontSize, lineHeightMultiplier);
+        if (lines.size() > maxLineCount) {
+            lines = limitLines(lines, font, effectiveFontSize, width, maxLineCount);
+        }
+        float y = topY(top, pageMetrics) - effectiveFontSize;
         canvas.saveState()
                 .setFillColor(textColor)
                 .beginText()
-                .setFontAndSize(font, fontSize);
-        for (String paragraph : paragraphs) {
-            StringBuilder line = new StringBuilder();
-            for (int offset = 0; offset < paragraph.length();) {
-                int codePoint = paragraph.codePointAt(offset);
-                String next = new String(Character.toChars(codePoint));
-                if (!line.isEmpty() && font.getWidth(line + next, fontSize) > width) {
-                    canvas.setTextMatrix(left, y).showText(line.toString());
-                    y -= lineHeight;
-                    line.setLength(0);
-                }
-                line.append(next);
-                offset += Character.charCount(codePoint);
-                if (y < minY) {
-                    break;
-                }
-            }
-            if (!line.isEmpty() && y >= minY) {
-                canvas.setTextMatrix(left, y).showText(line.toString());
-                y -= lineHeight;
-            }
-            if (y < minY) {
-                break;
-            }
+                .setFontAndSize(font, effectiveFontSize);
+        for (String line : lines) {
+            canvas.setTextMatrix(left, y).showText(line);
+            y -= lineHeight;
         }
         canvas.endText().restoreState();
+    }
+
+    private float fitParagraphFontSize(
+            PdfFont font,
+            List<String> paragraphs,
+            float width,
+            float height,
+            float fontSize,
+            float minimumFontSize,
+            float lineHeightMultiplier
+    ) {
+        float effectiveFontSize = fontSize;
+        while (effectiveFontSize > minimumFontSize) {
+            int lineCount = wrapParagraphs(font, paragraphs, effectiveFontSize, width).size();
+            if (lineCount <= maxLineCount(new Rectangle(0, 0, width, height), effectiveFontSize, lineHeightMultiplier)) {
+                return effectiveFontSize;
+            }
+            effectiveFontSize -= 0.5f;
+        }
+        return minimumFontSize;
+    }
+
+    private List<String> wrapParagraphs(PdfFont font, List<String> paragraphs, float fontSize, float width) {
+        return wrapLines(font, String.join("\n", paragraphs), fontSize, width);
     }
 
     float topY(float top, PageMetrics pageMetrics) {

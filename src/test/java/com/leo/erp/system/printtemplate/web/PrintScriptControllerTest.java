@@ -7,6 +7,7 @@ import com.leo.erp.system.printtemplate.service.PrintOptions;
 import com.leo.erp.system.printtemplate.service.PrintPdfFormService;
 import com.leo.erp.system.printtemplate.service.PrintScriptService;
 import com.leo.erp.system.printtemplate.service.PrintScriptService.PrintRecordItem;
+import com.leo.erp.system.operationlog.support.OperationLoggable;
 import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
@@ -58,8 +59,10 @@ class PrintScriptControllerTest {
         payload.put("recordId", "1");
         payload.put("printOptions", Map.of(
                 "hideUnitPrice", true,
+                "hideRemark", true,
                 "brandOverrides", Map.of("抚顺新钢", " 抚新 "),
-                "brandOverridesByItemId", Map.of("11", " 沙钢 ")
+                "brandOverridesByItemId", Map.of("11", " 沙钢 "),
+                "itemOrder", List.of("12", "11")
         ));
 
         Map<String, Object> result = new HashMap<>();
@@ -70,7 +73,7 @@ class PrintScriptControllerTest {
                 eq("template-1"),
                 eq("sales-order"),
                 eq(1L),
-                eq(new PrintOptions(true, "", Map.of("抚顺新钢", "抚新"), Map.of("11", "沙钢")))
+                eq(new PrintOptions(true, true, "", Map.of("抚顺新钢", "抚新"), Map.of("11", "沙钢"), List.of("12", "11")))
         )).thenReturn(result);
 
         ApiResponse<Map<String, Object>> response = controller.fromRecord(principal, payload);
@@ -80,7 +83,7 @@ class PrintScriptControllerTest {
                 "template-1",
                 "sales-order",
                 1L,
-                new PrintOptions(true, "", Map.of("抚顺新钢", "抚新"), Map.of("11", "沙钢"))
+                new PrintOptions(true, true, "", Map.of("抚顺新钢", "抚新"), Map.of("11", "沙钢"), List.of("12", "11"))
         );
     }
 
@@ -140,5 +143,19 @@ class PrintScriptControllerTest {
         assertThat(response.code()).isEqualTo(0);
         assertThat(response.data().get("templateType")).isEqualTo("PDF_FORM");
         assertThat(response.data().get("pdfBase64")).isNotNull();
+    }
+
+    @Test
+    void fromRecordHasOperationLogAnnotation() throws Exception {
+        OperationLoggable annotation = PrintScriptController.class
+                .getMethod("fromRecord", SecurityPrincipal.class, Map.class)
+                .getAnnotation(OperationLoggable.class);
+
+        assertThat(annotation).isNotNull();
+        assertThat(annotation.actionType()).isEqualTo("打印");
+        assertThat(annotation.moduleNameField()).isEqualTo("moduleKey");
+        assertThat(annotation.businessNoFields()).containsExactly("businessNo");
+        assertThat(annotation.recordIdField()).isEqualTo("recordId");
+        assertThat(annotation.moduleKeyField()).isEqualTo("moduleKey");
     }
 }

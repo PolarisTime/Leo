@@ -37,6 +37,7 @@ class OperationLogMetadataResolverTest {
 
         assertThat(result).isNotNull();
         assertThat(result.moduleName()).isEqualTo("测试模块");
+        assertThat(result.moduleNameField()).isEqualTo("moduleKey");
         assertThat(result.actionType()).isEqualTo("新增");
     }
 
@@ -107,7 +108,7 @@ class OperationLogMetadataResolverTest {
     static class TestController {
         public void noAnnotationMethod() {}
 
-        @OperationLoggable(moduleName = "测试模块", actionType = "新增", businessNoFields = {"id"})
+        @OperationLoggable(moduleName = "测试模块", moduleNameField = "moduleKey", actionType = "新增", businessNoFields = {"id"})
         public void loggableMethod() {}
 
         @RequiresPermission(resource = "test", action = "read")

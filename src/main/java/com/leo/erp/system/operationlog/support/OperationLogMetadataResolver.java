@@ -24,8 +24,11 @@ public class OperationLogMetadataResolver {
         if (operationLoggable != null) {
             return new OperationLogMetadata(
                     operationLoggable.moduleName(),
+                    operationLoggable.moduleNameField(),
                     operationLoggable.actionType(),
                     operationLoggable.businessNoFields(),
+                    operationLoggable.recordIdField(),
+                    operationLoggable.moduleKeyField(),
                     false
             );
         }
@@ -39,14 +42,14 @@ public class OperationLogMetadataResolver {
             if (!systemSwitchService.shouldRecordDetailedPageAction(autoLogAction.key())) {
                 return null;
             }
-            return new OperationLogMetadata(autoLogAction.moduleName(), autoLogAction.actionType(), new String[0], true);
+            return new OperationLogMetadata(autoLogAction.moduleName(), "", autoLogAction.actionType(), new String[0], "", "", true);
         }
 
         if (isReadOnlyMethod(request.getMethod()) || !systemSwitchService.shouldAutoRecordAllWriteOperations()) {
             return null;
         }
 
-        return new OperationLogMetadata(autoLogAction.moduleName(), autoLogAction.actionType(), new String[0], true);
+        return new OperationLogMetadata(autoLogAction.moduleName(), "", autoLogAction.actionType(), new String[0], "", "", true);
     }
 
     private AutoLogAction resolveAutoLogAction(HandlerMethod handlerMethod, HttpServletRequest request) {

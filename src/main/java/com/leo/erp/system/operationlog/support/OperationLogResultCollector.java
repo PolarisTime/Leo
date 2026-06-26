@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leo.erp.common.api.ApiResponse;
 import com.leo.erp.common.support.ClientIpResolver;
+import com.leo.erp.common.support.ModuleCatalog;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.stereotype.Component;
@@ -21,12 +22,18 @@ import java.util.StringJoiner;
 @Component
 public class OperationLogResultCollector {
 
+    public static final String BUSINESS_NO_ATTRIBUTE = OperationLogResultCollector.class.getName() + ".businessNo";
+    public static final String RECORD_ID_ATTRIBUTE = OperationLogResultCollector.class.getName() + ".recordId";
+    public static final String MODULE_KEY_ATTRIBUTE = OperationLogResultCollector.class.getName() + ".moduleKey";
+
     private final ObjectMapper objectMapper;
     private final ClientIpResolver clientIpResolver;
+    private final ModuleCatalog moduleCatalog;
 
-    public OperationLogResultCollector(ObjectMapper objectMapper, ClientIpResolver clientIpResolver) {
+    public OperationLogResultCollector(ObjectMapper objectMapper, ClientIpResolver clientIpResolver, ModuleCatalog moduleCatalog) {
         this.objectMapper = objectMapper;
         this.clientIpResolver = clientIpResolver;
+        this.moduleCatalog = moduleCatalog;
     }
 
     public ApiResponse<?> extractApiResponse(HttpServletRequest request) {
@@ -35,16 +42,24 @@ public class OperationLogResultCollector {
     }
 
     public String resolveResultStatus(ApiResponse<?> apiResponse, HttpServletResponse response, Exception ex) {
+        return resolveResultStatus(apiResponse, response == null ? 0 : response.getStatus(), ex);
+    }
+
+    public String resolveResultStatus(ApiResponse<?> apiResponse, int responseStatus, Exception ex) {
         if (apiResponse != null) {
             return apiResponse.code() == 0 ? "成功" : "失败";
         }
-        if (ex != null || response.getStatus() >= 400) {
+        if (ex != null || responseStatus >= 400) {
             return "失败";
         }
         return "成功";
     }
 
     public String resolveBusinessNo(HttpServletRequest request, ApiResponse<?> apiResponse, OperationLogMetadata metadata) {
+        String fromAttribute = readStringAttribute(request, BUSINESS_NO_ATTRIBUTE);
+        if (fromAttribute != null) {
+            return fromAttribute;
+        }
         String fromResponse = joinValues(metadata.businessNoFields(), apiResponse == null ? null : apiResponse.data());
         if (fromResponse != null) {
             return fromResponse;
@@ -53,6 +68,11 @@ public class OperationLogResultCollector {
         String fromRequest = joinValues(metadata.businessNoFields(), parseRequestBody(request));
         if (fromRequest != null) {
             return fromRequest;
+        }
+
+        String fromRecordId = resolveLogValue(request, apiResponse, metadata.recordIdField());
+        if (fromRecordId != null) {
+            return fromRecordId;
         }
 
         @SuppressWarnings("unchecked")
@@ -64,6 +84,83 @@ public class OperationLogResultCollector {
             }
         }
         return null;
+    }
+
+    public Long resolveRecordId(HttpServletRequest request, ApiResponse<?> apiResponse, OperationLogMetadata metadata) {
+        Long fromAttribute = readLongAttribute(request, RECORD_ID_ATTRIBUTE);
+        if (fromAttribute != null) {
+            return fromAttribute;
+        }
+        String value = resolveLogValue(request, apiResponse, metadata.recordIdField());
+        if (value == null) {
+            return null;
+        }
+        try {
+            return Long.valueOf(value);
+        } catch (NumberFormatException ignored) {
+            return null;
+        }
+    }
+
+    public String resolveModuleKey(HttpServletRequest request, ApiResponse<?> apiResponse, OperationLogMetadata metadata) {
+        String fromAttribute = readStringAttribute(request, MODULE_KEY_ATTRIBUTE);
+        if (fromAttribute != null) {
+            return fromAttribute;
+        }
+        return resolveLogValue(request, apiResponse, metadata.moduleKeyField());
+    }
+
+    public String resolveModuleName(HttpServletRequest request, OperationLogMetadata metadata) {
+        if (metadata == null) {
+            return null;
+        }
+        String moduleNameField = metadata.moduleNameField();
+        if (moduleNameField == null || moduleNameField.isBlank()) {
+            return metadata.moduleName();
+        }
+        String moduleKey = readValue(parseRequestBody(request), moduleNameField);
+        if (moduleKey == null || moduleKey.isBlank()) {
+            return metadata.moduleName();
+        }
+        return moduleCatalog == null ? moduleKey : moduleCatalog.resolveModuleName(moduleKey);
+    }
+
+    private String resolveLogValue(HttpServletRequest request, ApiResponse<?> apiResponse, String field) {
+        if (field == null || field.isBlank()) {
+            return null;
+        }
+        String fromResponse = readValue(apiResponse == null ? null : apiResponse.data(), field);
+        if (fromResponse != null) {
+            return fromResponse;
+        }
+        String fromRequest = readValue(parseRequestBody(request), field);
+        if (fromRequest != null) {
+            return fromRequest;
+        }
+        @SuppressWarnings("unchecked")
+        Map<String, String> uriVariables = (Map<String, String>) request.getAttribute(HandlerMapping.URI_TEMPLATE_VARIABLES_ATTRIBUTE);
+        return uriVariables == null ? null : trimToNull(uriVariables.get(field));
+    }
+
+    private Long readLongAttribute(HttpServletRequest request, String name) {
+        Object value = request.getAttribute(name);
+        if (value instanceof Number number) {
+            return number.longValue();
+        }
+        String text = value == null ? null : String.valueOf(value).trim();
+        if (text == null || text.isBlank()) {
+            return null;
+        }
+        try {
+            return Long.valueOf(text);
+        } catch (NumberFormatException ignored) {
+            return null;
+        }
+    }
+
+    private String readStringAttribute(HttpServletRequest request, String name) {
+        Object value = request.getAttribute(name);
+        return value == null ? null : trimToNull(String.valueOf(value));
     }
 
     public String resolveRemark(ApiResponse<?> apiResponse, Exception ex) {
@@ -170,5 +267,13 @@ public class OperationLogResultCollector {
             }
         }
         return null;
+    }
+
+    private String trimToNull(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
     }
 }

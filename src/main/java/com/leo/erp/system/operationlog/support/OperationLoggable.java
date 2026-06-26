@@ -11,7 +11,13 @@ public @interface OperationLoggable {
 
     String moduleName();
 
+    String moduleNameField() default "";
+
     String actionType();
 
     String[] businessNoFields() default {};
+
+    String recordIdField() default "";
+
+    String moduleKeyField() default "";
 }
