@@ -12,12 +12,17 @@ import com.leo.erp.purchase.inbound.web.dto.PurchaseInboundRequest;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Set;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @Service
 public class PurchaseInboundWeightSettlementService {
+
+    private static final BigDecimal DEFAULT_PURCHASE_WEIGH_TOLERANCE_PERCENT = new BigDecimal("5.00");
+    private static final BigDecimal ONE_HUNDRED = new BigDecimal("100");
 
     private final MaterialCategoryRepository materialCategoryRepository;
 
@@ -25,7 +30,7 @@ public class PurchaseInboundWeightSettlementService {
         this.materialCategoryRepository = materialCategoryRepository;
     }
 
-    Set<String> loadPurchaseWeighRequiredCategoryNames(PurchaseInboundRequest request) {
+    Map<String, PurchaseWeighCategoryRule> loadPurchaseWeighCategoryRules(PurchaseInboundRequest request) {
         List<String> categoryNames = request.items().stream()
                 .map(PurchaseInboundItemRequest::category)
                 .map(this::normalizeCategoryName)
@@ -33,13 +38,31 @@ public class PurchaseInboundWeightSettlementService {
                 .distinct()
                 .toList();
         if (categoryNames.isEmpty()) {
-            return Set.of();
+            return Map.of();
         }
-        return materialCategoryRepository.findByCategoryNameInAndDeletedFlagFalse(categoryNames).stream()
-                .filter(category -> Boolean.TRUE.equals(category.getPurchaseWeighRequired()))
-                .map(MaterialCategory::getCategoryName)
-                .map(this::normalizeCategoryName)
-                .collect(Collectors.toSet());
+        Map<String, PurchaseWeighCategoryRule> ruleMap = categoryNames.stream()
+                .collect(Collectors.toMap(
+                        categoryName -> categoryName,
+                        categoryName -> new PurchaseWeighCategoryRule(
+                                categoryName,
+                                false,
+                                DEFAULT_PURCHASE_WEIGH_TOLERANCE_PERCENT,
+                                DEFAULT_PURCHASE_WEIGH_TOLERANCE_PERCENT
+                        ),
+                        (left, right) -> left,
+                        LinkedHashMap::new
+                ));
+        materialCategoryRepository.findByCategoryNameInAndDeletedFlagFalse(categoryNames)
+                .forEach(category -> ruleMap.put(
+                        normalizeCategoryName(category.getCategoryName()),
+                        new PurchaseWeighCategoryRule(
+                                normalizeCategoryName(category.getCategoryName()),
+                                Boolean.TRUE.equals(category.getPurchaseWeighRequired()),
+                                normalizeTolerancePercent(category.getPurchaseWeighOverTolerancePercent()),
+                                normalizeTolerancePercent(category.getPurchaseWeighUnderTolerancePercent())
+                        )
+                ));
+        return ruleMap;
     }
 
     String resolveLineSettlementMode(
@@ -60,13 +83,14 @@ public class PurchaseInboundWeightSettlementService {
     WeightSettlementResult resolveWeightSettlement(
             PurchaseInboundItemRequest source,
             int lineNo,
-            Set<String> purchaseWeighRequiredCategoryNames,
+            Map<String, PurchaseWeighCategoryRule> purchaseWeighCategoryRules,
             String settlementMode
     ) {
         BigDecimal sourcePieceWeightTon = TradeItemCalculator.scaleWeightTon(source.pieceWeightTon());
         BigDecimal baseWeightTon = TradeItemCalculator.calculateWeightTon(source.quantity(), sourcePieceWeightTon);
-        boolean purchaseWeighRequired = purchaseWeighRequiredCategoryNames
-                .contains(normalizeCategoryName(source.category()));
+        PurchaseWeighCategoryRule purchaseWeighCategoryRule = resolvePurchaseWeighCategoryRule(
+                purchaseWeighCategoryRules, source.category());
+        boolean purchaseWeighRequired = purchaseWeighCategoryRule.purchaseWeighRequired();
         boolean purchaseWeighSettlement = isPurchaseWeighSettlement(settlementMode);
         if (!purchaseWeighRequired && !purchaseWeighSettlement) {
             return new WeightSettlementResult(
@@ -83,8 +107,7 @@ public class PurchaseInboundWeightSettlementService {
         }
         BigDecimal weighWeightTon = requireWeighWeightTon(source, lineNo);
         BigDecimal theoreticalWeightTon = resolveAdjustmentBaseWeightTon(source);
-        BigDecimal averagePieceWeightTon = TradeItemCalculator
-                .calculateAveragePieceWeightTon(source.quantity(), weighWeightTon);
+        validateWeighTolerance(weighWeightTon, theoreticalWeightTon, purchaseWeighCategoryRule, lineNo);
         BigDecimal weightAdjustmentTon = TradeItemCalculator
                 .scaleWeightTon(weighWeightTon.subtract(theoreticalWeightTon));
         BigDecimal weightAdjustmentAmount = TradeItemCalculator
@@ -92,7 +115,7 @@ public class PurchaseInboundWeightSettlementService {
         return new WeightSettlementResult(
                 theoreticalWeightTon, weighWeightTon,
                 weightAdjustmentTon, weightAdjustmentAmount,
-                averagePieceWeightTon, weighWeightTon
+                sourcePieceWeightTon, weighWeightTon
         );
     }
 
@@ -102,6 +125,22 @@ public class PurchaseInboundWeightSettlementService {
 
     private boolean isPurchaseWeighSettlement(String settlementMode) {
         return "过磅".equals(settlementMode == null ? "" : settlementMode.trim());
+    }
+
+    private PurchaseWeighCategoryRule resolvePurchaseWeighCategoryRule(
+            Map<String, PurchaseWeighCategoryRule> ruleMap,
+            String categoryName
+    ) {
+        String normalizedCategoryName = normalizeCategoryName(categoryName);
+        return ruleMap.getOrDefault(
+                normalizedCategoryName,
+                new PurchaseWeighCategoryRule(
+                        normalizedCategoryName,
+                        false,
+                        DEFAULT_PURCHASE_WEIGH_TOLERANCE_PERCENT,
+                        DEFAULT_PURCHASE_WEIGH_TOLERANCE_PERCENT
+                )
+        );
     }
 
     private BigDecimal requireWeighWeightTon(PurchaseInboundItemRequest source, int lineNo) {
@@ -121,5 +160,48 @@ public class PurchaseInboundWeightSettlementService {
 
     private BigDecimal resolveAdjustmentBaseWeightTon(PurchaseInboundItemRequest source) {
         return TradeItemCalculator.calculateWeightTon(source.quantity(), source.pieceWeightTon());
+    }
+
+    private void validateWeighTolerance(
+            BigDecimal weighWeightTon,
+            BigDecimal theoreticalWeightTon,
+            PurchaseWeighCategoryRule rule,
+            int lineNo
+    ) {
+        if (theoreticalWeightTon.compareTo(BigDecimal.ZERO) <= 0) {
+            return;
+        }
+        BigDecimal diff = weighWeightTon.subtract(theoreticalWeightTon);
+        BigDecimal diffPercent = diff.abs()
+                .multiply(ONE_HUNDRED)
+                .divide(theoreticalWeightTon, 4, RoundingMode.HALF_UP);
+        BigDecimal limitPercent = diff.compareTo(BigDecimal.ZERO) > 0
+                ? rule.overTolerancePercent()
+                : rule.underTolerancePercent();
+        if (diffPercent.compareTo(limitPercent) > 0) {
+            String direction = diff.compareTo(BigDecimal.ZERO) > 0 ? "上差" : "下差";
+            throw new BusinessException(
+                    ErrorCode.VALIDATION_ERROR,
+                    "第" + lineNo + "行过磅重量" + direction + "超过允许范围，当前差异"
+                            + formatPercent(diffPercent) + "%，允许" + formatPercent(limitPercent) + "%"
+            );
+        }
+    }
+
+    private BigDecimal normalizeTolerancePercent(BigDecimal value) {
+        BigDecimal normalized = value == null ? DEFAULT_PURCHASE_WEIGH_TOLERANCE_PERCENT : value;
+        return normalized.setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private String formatPercent(BigDecimal value) {
+        return value.stripTrailingZeros().toPlainString();
+    }
+
+    record PurchaseWeighCategoryRule(
+            String categoryName,
+            boolean purchaseWeighRequired,
+            BigDecimal overTolerancePercent,
+            BigDecimal underTolerancePercent
+    ) {
     }
 }

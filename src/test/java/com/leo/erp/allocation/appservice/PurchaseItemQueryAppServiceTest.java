@@ -64,6 +64,7 @@ class PurchaseItemQueryAppServiceTest {
         assertThat(record.id()).isEqualTo(2L);
         assertThat(record.quantity()).isEqualTo(200);
         assertThat(record.weightTon()).isEqualByComparingTo(new BigDecimal("10.25"));
+        assertThat(record.pieceWeightTon()).isNull();
         assertThat(record.orderNo()).isEqualTo("PO-002");
         assertThat(record.brand()).isEqualTo("BrandX");
         assertThat(record.material()).isEqualTo("MaterialY");

@@ -18,7 +18,6 @@ import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.function.LongSupplier;
 
 @Service
@@ -56,8 +55,8 @@ public class PurchaseInboundApplyService {
         PurchaseInboundSourceValidator.SourceValidationContext sourceContext =
                 sourceValidator.prepareContext(request, inbound.getId(), previousSourcePurchaseOrderItemIds);
         Map<Long, PurchaseOrderItem> sourcePurchaseOrderItemMap = sourceContext.sourcePurchaseOrderItemMap();
-        Set<String> purchaseWeighRequiredCategoryNames =
-                weightSettlementService.loadPurchaseWeighRequiredCategoryNames(request);
+        Map<String, PurchaseInboundWeightSettlementService.PurchaseWeighCategoryRule> purchaseWeighCategoryRules =
+                weightSettlementService.loadPurchaseWeighCategoryRules(request);
         Map<Long, PurchaseInboundWeightWriteBackService.SourceWeighAccumulator> currentWeighAccumulatorMap =
                 new HashMap<>();
         LinkedHashSet<String> sourcePurchaseOrderNos = new LinkedHashSet<>();
@@ -80,7 +79,7 @@ public class PurchaseInboundApplyService {
 
             sourceValidator.validateLine(source, lineNo, request, sourceContext);
             WeightSettlementResult weightSettlement = weightSettlementService.resolveWeightSettlement(
-                    source, lineNo, purchaseWeighRequiredCategoryNames,
+                    source, lineNo, purchaseWeighCategoryRules,
                     weightSettlementService.resolveLineSettlementMode(source, request, lineNo));
 
             InboundItemMapper.ItemMappingResult result = inboundItemMapper.applyItemFields(

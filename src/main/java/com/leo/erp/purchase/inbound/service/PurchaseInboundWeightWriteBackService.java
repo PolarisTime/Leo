@@ -55,14 +55,13 @@ public class PurchaseInboundWeightWriteBackService {
                     currentWeighAccumulatorMap.get(sourcePurchaseOrderItemId)
             );
             if (weighAccumulator != null && weighAccumulator.hasQuantity()) {
-                BigDecimal averagePieceWeightTon = weighAccumulator.averagePieceWeightTon();
                 BigDecimal actualWeightTon = weighAccumulator.isFullyAllocated(sourceItem.getQuantity())
                         ? TradeItemCalculator.scaleWeightTon(weighAccumulator.weightTon())
-                        : TradeItemCalculator.calculateWeightTon(sourceItem.getQuantity(), averagePieceWeightTon);
+                        : TradeItemCalculator.scaleWeightTon(sourceItem.getWeightTon());
                 sourceItem.setWeightTon(actualWeightTon);
                 sourceItem.setAmount(TradeItemCalculator.calculateAmount(actualWeightTon, sourceItem.getUnitPrice()));
-                sourceItem.setActualWeightTon(actualWeightTon);
-                sourceItem.setActualPieceWeightTon(TradeItemCalculator.scaleWeightTon(averagePieceWeightTon));
+                sourceItem.setActualWeightTon(TradeItemCalculator.scaleWeightTon(weighAccumulator.weightTon()));
+                sourceItem.setActualPieceWeightTon(null);
             } else {
                 sourceItem.setActualWeightTon(null);
                 sourceItem.setActualPieceWeightTon(null);
@@ -146,10 +145,6 @@ public class PurchaseInboundWeightWriteBackService {
     record SourceWeighAccumulator(Integer quantity, BigDecimal weightTon) {
         boolean hasQuantity() {
             return quantity != null && quantity > 0;
-        }
-
-        BigDecimal averagePieceWeightTon() {
-            return TradeItemCalculator.calculateAveragePieceWeightTon(quantity, weightTon);
         }
 
         boolean isFullyAllocated(Integer sourceQuantity) {

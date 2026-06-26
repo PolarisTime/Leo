@@ -315,7 +315,7 @@ class PurchaseInboundServiceTest {
                         new BigDecimal("4000.00"), null
                 ))
         );
-        MaterialCategory category = purchaseWeighCategory("盘螺");
+        MaterialCategory category = purchaseWeighCategory("盘螺", "10.00", "5.00");
 
         when(repository.existsByInboundNoAndDeletedFlagFalse("PI-002")).thenReturn(false);
         when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(materialMap("M1"));
@@ -341,18 +341,84 @@ class PurchaseInboundServiceTest {
         assertThat(inboundCaptor.getValue().getWarehouseName()).isEqualTo("一号库");
         assertThat(inboundCaptor.getValue().getSettlementMode()).isEqualTo("过磅");
         assertThat(savedItem.getSettlementMode()).isEqualTo("过磅");
-        assertThat(savedItem.getPieceWeightTon()).isEqualByComparingTo("0.10750000");
+        assertThat(savedItem.getPieceWeightTon()).isEqualByComparingTo("0.100");
         assertThat(savedItem.getWeightTon()).isEqualByComparingTo("0.400");
         assertThat(savedItem.getWeighWeightTon()).isEqualByComparingTo("0.430");
         assertThat(savedItem.getWeightAdjustmentTon()).isEqualByComparingTo("0.030");
         assertThat(savedItem.getWeightAdjustmentAmount()).isEqualByComparingTo("120.00");
         assertThat(savedItem.getAmount()).isEqualByComparingTo("1600.00");
         assertThat(loadedSourceItem.getPieceWeightTon()).isEqualByComparingTo("0.100");
-        assertThat(loadedSourceItem.getWeightTon()).isEqualByComparingTo("1.07500000");
-        assertThat(loadedSourceItem.getAmount()).isEqualByComparingTo("4300.00");
-        assertThat(loadedPurchaseOrder.getTotalWeight()).isEqualByComparingTo("1.07500000");
-        assertThat(loadedPurchaseOrder.getTotalAmount()).isEqualByComparingTo("4300.00");
+        assertThat(loadedSourceItem.getWeightTon()).isEqualByComparingTo("1.000");
+        assertThat(loadedSourceItem.getActualWeightTon()).isEqualByComparingTo("0.430");
+        assertThat(loadedSourceItem.getActualPieceWeightTon()).isNull();
+        assertThat(loadedSourceItem.getAmount()).isEqualByComparingTo("4000.00");
+        assertThat(loadedPurchaseOrder.getTotalWeight()).isEqualByComparingTo("1.000");
+        assertThat(loadedPurchaseOrder.getTotalAmount()).isEqualByComparingTo("4000.00");
         verify(purchaseOrderRepository).saveAll(any());
+    }
+
+    @Test
+    void shouldRejectWeighWeightWhenOverToleranceExceeded() {
+        PurchaseInboundRepository repository = mock(PurchaseInboundRepository.class);
+        PurchaseInboundMapper mapper = mock(PurchaseInboundMapper.class);
+        TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
+        WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
+        MaterialCategoryRepository materialCategoryRepository = mock(MaterialCategoryRepository.class);
+        PurchaseInboundItemRepository purchaseInboundItemRepository = mock(PurchaseInboundItemRepository.class);
+        PurchaseOrderRepository purchaseOrderRepository = mock(PurchaseOrderRepository.class);
+        PurchaseOrderItemQueryService purchaseOrderItemQueryService = mock(PurchaseOrderItemQueryService.class);
+        PurchaseInboundService service = service(
+                repository,
+                mock(SnowflakeIdGenerator.class),
+                mapper,
+                materialSupport,
+                warehouseSelectionSupport,
+                new PurchaseInboundWeightSettlementService(materialCategoryRepository),
+                weightWriteBackService(purchaseInboundItemRepository, purchaseOrderRepository, mock(PurchaseOrderItemPieceWeightService.class)),
+                completionSyncService(repository, sourceValidator(purchaseOrderItemQueryService, purchaseInboundItemRepository)),
+                purchaseInboundItemRepository,
+                sourceValidator(purchaseOrderItemQueryService, purchaseInboundItemRepository),
+                mock(ItemAllocationNativeRepository.class),
+                stubbedInboundItemMapper(), mock(WorkflowTransitionGuard.class)
+        );
+        PurchaseOrder sourceOrder = new PurchaseOrder();
+        sourceOrder.setId(301L);
+        PurchaseOrderItem sourceItem = sourcePurchaseOrderWeighItem(sourceOrder);
+        sourceItem.setPieceWeightTon(new BigDecimal("2.100"));
+        sourceItem.setWeightTon(new BigDecimal("21.000"));
+        sourceItem.setAmount(new BigDecimal("84000.00"));
+        sourceOrder.getItems().add(sourceItem);
+        MaterialCategory category = purchaseWeighCategory("盘螺", "5.00", "5.00");
+
+        PurchaseInboundRequest request = new PurchaseInboundRequest(
+                "PI-OVER",
+                "PO-001",
+                "供应商A",
+                null,
+                LocalDate.of(2026, 4, 26),
+                null,
+                "草稿",
+                null,
+                List.of(new PurchaseInboundItemRequest(
+                        null, "M1", "宝钢", "盘螺", "HRB400", "18", "12m", "吨",
+                        201L, "一号库", "过磅", "B1", 10, "件",
+                        new BigDecimal("2.100"), 1, null,
+                        new BigDecimal("22.200"), null, null,
+                        new BigDecimal("4000.00"), null
+                ))
+        );
+
+        when(repository.existsByInboundNoAndDeletedFlagFalse("PI-OVER")).thenReturn(false);
+        when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(materialMap("M1"));
+        when(materialCategoryRepository.findByCategoryNameInAndDeletedFlagFalse(List.of("盘螺"))).thenReturn(List.of(category));
+        when(purchaseOrderItemQueryService.findActiveByIdIn(List.of(201L))).thenReturn(List.of(sourceItem));
+        when(purchaseInboundItemRepository.summarizeAllocatedQuantityBySourcePurchaseOrderItemIdsExcludingInbound(eq(List.of(201L)), any()))
+                .thenReturn(List.of());
+
+        assertThatThrownBy(() -> service.create(request))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("过磅重量上差超过允许范围")
+                .hasMessageContaining("允许5%");
     }
 
     @Test
@@ -486,6 +552,8 @@ class PurchaseInboundServiceTest {
 
         assertThat(loadedSourceItem.getPieceWeightTon()).isEqualByComparingTo("2.100");
         assertThat(loadedSourceItem.getWeightTon()).isEqualByComparingTo("14.258");
+        assertThat(loadedSourceItem.getActualWeightTon()).isEqualByComparingTo("14.258");
+        assertThat(loadedSourceItem.getActualPieceWeightTon()).isNull();
         assertThat(loadedSourceItem.getAmount()).isEqualByComparingTo("42774.00");
         assertThat(loadedPurchaseOrder.getTotalWeight()).isEqualByComparingTo("14.258");
         assertThat(loadedPurchaseOrder.getTotalAmount()).isEqualByComparingTo("42774.00");
@@ -784,9 +852,15 @@ class PurchaseInboundServiceTest {
     }
 
     private MaterialCategory purchaseWeighCategory(String categoryName) {
+        return purchaseWeighCategory(categoryName, "5.00", "5.00");
+    }
+
+    private MaterialCategory purchaseWeighCategory(String categoryName, String overTolerancePercent, String underTolerancePercent) {
         MaterialCategory category = new MaterialCategory();
         category.setCategoryName(categoryName);
         category.setPurchaseWeighRequired(Boolean.TRUE);
+        category.setPurchaseWeighOverTolerancePercent(new BigDecimal(overTolerancePercent));
+        category.setPurchaseWeighUnderTolerancePercent(new BigDecimal(underTolerancePercent));
         return category;
     }
 

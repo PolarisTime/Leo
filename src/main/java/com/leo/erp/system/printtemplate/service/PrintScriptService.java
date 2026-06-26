@@ -41,6 +41,7 @@ public class PrintScriptService {
             String recordId,
             String brand,
             String category,
+            String settlementMode,
             String material,
             String spec,
             String quantity,
@@ -49,6 +50,21 @@ public class PrintScriptService {
             String unitPrice,
             String amount
     ) {
+        public PrintRecordItem(
+                String id,
+                String recordId,
+                String brand,
+                String category,
+                String material,
+                String spec,
+                String quantity,
+                String pieceWeightTon,
+                String weightTon,
+                String unitPrice,
+                String amount
+        ) {
+            this(id, recordId, brand, category, "", material, spec, quantity, pieceWeightTon, weightTon, unitPrice, amount);
+        }
     }
 
     private record CoordLayout(
@@ -272,7 +288,7 @@ public class PrintScriptService {
     private String printItemSql(String moduleKey, PrintRecordSource source, String placeholders) {
         if (!PRODUCT_PRINT_ITEM_MODULES.contains(moduleKey)) {
             return "SELECT id, " + source.itemFkColumn() + " AS record_id, "
-                    + "'' AS brand, '' AS category, '' AS material, '' AS spec, "
+                    + "'' AS brand, '' AS category, '' AS settlement_mode, '' AS material, '' AS spec, "
                     + "'' AS quantity, '' AS piece_weight_ton, '' AS weight_ton, '' AS unit_price, "
                     + "allocated_amount AS amount "
                     + "FROM " + source.itemTableName()
@@ -281,7 +297,9 @@ public class PrintScriptService {
         }
         String unitPrice = PRINT_ITEM_AMOUNT_MODULES.contains(moduleKey) ? "unit_price" : "''";
         String amount = PRINT_ITEM_AMOUNT_MODULES.contains(moduleKey) ? "amount" : "''";
+        String settlementMode = "purchase-inbound".equals(moduleKey) ? "settlement_mode" : "''";
         return "SELECT id, " + source.itemFkColumn() + " AS record_id, brand, category, material, spec, "
+                + settlementMode + " AS settlement_mode, "
                 + "quantity, piece_weight_ton, weight_ton, " + unitPrice + " AS unit_price, " + amount + " AS amount "
                 + "FROM " + source.itemTableName()
                 + " WHERE " + source.itemFkColumn() + " IN (" + placeholders + ")"
@@ -373,6 +391,7 @@ public class PrintScriptService {
                 value(item, "recordId"),
                 value(item, "brand"),
                 value(item, "category"),
+                value(item, "settlementMode"),
                 value(item, "material"),
                 value(item, "spec"),
                 value(item, "quantity"),
@@ -849,7 +868,7 @@ public class PrintScriptService {
 
     private Map<String, String> enrichItemPrintFields(Map<String, String> item) {
         Map<String, String> enriched = new HashMap<>(item);
-        if (COIL_CATEGORIES.contains(value(enriched, "category"))) {
+        if ("过磅".equals(value(enriched, "settlementMode")) || COIL_CATEGORIES.contains(value(enriched, "category"))) {
             enriched.put("pieceWeightTon", "-");
         } else if (value(enriched, "pieceWeightTon").isBlank()) {
             BigDecimal quantity = decimal(value(enriched, "quantity"));

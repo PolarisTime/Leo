@@ -104,6 +104,7 @@ class PurchaseItemQueryAppServiceImplTest {
         item.setId(1L);
         item.setPurchaseOrder(order);
         item.setQuantity(10);
+        item.setPieceWeightTon(new BigDecimal("0.100"));
         item.setWeightTon(new BigDecimal("1.000"));
         item.setBrand("宝钢");
         item.setMaterial("HRB400");
@@ -124,6 +125,7 @@ class PurchaseItemQueryAppServiceImplTest {
             assertThat(record.orderNo()).isEqualTo("PO-001");
             assertThat(record.quantity()).isEqualTo(10);
             assertThat(record.weightTon()).isEqualByComparingTo("1.000");
+            assertThat(record.pieceWeightTon()).isEqualByComparingTo("0.100");
             assertThat(record.brand()).isEqualTo("宝钢");
             assertThat(record.material()).isEqualTo("HRB400");
             assertThat(record.spec()).isEqualTo("18");
@@ -179,6 +181,7 @@ class PurchaseItemQueryAppServiceImplTest {
         item.setId(1L);
         item.setPurchaseOrder(null);
         item.setQuantity(5);
+        item.setPieceWeightTon(new BigDecimal("0.100"));
         item.setWeightTon(new BigDecimal("0.500"));
         item.setBrand("宝钢");
         item.setMaterial("HRB400");

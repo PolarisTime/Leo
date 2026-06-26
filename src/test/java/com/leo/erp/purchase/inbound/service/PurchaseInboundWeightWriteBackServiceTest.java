@@ -21,7 +21,7 @@ import static org.mockito.Mockito.when;
 class PurchaseInboundWeightWriteBackServiceTest {
 
     @Test
-    void shouldWriteBackAverageActualWeightAndRefreshPurchaseOrderTotals() {
+    void shouldKeepSourcePieceWeightAndRefreshActualWeight() {
         PurchaseInboundItemRepository inboundItemRepository = mock(PurchaseInboundItemRepository.class);
         PurchaseOrderRepository purchaseOrderRepository = mock(PurchaseOrderRepository.class);
         PurchaseOrderItemPieceWeightService pieceWeightService = mock(PurchaseOrderItemPieceWeightService.class);
@@ -55,12 +55,13 @@ class PurchaseInboundWeightWriteBackServiceTest {
                 Map.of(201L, item)
         );
 
-        assertThat(item.getActualPieceWeightTon()).isEqualByComparingTo("0.10833333");
-        assertThat(item.getActualWeightTon()).isEqualByComparingTo("1.08333330");
-        assertThat(item.getWeightTon()).isEqualByComparingTo("1.08333330");
-        assertThat(item.getAmount()).isEqualByComparingTo("4333.33");
-        assertThat(order.getTotalWeight()).isEqualByComparingTo("1.08333330");
-        assertThat(order.getTotalAmount()).isEqualByComparingTo("4333.33");
+        assertThat(item.getPieceWeightTon()).isEqualByComparingTo("0.100");
+        assertThat(item.getActualPieceWeightTon()).isNull();
+        assertThat(item.getActualWeightTon()).isEqualByComparingTo("0.650");
+        assertThat(item.getWeightTon()).isEqualByComparingTo("1.000");
+        assertThat(item.getAmount()).isEqualByComparingTo("4000.00");
+        assertThat(order.getTotalWeight()).isEqualByComparingTo("1.000");
+        assertThat(order.getTotalAmount()).isEqualByComparingTo("4000.00");
         verify(purchaseOrderRepository).saveAll(any());
         verify(pieceWeightService).regenerateForPurchaseOrderItems(List.of(item));
     }

@@ -1394,8 +1394,11 @@ class SalesOrderServiceTest {
             String unit,
             String warehouseName,
             String batchNo) {
+        java.math.BigDecimal pieceWeightTon = quantity == null || quantity <= 0 || weightTon == null
+                ? null
+                : weightTon.divide(java.math.BigDecimal.valueOf(quantity), 8, java.math.RoundingMode.HALF_UP);
         return new PurchaseItemQueryAppService.SourcePurchaseOrderItemRecord(
-                id, quantity, weightTon, null, StatusConstants.AUDITED,
+                id, quantity, weightTon, pieceWeightTon, null, StatusConstants.AUDITED,
                 brand, material, spec, materialCode, category, unit, warehouseName, batchNo);
     }
 

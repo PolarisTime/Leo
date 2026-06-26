@@ -76,7 +76,7 @@ public interface PurchaseInboundItemRepository extends JpaRepository<PurchaseInb
     @Query("""
             select item.sourcePurchaseOrderItemId as sourcePurchaseOrderItemId,
                    sum(item.quantity) as totalQuantity,
-                   coalesce(sum(item.weightTon), 0) as totalWeightTon
+                   coalesce(sum(item.weighWeightTon), 0) as totalWeightTon
             from PurchaseInboundItem item
             join item.purchaseInbound inbound
             where inbound.deletedFlag = false
