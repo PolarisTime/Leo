@@ -3,8 +3,9 @@ package com.leo.erp.system.printtemplate.web;
 import com.leo.erp.common.api.ApiResponse;
 import com.leo.erp.security.permission.ModulePermissionGuard;
 import com.leo.erp.security.support.SecurityPrincipal;
+import com.leo.erp.system.printtemplate.service.PrintOutput;
+import com.leo.erp.system.printtemplate.service.PrintOutputService;
 import com.leo.erp.system.printtemplate.service.PrintRenderOptions;
-import com.leo.erp.system.printtemplate.service.PrintPdfFormService;
 import com.leo.erp.system.printtemplate.service.PrintScriptService;
 import com.leo.erp.system.printtemplate.service.PrintScriptService.PrintRecordItem;
 import com.leo.erp.system.operationlog.support.OperationLoggable;
@@ -25,27 +26,38 @@ import static org.mockito.Mockito.when;
 class PrintScriptControllerTest {
 
     private final PrintScriptService printScriptService = mock(PrintScriptService.class);
-    private final PrintPdfFormService printPdfFormService = mock(PrintPdfFormService.class);
+    private final PrintOutputService printOutputService = mock(PrintOutputService.class);
     private final ModulePermissionGuard modulePermissionGuard = mock(ModulePermissionGuard.class);
-    private final PrintScriptController controller = new PrintScriptController(printScriptService, printPdfFormService, modulePermissionGuard);
+    private final PrintScriptController controller = new PrintScriptController(printScriptService, printOutputService, modulePermissionGuard);
 
     @Test
     void fromRecordReturnsGeneratedResult() {
         SecurityPrincipal principal = mock(SecurityPrincipal.class);
         PrintRecordRequest payload = new PrintRecordRequest("sales-order", "template-1", 1L, null);
 
-        Map<String, Object> result = new HashMap<>();
-        result.put("templateType", "COORD");
-        result.put("data", "test");
+        PrintOutput result = new PrintOutput(
+                PrintOutput.Kind.LODOP_SCRIPT,
+                "Test Template",
+                "COORD",
+                null,
+                null,
+                null,
+                "SO-001",
+                1L,
+                "sales-order",
+                "LODOP.PRINT_INIT(\"test\");",
+                Map.of("name", "test"),
+                List.of()
+        );
 
         when(modulePermissionGuard.requirePermission(principal, "sales-order", "read")).thenReturn("sales-order");
-        when(printScriptService.generateFromRecord(eq("template-1"), eq("sales-order"), eq(1L), any(PrintRenderOptions.class))).thenReturn(result);
+        when(printOutputService.generateFromRecord(eq("template-1"), eq("sales-order"), eq(1L), any(PrintRenderOptions.class))).thenReturn(result);
 
-        ApiResponse<Map<String, Object>> response = controller.fromRecord(principal, payload);
+        ApiResponse<PrintOutput> response = controller.fromRecord(principal, payload);
 
         assertThat(response.code()).isEqualTo(0);
         assertThat(response.data()).isEqualTo(result);
-        verify(printScriptService).generateFromRecord("template-1", "sales-order", 1L, PrintRenderOptions.defaults());
+        verify(printOutputService).generateFromRecord("template-1", "sales-order", 1L, PrintRenderOptions.defaults());
     }
 
     @Test
@@ -65,21 +77,33 @@ class PrintScriptControllerTest {
                 )
         );
 
-        Map<String, Object> result = new HashMap<>();
-        result.put("templateType", "COORD");
+        PrintOutput result = new PrintOutput(
+                PrintOutput.Kind.LODOP_SCRIPT,
+                "Test Template",
+                "COORD",
+                null,
+                null,
+                null,
+                "SO-001",
+                1L,
+                "sales-order",
+                "LODOP.PRINT_INIT(\"test\");",
+                Map.of(),
+                List.of()
+        );
 
         when(modulePermissionGuard.requirePermission(principal, "sales-order", "read")).thenReturn("sales-order");
-        when(printScriptService.generateFromRecord(
+        when(printOutputService.generateFromRecord(
                 eq("template-1"),
                 eq("sales-order"),
                 eq(1L),
                 eq(new PrintRenderOptions(true, true, "", Map.of("抚顺新钢", "抚新"), Map.of("11", "沙钢"), List.of("12", "11")))
         )).thenReturn(result);
 
-        ApiResponse<Map<String, Object>> response = controller.fromRecord(principal, payload);
+        ApiResponse<PrintOutput> response = controller.fromRecord(principal, payload);
 
         assertThat(response.code()).isEqualTo(0);
-        verify(printScriptService).generateFromRecord(
+        verify(printOutputService).generateFromRecord(
                 "template-1",
                 "sales-order",
                 1L,
@@ -127,19 +151,29 @@ class PrintScriptControllerTest {
         SecurityPrincipal principal = mock(SecurityPrincipal.class);
         PrintRecordRequest payload = new PrintRecordRequest("sales-order", "template-1", 1L, null);
 
-        Map<String, Object> result = new HashMap<>();
-        result.put("templateType", "PDF_FORM");
-        result.put("templateName", "Test Template");
+        PrintOutput result = new PrintOutput(
+                PrintOutput.Kind.PDF,
+                "Test Template",
+                "PDF_FORM",
+                "application/pdf",
+                "print.pdf",
+                "cGRmLWNvbnRlbnQ=",
+                "SO-001",
+                1L,
+                "sales-order",
+                null,
+                null,
+                null
+        );
 
         when(modulePermissionGuard.requirePermission(principal, "sales-order", "read")).thenReturn("sales-order");
-        when(printScriptService.generateFromRecord(eq("template-1"), eq("sales-order"), eq(1L), any(PrintRenderOptions.class))).thenReturn(result);
-        when(printPdfFormService.generateFromPayload(any())).thenReturn("pdf-content".getBytes());
+        when(printOutputService.generateFromRecord(eq("template-1"), eq("sales-order"), eq(1L), any(PrintRenderOptions.class))).thenReturn(result);
 
-        ApiResponse<Map<String, Object>> response = controller.fromRecord(principal, payload);
+        ApiResponse<PrintOutput> response = controller.fromRecord(principal, payload);
 
         assertThat(response.code()).isEqualTo(0);
-        assertThat(response.data().get("templateType")).isEqualTo("PDF_FORM");
-        assertThat(response.data().get("pdfBase64")).isNotNull();
+        assertThat(response.data().templateType()).isEqualTo("PDF_FORM");
+        assertThat(response.data().pdfBase64()).isNotNull();
     }
 
     @Test
