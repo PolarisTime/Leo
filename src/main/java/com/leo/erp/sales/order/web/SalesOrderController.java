@@ -12,9 +12,13 @@ import com.leo.erp.sales.order.service.SalesOrderPrintExportService;
 import com.leo.erp.sales.order.service.SalesOrderService;
 import com.leo.erp.sales.order.web.dto.SalesOrderRequest;
 import com.leo.erp.sales.order.web.dto.SalesOrderResponse;
+import com.leo.erp.system.operationlog.support.OperationLogResultCollector;
+import com.leo.erp.system.operationlog.support.OperationLoggable;
+import com.leo.erp.system.printtemplate.service.PrintOptions;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
@@ -33,6 +37,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
+import java.util.Map;
 
 @Tag(name = "销售订单")
 @RestController
@@ -85,8 +90,18 @@ public class SalesOrderController {
     @Operation(summary = "导出销售订单套打 Excel")
     @GetMapping("/{id}/print-xlsx")
     @RequiresPermission(resource = "sales-order", action = "print")
-    public ResponseEntity<byte[]> exportPrintXlsx(@PathVariable Long id) {
-        return toDownloadResponse(printExportService.exportSalesOrderPrint(id));
+    @OperationLoggable(moduleName = "销售订单", actionType = "打印", businessNoFields = {"id"}, recordIdField = "id")
+    public ResponseEntity<byte[]> exportPrintXlsx(@PathVariable Long id, HttpServletRequest request) {
+        return toDownloadResponse(printExportService.exportSalesOrderPrint(id, PrintOptions.defaults()), request);
+    }
+
+    @Operation(summary = "按打印选项导出销售订单套打 Excel")
+    @PostMapping("/{id}/print-xlsx")
+    @RequiresPermission(resource = "sales-order", action = "print")
+    @OperationLoggable(moduleName = "销售订单", actionType = "打印", businessNoFields = {"id"}, recordIdField = "id")
+    public ResponseEntity<byte[]> exportPrintXlsx(@PathVariable Long id, @RequestBody(required = false) Map<String, Object> payload, HttpServletRequest request) {
+        Object rawOptions = payload == null ? null : payload.get("printOptions");
+        return toDownloadResponse(printExportService.exportSalesOrderPrint(id, PrintOptions.from(rawOptions)), request);
     }
 
     @Operation(summary = "创建销售订单")
@@ -118,7 +133,10 @@ public class SalesOrderController {
         return ApiResponse.success("删除成功");
     }
 
-    private ResponseEntity<byte[]> toDownloadResponse(FileDownloadResponse file) {
+    private ResponseEntity<byte[]> toDownloadResponse(FileDownloadResponse file, HttpServletRequest request) {
+        request.setAttribute(OperationLogResultCollector.BUSINESS_NO_ATTRIBUTE, file.businessNo());
+        request.setAttribute(OperationLogResultCollector.RECORD_ID_ATTRIBUTE, file.recordId());
+        request.setAttribute(OperationLogResultCollector.MODULE_KEY_ATTRIBUTE, file.moduleKey());
         return ResponseEntity.ok()
                 .contentType(file.contentType())
                 .contentLength(file.content().length)

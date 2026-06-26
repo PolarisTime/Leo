@@ -185,6 +185,7 @@ class PrintScriptServiceTest {
             assertThat(text).contains("客户A", "SO-001", "2026年05月31日", "抚顺新钢", "螺纹钢");
             assertThat(text).contains("地下室工程");
             assertThat(text).contains("单据备注：6月4日报单", "合计件数：2件", "合计重量：2.345吨");
+            assertThat(text).contains("同时承担供方", "实现债权支出的一切费用");
         }
     }
 
@@ -424,6 +425,7 @@ class PrintScriptServiceTest {
         when(jdbc.queryForMap(anyString(), eq(1L))).thenReturn(Map.of(
                 "id", 1L,
                 "order_no", "PO-001",
+                "remark", "单据备注",
                 "deleted_flag", false
         ));
         when(jdbc.queryForList(anyString(), eq(1L))).thenReturn(List.of(Map.of(
@@ -438,11 +440,13 @@ class PrintScriptServiceTest {
                 "1",
                 "purchase-order",
                 1L,
-                new PrintOptions(true, "", Map.of("抚顺新钢", "沙钢"), Map.of())
+                new PrintOptions(true, true, "", Map.of("抚顺新钢", "沙钢"), Map.of(), List.of())
         );
 
+        Map<?, ?> data = (Map<?, ?>) result.get("data");
         List<?> items = (List<?>) result.get("items");
         Map<?, ?> item = (Map<?, ?>) items.get(0);
+        assertThat(data.get("remark")).isEqualTo("");
         assertThat(item.get("unitPrice")).isEqualTo("");
         assertThat(item.get("brand")).isEqualTo("沙钢");
         assertThat(item.get("amount")).isEqualTo("25.00");
@@ -479,12 +483,62 @@ class PrintScriptServiceTest {
                 "1",
                 "purchase-order",
                 1L,
-                new PrintOptions(false, "", Map.of(), Map.of("11", "沙钢"))
+                new PrintOptions(false, false, "", Map.of(), Map.of("11", "沙钢"), List.of())
         );
 
         List<?> items = (List<?>) result.get("items");
         assertThat(((Map<?, ?>) items.get(0)).get("brand")).isEqualTo("沙钢");
         assertThat(((Map<?, ?>) items.get(1)).get("brand")).isEqualTo("抚顺新钢");
+    }
+
+    @Test
+    void shouldApplyItemOrderBeforePreparingPrintItems() {
+        JdbcTemplate jdbc = mock(JdbcTemplate.class);
+        PrintScriptService service = printScriptService(repository("purchase-order"), jdbc);
+
+        when(jdbc.queryForMap(anyString(), eq(1L))).thenReturn(Map.of(
+                "id", 1L,
+                "order_no", "PO-001",
+                "deleted_flag", false
+        ));
+        when(jdbc.queryForList(anyString(), eq(1L))).thenReturn(List.of(
+                Map.of(
+                        "id", 11L,
+                        "line_no", 1,
+                        "brand", "品牌1",
+                        "quantity", 1,
+                        "weight_ton", new BigDecimal("1.000")
+                ),
+                Map.of(
+                        "id", 12L,
+                        "line_no", 2,
+                        "brand", "品牌2",
+                        "quantity", 2,
+                        "weight_ton", new BigDecimal("2.000")
+                ),
+                Map.of(
+                        "id", 13L,
+                        "line_no", 3,
+                        "brand", "品牌3",
+                        "quantity", 3,
+                        "weight_ton", new BigDecimal("3.000")
+                )
+        ));
+
+        Map<String, Object> result = service.generateFromRecord(
+                "1",
+                "purchase-order",
+                1L,
+                new PrintOptions(false, false, "", Map.of(), Map.of(), List.of("13", "11"))
+        );
+
+        List<?> items = (List<?>) result.get("items");
+        assertThat(((Map<?, ?>) items.get(0)).get("id")).isEqualTo("13");
+        assertThat(((Map<?, ?>) items.get(0)).get("index")).isEqualTo("1");
+        assertThat(((Map<?, ?>) items.get(1)).get("id")).isEqualTo("11");
+        assertThat(((Map<?, ?>) items.get(1)).get("index")).isEqualTo("2");
+        assertThat(((Map<?, ?>) items.get(2)).get("id")).isEqualTo("12");
+        assertThat(((Map<?, ?>) items.get(2)).get("index")).isEqualTo("3");
     }
 
     @Test

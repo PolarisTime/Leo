@@ -20,6 +20,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -211,6 +212,7 @@ public class PrintScriptService {
         } else if ("freight-bill".equals(moduleKey)) {
             enrichFreightBillItems(items);
         }
+        items = applyItemOrder(items, options);
         items = preparePrintItems(moduleKey, template.getTemplateName(), template.getTemplateHtml(), data, items);
         applyPrintOptions(data, items, options);
 
@@ -218,6 +220,9 @@ public class PrintScriptService {
         result.put("templateName", template.getTemplateName());
         result.put("templateHtml", renderTemplateHtml(template, data, items));
         result.put("templateType", template.getTemplateType() != null ? template.getTemplateType() : "COORD");
+        result.put("businessNo", resolvePrintBusinessNo(data));
+        result.put("recordId", recordId);
+        result.put("moduleKey", moduleKey);
         result.put("data", data);
         result.put("items", items);
         return result;
@@ -292,6 +297,9 @@ public class PrintScriptService {
                 item.put("unitPrice", "");
             }
         }
+        if (options.hideRemark()) {
+            data.put("remark", "");
+        }
         if (options.brandOverride() != null && !options.brandOverride().isBlank()) {
             String brandOverride = options.brandOverride().trim();
             for (Map<String, String> item : items) {
@@ -323,6 +331,38 @@ public class PrintScriptService {
                 item.put("brand", override.trim());
             }
         }
+    }
+
+    private List<Map<String, String>> applyItemOrder(List<Map<String, String>> items, PrintOptions options) {
+        if (options == null || options.itemOrder() == null || options.itemOrder().isEmpty() || items.isEmpty()) {
+            return items;
+        }
+        Map<String, Map<String, String>> itemsById = new LinkedHashMap<>();
+        for (Map<String, String> item : items) {
+            String itemId = item.get("id");
+            if (itemId != null && !itemId.isBlank()) {
+                itemsById.putIfAbsent(itemId, item);
+            }
+        }
+        if (itemsById.isEmpty()) {
+            return items;
+        }
+
+        Set<String> selectedIds = new HashSet<>();
+        List<Map<String, String>> orderedItems = new ArrayList<>();
+        for (String itemId : options.itemOrder()) {
+            Map<String, String> item = itemsById.get(itemId);
+            if (item != null && selectedIds.add(itemId)) {
+                orderedItems.add(item);
+            }
+        }
+        for (Map<String, String> item : items) {
+            String itemId = item.get("id");
+            if (itemId == null || itemId.isBlank() || selectedIds.add(itemId)) {
+                orderedItems.add(item);
+            }
+        }
+        return orderedItems;
     }
 
     private PrintRecordItem toPrintRecordItem(Map<String, Object> row) {
@@ -700,6 +740,20 @@ public class PrintScriptService {
         formatDecimalField(data, "paymentAmount", PRICE_SCALE);
         data.putIfAbsent("billNo", firstPresent(data, "outboundNo", "orderNo", "billNo", "statementNo"));
         enrichAdaptiveProjectNameLayout(data);
+    }
+
+    private String resolvePrintBusinessNo(Map<String, String> data) {
+        return firstPresent(data,
+                "billNo",
+                "orderNo",
+                "outboundNo",
+                "inboundNo",
+                "contractNo",
+                "statementNo",
+                "receiptNo",
+                "paymentNo",
+                "issueNo"
+        );
     }
 
     private void enrichAdaptiveProjectNameLayout(Map<String, String> data) {
