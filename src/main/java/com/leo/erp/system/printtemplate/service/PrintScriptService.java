@@ -34,21 +34,62 @@ public class PrintScriptService {
     private record PrintRecordSource(String tableName, String itemTableName, String itemFkColumn) {
     }
 
+    public record PrintRecordItem(
+            String id,
+            String recordId,
+            String brand,
+            String category,
+            String material,
+            String spec,
+            String quantity,
+            String pieceWeightTon,
+            String weightTon,
+            String unitPrice,
+            String amount
+    ) {
+    }
+
     private record CoordLayout(
             int tableTop,
             int rowH,
             int maxRows,
             int pageH,
             Integer sumTop,
-            boolean limitToMaxRows
+            boolean limitToMaxRows,
+            Integer pageBreakRows,
+            int pageResetTop
     ) {
+        private CoordLayout(
+                int tableTop,
+                int rowH,
+                int maxRows,
+                int pageH,
+                Integer sumTop,
+                boolean limitToMaxRows
+        ) {
+            this(tableTop, rowH, maxRows, pageH, sumTop, limitToMaxRows, null, 20);
+        }
+
+        private CoordLayout withPageBreakRows(int rows, int resetTop) {
+            return new CoordLayout(tableTop, rowH, maxRows, pageH, sumTop, limitToMaxRows, rows, resetTop);
+        }
+
+        private boolean shouldStartNewPage(int rowsOnPage, int nextRowTop) {
+            if (pageBreakRows != null && rowsOnPage >= pageBreakRows) {
+                return true;
+            }
+            return pageH > 0 && nextRowTop + rowH * 2 > pageH;
+        }
     }
 
     private static final Set<String> COIL_CATEGORIES = Set.of("盘螺", "线材");
     private static final int WEIGHT_SCALE = 3;
     private static final int PRICE_SCALE = 2;
+    private static final int A5_PROJECT_NAME_SINGLE_LINE_WIDTH = 56;
+    private static final int A5_PROJECT_NAME_COMPACT_WIDTH = 92;
+    private static final int A5_PROJECT_NAME_EXTRA_COMPACT_WIDTH = 160;
     private static final Pattern LAYOUT_FIELD_PATTERN = Pattern.compile(
-            "\\{\\{\\s*(?:#if\\s+)?(?:rowTop|sumTop|sumTop2|emptyRowTop|footerTop|footerLineTop|footerDateTop|hasEmptyRows|needsNewPage|needsSeparator|isSeparator|groupName|index)\\s*\\}\\}"
+            "\\{\\{\\s*(?:#if\\s+)?(?:rowTop|sumTop|sumTop2|emptyRowTop|footerTop|footerLineTop|footerDateTop|hasEmptyRows|needsNewPage|needsSeparator|isSeparator|groupName|index|projectNameTop|projectNameHeight|projectNameFontSize|projectNameWordBreak)\\s*\\}\\}"
     );
 
     private static final Map<String, CoordLayout> COORD_LAYOUTS = Map.of(
@@ -89,6 +130,32 @@ public class PrintScriptService {
             Map.entry("invoice-receipt", new PrintRecordSource(
                     "fm_invoice_receipt", "fm_invoice_receipt_item", "receipt_id"))
     );
+    private static final Set<String> PRODUCT_PRINT_ITEM_MODULES = Set.of(
+            "purchase-order",
+            "sales-order",
+            "purchase-inbound",
+            "sales-outbound",
+            "freight-bill",
+            "purchase-contract",
+            "sales-contract",
+            "customer-statement",
+            "supplier-statement",
+            "freight-statement",
+            "invoice-issue",
+            "invoice-receipt"
+    );
+    private static final Set<String> PRINT_ITEM_AMOUNT_MODULES = Set.of(
+            "purchase-order",
+            "sales-order",
+            "purchase-inbound",
+            "sales-outbound",
+            "purchase-contract",
+            "sales-contract",
+            "customer-statement",
+            "supplier-statement",
+            "invoice-issue",
+            "invoice-receipt"
+    );
 
     private final PrintTemplateRepository templateRepository;
     private final JdbcTemplate jdbc;
@@ -109,6 +176,10 @@ public class PrintScriptService {
 
     /** Load record + items from DB, return raw template + data for frontend rendering. */
     public Map<String, Object> generateFromRecord(String templateId, String moduleKey, Long recordId) {
+        return generateFromRecord(templateId, moduleKey, recordId, PrintOptions.defaults());
+    }
+
+    public Map<String, Object> generateFromRecord(String templateId, String moduleKey, Long recordId, PrintOptions options) {
         PrintTemplate template = templateRepository.findByIdAndDeletedFlagFalse(Long.parseLong(templateId))
                 .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "打印模板不存在"));
         if (!"ACTIVE".equals(template.getStatus())) {
@@ -141,6 +212,7 @@ public class PrintScriptService {
             enrichFreightBillItems(items);
         }
         items = preparePrintItems(moduleKey, template.getTemplateName(), template.getTemplateHtml(), data, items);
+        applyPrintOptions(data, items, options);
 
         Map<String, Object> result = new HashMap<>();
         result.put("templateName", template.getTemplateName());
@@ -149,6 +221,125 @@ public class PrintScriptService {
         result.put("data", data);
         result.put("items", items);
         return result;
+    }
+
+    public List<String> listBrands(String moduleKey, List<Long> recordIds) {
+        PrintRecordSource source = MODULE_SOURCES.get(moduleKey);
+        if (source == null) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "不支持的打印模块: " + moduleKey);
+        }
+        if (recordIds == null || recordIds.isEmpty()) {
+            return List.of();
+        }
+        for (Long recordId : recordIds) {
+            recordAccessService.assertRecordAccessible(currentPrincipal(), moduleKey, "read", recordId);
+        }
+        String placeholders = String.join(",", java.util.Collections.nCopies(recordIds.size(), "?"));
+        List<String> brands = jdbc.queryForList(
+                "SELECT DISTINCT brand FROM " + source.itemTableName()
+                        + " WHERE " + source.itemFkColumn() + " IN (" + placeholders + ")"
+                        + " AND brand IS NOT NULL AND btrim(brand) <> '' ORDER BY brand ASC",
+                String.class,
+                recordIds.toArray()
+        );
+        return brands.stream().map(String::trim).filter(brand -> !brand.isBlank()).toList();
+    }
+
+    public List<PrintRecordItem> listPrintItems(String moduleKey, List<Long> recordIds) {
+        PrintRecordSource source = MODULE_SOURCES.get(moduleKey);
+        if (source == null) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "不支持的打印模块: " + moduleKey);
+        }
+        if (recordIds == null || recordIds.isEmpty()) {
+            return List.of();
+        }
+        for (Long recordId : recordIds) {
+            recordAccessService.assertRecordAccessible(currentPrincipal(), moduleKey, "read", recordId);
+        }
+        String placeholders = String.join(",", java.util.Collections.nCopies(recordIds.size(), "?"));
+        List<Map<String, Object>> rows = jdbc.queryForList(printItemSql(moduleKey, source, placeholders), recordIds.toArray());
+        return rows.stream()
+                .map(this::toPrintRecordItem)
+                .toList();
+    }
+
+    private String printItemSql(String moduleKey, PrintRecordSource source, String placeholders) {
+        if (!PRODUCT_PRINT_ITEM_MODULES.contains(moduleKey)) {
+            return "SELECT id, " + source.itemFkColumn() + " AS record_id, "
+                    + "'' AS brand, '' AS category, '' AS material, '' AS spec, "
+                    + "'' AS quantity, '' AS piece_weight_ton, '' AS weight_ton, '' AS unit_price, "
+                    + "allocated_amount AS amount "
+                    + "FROM " + source.itemTableName()
+                    + " WHERE " + source.itemFkColumn() + " IN (" + placeholders + ")"
+                    + " ORDER BY " + source.itemFkColumn() + " ASC, line_no ASC, id ASC";
+        }
+        String unitPrice = PRINT_ITEM_AMOUNT_MODULES.contains(moduleKey) ? "unit_price" : "''";
+        String amount = PRINT_ITEM_AMOUNT_MODULES.contains(moduleKey) ? "amount" : "''";
+        return "SELECT id, " + source.itemFkColumn() + " AS record_id, brand, category, material, spec, "
+                + "quantity, piece_weight_ton, weight_ton, " + unitPrice + " AS unit_price, " + amount + " AS amount "
+                + "FROM " + source.itemTableName()
+                + " WHERE " + source.itemFkColumn() + " IN (" + placeholders + ")"
+                + " ORDER BY " + source.itemFkColumn() + " ASC, line_no ASC, id ASC";
+    }
+
+    private void applyPrintOptions(Map<String, String> data, List<Map<String, String>> items, PrintOptions options) {
+        if (options == null) {
+            return;
+        }
+        if (options.hideUnitPrice()) {
+            data.put("unitPrice", "");
+            for (Map<String, String> item : items) {
+                item.put("unitPrice", "");
+            }
+        }
+        if (options.brandOverride() != null && !options.brandOverride().isBlank()) {
+            String brandOverride = options.brandOverride().trim();
+            for (Map<String, String> item : items) {
+                item.put("brand", brandOverride);
+            }
+        }
+        if (options.brandOverridesByItemId() != null && !options.brandOverridesByItemId().isEmpty()) {
+            for (Map<String, String> item : items) {
+                String itemId = item.get("id");
+                if (itemId == null || itemId.isBlank()) {
+                    continue;
+                }
+                String override = options.brandOverridesByItemId().get(itemId);
+                if (override != null && !override.isBlank()) {
+                    item.put("brand", override.trim());
+                }
+            }
+        }
+        if (options.brandOverrides() == null || options.brandOverrides().isEmpty()) {
+            return;
+        }
+        for (Map<String, String> item : items) {
+            String originalBrand = item.get("brand");
+            if (originalBrand == null || originalBrand.isBlank()) {
+                continue;
+            }
+            String override = options.brandOverrides().get(originalBrand);
+            if (override != null && !override.isBlank()) {
+                item.put("brand", override.trim());
+            }
+        }
+    }
+
+    private PrintRecordItem toPrintRecordItem(Map<String, Object> row) {
+        Map<String, String> item = enrichItemPrintFields(toCamelStringMap(row));
+        return new PrintRecordItem(
+                value(item, "id"),
+                value(item, "recordId"),
+                value(item, "brand"),
+                value(item, "category"),
+                value(item, "material"),
+                value(item, "spec"),
+                value(item, "quantity"),
+                value(item, "pieceWeightTon"),
+                value(item, "weightTon"),
+                value(item, "unitPrice"),
+                value(item, "amount")
+        );
     }
 
     private SecurityPrincipal currentPrincipal() {
@@ -416,6 +607,7 @@ public class PrintScriptService {
         BigDecimal totalAmount = BigDecimal.ZERO;
         BigDecimal totalQuantity = BigDecimal.ZERO;
         int rowTop = layout.tableTop();
+        int rowsOnPage = 0;
         int index = 1;
         String previousSourceNo = null;
         List<Map<String, String>> result = new ArrayList<>();
@@ -425,9 +617,10 @@ public class PrintScriptService {
             boolean separator = "true".equals(enriched.get("isSeparator"));
             if (!separator) {
                 enriched.put("index", String.valueOf(index++));
-                if (needsLayout && layout.pageH() > 0 && rowTop + layout.rowH() * 2 > layout.pageH()) {
+                if (needsLayout && layout.shouldStartNewPage(rowsOnPage, rowTop)) {
                     enriched.put("needsNewPage", "true");
-                    rowTop = 20;
+                    rowTop = layout.pageResetTop();
+                    rowsOnPage = 0;
                 }
                 String sourceNo = value(enriched, "sourceNo");
                 if (needsLayout && previousSourceNo != null && !sourceNo.isBlank() && !sourceNo.equals(previousSourceNo)) {
@@ -441,13 +634,24 @@ public class PrintScriptService {
             if (needsLayout) {
                 enriched.put("rowTop", String.valueOf(rowTop));
                 rowTop += layout.rowH();
+                if (!separator) {
+                    rowsOnPage += 1;
+                }
             }
             result.add(enriched);
         }
 
-        data.put("totalQuantity", formatQuantity(totalQuantity));
-        data.put("totalWeight", formatDecimal(totalWeight, WEIGHT_SCALE));
-        data.put("totalAmount", formatDecimal(totalAmount, PRICE_SCALE));
+        String formattedTotalQuantity = formatQuantity(totalQuantity);
+        String formattedTotalWeight = formatDecimal(totalWeight, WEIGHT_SCALE);
+        String formattedTotalAmount = formatDecimal(totalAmount, PRICE_SCALE);
+        data.put("totalQuantity", formattedTotalQuantity);
+        data.put("totalWeight", formattedTotalWeight);
+        data.put("totalAmount", formattedTotalAmount);
+        for (Map<String, String> item : result) {
+            item.put("totalQuantity", formattedTotalQuantity);
+            item.put("totalWeight", formattedTotalWeight);
+            item.put("totalAmount", formattedTotalAmount);
+        }
         if (needsLayout) {
             long itemCount = result.stream().filter(item -> !"true".equals(item.get("isSeparator"))).count();
             int actualItemCount = needsGrouping ? result.size() : (int) Math.min(itemCount, layout.maxRows());
@@ -472,6 +676,10 @@ public class PrintScriptService {
     private CoordLayout resolveCoordLayout(String moduleKey, String templateName) {
         String name = templateName == null ? "" : templateName;
         if (("sales-order".equals(moduleKey) || "sales-outbound".equals(moduleKey))
+                && name.contains("A5")) {
+            return new CoordLayout(161, 41, 7, 0, 453, false).withPageBreakRows(7, 161);
+        }
+        if (("sales-order".equals(moduleKey) || "sales-outbound".equals(moduleKey))
                 && name.contains("A4")
                 && name.contains("备注")) {
             return new CoordLayout(204, 24, 10, 0, 444, true);
@@ -491,6 +699,46 @@ public class PrintScriptService {
         formatDecimalField(data, "receiptAmount", PRICE_SCALE);
         formatDecimalField(data, "paymentAmount", PRICE_SCALE);
         data.putIfAbsent("billNo", firstPresent(data, "outboundNo", "orderNo", "billNo", "statementNo"));
+        enrichAdaptiveProjectNameLayout(data);
+    }
+
+    private void enrichAdaptiveProjectNameLayout(Map<String, String> data) {
+        int width = displayWidth(firstPresent(data, "projectName"));
+        if (width > A5_PROJECT_NAME_EXTRA_COMPACT_WIDTH) {
+            data.put("projectNameMultiline", "true");
+            data.put("projectNameTop", "62");
+            data.put("projectNameHeight", "58");
+            data.put("projectNameFontSize", "9");
+            data.put("projectNameWordBreak", "1");
+            return;
+        }
+        if (width > A5_PROJECT_NAME_COMPACT_WIDTH) {
+            data.put("projectNameMultiline", "true");
+            data.put("projectNameTop", "70");
+            data.put("projectNameHeight", "54");
+            data.put("projectNameFontSize", "10");
+            data.put("projectNameWordBreak", "1");
+            return;
+        }
+        boolean multiline = width > A5_PROJECT_NAME_SINGLE_LINE_WIDTH;
+        data.put("projectNameMultiline", multiline ? "true" : "");
+        data.put("projectNameTop", multiline ? "78" : "90");
+        data.put("projectNameHeight", multiline ? "42" : "20");
+        data.put("projectNameFontSize", "12");
+        data.put("projectNameWordBreak", multiline ? "1" : "0");
+    }
+
+    private int displayWidth(String value) {
+        if (value == null || value.isBlank()) {
+            return 0;
+        }
+        int width = 0;
+        for (int offset = 0; offset < value.length(); ) {
+            int codePoint = value.codePointAt(offset);
+            width += codePoint <= 0x00FF ? 1 : 2;
+            offset += Character.charCount(codePoint);
+        }
+        return width;
     }
 
     private void putDateParts(Map<String, String> data, String rawDate) {
