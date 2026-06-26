@@ -9,6 +9,7 @@ import com.leo.erp.common.excel.service.ExcelImportService;
 import com.leo.erp.common.excel.service.ExcelTemplateService;
 import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.service.AbstractCrudService;
+import com.leo.erp.common.support.PrecisionConstants;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.TradeItemMaterialSupport;
 import com.leo.erp.common.support.TradeItemCalculator;
@@ -200,7 +201,7 @@ public class MaterialService extends AbstractCrudService<Material, MaterialReque
                         safe(material.getLength()),
                         safe(material.getUnit()),
                         safe(material.getQuantityUnit()),
-                        formatDecimal(material.getPieceWeightTon(), 3),
+                        formatDecimal(material.getPieceWeightTon(), PrecisionConstants.WEIGHT_SCALE),
                         material.getPiecesPerBundle() == null ? "" : material.getPiecesPerBundle().toString(),
                         formatDecimal(material.getUnitPrice(), 2),
                         formatBoolean(material.getBatchNoEnabled()),

@@ -58,7 +58,7 @@ public class FreightBillItem {
     @Column(name = "quantity_unit", nullable = false, length = 8)
     private String quantityUnit;
 
-    @Column(name = "piece_weight_ton", nullable = false, precision = 12, scale = 3)
+    @Column(name = "piece_weight_ton", nullable = false, precision = 18, scale = 8)
     private BigDecimal pieceWeightTon;
 
     @Column(name = "pieces_per_bundle", nullable = false)
@@ -67,7 +67,7 @@ public class FreightBillItem {
     @Column(name = "batch_no", length = 64)
     private String batchNo;
 
-    @Column(name = "weight_ton", nullable = false, precision = 14, scale = 3)
+    @Column(name = "weight_ton", nullable = false, precision = 18, scale = 8)
     private BigDecimal weightTon;
 
     @Column(name = "warehouse_name", length = 128)

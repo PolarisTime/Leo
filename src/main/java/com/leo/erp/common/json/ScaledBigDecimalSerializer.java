@@ -47,11 +47,11 @@ public class ScaledBigDecimalSerializer extends JsonSerializer<BigDecimal> imple
 
     private Integer resolveScale(String propertyName) {
         String normalizedName = propertyName == null ? "" : propertyName.toLowerCase(Locale.ROOT);
-        if (normalizedName.contains("weight")) {
-            return PrecisionConstants.WEIGHT_SCALE;
-        }
         if (normalizedName.contains("amount") || normalizedName.contains("price") || normalizedName.contains("freight")) {
             return 2;
+        }
+        if (normalizedName.contains("weight")) {
+            return PrecisionConstants.WEIGHT_SCALE;
         }
         return null;
     }

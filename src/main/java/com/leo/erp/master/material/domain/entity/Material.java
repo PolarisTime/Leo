@@ -43,7 +43,7 @@ public class Material extends AbstractAuditableEntity {
     @Column(name = "quantity_unit", nullable = false, length = 8)
     private String quantityUnit;
 
-    @Column(name = "piece_weight_ton", nullable = false, precision = 12, scale = 3)
+    @Column(name = "piece_weight_ton", nullable = false, precision = 18, scale = 8)
     private BigDecimal pieceWeightTon;
 
     @Column(name = "pieces_per_bundle", nullable = false)

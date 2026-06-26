@@ -1,5 +1,6 @@
 package com.leo.erp.purchase.inbound.service;
 
+import com.leo.erp.common.support.PrecisionConstants;
 import com.leo.erp.common.support.TradeItemCalculator;
 import com.leo.erp.purchase.inbound.domain.entity.PurchaseInboundItem;
 import com.leo.erp.purchase.order.web.dto.PieceWeightResponse;
@@ -13,7 +14,7 @@ import java.util.List;
 @Service
 public class PurchaseInboundPieceWeightService {
 
-    private static final BigDecimal WEIGHT_UNIT = new BigDecimal("0.001");
+    private static final BigDecimal WEIGHT_UNIT = BigDecimal.ONE.movePointLeft(PrecisionConstants.WEIGHT_SCALE);
 
     private final PurchaseInboundItemQueryService itemQueryService;
 

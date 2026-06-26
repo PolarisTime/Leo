@@ -10,7 +10,12 @@ class PrecisionConstantsTest {
 
     @Test
     void shouldHaveCorrectWeightScale() {
-        assertThat(PrecisionConstants.WEIGHT_SCALE).isEqualTo(3);
+        assertThat(PrecisionConstants.WEIGHT_SCALE).isEqualTo(8);
+    }
+
+    @Test
+    void shouldHaveCorrectDisplayWeightScale() {
+        assertThat(PrecisionConstants.DISPLAY_WEIGHT_SCALE).isEqualTo(3);
     }
 
     @Test

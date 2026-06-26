@@ -36,13 +36,21 @@ class TradeItemCalculatorTest {
 
     @Test
     void shouldScaleWeightTon() {
-        BigDecimal result = TradeItemCalculator.scaleWeightTon(new BigDecimal("5.1234"));
-        assertThat(result).isEqualByComparingTo(new BigDecimal("5.123"));
+        BigDecimal result = TradeItemCalculator.scaleWeightTon(new BigDecimal("5.123456789"));
+        assertThat(result.toPlainString()).isEqualTo("5.12345679");
+    }
+
+    @Test
+    void shouldRoundTinyWeightAtInternalScale() {
+        assertThat(TradeItemCalculator.scaleWeightTon(new BigDecimal("0.000000004")).toPlainString())
+                .isEqualTo("0.00000000");
+        assertThat(TradeItemCalculator.scaleWeightTon(new BigDecimal("0.000000005")).toPlainString())
+                .isEqualTo("0.00000001");
     }
 
     @Test
     void shouldScaleWeightTonFromNull() {
-        assertThat(TradeItemCalculator.scaleWeightTon(null)).isEqualByComparingTo(new BigDecimal("0.000"));
+        assertThat(TradeItemCalculator.scaleWeightTon(null).toPlainString()).isEqualTo("0.00000000");
     }
 
     @Test
@@ -65,13 +73,25 @@ class TradeItemCalculatorTest {
     @Test
     void shouldCalculateWeightTonWithNullQuantity() {
         BigDecimal result = TradeItemCalculator.calculateWeightTon(null, new BigDecimal("0.500"));
-        assertThat(result).isEqualByComparingTo(BigDecimal.ZERO.setScale(3));
+        assertThat(result.toPlainString()).isEqualTo("0.00000000");
     }
 
     @Test
     void shouldCalculateWeightTonWithNullPieceWeight() {
         BigDecimal result = TradeItemCalculator.calculateWeightTon(10, null);
-        assertThat(result).isEqualByComparingTo(BigDecimal.ZERO.setScale(3));
+        assertThat(result.toPlainString()).isEqualTo("0.00000000");
+    }
+
+    @Test
+    void shouldKeepSmallPieceWeightPrecision() {
+        BigDecimal result = TradeItemCalculator.calculateWeightTon(1, new BigDecimal("0.005555"));
+        assertThat(result.toPlainString()).isEqualTo("0.00555500");
+    }
+
+    @Test
+    void shouldCalculateMinimumRepresentableWeightTon() {
+        BigDecimal result = TradeItemCalculator.calculateWeightTon(1, new BigDecimal("0.000000005"));
+        assertThat(result.toPlainString()).isEqualTo("0.00000001");
     }
 
     @Test
@@ -83,13 +103,13 @@ class TradeItemCalculatorTest {
     @Test
     void shouldReturnZeroAverageWhenQuantityIsZero() {
         BigDecimal result = TradeItemCalculator.calculateAveragePieceWeightTon(0, new BigDecimal("5.000"));
-        assertThat(result).isEqualByComparingTo(BigDecimal.ZERO.setScale(3));
+        assertThat(result.toPlainString()).isEqualTo("0.00000000");
     }
 
     @Test
     void shouldReturnZeroAverageWhenQuantityIsNull() {
         BigDecimal result = TradeItemCalculator.calculateAveragePieceWeightTon(null, new BigDecimal("5.000"));
-        assertThat(result).isEqualByComparingTo(BigDecimal.ZERO.setScale(3));
+        assertThat(result.toPlainString()).isEqualTo("0.00000000");
     }
 
     @Test
