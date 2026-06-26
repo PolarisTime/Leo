@@ -22,18 +22,26 @@ public class OperationLogCommandRecorder {
     public void record(HttpServletRequest request, OperationLogMetadata metadata,
                        ApiResponse<?> apiResponse, Exception ex, int responseStatus) {
         try {
-            String resultStatus = resultCollector.resolveResultStatus(apiResponse, null, ex);
+            String resultStatus = resultCollector.resolveResultStatus(apiResponse, responseStatus, ex);
+            String moduleName = resultCollector.resolveModuleName(request, metadata);
             String businessNo = resultCollector.resolveBusinessNo(request, apiResponse, metadata);
+            Long recordId = resultCollector.resolveRecordId(request, apiResponse, metadata);
+            String moduleKey = resultCollector.resolveModuleKey(request, apiResponse, metadata);
             String remark = resultCollector.resolveRemark(apiResponse, ex);
             operationLogService.record(new OperationLogCommand(
-                    metadata.moduleName(),
+                    moduleName,
                     metadata.actionType(),
                     businessNo,
                     request.getMethod(),
                     resultCollector.resolveRequestPath(request),
                     resultCollector.resolveIp(request),
                     resultStatus,
-                    remark
+                    remark,
+                    recordId,
+                    moduleKey,
+                    null,
+                    null,
+                    null
             ));
         } catch (Exception logEx) {
             log.warn("操作日志写入失败: {} {}", request.getMethod(), request.getRequestURI(), logEx);

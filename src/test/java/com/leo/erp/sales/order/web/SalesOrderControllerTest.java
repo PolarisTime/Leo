@@ -9,12 +9,17 @@ import com.leo.erp.common.web.dto.StatusUpdateRequest;
 import com.leo.erp.sales.order.service.SalesOrderService;
 import com.leo.erp.sales.order.web.dto.SalesOrderRequest;
 import com.leo.erp.sales.order.web.dto.SalesOrderResponse;
+import com.leo.erp.system.operationlog.support.OperationLogResultCollector;
+import com.leo.erp.system.operationlog.support.OperationLoggable;
+import com.leo.erp.system.printtemplate.service.PrintOptions;
 import org.junit.jupiter.api.Test;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.http.MediaType;
+import jakarta.servlet.http.HttpServletRequest;
 
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -27,6 +32,7 @@ class SalesOrderControllerTest {
 
     private final SalesOrderService service = mock(SalesOrderService.class);
     private final SalesOrderPrintExportService printExportService = mock(SalesOrderPrintExportService.class);
+    private final HttpServletRequest request = mock(HttpServletRequest.class);
     private final SalesOrderController controller = new SalesOrderController(service, printExportService);
 
     @Test
@@ -87,19 +93,58 @@ class SalesOrderControllerTest {
     @Test
     void exportPrintXlsxReturnsDownloadResponse() {
         byte[] content = new byte[]{1, 2, 3};
-        when(printExportService.exportSalesOrderPrint(1L)).thenReturn(new FileDownloadResponse(
+        when(printExportService.exportSalesOrderPrint(1L, PrintOptions.defaults())).thenReturn(new FileDownloadResponse(
                 "SO-001-套打.xlsx",
                 MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
                 content
         ));
 
-        var response = controller.exportPrintXlsx(1L);
+        var response = controller.exportPrintXlsx(1L, request);
 
         assertThat(response.getHeaders().getContentType().toString())
                 .isEqualTo("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
         assertThat(response.getHeaders().getContentDisposition().getFilename()).isEqualTo("SO-001-套打.xlsx");
         assertThat(response.getBody()).isEqualTo(content);
-        verify(printExportService).exportSalesOrderPrint(1L);
+        verify(printExportService).exportSalesOrderPrint(1L, PrintOptions.defaults());
+        verify(request).setAttribute(OperationLogResultCollector.BUSINESS_NO_ATTRIBUTE, null);
+        verify(request).setAttribute(OperationLogResultCollector.RECORD_ID_ATTRIBUTE, null);
+        verify(request).setAttribute(OperationLogResultCollector.MODULE_KEY_ATTRIBUTE, null);
+    }
+
+    @Test
+    void exportPrintXlsxPassesPrintOptions() {
+        byte[] content = new byte[]{1, 2, 3};
+        PrintOptions options = new PrintOptions(true, true, "", Map.of(), Map.of("11", "抚新"), List.of("12", "11"));
+        when(printExportService.exportSalesOrderPrint(1L, options)).thenReturn(new FileDownloadResponse(
+                "SO-001-套打.xlsx",
+                MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
+                content
+        ));
+
+        var response = controller.exportPrintXlsx(1L, Map.of(
+                "printOptions", Map.of(
+                        "hideUnitPrice", true,
+                        "hideRemark", true,
+                        "brandOverridesByItemId", Map.of("11", " 抚新 "),
+                        "itemOrder", List.of("12", "11")
+                )
+        ), request);
+
+        assertThat(response.getBody()).isEqualTo(content);
+        verify(printExportService).exportSalesOrderPrint(1L, options);
+    }
+
+    @Test
+    void exportPrintXlsxHasOperationLogAnnotation() throws Exception {
+        OperationLoggable annotation = SalesOrderController.class
+                .getMethod("exportPrintXlsx", Long.class, Map.class, HttpServletRequest.class)
+                .getAnnotation(OperationLoggable.class);
+
+        assertThat(annotation).isNotNull();
+        assertThat(annotation.moduleName()).isEqualTo("销售订单");
+        assertThat(annotation.actionType()).isEqualTo("打印");
+        assertThat(annotation.businessNoFields()).containsExactly("id");
+        assertThat(annotation.recordIdField()).isEqualTo("id");
     }
 
     @Test

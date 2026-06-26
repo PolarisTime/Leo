@@ -3,6 +3,7 @@ package com.leo.erp.sales.order.service;
 import com.leo.erp.sales.order.domain.entity.SalesOrder;
 import com.leo.erp.sales.order.domain.entity.SalesOrderItem;
 import com.leo.erp.sales.order.repository.SalesOrderRepository;
+import com.leo.erp.system.printtemplate.service.PrintOptions;
 import org.apache.poi.ss.usermodel.DataFormatter;
 import org.apache.poi.ss.usermodel.WorkbookFactory;
 import org.junit.jupiter.api.Test;
@@ -11,6 +12,7 @@ import java.io.ByteArrayInputStream;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -48,16 +50,62 @@ class SalesOrderPrintExportServiceTest {
             assertThat(text(formatter, firstSheet, 7, 0)).isEqualTo("品牌1");
             assertThat(text(formatter, firstSheet, 13, 0)).isEqualTo("品牌7");
             assertThat(text(formatter, firstSheet, 14, 3)).isEqualTo("合计件数");
-            assertThat(text(formatter, firstSheet, 14, 4)).isEqualTo("36");
+            assertThat(text(formatter, firstSheet, 14, 4)).isEqualTo("28");
             assertThat(text(formatter, firstSheet, 14, 5)).isEqualTo("合计吨位");
-            assertThat(text(formatter, firstSheet, 14, 6)).isEqualTo("36.8T");
+            assertThat(text(formatter, firstSheet, 14, 6)).isEqualTo("28.7T");
 
             var secondSheet = workbook.getSheetAt(1);
             assertThat(text(formatter, secondSheet, 7, 0)).isEqualTo("品牌8");
             assertThat(text(formatter, secondSheet, 8, 0)).isBlank();
-            assertThat(text(formatter, secondSheet, 14, 4)).isEqualTo("36");
-            assertThat(text(formatter, secondSheet, 14, 6)).isEqualTo("36.8T");
+            assertThat(text(formatter, secondSheet, 14, 4)).isEqualTo("8");
+            assertThat(text(formatter, secondSheet, 14, 6)).isEqualTo("8.1T");
             assertThat(secondSheet.getProtect()).isTrue();
+        }
+    }
+
+    @Test
+    void shouldApplyPrintOptionsWhenExportingLockedTemplate() throws Exception {
+        SalesOrderRepository repository = mock(SalesOrderRepository.class);
+        SalesOrder order = salesOrder(2);
+        when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(order));
+
+        SalesOrderPrintExportService service = new SalesOrderPrintExportService(repository);
+
+        var file = service.exportSalesOrderPrint(
+                1L,
+                new PrintOptions(true, true, "", Map.of(), Map.of("1", "抚新"), java.util.List.of())
+        );
+
+        try (var workbook = WorkbookFactory.create(new ByteArrayInputStream(file.content()))) {
+            DataFormatter formatter = new DataFormatter();
+            var sheet = workbook.getSheetAt(0);
+            assertThat(text(formatter, sheet, 0, 0)).isBlank();
+            assertThat(text(formatter, sheet, 7, 0)).isEqualTo("抚新");
+            assertThat(text(formatter, sheet, 8, 0)).isEqualTo("品牌2");
+            assertThat(text(formatter, sheet, 7, 7)).isBlank();
+            assertThat(text(formatter, sheet, 8, 7)).isBlank();
+        }
+    }
+
+    @Test
+    void shouldApplyItemOrderWhenExportingLockedTemplate() throws Exception {
+        SalesOrderRepository repository = mock(SalesOrderRepository.class);
+        SalesOrder order = salesOrder(3);
+        when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(order));
+
+        SalesOrderPrintExportService service = new SalesOrderPrintExportService(repository);
+
+        var file = service.exportSalesOrderPrint(
+                1L,
+                new PrintOptions(false, false, "", Map.of(), Map.of(), java.util.List.of("3", "1"))
+        );
+
+        try (var workbook = WorkbookFactory.create(new ByteArrayInputStream(file.content()))) {
+            DataFormatter formatter = new DataFormatter();
+            var sheet = workbook.getSheetAt(0);
+            assertThat(text(formatter, sheet, 7, 0)).isEqualTo("品牌3");
+            assertThat(text(formatter, sheet, 8, 0)).isEqualTo("品牌1");
+            assertThat(text(formatter, sheet, 9, 0)).isEqualTo("品牌2");
         }
     }
 
