@@ -194,10 +194,10 @@ public class PrintScriptService {
 
     /** Load record + items from DB, return raw template + data for frontend rendering. */
     public Map<String, Object> generateFromRecord(String templateId, String moduleKey, Long recordId) {
-        return generateFromRecord(templateId, moduleKey, recordId, PrintOptions.defaults());
+        return generateFromRecord(templateId, moduleKey, recordId, PrintRenderOptions.defaults());
     }
 
-    public Map<String, Object> generateFromRecord(String templateId, String moduleKey, Long recordId, PrintOptions options) {
+    public Map<String, Object> generateFromRecord(String templateId, String moduleKey, Long recordId, PrintRenderOptions options) {
         PrintTemplate template = templateRepository.findByIdAndDeletedFlagFalse(Long.parseLong(templateId))
                 .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "打印模板不存在"));
         if (!"ACTIVE".equals(template.getStatus())) {
@@ -306,7 +306,7 @@ public class PrintScriptService {
                 + " ORDER BY " + source.itemFkColumn() + " ASC, line_no ASC, id ASC";
     }
 
-    private void applyPrintOptions(Map<String, String> data, List<Map<String, String>> items, PrintOptions options) {
+    private void applyPrintOptions(Map<String, String> data, List<Map<String, String>> items, PrintRenderOptions options) {
         if (options == null) {
             return;
         }
@@ -352,7 +352,7 @@ public class PrintScriptService {
         }
     }
 
-    private List<Map<String, String>> applyItemOrder(List<Map<String, String>> items, PrintOptions options) {
+    private List<Map<String, String>> applyItemOrder(List<Map<String, String>> items, PrintRenderOptions options) {
         if (options == null || options.itemOrder() == null || options.itemOrder().isEmpty() || items.isEmpty()) {
             return items;
         }

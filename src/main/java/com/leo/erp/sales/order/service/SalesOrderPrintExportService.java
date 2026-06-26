@@ -5,9 +5,11 @@ import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.support.PrecisionConstants;
 import com.leo.erp.common.web.dto.FileDownloadResponse;
 import com.leo.erp.sales.order.domain.entity.SalesOrder;
-import com.leo.erp.sales.order.domain.entity.SalesOrderItem;
 import com.leo.erp.sales.order.repository.SalesOrderRepository;
-import com.leo.erp.system.printtemplate.service.PrintOptions;
+import com.leo.erp.sales.order.service.print.SalesOrderPrintDocument;
+import com.leo.erp.sales.order.service.print.SalesOrderPrintDocumentFactory;
+import com.leo.erp.sales.order.service.print.SalesOrderPrintLine;
+import com.leo.erp.sales.order.service.print.SalesOrderPrintPage;
 import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.PrintSetup;
 import org.apache.poi.ss.usermodel.Row;
@@ -27,13 +29,7 @@ import java.io.IOException;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.HashSet;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
-import java.util.Set;
 
 @Service
 public class SalesOrderPrintExportService {
@@ -47,27 +43,29 @@ public class SalesOrderPrintExportService {
     private static final int SUMMARY_ROW = 14;
 
     private final SalesOrderRepository salesOrderRepository;
+    private final SalesOrderPrintDocumentFactory printDocumentFactory;
 
-    public SalesOrderPrintExportService(SalesOrderRepository salesOrderRepository) {
+    public SalesOrderPrintExportService(
+            SalesOrderRepository salesOrderRepository,
+            SalesOrderPrintDocumentFactory printDocumentFactory
+    ) {
         this.salesOrderRepository = salesOrderRepository;
+        this.printDocumentFactory = printDocumentFactory;
     }
 
     @Transactional(readOnly = true)
     public FileDownloadResponse exportSalesOrderPrint(Long orderId) {
-        return exportSalesOrderPrint(orderId, PrintOptions.defaults());
+        return exportSalesOrderPrint(orderId, SalesOrderPrintXlsxOptions.defaults());
     }
 
     @Transactional(readOnly = true)
-    public FileDownloadResponse exportSalesOrderPrint(Long orderId, PrintOptions options) {
+    public FileDownloadResponse exportSalesOrderPrint(Long orderId, SalesOrderPrintXlsxOptions options) {
         SalesOrder order = salesOrderRepository.findByIdAndDeletedFlagFalse(orderId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "销售订单不存在"));
-        List<SalesOrderItem> items = order.getItems().stream()
-                .sorted(Comparator.comparing(SalesOrderItem::getLineNo, Comparator.nullsLast(Integer::compareTo)))
-                .toList();
-        items = applyItemOrder(items, options);
+        SalesOrderPrintDocument document = printDocumentFactory.create(order, options, DETAIL_ROWS_PER_SHEET);
 
         try (XSSFWorkbook workbook = loadTemplateWorkbook(); ByteArrayOutputStream output = new ByteArrayOutputStream()) {
-            int pageCount = Math.max(1, (int) Math.ceil(items.size() / (double) DETAIL_ROWS_PER_SHEET));
+            int pageCount = document.pages().size();
             for (int pageIndex = 1; pageIndex < pageCount; pageIndex += 1) {
                 workbook.cloneSheet(0);
             }
@@ -78,19 +76,19 @@ public class SalesOrderPrintExportService {
                 if (pageIndex > 0) {
                     copyPrintSetup(workbook.getSheetAt(0), sheet);
                 }
-                List<SalesOrderItem> pageItems = pageItems(items, pageIndex);
-                fillHeader(sheet, order, options);
+                SalesOrderPrintPage page = document.pages().get(pageIndex);
+                fillHeader(sheet, document);
                 clearDetailRows(sheet);
-                fillDetailRows(sheet, pageItems, options);
-                fillSummary(sheet, pageItems);
+                fillDetailRows(sheet, page.lines());
+                fillSummary(sheet, page);
             }
 
             workbook.write(output);
             return new FileDownloadResponse(
-                    safeFilename(order.getOrderNo()) + "-套打.xlsx",
+                    safeFilename(document.orderNo()) + "-套打.xlsx",
                     XLSX_MEDIA_TYPE,
                     output.toByteArray(),
-                    order.getOrderNo(),
+                    document.orderNo(),
                     order.getId(),
                     "sales-order"
             );
@@ -127,13 +125,13 @@ public class SalesOrderPrintExportService {
         }
     }
 
-    private void fillHeader(Sheet sheet, SalesOrder order, PrintOptions options) {
-        setText(sheet, "A1", options != null && options.hideRemark() ? "" : order.getRemark());
-        setText(sheet, "B2", order.getCustomerName());
-        setText(sheet, "B4", order.getProjectName());
-        setText(sheet, "I4", order.getOrderNo());
+    private void fillHeader(Sheet sheet, SalesOrderPrintDocument document) {
+        setText(sheet, "A1", document.remark());
+        setText(sheet, "B2", document.customerName());
+        setText(sheet, "B4", document.projectName());
+        setText(sheet, "I4", document.orderNo());
 
-        LocalDate date = order.getDeliveryDate();
+        LocalDate date = document.deliveryDate();
         if (date == null) {
             setText(sheet, "I5", "");
             setText(sheet, "J5", "");
@@ -153,116 +151,41 @@ public class SalesOrderPrintExportService {
         }
     }
 
-    private List<SalesOrderItem> pageItems(List<SalesOrderItem> items, int pageIndex) {
-        int start = pageIndex * DETAIL_ROWS_PER_SHEET;
-        int end = Math.min(items.size(), start + DETAIL_ROWS_PER_SHEET);
-        return items.subList(start, end);
-    }
-
-    private void fillDetailRows(Sheet sheet, List<SalesOrderItem> items, PrintOptions options) {
+    private void fillDetailRows(Sheet sheet, List<SalesOrderPrintLine> items) {
         for (int itemIndex = 0; itemIndex < items.size(); itemIndex += 1) {
-            SalesOrderItem item = items.get(itemIndex);
+            SalesOrderPrintLine item = items.get(itemIndex);
             int rowIndex = DETAIL_START_ROW + itemIndex;
-            setText(sheet, rowIndex, 0, brand(item, options));
-            setText(sheet, rowIndex, 1, item.getCategory());
-            setText(sheet, rowIndex, 2, item.getMaterial());
-            setText(sheet, rowIndex, 3, item.getSpec());
-            setNumber(sheet, rowIndex, 4, item.getQuantity());
+            setText(sheet, rowIndex, 0, item.brand());
+            setText(sheet, rowIndex, 1, item.category());
+            setText(sheet, rowIndex, 2, item.material());
+            setText(sheet, rowIndex, 3, item.spec());
+            setNumber(sheet, rowIndex, 4, item.quantity());
             setText(sheet, rowIndex, 5, pieceWeight(item));
-            setNumber(sheet, rowIndex, 6, item.getWeightTon());
-            if (options != null && options.hideUnitPrice()) {
-                clearCell(sheet, rowIndex, 7);
-            } else {
-                setNumber(sheet, rowIndex, 7, item.getUnitPrice());
-            }
+            setNumber(sheet, rowIndex, 6, item.weightTon());
+            setNumber(sheet, rowIndex, 7, item.unitPrice());
         }
     }
 
-    private String brand(SalesOrderItem item, PrintOptions options) {
-        if (options == null) {
-            return item.getBrand();
-        }
-        if (options.brandOverride() != null && !options.brandOverride().isBlank()) {
-            return options.brandOverride().trim();
-        }
-        String itemId = item.getId() == null ? "" : String.valueOf(item.getId());
-        String itemOverride = options.brandOverridesByItemId() == null ? null : options.brandOverridesByItemId().get(itemId);
-        if (itemOverride != null && !itemOverride.isBlank()) {
-            return itemOverride.trim();
-        }
-        String brand = item.getBrand();
-        String brandOverride = brand == null || options.brandOverrides() == null ? null : options.brandOverrides().get(brand);
-        if (brandOverride != null && !brandOverride.isBlank()) {
-            return brandOverride.trim();
-        }
-        return brand;
-    }
-
-    private List<SalesOrderItem> applyItemOrder(List<SalesOrderItem> items, PrintOptions options) {
-        if (options == null || options.itemOrder() == null || options.itemOrder().isEmpty() || items.isEmpty()) {
-            return items;
-        }
-        Map<String, SalesOrderItem> itemsById = new LinkedHashMap<>();
-        for (SalesOrderItem item : items) {
-            if (item.getId() != null) {
-                itemsById.putIfAbsent(String.valueOf(item.getId()), item);
-            }
-        }
-        if (itemsById.isEmpty()) {
-            return items;
-        }
-
-        Set<String> selectedIds = new HashSet<>();
-        List<SalesOrderItem> orderedItems = new ArrayList<>();
-        for (String itemId : options.itemOrder()) {
-            SalesOrderItem item = itemsById.get(itemId);
-            if (item != null && selectedIds.add(itemId)) {
-                orderedItems.add(item);
-            }
-        }
-        for (SalesOrderItem item : items) {
-            String itemId = item.getId() == null ? "" : String.valueOf(item.getId());
-            if (itemId.isBlank() || selectedIds.add(itemId)) {
-                orderedItems.add(item);
-            }
-        }
-        return orderedItems;
-    }
-
-    private void fillSummary(Sheet sheet, List<SalesOrderItem> items) {
+    private void fillSummary(Sheet sheet, SalesOrderPrintPage page) {
         setText(sheet, SUMMARY_ROW, 3, "合计件数");
-        setNumber(sheet, SUMMARY_ROW, 4, totalQuantity(items));
+        setNumber(sheet, SUMMARY_ROW, 4, page.totalQuantity());
         setText(sheet, SUMMARY_ROW, 5, "合计吨位");
         setText(
                 sheet,
                 SUMMARY_ROW,
                 6,
-                formatDecimal(totalWeight(items), PrecisionConstants.DISPLAY_WEIGHT_SCALE) + "T"
+                formatDecimal(page.totalWeight(), PrecisionConstants.DISPLAY_WEIGHT_SCALE) + "T"
         );
     }
 
-    private BigDecimal totalWeight(List<SalesOrderItem> items) {
-        return items.stream()
-                .map(SalesOrderItem::getWeightTon)
-                .filter(value -> value != null)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
-    }
-
-    private int totalQuantity(List<SalesOrderItem> items) {
-        return items.stream()
-                .map(SalesOrderItem::getQuantity)
-                .filter(value -> value != null)
-                .reduce(0, Integer::sum);
-    }
-
-    private String pieceWeight(SalesOrderItem item) {
-        if (isCoil(item.getCategory())) {
+    private String pieceWeight(SalesOrderPrintLine item) {
+        if (isCoil(item.category())) {
             return "-";
         }
-        BigDecimal pieceWeight = item.getPieceWeightTon();
-        if (pieceWeight == null && item.getWeightTon() != null && item.getQuantity() != null && item.getQuantity() > 0) {
-            pieceWeight = item.getWeightTon().divide(
-                    BigDecimal.valueOf(item.getQuantity()),
+        BigDecimal pieceWeight = item.pieceWeightTon();
+        if (pieceWeight == null && item.weightTon() != null && item.quantity() != null && item.quantity() > 0) {
+            pieceWeight = item.weightTon().divide(
+                    BigDecimal.valueOf(item.quantity()),
                     PrecisionConstants.DISPLAY_WEIGHT_SCALE,
                     RoundingMode.HALF_UP
             );
