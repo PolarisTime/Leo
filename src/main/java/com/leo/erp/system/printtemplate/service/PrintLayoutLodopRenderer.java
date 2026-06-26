@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
+import com.leo.erp.common.support.PrecisionConstants;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
@@ -46,7 +47,10 @@ public class PrintLayoutLodopRenderer {
             Map<String, String> variables = new HashMap<>(data);
             Totals totals = totals(items);
             variables.put("totalQuantity", formatQuantity(totals.quantity()));
-            variables.put("totalWeight", formatDecimal(totals.weight(), 3));
+            variables.put(
+                    "totalWeight",
+                    formatDecimal(totals.weight(), PrecisionConstants.DISPLAY_WEIGHT_SCALE)
+            );
 
             StringBuilder script = new StringBuilder();
             script.append("LODOP.PRINT_INIT(").append(jsString(templateName)).append(");\n");

@@ -1,5 +1,6 @@
 package com.leo.erp.purchase.inbound.service;
 
+import com.leo.erp.common.support.PrecisionConstants;
 import com.leo.erp.common.support.TradeItemMaterialSupport;
 import com.leo.erp.common.support.TradeMaterialSnapshot;
 import com.leo.erp.common.support.WarehouseSelectionSupport;
@@ -47,7 +48,8 @@ class InboundItemMapperTest {
         PurchaseInboundItem item = new PurchaseInboundItem();
         WeightSettlementResult ws = new WeightSettlementResult(
                 new BigDecimal("1.000"), null,
-                BigDecimal.ZERO.setScale(3), BigDecimal.ZERO.setScale(2),
+                BigDecimal.ZERO.setScale(PrecisionConstants.WEIGHT_SCALE),
+                BigDecimal.ZERO.setScale(2),
                 new BigDecimal("0.100"), new BigDecimal("1.000")
         );
         InboundItemMapper.ItemMappingContext ctx = new InboundItemMapper.ItemMappingContext(
@@ -105,7 +107,8 @@ class InboundItemMapperTest {
         PurchaseInboundItem item = new PurchaseInboundItem();
         WeightSettlementResult ws = new WeightSettlementResult(
                 new BigDecimal("1.000"), null,
-                BigDecimal.ZERO.setScale(3), BigDecimal.ZERO.setScale(2),
+                BigDecimal.ZERO.setScale(PrecisionConstants.WEIGHT_SCALE),
+                BigDecimal.ZERO.setScale(2),
                 new BigDecimal("0.100"), new BigDecimal("1.000")
         );
         InboundItemMapper.ItemMappingContext ctx = new InboundItemMapper.ItemMappingContext(ws, "一号库", "理算");
@@ -137,7 +140,8 @@ class InboundItemMapperTest {
         PurchaseInboundItem item = new PurchaseInboundItem();
         WeightSettlementResult ws = new WeightSettlementResult(
                 new BigDecimal("1.000"), null,
-                BigDecimal.ZERO.setScale(3), BigDecimal.ZERO.setScale(2),
+                BigDecimal.ZERO.setScale(PrecisionConstants.WEIGHT_SCALE),
+                BigDecimal.ZERO.setScale(2),
                 new BigDecimal("0.100"), new BigDecimal("1.000")
         );
         InboundItemMapper.ItemMappingContext ctx = new InboundItemMapper.ItemMappingContext(ws, "一号库", "理算");
@@ -169,7 +173,8 @@ class InboundItemMapperTest {
         PurchaseInboundItem item = new PurchaseInboundItem();
         WeightSettlementResult ws = new WeightSettlementResult(
                 new BigDecimal("1.000"), null,
-                BigDecimal.ZERO.setScale(3), BigDecimal.ZERO.setScale(2),
+                BigDecimal.ZERO.setScale(PrecisionConstants.WEIGHT_SCALE),
+                BigDecimal.ZERO.setScale(2),
                 new BigDecimal("0.100"), new BigDecimal("1.000")
         );
         InboundItemMapper.ItemMappingContext ctx = new InboundItemMapper.ItemMappingContext(ws, "默认仓库", "理算");
@@ -230,7 +235,8 @@ class InboundItemMapperTest {
         PurchaseInboundItem item = new PurchaseInboundItem();
         WeightSettlementResult ws = new WeightSettlementResult(
                 new BigDecimal("1.000"), null,
-                BigDecimal.ZERO.setScale(3), BigDecimal.ZERO.setScale(2),
+                BigDecimal.ZERO.setScale(PrecisionConstants.WEIGHT_SCALE),
+                BigDecimal.ZERO.setScale(2),
                 new BigDecimal("0.100"), new BigDecimal("1.000")
         );
         InboundItemMapper.ItemMappingContext ctx = new InboundItemMapper.ItemMappingContext(ws, "一号库", null);

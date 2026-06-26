@@ -1,6 +1,7 @@
 package com.leo.erp.system.printtemplate.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.leo.erp.common.support.PrecisionConstants;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -33,7 +34,10 @@ public class PrintPdfFormValueResolver {
         Totals totals = totals(items);
         Map<String, String> variables = new HashMap<>(data);
         variables.put("totalQuantity", formatQuantity(totals.quantity()));
-        variables.put("totalWeight", formatDecimal(totals.weight(), 3));
+        variables.put(
+                "totalWeight",
+                formatDecimal(totals.weight(), PrecisionConstants.DISPLAY_WEIGHT_SCALE)
+        );
         return variables;
     }
 

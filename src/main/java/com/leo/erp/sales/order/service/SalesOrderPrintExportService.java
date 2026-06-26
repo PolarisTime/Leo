@@ -2,6 +2,7 @@ package com.leo.erp.sales.order.service;
 
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
+import com.leo.erp.common.support.PrecisionConstants;
 import com.leo.erp.common.web.dto.FileDownloadResponse;
 import com.leo.erp.sales.order.domain.entity.SalesOrder;
 import com.leo.erp.sales.order.domain.entity.SalesOrderItem;
@@ -232,7 +233,12 @@ public class SalesOrderPrintExportService {
         setText(sheet, SUMMARY_ROW, 3, "合计件数");
         setNumber(sheet, SUMMARY_ROW, 4, totalQuantity(items));
         setText(sheet, SUMMARY_ROW, 5, "合计吨位");
-        setText(sheet, SUMMARY_ROW, 6, formatDecimal(totalWeight(items), 3) + "T");
+        setText(
+                sheet,
+                SUMMARY_ROW,
+                6,
+                formatDecimal(totalWeight(items), PrecisionConstants.DISPLAY_WEIGHT_SCALE) + "T"
+        );
     }
 
     private BigDecimal totalWeight(List<SalesOrderItem> items) {
@@ -255,9 +261,13 @@ public class SalesOrderPrintExportService {
         }
         BigDecimal pieceWeight = item.getPieceWeightTon();
         if (pieceWeight == null && item.getWeightTon() != null && item.getQuantity() != null && item.getQuantity() > 0) {
-            pieceWeight = item.getWeightTon().divide(BigDecimal.valueOf(item.getQuantity()), 3, RoundingMode.HALF_UP);
+            pieceWeight = item.getWeightTon().divide(
+                    BigDecimal.valueOf(item.getQuantity()),
+                    PrecisionConstants.DISPLAY_WEIGHT_SCALE,
+                    RoundingMode.HALF_UP
+            );
         }
-        return formatDecimal(pieceWeight, 3);
+        return formatDecimal(pieceWeight, PrecisionConstants.DISPLAY_WEIGHT_SCALE);
     }
 
     private boolean isCoil(String category) {

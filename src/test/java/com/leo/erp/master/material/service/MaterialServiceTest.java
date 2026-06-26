@@ -634,6 +634,7 @@ class MaterialServiceTest {
     @Test
     void shouldExportCsv() {
         Material material = createMaterial(1L, "MAT-001");
+        material.setPieceWeightTon(new BigDecimal("0.005555"));
         var repository = (MaterialRepository) Proxy.newProxyInstance(
                 MaterialRepository.class.getClassLoader(),
                 new Class[]{MaterialRepository.class},
@@ -659,6 +660,7 @@ class MaterialServiceTest {
         String content = new String(result, StandardCharsets.UTF_8);
         assertThat(content).contains("MAT-001");
         assertThat(content).contains("商品编码");
+        assertThat(content).contains("0.00555500");
     }
 
     @Test

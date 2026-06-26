@@ -40,7 +40,7 @@ public final class TradeItemCalculator {
             return BigDecimal.ZERO.setScale(PrecisionConstants.WEIGHT_SCALE, PrecisionConstants.DEFAULT_ROUNDING);
         }
         return safeBigDecimal(weightTon)
-                .divide(BigDecimal.valueOf(quantity.longValue()), 3, RoundingMode.HALF_UP);
+                .divide(BigDecimal.valueOf(quantity.longValue()), PrecisionConstants.WEIGHT_SCALE, RoundingMode.HALF_UP);
     }
 
     public static BigDecimal calculateRepresentableAveragePieceWeightTon(Integer quantity, BigDecimal weightTon) {

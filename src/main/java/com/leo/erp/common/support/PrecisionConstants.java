@@ -9,8 +9,11 @@ public final class PrecisionConstants {
 
     private PrecisionConstants() {}
 
-    /** 重量精度（吨），3 位小数 */
-    public static final int WEIGHT_SCALE = 3;
+    /** 内部重量精度（吨），8 位小数 */
+    public static final int WEIGHT_SCALE = 8;
+
+    /** 展示重量精度（吨），3 位小数 */
+    public static final int DISPLAY_WEIGHT_SCALE = 3;
 
     /** 金额精度（元），2 位小数 */
     public static final int AMOUNT_SCALE = 2;

@@ -54,7 +54,7 @@ class ScaledBigDecimalSerializerTest {
         ObjectMapper mapper = buildMapperWithSerializer();
 
         String json = mapper.writeValueAsString(new WeightHolder(new BigDecimal("1.23456")));
-        assertThat(json).contains("1.235");
+        assertThat(json).contains("1.23456000");
     }
 
     @Test
@@ -63,6 +63,22 @@ class ScaledBigDecimalSerializerTest {
 
         String json = mapper.writeValueAsString(new AmountHolder(new BigDecimal("123.456")));
         assertThat(json).contains("123.46");
+    }
+
+    @Test
+    void amountFieldWithWeightPrefix_usesScale2() throws Exception {
+        ObjectMapper mapper = buildMapperWithSerializer();
+
+        String json = mapper.writeValueAsString(new WeightAdjustmentAmountHolder(new BigDecimal("123.456")));
+        assertThat(json).contains("123.46");
+    }
+
+    @Test
+    void weightAdjustmentTonField_usesWeightScale() throws Exception {
+        ObjectMapper mapper = buildMapperWithSerializer();
+
+        String json = mapper.writeValueAsString(new WeightAdjustmentTonHolder(new BigDecimal("0.005555")));
+        assertThat(json).contains("0.00555500");
     }
 
     @Test
@@ -137,6 +153,28 @@ class ScaledBigDecimalSerializerTest {
 
         AmountHolder(BigDecimal totalAmount) { this.totalAmount = totalAmount; }
         public BigDecimal getTotalAmount() { return totalAmount; }
+    }
+
+    static class WeightAdjustmentAmountHolder {
+        @JsonSerialize(using = ScaledBigDecimalSerializer.class)
+        BigDecimal weightAdjustmentAmount;
+
+        WeightAdjustmentAmountHolder(BigDecimal weightAdjustmentAmount) {
+            this.weightAdjustmentAmount = weightAdjustmentAmount;
+        }
+
+        public BigDecimal getWeightAdjustmentAmount() { return weightAdjustmentAmount; }
+    }
+
+    static class WeightAdjustmentTonHolder {
+        @JsonSerialize(using = ScaledBigDecimalSerializer.class)
+        BigDecimal weightAdjustmentTon;
+
+        WeightAdjustmentTonHolder(BigDecimal weightAdjustmentTon) {
+            this.weightAdjustmentTon = weightAdjustmentTon;
+        }
+
+        public BigDecimal getWeightAdjustmentTon() { return weightAdjustmentTon; }
     }
 
     static class PriceHolder {

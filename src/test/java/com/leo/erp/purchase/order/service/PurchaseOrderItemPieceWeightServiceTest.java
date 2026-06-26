@@ -46,13 +46,38 @@ class PurchaseOrderItemPieceWeightServiceTest {
         assertThat(captor.getValue())
                 .extracting(PurchaseOrderItemPieceWeight::getWeightTon)
                 .containsExactly(
-                        new BigDecimal("2.037"),
-                        new BigDecimal("2.037"),
-                        new BigDecimal("2.037"),
-                        new BigDecimal("2.037"),
-                        new BigDecimal("2.037"),
-                        new BigDecimal("2.037"),
-                        new BigDecimal("2.036")
+                        new BigDecimal("2.03685714"),
+                        new BigDecimal("2.03685714"),
+                        new BigDecimal("2.03685714"),
+                        new BigDecimal("2.03685714"),
+                        new BigDecimal("2.03685714"),
+                        new BigDecimal("2.03685715"),
+                        new BigDecimal("2.03685715")
+                );
+    }
+
+    @Test
+    void shouldKeepMinimumRepresentableTotalWhenRegeneratingPieces() {
+        PurchaseOrderItemPieceWeightRepository repository = mock(PurchaseOrderItemPieceWeightRepository.class);
+        PurchaseOrderItemPieceWeightService service = new PurchaseOrderItemPieceWeightService(repository, mock(JdbcTemplate.class));
+        PurchaseOrderItem item = new PurchaseOrderItem();
+        item.setId(201L);
+        item.setQuantity(3);
+        item.setWeightTon(new BigDecimal("0.00000001"));
+
+        when(repository.findByPurchaseOrderItemIdOrderByPieceNoAsc(201L)).thenReturn(List.of());
+
+        service.regenerateForPurchaseOrderItems(List.of(item));
+
+        @SuppressWarnings({"rawtypes", "unchecked"})
+        ArgumentCaptor<Iterable<PurchaseOrderItemPieceWeight>> captor = ArgumentCaptor.forClass(Iterable.class);
+        verify(repository).saveAll(captor.capture());
+        assertThat(captor.getValue())
+                .extracting(PurchaseOrderItemPieceWeight::getWeightTon)
+                .containsExactly(
+                        new BigDecimal("0.00000000"),
+                        new BigDecimal("0.00000000"),
+                        new BigDecimal("0.00000001")
                 );
     }
 

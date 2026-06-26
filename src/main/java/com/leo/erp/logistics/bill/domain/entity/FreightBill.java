@@ -40,7 +40,7 @@ public class FreightBill extends AbstractAuditableEntity {
     @Column(name = "unit_price", nullable = false, precision = 12, scale = 2)
     private BigDecimal unitPrice;
 
-    @Column(name = "total_weight", nullable = false, precision = 14, scale = 3)
+    @Column(name = "total_weight", nullable = false, precision = 18, scale = 8)
     private BigDecimal totalWeight;
 
     @Column(name = "total_freight", nullable = false, precision = 14, scale = 2)

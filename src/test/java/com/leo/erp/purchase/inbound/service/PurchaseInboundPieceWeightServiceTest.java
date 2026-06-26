@@ -49,6 +49,28 @@ class PurchaseInboundPieceWeightServiceTest {
     }
 
     @Test
+    void shouldKeepMinimumRepresentableTotalWhenDistributed() {
+        PurchaseInboundItemQueryService itemQueryService = mock(PurchaseInboundItemQueryService.class);
+        PurchaseInboundPieceWeightService service = new PurchaseInboundPieceWeightService(itemQueryService);
+        PurchaseInboundItem item = inboundItem(3, "0.00000001", null);
+
+        when(itemQueryService.requireActiveById(101L)).thenReturn(item);
+
+        List<PieceWeightResponse> pieceWeights = service.getPieceWeights(101L);
+        BigDecimal totalWeight = pieceWeights.stream()
+                .map(PieceWeightResponse::weightTon)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        assertThat(pieceWeights).extracting(PieceWeightResponse::weightTon)
+                .containsExactly(
+                        new BigDecimal("0.00000000"),
+                        new BigDecimal("0.00000000"),
+                        new BigDecimal("0.00000001")
+                );
+        assertThat(totalWeight).isEqualByComparingTo("0.00000001");
+    }
+
+    @Test
     void shouldPreferWeighWeightTon() {
         PurchaseInboundItemQueryService itemQueryService = mock(PurchaseInboundItemQueryService.class);
         PurchaseInboundPieceWeightService service = new PurchaseInboundPieceWeightService(itemQueryService);

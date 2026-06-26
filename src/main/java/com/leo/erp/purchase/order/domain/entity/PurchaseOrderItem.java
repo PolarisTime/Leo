@@ -61,13 +61,13 @@ public class PurchaseOrderItem {
     @Column(name = "quantity_unit", nullable = false, length = 8)
     private String quantityUnit;
 
-    @Column(name = "piece_weight_ton", nullable = false, precision = 12, scale = 3)
+    @Column(name = "piece_weight_ton", nullable = false, precision = 18, scale = 8)
     private BigDecimal pieceWeightTon;
 
     @Column(name = "pieces_per_bundle", nullable = false)
     private Integer piecesPerBundle;
 
-    @Column(name = "weight_ton", nullable = false, precision = 14, scale = 3)
+    @Column(name = "weight_ton", nullable = false, precision = 18, scale = 8)
     private BigDecimal weightTon;
 
     @Column(name = "unit_price", nullable = false, precision = 12, scale = 2)
@@ -76,9 +76,9 @@ public class PurchaseOrderItem {
     @Column(name = "amount", nullable = false, precision = 14, scale = 2)
     private BigDecimal amount;
 
-    @Column(name = "actual_weight_ton", precision = 14, scale = 3)
+    @Column(name = "actual_weight_ton", precision = 18, scale = 8)
     private BigDecimal actualWeightTon;
 
-    @Column(name = "actual_piece_weight_ton", precision = 12, scale = 3)
+    @Column(name = "actual_piece_weight_ton", precision = 18, scale = 8)
     private BigDecimal actualPieceWeightTon;
 }

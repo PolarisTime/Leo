@@ -341,17 +341,17 @@ class PurchaseInboundServiceTest {
         assertThat(inboundCaptor.getValue().getWarehouseName()).isEqualTo("一号库");
         assertThat(inboundCaptor.getValue().getSettlementMode()).isEqualTo("过磅");
         assertThat(savedItem.getSettlementMode()).isEqualTo("过磅");
-        assertThat(savedItem.getPieceWeightTon()).isEqualByComparingTo("0.108");
+        assertThat(savedItem.getPieceWeightTon()).isEqualByComparingTo("0.10750000");
         assertThat(savedItem.getWeightTon()).isEqualByComparingTo("0.400");
         assertThat(savedItem.getWeighWeightTon()).isEqualByComparingTo("0.430");
         assertThat(savedItem.getWeightAdjustmentTon()).isEqualByComparingTo("0.030");
         assertThat(savedItem.getWeightAdjustmentAmount()).isEqualByComparingTo("120.00");
         assertThat(savedItem.getAmount()).isEqualByComparingTo("1600.00");
         assertThat(loadedSourceItem.getPieceWeightTon()).isEqualByComparingTo("0.100");
-        assertThat(loadedSourceItem.getWeightTon()).isEqualByComparingTo("1.080");
-        assertThat(loadedSourceItem.getAmount()).isEqualByComparingTo("4320.00");
-        assertThat(loadedPurchaseOrder.getTotalWeight()).isEqualByComparingTo("1.080");
-        assertThat(loadedPurchaseOrder.getTotalAmount()).isEqualByComparingTo("4320.00");
+        assertThat(loadedSourceItem.getWeightTon()).isEqualByComparingTo("1.07500000");
+        assertThat(loadedSourceItem.getAmount()).isEqualByComparingTo("4300.00");
+        assertThat(loadedPurchaseOrder.getTotalWeight()).isEqualByComparingTo("1.07500000");
+        assertThat(loadedPurchaseOrder.getTotalAmount()).isEqualByComparingTo("4300.00");
         verify(purchaseOrderRepository).saveAll(any());
     }
 

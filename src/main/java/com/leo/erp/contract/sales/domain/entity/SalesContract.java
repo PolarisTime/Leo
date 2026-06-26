@@ -45,7 +45,7 @@ public class SalesContract extends AbstractAuditableEntity {
     @Column(name = "sales_name", nullable = false, length = 32)
     private String salesName;
 
-    @Column(name = "total_weight", nullable = false, precision = 14, scale = 3)
+    @Column(name = "total_weight", nullable = false, precision = 18, scale = 8)
     private BigDecimal totalWeight;
 
     @Column(name = "total_amount", nullable = false, precision = 14, scale = 2)
