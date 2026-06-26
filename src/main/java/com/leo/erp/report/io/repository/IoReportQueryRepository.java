@@ -39,7 +39,7 @@ public class IoReportQueryRepository {
                     0 AS out_quantity,
                     item.quantity_unit,
                     item.weight_ton AS in_weight_ton,
-                    CAST(0 AS NUMERIC(14, 3)) AS out_weight_ton,
+                    CAST(0 AS NUMERIC(18, 8)) AS out_weight_ton,
                     item.unit,
                     inbound.remark,
                     inbound.created_by
@@ -62,7 +62,7 @@ public class IoReportQueryRepository {
                     0 AS in_quantity,
                     item.quantity AS out_quantity,
                     item.quantity_unit,
-                    CAST(0 AS NUMERIC(14, 3)) AS in_weight_ton,
+                    CAST(0 AS NUMERIC(18, 8)) AS in_weight_ton,
                     item.weight_ton AS out_weight_ton,
                     item.unit,
                     outbound.remark,

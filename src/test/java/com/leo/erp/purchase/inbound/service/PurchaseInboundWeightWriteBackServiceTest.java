@@ -55,12 +55,12 @@ class PurchaseInboundWeightWriteBackServiceTest {
                 Map.of(201L, item)
         );
 
-        assertThat(item.getActualPieceWeightTon()).isEqualByComparingTo("0.108");
-        assertThat(item.getActualWeightTon()).isEqualByComparingTo("1.080");
-        assertThat(item.getWeightTon()).isEqualByComparingTo("1.080");
-        assertThat(item.getAmount()).isEqualByComparingTo("4320.00");
-        assertThat(order.getTotalWeight()).isEqualByComparingTo("1.080");
-        assertThat(order.getTotalAmount()).isEqualByComparingTo("4320.00");
+        assertThat(item.getActualPieceWeightTon()).isEqualByComparingTo("0.10833333");
+        assertThat(item.getActualWeightTon()).isEqualByComparingTo("1.08333330");
+        assertThat(item.getWeightTon()).isEqualByComparingTo("1.08333330");
+        assertThat(item.getAmount()).isEqualByComparingTo("4333.33");
+        assertThat(order.getTotalWeight()).isEqualByComparingTo("1.08333330");
+        assertThat(order.getTotalAmount()).isEqualByComparingTo("4333.33");
         verify(purchaseOrderRepository).saveAll(any());
         verify(pieceWeightService).regenerateForPurchaseOrderItems(List.of(item));
     }

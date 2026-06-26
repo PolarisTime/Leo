@@ -3,6 +3,7 @@ package com.leo.erp.system.printtemplate.service;
 import com.leo.erp.attachment.service.AttachmentRecordAccessService;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
+import com.leo.erp.common.support.PrecisionConstants;
 import com.leo.erp.security.support.SecurityPrincipal;
 import com.leo.erp.system.printtemplate.domain.entity.PrintTemplate;
 import com.leo.erp.system.printtemplate.repository.PrintTemplateRepository;
@@ -84,7 +85,7 @@ public class PrintScriptService {
     }
 
     private static final Set<String> COIL_CATEGORIES = Set.of("盘螺", "线材");
-    private static final int WEIGHT_SCALE = 3;
+    private static final int WEIGHT_SCALE = PrecisionConstants.DISPLAY_WEIGHT_SCALE;
     private static final int PRICE_SCALE = 2;
     private static final int A5_PROJECT_NAME_SINGLE_LINE_WIDTH = 56;
     private static final int A5_PROJECT_NAME_COMPACT_WIDTH = 92;

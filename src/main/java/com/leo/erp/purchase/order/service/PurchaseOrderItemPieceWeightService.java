@@ -25,7 +25,7 @@ import java.util.stream.IntStream;
 @Service
 public class PurchaseOrderItemPieceWeightService {
 
-    private static final BigDecimal WEIGHT_UNIT = new BigDecimal("0.001");
+    private static final BigDecimal WEIGHT_UNIT = BigDecimal.ONE.movePointLeft(PrecisionConstants.WEIGHT_SCALE);
 
     private final PurchaseOrderItemPieceWeightRepository repository;
     private final JdbcTemplate jdbc;
