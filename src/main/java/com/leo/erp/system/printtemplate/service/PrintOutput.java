@@ -2,6 +2,8 @@ package com.leo.erp.system.printtemplate.service;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 @JsonInclude(JsonInclude.Include.NON_NULL)
@@ -17,7 +19,7 @@ public record PrintOutput(
         String moduleKey,
         String templateHtml,
         Map<String, String> data,
-        java.util.List<Map<String, String>> items
+        List<Map<String, String>> items
 ) {
 
     public enum Kind {
@@ -77,13 +79,27 @@ public record PrintOutput(
         }
     }
 
-    @SuppressWarnings("unchecked")
     private static Map<String, String> stringMap(Object value) {
-        return value instanceof Map<?, ?> map ? (Map<String, String>) map : null;
+        if (!(value instanceof Map<?, ?> map)) {
+            return null;
+        }
+        Map<String, String> result = new LinkedHashMap<>();
+        for (Map.Entry<?, ?> entry : map.entrySet()) {
+            if (entry.getKey() instanceof String key
+                    && entry.getValue() instanceof String text) {
+                result.put(key, text);
+            }
+        }
+        return result;
     }
 
-    @SuppressWarnings("unchecked")
-    private static java.util.List<Map<String, String>> stringMapList(Object value) {
-        return value instanceof java.util.List<?> list ? (java.util.List<Map<String, String>>) list : null;
+    private static List<Map<String, String>> stringMapList(Object value) {
+        if (!(value instanceof List<?> list)) {
+            return null;
+        }
+        return list.stream()
+                .filter(Map.class::isInstance)
+                .map(PrintOutput::stringMap)
+                .toList();
     }
 }
