@@ -98,12 +98,14 @@ class PrintTemplateServiceTest {
 
     private PrintTemplateService service(PrintTemplateRepository repository) {
         ObjectMapper objectMapper = new ObjectMapper();
+        PrintRuntimeProperties runtimeProperties = new PrintRuntimeProperties(objectMapper);
         return new PrintTemplateService(
                 repository,
                 new SnowflakeIdGenerator(0L),
                 mapper(),
                 new ModuleCatalog(),
-                new PrintPdfFormTemplateValidator(objectMapper)
+                new PrintPdfFormTemplateValidator(objectMapper),
+                runtimeProperties
         );
     }
 

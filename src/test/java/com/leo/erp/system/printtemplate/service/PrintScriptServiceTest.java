@@ -576,12 +576,22 @@ class PrintScriptServiceTest {
                 Map.entry("amount", new BigDecimal("4870.80"))
         )));
 
-        List<PrintScriptService.PrintRecordItem> items = service.listPrintItems("sales-order", List.of(1L));
+        List<PrintRecordItem> items = service.listPrintItems("sales-order", List.of(1L));
 
-        assertThat(items).containsExactly(new PrintScriptService.PrintRecordItem(
+        assertThat(items).containsExactly(new PrintRecordItem(
                 "11", "1", "中杭", "螺纹钢", "HRB400E", "Ф18", "12", "0.123", "1.476", "3300.00", "4870.80"
         ));
         verify(accessService).assertRecordAccessible(org.mockito.ArgumentMatchers.any(), eq("sales-order"), eq("read"), eq(1L));
+    }
+
+    @Test
+    void shouldRejectUnsupportedModuleBeforeReturningEmptyPrintItems() {
+        JdbcTemplate jdbc = mock(JdbcTemplate.class);
+        PrintScriptService service = printScriptService(repository("sales-order"), jdbc);
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.listPrintItems("unknown-module", List.of()))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("不支持的打印模块");
     }
 
     @Test
@@ -635,7 +645,17 @@ class PrintScriptServiceTest {
             JdbcTemplate jdbc,
             AttachmentRecordAccessService accessService
     ) {
-        return new PrintScriptService(repository, jdbc, new PrintLayoutLodopRenderer(new ObjectMapper()), accessService);
+        PrintRuntimeProperties runtimeProperties = new PrintRuntimeProperties(new ObjectMapper());
+        PrintRecordFieldFormatter formatter = new PrintRecordFieldFormatter(runtimeProperties);
+        return new PrintScriptService(
+                repository,
+                new PrintRecordDataProvider(jdbc, formatter, runtimeProperties),
+                new PrintRecordEnricher(jdbc, formatter, runtimeProperties),
+                new PrintRecordLayoutPreparer(formatter, runtimeProperties),
+                new PrintLayoutLodopRenderer(new ObjectMapper(), runtimeProperties),
+                accessService,
+                runtimeProperties
+        );
     }
 
     private PrintTemplateRepository repository(String billType, String templateType, String templateHtml) {

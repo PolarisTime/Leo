@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leo.erp.common.error.BusinessException;
 import org.junit.jupiter.api.Test;
 
+import java.math.BigDecimal;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -35,5 +37,29 @@ class PrintPdfFormPayloadParserTest {
         assertThat(payload.root().path("static").isArray()).isTrue();
         assertThat(payload.data()).containsEntry("billNo", "SO-001");
         assertThat(payload.items()).containsExactly(Map.of("material", "HRB400E"));
+    }
+
+    @Test
+    void shouldIgnoreNonStringPayloadFields() {
+        Map<String, Object> data = new HashMap<>();
+        data.put("billNo", "SO-001");
+        data.put("totalWeight", BigDecimal.ONE);
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("templateType", "PDF_FORM");
+        payload.put("templateHtml", "{\"static\":[]}");
+        payload.put("data", data);
+        payload.put("items", List.of(
+                Map.of("material", "HRB400E", "quantity", BigDecimal.ONE),
+                "invalid",
+                Map.of("spec", "Ф18")
+        ));
+
+        PrintPdfFormPayload result = parser.parse(payload);
+
+        assertThat(result.data()).containsExactly(Map.entry("billNo", "SO-001"));
+        assertThat(result.items()).containsExactly(
+                Map.of("material", "HRB400E"),
+                Map.of("spec", "Ф18")
+        );
     }
 }

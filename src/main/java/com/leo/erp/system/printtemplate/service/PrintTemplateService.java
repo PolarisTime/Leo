@@ -30,12 +30,6 @@ import java.util.regex.Pattern;
 @Service
 public class PrintTemplateService extends AbstractCrudService<PrintTemplate, PrintTemplateRequest, PrintTemplateResponse> {
 
-    private static final Set<String> ALLOWED_BILL_TYPES = Set.of(
-            "purchase-order", "purchase-inbound", "sales-order", "sales-outbound",
-            "freight-bill", "purchase-contract", "sales-contract",
-            "supplier-statement", "customer-statement", "freight-statement",
-            "receipt", "payment", "invoice-receipt", "invoice-issue"
-    );
     private static final List<Pattern> DANGEROUS_LODOP_PATTERNS = List.of(
             Pattern.compile("\\b(eval|Function)\\s*\\(", Pattern.CASE_INSENSITIVE),
             Pattern.compile("\\b(window|document|localStorage|sessionStorage|location|history|navigator)\\b", Pattern.CASE_INSENSITIVE),
@@ -48,27 +42,25 @@ public class PrintTemplateService extends AbstractCrudService<PrintTemplate, Pri
     private static final String SYNC_MODE_MANUAL = "MANUAL";
     private static final String SYNC_MODE_FILE = "FILE";
     private static final long MAX_UPLOAD_JSON_BYTES = 1024L * 1024L;
-    private static final String DEFAULT_PDF_FORM_LAYOUT = "print-forms/yingjie-a4-remark.layout.json";
-    private static final String DEFAULT_PURCHASE_LAYOUT = "print-forms/default-purchase.layout.json";
-    private static final String DEFAULT_SALES_LAYOUT = "print-forms/default-sales.layout.json";
-    private static final String DEFAULT_LOGISTICS_LAYOUT = "print-forms/default-logistics.layout.json";
-    private static final String DEFAULT_STATEMENT_LAYOUT = "print-forms/default-statement.layout.json";
 
     private final PrintTemplateRepository repository;
     private final PrintTemplateMapper printTemplateMapper;
     private final ModuleCatalog moduleCatalog;
     private final PrintPdfFormTemplateValidator pdfFormTemplateValidator;
+    private final PrintRuntimeProperties runtimeProperties;
 
     public PrintTemplateService(PrintTemplateRepository repository,
                                 SnowflakeIdGenerator idGenerator,
                                 PrintTemplateMapper printTemplateMapper,
                                 ModuleCatalog moduleCatalog,
-                                PrintPdfFormTemplateValidator pdfFormTemplateValidator) {
+                                PrintPdfFormTemplateValidator pdfFormTemplateValidator,
+                                PrintRuntimeProperties runtimeProperties) {
         super(idGenerator);
         this.repository = repository;
         this.printTemplateMapper = printTemplateMapper;
         this.moduleCatalog = moduleCatalog;
         this.pdfFormTemplateValidator = pdfFormTemplateValidator;
+        this.runtimeProperties = runtimeProperties;
     }
 
     @Transactional(readOnly = true)
@@ -207,7 +199,7 @@ public class PrintTemplateService extends AbstractCrudService<PrintTemplate, Pri
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "适用页面不能为空");
         }
         String normalized = billType.trim();
-        if (!moduleCatalog.containsModule(normalized) || !ALLOWED_BILL_TYPES.contains(normalized)) {
+        if (!moduleCatalog.containsModule(normalized) || !runtimeProperties.printableModules().contains(normalized)) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "适用页面不合法");
         }
         return normalized;
@@ -263,28 +255,12 @@ public class PrintTemplateService extends AbstractCrudService<PrintTemplate, Pri
 
     private String defaultPdfFormTemplate(String billType) {
         try {
-            return new ClassPathResource(defaultPdfFormLayout(normalizeBillType(billType)))
+            return new ClassPathResource(runtimeProperties.defaultPdfFormLayout(normalizeBillType(billType)))
                     .getContentAsString(StandardCharsets.UTF_8)
                     .trim();
         } catch (IOException ex) {
             throw new BusinessException(ErrorCode.INTERNAL_ERROR, "读取 PDF_FORM 默认布局失败");
         }
-    }
-
-    private String defaultPdfFormLayout(String billType) {
-        if (billType.startsWith("purchase-")) {
-            return DEFAULT_PURCHASE_LAYOUT;
-        }
-        if (billType.startsWith("sales-")) {
-            return DEFAULT_SALES_LAYOUT;
-        }
-        if ("freight-bill".equals(billType)) {
-            return DEFAULT_LOGISTICS_LAYOUT;
-        }
-        if (billType.endsWith("-statement")) {
-            return DEFAULT_STATEMENT_LAYOUT;
-        }
-        return DEFAULT_PDF_FORM_LAYOUT;
     }
 
     private String normalizeTemplateType(String templateType) {

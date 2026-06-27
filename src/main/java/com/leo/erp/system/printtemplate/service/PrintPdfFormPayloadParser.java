@@ -5,6 +5,7 @@ import com.leo.erp.common.error.ErrorCode;
 import org.springframework.stereotype.Service;
 
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -29,13 +30,26 @@ public class PrintPdfFormPayloadParser {
         );
     }
 
-    @SuppressWarnings("unchecked")
     private Map<String, String> data(Object rawData) {
-        return (Map<String, String>) rawData;
+        if (!(rawData instanceof Map<?, ?> map)) {
+            return Collections.emptyMap();
+        }
+        Map<String, String> result = new LinkedHashMap<>();
+        for (Map.Entry<?, ?> entry : map.entrySet()) {
+            if (entry.getKey() instanceof String key && entry.getValue() instanceof String value) {
+                result.put(key, value);
+            }
+        }
+        return result;
     }
 
-    @SuppressWarnings("unchecked")
     private List<Map<String, String>> items(Object rawItems) {
-        return (List<Map<String, String>>) rawItems;
+        if (!(rawItems instanceof List<?> list)) {
+            return List.of();
+        }
+        return list.stream()
+                .filter(Map.class::isInstance)
+                .map(this::data)
+                .toList();
     }
 }

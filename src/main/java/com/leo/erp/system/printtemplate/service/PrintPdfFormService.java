@@ -1,5 +1,6 @@
 package com.leo.erp.system.printtemplate.service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -22,15 +23,23 @@ public class PrintPdfFormService {
     }
 
     PrintPdfFormService(PrintScriptService printScriptService, PrintPdfFormTemplateValidator templateValidator) {
+        this(printScriptService, templateValidator, new PrintRuntimeProperties(new ObjectMapper()));
+    }
+
+    PrintPdfFormService(
+            PrintScriptService printScriptService,
+            PrintPdfFormTemplateValidator templateValidator,
+            PrintRuntimeProperties runtimeProperties
+    ) {
         this(
                 printScriptService,
                 new PrintPdfFormPayloadParser(templateValidator),
-                defaultRenderer()
+                defaultRenderer(runtimeProperties)
         );
     }
 
-    private static PrintPdfFormRenderer defaultRenderer() {
-        PrintPdfFormValueResolver valueResolver = new PrintPdfFormValueResolver();
+    private static PrintPdfFormRenderer defaultRenderer(PrintRuntimeProperties runtimeProperties) {
+        PrintPdfFormValueResolver valueResolver = new PrintPdfFormValueResolver(runtimeProperties);
         PrintPdfDrawingSupport drawing = new PrintPdfDrawingSupport();
         return new PrintPdfFormRenderer(
                 valueResolver,

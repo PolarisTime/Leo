@@ -233,17 +233,15 @@ public class PrintPdfDrawingSupport {
     }
 
     private TextStyle textStyle(String fieldName, JsonNode fieldConfig) {
-        boolean defaultMultiline = "projectName".equals(fieldName)
-                || "customerName".equals(fieldName)
-                || "projectAddress".equals(fieldName);
+        boolean multiline = bool(fieldConfig, "multiline", false);
         return new TextStyle(
                 number(fieldConfig, "fontSize", 9f),
                 number(fieldConfig, "minimumFontSize", 7f),
                 number(fieldConfig, "horizontalPadding", 2f),
-                number(fieldConfig, "verticalPadding", defaultMultiline ? 3f : 2f),
+                number(fieldConfig, "verticalPadding", multiline ? 3f : 2f),
                 alignment(text(fieldConfig, "align", "left")),
-                verticalPosition(text(fieldConfig, "vertical", defaultMultiline ? "top" : "middle")),
-                bool(fieldConfig, "multiline", defaultMultiline),
+                verticalPosition(text(fieldConfig, "vertical", multiline ? "top" : "middle")),
+                multiline,
                 number(fieldConfig, "lineHeight", 1.2f),
                 color(fieldConfig, "color", ColorConstants.BLACK)
         );

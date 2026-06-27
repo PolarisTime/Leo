@@ -5,9 +5,9 @@ import com.leo.erp.security.permission.ModulePermissionGuard;
 import com.leo.erp.security.support.SecurityPrincipal;
 import com.leo.erp.system.printtemplate.service.PrintOutput;
 import com.leo.erp.system.printtemplate.service.PrintOutputService;
+import com.leo.erp.system.printtemplate.service.PrintRecordItem;
 import com.leo.erp.system.printtemplate.service.PrintRenderOptions;
 import com.leo.erp.system.printtemplate.service.PrintScriptService;
-import com.leo.erp.system.printtemplate.service.PrintScriptService.PrintRecordItem;
 import com.leo.erp.system.operationlog.support.OperationLoggable;
 import com.leo.erp.system.printtemplate.web.dto.PrintRecordRequest;
 import org.junit.jupiter.api.Test;
@@ -161,6 +161,23 @@ class PrintScriptControllerTest {
         assertThat(response.code()).isEqualTo(0);
         assertThat(response.data()).isEmpty();
         verify(printScriptService).listPrintItems("sales-order", List.of());
+    }
+
+    @Test
+    void itemsIgnoresInvalidRecordIdValues() {
+        SecurityPrincipal principal = mock(SecurityPrincipal.class);
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("moduleKey", "sales-order");
+        payload.put("recordIds", List.of("1", "abc", " 2 ", ""));
+
+        when(modulePermissionGuard.requirePermission(principal, "sales-order", "read")).thenReturn("sales-order");
+        when(printScriptService.listPrintItems("sales-order", List.of(1L, 2L))).thenReturn(List.of());
+
+        ApiResponse<List<PrintRecordItem>> response = controller.items(principal, payload);
+
+        assertThat(response.code()).isEqualTo(0);
+        assertThat(response.data()).isEmpty();
+        verify(printScriptService).listPrintItems("sales-order", List.of(1L, 2L));
     }
 
     @Test

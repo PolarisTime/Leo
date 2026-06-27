@@ -126,7 +126,7 @@ public class PrintPdfTableRenderer {
         drawing.drawCanvasText(
                 canvas,
                 font,
-                text(tableConfig, "emptyText", "----------------以下无内容----------------"),
+                text(tableConfig, "emptyText", ""),
                 left,
                 top + 7,
                 width,

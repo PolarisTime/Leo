@@ -1,0 +1,447 @@
+{
+  "modules": {
+    "purchase-order": {
+      "tableName": "po_purchase_order",
+      "itemTableName": "po_purchase_order_item",
+      "itemFkColumn": "order_id",
+      "productPrintItems": true,
+      "printItemAmount": true
+    },
+    "sales-order": {
+      "tableName": "so_sales_order",
+      "itemTableName": "so_sales_order_item",
+      "itemFkColumn": "order_id",
+      "productPrintItems": true,
+      "printItemAmount": true
+    },
+    "purchase-inbound": {
+      "tableName": "po_purchase_inbound",
+      "itemTableName": "po_purchase_inbound_item",
+      "itemFkColumn": "inbound_id",
+      "productPrintItems": true,
+      "printItemAmount": true,
+      "settlementModeColumn": "settlement_mode"
+    },
+    "sales-outbound": {
+      "tableName": "so_sales_outbound",
+      "itemTableName": "so_sales_outbound_item",
+      "itemFkColumn": "outbound_id",
+      "productPrintItems": true,
+      "printItemAmount": true
+    },
+    "freight-bill": {
+      "tableName": "lg_freight_bill",
+      "itemTableName": "lg_freight_bill_item",
+      "itemFkColumn": "bill_id",
+      "productPrintItems": true,
+      "printItemAmount": false
+    },
+    "purchase-contract": {
+      "tableName": "ct_purchase_contract",
+      "itemTableName": "ct_purchase_contract_item",
+      "itemFkColumn": "contract_id",
+      "productPrintItems": true,
+      "printItemAmount": true
+    },
+    "sales-contract": {
+      "tableName": "ct_sales_contract",
+      "itemTableName": "ct_sales_contract_item",
+      "itemFkColumn": "contract_id",
+      "productPrintItems": true,
+      "printItemAmount": true
+    },
+    "customer-statement": {
+      "tableName": "st_customer_statement",
+      "itemTableName": "st_customer_statement_item",
+      "itemFkColumn": "statement_id",
+      "productPrintItems": true,
+      "printItemAmount": true
+    },
+    "supplier-statement": {
+      "tableName": "st_supplier_statement",
+      "itemTableName": "st_supplier_statement_item",
+      "itemFkColumn": "statement_id",
+      "productPrintItems": true,
+      "printItemAmount": true
+    },
+    "freight-statement": {
+      "tableName": "st_freight_statement",
+      "itemTableName": "st_freight_statement_item",
+      "itemFkColumn": "statement_id",
+      "productPrintItems": true,
+      "printItemAmount": false
+    },
+    "receipt": {
+      "tableName": "fm_receipt",
+      "itemTableName": "fm_receipt_allocation",
+      "itemFkColumn": "receipt_id",
+      "productPrintItems": false,
+      "printItemAmount": false,
+      "allocationAmountColumn": "allocated_amount"
+    },
+    "payment": {
+      "tableName": "fm_payment",
+      "itemTableName": "fm_payment_allocation",
+      "itemFkColumn": "payment_id",
+      "productPrintItems": false,
+      "printItemAmount": false,
+      "allocationAmountColumn": "allocated_amount"
+    },
+    "invoice-issue": {
+      "tableName": "fm_invoice_issue",
+      "itemTableName": "fm_invoice_issue_item",
+      "itemFkColumn": "issue_id",
+      "productPrintItems": true,
+      "printItemAmount": true
+    },
+    "invoice-receipt": {
+      "tableName": "fm_invoice_receipt",
+      "itemTableName": "fm_invoice_receipt_item",
+      "itemFkColumn": "receipt_id",
+      "productPrintItems": true,
+      "printItemAmount": true
+    }
+  },
+  "fieldFormatting": {
+    "pieceWeightTon": {
+      "replacement": "-",
+      "suppressWhen": [
+        {"field": "settlementMode", "values": ["过磅"]},
+        {"field": "category", "values": ["盘螺", "线材"]}
+      ]
+    }
+  },
+  "topLevelFields": {
+    "businessNoKeys": [
+      "billNo",
+      "orderNo",
+      "outboundNo",
+      "inboundNo",
+      "contractNo",
+      "statementNo",
+      "receiptNo",
+      "paymentNo",
+      "issueNo"
+    ],
+    "headerBusinessNo": {
+      "target": "billNo",
+      "sourceKeys": ["outboundNo", "orderNo", "billNo", "statementNo"]
+    },
+    "dateParts": {
+      "sourceKeys": ["deliveryDate", "outboundDate", "orderDate", "inboundDate", "billTime", "endDate"],
+      "targets": {"year": "dateYear", "month": "dateMonth", "day": "dateDay"}
+    },
+    "decimalFields": [
+      {"field": "totalWeight", "scale": "weight"},
+      {"field": "totalFreight", "scale": "price"},
+      {"field": "totalAmount", "scale": "price"},
+      {"field": "paidAmount", "scale": "price"},
+      {"field": "receiptAmount", "scale": "price"},
+      {"field": "paymentAmount", "scale": "price"}
+    ],
+    "adaptiveFields": [
+      {
+        "sourceField": "projectName",
+        "rules": [
+          {
+            "minDisplayWidth": 160,
+            "values": {
+              "projectNameMultiline": "true",
+              "projectNameTop": "62",
+              "projectNameHeight": "58",
+              "projectNameFontSize": "9",
+              "projectNameWordBreak": "1"
+            }
+          },
+          {
+            "minDisplayWidth": 92,
+            "values": {
+              "projectNameMultiline": "true",
+              "projectNameTop": "70",
+              "projectNameHeight": "54",
+              "projectNameFontSize": "10",
+              "projectNameWordBreak": "1"
+            }
+          },
+          {
+            "minDisplayWidth": 56,
+            "values": {
+              "projectNameMultiline": "true",
+              "projectNameTop": "78",
+              "projectNameHeight": "42",
+              "projectNameFontSize": "12",
+              "projectNameWordBreak": "1"
+            }
+          }
+        ],
+        "defaultValues": {
+          "projectNameMultiline": "",
+          "projectNameTop": "90",
+          "projectNameHeight": "20",
+          "projectNameFontSize": "12",
+          "projectNameWordBreak": "0"
+        }
+      }
+    ],
+    "separatorSourceField": "sourceNo"
+  },
+  "totals": {
+    "quantity": {"itemField": "quantity", "outputField": "totalQuantity", "format": "quantity"},
+    "weight": {"itemField": "weightTon", "outputField": "totalWeight", "format": "weight"},
+    "amount": {"itemField": "amount", "outputField": "totalAmount", "format": "price"}
+  },
+  "templateDefaults": {
+    "remark": "无"
+  },
+  "legacyLayout": {
+    "dynamicFields": [
+      "rowTop",
+      "sumTop",
+      "sumTop2",
+      "emptyRowTop",
+      "footerTop",
+      "footerLineTop",
+      "footerDateTop",
+      "hasEmptyRows",
+      "needsNewPage",
+      "needsSeparator",
+      "isSeparator",
+      "groupName",
+      "index",
+      "projectNameTop",
+      "projectNameHeight",
+      "projectNameFontSize",
+      "projectNameWordBreak"
+    ],
+    "defaultLayout": {
+      "tableTop": 130,
+      "rowHeight": 20,
+      "maxRows": 50,
+      "pageHeight": 0,
+      "limitToMaxRows": false,
+      "pageResetTop": 20
+    },
+    "rules": [
+      {
+        "when": {"moduleIn": ["sales-order", "sales-outbound"], "templateNameContains": "A5"},
+        "layout": {
+          "tableTop": 161,
+          "rowHeight": 41,
+          "maxRows": 7,
+          "pageHeight": 0,
+          "sumTop": 453,
+          "limitToMaxRows": false,
+          "pageBreakRows": 7,
+          "pageResetTop": 161
+        }
+      },
+      {
+        "when": {"moduleIn": ["sales-order", "sales-outbound"], "templateNameContainsAll": ["A4", "备注"]},
+        "layout": {
+          "tableTop": 204,
+          "rowHeight": 24,
+          "maxRows": 10,
+          "pageHeight": 0,
+          "sumTop": 444,
+          "limitToMaxRows": true,
+          "pageResetTop": 20
+        }
+      },
+      {
+        "when": {"module": "sales-order"},
+        "layout": {
+          "tableTop": 161,
+          "rowHeight": 41,
+          "maxRows": 8,
+          "pageHeight": 0,
+          "sumTop": 453,
+          "limitToMaxRows": true,
+          "pageResetTop": 20
+        }
+      },
+      {
+        "when": {"module": "sales-outbound"},
+        "layout": {
+          "tableTop": 138,
+          "rowHeight": 24,
+          "maxRows": 10,
+          "pageHeight": 0,
+          "limitToMaxRows": false,
+          "pageResetTop": 20
+        }
+      },
+      {
+        "when": {"module": "freight-bill"},
+        "layout": {
+          "tableTop": 164,
+          "rowHeight": 20,
+          "maxRows": 50,
+          "pageHeight": 0,
+          "limitToMaxRows": false,
+          "pageResetTop": 20,
+          "groupByField": "projectName",
+          "separatorField": "groupName"
+        }
+      },
+      {
+        "when": {"module": "freight-statement"},
+        "layout": {
+          "tableTop": 130,
+          "rowHeight": 20,
+          "maxRows": 50,
+          "pageHeight": 0,
+          "limitToMaxRows": false,
+          "pageResetTop": 20
+        }
+      },
+      {
+        "when": {"module": "customer-statement"},
+        "layout": {
+          "tableTop": 130,
+          "rowHeight": 20,
+          "maxRows": 50,
+          "pageHeight": 1050,
+          "limitToMaxRows": false,
+          "pageResetTop": 20
+        }
+      }
+    ]
+  },
+  "enrichers": {
+    "sales-order": [
+      {
+        "type": "dataLookup",
+        "sourceField": "projectId",
+        "targetField": "projectAddress",
+        "argumentType": "long",
+        "sql": "SELECT project_address FROM md_project WHERE id = ? AND deleted_flag = FALSE",
+        "stopWhenPresent": true
+      },
+      {
+        "type": "dataLookup",
+        "sourceField": "projectName",
+        "targetField": "projectAddress",
+        "sql": "SELECT project_address FROM md_project WHERE project_name = ? AND deleted_flag = FALSE AND project_address IS NOT NULL ORDER BY id LIMIT 1",
+        "stopWhenPresent": true
+      },
+      {
+        "type": "dataLookup",
+        "sourceField": "orderNo",
+        "targetField": "vehiclePlate",
+        "result": "list",
+        "join": ", ",
+        "sql": "SELECT DISTINCT fb.vehicle_plate FROM so_sales_outbound ob JOIN lg_freight_bill_item fbi ON fbi.source_no = ob.outbound_no JOIN lg_freight_bill fb ON fb.id = fbi.bill_id WHERE ob.sales_order_no = ? AND fb.vehicle_plate IS NOT NULL"
+      }
+    ],
+    "sales-outbound": [
+      {
+        "type": "dataLookup",
+        "sourceField": "projectId",
+        "targetField": "projectAddress",
+        "argumentType": "long",
+        "sql": "SELECT project_address FROM md_project WHERE id = ? AND deleted_flag = FALSE",
+        "stopWhenPresent": true
+      },
+      {
+        "type": "dataLookup",
+        "sourceField": "projectName",
+        "targetField": "projectAddress",
+        "sql": "SELECT project_address FROM md_project WHERE project_name = ? AND deleted_flag = FALSE AND project_address IS NOT NULL ORDER BY id LIMIT 1",
+        "stopWhenPresent": true
+      },
+      {
+        "type": "dataLookup",
+        "sourceField": "outboundNo",
+        "targetField": "vehiclePlate",
+        "result": "list",
+        "join": ", ",
+        "sql": "SELECT DISTINCT fb.vehicle_plate FROM lg_freight_bill_item fbi JOIN lg_freight_bill fb ON fb.id = fbi.bill_id WHERE fbi.source_no = ? AND fb.vehicle_plate IS NOT NULL"
+      }
+    ],
+    "freight-bill": [
+      {
+        "type": "itemLookupByField",
+        "sourceField": "projectName",
+        "sql": "SELECT project_name, project_name_abbr FROM md_project WHERE project_name IN (:values) AND deleted_flag = FALSE",
+        "lookupKeyColumn": "project_name",
+        "targetFields": {"projectShortName": "project_name_abbr"}
+      }
+    ],
+    "customer-statement": [
+      {
+        "type": "itemLookupByField",
+        "sourceField": "sourceNo",
+        "sql": "SELECT order_no, delivery_date FROM so_sales_order WHERE deleted_flag = FALSE AND order_no IN (:values)",
+        "lookupKeyColumn": "order_no",
+        "targetFields": {"billTime": "delivery_date"}
+      }
+    ],
+    "freight-statement": [
+      {
+        "type": "itemLookupByField",
+        "sourceField": "sourceNo",
+        "sql": "SELECT bill_no, bill_time, carrier_name, unit_price, total_freight, remark FROM lg_freight_bill WHERE deleted_flag = FALSE AND bill_no IN (:values)",
+        "lookupKeyColumn": "bill_no",
+        "targetFields": {
+          "billTime": "bill_time",
+          "carrierName": "carrier_name",
+          "unitPrice": "unit_price",
+          "amount": "total_freight",
+          "remark": "remark"
+        },
+        "fallbackFields": {"carrierName": "carrierName"}
+      }
+    ]
+  },
+  "xlsxExports": {
+    "sales-order": {
+      "templateResource": "print-forms/sales-order-print-v1.xlsx",
+      "sheetName": "销售订单",
+      "filenameSuffix": "-套打.xlsx",
+      "rowsPerPage": 7,
+      "header": [
+        {"field": "remark", "cell": "A1"},
+        {"field": "customerName", "cell": "B2"},
+        {"field": "projectName", "cell": "B4"},
+        {"field": "orderNo", "cell": "I4"},
+        {"field": "deliveryYear", "cell": "I5"},
+        {"field": "deliveryMonth", "cell": "J5"},
+        {"field": "deliveryDay", "cell": "K5"}
+      ],
+      "detail": {
+        "startRow": 7,
+        "endColumn": 7,
+        "columns": [
+          {"field": "brand", "column": 0, "type": "text"},
+          {"field": "category", "column": 1, "type": "text"},
+          {"field": "material", "column": 2, "type": "text"},
+          {"field": "spec", "column": 3, "type": "text"},
+          {"field": "quantity", "column": 4, "type": "number"},
+          {"field": "pieceWeightTon", "column": 5, "type": "pieceWeight"},
+          {"field": "weightTon", "column": 6, "type": "number"},
+          {"field": "unitPrice", "column": 7, "type": "number"}
+        ]
+      },
+      "summary": {
+        "row": 14,
+        "cells": [
+          {"text": "合计件数", "column": 3, "type": "text"},
+          {"field": "totalQuantity", "column": 4, "type": "number"},
+          {"text": "合计吨位", "column": 5, "type": "text"},
+          {"field": "totalWeight", "column": 6, "type": "text", "scale": "weight", "suffix": "T"}
+        ]
+      },
+      "pieceWeight": {
+        "replacement": "-",
+        "scale": "weight"
+      }
+    }
+  },
+  "defaultPdfFormLayouts": [
+    {"billTypePrefix": "purchase-", "resource": "print-forms/default-purchase.layout.json"},
+    {"billTypePrefix": "sales-", "resource": "print-forms/default-sales.layout.json"},
+    {"billType": "freight-bill", "resource": "print-forms/default-logistics.layout.json"},
+    {"billTypeSuffix": "-statement", "resource": "print-forms/default-statement.layout.json"},
+    {"default": true, "resource": "print-forms/yingjie-a4-remark.layout.json"}
+  ]
+}

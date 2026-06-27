@@ -7,8 +7,8 @@ import com.leo.erp.security.support.SecurityPrincipal;
 import com.leo.erp.system.operationlog.support.OperationLoggable;
 import com.leo.erp.system.printtemplate.service.PrintOutput;
 import com.leo.erp.system.printtemplate.service.PrintOutputService;
+import com.leo.erp.system.printtemplate.service.PrintRecordItem;
 import com.leo.erp.system.printtemplate.service.PrintScriptService;
-import com.leo.erp.system.printtemplate.service.PrintScriptService.PrintRecordItem;
 import com.leo.erp.system.printtemplate.web.dto.PrintRecordRequest;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
@@ -21,7 +21,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
+import java.util.Optional;
 
 @RestController
 @Validated
@@ -90,8 +90,23 @@ public class PrintScriptController {
             return List.of();
         }
         return values.stream()
-                .filter(Objects::nonNull)
-                .map(value -> Long.valueOf(String.valueOf(value)))
+                .map(this::recordId)
+                .flatMap(Optional::stream)
                 .toList();
+    }
+
+    private Optional<Long> recordId(Object value) {
+        if (value == null) {
+            return Optional.empty();
+        }
+        String text = String.valueOf(value).trim();
+        if (text.isEmpty()) {
+            return Optional.empty();
+        }
+        try {
+            return Optional.of(Long.valueOf(text));
+        } catch (NumberFormatException ignored) {
+            return Optional.empty();
+        }
     }
 }

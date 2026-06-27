@@ -10,6 +10,8 @@ import com.leo.erp.sales.order.service.print.SalesOrderPrintDocument;
 import com.leo.erp.sales.order.service.print.SalesOrderPrintDocumentFactory;
 import com.leo.erp.sales.order.service.print.SalesOrderPrintLine;
 import com.leo.erp.sales.order.service.print.SalesOrderPrintPage;
+import com.leo.erp.system.printtemplate.service.PrintXlsxExportLayout;
+import com.leo.erp.system.printtemplate.service.PrintXlsxExportLayoutProvider;
 import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.PrintSetup;
 import org.apache.poi.ss.usermodel.Row;
@@ -34,23 +36,26 @@ import java.util.List;
 @Service
 public class SalesOrderPrintExportService {
 
-    private static final String TEMPLATE_PATH = "print-forms/sales-order-print-v1.xlsx";
+    private static final String MODULE_KEY = "sales-order";
+    private static final String CELL_TYPE_NUMBER = "number";
+    private static final String CELL_TYPE_PIECE_WEIGHT = "pieceWeight";
+    private static final String FIELD_DELIVERY_DATE = "deliveryDate";
     private static final MediaType XLSX_MEDIA_TYPE = MediaType.parseMediaType(
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     );
-    private static final int DETAIL_START_ROW = 7;
-    private static final int DETAIL_ROWS_PER_SHEET = 7;
-    private static final int SUMMARY_ROW = 14;
 
     private final SalesOrderRepository salesOrderRepository;
     private final SalesOrderPrintDocumentFactory printDocumentFactory;
+    private final PrintXlsxExportLayoutProvider layoutProvider;
 
     public SalesOrderPrintExportService(
             SalesOrderRepository salesOrderRepository,
-            SalesOrderPrintDocumentFactory printDocumentFactory
+            SalesOrderPrintDocumentFactory printDocumentFactory,
+            PrintXlsxExportLayoutProvider layoutProvider
     ) {
         this.salesOrderRepository = salesOrderRepository;
         this.printDocumentFactory = printDocumentFactory;
+        this.layoutProvider = layoutProvider;
     }
 
     @Transactional(readOnly = true)
@@ -62,9 +67,10 @@ public class SalesOrderPrintExportService {
     public FileDownloadResponse exportSalesOrderPrint(Long orderId, SalesOrderPrintXlsxOptions options) {
         SalesOrder order = salesOrderRepository.findByIdAndDeletedFlagFalse(orderId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "销售订单不存在"));
-        SalesOrderPrintDocument document = printDocumentFactory.create(order, options, DETAIL_ROWS_PER_SHEET);
+        PrintXlsxExportLayout layout = layoutProvider.layout(MODULE_KEY);
+        SalesOrderPrintDocument document = printDocumentFactory.create(order, options, layout.rowsPerPage());
 
-        try (XSSFWorkbook workbook = loadTemplateWorkbook(); ByteArrayOutputStream output = new ByteArrayOutputStream()) {
+        try (XSSFWorkbook workbook = loadTemplateWorkbook(layout); ByteArrayOutputStream output = new ByteArrayOutputStream()) {
             int pageCount = document.pages().size();
             for (int pageIndex = 1; pageIndex < pageCount; pageIndex += 1) {
                 workbook.cloneSheet(0);
@@ -72,25 +78,25 @@ public class SalesOrderPrintExportService {
 
             for (int pageIndex = 0; pageIndex < pageCount; pageIndex += 1) {
                 XSSFSheet sheet = workbook.getSheetAt(pageIndex);
-                workbook.setSheetName(pageIndex, pageCount == 1 ? "销售订单" : "销售订单-" + (pageIndex + 1));
+                workbook.setSheetName(pageIndex, sheetName(layout, pageCount, pageIndex));
                 if (pageIndex > 0) {
                     copyPrintSetup(workbook.getSheetAt(0), sheet);
                 }
                 SalesOrderPrintPage page = document.pages().get(pageIndex);
-                fillHeader(sheet, document);
-                clearDetailRows(sheet);
-                fillDetailRows(sheet, page.lines());
-                fillSummary(sheet, page);
+                fillHeader(sheet, document, layout);
+                clearDetailRows(sheet, layout);
+                fillDetailRows(sheet, page.lines(), layout);
+                fillSummary(sheet, page, layout);
             }
 
             workbook.write(output);
             return new FileDownloadResponse(
-                    safeFilename(document.orderNo()) + "-套打.xlsx",
+                    safeFilename(document.orderNo()) + layout.filenameSuffix(),
                     XLSX_MEDIA_TYPE,
                     output.toByteArray(),
                     document.orderNo(),
                     order.getId(),
-                    "sales-order"
+                    layout.moduleKey()
             );
         } catch (IOException ex) {
             throw new BusinessException(ErrorCode.INTERNAL_ERROR, "销售订单套打 Excel 生成失败");
@@ -119,82 +125,164 @@ public class SalesOrderPrintExportService {
         target.setVerticallyCenter(source.getVerticallyCenter());
     }
 
-    private XSSFWorkbook loadTemplateWorkbook() throws IOException {
-        try (var input = new ClassPathResource(TEMPLATE_PATH).getInputStream()) {
+    private XSSFWorkbook loadTemplateWorkbook(PrintXlsxExportLayout layout) throws IOException {
+        try (var input = new ClassPathResource(layout.templateResource()).getInputStream()) {
             return (XSSFWorkbook) WorkbookFactory.create(input);
         }
     }
 
-    private void fillHeader(Sheet sheet, SalesOrderPrintDocument document) {
-        setText(sheet, "A1", document.remark());
-        setText(sheet, "B2", document.customerName());
-        setText(sheet, "B4", document.projectName());
-        setText(sheet, "I4", document.orderNo());
-
-        LocalDate date = document.deliveryDate();
-        if (date == null) {
-            setText(sheet, "I5", "");
-            setText(sheet, "J5", "");
-            setText(sheet, "K5", "");
-            return;
-        }
-        setText(sheet, "I5", String.valueOf(date.getYear()));
-        setText(sheet, "J5", twoDigits(date.getMonthValue()));
-        setText(sheet, "K5", twoDigits(date.getDayOfMonth()));
+    private String sheetName(PrintXlsxExportLayout layout, int pageCount, int pageIndex) {
+        String baseName = layout.sheetName().isBlank() ? "Sheet" : layout.sheetName();
+        return pageCount == 1 ? baseName : baseName + "-" + (pageIndex + 1);
     }
 
-    private void clearDetailRows(Sheet sheet) {
-        for (int rowIndex = DETAIL_START_ROW; rowIndex < DETAIL_START_ROW + DETAIL_ROWS_PER_SHEET; rowIndex += 1) {
-            for (int colIndex = 0; colIndex <= 7; colIndex += 1) {
+    private void fillHeader(Sheet sheet, SalesOrderPrintDocument document, PrintXlsxExportLayout layout) {
+        for (PrintXlsxExportLayout.HeaderCell cell : layout.headerCells()) {
+            setText(sheet, cell.cell(), headerValue(document, cell.field()));
+        }
+    }
+
+    private void clearDetailRows(Sheet sheet, PrintXlsxExportLayout layout) {
+        for (int rowIndex = layout.detailStartRow(); rowIndex < layout.detailStartRow() + layout.rowsPerPage(); rowIndex += 1) {
+            for (int colIndex = 0; colIndex <= layout.detailEndColumn(); colIndex += 1) {
                 clearCell(sheet, rowIndex, colIndex);
             }
         }
     }
 
-    private void fillDetailRows(Sheet sheet, List<SalesOrderPrintLine> items) {
+    private void fillDetailRows(Sheet sheet, List<SalesOrderPrintLine> items, PrintXlsxExportLayout layout) {
         for (int itemIndex = 0; itemIndex < items.size(); itemIndex += 1) {
             SalesOrderPrintLine item = items.get(itemIndex);
-            int rowIndex = DETAIL_START_ROW + itemIndex;
-            setText(sheet, rowIndex, 0, item.brand());
-            setText(sheet, rowIndex, 1, item.category());
-            setText(sheet, rowIndex, 2, item.material());
-            setText(sheet, rowIndex, 3, item.spec());
-            setNumber(sheet, rowIndex, 4, item.quantity());
-            setText(sheet, rowIndex, 5, pieceWeight(item));
-            setNumber(sheet, rowIndex, 6, item.weightTon());
-            setNumber(sheet, rowIndex, 7, item.unitPrice());
+            int rowIndex = layout.detailStartRow() + itemIndex;
+            for (PrintXlsxExportLayout.DetailColumn column : layout.detailColumns()) {
+                setDetailValue(sheet, rowIndex, item, column, layout.pieceWeight());
+            }
         }
     }
 
-    private void fillSummary(Sheet sheet, SalesOrderPrintPage page) {
-        setText(sheet, SUMMARY_ROW, 3, "合计件数");
-        setNumber(sheet, SUMMARY_ROW, 4, page.totalQuantity());
-        setText(sheet, SUMMARY_ROW, 5, "合计吨位");
-        setText(
-                sheet,
-                SUMMARY_ROW,
-                6,
-                formatDecimal(page.totalWeight(), PrecisionConstants.DISPLAY_WEIGHT_SCALE) + "T"
-        );
+    private void fillSummary(Sheet sheet, SalesOrderPrintPage page, PrintXlsxExportLayout layout) {
+        for (PrintXlsxExportLayout.SummaryCell cell : layout.summary().cells()) {
+            if (CELL_TYPE_NUMBER.equals(cell.type())) {
+                setNumber(sheet, layout.summary().row(), cell.column(), summaryNumber(page, cell.field()));
+                continue;
+            }
+            setText(sheet, layout.summary().row(), cell.column(), summaryText(page, cell));
+        }
     }
 
-    private String pieceWeight(SalesOrderPrintLine item) {
-        if (isCoil(item.category())) {
-            return "-";
+    private void setDetailValue(
+            Sheet sheet,
+            int rowIndex,
+            SalesOrderPrintLine item,
+            PrintXlsxExportLayout.DetailColumn column,
+            PrintXlsxExportLayout.PieceWeight pieceWeight
+    ) {
+        if (CELL_TYPE_NUMBER.equals(column.type())) {
+            Object value = lineValue(item, column.field());
+            if (value instanceof Integer integer) {
+                setNumber(sheet, rowIndex, column.column(), integer);
+            } else if (value instanceof BigDecimal decimal) {
+                setNumber(sheet, rowIndex, column.column(), decimal);
+            } else {
+                clearCell(sheet, rowIndex, column.column());
+            }
+            return;
+        }
+        if (CELL_TYPE_PIECE_WEIGHT.equals(column.type())) {
+            setText(sheet, rowIndex, column.column(), pieceWeight(item, pieceWeight));
+            return;
+        }
+        setText(sheet, rowIndex, column.column(), stringValue(lineValue(item, column.field())));
+    }
+
+    private String headerValue(SalesOrderPrintDocument document, String field) {
+        LocalDate date = document.deliveryDate();
+        if ("orderNo".equals(field)) {
+            return document.orderNo();
+        }
+        if ("customerName".equals(field)) {
+            return document.customerName();
+        }
+        if ("projectName".equals(field)) {
+            return document.projectName();
+        }
+        if ("remark".equals(field)) {
+            return document.remark();
+        }
+        if ("deliveryYear".equals(field)) {
+            return date == null ? "" : String.valueOf(date.getYear());
+        }
+        if ("deliveryMonth".equals(field)) {
+            return date == null ? "" : twoDigits(date.getMonthValue());
+        }
+        if ("deliveryDay".equals(field)) {
+            return date == null ? "" : twoDigits(date.getDayOfMonth());
+        }
+        if (FIELD_DELIVERY_DATE.equals(field)) {
+            return date == null ? "" : date.toString();
+        }
+        return "";
+    }
+
+    private Object lineValue(SalesOrderPrintLine item, String field) {
+        return switch (field) {
+            case "brand" -> item.brand();
+            case "category" -> item.category();
+            case "material" -> item.material();
+            case "spec" -> item.spec();
+            case "quantity" -> item.quantity();
+            case "weightTon" -> item.weightTon();
+            case "unitPrice" -> item.unitPrice();
+            case "pieceWeightTon" -> item.pieceWeightTon();
+            default -> null;
+        };
+    }
+
+    private Integer summaryNumber(SalesOrderPrintPage page, String field) {
+        if ("totalQuantity".equals(field)) {
+            return page.totalQuantity();
+        }
+        return null;
+    }
+
+    private String summaryText(SalesOrderPrintPage page, PrintXlsxExportLayout.SummaryCell cell) {
+        if (!cell.text().isBlank()) {
+            return cell.text();
+        }
+        if ("totalWeight".equals(cell.field())) {
+            return formatDecimal(page.totalWeight(), cell.scale()) + cell.suffix();
+        }
+        Object value = summaryNumber(page, cell.field());
+        return value == null ? "" : String.valueOf(value);
+    }
+
+    private String pieceWeight(SalesOrderPrintLine item, PrintXlsxExportLayout.PieceWeight config) {
+        if (shouldSuppressPieceWeight(item, config)) {
+            return config.replacement();
         }
         BigDecimal pieceWeight = item.pieceWeightTon();
         if (pieceWeight == null && item.weightTon() != null && item.quantity() != null && item.quantity() > 0) {
             pieceWeight = item.weightTon().divide(
                     BigDecimal.valueOf(item.quantity()),
-                    PrecisionConstants.DISPLAY_WEIGHT_SCALE,
+                    config.scale(),
                     RoundingMode.HALF_UP
             );
         }
-        return formatDecimal(pieceWeight, PrecisionConstants.DISPLAY_WEIGHT_SCALE);
+        return formatDecimal(pieceWeight, config.scale());
     }
 
-    private boolean isCoil(String category) {
-        return "盘螺".equals(category) || "线材".equals(category);
+    private boolean shouldSuppressPieceWeight(SalesOrderPrintLine item, PrintXlsxExportLayout.PieceWeight config) {
+        for (PrintXlsxExportLayout.SuppressRule rule : config.suppressWhen()) {
+            String value = stringValue(lineValue(item, rule.field()));
+            if (!value.isBlank() && rule.values().contains(value)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private String stringValue(Object value) {
+        return value == null ? "" : String.valueOf(value);
     }
 
     private void setText(Sheet sheet, String address, String value) {

@@ -17,6 +17,12 @@ public class PrintPdfFormValueResolver {
 
     private static final Pattern TEMPLATE_PLACEHOLDER = Pattern.compile("\\$\\{([A-Za-z0-9_]+)}");
 
+    private final PrintRuntimeProperties runtimeProperties;
+
+    PrintPdfFormValueResolver(PrintRuntimeProperties runtimeProperties) {
+        this.runtimeProperties = runtimeProperties;
+    }
+
     String fieldValue(Map<String, String> data, JsonNode fieldConfig, String fieldName) {
         String value = resolveValue(data, fieldConfig.path("source"), fieldName);
         return formatValue(value, text(fieldConfig, "format", ""));
@@ -125,10 +131,10 @@ public class PrintPdfFormValueResolver {
     }
 
     private String templateValue(String key, String value) {
-        if ("remark".equals(key) && (value == null || value.isBlank())) {
-            return "无";
+        if (value == null || value.isBlank()) {
+            return runtimeProperties.templateDefault(key);
         }
-        return value == null ? "" : value;
+        return value;
     }
 
     private String compactAsciiToken(String value) {

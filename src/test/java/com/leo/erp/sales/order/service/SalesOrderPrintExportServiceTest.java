@@ -1,9 +1,12 @@
 package com.leo.erp.sales.order.service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leo.erp.sales.order.domain.entity.SalesOrder;
 import com.leo.erp.sales.order.domain.entity.SalesOrderItem;
 import com.leo.erp.sales.order.repository.SalesOrderRepository;
 import com.leo.erp.sales.order.service.print.SalesOrderPrintDocumentFactory;
+import com.leo.erp.system.printtemplate.service.PrintRuntimeProperties;
+import com.leo.erp.system.printtemplate.service.PrintXlsxExportLayoutProvider;
 import org.apache.poi.ss.usermodel.DataFormatter;
 import org.apache.poi.ss.usermodel.WorkbookFactory;
 import org.junit.jupiter.api.Test;
@@ -138,7 +141,11 @@ class SalesOrderPrintExportServiceTest {
     }
 
     private SalesOrderPrintExportService service(SalesOrderRepository repository) {
-        return new SalesOrderPrintExportService(repository, new SalesOrderPrintDocumentFactory());
+        return new SalesOrderPrintExportService(
+                repository,
+                new SalesOrderPrintDocumentFactory(),
+                new PrintXlsxExportLayoutProvider(new PrintRuntimeProperties(new ObjectMapper()))
+        );
     }
 
     private String text(DataFormatter formatter, org.apache.poi.ss.usermodel.Sheet sheet, int row, int col) {

@@ -24,9 +24,11 @@ public class PrintLayoutLodopRenderer {
     private static final Pattern TEMPLATE_PLACEHOLDER = Pattern.compile("\\$\\{([A-Za-z0-9_]+)}");
 
     private final ObjectMapper objectMapper;
+    private final PrintRuntimeProperties runtimeProperties;
 
-    public PrintLayoutLodopRenderer(ObjectMapper objectMapper) {
+    public PrintLayoutLodopRenderer(ObjectMapper objectMapper, PrintRuntimeProperties runtimeProperties) {
         this.objectMapper = objectMapper;
+        this.runtimeProperties = runtimeProperties;
     }
 
     public boolean supports(String templateHtml) {
@@ -268,10 +270,10 @@ public class PrintLayoutLodopRenderer {
     }
 
     private String templateValue(String key, String value) {
-        if ("remark".equals(key) && (value == null || value.isBlank())) {
-            return "无";
+        if (value == null || value.isBlank()) {
+            return runtimeProperties.templateDefault(key);
         }
-        return value == null ? "" : value;
+        return value;
     }
 
     private float tableWidth(JsonNode table) {

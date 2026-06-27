@@ -11,7 +11,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 class PrintPdfFormValueResolverTest {
 
     private final ObjectMapper objectMapper = new ObjectMapper();
-    private final PrintPdfFormValueResolver resolver = new PrintPdfFormValueResolver();
+    private final PrintPdfFormValueResolver resolver = new PrintPdfFormValueResolver(
+            new PrintRuntimeProperties(objectMapper)
+    );
 
     @Test
     void shouldResolveFieldValueFromSourceAndFormatChineseDate() throws Exception {
