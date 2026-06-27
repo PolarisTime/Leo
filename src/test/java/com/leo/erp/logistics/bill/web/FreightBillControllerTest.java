@@ -1,16 +1,22 @@
 package com.leo.erp.logistics.bill.web;
 
 import com.leo.erp.common.api.ApiResponse;
+import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.api.PageResponse;
 import com.leo.erp.common.web.dto.StatusUpdateRequest;
 import com.leo.erp.logistics.bill.service.FreightBillService;
+import com.leo.erp.logistics.bill.web.dto.FreightBillImportCandidateResponse;
 import com.leo.erp.logistics.bill.web.dto.FreightBillRequest;
 import com.leo.erp.logistics.bill.web.dto.FreightBillResponse;
+import com.leo.erp.security.permission.RequiresPermission;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 
+import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -80,6 +86,66 @@ class FreightBillControllerTest {
 
         assertThat(response.code()).isEqualTo(0);
         assertThat(response.data().content()).isEmpty();
+    }
+
+    @Test
+    void importCandidatesReturnsSalesOutboundCandidates() {
+        FreightBillImportCandidateResponse candidate = new FreightBillImportCandidateResponse(
+                1L,
+                "OB-001",
+                "SO-001",
+                "客户甲",
+                "项目甲",
+                "一号库",
+                LocalDate.of(2026, 6, 1),
+                new BigDecimal("12.500"),
+                new BigDecimal("3000.00"),
+                "已审核"
+        );
+        Page<FreightBillImportCandidateResponse> page = new PageImpl<>(List.of(candidate));
+        PageQuery query = new PageQuery(0, 20, null, null);
+        when(service.importCandidates(any(), any())).thenReturn(page);
+
+        ApiResponse<PageResponse<FreightBillImportCandidateResponse>> response = controller.importCandidates(
+                query,
+                "OB",
+                "客户甲",
+                "项目甲",
+                "已审核",
+                LocalDate.of(2026, 6, 1),
+                LocalDate.of(2026, 6, 30)
+        );
+
+        assertThat(response.code()).isEqualTo(0);
+        assertThat(response.data().content()).containsExactly(candidate);
+        ArgumentCaptor<PageFilter> filterCaptor = ArgumentCaptor.forClass(PageFilter.class);
+        verify(service).importCandidates(eq(query), filterCaptor.capture());
+        PageFilter filter = filterCaptor.getValue();
+        assertThat(filter.keyword()).isEqualTo("OB");
+        assertThat(filter.name()).isEqualTo("客户甲");
+        assertThat(filter.projectName()).isEqualTo("项目甲");
+        assertThat(filter.status()).isEqualTo("已审核");
+        assertThat(filter.startDate()).isEqualTo(LocalDate.of(2026, 6, 1));
+        assertThat(filter.endDate()).isEqualTo(LocalDate.of(2026, 6, 30));
+    }
+
+    @Test
+    void importCandidatesRequiresSalesOutboundReadPermission() throws NoSuchMethodException {
+        RequiresPermission permission = FreightBillController.class
+                .getMethod(
+                        "importCandidates",
+                        PageQuery.class,
+                        String.class,
+                        String.class,
+                        String.class,
+                        String.class,
+                        LocalDate.class,
+                        LocalDate.class
+                )
+                .getAnnotation(RequiresPermission.class);
+
+        assertThat(permission.resource()).isEqualTo("sales-outbound");
+        assertThat(permission.action()).isEqualTo("read");
     }
 
     @Test

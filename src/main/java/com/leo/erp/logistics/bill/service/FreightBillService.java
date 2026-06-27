@@ -5,20 +5,25 @@ import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.service.AbstractCrudService;
-import com.leo.erp.common.support.BusinessStatusValidator;
 import com.leo.erp.common.support.BusinessDocumentValidator;
+import com.leo.erp.common.support.BusinessStatusValidator;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.logistics.bill.domain.entity.FreightBill;
 import com.leo.erp.logistics.bill.domain.entity.FreightBillItem;
-import com.leo.erp.logistics.bill.repository.FreightBillRepository;
 import com.leo.erp.logistics.bill.mapper.FreightBillMapper;
+import com.leo.erp.logistics.bill.repository.FreightBillRepository;
+import com.leo.erp.sales.outbound.domain.entity.SalesOutbound;
+import com.leo.erp.sales.outbound.repository.SalesOutboundRepository;
+import com.leo.erp.security.permission.DataScopeContext;
 import com.leo.erp.security.permission.WorkflowTransitionGuard;
 import com.leo.erp.logistics.bill.web.dto.*;
+import jakarta.persistence.criteria.Join;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Optional;
 
@@ -26,6 +31,7 @@ import java.util.Optional;
 public class FreightBillService extends AbstractCrudService<FreightBill, FreightBillRequest, FreightBillResponse> {
 
     private final FreightBillRepository repository;
+    private final SalesOutboundRepository salesOutboundRepository;
     private final FreightBillMapper freightBillMapper;
     private final FreightBillSourceService freightBillSourceService;
     private final FreightBillApplyService freightBillApplyService;
@@ -33,6 +39,7 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
 
     @Autowired
     public FreightBillService(FreightBillRepository repository,
+                              SalesOutboundRepository salesOutboundRepository,
                               SnowflakeIdGenerator idGenerator,
                               FreightBillMapper freightBillMapper,
                               FreightBillSourceService freightBillSourceService,
@@ -40,6 +47,7 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
                               WorkflowTransitionGuard workflowTransitionGuard) {
         super(idGenerator);
         this.repository = repository;
+        this.salesOutboundRepository = salesOutboundRepository;
         this.freightBillMapper = freightBillMapper;
         this.freightBillSourceService = freightBillSourceService;
         this.freightBillApplyService = freightBillApplyService;
@@ -52,6 +60,19 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
                 .and(Specs.equalIfPresent("status", filter.status()))
                 .and(Specs.betweenIfPresent("billTime", filter.startDate(), filter.endDate()));
         return page(query, spec, repository);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<FreightBillImportCandidateResponse> importCandidates(PageQuery query, PageFilter filter) {
+        Specification<SalesOutbound> spec = Specs.<SalesOutbound>notDeleted()
+                .and(Specs.keywordLike(filter.keyword(), "outboundNo", "salesOrderNo", "customerName", "projectName"))
+                .and(Specs.equalIfPresent("customerName", filter.name()))
+                .and(Specs.equalIfPresent("projectName", filter.projectName()))
+                .and(importableSalesOutboundStatus(filter.status()))
+                .and(Specs.betweenIfPresent("outboundDate", filter.startDate(), filter.endDate()))
+                .and(sourceOutboundNotOccupied());
+        return salesOutboundRepository.findAll(DataScopeContext.apply(spec), query.toPageable("id"))
+                .map(this::toImportCandidateResponse);
     }
 
     private static final String[] FREIGHT_BILL_SEARCH_FIELDS = {
@@ -202,6 +223,44 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
             return explicitName;
         }
         return emptyToNull(item.getBrand());
+    }
+
+    private Specification<SalesOutbound> importableSalesOutboundStatus(String status) {
+        return (root, query, cb) -> {
+            String requestedStatus = BusinessDocumentValidator.trimToNull(status);
+            if (requestedStatus != null && !StatusConstants.AUDITED.equals(requestedStatus)) {
+                return cb.disjunction();
+            }
+            return cb.equal(root.get("status"), StatusConstants.AUDITED);
+        };
+    }
+
+    private Specification<SalesOutbound> sourceOutboundNotOccupied() {
+        return (root, query, cb) -> {
+            var subquery = query.subquery(Long.class);
+            var bill = subquery.from(FreightBill.class);
+            Join<FreightBill, FreightBillItem> item = bill.join("items");
+            subquery.select(cb.literal(1L)).where(
+                    cb.isFalse(bill.get("deletedFlag")),
+                    cb.equal(cb.trim(item.get("sourceNo")), root.get("outboundNo"))
+            );
+            return cb.not(cb.exists(subquery));
+        };
+    }
+
+    private FreightBillImportCandidateResponse toImportCandidateResponse(SalesOutbound outbound) {
+        return new FreightBillImportCandidateResponse(
+                outbound.getId(),
+                outbound.getOutboundNo(),
+                outbound.getSalesOrderNo(),
+                outbound.getCustomerName(),
+                outbound.getProjectName(),
+                outbound.getWarehouseName(),
+                outbound.getOutboundDate(),
+                outbound.getTotalWeight(),
+                outbound.getTotalAmount(),
+                outbound.getStatus()
+        );
     }
 
     @Override

@@ -7,6 +7,7 @@ import com.leo.erp.common.api.PageResponse;
 import com.leo.erp.common.web.BindPageQuery;
 import com.leo.erp.common.web.dto.StatusUpdateRequest;
 import com.leo.erp.logistics.bill.service.FreightBillService;
+import com.leo.erp.logistics.bill.web.dto.FreightBillImportCandidateResponse;
 import com.leo.erp.logistics.bill.web.dto.FreightBillRequest;
 import com.leo.erp.logistics.bill.web.dto.FreightBillResponse;
 import com.leo.erp.security.permission.RequiresPermission;
@@ -59,6 +60,22 @@ public class FreightBillController {
         return ApiResponse.success(PageResponse.from(
                 service.page(query, PageFilter.of(keyword, carrierName, status, startDate, endDate))
         ));
+    }
+
+    @GetMapping("/import-candidate")
+    @RequiresPermission(resource = "sales-outbound", action = "read")
+    public ApiResponse<PageResponse<FreightBillImportCandidateResponse>> importCandidates(
+            @BindPageQuery(sortFieldKey = "sales-outbound") PageQuery query,
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) String customerName,
+            @RequestParam(required = false) String projectName,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate
+    ) {
+        PageFilter filter = new PageFilter(keyword, status, startDate, endDate,
+                customerName, projectName, null, null, null, null, null, null, null, null, null);
+        return ApiResponse.success(PageResponse.from(service.importCandidates(query, filter)));
     }
 
     @GetMapping("/{id}")

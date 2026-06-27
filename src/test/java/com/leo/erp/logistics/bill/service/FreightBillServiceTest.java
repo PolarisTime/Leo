@@ -1,6 +1,8 @@
 package com.leo.erp.logistics.bill.service;
 
 import com.leo.erp.common.error.BusinessException;
+import com.leo.erp.common.api.PageFilter;
+import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.logistics.bill.domain.entity.FreightBill;
@@ -11,6 +13,8 @@ import com.leo.erp.logistics.bill.web.dto.FreightBillItemRequest;
 import com.leo.erp.logistics.bill.web.dto.FreightBillItemResponse;
 import com.leo.erp.logistics.bill.web.dto.FreightBillRequest;
 import com.leo.erp.logistics.bill.web.dto.FreightBillResponse;
+import com.leo.erp.sales.outbound.domain.entity.SalesOutbound;
+import com.leo.erp.sales.outbound.repository.SalesOutboundRepository;
 import com.leo.erp.security.permission.WorkflowTransitionGuard;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -58,8 +62,15 @@ class FreightBillServiceTest {
 
     private FreightBillService createService(FreightBillRepository repository,
                                              FreightBillSourceService sourceService) {
+        return createService(repository, mock(SalesOutboundRepository.class), sourceService);
+    }
+
+    private FreightBillService createService(FreightBillRepository repository,
+                                             SalesOutboundRepository salesOutboundRepository,
+                                             FreightBillSourceService sourceService) {
         return new FreightBillService(
                 repository,
+                salesOutboundRepository,
                 new SnowflakeIdGenerator(),
                 Mappers.getMapper(FreightBillMapper.class),
                 sourceService,
@@ -105,7 +116,65 @@ class FreightBillServiceTest {
         );
     }
 
+    @Test
+    void shouldReturnSalesOutboundImportCandidates() {
+        FreightBillRepository repository = mock(FreightBillRepository.class);
+        SalesOutboundRepository salesOutboundRepository = mock(SalesOutboundRepository.class);
+        FreightBillSourceService sourceService = mock(FreightBillSourceService.class);
+        SalesOutbound outbound = new SalesOutbound();
+        outbound.setId(101L);
+        outbound.setOutboundNo("OB-001");
+        outbound.setSalesOrderNo("SO-001");
+        outbound.setCustomerName("客户甲");
+        outbound.setProjectName("项目甲");
+        outbound.setWarehouseName("一号库");
+        outbound.setOutboundDate(LocalDate.of(2026, 6, 1));
+        outbound.setTotalWeight(new BigDecimal("12.500"));
+        outbound.setTotalAmount(new BigDecimal("3000.00"));
+        outbound.setStatus(StatusConstants.AUDITED);
+
+        when(salesOutboundRepository.findAll(any(Specification.class), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(outbound)));
+
+        FreightBillService service = createService(repository, salesOutboundRepository, sourceService);
+
+        PageFilter filter = new PageFilter(
+                "OB",
+                StatusConstants.AUDITED,
+                LocalDate.of(2026, 6, 1),
+                LocalDate.of(2026, 6, 30),
+                "客户甲",
+                "项目甲",
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null
+        );
+
+        var page = service.importCandidates(PageQuery.of(0, 20, null, null), filter);
+
+        assertThat(page.getContent()).singleElement().satisfies(candidate -> {
+            assertThat(candidate.id()).isEqualTo(101L);
+            assertThat(candidate.outboundNo()).isEqualTo("OB-001");
+            assertThat(candidate.salesOrderNo()).isEqualTo("SO-001");
+            assertThat(candidate.customerName()).isEqualTo("客户甲");
+            assertThat(candidate.projectName()).isEqualTo("项目甲");
+            assertThat(candidate.warehouseName()).isEqualTo("一号库");
+            assertThat(candidate.outboundDate()).isEqualTo(LocalDate.of(2026, 6, 1));
+            assertThat(candidate.totalWeight()).isEqualByComparingTo("12.500");
+            assertThat(candidate.totalAmount()).isEqualByComparingTo("3000.00");
+            assertThat(candidate.status()).isEqualTo(StatusConstants.AUDITED);
+        });
+        verify(salesOutboundRepository).findAll(any(Specification.class), any(Pageable.class));
+    }
+
     // ======================== create tests ========================
+
 
     @Test
     void shouldSaveVehiclePlateAndExposeItInResponse() {
