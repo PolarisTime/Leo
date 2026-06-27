@@ -96,6 +96,30 @@ class JwtAuthenticationFilterTest {
     }
 
     @Test
+    void shouldPassThroughWhenBearerTokenLooksLikeApiKey() throws ServletException, IOException {
+        AtomicBoolean repositoryTouched = new AtomicBoolean(false);
+        JwtAuthenticationFilter filter = new JwtAuthenticationFilter(
+                new ThrowingJwtTokenService(),
+                authenticatedUserCacheService(Optional.empty(), repositoryTouched),
+                new NoOpBlacklistService(),
+                new NoOpSessionActivityService(),
+                new ObjectMapper()
+        );
+
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.addHeader("Authorization", "Bearer leo_valid-key");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        AtomicBoolean chainInvoked = new AtomicBoolean(false);
+        FilterChain chain = (req, res) -> chainInvoked.set(true);
+
+        filter.doFilter(request, response, chain);
+
+        assertThat(chainInvoked.get()).isTrue();
+        assertThat(response.getStatus()).isEqualTo(200);
+        assertThat(repositoryTouched.get()).isFalse();
+    }
+
+    @Test
     void shouldPassThroughWhenAuthenticationAlreadyExists() throws ServletException, IOException {
         SecurityContextHolder.getContext().setAuthentication(
                 new org.springframework.security.authentication.UsernamePasswordAuthenticationToken("user", null, List.of())

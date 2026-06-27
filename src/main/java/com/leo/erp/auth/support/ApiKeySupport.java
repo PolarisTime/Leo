@@ -16,6 +16,7 @@ public final class ApiKeySupport {
     public static final String SCOPE_ALL = "全部接口";
     public static final String SCOPE_READ_ONLY = "只读接口";
     public static final String SCOPE_BUSINESS = "业务接口";
+    public static final String RAW_KEY_PREFIX = "leo_";
     public static final Set<String> ALLOWED_USAGE_SCOPE = Set.of(SCOPE_ALL, SCOPE_READ_ONLY, SCOPE_BUSINESS);
     private static final String LIST_SEPARATOR = ",";
 

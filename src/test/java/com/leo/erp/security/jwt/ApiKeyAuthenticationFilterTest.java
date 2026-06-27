@@ -221,6 +221,58 @@ class ApiKeyAuthenticationFilterTest {
     }
 
     @Test
+    void shouldAuthenticateMcpRequestWithBearerApiKey() throws ServletException, IOException {
+        ApiKey apiKey = activeApiKey(ApiKeySupport.SCOPE_READ_ONLY);
+        apiKey.setAllowedResources("sales-order");
+        apiKey.setKeyHash(ApiKeySupport.hashKey("leo_valid-key"));
+        ApiKeyUsageService apiKeyUsageService = mock(ApiKeyUsageService.class);
+        ApiKeyAuthenticationFilter filter = new ApiKeyAuthenticationFilter(
+                apiKeyRepository(Optional.of(apiKey), new AtomicBoolean(true)),
+                userAccountRepository(Optional.of(activeUser()), new AtomicBoolean(false)),
+                objectMapper(),
+                new UserRoleBindingService(userRoleRepository(), roleSettingRepository(), new NoOpIdGenerator()),
+                apiKeyUsageService
+        );
+
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/mcp");
+        request.setContextPath("/api");
+        request.addHeader("Authorization", "Bearer leo_valid-key");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        AtomicBoolean chainInvoked = new AtomicBoolean(false);
+        FilterChain chain = (req, res) -> chainInvoked.set(true);
+
+        filter.doFilter(request, response, chain);
+
+        assertThat(chainInvoked.get()).isTrue();
+        assertThat(response.getStatus()).isEqualTo(200);
+        assertThat(SecurityContextHolder.getContext().getAuthentication().getDetails()).isInstanceOf(ApiKeyAuthenticationDetails.class);
+        verify(apiKeyUsageService).markUsed(apiKey.getId());
+    }
+
+    @Test
+    void shouldIgnoreBearerApiKeyOutsideMcpTransport() throws ServletException, IOException {
+        AtomicBoolean repositoryTouched = new AtomicBoolean(false);
+        ApiKeyAuthenticationFilter filter = new ApiKeyAuthenticationFilter(
+                apiKeyRepository(Optional.empty(), repositoryTouched),
+                userAccountRepository(Optional.empty(), new AtomicBoolean(false)),
+                objectMapper(),
+                new UserRoleBindingService(userRoleRepository(), roleSettingRepository(), new NoOpIdGenerator()),
+                mock(ApiKeyUsageService.class)
+        );
+
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/sales-order");
+        request.addHeader("Authorization", "Bearer leo_valid-key");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        AtomicBoolean chainInvoked = new AtomicBoolean(false);
+        FilterChain chain = (req, res) -> chainInvoked.set(true);
+
+        filter.doFilter(request, response, chain);
+
+        assertThat(chainInvoked.get()).isTrue();
+        assertThat(repositoryTouched.get()).isFalse();
+    }
+
+    @Test
     void shouldNotRecordUsageWhenApiKeyRejected() throws ServletException, IOException {
         ApiKey apiKey = activeApiKey(ApiKeySupport.SCOPE_READ_ONLY);
         ApiKeyUsageService apiKeyUsageService = mock(ApiKeyUsageService.class);

@@ -32,6 +32,7 @@ public class ApiKeyAuthenticationFilter extends OncePerRequestFilter {
 
     public static final String API_KEY_HEADER = "X-API-Key";
     private static final Set<String> READ_ONLY_METHODS = Set.of("GET", "HEAD", "OPTIONS");
+    private static final Set<String> MCP_TRANSPORT_PATHS = Set.of("/mcp", "/mcp/message", "/sse");
     private final ApiKeyRepository apiKeyRepository;
     private final UserAccountRepository userAccountRepository;
     private final ObjectMapper objectMapper;
@@ -53,7 +54,8 @@ public class ApiKeyAuthenticationFilter extends OncePerRequestFilter {
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
             throws ServletException, IOException {
-        String rawKey = request.getHeader(API_KEY_HEADER);
+        String requestPath = resolveRequestPath(request);
+        String rawKey = resolveRawKey(request, requestPath);
         if (rawKey == null || rawKey.isBlank()) {
             filterChain.doFilter(request, response);
             return;
@@ -71,7 +73,6 @@ public class ApiKeyAuthenticationFilter extends OncePerRequestFilter {
             return;
         }
 
-        String requestPath = resolveRequestPath(request);
         if (!isScopeAllowed(apiKey.getUsageScope(), requestPath, request.getMethod())) {
             sendFailure(request, response, HttpServletResponse.SC_FORBIDDEN, ErrorCode.FORBIDDEN, "当前 API Key 使用范围不允许访问该接口");
             return;
@@ -99,6 +100,9 @@ public class ApiKeyAuthenticationFilter extends OncePerRequestFilter {
     }
 
     private boolean isScopeAllowed(String usageScope, String requestPath, String requestMethod) {
+        if (isMcpTransportPath(requestPath)) {
+            return ApiKeySupport.ALLOWED_USAGE_SCOPE.contains(usageScope);
+        }
         return switch (usageScope) {
             case ApiKeySupport.SCOPE_ALL -> true;
             case ApiKeySupport.SCOPE_READ_ONLY -> READ_ONLY_METHODS.contains(requestMethod);
@@ -109,6 +113,9 @@ public class ApiKeyAuthenticationFilter extends OncePerRequestFilter {
 
     private boolean isResourceAllowed(ApiKey apiKey, HttpServletRequest request, String requestPath) {
         var allowedResources = ApiKeySupport.parseAllowedResources(apiKey.getAllowedResources());
+        if (isMcpTransportPath(requestPath)) {
+            return !allowedResources.isEmpty();
+        }
         String resolvedCode = resolveResourceCode(request, requestPath);
         if ("/auth/ping".equals(requestPath)) {
             return true;
@@ -135,6 +142,26 @@ public class ApiKeyAuthenticationFilter extends OncePerRequestFilter {
             return requestUri.substring(contextPath.length());
         }
         return requestUri;
+    }
+
+    private String resolveRawKey(HttpServletRequest request, String requestPath) {
+        String headerKey = request.getHeader(API_KEY_HEADER);
+        if (headerKey != null && !headerKey.isBlank()) {
+            return headerKey.trim();
+        }
+        if (!isMcpTransportPath(requestPath)) {
+            return null;
+        }
+        String authorization = request.getHeader("Authorization");
+        if (authorization == null || !authorization.startsWith("Bearer ")) {
+            return null;
+        }
+        String bearerToken = authorization.substring(7).trim();
+        return bearerToken.startsWith(ApiKeySupport.RAW_KEY_PREFIX) ? bearerToken : null;
+    }
+
+    private boolean isMcpTransportPath(String requestPath) {
+        return MCP_TRANSPORT_PATHS.contains(requestPath);
     }
 
     private String resolveResourceCode(HttpServletRequest request, String requestPath) {

@@ -19,6 +19,18 @@ spring:
       server:
         # MCP 仅作为开发辅助入口，默认关闭；需要时通过环境变量显式开启。
         enabled: ${SPRING_AI_MCP_SERVER_ENABLED:false}
+        name: leo-erp
+        version: ${SPRING_AI_MCP_SERVER_VERSION:0.1.0}
+        protocol: ${SPRING_AI_MCP_SERVER_PROTOCOL:STREAMABLE}
+        type: ${SPRING_AI_MCP_SERVER_TYPE:SYNC}
+        instructions: "Leo ERP MCP 仅提供按当前登录用户权限和数据范围过滤后的只读查询工具。"
+        capabilities:
+          tool: true
+          resource: false
+          prompt: false
+          completion: false
+        streamable-http:
+          mcp-endpoint: /mcp
 
   autoconfigure:
     exclude:

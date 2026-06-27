@@ -169,7 +169,7 @@ public class ApiKeyAdminService {
             ensurePermissionUpperBound(operator.id(), allowedResources, allowedActions, "当前操作者权限不足，不能生成包含该资源或动作的 API Key");
         }
 
-        String rawKey = "leo_" + Base64.getUrlEncoder().withoutPadding().encodeToString(
+        String rawKey = ApiKeySupport.RAW_KEY_PREFIX + Base64.getUrlEncoder().withoutPadding().encodeToString(
                 generateRandomBytes(API_KEY_RANDOM_BYTES));
         String keyHash = ApiKeySupport.hashKey(rawKey);
         String keyPrefix = rawKey.substring(0, PrecisionConstants.ID_PREFIX_LENGTH);

@@ -1,6 +1,7 @@
 package com.leo.erp.security.jwt;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.leo.erp.auth.support.ApiKeySupport;
 import com.leo.erp.common.api.ApiResponse;
 import com.leo.erp.common.api.RateLimitContext;
 import com.leo.erp.common.error.ErrorCode;
@@ -58,7 +59,11 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             return;
         }
 
-        String token = authorization.substring(7);
+        String token = authorization.substring(7).trim();
+        if (token.startsWith(ApiKeySupport.RAW_KEY_PREFIX)) {
+            filterChain.doFilter(request, response);
+            return;
+        }
         try {
             Claims claims = jwtTokenService.parseAccessToken(token);
             Long userId = extractUserId(claims);

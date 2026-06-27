@@ -104,6 +104,29 @@ bash leo/scripts/prod.sh stop
 - `LEO_JWT_SECRET`
 - `TOTP_ENCRYPTION_KEY`
 - `LEO_MACHINE_ID`
+- `SPRING_AI_MCP_SERVER_ENABLED`
+- `SPRING_AI_MCP_SERVER_PROTOCOL`
+
+## MCP
+
+后端内置 Spring AI MCP Server，默认关闭。开启本地 MCP：
+
+```bash
+export SPRING_AI_MCP_SERVER_ENABLED=true
+export SPRING_AI_MCP_SERVER_PROTOCOL=STREAMABLE
+bash leo/scripts/dev.sh start
+```
+
+MCP 端点：`http://localhost:11211/api/mcp`。
+
+Codex 连接示例：
+
+```bash
+export LEO_MCP_API_KEY="leo_xxx"
+codex mcp add leo-erp --url http://localhost:11211/api/mcp --bearer-token-env-var LEO_MCP_API_KEY
+```
+
+`LEO_MCP_API_KEY` 使用系统 API Key 管理生成的密钥。建议只授予需要查询的业务资源和 `read` 动作；MCP 工具仍复用现有权限和数据范围校验。
 
 ## CI 校验
 
