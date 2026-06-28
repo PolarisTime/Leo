@@ -23,13 +23,16 @@ public class HealthService {
     private final JdbcTemplate jdbcTemplate;
     private final RedisConnectionFactory redisConnectionFactory;
     private final String appName;
+    private final String appVersion;
 
     public HealthService(JdbcTemplate jdbcTemplate,
                          RedisConnectionFactory redisConnectionFactory,
-                         @Value("${spring.application.name:leo}") String appName) {
+                         @Value("${spring.application.name:leo}") String appName,
+                         @Value("${leo.version:0.1.0}") String appVersion) {
         this.jdbcTemplate = jdbcTemplate;
         this.redisConnectionFactory = redisConnectionFactory;
         this.appName = appName;
+        this.appVersion = appVersion;
     }
 
     public HealthResponse health() {
@@ -40,6 +43,7 @@ public class HealthService {
         return new HealthResponse(
                 allUp ? "UP" : "DEGRADED",
                 appName,
+                appVersion,
                 safeTraceId(),
                 DateTimeFormatSupport.now(),
                 db,

@@ -6,6 +6,10 @@ server:
     # 统一接口前缀
     context-path: /api
 
+leo:
+  # 应用版本，用于前端页脚和健康检查展示；生产环境可用 LEO_VERSION 覆盖。
+  version: ${LEO_VERSION:0.1.0}
+
 # Spring 基础能力配置
 spring:
   config:

@@ -18,7 +18,7 @@ class HealthControllerTest {
     @Test
     void shouldReturnHealthResponse() {
         HealthResponse healthResponse = new HealthResponse(
-                "UP", "leo", "trace-123", "2026-01-01 00:00:00",
+                "UP", "leo", "0.1.0", "trace-123", "2026-01-01 00:00:00",
                 HealthCheckResponse.up(),
                 HealthCheckResponse.up(),
                 HealthCheckResponse.disk("UP", 100L, 500L)
@@ -35,7 +35,7 @@ class HealthControllerTest {
     @Test
     void shouldReturnDegradedStatusWhenChecksFail() {
         HealthResponse healthResponse = new HealthResponse(
-                "DEGRADED", "leo", "", "2026-01-01 00:00:00",
+                "DEGRADED", "leo", "0.1.0", "", "2026-01-01 00:00:00",
                 HealthCheckResponse.down(),
                 HealthCheckResponse.up(),
                 HealthCheckResponse.disk("UP", 100L, 500L)
