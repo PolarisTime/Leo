@@ -19,6 +19,8 @@ import com.leo.erp.search.service.GlobalSearchService;
 import com.leo.erp.system.printtemplate.service.PrintScriptService;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Import;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 
@@ -37,8 +39,9 @@ class ErpMcpToolsTest {
     @Test
     void shouldNotCreateToolsWhenMcpServerDisabled() {
         new ApplicationContextRunner()
+                .withPropertyValues("spring.ai.mcp.server.enabled=false")
                 .withBean(ErpMcpQueryFacade.class, () -> mock(ErpMcpQueryFacade.class))
-                .withUserConfiguration(ErpMcpTools.class)
+                .withUserConfiguration(McpToolsConfiguration.class)
                 .run(context -> assertThat(context).doesNotHaveBean(ErpMcpTools.class));
     }
 
@@ -47,8 +50,13 @@ class ErpMcpToolsTest {
         new ApplicationContextRunner()
                 .withPropertyValues("spring.ai.mcp.server.enabled=true")
                 .withBean(ErpMcpQueryFacade.class, () -> mock(ErpMcpQueryFacade.class))
-                .withUserConfiguration(ErpMcpTools.class)
+                .withUserConfiguration(McpToolsConfiguration.class)
                 .run(context -> assertThat(context).hasSingleBean(ErpMcpTools.class));
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    @Import(ErpMcpTools.class)
+    static class McpToolsConfiguration {
     }
 
     @Test

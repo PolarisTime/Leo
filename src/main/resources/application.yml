@@ -6,10 +6,6 @@ server:
     # 统一接口前缀
     context-path: /api
 
-leo:
-  # 应用版本，用于前端页脚和健康检查展示；生产环境可用 LEO_VERSION 覆盖。
-  version: ${LEO_VERSION:0.1.0}
-
 # Spring 基础能力配置
 spring:
   config:
@@ -24,7 +20,7 @@ spring:
         # MCP 仅作为开发辅助入口，默认关闭；需要时通过环境变量显式开启。
         enabled: ${SPRING_AI_MCP_SERVER_ENABLED:false}
         name: leo-erp
-        version: ${SPRING_AI_MCP_SERVER_VERSION:0.1.0}
+        version: ${SPRING_AI_MCP_SERVER_VERSION:1.0.0}
         protocol: ${SPRING_AI_MCP_SERVER_PROTOCOL:STREAMABLE}
         type: ${SPRING_AI_MCP_SERVER_TYPE:SYNC}
         instructions: "Leo ERP MCP 仅提供按当前登录用户权限和数据范围过滤后的只读查询工具。"
@@ -156,6 +152,8 @@ spring:
 
 # 业务自定义配置
 leo:
+  # 应用版本，用于前端页脚和健康检查展示；生产环境可用 LEO_VERSION 覆盖。
+  version: ${LEO_VERSION:1.0.0}
   # 受信代理 IP/CIDR 列表（逗号分隔）。只有来自这些地址的请求才会信任 X-Forwarded-For 头。
   # 部署在 nginx / CDN 后面时，填入代理的内网地址。
   # 示例: "127.0.0.1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"

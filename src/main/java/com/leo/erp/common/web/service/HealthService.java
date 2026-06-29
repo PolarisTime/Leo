@@ -28,7 +28,7 @@ public class HealthService {
     public HealthService(JdbcTemplate jdbcTemplate,
                          RedisConnectionFactory redisConnectionFactory,
                          @Value("${spring.application.name:leo}") String appName,
-                         @Value("${leo.version:0.1.0}") String appVersion) {
+                         @Value("${leo.version:1.0.0}") String appVersion) {
         this.jdbcTemplate = jdbcTemplate;
         this.redisConnectionFactory = redisConnectionFactory;
         this.appName = appName;

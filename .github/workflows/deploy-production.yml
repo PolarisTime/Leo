@@ -1,0 +1,323 @@
+name: production-deploy
+run-name: "production deploy: Leo ${{ inputs.leo_ref }} / Aries ${{ inputs.aries_ref }} / dry_run=${{ inputs.dry_run }}"
+
+on:
+  workflow_dispatch:
+    inputs:
+      leo_ref:
+        description: "Backend Git ref to deploy"
+        required: true
+        default: "main"
+        type: string
+      aries_ref:
+        description: "Frontend Git ref to deploy"
+        required: true
+        default: "dev"
+        type: string
+      dry_run:
+        description: "Build and package only; do not deploy to production"
+        required: true
+        default: true
+        type: boolean
+      release_note:
+        description: "Optional release note"
+        required: false
+        default: ""
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+env:
+  ARIES_REPOSITORY: PolarisTime/Aries
+  NODE_VERSION: "20"
+  PNPM_VERSION: "10.33.0"
+  VITE_API_BASE_URL: /api
+
+jobs:
+  backend:
+    name: Build Backend
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: leo
+          POSTGRES_USER: leo
+          POSTGRES_PASSWORD: leo_ci_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U leo -d leo"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    defaults:
+      run:
+        shell: bash
+    env:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/leo
+      SPRING_DATASOURCE_USERNAME: leo
+      SPRING_DATASOURCE_PASSWORD: leo_ci_password
+      SPRING_DATA_REDIS_HOST: localhost
+      SPRING_DATA_REDIS_PORT: 6379
+      SPRING_DATA_REDIS_DATABASE: 3
+      SPRING_DATA_REDIS_PASSWORD: ""
+      LEO_JWT_SECRET: ci-jwt-secret-ci-jwt-secret-ci-jwt-secret
+      TOTP_ENCRYPTION_KEY: ci-totp-secret-ci-totp-secret-ci-totp
+      LEO_MACHINE_ID: 1
+    steps:
+      - name: Checkout Leo
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.leo_ref }}
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+          cache-dependency-path: pom.xml
+
+      - name: Static analysis
+        run: mvn -B -ntp -DskipTests checkstyle:check spotbugs:spotbugs
+
+      - name: Test
+        run: mvn -B -ntp test
+
+      - name: Package
+        run: mvn -B -ntp -DskipTests package
+
+      - name: Upload backend artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: leo-backend-jar
+          path: target/*.jar
+          if-no-files-found: error
+
+  frontend:
+    name: Build Frontend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+        working-directory: aries
+    steps:
+      - name: Checkout Aries
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.ARIES_REPOSITORY }}
+          ref: ${{ inputs.aries_ref }}
+          path: aries
+          token: ${{ secrets.ARIES_REPOSITORY_TOKEN || github.token }}
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+          run_install: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: aries/pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Unit tests
+        run: pnpm test:unit
+
+      - name: Build
+        run: pnpm build
+
+      - name: Upload frontend artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: aries-frontend-dist
+          path: aries/dist/**
+          if-no-files-found: error
+
+  package:
+    name: Package Release
+    needs:
+      - backend
+      - frontend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout Leo deploy scripts
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.leo_ref }}
+
+      - name: Download backend artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: leo-backend-jar
+          path: release-input/backend
+
+      - name: Download frontend artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: aries-frontend-dist
+          path: release-input/frontend
+
+      - name: Create production release archive
+        run: |
+          set -euo pipefail
+          release_id="leo-${GITHUB_RUN_NUMBER}-${GITHUB_SHA::12}"
+          mkdir -p release/backend release/frontend release/deploy
+          backend_jar="$(find release-input/backend -maxdepth 1 -type f -name '*.jar' | head -1)"
+          if [[ -z "$backend_jar" ]]; then
+            echo "Backend jar artifact not found" >&2
+            exit 1
+          fi
+          cp "$backend_jar" release/backend/leo.jar
+          cp -a release-input/frontend/. release/frontend/
+          cp scripts/deploy/install-production-release.sh release/deploy/
+          jq -n \
+            --arg releaseId "$release_id" \
+            --arg leoRef "${{ inputs.leo_ref }}" \
+            --arg ariesRef "${{ inputs.aries_ref }}" \
+            --arg leoSha "$GITHUB_SHA" \
+            --arg runId "$GITHUB_RUN_ID" \
+            --arg runNumber "$GITHUB_RUN_NUMBER" \
+            --argjson dryRun "${{ inputs.dry_run }}" \
+            --arg releaseNote "${{ inputs.release_note }}" \
+            '{
+              releaseId: $releaseId,
+              leoRef: $leoRef,
+              ariesRef: $ariesRef,
+              leoSha: $leoSha,
+              runId: $runId,
+              runNumber: $runNumber,
+              dryRun: $dryRun,
+              releaseNote: $releaseNote
+            }' > release/manifest.json
+          tar -C release -czf leo-production-release.tar.gz .
+          sha256sum leo-production-release.tar.gz > leo-production-release.tar.gz.sha256
+
+      - name: Upload release archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: leo-production-release
+          path: |
+            leo-production-release.tar.gz
+            leo-production-release.tar.gz.sha256
+          if-no-files-found: error
+
+  dry-run:
+    name: Dry Run Summary
+    needs: package
+    if: ${{ inputs.dry_run }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Print summary
+        run: |
+          echo "Dry run completed. Release archive was built but not deployed."
+          echo "Leo ref:   ${{ inputs.leo_ref }}"
+          echo "Aries ref: ${{ inputs.aries_ref }}"
+
+  deploy:
+    name: Deploy Production
+    needs: package
+    if: ${{ !inputs.dry_run }}
+    runs-on: ubuntu-latest
+    environment: production
+    defaults:
+      run:
+        shell: bash
+    env:
+      PROD_SSH_HOST: ${{ secrets.PROD_SSH_HOST }}
+      PROD_SSH_PORT: ${{ secrets.PROD_SSH_PORT || '22' }}
+      PROD_SSH_USER: ${{ secrets.PROD_SSH_USER }}
+      PROD_SSH_PRIVATE_KEY: ${{ secrets.PROD_SSH_PRIVATE_KEY }}
+      PROD_SSH_KNOWN_HOSTS: ${{ secrets.PROD_SSH_KNOWN_HOSTS }}
+      PROD_RELEASE_ROOT: ${{ vars.PROD_RELEASE_ROOT || '/opt/leo' }}
+      PROD_FRONTEND_ROOT: ${{ vars.PROD_FRONTEND_ROOT || '/var/www/leo' }}
+      PROD_BACKEND_SERVICE: ${{ vars.PROD_BACKEND_SERVICE || 'leo-backend' }}
+      PROD_HEALTHCHECK_URL: ${{ vars.PROD_HEALTHCHECK_URL || 'http://127.0.0.1:11211/api/auth/ping' }}
+      PROD_KEEP_RELEASES: ${{ vars.PROD_KEEP_RELEASES || '5' }}
+    steps:
+      - name: Checkout Leo deploy scripts
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.leo_ref }}
+
+      - name: Download release archive
+        uses: actions/download-artifact@v4
+        with:
+          name: leo-production-release
+          path: production-release
+
+      - name: Configure SSH
+        run: |
+          set -euo pipefail
+          : "${PROD_SSH_HOST:?Missing PROD_SSH_HOST secret}"
+          : "${PROD_SSH_USER:?Missing PROD_SSH_USER secret}"
+          : "${PROD_SSH_PRIVATE_KEY:?Missing PROD_SSH_PRIVATE_KEY secret}"
+          mkdir -p "$HOME/.ssh"
+          chmod 700 "$HOME/.ssh"
+          printf '%s\n' "$PROD_SSH_PRIVATE_KEY" > "$HOME/.ssh/leo-production"
+          chmod 600 "$HOME/.ssh/leo-production"
+          if [[ -n "$PROD_SSH_KNOWN_HOSTS" ]]; then
+            printf '%s\n' "$PROD_SSH_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          else
+            ssh-keyscan -p "$PROD_SSH_PORT" "$PROD_SSH_HOST" > "$HOME/.ssh/known_hosts"
+          fi
+          chmod 644 "$HOME/.ssh/known_hosts"
+
+      - name: Upload release archive
+        run: |
+          set -euo pipefail
+          remote_dir="/tmp/leo-production-release-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          ssh -i "$HOME/.ssh/leo-production" \
+            -p "$PROD_SSH_PORT" \
+            "${PROD_SSH_USER}@${PROD_SSH_HOST}" \
+            "mkdir -p '$remote_dir'"
+          scp -i "$HOME/.ssh/leo-production" \
+            -P "$PROD_SSH_PORT" \
+            production-release/leo-production-release.tar.gz \
+            production-release/leo-production-release.tar.gz.sha256 \
+            "${PROD_SSH_USER}@${PROD_SSH_HOST}:${remote_dir}/"
+          echo "REMOTE_ARCHIVE=${remote_dir}/leo-production-release.tar.gz" >> "$GITHUB_ENV"
+          echo "REMOTE_SHA256=${remote_dir}/leo-production-release.tar.gz.sha256" >> "$GITHUB_ENV"
+
+      - name: Install release on production
+        run: |
+          set -euo pipefail
+          quote() { printf '%q' "$1"; }
+          remote_command="sudo bash -s --"
+          remote_command+=" --archive $(quote "$REMOTE_ARCHIVE")"
+          remote_command+=" --sha256-file $(quote "$REMOTE_SHA256")"
+          remote_command+=" --release-root $(quote "$PROD_RELEASE_ROOT")"
+          remote_command+=" --frontend-root $(quote "$PROD_FRONTEND_ROOT")"
+          remote_command+=" --backend-service $(quote "$PROD_BACKEND_SERVICE")"
+          remote_command+=" --healthcheck-url $(quote "$PROD_HEALTHCHECK_URL")"
+          remote_command+=" --keep-releases $(quote "$PROD_KEEP_RELEASES")"
+          ssh -i "$HOME/.ssh/leo-production" \
+            -p "$PROD_SSH_PORT" \
+            "${PROD_SSH_USER}@${PROD_SSH_HOST}" \
+            "$remote_command" < scripts/deploy/install-production-release.sh

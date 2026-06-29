@@ -1,0 +1,27 @@
+[Unit]
+Description=Leo ERP Backend
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=leo
+Group=leo
+WorkingDirectory=/opt/leo/current
+Environment=SERVER_PORT=11211
+EnvironmentFile=/opt/leo/shared/leo.env
+Environment=SPRING_PROFILES_ACTIVE=prod
+Environment=SPRING_AI_MCP_SERVER_ENABLED=false
+ExecStart=/usr/bin/java -Xms512m -Xmx2g -XX:+UseG1GC -XX:MaxGCPauseMillis=200 -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/opt/leo/shared/heapdump.hprof -Dserver.port=${SERVER_PORT} -Dspring.profiles.active=prod -jar /opt/leo/current/backend/leo.jar
+Restart=on-failure
+RestartSec=5
+SuccessExitStatus=143
+LimitNOFILE=65535
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/opt/leo/shared /var/lib/leo /tmp
+
+[Install]
+WantedBy=multi-user.target

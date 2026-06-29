@@ -1,0 +1,72 @@
+name: production-rollback
+run-name: "production rollback: ${{ inputs.target_release }}"
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_release:
+        description: "Release id to roll back to, or previous"
+        required: true
+        default: "previous"
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+jobs:
+  rollback:
+    name: Rollback Production
+    runs-on: ubuntu-latest
+    environment: production
+    defaults:
+      run:
+        shell: bash
+    env:
+      PROD_SSH_HOST: ${{ secrets.PROD_SSH_HOST }}
+      PROD_SSH_PORT: ${{ secrets.PROD_SSH_PORT || '22' }}
+      PROD_SSH_USER: ${{ secrets.PROD_SSH_USER }}
+      PROD_SSH_PRIVATE_KEY: ${{ secrets.PROD_SSH_PRIVATE_KEY }}
+      PROD_SSH_KNOWN_HOSTS: ${{ secrets.PROD_SSH_KNOWN_HOSTS }}
+      PROD_RELEASE_ROOT: ${{ vars.PROD_RELEASE_ROOT || '/opt/leo' }}
+      PROD_FRONTEND_ROOT: ${{ vars.PROD_FRONTEND_ROOT || '/var/www/leo' }}
+      PROD_BACKEND_SERVICE: ${{ vars.PROD_BACKEND_SERVICE || 'leo-backend' }}
+      PROD_HEALTHCHECK_URL: ${{ vars.PROD_HEALTHCHECK_URL || 'http://127.0.0.1:11211/api/auth/ping' }}
+    steps:
+      - name: Checkout Leo deploy scripts
+        uses: actions/checkout@v4
+
+      - name: Configure SSH
+        run: |
+          set -euo pipefail
+          : "${PROD_SSH_HOST:?Missing PROD_SSH_HOST secret}"
+          : "${PROD_SSH_USER:?Missing PROD_SSH_USER secret}"
+          : "${PROD_SSH_PRIVATE_KEY:?Missing PROD_SSH_PRIVATE_KEY secret}"
+          mkdir -p "$HOME/.ssh"
+          chmod 700 "$HOME/.ssh"
+          printf '%s\n' "$PROD_SSH_PRIVATE_KEY" > "$HOME/.ssh/leo-production"
+          chmod 600 "$HOME/.ssh/leo-production"
+          if [[ -n "$PROD_SSH_KNOWN_HOSTS" ]]; then
+            printf '%s\n' "$PROD_SSH_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          else
+            ssh-keyscan -p "$PROD_SSH_PORT" "$PROD_SSH_HOST" > "$HOME/.ssh/known_hosts"
+          fi
+          chmod 644 "$HOME/.ssh/known_hosts"
+
+      - name: Roll back production release
+        run: |
+          set -euo pipefail
+          quote() { printf '%q' "$1"; }
+          remote_command="sudo bash -s --"
+          remote_command+=" --target-release $(quote "${{ inputs.target_release }}")"
+          remote_command+=" --release-root $(quote "$PROD_RELEASE_ROOT")"
+          remote_command+=" --frontend-root $(quote "$PROD_FRONTEND_ROOT")"
+          remote_command+=" --backend-service $(quote "$PROD_BACKEND_SERVICE")"
+          remote_command+=" --healthcheck-url $(quote "$PROD_HEALTHCHECK_URL")"
+          ssh -i "$HOME/.ssh/leo-production" \
+            -p "$PROD_SSH_PORT" \
+            "${PROD_SSH_USER}@${PROD_SSH_HOST}" \
+            "$remote_command" < scripts/deploy/rollback-production-release.sh

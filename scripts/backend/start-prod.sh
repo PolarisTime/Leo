@@ -4,7 +4,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LEO_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
-DEFAULT_JAR="$LEO_DIR/target/leo-0.1.0.jar"
+DEFAULT_JAR="$LEO_DIR/target/leo-1.0.0.jar"
 
 CHECK_ONLY=false
 JAR_FILE="$DEFAULT_JAR"

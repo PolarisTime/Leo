@@ -88,6 +88,18 @@ bash leo/scripts/prod.sh stop
 
 后端生产启动逻辑位于 `scripts/backend/start-prod.sh`，环境默认值位于 `scripts/env/prod.sh`。
 
+## 生产 CI/CD
+
+正式生产发布不使用本机 `prod.sh restart`，而是通过 GitHub Actions 构建产物并 SSH 发布到生产机：
+
+```bash
+bash leo/scripts/deploy/trigger-production-deploy.sh --dry-run --watch
+bash leo/scripts/deploy/trigger-production-deploy.sh --confirm-production --leo-ref main --aries-ref dev --watch
+bash leo/scripts/deploy/trigger-production-rollback.sh --confirm-production --target-release previous --watch
+```
+
+CI/CD 详细配置、生产机 systemd/Nginx 模板和回滚策略见 `docs/deployment/production-cicd.md`。
+
 ## 关键配置
 
 常见环境变量：

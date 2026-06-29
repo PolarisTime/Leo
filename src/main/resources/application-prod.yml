@@ -23,6 +23,11 @@ leo:
         hsts-enabled: ${LEO_SECURITY_HSTS_ENABLED:true}
 
 spring:
+  ai:
+    mcp:
+      server:
+        # 生产环境默认关闭 MCP，只允许通过显式环境变量开启。
+        enabled: ${SPRING_AI_MCP_SERVER_ENABLED:false}
   datasource:
     # 生产环境默认连接 prod 库，可通过 SPRING_DATASOURCE_URL 或 SPRING_DATASOURCE_DB 覆盖
     url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://${SPRING_DATASOURCE_HOST:localhost}:${SPRING_DATASOURCE_PORT:5432}/${SPRING_DATASOURCE_DB:prod}}
