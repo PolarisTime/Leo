@@ -41,6 +41,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentCaptor.forClass;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
@@ -1579,10 +1580,11 @@ class SalesOrderServiceTest {
         doAnswer(invocation -> {
             SalesOrderItem item = invocation.getArgument(2);
             SalesOrderItemRequest source = invocation.getArgument(1);
-            java.math.BigDecimal weightTon = invocation.getArgument(5);
-            java.math.BigDecimal pieceWeightTon = invocation.getArgument(6);
+            String materialCode = invocation.getArgument(4);
+            java.math.BigDecimal weightTon = invocation.getArgument(6);
+            java.math.BigDecimal pieceWeightTon = invocation.getArgument(7);
             item.setLineNo(invocation.getArgument(3));
-            item.setMaterialCode(source.materialCode());
+            item.setMaterialCode(materialCode);
             item.setBrand(source.brand());
             item.setCategory(source.category());
             item.setMaterial(source.material());
@@ -1600,7 +1602,7 @@ class SalesOrderServiceTest {
             item.setWeightTon(weightTon);
             item.setUnitPrice(source.unitPrice());
             return null;
-        }).when(mapper).applyItemFields(any(), any(), any(), anyInt(), any(), any(), any());
+        }).when(mapper).applyItemFields(any(), any(), any(), anyInt(), anyString(), any(), any(), any());
         return mapper;
     }
 

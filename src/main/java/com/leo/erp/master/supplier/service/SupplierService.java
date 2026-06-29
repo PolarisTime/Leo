@@ -8,6 +8,7 @@ import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.service.AbstractCrudService;
 import com.leo.erp.common.support.MasterDataReferenceGuard;
 import com.leo.erp.common.support.MasterDataReferenceGuard.ReferenceCheck;
+import com.leo.erp.common.support.RedisCacheHealthCheck;
 import com.leo.erp.common.support.RedisJsonCacheSupport;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
@@ -28,7 +29,7 @@ import java.util.List;
 import java.util.Optional;
 
 @Service
-public class SupplierService extends AbstractCrudService<Supplier, SupplierRequest, SupplierResponse> {
+public class SupplierService extends AbstractCrudService<Supplier, SupplierRequest, SupplierResponse> implements RedisCacheHealthCheck {
 
     private static final String SUPPLIER_CACHE_KEY = "leo:supplier:all";
     private static final Duration SUPPLIER_CACHE_TTL = Duration.ofMinutes(30);
@@ -70,12 +71,21 @@ public class SupplierService extends AbstractCrudService<Supplier, SupplierReque
         if (redisJsonCacheSupport == null) {
             return loadActiveOptions();
         }
-        return redisJsonCacheSupport.getOrLoad(
+        List<SupplierOptionResponse> options = redisJsonCacheSupport.getOrLoad(
                 SUPPLIER_CACHE_KEY,
                 SUPPLIER_CACHE_TTL,
                 SUPPLIER_OPTION_LIST_TYPE,
                 this::loadActiveOptions
         );
+        if (options.isEmpty()) {
+            List<SupplierOptionResponse> refreshed = loadActiveOptions();
+            if (refreshed.isEmpty()) {
+                return options;
+            }
+            writeActiveOptionsCache(refreshed);
+            return refreshed;
+        }
+        return options;
     }
 
     private List<SupplierOptionResponse> loadActiveOptions() {
@@ -84,11 +94,35 @@ public class SupplierService extends AbstractCrudService<Supplier, SupplierReque
                 .toList();
     }
 
+    private void writeActiveOptionsCache(List<SupplierOptionResponse> options) {
+        if (redisJsonCacheSupport != null) {
+            redisJsonCacheSupport.write(SUPPLIER_CACHE_KEY, options, SUPPLIER_CACHE_TTL);
+        }
+    }
+
+    @Override
+    public String cacheName() {
+        return SUPPLIER_CACHE_KEY;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public CacheHealthCheckResult verifyAndRefreshCache() {
+        List<SupplierOptionResponse> expected = loadActiveOptions();
+        return verifyAndRefreshListCache(
+                redisJsonCacheSupport,
+                SUPPLIER_CACHE_KEY,
+                SUPPLIER_CACHE_TTL,
+                SUPPLIER_OPTION_LIST_TYPE,
+                expected
+        );
+    }
+
     @Transactional(readOnly = true)
     public Page<SupplierResponse> page(PageQuery query, String keyword, String status) {
         Specification<Supplier> spec = Specs.<Supplier>notDeleted()
                 .and(Specs.keywordLike(keyword, "supplierCode", "supplierName", "contactName"))
-                .and(Specs.equalIfPresent("status", status));
+                .and(Specs.equalIfPresent("status", StatusConstants.normalizeOptionalActiveStatus(status, "供应商状态")));
         return page(query, spec, supplierRepository);
     }
 
@@ -139,7 +173,7 @@ public class SupplierService extends AbstractCrudService<Supplier, SupplierReque
         entity.setContactName(request.contactName());
         entity.setContactPhone(request.contactPhone());
         entity.setCity(request.city());
-        entity.setStatus(request.status());
+        entity.setStatus(StatusConstants.normalizeActiveStatus(request.status(), "供应商状态"));
         entity.setRemark(request.remark());
     }
 
@@ -211,7 +245,7 @@ public class SupplierService extends AbstractCrudService<Supplier, SupplierReque
 
     private void evictCache() {
         if (redisJsonCacheSupport != null) {
-            redisJsonCacheSupport.delete(SUPPLIER_CACHE_KEY);
+            redisJsonCacheSupport.deleteAfterCommit(SUPPLIER_CACHE_KEY);
         }
     }
 }

@@ -27,6 +27,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 
 class PermissionServiceTest {
 
@@ -361,21 +363,18 @@ class PermissionServiceTest {
 
     @Test
     void shouldDelegateEvictMetadataCache() {
-        Map<String, Map<Object, Object>> hashes = new java.util.LinkedHashMap<>();
-        List<String> deletedKeys = new ArrayList<>();
-        StringRedisTemplate redis = evictableRedisTemplate(hashes, deletedKeys);
-
         com.leo.erp.common.support.RedisJsonCacheSupport cacheSupport =
-                new com.leo.erp.common.support.RedisJsonCacheSupport(redis, new com.fasterxml.jackson.databind.ObjectMapper(), new RedisTuningProperties());
+                mock(com.leo.erp.common.support.RedisJsonCacheSupport.class);
 
         PermissionService service = permissionService(
-                null, null, null, redis, null,
+                null, null, null, noOpRedisTemplate(), null,
                 java.util.Optional.of(cacheSupport),
                 new RedisTuningProperties()
         );
 
         service.evictMetadataCache();
-        assertThat(deletedKeys).isNotEmpty();
+
+        verify(cacheSupport).deleteByPattern("leo:menu:all*");
     }
 
     @Test

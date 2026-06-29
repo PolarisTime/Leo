@@ -10,6 +10,8 @@ import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.core.Cursor;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
@@ -27,6 +29,8 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class RedisJsonCacheSupportTest {
@@ -166,6 +170,25 @@ class RedisJsonCacheSupportTest {
     }
 
     @Test
+    void shouldDeleteSingleKeyAfterCommit_whenTransactionActive() {
+        try {
+            support.setAfterCommitExecutor(new AfterCommitExecutor());
+            TransactionSynchronizationManager.initSynchronization();
+            TransactionSynchronizationManager.setActualTransactionActive(true);
+
+            support.deleteAfterCommit("test-key");
+
+            verify(redisTemplate, never()).delete("test-key");
+            TransactionSynchronization synchronization = TransactionSynchronizationManager.getSynchronizations().getFirst();
+            synchronization.afterCommit();
+            verify(redisTemplate).delete("test-key");
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+            TransactionSynchronizationManager.setActualTransactionActive(false);
+        }
+    }
+
+    @Test
     void shouldSkipDelete_whenKeyIsNull() {
         support.delete((String) null);
     }
@@ -173,6 +196,26 @@ class RedisJsonCacheSupportTest {
     @Test
     void shouldDeleteCollection() {
         support.delete(List.of("key1", "key2"));
+    }
+
+    @Test
+    void shouldDeleteCollectionAfterCommit_whenTransactionActive() {
+        List<String> keys = List.of("key1", "key2");
+        try {
+            support.setAfterCommitExecutor(new AfterCommitExecutor());
+            TransactionSynchronizationManager.initSynchronization();
+            TransactionSynchronizationManager.setActualTransactionActive(true);
+
+            support.deleteAfterCommit(keys);
+
+            verify(redisTemplate, never()).delete(keys);
+            TransactionSynchronization synchronization = TransactionSynchronizationManager.getSynchronizations().getFirst();
+            synchronization.afterCommit();
+            verify(redisTemplate).delete(keys);
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+            TransactionSynchronizationManager.setActualTransactionActive(false);
+        }
     }
 
     @Test

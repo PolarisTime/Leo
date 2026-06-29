@@ -136,13 +136,14 @@ public class SalesOrderApplyService {
                                  int lineNo,
                                  Map<String, TradeMaterialSnapshot> materialMap,
                                  SalesOrderSourceContext sourceContext) {
-        TradeMaterialSnapshot material = materialMap.get(source.materialCode());
+        String materialCode = tradeItemMaterialSupport.normalizeMaterialCode(source.materialCode(), lineNo);
+        TradeMaterialSnapshot material = materialMap.get(materialCode);
         var sourceInboundItem = sourceAllocationService.resolveSourceInbound(source, sourceContext);
         var sourcePurchaseOrderItem = sourceAllocationService.resolveSourcePurchaseOrder(source, sourceContext);
         sourceAllocationService.validateLine(source, lineNo, sourceContext);
         BigDecimal pieceWeightTon = weightResolver.resolvePieceWeightTon(source, sourceContext);
         BigDecimal weightTon = weightResolver.resolveWeightTon(source, pieceWeightTon, sourceContext);
-        salesOrderItemMapper.applyItemFields(entity, source, item, lineNo, material, weightTon, pieceWeightTon);
+        salesOrderItemMapper.applyItemFields(entity, source, item, lineNo, materialCode, material, weightTon, pieceWeightTon);
         applyPurchaseSettlementCompany(item, sourceInboundItem, sourcePurchaseOrderItem);
         BigDecimal amount = TradeItemCalculator.calculateAmount(weightTon, source.unitPrice());
         item.setAmount(amount);

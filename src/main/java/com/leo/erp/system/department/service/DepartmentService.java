@@ -8,6 +8,7 @@ import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.service.AbstractCrudService;
+import com.leo.erp.common.support.RedisCacheHealthCheck;
 import com.leo.erp.common.support.RedisJsonCacheSupport;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
@@ -34,7 +35,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
-public class DepartmentService extends AbstractCrudService<Department, DepartmentRequest, DepartmentResponse> {
+public class DepartmentService extends AbstractCrudService<Department, DepartmentRequest, DepartmentResponse> implements RedisCacheHealthCheck {
 
     private static final Set<String> ALLOWED_STATUS = StatusConstants.ALLOWED_ACTIVE_STATUS;
     private static final String DEPARTMENT_OPTIONS_CACHE_KEY = "leo:department:options";
@@ -84,12 +85,21 @@ public class DepartmentService extends AbstractCrudService<Department, Departmen
         if (redisJsonCacheSupport == null) {
             return loadOptions();
         }
-        return redisJsonCacheSupport.getOrLoad(
+        List<DepartmentOptionResponse> options = redisJsonCacheSupport.getOrLoad(
                 DEPARTMENT_OPTIONS_CACHE_KEY,
                 DEPARTMENT_OPTIONS_CACHE_TTL,
                 DEPARTMENT_OPTION_LIST_TYPE,
                 this::loadOptions
         );
+        if (options.isEmpty()) {
+            List<DepartmentOptionResponse> refreshed = loadOptions();
+            if (refreshed.isEmpty()) {
+                return options;
+            }
+            writeOptionsCache(refreshed);
+            return refreshed;
+        }
+        return options;
     }
 
     private List<DepartmentOptionResponse> loadOptions() {
@@ -101,6 +111,30 @@ public class DepartmentService extends AbstractCrudService<Department, Departmen
                         department.getDepartmentName()
                 ))
                 .toList();
+    }
+
+    private void writeOptionsCache(List<DepartmentOptionResponse> options) {
+        if (redisJsonCacheSupport != null) {
+            redisJsonCacheSupport.write(DEPARTMENT_OPTIONS_CACHE_KEY, options, DEPARTMENT_OPTIONS_CACHE_TTL);
+        }
+    }
+
+    @Override
+    public String cacheName() {
+        return DEPARTMENT_OPTIONS_CACHE_KEY;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public CacheHealthCheckResult verifyAndRefreshCache() {
+        List<DepartmentOptionResponse> expected = loadOptions();
+        return verifyAndRefreshListCache(
+                redisJsonCacheSupport,
+                DEPARTMENT_OPTIONS_CACHE_KEY,
+                DEPARTMENT_OPTIONS_CACHE_TTL,
+                DEPARTMENT_OPTION_LIST_TYPE,
+                expected
+        );
     }
 
     @Override
@@ -152,7 +186,7 @@ public class DepartmentService extends AbstractCrudService<Department, Departmen
         try {
             Department saved = departmentRepository.save(entity);
             evictOptionsCache();
-            permissionService.evictDepartmentUserCache(saved.getId());
+            permissionService.clearDepartmentUserCache();
             syncBoundUserDepartmentName(saved);
             return saved;
         } catch (DataIntegrityViolationException ex) {
@@ -165,7 +199,7 @@ public class DepartmentService extends AbstractCrudService<Department, Departmen
 
     private void evictOptionsCache() {
         if (redisJsonCacheSupport != null) {
-            redisJsonCacheSupport.delete(DEPARTMENT_OPTIONS_CACHE_KEY);
+            redisJsonCacheSupport.deleteAfterCommit(DEPARTMENT_OPTIONS_CACHE_KEY);
         }
     }
 

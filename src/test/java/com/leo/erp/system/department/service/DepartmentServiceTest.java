@@ -143,7 +143,7 @@ class DepartmentServiceTest {
 
         assertThat(user.getDepartmentName()).isEqualTo("总部运营部");
         verify(userAccountRepository).saveAll(anyList());
-        verify(permissionService).evictDepartmentUserCache(10L);
+        verify(permissionService).clearDepartmentUserCache();
     }
 
     @Test
@@ -382,6 +382,123 @@ class DepartmentServiceTest {
     }
 
     @Test
+    void shouldRefreshOptionsCache_whenCachedOptionsAreEmptyButActiveDepartmentsExist() {
+        DepartmentRepository departmentRepository = mock(DepartmentRepository.class);
+        UserAccountRepository userAccountRepository = mock(UserAccountRepository.class);
+        PermissionService permissionService = mock(PermissionService.class);
+        RedisJsonCacheSupport cacheSupport = mock(RedisJsonCacheSupport.class);
+        Department dept = department();
+        when(departmentRepository.findByStatusAndDeletedFlagFalseOrderBySortOrderAscIdAsc("正常"))
+                .thenReturn(List.of(dept));
+        when(cacheSupport.getOrLoad(anyString(), any(Duration.class), any(TypeReference.class), any()))
+                .thenReturn(List.of());
+
+        DepartmentService service = new DepartmentService(
+                departmentRepository,
+                userAccountRepository,
+                permissionService,
+                null,
+                cacheSupport
+        );
+
+        List<DepartmentOptionResponse> options = service.options();
+
+        assertThat(options).hasSize(1);
+        verify(cacheSupport, never()).delete(anyString());
+        verify(cacheSupport).write(eq("leo:department:options"), eq(options), any(Duration.class));
+    }
+
+    @Test
+    void shouldRefreshDepartmentCacheDuringHealthCheck_whenCachedContentDiffers() {
+        DepartmentRepository departmentRepository = mock(DepartmentRepository.class);
+        UserAccountRepository userAccountRepository = mock(UserAccountRepository.class);
+        PermissionService permissionService = mock(PermissionService.class);
+        RedisJsonCacheSupport cacheSupport = mock(RedisJsonCacheSupport.class);
+        Department dept = department();
+        when(departmentRepository.findByStatusAndDeletedFlagFalseOrderBySortOrderAscIdAsc("正常"))
+                .thenReturn(List.of(dept));
+        when(cacheSupport.getOrLoad(anyString(), any(Duration.class), any(TypeReference.class), any()))
+                .thenReturn(List.of());
+
+        DepartmentService service = new DepartmentService(
+                departmentRepository,
+                userAccountRepository,
+                permissionService,
+                null,
+                cacheSupport
+        );
+
+        var result = service.verifyAndRefreshCache();
+
+        assertThat(result.cacheName()).isEqualTo("leo:department:options");
+        assertThat(result.currentSize()).isZero();
+        assertThat(result.refreshedSize()).isEqualTo(1);
+        assertThat(result.refreshed()).isTrue();
+        verify(cacheSupport).write(eq("leo:department:options"), any(), any(Duration.class));
+    }
+
+    @Test
+    void shouldRefreshDepartmentCacheDuringHealthCheck_whenDatabaseContentChanged() {
+        DepartmentRepository departmentRepository = mock(DepartmentRepository.class);
+        UserAccountRepository userAccountRepository = mock(UserAccountRepository.class);
+        PermissionService permissionService = mock(PermissionService.class);
+        RedisJsonCacheSupport cacheSupport = mock(RedisJsonCacheSupport.class);
+        Department dept = department();
+        dept.setDepartmentName("新部门");
+        when(departmentRepository.findByStatusAndDeletedFlagFalseOrderBySortOrderAscIdAsc("正常"))
+                .thenReturn(List.of(dept));
+        when(cacheSupport.read(anyString(), any(TypeReference.class)))
+                .thenReturn(Optional.of(List.of(new DepartmentOptionResponse(10L, "HQ", "旧部门"))));
+
+        DepartmentService service = new DepartmentService(
+                departmentRepository,
+                userAccountRepository,
+                permissionService,
+                null,
+                cacheSupport
+        );
+
+        var result = service.verifyAndRefreshCache();
+
+        assertThat(result.currentSize()).isEqualTo(1);
+        assertThat(result.refreshedSize()).isEqualTo(1);
+        assertThat(result.refreshed()).isTrue();
+        verify(cacheSupport).write(
+                eq("leo:department:options"),
+                eq(List.of(new DepartmentOptionResponse(10L, "HQ", "新部门"))),
+                any(Duration.class)
+        );
+    }
+
+    @Test
+    void shouldDeleteStaleDepartmentCacheDuringHealthCheck_whenDatabaseHasNoActiveDepartments() {
+        DepartmentRepository departmentRepository = mock(DepartmentRepository.class);
+        UserAccountRepository userAccountRepository = mock(UserAccountRepository.class);
+        PermissionService permissionService = mock(PermissionService.class);
+        RedisJsonCacheSupport cacheSupport = mock(RedisJsonCacheSupport.class);
+        when(departmentRepository.findByStatusAndDeletedFlagFalseOrderBySortOrderAscIdAsc("正常"))
+                .thenReturn(List.of());
+        when(cacheSupport.read(anyString(), any(TypeReference.class)))
+                .thenReturn(Optional.of(List.of(new DepartmentOptionResponse(10L, "HQ", "旧部门"))));
+
+        DepartmentService service = new DepartmentService(
+                departmentRepository,
+                userAccountRepository,
+                permissionService,
+                null,
+                cacheSupport
+        );
+
+        var result = service.verifyAndRefreshCache();
+
+        assertThat(result.currentSize()).isEqualTo(1);
+        assertThat(result.refreshedSize()).isZero();
+        assertThat(result.refreshed()).isTrue();
+        verify(cacheSupport).delete("leo:department:options");
+        verify(cacheSupport, never()).write(anyString(), any(), any(Duration.class));
+    }
+
+    @Test
     void shouldNormalizeStatusFilter() {
         DepartmentRepository departmentRepository = mock(DepartmentRepository.class);
         UserAccountRepository userAccountRepository = mock(UserAccountRepository.class);
@@ -476,7 +593,7 @@ class DepartmentServiceTest {
                 ""
         ));
 
-        verify(cacheSupport).delete(anyString());
+        verify(cacheSupport).deleteAfterCommit(anyString());
     }
 
     @Test
@@ -507,7 +624,7 @@ class DepartmentServiceTest {
                 ""
         ));
 
-        verify(permissionService).evictDepartmentUserCache(any());
+        verify(permissionService).clearDepartmentUserCache();
     }
 
     private java.lang.reflect.Method getMethod(String name, Class<?>... paramTypes) {

@@ -85,6 +85,19 @@ class PermissionCacheExtendedTest {
     }
 
     @Test
+    void shouldEvictMetadataByPrefixWhenCacheSupportExists() {
+        StringRedisTemplate redisTemplate = mock(StringRedisTemplate.class);
+        com.leo.erp.common.support.RedisJsonCacheSupport cacheSupport =
+                mock(com.leo.erp.common.support.RedisJsonCacheSupport.class);
+        RedisTuningProperties props = new RedisTuningProperties();
+        PermissionCache cache = new PermissionCache(redisTemplate, Optional.of(cacheSupport), props);
+
+        cache.evictMetadata("leo:menu:all");
+
+        verify(cacheSupport).deleteByPattern("leo:menu:all*");
+    }
+
+    @Test
     void shouldEvictUserCacheKeys() {
         StringRedisTemplate redisTemplate = mock(StringRedisTemplate.class);
         @SuppressWarnings("unchecked")

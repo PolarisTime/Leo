@@ -18,18 +18,22 @@ public class MaintenanceScheduledTasks {
     private final ScheduledDatabaseBackupService scheduledDatabaseBackupService;
     private final OperationLogArchiveService operationLogArchiveService;
     private final DatabaseExportTaskService databaseExportTaskService;
+    private final RedisCacheHealthCheckService redisCacheHealthCheckService;
     private final AtomicBoolean databaseBackupRunning = new AtomicBoolean(false);
     private final AtomicBoolean operationLogArchiveRunning = new AtomicBoolean(false);
     private final AtomicBoolean exportTaskCleanupRunning = new AtomicBoolean(false);
+    private final AtomicBoolean redisCacheHealthCheckRunning = new AtomicBoolean(false);
 
     public MaintenanceScheduledTasks(MaintenanceScheduleProperties properties,
                                      ScheduledDatabaseBackupService scheduledDatabaseBackupService,
                                      OperationLogArchiveService operationLogArchiveService,
-                                     DatabaseExportTaskService databaseExportTaskService) {
+                                     DatabaseExportTaskService databaseExportTaskService,
+                                     RedisCacheHealthCheckService redisCacheHealthCheckService) {
         this.properties = properties;
         this.scheduledDatabaseBackupService = scheduledDatabaseBackupService;
         this.operationLogArchiveService = operationLogArchiveService;
         this.databaseExportTaskService = databaseExportTaskService;
+        this.redisCacheHealthCheckService = redisCacheHealthCheckService;
     }
 
     @Scheduled(cron = "${leo.maintenance.database-backup.cron:0 15 2 * * *}", zone = "${leo.maintenance.zone:Asia/Shanghai}")
@@ -90,6 +94,24 @@ public class MaintenanceScheduledTasks {
             log.error("数据库导出任务清理失败", ex);
         } finally {
             exportTaskCleanupRunning.set(false);
+        }
+    }
+
+    @Scheduled(cron = "${leo.maintenance.redis-cache-health-check.cron:0 */5 * * * *}", zone = "${leo.maintenance.zone:Asia/Shanghai}")
+    public void runRedisCacheHealthCheck() {
+        if (!properties.isEnabled() || !properties.getRedisCacheHealthCheck().isEnabled()) {
+            return;
+        }
+        if (!redisCacheHealthCheckRunning.compareAndSet(false, true)) {
+            log.warn("跳过 Redis 缓存巡检：上一轮仍在执行");
+            return;
+        }
+        try {
+            redisCacheHealthCheckService.verifyAndRefreshCaches();
+        } catch (Exception ex) {
+            log.error("Redis 缓存巡检失败", ex);
+        } finally {
+            redisCacheHealthCheckRunning.set(false);
         }
     }
 }

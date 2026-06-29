@@ -61,10 +61,7 @@ public class UserAccountCacheService {
     }
 
     public void evictDepartmentUserCaches(Long previousDepartmentId, Long nextDepartmentId) {
-        permissionService.evictDepartmentUserCache(previousDepartmentId);
-        if (!java.util.Objects.equals(previousDepartmentId, nextDepartmentId)) {
-            permissionService.evictDepartmentUserCache(nextDepartmentId);
-        }
+        permissionService.clearDepartmentUserCache();
     }
 
     public void evictPermissionCache(Long userId) {

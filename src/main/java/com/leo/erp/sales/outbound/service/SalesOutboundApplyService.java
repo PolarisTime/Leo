@@ -67,13 +67,15 @@ public class SalesOutboundApplyService {
             SalesOutboundItemRequest source = request.items().get(i);
             SalesOutboundItem item = items.get(i);
             int lineNo = i + 1;
+            String materialCode = tradeItemMaterialSupport.normalizeMaterialCode(source.materialCode(), lineNo);
             LineApplyResult result = applyItem(
                     entity,
                     request,
                     source,
                     item,
                     lineNo,
-                    materialMap.get(source.materialCode()),
+                    materialCode,
+                    materialMap.get(materialCode),
                     sourceSalesOrderItemMap,
                     requestSourceQuantityMap
             );
@@ -108,6 +110,7 @@ public class SalesOutboundApplyService {
                                       SalesOutboundItemRequest source,
                                       SalesOutboundItem item,
                                       int lineNo,
+                                      String materialCode,
                                       TradeMaterialSnapshot material,
                                       Map<Long, SalesOrderItem> sourceSalesOrderItemMap,
                                       Map<Long, Integer> requestSourceQuantityMap) {
@@ -119,7 +122,7 @@ public class SalesOutboundApplyService {
         item.setSourceSalesOrderItemId(sourceSalesOrderItemId);
         item.setSettlementCompanyId(sourceSalesOrderItem.getSettlementCompanyId());
         item.setSettlementCompanyName(sourceSalesOrderItem.getSettlementCompanyName());
-        item.setMaterialCode(source.materialCode());
+        item.setMaterialCode(materialCode);
         item.setBrand(source.brand());
         item.setCategory(source.category());
         item.setMaterial(source.material());

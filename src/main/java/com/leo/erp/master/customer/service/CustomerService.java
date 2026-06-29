@@ -8,6 +8,7 @@ import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.service.AbstractCrudService;
 import com.leo.erp.common.support.MasterDataReferenceGuard;
 import com.leo.erp.common.support.MasterDataReferenceGuard.ReferenceCheck;
+import com.leo.erp.common.support.RedisCacheHealthCheck;
 import com.leo.erp.common.support.RedisJsonCacheSupport;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
@@ -30,7 +31,7 @@ import java.util.List;
 import java.util.Optional;
 
 @Service
-public class CustomerService extends AbstractCrudService<Customer, CustomerRequest, CustomerResponse> {
+public class CustomerService extends AbstractCrudService<Customer, CustomerRequest, CustomerResponse> implements RedisCacheHealthCheck {
 
     private static final String CUSTOMER_CACHE_KEY = "leo:customer:all";
     private static final Duration CUSTOMER_CACHE_TTL = Duration.ofMinutes(30);
@@ -83,12 +84,21 @@ public class CustomerService extends AbstractCrudService<Customer, CustomerReque
         if (redisJsonCacheSupport == null) {
             return loadActiveOptions();
         }
-        return redisJsonCacheSupport.getOrLoad(
+        List<CustomerOptionResponse> options = redisJsonCacheSupport.getOrLoad(
                 CUSTOMER_CACHE_KEY,
                 CUSTOMER_CACHE_TTL,
                 CUSTOMER_OPTION_LIST_TYPE,
                 this::loadActiveOptions
         );
+        if (options.isEmpty()) {
+            List<CustomerOptionResponse> refreshed = loadActiveOptions();
+            if (refreshed.isEmpty()) {
+                return options;
+            }
+            writeActiveOptionsCache(refreshed);
+            return refreshed;
+        }
+        return options;
     }
 
     private List<CustomerOptionResponse> loadActiveOptions() {
@@ -107,6 +117,30 @@ public class CustomerService extends AbstractCrudService<Customer, CustomerReque
                 .toList();
     }
 
+    private void writeActiveOptionsCache(List<CustomerOptionResponse> options) {
+        if (redisJsonCacheSupport != null) {
+            redisJsonCacheSupport.write(CUSTOMER_CACHE_KEY, options, CUSTOMER_CACHE_TTL);
+        }
+    }
+
+    @Override
+    public String cacheName() {
+        return CUSTOMER_CACHE_KEY;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public CacheHealthCheckResult verifyAndRefreshCache() {
+        List<CustomerOptionResponse> expected = loadActiveOptions();
+        return verifyAndRefreshListCache(
+                redisJsonCacheSupport,
+                CUSTOMER_CACHE_KEY,
+                CUSTOMER_CACHE_TTL,
+                CUSTOMER_OPTION_LIST_TYPE,
+                expected
+        );
+    }
+
     private String optionLabel(Customer customer) {
         String projectName = customer.getProjectName() == null ? "" : customer.getProjectName().trim();
         if (projectName.isEmpty() || projectName.equals(customer.getCustomerName())) {
@@ -119,7 +153,7 @@ public class CustomerService extends AbstractCrudService<Customer, CustomerReque
     public Page<CustomerResponse> page(PageQuery query, String keyword, String status) {
         Specification<Customer> spec = Specs.<Customer>notDeleted()
                 .and(Specs.keywordLike(keyword, "customerCode", "customerName", "projectName", "contactName"))
-                .and(Specs.equalIfPresent("status", status));
+                .and(Specs.equalIfPresent("status", StatusConstants.normalizeOptionalActiveStatus(status, "客户状态")));
         return page(query, spec, customerRepository);
     }
 
@@ -177,7 +211,7 @@ public class CustomerService extends AbstractCrudService<Customer, CustomerReque
         SettlementCompanySnapshot settlementCompany = resolveSettlementCompany(request.defaultSettlementCompanyId());
         entity.setDefaultSettlementCompanyId(settlementCompany.id());
         entity.setDefaultSettlementCompanyName(settlementCompany.name());
-        entity.setStatus(request.status());
+        entity.setStatus(StatusConstants.normalizeActiveStatus(request.status(), "客户状态"));
         entity.setRemark(request.remark());
     }
 
@@ -272,7 +306,7 @@ public class CustomerService extends AbstractCrudService<Customer, CustomerReque
 
     private void evictCache() {
         if (redisJsonCacheSupport != null) {
-            redisJsonCacheSupport.delete(CUSTOMER_CACHE_KEY);
+            redisJsonCacheSupport.deleteAfterCommit(CUSTOMER_CACHE_KEY);
         }
     }
 

@@ -103,7 +103,7 @@ public class CarrierService extends AbstractCrudService<Carrier, CarrierRequest,
     public Page<CarrierResponse> page(PageQuery query, String keyword, String status) {
         Specification<Carrier> spec = Specs.<Carrier>notDeleted()
                 .and(Specs.keywordLike(keyword, "carrierCode", "carrierName", "contactName"))
-                .and(Specs.equalIfPresent("status", status));
+                .and(Specs.equalIfPresent("status", StatusConstants.normalizeOptionalActiveStatus(status, "物流商状态")));
         return page(query, spec, carrierRepository);
     }
 
@@ -176,7 +176,7 @@ public class CarrierService extends AbstractCrudService<Carrier, CarrierRequest,
         SettlementCompanySnapshot settlementCompany = resolveSettlementCompany(request.defaultSettlementCompanyId());
         entity.setDefaultSettlementCompanyId(settlementCompany.id());
         entity.setDefaultSettlementCompanyName(settlementCompany.name());
-        entity.setStatus(request.status());
+        entity.setStatus(StatusConstants.normalizeActiveStatus(request.status(), "物流商状态"));
         entity.setRemark(request.remark());
     }
 
@@ -307,7 +307,7 @@ public class CarrierService extends AbstractCrudService<Carrier, CarrierRequest,
 
     private void evictCache() {
         if (redisJsonCacheSupport != null) {
-            redisJsonCacheSupport.delete(CARRIER_CACHE_KEY);
+            redisJsonCacheSupport.deleteAfterCommit(CARRIER_CACHE_KEY);
         }
     }
 

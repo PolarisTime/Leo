@@ -6,6 +6,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.lang.reflect.Method;
+import java.lang.reflect.Proxy;
 import java.util.List;
 import java.util.Optional;
 
@@ -59,26 +61,41 @@ class WarehouseRepositoryTest {
     }
 
     @Test
-    void findByDeletedFlagFalseOrderByWarehouseNameAsc_shouldReturnNonDeletedWarehouses() {
+    void findByDeletedFlagFalseAndStatusOrderByWarehouseNameAsc_shouldReturnActiveWarehouses() {
         Warehouse warehouse1 = new Warehouse();
         warehouse1.setId(1L);
         warehouse1.setWarehouseCode("WH001");
         warehouse1.setWarehouseName("仓库A");
         warehouse1.setDeletedFlag(false);
+        warehouse1.setStatus("正常");
 
         Warehouse warehouse2 = new Warehouse();
         warehouse2.setId(2L);
         warehouse2.setWarehouseCode("WH002");
         warehouse2.setWarehouseName("仓库B");
         warehouse2.setDeletedFlag(false);
+        warehouse2.setStatus("正常");
 
-        when(repository.findByDeletedFlagFalseOrderByWarehouseNameAsc()).thenReturn(List.of(warehouse1, warehouse2));
+        when(repository.findByDeletedFlagFalseAndStatusOrderByWarehouseNameAsc("正常")).thenReturn(List.of(warehouse1, warehouse2));
 
-        List<Warehouse> result = repository.findByDeletedFlagFalseOrderByWarehouseNameAsc();
+        List<Warehouse> result = repository.findByDeletedFlagFalseAndStatusOrderByWarehouseNameAsc("正常");
 
         assertThat(result).hasSize(2);
         assertThat(result.get(0).getWarehouseName()).isEqualTo("仓库A");
         assertThat(result.get(1).getWarehouseName()).isEqualTo("仓库B");
+    }
+
+    @Test
+    void listActiveWarehouseNames_shouldQueryOnlyNormalWarehouses() {
+        Warehouse activeWarehouse = new Warehouse();
+        activeWarehouse.setWarehouseName(" 仓库A ");
+        activeWarehouse.setStatus("正常");
+
+        WarehouseRepository repo = warehouseRepositoryReturning(List.of(activeWarehouse));
+
+        List<String> result = repo.listActiveWarehouseNames();
+
+        assertThat(result).containsExactly("仓库A");
     }
 
     @Test
@@ -104,5 +121,31 @@ class WarehouseRepositoryTest {
         Optional<Warehouse> result = repository.findByIdAndDeletedFlagFalse(1L);
 
         assertThat(result).isEmpty();
+    }
+
+    private WarehouseRepository warehouseRepositoryReturning(List<Warehouse> activeWarehouses) {
+        return (WarehouseRepository) Proxy.newProxyInstance(
+                WarehouseRepository.class.getClassLoader(),
+                new Class[]{WarehouseRepository.class},
+                (proxy, method, args) -> {
+                    if ("findByDeletedFlagFalseAndStatusOrderByWarehouseNameAsc".equals(method.getName())) {
+                        assertThat(args).containsExactly("正常");
+                        return activeWarehouses;
+                    }
+                    if (method.isDefault()) {
+                        return java.lang.reflect.InvocationHandler.invokeDefault(proxy, method, args);
+                    }
+                    if ("toString".equals(method.getName())) {
+                        return "WarehouseRepositoryDefaultMethodStub";
+                    }
+                    if ("hashCode".equals(method.getName())) {
+                        return System.identityHashCode(proxy);
+                    }
+                    if ("equals".equals(method.getName())) {
+                        return proxy == args[0];
+                    }
+                    throw new UnsupportedOperationException(method.getName());
+                }
+        );
     }
 }

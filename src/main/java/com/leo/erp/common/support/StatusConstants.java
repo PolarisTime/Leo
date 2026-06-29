@@ -1,5 +1,8 @@
 package com.leo.erp.common.support;
 
+import com.leo.erp.common.error.BusinessException;
+import com.leo.erp.common.error.ErrorCode;
+
 import java.util.Set;
 
 public final class StatusConstants {
@@ -96,4 +99,39 @@ public final class StatusConstants {
             UNAUDITED + "->" + AUDITED,
             AUDITED + "->" + UNAUDITED
     );
+
+    public static String normalizeActiveStatus(String value, String fieldName) {
+        String normalized = normalizeRequired(value, fieldName);
+        if (!ALLOWED_ACTIVE_STATUS.contains(normalized)) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, fieldName + "不合法");
+        }
+        return normalized;
+    }
+
+    public static String normalizeOptionalActiveStatus(String value, String fieldName) {
+        String normalized = normalizeOptional(value);
+        if (normalized == null) {
+            return null;
+        }
+        if (!ALLOWED_ACTIVE_STATUS.contains(normalized)) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, fieldName + "不合法");
+        }
+        return normalized;
+    }
+
+    private static String normalizeRequired(String value, String fieldName) {
+        String normalized = normalizeOptional(value);
+        if (normalized == null) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, fieldName + "不能为空");
+        }
+        return normalized;
+    }
+
+    private static String normalizeOptional(String value) {
+        if (value == null) {
+            return null;
+        }
+        String normalized = value.trim();
+        return normalized.isBlank() ? null : normalized;
+    }
 }

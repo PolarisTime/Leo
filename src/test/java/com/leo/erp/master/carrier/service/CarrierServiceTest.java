@@ -199,7 +199,7 @@ class CarrierServiceTest {
         var result = service.update(1L, request);
 
         assertThat(result).isNotNull();
-        verify(cache).delete("leo:carrier:all");
+        verify(cache).deleteAfterCommit("leo:carrier:all");
     }
 
     @Test
@@ -620,7 +620,7 @@ class CarrierServiceTest {
 
         evictCache.invoke(service);
 
-        verify(cache).delete("leo:carrier:all");
+        verify(cache).deleteAfterCommit("leo:carrier:all");
     }
 
     @Test

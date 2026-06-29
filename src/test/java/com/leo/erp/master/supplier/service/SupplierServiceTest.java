@@ -27,6 +27,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -93,6 +94,121 @@ class SupplierServiceTest {
         var result = service.listActiveOptions();
 
         assertThat(result).hasSize(1);
+    }
+
+    @Test
+    void shouldRefreshCache_whenCachedOptionsAreEmptyButActiveSuppliersExist() {
+        SupplierRepository repository = mock(SupplierRepository.class);
+        Supplier supplier = createSupplier(1L, "S001");
+        supplier.setSupplierName("供应商甲");
+        when(repository.findByDeletedFlagFalseAndStatusOrderBySupplierCodeAsc(StatusConstants.NORMAL))
+                .thenReturn(List.of(supplier));
+        RedisJsonCacheSupport cache = mock(RedisJsonCacheSupport.class);
+        when(cache.getOrLoad(anyString(), any(), any(TypeReference.class), any())).thenReturn(List.of());
+        SupplierService service = new SupplierService(repository, new SnowflakeIdGenerator(1), null, cache);
+
+        List<SupplierOptionResponse> result = service.listActiveOptions();
+
+        assertThat(result).singleElement().satisfies(option -> {
+            assertThat(option.id()).isEqualTo(1L);
+            assertThat(option.label()).isEqualTo("供应商甲");
+        });
+        verify(cache, never()).delete(anyString());
+        verify(cache).write(eq("leo:supplier:all"), eq(result), any());
+    }
+
+    @Test
+    void shouldRefreshCacheDuringHealthCheck_whenCachedSizeDiffersFromDatabase() {
+        SupplierRepository repository = mock(SupplierRepository.class);
+        Supplier supplier = createSupplier(1L, "S001");
+        supplier.setSupplierName("供应商甲");
+        when(repository.findByDeletedFlagFalseAndStatusOrderBySupplierCodeAsc(StatusConstants.NORMAL))
+                .thenReturn(List.of(supplier));
+        RedisJsonCacheSupport cache = mock(RedisJsonCacheSupport.class);
+        SupplierService service = new SupplierService(repository, new SnowflakeIdGenerator(1), null, cache);
+
+        var result = service.verifyAndRefreshCache();
+
+        assertThat(result.cacheName()).isEqualTo("leo:supplier:all");
+        assertThat(result.currentSize()).isZero();
+        assertThat(result.refreshedSize()).isEqualTo(1);
+        assertThat(result.refreshed()).isTrue();
+        verify(cache).write(eq("leo:supplier:all"), any(), any());
+    }
+
+    @Test
+    void shouldRefreshCacheDuringHealthCheck_whenDatabaseContentChanged() {
+        SupplierRepository repository = mock(SupplierRepository.class);
+        Supplier supplier = createSupplier(1L, "S001");
+        supplier.setSupplierName("供应商新名称");
+        when(repository.findByDeletedFlagFalseAndStatusOrderBySupplierCodeAsc(StatusConstants.NORMAL))
+                .thenReturn(List.of(supplier));
+        RedisJsonCacheSupport cache = mock(RedisJsonCacheSupport.class);
+        when(cache.read(anyString(), any(TypeReference.class)))
+                .thenReturn(Optional.of(List.of(new SupplierOptionResponse(1L, "供应商旧名称", "供应商旧名称"))));
+        SupplierService service = new SupplierService(repository, new SnowflakeIdGenerator(1), null, cache);
+
+        var result = service.verifyAndRefreshCache();
+
+        assertThat(result.currentSize()).isEqualTo(1);
+        assertThat(result.refreshedSize()).isEqualTo(1);
+        assertThat(result.refreshed()).isTrue();
+        verify(cache).write(
+                eq("leo:supplier:all"),
+                eq(List.of(new SupplierOptionResponse(1L, "供应商新名称", "供应商新名称"))),
+                any()
+        );
+    }
+
+    @Test
+    void shouldNotRefreshCacheDuringHealthCheck_whenDatabaseHasNoActiveSuppliers() {
+        SupplierRepository repository = mock(SupplierRepository.class);
+        when(repository.findByDeletedFlagFalseAndStatusOrderBySupplierCodeAsc(StatusConstants.NORMAL))
+                .thenReturn(List.of());
+        RedisJsonCacheSupport cache = mock(RedisJsonCacheSupport.class);
+        SupplierService service = new SupplierService(repository, new SnowflakeIdGenerator(1), null, cache);
+
+        var result = service.verifyAndRefreshCache();
+
+        assertThat(result.refreshed()).isFalse();
+        verify(cache, never()).write(anyString(), any(), any());
+    }
+
+    @Test
+    void shouldDeleteEmptyCacheDuringHealthCheck_whenDatabaseHasNoActiveSuppliers() {
+        SupplierRepository repository = mock(SupplierRepository.class);
+        when(repository.findByDeletedFlagFalseAndStatusOrderBySupplierCodeAsc(StatusConstants.NORMAL))
+                .thenReturn(List.of());
+        RedisJsonCacheSupport cache = mock(RedisJsonCacheSupport.class);
+        when(cache.read(anyString(), any(TypeReference.class))).thenReturn(Optional.of(List.of()));
+        SupplierService service = new SupplierService(repository, new SnowflakeIdGenerator(1), null, cache);
+
+        var result = service.verifyAndRefreshCache();
+
+        assertThat(result.currentSize()).isZero();
+        assertThat(result.refreshedSize()).isZero();
+        assertThat(result.refreshed()).isTrue();
+        verify(cache).delete("leo:supplier:all");
+        verify(cache, never()).write(anyString(), any(), any());
+    }
+
+    @Test
+    void shouldDeleteStaleCacheDuringHealthCheck_whenDatabaseHasNoActiveSuppliers() {
+        SupplierRepository repository = mock(SupplierRepository.class);
+        when(repository.findByDeletedFlagFalseAndStatusOrderBySupplierCodeAsc(StatusConstants.NORMAL))
+                .thenReturn(List.of());
+        RedisJsonCacheSupport cache = mock(RedisJsonCacheSupport.class);
+        when(cache.read(anyString(), any(TypeReference.class)))
+                .thenReturn(Optional.of(List.of(new SupplierOptionResponse(1L, "旧供应商", "旧供应商"))));
+        SupplierService service = new SupplierService(repository, new SnowflakeIdGenerator(1), null, cache);
+
+        var result = service.verifyAndRefreshCache();
+
+        assertThat(result.currentSize()).isEqualTo(1);
+        assertThat(result.refreshedSize()).isZero();
+        assertThat(result.refreshed()).isTrue();
+        verify(cache).delete("leo:supplier:all");
+        verify(cache, never()).write(anyString(), any(), any());
     }
 
     @Test
@@ -169,7 +285,7 @@ class SupplierServiceTest {
         var result = service.update(1L, request);
 
         assertThat(result).isNotNull();
-        verify(cache).delete("leo:supplier:all");
+        verify(cache).deleteAfterCommit("leo:supplier:all");
     }
 
     @Test
@@ -373,7 +489,7 @@ class SupplierServiceTest {
         var request = new SupplierRequest("S001", "供应商甲", null, null, null, "正常", null);
         service.create(request);
 
-        verify(cache).delete("leo:supplier:all");
+        verify(cache).deleteAfterCommit("leo:supplier:all");
     }
 
     private static Supplier createSupplier(Long id, String code) {

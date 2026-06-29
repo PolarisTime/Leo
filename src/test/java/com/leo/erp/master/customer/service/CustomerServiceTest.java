@@ -26,6 +26,7 @@ import java.util.function.Supplier;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -74,6 +75,99 @@ class CustomerServiceTest {
 
         assertThat(result).hasSize(1);
         assertThat(result.get(0).customerCode()).isEqualTo("C001");
+    }
+
+    @Test
+    void shouldRefreshCache_whenCachedOptionsAreEmptyButActiveCustomersExist() {
+        CustomerRepository repository = mock(CustomerRepository.class);
+        Customer customer = createCustomer(1L, "C001");
+        when(repository.findByDeletedFlagFalseAndStatusOrderByCustomerCodeAsc(StatusConstants.NORMAL))
+                .thenReturn(List.of(customer));
+        RedisJsonCacheSupport redisJsonCacheSupport = mock(RedisJsonCacheSupport.class);
+        when(redisJsonCacheSupport.getOrLoad(
+                eq("leo:customer:all"),
+                any(Duration.class),
+                any(TypeReference.class),
+                any(Supplier.class)
+        )).thenReturn(List.of());
+
+        CustomerService service = new CustomerService(repository, null, mock(CustomerMapper.class), redisJsonCacheSupport);
+
+        List<CustomerOptionResponse> result = service.listActiveOptions();
+
+        assertThat(result).hasSize(1);
+        verify(redisJsonCacheSupport, never()).delete(anyString());
+        verify(redisJsonCacheSupport).write(eq("leo:customer:all"), eq(result), any(Duration.class));
+    }
+
+    @Test
+    void shouldRefreshCustomerCacheDuringHealthCheck_whenCachedSizeDiffersFromDatabase() {
+        CustomerRepository repository = mock(CustomerRepository.class);
+        Customer customer = createCustomer(1L, "C001");
+        when(repository.findByDeletedFlagFalseAndStatusOrderByCustomerCodeAsc(StatusConstants.NORMAL))
+                .thenReturn(List.of(customer));
+        RedisJsonCacheSupport redisJsonCacheSupport = mock(RedisJsonCacheSupport.class);
+
+        CustomerService service = new CustomerService(repository, null, mock(CustomerMapper.class), redisJsonCacheSupport);
+
+        var result = service.verifyAndRefreshCache();
+
+        assertThat(result.cacheName()).isEqualTo("leo:customer:all");
+        assertThat(result.currentSize()).isZero();
+        assertThat(result.refreshedSize()).isEqualTo(1);
+        assertThat(result.refreshed()).isTrue();
+        verify(redisJsonCacheSupport).write(eq("leo:customer:all"), any(), any(Duration.class));
+    }
+
+    @Test
+    void shouldRefreshCustomerCacheDuringHealthCheck_whenDatabaseContentChanged() {
+        CustomerRepository repository = mock(CustomerRepository.class);
+        Customer customer = createCustomer(1L, "C001");
+        customer.setCustomerName("客户新名称");
+        when(repository.findByDeletedFlagFalseAndStatusOrderByCustomerCodeAsc(StatusConstants.NORMAL))
+                .thenReturn(List.of(customer));
+        RedisJsonCacheSupport redisJsonCacheSupport = mock(RedisJsonCacheSupport.class);
+        CustomerOptionResponse cached = new CustomerOptionResponse(
+                1L, "客户旧名称 / 项目A", "客户旧名称", "C001", "客户旧名称", "项目A", "XMA"
+        );
+        when(redisJsonCacheSupport.read(
+                eq("leo:customer:all"),
+                any(TypeReference.class)
+        )).thenReturn(Optional.of(List.of(cached)));
+
+        CustomerService service = new CustomerService(repository, null, mock(CustomerMapper.class), redisJsonCacheSupport);
+
+        var result = service.verifyAndRefreshCache();
+
+        assertThat(result.currentSize()).isEqualTo(1);
+        assertThat(result.refreshedSize()).isEqualTo(1);
+        assertThat(result.refreshed()).isTrue();
+        verify(redisJsonCacheSupport).write(eq("leo:customer:all"), any(), any(Duration.class));
+    }
+
+    @Test
+    void shouldDeleteStaleCustomerCacheDuringHealthCheck_whenDatabaseHasNoActiveCustomers() {
+        CustomerRepository repository = mock(CustomerRepository.class);
+        when(repository.findByDeletedFlagFalseAndStatusOrderByCustomerCodeAsc(StatusConstants.NORMAL))
+                .thenReturn(List.of());
+        RedisJsonCacheSupport redisJsonCacheSupport = mock(RedisJsonCacheSupport.class);
+        CustomerOptionResponse cached = new CustomerOptionResponse(
+                1L, "旧客户 / 项目A", "旧客户", "C001", "旧客户", "项目A", "XMA"
+        );
+        when(redisJsonCacheSupport.read(
+                eq("leo:customer:all"),
+                any(TypeReference.class)
+        )).thenReturn(Optional.of(List.of(cached)));
+
+        CustomerService service = new CustomerService(repository, null, mock(CustomerMapper.class), redisJsonCacheSupport);
+
+        var result = service.verifyAndRefreshCache();
+
+        assertThat(result.currentSize()).isEqualTo(1);
+        assertThat(result.refreshedSize()).isZero();
+        assertThat(result.refreshed()).isTrue();
+        verify(redisJsonCacheSupport).delete("leo:customer:all");
+        verify(redisJsonCacheSupport, never()).write(any(), any(), any(Duration.class));
     }
 
     @Test
@@ -203,7 +297,7 @@ class CustomerServiceTest {
         var result = service.update(1L, request);
 
         assertThat(result).isNotNull();
-        verify(cache).delete("leo:customer:all");
+        verify(cache).deleteAfterCommit("leo:customer:all");
     }
 
     @Test
@@ -407,7 +501,7 @@ class CustomerServiceTest {
         var request = new CustomerRequest("C001", "客户甲", null, null, null, null, "项目A", null, null, 1L, "正常", null);
         service.create(request);
 
-        verify(cache).delete("leo:customer:all");
+        verify(cache).deleteAfterCommit("leo:customer:all");
     }
 
     @Test

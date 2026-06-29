@@ -1,6 +1,7 @@
 package com.leo.erp.master.warehouse.repository;
 
 import com.leo.erp.common.support.WarehouseCatalog;
+import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.master.warehouse.domain.entity.Warehouse;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
@@ -15,11 +16,11 @@ public interface WarehouseRepository extends JpaRepository<Warehouse, Long>, Jpa
 
     List<Warehouse> findByWarehouseNameInAndDeletedFlagFalse(Collection<String> warehouseNames);
 
-    List<Warehouse> findByDeletedFlagFalseOrderByWarehouseNameAsc();
+    List<Warehouse> findByDeletedFlagFalseAndStatusOrderByWarehouseNameAsc(String status);
 
     @Override
     default List<String> listActiveWarehouseNames() {
-        return findByDeletedFlagFalseOrderByWarehouseNameAsc().stream()
+        return findByDeletedFlagFalseAndStatusOrderByWarehouseNameAsc(StatusConstants.NORMAL).stream()
                 .map(warehouse -> warehouse.getWarehouseName() == null ? null : warehouse.getWarehouseName().trim())
                 .filter(name -> name != null && !name.isBlank())
                 .toList();

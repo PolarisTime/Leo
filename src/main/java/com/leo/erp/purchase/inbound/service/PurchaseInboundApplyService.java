@@ -73,9 +73,10 @@ public class PurchaseInboundApplyService {
 
         for (int i = 0; i < request.items().size(); i++) {
             PurchaseInboundItemRequest source = request.items().get(i);
-            TradeMaterialSnapshot material = materialMap.get(source.materialCode());
-            PurchaseInboundItem item = items.get(i);
             int lineNo = i + 1;
+            String materialCode = tradeItemMaterialSupport.normalizeMaterialCode(source.materialCode(), lineNo);
+            TradeMaterialSnapshot material = materialMap.get(materialCode);
+            PurchaseInboundItem item = items.get(i);
 
             sourceValidator.validateLine(source, lineNo, request, sourceContext);
             WeightSettlementResult weightSettlement = weightSettlementService.resolveWeightSettlement(
@@ -83,7 +84,7 @@ public class PurchaseInboundApplyService {
                     weightSettlementService.resolveLineSettlementMode(source, request, lineNo));
 
             InboundItemMapper.ItemMappingResult result = inboundItemMapper.applyItemFields(
-                    inbound, source, item, lineNo, material,
+                    inbound, source, item, lineNo, materialCode, material,
                     sourcePurchaseOrderItemMap,
                     new InboundItemMapper.ItemMappingContext(
                             weightSettlement,

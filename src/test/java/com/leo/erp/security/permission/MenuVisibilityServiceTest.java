@@ -14,6 +14,7 @@ import java.util.Set;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class MenuVisibilityServiceTest {
@@ -103,6 +104,8 @@ class MenuVisibilityServiceTest {
         List<Menu> menus = service.getActiveMenus();
 
         assertThat(menus).hasSize(1);
+        verify(cacheSupport).getOrLoad(org.mockito.ArgumentMatchers.startsWith("leo:menu:all:"),
+                any(java.time.Duration.class), any(com.fasterxml.jackson.core.type.TypeReference.class), any());
     }
 
     @SuppressWarnings("unchecked")
@@ -112,6 +115,7 @@ class MenuVisibilityServiceTest {
                 new Class[]{MenuRepository.class},
                 (proxy, method, args) -> switch (method.getName()) {
                     case "findByStatusAndDeletedFlagFalseOrderBySortOrder" -> List.of(menus);
+                    case "activeMenuCacheSignature" -> "1:2026-06-29T18:00";
                     case "toString" -> "MenuRepositoryStub";
                     case "hashCode" -> System.identityHashCode(proxy);
                     case "equals" -> proxy == args[0];

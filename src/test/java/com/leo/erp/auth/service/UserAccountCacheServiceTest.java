@@ -10,6 +10,7 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 
 class UserAccountCacheServiceTest {
 
@@ -88,6 +89,8 @@ class UserAccountCacheServiceTest {
         var service = new UserAccountCacheService(null, null, null, permissionService);
 
         service.evictDepartmentUserCaches(1L, 2L);
+
+        verify(permissionService).clearDepartmentUserCache();
     }
 
     @Test
@@ -96,6 +99,8 @@ class UserAccountCacheServiceTest {
         var service = new UserAccountCacheService(null, null, null, permissionService);
 
         service.evictDepartmentUserCaches(1L, 1L);
+
+        verify(permissionService).clearDepartmentUserCache();
     }
 
     @Test

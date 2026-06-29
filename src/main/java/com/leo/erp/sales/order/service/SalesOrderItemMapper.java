@@ -27,10 +27,11 @@ public class SalesOrderItemMapper {
     }
 
     void applyItemFields(SalesOrder entity, SalesOrderItemRequest source, SalesOrderItem item,
-                         int lineNo, TradeMaterialSnapshot material, BigDecimal weightTon, BigDecimal pieceWeightTon) {
+                         int lineNo, String materialCode, TradeMaterialSnapshot material,
+                         BigDecimal weightTon, BigDecimal pieceWeightTon) {
         item.setSalesOrder(entity);
         item.setLineNo(lineNo);
-        item.setMaterialCode(source.materialCode());
+        item.setMaterialCode(materialCode);
         item.setBrand(source.brand());
         item.setCategory(source.category());
         item.setMaterial(source.material());

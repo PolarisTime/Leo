@@ -45,13 +45,14 @@ public class InboundItemMapper {
             PurchaseInboundItemRequest source,
             PurchaseInboundItem item,
             int lineNo,
+            String materialCode,
             TradeMaterialSnapshot material,
             Map<Long, PurchaseOrderItem> sourcePurchaseOrderItemMap,
             ItemMappingContext ctx) {
 
         item.setPurchaseInbound(inbound);
         item.setLineNo(lineNo);
-        item.setMaterialCode(source.materialCode());
+        item.setMaterialCode(materialCode);
         item.setBrand(source.brand());
         item.setCategory(source.category());
         item.setMaterial(source.material());

@@ -18,7 +18,7 @@ import java.util.stream.Collectors;
 @Component
 class MenuVisibilityService {
 
-    static final String MENU_CACHE_KEY = "leo:menu:all";
+    static final String MENU_CACHE_KEY_PREFIX = "leo:menu:all";
     static final Duration MENU_CACHE_TTL = Duration.ofMinutes(30);
     private static final TypeReference<List<MenuSnapshot>> MENU_LIST_TYPE = new TypeReference<>() { };
 
@@ -74,14 +74,27 @@ class MenuVisibilityService {
                     .map(MenuVisibilityService::toMenuSnapshot)
                     .toList();
         }
+        String cacheKey = MENU_CACHE_KEY_PREFIX + ":" + activeMenuCacheSignature();
         return redisJsonCacheSupport.getOrLoad(
-                MENU_CACHE_KEY,
+                cacheKey,
                 MENU_CACHE_TTL,
                 MENU_LIST_TYPE,
                 () -> menuRepository.findByStatusAndDeletedFlagFalseOrderBySortOrder(StatusConstants.NORMAL).stream()
                         .map(MenuVisibilityService::toMenuSnapshot)
                         .toList()
         );
+    }
+
+    private String activeMenuCacheSignature() {
+        try {
+            String signature = menuRepository.activeMenuCacheSignature(StatusConstants.NORMAL);
+            if (signature != null && !signature.isBlank()) {
+                return Integer.toHexString(signature.hashCode());
+            }
+        } catch (RuntimeException ignored) {
+            // If signature query fails, keep a stable fallback key and load menus normally.
+        }
+        return "default";
     }
 
     private static MenuSnapshot toMenuSnapshot(Menu menu) {

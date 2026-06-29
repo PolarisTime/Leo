@@ -9,6 +9,7 @@ import com.leo.erp.common.support.MasterDataReferenceGuard;
 import com.leo.erp.common.support.MasterDataReferenceGuard.ReferenceCheck;
 import com.leo.erp.common.support.WarehouseSelectionSupport;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
+import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.master.warehouse.domain.entity.Warehouse;
 import com.leo.erp.master.warehouse.repository.WarehouseRepository;
 import com.leo.erp.master.warehouse.mapper.WarehouseMapper;
@@ -59,7 +60,7 @@ public class WarehouseService extends AbstractCrudService<Warehouse, WarehouseRe
         Specification<Warehouse> spec = Specs.<Warehouse>notDeleted()
                 .and(Specs.keywordLike(keyword, "warehouseCode", "warehouseName", "contactName"))
                 .and(Specs.equalIfPresent("warehouseType", warehouseType))
-                .and(Specs.equalIfPresent("status", status));
+                .and(Specs.equalIfPresent("status", StatusConstants.normalizeOptionalActiveStatus(status, "仓库状态")));
         return page(query, spec, warehouseRepository);
     }
 
@@ -111,7 +112,7 @@ public class WarehouseService extends AbstractCrudService<Warehouse, WarehouseRe
         entity.setContactName(request.contactName());
         entity.setContactPhone(request.contactPhone());
         entity.setAddress(request.address());
-        entity.setStatus(request.status());
+        entity.setStatus(StatusConstants.normalizeActiveStatus(request.status(), "仓库状态"));
         entity.setRemark(request.remark());
     }
 

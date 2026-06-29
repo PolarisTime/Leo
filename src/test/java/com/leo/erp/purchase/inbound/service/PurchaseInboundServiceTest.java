@@ -38,6 +38,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentCaptor.forClass;
 import static org.mockito.Mockito.mock;
@@ -1709,15 +1710,16 @@ class PurchaseInboundServiceTest {
 
     private InboundItemMapper stubbedInboundItemMapper() {
         InboundItemMapper mapper = mock(InboundItemMapper.class);
-        when(mapper.applyItemFields(any(), any(), any(), anyInt(), any(), any(), any())).thenAnswer(invocation -> {
+        when(mapper.applyItemFields(any(), any(), any(), anyInt(), anyString(), any(), any(), any())).thenAnswer(invocation -> {
             PurchaseInboundItemRequest source = invocation.getArgument(1);
             PurchaseInboundItem item = invocation.getArgument(2);
             int lineNo = invocation.getArgument(3);
-            InboundItemMapper.ItemMappingContext ctx = invocation.getArgument(6);
+            String materialCode = invocation.getArgument(4);
+            InboundItemMapper.ItemMappingContext ctx = invocation.getArgument(7);
             WeightSettlementResult ws = ctx.weightSettlement();
 
             item.setLineNo(lineNo);
-            item.setMaterialCode(source.materialCode());
+            item.setMaterialCode(materialCode);
             item.setBrand(source.brand());
             item.setCategory(source.category());
             item.setMaterial(source.material());

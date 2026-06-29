@@ -5,10 +5,10 @@ import com.leo.erp.system.schedule.config.MaintenanceScheduleProperties;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import java.lang.reflect.Proxy;
-
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class MaintenanceScheduledTasksTest {
@@ -17,6 +17,7 @@ class MaintenanceScheduledTasksTest {
     private ScheduledDatabaseBackupService scheduledDatabaseBackupService;
     private OperationLogArchiveService operationLogArchiveService;
     private DatabaseExportTaskService databaseExportTaskService;
+    private RedisCacheHealthCheckService redisCacheHealthCheckService;
 
     @BeforeEach
     void setUp() {
@@ -24,48 +25,55 @@ class MaintenanceScheduledTasksTest {
         scheduledDatabaseBackupService = mock(ScheduledDatabaseBackupService.class);
         operationLogArchiveService = mock(OperationLogArchiveService.class);
         databaseExportTaskService = mock(DatabaseExportTaskService.class);
+        redisCacheHealthCheckService = mock(RedisCacheHealthCheckService.class);
+    }
+
+    private MaintenanceScheduledTasks tasks() {
+        return new MaintenanceScheduledTasks(
+                properties,
+                scheduledDatabaseBackupService,
+                operationLogArchiveService,
+                databaseExportTaskService,
+                redisCacheHealthCheckService
+        );
     }
 
     @Test
     void shouldSkipDatabaseBackup_whenDisabled() {
         properties.setEnabled(false);
-        var tasks = new MaintenanceScheduledTasks(properties, scheduledDatabaseBackupService, operationLogArchiveService, databaseExportTaskService);
 
-        tasks.runDatabaseBackup();
+        tasks().runDatabaseBackup();
         // no exception means success
     }
 
     @Test
     void shouldSkipArchiving_whenDisabled() {
         properties.setEnabled(false);
-        var tasks = new MaintenanceScheduledTasks(properties, scheduledDatabaseBackupService, operationLogArchiveService, databaseExportTaskService);
 
-        tasks.runOperationLogArchive();
+        tasks().runOperationLogArchive();
         // no exception means success
     }
 
     @Test
     void shouldSkipCleanup_whenDisabled() {
         properties.setEnabled(false);
-        var tasks = new MaintenanceScheduledTasks(properties, scheduledDatabaseBackupService, operationLogArchiveService, databaseExportTaskService);
 
-        tasks.runExportTaskCleanup();
+        tasks().runExportTaskCleanup();
         // no exception means success
     }
 
     @Test
     void shouldRunDatabaseBackup_whenEnabled() {
         properties.getDatabaseBackup().setEnabled(true);
-        var tasks = new MaintenanceScheduledTasks(properties, scheduledDatabaseBackupService, operationLogArchiveService, databaseExportTaskService);
 
-        tasks.runDatabaseBackup();
+        tasks().runDatabaseBackup();
         // no exception means success, first call should run
     }
 
     @Test
     void shouldSkipDatabaseBackup_whenAlreadyRunning() {
         properties.getDatabaseBackup().setEnabled(true);
-        var tasks = new MaintenanceScheduledTasks(properties, scheduledDatabaseBackupService, operationLogArchiveService, databaseExportTaskService);
+        var tasks = tasks();
 
         tasks.runDatabaseBackup();
         tasks.runDatabaseBackup();
@@ -75,9 +83,8 @@ class MaintenanceScheduledTasksTest {
     @Test
     void shouldRunExportTaskCleanup_whenEnabled() {
         properties.getExportTaskCleanup().setEnabled(true);
-        var tasks = new MaintenanceScheduledTasks(properties, scheduledDatabaseBackupService, operationLogArchiveService, databaseExportTaskService);
 
-        tasks.runExportTaskCleanup();
+        tasks().runExportTaskCleanup();
         // no exception means success
     }
 
@@ -85,9 +92,35 @@ class MaintenanceScheduledTasksTest {
     void shouldHandleDatabaseBackupException() throws Exception {
         properties.getDatabaseBackup().setEnabled(true);
         doThrow(new RuntimeException("test error")).when(scheduledDatabaseBackupService).createBackupAndCleanup(30);
-        var tasks = new MaintenanceScheduledTasks(properties, scheduledDatabaseBackupService, operationLogArchiveService, databaseExportTaskService);
 
-        tasks.runDatabaseBackup();
+        tasks().runDatabaseBackup();
+        // exception should be caught and logged, not propagated
+    }
+
+    @Test
+    void shouldRunRedisCacheHealthCheck_whenEnabled() {
+        properties.getRedisCacheHealthCheck().setEnabled(true);
+
+        tasks().runRedisCacheHealthCheck();
+
+        verify(redisCacheHealthCheckService).verifyAndRefreshCaches();
+    }
+
+    @Test
+    void shouldSkipRedisCacheHealthCheck_whenDisabled() {
+        properties.getRedisCacheHealthCheck().setEnabled(false);
+
+        tasks().runRedisCacheHealthCheck();
+
+        verify(redisCacheHealthCheckService, never()).verifyAndRefreshCaches();
+    }
+
+    @Test
+    void shouldHandleRedisCacheHealthCheckException() {
+        properties.getRedisCacheHealthCheck().setEnabled(true);
+        doThrow(new RuntimeException("test error")).when(redisCacheHealthCheckService).verifyAndRefreshCaches();
+
+        tasks().runRedisCacheHealthCheck();
         // exception should be caught and logged, not propagated
     }
 }

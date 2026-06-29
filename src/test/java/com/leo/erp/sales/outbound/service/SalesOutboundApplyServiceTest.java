@@ -23,6 +23,7 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyCollection;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -49,6 +50,8 @@ class SalesOutboundApplyServiceTest {
         entity.setItems(new ArrayList<>());
         SalesOutboundRequest request = request();
         when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(Map.of("M1", new TradeMaterialSnapshot("M1", false)));
+        when(materialSupport.normalizeMaterialCode(any(), anyInt())).thenAnswer(invocation ->
+                ((String) invocation.getArgument(0)).trim());
         when(materialSupport.normalizeBatchNo(any(), eq("B1"), eq(1), eq(true))).thenReturn("B1");
         when(warehouseSelectionSupport.normalizeWarehouseName("仓库A", 1, true)).thenReturn("仓库A");
         when(queryService.findActiveByIdIn(anyCollection())).thenReturn(List.of(sourceSalesOrderItem()));

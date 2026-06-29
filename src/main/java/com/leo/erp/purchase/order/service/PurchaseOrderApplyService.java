@@ -57,11 +57,13 @@ public class PurchaseOrderApplyService {
         for (int index = 0; index < request.items().size(); index++) {
             PurchaseOrderItemRequest itemRequest = request.items().get(index);
             PurchaseOrderItem item = items.get(index);
+            String materialCode = tradeItemMaterialSupport.normalizeMaterialCode(itemRequest.materialCode(), index + 1);
             BigDecimal weightTon = applyItem(
                     purchaseOrder,
                     item,
                     itemRequest,
-                    materialMap.get(itemRequest.materialCode()),
+                    materialCode,
+                    materialMap.get(materialCode),
                     inboundWeightAdjustmentMap.getOrDefault(item.getId(), BigDecimal.ZERO),
                     index + 1
             );
@@ -79,12 +81,13 @@ public class PurchaseOrderApplyService {
     private BigDecimal applyItem(PurchaseOrder purchaseOrder,
                                  PurchaseOrderItem item,
                                  PurchaseOrderItemRequest itemRequest,
+                                 String materialCode,
                                  TradeMaterialSnapshot material,
                                  BigDecimal weightAdjustmentTon,
                                  int lineNo) {
         item.setPurchaseOrder(purchaseOrder);
         item.setLineNo(lineNo);
-        item.setMaterialCode(itemRequest.materialCode());
+        item.setMaterialCode(materialCode);
         item.setBrand(itemRequest.brand());
         item.setCategory(itemRequest.category());
         item.setMaterial(itemRequest.material());

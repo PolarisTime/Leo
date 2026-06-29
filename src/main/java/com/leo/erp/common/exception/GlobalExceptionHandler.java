@@ -3,6 +3,7 @@ package com.leo.erp.common.exception;
 import com.leo.erp.common.api.ApiResponse;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
+import jakarta.servlet.http.HttpServletRequest;
 import io.jsonwebtoken.JwtException;
 import jakarta.validation.ConstraintViolationException;
 import lombok.extern.slf4j.Slf4j;
@@ -26,83 +27,113 @@ import org.springframework.web.servlet.resource.NoResourceFoundException;
 public class GlobalExceptionHandler {
 
     @ExceptionHandler(HttpMessageNotReadableException.class)
-    public ResponseEntity<ApiResponse<Void>> handleHttpMessageNotReadable(HttpMessageNotReadableException ex) {
+    public ResponseEntity<ApiResponse<Void>> handleHttpMessageNotReadable(
+            HttpMessageNotReadableException ex,
+            HttpServletRequest request
+    ) {
+        logClientException(request, ErrorCode.VALIDATION_ERROR, "请求体格式错误，请检查JSON格式");
         return ResponseEntity.badRequest()
                 .body(ApiResponse.failure(ErrorCode.VALIDATION_ERROR, "请求体格式错误，请检查JSON格式"));
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
-    public ResponseEntity<ApiResponse<Void>> handleMethodArgumentNotValid(MethodArgumentNotValidException ex) {
+    public ResponseEntity<ApiResponse<Void>> handleMethodArgumentNotValid(
+            MethodArgumentNotValidException ex,
+            HttpServletRequest request
+    ) {
         String message = ex.getBindingResult().getFieldErrors().stream()
                 .map(error -> error.getField() + ": " + error.getDefaultMessage())
                 .collect(Collectors.joining("; "));
         if (message.isBlank()) {
             message = "请求参数校验失败";
         }
+        logClientException(request, ErrorCode.VALIDATION_ERROR, message);
         return ResponseEntity.badRequest().body(ApiResponse.failure(ErrorCode.VALIDATION_ERROR, message));
     }
 
     @ExceptionHandler(BindException.class)
-    public ResponseEntity<ApiResponse<Void>> handleBindException(BindException ex) {
+    public ResponseEntity<ApiResponse<Void>> handleBindException(BindException ex, HttpServletRequest request) {
         String message = ex.getBindingResult().getFieldErrors().stream()
                 .map(error -> error.getField() + ": " + error.getDefaultMessage())
                 .collect(Collectors.joining("; "));
         if (message.isBlank()) {
             message = "请求参数绑定失败";
         }
+        logClientException(request, ErrorCode.VALIDATION_ERROR, message);
         return ResponseEntity.badRequest().body(ApiResponse.failure(ErrorCode.VALIDATION_ERROR, message));
     }
 
     @ExceptionHandler(ConstraintViolationException.class)
-    public ResponseEntity<ApiResponse<Void>> handleConstraintViolation(ConstraintViolationException ex) {
+    public ResponseEntity<ApiResponse<Void>> handleConstraintViolation(
+            ConstraintViolationException ex,
+            HttpServletRequest request
+    ) {
+        logClientException(request, ErrorCode.VALIDATION_ERROR, ex.getMessage());
         return ResponseEntity.badRequest().body(ApiResponse.failure(ErrorCode.VALIDATION_ERROR, ex.getMessage()));
     }
 
     @ExceptionHandler(MethodArgumentTypeMismatchException.class)
     public ResponseEntity<ApiResponse<Void>> handleMethodArgumentTypeMismatch(
-            MethodArgumentTypeMismatchException ex
+            MethodArgumentTypeMismatchException ex,
+            HttpServletRequest request
     ) {
         String parameterName = ex.getName() == null || ex.getName().isBlank() ? "参数" : ex.getName();
+        String message = parameterName + ": 参数格式错误";
+        logClientException(request, ErrorCode.VALIDATION_ERROR, message);
         return ResponseEntity.badRequest()
-                .body(ApiResponse.failure(ErrorCode.VALIDATION_ERROR, parameterName + ": 参数格式错误"));
+                .body(ApiResponse.failure(ErrorCode.VALIDATION_ERROR, message));
     }
 
     @ExceptionHandler(MissingServletRequestParameterException.class)
-    public ResponseEntity<ApiResponse<Void>> handleMissingServletRequestParameter(MissingServletRequestParameterException ex) {
+    public ResponseEntity<ApiResponse<Void>> handleMissingServletRequestParameter(
+            MissingServletRequestParameterException ex,
+            HttpServletRequest request
+    ) {
+        String message = ex.getParameterName() + ": 参数不能为空";
+        logClientException(request, ErrorCode.VALIDATION_ERROR, message);
         return ResponseEntity.badRequest()
-                .body(ApiResponse.failure(ErrorCode.VALIDATION_ERROR, ex.getParameterName() + ": 参数不能为空"));
+                .body(ApiResponse.failure(ErrorCode.VALIDATION_ERROR, message));
     }
 
     @ExceptionHandler(MissingServletRequestPartException.class)
-    public ResponseEntity<ApiResponse<Void>> handleMissingServletRequestPart(MissingServletRequestPartException ex) {
+    public ResponseEntity<ApiResponse<Void>> handleMissingServletRequestPart(
+            MissingServletRequestPartException ex,
+            HttpServletRequest request
+    ) {
+        String message = ex.getRequestPartName() + ": 文件不能为空";
+        logClientException(request, ErrorCode.VALIDATION_ERROR, message);
         return ResponseEntity.badRequest()
-                .body(ApiResponse.failure(ErrorCode.VALIDATION_ERROR, ex.getRequestPartName() + ": 文件不能为空"));
+                .body(ApiResponse.failure(ErrorCode.VALIDATION_ERROR, message));
     }
 
     @ExceptionHandler(BusinessException.class)
-    public ResponseEntity<ApiResponse<Void>> handleBusinessException(BusinessException ex) {
+    public ResponseEntity<ApiResponse<Void>> handleBusinessException(BusinessException ex, HttpServletRequest request) {
         HttpStatus status = resolveStatus(ex.getErrorCode());
+        logClientException(request, ex.getErrorCode(), ex.getMessage());
         return ResponseEntity.status(status)
                 .body(ApiResponse.failure(ex.getErrorCode(), ex.getMessage()));
     }
 
     @ExceptionHandler({BadCredentialsException.class, JwtException.class})
-    public ResponseEntity<ApiResponse<Void>> handleUnauthorized(Exception ex) {
+    public ResponseEntity<ApiResponse<Void>> handleUnauthorized(Exception ex, HttpServletRequest request) {
         String message = ex.getMessage() != null && !ex.getMessage().isBlank()
                 ? ex.getMessage()
                 : "认证失败";
+        logClientException(request, ErrorCode.UNAUTHORIZED, message);
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                 .body(ApiResponse.failure(ErrorCode.UNAUTHORIZED, message));
     }
 
     @ExceptionHandler(AccessDeniedException.class)
-    public ResponseEntity<ApiResponse<Void>> handleAccessDenied(AccessDeniedException ex) {
+    public ResponseEntity<ApiResponse<Void>> handleAccessDenied(AccessDeniedException ex, HttpServletRequest request) {
+        logClientException(request, ErrorCode.FORBIDDEN, "无访问权限");
         return ResponseEntity.status(HttpStatus.FORBIDDEN)
                 .body(ApiResponse.failure(ErrorCode.FORBIDDEN, "无访问权限"));
     }
 
     @ExceptionHandler(NoResourceFoundException.class)
-    public ResponseEntity<ApiResponse<Void>> handleNoResourceFound(NoResourceFoundException ex) {
+    public ResponseEntity<ApiResponse<Void>> handleNoResourceFound(NoResourceFoundException ex, HttpServletRequest request) {
+        logClientException(request, ErrorCode.NOT_FOUND, "资源不存在");
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
                 .body(ApiResponse.failure(ErrorCode.NOT_FOUND, "资源不存在"));
     }
@@ -130,5 +161,23 @@ public class GlobalExceptionHandler {
             case RATE_LIMITED -> HttpStatus.TOO_MANY_REQUESTS;
             case BUSINESS_ERROR -> HttpStatus.UNPROCESSABLE_ENTITY;
         };
+    }
+
+    private void logClientException(HttpServletRequest request, ErrorCode errorCode, String message) {
+        if (request == null) {
+            log.warn("请求失败 code={} message={}", codeOf(errorCode), message);
+            return;
+        }
+        log.warn(
+                "请求失败 method={} uri={} code={} message={}",
+                request.getMethod(),
+                request.getRequestURI(),
+                codeOf(errorCode),
+                message
+        );
+    }
+
+    private int codeOf(ErrorCode errorCode) {
+        return errorCode == null ? ErrorCode.BUSINESS_ERROR.getCode() : errorCode.getCode();
     }
 }

@@ -41,7 +41,7 @@ class SalesOrderItemMapperTest {
         when(warehouseSelectionSupport.normalizeWarehouseName("一号库", 1, true)).thenReturn("一号库");
         when(materialSupport.normalizeBatchNo(material, "B1", 1, true)).thenReturn("B1");
 
-        mapper.applyItemFields(entity, source, item, 1, material,
+        mapper.applyItemFields(entity, source, item, 1, "M1", material,
                 new BigDecimal("11.240"), new BigDecimal("2.248"));
 
         assertThat(item.getSalesOrder()).isEqualTo(entity);
@@ -83,7 +83,7 @@ class SalesOrderItemMapperTest {
         when(warehouseSelectionSupport.normalizeWarehouseName("仓库A", 2, true)).thenReturn("仓库A-normalized");
         when(materialSupport.normalizeBatchNo(material, null, 2, true)).thenReturn("AUTO-BATCH");
 
-        mapper.applyItemFields(entity, source, item, 2, material,
+        mapper.applyItemFields(entity, source, item, 2, "M2", material,
                 new BigDecimal("4.500"), new BigDecimal("1.500"));
 
         assertThat(item.getWarehouseName()).isEqualTo("仓库A-normalized");
@@ -111,7 +111,7 @@ class SalesOrderItemMapperTest {
         when(warehouseSelectionSupport.normalizeWarehouseName("一号库", 1, true)).thenReturn("一号库");
         when(materialSupport.normalizeBatchNo(any(), any(), eq(1), eq(true))).thenReturn("B1");
 
-        mapper.applyItemFields(entity, source, item, 1, material,
+        mapper.applyItemFields(entity, source, item, 1, "M3", material,
                 new BigDecimal("5.000"), new BigDecimal("0.500"));
 
         assertThat(item.getSourceInboundItemId()).isNull();
@@ -137,7 +137,7 @@ class SalesOrderItemMapperTest {
         when(warehouseSelectionSupport.normalizeWarehouseName("一号库", 1, true)).thenReturn("一号库");
         when(materialSupport.normalizeBatchNo(material, "B1", 1, true)).thenReturn("B1");
 
-        mapper.applyItemFields(entity, source, item, 1, material,
+        mapper.applyItemFields(entity, source, item, 1, "M1", material,
                 new BigDecimal("4.496"), new BigDecimal("2.248"));
 
         assertThat(item.getSourcePurchaseOrderItemId()).isEqualTo(201L);

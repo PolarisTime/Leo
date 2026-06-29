@@ -18,6 +18,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 import java.util.function.Supplier;
 
 @Slf4j
@@ -27,6 +28,7 @@ public class RedisJsonCacheSupport {
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
     private final RedisTuningProperties redisTuningProperties;
+    private AfterCommitExecutor afterCommitExecutor;
 
     public RedisJsonCacheSupport(StringRedisTemplate redisTemplate,
                                  ObjectMapper objectMapper,
@@ -36,18 +38,15 @@ public class RedisJsonCacheSupport {
         this.redisTuningProperties = redisTuningProperties;
     }
 
+    @Autowired(required = false)
+    public void setAfterCommitExecutor(AfterCommitExecutor afterCommitExecutor) {
+        this.afterCommitExecutor = afterCommitExecutor;
+    }
+
     public <T> T getOrLoad(String key, Duration ttl, TypeReference<T> typeReference, Supplier<T> loader) {
-        if (redisTemplate != null && objectMapper != null) {
-            try {
-                String cached = redisTemplate.opsForValue().get(key);
-                if (cached != null && !cached.isBlank()) {
-                    return objectMapper.readValue(cached, typeReference);
-                }
-            } catch (JsonProcessingException ex) {
-                delete(key);
-            } catch (RuntimeException ex) {
-                log.warn("Redis cache read failed, key={}", key, ex);
-            }
+        Optional<T> cached = read(key, typeReference);
+        if (cached.isPresent()) {
+            return cached.get();
         }
 
         T loaded = loader.get();
@@ -56,22 +55,48 @@ public class RedisJsonCacheSupport {
     }
 
     public <T> T getOrLoad(String key, Duration ttl, Class<T> type, Supplier<T> loader) {
-        if (redisTemplate != null && objectMapper != null) {
-            try {
-                String cached = redisTemplate.opsForValue().get(key);
-                if (cached != null && !cached.isBlank()) {
-                    return objectMapper.readValue(cached, type);
-                }
-            } catch (JsonProcessingException ex) {
-                delete(key);
-            } catch (RuntimeException ex) {
-                log.warn("Redis cache read failed, key={}", key, ex);
-            }
+        Optional<T> cached = read(key, type);
+        if (cached.isPresent()) {
+            return cached.get();
         }
 
         T loaded = loader.get();
         write(key, loaded, ttl);
         return loaded;
+    }
+
+    public <T> Optional<T> read(String key, TypeReference<T> typeReference) {
+        if (redisTemplate == null || objectMapper == null || key == null || typeReference == null) {
+            return Optional.empty();
+        }
+        try {
+            String cached = redisTemplate.opsForValue().get(key);
+            if (cached != null && !cached.isBlank()) {
+                return Optional.ofNullable(objectMapper.readValue(cached, typeReference));
+            }
+        } catch (JsonProcessingException ex) {
+            delete(key);
+        } catch (RuntimeException ex) {
+            log.warn("Redis cache read failed, key={}", key, ex);
+        }
+        return Optional.empty();
+    }
+
+    public <T> Optional<T> read(String key, Class<T> type) {
+        if (redisTemplate == null || objectMapper == null || key == null || type == null) {
+            return Optional.empty();
+        }
+        try {
+            String cached = redisTemplate.opsForValue().get(key);
+            if (cached != null && !cached.isBlank()) {
+                return Optional.ofNullable(objectMapper.readValue(cached, type));
+            }
+        } catch (JsonProcessingException ex) {
+            delete(key);
+        } catch (RuntimeException ex) {
+            log.warn("Redis cache read failed, key={}", key, ex);
+        }
+        return Optional.empty();
     }
 
     public void write(String key, Object value, Duration ttl) {
@@ -98,6 +123,17 @@ public class RedisJsonCacheSupport {
         }
     }
 
+    public void deleteAfterCommit(String key) {
+        if (key == null) {
+            return;
+        }
+        if (afterCommitExecutor == null) {
+            delete(key);
+            return;
+        }
+        afterCommitExecutor.run(() -> delete(key));
+    }
+
     public void delete(Collection<String> keys) {
         if (redisTemplate == null || keys == null || keys.isEmpty()) {
             return;
@@ -107,6 +143,17 @@ public class RedisJsonCacheSupport {
         } catch (RuntimeException ex) {
             log.warn("Redis cache delete failed, keys={}", keys, ex);
         }
+    }
+
+    public void deleteAfterCommit(Collection<String> keys) {
+        if (keys == null || keys.isEmpty()) {
+            return;
+        }
+        if (afterCommitExecutor == null) {
+            delete(keys);
+            return;
+        }
+        afterCommitExecutor.run(() -> delete(keys));
     }
 
     public void deleteByPattern(String pattern) {

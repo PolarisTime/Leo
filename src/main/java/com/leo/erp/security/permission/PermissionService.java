@@ -117,16 +117,28 @@ public class PermissionService {
     }
 
     public void evictDepartmentUserCache(Long departmentId) {
+        if (departmentScope == null) {
+            return;
+        }
         departmentScope.evictDepartmentUserCache(departmentId);
     }
 
+    public void clearDepartmentUserCache() {
+        if (departmentScope == null) {
+            return;
+        }
+        departmentScope.clearDepartmentUserCache();
+    }
+
     public void evictMetadataCache() {
-        cache.evictMetadata(MenuVisibilityService.MENU_CACHE_KEY);
+        cache.evictMetadata(MenuVisibilityService.MENU_CACHE_KEY_PREFIX);
     }
 
     public void evictAllCache() {
-        departmentScope.clearDepartmentUserCache();
-        cache.evictMetadata(MenuVisibilityService.MENU_CACHE_KEY);
-        cache.evictAll();
+        clearDepartmentUserCache();
+        if (cache != null) {
+            cache.evictMetadata(MenuVisibilityService.MENU_CACHE_KEY_PREFIX);
+            cache.evictAll();
+        }
     }
 }

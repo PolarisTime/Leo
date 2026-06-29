@@ -10,6 +10,7 @@ public class MaintenanceScheduleProperties {
     private BackupTask databaseBackup = new BackupTask();
     private OperationLogArchiveTask operationLogArchive = new OperationLogArchiveTask();
     private ExportTaskCleanup exportTaskCleanup = new ExportTaskCleanup();
+    private RedisCacheHealthCheckTask redisCacheHealthCheck = new RedisCacheHealthCheckTask();
 
     public boolean isEnabled() {
         return enabled;
@@ -49,6 +50,14 @@ public class MaintenanceScheduleProperties {
 
     public void setExportTaskCleanup(ExportTaskCleanup exportTaskCleanup) {
         this.exportTaskCleanup = exportTaskCleanup;
+    }
+
+    public RedisCacheHealthCheckTask getRedisCacheHealthCheck() {
+        return redisCacheHealthCheck;
+    }
+
+    public void setRedisCacheHealthCheck(RedisCacheHealthCheckTask redisCacheHealthCheck) {
+        this.redisCacheHealthCheck = redisCacheHealthCheck;
     }
 
     public static class BackupTask {
@@ -132,6 +141,27 @@ public class MaintenanceScheduleProperties {
     public static class ExportTaskCleanup {
         private boolean enabled = true;
         private String cron = "0 45 2 * * *";
+
+        public boolean isEnabled() {
+            return enabled;
+        }
+
+        public void setEnabled(boolean enabled) {
+            this.enabled = enabled;
+        }
+
+        public String getCron() {
+            return cron;
+        }
+
+        public void setCron(String cron) {
+            this.cron = cron;
+        }
+    }
+
+    public static class RedisCacheHealthCheckTask {
+        private boolean enabled = true;
+        private String cron = "0 */5 * * * *";
 
         public boolean isEnabled() {
             return enabled;

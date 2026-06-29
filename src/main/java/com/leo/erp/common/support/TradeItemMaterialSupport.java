@@ -15,7 +15,7 @@ import java.util.Map;
 import java.util.Objects;
 
 @Component
-public class TradeItemMaterialSupport {
+public class TradeItemMaterialSupport implements RedisCacheHealthCheck {
 
     private static final String MATERIAL_CACHE_KEY = "leo:material:all";
     private static final Duration MATERIAL_CACHE_TTL = Duration.ofMinutes(10);
@@ -43,9 +43,8 @@ public class TradeItemMaterialSupport {
 
     public Map<String, TradeMaterialSnapshot> loadMaterialMap(Collection<String> materialCodes) {
         List<String> normalizedCodes = materialCodes == null ? List.of() : materialCodes.stream()
+                .map(this::normalizeOptionalMaterialCode)
                 .filter(Objects::nonNull)
-                .map(String::trim)
-                .filter(code -> !code.isBlank())
                 .distinct()
                 .toList();
         if (normalizedCodes.isEmpty()) {
@@ -68,6 +67,14 @@ public class TradeItemMaterialSupport {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "商品不存在: " + missingCodes.get(0));
         }
         return materialMap;
+    }
+
+    public String normalizeMaterialCode(String materialCode, int lineNo) {
+        String normalized = normalizeOptionalMaterialCode(materialCode);
+        if (normalized == null) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "第" + lineNo + "行商品编码不能为空");
+        }
+        return normalized;
     }
 
     public String normalizeBatchNo(TradeMaterialSnapshot material, String batchNo, int lineNo, boolean requiredWhenEnabled) {
@@ -102,7 +109,7 @@ public class TradeItemMaterialSupport {
         if (redisJsonCacheSupport == null) {
             return;
         }
-        redisJsonCacheSupport.delete(MATERIAL_CACHE_KEY);
+        redisJsonCacheSupport.deleteAfterCommit(MATERIAL_CACHE_KEY);
     }
 
     private Map<String, TradeMaterialSnapshot> loadActiveMaterialsByCode() {
@@ -116,17 +123,56 @@ public class TradeItemMaterialSupport {
                     MATERIAL_CACHE_KEY,
                     MATERIAL_CACHE_TTL,
                     MATERIAL_LIST_TYPE,
-                    materialCatalog::listActiveMaterials
+                    this::loadActiveMaterialsFromCatalog
             );
+            if (snapshots.isEmpty()) {
+                List<TradeMaterialSnapshot> refreshed = loadActiveMaterialsFromCatalog();
+                if (refreshed.isEmpty()) {
+                    return Map.of();
+                }
+                writeMaterialCache(refreshed);
+                snapshots = refreshed;
+            }
         }
 
         Map<String, TradeMaterialSnapshot> materialsByCode = new LinkedHashMap<>();
         snapshots.forEach(snapshot -> {
-            if (snapshot.materialCode() != null && !snapshot.materialCode().isBlank()) {
-                materialsByCode.put(snapshot.materialCode(), snapshot);
+            String materialCode = normalizeOptionalMaterialCode(snapshot.materialCode());
+            if (materialCode != null) {
+                materialsByCode.put(materialCode, snapshot);
             }
         });
         return materialsByCode;
+    }
+
+    private List<TradeMaterialSnapshot> loadActiveMaterialsFromCatalog() {
+        if (materialCatalog == null) {
+            return List.of();
+        }
+        return materialCatalog.listActiveMaterials();
+    }
+
+    private void writeMaterialCache(List<TradeMaterialSnapshot> snapshots) {
+        if (redisJsonCacheSupport != null) {
+            redisJsonCacheSupport.write(MATERIAL_CACHE_KEY, snapshots, MATERIAL_CACHE_TTL);
+        }
+    }
+
+    @Override
+    public String cacheName() {
+        return MATERIAL_CACHE_KEY;
+    }
+
+    @Override
+    public CacheHealthCheckResult verifyAndRefreshCache() {
+        List<TradeMaterialSnapshot> expected = loadActiveMaterialsFromCatalog();
+        return verifyAndRefreshListCache(
+                redisJsonCacheSupport,
+                MATERIAL_CACHE_KEY,
+                MATERIAL_CACHE_TTL,
+                MATERIAL_LIST_TYPE,
+                expected
+        );
     }
 
     private boolean shouldAutoGenerateBatchNo() {
@@ -141,5 +187,13 @@ public class TradeItemMaterialSupport {
 
     private boolean shouldForceBatchManagement() {
         return tradeItemRuntimeSettings != null && tradeItemRuntimeSettings.shouldForceBatchManagement();
+    }
+
+    private String normalizeOptionalMaterialCode(String materialCode) {
+        if (materialCode == null) {
+            return null;
+        }
+        String normalized = materialCode.trim();
+        return normalized.isBlank() ? null : normalized;
     }
 }

@@ -14,7 +14,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 @Component
-public class WarehouseSelectionSupport {
+public class WarehouseSelectionSupport implements RedisCacheHealthCheck {
 
     private static final String WAREHOUSE_CACHE_KEY = "leo:warehouse:all";
     private static final Duration WAREHOUSE_CACHE_TTL = Duration.ofMinutes(30);
@@ -73,7 +73,7 @@ public class WarehouseSelectionSupport {
         if (redisJsonCacheSupport == null) {
             return;
         }
-        redisJsonCacheSupport.delete(WAREHOUSE_CACHE_KEY);
+        redisJsonCacheSupport.deleteAfterCommit(WAREHOUSE_CACHE_KEY);
     }
 
     public List<OptionResponse> listActiveOptions() {
@@ -88,19 +88,61 @@ public class WarehouseSelectionSupport {
         }
         List<String> names;
         if (redisJsonCacheSupport == null) {
-            names = warehouseCatalog.listActiveWarehouseNames();
+            names = loadActiveWarehouseNamesFromCatalog();
         } else {
             names = redisJsonCacheSupport.getOrLoad(
                     WAREHOUSE_CACHE_KEY,
                     WAREHOUSE_CACHE_TTL,
                     WAREHOUSE_LIST_TYPE,
-                    warehouseCatalog::listActiveWarehouseNames
+                    this::loadActiveWarehouseNamesFromCatalog
             );
+            if (names.isEmpty()) {
+                List<String> refreshed = loadActiveWarehouseNamesFromCatalog();
+                if (refreshed.isEmpty()) {
+                    return List.of();
+                }
+                writeActiveWarehouseNameCache(refreshed);
+                names = refreshed;
+            }
         }
+        return normalizeWarehouseNames(names);
+    }
+
+    private List<String> loadActiveWarehouseNamesFromCatalog() {
+        if (warehouseCatalog == null) {
+            return List.of();
+        }
+        return normalizeWarehouseNames(warehouseCatalog.listActiveWarehouseNames());
+    }
+
+    private List<String> normalizeWarehouseNames(List<String> names) {
         return names.stream()
                 .filter(name -> name != null && !name.isBlank())
                 .map(String::trim)
                 .toList();
+    }
+
+    private void writeActiveWarehouseNameCache(List<String> names) {
+        if (redisJsonCacheSupport != null) {
+            redisJsonCacheSupport.write(WAREHOUSE_CACHE_KEY, names, WAREHOUSE_CACHE_TTL);
+        }
+    }
+
+    @Override
+    public String cacheName() {
+        return WAREHOUSE_CACHE_KEY;
+    }
+
+    @Override
+    public CacheHealthCheckResult verifyAndRefreshCache() {
+        List<String> expected = loadActiveWarehouseNamesFromCatalog();
+        return verifyAndRefreshListCache(
+                redisJsonCacheSupport,
+                WAREHOUSE_CACHE_KEY,
+                WAREHOUSE_CACHE_TTL,
+                WAREHOUSE_LIST_TYPE,
+                expected
+        );
     }
 
     private Set<String> loadActiveWarehouseNameSet() {

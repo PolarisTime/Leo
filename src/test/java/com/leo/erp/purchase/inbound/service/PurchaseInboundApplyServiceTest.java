@@ -24,6 +24,7 @@ import java.util.concurrent.atomic.AtomicLong;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -87,6 +88,8 @@ class PurchaseInboundApplyServiceTest {
                 "M1", new TradeMaterialSnapshot("M1", true),
                 "M2", new TradeMaterialSnapshot("M2", true)
         ));
+        when(materialSupport.normalizeMaterialCode(any(), anyInt())).thenAnswer(invocation ->
+                ((String) invocation.getArgument(0)).trim());
         when(materialSupport.normalizeBatchNo(any(), eq("B1"), eq(1), eq(true))).thenReturn("B1");
         when(materialSupport.normalizeBatchNo(any(), eq("B2"), eq(2), eq(true))).thenReturn("B2");
         when(warehouseSelectionSupport.normalizeWarehouseName("一号库", 1, true)).thenReturn("一号库");
