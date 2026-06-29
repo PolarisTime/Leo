@@ -136,6 +136,7 @@ class PurchaseOrderApplyServiceTest {
                 "供应商A",
                 LocalDateTime.of(2026, 4, 26, 0, 0),
                 "李四",
+                1L,
                 "草稿",
                 "备注",
                 items

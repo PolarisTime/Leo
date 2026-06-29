@@ -18,6 +18,8 @@ import com.leo.erp.purchase.order.web.dto.PurchaseOrderRequest;
 import com.leo.erp.purchase.order.web.dto.PurchaseOrderResponse;
 import com.leo.erp.allocation.repository.ItemAllocationNativeRepository;
 import com.leo.erp.security.permission.WorkflowTransitionGuard;
+import com.leo.erp.system.company.domain.entity.CompanySetting;
+import com.leo.erp.system.company.service.CompanySettingService;
 import org.springframework.jdbc.core.JdbcTemplate;
 import com.leo.erp.system.norule.service.SystemSwitchService;
 import org.junit.jupiter.api.AfterEach;
@@ -468,6 +470,7 @@ class PurchaseOrderServiceTest {
                 "供应商A",
                 LocalDateTime.of(2026, 4, 26, 0, 0),
                 "李四",
+                1L,
                 status,
                 null,
                 List.of(new PurchaseOrderItemRequest(
@@ -679,6 +682,7 @@ class PurchaseOrderServiceTest {
         PurchaseOrderRequest request = new PurchaseOrderRequest(
                 "PO-002", "供应商A",
                 LocalDateTime.of(2026, 4, 26, 0, 0), "李四",
+                1L,
                 "草稿", null, List.of()
         );
 
@@ -1116,7 +1120,8 @@ class PurchaseOrderServiceTest {
                         purchaseInboundItemQueryService
                 ),
                 new PurchaseOrderPieceWeightQueryService(jdbc),
-                workflowTransitionGuard
+                workflowTransitionGuard,
+                null
         );
     }
 

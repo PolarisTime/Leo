@@ -107,7 +107,7 @@ class CarrierServiceTest {
         );
         var service = new CarrierService(repository, mock(VehicleRepository.class), new SnowflakeIdGenerator(1), null);
 
-        assertThatThrownBy(() -> service.create(new CarrierRequest("CR001", "物流甲", null, null, null, null, null, "正常", null)))
+        assertThatThrownBy(() -> service.create(new CarrierRequest("CR001", "物流甲", null, null, null, null, null, 1L, "正常", null)))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("物流方编码已存在");
     }
@@ -128,7 +128,7 @@ class CarrierServiceTest {
         );
         var service = new CarrierService(repository, mock(VehicleRepository.class), new SnowflakeIdGenerator(1), null);
 
-        assertThatThrownBy(() -> service.update(1L, new CarrierRequest("CR002", "物流乙", null, null, null, null, null, "正常", null)))
+        assertThatThrownBy(() -> service.update(1L, new CarrierRequest("CR002", "物流乙", null, null, null, null, null, 1L, "正常", null)))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("物流方编码已存在");
     }
@@ -195,7 +195,7 @@ class CarrierServiceTest {
         );
         var service = new CarrierService(repository, mock(VehicleRepository.class), new SnowflakeIdGenerator(1), mapper, cache);
 
-        var request = new CarrierRequest("CR001", "物流甲", null, null, null, null, null, "正常", null);
+        var request = new CarrierRequest("CR001", "物流甲", null, null, null, null, null, 1L, "正常", null);
         var result = service.update(1L, request);
 
         assertThat(result).isNotNull();
@@ -233,7 +233,7 @@ class CarrierServiceTest {
                 new VehicleItem("苏A12345", "司机A", "13900000001", "车辆1"),
                 new VehicleItem("苏A67890", "司机B", "13900000002", "车辆2")
         );
-        var request = new CarrierRequest("CR001", "物流甲", "张三", "13800138000", "重型卡车", vehicles, "按吨", "正常", "备注");
+        var request = new CarrierRequest("CR001", "物流甲", "张三", "13800138000", "重型卡车", vehicles, "按吨", 1L, "正常", "备注");
         var result = service.create(request);
 
         assertThat(result).isNotNull();
@@ -275,7 +275,7 @@ class CarrierServiceTest {
                 new VehicleItem("  ", null, null, null),
                 new VehicleItem(null, null, null, null)
         );
-        var request = new CarrierRequest("CR001", "物流甲", "  ", "  ", "  ", vehicles, "按吨", "正常", "备注");
+        var request = new CarrierRequest("CR001", "物流甲", "  ", "  ", "  ", vehicles, "按吨", 1L, "正常", "备注");
         var result = service.update(1L, request);
 
         assertThat(result).isNotNull();
@@ -312,7 +312,7 @@ class CarrierServiceTest {
         );
         var service = new CarrierService(repository, mock(VehicleRepository.class), new SnowflakeIdGenerator(1), mapper);
 
-        var request = new CarrierRequest("CR001", "物流甲", null, null, null, null, "按吨", "正常", null);
+        var request = new CarrierRequest("CR001", "物流甲", null, null, null, null, "按吨", 1L, "正常", null);
         var result = service.update(1L, request);
 
         assertThat(result).isNotNull();
@@ -413,7 +413,7 @@ class CarrierServiceTest {
         );
         var service = new CarrierService(repository, mock(VehicleRepository.class), new SnowflakeIdGenerator(1), mapper);
 
-        var request = new CarrierRequest("CR001", "物流甲", "张三", "13800138000", "重型卡车", null, "按吨", "正常", "备注");
+        var request = new CarrierRequest("CR001", "物流甲", "张三", "13800138000", "重型卡车", null, "按吨", 1L, "正常", "备注");
         var result = service.create(request);
 
         assertThat(result).isNotNull();
@@ -447,7 +447,7 @@ class CarrierServiceTest {
         );
         var service = new CarrierService(repository, mock(VehicleRepository.class), new SnowflakeIdGenerator(1), mapper);
 
-        var request = new CarrierRequest("CR001", "物流乙", null, null, null, null, null, "正常", null);
+        var request = new CarrierRequest("CR001", "物流乙", null, null, null, null, null, 1L, "正常", null);
         var result = service.update(1L, request);
 
         assertThat(result).isNotNull();

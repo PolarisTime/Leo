@@ -5,14 +5,18 @@ import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.service.AbstractCrudService;
+import com.leo.erp.common.support.MasterDataReferenceGuard;
+import com.leo.erp.common.support.MasterDataReferenceGuard.ReferenceCheck;
 import com.leo.erp.common.support.RedisJsonCacheSupport;
 import com.leo.erp.common.support.PrecisionConstants;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
+import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.support.TaxRateProvider;
 import com.leo.erp.system.company.domain.entity.CompanySetting;
 import com.leo.erp.system.company.repository.CompanySettingRepository;
 import com.leo.erp.system.company.mapper.CompanySettingMapper;
 import com.leo.erp.system.company.web.dto.CompanySettingRequest;
+import com.leo.erp.system.company.web.dto.CompanySettingOptionResponse;
 import com.leo.erp.system.company.web.dto.CompanySettingResponse;
 import com.leo.erp.system.company.web.dto.CompanySettlementAccountRequest;
 import com.leo.erp.system.company.web.dto.CompanySettlementAccountResponse;
@@ -29,7 +33,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -43,6 +46,7 @@ public class CompanySettingService extends AbstractCrudService<CompanySetting, C
     public static final String DEFAULT_TAX_RATE_SETTING_CODE = "SYS_DEFAULT_TAX_RATE";
     public static final String CURRENT_COMPANY_CACHE_KEY = "leo:company:current";
     public static final String CURRENT_TAX_RATE_CACHE_KEY = "leo:company:tax-rate";
+    private static final BigDecimal DEFAULT_COMPANY_TAX_RATE = new BigDecimal("0.1300");
     private static final Duration COMPANY_CACHE_TTL = Duration.ofMinutes(10);
     private static final TypeReference<List<CompanySettlementAccountResponse>> SETTLEMENT_ACCOUNT_LIST_TYPE = new TypeReference<>() { };
 
@@ -52,6 +56,7 @@ public class CompanySettingService extends AbstractCrudService<CompanySetting, C
     private final NoRuleRepository noRuleRepository;
     private final ObjectMapper objectMapper;
     private final RedisJsonCacheSupport redisJsonCacheSupport;
+    private final MasterDataReferenceGuard referenceGuard;
 
     @Autowired
     public CompanySettingService(CompanySettingRepository companySettingRepository,
@@ -60,7 +65,8 @@ public class CompanySettingService extends AbstractCrudService<CompanySetting, C
                                  DashboardSummaryService dashboardSummaryService,
                                  NoRuleRepository noRuleRepository,
                                  ObjectMapper objectMapper,
-                                 RedisJsonCacheSupport redisJsonCacheSupport) {
+                                 RedisJsonCacheSupport redisJsonCacheSupport,
+                                 MasterDataReferenceGuard referenceGuard) {
         super(snowflakeIdGenerator);
         this.companySettingRepository = companySettingRepository;
         this.companySettingMapper = companySettingMapper;
@@ -68,6 +74,7 @@ public class CompanySettingService extends AbstractCrudService<CompanySetting, C
         this.noRuleRepository = noRuleRepository;
         this.objectMapper = objectMapper;
         this.redisJsonCacheSupport = redisJsonCacheSupport;
+        this.referenceGuard = referenceGuard;
     }
 
     public CompanySettingService(CompanySettingRepository companySettingRepository,
@@ -77,7 +84,18 @@ public class CompanySettingService extends AbstractCrudService<CompanySetting, C
                                  NoRuleRepository noRuleRepository,
                                  ObjectMapper objectMapper) {
         this(companySettingRepository, snowflakeIdGenerator, companySettingMapper, dashboardSummaryService,
-                noRuleRepository, objectMapper, null);
+                noRuleRepository, objectMapper, null, null);
+    }
+
+    public CompanySettingService(CompanySettingRepository companySettingRepository,
+                                 SnowflakeIdGenerator snowflakeIdGenerator,
+                                 CompanySettingMapper companySettingMapper,
+                                 DashboardSummaryService dashboardSummaryService,
+                                 NoRuleRepository noRuleRepository,
+                                 ObjectMapper objectMapper,
+                                 RedisJsonCacheSupport redisJsonCacheSupport) {
+        this(companySettingRepository, snowflakeIdGenerator, companySettingMapper, dashboardSummaryService,
+                noRuleRepository, objectMapper, redisJsonCacheSupport, null);
     }
 
     @Transactional(readOnly = true)
@@ -101,6 +119,25 @@ public class CompanySettingService extends AbstractCrudService<CompanySetting, C
         );
     }
 
+    @Transactional(readOnly = true)
+    public List<CompanySettingOptionResponse> listActiveOptions() {
+        return companySettingRepository.findByStatusAndDeletedFlagFalseOrderByIdAsc(StatusConstants.NORMAL).stream()
+                .map(entity -> new CompanySettingOptionResponse(
+                        entity.getId(),
+                        entity.getCompanyName()
+                ))
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public CompanySetting requireActiveSettlementCompany(Long id) {
+        if (id == null) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "请选择结算主体");
+        }
+        return companySettingRepository.findByIdAndStatusAndDeletedFlagFalse(id, StatusConstants.NORMAL)
+                .orElseThrow(() -> new BusinessException(ErrorCode.VALIDATION_ERROR, "结算主体不存在或已禁用"));
+    }
+
     private CompanySettingResponse loadCurrent() {
         return findCurrentEntity()
                 .map(this::toResponse)
@@ -122,18 +159,25 @@ public class CompanySettingService extends AbstractCrudService<CompanySetting, C
     }
 
     private BigDecimal loadCurrentTaxRate() {
-        return noRuleRepository.findBySettingCodeAndDeletedFlagFalse(DEFAULT_TAX_RATE_SETTING_CODE)
-                .map(NoRule::getSampleNo)
-                .flatMap(this::parseTaxRate)
+        return resolveConfiguredTaxRate()
                 .or(() -> findCurrentEntity().map(CompanySetting::getTaxRate))
                 .orElse(BigDecimal.ZERO)
                 .setScale(PrecisionConstants.TAX_RATE_SCALE, PrecisionConstants.DEFAULT_ROUNDING);
     }
 
+    private Optional<BigDecimal> resolveConfiguredTaxRate() {
+        if (noRuleRepository == null) {
+            return Optional.empty();
+        }
+        return noRuleRepository.findBySettingCodeAndDeletedFlagFalse(DEFAULT_TAX_RATE_SETTING_CODE)
+                .map(NoRule::getSampleNo)
+                .flatMap(this::parseTaxRate);
+    }
+
     @Transactional
     public CompanySettingResponse saveCurrent(CompanySettingRequest request) {
-        CompanySetting entity = companySettingRepository.findFirstByDeletedFlagFalseOrderByIdAsc()
-                .orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_ERROR, "请先通过首次初始化页面创建公司信息"));
+        CompanySetting entity = findCurrentEntity()
+                .orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_ERROR, "请先通过首次初始化页面创建默认结算主体"));
 
         validateImmutableIdentity(entity, request);
 
@@ -146,12 +190,14 @@ public class CompanySettingService extends AbstractCrudService<CompanySetting, C
 
     @Override
     protected void validateCreate(CompanySettingRequest request) {
-        throw new BusinessException(ErrorCode.BUSINESS_ERROR, "公司信息仅允许通过首次初始化页面创建");
+        ensureCompanyNameUnique(request.companyName());
     }
 
     @Override
     protected void validateUpdate(CompanySetting entity, CompanySettingRequest request) {
-        validateImmutableIdentity(entity, request);
+        if (!entity.getCompanyName().equals(request.companyName())) {
+            ensureCompanyNameUnique(request.companyName());
+        }
     }
 
     @Override
@@ -170,8 +216,20 @@ public class CompanySettingService extends AbstractCrudService<CompanySetting, C
     }
 
     @Override
+    protected void beforeDelete(CompanySetting entity) {
+        if (referenceGuard == null) {
+            return;
+        }
+        referenceGuard.assertNoReferences("该结算主体", List.of(
+                ReferenceCheck.active("md_customer", "default_settlement_company_id", entity.getId()),
+                ReferenceCheck.active("md_carrier", "default_settlement_company_id", entity.getId()),
+                ReferenceCheck.active("po_purchase_order", "settlement_company_id", entity.getId())
+        ));
+    }
+
+    @Override
     protected String notFoundMessage() {
-        return "公司信息不存在";
+        return "结算主体不存在";
     }
 
     @Override
@@ -182,9 +240,20 @@ public class CompanySettingService extends AbstractCrudService<CompanySetting, C
         entity.setTaxNo(request.taxNo());
         entity.setBankName(primaryAccount.bankName());
         entity.setBankAccount(primaryAccount.bankAccount());
+        if (entity.getTaxRate() == null) {
+            entity.setTaxRate(resolveCurrentTaxRateForEntity());
+        }
         entity.setSettlementAccountsJson(writeSettlementAccounts(settlementAccounts));
         entity.setStatus(request.status() != null ? request.status() : "正常");
         entity.setRemark(request.remark());
+    }
+
+    private BigDecimal resolveCurrentTaxRateForEntity() {
+        return resolveConfiguredTaxRate()
+                .or(() -> findCurrentEntity().map(CompanySetting::getTaxRate))
+                .filter(taxRate -> taxRate.compareTo(BigDecimal.ZERO) > 0)
+                .orElse(DEFAULT_COMPANY_TAX_RATE)
+                .setScale(PrecisionConstants.TAX_RATE_SCALE, PrecisionConstants.DEFAULT_ROUNDING);
     }
 
     private void validateImmutableIdentity(CompanySetting entity, CompanySettingRequest request) {
@@ -197,8 +266,14 @@ public class CompanySettingService extends AbstractCrudService<CompanySetting, C
     }
 
     private Optional<CompanySetting> findCurrentEntity() {
-        return companySettingRepository.findFirstByStatusAndDeletedFlagFalseOrderByIdAsc("正常")
+        return companySettingRepository.findFirstByStatusAndDeletedFlagFalseOrderByIdAsc(StatusConstants.NORMAL)
                 .or(() -> companySettingRepository.findFirstByDeletedFlagFalseOrderByIdAsc());
+    }
+
+    private void ensureCompanyNameUnique(String companyName) {
+        if (companySettingRepository.existsByCompanyNameAndDeletedFlagFalse(companyName)) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "结算主体名称已存在");
+        }
     }
 
     @Override
@@ -211,7 +286,15 @@ public class CompanySettingService extends AbstractCrudService<CompanySetting, C
 
     @Override
     protected CompanySettingResponse toResponse(CompanySetting entity) {
-        return companySettingMapper.toResponse(entity, resolveCurrentTaxRate(), readSettlementAccounts(entity));
+        return companySettingMapper.toResponse(entity, resolveResponseTaxRate(entity), readSettlementAccounts(entity));
+    }
+
+    private BigDecimal resolveResponseTaxRate(CompanySetting entity) {
+        return resolveConfiguredTaxRate()
+                .or(() -> Optional.ofNullable(entity.getTaxRate()))
+                .or(() -> findCurrentEntity().map(CompanySetting::getTaxRate))
+                .orElse(BigDecimal.ZERO)
+                .setScale(PrecisionConstants.TAX_RATE_SCALE, PrecisionConstants.DEFAULT_ROUNDING);
     }
 
     private List<CompanySettlementAccountResponse> normalizeSettlementAccounts(List<CompanySettlementAccountRequest> requestAccounts) {

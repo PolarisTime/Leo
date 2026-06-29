@@ -24,6 +24,7 @@ class CarrierRequestValidationTest {
                 "平板车",
                 List.of(),
                 "按吨",
+                1L,
                 "启用",
                 "备注"
         );
@@ -45,6 +46,7 @@ class CarrierRequestValidationTest {
                 "平板车",
                 List.of(),
                 "按吨",
+                1L,
                 "启用",
                 "备注"
         );
@@ -66,6 +68,7 @@ class CarrierRequestValidationTest {
                 "平板车",
                 List.of(),
                 "按吨",
+                1L,
                 "",
                 "备注"
         );
@@ -87,6 +90,7 @@ class CarrierRequestValidationTest {
                 "平板车",
                 List.of(),
                 "按吨",
+                1L,
                 "启用",
                 "备注"
         );
@@ -108,6 +112,7 @@ class CarrierRequestValidationTest {
                 null,
                 null,
                 null,
+                1L,
                 "启用",
                 null
         );
@@ -117,6 +122,28 @@ class CarrierRequestValidationTest {
                 .collect(Collectors.toSet());
 
         assertThat(violations).isEmpty();
+    }
+
+    @Test
+    void shouldRejectMissingDefaultSettlementCompany() {
+        CarrierRequest request = new CarrierRequest(
+                "C001",
+                "物流方名称",
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                "启用",
+                null
+        );
+
+        Set<String> violations = VALIDATOR.validate(request).stream()
+                .map(violation -> violation.getPropertyPath().toString())
+                .collect(Collectors.toSet());
+
+        assertThat(violations).contains("defaultSettlementCompanyId");
     }
 
     private static Validator validator() {

@@ -17,6 +17,8 @@ import com.leo.erp.master.customer.mapper.CustomerMapper;
 import com.leo.erp.master.customer.web.dto.CustomerOptionResponse;
 import com.leo.erp.master.customer.web.dto.CustomerRequest;
 import com.leo.erp.master.customer.web.dto.CustomerResponse;
+import com.leo.erp.system.company.domain.entity.CompanySetting;
+import com.leo.erp.system.company.service.CompanySettingService;
 import org.springframework.data.domain.Page;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -38,31 +40,42 @@ public class CustomerService extends AbstractCrudService<Customer, CustomerReque
     private final CustomerMapper customerMapper;
     private final RedisJsonCacheSupport redisJsonCacheSupport;
     private final MasterDataReferenceGuard referenceGuard;
+    private final CompanySettingService companySettingService;
 
     @Autowired
     public CustomerService(CustomerRepository customerRepository,
                            SnowflakeIdGenerator snowflakeIdGenerator,
                            CustomerMapper customerMapper,
                            RedisJsonCacheSupport redisJsonCacheSupport,
-                           MasterDataReferenceGuard referenceGuard) {
+                           MasterDataReferenceGuard referenceGuard,
+                           CompanySettingService companySettingService) {
         super(snowflakeIdGenerator);
         this.customerRepository = customerRepository;
         this.customerMapper = customerMapper;
         this.redisJsonCacheSupport = redisJsonCacheSupport;
         this.referenceGuard = referenceGuard;
+        this.companySettingService = companySettingService;
     }
 
     public CustomerService(CustomerRepository customerRepository,
                            SnowflakeIdGenerator snowflakeIdGenerator,
                            CustomerMapper customerMapper) {
-        this(customerRepository, snowflakeIdGenerator, customerMapper, null, null);
+        this(customerRepository, snowflakeIdGenerator, customerMapper, null, null, null);
     }
 
     public CustomerService(CustomerRepository customerRepository,
                            SnowflakeIdGenerator snowflakeIdGenerator,
                            CustomerMapper customerMapper,
                            RedisJsonCacheSupport redisJsonCacheSupport) {
-        this(customerRepository, snowflakeIdGenerator, customerMapper, redisJsonCacheSupport, null);
+        this(customerRepository, snowflakeIdGenerator, customerMapper, redisJsonCacheSupport, null, null);
+    }
+
+    public CustomerService(CustomerRepository customerRepository,
+                           SnowflakeIdGenerator snowflakeIdGenerator,
+                           CustomerMapper customerMapper,
+                           RedisJsonCacheSupport redisJsonCacheSupport,
+                           MasterDataReferenceGuard referenceGuard) {
+        this(customerRepository, snowflakeIdGenerator, customerMapper, redisJsonCacheSupport, referenceGuard, null);
     }
 
     @Transactional(readOnly = true)
@@ -159,6 +172,9 @@ public class CustomerService extends AbstractCrudService<Customer, CustomerReque
         entity.setProjectName(request.projectName());
         entity.setProjectNameAbbr(request.projectNameAbbr());
         entity.setProjectAddress(request.projectAddress());
+        SettlementCompanySnapshot settlementCompany = resolveSettlementCompany(request.defaultSettlementCompanyId());
+        entity.setDefaultSettlementCompanyId(settlementCompany.id());
+        entity.setDefaultSettlementCompanyName(settlementCompany.name());
         entity.setStatus(request.status());
         entity.setRemark(request.remark());
     }
@@ -256,5 +272,16 @@ public class CustomerService extends AbstractCrudService<Customer, CustomerReque
         if (redisJsonCacheSupport != null) {
             redisJsonCacheSupport.delete(CUSTOMER_CACHE_KEY);
         }
+    }
+
+    private SettlementCompanySnapshot resolveSettlementCompany(Long id) {
+        if (companySettingService == null) {
+            return new SettlementCompanySnapshot(id, null);
+        }
+        CompanySetting company = companySettingService.requireActiveSettlementCompany(id);
+        return new SettlementCompanySnapshot(company.getId(), company.getCompanyName());
+    }
+
+    private record SettlementCompanySnapshot(Long id, String name) {
     }
 }

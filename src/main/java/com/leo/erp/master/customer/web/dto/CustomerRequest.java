@@ -1,6 +1,7 @@
 package com.leo.erp.master.customer.web.dto;
 
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 
 public record CustomerRequest(
         @NotBlank(message = "客户编码不能为空")
@@ -15,6 +16,8 @@ public record CustomerRequest(
         String projectName,
         String projectNameAbbr,
         String projectAddress,
+        @NotNull(message = "默认结算主体不能为空")
+        Long defaultSettlementCompanyId,
         @NotBlank(message = "状态不能为空")
         String status,
         String remark

@@ -33,6 +33,8 @@ public class PurchaseOrderResponseAssembler {
                 response.supplierName(),
                 response.orderDate(),
                 response.buyerName(),
+                response.settlementCompanyId(),
+                response.settlementCompanyName(),
                 response.totalWeight(),
                 response.totalAmount(),
                 response.status(),

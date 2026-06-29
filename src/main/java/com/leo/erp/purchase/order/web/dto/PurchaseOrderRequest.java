@@ -14,6 +14,8 @@ public record PurchaseOrderRequest(
         @NotNull(message = "订单日期不能为空")
         LocalDateTime orderDate,
         String buyerName,
+        @NotNull(message = "采购结算主体不能为空")
+        Long settlementCompanyId,
         String status,
         String remark,
         @Valid

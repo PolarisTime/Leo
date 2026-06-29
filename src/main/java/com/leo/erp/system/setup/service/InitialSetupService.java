@@ -165,7 +165,7 @@ public class InitialSetupService {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "请先完成管理员账号初始化");
         }
         if (companySettingRepository.existsByDeletedFlagFalse()) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "公司主体已完成初始化");
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "默认结算主体已完成初始化");
         }
         return new InitialSetupSubmitResponse(resolveExistingAdminLoginName(), createCompanyRecord(request));
     }
@@ -292,7 +292,7 @@ public class InitialSetupService {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "请填写公司主体信息");
         }
 
-        String companyName = requireText(request.companyName(), "公司名称不能为空");
+        String companyName = requireText(request.companyName(), "结算主体名称不能为空");
         String taxNo = requireText(request.taxNo(), "税号不能为空");
         String bankName = requireText(request.bankName(), "开户银行不能为空");
         String bankAccount = requireText(request.bankAccount(), "银行账号不能为空");
@@ -317,7 +317,7 @@ public class InitialSetupService {
             upsertDefaultTaxRateSetting(taxRate);
             return entity.getCompanyName();
         } catch (DataIntegrityViolationException ex) {
-            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "公司信息已存在，请刷新页面后重试");
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "默认结算主体已存在，请刷新页面后重试");
         }
     }
 

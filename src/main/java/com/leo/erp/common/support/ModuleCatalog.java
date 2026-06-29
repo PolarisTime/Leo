@@ -51,7 +51,7 @@ public class ModuleCatalog {
         modules.put("ledger-adjustment", "台账调整单");
         modules.put("receivable-payable", "应收应付");
         modules.put("general-setting", "通用设置");
-        modules.put("company-setting", "公司信息");
+        modules.put("company-setting", "结算主体管理");
         modules.put("permission", "权限管理");
         modules.put("user-account", "用户账户");
         modules.put("role-setting", "角色权限配置");

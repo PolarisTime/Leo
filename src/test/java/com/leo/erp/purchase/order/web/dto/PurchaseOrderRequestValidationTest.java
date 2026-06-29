@@ -23,6 +23,7 @@ class PurchaseOrderRequestValidationTest {
                 "供应商甲",
                 LocalDateTime.of(2026, 4, 25, 0, 0),
                 "采购员A",
+                1L,
                 "草稿",
                 null,
                 List.of(new PurchaseOrderItemRequest(
@@ -59,6 +60,7 @@ class PurchaseOrderRequestValidationTest {
                 "供应商甲",
                 LocalDateTime.of(2026, 4, 25, 0, 0),
                 "采购员A",
+                1L,
                 "草稿",
                 null,
                 List.of()
@@ -69,6 +71,43 @@ class PurchaseOrderRequestValidationTest {
                 .collect(Collectors.toSet());
 
         assertThat(violations).contains("items");
+    }
+
+    @Test
+    void shouldRejectMissingSettlementCompany() {
+        PurchaseOrderRequest request = new PurchaseOrderRequest(
+                "PO-20260425-003",
+                "供应商甲",
+                LocalDateTime.of(2026, 4, 25, 0, 0),
+                "采购员A",
+                null,
+                "草稿",
+                null,
+                List.of(new PurchaseOrderItemRequest(
+                        "M001",
+                        "宝钢",
+                        "板材",
+                        "Q235",
+                        "10mm",
+                        "",
+                        "吨",
+                        "一号库",
+                        null,
+                        1,
+                        "件",
+                        BigDecimal.valueOf(1.250),
+                        1,
+                        BigDecimal.valueOf(1.250),
+                        BigDecimal.valueOf(4000),
+                        BigDecimal.valueOf(5000)
+                ))
+        );
+
+        Set<String> violations = VALIDATOR.validate(request).stream()
+                .map(violation -> violation.getPropertyPath().toString())
+                .collect(Collectors.toSet());
+
+        assertThat(violations).contains("settlementCompanyId");
     }
 
     private static Validator validator() {

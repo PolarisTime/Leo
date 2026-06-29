@@ -8,6 +8,7 @@ import com.leo.erp.common.web.BindPageQuery;
 import com.leo.erp.common.web.PublicAccess;
 import com.leo.erp.security.permission.RequiresPermission;
 import com.leo.erp.system.company.service.CompanySettingService;
+import com.leo.erp.system.company.web.dto.CompanySettingOptionResponse;
 import com.leo.erp.system.company.web.dto.CompanySettingRequest;
 import com.leo.erp.system.company.web.dto.CompanySettingResponse;
 import com.leo.erp.system.operationlog.support.OperationLoggable;
@@ -22,6 +23,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
 
 @RestController
 @Validated
@@ -44,6 +47,12 @@ public class CompanySettingController {
         return ApiResponse.success(PageResponse.from(companySettingService.page(query, keyword, status)));
     }
 
+    @GetMapping("/options")
+    @RequiresPermission(authenticatedOnly = true)
+    public ApiResponse<List<CompanySettingOptionResponse>> options() {
+        return ApiResponse.success(companySettingService.listActiveOptions());
+    }
+
     @GetMapping("/{id}")
     @RequiresPermission(resource = "company-setting", action = "read")
     public ApiResponse<CompanySettingResponse> detail(@PathVariable Long id) {
@@ -53,7 +62,8 @@ public class CompanySettingController {
     @GetMapping("/name")
     @PublicAccess
     public ApiResponse<String> companyName() {
-        return ApiResponse.success(ErrorCode.SUCCESS.getMessage(), companySettingService.current().companyName());
+        CompanySettingResponse current = companySettingService.current();
+        return ApiResponse.success(ErrorCode.SUCCESS.getMessage(), current == null ? "" : current.companyName());
     }
 
     @GetMapping("/current")
@@ -64,7 +74,7 @@ public class CompanySettingController {
 
     @PutMapping("/current")
     @RequiresPermission(resource = "company-setting", action = "update")
-    @OperationLoggable(moduleName = "公司信息", actionType = "保存")
+    @OperationLoggable(moduleName = "结算主体", actionType = "保存")
     public ApiResponse<CompanySettingResponse> saveCurrent(@Valid @RequestBody CompanySettingRequest request) {
         return ApiResponse.success("保存成功", companySettingService.saveCurrent(request));
     }

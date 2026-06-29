@@ -10,10 +10,37 @@ public record PurchaseOrderResponse(
         String supplierName,
         LocalDateTime orderDate,
         String buyerName,
+        Long settlementCompanyId,
+        String settlementCompanyName,
         BigDecimal totalWeight,
         BigDecimal totalAmount,
         String status,
         String remark,
         List<PurchaseOrderItemResponse> items
 ) {
+    public PurchaseOrderResponse(Long id,
+                                 String orderNo,
+                                 String supplierName,
+                                 LocalDateTime orderDate,
+                                 String buyerName,
+                                 BigDecimal totalWeight,
+                                 BigDecimal totalAmount,
+                                 String status,
+                                 String remark,
+                                 List<PurchaseOrderItemResponse> items) {
+        this(
+                id,
+                orderNo,
+                supplierName,
+                orderDate,
+                buyerName,
+                null,
+                null,
+                totalWeight,
+                totalAmount,
+                status,
+                remark,
+                items
+        );
+    }
 }

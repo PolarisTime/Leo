@@ -20,6 +20,8 @@ import com.leo.erp.master.carrier.web.dto.CarrierOptionResponse;
 import com.leo.erp.master.carrier.web.dto.CarrierRequest;
 import com.leo.erp.master.carrier.web.dto.CarrierResponse;
 import com.leo.erp.master.carrier.web.dto.VehicleItem;
+import com.leo.erp.system.company.domain.entity.CompanySetting;
+import com.leo.erp.system.company.service.CompanySettingService;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -46,6 +48,7 @@ public class CarrierService extends AbstractCrudService<Carrier, CarrierRequest,
     private final CarrierMapper carrierMapper;
     private final RedisJsonCacheSupport redisJsonCacheSupport;
     private final MasterDataReferenceGuard referenceGuard;
+    private final CompanySettingService companySettingService;
 
     @Autowired
     public CarrierService(CarrierRepository carrierRepository,
@@ -53,20 +56,22 @@ public class CarrierService extends AbstractCrudService<Carrier, CarrierRequest,
                           SnowflakeIdGenerator snowflakeIdGenerator,
                           CarrierMapper carrierMapper,
                           RedisJsonCacheSupport redisJsonCacheSupport,
-                          MasterDataReferenceGuard referenceGuard) {
+                          MasterDataReferenceGuard referenceGuard,
+                          CompanySettingService companySettingService) {
         super(snowflakeIdGenerator);
         this.carrierRepository = carrierRepository;
         this.vehicleRepository = vehicleRepository;
         this.carrierMapper = carrierMapper;
         this.redisJsonCacheSupport = redisJsonCacheSupport;
         this.referenceGuard = referenceGuard;
+        this.companySettingService = companySettingService;
     }
 
     public CarrierService(CarrierRepository carrierRepository,
                           VehicleRepository vehicleRepository,
                           SnowflakeIdGenerator snowflakeIdGenerator,
                           CarrierMapper carrierMapper) {
-        this(carrierRepository, vehicleRepository, snowflakeIdGenerator, carrierMapper, null, null);
+        this(carrierRepository, vehicleRepository, snowflakeIdGenerator, carrierMapper, null, null, null);
     }
 
     public CarrierService(CarrierRepository carrierRepository,
@@ -74,7 +79,17 @@ public class CarrierService extends AbstractCrudService<Carrier, CarrierRequest,
                           SnowflakeIdGenerator snowflakeIdGenerator,
                           CarrierMapper carrierMapper,
                           RedisJsonCacheSupport redisJsonCacheSupport) {
-        this(carrierRepository, vehicleRepository, snowflakeIdGenerator, carrierMapper, redisJsonCacheSupport, null);
+        this(carrierRepository, vehicleRepository, snowflakeIdGenerator, carrierMapper, redisJsonCacheSupport, null, null);
+    }
+
+    public CarrierService(CarrierRepository carrierRepository,
+                          VehicleRepository vehicleRepository,
+                          SnowflakeIdGenerator snowflakeIdGenerator,
+                          CarrierMapper carrierMapper,
+                          RedisJsonCacheSupport redisJsonCacheSupport,
+                          MasterDataReferenceGuard referenceGuard) {
+        this(carrierRepository, vehicleRepository, snowflakeIdGenerator, carrierMapper, redisJsonCacheSupport,
+                referenceGuard, null);
     }
 
     @org.springframework.transaction.annotation.Transactional(readOnly = true)
@@ -158,6 +173,9 @@ public class CarrierService extends AbstractCrudService<Carrier, CarrierRequest,
             }
         }
         entity.setPriceMode(request.priceMode());
+        SettlementCompanySnapshot settlementCompany = resolveSettlementCompany(request.defaultSettlementCompanyId());
+        entity.setDefaultSettlementCompanyId(settlementCompany.id());
+        entity.setDefaultSettlementCompanyName(settlementCompany.name());
         entity.setStatus(request.status());
         entity.setRemark(request.remark());
     }
@@ -291,5 +309,16 @@ public class CarrierService extends AbstractCrudService<Carrier, CarrierRequest,
         if (redisJsonCacheSupport != null) {
             redisJsonCacheSupport.delete(CARRIER_CACHE_KEY);
         }
+    }
+
+    private SettlementCompanySnapshot resolveSettlementCompany(Long id) {
+        if (companySettingService == null) {
+            return new SettlementCompanySnapshot(id, null);
+        }
+        CompanySetting company = companySettingService.requireActiveSettlementCompany(id);
+        return new SettlementCompanySnapshot(company.getId(), company.getCompanyName());
+    }
+
+    private record SettlementCompanySnapshot(Long id, String name) {
     }
 }

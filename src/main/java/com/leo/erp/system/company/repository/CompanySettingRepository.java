@@ -4,6 +4,7 @@ import com.leo.erp.system.company.domain.entity.CompanySetting;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 
+import java.util.List;
 import java.util.Optional;
 
 public interface CompanySettingRepository extends JpaRepository<CompanySetting, Long>, JpaSpecificationExecutor<CompanySetting> {
@@ -13,6 +14,10 @@ public interface CompanySettingRepository extends JpaRepository<CompanySetting, 
     Optional<CompanySetting> findFirstByDeletedFlagFalseOrderByIdAsc();
 
     Optional<CompanySetting> findFirstByStatusAndDeletedFlagFalseOrderByIdAsc(String status);
+
+    Optional<CompanySetting> findByIdAndStatusAndDeletedFlagFalse(Long id, String status);
+
+    List<CompanySetting> findByStatusAndDeletedFlagFalseOrderByIdAsc(String status);
 
     boolean existsByDeletedFlagFalse();
 

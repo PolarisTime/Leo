@@ -111,7 +111,7 @@ class CustomerServiceTest {
         );
         var service = new CustomerService(repository, new SnowflakeIdGenerator(1), null);
 
-        assertThatThrownBy(() -> service.create(new CustomerRequest("C001", "客户甲", null, null, null, null, "项目A", null, null, "正常", null)))
+        assertThatThrownBy(() -> service.create(new CustomerRequest("C001", "客户甲", null, null, null, null, "项目A", null, null, 1L, "正常", null)))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("客户编码已存在");
     }
@@ -132,7 +132,7 @@ class CustomerServiceTest {
         );
         var service = new CustomerService(repository, new SnowflakeIdGenerator(1), null);
 
-        assertThatThrownBy(() -> service.update(1L, new CustomerRequest("C002", "客户乙", null, null, null, null, "项目B", null, null, "正常", null)))
+        assertThatThrownBy(() -> service.update(1L, new CustomerRequest("C002", "客户乙", null, null, null, null, "项目B", null, null, 1L, "正常", null)))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("客户编码已存在");
     }
@@ -199,7 +199,7 @@ class CustomerServiceTest {
         );
         var service = new CustomerService(repository, new SnowflakeIdGenerator(1), mapper, cache);
 
-        var request = new CustomerRequest("C001", "客户甲", null, null, null, null, "项目A", null, null, "正常", null);
+        var request = new CustomerRequest("C001", "客户甲", null, null, null, null, "项目A", null, null, 1L, "正常", null);
         var result = service.update(1L, request);
 
         assertThat(result).isNotNull();
@@ -233,7 +233,7 @@ class CustomerServiceTest {
         );
         var service = new CustomerService(repository, new SnowflakeIdGenerator(1), mapper);
 
-        var request = new CustomerRequest("C001", "客户甲", "张三", "13800138000", "北京", "月结", "项目A", "项A", "地址", "正常", "备注");
+        var request = new CustomerRequest("C001", "客户甲", "张三", "13800138000", "北京", "月结", "项目A", "项A", "地址", 1L, "正常", "备注");
         var result = service.create(request);
 
         assertThat(result).isNotNull();
@@ -267,7 +267,7 @@ class CustomerServiceTest {
         );
         var service = new CustomerService(repository, new SnowflakeIdGenerator(1), mapper);
 
-        var request = new CustomerRequest("C001", "客户乙", null, null, null, null, "项目B", null, null, "正常", null);
+        var request = new CustomerRequest("C001", "客户乙", null, null, null, null, "项目B", null, null, 1L, "正常", null);
         var result = service.update(1L, request);
 
         assertThat(result).isNotNull();
@@ -302,7 +302,7 @@ class CustomerServiceTest {
         );
         var service = new CustomerService(repository, new SnowflakeIdGenerator(1), mapper);
 
-        var request = new CustomerRequest("C002", "客户乙", null, null, null, null, "项目B", null, null, "正常", null);
+        var request = new CustomerRequest("C002", "客户乙", null, null, null, null, "项目B", null, null, 1L, "正常", null);
         var result = service.update(1L, request);
 
         assertThat(result).isNotNull();
@@ -404,7 +404,7 @@ class CustomerServiceTest {
         );
         var service = new CustomerService(repository, new SnowflakeIdGenerator(1), mapper, cache);
 
-        var request = new CustomerRequest("C001", "客户甲", null, null, null, null, "项目A", null, null, "正常", null);
+        var request = new CustomerRequest("C001", "客户甲", null, null, null, null, "项目A", null, null, 1L, "正常", null);
         service.create(request);
 
         verify(cache).delete("leo:customer:all");

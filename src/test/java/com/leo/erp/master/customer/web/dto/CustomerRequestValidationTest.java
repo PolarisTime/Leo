@@ -25,6 +25,7 @@ class CustomerRequestValidationTest {
                 "项目名称",
                 "项目简称",
                 "项目地址",
+                1L,
                 "正常",
                 "备注"
         );
@@ -48,6 +49,7 @@ class CustomerRequestValidationTest {
                 "项目名称",
                 "项目简称",
                 "项目地址",
+                1L,
                 "正常",
                 "备注"
         );
@@ -71,6 +73,7 @@ class CustomerRequestValidationTest {
                 "",
                 "项目简称",
                 "项目地址",
+                1L,
                 "正常",
                 "备注"
         );
@@ -94,6 +97,7 @@ class CustomerRequestValidationTest {
                 "项目名称",
                 "项目简称",
                 "项目地址",
+                1L,
                 "",
                 "备注"
         );
@@ -117,6 +121,7 @@ class CustomerRequestValidationTest {
                 "项目名称",
                 "项目简称",
                 "项目地址",
+                1L,
                 "正常",
                 "备注"
         );
@@ -126,6 +131,30 @@ class CustomerRequestValidationTest {
                 .collect(Collectors.toSet());
 
         assertThat(violations).isEmpty();
+    }
+
+    @Test
+    void shouldRejectMissingDefaultSettlementCompany() {
+        CustomerRequest request = new CustomerRequest(
+                "C001",
+                "客户名称",
+                "联系人",
+                "13800138000",
+                "上海",
+                "月结",
+                "项目名称",
+                "项目简称",
+                "项目地址",
+                null,
+                "正常",
+                "备注"
+        );
+
+        Set<String> violations = VALIDATOR.validate(request).stream()
+                .map(violation -> violation.getPropertyPath().toString())
+                .collect(Collectors.toSet());
+
+        assertThat(violations).contains("defaultSettlementCompanyId");
     }
 
     private static Validator validator() {

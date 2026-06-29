@@ -43,6 +43,12 @@ public class Carrier extends AbstractAuditableEntity {
     @Column(name = "price_mode", length = 32)
     private String priceMode;
 
+    @Column(name = "default_settlement_company_id")
+    private Long defaultSettlementCompanyId;
+
+    @Column(name = "default_settlement_company_name", length = 128)
+    private String defaultSettlementCompanyName;
+
     @Column(name = "status", nullable = false, length = 16)
     private String status;
 

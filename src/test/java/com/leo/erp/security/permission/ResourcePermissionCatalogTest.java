@@ -84,6 +84,10 @@ class ResourcePermissionCatalogTest {
         assertThat(ResourcePermissionCatalog.resolveResourceByPath("/purchase-order/123")).isPresent();
         assertThat(ResourcePermissionCatalog.resolveResourceByPath("/ledger-adjustments/123"))
                 .contains("ledger-adjustment");
+        assertThat(ResourcePermissionCatalog.resolveResourceByPath("/company-settings/options"))
+                .contains("company-setting");
+        assertThat(ResourcePermissionCatalog.resolveResourceByPath("/company-settings/current"))
+                .contains("company-setting");
     }
 
     @Test

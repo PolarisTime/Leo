@@ -16,6 +16,8 @@ import com.leo.erp.purchase.order.web.dto.PieceWeightResponse;
 import com.leo.erp.purchase.order.web.dto.PurchaseOrderRequest;
 import com.leo.erp.purchase.order.web.dto.PurchaseOrderResponse;
 import com.leo.erp.security.permission.WorkflowTransitionGuard;
+import com.leo.erp.system.company.domain.entity.CompanySetting;
+import com.leo.erp.system.company.service.CompanySettingService;
 import java.util.function.Function;
 import org.springframework.data.domain.Page;
 import org.springframework.data.jpa.domain.Specification;
@@ -37,6 +39,7 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
     private final PurchaseOrderApplyService purchaseOrderApplyService;
     private final PurchaseOrderPieceWeightQueryService pieceWeightQueryService;
     private final WorkflowTransitionGuard workflowTransitionGuard;
+    private final CompanySettingService companySettingService;
 
     public PurchaseOrderService(PurchaseOrderRepository purchaseOrderRepository,
                                 SnowflakeIdGenerator snowflakeIdGenerator,
@@ -45,7 +48,8 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
                                 PurchaseOrderSupplierResolver supplierResolver,
                                 PurchaseOrderApplyService purchaseOrderApplyService,
                                 PurchaseOrderPieceWeightQueryService pieceWeightQueryService,
-                                WorkflowTransitionGuard workflowTransitionGuard) {
+                                WorkflowTransitionGuard workflowTransitionGuard,
+                                CompanySettingService companySettingService) {
         super(snowflakeIdGenerator);
         this.purchaseOrderRepository = purchaseOrderRepository;
         this.availabilityService = availabilityService;
@@ -54,6 +58,7 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
         this.purchaseOrderApplyService = purchaseOrderApplyService;
         this.pieceWeightQueryService = pieceWeightQueryService;
         this.workflowTransitionGuard = workflowTransitionGuard;
+        this.companySettingService = companySettingService;
     }
 
     private static final String[] PURCHASE_ORDER_SEARCH_FIELDS = {"orderNo", "supplierName"};
@@ -138,6 +143,7 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
                 request.supplierName(),
                 request.orderDate(),
                 request.buyerName(),
+                request.settlementCompanyId(),
                 request.status(),
                 request.remark(),
                 request.items()
@@ -151,6 +157,7 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
                 request.supplierName(),
                 request.orderDate(),
                 request.buyerName(),
+                request.settlementCompanyId(),
                 request.status(),
                 request.remark(),
                 request.items()
@@ -194,6 +201,7 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
 
     @Override
     protected void apply(PurchaseOrder purchaseOrder, PurchaseOrderRequest request) {
+        assertSettlementCompanyMutable(purchaseOrder, request.settlementCompanyId());
         String nextStatus = BusinessStatusValidator.normalizeWithDefault(
                 request.status(),
                 purchaseOrder.getStatus() != null ? purchaseOrder.getStatus() : StatusConstants.DRAFT,
@@ -211,6 +219,9 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
         purchaseOrder.setSupplierName(supplierResolver.requireMasterSupplierName(request.supplierName()));
         purchaseOrder.setOrderDate(request.orderDate());
         purchaseOrder.setBuyerName(request.buyerName());
+        SettlementCompanySnapshot settlementCompany = resolveSettlementCompany(request.settlementCompanyId());
+        purchaseOrder.setSettlementCompanyId(settlementCompany.id());
+        purchaseOrder.setSettlementCompanyName(settlementCompany.name());
         purchaseOrder.setStatus(nextStatus);
         purchaseOrder.setRemark(request.remark());
         purchaseOrderApplyService.applyItems(purchaseOrder, request, this::nextId);
@@ -237,5 +248,26 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
 
     public List<PieceWeightResponse> getPieceWeightsBySalesOrderItemId(Long salesOrderItemId) {
         return pieceWeightQueryService.getPieceWeightsBySalesOrderItemId(salesOrderItemId);
+    }
+
+    private void assertSettlementCompanyMutable(PurchaseOrder purchaseOrder, Long requestedSettlementCompanyId) {
+        if (purchaseOrder.getId() == null || purchaseOrder.getSettlementCompanyId() == null) {
+            return;
+        }
+        if (StatusConstants.AUDITED.equals(purchaseOrder.getStatus())
+                && !purchaseOrder.getSettlementCompanyId().equals(requestedSettlementCompanyId)) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "已审核采购订单不允许修改采购结算主体");
+        }
+    }
+
+    private SettlementCompanySnapshot resolveSettlementCompany(Long id) {
+        if (companySettingService == null) {
+            return new SettlementCompanySnapshot(id, null);
+        }
+        CompanySetting company = companySettingService.requireActiveSettlementCompany(id);
+        return new SettlementCompanySnapshot(company.getId(), company.getCompanyName());
+    }
+
+    private record SettlementCompanySnapshot(Long id, String name) {
     }
 }

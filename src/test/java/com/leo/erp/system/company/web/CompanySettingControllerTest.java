@@ -61,6 +61,17 @@ class CompanySettingControllerTest {
     }
 
     @Test
+    void companyNameReturnsEmptyWhenCurrentIsMissing() {
+        when(companySettingService.current()).thenReturn(null);
+
+        ApiResponse<String> response = controller.companyName();
+
+        assertThat(response.code()).isEqualTo(0);
+        assertThat(response.data()).isEmpty();
+        verify(companySettingService).current();
+    }
+
+    @Test
     void currentReturnsCurrentCompanySetting() {
         CompanySettingResponse setting = mock(CompanySettingResponse.class);
         when(companySettingService.current()).thenReturn(setting);

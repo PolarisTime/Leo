@@ -36,6 +36,12 @@ public class PurchaseOrder extends AbstractAuditableEntity {
     @Column(name = "buyer_name", length = 32)
     private String buyerName;
 
+    @Column(name = "settlement_company_id")
+    private Long settlementCompanyId;
+
+    @Column(name = "settlement_company_name", length = 128)
+    private String settlementCompanyName;
+
     @Column(name = "total_weight", nullable = false, precision = 18, scale = 8)
     private BigDecimal totalWeight;
 
