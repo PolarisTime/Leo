@@ -63,7 +63,7 @@ class InvoiceIssueControllerTest {
         PageQuery query = new PageQuery(0, 20, null, null);
         when(service.page(any(), any())).thenReturn(page);
 
-        ApiResponse<PageResponse<InvoiceIssueResponse>> response = controller.page(query, "test", "customer", "active", null, null);
+        ApiResponse<PageResponse<InvoiceIssueResponse>> response = controller.page(query, "test", "customer", null, "active", null, null);
 
         assertThat(response.code()).isEqualTo(0);
         assertThat(response.data().content()).hasSize(1);

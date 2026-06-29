@@ -15,6 +15,8 @@ public record FreightStatementRequest(
         String statementNo,
         String carrierCode,
         @jakarta.validation.constraints.NotBlank String carrierName,
+        Long settlementCompanyId,
+        String settlementCompanyName,
         @NotNull LocalDate startDate,
         @NotNull LocalDate endDate,
         @NotNull @DecimalMin("0.000") BigDecimal totalWeight,
@@ -40,6 +42,25 @@ public record FreightStatementRequest(
                                    String attachment,
                                    String remark,
                                    List<FreightBillItemRequest> items) {
-        this(statementNo, null, carrierName, startDate, endDate, totalWeight, totalFreight, paidAmount, unpaidAmount, status, signStatus, attachment, remark, items);
+        this(statementNo, null, carrierName, null, null, startDate, endDate, totalWeight, totalFreight,
+                paidAmount, unpaidAmount, status, signStatus, attachment, remark, items);
+    }
+
+    public FreightStatementRequest(String statementNo,
+                                   String carrierCode,
+                                   String carrierName,
+                                   LocalDate startDate,
+                                   LocalDate endDate,
+                                   BigDecimal totalWeight,
+                                   BigDecimal totalFreight,
+                                   BigDecimal paidAmount,
+                                   BigDecimal unpaidAmount,
+                                   String status,
+                                   String signStatus,
+                                   String attachment,
+                                   String remark,
+                                   List<FreightBillItemRequest> items) {
+        this(statementNo, carrierCode, carrierName, null, null, startDate, endDate, totalWeight,
+                totalFreight, paidAmount, unpaidAmount, status, signStatus, attachment, remark, items);
     }
 }

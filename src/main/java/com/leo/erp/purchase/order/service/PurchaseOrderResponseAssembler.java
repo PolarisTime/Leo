@@ -63,6 +63,8 @@ public class PurchaseOrderResponseAssembler {
                 item.getSpec(),
                 item.getLength(),
                 item.getUnit(),
+                item.getPurchaseOrder() == null ? null : item.getPurchaseOrder().getSettlementCompanyId(),
+                item.getPurchaseOrder() == null ? null : item.getPurchaseOrder().getSettlementCompanyName(),
                 item.getWarehouseName(),
                 item.getBatchNo(),
                 availabilityService.remainingQuantity(item, allocatedQuantityMap),

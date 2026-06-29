@@ -12,6 +12,8 @@ public record PurchaseOrderItemResponse(
         String spec,
         String length,
         String unit,
+        Long settlementCompanyId,
+        String settlementCompanyName,
         String warehouseName,
         String batchNo,
         Integer remainingQuantity,
@@ -27,4 +29,32 @@ public record PurchaseOrderItemResponse(
         BigDecimal unitPrice,
         BigDecimal amount
 ) {
+    public PurchaseOrderItemResponse(Long id,
+                                     Integer lineNo,
+                                     String materialCode,
+                                     String brand,
+                                     String category,
+                                     String material,
+                                     String spec,
+                                     String length,
+                                     String unit,
+                                     String warehouseName,
+                                     String batchNo,
+                                     Integer remainingQuantity,
+                                     Integer salesRemainingQuantity,
+                                     BigDecimal salesRemainingWeightTon,
+                                     Integer quantity,
+                                     String quantityUnit,
+                                     BigDecimal pieceWeightTon,
+                                     Integer piecesPerBundle,
+                                     BigDecimal weightTon,
+                                     BigDecimal actualWeightTon,
+                                     BigDecimal actualPieceWeightTon,
+                                     BigDecimal unitPrice,
+                                     BigDecimal amount) {
+        this(id, lineNo, materialCode, brand, category, material, spec, length, unit,
+                null, null, warehouseName, batchNo, remainingQuantity, salesRemainingQuantity,
+                salesRemainingWeightTon, quantity, quantityUnit, pieceWeightTon, piecesPerBundle,
+                weightTon, actualWeightTon, actualPieceWeightTon, unitPrice, amount);
+    }
 }

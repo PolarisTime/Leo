@@ -56,7 +56,7 @@ class FreightBillServiceTest {
     private FreightBillService createService(FreightBillRepository repository) {
         FreightBillSourceService sourceService = mock(FreightBillSourceService.class);
         when(sourceService.validateSources(any(FreightBillRequest.class), any()))
-                .thenReturn(new FreightBillSourceService.SourceValidationContext(Map.of()));
+                .thenReturn(new FreightBillSourceService.SourceValidationContext(Map.of(), Map.of()));
         return createService(repository, sourceService);
     }
 

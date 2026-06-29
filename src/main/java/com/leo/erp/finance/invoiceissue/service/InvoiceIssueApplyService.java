@@ -49,7 +49,7 @@ public class InvoiceIssueApplyService {
         entity.setOperatorName(request.operatorName());
         entity.setRemark(request.remark());
 
-        BigDecimal amount = invoiceIssueSourceService.applyItems(
+        InvoiceIssueSourceService.SourceApplyResult sourceResult = invoiceIssueSourceService.applyItems(
                 entity,
                 request.items(),
                 request.customerName(),
@@ -58,11 +58,13 @@ public class InvoiceIssueApplyService {
         );
         InvoiceAmountCalculator.InvoiceAmounts amounts = amountCalculator.resolve(
                 "开票",
-                amount,
+                sourceResult.amount(),
                 request.amount(),
                 request.taxAmount()
         );
         entity.setAmount(amounts.amount());
         entity.setTaxAmount(amounts.taxAmount());
+        entity.setSettlementCompanyId(sourceResult.settlementCompanyId());
+        entity.setSettlementCompanyName(sourceResult.settlementCompanyName());
     }
 }

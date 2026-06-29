@@ -63,7 +63,7 @@ class CompanySettingRequestValidationTest {
     }
 
     @Test
-    void shouldFail_whenSettlementAccountsEmpty() {
+    void shouldPass_whenSettlementAccountsEmpty() {
         var request = new CompanySettingRequest(
                 "测试公司", "91110000MA0XXXXXXX",
                 List.of(),
@@ -72,8 +72,7 @@ class CompanySettingRequestValidationTest {
 
         var violations = validator.validate(request);
 
-        assertThat(violations).isNotEmpty();
-        assertThat(violations.stream().anyMatch(v -> v.getPropertyPath().toString().equals("settlementAccounts"))).isTrue();
+        assertThat(violations).isEmpty();
     }
 
     @Test

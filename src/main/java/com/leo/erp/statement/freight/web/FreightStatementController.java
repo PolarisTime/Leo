@@ -59,13 +59,16 @@ public class FreightStatementController {
             @BindPageQuery(sortFieldKey = "freight-statement") PageQuery query,
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) String carrierName,
+            @RequestParam(required = false) Long settlementCompanyId,
             @RequestParam(required = false) String status,
             @RequestParam(required = false) String signStatus,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate periodStart,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate periodEnd
     ) {
         return ApiResponse.success(PageResponse.from(
-                freightStatementService.responsePage(query, new PageFilter(keyword, status, periodStart, periodEnd, carrierName, null, null, null, null, null, signStatus, null, null, null, null))
+                freightStatementService.responsePage(query, new PageFilter(keyword, status, periodStart, periodEnd,
+                        carrierName, null, null, null, null, null, signStatus, null, null, null, null,
+                        settlementCompanyId))
         ));
     }
 
@@ -76,11 +79,12 @@ public class FreightStatementController {
             @BindPageQuery(sortFieldKey = "freight-bill") PageQuery query,
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) String carrierName,
+            @RequestParam(required = false) Long settlementCompanyId,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate
     ) {
         return ApiResponse.success(PageResponse.from(
-                freightStatementService.candidatePage(query, PageFilter.of(keyword, carrierName, null, startDate, endDate))
+                freightStatementService.candidatePage(query, PageFilter.of(keyword, carrierName, settlementCompanyId, null, startDate, endDate))
         ));
     }
 

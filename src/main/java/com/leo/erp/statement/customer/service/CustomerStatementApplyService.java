@@ -45,9 +45,12 @@ public class CustomerStatementApplyService {
         entity.setStatus(nextStatus);
         entity.setRemark(request.remark());
 
-        BigDecimal salesAmount = sourceService.applyItems(entity, request, nextIdSupplier);
+        CustomerStatementSourceService.SourceApplyResult sourceResult =
+                sourceService.applyItems(entity, request, nextIdSupplier);
+        entity.setSettlementCompanyId(sourceResult.settlementCompanyId());
+        entity.setSettlementCompanyName(sourceResult.settlementCompanyName());
         StatementBalanceRule.Balance balance = StatementBalanceRule.resolve(
-                salesAmount,
+                sourceResult.salesAmount(),
                 request.receiptAmount(),
                 "客户对账单收款金额",
                 "客户对账单销售金额不能低于已收款金额"

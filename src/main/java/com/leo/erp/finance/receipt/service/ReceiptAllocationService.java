@@ -39,6 +39,7 @@ public class ReceiptAllocationService {
     ) {
         List<ReceiptAllocationRequest> allocationRequests = normalizeAllocationRequests(request);
         String resolvedCustomerCode = null;
+        SettlementCompanySnapshot settlementCompany = SettlementCompanySnapshot.EMPTY;
         BigDecimal totalAllocatedAmount = BigDecimal.ZERO;
         Map<Long, BigDecimal> requestAllocatedAmountMap = new HashMap<>();
         List<ReceiptAllocation> items = ManagedEntityItemSupport.syncById(
@@ -64,6 +65,7 @@ public class ReceiptAllocationService {
                     i + 1
             );
             resolvedCustomerCode = mergeCustomerCode(resolvedCustomerCode, statement.getCustomerCode());
+            settlementCompany = mergeSettlementCompany(settlementCompany, statement, i + 1);
 
             ReceiptAllocation item = items.get(i);
             item.setReceipt(entity);
@@ -78,7 +80,13 @@ public class ReceiptAllocationService {
         }
         assertSettlementAllocationsComplete(nextStatus, allocationRequests.isEmpty(), totalAllocatedAmount, entity.getAmount());
         entity.getItems().sort(java.util.Comparator.comparing(ReceiptAllocation::getLineNo));
-        return new AllocationApplyResult(resolvedCustomerCode, totalAllocatedAmount, allocationRequests.isEmpty());
+        return new AllocationApplyResult(
+                resolvedCustomerCode,
+                settlementCompany.id(),
+                settlementCompany.name(),
+                totalAllocatedAmount,
+                allocationRequests.isEmpty()
+        );
     }
 
     void validateExistingAllocationsForSettlement(Receipt entity, String nextStatus) {
@@ -94,6 +102,7 @@ public class ReceiptAllocationService {
         );
         Map<Long, BigDecimal> requestAllocatedAmountMap = new HashMap<>();
         String resolvedCustomerCode = null;
+        SettlementCompanySnapshot settlementCompany = SettlementCompanySnapshot.EMPTY;
         for (int i = 0; i < entity.getItems().size(); i++) {
             ReceiptAllocation item = entity.getItems().get(i);
             CustomerStatement statement = statementAllocationValidator.validate(
@@ -106,8 +115,11 @@ public class ReceiptAllocationService {
                     i + 1
             );
             resolvedCustomerCode = mergeCustomerCode(resolvedCustomerCode, statement.getCustomerCode());
+            settlementCompany = mergeSettlementCompany(settlementCompany, statement, i + 1);
         }
         entity.setCustomerCode(mergeCustomerCode(entity.getCustomerCode(), resolvedCustomerCode));
+        entity.setSettlementCompanyId(settlementCompany.id());
+        entity.setSettlementCompanyName(settlementCompany.name());
     }
 
     String mergeCustomerCode(String currentCode, String nextCode) {
@@ -182,10 +194,40 @@ public class ReceiptAllocationService {
         return SettlementAllocationRule.requirePositiveAmount(allocatedAmount, lineNo);
     }
 
+    private SettlementCompanySnapshot mergeSettlementCompany(SettlementCompanySnapshot current,
+                                                             CustomerStatement statement,
+                                                             int lineNo) {
+        SettlementCompanySnapshot next = new SettlementCompanySnapshot(
+                statement.getSettlementCompanyId(),
+                BusinessDocumentValidator.trimToNull(statement.getSettlementCompanyName())
+        );
+        if (next.isEmpty()) {
+            return current;
+        }
+        if (current.isEmpty()) {
+            return next;
+        }
+        if (!current.equals(next)) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行客户对账单结算主体与收款单不一致");
+        }
+        return current;
+    }
+
     record AllocationApplyResult(
             String customerCode,
+            Long settlementCompanyId,
+            String settlementCompanyName,
             BigDecimal totalAllocatedAmount,
             boolean allocationEmpty
     ) {
+    }
+
+    private record SettlementCompanySnapshot(Long id, String name) {
+
+        private static final SettlementCompanySnapshot EMPTY = new SettlementCompanySnapshot(null, null);
+
+        boolean isEmpty() {
+            return id == null && name == null;
+        }
     }
 }

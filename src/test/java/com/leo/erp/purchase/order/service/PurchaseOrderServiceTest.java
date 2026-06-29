@@ -362,8 +362,16 @@ class PurchaseOrderServiceTest {
         when(itemAllocationRepo.summarizeSalesByPurchaseOrderItems(List.of(11L, 12L), null))
                 .thenReturn(List.of(allocationProjection(11L, 7L), allocationProjection(12L, 3L)));
 
-        var inboundPage = service.importCandidates(PageQuery.of(0, 20, null, null), "", "purchase-inbound");
-        var salesPage = service.importCandidates(PageQuery.of(0, 20, null, null), "", "sales-order");
+        var inboundPage = service.importCandidates(
+                PageQuery.of(0, 20, null, null),
+                PageFilter.of("", null, null, null, null),
+                "purchase-inbound"
+        );
+        var salesPage = service.importCandidates(
+                PageQuery.of(0, 20, null, null),
+                PageFilter.of("", null, null, null, null),
+                "sales-order"
+        );
 
         assertThat(inboundPage.getContent()).singleElement().satisfies(candidate ->
                 assertThat(candidate.importableQuantity()).isEqualTo(11)
@@ -711,7 +719,11 @@ class PurchaseOrderServiceTest {
         when(repository.findAll(any(Specification.class), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of()));
 
-        var page = service.importCandidates(PageQuery.of(0, 20, null, null), "", "purchase-inbound");
+        var page = service.importCandidates(
+                PageQuery.of(0, 20, null, null),
+                PageFilter.of("", null, null, null, null),
+                "purchase-inbound"
+        );
 
         assertThat(page.getContent()).isEmpty();
         verify(repository, never()).findByIdInAndDeletedFlagFalse(any());
@@ -734,7 +746,11 @@ class PurchaseOrderServiceTest {
                 mock(JdbcTemplate.class)
         );
 
-        assertThatThrownBy(() -> service.importCandidates(PageQuery.of(0, 20, null, null), "", "invalid"))
+        assertThatThrownBy(() -> service.importCandidates(
+                PageQuery.of(0, 20, null, null),
+                PageFilter.of("", null, null, null, null),
+                "invalid"
+        ))
                 .hasMessageContaining("usage 不支持当前导入场景");
     }
 

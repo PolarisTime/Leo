@@ -46,6 +46,12 @@ public class PurchaseInboundItem {
     @Column(name = "source_purchase_order_item_id")
     private Long sourcePurchaseOrderItemId;
 
+    @Column(name = "settlement_company_id")
+    private Long settlementCompanyId;
+
+    @Column(name = "settlement_company_name", length = 128)
+    private String settlementCompanyName;
+
     @Column(name = "warehouse_name", length = 128)
     private String warehouseName;
 

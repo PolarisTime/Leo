@@ -47,7 +47,8 @@ public class PurchaseItemQueryAppServiceImpl implements PurchaseItemQueryAppServ
                 item.getWeighWeightTon(),
                 item.getBrand(), item.getMaterial(), item.getSpec(),
                 item.getMaterialCode(), item.getCategory(), item.getUnit(),
-                item.getWarehouseName(), item.getBatchNo()
+                item.getWarehouseName(), item.getBatchNo(),
+                item.getSettlementCompanyId(), item.getSettlementCompanyName()
         );
     }
 
@@ -62,7 +63,9 @@ public class PurchaseItemQueryAppServiceImpl implements PurchaseItemQueryAppServ
                 order != null ? order.getStatus() : null,
                 item.getBrand(), item.getMaterial(), item.getSpec(),
                 item.getMaterialCode(), item.getCategory(), item.getUnit(),
-                item.getWarehouseName(), item.getBatchNo()
+                item.getWarehouseName(), item.getBatchNo(),
+                order != null ? order.getSettlementCompanyId() : null,
+                order != null ? order.getSettlementCompanyName() : null
         );
     }
 }

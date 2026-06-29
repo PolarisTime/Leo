@@ -8,6 +8,7 @@ import com.leo.erp.logistics.bill.domain.entity.FreightBill;
 import com.leo.erp.logistics.bill.domain.entity.FreightBillItem;
 import com.leo.erp.logistics.bill.web.dto.FreightBillItemRequest;
 import com.leo.erp.logistics.bill.web.dto.FreightBillRequest;
+import com.leo.erp.sales.outbound.domain.entity.SalesOutboundItem;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -19,7 +20,21 @@ import java.util.function.LongSupplier;
 @Service
 public class FreightBillApplyService {
 
-    void applyItems(FreightBill entity, FreightBillRequest request, LongSupplier nextId) {
+    void applyItems(FreightBill entity,
+                    FreightBillRequest request,
+                    LongSupplier nextId) {
+        applyItems(
+                entity,
+                request,
+                new FreightBillSourceService.SourceValidationContext(java.util.Map.of(), java.util.Map.of()),
+                nextId
+        );
+    }
+
+    void applyItems(FreightBill entity,
+                    FreightBillRequest request,
+                    FreightBillSourceService.SourceValidationContext sourceContext,
+                    LongSupplier nextId) {
         BigDecimal totalWeight = BigDecimal.ZERO;
         LinkedHashSet<String> customerNames = new LinkedHashSet<>();
         LinkedHashSet<String> projectNames = new LinkedHashSet<>();
@@ -35,9 +50,12 @@ public class FreightBillApplyService {
         for (int i = 0; i < request.items().size(); i++) {
             FreightBillItemRequest source = request.items().get(i);
             FreightBillItem item = items.get(i);
+            int lineNo = i + 1;
+            SalesOutboundItem sourceOutboundItem = sourceContext.sourceItemAt(lineNo);
             item.setFreightBill(entity);
-            item.setLineNo(i + 1);
+            item.setLineNo(lineNo);
             item.setSourceNo(source.sourceNo());
+            applySourceSnapshot(item, sourceOutboundItem);
             item.setCustomerName(source.customerName());
             customerNames.add(source.customerName());
             item.setProjectName(source.projectName());
@@ -82,5 +100,17 @@ public class FreightBillApplyService {
             return explicitName;
         }
         return BusinessDocumentValidator.trimToNull(source.brand());
+    }
+
+    private void applySourceSnapshot(FreightBillItem item, SalesOutboundItem sourceOutboundItem) {
+        if (sourceOutboundItem == null) {
+            item.setSourceSalesOutboundItemId(null);
+            item.setSettlementCompanyId(null);
+            item.setSettlementCompanyName(null);
+            return;
+        }
+        item.setSourceSalesOutboundItemId(sourceOutboundItem.getId());
+        item.setSettlementCompanyId(sourceOutboundItem.getSettlementCompanyId());
+        item.setSettlementCompanyName(sourceOutboundItem.getSettlementCompanyName());
     }
 }

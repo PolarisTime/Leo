@@ -34,6 +34,12 @@ public class SalesOutbound extends AbstractAuditableEntity {
     @Column(name = "warehouse_name", nullable = false, length = 128)
     private String warehouseName;
 
+    @Column(name = "settlement_company_id")
+    private Long settlementCompanyId;
+
+    @Column(name = "settlement_company_name", length = 128)
+    private String settlementCompanyName;
+
     @Column(name = "outbound_date", nullable = false)
     private LocalDate outboundDate;
 

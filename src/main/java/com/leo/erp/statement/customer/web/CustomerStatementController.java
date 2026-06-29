@@ -59,12 +59,13 @@ public class CustomerStatementController {
             @BindPageQuery(sortFieldKey = "customer-statement") PageQuery query,
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) String customerName,
+            @RequestParam(required = false) Long settlementCompanyId,
             @RequestParam(required = false) String status,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate periodStart,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate periodEnd
     ) {
         return ApiResponse.success(PageResponse.from(
-                customerStatementService.page(query, PageFilter.of(keyword, customerName, status, periodStart, periodEnd))
+                customerStatementService.page(query, PageFilter.of(keyword, customerName, settlementCompanyId, status, periodStart, periodEnd))
         ));
     }
 
@@ -76,11 +77,12 @@ public class CustomerStatementController {
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) String customerName,
             @RequestParam(required = false) String projectName,
+            @RequestParam(required = false) Long settlementCompanyId,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate
     ) {
         return ApiResponse.success(PageResponse.from(
-                customerStatementService.candidatePage(query, new PageFilter(keyword, null, startDate, endDate, customerName, projectName, null, null, null, null, null, null, null, null, null))
+                customerStatementService.candidatePage(query, PageFilter.of(keyword, customerName, projectName, settlementCompanyId, null, startDate, endDate))
         ));
     }
 

@@ -34,15 +34,16 @@ public class InvoiceIssueSourceService {
         this.salesOrderItemQueryService = salesOrderItemQueryService;
     }
 
-    BigDecimal applyItems(InvoiceIssue entity,
-                          List<InvoiceIssueItemRequest> itemRequests,
-                          String customerName,
-                          String projectName,
-                          LongSupplier nextIdSupplier) {
+    SourceApplyResult applyItems(InvoiceIssue entity,
+                                 List<InvoiceIssueItemRequest> itemRequests,
+                                 String customerName,
+                                 String projectName,
+                                 LongSupplier nextIdSupplier) {
         List<Long> sourceItemIds = extractSourceItemIds(itemRequests);
         Map<Long, SalesOrderItem> sourceSalesOrderItemMap = loadSourceSalesOrderItemMap(sourceItemIds);
         Map<Long, AllocationProgress> allocatedProgressMap = loadAllocatedProgressMap(sourceItemIds, entity.getId());
         Map<Long, AllocationProgress> requestProgressMap = new HashMap<>();
+        SettlementCompanySnapshot settlementCompany = SettlementCompanySnapshot.EMPTY;
         List<InvoiceIssueItem> items = ManagedEntityItemSupport.syncById(
                 entity.getItems(),
                 itemRequests,
@@ -70,6 +71,7 @@ public class InvoiceIssueSourceService {
                     allocatedProgressMap,
                     requestProgressMap
             );
+            settlementCompany = mergeSettlementCompany(settlementCompany, resolvedItem, i + 1);
             InvoiceIssueItem item = items.get(i);
             item.setInvoiceIssue(entity);
             item.setLineNo(i + 1);
@@ -95,7 +97,7 @@ public class InvoiceIssueSourceService {
             amount = amount.add(lineAmount);
         }
         entity.getItems().sort(java.util.Comparator.comparing(InvoiceIssueItem::getLineNo));
-        return amount;
+        return new SourceApplyResult(amount, settlementCompany.id(), settlementCompany.name());
     }
 
     void validateExistingItemsForIssue(InvoiceIssue entity) {
@@ -123,13 +125,15 @@ public class InvoiceIssueSourceService {
                 ))
                 .toList();
         List<Long> sourceItemIds = extractSourceItemIds(items);
-        validateSourceSalesOrderAllocations(
+        SettlementCompanySnapshot settlementCompany = validateSourceSalesOrderAllocations(
                 entity.getCustomerName(),
                 entity.getProjectName(),
                 items,
                 loadSourceSalesOrderItemMap(sourceItemIds),
                 loadAllocatedProgressMap(sourceItemIds, entity.getId())
         );
+        entity.setSettlementCompanyId(settlementCompany.id());
+        entity.setSettlementCompanyName(settlementCompany.name());
     }
 
     private List<Long> extractSourceItemIds(List<InvoiceIssueItemRequest> items) {
@@ -166,7 +170,7 @@ public class InvoiceIssueSourceService {
                 ), HashMap::putAll);
     }
 
-    private void validateSourceSalesOrderAllocations(
+    private SettlementCompanySnapshot validateSourceSalesOrderAllocations(
             String headerCustomerName,
             String headerProjectName,
             List<InvoiceIssueItemRequest> items,
@@ -174,17 +178,27 @@ public class InvoiceIssueSourceService {
             Map<Long, AllocationProgress> allocatedProgressMap
     ) {
         Map<Long, AllocationProgress> requestProgressMap = new HashMap<>();
+        SettlementCompanySnapshot settlementCompany = SettlementCompanySnapshot.EMPTY;
         for (int i = 0; i < items.size(); i++) {
             InvoiceIssueItemRequest source = items.get(i);
+            ResolvedInvoiceIssueItem resolvedItem = resolveItem(
+                    source,
+                    sourceSalesOrderItemMap,
+                    i + 1,
+                    headerCustomerName,
+                    headerProjectName
+            );
             validateSourceSalesOrderAllocation(
                     source,
                     i + 1,
-                    resolveItem(source, sourceSalesOrderItemMap, i + 1, headerCustomerName, headerProjectName),
+                    resolvedItem,
                     sourceSalesOrderItemMap,
                     allocatedProgressMap,
                     requestProgressMap
             );
+            settlementCompany = mergeSettlementCompany(settlementCompany, resolvedItem, i + 1);
         }
+        return settlementCompany;
     }
 
     private void validateSourceSalesOrderAllocation(InvoiceIssueItemRequest source,
@@ -265,6 +279,8 @@ public class InvoiceIssueSourceService {
                 sourceSalesOrderItem.getUnit(),
                 sourceSalesOrderItem.getWarehouseName(),
                 sourceSalesOrderItem.getBatchNo(),
+                sourceSalesOrder.getSettlementCompanyId(),
+                BusinessDocumentValidator.trimToNull(sourceSalesOrder.getSettlementCompanyName()),
                 TradeItemCalculator.normalizeQuantityUnit(source.quantityUnit()),
                 sourceSalesOrderItem.getPiecesPerBundle(),
                 pieceWeightTon,
@@ -295,6 +311,25 @@ public class InvoiceIssueSourceService {
         );
     }
 
+    private SettlementCompanySnapshot mergeSettlementCompany(SettlementCompanySnapshot current,
+                                                             ResolvedInvoiceIssueItem item,
+                                                             int lineNo) {
+        SettlementCompanySnapshot next = new SettlementCompanySnapshot(
+                item.settlementCompanyId(),
+                item.settlementCompanyName()
+        );
+        if (next.isEmpty()) {
+            return current;
+        }
+        if (current.isEmpty()) {
+            return next;
+        }
+        if (!current.equals(next)) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行来源销售订单结算主体与开票单不一致");
+        }
+        return current;
+    }
+
     private record ResolvedInvoiceIssueItem(
             String sourceNo,
             String materialCode,
@@ -306,6 +341,8 @@ public class InvoiceIssueSourceService {
             String unit,
             String warehouseName,
             String batchNo,
+            Long settlementCompanyId,
+            String settlementCompanyName,
             String quantityUnit,
             Integer piecesPerBundle,
             BigDecimal pieceWeightTon,
@@ -313,5 +350,21 @@ public class InvoiceIssueSourceService {
             BigDecimal weightTon,
             BigDecimal amount
     ) {
+    }
+
+    record SourceApplyResult(
+            BigDecimal amount,
+            Long settlementCompanyId,
+            String settlementCompanyName
+    ) {
+    }
+
+    private record SettlementCompanySnapshot(Long id, String name) {
+
+        private static final SettlementCompanySnapshot EMPTY = new SettlementCompanySnapshot(null, null);
+
+        boolean isEmpty() {
+            return id == null && name == null;
+        }
     }
 }

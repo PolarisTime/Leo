@@ -13,6 +13,8 @@ public record PurchaseInboundItemResponse(
         String length,
         String unit,
         Long sourcePurchaseOrderItemId,
+        Long settlementCompanyId,
+        String settlementCompanyName,
         String warehouseName,
         String settlementMode,
         String batchNo,
@@ -28,4 +30,33 @@ public record PurchaseInboundItemResponse(
         BigDecimal unitPrice,
         BigDecimal amount
 ) {
+    public PurchaseInboundItemResponse(Long id,
+                                       Integer lineNo,
+                                       String materialCode,
+                                       String brand,
+                                       String category,
+                                       String material,
+                                       String spec,
+                                       String length,
+                                       String unit,
+                                       Long sourcePurchaseOrderItemId,
+                                       String warehouseName,
+                                       String settlementMode,
+                                       String batchNo,
+                                       Integer remainingQuantity,
+                                       Integer quantity,
+                                       String quantityUnit,
+                                       BigDecimal pieceWeightTon,
+                                       Integer piecesPerBundle,
+                                       BigDecimal weightTon,
+                                       BigDecimal weighWeightTon,
+                                       BigDecimal weightAdjustmentTon,
+                                       BigDecimal weightAdjustmentAmount,
+                                       BigDecimal unitPrice,
+                                       BigDecimal amount) {
+        this(id, lineNo, materialCode, brand, category, material, spec, length, unit,
+                sourcePurchaseOrderItemId, null, null, warehouseName, settlementMode, batchNo,
+                remainingQuantity, quantity, quantityUnit, pieceWeightTon, piecesPerBundle,
+                weightTon, weighWeightTon, weightAdjustmentTon, weightAdjustmentAmount, unitPrice, amount);
+    }
 }

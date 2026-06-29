@@ -6,9 +6,22 @@ public record PurchaseOrderImportCandidateResponse(
         Long id,
         String orderNo,
         String supplierName,
+        Long settlementCompanyId,
+        String settlementCompanyName,
         String buyerName,
         LocalDateTime orderDate,
         String status,
         Integer importableQuantity
 ) {
+    public PurchaseOrderImportCandidateResponse(
+            Long id,
+            String orderNo,
+            String supplierName,
+            String buyerName,
+            LocalDateTime orderDate,
+            String status,
+            Integer importableQuantity
+    ) {
+        this(id, orderNo, supplierName, null, null, buyerName, orderDate, status, importableQuantity);
+    }
 }

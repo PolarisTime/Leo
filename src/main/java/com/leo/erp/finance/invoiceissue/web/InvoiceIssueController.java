@@ -56,12 +56,13 @@ public class InvoiceIssueController {
             @BindPageQuery(sortFieldKey = "invoice-issue") PageQuery query,
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) String customerName,
+            @RequestParam(required = false) Long settlementCompanyId,
             @RequestParam(required = false) String status,
             @RequestParam(required = false) LocalDate startDate,
             @RequestParam(required = false) LocalDate endDate
     ) {
         return ApiResponse.success(PageResponse.from(service.page(
-                query, PageFilter.of(keyword, customerName, status, startDate, endDate)
+                query, PageFilter.of(keyword, customerName, settlementCompanyId, status, startDate, endDate)
         )));
     }
 

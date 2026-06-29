@@ -13,6 +13,8 @@ public record SupplierStatementRequest(
         String statementNo,
         String supplierCode,
         @jakarta.validation.constraints.NotBlank String supplierName,
+        Long settlementCompanyId,
+        String settlementCompanyName,
         @NotNull LocalDate startDate,
         @NotNull LocalDate endDate,
         @NotNull @DecimalMin("0.00") BigDecimal purchaseAmount,
@@ -32,6 +34,22 @@ public record SupplierStatementRequest(
                                     String status,
                                     String remark,
                                     List<SupplierStatementItemRequest> items) {
-        this(statementNo, null, supplierName, startDate, endDate, purchaseAmount, paymentAmount, closingAmount, status, remark, items);
+        this(statementNo, null, supplierName, null, null, startDate, endDate, purchaseAmount,
+                paymentAmount, closingAmount, status, remark, items);
+    }
+
+    public SupplierStatementRequest(String statementNo,
+                                    String supplierCode,
+                                    String supplierName,
+                                    LocalDate startDate,
+                                    LocalDate endDate,
+                                    BigDecimal purchaseAmount,
+                                    BigDecimal paymentAmount,
+                                    BigDecimal closingAmount,
+                                    String status,
+                                    String remark,
+                                    List<SupplierStatementItemRequest> items) {
+        this(statementNo, supplierCode, supplierName, null, null, startDate, endDate, purchaseAmount,
+                paymentAmount, closingAmount, status, remark, items);
     }
 }

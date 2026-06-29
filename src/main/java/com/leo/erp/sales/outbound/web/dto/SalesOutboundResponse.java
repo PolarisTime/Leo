@@ -11,6 +11,8 @@ public record SalesOutboundResponse(
         String customerName,
         String projectName,
         String warehouseName,
+        Long settlementCompanyId,
+        String settlementCompanyName,
         LocalDate outboundDate,
         BigDecimal totalWeight,
         BigDecimal totalAmount,
@@ -18,4 +20,19 @@ public record SalesOutboundResponse(
         String remark,
         List<SalesOutboundItemResponse> items
 ) {
+    public SalesOutboundResponse(Long id,
+                                 String outboundNo,
+                                 String salesOrderNo,
+                                 String customerName,
+                                 String projectName,
+                                 String warehouseName,
+                                 LocalDate outboundDate,
+                                 BigDecimal totalWeight,
+                                 BigDecimal totalAmount,
+                                 String status,
+                                 String remark,
+                                 List<SalesOutboundItemResponse> items) {
+        this(id, outboundNo, salesOrderNo, customerName, projectName, warehouseName, null, null,
+                outboundDate, totalWeight, totalAmount, status, remark, items);
+    }
 }

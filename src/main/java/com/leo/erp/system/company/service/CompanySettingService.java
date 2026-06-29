@@ -223,7 +223,16 @@ public class CompanySettingService extends AbstractCrudService<CompanySetting, C
         referenceGuard.assertNoReferences("该结算主体", List.of(
                 ReferenceCheck.active("md_customer", "default_settlement_company_id", entity.getId()),
                 ReferenceCheck.active("md_carrier", "default_settlement_company_id", entity.getId()),
-                ReferenceCheck.active("po_purchase_order", "settlement_company_id", entity.getId())
+                ReferenceCheck.active("po_purchase_order", "settlement_company_id", entity.getId()),
+                ReferenceCheck.active("po_purchase_inbound", "settlement_company_id", entity.getId()),
+                ReferenceCheck.active("so_sales_order", "settlement_company_id", entity.getId()),
+                ReferenceCheck.active("so_sales_outbound", "settlement_company_id", entity.getId()),
+                ReferenceCheck.active("lg_freight_bill", "settlement_company_id", entity.getId()),
+                ReferenceCheck.active("st_supplier_statement", "settlement_company_id", entity.getId()),
+                ReferenceCheck.active("st_customer_statement", "settlement_company_id", entity.getId()),
+                ReferenceCheck.active("st_freight_statement", "settlement_company_id", entity.getId()),
+                ReferenceCheck.active("fm_receipt", "settlement_company_id", entity.getId()),
+                ReferenceCheck.active("fm_invoice_issue", "settlement_company_id", entity.getId())
         ));
     }
 
@@ -235,11 +244,11 @@ public class CompanySettingService extends AbstractCrudService<CompanySetting, C
     @Override
     protected void apply(CompanySetting entity, CompanySettingRequest request) {
         List<CompanySettlementAccountResponse> settlementAccounts = normalizeSettlementAccounts(request.settlementAccounts());
-        CompanySettlementAccountResponse primaryAccount = settlementAccounts.getFirst();
+        CompanySettlementAccountResponse primaryAccount = settlementAccounts.isEmpty() ? null : settlementAccounts.getFirst();
         entity.setCompanyName(request.companyName());
         entity.setTaxNo(request.taxNo());
-        entity.setBankName(primaryAccount.bankName());
-        entity.setBankAccount(primaryAccount.bankAccount());
+        entity.setBankName(primaryAccount == null ? "" : primaryAccount.bankName());
+        entity.setBankAccount(primaryAccount == null ? "" : primaryAccount.bankAccount());
         if (entity.getTaxRate() == null) {
             entity.setTaxRate(resolveCurrentTaxRateForEntity());
         }
@@ -299,18 +308,21 @@ public class CompanySettingService extends AbstractCrudService<CompanySetting, C
 
     private List<CompanySettlementAccountResponse> normalizeSettlementAccounts(List<CompanySettlementAccountRequest> requestAccounts) {
         if (requestAccounts == null || requestAccounts.isEmpty()) {
-            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "至少需要维护一个结算账户");
+            return List.of();
         }
         List<CompanySettlementAccountResponse> normalized = new ArrayList<>();
         Set<String> usedBankAccounts = new HashSet<>();
         for (int index = 0; index < requestAccounts.size(); index++) {
             CompanySettlementAccountRequest request = requestAccounts.get(index);
-            String accountName = normalizeRequired(request.accountName(), "第" + (index + 1) + "行账户名称不能为空");
-            String bankName = normalizeRequired(request.bankName(), "第" + (index + 1) + "行开户银行不能为空");
-            String bankAccount = normalizeRequired(request.bankAccount(), "第" + (index + 1) + "行银行账号不能为空");
-            String usageType = normalizeRequired(request.usageType(), "第" + (index + 1) + "行用途不能为空");
-            String status = normalizeRequired(request.status(), "第" + (index + 1) + "行状态不能为空");
-            if (!usedBankAccounts.add(bankAccount)) {
+            if (request == null || isBlankSettlementAccount(request)) {
+                continue;
+            }
+            String accountName = normalizeOptional(request.accountName());
+            String bankName = normalizeOptional(request.bankName());
+            String bankAccount = normalizeOptional(request.bankAccount());
+            String usageType = defaultIfBlank(request.usageType(), "通用");
+            String status = defaultIfBlank(request.status(), StatusConstants.NORMAL);
+            if (!bankAccount.isBlank() && !usedBankAccounts.add(bankAccount)) {
                 throw new BusinessException(ErrorCode.VALIDATION_ERROR, "银行账号不能重复: " + bankAccount);
             }
             normalized.add(new CompanySettlementAccountResponse(
@@ -324,6 +336,13 @@ public class CompanySettingService extends AbstractCrudService<CompanySetting, C
             ));
         }
         return normalized;
+    }
+
+    private boolean isBlankSettlementAccount(CompanySettlementAccountRequest request) {
+        return isBlank(request.accountName())
+                && isBlank(request.bankName())
+                && isBlank(request.bankAccount())
+                && isBlank(request.remark());
     }
 
     private List<CompanySettlementAccountResponse> readSettlementAccounts(CompanySetting entity) {
@@ -376,14 +395,15 @@ public class CompanySettingService extends AbstractCrudService<CompanySetting, C
         }
     }
 
-    private String normalizeRequired(String value, String message) {
-        if (value == null || value.isBlank()) {
-            throw new BusinessException(ErrorCode.VALIDATION_ERROR, message);
-        }
-        return value.trim();
-    }
-
     private String normalizeOptional(String value) {
         return value == null ? "" : value.trim();
+    }
+
+    private String defaultIfBlank(String value, String defaultValue) {
+        return value == null || value.isBlank() ? defaultValue : value.trim();
+    }
+
+    private boolean isBlank(String value) {
+        return value == null || value.isBlank();
     }
 }

@@ -36,6 +36,12 @@ public class InvoiceIssue extends AbstractAuditableEntity {
     @Column(name = "project_name", nullable = false, length = 200)
     private String projectName;
 
+    @Column(name = "settlement_company_id")
+    private Long settlementCompanyId;
+
+    @Column(name = "settlement_company_name", length = 128)
+    private String settlementCompanyName;
+
     @Column(name = "invoice_date", nullable = false)
     private LocalDate invoiceDate;
 

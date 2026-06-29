@@ -109,6 +109,7 @@ public class PurchaseInboundApplyService {
                 : String.join(", ", sourcePurchaseOrderNos));
         inbound.setWarehouseName(resolveHeaderWarehouseName(request.warehouseName(), firstLineWarehouseName));
         inbound.setSettlementMode(resolveHeaderSettlementMode(request.settlementMode(), items));
+        applyHeaderSettlementCompany(inbound, items);
         inbound.setTotalWeight(TradeItemCalculator.scaleWeightTon(totalWeight));
         inbound.setTotalAmount(TradeItemCalculator.scaleAmount(totalAmount));
         weightWriteBackService.writeBackPurchaseOrderWeights(
@@ -158,7 +159,31 @@ public class PurchaseInboundApplyService {
         return lineSettlementModes.size() == 1 ? lineSettlementModes.get(0) : "混合";
     }
 
+    private void applyHeaderSettlementCompany(PurchaseInbound inbound, List<PurchaseInboundItem> items) {
+        List<SettlementCompanySnapshot> snapshots = items.stream()
+                .map(item -> new SettlementCompanySnapshot(item.getSettlementCompanyId(), trimToNull(item.getSettlementCompanyName())))
+                .filter(snapshot -> snapshot.id() != null || snapshot.name() != null)
+                .distinct()
+                .toList();
+        if (snapshots.isEmpty()) {
+            inbound.setSettlementCompanyId(null);
+            inbound.setSettlementCompanyName(null);
+            return;
+        }
+        if (snapshots.size() == 1) {
+            SettlementCompanySnapshot snapshot = snapshots.get(0);
+            inbound.setSettlementCompanyId(snapshot.id());
+            inbound.setSettlementCompanyName(snapshot.name());
+            return;
+        }
+        inbound.setSettlementCompanyId(null);
+        inbound.setSettlementCompanyName("多结算主体");
+    }
+
     private String trimToNull(String value) {
         return BusinessDocumentValidator.trimToNull(value);
+    }
+
+    private record SettlementCompanySnapshot(Long id, String name) {
     }
 }

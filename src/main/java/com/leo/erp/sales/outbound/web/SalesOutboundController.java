@@ -58,12 +58,13 @@ public class SalesOutboundController {
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) String customerName,
             @RequestParam(required = false) String projectName,
+            @RequestParam(required = false) Long settlementCompanyId,
             @RequestParam(required = false) String status,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate
     ) {
         return ApiResponse.success(PageResponse.from(
-                service.page(query, new PageFilter(keyword, status, startDate, endDate, customerName, projectName, null, null, null, null, null, null, null, null, null))
+                service.page(query, PageFilter.of(keyword, customerName, projectName, settlementCompanyId, status, startDate, endDate))
         ));
     }
 

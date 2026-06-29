@@ -15,6 +15,8 @@ public record CustomerStatementRequest(
         @jakarta.validation.constraints.NotBlank String customerName,
         Long projectId,
         @jakarta.validation.constraints.NotBlank String projectName,
+        Long settlementCompanyId,
+        String settlementCompanyName,
         @NotNull LocalDate startDate,
         @NotNull LocalDate endDate,
         @NotNull @DecimalMin("0.00") BigDecimal salesAmount,
@@ -35,6 +37,24 @@ public record CustomerStatementRequest(
                                     String status,
                                     String remark,
                                     List<CustomerStatementItemRequest> items) {
-        this(statementNo, null, customerName, null, projectName, startDate, endDate, salesAmount, receiptAmount, closingAmount, status, remark, items);
+        this(statementNo, null, customerName, null, projectName, null, null, startDate, endDate,
+                salesAmount, receiptAmount, closingAmount, status, remark, items);
+    }
+
+    public CustomerStatementRequest(String statementNo,
+                                    String customerCode,
+                                    String customerName,
+                                    Long projectId,
+                                    String projectName,
+                                    LocalDate startDate,
+                                    LocalDate endDate,
+                                    BigDecimal salesAmount,
+                                    BigDecimal receiptAmount,
+                                    BigDecimal closingAmount,
+                                    String status,
+                                    String remark,
+                                    List<CustomerStatementItemRequest> items) {
+        this(statementNo, customerCode, customerName, projectId, projectName, null, null, startDate, endDate,
+                salesAmount, receiptAmount, closingAmount, status, remark, items);
     }
 }

@@ -27,6 +27,8 @@ public class SupplierStatementResponseAssembler {
                 response.statementNo(),
                 response.supplierCode(),
                 response.supplierName(),
+                response.settlementCompanyId(),
+                response.settlementCompanyName(),
                 response.startDate(),
                 response.endDate(),
                 response.purchaseAmount(),

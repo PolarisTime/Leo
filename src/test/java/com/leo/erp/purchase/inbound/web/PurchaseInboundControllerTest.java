@@ -56,7 +56,7 @@ class PurchaseInboundControllerTest {
         PageQuery query = new PageQuery(0, 20, null, null);
         when(service.page(any(), any())).thenReturn(page);
 
-        ApiResponse<PageResponse<PurchaseInboundResponse>> response = controller.page(query, "test", "supplier", "active", null, null);
+        ApiResponse<PageResponse<PurchaseInboundResponse>> response = controller.page(query, "test", "supplier", 7L, "active", null, null);
 
         assertThat(response.code()).isEqualTo(0);
         assertThat(response.data().content()).hasSize(1);

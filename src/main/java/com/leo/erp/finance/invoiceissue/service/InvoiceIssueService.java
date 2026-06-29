@@ -44,6 +44,7 @@ public class InvoiceIssueService extends AbstractCrudService<InvoiceIssue, Invoi
     public Page<InvoiceIssueResponse> page(PageQuery query, PageFilter filter) {
         Specification<InvoiceIssue> spec = Specs.<InvoiceIssue>keywordLike(filter.keyword(), "issueNo", "invoiceNo", "customerName", "projectName")
                 .and(Specs.equalIfPresent("customerName", filter.name()))
+                .and(Specs.equalValueIfPresent("settlementCompanyId", filter.settlementCompanyId()))
                 .and(Specs.equalIfPresent("status", filter.status()))
                 .and(Specs.betweenIfPresent("invoiceDate", filter.startDate(), filter.endDate()));
         return page(query, spec, repository);

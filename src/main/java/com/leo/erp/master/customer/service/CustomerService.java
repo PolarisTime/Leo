@@ -100,7 +100,9 @@ public class CustomerService extends AbstractCrudService<Customer, CustomerReque
                         c.getCustomerCode(),
                         c.getCustomerName(),
                         c.getProjectName(),
-                        c.getProjectNameAbbr()
+                        c.getProjectNameAbbr(),
+                        c.getDefaultSettlementCompanyId(),
+                        c.getDefaultSettlementCompanyName()
                 ))
                 .toList();
     }

@@ -8,6 +8,7 @@ import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.logistics.bill.domain.entity.FreightBill;
+import com.leo.erp.logistics.bill.domain.entity.FreightBillItem;
 import com.leo.erp.logistics.bill.repository.FreightBillRepository;
 import com.leo.erp.master.carrier.domain.entity.Carrier;
 import com.leo.erp.master.carrier.repository.CarrierRepository;
@@ -134,6 +135,8 @@ class FreightStatementServiceTest {
         assertThat(result.items()).hasSize(1);
         assertThat(result.items().get(0).sourceNo()).isEqualTo("FB-001");
         assertThat(result.items().get(0).quantityUnit()).isEqualTo("件");
+        assertThat(result.items().get(0).settlementCompanyId()).isEqualTo(7L);
+        assertThat(result.items().get(0).settlementCompanyName()).isEqualTo("主体A");
     }
 
     @Test
@@ -355,8 +358,39 @@ class FreightStatementServiceTest {
         bill.setId(1L);
         bill.setBillNo(billNo);
         bill.setCarrierName("物流甲");
+        bill.setSettlementCompanyId(70L);
+        bill.setSettlementCompanyName("物流主体");
         bill.setStatus(StatusConstants.AUDITED);
         bill.setTotalFreight(new BigDecimal("100"));
+        bill.setItems(new java.util.ArrayList<>(List.of(freightBillItem(bill))));
         return bill;
+    }
+
+    private static FreightBillItem freightBillItem(FreightBill bill) {
+        FreightBillItem item = new FreightBillItem();
+        item.setId(11L);
+        item.setFreightBill(bill);
+        item.setLineNo(1);
+        item.setSourceNo(bill.getBillNo());
+        item.setSourceSalesOutboundItemId(21L);
+        item.setSettlementCompanyId(7L);
+        item.setSettlementCompanyName("主体A");
+        item.setCustomerName("客户甲");
+        item.setProjectName("项目甲");
+        item.setMaterialCode("M-001");
+        item.setMaterialName("螺纹钢");
+        item.setBrand("HRB400");
+        item.setCategory("钢材");
+        item.setMaterial("钢");
+        item.setSpec("10");
+        item.setLength("9m");
+        item.setQuantity(4);
+        item.setQuantityUnit("件");
+        item.setPieceWeightTon(new BigDecimal("0.5"));
+        item.setPiecesPerBundle(2);
+        item.setBatchNo("B-001");
+        item.setWeightTon(new BigDecimal("2.000"));
+        item.setWarehouseName("仓库甲");
+        return item;
     }
 }

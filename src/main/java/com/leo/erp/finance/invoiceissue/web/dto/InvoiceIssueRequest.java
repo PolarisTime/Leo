@@ -17,6 +17,8 @@ public record InvoiceIssueRequest(
         String customerName,
         @jakarta.validation.constraints.NotBlank(message = "项目不能为空")
         String projectName,
+        Long settlementCompanyId,
+        String settlementCompanyName,
         @NotNull(message = "发票日期不能为空")
         LocalDate invoiceDate,
         @jakarta.validation.constraints.NotBlank(message = "发票类型不能为空")
@@ -35,4 +37,19 @@ public record InvoiceIssueRequest(
         @Valid @NotEmpty(message = "请至少填写一条开票明细")
         List<InvoiceIssueItemRequest> items
 ) {
+    public InvoiceIssueRequest(String issueNo,
+                               String invoiceNo,
+                               String customerName,
+                               String projectName,
+                               LocalDate invoiceDate,
+                               String invoiceType,
+                               BigDecimal amount,
+                               BigDecimal taxAmount,
+                               String status,
+                               String operatorName,
+                               String remark,
+                               List<InvoiceIssueItemRequest> items) {
+        this(issueNo, invoiceNo, customerName, projectName, null, null, invoiceDate, invoiceType,
+                amount, taxAmount, status, operatorName, remark, items);
+    }
 }

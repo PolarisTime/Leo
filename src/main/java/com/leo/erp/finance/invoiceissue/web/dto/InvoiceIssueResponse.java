@@ -10,6 +10,8 @@ public record InvoiceIssueResponse(
         String invoiceNo,
         String customerName,
         String projectName,
+        Long settlementCompanyId,
+        String settlementCompanyName,
         LocalDate invoiceDate,
         String invoiceType,
         BigDecimal amount,
@@ -19,4 +21,20 @@ public record InvoiceIssueResponse(
         String remark,
         List<InvoiceIssueItemResponse> items
 ) {
+    public InvoiceIssueResponse(Long id,
+                                String issueNo,
+                                String invoiceNo,
+                                String customerName,
+                                String projectName,
+                                LocalDate invoiceDate,
+                                String invoiceType,
+                                BigDecimal amount,
+                                BigDecimal taxAmount,
+                                String status,
+                                String operatorName,
+                                String remark,
+                                List<InvoiceIssueItemResponse> items) {
+        this(id, issueNo, invoiceNo, customerName, projectName, null, null, invoiceDate, invoiceType,
+                amount, taxAmount, status, operatorName, remark, items);
+    }
 }

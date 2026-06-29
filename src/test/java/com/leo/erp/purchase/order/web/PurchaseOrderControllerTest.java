@@ -1,6 +1,7 @@
 package com.leo.erp.purchase.order.web;
 
 import com.leo.erp.common.api.ApiResponse;
+import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.api.PageResponse;
 import com.leo.erp.common.web.dto.StatusUpdateRequest;
@@ -10,6 +11,7 @@ import com.leo.erp.purchase.order.web.dto.PurchaseOrderImportCandidateResponse;
 import com.leo.erp.purchase.order.web.dto.PurchaseOrderRequest;
 import com.leo.erp.purchase.order.web.dto.PurchaseOrderResponse;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 
@@ -63,12 +65,17 @@ class PurchaseOrderControllerTest {
         PurchaseOrderImportCandidateResponse candidate = mock(PurchaseOrderImportCandidateResponse.class);
         Page<PurchaseOrderImportCandidateResponse> page = new PageImpl<>(List.of(candidate));
         PageQuery query = new PageQuery(0, 20, null, null);
-        when(purchaseOrderService.importCandidates(any(), eq("test"), eq("usage"))).thenReturn(page);
+        when(purchaseOrderService.importCandidates(any(), any(), eq("usage"))).thenReturn(page);
 
-        ApiResponse<PageResponse<PurchaseOrderImportCandidateResponse>> response = controller.importCandidates(query, "test", "usage");
+        ApiResponse<PageResponse<PurchaseOrderImportCandidateResponse>> response = controller.importCandidates(
+                query, "test", "supplier", 7L, "active", null, null, "usage"
+        );
 
         assertThat(response.code()).isEqualTo(0);
         assertThat(response.data().content()).hasSize(1);
+        ArgumentCaptor<PageFilter> filterCaptor = ArgumentCaptor.forClass(PageFilter.class);
+        verify(purchaseOrderService).importCandidates(eq(query), filterCaptor.capture(), eq("usage"));
+        assertThat(filterCaptor.getValue().settlementCompanyId()).isEqualTo(7L);
     }
 
     @Test
@@ -78,7 +85,7 @@ class PurchaseOrderControllerTest {
         PageQuery query = new PageQuery(0, 20, null, null);
         when(purchaseOrderService.page(any(), any())).thenReturn(page);
 
-        ApiResponse<PageResponse<PurchaseOrderResponse>> response = controller.page(query, "test", "supplier", "active", null, null);
+        ApiResponse<PageResponse<PurchaseOrderResponse>> response = controller.page(query, "test", "supplier", 7L, "active", null, null);
 
         assertThat(response.code()).isEqualTo(0);
         assertThat(response.data().content()).hasSize(1);

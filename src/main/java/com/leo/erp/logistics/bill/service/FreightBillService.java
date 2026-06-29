@@ -13,6 +13,8 @@ import com.leo.erp.logistics.bill.domain.entity.FreightBill;
 import com.leo.erp.logistics.bill.domain.entity.FreightBillItem;
 import com.leo.erp.logistics.bill.mapper.FreightBillMapper;
 import com.leo.erp.logistics.bill.repository.FreightBillRepository;
+import com.leo.erp.master.carrier.domain.entity.Carrier;
+import com.leo.erp.master.carrier.repository.CarrierRepository;
 import com.leo.erp.sales.outbound.domain.entity.SalesOutbound;
 import com.leo.erp.sales.outbound.repository.SalesOutboundRepository;
 import com.leo.erp.security.permission.DataScopeContext;
@@ -36,6 +38,18 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
     private final FreightBillSourceService freightBillSourceService;
     private final FreightBillApplyService freightBillApplyService;
     private final WorkflowTransitionGuard workflowTransitionGuard;
+    private final CarrierRepository carrierRepository;
+
+    public FreightBillService(FreightBillRepository repository,
+                              SalesOutboundRepository salesOutboundRepository,
+                              SnowflakeIdGenerator idGenerator,
+                              FreightBillMapper freightBillMapper,
+                              FreightBillSourceService freightBillSourceService,
+                              FreightBillApplyService freightBillApplyService,
+                              WorkflowTransitionGuard workflowTransitionGuard) {
+        this(repository, salesOutboundRepository, idGenerator, freightBillMapper, freightBillSourceService,
+                freightBillApplyService, workflowTransitionGuard, null);
+    }
 
     @Autowired
     public FreightBillService(FreightBillRepository repository,
@@ -44,7 +58,8 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
                               FreightBillMapper freightBillMapper,
                               FreightBillSourceService freightBillSourceService,
                               FreightBillApplyService freightBillApplyService,
-                              WorkflowTransitionGuard workflowTransitionGuard) {
+                              WorkflowTransitionGuard workflowTransitionGuard,
+                              CarrierRepository carrierRepository) {
         super(idGenerator);
         this.repository = repository;
         this.salesOutboundRepository = salesOutboundRepository;
@@ -52,11 +67,13 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
         this.freightBillSourceService = freightBillSourceService;
         this.freightBillApplyService = freightBillApplyService;
         this.workflowTransitionGuard = workflowTransitionGuard;
+        this.carrierRepository = carrierRepository;
     }
 
     public Page<FreightBillResponse> page(PageQuery query, PageFilter filter) {
         Specification<FreightBill> spec = Specs.<FreightBill>keywordLike(filter.keyword(), "billNo", "carrierName", "customerName")
                 .and(Specs.equalIfPresent("carrierName", filter.name()))
+                .and(Specs.equalValueIfPresent("settlementCompanyId", filter.settlementCompanyId()))
                 .and(Specs.equalIfPresent("status", filter.status()))
                 .and(Specs.betweenIfPresent("billTime", filter.startDate(), filter.endDate()));
         return page(query, spec, repository);
@@ -69,6 +86,7 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
                 .and(Specs.equalIfPresent("customerName", filter.name()))
                 .and(Specs.equalIfPresent("projectName", filter.projectName()))
                 .and(importableSalesOutboundStatus(filter.status()))
+                .and(Specs.equalValueIfPresent("settlementCompanyId", filter.settlementCompanyId()))
                 .and(Specs.betweenIfPresent("outboundDate", filter.startDate(), filter.endDate()))
                 .and(sourceOutboundNotOccupied());
         return salesOutboundRepository.findAll(DataScopeContext.apply(spec), query.toPageable("id"))
@@ -90,13 +108,15 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
         FreightBillResponse response = freightBillMapper.toResponse(entity);
         return new FreightBillResponse(
                 response.id(), response.billNo(),
-                response.carrierName(), response.vehiclePlate(),
+                response.carrierName(), response.settlementCompanyId(), response.settlementCompanyName(), response.vehiclePlate(),
                 response.customerName(), response.projectName(),
                 response.billTime(), response.unitPrice(), response.totalWeight(),
                 response.totalFreight(), response.status(),
                 response.remark(),
                 entity.getItems().stream().map(item -> new FreightBillItemResponse(
                         item.getId(), item.getLineNo(), item.getSourceNo(),
+                        item.getSourceSalesOutboundItemId(),
+                        item.getSettlementCompanyId(), item.getSettlementCompanyName(),
                         item.getCustomerName(), item.getProjectName(), item.getMaterialCode(),
                         resolveMaterialName(item), item.getBrand(), item.getCategory(),
                         item.getMaterial(), item.getSpec(), item.getLength(),
@@ -203,14 +223,37 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
         );
         entity.setBillNo(request.billNo());
         entity.setCarrierName(request.carrierName());
+        applyCarrierSettlementCompany(entity, request.carrierName());
         entity.setVehiclePlate(emptyToNull(request.vehiclePlate()));
         entity.setBillTime(request.billTime());
         entity.setUnitPrice(request.unitPrice());
         entity.setStatus(nextStatus);
         entity.setRemark(request.remark());
 
-        freightBillSourceService.validateSources(request, entity.getId());
-        freightBillApplyService.applyItems(entity, request, this::nextId);
+        FreightBillSourceService.SourceValidationContext sourceContext =
+                freightBillSourceService.validateSources(request, entity.getId());
+        freightBillApplyService.applyItems(entity, request, sourceContext, this::nextId);
+    }
+
+    private void applyCarrierSettlementCompany(FreightBill entity, String carrierName) {
+        if (carrierRepository == null) {
+            return;
+        }
+        String normalizedCarrierName = emptyToNull(carrierName);
+        if (normalizedCarrierName == null) {
+            entity.setSettlementCompanyId(null);
+            entity.setSettlementCompanyName(null);
+            return;
+        }
+        Carrier carrier = carrierRepository.findFirstByCarrierNameAndDeletedFlagFalseOrderByCarrierCodeAsc(normalizedCarrierName)
+                .orElse(null);
+        if (carrier == null) {
+            entity.setSettlementCompanyId(null);
+            entity.setSettlementCompanyName(null);
+            return;
+        }
+        entity.setSettlementCompanyId(carrier.getDefaultSettlementCompanyId());
+        entity.setSettlementCompanyName(carrier.getDefaultSettlementCompanyName());
     }
 
     private String emptyToNull(String value) {
@@ -256,6 +299,8 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
                 outbound.getCustomerName(),
                 outbound.getProjectName(),
                 outbound.getWarehouseName(),
+                outbound.getSettlementCompanyId(),
+                outbound.getSettlementCompanyName(),
                 outbound.getOutboundDate(),
                 outbound.getTotalWeight(),
                 outbound.getTotalAmount(),

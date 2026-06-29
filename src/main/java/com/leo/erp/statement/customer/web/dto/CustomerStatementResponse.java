@@ -11,6 +11,8 @@ public record CustomerStatementResponse(
         String customerName,
         Long projectId,
         String projectName,
+        Long settlementCompanyId,
+        String settlementCompanyName,
         LocalDate startDate,
         LocalDate endDate,
         BigDecimal salesAmount,
@@ -20,6 +22,24 @@ public record CustomerStatementResponse(
         String remark,
         List<CustomerStatementItemResponse> items
 ) {
+    public CustomerStatementResponse(Long id,
+                                     String statementNo,
+                                     String customerCode,
+                                     String customerName,
+                                     Long projectId,
+                                     String projectName,
+                                     LocalDate startDate,
+                                     LocalDate endDate,
+                                     BigDecimal salesAmount,
+                                     BigDecimal receiptAmount,
+                                     BigDecimal closingAmount,
+                                     String status,
+                                     String remark,
+                                     List<CustomerStatementItemResponse> items) {
+        this(id, statementNo, customerCode, customerName, projectId, projectName, null, null,
+                startDate, endDate, salesAmount, receiptAmount, closingAmount, status, remark, items);
+    }
+
     public CustomerStatementResponse(Long id,
                                      String statementNo,
                                      String customerName,
@@ -32,6 +52,7 @@ public record CustomerStatementResponse(
                                      String status,
                                      String remark,
                                      List<CustomerStatementItemResponse> items) {
-        this(id, statementNo, null, customerName, null, projectName, startDate, endDate, salesAmount, receiptAmount, closingAmount, status, remark, items);
+        this(id, statementNo, null, customerName, null, projectName, null, null, startDate, endDate,
+                salesAmount, receiptAmount, closingAmount, status, remark, items);
     }
 }

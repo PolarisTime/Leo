@@ -8,6 +8,8 @@ public record FreightBillResponse(
         Long id,
         String billNo,
         String carrierName,
+        Long settlementCompanyId,
+        String settlementCompanyName,
         String vehiclePlate,
         String customerName,
         String projectName,
@@ -19,4 +21,20 @@ public record FreightBillResponse(
         String remark,
         List<FreightBillItemResponse> items
 ) {
+    public FreightBillResponse(Long id,
+                               String billNo,
+                               String carrierName,
+                               String vehiclePlate,
+                               String customerName,
+                               String projectName,
+                               LocalDate billTime,
+                               BigDecimal unitPrice,
+                               BigDecimal totalWeight,
+                               BigDecimal totalFreight,
+                               String status,
+                               String remark,
+                               List<FreightBillItemResponse> items) {
+        this(id, billNo, carrierName, null, null, vehiclePlate, customerName, projectName, billTime,
+                unitPrice, totalWeight, totalFreight, status, remark, items);
+    }
 }

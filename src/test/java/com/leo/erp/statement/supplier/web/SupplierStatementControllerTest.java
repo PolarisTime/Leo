@@ -56,7 +56,7 @@ class SupplierStatementControllerTest {
         PageQuery query = new PageQuery(0, 20, null, null);
         when(supplierStatementService.page(any(), any())).thenReturn(page);
 
-        ApiResponse<PageResponse<SupplierStatementResponse>> response = controller.page(query, "test", "supplier", "active", null, null);
+        ApiResponse<PageResponse<SupplierStatementResponse>> response = controller.page(query, "test", "supplier", 7L, "active", null, null);
 
         assertThat(response.code()).isEqualTo(0);
         assertThat(response.data().content()).hasSize(1);
@@ -69,7 +69,7 @@ class SupplierStatementControllerTest {
         PageQuery query = new PageQuery(0, 20, null, null);
         when(supplierStatementService.candidatePage(any(), any())).thenReturn(page);
 
-        ApiResponse<PageResponse<SupplierStatementCandidateResponse>> response = controller.candidates(query, "test", "supplier", null, null);
+        ApiResponse<PageResponse<SupplierStatementCandidateResponse>> response = controller.candidates(query, "test", "supplier", 7L, null, null);
 
         assertThat(response.code()).isEqualTo(0);
         assertThat(response.data().content()).hasSize(1);

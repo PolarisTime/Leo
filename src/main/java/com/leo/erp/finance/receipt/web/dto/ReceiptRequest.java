@@ -16,6 +16,8 @@ public record ReceiptRequest(
         Long projectId,
         @jakarta.validation.constraints.NotBlank(message = "项目不能为空")
         String projectName,
+        Long settlementCompanyId,
+        String settlementCompanyName,
         Long sourceStatementId,
         @NotNull(message = "收款日期不能为空")
         LocalDate receiptDate,
@@ -43,6 +45,22 @@ public record ReceiptRequest(
                           String operatorName,
                           String remark,
                           List<ReceiptAllocationRequest> items) {
-        this(receiptNo, null, customerName, null, projectName, sourceStatementId, receiptDate, payType, amount, status, operatorName, remark, items);
+        this(receiptNo, null, customerName, null, projectName, null, null, sourceStatementId, receiptDate, payType, amount, status, operatorName, remark, items);
+    }
+
+    public ReceiptRequest(String receiptNo,
+                          String customerCode,
+                          String customerName,
+                          Long projectId,
+                          String projectName,
+                          Long sourceStatementId,
+                          LocalDate receiptDate,
+                          String payType,
+                          BigDecimal amount,
+                          String status,
+                          String operatorName,
+                          String remark,
+                          List<ReceiptAllocationRequest> items) {
+        this(receiptNo, customerCode, customerName, projectId, projectName, null, null, sourceStatementId, receiptDate, payType, amount, status, operatorName, remark, items);
     }
 }

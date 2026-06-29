@@ -684,6 +684,8 @@ CREATE TABLE public.fm_invoice_issue (
     invoice_no character varying(64) NOT NULL,
     customer_name character varying(128) NOT NULL,
     project_name character varying(200) NOT NULL,
+    settlement_company_id bigint,
+    settlement_company_name character varying(128),
     invoice_date timestamp without time zone NOT NULL,
     invoice_type character varying(32) NOT NULL,
     amount numeric(14,2) NOT NULL,
@@ -882,7 +884,9 @@ CREATE TABLE public.fm_receipt (
     source_customer_statement_id bigint,
     version bigint,
     customer_code character varying(64),
-    project_id bigint
+    project_id bigint,
+    settlement_company_id bigint,
+    settlement_company_name character varying(128)
 )
 WITH (fillfactor='70');
 
@@ -923,7 +927,9 @@ CREATE TABLE public.lg_freight_bill (
     updated_name character varying(64),
     updated_at timestamp without time zone,
     deleted_flag boolean DEFAULT false NOT NULL,
-    vehicle_plate character varying(16)
+    vehicle_plate character varying(16),
+    settlement_company_id bigint,
+    settlement_company_name character varying(128)
 )
 WITH (fillfactor='70');
 
@@ -952,7 +958,10 @@ CREATE TABLE public.lg_freight_bill_item (
     batch_no character varying(64),
     weight_ton numeric(14,3) NOT NULL,
     warehouse_name character varying(128),
-    quantity_unit character varying(8) DEFAULT '件'::character varying NOT NULL
+    quantity_unit character varying(8) DEFAULT '件'::character varying NOT NULL,
+    source_sales_outbound_item_id bigint,
+    settlement_company_id bigint,
+    settlement_company_name character varying(128)
 );
 
 
@@ -978,6 +987,8 @@ CREATE TABLE public.md_carrier (
     updated_at timestamp without time zone,
     deleted_flag boolean DEFAULT false NOT NULL,
     vehicle_plates text,
+    default_settlement_company_id bigint,
+    default_settlement_company_name character varying(128),
     CONSTRAINT chk_carrier_status CHECK (((status)::text = ANY ((ARRAY['正常'::character varying, '禁用'::character varying])::text[])))
 );
 
@@ -1013,6 +1024,8 @@ CREATE TABLE public.md_customer (
     project_name character varying(200) NOT NULL,
     project_name_abbr character varying(64),
     project_address character varying(255),
+    default_settlement_company_id bigint,
+    default_settlement_company_name character varying(128),
     CONSTRAINT chk_customer_status CHECK (((status)::text = ANY ((ARRAY['正常'::character varying, '禁用'::character varying])::text[])))
 );
 
@@ -1212,7 +1225,9 @@ CREATE TABLE public.po_purchase_inbound (
     updated_by bigint,
     updated_name character varying(64),
     updated_at timestamp without time zone,
-    deleted_flag boolean DEFAULT false NOT NULL
+    deleted_flag boolean DEFAULT false NOT NULL,
+    settlement_company_id bigint,
+    settlement_company_name character varying(128)
 )
 WITH (fillfactor='70', autovacuum_vacuum_scale_factor='0.02');
 
@@ -1245,7 +1260,9 @@ CREATE TABLE public.po_purchase_inbound_item (
     weigh_weight_ton numeric(14,3),
     weight_adjustment_ton numeric(14,3) DEFAULT 0 NOT NULL,
     weight_adjustment_amount numeric(14,2) DEFAULT 0 NOT NULL,
-    settlement_mode character varying(32) NOT NULL
+    settlement_mode character varying(32) NOT NULL,
+    settlement_company_id bigint,
+    settlement_company_name character varying(128)
 );
 
 
@@ -1269,7 +1286,9 @@ CREATE TABLE public.po_purchase_order (
     updated_by bigint,
     updated_name character varying(64),
     updated_at timestamp without time zone,
-    deleted_flag boolean DEFAULT false NOT NULL
+    deleted_flag boolean DEFAULT false NOT NULL,
+    settlement_company_id bigint,
+    settlement_company_name character varying(128)
 )
 WITH (fillfactor='70', autovacuum_vacuum_scale_factor='0.02');
 
@@ -1355,7 +1374,9 @@ CREATE TABLE public.so_sales_order (
     deleted_flag boolean DEFAULT false NOT NULL,
     purchase_order_no character varying(256),
     customer_code character varying(64),
-    project_id bigint
+    project_id bigint,
+    settlement_company_id bigint,
+    settlement_company_name character varying(128)
 )
 WITH (fillfactor='70', autovacuum_vacuum_scale_factor='0.02');
 
@@ -1385,7 +1406,9 @@ CREATE TABLE public.so_sales_order_item (
     batch_no character varying(64),
     source_inbound_item_id bigint,
     warehouse_name character varying(128),
-    source_purchase_order_item_id bigint
+    source_purchase_order_item_id bigint,
+    settlement_company_id bigint,
+    settlement_company_name character varying(128)
 );
 
 
@@ -1411,7 +1434,9 @@ CREATE TABLE public.so_sales_outbound (
     updated_by bigint,
     updated_name character varying(64),
     updated_at timestamp without time zone,
-    deleted_flag boolean DEFAULT false NOT NULL
+    deleted_flag boolean DEFAULT false NOT NULL,
+    settlement_company_id bigint,
+    settlement_company_name character varying(128)
 )
 WITH (fillfactor='70', autovacuum_vacuum_scale_factor='0.02');
 
@@ -1440,7 +1465,9 @@ CREATE TABLE public.so_sales_outbound_item (
     amount numeric(14,2) NOT NULL,
     quantity_unit character varying(8) DEFAULT '件'::character varying NOT NULL,
     warehouse_name character varying(128),
-    source_sales_order_item_id bigint
+    source_sales_order_item_id bigint,
+    settlement_company_id bigint,
+    settlement_company_name character varying(128)
 );
 
 
@@ -1469,7 +1496,9 @@ CREATE TABLE public.st_customer_statement (
     deleted_flag boolean DEFAULT false NOT NULL,
     version bigint,
     customer_code character varying(64),
-    project_id bigint
+    project_id bigint,
+    settlement_company_id bigint,
+    settlement_company_name character varying(128)
 )
 WITH (fillfactor='70');
 
@@ -1529,7 +1558,9 @@ CREATE TABLE public.st_freight_statement (
     updated_name character varying(64),
     updated_at timestamp without time zone,
     deleted_flag boolean DEFAULT false NOT NULL,
-    version bigint
+    version bigint,
+    settlement_company_id bigint,
+    settlement_company_name character varying(128)
 )
 WITH (fillfactor='70');
 
@@ -1558,7 +1589,10 @@ CREATE TABLE public.st_freight_statement_item (
     batch_no character varying(64),
     weight_ton numeric(14,3) NOT NULL,
     warehouse_name character varying(128),
-    quantity_unit character varying(8) DEFAULT '件'::character varying NOT NULL
+    quantity_unit character varying(8) DEFAULT '件'::character varying NOT NULL,
+    source_sales_outbound_item_id bigint,
+    settlement_company_id bigint,
+    settlement_company_name character varying(128)
 );
 
 
@@ -1584,7 +1618,9 @@ CREATE TABLE public.st_supplier_statement (
     updated_name character varying(64),
     updated_at timestamp without time zone,
     deleted_flag boolean DEFAULT false NOT NULL,
-    version bigint
+    version bigint,
+    settlement_company_id bigint,
+    settlement_company_name character varying(128)
 )
 WITH (fillfactor='70');
 
@@ -2699,7 +2735,7 @@ COPY public.sys_menu (id, menu_code, menu_name, parent_code, route_path, icon, s
 2007	material-categories	商品类别	master	/material-categories	TagsOutlined	7	菜单	正常	0	system	2026-06-01 11:55:10.46423	\N	\N	\N	f
 90001	number-rules	编号规则	system	/number-rules	ProfileOutlined	2	菜单	正常	1	system	2026-06-01 11:55:11.360832	\N	\N	2026-06-01 11:55:11.485289	f
 10001	general-setting	通用设置	system	/general-setting	SettingOutlined	1	菜单	正常	0	system	2026-06-01 11:55:09.808174	\N	\N	2026-06-01 11:55:11.485289	f
-10012	company-setting	公司信息	system	/company-setting	AccountBookOutlined	3	菜单	正常	0	system	2026-06-01 11:55:10.154508	\N	\N	2026-06-01 11:55:11.485289	f
+10012	company-setting	结算主体管理	master	/company-setting	AccountBookOutlined	8	菜单	正常	0	system	2026-06-01 11:55:10.154508	\N	\N	2026-06-01 11:55:11.485289	f
 10013	department	部门管理	system	/department	ApartmentOutlined	4	菜单	正常	0	system	2026-06-01 11:55:10.349496	\N	\N	2026-06-01 11:55:11.485289	f
 10014	access-control	访问控制	system	/access-control	SafetyCertificateOutlined	5	菜单	正常	0	system	2026-06-01 11:55:10.734272	\N	\N	2026-06-01 11:55:11.485289	f
 10007	session	会话管理	system	/session	SafetyCertificateOutlined	6	菜单	正常	0	system	2026-06-01 11:55:09.808174	\N	\N	2026-06-01 11:55:11.485289	f
@@ -4824,6 +4860,13 @@ CREATE INDEX idx_fm_invoice_issue_project_name_trgm ON public.fm_invoice_issue U
 
 
 --
+-- Name: idx_fm_invoice_issue_settlement_company; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_fm_invoice_issue_settlement_company ON public.fm_invoice_issue USING btree (settlement_company_id) WHERE (deleted_flag = false);
+
+
+--
 -- Name: idx_fm_invoice_issue_status; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -5013,6 +5056,13 @@ CREATE INDEX idx_fm_receipt_receipt_no_trgm ON public.fm_receipt USING gin (rece
 
 
 --
+-- Name: idx_fm_receipt_settlement_company; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_fm_receipt_settlement_company ON public.fm_receipt USING btree (settlement_company_id) WHERE (deleted_flag = false);
+
+
+--
 -- Name: idx_fm_receipt_source_statement; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -5083,6 +5133,13 @@ CREATE INDEX idx_lg_freight_bill_customer_name_trgm ON public.lg_freight_bill US
 
 
 --
+-- Name: idx_lg_freight_bill_settlement_company; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_lg_freight_bill_settlement_company ON public.lg_freight_bill USING btree (settlement_company_id) WHERE (deleted_flag = false);
+
+
+--
 -- Name: idx_lg_freight_bill_item_bill; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -5101,6 +5158,20 @@ CREATE INDEX idx_lg_freight_bill_item_bill_id ON public.lg_freight_bill_item USI
 --
 
 CREATE INDEX idx_lg_freight_bill_item_source ON public.lg_freight_bill_item USING btree (source_no);
+
+
+--
+-- Name: idx_lg_freight_bill_item_settlement_company; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_lg_freight_bill_item_settlement_company ON public.lg_freight_bill_item USING btree (settlement_company_id);
+
+
+--
+-- Name: idx_lg_freight_bill_item_source_outbound_item; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_lg_freight_bill_item_source_outbound_item ON public.lg_freight_bill_item USING btree (source_sales_outbound_item_id);
 
 
 --
@@ -5125,10 +5196,24 @@ CREATE INDEX idx_md_carrier_name ON public.md_carrier USING btree (carrier_name)
 
 
 --
+-- Name: idx_md_carrier_settlement_company; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_md_carrier_settlement_company ON public.md_carrier USING btree (default_settlement_company_id) WHERE (deleted_flag = false);
+
+
+--
 -- Name: idx_md_customer_name; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_md_customer_name ON public.md_customer USING btree (customer_name);
+
+
+--
+-- Name: idx_md_customer_settlement_company; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_md_customer_settlement_company ON public.md_customer USING btree (default_settlement_company_id) WHERE (deleted_flag = false);
 
 
 --
@@ -5300,6 +5385,13 @@ CREATE INDEX idx_po_purchase_inbound_item_inbound_id ON public.po_purchase_inbou
 
 
 --
+-- Name: idx_po_purchase_inbound_item_settlement_company; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_po_purchase_inbound_item_settlement_company ON public.po_purchase_inbound_item USING btree (settlement_company_id);
+
+
+--
 -- Name: idx_po_purchase_inbound_purchase_order_no_trgm; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -5325,6 +5417,13 @@ CREATE INDEX idx_po_purchase_inbound_supplier_date ON public.po_purchase_inbound
 --
 
 CREATE INDEX idx_po_purchase_inbound_supplier_name_trgm ON public.po_purchase_inbound USING gin (supplier_name public.gin_trgm_ops) WHERE (deleted_flag = false);
+
+
+--
+-- Name: idx_po_purchase_inbound_settlement_company; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_po_purchase_inbound_settlement_company ON public.po_purchase_inbound USING btree (settlement_company_id) WHERE (deleted_flag = false);
 
 
 --
@@ -5395,6 +5494,13 @@ CREATE INDEX idx_po_purchase_order_supplier_date ON public.po_purchase_order USI
 --
 
 CREATE INDEX idx_po_purchase_order_supplier_name_trgm ON public.po_purchase_order USING gin (supplier_name public.gin_trgm_ops) WHERE (deleted_flag = false);
+
+
+--
+-- Name: idx_po_purchase_order_settlement_company; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_po_purchase_order_settlement_company ON public.po_purchase_order USING btree (settlement_company_id) WHERE (deleted_flag = false);
 
 
 --
@@ -5524,6 +5630,13 @@ CREATE INDEX idx_so_sales_order_item_source_purchase_order_item ON public.so_sal
 
 
 --
+-- Name: idx_so_sales_order_item_settlement_company; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_so_sales_order_item_settlement_company ON public.so_sales_order_item USING btree (settlement_company_id);
+
+
+--
 -- Name: idx_so_sales_order_order_no_trgm; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -5556,6 +5669,13 @@ CREATE INDEX idx_so_sales_order_purchase_order_no_trgm ON public.so_sales_order 
 --
 
 CREATE INDEX idx_so_sales_order_status ON public.so_sales_order USING btree (status);
+
+
+--
+-- Name: idx_so_sales_order_settlement_company; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_so_sales_order_settlement_company ON public.so_sales_order USING btree (settlement_company_id) WHERE (deleted_flag = false);
 
 
 --
@@ -5601,6 +5721,13 @@ CREATE INDEX idx_so_sales_outbound_item_source_sales_order_item ON public.so_sal
 
 
 --
+-- Name: idx_so_sales_outbound_item_settlement_company; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_so_sales_outbound_item_settlement_company ON public.so_sales_outbound_item USING btree (settlement_company_id);
+
+
+--
 -- Name: idx_so_sales_outbound_outbound_date; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -5633,6 +5760,13 @@ CREATE INDEX idx_so_sales_outbound_sales_order_no_trgm ON public.so_sales_outbou
 --
 
 CREATE INDEX idx_so_sales_outbound_status ON public.so_sales_outbound USING btree (status);
+
+
+--
+-- Name: idx_so_sales_outbound_settlement_company; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_so_sales_outbound_settlement_company ON public.so_sales_outbound USING btree (settlement_company_id) WHERE (deleted_flag = false);
 
 
 --
@@ -5713,6 +5847,13 @@ CREATE INDEX idx_st_customer_statement_status ON public.st_customer_statement US
 
 
 --
+-- Name: idx_st_customer_statement_settlement_company; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_st_customer_statement_settlement_company ON public.st_customer_statement USING btree (settlement_company_id) WHERE (deleted_flag = false);
+
+
+--
 -- Name: idx_st_freight_statement_carrier_date; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -5741,6 +5882,20 @@ CREATE INDEX idx_st_freight_statement_item_statement_id ON public.st_freight_sta
 
 
 --
+-- Name: idx_st_freight_statement_item_settlement_company; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_st_freight_statement_item_settlement_company ON public.st_freight_statement_item USING btree (settlement_company_id);
+
+
+--
+-- Name: idx_st_freight_statement_item_source_outbound_item; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_st_freight_statement_item_source_outbound_item ON public.st_freight_statement_item USING btree (source_sales_outbound_item_id);
+
+
+--
 -- Name: idx_st_freight_statement_statement_no_trgm; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -5752,6 +5907,13 @@ CREATE INDEX idx_st_freight_statement_statement_no_trgm ON public.st_freight_sta
 --
 
 CREATE INDEX idx_st_freight_statement_status ON public.st_freight_statement USING btree (status);
+
+
+--
+-- Name: idx_st_freight_statement_settlement_company; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_st_freight_statement_settlement_company ON public.st_freight_statement USING btree (settlement_company_id) WHERE (deleted_flag = false);
 
 
 --
@@ -5794,6 +5956,13 @@ CREATE INDEX idx_st_supplier_statement_supplier_date ON public.st_supplier_state
 --
 
 CREATE INDEX idx_st_supplier_statement_supplier_name_trgm ON public.st_supplier_statement USING gin (supplier_name public.gin_trgm_ops) WHERE (deleted_flag = false);
+
+
+--
+-- Name: idx_st_supplier_statement_settlement_company; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_st_supplier_statement_settlement_company ON public.st_supplier_statement USING btree (settlement_company_id) WHERE (deleted_flag = false);
 
 
 --

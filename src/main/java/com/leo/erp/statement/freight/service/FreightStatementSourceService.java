@@ -9,6 +9,7 @@ import com.leo.erp.common.support.ManagedEntityItemSupport;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.support.TradeItemCalculator;
 import com.leo.erp.logistics.bill.domain.entity.FreightBill;
+import com.leo.erp.logistics.bill.domain.entity.FreightBillItem;
 import com.leo.erp.logistics.bill.repository.FreightBillRepository;
 import com.leo.erp.security.permission.DataScopeContext;
 import com.leo.erp.statement.freight.domain.entity.FreightStatement;
@@ -54,6 +55,7 @@ public class FreightStatementSourceService {
         Specification<FreightBill> spec = Specs.<FreightBill>notDeleted()
                 .and(Specs.keywordLike(filter.keyword(), FREIGHT_BILL_CANDIDATE_SEARCH_FIELDS))
                 .and(Specs.equalIfPresent("carrierName", filter.name()))
+                .and(Specs.equalValueIfPresent("settlementCompanyId", filter.settlementCompanyId()))
                 .and(Specs.equalIfPresent("status", StatusConstants.AUDITED))
                 .and(Specs.betweenIfPresent("billTime", filter.startDate(), filter.endDate()))
                 .and(StatementCandidateSupport.excludeFieldValues("billNo", occupiedBillNos));
@@ -65,6 +67,9 @@ public class FreightStatementSourceService {
                                  FreightStatementCommand command,
                                  LongSupplier nextIdSupplier) {
         List<FreightBill> sourceBills = loadSourceBills(command, entity.getId());
+        SettlementCompanySnapshot settlementCompany = resolveStatementSettlementCompany(sourceBills);
+        entity.setSettlementCompanyId(settlementCompany.id());
+        entity.setSettlementCompanyName(settlementCompany.name());
         BigDecimal totalWeight = BigDecimal.ZERO;
         List<FreightStatementItem> items = ManagedEntityItemSupport.syncById(
                 entity.getItems(),
@@ -78,10 +83,14 @@ public class FreightStatementSourceService {
         for (int i = 0; i < command.items().size(); i++) {
             FreightStatementItemCommand source = command.items().get(i);
             FreightBill sourceBill = resolveSourceBill(sourceBills, source.sourceNo(), i + 1);
+            FreightBillItem sourceBillItem = resolveSourceBillItem(sourceBill, source, i + 1);
             FreightStatementItem item = items.get(i);
             item.setFreightStatement(entity);
             item.setLineNo(i + 1);
             item.setSourceNo(sourceBill.getBillNo());
+            item.setSourceSalesOutboundItemId(sourceBillItem.getSourceSalesOutboundItemId());
+            item.setSettlementCompanyId(sourceBillItem.getSettlementCompanyId());
+            item.setSettlementCompanyName(sourceBillItem.getSettlementCompanyName());
             item.setCustomerName(source.customerName());
             item.setProjectName(source.projectName());
             item.setMaterialCode(source.materialCode());
@@ -146,6 +155,11 @@ public class FreightStatementSourceService {
             if (!command.carrierName().trim().equals(bill.getCarrierName())) {
                 throw new BusinessException(ErrorCode.BUSINESS_ERROR, "来源物流单存在不同物流商，不能合并生成物流对账单");
             }
+            if (command.settlementCompanyId() != null
+                    && bill.getSettlementCompanyId() != null
+                    && !command.settlementCompanyId().equals(bill.getSettlementCompanyId())) {
+                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "来源物流单存在不同物流结算主体，不能合并生成物流对账单");
+            }
             if (!StatusConstants.AUDITED.equals(bill.getStatus())) {
                 throw new BusinessException(ErrorCode.BUSINESS_ERROR, "来源物流单" + bill.getBillNo() + "未审核，不能生成物流对账单");
             }
@@ -180,11 +194,49 @@ public class FreightStatementSourceService {
         throw new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行来源物流单不存在");
     }
 
+    private FreightBillItem resolveSourceBillItem(FreightBill sourceBill, FreightStatementItemCommand source, int lineNo) {
+        if (source.sourceSalesOutboundItemId() != null) {
+            return sourceBill.getItems().stream()
+                    .filter(item -> source.sourceSalesOutboundItemId().equals(item.getSourceSalesOutboundItemId()))
+                    .findFirst()
+                    .orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行来源物流单明细不存在"));
+        }
+        return sourceBill.getItems().stream()
+                .filter(item -> normalizeText(source.materialCode()).equals(normalizeText(item.getMaterialCode())))
+                .filter(item -> normalizeText(source.batchNo()).equals(normalizeText(item.getBatchNo())))
+                .filter(item -> normalizeText(source.warehouseName()).equals(normalizeText(item.getWarehouseName())))
+                .filter(item -> java.util.Objects.equals(source.quantity(), item.getQuantity()))
+                .findFirst()
+                .orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行来源物流单明细不存在"));
+    }
+
+    private String normalizeText(String value) {
+        String normalized = trimToNull(value);
+        return normalized == null ? "" : normalized;
+    }
+
+    private SettlementCompanySnapshot resolveStatementSettlementCompany(List<FreightBill> sourceBills) {
+        List<SettlementCompanySnapshot> snapshots = sourceBills.stream()
+                .map(bill -> new SettlementCompanySnapshot(bill.getSettlementCompanyId(), trimToNull(bill.getSettlementCompanyName())))
+                .filter(snapshot -> snapshot.id() != null || snapshot.name() != null)
+                .distinct()
+                .toList();
+        if (snapshots.isEmpty()) {
+            return new SettlementCompanySnapshot(null, null);
+        }
+        if (snapshots.size() > 1) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "来源物流单存在不同物流结算主体，不能合并生成物流对账单");
+        }
+        return snapshots.get(0);
+    }
+
     private FreightStatementCandidateResponse toCandidateResponse(FreightBill bill) {
         return new FreightStatementCandidateResponse(
                 bill.getId(),
                 bill.getBillNo(),
                 bill.getCarrierName(),
+                bill.getSettlementCompanyId(),
+                bill.getSettlementCompanyName(),
                 bill.getCustomerName(),
                 bill.getProjectName(),
                 bill.getBillTime(),
@@ -198,5 +250,15 @@ public class FreightStatementSourceService {
             BigDecimal totalWeight,
             BigDecimal totalFreight
     ) {
+    }
+
+    private String trimToNull(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        return value.trim();
+    }
+
+    private record SettlementCompanySnapshot(Long id, String name) {
     }
 }

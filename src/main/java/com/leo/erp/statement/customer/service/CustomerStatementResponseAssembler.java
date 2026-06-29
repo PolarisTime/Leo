@@ -29,6 +29,8 @@ public class CustomerStatementResponseAssembler {
                 response.customerName(),
                 response.projectId(),
                 response.projectName(),
+                response.settlementCompanyId(),
+                response.settlementCompanyName(),
                 response.startDate(),
                 response.endDate(),
                 response.salesAmount(),

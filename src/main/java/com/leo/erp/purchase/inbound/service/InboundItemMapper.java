@@ -59,6 +59,7 @@ public class InboundItemMapper {
         item.setLength(source.length());
         item.setUnit(source.unit());
         item.setSourcePurchaseOrderItemId(source.sourcePurchaseOrderItemId());
+        applySettlementCompany(item, source.sourcePurchaseOrderItemId(), sourcePurchaseOrderItemMap);
 
         String sourceOrderNo = resolveSourceOrderNo(source, sourcePurchaseOrderItemMap);
         String warehouseName = warehouseSelectionSupport.normalizeWarehouseName(
@@ -104,6 +105,24 @@ public class InboundItemMapper {
         PurchaseOrderItem sourceItem = sourceMap.get(source.sourcePurchaseOrderItemId());
         if (sourceItem == null || sourceItem.getPurchaseOrder() == null) return null;
         return sourceItem.getPurchaseOrder().getOrderNo();
+    }
+
+    private void applySettlementCompany(PurchaseInboundItem item,
+                                        Long sourcePurchaseOrderItemId,
+                                        Map<Long, PurchaseOrderItem> sourceMap) {
+        if (sourcePurchaseOrderItemId == null) {
+            item.setSettlementCompanyId(null);
+            item.setSettlementCompanyName(null);
+            return;
+        }
+        PurchaseOrderItem sourceItem = sourceMap.get(sourcePurchaseOrderItemId);
+        if (sourceItem == null || sourceItem.getPurchaseOrder() == null) {
+            item.setSettlementCompanyId(null);
+            item.setSettlementCompanyName(null);
+            return;
+        }
+        item.setSettlementCompanyId(sourceItem.getPurchaseOrder().getSettlementCompanyId());
+        item.setSettlementCompanyName(sourceItem.getPurchaseOrder().getSettlementCompanyName());
     }
 
     record ItemMappingResult(

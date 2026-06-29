@@ -57,12 +57,13 @@ public class ReceiptController {
             @BindPageQuery(sortFieldKey = "receipt") PageQuery query,
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) String customerName,
+            @RequestParam(required = false) Long settlementCompanyId,
             @RequestParam(required = false) String status,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate
     ) {
         return ApiResponse.success(PageResponse.from(
-                receiptService.page(query, PageFilter.of(keyword, customerName, status, startDate, endDate))
+                receiptService.page(query, PageFilter.of(keyword, customerName, settlementCompanyId, status, startDate, endDate))
         ));
     }
 

@@ -63,7 +63,7 @@ class ReceiptControllerTest {
         PageQuery query = new PageQuery(0, 20, null, null);
         when(receiptService.page(any(), any())).thenReturn(page);
 
-        ApiResponse<PageResponse<ReceiptResponse>> response = controller.page(query, "test", "customer", "active", null, null);
+        ApiResponse<PageResponse<ReceiptResponse>> response = controller.page(query, "test", "customer", null, "active", null, null);
 
         assertThat(response.code()).isEqualTo(0);
         assertThat(response.data().content()).hasSize(1);

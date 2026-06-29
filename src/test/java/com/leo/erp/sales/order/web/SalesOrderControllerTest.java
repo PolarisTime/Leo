@@ -74,7 +74,7 @@ class SalesOrderControllerTest {
         PageQuery query = new PageQuery(0, 20, null, null);
         when(service.page(any(), any())).thenReturn(page);
 
-        ApiResponse<PageResponse<SalesOrderResponse>> response = controller.page(query, "test", "customer", "project", "active", null, null);
+        ApiResponse<PageResponse<SalesOrderResponse>> response = controller.page(query, "test", "customer", "project", 7L, "active", null, null);
 
         assertThat(response.code()).isEqualTo(0);
         assertThat(response.data().content()).hasSize(1);

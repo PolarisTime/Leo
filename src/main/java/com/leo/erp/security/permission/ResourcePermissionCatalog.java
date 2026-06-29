@@ -118,7 +118,7 @@ public final class ResourcePermissionCatalog {
             entry("receivable-payable", "应收应付", "财务", true, List.of("/receivable-payable"), REPORT_ACTIONS),
             entry("general-setting", "通用设置", "系统", false,
                     List.of("/general-setting", "/general-setting/upload-rule"), List.of(action(READ, "查看"), action(UPDATE, "编辑"))),
-            entry("company-setting", "结算主体管理", "系统", false, List.of("/company-setting", "/company-settings"), CRUD_ACTIONS),
+            entry("company-setting", "结算主体管理", "主数据", false, List.of("/company-setting", "/company-settings"), CRUD_ACTIONS),
             entry("operation-log", "操作日志", "系统", false, List.of("/operation-log"), READ_ONLY_ACTIONS),
             entry("department", "部门", "主数据", false, List.of("/department"), CRUD_ACTIONS),
             entry("user-account", "用户账户", "系统", false, List.of("/user-account"), CRUD_ACTIONS),

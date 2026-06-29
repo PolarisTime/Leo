@@ -63,6 +63,7 @@ public class SupplierStatementSourceService {
         Specification<PurchaseInbound> spec = Specs.<PurchaseInbound>notDeleted()
                 .and(Specs.keywordLike(filter.keyword(), PURCHASE_INBOUND_CANDIDATE_SEARCH_FIELDS))
                 .and(Specs.equalIfPresent("supplierName", filter.name()))
+                .and(Specs.equalValueIfPresent("settlementCompanyId", filter.settlementCompanyId()))
                 .and(Specs.equalIfPresent("status", StatusConstants.PURCHASE_COMPLETED))
                 .and(Specs.betweenIfPresent("inboundDate", filter.startDate(), filter.endDate()))
                 .and(StatementCandidateSupport.excludeFieldValues("inboundNo", occupiedInboundNos));
@@ -70,13 +71,17 @@ public class SupplierStatementSourceService {
                 .map(this::toCandidateResponse);
     }
 
-    BigDecimal applyItems(SupplierStatement entity,
-                          SupplierStatementRequest request,
-                          LongSupplier nextIdSupplier) {
+    SourceApplyResult applyItems(SupplierStatement entity,
+                                 SupplierStatementRequest request,
+                                 LongSupplier nextIdSupplier) {
         BigDecimal purchaseAmount = BigDecimal.ZERO;
         entity.setSupplierCode(resolveSupplierCode(request.supplierCode(), request.supplierName()));
         Map<Long, PurchaseInboundItem> sourceInboundItemMap = loadSourceInboundItemMap(request.items());
         validateSourceInbounds(request, sourceInboundItemMap, entity.getId());
+        SettlementCompanySnapshot settlementCompany = resolveStatementSettlementCompany(sourceInboundItemMap.values().stream()
+                .map(PurchaseInboundItem::getPurchaseInbound)
+                .distinct()
+                .toList());
         List<SupplierStatementItem> items = ManagedEntityItemSupport.syncById(
                 entity.getItems(),
                 request.items(),
@@ -118,7 +123,7 @@ public class SupplierStatementSourceService {
             purchaseAmount = purchaseAmount.add(amount);
         }
         entity.getItems().sort(java.util.Comparator.comparing(SupplierStatementItem::getLineNo));
-        return purchaseAmount;
+        return new SourceApplyResult(purchaseAmount, settlementCompany.id(), settlementCompany.name());
     }
 
     Set<String> collectOccupiedInboundNos(Long currentStatementId) {
@@ -168,6 +173,11 @@ public class SupplierStatementSourceService {
                     Set.of(StatusConstants.PURCHASE_COMPLETED),
                     "来源采购入库单" + inbound.getInboundNo() + "未完成采购，不能生成供应商对账单"
             );
+            if (request.settlementCompanyId() != null
+                    && inbound.getSettlementCompanyId() != null
+                    && !request.settlementCompanyId().equals(inbound.getSettlementCompanyId())) {
+                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "来源采购入库单存在不同采购结算主体，不能合并生成供应商对账单");
+            }
         }
         if (requestedInboundNos.isEmpty()) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "供应商对账单来源采购入库单不能为空");
@@ -223,11 +233,28 @@ public class SupplierStatementSourceService {
         return BusinessDocumentValidator.trimToNull(value);
     }
 
+    private SettlementCompanySnapshot resolveStatementSettlementCompany(List<PurchaseInbound> inbounds) {
+        List<SettlementCompanySnapshot> snapshots = inbounds.stream()
+                .map(inbound -> new SettlementCompanySnapshot(inbound.getSettlementCompanyId(), trimToNull(inbound.getSettlementCompanyName())))
+                .filter(snapshot -> snapshot.id() != null || snapshot.name() != null)
+                .distinct()
+                .toList();
+        if (snapshots.isEmpty()) {
+            return new SettlementCompanySnapshot(null, null);
+        }
+        if (snapshots.size() > 1) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "来源采购入库单存在不同采购结算主体，不能合并生成供应商对账单");
+        }
+        return snapshots.get(0);
+    }
+
     private SupplierStatementCandidateResponse toCandidateResponse(PurchaseInbound inbound) {
         return new SupplierStatementCandidateResponse(
                 inbound.getId(),
                 inbound.getInboundNo(),
                 inbound.getSupplierName(),
+                inbound.getSettlementCompanyId(),
+                inbound.getSettlementCompanyName(),
                 inbound.getWarehouseName(),
                 inbound.getInboundDate(),
                 inbound.getSettlementMode(),
@@ -235,5 +262,15 @@ public class SupplierStatementSourceService {
                 inbound.getTotalAmount(),
                 inbound.getStatus()
         );
+    }
+
+    record SourceApplyResult(
+            BigDecimal purchaseAmount,
+            Long settlementCompanyId,
+            String settlementCompanyName
+    ) {
+    }
+
+    private record SettlementCompanySnapshot(Long id, String name) {
     }
 }

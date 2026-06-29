@@ -56,7 +56,7 @@ class FreightStatementControllerTest {
         PageQuery query = new PageQuery(0, 20, null, null);
         when(freightStatementService.responsePage(any(), any())).thenReturn(page);
 
-        ApiResponse<PageResponse<FreightStatementResponse>> response = controller.page(query, "test", "carrier", "active", null, null, null);
+        ApiResponse<PageResponse<FreightStatementResponse>> response = controller.page(query, "test", "carrier", 7L, "active", null, null, null);
 
         assertThat(response.code()).isEqualTo(0);
         assertThat(response.data().content()).hasSize(1);
@@ -69,7 +69,7 @@ class FreightStatementControllerTest {
         PageQuery query = new PageQuery(0, 20, null, null);
         when(freightStatementService.candidatePage(any(), any())).thenReturn(page);
 
-        ApiResponse<PageResponse<FreightStatementCandidateResponse>> response = controller.candidates(query, "test", "carrier", null, null);
+        ApiResponse<PageResponse<FreightStatementCandidateResponse>> response = controller.candidates(query, "test", "carrier", 7L, null, null);
 
         assertThat(response.code()).isEqualTo(0);
         assertThat(response.data().content()).hasSize(1);

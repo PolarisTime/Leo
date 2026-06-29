@@ -31,6 +31,15 @@ public class FreightStatementItem {
     @Column(name = "source_no", nullable = false, length = 64)
     private String sourceNo;
 
+    @Column(name = "source_sales_outbound_item_id")
+    private Long sourceSalesOutboundItemId;
+
+    @Column(name = "settlement_company_id")
+    private Long settlementCompanyId;
+
+    @Column(name = "settlement_company_name", length = 128)
+    private String settlementCompanyName;
+
     @Column(name = "customer_name", nullable = false, length = 128)
     private String customerName;
 

@@ -59,6 +59,8 @@ public class ReceiptApplyService {
                 entity.getCustomerCode(),
                 allocationResult.customerCode()
         ));
+        entity.setSettlementCompanyId(allocationResult.settlementCompanyId());
+        entity.setSettlementCompanyName(allocationResult.settlementCompanyName());
         entity.setSourceStatementId(settlementSyncService.resolveLegacySourceStatementId(entity));
     }
 }

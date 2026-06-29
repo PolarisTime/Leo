@@ -53,6 +53,7 @@ public class ReceiptService extends AbstractCrudService<Receipt, ReceiptRequest,
     public Page<ReceiptResponse> page(PageQuery query, PageFilter filter) {
         Specification<Receipt> spec = Specs.<Receipt>keywordLike(filter.keyword(), "receiptNo", "customerName", "projectName")
                 .and(Specs.equalIfPresent("customerName", filter.name()))
+                .and(Specs.equalValueIfPresent("settlementCompanyId", filter.settlementCompanyId()))
                 .and(Specs.equalIfPresent("status", filter.status()))
                 .and(Specs.betweenIfPresent("receiptDate", filter.startDate(), filter.endDate()));
         return page(query, spec, receiptRepository);
@@ -172,6 +173,8 @@ public class ReceiptService extends AbstractCrudService<Receipt, ReceiptRequest,
                 response.customerName(),
                 response.projectId(),
                 response.projectName(),
+                response.settlementCompanyId(),
+                response.settlementCompanyName(),
                 response.sourceStatementId(),
                 response.receiptDate(),
                 response.payType(),

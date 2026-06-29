@@ -52,6 +52,7 @@ public class SupplierStatementService extends AbstractCrudService<SupplierStatem
     public Page<SupplierStatementResponse> page(PageQuery query, PageFilter filter) {
         Specification<SupplierStatement> spec = Specs.<SupplierStatement>keywordLike(filter.keyword(), "statementNo", "supplierName")
                 .and(Specs.equalIfPresent("supplierName", filter.name()))
+                .and(Specs.equalValueIfPresent("settlementCompanyId", filter.settlementCompanyId()))
                 .and(Specs.equalIfPresent("status", filter.status()))
                 .and(Specs.betweenIfPresent("endDate", filter.startDate(), filter.endDate()));
         return page(query, spec, repository);
@@ -103,6 +104,8 @@ public class SupplierStatementService extends AbstractCrudService<SupplierStatem
                 resolveCreateBusinessNo("supplier-statement", request.statementNo(), entityId),
                 request.supplierCode(),
                 request.supplierName(),
+                request.settlementCompanyId(),
+                request.settlementCompanyName(),
                 request.startDate(),
                 request.endDate(),
                 request.purchaseAmount(),
@@ -120,6 +123,8 @@ public class SupplierStatementService extends AbstractCrudService<SupplierStatem
                 entity.getStatementNo(),
                 request.supplierCode(),
                 request.supplierName(),
+                request.settlementCompanyId(),
+                request.settlementCompanyName(),
                 request.startDate(),
                 request.endDate(),
                 request.purchaseAmount(),

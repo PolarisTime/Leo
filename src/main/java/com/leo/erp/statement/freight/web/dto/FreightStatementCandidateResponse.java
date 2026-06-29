@@ -7,6 +7,8 @@ public record FreightStatementCandidateResponse(
         Long id,
         String billNo,
         String carrierName,
+        Long settlementCompanyId,
+        String settlementCompanyName,
         String customerName,
         String projectName,
         LocalDate billTime,
@@ -14,4 +16,16 @@ public record FreightStatementCandidateResponse(
         BigDecimal totalFreight,
         String status
 ) {
+    public FreightStatementCandidateResponse(Long id,
+                                             String billNo,
+                                             String carrierName,
+                                             String customerName,
+                                             String projectName,
+                                             LocalDate billTime,
+                                             BigDecimal totalWeight,
+                                             BigDecimal totalFreight,
+                                             String status) {
+        this(id, billNo, carrierName, null, null, customerName, projectName, billTime,
+                totalWeight, totalFreight, status);
+    }
 }

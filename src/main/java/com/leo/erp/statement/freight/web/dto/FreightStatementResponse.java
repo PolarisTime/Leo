@@ -12,6 +12,8 @@ public record FreightStatementResponse(
         String statementNo,
         String carrierCode,
         String carrierName,
+        Long settlementCompanyId,
+        String settlementCompanyName,
         LocalDate startDate,
         LocalDate endDate,
         BigDecimal totalWeight,
@@ -27,6 +29,7 @@ public record FreightStatementResponse(
 ) {
     public FreightStatementResponse(Long id,
                                     String statementNo,
+                                    String carrierCode,
                                     String carrierName,
                                     LocalDate startDate,
                                     LocalDate endDate,
@@ -40,6 +43,26 @@ public record FreightStatementResponse(
                                     List<AttachmentResponse> attachments,
                                     String remark,
                                     List<FreightBillItemResponse> items) {
-        this(id, statementNo, null, carrierName, startDate, endDate, totalWeight, totalFreight, paidAmount, unpaidAmount, status, signStatus, attachment, attachments, remark, items);
+        this(id, statementNo, carrierCode, carrierName, null, null, startDate, endDate, totalWeight,
+                totalFreight, paidAmount, unpaidAmount, status, signStatus, attachment, attachments, remark, items);
+    }
+
+    public FreightStatementResponse(Long id,
+                                    String statementNo,
+                                    String carrierName,
+                                    LocalDate startDate,
+                                    LocalDate endDate,
+                                    BigDecimal totalWeight,
+                                    BigDecimal totalFreight,
+                                    BigDecimal paidAmount,
+                                    BigDecimal unpaidAmount,
+                                    String status,
+                                    String signStatus,
+                                    String attachment,
+                                    List<AttachmentResponse> attachments,
+                                    String remark,
+                                    List<FreightBillItemResponse> items) {
+        this(id, statementNo, null, carrierName, null, null, startDate, endDate, totalWeight, totalFreight,
+                paidAmount, unpaidAmount, status, signStatus, attachment, attachments, remark, items);
     }
 }

@@ -66,6 +66,7 @@ public class CustomerStatementSourceService {
                 .and(Specs.keywordLike(filter.keyword(), SALES_ORDER_CANDIDATE_SEARCH_FIELDS))
                 .and(Specs.equalIfPresent("customerName", filter.name()))
                 .and(Specs.equalIfPresent("projectName", filter.projectName()))
+                .and(Specs.equalValueIfPresent("settlementCompanyId", filter.settlementCompanyId()))
                 .and(Specs.equalIfPresent("status", StatusConstants.SALES_COMPLETED))
                 .and(Specs.betweenIfPresent("deliveryDate", filter.startDate(), filter.endDate()))
                 .and(StatementCandidateSupport.excludeFieldValues("orderNo", occupiedOrderNos));
@@ -73,12 +74,16 @@ public class CustomerStatementSourceService {
                 .map(this::toCandidateResponse);
     }
 
-    BigDecimal applyItems(CustomerStatement entity,
-                          CustomerStatementRequest request,
-                          LongSupplier nextIdSupplier) {
+    SourceApplyResult applyItems(CustomerStatement entity,
+                                 CustomerStatementRequest request,
+                                 LongSupplier nextIdSupplier) {
         BigDecimal salesAmount = BigDecimal.ZERO;
         Map<Long, SalesOrderItem> sourceSalesOrderItemMap = loadSourceSalesOrderItemMap(request.items());
         validateSourceSalesOrders(request, sourceSalesOrderItemMap, entity.getId());
+        SettlementCompanySnapshot settlementCompany = resolveStatementSettlementCompany(sourceSalesOrderItemMap.values().stream()
+                .map(SalesOrderItem::getSalesOrder)
+                .distinct()
+                .toList());
         entity.setCustomerCode(resolveCustomerCode(
                 request.customerCode(),
                 request.customerName(),
@@ -121,7 +126,7 @@ public class CustomerStatementSourceService {
             salesAmount = salesAmount.add(amount);
         }
         entity.getItems().sort(java.util.Comparator.comparing(CustomerStatementItem::getLineNo));
-        return salesAmount;
+        return new SourceApplyResult(salesAmount, settlementCompany.id(), settlementCompany.name());
     }
 
     Set<String> collectOccupiedOrderNos(Long currentStatementId) {
@@ -176,6 +181,11 @@ public class CustomerStatementSourceService {
                     Set.of(StatusConstants.SALES_COMPLETED),
                     "来源销售订单" + order.getOrderNo() + "未完成销售，不能生成客户对账单"
             );
+            if (request.settlementCompanyId() != null
+                    && order.getSettlementCompanyId() != null
+                    && !request.settlementCompanyId().equals(order.getSettlementCompanyId())) {
+                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "来源销售订单存在不同客户结算主体，不能合并生成客户对账单");
+            }
         }
         if (requestedOrderNos.isEmpty()) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "客户对账单来源销售订单不能为空");
@@ -251,17 +261,44 @@ public class CustomerStatementSourceService {
         return BusinessDocumentValidator.trimToNull(value);
     }
 
+    private SettlementCompanySnapshot resolveStatementSettlementCompany(List<SalesOrder> orders) {
+        List<SettlementCompanySnapshot> snapshots = orders.stream()
+                .map(order -> new SettlementCompanySnapshot(order.getSettlementCompanyId(), trimToNull(order.getSettlementCompanyName())))
+                .filter(snapshot -> snapshot.id() != null || snapshot.name() != null)
+                .distinct()
+                .toList();
+        if (snapshots.isEmpty()) {
+            return new SettlementCompanySnapshot(null, null);
+        }
+        if (snapshots.size() > 1) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "来源销售订单存在不同客户结算主体，不能合并生成客户对账单");
+        }
+        return snapshots.get(0);
+    }
+
     private CustomerStatementCandidateResponse toCandidateResponse(SalesOrder order) {
         return new CustomerStatementCandidateResponse(
                 order.getId(),
                 order.getOrderNo(),
                 order.getCustomerName(),
                 order.getProjectName(),
+                order.getSettlementCompanyId(),
+                order.getSettlementCompanyName(),
                 order.getDeliveryDate(),
                 order.getSalesName(),
                 order.getTotalWeight(),
                 order.getTotalAmount(),
                 order.getStatus()
         );
+    }
+
+    record SourceApplyResult(
+            BigDecimal salesAmount,
+            Long settlementCompanyId,
+            String settlementCompanyName
+    ) {
+    }
+
+    private record SettlementCompanySnapshot(Long id, String name) {
     }
 }

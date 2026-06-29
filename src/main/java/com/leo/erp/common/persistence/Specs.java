@@ -31,6 +31,15 @@ public final class Specs {
         };
     }
 
+    public static <T> Specification<T> equalValueIfPresent(String field, Object value) {
+        return (root, q, cb) -> {
+            if (value == null) {
+                return cb.conjunction();
+            }
+            return cb.equal(root.get(field), value);
+        };
+    }
+
     public static <T, V extends Comparable<? super V>> Specification<T> betweenIfPresent(String field, V start, V end) {
         return (root, q, cb) -> {
             var predicates = new java.util.ArrayList<jakarta.persistence.criteria.Predicate>(2);

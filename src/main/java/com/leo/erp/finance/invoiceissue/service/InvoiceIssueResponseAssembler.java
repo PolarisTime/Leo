@@ -24,6 +24,8 @@ public class InvoiceIssueResponseAssembler {
                 response.invoiceNo(),
                 response.customerName(),
                 response.projectName(),
+                response.settlementCompanyId(),
+                response.settlementCompanyName(),
                 response.invoiceDate(),
                 response.invoiceType(),
                 response.amount(),

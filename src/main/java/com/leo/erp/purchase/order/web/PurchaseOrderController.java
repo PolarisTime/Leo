@@ -58,10 +58,19 @@ public class PurchaseOrderController {
     public ApiResponse<PageResponse<PurchaseOrderImportCandidateResponse>> importCandidates(
             @BindPageQuery(sortFieldKey = "purchase-order") PageQuery query,
             @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) String supplierName,
+            @RequestParam(required = false) Long settlementCompanyId,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate,
             @RequestParam String usage
     ) {
         return ApiResponse.success(PageResponse.from(
-                purchaseOrderService.importCandidates(query, keyword, usage)
+                purchaseOrderService.importCandidates(
+                        query,
+                        PageFilter.of(keyword, supplierName, settlementCompanyId, status, startDate, endDate),
+                        usage
+                )
         ));
     }
 
@@ -72,12 +81,13 @@ public class PurchaseOrderController {
             @BindPageQuery(sortFieldKey = "purchase-order") PageQuery query,
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) String supplierName,
+            @RequestParam(required = false) Long settlementCompanyId,
             @RequestParam(required = false) String status,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate
     ) {
         return ApiResponse.success(PageResponse.from(
-                purchaseOrderService.page(query, PageFilter.of(keyword, supplierName, status, startDate, endDate))
+                purchaseOrderService.page(query, PageFilter.of(keyword, supplierName, settlementCompanyId, status, startDate, endDate))
         ));
     }
 

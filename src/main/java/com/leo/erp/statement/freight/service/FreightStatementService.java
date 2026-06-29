@@ -60,6 +60,7 @@ public class FreightStatementService extends AbstractCrudService<FreightStatemen
         Specification<FreightStatement> spec = applyDeletedVisibilityPolicy(
                 Specs.<FreightStatement>keywordLike(filter.keyword(), "statementNo", "carrierName")
                 .and(Specs.equalIfPresent("carrierName", filter.name()))
+                .and(Specs.equalValueIfPresent("settlementCompanyId", filter.settlementCompanyId()))
                 .and(Specs.equalIfPresent("status", filter.status()))
                 .and(Specs.equalIfPresent("signStatus", filter.signStatus()))
                 .and(Specs.betweenIfPresent("endDate", filter.startDate(), filter.endDate()))
@@ -146,6 +147,8 @@ public class FreightStatementService extends AbstractCrudService<FreightStatemen
                 resolveCreateBusinessNo("freight-statement", command.statementNo(), entityId),
                 command.carrierCode(),
                 command.carrierName(),
+                command.settlementCompanyId(),
+                command.settlementCompanyName(),
                 command.startDate(),
                 command.endDate(),
                 command.totalWeight(),
@@ -166,6 +169,8 @@ public class FreightStatementService extends AbstractCrudService<FreightStatemen
                 entity.getStatementNo(),
                 command.carrierCode(),
                 command.carrierName(),
+                command.settlementCompanyId(),
+                command.settlementCompanyName(),
                 command.startDate(),
                 command.endDate(),
                 command.totalWeight(),

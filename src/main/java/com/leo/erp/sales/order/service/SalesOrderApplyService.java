@@ -6,11 +6,14 @@ import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.support.TradeItemCalculator;
 import com.leo.erp.common.support.TradeItemMaterialSupport;
 import com.leo.erp.common.support.TradeMaterialSnapshot;
+import com.leo.erp.master.customer.domain.entity.Customer;
+import com.leo.erp.master.customer.repository.CustomerRepository;
 import com.leo.erp.sales.order.domain.entity.SalesOrder;
 import com.leo.erp.sales.order.domain.entity.SalesOrderItem;
 import com.leo.erp.sales.order.web.dto.SalesOrderItemRequest;
 import com.leo.erp.sales.order.web.dto.SalesOrderRequest;
 import com.leo.erp.security.permission.WorkflowTransitionGuard;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -28,6 +31,7 @@ public class SalesOrderApplyService {
     private final SalesOrderPurchaseAllocationService purchaseAllocationService;
     private final SalesOrderItemMapper salesOrderItemMapper;
     private final WorkflowTransitionGuard workflowTransitionGuard;
+    private final CustomerRepository customerRepository;
 
     public SalesOrderApplyService(TradeItemMaterialSupport tradeItemMaterialSupport,
                                   SalesOrderSourceAllocationService sourceAllocationService,
@@ -35,12 +39,25 @@ public class SalesOrderApplyService {
                                   SalesOrderPurchaseAllocationService purchaseAllocationService,
                                   SalesOrderItemMapper salesOrderItemMapper,
                                   WorkflowTransitionGuard workflowTransitionGuard) {
+        this(tradeItemMaterialSupport, sourceAllocationService, weightResolver, purchaseAllocationService,
+                salesOrderItemMapper, workflowTransitionGuard, null);
+    }
+
+    @Autowired
+    public SalesOrderApplyService(TradeItemMaterialSupport tradeItemMaterialSupport,
+                                  SalesOrderSourceAllocationService sourceAllocationService,
+                                  SalesOrderWeightResolver weightResolver,
+                                  SalesOrderPurchaseAllocationService purchaseAllocationService,
+                                  SalesOrderItemMapper salesOrderItemMapper,
+                                  WorkflowTransitionGuard workflowTransitionGuard,
+                                  CustomerRepository customerRepository) {
         this.tradeItemMaterialSupport = tradeItemMaterialSupport;
         this.sourceAllocationService = sourceAllocationService;
         this.weightResolver = weightResolver;
         this.purchaseAllocationService = purchaseAllocationService;
         this.salesOrderItemMapper = salesOrderItemMapper;
         this.workflowTransitionGuard = workflowTransitionGuard;
+        this.customerRepository = customerRepository;
     }
 
     void apply(SalesOrder entity, SalesOrderRequest request, LongSupplier nextIdSupplier) {
@@ -71,6 +88,7 @@ public class SalesOrderApplyService {
         entity.setProjectId(request.projectId());
         entity.setDeliveryDate(request.deliveryDate());
         entity.setSalesName(request.salesName());
+        applyCustomerSettlementCompany(entity, request);
         entity.setStatus(nextStatus);
         entity.setRemark(request.remark());
     }
@@ -119,16 +137,77 @@ public class SalesOrderApplyService {
                                  Map<String, TradeMaterialSnapshot> materialMap,
                                  SalesOrderSourceContext sourceContext) {
         TradeMaterialSnapshot material = materialMap.get(source.materialCode());
-        sourceAllocationService.resolveSourceInbound(source, sourceContext);
-        sourceAllocationService.resolveSourcePurchaseOrder(source, sourceContext);
+        var sourceInboundItem = sourceAllocationService.resolveSourceInbound(source, sourceContext);
+        var sourcePurchaseOrderItem = sourceAllocationService.resolveSourcePurchaseOrder(source, sourceContext);
         sourceAllocationService.validateLine(source, lineNo, sourceContext);
         BigDecimal pieceWeightTon = weightResolver.resolvePieceWeightTon(source, sourceContext);
         BigDecimal weightTon = weightResolver.resolveWeightTon(source, pieceWeightTon, sourceContext);
         salesOrderItemMapper.applyItemFields(entity, source, item, lineNo, material, weightTon, pieceWeightTon);
+        applyPurchaseSettlementCompany(item, sourceInboundItem, sourcePurchaseOrderItem);
         BigDecimal amount = TradeItemCalculator.calculateAmount(weightTon, source.unitPrice());
         item.setAmount(amount);
         sourceAllocationService.recordAllocation(source, weightTon, sourceContext);
         return new ItemTotals(weightTon, amount);
+    }
+
+    private void applyCustomerSettlementCompany(SalesOrder entity, SalesOrderRequest request) {
+        if (shouldPreserveExistingSettlementCompany(entity)) {
+            return;
+        }
+        Customer customer = resolveCustomer(request);
+        if (customer == null) {
+            entity.setSettlementCompanyId(null);
+            entity.setSettlementCompanyName(null);
+            return;
+        }
+        entity.setSettlementCompanyId(customer.getDefaultSettlementCompanyId());
+        entity.setSettlementCompanyName(customer.getDefaultSettlementCompanyName());
+    }
+
+    private boolean shouldPreserveExistingSettlementCompany(SalesOrder entity) {
+        if (entity.getSettlementCompanyId() == null) {
+            return false;
+        }
+        return StatusConstants.AUDITED.equals(entity.getStatus())
+                || StatusConstants.SALES_COMPLETED.equals(entity.getStatus());
+    }
+
+    private Customer resolveCustomer(SalesOrderRequest request) {
+        if (customerRepository == null) {
+            return null;
+        }
+        if (request.customerCode() != null && !request.customerCode().isBlank()) {
+            return customerRepository.findByCustomerCodeAndDeletedFlagFalse(request.customerCode().trim())
+                    .orElse(null);
+        }
+        if (request.customerName() == null || request.customerName().isBlank()
+                || request.projectName() == null || request.projectName().isBlank()) {
+            return null;
+        }
+        return customerRepository.findFirstByCustomerNameAndProjectNameAndDeletedFlagFalseOrderByCustomerCodeAsc(
+                        request.customerName().trim(),
+                        request.projectName().trim()
+                )
+                .orElse(null);
+    }
+
+    private void applyPurchaseSettlementCompany(
+            SalesOrderItem item,
+            com.leo.erp.allocation.appservice.PurchaseItemQueryAppService.SourceInboundItemRecord sourceInboundItem,
+            com.leo.erp.allocation.appservice.PurchaseItemQueryAppService.SourcePurchaseOrderItemRecord sourcePurchaseOrderItem
+    ) {
+        if (sourceInboundItem != null) {
+            item.setSettlementCompanyId(sourceInboundItem.settlementCompanyId());
+            item.setSettlementCompanyName(sourceInboundItem.settlementCompanyName());
+            return;
+        }
+        if (sourcePurchaseOrderItem != null) {
+            item.setSettlementCompanyId(sourcePurchaseOrderItem.settlementCompanyId());
+            item.setSettlementCompanyName(sourcePurchaseOrderItem.settlementCompanyName());
+            return;
+        }
+        item.setSettlementCompanyId(null);
+        item.setSettlementCompanyName(null);
     }
 
     private record ItemTotals(BigDecimal weightTon, BigDecimal amount) {

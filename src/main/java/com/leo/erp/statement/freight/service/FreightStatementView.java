@@ -11,6 +11,8 @@ public record FreightStatementView(
         String statementNo,
         String carrierCode,
         String carrierName,
+        Long settlementCompanyId,
+        String settlementCompanyName,
         LocalDate startDate,
         LocalDate endDate,
         BigDecimal totalWeight,
@@ -39,6 +41,7 @@ public record FreightStatementView(
                                 List<AttachmentView> attachments,
                                 String remark,
                                 List<FreightStatementItemView> items) {
-        this(id, statementNo, null, carrierName, startDate, endDate, totalWeight, totalFreight, paidAmount, unpaidAmount, status, signStatus, attachment, attachments, remark, items);
+        this(id, statementNo, null, carrierName, null, null, startDate, endDate, totalWeight, totalFreight,
+                paidAmount, unpaidAmount, status, signStatus, attachment, attachments, remark, items);
     }
 }

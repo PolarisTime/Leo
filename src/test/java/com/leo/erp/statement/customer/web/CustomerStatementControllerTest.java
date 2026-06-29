@@ -56,7 +56,7 @@ class CustomerStatementControllerTest {
         PageQuery query = new PageQuery(0, 20, null, null);
         when(customerStatementService.page(any(), any())).thenReturn(page);
 
-        ApiResponse<PageResponse<CustomerStatementResponse>> response = controller.page(query, "test", "customer", "active", null, null);
+        ApiResponse<PageResponse<CustomerStatementResponse>> response = controller.page(query, "test", "customer", 7L, "active", null, null);
 
         assertThat(response.code()).isEqualTo(0);
         assertThat(response.data().content()).hasSize(1);
@@ -69,7 +69,7 @@ class CustomerStatementControllerTest {
         PageQuery query = new PageQuery(0, 20, null, null);
         when(customerStatementService.candidatePage(any(), any())).thenReturn(page);
 
-        ApiResponse<PageResponse<CustomerStatementCandidateResponse>> response = controller.candidates(query, "test", "customer", "project", null, null);
+        ApiResponse<PageResponse<CustomerStatementCandidateResponse>> response = controller.candidates(query, "test", "customer", "project", 7L, null, null);
 
         assertThat(response.code()).isEqualTo(0);
         assertThat(response.data().content()).hasSize(1);

@@ -16,6 +16,8 @@ import org.mapstruct.Mapping;
 @Mapper(config = StrictMapperConfig.class, uses = AttachmentWebMapper.class)
 public interface FreightStatementWebMapper {
 
+    @Mapping(target = "settlementCompanyId", source = "settlementCompanyId")
+    @Mapping(target = "settlementCompanyName", source = "settlementCompanyName")
     FreightStatementCommand toCommand(FreightStatementRequest request);
 
     FreightStatementItemCommand toItemCommand(FreightBillItemRequest item);

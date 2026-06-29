@@ -68,6 +68,7 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
     public Page<PurchaseOrderResponse> page(PageQuery query, PageFilter filter) {
         Specification<PurchaseOrder> spec = Specs.<PurchaseOrder>keywordLike(filter.keyword(), PURCHASE_ORDER_SEARCH_FIELDS)
                 .and(Specs.equalIfPresent("supplierName", filter.name()))
+                .and(Specs.equalValueIfPresent("settlementCompanyId", filter.settlementCompanyId()))
                 .and(Specs.equalIfPresent("status", filter.status()))
                 .and(Specs.betweenIfPresent("orderDate", filter.startDate(), filter.endDate()));
         return page(query, spec, purchaseOrderRepository);
@@ -80,11 +81,15 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
     }
 
     @Transactional(readOnly = true)
-    public Page<PurchaseOrderImportCandidateResponse> importCandidates(PageQuery query, String keyword, String usage) {
+    public Page<PurchaseOrderImportCandidateResponse> importCandidates(PageQuery query, PageFilter filter, String usage) {
         PurchaseOrderAvailabilityService.ImportCandidateUsage candidateUsage =
                 PurchaseOrderAvailabilityService.ImportCandidateUsage.from(usage);
         Specification<PurchaseOrder> spec = Specs.<PurchaseOrder>notDeleted()
-                .and(Specs.keywordLike(keyword, PURCHASE_ORDER_SEARCH_FIELDS));
+                .and(Specs.keywordLike(filter.keyword(), PURCHASE_ORDER_SEARCH_FIELDS))
+                .and(Specs.equalIfPresent("supplierName", filter.name()))
+                .and(Specs.equalValueIfPresent("settlementCompanyId", filter.settlementCompanyId()))
+                .and(Specs.equalIfPresent("status", filter.status()))
+                .and(Specs.betweenIfPresent("orderDate", filter.startDate(), filter.endDate()));
         Page<PurchaseOrder> page = pageEntities(query, spec, purchaseOrderRepository);
         if (page.isEmpty()) {
             return page.map(order -> toImportCandidateResponse(order, 0));
@@ -114,6 +119,8 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
                 order.getId(),
                 order.getOrderNo(),
                 order.getSupplierName(),
+                order.getSettlementCompanyId(),
+                order.getSettlementCompanyName(),
                 order.getBuyerName(),
                 order.getOrderDate(),
                 order.getStatus(),

@@ -10,9 +10,26 @@ public record FreightBillImportCandidateResponse(
         String customerName,
         String projectName,
         String warehouseName,
+        Long settlementCompanyId,
+        String settlementCompanyName,
         LocalDate outboundDate,
         BigDecimal totalWeight,
         BigDecimal totalAmount,
         String status
 ) {
+    public FreightBillImportCandidateResponse(
+            Long id,
+            String outboundNo,
+            String salesOrderNo,
+            String customerName,
+            String projectName,
+            String warehouseName,
+            LocalDate outboundDate,
+            BigDecimal totalWeight,
+            BigDecimal totalAmount,
+            String status
+    ) {
+        this(id, outboundNo, salesOrderNo, customerName, projectName, warehouseName, null, null,
+                outboundDate, totalWeight, totalAmount, status);
+    }
 }

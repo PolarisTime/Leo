@@ -69,7 +69,8 @@ public class PurchaseInboundResponseAssembler {
                 : weightSummary.getTotalWeightAdjustmentTon();
         return new PurchaseInboundResponse(
                 response.id(), response.inboundNo(), response.purchaseOrderNo(),
-                response.supplierName(), response.warehouseName(), response.inboundDate(),
+                response.supplierName(), response.settlementCompanyId(), response.settlementCompanyName(),
+                response.warehouseName(), response.inboundDate(),
                 response.settlementMode(), response.totalWeight(), response.totalAmount(),
                 response.status(), response.remark(),
                 TradeItemCalculator.scaleWeightTon(totalWeighWeightTon),
@@ -90,7 +91,8 @@ public class PurchaseInboundResponseAssembler {
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         return new PurchaseInboundResponse(
                 response.id(), response.inboundNo(), response.purchaseOrderNo(),
-                response.supplierName(), response.warehouseName(), response.inboundDate(),
+                response.supplierName(), response.settlementCompanyId(), response.settlementCompanyName(),
+                response.warehouseName(), response.inboundDate(),
                 response.settlementMode(), response.totalWeight(), response.totalAmount(),
                 response.status(), response.remark(),
                 TradeItemCalculator.scaleWeightTon(totalWeighWeightTon),
@@ -100,6 +102,7 @@ public class PurchaseInboundResponseAssembler {
                         item.getBrand(), item.getCategory(), item.getMaterial(),
                         item.getSpec(), item.getLength(), item.getUnit(),
                         item.getSourcePurchaseOrderItemId(),
+                        item.getSettlementCompanyId(), item.getSettlementCompanyName(),
                         item.getWarehouseName(), item.getSettlementMode(),
                         item.getBatchNo(),
                         remainingQuantity(item, allocatedQuantityMap),

@@ -70,7 +70,7 @@ class FreightBillControllerTest {
         PageQuery query = new PageQuery(0, 20, null, null);
         when(service.page(any(), any())).thenReturn(page);
 
-        ApiResponse<PageResponse<FreightBillResponse>> response = controller.page(query, "test", "carrier", "active", null, null);
+        ApiResponse<PageResponse<FreightBillResponse>> response = controller.page(query, "test", "carrier", 7L, "active", null, null);
 
         assertThat(response.code()).isEqualTo(0);
         assertThat(response.data().content()).hasSize(1);
@@ -82,7 +82,7 @@ class FreightBillControllerTest {
         PageQuery query = new PageQuery(0, 20, null, null);
         when(service.page(any(), any())).thenReturn(page);
 
-        ApiResponse<PageResponse<FreightBillResponse>> response = controller.page(query, null, null, null, null, null);
+        ApiResponse<PageResponse<FreightBillResponse>> response = controller.page(query, null, null, null, null, null, null);
 
         assertThat(response.code()).isEqualTo(0);
         assertThat(response.data().content()).isEmpty();
@@ -111,6 +111,7 @@ class FreightBillControllerTest {
                 "OB",
                 "客户甲",
                 "项目甲",
+                7L,
                 "已审核",
                 LocalDate.of(2026, 6, 1),
                 LocalDate.of(2026, 6, 30)
@@ -124,6 +125,7 @@ class FreightBillControllerTest {
         assertThat(filter.keyword()).isEqualTo("OB");
         assertThat(filter.name()).isEqualTo("客户甲");
         assertThat(filter.projectName()).isEqualTo("项目甲");
+        assertThat(filter.settlementCompanyId()).isEqualTo(7L);
         assertThat(filter.status()).isEqualTo("已审核");
         assertThat(filter.startDate()).isEqualTo(LocalDate.of(2026, 6, 1));
         assertThat(filter.endDate()).isEqualTo(LocalDate.of(2026, 6, 30));
@@ -138,6 +140,7 @@ class FreightBillControllerTest {
                         String.class,
                         String.class,
                         String.class,
+                        Long.class,
                         String.class,
                         LocalDate.class,
                         LocalDate.class

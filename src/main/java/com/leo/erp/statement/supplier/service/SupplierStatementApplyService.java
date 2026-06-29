@@ -38,14 +38,17 @@ public class SupplierStatementApplyService {
         );
         entity.setStatementNo(request.statementNo());
         entity.setSupplierName(request.supplierName());
-        BigDecimal purchaseAmount = sourceService.applyItems(entity, request, nextIdSupplier);
+        SupplierStatementSourceService.SourceApplyResult sourceResult =
+                sourceService.applyItems(entity, request, nextIdSupplier);
+        entity.setSettlementCompanyId(sourceResult.settlementCompanyId());
+        entity.setSettlementCompanyName(sourceResult.settlementCompanyName());
         entity.setStartDate(request.startDate());
         entity.setEndDate(request.endDate());
         entity.setStatus(nextStatus);
         entity.setRemark(request.remark());
 
         StatementBalanceRule.Balance balance = StatementBalanceRule.resolve(
-                purchaseAmount,
+                sourceResult.purchaseAmount(),
                 request.paymentAmount(),
                 "供应商对账单付款金额",
                 "供应商对账单采购金额不能低于已付款金额"

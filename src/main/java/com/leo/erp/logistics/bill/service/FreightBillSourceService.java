@@ -16,6 +16,7 @@ import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -37,15 +38,17 @@ public class FreightBillSourceService {
     public SourceValidationContext validateSources(FreightBillRequest request, Long currentBillId) {
         Set<String> sourceNos = collectSourceNos(request.items());
         if (sourceNos.isEmpty()) {
-            return new SourceValidationContext(Map.of());
+            return new SourceValidationContext(Map.of(), Map.of());
         }
 
         assertSourceOutboundsNotOccupied(sourceNos, currentBillId);
         Map<String, SalesOutbound> outboundMap = loadOutboundMap(sourceNos);
+        Map<Integer, SalesOutboundItem> sourceItemMap = new HashMap<>();
         for (int i = 0; i < request.items().size(); i++) {
-            validateLine(request.items().get(i), i + 1, outboundMap);
+            SalesOutboundItem sourceItem = validateLine(request.items().get(i), i + 1, outboundMap);
+            sourceItemMap.put(i + 1, sourceItem);
         }
-        return new SourceValidationContext(outboundMap);
+        return new SourceValidationContext(outboundMap, sourceItemMap);
     }
 
     private Set<String> collectSourceNos(List<FreightBillItemRequest> items) {
@@ -85,7 +88,7 @@ public class FreightBillSourceService {
                 .collect(Collectors.toMap(SalesOutbound::getOutboundNo, outbound -> outbound));
     }
 
-    private void validateLine(
+    private SalesOutboundItem validateLine(
             FreightBillItemRequest request,
             int lineNo,
             Map<String, SalesOutbound> outboundMap
@@ -141,9 +144,16 @@ public class FreightBillSourceService {
                 : TradeItemCalculator.calculateWeightTon(request.quantity(), request.pieceWeightTon());
         BusinessDocumentValidator.requireSameSourceDecimal(requestedWeightTon, outboundItem.getWeightTon(), lineNo, "来源销售出库明细", "重量");
         BusinessDocumentValidator.requireSameSourceText(request.warehouseName(), outboundItem.getWarehouseName(), lineNo, "来源销售出库明细", "仓库");
+        return outboundItem;
     }
 
     private SalesOutboundItem findMatchingItem(FreightBillItemRequest request, SalesOutbound outbound) {
+        if (request.sourceSalesOutboundItemId() != null) {
+            return outbound.getItems().stream()
+                    .filter(item -> request.sourceSalesOutboundItemId().equals(item.getId()))
+                    .findFirst()
+                    .orElse(null);
+        }
         return outbound.getItems().stream()
                 .filter(item -> BusinessDocumentValidator.normalizeText(request.materialCode())
                         .equals(BusinessDocumentValidator.normalizeText(item.getMaterialCode())))
@@ -156,6 +166,12 @@ public class FreightBillSourceService {
                 .orElse(null);
     }
 
-    public record SourceValidationContext(Map<String, SalesOutbound> outboundMap) {
+    public record SourceValidationContext(
+            Map<String, SalesOutbound> outboundMap,
+            Map<Integer, SalesOutboundItem> sourceItemMap
+    ) {
+        SalesOutboundItem sourceItemAt(int lineNo) {
+            return sourceItemMap.get(lineNo);
+        }
     }
 }
