@@ -29,11 +29,11 @@ class InventoryReportServiceTest {
     @Test
     void shouldNormalizeWarehouseNameAndCategoryWithoutRejectingUnknownValues() {
         PageQuery query = new PageQuery(0, 20, null, null);
-        when(repo.page(query, null, "任意仓库名", "任意类别")).thenReturn(new PageImpl<>(List.of()));
+        when(repo.page(query, null, "任意仓库名", "任意类别", false)).thenReturn(new PageImpl<>(List.of()));
 
-        assertThatCode(() -> service.page(query, null, " 任意仓库名 ", " 任意类别 "))
+        assertThatCode(() -> service.page(query, null, " 任意仓库名 ", " 任意类别 ", null))
                 .doesNotThrowAnyException();
-        verify(repo).page(query, null, "任意仓库名", "任意类别");
+        verify(repo).page(query, null, "任意仓库名", "任意类别", false);
     }
 
     @Test
@@ -54,60 +54,60 @@ class InventoryReportServiceTest {
                 "吨",
                 new BigDecimal("0.625")
         );
-        when(repo.list(PageQuery.of(0, 200, null, null), "m-001", "一号仓", "类别A"))
+        when(repo.list(PageQuery.of(0, 200, null, null), "m-001", "一号仓", "类别A", true))
                 .thenReturn(List.of(row));
         when(excelExportService.export(any(), any()))
                 .thenReturn(new byte[]{1, 2, 3});
 
-        var file = service.exportExcel(" M-001 ", " 一号仓 ", " 类别A ");
+        var file = service.exportExcel(" M-001 ", " 一号仓 ", " 类别A ", true);
 
         assertThat(file.filename()).isEqualTo("商品库存报表.xlsx");
         assertThat(file.content()).containsExactly(1, 2, 3);
-        verify(repo).list(PageQuery.of(0, 200, null, null), "m-001", "一号仓", "类别A");
+        verify(repo).list(PageQuery.of(0, 200, null, null), "m-001", "一号仓", "类别A", true);
     }
 
     @Test
     void shouldNormalizeKeywordToLowerCase() {
         PageQuery query = new PageQuery(0, 20, null, null);
         Page<InventoryReportResponse> expected = new PageImpl<>(List.of());
-        when(repo.page(any(), eq("abc"), isNull(), isNull())).thenReturn(expected);
+        when(repo.page(any(), eq("abc"), isNull(), isNull(), eq(false))).thenReturn(expected);
 
-        Page<InventoryReportResponse> result = service.page(query, " ABC ", null, null);
+        Page<InventoryReportResponse> result = service.page(query, " ABC ", null, null, null);
 
         assertThat(result).isEqualTo(expected);
-        verify(repo).page(query, "abc", null, null);
+        verify(repo).page(query, "abc", null, null, false);
     }
 
     @Test
     void shouldNormalizeBlankKeywordToNull() {
         PageQuery query = new PageQuery(0, 20, null, null);
         Page<InventoryReportResponse> expected = new PageImpl<>(List.of());
-        when(repo.page(any(), isNull(), isNull(), isNull())).thenReturn(expected);
+        when(repo.page(any(), isNull(), isNull(), isNull(), eq(false))).thenReturn(expected);
 
-        service.page(query, "   ", null, null);
+        service.page(query, "   ", null, null, null);
 
-        verify(repo).page(query, null, null, null);
+        verify(repo).page(query, null, null, null, false);
     }
 
     @Test
     void shouldNormalizeNullWarehouseNameAndCategoryToNull() {
         PageQuery query = new PageQuery(0, 20, null, null);
         Page<InventoryReportResponse> expected = new PageImpl<>(List.of());
-        when(repo.page(any(), isNull(), isNull(), isNull())).thenReturn(expected);
+        when(repo.page(any(), isNull(), isNull(), isNull(), eq(false))).thenReturn(expected);
 
-        service.page(query, null, "   ", "   ");
+        service.page(query, null, "   ", "   ", null);
 
-        verify(repo).page(query, null, null, null);
+        verify(repo).page(query, null, null, null, false);
     }
 
     @Test
     void exportExcelWithAllNullFilters() {
-        when(repo.list(PageQuery.of(0, 200, null, null), null, null, null))
+        when(repo.list(PageQuery.of(0, 200, null, null), null, null, null, false))
                 .thenReturn(List.of());
         when(excelExportService.export(any(), any()))
                 .thenReturn(new byte[]{});
 
-        var file = service.exportExcel(null, null, null);
+        var file = service.exportExcel(null, null, null, null);
 
         assertThat(file.filename()).isEqualTo("商品库存报表.xlsx");
         assertThat(file.content()).isEmpty();

@@ -39,21 +39,25 @@ public class InventoryReportController {
             @BindPageQuery(sortFieldKey = "inventory-report", directionParam = "sortDirection") PageQuery query,
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) String warehouseName,
-            @RequestParam(required = false) String category
+            @RequestParam(required = false) String category,
+            @RequestParam(required = false) Boolean includeOutbound
     ) {
-        return ApiResponse.success(PageResponse.from(inventoryReportService.page(query, keyword, warehouseName, category)));
+        return ApiResponse.success(PageResponse.from(
+                inventoryReportService.page(query, keyword, warehouseName, category, includeOutbound)
+        ));
     }
 
     @PostMapping("/export")
     @RequiresPermission(resource = "inventory-report", action = "export")
     public ResponseEntity<byte[]> export(@RequestBody(required = false) InventoryReportExportRequest request) {
         InventoryReportExportRequest safeRequest = request == null
-                ? new InventoryReportExportRequest(null, null, null)
+                ? new InventoryReportExportRequest(null, null, null, null)
                 : request;
         return toDownloadResponse(inventoryReportService.exportExcel(
                 safeRequest.keyword(),
                 safeRequest.warehouseName(),
-                safeRequest.category()
+                safeRequest.category(),
+                safeRequest.includeOutbound()
         ));
     }
 

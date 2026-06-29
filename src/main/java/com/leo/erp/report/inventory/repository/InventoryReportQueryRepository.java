@@ -1,6 +1,10 @@
 package com.leo.erp.report.inventory.repository;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leo.erp.common.api.PageQuery;
+import com.leo.erp.report.inventory.web.dto.InventoryReportItemResponse;
 import com.leo.erp.report.inventory.web.dto.InventoryReportResponse;
 import com.leo.erp.security.permission.DataScopeContext;
 import org.springframework.data.domain.Page;
@@ -19,8 +23,12 @@ import java.util.Set;
 @Repository
 public class InventoryReportQueryRepository {
 
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+    private static final TypeReference<List<InventoryReportItemResponse>> ITEM_LIST_TYPE = new TypeReference<>() {
+    };
+
     private static final String INVENTORY_CTE = """
-            WITH inventory AS (
+            WITH stock_line AS (
                 SELECT
                     movement.material_code,
                     movement.brand,
@@ -30,6 +38,8 @@ public class InventoryReportQueryRepository {
                     movement.length,
                     movement.warehouse_name,
                     movement.batch_no,
+                    STRING_AGG(DISTINCT NULLIF(movement.outbound_no, ''), '、') AS outbound_no,
+                    STRING_AGG(DISTINCT NULLIF(movement.outbound_date, ''), '、') AS outbound_date,
                     movement.quantity_unit,
                     movement.unit,
                     SUM(movement.quantity_delta) AS quantity,
@@ -44,6 +54,8 @@ public class InventoryReportQueryRepository {
                         item.length,
                         COALESCE(NULLIF(item.warehouse_name, ''), inbound.warehouse_name) AS warehouse_name,
                         item.batch_no,
+                        NULL AS outbound_no,
+                        NULL AS outbound_date,
                         item.quantity_unit,
                         item.unit,
                         item.quantity AS quantity_delta,
@@ -62,6 +74,8 @@ public class InventoryReportQueryRepository {
                         item.length,
                         outbound.warehouse_name AS warehouse_name,
                         item.batch_no,
+                        outbound.outbound_no AS outbound_no,
+                        TO_CHAR(outbound.outbound_date, 'YYYY-MM-DD') AS outbound_date,
                         item.quantity_unit,
                         item.unit,
                         -item.quantity AS quantity_delta,
@@ -82,6 +96,66 @@ public class InventoryReportQueryRepository {
                     movement.batch_no,
                     movement.quantity_unit,
                     movement.unit
+            ),
+            inventory_report AS (
+                SELECT
+                    stock.material_code,
+                    stock.brand,
+                    stock.material,
+                    stock.category,
+                    stock.spec,
+                    stock.length,
+                    STRING_AGG(DISTINCT NULLIF(stock.warehouse_name, ''), '、') AS warehouse_name,
+                    STRING_AGG(DISTINCT NULLIF(stock.batch_no, ''), '、') AS batch_no,
+                    SUM(stock.quantity) AS quantity,
+                    stock.quantity_unit,
+                    SUM(stock.weight_ton) AS weight_ton,
+                    stock.unit,
+                    material.piece_weight_ton,
+                    JSONB_AGG(
+                        JSONB_BUILD_OBJECT(
+                            'id', CONCAT_WS('|',
+                                stock.material_code,
+                                stock.brand,
+                                stock.material,
+                                stock.category,
+                                stock.spec,
+                                stock.length,
+                                stock.warehouse_name,
+                                stock.batch_no
+                            ),
+                            'materialCode', stock.material_code,
+                            'brand', stock.brand,
+                            'material', stock.material,
+                            'category', stock.category,
+                            'spec', stock.spec,
+                            'length', stock.length,
+                            'warehouseName', stock.warehouse_name,
+                            'batchNo', stock.batch_no,
+                            'outboundNo', stock.outbound_no,
+                            'outboundDate', stock.outbound_date,
+                            'quantity', stock.quantity,
+                            'quantityUnit', stock.quantity_unit,
+                            'weightTon', stock.weight_ton,
+                            'unit', stock.unit,
+                            'pieceWeightTon', material.piece_weight_ton
+                        )
+                        ORDER BY stock.warehouse_name, stock.batch_no
+                    ) AS items_json
+                FROM stock_line stock
+                LEFT JOIN md_material material ON material.material_code = stock.material_code
+                    AND material.deleted_flag = FALSE
+                %s
+                GROUP BY
+                    stock.material_code,
+                    stock.brand,
+                    stock.material,
+                    stock.category,
+                    stock.spec,
+                    stock.length,
+                    stock.quantity_unit,
+                    stock.unit,
+                    material.piece_weight_ton
             )
             """;
 
@@ -99,7 +173,8 @@ public class InventoryReportQueryRepository {
             rs.getString("quantity_unit"),
             rs.getBigDecimal("weight_ton"),
             rs.getString("unit"),
-            rs.getBigDecimal("piece_weight_ton")
+            rs.getBigDecimal("piece_weight_ton"),
+            parseItems(rs.getObject("items_json"))
     );
 
     private final NamedParameterJdbcTemplate jdbcTemplate;
@@ -108,18 +183,19 @@ public class InventoryReportQueryRepository {
         this.jdbcTemplate = jdbcTemplate;
     }
 
-    public Page<InventoryReportResponse> page(PageQuery query, String keyword, String warehouseName, String category) {
+    public Page<InventoryReportResponse> page(PageQuery query, String keyword, String warehouseName, String category,
+                                              boolean includeOutbound) {
         MapSqlParameterSource params = new MapSqlParameterSource()
                 .addValue("limit", query.size())
                 .addValue("offset", (long) query.page() * query.size());
         String inventoryCte = INVENTORY_CTE.formatted(
                 dataScopeClause(params, "inbound"),
-                dataScopeClause(params, "outbound")
+                dataScopeClause(params, "outbound"),
+                buildStockWhereClause(params, keyword, warehouseName, category, includeOutbound)
         );
-        String whereClause = buildWhereClause(params, keyword, warehouseName, category);
 
         Number totalNumber = jdbcTemplate.queryForObject(
-                inventoryCte + "SELECT COUNT(1) FROM inventory report" + whereClause,
+                inventoryCte + "SELECT COUNT(1) FROM inventory_report report",
                 params,
                 Number.class
         );
@@ -146,17 +222,14 @@ public class InventoryReportQueryRepository {
                         report.quantity_unit,
                         report.weight_ton,
                         report.unit,
-                        material.piece_weight_ton
-                    FROM inventory report
-                    LEFT JOIN md_material material ON material.material_code = report.material_code
-                        AND material.deleted_flag = FALSE
-                    %s
+                        report.piece_weight_ton,
+                        report.items_json
+                    FROM inventory_report report
                 ) paged
                 ORDER BY %s
                 LIMIT :limit OFFSET :offset
                 """).formatted(
                 orderExpression,
-                whereClause,
                 sortExpression("paged", query.sortBy(), query.direction())
         );
 
@@ -164,13 +237,14 @@ public class InventoryReportQueryRepository {
         return new PageImpl<>(rows, PageRequest.of(query.page(), query.size()), total);
     }
 
-    public List<InventoryReportResponse> list(PageQuery query, String keyword, String warehouseName, String category) {
+    public List<InventoryReportResponse> list(PageQuery query, String keyword, String warehouseName, String category,
+                                              boolean includeOutbound) {
         MapSqlParameterSource params = new MapSqlParameterSource();
         String inventoryCte = INVENTORY_CTE.formatted(
                 dataScopeClause(params, "inbound"),
-                dataScopeClause(params, "outbound")
+                dataScopeClause(params, "outbound"),
+                buildStockWhereClause(params, keyword, warehouseName, category, includeOutbound)
         );
-        String whereClause = buildWhereClause(params, keyword, warehouseName, category);
         String orderExpression = sortExpression("report", query.sortBy(), query.direction());
         String dataSql = (inventoryCte + """
                 SELECT
@@ -187,15 +261,12 @@ public class InventoryReportQueryRepository {
                     report.quantity_unit,
                     report.weight_ton,
                     report.unit,
-                    material.piece_weight_ton
-                FROM inventory report
-                LEFT JOIN md_material material ON material.material_code = report.material_code
-                    AND material.deleted_flag = FALSE
-                %s
+                    report.piece_weight_ton,
+                    report.items_json
+                FROM inventory_report report
                 ORDER BY %s
                 """).formatted(
                 orderExpression,
-                whereClause,
                 orderExpression
         );
 
@@ -214,29 +285,46 @@ public class InventoryReportQueryRepository {
         return "                    AND " + alias + ".created_by IN (:dataScopeOwnerUserIds)";
     }
 
-    private String buildWhereClause(MapSqlParameterSource params, String keyword, String warehouseName, String category) {
+    private String buildStockWhereClause(MapSqlParameterSource params, String keyword, String warehouseName, String category,
+                                         boolean includeOutbound) {
         List<String> clauses = new ArrayList<>();
-        clauses.add("(report.quantity > 0 OR report.weight_ton > 0)");
+        if (!includeOutbound) {
+            clauses.add("(stock.quantity > 0 OR stock.weight_ton > 0)");
+        }
         if (keyword != null) {
             params.addValue("keyword", "%" + keyword.trim().toLowerCase(Locale.ROOT) + "%");
             clauses.add("""
                     (
-                        LOWER(COALESCE(report.material_code, '')) LIKE :keyword
-                        OR LOWER(COALESCE(report.brand, '')) LIKE :keyword
-                        OR LOWER(COALESCE(report.spec, '')) LIKE :keyword
-                        OR LOWER(COALESCE(report.material, '')) LIKE :keyword
+                        LOWER(COALESCE(stock.material_code, '')) LIKE :keyword
+                        OR LOWER(COALESCE(stock.brand, '')) LIKE :keyword
+                        OR LOWER(COALESCE(stock.spec, '')) LIKE :keyword
+                        OR LOWER(COALESCE(stock.material, '')) LIKE :keyword
                     )
                     """.stripIndent().trim());
         }
         if (warehouseName != null) {
             params.addValue("warehouseName", warehouseName);
-            clauses.add("report.warehouse_name = :warehouseName");
+            clauses.add("stock.warehouse_name = :warehouseName");
         }
         if (category != null) {
             params.addValue("category", category);
-            clauses.add("report.category = :category");
+            clauses.add("stock.category = :category");
+        }
+        if (clauses.isEmpty()) {
+            return "";
         }
         return "\nWHERE " + String.join("\n  AND ", clauses) + "\n";
+    }
+
+    private static List<InventoryReportItemResponse> parseItems(Object value) {
+        if (value == null) {
+            return List.of();
+        }
+        try {
+            return OBJECT_MAPPER.readValue(value.toString(), ITEM_LIST_TYPE);
+        } catch (JsonProcessingException ex) {
+            throw new IllegalStateException("Failed to parse inventory report items", ex);
+        }
     }
 
     private String sortExpression(String alias, String sortBy, String direction) {

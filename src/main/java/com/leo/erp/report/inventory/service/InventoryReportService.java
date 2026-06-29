@@ -26,15 +26,22 @@ public class InventoryReportService {
     }
 
     @Transactional(readOnly = true)
-    public Page<InventoryReportResponse> page(PageQuery query, String keyword, String warehouseName, String category) {
+    public Page<InventoryReportResponse> page(PageQuery query, String keyword, String warehouseName, String category,
+                                              Boolean includeOutbound) {
         String normalizedKeyword = normalizeKeyword(keyword);
         String normalizedWarehouseName = trimToNull(warehouseName);
         String normalizedCategory = trimToNull(category);
-        return inventoryReportQueryRepository.page(query, normalizedKeyword, normalizedWarehouseName, normalizedCategory);
+        return inventoryReportQueryRepository.page(
+                query,
+                normalizedKeyword,
+                normalizedWarehouseName,
+                normalizedCategory,
+                Boolean.TRUE.equals(includeOutbound)
+        );
     }
 
     @Transactional(readOnly = true)
-    public FileDownloadResponse exportExcel(String keyword, String warehouseName, String category) {
+    public FileDownloadResponse exportExcel(String keyword, String warehouseName, String category, Boolean includeOutbound) {
         String normalizedKeyword = normalizeKeyword(keyword);
         String normalizedWarehouseName = trimToNull(warehouseName);
         String normalizedCategory = trimToNull(category);
@@ -42,7 +49,8 @@ public class InventoryReportService {
                 PageQuery.of(0, 200, null, null),
                 normalizedKeyword,
                 normalizedWarehouseName,
-                normalizedCategory
+                normalizedCategory,
+                Boolean.TRUE.equals(includeOutbound)
         ).stream().map(InventoryReportExportRow::from).toList();
         byte[] data = excelExportService.export(rows, InventoryReportExportRow.class);
         return new FileDownloadResponse(

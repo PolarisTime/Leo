@@ -183,7 +183,7 @@ class ErpMcpQueryFacade {
                 new PageFilter(keyword, status, null, null, null, null, null, null, null, null, null, null, null, null, null)
         )));
         readers.put("inventory-report", (query, keyword, status) ->
-                PageResponse.from(inventoryReportService.page(query, keyword, null, null)));
+                PageResponse.from(inventoryReportService.page(query, keyword, null, null, null)));
         return Map.copyOf(readers);
     }
 
