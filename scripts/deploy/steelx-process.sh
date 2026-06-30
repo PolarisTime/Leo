@@ -48,7 +48,7 @@ start_backend() {
     echo "JAR 不存在: $JAR_FILE" >&2
     exit 1
   fi
-  setsid nohup java \
+  env -u RUNNER_TRACKING_ID setsid nohup java \
     -Xms512m -Xmx2g \
     -XX:+UseG1GC \
     -XX:MaxGCPauseMillis=200 \
