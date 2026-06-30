@@ -34,7 +34,7 @@ concurrency:
 
 env:
   ARIES_REPOSITORY: PolarisTime/Aries
-  NODE_VERSION: "20"
+  NODE_VERSION: "24.16.0"
   PNPM_VERSION: "10.33.0"
   VITE_API_BASE_URL: /api
 
