@@ -9,8 +9,8 @@ ARIES_DIR="$WORKSPACE_DIR/aries"
 OUTPUT_DIR="$LEO_DIR/target/local-release"
 RELEASE_NAME="leo-local-release"
 VITE_API_BASE_URL="/api"
-LEO_VERSION="1.0.0"
-ARIES_VERSION="1.0.0"
+LEO_VERSION="1.1.0"
+ARIES_VERSION="1.1.0"
 SKIP_TESTS=false
 
 usage() {

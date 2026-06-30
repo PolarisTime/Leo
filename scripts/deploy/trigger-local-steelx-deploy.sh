@@ -235,7 +235,7 @@ SPRING_DATA_REDIS_DATABASE=$REDIS_DATABASE
 SPRING_DATA_REDIS_PASSWORD=$REDIS_PASSWORD
 LEO_JWT_SECRET=$JWT_SECRET
 TOTP_ENCRYPTION_KEY=$TOTP_ENCRYPTION_KEY
-LEO_VERSION=1.0.0
+LEO_VERSION=1.1.0
 LEO_MACHINE_ID=2
 LEO_ATTACHMENT_LOCAL_PATH=$STEELX_ROOT/shared/uploads
 LEO_AUTH_REFRESH_COOKIE_SECURE=true
@@ -249,7 +249,7 @@ chmod 600 "$STEELX_ROOT/shared/steelx.env"
 
 build_args=(
   --output-dir "$LEO_DIR/target/steelx-release"
-  --release-name "steelx-1.0.0"
+  --release-name "steelx-1.1.0"
   --api-base-url "/api"
 )
 if [[ "$SKIP_TESTS" == "true" ]]; then
@@ -258,7 +258,7 @@ fi
 
 bash "$SCRIPT_DIR/build-local-release.sh" "${build_args[@]}"
 
-archive="$LEO_DIR/target/steelx-release/steelx-1.0.0.tar.gz"
+archive="$LEO_DIR/target/steelx-release/steelx-1.1.0.tar.gz"
 sha_file="$archive.sha256"
 
 cp "$SCRIPT_DIR/steelx-process.sh" "$STEELX_ROOT/shared/steelx-process.sh"
