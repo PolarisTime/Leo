@@ -10,29 +10,50 @@
   -> 构建后端 JAR 与前端 dist
   -> 打包 release archive
   -> 校验 SHA256
-  -> SSH 上传生产机
-  -> 获取生产发布锁
-  -> 执行生产机 pre-deploy hook
-  -> systemd 重启后端
+  -> 本机 self-hosted runner 下载 release archive
+  -> 获取 /instance/steelx 生产发布锁
+  -> 执行本机 pre-deploy hook
+  -> 重启 steelx 后端进程
   -> 健康检查
   -> Nginx 前端软链切换
-  -> 执行生产机 post-deploy hook
+  -> 执行本机 post-deploy hook
   -> 失败自动回滚
 ```
 
-开发机不直接停止、启动或重启生产服务。
+开发机不直接停止、启动或重启生产服务。真实部署由 GitHub Actions 调度到本机 self-hosted runner 执行。
 
 ## GitHub 配置
 
 在 `PolarisTime/Leo` 仓库配置 Environment：`production`。
 
-必需 Secrets：
+默认生产目标是 `local`，要求本机已注册 GitHub self-hosted runner，并带有以下标签：
+
+- `self-hosted`
+- `linux`
+- `steelx-production`
+
+本机 runner 可以用仓库脚本安装：
+
+```bash
+bash leo/scripts/deploy/install-github-runner.sh --start
+```
+
+该脚本优先用已登录且具备仓库 Admin 权限的 `gh` 创建 runner 注册 token。若当前 token 权限不足，可在 GitHub 页面生成 self-hosted runner 注册 token 后执行：
+
+```bash
+GITHUB_RUNNER_TOKEN="<registration-token>" \
+  bash leo/scripts/deploy/install-github-runner.sh --start
+```
+
+本机部署不需要 SSH secrets。
+
+SSH 部署目标 `deploy_target=ssh` 才需要以下 Secrets：
 
 - `PROD_SSH_HOST`：生产机地址
 - `PROD_SSH_USER`：SSH 用户
 - `PROD_SSH_PRIVATE_KEY`：部署私钥
 
-建议 Secrets：
+SSH 可选 Secrets：
 
 - `PROD_SSH_PORT`：SSH 端口，默认 `22`
 - `PROD_SSH_KNOWN_HOSTS`：生产机 known_hosts，未配置时 workflow 使用 `ssh-keyscan`
@@ -62,6 +83,10 @@ PROD_STOP_COMMAND=STEELX_ROOT=/instance/steelx bash /instance/steelx/shared/stee
 生产机必须已存在 `/instance/steelx/shared/steelx-process.sh` 与 `/instance/steelx/shared/steelx.env`。首次迁移到 GitHub 部署前，先用本地 steelx 部署脚本完成目录、数据库、密钥、Nginx 和进程脚本初始化。
 
 ## 生产机准备
+
+当前 steelx 本机生产实例使用 `/instance/steelx`，首次初始化优先使用“本机 steelx 生产部署”章节。
+
+以下 `/opt/leo` systemd/Nginx 模板用于通用 SSH/systemd 部署目标，不是当前本机 steelx 默认路径。
 
 创建运行用户和目录：
 
@@ -156,10 +181,13 @@ bash leo/scripts/deploy/trigger-production-deploy.sh --dry-run --watch
 ```bash
 bash leo/scripts/deploy/trigger-production-deploy.sh \
   --confirm-production \
+  --deploy-target local \
   --leo-ref main \
   --aries-ref dev \
   --watch
 ```
+
+`--deploy-target local` 是默认值，可省略。若要走旧 SSH 目标，显式传 `--deploy-target ssh` 并配置 SSH secrets。
 
 脚本会拒绝部署未提交或未推送到远端的本地改动，因为 GitHub Actions 只能构建远端 Git ref。
 
@@ -186,11 +214,14 @@ PGPASSWORD="<postgres-admin-password>" \
 
 脚本会安装 `/etc/nginx/conf.d/steelx.conf`，执行 `nginx -t` 后 reload Nginx。执行用户需要 root 权限，或具备免密 sudo 执行 `install`、`nginx -t`、`nginx -s reload` 的权限。生产实例对外地址为 `https://in1ove.com`，`http://in1ove.com` 会跳转到 HTTPS。
 
+完成首次初始化后，后续自动化发布走 GitHub Actions `deploy_target=local`。本机 runner 直接下载 release archive 并调用 `scripts/deploy/install-production-release.sh` 发布到 `/instance/steelx`，不会重新写数据库、Nginx 或 TLS 配置。
+
 生产回滚到上一版：
 
 ```bash
 bash leo/scripts/deploy/trigger-production-rollback.sh \
   --confirm-production \
+  --deploy-target local \
   --target-release previous \
   --watch
 ```
@@ -199,8 +230,8 @@ bash leo/scripts/deploy/trigger-production-rollback.sh \
 
 远端脚本 `scripts/deploy/install-production-release.sh` 使用 release 目录和软链发布：
 
-- 后端当前版本：`/opt/leo/current`
-- 后端上个版本：`/opt/leo/previous`
-- 前端当前版本：`/var/www/leo/current`
+- 后端当前版本：`/instance/steelx/current`
+- 后端上个版本：`/instance/steelx/previous`
+- 前端当前版本：`/instance/steelx/frontend/current`
 
 如果后端重启后健康检查失败，脚本会恢复旧的后端软链、重启 systemd 服务，并恢复旧的前端软链。

@@ -13,6 +13,7 @@ WORKFLOW_REF="main"
 LEO_REF=""
 ARIES_REF=""
 DRY_RUN=false
+DEPLOY_TARGET="local"
 CONFIRM_PRODUCTION=false
 ALLOW_DIRTY=false
 WATCH=false
@@ -29,6 +30,7 @@ usage() {
   --workflow-ref <ref>     触发 workflow 所在 ref，默认 main
   --repo <owner/repo>      GitHub 仓库，默认 PolarisTime/Leo
   --dry-run               只触发构建打包，不部署生产
+  --deploy-target <target> 部署目标，local 或 ssh，默认 local
   --confirm-production    确认触发真实生产部署
   --allow-dirty           允许本地工作区存在未提交改动
   --watch                 触发后跟踪 Actions 运行状态
@@ -38,6 +40,7 @@ usage() {
 示例:
   bash leo/scripts/deploy/trigger-production-deploy.sh --dry-run
   bash leo/scripts/deploy/trigger-production-deploy.sh --confirm-production --leo-ref main --aries-ref dev --watch
+  bash leo/scripts/deploy/trigger-production-deploy.sh --confirm-production --deploy-target ssh --leo-ref main --aries-ref dev --watch
 EOF
 }
 
@@ -48,6 +51,7 @@ while [[ $# -gt 0 ]]; do
     --workflow-ref) WORKFLOW_REF="$2"; shift 2 ;;
     --repo) REPO="$2"; shift 2 ;;
     --dry-run) DRY_RUN=true; shift ;;
+    --deploy-target) DEPLOY_TARGET="$2"; shift 2 ;;
     --confirm-production) CONFIRM_PRODUCTION=true; shift ;;
     --allow-dirty) ALLOW_DIRTY=true; shift ;;
     --watch) WATCH=true; shift ;;
@@ -116,6 +120,11 @@ ensure_branch_pushed() {
 require_command git
 require_command gh
 
+if [[ "$DEPLOY_TARGET" != "local" && "$DEPLOY_TARGET" != "ssh" ]]; then
+  echo "--deploy-target 只支持 local 或 ssh: $DEPLOY_TARGET" >&2
+  exit 1
+fi
+
 if [[ ! -d "$ARIES_DIR/.git" ]]; then
   echo "未找到前端仓库: $ARIES_DIR" >&2
   exit 1
@@ -133,7 +142,8 @@ if [[ "$DRY_RUN" != "true" && "$CONFIRM_PRODUCTION" != "true" ]]; then
   cat >&2 <<EOF
 拒绝触发真实生产部署。
 
-本脚本会触发 GitHub Actions 的 production-deploy 工作流，并在 dry_run=false 时通过 SSH 发布到生产机。
+本脚本会触发 GitHub Actions 的 production-deploy 工作流，并在 dry_run=false 时发布到指定生产目标。
+默认部署目标是 local，需要 GitHub self-hosted runner 运行在本机并带有 steelx-production 标签。
 如需真实发布，请追加:
   --confirm-production
 
@@ -151,6 +161,7 @@ echo "  workflow:     $WORKFLOW"
 echo "  workflow ref: $WORKFLOW_REF"
 echo "  leo ref:      $LEO_REF"
 echo "  aries ref:    $ARIES_REF"
+echo "  target:       $DEPLOY_TARGET"
 echo "  dry run:      $DRY_RUN"
 
 gh workflow run "$WORKFLOW" \
@@ -159,6 +170,7 @@ gh workflow run "$WORKFLOW" \
   -f "leo_ref=$LEO_REF" \
   -f "aries_ref=$ARIES_REF" \
   -f "dry_run=$DRY_RUN" \
+  -f "deploy_target=$DEPLOY_TARGET" \
   -f "release_note=$RELEASE_NOTE"
 
 if [[ "$WATCH" == "true" ]]; then

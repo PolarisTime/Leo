@@ -90,12 +90,12 @@ bash leo/scripts/prod.sh stop
 
 ## 生产 CI/CD
 
-正式生产发布不使用本机 `prod.sh restart`，而是通过 GitHub Actions 构建产物并 SSH 发布到生产机：
+正式生产发布不使用本机 `prod.sh restart`，而是通过 GitHub Actions 构建产物，并调度本机 self-hosted runner 发布到 `/instance/steelx`：
 
 ```bash
 bash leo/scripts/deploy/trigger-production-deploy.sh --dry-run --watch
-bash leo/scripts/deploy/trigger-production-deploy.sh --confirm-production --leo-ref main --aries-ref dev --watch
-bash leo/scripts/deploy/trigger-production-rollback.sh --confirm-production --target-release previous --watch
+bash leo/scripts/deploy/trigger-production-deploy.sh --confirm-production --deploy-target local --leo-ref main --aries-ref dev --watch
+bash leo/scripts/deploy/trigger-production-rollback.sh --confirm-production --deploy-target local --target-release previous --watch
 ```
 
 CI/CD 详细配置、生产机 systemd/Nginx 模板和回滚策略见 `docs/deployment/production-cicd.md`。

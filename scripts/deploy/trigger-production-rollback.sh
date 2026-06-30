@@ -6,6 +6,7 @@ REPO="PolarisTime/Leo"
 WORKFLOW="rollback-production.yml"
 WORKFLOW_REF="main"
 TARGET_RELEASE="previous"
+DEPLOY_TARGET="local"
 CONFIRM_PRODUCTION=false
 WATCH=false
 
@@ -16,6 +17,7 @@ usage() {
 
 选项:
   --target-release <release-id|previous>  回滚目标，默认 previous
+  --deploy-target <target>                回滚目标，local 或 ssh，默认 local
   --workflow-ref <ref>                    触发 workflow 所在 ref，默认 main
   --repo <owner/repo>                     GitHub 仓库，默认 PolarisTime/Leo
   --confirm-production                    确认触发真实生产回滚
@@ -27,6 +29,7 @@ EOF
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --target-release) TARGET_RELEASE="$2"; shift 2 ;;
+    --deploy-target) DEPLOY_TARGET="$2"; shift 2 ;;
     --workflow-ref) WORKFLOW_REF="$2"; shift 2 ;;
     --repo) REPO="$2"; shift 2 ;;
     --confirm-production) CONFIRM_PRODUCTION=true; shift ;;
@@ -38,6 +41,11 @@ done
 
 if ! command -v gh >/dev/null 2>&1; then
   echo "缺少命令: gh" >&2
+  exit 1
+fi
+
+if [[ "$DEPLOY_TARGET" != "local" && "$DEPLOY_TARGET" != "ssh" ]]; then
+  echo "--deploy-target 只支持 local 或 ssh: $DEPLOY_TARGET" >&2
   exit 1
 fi
 
@@ -58,11 +66,13 @@ echo "  repo:           $REPO"
 echo "  workflow:       $WORKFLOW"
 echo "  workflow ref:   $WORKFLOW_REF"
 echo "  target release: $TARGET_RELEASE"
+echo "  target:         $DEPLOY_TARGET"
 
 gh workflow run "$WORKFLOW" \
   --repo "$REPO" \
   --ref "$WORKFLOW_REF" \
-  -f "target_release=$TARGET_RELEASE"
+  -f "target_release=$TARGET_RELEASE" \
+  -f "deploy_target=$DEPLOY_TARGET"
 
 if [[ "$WATCH" == "true" ]]; then
   sleep 3

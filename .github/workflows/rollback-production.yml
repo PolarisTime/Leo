@@ -1,5 +1,5 @@
 name: production-rollback
-run-name: "production rollback: ${{ inputs.target_release }}"
+run-name: "production rollback: ${{ inputs.target_release }} / target=${{ inputs.deploy_target }}"
 
 on:
   workflow_dispatch:
@@ -9,6 +9,14 @@ on:
         required: true
         default: "previous"
         type: string
+      deploy_target:
+        description: "Production rollback target"
+        required: true
+        default: "local"
+        type: choice
+        options:
+          - local
+          - ssh
 
 permissions:
   contents: read
@@ -18,8 +26,56 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  rollback:
-    name: Rollback Production
+  rollback-local:
+    name: Rollback Production Local
+    if: ${{ inputs.deploy_target == 'local' }}
+    runs-on:
+      - self-hosted
+      - linux
+      - steelx-production
+    environment: production
+    defaults:
+      run:
+        shell: bash
+    env:
+      PROD_RELEASE_ROOT: ${{ vars.PROD_RELEASE_ROOT || '/instance/steelx' }}
+      PROD_FRONTEND_ROOT: ${{ vars.PROD_FRONTEND_ROOT || '/instance/steelx/frontend' }}
+      PROD_BACKEND_SERVICE: ${{ vars.PROD_BACKEND_SERVICE || 'steelx-local' }}
+      PROD_HEALTHCHECK_URL: ${{ vars.PROD_HEALTHCHECK_URL || 'http://127.0.0.1:57217/api/health' }}
+      PROD_START_COMMAND: ${{ vars.PROD_START_COMMAND || 'STEELX_ROOT=/instance/steelx bash /instance/steelx/shared/steelx-process.sh start' }}
+      PROD_STOP_COMMAND: ${{ vars.PROD_STOP_COMMAND || 'STEELX_ROOT=/instance/steelx bash /instance/steelx/shared/steelx-process.sh stop' }}
+    steps:
+      - name: Checkout Leo deploy scripts
+        uses: actions/checkout@v4
+
+      - name: Verify local production target
+        run: |
+          set -euo pipefail
+          if [[ ! -d "$PROD_RELEASE_ROOT/releases" ]]; then
+            echo "Local production root is not initialized: $PROD_RELEASE_ROOT" >&2
+            exit 1
+          fi
+          if [[ ! -d "$PROD_RELEASE_ROOT/shared" ]]; then
+            echo "Missing production shared directory: $PROD_RELEASE_ROOT/shared" >&2
+            exit 1
+          fi
+          install -m 0755 scripts/deploy/steelx-process.sh "$PROD_RELEASE_ROOT/shared/steelx-process.sh"
+
+      - name: Roll back local production release
+        run: |
+          set -euo pipefail
+          bash scripts/deploy/rollback-production-release.sh \
+            --target-release "${{ inputs.target_release }}" \
+            --release-root "$PROD_RELEASE_ROOT" \
+            --frontend-root "$PROD_FRONTEND_ROOT" \
+            --backend-service "$PROD_BACKEND_SERVICE" \
+            --healthcheck-url "$PROD_HEALTHCHECK_URL" \
+            --start-command "$PROD_START_COMMAND" \
+            --stop-command "$PROD_STOP_COMMAND"
+
+  rollback-ssh:
+    name: Rollback Production SSH
+    if: ${{ inputs.deploy_target == 'ssh' }}
     runs-on: ubuntu-latest
     environment: production
     defaults:
