@@ -45,6 +45,21 @@
 - `PROD_BACKEND_SERVICE`：systemd 服务名，默认 `leo-backend`
 - `PROD_HEALTHCHECK_URL`：健康检查地址，默认 `http://127.0.0.1:11211/api/auth/ping`
 - `PROD_KEEP_RELEASES`：保留 release 数量，默认 `5`
+- `PROD_START_COMMAND`：可选；非 systemd 部署的后端启动命令。
+- `PROD_STOP_COMMAND`：可选；非 systemd 部署的后端停止命令。
+
+当前 steelx 生产实例部署在 `/instance/steelx`，不是默认的 `/opt/leo`。若 GitHub `production` 环境要部署 steelx，配置 Environment Variables：
+
+```text
+PROD_RELEASE_ROOT=/instance/steelx
+PROD_FRONTEND_ROOT=/instance/steelx/frontend
+PROD_BACKEND_SERVICE=steelx-local
+PROD_HEALTHCHECK_URL=http://127.0.0.1:57217/api/health
+PROD_START_COMMAND=STEELX_ROOT=/instance/steelx bash /instance/steelx/shared/steelx-process.sh start
+PROD_STOP_COMMAND=STEELX_ROOT=/instance/steelx bash /instance/steelx/shared/steelx-process.sh stop
+```
+
+生产机必须已存在 `/instance/steelx/shared/steelx-process.sh` 与 `/instance/steelx/shared/steelx.env`。首次迁移到 GitHub 部署前，先用本地 steelx 部署脚本完成目录、数据库、密钥、Nginx 和进程脚本初始化。
 
 ## 生产机准备
 

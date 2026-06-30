@@ -260,6 +260,8 @@ jobs:
       PROD_BACKEND_SERVICE: ${{ vars.PROD_BACKEND_SERVICE || 'leo-backend' }}
       PROD_HEALTHCHECK_URL: ${{ vars.PROD_HEALTHCHECK_URL || 'http://127.0.0.1:11211/api/auth/ping' }}
       PROD_KEEP_RELEASES: ${{ vars.PROD_KEEP_RELEASES || '5' }}
+      PROD_START_COMMAND: ${{ vars.PROD_START_COMMAND }}
+      PROD_STOP_COMMAND: ${{ vars.PROD_STOP_COMMAND }}
     steps:
       - name: Checkout Leo deploy scripts
         uses: actions/checkout@v4
@@ -317,6 +319,12 @@ jobs:
           remote_command+=" --backend-service $(quote "$PROD_BACKEND_SERVICE")"
           remote_command+=" --healthcheck-url $(quote "$PROD_HEALTHCHECK_URL")"
           remote_command+=" --keep-releases $(quote "$PROD_KEEP_RELEASES")"
+          if [[ -n "$PROD_START_COMMAND" ]]; then
+            remote_command+=" --start-command $(quote "$PROD_START_COMMAND")"
+          fi
+          if [[ -n "$PROD_STOP_COMMAND" ]]; then
+            remote_command+=" --stop-command $(quote "$PROD_STOP_COMMAND")"
+          fi
           ssh -i "$HOME/.ssh/leo-production" \
             -p "$PROD_SSH_PORT" \
             "${PROD_SSH_USER}@${PROD_SSH_HOST}" \
