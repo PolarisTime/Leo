@@ -116,7 +116,7 @@ healthcheck() {
 
 start_backend() {
   if [[ -n "$START_COMMAND" ]]; then
-    bash -lc "$START_COMMAND"
+    bash -lc "$START_COMMAND" 9>&-
   else
     systemctl restart "$BACKEND_SERVICE"
   fi
@@ -124,7 +124,7 @@ start_backend() {
 
 stop_backend() {
   if [[ -n "$STOP_COMMAND" ]]; then
-    bash -lc "$STOP_COMMAND"
+    bash -lc "$STOP_COMMAND" 9>&-
   fi
 }
 
