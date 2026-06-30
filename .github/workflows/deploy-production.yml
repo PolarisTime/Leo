@@ -255,13 +255,13 @@ jobs:
       PROD_SSH_USER: ${{ secrets.PROD_SSH_USER }}
       PROD_SSH_PRIVATE_KEY: ${{ secrets.PROD_SSH_PRIVATE_KEY }}
       PROD_SSH_KNOWN_HOSTS: ${{ secrets.PROD_SSH_KNOWN_HOSTS }}
-      PROD_RELEASE_ROOT: ${{ vars.PROD_RELEASE_ROOT || '/opt/leo' }}
-      PROD_FRONTEND_ROOT: ${{ vars.PROD_FRONTEND_ROOT || '/var/www/leo' }}
-      PROD_BACKEND_SERVICE: ${{ vars.PROD_BACKEND_SERVICE || 'leo-backend' }}
-      PROD_HEALTHCHECK_URL: ${{ vars.PROD_HEALTHCHECK_URL || 'http://127.0.0.1:11211/api/auth/ping' }}
+      PROD_RELEASE_ROOT: ${{ vars.PROD_RELEASE_ROOT || '/instance/steelx' }}
+      PROD_FRONTEND_ROOT: ${{ vars.PROD_FRONTEND_ROOT || '/instance/steelx/frontend' }}
+      PROD_BACKEND_SERVICE: ${{ vars.PROD_BACKEND_SERVICE || 'steelx-local' }}
+      PROD_HEALTHCHECK_URL: ${{ vars.PROD_HEALTHCHECK_URL || 'http://127.0.0.1:57217/api/health' }}
       PROD_KEEP_RELEASES: ${{ vars.PROD_KEEP_RELEASES || '5' }}
-      PROD_START_COMMAND: ${{ vars.PROD_START_COMMAND }}
-      PROD_STOP_COMMAND: ${{ vars.PROD_STOP_COMMAND }}
+      PROD_START_COMMAND: ${{ vars.PROD_START_COMMAND || 'STEELX_ROOT=/instance/steelx bash /instance/steelx/shared/steelx-process.sh start' }}
+      PROD_STOP_COMMAND: ${{ vars.PROD_STOP_COMMAND || 'STEELX_ROOT=/instance/steelx bash /instance/steelx/shared/steelx-process.sh stop' }}
     steps:
       - name: Checkout Leo deploy scripts
         uses: actions/checkout@v4

@@ -40,15 +40,15 @@
 
 可选 Environment Variables：
 
-- `PROD_RELEASE_ROOT`：后端发布根目录，默认 `/opt/leo`
-- `PROD_FRONTEND_ROOT`：前端发布根目录，默认 `/var/www/leo`
-- `PROD_BACKEND_SERVICE`：systemd 服务名，默认 `leo-backend`
-- `PROD_HEALTHCHECK_URL`：健康检查地址，默认 `http://127.0.0.1:11211/api/auth/ping`
+- `PROD_RELEASE_ROOT`：后端发布根目录，默认 `/instance/steelx`
+- `PROD_FRONTEND_ROOT`：前端发布根目录，默认 `/instance/steelx/frontend`
+- `PROD_BACKEND_SERVICE`：systemd 服务名，默认 `steelx-local`
+- `PROD_HEALTHCHECK_URL`：健康检查地址，默认 `http://127.0.0.1:57217/api/health`
 - `PROD_KEEP_RELEASES`：保留 release 数量，默认 `5`
-- `PROD_START_COMMAND`：可选；非 systemd 部署的后端启动命令。
-- `PROD_STOP_COMMAND`：可选；非 systemd 部署的后端停止命令。
+- `PROD_START_COMMAND`：非 systemd 部署的后端启动命令，默认 `STEELX_ROOT=/instance/steelx bash /instance/steelx/shared/steelx-process.sh start`
+- `PROD_STOP_COMMAND`：非 systemd 部署的后端停止命令，默认 `STEELX_ROOT=/instance/steelx bash /instance/steelx/shared/steelx-process.sh stop`
 
-当前 steelx 生产实例部署在 `/instance/steelx`，不是默认的 `/opt/leo`。若 GitHub `production` 环境要部署 steelx，配置 Environment Variables：
+当前 steelx 生产实例部署在 `/instance/steelx`。若后续迁移到其他生产实例，可用 GitHub Variables 覆盖默认值：
 
 ```text
 PROD_RELEASE_ROOT=/instance/steelx
