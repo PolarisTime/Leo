@@ -109,9 +109,8 @@ spring:
     baseline-on-migrate: true
     # 禁止执行危险的 clean 操作
     clean-disabled: true
-    # 自动修复 checksum 不匹配
-    repair-on-migrate: true
-    validate-on-migrate: false
+    # 启动时严格校验迁移历史，不掩盖迁移脚本漂移
+    validate-on-migrate: true
     # 迁移脚本目录
     locations: classpath:db/migration
 

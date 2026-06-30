@@ -182,13 +182,22 @@ jobs:
           cache: maven
           cache-dependency-path: pom.xml
 
-      - name: Inspect Flyway migrations
-        continue-on-error: true
-        run: >-
-          mvn -B -ntp flyway:info
-          -Dflyway.url="$SPRING_DATASOURCE_URL"
-          -Dflyway.user="$SPRING_DATASOURCE_USERNAME"
-          -Dflyway.password="$SPRING_DATASOURCE_PASSWORD"
+      - name: Verify Flyway migrations
+        run: |
+          mvn -B -ntp flyway:migrate \
+            -Dflyway.url="$SPRING_DATASOURCE_URL" \
+            -Dflyway.user="$SPRING_DATASOURCE_USERNAME" \
+            -Dflyway.password="$SPRING_DATASOURCE_PASSWORD" \
+            -Dflyway.locations="filesystem:src/main/resources/db/migration" \
+            -Dflyway.cleanDisabled=true \
+            -Dflyway.validateMigrationNaming=true
+          mvn -B -ntp flyway:validate \
+            -Dflyway.url="$SPRING_DATASOURCE_URL" \
+            -Dflyway.user="$SPRING_DATASOURCE_USERNAME" \
+            -Dflyway.password="$SPRING_DATASOURCE_PASSWORD" \
+            -Dflyway.locations="filesystem:src/main/resources/db/migration" \
+            -Dflyway.cleanDisabled=true \
+            -Dflyway.validateMigrationNaming=true
 
       - name: Package
         run: mvn -B -ntp -DskipTests package
