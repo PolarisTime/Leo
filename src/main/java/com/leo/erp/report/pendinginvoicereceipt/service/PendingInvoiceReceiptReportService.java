@@ -10,6 +10,8 @@ import com.leo.erp.report.pendinginvoicereceipt.web.dto.PendingInvoiceReceiptRep
 import com.leo.erp.security.permission.DataScopeContext;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
@@ -30,6 +32,8 @@ public class PendingInvoiceReceiptReportService {
 
     private final PurchaseOrderRepository purchaseOrderRepository;
     private final InvoiceReceiptRepository invoiceReceiptRepository;
+    private static final int ORDER_BATCH_SIZE = 200;
+    private static final int MAX_ORDER_CANDIDATES = 1_000;
 
     public PendingInvoiceReceiptReportService(PurchaseOrderRepository purchaseOrderRepository,
                                               InvoiceReceiptRepository invoiceReceiptRepository) {
@@ -44,7 +48,7 @@ public class PendingInvoiceReceiptReportService {
                                                           LocalDate startDate,
                                                           LocalDate endDate) {
         String normalizedKeyword = normalizeKeyword(keyword);
-        List<PurchaseOrder> orders = loadAccessibleOrders(supplierName, startDate, endDate);
+        List<PurchaseOrder> orders = loadAccessibleOrders(query, supplierName, startDate, endDate);
         Map<Long, InvoiceProgress> progressBySourceItemId = buildProgressBySourceItemId(collectSourceItemIds(orders));
         List<PendingInvoiceReceiptReportResponse> rows = new ArrayList<>();
         long index = 1L;
@@ -90,12 +94,20 @@ public class PendingInvoiceReceiptReportService {
         return toPage(rows, query);
     }
 
-    private List<PurchaseOrder> loadAccessibleOrders(String supplierName, LocalDate startDate, LocalDate endDate) {
+    private List<PurchaseOrder> loadAccessibleOrders(PageQuery query, String supplierName, LocalDate startDate, LocalDate endDate) {
         Specification<PurchaseOrder> spec = Specs.<PurchaseOrder>notDeleted()
                 .and(supplierNameSpec(supplierName))
                 .and(startDateSpec(startDate))
                 .and(endDateSpec(endDate));
-        return purchaseOrderRepository.findAll(DataScopeContext.apply(spec), Sort.by(Sort.Direction.ASC, "id"));
+        Specification<PurchaseOrder> effectiveSpec = DataScopeContext.apply(spec);
+        Pageable pageable = PageRequest.of(0, candidateOrderLimit(query), Sort.by(Sort.Direction.ASC, "id"));
+        return purchaseOrderRepository.findAll(effectiveSpec, pageable).getContent();
+    }
+
+    private int candidateOrderLimit(PageQuery query) {
+        long pageWindow = (long) (query.page() + 1) * query.size();
+        long requestedLimit = Math.max(pageWindow, ORDER_BATCH_SIZE);
+        return (int) Math.min(requestedLimit, MAX_ORDER_CANDIDATES);
     }
 
     private List<Long> collectSourceItemIds(List<PurchaseOrder> orders) {

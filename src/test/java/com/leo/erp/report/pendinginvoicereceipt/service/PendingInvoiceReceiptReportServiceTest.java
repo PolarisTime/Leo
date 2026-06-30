@@ -13,6 +13,8 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 
@@ -46,7 +48,7 @@ class PendingInvoiceReceiptReportServiceTest {
                 purchaseOrderItem(201L, "2.000", "200.00"),
                 purchaseOrderItem(202L, "1.000", "80.00")
         );
-        when(purchaseOrderRepository.findAll(anySpecification(), any(Sort.class))).thenReturn(List.of(order));
+        when(purchaseOrderRepository.findAll(anySpecification(), any(Pageable.class))).thenReturn(new PageImpl<>(List.of(order)));
         when(invoiceReceiptRepository.summarizeAllocatedBySourcePurchaseOrderItemIds(any(), isNull()))
                 .thenReturn(List.of(summary(201L, "1.250", "100.00")));
 
@@ -67,12 +69,50 @@ class PendingInvoiceReceiptReportServiceTest {
         verify(invoiceReceiptRepository).summarizeAllocatedBySourcePurchaseOrderItemIds(sourceItemIds.capture(), isNull());
         assertThat(sourceItemIds.getValue()).containsExactly(201L, 202L);
         verify(purchaseOrderRepository, never()).findAllByDeletedFlagFalse();
+        verify(purchaseOrderRepository, never()).findAll(anySpecification(), any(Sort.class));
         verify(invoiceReceiptRepository, never()).findAllByDeletedFlagFalse();
     }
 
     @Test
+    void pageUsesBoundedPurchaseOrderPageQuery() {
+        when(purchaseOrderRepository.findAll(anySpecification(), any(Pageable.class))).thenReturn(new PageImpl<>(List.of()));
+
+        service.page(
+                PageQuery.of(2, 50, "orderDate", "asc"),
+                null,
+                null,
+                null,
+                null
+        );
+
+        ArgumentCaptor<Pageable> pageable = ArgumentCaptor.forClass(Pageable.class);
+        verify(purchaseOrderRepository).findAll(anySpecification(), pageable.capture());
+        assertThat(pageable.getValue().getPageNumber()).isZero();
+        assertThat(pageable.getValue().getPageSize()).isEqualTo(200);
+        verify(purchaseOrderRepository, never()).findAll(anySpecification(), any(Sort.class));
+    }
+
+    @Test
+    void pageCapsPurchaseOrderCandidateQuery() {
+        when(purchaseOrderRepository.findAll(anySpecification(), any(Pageable.class))).thenReturn(new PageImpl<>(List.of()));
+
+        service.page(
+                PageQuery.of(20, 200, null, null),
+                null,
+                null,
+                null,
+                null
+        );
+
+        ArgumentCaptor<Pageable> pageable = ArgumentCaptor.forClass(Pageable.class);
+        verify(purchaseOrderRepository).findAll(anySpecification(), pageable.capture());
+        assertThat(pageable.getValue().getPageSize()).isEqualTo(1_000);
+        verify(purchaseOrderRepository, never()).findAll(anySpecification(), any(Sort.class));
+    }
+
+    @Test
     void pageSkipsProgressQueryWhenNoAccessiblePurchaseOrderItemsExist() {
-        when(purchaseOrderRepository.findAll(anySpecification(), any(Sort.class))).thenReturn(List.of());
+        when(purchaseOrderRepository.findAll(anySpecification(), any(Pageable.class))).thenReturn(new PageImpl<>(List.of()));
 
         Page<PendingInvoiceReceiptReportResponse> page = service.page(
                 PageQuery.of(0, 20, null, null),
@@ -91,7 +131,7 @@ class PendingInvoiceReceiptReportServiceTest {
         PurchaseOrder order = purchaseOrder(
                 purchaseOrderItem(301L, "2.000", "200.00")
         );
-        when(purchaseOrderRepository.findAll(anySpecification(), any(Sort.class))).thenReturn(List.of(order));
+        when(purchaseOrderRepository.findAll(anySpecification(), any(Pageable.class))).thenReturn(new PageImpl<>(List.of(order)));
         when(invoiceReceiptRepository.summarizeAllocatedBySourcePurchaseOrderItemIds(any(), isNull()))
                 .thenReturn(List.of(summary(301L, "2.000", "200.00")));
 
@@ -116,7 +156,7 @@ class PendingInvoiceReceiptReportServiceTest {
                 purchaseOrderItem(402L, "1.000", "100.00")
         );
         orderB.setOrderNo("PO-NOMATCH");
-        when(purchaseOrderRepository.findAll(anySpecification(), any(Sort.class))).thenReturn(List.of(orderA, orderB));
+        when(purchaseOrderRepository.findAll(anySpecification(), any(Pageable.class))).thenReturn(new PageImpl<>(List.of(orderA, orderB)));
         when(invoiceReceiptRepository.summarizeAllocatedBySourcePurchaseOrderItemIds(any(), isNull()))
                 .thenReturn(List.of());
 
@@ -137,7 +177,7 @@ class PendingInvoiceReceiptReportServiceTest {
         PurchaseOrder order = purchaseOrder(
                 purchaseOrderItem(501L, "1.000", "100.00")
         );
-        when(purchaseOrderRepository.findAll(anySpecification(), any(Sort.class))).thenReturn(List.of(order));
+        when(purchaseOrderRepository.findAll(anySpecification(), any(Pageable.class))).thenReturn(new PageImpl<>(List.of(order)));
         when(invoiceReceiptRepository.summarizeAllocatedBySourcePurchaseOrderItemIds(any(), isNull()))
                 .thenReturn(List.of());
 
@@ -159,7 +199,7 @@ class PendingInvoiceReceiptReportServiceTest {
         orderB.setSupplierName("乙供应商");
         PurchaseOrder orderA = purchaseOrder(purchaseOrderItem(602L, "1.000", "100.00"));
         orderA.setSupplierName("甲供应商");
-        when(purchaseOrderRepository.findAll(anySpecification(), any(Sort.class))).thenReturn(List.of(orderB, orderA));
+        when(purchaseOrderRepository.findAll(anySpecification(), any(Pageable.class))).thenReturn(new PageImpl<>(List.of(orderB, orderA)));
         when(invoiceReceiptRepository.summarizeAllocatedBySourcePurchaseOrderItemIds(any(), isNull()))
                 .thenReturn(List.of());
 
@@ -180,7 +220,7 @@ class PendingInvoiceReceiptReportServiceTest {
     void pageSortsByPendingInvoiceWeightTonDescending() {
         PurchaseOrder orderLight = purchaseOrder(purchaseOrderItem(701L, "0.500", "50.00"));
         PurchaseOrder orderHeavy = purchaseOrder(purchaseOrderItem(702L, "3.000", "300.00"));
-        when(purchaseOrderRepository.findAll(anySpecification(), any(Sort.class))).thenReturn(List.of(orderLight, orderHeavy));
+        when(purchaseOrderRepository.findAll(anySpecification(), any(Pageable.class))).thenReturn(new PageImpl<>(List.of(orderLight, orderHeavy)));
         when(invoiceReceiptRepository.summarizeAllocatedBySourcePurchaseOrderItemIds(any(), isNull()))
                 .thenReturn(List.of());
 
@@ -201,7 +241,7 @@ class PendingInvoiceReceiptReportServiceTest {
         PurchaseOrder order = purchaseOrder(
                 purchaseOrderItem(801L, "2.000", "200.00")
         );
-        when(purchaseOrderRepository.findAll(anySpecification(), any(Sort.class))).thenReturn(List.of(order));
+        when(purchaseOrderRepository.findAll(anySpecification(), any(Pageable.class))).thenReturn(new PageImpl<>(List.of(order)));
         when(invoiceReceiptRepository.summarizeAllocatedBySourcePurchaseOrderItemIds(any(), isNull()))
                 .thenReturn(List.of(summary(801L, "2.000", "200.00")));
 
@@ -222,7 +262,7 @@ class PendingInvoiceReceiptReportServiceTest {
                 purchaseOrderItem(901L, "1.000", "100.00")
         );
         order.setSupplierName("特殊供应商");
-        when(purchaseOrderRepository.findAll(anySpecification(), any(Sort.class))).thenReturn(List.of(order));
+        when(purchaseOrderRepository.findAll(anySpecification(), any(Pageable.class))).thenReturn(new PageImpl<>(List.of(order)));
         when(invoiceReceiptRepository.summarizeAllocatedBySourcePurchaseOrderItemIds(any(), isNull()))
                 .thenReturn(List.of());
 
@@ -243,7 +283,7 @@ class PendingInvoiceReceiptReportServiceTest {
         PurchaseOrder order = purchaseOrder(
                 purchaseOrderItem(902L, "1.000", "100.00")
         );
-        when(purchaseOrderRepository.findAll(anySpecification(), any(Sort.class))).thenReturn(List.of(order));
+        when(purchaseOrderRepository.findAll(anySpecification(), any(Pageable.class))).thenReturn(new PageImpl<>(List.of(order)));
         when(invoiceReceiptRepository.summarizeAllocatedBySourcePurchaseOrderItemIds(any(), isNull()))
                 .thenReturn(List.of());
 
@@ -263,7 +303,7 @@ class PendingInvoiceReceiptReportServiceTest {
         PurchaseOrder order = purchaseOrder(
                 purchaseOrderItem(903L, "1.000", "100.00")
         );
-        when(purchaseOrderRepository.findAll(anySpecification(), any(Sort.class))).thenReturn(List.of(order));
+        when(purchaseOrderRepository.findAll(anySpecification(), any(Pageable.class))).thenReturn(new PageImpl<>(List.of(order)));
         when(invoiceReceiptRepository.summarizeAllocatedBySourcePurchaseOrderItemIds(any(), isNull()))
                 .thenReturn(List.of());
 
@@ -283,7 +323,7 @@ class PendingInvoiceReceiptReportServiceTest {
         PurchaseOrder order = purchaseOrder(
                 purchaseOrderItem(904L, "1.000", "100.00")
         );
-        when(purchaseOrderRepository.findAll(anySpecification(), any(Sort.class))).thenReturn(List.of(order));
+        when(purchaseOrderRepository.findAll(anySpecification(), any(Pageable.class))).thenReturn(new PageImpl<>(List.of(order)));
         when(invoiceReceiptRepository.summarizeAllocatedBySourcePurchaseOrderItemIds(any(), isNull()))
                 .thenReturn(List.of());
 
@@ -303,7 +343,7 @@ class PendingInvoiceReceiptReportServiceTest {
         PurchaseOrder order = purchaseOrder(
                 purchaseOrderItem(905L, "1.000", "100.00")
         );
-        when(purchaseOrderRepository.findAll(anySpecification(), any(Sort.class))).thenReturn(List.of(order));
+        when(purchaseOrderRepository.findAll(anySpecification(), any(Pageable.class))).thenReturn(new PageImpl<>(List.of(order)));
         when(invoiceReceiptRepository.summarizeAllocatedBySourcePurchaseOrderItemIds(any(), isNull()))
                 .thenReturn(List.of());
 
@@ -324,7 +364,7 @@ class PendingInvoiceReceiptReportServiceTest {
                 purchaseOrderItem(906L, "1.000", "100.00")
         );
         order.setSupplierName("发票抬头匹配");
-        when(purchaseOrderRepository.findAll(anySpecification(), any(Sort.class))).thenReturn(List.of(order));
+        when(purchaseOrderRepository.findAll(anySpecification(), any(Pageable.class))).thenReturn(new PageImpl<>(List.of(order)));
         when(invoiceReceiptRepository.summarizeAllocatedBySourcePurchaseOrderItemIds(any(), isNull()))
                 .thenReturn(List.of());
 
@@ -344,7 +384,7 @@ class PendingInvoiceReceiptReportServiceTest {
         PurchaseOrder order = purchaseOrder(
                 purchaseOrderItem(907L, "1.000", "100.00")
         );
-        when(purchaseOrderRepository.findAll(anySpecification(), any(Sort.class))).thenReturn(List.of(order));
+        when(purchaseOrderRepository.findAll(anySpecification(), any(Pageable.class))).thenReturn(new PageImpl<>(List.of(order)));
         when(invoiceReceiptRepository.summarizeAllocatedBySourcePurchaseOrderItemIds(any(), isNull()))
                 .thenReturn(List.of());
 
@@ -364,7 +404,7 @@ class PendingInvoiceReceiptReportServiceTest {
         PurchaseOrder order = purchaseOrder(
                 purchaseOrderItem(908L, "1.000", "100.00")
         );
-        when(purchaseOrderRepository.findAll(anySpecification(), any(Sort.class))).thenReturn(List.of(order));
+        when(purchaseOrderRepository.findAll(anySpecification(), any(Pageable.class))).thenReturn(new PageImpl<>(List.of(order)));
         when(invoiceReceiptRepository.summarizeAllocatedBySourcePurchaseOrderItemIds(any(), isNull()))
                 .thenReturn(List.of());
 
@@ -385,7 +425,7 @@ class PendingInvoiceReceiptReportServiceTest {
         orderA.setOrderDate(LocalDateTime.of(2026, 1, 1, 0, 0));
         PurchaseOrder orderB = purchaseOrder(purchaseOrderItem(1002L, "1.000", "100.00"));
         orderB.setOrderDate(LocalDateTime.of(2026, 6, 1, 0, 0));
-        when(purchaseOrderRepository.findAll(anySpecification(), any(Sort.class))).thenReturn(List.of(orderA, orderB));
+        when(purchaseOrderRepository.findAll(anySpecification(), any(Pageable.class))).thenReturn(new PageImpl<>(List.of(orderA, orderB)));
         when(invoiceReceiptRepository.summarizeAllocatedBySourcePurchaseOrderItemIds(any(), isNull()))
                 .thenReturn(List.of());
 
@@ -406,7 +446,7 @@ class PendingInvoiceReceiptReportServiceTest {
                 purchaseOrderItem(1003L, "1.000", "100.00"),
                 purchaseOrderItem(1004L, "1.000", "100.00")
         );
-        when(purchaseOrderRepository.findAll(anySpecification(), any(Sort.class))).thenReturn(List.of(order));
+        when(purchaseOrderRepository.findAll(anySpecification(), any(Pageable.class))).thenReturn(new PageImpl<>(List.of(order)));
         when(invoiceReceiptRepository.summarizeAllocatedBySourcePurchaseOrderItemIds(any(), isNull()))
                 .thenReturn(List.of());
 
@@ -425,7 +465,7 @@ class PendingInvoiceReceiptReportServiceTest {
     void pageSortsByPendingInvoiceAmountAscending() {
         PurchaseOrder orderLight = purchaseOrder(purchaseOrderItem(1005L, "0.500", "50.00"));
         PurchaseOrder orderHeavy = purchaseOrder(purchaseOrderItem(1006L, "3.000", "300.00"));
-        when(purchaseOrderRepository.findAll(anySpecification(), any(Sort.class))).thenReturn(List.of(orderLight, orderHeavy));
+        when(purchaseOrderRepository.findAll(anySpecification(), any(Pageable.class))).thenReturn(new PageImpl<>(List.of(orderLight, orderHeavy)));
         when(invoiceReceiptRepository.summarizeAllocatedBySourcePurchaseOrderItemIds(any(), isNull()))
                 .thenReturn(List.of());
 
@@ -447,7 +487,7 @@ class PendingInvoiceReceiptReportServiceTest {
         orderA.setOrderNo("PO-BBB");
         PurchaseOrder orderB = purchaseOrder(purchaseOrderItem(1008L, "1.000", "100.00"));
         orderB.setOrderNo("PO-AAA");
-        when(purchaseOrderRepository.findAll(anySpecification(), any(Sort.class))).thenReturn(List.of(orderA, orderB));
+        when(purchaseOrderRepository.findAll(anySpecification(), any(Pageable.class))).thenReturn(new PageImpl<>(List.of(orderA, orderB)));
         when(invoiceReceiptRepository.summarizeAllocatedBySourcePurchaseOrderItemIds(any(), isNull()))
                 .thenReturn(List.of());
 
@@ -469,7 +509,7 @@ class PendingInvoiceReceiptReportServiceTest {
                 purchaseOrderItem(1102L, "1.000", "100.00"),
                 purchaseOrderItem(1103L, "1.000", "100.00")
         );
-        when(purchaseOrderRepository.findAll(anySpecification(), any(Sort.class))).thenReturn(List.of(order));
+        when(purchaseOrderRepository.findAll(anySpecification(), any(Pageable.class))).thenReturn(new PageImpl<>(List.of(order)));
         when(invoiceReceiptRepository.summarizeAllocatedBySourcePurchaseOrderItemIds(any(), isNull()))
                 .thenReturn(List.of());
 
@@ -492,7 +532,7 @@ class PendingInvoiceReceiptReportServiceTest {
                 purchaseOrderItem(1202L, "1.000", "100.00"),
                 purchaseOrderItem(1203L, "1.000", "100.00")
         );
-        when(purchaseOrderRepository.findAll(anySpecification(), any(Sort.class))).thenReturn(List.of(order));
+        when(purchaseOrderRepository.findAll(anySpecification(), any(Pageable.class))).thenReturn(new PageImpl<>(List.of(order)));
         when(invoiceReceiptRepository.summarizeAllocatedBySourcePurchaseOrderItemIds(any(), isNull()))
                 .thenReturn(List.of());
 

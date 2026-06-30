@@ -23,8 +23,11 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.lang.reflect.Proxy;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -34,7 +37,10 @@ import java.util.concurrent.atomic.AtomicReference;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class RoleSettingServiceTest {
@@ -534,6 +540,20 @@ class RoleSettingServiceTest {
         );
     }
 
+    private UserRoleRepository userRoleRepository(List<UserRole> userRoles) {
+        return (UserRoleRepository) Proxy.newProxyInstance(
+                UserRoleRepository.class.getClassLoader(),
+                new Class[]{UserRoleRepository.class},
+                (proxy, method, args) -> switch (method.getName()) {
+                    case "findByRoleIdInAndDeletedFlagFalse" -> userRoles;
+                    case "toString" -> "UserRoleRepositoryStub";
+                    case "hashCode" -> System.identityHashCode(proxy);
+                    case "equals" -> proxy == args[0];
+                    default -> throw new UnsupportedOperationException(method.getName());
+                }
+        );
+    }
+
     private PermissionService permissionService() {
         return permissionService(Map.of());
     }
@@ -566,6 +586,13 @@ class RoleSettingServiceTest {
         permission.setResourceCode(resource);
         permission.setActionCode(action);
         return permission;
+    }
+
+    private UserRole userRole(Long roleId, Long userId) {
+        UserRole userRole = new UserRole();
+        userRole.setRoleId(roleId);
+        userRole.setUserId(userId);
+        return userRole;
     }
 
     private void authenticate(Long userId, String username, List<SimpleGrantedAuthority> authorities) {
@@ -837,5 +864,43 @@ class RoleSettingServiceTest {
         assertThat(saved.get())
                 .extracting(permission -> permission.getResourceCode() + ":" + permission.getActionCode())
                 .contains("user-account:read", "access-control:read");
+    }
+
+    @Test
+    void shouldEvictRoleCachesAfterTransactionCommit() {
+        PermissionService permissionService = mock(PermissionService.class);
+        AuthenticatedUserCacheService authenticatedUserCacheService = mock(AuthenticatedUserCacheService.class);
+        RoleSettingService service = new RoleSettingService(
+                roleRepository(),
+                rolePermissionRepository(),
+                userRoleRepository(List.of(userRole(1L, 11L), userRole(1L, 11L), userRole(1L, 12L))),
+                new SnowflakeIdGenerator(0L),
+                permissionService,
+                authenticatedUserCacheService
+        );
+
+        try {
+            TransactionSynchronizationManager.initSynchronization();
+            TransactionSynchronizationManager.setActualTransactionActive(true);
+
+            service.saveRolePermissions(1L, List.of(new RolePermissionItem("material", "read")));
+
+            verify(permissionService, never()).evictUserCaches(any());
+            verify(authenticatedUserCacheService, never()).evict(anyLong());
+            assertThat(TransactionSynchronizationManager.getSynchronizations()).hasSize(1);
+
+            TransactionSynchronization synchronization = TransactionSynchronizationManager.getSynchronizations().getFirst();
+            synchronization.afterCommit();
+
+            @SuppressWarnings("unchecked")
+            org.mockito.ArgumentCaptor<Collection<Long>> userIds = org.mockito.ArgumentCaptor.forClass(Collection.class);
+            verify(permissionService).evictUserCaches(userIds.capture());
+            assertThat(userIds.getValue()).containsExactly(11L, 12L);
+            verify(authenticatedUserCacheService).evict(11L);
+            verify(authenticatedUserCacheService).evict(12L);
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+            TransactionSynchronizationManager.setActualTransactionActive(false);
+        }
     }
 }

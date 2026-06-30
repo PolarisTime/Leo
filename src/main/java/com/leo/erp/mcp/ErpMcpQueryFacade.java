@@ -7,6 +7,7 @@ import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.master.carrier.service.CarrierService;
 import com.leo.erp.master.customer.service.CustomerService;
+import com.leo.erp.master.customer.web.dto.CustomerResponse;
 import com.leo.erp.master.material.service.MaterialCategoryService;
 import com.leo.erp.master.material.service.MaterialService;
 import com.leo.erp.master.project.service.ProjectService;
@@ -26,12 +27,14 @@ import org.springframework.stereotype.Component;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
 
 @Component
 class ErpMcpQueryFacade {
 
     private static final int DEFAULT_PAGE_SIZE = 20;
     private static final int MAX_PAGE_SIZE = 50;
+    private static final int MAX_PAGE = 100;
     private static final int DEFAULT_SEARCH_LIMIT = 20;
     private static final int MAX_SEARCH_LIMIT = 50;
 
@@ -107,7 +110,7 @@ class ErpMcpQueryFacade {
         if (reader == null) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "MCP 不支持查询该模块: " + normalizedModuleKey);
         }
-        PageQuery query = PageQuery.of(page, limit(size, DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE), null, null);
+        PageQuery query = mcpPageQuery(page, size);
         return permissionExecutor.read(normalizedModuleKey, () -> reader.read(query, keyword, status));
     }
 
@@ -123,13 +126,14 @@ class ErpMcpQueryFacade {
         return permissionExecutor.read(normalizedModuleKey, () -> reader.read(recordId));
     }
 
-    Object listOptions(String optionType) {
+    Object listOptions(String optionType, String keyword, Integer limit) {
         String normalizedOptionType = normalizeKey(optionType);
         OptionReader reader = optionReaders.get(normalizedOptionType);
         if (reader == null) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "MCP 不支持读取该选项: " + normalizedOptionType);
         }
-        return permissionExecutor.read(reader.moduleKey(), reader::read);
+        PageQuery query = mcpPageQuery(0, limit);
+        return permissionExecutor.read(reader.moduleKey(), () -> reader.read(query, keyword));
     }
 
     Map<String, Object> printPayloadPreview(String moduleKey, Long recordId, String templateId) {
@@ -140,12 +144,12 @@ class ErpMcpQueryFacade {
         if (templateId == null || templateId.isBlank()) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "templateId 不能为空");
         }
-        return permissionExecutor.read(normalizedModuleKey, () -> printScriptService.generateFromRecord(
+        return permissionExecutor.print(normalizedModuleKey, () -> minimizePrintPayload(printScriptService.generateFromRecord(
                 templateId.trim(),
                 normalizedModuleKey,
                 recordId,
                 PrintRenderOptions.defaults()
-        ));
+        )));
     }
 
     private Map<String, PageReader> pageReaders(MaterialService materialService,
@@ -220,12 +224,24 @@ class ErpMcpQueryFacade {
                                                     WarehouseService warehouseService,
                                                     CarrierService carrierService) {
         Map<String, OptionReader> readers = new LinkedHashMap<>();
-        readers.put("material-category", new OptionReader("material", materialCategoryService::options));
-        readers.put("material-grade", new OptionReader("material", materialService::materialGrades));
-        readers.put("supplier", new OptionReader("supplier", supplierService::listActiveOptions));
-        readers.put("customer", new OptionReader("customer", customerService::listActiveOptions));
-        readers.put("warehouse", new OptionReader("warehouse", warehouseService::listActiveOptions));
-        readers.put("carrier", new OptionReader("carrier", carrierService::listActiveOptions));
+        readers.put("material-category", new OptionReader("material", (query, keyword) ->
+                mapPage(PageResponse.from(materialCategoryService.page(query, keyword, "正常")),
+                        item -> option(null, item.categoryName(), item.categoryName()))));
+        readers.put("material-grade", new OptionReader("material", (query, keyword) ->
+                mapPage(PageResponse.from(materialService.page(query, keyword, null, null)),
+                        item -> option(null, item.material(), item.material()))));
+        readers.put("supplier", new OptionReader("supplier", (query, keyword) ->
+                mapPage(PageResponse.from(supplierService.page(query, keyword, "正常")),
+                        item -> option(item.id(), item.supplierName(), item.supplierName()))));
+        readers.put("customer", new OptionReader("customer", (query, keyword) ->
+                mapPage(PageResponse.from(customerService.page(query, keyword, "正常")),
+                        item -> option(item.id(), customerLabel(item), item.customerName()))));
+        readers.put("warehouse", new OptionReader("warehouse", (query, keyword) ->
+                mapPage(PageResponse.from(warehouseService.page(query, keyword, null, "正常")),
+                        item -> option(item.id(), item.warehouseName(), item.warehouseName()))));
+        readers.put("carrier", new OptionReader("carrier", (query, keyword) ->
+                mapPage(PageResponse.from(carrierService.page(query, keyword, "正常")),
+                        item -> option(item.id(), item.carrierName(), item.carrierName()))));
         return Map.copyOf(readers);
     }
 
@@ -236,11 +252,86 @@ class ErpMcpQueryFacade {
         return value.trim();
     }
 
+    private PageQuery mcpPageQuery(Integer page, Integer size) {
+        int resolvedPage = page == null ? 0 : page;
+        if (resolvedPage > MAX_PAGE) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "page 不能超过" + MAX_PAGE);
+        }
+        return PageQuery.of(resolvedPage, limit(size, DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE), null, null);
+    }
+
     private int limit(Integer value, int defaultValue, int maxValue) {
         if (value == null) {
             return defaultValue;
         }
         return Math.min(value, maxValue);
+    }
+
+    private <S, T> PageResponse<T> mapPage(PageResponse<S> page, Function<S, T> mapper) {
+        return new PageResponse<>(
+                page.content().stream()
+                        .map(mapper)
+                        .filter(item -> item != null)
+                        .distinct()
+                        .toList(),
+                page.totalElements(),
+                page.totalPages(),
+                page.currentPage(),
+                page.pageSize(),
+                page.hasMore()
+        );
+    }
+
+    private Map<String, Object> minimizePrintPayload(Map<String, Object> payload) {
+        Map<String, Object> preview = new LinkedHashMap<>();
+        copyIfPresent(payload, preview, "templateName");
+        copyIfPresent(payload, preview, "templateType");
+        copyIfPresent(payload, preview, "businessNo");
+        copyIfPresent(payload, preview, "recordId");
+        copyIfPresent(payload, preview, "moduleKey");
+        preview.put("dataKeys", keysOf(payload.get("data")));
+        preview.put("itemCount", itemCount(payload.get("items")));
+        return preview;
+    }
+
+    private void copyIfPresent(Map<String, Object> source, Map<String, Object> target, String key) {
+        if (source.containsKey(key)) {
+            target.put(key, source.get(key));
+        }
+    }
+
+    private List<String> keysOf(Object value) {
+        if (!(value instanceof Map<?, ?> map)) {
+            return List.of();
+        }
+        return map.keySet().stream()
+                .map(String::valueOf)
+                .toList();
+    }
+
+    private int itemCount(Object value) {
+        return value instanceof List<?> list ? list.size() : 0;
+    }
+
+    private Map<String, Object> option(Long id, String label, String value) {
+        if ((label == null || label.isBlank()) && (value == null || value.isBlank())) {
+            return null;
+        }
+        Map<String, Object> option = new LinkedHashMap<>();
+        if (id != null) {
+            option.put("id", id);
+        }
+        option.put("label", label == null ? value : label);
+        option.put("value", value == null ? label : value);
+        return option;
+    }
+
+    private String customerLabel(CustomerResponse item) {
+        String projectName = item.projectName() == null ? "" : item.projectName().trim();
+        if (projectName.isEmpty() || projectName.equals(item.customerName())) {
+            return item.customerName();
+        }
+        return item.customerName() + " / " + projectName;
     }
 
     @FunctionalInterface
@@ -253,9 +344,14 @@ class ErpMcpQueryFacade {
         Object read(Long recordId);
     }
 
-    private record OptionReader(String moduleKey, java.util.function.Supplier<Object> supplier) {
-        Object read() {
-            return supplier.get();
+    private record OptionReader(String moduleKey, OptionPageReader reader) {
+        Object read(PageQuery query, String keyword) {
+            return reader.read(query, keyword);
         }
+    }
+
+    @FunctionalInterface
+    private interface OptionPageReader {
+        Object read(PageQuery query, String keyword);
     }
 }

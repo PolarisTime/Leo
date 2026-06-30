@@ -13,15 +13,19 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.core.io.Resource;
 import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.unit.DataSize;
 
 import java.io.IOException;
 import java.lang.reflect.Proxy;
+import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -37,6 +41,17 @@ class AttachmentServiceTest {
     Path tempDir;
 
     private final AttachmentFilenameResolver filenameResolver = new AttachmentFilenameResolver();
+
+    @Test
+    void shouldNotDeclareNonPublicTransactionalMethods() {
+        List<String> nonPublicTransactionalMethods = Arrays.stream(AttachmentService.class.getDeclaredMethods())
+                .filter(method -> method.isAnnotationPresent(Transactional.class))
+                .filter(method -> !Modifier.isPublic(method.getModifiers()))
+                .map(Method::getName)
+                .toList();
+
+        assertThat(nonPublicTransactionalMethods).isEmpty();
+    }
 
     @Test
     void shouldUploadAttachmentToConfiguredLocalDirectory() throws IOException {

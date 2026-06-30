@@ -3,6 +3,7 @@ package com.leo.erp.mcp;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.api.PageResponse;
 import com.leo.erp.common.error.BusinessException;
+import com.leo.erp.master.customer.web.dto.CustomerResponse;
 import com.leo.erp.master.carrier.service.CarrierService;
 import com.leo.erp.master.customer.service.CustomerService;
 import com.leo.erp.master.material.service.MaterialCategoryService;
@@ -24,14 +25,18 @@ import org.springframework.context.annotation.Import;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class ErpMcpToolsTest {
@@ -87,15 +92,107 @@ class ErpMcpToolsTest {
         assertThat(queryRef.get().size()).isEqualTo(50);
     }
 
+    @Test
+    void shouldRejectTooLargeQueryPageOffset() {
+        ErpMcpPermissionExecutor permissionExecutor = mock(ErpMcpPermissionExecutor.class);
+        MaterialService materialService = mock(MaterialService.class);
+
+        ErpMcpQueryFacade facade = facadeWith(permissionExecutor, materialService);
+
+        assertThatThrownBy(() -> facade.queryRecords("material", null, null, 101, 20))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("page 不能超过");
+    }
+
+    @Test
+    void shouldLimitOptionsAndApplyKeywordThroughScopedPageReader() {
+        ErpMcpPermissionExecutor permissionExecutor = mock(ErpMcpPermissionExecutor.class);
+        CustomerService customerService = mock(CustomerService.class);
+        AtomicReference<PageQuery> queryRef = new AtomicReference<>();
+        AtomicReference<String> keywordRef = new AtomicReference<>();
+        when(permissionExecutor.read(any(), any())).thenAnswer(invocation -> invocation.getArgument(1, java.util.function.Supplier.class).get());
+        when(customerService.page(any(PageQuery.class), any(), eq("正常"))).thenAnswer(invocation -> {
+            PageQuery query = invocation.getArgument(0);
+            queryRef.set(query);
+            keywordRef.set(invocation.getArgument(1));
+            return new PageImpl<>(
+                    List.of(customerResponse(1L, "华东客户"), customerResponse(2L, "华北客户")),
+                    PageRequest.of(query.page(), query.size()),
+                    2
+            );
+        });
+
+        Object response = facadeWith(permissionExecutor, mock(MaterialService.class), customerService)
+                .listOptions("customer", "华东", 500);
+
+        assertThat(response).isInstanceOf(PageResponse.class);
+        assertThat(((PageResponse<?>) response).content()).hasSize(2);
+        assertThat(queryRef.get().page()).isZero();
+        assertThat(queryRef.get().size()).isEqualTo(50);
+        assertThat(keywordRef.get()).isEqualTo("华东");
+        verify(permissionExecutor).read(eq("customer"), any());
+    }
+
+    @Test
+    void shouldUsePrintPermissionAndMinimizePrintPayloadPreview() {
+        ErpMcpPermissionExecutor permissionExecutor = mock(ErpMcpPermissionExecutor.class);
+        PrintScriptService printScriptService = mock(PrintScriptService.class);
+        when(permissionExecutor.print(any(), any())).thenAnswer(invocation -> invocation.getArgument(1, java.util.function.Supplier.class).get());
+        Map<String, Object> rawPayload = new LinkedHashMap<>();
+        rawPayload.put("templateName", "销售单模板");
+        rawPayload.put("templateHtml", "<html>large</html>");
+        rawPayload.put("templateType", "COORD");
+        rawPayload.put("businessNo", "SO-001");
+        rawPayload.put("recordId", 1L);
+        rawPayload.put("moduleKey", "sales-order");
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("customerName", "测试客户");
+        data.put("unitPrice", "100");
+        rawPayload.put("data", data);
+        rawPayload.put("items", List.of(Map.of("id", "11", "unitPrice", "100")));
+        when(printScriptService.generateFromRecord(eq("1"), eq("sales-order"), eq(1L), any()))
+                .thenReturn(rawPayload);
+
+        Map<String, Object> preview = facadeWith(
+                permissionExecutor,
+                mock(MaterialService.class),
+                mock(CustomerService.class),
+                printScriptService
+        ).printPayloadPreview("sales-order", 1L, "1");
+
+        assertThat(preview)
+                .containsEntry("templateName", "销售单模板")
+                .containsEntry("businessNo", "SO-001")
+                .containsEntry("recordId", 1L)
+                .containsEntry("moduleKey", "sales-order");
+        assertThat(preview).doesNotContainKeys("templateHtml", "data", "items");
+        assertThat(preview.get("dataKeys")).isEqualTo(List.of("customerName", "unitPrice"));
+        assertThat(preview.get("itemCount")).isEqualTo(1);
+        verify(permissionExecutor).print(eq("sales-order"), any());
+    }
+
     private ErpMcpQueryFacade facadeWith(ErpMcpPermissionExecutor permissionExecutor, MaterialService materialService) {
+        return facadeWith(permissionExecutor, materialService, mock(CustomerService.class), mock(PrintScriptService.class));
+    }
+
+    private ErpMcpQueryFacade facadeWith(ErpMcpPermissionExecutor permissionExecutor,
+                                         MaterialService materialService,
+                                         CustomerService customerService) {
+        return facadeWith(permissionExecutor, materialService, customerService, mock(PrintScriptService.class));
+    }
+
+    private ErpMcpQueryFacade facadeWith(ErpMcpPermissionExecutor permissionExecutor,
+                                         MaterialService materialService,
+                                         CustomerService customerService,
+                                         PrintScriptService printScriptService) {
         return new ErpMcpQueryFacade(
                 permissionExecutor,
                 mock(GlobalSearchService.class),
-                mock(PrintScriptService.class),
+                printScriptService,
                 materialService,
                 mock(MaterialCategoryService.class),
                 mock(SupplierService.class),
-                mock(CustomerService.class),
+                customerService,
                 mock(ProjectService.class),
                 mock(WarehouseService.class),
                 mock(CarrierService.class),
@@ -104,6 +201,23 @@ class ErpMcpToolsTest {
                 mock(SalesOrderService.class),
                 mock(SalesOutboundService.class),
                 mock(InventoryReportService.class)
+        );
+    }
+
+    private CustomerResponse customerResponse(Long id, String customerName) {
+        return new CustomerResponse(
+                id,
+                "C" + id,
+                customerName,
+                "",
+                "",
+                "",
+                "",
+                "",
+                "",
+                "",
+                "正常",
+                null
         );
     }
 }

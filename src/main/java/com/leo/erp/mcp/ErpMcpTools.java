@@ -64,9 +64,11 @@ public class ErpMcpTools {
     )
     public Object listOptions(
             @ToolParam(description = "选项类型：material-category、material-grade、supplier、customer、warehouse、carrier。")
-            String optionType
+            String optionType,
+            @ToolParam(required = false, description = "关键词过滤；高基数选项建议必传。") String keyword,
+            @ToolParam(required = false, description = "最大返回数量，默认20，最大50。") Integer limit
     ) {
-        return queryFacade.listOptions(optionType);
+        return queryFacade.listOptions(optionType, keyword, limit);
     }
 
     @Tool(

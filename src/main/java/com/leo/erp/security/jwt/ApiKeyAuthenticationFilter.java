@@ -25,6 +25,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.util.List;
 import java.util.Set;
 
 @Component
@@ -81,7 +82,7 @@ public class ApiKeyAuthenticationFilter extends OncePerRequestFilter {
             sendFailure(request, response, HttpServletResponse.SC_FORBIDDEN, ErrorCode.FORBIDDEN, "当前 API Key 未开通该资源接口权限");
             return;
         }
-        if (!hasConfiguredActions(apiKey)) {
+        if (!hasConfiguredActions(apiKey, requestPath)) {
             sendFailure(request, response, HttpServletResponse.SC_FORBIDDEN, ErrorCode.FORBIDDEN, "当前 API Key 未配置动作权限");
             return;
         }
@@ -94,7 +95,7 @@ public class ApiKeyAuthenticationFilter extends OncePerRequestFilter {
             return;
         }
 
-        authenticate(request, user, apiKey);
+        authenticate(request, requestPath, user, apiKey);
         apiKeyUsageService.markUsed(apiKey.getId());
         filterChain.doFilter(request, response);
     }
@@ -123,8 +124,18 @@ public class ApiKeyAuthenticationFilter extends OncePerRequestFilter {
         return !allowedResources.isEmpty() && resolvedCode != null && allowedResources.contains(resolvedCode);
     }
 
-    private boolean hasConfiguredActions(ApiKey apiKey) {
-        return !ApiKeySupport.parseAllowedActions(apiKey.getAllowedActions()).isEmpty();
+    private boolean hasConfiguredActions(ApiKey apiKey, String requestPath) {
+        return !effectiveAllowedActions(apiKey, requestPath).isEmpty();
+    }
+
+    private List<String> effectiveAllowedActions(ApiKey apiKey, String requestPath) {
+        List<String> allowedActions = ApiKeySupport.parseAllowedActions(apiKey.getAllowedActions());
+        if (isMcpTransportPath(requestPath) && ApiKeySupport.SCOPE_READ_ONLY.equals(apiKey.getUsageScope())) {
+            return allowedActions.contains(ResourcePermissionCatalog.READ)
+                    ? List.of(ResourcePermissionCatalog.READ)
+                    : List.of();
+        }
+        return allowedActions;
     }
 
     private boolean isBusinessEndpoint(String path) {
@@ -193,7 +204,7 @@ public class ApiKeyAuthenticationFilter extends OncePerRequestFilter {
         );
     }
 
-    private void authenticate(HttpServletRequest request, UserAccount user, ApiKey apiKey) {
+    private void authenticate(HttpServletRequest request, String requestPath, UserAccount user, ApiKey apiKey) {
         var boundRoles = userRoleBindingService.resolveRolesForUser(user.getId());
         SecurityPrincipal principal = SecurityPrincipal.authenticated(
                 user.getId(),
@@ -210,7 +221,7 @@ public class ApiKeyAuthenticationFilter extends OncePerRequestFilter {
         authentication.setDetails(new ApiKeyAuthenticationDetails(
                 new WebAuthenticationDetailsSource().buildDetails(request),
                 ApiKeySupport.parseAllowedResources(apiKey.getAllowedResources()),
-                ApiKeySupport.parseAllowedActions(apiKey.getAllowedActions())
+                effectiveAllowedActions(apiKey, requestPath)
         ));
         SecurityContextHolder.getContext().setAuthentication(authentication);
     }

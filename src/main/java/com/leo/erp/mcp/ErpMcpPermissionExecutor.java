@@ -26,6 +26,10 @@ class ErpMcpPermissionExecutor {
         return execute(moduleKey, ResourcePermissionCatalog.READ, action);
     }
 
+    <T> T print(String moduleKey, Supplier<T> action) {
+        return execute(moduleKey, ResourcePermissionCatalog.PRINT, action);
+    }
+
     private <T> T execute(String moduleKey, String actionCode, Supplier<T> action) {
         SecurityPrincipal principal = currentPrincipal();
         ModulePermissionGuard.PermissionCheck permission =

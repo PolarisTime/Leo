@@ -31,6 +31,8 @@ import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.util.Comparator;
 import java.util.LinkedHashSet;
@@ -58,6 +60,10 @@ public class RoleSettingService extends AbstractCrudService<RoleSetting, RoleSet
                 .distinct()
                 .collect(java.util.stream.Collectors.toList());
         if (affectedUserIds.isEmpty()) return;
+        runAfterCommit(() -> evictCachesForUsers(affectedUserIds));
+    }
+
+    private void evictCachesForUsers(List<Long> affectedUserIds) {
         permissionService.evictUserCaches(affectedUserIds);
         for (Long userId : affectedUserIds) {
             authenticatedUserCacheService.evict(userId);
@@ -65,6 +71,20 @@ public class RoleSettingService extends AbstractCrudService<RoleSetting, RoleSet
         if (dashboardSummaryService != null) {
             dashboardSummaryService.evictAllCache();
         }
+    }
+
+    private void runAfterCommit(Runnable action) {
+        if (!TransactionSynchronizationManager.isActualTransactionActive()
+                || !TransactionSynchronizationManager.isSynchronizationActive()) {
+            action.run();
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                action.run();
+            }
+        });
     }
     private static final Set<String> ALLOWED_STATUS = StatusConstants.ALLOWED_ACTIVE_STATUS;
 

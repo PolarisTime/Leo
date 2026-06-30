@@ -246,7 +246,38 @@ class ApiKeyAuthenticationFilterTest {
         assertThat(chainInvoked.get()).isTrue();
         assertThat(response.getStatus()).isEqualTo(200);
         assertThat(SecurityContextHolder.getContext().getAuthentication().getDetails()).isInstanceOf(ApiKeyAuthenticationDetails.class);
+        ApiKeyAuthenticationDetails details = (ApiKeyAuthenticationDetails) SecurityContextHolder.getContext().getAuthentication().getDetails();
+        assertThat(details.allowedActions()).containsExactly("read");
         verify(apiKeyUsageService).markUsed(apiKey.getId());
+    }
+
+    @Test
+    void shouldRejectReadOnlyMcpKeyWithoutReadAction() throws ServletException, IOException {
+        ApiKey apiKey = activeApiKey(ApiKeySupport.SCOPE_READ_ONLY);
+        apiKey.setAllowedResources("sales-order");
+        apiKey.setAllowedActions("print");
+        apiKey.setKeyHash(ApiKeySupport.hashKey("leo_valid-key"));
+        ApiKeyUsageService apiKeyUsageService = mock(ApiKeyUsageService.class);
+        ApiKeyAuthenticationFilter filter = new ApiKeyAuthenticationFilter(
+                apiKeyRepository(Optional.of(apiKey), new AtomicBoolean(true)),
+                userAccountRepository(Optional.of(activeUser()), new AtomicBoolean(false)),
+                objectMapper(),
+                new UserRoleBindingService(userRoleRepository(), roleSettingRepository(), new NoOpIdGenerator()),
+                apiKeyUsageService
+        );
+
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/mcp");
+        request.setContextPath("/api");
+        request.addHeader("Authorization", "Bearer leo_valid-key");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        AtomicBoolean chainInvoked = new AtomicBoolean(false);
+
+        filter.doFilter(request, response, (req, res) -> chainInvoked.set(true));
+
+        assertThat(chainInvoked.get()).isFalse();
+        assertThat(response.getStatus()).isEqualTo(403);
+        assertThat(response.getContentAsString()).contains("当前 API Key 未配置动作权限");
+        verifyNoInteractions(apiKeyUsageService);
     }
 
     @Test

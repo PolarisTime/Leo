@@ -7,6 +7,7 @@ import com.leo.erp.attachment.service.storage.AttachmentStorageResolver;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.MediaType;
 import org.springframework.core.io.ByteArrayResource;
@@ -30,7 +31,6 @@ import java.util.Set;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Service
@@ -48,6 +48,7 @@ public class AttachmentService {
     private final AttachmentStorageResolver storageResolver;
     private final ImageWatermarkService imageWatermarkService;
     private final PdfWatermarkService pdfWatermarkService;
+    private final AttachmentMetadataService metadataService;
 
     public AttachmentService(AttachmentFileRepository repository,
                              SnowflakeIdGenerator idGenerator,
@@ -57,6 +58,21 @@ public class AttachmentService {
                              AttachmentStorageResolver storageResolver,
                              ImageWatermarkService imageWatermarkService,
                              PdfWatermarkService pdfWatermarkService) {
+        this(repository, idGenerator, properties, filenameResolver, uploadRuleService, storageResolver,
+                imageWatermarkService, pdfWatermarkService,
+                new AttachmentMetadataService(repository, filenameResolver));
+    }
+
+    @Autowired
+    public AttachmentService(AttachmentFileRepository repository,
+                             SnowflakeIdGenerator idGenerator,
+                             AttachmentProperties properties,
+                             AttachmentFilenameResolver filenameResolver,
+                             UploadRuleService uploadRuleService,
+                             AttachmentStorageResolver storageResolver,
+                             ImageWatermarkService imageWatermarkService,
+                             PdfWatermarkService pdfWatermarkService,
+                             AttachmentMetadataService metadataService) {
         this.repository = repository;
         this.idGenerator = idGenerator;
         this.properties = properties;
@@ -65,6 +81,7 @@ public class AttachmentService {
         this.storageResolver = storageResolver;
         this.imageWatermarkService = imageWatermarkService;
         this.pdfWatermarkService = pdfWatermarkService;
+        this.metadataService = metadataService;
     }
 
     public AttachmentView upload(MultipartFile file, String sourceType) throws IOException {
@@ -81,21 +98,23 @@ public class AttachmentService {
         long attachmentId = idGenerator.nextId();
         String storedFileName = extractFileName(candidateFileName);
 
-        // Persist metadata first (inside transaction), then store the file externally
-        AttachmentFile saved = persistAttachmentMetadata(
-                attachmentId, storedFileName, originalFileName, file, normalizedSourceType);
-
         // Store file outside the DB transaction to avoid holding connections during I/O
-        String storagePath;
+        String storagePath = storageResolver.store(buildObjectKey(attachmentId, storedFileName), file);
+        AttachmentFile saved;
         try {
-            storagePath = storageResolver.store(buildObjectKey(attachmentId, storedFileName), file);
-        } catch (IOException ex) {
-            rollbackAttachmentMetadata(saved.getId());
+            saved = metadataService.saveUploadedFileMetadata(
+                    attachmentId,
+                    storedFileName,
+                    originalFileName,
+                    file.getContentType(),
+                    file.getSize(),
+                    normalizedSourceType,
+                    storagePath
+            );
+        } catch (RuntimeException | Error ex) {
+            cleanupStoredFileQuietly(storagePath);
             throw ex;
         }
-
-        updateStoragePath(saved.getId(), storagePath);
-        saved.setStoragePath(storagePath);
 
         AttachmentPresentation presentation = toPresentation(saved, moduleKey);
         return new AttachmentView(
@@ -113,35 +132,6 @@ public class AttachmentService {
                 presentation.previewUrl(),
                 presentation.downloadUrl()
         );
-    }
-
-    @Transactional
-    protected AttachmentFile persistAttachmentMetadata(
-            long attachmentId, String storedFileName, String originalFileName,
-            MultipartFile file, String normalizedSourceType) {
-        AttachmentFile entity = new AttachmentFile();
-        entity.setId(attachmentId);
-        entity.setFileName(storedFileName);
-        entity.setOriginalFileName(originalFileName);
-        entity.setFileExtension(filenameResolver.parseFilenameParts(storedFileName, file.getContentType()).extension());
-        entity.setContentType(file.getContentType());
-        entity.setFileSize(file.getSize());
-        entity.setAccessKey(generateAccessKey());
-        entity.setSourceType(normalizedSourceType);
-        return repository.save(entity);
-    }
-
-    @Transactional
-    protected void rollbackAttachmentMetadata(long attachmentId) {
-        repository.findById(attachmentId).ifPresent(repository::delete);
-    }
-
-    @Transactional
-    protected void updateStoragePath(long attachmentId, String storagePath) {
-        repository.findById(attachmentId).ifPresent(entity -> {
-            entity.setStoragePath(storagePath);
-            repository.save(entity);
-        });
     }
 
     @Transactional(readOnly = true)
@@ -450,11 +440,6 @@ public class AttachmentService {
                 entity.getAccessKey().getBytes(StandardCharsets.UTF_8),
                 accessKey.getBytes(StandardCharsets.UTF_8)
         );
-    }
-
-    private String generateAccessKey() {
-        return UUID.randomUUID().toString().replace("-", "")
-                + UUID.randomUUID().toString().replace("-", "");
     }
 
     private String urlEncode(String value) {
