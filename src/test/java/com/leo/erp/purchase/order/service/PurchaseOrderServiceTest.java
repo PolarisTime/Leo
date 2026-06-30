@@ -4,6 +4,7 @@ import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.TradeItemMaterialSupport;
+import com.leo.erp.common.support.TradeItemMaterialSupportTestDoubles;
 import com.leo.erp.common.support.TradeMaterialSnapshot;
 import com.leo.erp.common.support.WarehouseSelectionSupport;
 import com.leo.erp.master.supplier.domain.entity.Supplier;
@@ -1119,6 +1120,7 @@ class PurchaseOrderServiceTest {
                                          PurchaseOrderItemPieceWeightService purchaseOrderItemPieceWeightService,
                                          WorkflowTransitionGuard workflowTransitionGuard,
                                          JdbcTemplate jdbc) {
+        TradeItemMaterialSupportTestDoubles.stubMaterialCodeNormalization(tradeItemMaterialSupport);
         PurchaseOrderAvailabilityService availabilityService = new PurchaseOrderAvailabilityService(
                 purchaseInboundItemQueryService,
                 itemAllocationRepo,

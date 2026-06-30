@@ -6,6 +6,7 @@ import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.sales.order.service.SalesOrderCompletionSyncService;
 import com.leo.erp.sales.order.service.SalesOrderItemQueryService;
 import com.leo.erp.common.support.TradeItemMaterialSupport;
+import com.leo.erp.common.support.TradeItemMaterialSupportTestDoubles;
 import com.leo.erp.common.support.TradeMaterialSnapshot;
 import com.leo.erp.common.support.WarehouseSelectionSupport;
 import com.leo.erp.sales.order.domain.entity.SalesOrder;
@@ -1045,6 +1046,7 @@ class SalesOutboundServiceTest {
                                                SalesOrderItemQueryService salesOrderItemQueryService,
                                                PurchaseOrderItemPieceWeightService purchaseOrderItemPieceWeightService,
                                                JdbcTemplate jdbc) {
+        TradeItemMaterialSupportTestDoubles.stubMaterialCodeNormalization(materialSupport);
         SalesOutboundSourceService sourceService = new SalesOutboundSourceService(salesOrderItemQueryService, repository);
         return new SalesOutboundService(
                 repository,

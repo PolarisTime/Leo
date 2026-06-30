@@ -3,11 +3,12 @@ package com.leo.erp.purchase.inbound.service;
 import com.leo.erp.allocation.repository.ItemAllocationNativeRepository;
 import com.leo.erp.purchase.inbound.service.InboundItemMapper;
 
+import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.TradeItemMaterialSupport;
+import com.leo.erp.common.support.TradeItemMaterialSupportTestDoubles;
 import com.leo.erp.common.support.TradeMaterialSnapshot;
 import com.leo.erp.common.support.WarehouseSelectionSupport;
-import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.master.material.domain.entity.MaterialCategory;
 import com.leo.erp.master.material.repository.MaterialCategoryRepository;
 import com.leo.erp.purchase.inbound.domain.entity.PurchaseInbound;
@@ -790,6 +791,7 @@ class PurchaseInboundServiceTest {
                                            ItemAllocationNativeRepository itemAllocationRepo,
                                            InboundItemMapper inboundItemMapper,
                                            WorkflowTransitionGuard workflowTransitionGuard) {
+        TradeItemMaterialSupportTestDoubles.stubMaterialCodeNormalization(tradeItemMaterialSupport);
         return new PurchaseInboundService(
                 repository,
                 idGenerator,

@@ -6,6 +6,7 @@ import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.support.TradeItemMaterialSupport;
+import com.leo.erp.common.support.TradeItemMaterialSupportTestDoubles;
 import com.leo.erp.common.support.TradeMaterialSnapshot;
 import com.leo.erp.common.support.WarehouseSelectionSupport;
 import com.leo.erp.purchase.inbound.domain.entity.PurchaseInbound;
@@ -1441,6 +1442,7 @@ class SalesOrderServiceTest {
                                       WorkflowTransitionGuard workflowTransitionGuard,
                                       SalesOrderOutboundPricingSyncService outboundPricingSyncService,
                                       SalesOrderCompletionSyncService completionSyncService) {
+        TradeItemMaterialSupportTestDoubles.stubMaterialCodeNormalization(tradeItemMaterialSupport);
         SalesOrderPurchaseAllocationService purchaseAllocationService =
                 new SalesOrderPurchaseAllocationService(purchaseItemQueryAppService, purchaseItemPieceWeightAppService);
         SalesOrderAuditedPricingService auditedPricingService =

@@ -1,6 +1,7 @@
 package com.leo.erp.purchase.order.service;
 
 import com.leo.erp.common.support.TradeItemMaterialSupport;
+import com.leo.erp.common.support.TradeItemMaterialSupportTestDoubles;
 import com.leo.erp.common.support.TradeMaterialSnapshot;
 import com.leo.erp.common.support.WarehouseSelectionSupport;
 import com.leo.erp.purchase.inbound.service.PurchaseInboundItemQueryService;
@@ -18,7 +19,6 @@ import java.util.concurrent.atomic.AtomicLong;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -50,8 +50,7 @@ class PurchaseOrderApplyServiceTest {
                 "M1", new TradeMaterialSnapshot("M1", true),
                 "M2", new TradeMaterialSnapshot("M2", true)
         ));
-        when(materialSupport.normalizeMaterialCode(any(), anyInt())).thenAnswer(invocation ->
-                ((String) invocation.getArgument(0)).trim());
+        TradeItemMaterialSupportTestDoubles.stubMaterialCodeNormalization(materialSupport);
         when(warehouseSelectionSupport.normalizeWarehouseName("一号库", 1, true)).thenReturn("一号库");
         when(warehouseSelectionSupport.normalizeWarehouseName("二号库", 2, true)).thenReturn("二号库");
         when(materialSupport.normalizeBatchNo(any(), eq("B1"), eq(1), eq(false))).thenReturn("B1");
@@ -114,8 +113,7 @@ class PurchaseOrderApplyServiceTest {
                 "M1", new TradeMaterialSnapshot("M1", true),
                 "M2", new TradeMaterialSnapshot("M2", true)
         ));
-        when(materialSupport.normalizeMaterialCode(any(), anyInt())).thenAnswer(invocation ->
-                ((String) invocation.getArgument(0)).trim());
+        TradeItemMaterialSupportTestDoubles.stubMaterialCodeNormalization(materialSupport);
         when(warehouseSelectionSupport.normalizeWarehouseName("一号库", 1, true)).thenReturn("一号库");
         when(warehouseSelectionSupport.normalizeWarehouseName("二号库", 2, true)).thenReturn("二号库");
         when(materialSupport.normalizeBatchNo(any(), eq("B1"), eq(1), eq(false))).thenReturn("B1");
