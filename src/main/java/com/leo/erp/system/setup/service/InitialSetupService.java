@@ -171,7 +171,16 @@ public class InitialSetupService {
     }
 
     public boolean isSetupRequired() {
+        if (isOobeCompleted()) {
+            return false;
+        }
         return !isAdminConfigured() || !companySettingRepository.existsByDeletedFlagFalse();
+    }
+
+    private boolean isOobeCompleted() {
+        return noRuleRepository.findBySettingCodeAndDeletedFlagFalse(SystemSwitchService.OOBE_COMPLETED_SWITCH)
+                .map(setting -> StatusConstants.NORMAL.equals(setting.getStatus()))
+                .orElse(false);
     }
 
     private void assertOobeNotCompleted() {

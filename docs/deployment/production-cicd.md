@@ -149,7 +149,19 @@ sudo systemctl reload nginx
 6. 发布成功后检查登录、核心单据列表、关键报表。
 7. 如发现问题，使用回滚 workflow 回到上一版。
 
-数据库迁移遵循 forward-only 原则。后端启动会执行 Flyway，应用回滚不会自动反向回滚数据库结构；涉及破坏性 schema 变更时必须拆成“兼容发布 -> 数据迁移 -> 清理发布”多步。
+数据库迁移遵循 forward-only 原则。所有数据库结构、约束、索引、种子数据、数据修复和清理变更必须新增递增的 Flyway 脚本，禁止修改已经合入或已经在任一环境执行过的历史迁移。后端启动会执行 Flyway，应用回滚不会自动反向回滚数据库结构；涉及破坏性 schema 变更时必须拆成“兼容发布 -> 数据迁移 -> 清理发布”多步。
+
+## PostgreSQL 调优检查
+
+生产调优先执行只读检查脚本，确认扩展、参数、缓存命中率、死元组和表维护状态：
+
+```bash
+bash scripts/postgres-tuning-check.sh \
+  --env prod \
+  --env-file /instance/steelx/shared/steelx.env
+```
+
+脚本默认不修改数据库或系统配置。若仅需补齐 `pg_stat_statements` 扩展，可在确认后追加 `--apply-extension`；实例参数如 `track_io_timing`、`shared_buffers`、`effective_cache_size` 仍需数据库管理员按脚本输出的建议执行，并按参数要求 reload 或 restart PostgreSQL。
 
 ## 生产机 Hook
 

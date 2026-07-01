@@ -185,6 +185,36 @@ class InitialSetupServiceTest {
     }
 
     @Test
+    void shouldNotRequireSetupWhenOobeCompletedSwitchExists() {
+        var svc = new InitialSetupService(
+                userAccountRepository, userRoleRepository, userRoleBindingService,
+                roleSettingRepository, companySettingRepository, oobeCompletedNoRuleRepository(),
+                departmentRepository, passwordEncoder, new SnowflakeIdGenerator(1),
+                new ObjectMapper(), totpService, redisTemplate
+        );
+
+        var status = svc.status();
+
+        assertThat(status.setupRequired()).isFalse();
+        assertThat(status.adminConfigured()).isFalse();
+        assertThat(status.companyConfigured()).isFalse();
+    }
+
+    @Test
+    void shouldRejectSetupAdminTotpWhenOobeCompletedSwitchExists() {
+        var svc = new InitialSetupService(
+                userAccountRepository, userRoleRepository, userRoleBindingService,
+                roleSettingRepository, companySettingRepository, oobeCompletedNoRuleRepository(),
+                departmentRepository, passwordEncoder, new SnowflakeIdGenerator(1),
+                new ObjectMapper(), totpService, redisTemplate
+        );
+
+        assertThatThrownBy(() -> svc.setupAdminTotp(new InitialSetupTotpSetupRequest("admin")))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("系统已完成初始化");
+    }
+
+    @Test
     void shouldThrowException_whenOobeCompleted() {
         var repo = (CompanySettingRepository) Proxy.newProxyInstance(
                 CompanySettingRepository.class.getClassLoader(),
@@ -484,5 +514,30 @@ class InitialSetupServiceTest {
         when(valueOperations.get(anyString())).thenAnswer(invocation -> values.get(invocation.getArgument(0)));
         when(redis.delete(anyString())).thenAnswer(invocation -> values.remove(invocation.getArgument(0)) != null);
         return redis;
+    }
+
+    private NoRuleRepository oobeCompletedNoRuleRepository() {
+        return (NoRuleRepository) Proxy.newProxyInstance(
+                NoRuleRepository.class.getClassLoader(),
+                new Class[]{NoRuleRepository.class},
+                (proxy, method, args) -> switch (method.getName()) {
+                    case "findBySettingCodeAndDeletedFlagFalse" -> {
+                        if ("SYS_OOBE_COMPLETED".equals(args[0])) {
+                            var rule = new NoRule();
+                            rule.setId(1L);
+                            rule.setSettingCode("SYS_OOBE_COMPLETED");
+                            rule.setStatus("正常");
+                            rule.setSampleNo("COMPLETED");
+                            yield Optional.of(rule);
+                        }
+                        yield Optional.empty();
+                    }
+                    case "save" -> args[0];
+                    case "toString" -> "OobeCompletedNoRuleRepositoryStub";
+                    case "hashCode" -> System.identityHashCode(proxy);
+                    case "equals" -> proxy == args[0];
+                    default -> throw new UnsupportedOperationException(method.getName());
+                }
+        );
     }
 }
