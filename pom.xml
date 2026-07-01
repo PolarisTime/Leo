@@ -24,6 +24,7 @@
         <jjwt.version>0.12.7</jjwt.version>
         <flyway.version>11.20.3</flyway.version>
         <spring-ai.version>1.1.8</spring-ai.version>
+        <aws.sdk.version>2.46.19</aws.sdk.version>
         <maven.checkstyle.plugin.version>3.6.0</maven.checkstyle.plugin.version>
         <checkstyle.version>10.26.1</checkstyle.version>
         <spotbugs.maven.plugin.version>4.9.3.0</spotbugs.maven.plugin.version>
@@ -35,6 +36,13 @@
                 <groupId>org.springframework.ai</groupId>
                 <artifactId>spring-ai-bom</artifactId>
                 <version>${spring-ai.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <dependency>
+                <groupId>software.amazon.awssdk</groupId>
+                <artifactId>bom</artifactId>
+                <version>${aws.sdk.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
@@ -166,6 +174,16 @@
             <groupId>io.github.resilience4j</groupId>
             <artifactId>resilience4j-ratelimiter</artifactId>
             <version>2.3.0</version>
+        </dependency>
+
+        <!-- AWS SDK v2 S3-compatible object storage -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>s3</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>apache-client</artifactId>
         </dependency>
 
         <!-- Spring AI MCP Server -->

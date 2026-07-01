@@ -8,35 +8,38 @@ import org.springframework.core.io.InputStreamResource;
 import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Component;
 import org.springframework.web.multipart.MultipartFile;
+import software.amazon.awssdk.core.ResponseInputStream;
+import software.amazon.awssdk.core.sync.RequestBody;
+import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
+import software.amazon.awssdk.services.s3.model.GetObjectRequest;
+import software.amazon.awssdk.services.s3.model.GetObjectResponse;
+import software.amazon.awssdk.services.s3.model.NoSuchKeyException;
+import software.amazon.awssdk.services.s3.model.PutObjectRequest;
+import software.amazon.awssdk.services.s3.model.S3Exception;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.net.http.HttpRequest;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.charset.StandardCharsets;
 
 @Component
 public class S3CompatibleAttachmentStorage implements AttachmentStorage {
 
+    private static final int HTTP_NOT_FOUND = 404;
+
     private final AttachmentProperties properties;
-    private final S3RequestExecutor requestExecutor;
-    private final S3ChecksumUtil checksumUtil;
+    private final S3ClientProvider clientProvider;
     private final S3PathParser pathParser;
-    private final S3Signer signer;
 
     @Autowired
     public S3CompatibleAttachmentStorage(
             AttachmentProperties properties,
-            S3RequestExecutor requestExecutor,
-            S3ChecksumUtil checksumUtil,
-            S3PathParser pathParser,
-            S3Signer signer) {
+            S3ClientProvider clientProvider,
+            S3PathParser pathParser) {
         this.properties = properties;
-        this.requestExecutor = requestExecutor;
-        this.checksumUtil = checksumUtil;
+        this.clientProvider = clientProvider;
         this.pathParser = pathParser;
-        this.signer = signer;
     }
 
     @Override
@@ -51,22 +54,17 @@ public class S3CompatibleAttachmentStorage implements AttachmentStorage {
         try (InputStream in = file.getInputStream()) {
             Files.copy(in, tempFile, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
         }
-        String payloadHash;
-        try (InputStream in = Files.newInputStream(tempFile)) {
-            payloadHash = checksumUtil.hexSha256(in);
-        }
-        HttpRequest request = signer.signedRequest(
-                "PUT", objectKey, payloadHash, file.getContentType(), s3,
-                HttpRequest.BodyPublishers.ofFile(tempFile));
         try {
-            S3RequestExecutor.S3Response response = requestExecutor.execute(request);
-            if (response.statusCode() < 200 || response.statusCode() >= 300) {
-                throw new IOException("S3 上传失败: HTTP " + response.statusCode() + " " + new String(response.body(), StandardCharsets.UTF_8));
-            }
+            S3Client s3Client = clientProvider.getClient(s3);
+            PutObjectRequest request = PutObjectRequest.builder()
+                    .bucket(s3.getBucket())
+                    .key(objectKey)
+                    .contentType(file.getContentType())
+                    .build();
+            s3Client.putObject(request, RequestBody.fromFile(tempFile));
             return pathParser.buildStoragePath(s3.getBucket(), objectKey);
-        } catch (InterruptedException ex) {
-            Thread.currentThread().interrupt();
-            throw new IOException("S3 上传被中断", ex);
+        } catch (S3Exception ex) {
+            throw new IOException("S3 上传失败: " + describeS3Error(ex), ex);
         } finally {
             Files.deleteIfExists(tempFile);
         }
@@ -79,24 +77,20 @@ public class S3CompatibleAttachmentStorage implements AttachmentStorage {
         if (!parsed.bucket().equals(s3.getBucket())) {
             throw new BusinessException(ErrorCode.INTERNAL_ERROR, "当前 S3 配置与附件桶不一致");
         }
-        HttpRequest request = signer.signedRequest(
-                "GET", parsed.objectKey(), checksumUtil.emptyBodyHash(), null, s3,
-                HttpRequest.BodyPublishers.noBody());
         try {
-            S3RequestExecutor.S3StreamResponse response = requestExecutor.executeForStream(request);
-            if (response.statusCode() == 404) {
-                response.close();
+            S3Client s3Client = clientProvider.getClient(s3);
+            ResponseInputStream<GetObjectResponse> response = s3Client.getObject(GetObjectRequest.builder()
+                    .bucket(s3.getBucket())
+                    .key(parsed.objectKey())
+                    .build());
+            return new InputStreamResource(response);
+        } catch (NoSuchKeyException ex) {
+            throw new BusinessException(ErrorCode.NOT_FOUND, "附件文件不存在");
+        } catch (S3Exception ex) {
+            if (isNotFound(ex)) {
                 throw new BusinessException(ErrorCode.NOT_FOUND, "附件文件不存在");
             }
-            if (response.statusCode() < 200 || response.statusCode() >= 300) {
-                try (response; InputStream body = response.body()) {
-                    throw new IOException("S3 下载失败: HTTP " + response.statusCode() + " " + new String(body.readAllBytes(), StandardCharsets.UTF_8));
-                }
-            }
-            return new InputStreamResource(response.body());
-        } catch (InterruptedException ex) {
-            Thread.currentThread().interrupt();
-            throw new IOException("S3 下载被中断", ex);
+            throw new IOException("S3 下载失败: " + describeS3Error(ex), ex);
         }
     }
 
@@ -107,29 +101,40 @@ public class S3CompatibleAttachmentStorage implements AttachmentStorage {
         if (!parsed.bucket().equals(s3.getBucket())) {
             throw new BusinessException(ErrorCode.INTERNAL_ERROR, "当前 S3 配置与附件桶不一致");
         }
-        HttpRequest request = signer.signedRequest(
-                "DELETE", parsed.objectKey(), checksumUtil.emptyBodyHash(), null, s3,
-                HttpRequest.BodyPublishers.noBody());
         try {
-            S3RequestExecutor.S3Response response = requestExecutor.execute(request);
-            if (response.statusCode() == 404) {
-                return;
+            S3Client s3Client = clientProvider.getClient(s3);
+            s3Client.deleteObject(DeleteObjectRequest.builder()
+                    .bucket(s3.getBucket())
+                    .key(parsed.objectKey())
+                    .build());
+        } catch (NoSuchKeyException ex) {
+            // S3 删除保持幂等：对象不存在视为已删除。
+        } catch (S3Exception ex) {
+            if (!isNotFound(ex)) {
+                throw new IOException("S3 删除失败: " + describeS3Error(ex), ex);
             }
-            if (response.statusCode() < 200 || response.statusCode() >= 300) {
-                throw new IOException("S3 删除失败: HTTP " + response.statusCode() + " " + new String(response.body(), StandardCharsets.UTF_8));
-            }
-        } catch (InterruptedException ex) {
-            Thread.currentThread().interrupt();
-            throw new IOException("S3 删除被中断", ex);
         }
     }
 
     private AttachmentProperties.S3 requireS3Config() {
         AttachmentProperties.S3 s3 = properties.getStorage().getS3();
         if (pathParser.isBlank(s3.getEndpoint()) || pathParser.isBlank(s3.getBucket())
-                || pathParser.isBlank(s3.getAccessKey()) || pathParser.isBlank(s3.getSecretKey())) {
+                || pathParser.isBlank(s3.getRegion()) || pathParser.isBlank(s3.getAccessKey())
+                || pathParser.isBlank(s3.getSecretKey())) {
             throw new BusinessException(ErrorCode.INTERNAL_ERROR, "S3 附件存储配置不完整");
         }
         return s3;
+    }
+
+    private boolean isNotFound(S3Exception ex) {
+        return ex.statusCode() == HTTP_NOT_FOUND;
+    }
+
+    private String describeS3Error(S3Exception ex) {
+        String message = ex.awsErrorDetails() == null ? ex.getMessage() : ex.awsErrorDetails().errorMessage();
+        if (message == null || message.isBlank()) {
+            message = ex.getMessage();
+        }
+        return "HTTP " + ex.statusCode() + " " + message;
     }
 }

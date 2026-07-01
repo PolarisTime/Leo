@@ -1,83 +1,67 @@
 package com.leo.erp.attachment.service.storage;
 
 import com.leo.erp.attachment.config.AttachmentProperties;
+import com.leo.erp.common.error.BusinessException;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockMultipartFile;
+import software.amazon.awssdk.core.ResponseInputStream;
+import software.amazon.awssdk.core.sync.RequestBody;
+import software.amazon.awssdk.http.AbortableInputStream;
+import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
+import software.amazon.awssdk.services.s3.model.DeleteObjectResponse;
+import software.amazon.awssdk.services.s3.model.GetObjectRequest;
+import software.amazon.awssdk.services.s3.model.GetObjectResponse;
+import software.amazon.awssdk.services.s3.model.NoSuchKeyException;
+import software.amazon.awssdk.services.s3.model.PutObjectRequest;
+import software.amazon.awssdk.services.s3.model.PutObjectResponse;
 
 import java.io.ByteArrayInputStream;
-import java.net.http.HttpRequest;
 import java.nio.charset.StandardCharsets;
-import java.time.Clock;
-import java.time.Instant;
-import java.time.ZoneOffset;
-import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 class S3CompatibleAttachmentStorageTest {
 
-    private static S3ChecksumUtil checksumUtil = new S3ChecksumUtil();
-    private static S3PathParser pathParser = new S3PathParser();
-
-    private static S3CompatibleAttachmentStorage createStorage(AttachmentProperties properties, S3RequestExecutor executor, Clock clock) {
-        S3Signer signer = new S3Signer(checksumUtil, pathParser, clock);
-        return new S3CompatibleAttachmentStorage(properties, executor, checksumUtil, pathParser, signer);
-    }
-
     @Test
-    void shouldBuildSignedPutRequestForS3CompatibleEndpoint() throws Exception {
+    void shouldStoreObjectWithAwsSdkS3Client() throws Exception {
         AttachmentProperties properties = s3Properties();
-        AtomicReference<HttpRequest> captured = new AtomicReference<>();
-        S3RequestExecutor executor = new S3RequestExecutor() {
-            @Override
-            public S3Response execute(HttpRequest request) {
-                captured.set(request);
-                return new S3Response(200, new byte[0]);
-            }
-
-            @Override
-            public S3StreamResponse executeForStream(HttpRequest request) {
-                captured.set(request);
-                return new S3StreamResponse(200, new ByteArrayInputStream(new byte[0]));
-            }
-        };
-
-        S3CompatibleAttachmentStorage storage = createStorage(properties, executor,
-                Clock.fixed(Instant.parse("2026-04-24T12:30:45Z"), ZoneOffset.UTC));
+        S3Client s3Client = mock(S3Client.class);
+        when(s3Client.putObject(
+                org.mockito.ArgumentMatchers.<PutObjectRequest>any(),
+                org.mockito.ArgumentMatchers.<RequestBody>any()))
+                .thenReturn(PutObjectResponse.builder().build());
+        S3CompatibleAttachmentStorage storage = createStorage(properties, s3Client);
 
         String storagePath = storage.store(
                 "attachments/2026/04/1/test.pdf",
                 new MockMultipartFile("file", "test.pdf", "application/pdf", "hello".getBytes(StandardCharsets.UTF_8))
         );
 
-        HttpRequest request = captured.get();
         assertThat(storagePath).isEqualTo("s3:test-bucket/attachments/2026/04/1/test.pdf");
-        assertThat(request.uri().toString()).isEqualTo("http://127.0.0.1:9000/test-bucket/attachments/2026/04/1/test.pdf");
-        assertThat(request.headers().firstValue("Authorization")).hasValueSatisfying(value -> assertThat(value).startsWith("AWS4-HMAC-SHA256 "));
-        assertThat(request.headers().firstValue("x-amz-date")).hasValue("20260424T123045Z");
-        assertThat(request.headers().firstValue("Content-Type")).hasValue("application/pdf");
+        verify(s3Client).putObject(
+                org.mockito.ArgumentMatchers.<PutObjectRequest>argThat(request ->
+                        request.bucket().equals("test-bucket")
+                                && request.key().equals("attachments/2026/04/1/test.pdf")
+                                && request.contentType().equals("application/pdf")),
+                org.mockito.ArgumentMatchers.<RequestBody>any()
+        );
     }
 
     @Test
-    void shouldBuildSignedGetRequestForS3Download() throws Exception {
+    void shouldLoadObjectWithAwsSdkS3Client() throws Exception {
         AttachmentProperties properties = s3Properties();
-        AtomicReference<HttpRequest> captured = new AtomicReference<>();
-        S3RequestExecutor executor = new S3RequestExecutor() {
-            @Override
-            public S3Response execute(HttpRequest request) {
-                captured.set(request);
-                return new S3Response(200, "payload".getBytes(StandardCharsets.UTF_8));
-            }
-
-            @Override
-            public S3StreamResponse executeForStream(HttpRequest request) {
-                captured.set(request);
-                return new S3StreamResponse(200, new ByteArrayInputStream("payload".getBytes(StandardCharsets.UTF_8)));
-            }
-        };
-
-        S3CompatibleAttachmentStorage storage = createStorage(properties, executor,
-                Clock.fixed(Instant.parse("2026-04-24T12:30:45Z"), ZoneOffset.UTC));
+        S3Client s3Client = mock(S3Client.class);
+        ResponseInputStream<GetObjectResponse> response = new ResponseInputStream<>(
+                GetObjectResponse.builder().build(),
+                AbortableInputStream.create(new ByteArrayInputStream("payload".getBytes(StandardCharsets.UTF_8)))
+        );
+        when(s3Client.getObject(org.mockito.ArgumentMatchers.<GetObjectRequest>any())).thenReturn(response);
+        S3CompatibleAttachmentStorage storage = createStorage(properties, s3Client);
 
         String content = new String(
                 storage.load("s3:test-bucket/attachments/2026/04/1/test.pdf").getInputStream().readAllBytes(),
@@ -85,8 +69,52 @@ class S3CompatibleAttachmentStorageTest {
         );
 
         assertThat(content).isEqualTo("payload");
-        assertThat(captured.get().uri().toString()).isEqualTo("http://127.0.0.1:9000/test-bucket/attachments/2026/04/1/test.pdf");
-        assertThat(captured.get().method()).isEqualTo("GET");
+        verify(s3Client).getObject(org.mockito.ArgumentMatchers.<GetObjectRequest>argThat(request ->
+                request.bucket().equals("test-bucket")
+                        && request.key().equals("attachments/2026/04/1/test.pdf")
+        ));
+    }
+
+    @Test
+    void shouldConvertMissingS3ObjectToNotFoundBusinessException() {
+        AttachmentProperties properties = s3Properties();
+        S3Client s3Client = mock(S3Client.class);
+        when(s3Client.getObject(org.mockito.ArgumentMatchers.<GetObjectRequest>any())).thenThrow(
+                NoSuchKeyException.builder().statusCode(404).message("missing").build()
+        );
+        S3CompatibleAttachmentStorage storage = createStorage(properties, s3Client);
+
+        assertThatThrownBy(() -> storage.load("s3:test-bucket/attachments/missing.pdf"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("附件文件不存在");
+    }
+
+    @Test
+    void shouldDeleteObjectWithAwsSdkS3Client() throws Exception {
+        AttachmentProperties properties = s3Properties();
+        S3Client s3Client = mock(S3Client.class);
+        when(s3Client.deleteObject(org.mockito.ArgumentMatchers.<DeleteObjectRequest>any()))
+                .thenReturn(DeleteObjectResponse.builder().build());
+        S3CompatibleAttachmentStorage storage = createStorage(properties, s3Client);
+
+        storage.delete("s3:test-bucket/attachments/2026/04/1/test.pdf");
+
+        verify(s3Client).deleteObject(org.mockito.ArgumentMatchers.<DeleteObjectRequest>argThat(request ->
+                request.bucket().equals("test-bucket")
+                        && request.key().equals("attachments/2026/04/1/test.pdf")
+        ));
+    }
+
+    @Test
+    void shouldIgnoreMissingS3ObjectOnDelete() throws Exception {
+        AttachmentProperties properties = s3Properties();
+        S3Client s3Client = mock(S3Client.class);
+        when(s3Client.deleteObject(org.mockito.ArgumentMatchers.<DeleteObjectRequest>any())).thenThrow(
+                NoSuchKeyException.builder().statusCode(404).message("missing").build()
+        );
+        S3CompatibleAttachmentStorage storage = createStorage(properties, s3Client);
+
+        storage.delete("s3:test-bucket/attachments/missing.pdf");
     }
 
     private AttachmentProperties s3Properties() {
@@ -99,5 +127,11 @@ class S3CompatibleAttachmentStorageTest {
         properties.getStorage().getS3().setSecretKey("miniosecret");
         properties.getStorage().getS3().setPathStyleAccess(true);
         return properties;
+    }
+
+    private S3CompatibleAttachmentStorage createStorage(AttachmentProperties properties, S3Client s3Client) {
+        S3ClientProvider clientProvider = mock(S3ClientProvider.class);
+        when(clientProvider.getClient(properties.getStorage().getS3())).thenReturn(s3Client);
+        return new S3CompatibleAttachmentStorage(properties, clientProvider, new S3PathParser());
     }
 }
