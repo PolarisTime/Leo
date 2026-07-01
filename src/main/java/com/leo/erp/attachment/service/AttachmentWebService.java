@@ -2,6 +2,7 @@ package com.leo.erp.attachment.service;
 
 import com.leo.erp.attachment.mapper.AttachmentWebMapper;
 import com.leo.erp.attachment.web.dto.AttachmentBindingResponse;
+import com.leo.erp.attachment.web.dto.AttachmentBindingCountResponse;
 import com.leo.erp.attachment.web.dto.AttachmentDirectUploadCompleteRequest;
 import com.leo.erp.attachment.web.dto.AttachmentDirectUploadPrepareRequest;
 import com.leo.erp.attachment.web.dto.AttachmentDirectUploadPrepareResponse;
@@ -11,6 +12,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.Map;
 
 @Service
 public class AttachmentWebService {
@@ -59,5 +61,10 @@ public class AttachmentWebService {
     public AttachmentBindingResponse replace(String moduleKey, Long recordId, List<Long> attachmentIds) {
         List<AttachmentView> attachments = attachmentBindingService.replace(moduleKey, recordId, attachmentIds);
         return attachmentWebMapper.toBindingResponse(moduleKey, recordId, attachments);
+    }
+
+    public AttachmentBindingCountResponse counts(String moduleKey, List<Long> recordIds) {
+        Map<Long, Integer> counts = attachmentBindingService.countByRecordIds(moduleKey, recordIds);
+        return new AttachmentBindingCountResponse(moduleKey, counts);
     }
 }

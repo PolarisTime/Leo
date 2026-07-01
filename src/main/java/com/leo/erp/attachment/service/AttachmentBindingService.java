@@ -106,12 +106,7 @@ public class AttachmentBindingService {
     @Transactional(readOnly = true)
     public Map<Long, List<AttachmentView>> listByRecordIds(String moduleKey, List<Long> recordIds) {
         String normalizedModuleKey = normalizeModuleKey(moduleKey);
-        if (recordIds == null || recordIds.isEmpty()) {
-            return Map.of();
-        }
-        List<Long> normalizedRecordIds = new ArrayList<>(new LinkedHashSet<>(recordIds.stream()
-                .filter(id -> id != null && id > 0)
-                .toList()));
+        List<Long> normalizedRecordIds = normalizeRecordIds(recordIds);
         if (normalizedRecordIds.isEmpty()) {
             return Map.of();
         }
@@ -143,6 +138,27 @@ public class AttachmentBindingService {
         return result;
     }
 
+    @Transactional(readOnly = true)
+    public Map<Long, Integer> countByRecordIds(String moduleKey, List<Long> recordIds) {
+        String normalizedModuleKey = normalizeModuleKey(moduleKey);
+        List<Long> normalizedRecordIds = normalizeRecordIds(recordIds);
+        if (normalizedRecordIds.isEmpty()) {
+            return Map.of();
+        }
+
+        Map<Long, Integer> result = new LinkedHashMap<>();
+        for (Long recordId : normalizedRecordIds) {
+            result.put(recordId, 0);
+        }
+
+        List<AttachmentBinding> bindings = repository
+                .findByModuleKeyAndRecordIdInAndDeletedFlagFalseOrderByRecordIdAscSortOrderAscIdAsc(normalizedModuleKey, normalizedRecordIds);
+        for (AttachmentBinding binding : bindings) {
+            result.computeIfPresent(binding.getRecordId(), (key, count) -> count + 1);
+        }
+        return result;
+    }
+
     private String normalizeModuleKey(String moduleKey) {
         if (moduleKey == null || moduleKey.isBlank()) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "缺少模块标识");
@@ -159,6 +175,15 @@ public class AttachmentBindingService {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "缺少业务记录标识");
         }
         return recordId;
+    }
+
+    private List<Long> normalizeRecordIds(List<Long> recordIds) {
+        if (recordIds == null || recordIds.isEmpty()) {
+            return List.of();
+        }
+        return new ArrayList<>(new LinkedHashSet<>(recordIds.stream()
+                .filter(id -> id != null && id > 0)
+                .toList()));
     }
 
     private List<Long> normalizeAttachmentIds(List<Long> attachmentIds) {

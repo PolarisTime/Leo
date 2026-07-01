@@ -38,6 +38,8 @@ class AttachmentWebMapperImplTest {
         assertThat(response.previewType()).isEqualTo("pdf");
         assertThat(response.previewUrl()).isEqualTo("/api/attachment/1/preview");
         assertThat(response.downloadUrl()).isEqualTo("/api/attachment/1/download");
+        assertThat(response.storageType()).isEqualTo("s3");
+        assertThat(response.storageLabel()).isEqualTo("S3存储");
     }
 
     @Test
@@ -59,6 +61,8 @@ class AttachmentWebMapperImplTest {
         assertThat(response.previewType()).isEqualTo("pdf");
         assertThat(response.previewUrl()).isEqualTo("/api/attachment/1/preview");
         assertThat(response.downloadUrl()).isEqualTo("/api/attachment/1/download");
+        assertThat(response.storageType()).isEqualTo("s3");
+        assertThat(response.storageLabel()).isEqualTo("S3存储");
     }
 
     @Test
@@ -159,7 +163,9 @@ class AttachmentWebMapperImplTest {
                 true,
                 "pdf",
                 "/api/attachment/1/preview",
-                "/api/attachment/1/download"
+                "/api/attachment/1/download",
+                "s3",
+                "S3存储"
         );
     }
 }

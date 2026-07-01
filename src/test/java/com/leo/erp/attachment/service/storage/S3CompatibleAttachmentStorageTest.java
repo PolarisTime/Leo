@@ -12,6 +12,8 @@ import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
 import software.amazon.awssdk.services.s3.model.DeleteObjectResponse;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.GetObjectResponse;
+import software.amazon.awssdk.services.s3.model.HeadObjectRequest;
+import software.amazon.awssdk.services.s3.model.HeadObjectResponse;
 import software.amazon.awssdk.services.s3.model.NoSuchKeyException;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.services.s3.model.PutObjectResponse;
@@ -152,6 +154,34 @@ class S3CompatibleAttachmentStorageTest {
         verify(presigner).presignPutObject(org.mockito.ArgumentMatchers.<PutObjectPresignRequest>argThat(request ->
                 "ASNFZ4mrze8BI0VniavN7wEjRWeJq83vASNFZ4mrze8="
                         .equals(request.putObjectRequest().checksumSHA256())
+        ));
+    }
+
+    @Test
+    void shouldVerifyDirectUploadByReadingObjectWhenHeadChecksumIsMissing() {
+        AttachmentProperties properties = s3Properties();
+        S3Client s3Client = mock(S3Client.class);
+        when(s3Client.headObject(org.mockito.ArgumentMatchers.<HeadObjectRequest>any())).thenReturn(
+                HeadObjectResponse.builder()
+                        .contentLength(5L)
+                        .build()
+        );
+        ResponseInputStream<GetObjectResponse> response = new ResponseInputStream<>(
+                GetObjectResponse.builder().build(),
+                AbortableInputStream.create(new ByteArrayInputStream("hello".getBytes(StandardCharsets.UTF_8)))
+        );
+        when(s3Client.getObject(org.mockito.ArgumentMatchers.<GetObjectRequest>any())).thenReturn(response);
+        S3CompatibleAttachmentStorage storage = createStorage(properties, s3Client);
+
+        storage.verifyDirectUpload(
+                "s3:test-bucket/attachments/2026/04/1/test.txt",
+                5L,
+                "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
+        );
+
+        verify(s3Client).getObject(org.mockito.ArgumentMatchers.<GetObjectRequest>argThat(request ->
+                request.bucket().equals("test-bucket")
+                        && request.key().equals("attachments/2026/04/1/test.txt")
         ));
     }
 

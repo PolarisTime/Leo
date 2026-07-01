@@ -86,6 +86,8 @@ class AttachmentServiceTest {
         assertThat(store.get(9001L).getAccessKey()).isNotBlank();
         assertThat(response.previewUrl()).isEqualTo("/api/attachments/9001/preview?accessKey=" + store.get(9001L).getAccessKey());
         assertThat(response.downloadUrl()).isEqualTo("/api/attachments/9001/download?accessKey=" + store.get(9001L).getAccessKey());
+        assertThat(response.storageType()).isEqualTo("local");
+        assertThat(response.storageLabel()).isEqualTo("本机存储");
         assertThat(store.get(9001L).getOriginalFileName()).isEqualTo("contract.pdf");
         assertThat(store.get(9001L).getStoragePath()).isEqualTo(
                 "local:attachments/" + LocalDate.now().getYear() + "/" + String.format("%02d", LocalDate.now().getMonthValue()) + "/9001/renamed-contract.pdf"
@@ -322,6 +324,8 @@ class AttachmentServiceTest {
         assertThat(storage.verifiedSha256Hex).isEqualTo("abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789");
         assertThat(view.id()).isEqualTo(9500L);
         assertThat(view.fileName()).isEqualTo("complete.pdf");
+        assertThat(view.storageType()).isEqualTo("s3");
+        assertThat(view.storageLabel()).isEqualTo("S3存储");
         assertThat(store.get(9500L).getStoragePath()).isEqualTo(prepared.storagePath());
         assertThat(store.get(9500L).getFileSize()).isEqualTo(256L);
     }

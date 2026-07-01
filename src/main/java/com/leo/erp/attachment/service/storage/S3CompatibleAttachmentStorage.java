@@ -30,6 +30,8 @@ import java.io.InputStream;
 import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
 import java.util.Base64;
 import java.util.LinkedHashMap;
@@ -168,7 +170,10 @@ public class S3CompatibleAttachmentStorage implements DirectUploadAttachmentStor
             if (response.contentLength() != expectedFileSize) {
                 throw new BusinessException(ErrorCode.VALIDATION_ERROR, "直传文件大小不一致");
             }
-            if (!sha256Base64(expectedSha256Hex).equals(response.checksumSHA256())) {
+            String expectedChecksum = sha256Base64(expectedSha256Hex);
+            String headChecksum = normalizeChecksum(response.checksumSHA256());
+            if (!expectedChecksum.equals(headChecksum)
+                    && !expectedChecksum.equals(readObjectSha256Base64(s3Client, s3, parsed.objectKey()))) {
                 throw new BusinessException(ErrorCode.VALIDATION_ERROR, "直传文件校验值不一致");
             }
         } catch (NoSuchKeyException ex) {
@@ -177,6 +182,8 @@ public class S3CompatibleAttachmentStorage implements DirectUploadAttachmentStor
             if (isNotFound(ex)) {
                 throw new BusinessException(ErrorCode.NOT_FOUND, "直传文件不存在");
             }
+            throw new BusinessException(ErrorCode.INTERNAL_ERROR, "S3 直传校验失败");
+        } catch (IOException ex) {
             throw new BusinessException(ErrorCode.INTERNAL_ERROR, "S3 直传校验失败");
         }
     }
@@ -250,6 +257,34 @@ public class S3CompatibleAttachmentStorage implements DirectUploadAttachmentStor
 
     private String normalizeSha256Hex(String value) {
         return value == null ? "" : value.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private String normalizeChecksum(String value) {
+        return value == null ? "" : value.trim();
+    }
+
+    private String readObjectSha256Base64(S3Client s3Client, AttachmentProperties.S3 s3, String objectKey)
+            throws IOException {
+        MessageDigest digest = sha256Digest();
+        try (ResponseInputStream<GetObjectResponse> response = s3Client.getObject(GetObjectRequest.builder()
+                .bucket(s3.getBucket())
+                .key(objectKey)
+                .build())) {
+            byte[] buffer = new byte[8192];
+            int read;
+            while ((read = response.read(buffer)) != -1) {
+                digest.update(buffer, 0, read);
+            }
+        }
+        return Base64.getEncoder().encodeToString(digest.digest());
+    }
+
+    private MessageDigest sha256Digest() {
+        try {
+            return MessageDigest.getInstance("SHA-256");
+        } catch (NoSuchAlgorithmException ex) {
+            throw new BusinessException(ErrorCode.INTERNAL_ERROR, "S3 直传校验失败");
+        }
     }
 
     private String sha256Base64(String sha256Hex) {

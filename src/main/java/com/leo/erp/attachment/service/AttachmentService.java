@@ -46,6 +46,8 @@ public class AttachmentService {
     private static final String TEST_DIRECT_UPLOAD_TOKEN_SECRET =
             "leo-direct-upload-test-secret-must-be-long-enough";
     private static final String SHA256_HEX_PATTERN = "^[0-9a-fA-F]{64}$";
+    private static final String STORAGE_TYPE_LOCAL = "local";
+    private static final String STORAGE_TYPE_S3 = "s3";
 
     private final AttachmentFileRepository repository;
     private final SnowflakeIdGenerator idGenerator;
@@ -141,7 +143,9 @@ public class AttachmentService {
                 presentation.previewSupported(),
                 presentation.previewType(),
                 presentation.previewUrl(),
-                presentation.downloadUrl()
+                presentation.downloadUrl(),
+                presentation.storageType(),
+                presentation.storageLabel()
         );
     }
 
@@ -478,7 +482,9 @@ public class AttachmentService {
                 presentation.previewSupported(),
                 presentation.previewType(),
                 presentation.previewUrl(),
-                presentation.downloadUrl()
+                presentation.downloadUrl(),
+                presentation.storageType(),
+                presentation.storageLabel()
         );
     }
 
@@ -506,6 +512,7 @@ public class AttachmentService {
         String baseUrl = "/api/attachments/" + entity.getId();
         String accessKey = urlEncode(entity.getAccessKey());
         String moduleQuery = toModuleQuery(moduleKey);
+        String storageType = resolveStorageType(entity.getStoragePath());
         return new AttachmentPresentation(
                 entity.getId(),
                 entity.getOriginalFileName(),
@@ -519,8 +526,26 @@ public class AttachmentService {
                 previewSupported,
                 previewType,
                 previewSupported ? baseUrl + "/preview?accessKey=" + accessKey + moduleQuery : null,
-                baseUrl + "/download?accessKey=" + accessKey + moduleQuery
+                baseUrl + "/download?accessKey=" + accessKey + moduleQuery,
+                storageType,
+                resolveStorageLabel(storageType)
         );
+    }
+
+    private String resolveStorageType(String storagePath) {
+        if (storagePath == null || storagePath.isBlank()) {
+            return STORAGE_TYPE_LOCAL;
+        }
+        int colonIndex = storagePath.indexOf(':');
+        if (colonIndex <= 0) {
+            return STORAGE_TYPE_LOCAL;
+        }
+        String type = storagePath.substring(0, colonIndex).trim().toLowerCase(Locale.ROOT);
+        return STORAGE_TYPE_S3.equals(type) ? STORAGE_TYPE_S3 : STORAGE_TYPE_LOCAL;
+    }
+
+    private String resolveStorageLabel(String storageType) {
+        return STORAGE_TYPE_S3.equals(storageType) ? "S3存储" : "本机存储";
     }
 
     private String toModuleQuery(String moduleKey) {
@@ -591,7 +616,9 @@ public class AttachmentService {
             Boolean previewSupported,
             String previewType,
             String previewUrl,
-            String downloadUrl
+            String downloadUrl,
+            String storageType,
+            String storageLabel
     ) {
     }
 

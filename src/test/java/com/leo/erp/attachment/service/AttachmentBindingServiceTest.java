@@ -325,6 +325,32 @@ class AttachmentBindingServiceTest {
     }
 
     @Test
+    void shouldReturnAttachmentCounts_forCountByRecordIds() {
+        List<AttachmentBinding> bindings = List.of(
+                binding(1L, "sales-order", 1L, 10L, 1),
+                binding(2L, "sales-order", 1L, 11L, 2),
+                binding(3L, "sales-order", 2L, 12L, 1)
+        );
+
+        AttachmentBindingService service = new AttachmentBindingService(
+                bindingRepository(bindings, new AtomicReference<>(List.of()), new AtomicReference<>(List.of()), new AtomicReference<>(false)),
+                attachmentService(Map.of()),
+                enabledUploadRuleService(),
+                new FixedIdGenerator(),
+                new ModuleCatalog(),
+                attachmentFileRepository()
+        );
+
+        Map<Long, Integer> result = service.countByRecordIds("sales-order", List.of(1L, 2L, 3L, 1L));
+
+        assertThat(result).containsExactly(
+                Map.entry(1L, 2),
+                Map.entry(2L, 1),
+                Map.entry(3L, 0)
+        );
+    }
+
+    @Test
     void shouldRejectNullModuleKey() {
         AttachmentBindingService service = new AttachmentBindingService(
                 bindingRepository(List.of(), new AtomicReference<>(List.of()), new AtomicReference<>(List.of()), new AtomicReference<>(false)),

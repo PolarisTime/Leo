@@ -7,9 +7,11 @@ import com.leo.erp.attachment.service.AttachmentWebService;
 import com.leo.erp.attachment.web.dto.AttachmentDirectUploadCompleteRequest;
 import com.leo.erp.attachment.web.dto.AttachmentDirectUploadPrepareRequest;
 import com.leo.erp.attachment.web.dto.AttachmentDirectUploadPrepareResponse;
+import com.leo.erp.attachment.web.dto.AttachmentAccessUrlResponse;
 import com.leo.erp.attachment.web.dto.AttachmentUploadResponse;
 import com.leo.erp.common.api.ApiResponse;
 import com.leo.erp.security.permission.ModulePermissionGuard;
+import com.leo.erp.security.permission.RateLimit;
 import com.leo.erp.security.support.SecurityPrincipal;
 import com.leo.erp.system.norule.service.SystemSwitchService;
 import org.junit.jupiter.api.Test;
@@ -19,6 +21,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.mock.web.MockMultipartFile;
 
 import java.io.IOException;
+import java.lang.reflect.Method;
 import java.net.URI;
 import java.time.Instant;
 import java.util.Collection;
@@ -35,6 +38,9 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class AttachmentControllerTest {
+
+    private static final double ATTACHMENT_ACCESS_RATE = 2.0;
+    private static final int ATTACHMENT_ACCESS_CAPACITY = 20;
 
     private final AttachmentService attachmentService = mock(AttachmentService.class);
     private final AttachmentWebService attachmentWebService = mock(AttachmentWebService.class);
@@ -108,6 +114,46 @@ class AttachmentControllerTest {
     }
 
     @Test
+    void accessUrlReturnsPresignedUrlWhenAvailable() {
+        SecurityPrincipal principal = mock(SecurityPrincipal.class);
+        AttachmentService.PresignedAttachmentUrl presignedUrl =
+                new AttachmentService.PresignedAttachmentUrl(URI.create("https://download.example.com/test.pdf"), true);
+
+        when(modulePermissionGuard.requirePermission(principal, "sales-order", "read")).thenReturn("sales-order");
+        when(systemSwitchService.shouldWatermarkAttachments()).thenReturn(false);
+        when(attachmentService.createPresignedAccessUrl(1L, "access-key", true, false, "sales-order"))
+                .thenReturn(presignedUrl);
+
+        ApiResponse<AttachmentAccessUrlResponse> response =
+                controller.accessUrl(principal, 1L, "sales-order", "access-key", true);
+
+        assertThat(response.code()).isEqualTo(0);
+        assertThat(response.data().url()).isEqualTo("https://download.example.com/test.pdf");
+        assertThat(response.data().inline()).isTrue();
+        assertThat(response.data().presigned()).isTrue();
+        verify(attachmentRecordAccessService).assertAttachmentAccessible(principal, "sales-order", "read", 1L);
+    }
+
+    @Test
+    void accessUrlReturnsEmptyUrlWhenPresignedUrlUnavailable() {
+        SecurityPrincipal principal = mock(SecurityPrincipal.class);
+
+        when(modulePermissionGuard.requirePermission(principal, "sales-order", "read")).thenReturn("sales-order");
+        when(systemSwitchService.shouldWatermarkAttachments()).thenReturn(false);
+        when(attachmentService.createPresignedAccessUrl(1L, "access-key", false, false, "sales-order"))
+                .thenReturn(null);
+
+        ApiResponse<AttachmentAccessUrlResponse> response =
+                controller.accessUrl(principal, 1L, "sales-order", "access-key", false);
+
+        assertThat(response.code()).isEqualTo(0);
+        assertThat(response.data().url()).isNull();
+        assertThat(response.data().inline()).isFalse();
+        assertThat(response.data().presigned()).isFalse();
+        verify(attachmentRecordAccessService).assertAttachmentAccessible(principal, "sales-order", "read", 1L);
+    }
+
+    @Test
     void previewRedirectsToPresignedUrlWhenAvailable() {
         SecurityPrincipal principal = mock(SecurityPrincipal.class);
         AttachmentService.PresignedAttachmentUrl presignedUrl =
@@ -123,7 +169,7 @@ class AttachmentControllerTest {
 
         assertThat(response.getStatusCode().is3xxRedirection()).isTrue();
         assertThat(response.getHeaders().getLocation()).isEqualTo(presignedUrl.url());
-        verify(attachmentRecordAccessService).assertAttachmentAccessible(principal, "read", 1L);
+        verify(attachmentRecordAccessService).assertAttachmentAccessible(principal, "sales-order", "read", 1L);
     }
 
     @Test
@@ -142,7 +188,7 @@ class AttachmentControllerTest {
 
         assertThat(response.getStatusCode().is2xxSuccessful()).isTrue();
         assertThat(response.getBody()).isEqualTo(resource);
-        verify(attachmentRecordAccessService).assertAttachmentAccessible(principal, "read", 1L);
+        verify(attachmentRecordAccessService).assertAttachmentAccessible(principal, "sales-order", "read", 1L);
     }
 
     @Test
@@ -161,7 +207,40 @@ class AttachmentControllerTest {
 
         assertThat(response.getStatusCode().is2xxSuccessful()).isTrue();
         assertThat(response.getBody()).isEqualTo(resource);
-        verify(attachmentRecordAccessService).assertAttachmentAccessible(principal, "read", 1L);
+        verify(attachmentRecordAccessService).assertAttachmentAccessible(principal, "sales-order", "read", 1L);
+    }
+
+    @Test
+    void accessUrlPreviewAndDownloadHaveDedicatedRateLimit() throws NoSuchMethodException {
+        assertAttachmentAccessRateLimit(AttachmentController.class.getMethod(
+                "accessUrl",
+                SecurityPrincipal.class,
+                Long.class,
+                String.class,
+                String.class,
+                boolean.class
+        ));
+        assertAttachmentAccessRateLimit(AttachmentController.class.getMethod(
+                "download",
+                SecurityPrincipal.class,
+                Long.class,
+                String.class,
+                String.class
+        ));
+        assertAttachmentAccessRateLimit(AttachmentController.class.getMethod(
+                "preview",
+                SecurityPrincipal.class,
+                Long.class,
+                String.class,
+                String.class
+        ));
+    }
+
+    private void assertAttachmentAccessRateLimit(Method method) {
+        RateLimit rateLimit = method.getAnnotation(RateLimit.class);
+        assertThat(rateLimit).isNotNull();
+        assertThat(rateLimit.rate()).isEqualTo(ATTACHMENT_ACCESS_RATE);
+        assertThat(rateLimit.capacity()).isEqualTo(ATTACHMENT_ACCESS_CAPACITY);
     }
 
     @Test

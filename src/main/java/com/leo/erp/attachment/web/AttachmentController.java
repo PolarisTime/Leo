@@ -4,6 +4,7 @@ import com.leo.erp.attachment.service.AttachmentDownloadResource;
 import com.leo.erp.attachment.service.AttachmentRecordAccessService;
 import com.leo.erp.attachment.service.AttachmentService;
 import com.leo.erp.attachment.service.AttachmentWebService;
+import com.leo.erp.attachment.web.dto.AttachmentAccessUrlResponse;
 import com.leo.erp.attachment.web.dto.AttachmentDirectUploadCompleteRequest;
 import com.leo.erp.attachment.web.dto.AttachmentDirectUploadPrepareRequest;
 import com.leo.erp.attachment.web.dto.AttachmentDirectUploadPrepareResponse;
@@ -41,6 +42,8 @@ import java.io.IOException;
 @RequestMapping("/attachments")
 public class AttachmentController {
 
+    private static final double ATTACHMENT_ACCESS_RATE = 2.0;
+    private static final int ATTACHMENT_ACCESS_CAPACITY = 20;
     private final AttachmentService attachmentService;
     private final AttachmentWebService attachmentWebService;
     private final ModulePermissionGuard modulePermissionGuard;
@@ -106,17 +109,38 @@ public class AttachmentController {
                 attachmentWebService.completeDirectUpload(request, normalizedModuleKey, principal.id()));
     }
 
+    @GetMapping("/{id}/access-url")
+    @RateLimit(rate = ATTACHMENT_ACCESS_RATE, capacity = ATTACHMENT_ACCESS_CAPACITY)
+    @RequiresPermission(authenticatedOnly = true, allowApiKey = true)
+    public ApiResponse<AttachmentAccessUrlResponse> accessUrl(@AuthenticationPrincipal SecurityPrincipal principal,
+                                                              @PathVariable Long id,
+                                                              @RequestParam String moduleKey,
+                                                              @RequestParam String accessKey,
+                                                              @RequestParam(defaultValue = "false") boolean inline) {
+        String normalizedModuleKey = modulePermissionGuard.requirePermission(principal, moduleKey, "read");
+        attachmentRecordAccessService.assertAttachmentAccessible(principal, normalizedModuleKey, "read", id);
+        boolean watermark = systemSwitchService.shouldWatermarkAttachments() && !isAdmin(principal);
+        AttachmentService.PresignedAttachmentUrl presignedUrl =
+                attachmentService.createPresignedAccessUrl(id, accessKey, inline, watermark, normalizedModuleKey);
+        return ApiResponse.success(new AttachmentAccessUrlResponse(
+                presignedUrl == null ? null : presignedUrl.url().toString(),
+                inline,
+                presignedUrl != null
+        ));
+    }
+
     @GetMapping("/{id}/download")
+    @RateLimit(rate = ATTACHMENT_ACCESS_RATE, capacity = ATTACHMENT_ACCESS_CAPACITY)
     @RequiresPermission(authenticatedOnly = true, allowApiKey = true)
     public ResponseEntity<Resource> download(@AuthenticationPrincipal SecurityPrincipal principal,
                                              @PathVariable Long id,
                                              @RequestParam String moduleKey,
                                              @RequestParam String accessKey) {
-        modulePermissionGuard.requirePermission(principal, moduleKey, "read");
-        attachmentRecordAccessService.assertAttachmentAccessible(principal, "read", id);
+        String normalizedModuleKey = modulePermissionGuard.requirePermission(principal, moduleKey, "read");
+        attachmentRecordAccessService.assertAttachmentAccessible(principal, normalizedModuleKey, "read", id);
         boolean watermark = systemSwitchService.shouldWatermarkAttachments() && !isAdmin(principal);
         AttachmentService.PresignedAttachmentUrl presignedUrl =
-                attachmentService.createPresignedAccessUrl(id, accessKey, false, watermark, moduleKey);
+                attachmentService.createPresignedAccessUrl(id, accessKey, false, watermark, normalizedModuleKey);
         if (presignedUrl != null) {
             return ResponseEntity.status(HttpStatus.FOUND).location(presignedUrl.url()).build();
         }
@@ -125,16 +149,17 @@ public class AttachmentController {
     }
 
     @GetMapping("/{id}/preview")
+    @RateLimit(rate = ATTACHMENT_ACCESS_RATE, capacity = ATTACHMENT_ACCESS_CAPACITY)
     @RequiresPermission(authenticatedOnly = true, allowApiKey = true)
     public ResponseEntity<Resource> preview(@AuthenticationPrincipal SecurityPrincipal principal,
                                             @PathVariable Long id,
                                             @RequestParam String moduleKey,
                                             @RequestParam String accessKey) {
-        modulePermissionGuard.requirePermission(principal, moduleKey, "read");
-        attachmentRecordAccessService.assertAttachmentAccessible(principal, "read", id);
+        String normalizedModuleKey = modulePermissionGuard.requirePermission(principal, moduleKey, "read");
+        attachmentRecordAccessService.assertAttachmentAccessible(principal, normalizedModuleKey, "read", id);
         boolean watermark = systemSwitchService.shouldWatermarkAttachments() && !isAdmin(principal);
         AttachmentService.PresignedAttachmentUrl presignedUrl =
-                attachmentService.createPresignedAccessUrl(id, accessKey, true, watermark, moduleKey);
+                attachmentService.createPresignedAccessUrl(id, accessKey, true, watermark, normalizedModuleKey);
         if (presignedUrl != null) {
             return ResponseEntity.status(HttpStatus.FOUND).location(presignedUrl.url()).build();
         }
