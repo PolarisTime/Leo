@@ -11,6 +11,7 @@ import software.amazon.awssdk.http.apache.ApacheHttpClient;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.S3Configuration;
+import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 
 import java.net.URI;
 
@@ -18,6 +19,7 @@ import java.net.URI;
 public class S3ClientProvider implements DisposableBean {
 
     private volatile S3Client client;
+    private volatile S3Presigner presigner;
 
     public S3Client getClient(AttachmentProperties.S3 s3) {
         S3Client current = client;
@@ -32,11 +34,28 @@ public class S3ClientProvider implements DisposableBean {
         }
     }
 
+    public S3Presigner getPresigner(AttachmentProperties.S3 s3) {
+        S3Presigner current = presigner;
+        if (current != null) {
+            return current;
+        }
+        synchronized (this) {
+            if (presigner == null) {
+                presigner = buildPresigner(s3);
+            }
+            return presigner;
+        }
+    }
+
     @Override
     public void destroy() {
         S3Client current = client;
         if (current != null) {
             current.close();
+        }
+        S3Presigner currentPresigner = presigner;
+        if (currentPresigner != null) {
+            currentPresigner.close();
         }
     }
 
@@ -54,6 +73,20 @@ public class S3ClientProvider implements DisposableBean {
                 .serviceConfiguration(S3Configuration.builder()
                         .pathStyleAccessEnabled(s3.isPathStyleAccess())
                         .checksumValidationEnabled(false)
+                        .build())
+                .build();
+    }
+
+    private S3Presigner buildPresigner(AttachmentProperties.S3 s3) {
+        URI endpoint = parseEndpoint(s3.getEndpoint());
+        return S3Presigner.builder()
+                .credentialsProvider(StaticCredentialsProvider.create(
+                        AwsBasicCredentials.create(s3.getAccessKey(), s3.getSecretKey())
+                ))
+                .region(Region.of(s3.getRegion()))
+                .endpointOverride(endpoint)
+                .serviceConfiguration(S3Configuration.builder()
+                        .pathStyleAccessEnabled(s3.isPathStyleAccess())
                         .build())
                 .build();
     }

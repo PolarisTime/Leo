@@ -1,13 +1,19 @@
 package com.leo.erp.attachment.service;
 
 import com.leo.erp.attachment.mapper.AttachmentWebMapper;
+import com.leo.erp.attachment.web.dto.AttachmentDirectUploadCompleteRequest;
+import com.leo.erp.attachment.web.dto.AttachmentDirectUploadPrepareRequest;
+import com.leo.erp.attachment.web.dto.AttachmentDirectUploadPrepareResponse;
 import com.leo.erp.attachment.web.dto.AttachmentBindingResponse;
 import com.leo.erp.attachment.web.dto.AttachmentUploadResponse;
 import org.junit.jupiter.api.Test;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.net.URI;
 import java.io.IOException;
+import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -39,6 +45,62 @@ class AttachmentWebServiceTest {
 
         assertThat(result).isEqualTo(expected);
         verify(attachmentService).upload(file, "sales-order", "sales-order");
+    }
+
+    @Test
+    void prepareDirectUploadShouldDelegateAndMapResponse() {
+        AttachmentService attachmentService = mock(AttachmentService.class);
+        AttachmentBindingService bindingService = mock(AttachmentBindingService.class);
+        AttachmentWebMapper mapper = mock(AttachmentWebMapper.class);
+        AttachmentDirectUploadPrepareRequest request = new AttachmentDirectUploadPrepareRequest(
+                "test.pdf", "application/pdf", 1024L, "PAGE_UPLOAD",
+                "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef");
+        AttachmentService.DirectUploadPrepareResult prepareResult = new AttachmentService.DirectUploadPrepareResult(
+                1L,
+                "token",
+                "attachments/2026/07/1/test.pdf",
+                "s3:test-bucket/attachments/2026/07/1/test.pdf",
+                URI.create("https://upload.example.com/test.pdf"),
+                "PUT",
+                Map.of("Content-Type", "application/pdf"),
+                Instant.parse("2026-07-01T08:00:00Z")
+        );
+        AttachmentDirectUploadPrepareResponse expected = mock(AttachmentDirectUploadPrepareResponse.class);
+
+        when(attachmentService.prepareDirectUpload(
+                request.fileName(), request.contentType(), request.fileSize(), request.sourceType(), "sales-order",
+                request.sha256Hex(), 9L))
+                .thenReturn(prepareResult);
+        when(mapper.toDirectUploadPrepareResponse(prepareResult)).thenReturn(expected);
+
+        AttachmentWebService service = new AttachmentWebService(attachmentService, bindingService, mapper);
+
+        AttachmentDirectUploadPrepareResponse result = service.prepareDirectUpload(request, "sales-order", 9L);
+
+        assertThat(result).isEqualTo(expected);
+        verify(attachmentService).prepareDirectUpload(
+                "test.pdf", "application/pdf", 1024L, "PAGE_UPLOAD", "sales-order",
+                "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", 9L);
+    }
+
+    @Test
+    void completeDirectUploadShouldDelegateAndMapResponse() {
+        AttachmentService attachmentService = mock(AttachmentService.class);
+        AttachmentBindingService bindingService = mock(AttachmentBindingService.class);
+        AttachmentWebMapper mapper = mock(AttachmentWebMapper.class);
+        AttachmentDirectUploadCompleteRequest request = new AttachmentDirectUploadCompleteRequest(1L, "token");
+        AttachmentView view = mock(AttachmentView.class);
+        AttachmentUploadResponse expected = mock(AttachmentUploadResponse.class);
+
+        when(attachmentService.completeDirectUpload(1L, "token", "sales-order", 9L)).thenReturn(view);
+        when(mapper.toUploadResponse(view)).thenReturn(expected);
+
+        AttachmentWebService service = new AttachmentWebService(attachmentService, bindingService, mapper);
+
+        AttachmentUploadResponse result = service.completeDirectUpload(request, "sales-order", 9L);
+
+        assertThat(result).isEqualTo(expected);
+        verify(attachmentService).completeDirectUpload(1L, "token", "sales-order", 9L);
     }
 
     @Test

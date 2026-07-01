@@ -4,6 +4,9 @@ import com.leo.erp.attachment.service.AttachmentDownloadResource;
 import com.leo.erp.attachment.service.AttachmentRecordAccessService;
 import com.leo.erp.attachment.service.AttachmentService;
 import com.leo.erp.attachment.service.AttachmentWebService;
+import com.leo.erp.attachment.web.dto.AttachmentDirectUploadCompleteRequest;
+import com.leo.erp.attachment.web.dto.AttachmentDirectUploadPrepareRequest;
+import com.leo.erp.attachment.web.dto.AttachmentDirectUploadPrepareResponse;
 import com.leo.erp.attachment.web.dto.AttachmentUploadResponse;
 import com.leo.erp.common.api.ApiResponse;
 import com.leo.erp.security.permission.ModulePermissionGuard;
@@ -16,9 +19,12 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.mock.web.MockMultipartFile;
 
 import java.io.IOException;
+import java.net.URI;
+import java.time.Instant;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -52,6 +58,72 @@ class AttachmentControllerTest {
         assertThat(response.code()).isEqualTo(0);
         assertThat(response.message()).isEqualTo("上传成功");
         verify(attachmentWebService).upload(file, null, "sales-order");
+    }
+
+    @Test
+    void prepareDirectUploadReturnsPresignedUploadPayload() {
+        SecurityPrincipal principal = mock(SecurityPrincipal.class);
+        AttachmentDirectUploadPrepareRequest request = new AttachmentDirectUploadPrepareRequest(
+                "test.pdf", "application/pdf", 1024L, "PAGE_UPLOAD",
+                "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef");
+        AttachmentDirectUploadPrepareResponse expected = new AttachmentDirectUploadPrepareResponse(
+                1L,
+                "token",
+                "attachments/2026/07/1/test.pdf",
+                "s3:test-bucket/attachments/2026/07/1/test.pdf",
+                URI.create("https://upload.example.com/test.pdf"),
+                "PUT",
+                Map.of("Content-Type", "application/pdf"),
+                Instant.parse("2026-07-01T08:00:00Z")
+        );
+
+        when(modulePermissionGuard.requirePermission(principal, "sales-order", "update")).thenReturn("sales-order");
+        when(principal.id()).thenReturn(9L);
+        when(attachmentWebService.prepareDirectUpload(request, "sales-order", 9L)).thenReturn(expected);
+
+        ApiResponse<AttachmentDirectUploadPrepareResponse> response =
+                controller.prepareDirectUpload(principal, "sales-order", request);
+
+        assertThat(response.code()).isEqualTo(0);
+        assertThat(response.data()).isEqualTo(expected);
+        verify(attachmentWebService).prepareDirectUpload(request, "sales-order", 9L);
+    }
+
+    @Test
+    void completeDirectUploadReturnsUploadedAttachment() {
+        SecurityPrincipal principal = mock(SecurityPrincipal.class);
+        AttachmentDirectUploadCompleteRequest request = new AttachmentDirectUploadCompleteRequest(1L, "token");
+        AttachmentUploadResponse uploadResponse = mock(AttachmentUploadResponse.class);
+
+        when(modulePermissionGuard.requirePermission(principal, "sales-order", "update")).thenReturn("sales-order");
+        when(principal.id()).thenReturn(9L);
+        when(attachmentWebService.completeDirectUpload(request, "sales-order", 9L)).thenReturn(uploadResponse);
+
+        ApiResponse<AttachmentUploadResponse> response =
+                controller.completeDirectUpload(principal, "sales-order", request);
+
+        assertThat(response.code()).isEqualTo(0);
+        assertThat(response.data()).isEqualTo(uploadResponse);
+        verify(attachmentWebService).completeDirectUpload(request, "sales-order", 9L);
+    }
+
+    @Test
+    void previewRedirectsToPresignedUrlWhenAvailable() {
+        SecurityPrincipal principal = mock(SecurityPrincipal.class);
+        AttachmentService.PresignedAttachmentUrl presignedUrl =
+                new AttachmentService.PresignedAttachmentUrl(URI.create("https://download.example.com/test.pdf"), true);
+
+        when(modulePermissionGuard.requirePermission(principal, "sales-order", "read")).thenReturn("sales-order");
+        when(principal.getUsername()).thenReturn("user");
+        when(systemSwitchService.shouldWatermarkAttachments()).thenReturn(false);
+        when(attachmentService.createPresignedAccessUrl(1L, "access-key", true, false, "sales-order"))
+                .thenReturn(presignedUrl);
+
+        ResponseEntity<Resource> response = controller.preview(principal, 1L, "sales-order", "access-key");
+
+        assertThat(response.getStatusCode().is3xxRedirection()).isTrue();
+        assertThat(response.getHeaders().getLocation()).isEqualTo(presignedUrl.url());
+        verify(attachmentRecordAccessService).assertAttachmentAccessible(principal, "read", 1L);
     }
 
     @Test

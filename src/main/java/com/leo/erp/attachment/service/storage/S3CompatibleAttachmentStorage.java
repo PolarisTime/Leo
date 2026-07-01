@@ -14,20 +14,32 @@ import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.GetObjectResponse;
+import software.amazon.awssdk.services.s3.model.HeadObjectRequest;
+import software.amazon.awssdk.services.s3.model.HeadObjectResponse;
 import software.amazon.awssdk.services.s3.model.NoSuchKeyException;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.services.s3.model.S3Exception;
+import software.amazon.awssdk.services.s3.presigner.S3Presigner;
+import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest;
+import software.amazon.awssdk.services.s3.presigner.model.PresignedGetObjectRequest;
+import software.amazon.awssdk.services.s3.presigner.model.PresignedPutObjectRequest;
+import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignRequest;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
+import java.util.Base64;
+import java.util.LinkedHashMap;
+import java.util.Locale;
+import java.util.Map;
 
 @Component
-public class S3CompatibleAttachmentStorage implements AttachmentStorage {
+public class S3CompatibleAttachmentStorage implements DirectUploadAttachmentStorage {
 
     private static final int HTTP_NOT_FOUND = 404;
-
     private final AttachmentProperties properties;
     private final S3ClientProvider clientProvider;
     private final S3PathParser pathParser;
@@ -116,6 +128,80 @@ public class S3CompatibleAttachmentStorage implements AttachmentStorage {
         }
     }
 
+    @Override
+    public PresignedUpload prepareDirectUpload(String objectKey, String contentType, long fileSize, String sha256Hex) {
+        AttachmentProperties.S3 s3 = requireS3Config();
+        S3Presigner presigner = clientProvider.getPresigner(s3);
+        PutObjectRequest request = PutObjectRequest.builder()
+                .bucket(s3.getBucket())
+                .key(objectKey)
+                .contentType(contentType)
+                .contentLength(fileSize)
+                .checksumSHA256(sha256Base64(sha256Hex))
+                .build();
+        PresignedPutObjectRequest presigned = presigner.presignPutObject(PutObjectPresignRequest.builder()
+                .signatureDuration(uploadTtl(s3))
+                .putObjectRequest(request)
+                .build());
+        return new PresignedUpload(
+                URI.create(presigned.url().toString()),
+                presigned.httpRequest().method().name(),
+                signedHeaders(presigned.signedHeaders()),
+                pathParser.buildStoragePath(s3.getBucket(), objectKey),
+                presigned.expiration()
+        );
+    }
+
+    @Override
+    public void verifyDirectUpload(String storagePath, long expectedFileSize, String expectedSha256Hex) {
+        S3PathParser.ParsedStoragePath parsed = pathParser.parseStoragePath(storagePath);
+        AttachmentProperties.S3 s3 = requireS3Config();
+        if (!parsed.bucket().equals(s3.getBucket())) {
+            throw new BusinessException(ErrorCode.INTERNAL_ERROR, "当前 S3 配置与附件桶不一致");
+        }
+        try {
+            S3Client s3Client = clientProvider.getClient(s3);
+            HeadObjectResponse response = s3Client.headObject(HeadObjectRequest.builder()
+                    .bucket(s3.getBucket())
+                    .key(parsed.objectKey())
+                    .build());
+            if (response.contentLength() != expectedFileSize) {
+                throw new BusinessException(ErrorCode.VALIDATION_ERROR, "直传文件大小不一致");
+            }
+            if (!sha256Base64(expectedSha256Hex).equals(response.checksumSHA256())) {
+                throw new BusinessException(ErrorCode.VALIDATION_ERROR, "直传文件校验值不一致");
+            }
+        } catch (NoSuchKeyException ex) {
+            throw new BusinessException(ErrorCode.NOT_FOUND, "直传文件不存在");
+        } catch (S3Exception ex) {
+            if (isNotFound(ex)) {
+                throw new BusinessException(ErrorCode.NOT_FOUND, "直传文件不存在");
+            }
+            throw new BusinessException(ErrorCode.INTERNAL_ERROR, "S3 直传校验失败");
+        }
+    }
+
+    @Override
+    public URI createPresignedAccessUrl(String storagePath, String fileName, String contentType, boolean inline) {
+        S3PathParser.ParsedStoragePath parsed = pathParser.parseStoragePath(storagePath);
+        AttachmentProperties.S3 s3 = requireS3Config();
+        if (!parsed.bucket().equals(s3.getBucket())) {
+            throw new BusinessException(ErrorCode.INTERNAL_ERROR, "当前 S3 配置与附件桶不一致");
+        }
+        S3Presigner presigner = clientProvider.getPresigner(s3);
+        GetObjectRequest request = GetObjectRequest.builder()
+                .bucket(s3.getBucket())
+                .key(parsed.objectKey())
+                .responseContentType(contentType)
+                .responseContentDisposition(contentDisposition(inline, fileName))
+                .build();
+        PresignedGetObjectRequest presigned = presigner.presignGetObject(GetObjectPresignRequest.builder()
+                .signatureDuration(previewTtl(s3))
+                .getObjectRequest(request)
+                .build());
+        return URI.create(presigned.url().toString());
+    }
+
     private AttachmentProperties.S3 requireS3Config() {
         AttachmentProperties.S3 s3 = properties.getStorage().getS3();
         if (pathParser.isBlank(s3.getEndpoint()) || pathParser.isBlank(s3.getBucket())
@@ -130,11 +216,52 @@ public class S3CompatibleAttachmentStorage implements AttachmentStorage {
         return ex.statusCode() == HTTP_NOT_FOUND;
     }
 
+    private Duration uploadTtl(AttachmentProperties.S3 s3) {
+        return s3.getPresignUploadTtl() == null ? Duration.ofMinutes(10) : s3.getPresignUploadTtl();
+    }
+
+    private Duration previewTtl(AttachmentProperties.S3 s3) {
+        return s3.getPresignPreviewTtl() == null ? Duration.ofMinutes(5) : s3.getPresignPreviewTtl();
+    }
+
+    private Map<String, String> signedHeaders(Map<String, java.util.List<String>> headers) {
+        Map<String, String> result = new LinkedHashMap<>();
+        headers.forEach((key, values) -> {
+            if (values != null && !values.isEmpty()) {
+                result.put(key, String.join(",", values));
+            }
+        });
+        return result;
+    }
+
+    private String contentDisposition(boolean inline, String fileName) {
+        String disposition = inline ? "inline" : "attachment";
+        String safeFileName = fileName == null ? "download" : fileName.replace("\"", "");
+        return String.format(Locale.ROOT, "%s; filename=\"%s\"", disposition, safeFileName);
+    }
+
     private String describeS3Error(S3Exception ex) {
         String message = ex.awsErrorDetails() == null ? ex.getMessage() : ex.awsErrorDetails().errorMessage();
         if (message == null || message.isBlank()) {
             message = ex.getMessage();
         }
         return "HTTP " + ex.statusCode() + " " + message;
+    }
+
+    private String normalizeSha256Hex(String value) {
+        return value == null ? "" : value.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private String sha256Base64(String sha256Hex) {
+        String normalized = normalizeSha256Hex(sha256Hex);
+        if (normalized.length() != 64) {
+            return "";
+        }
+        byte[] bytes = new byte[32];
+        for (int i = 0; i < bytes.length; i++) {
+            int index = i * 2;
+            bytes[i] = (byte) Integer.parseInt(normalized.substring(index, index + 2), 16);
+        }
+        return Base64.getEncoder().encodeToString(bytes);
     }
 }

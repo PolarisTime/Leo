@@ -5,6 +5,7 @@ import com.leo.erp.attachment.domain.entity.AttachmentFile;
 import com.leo.erp.attachment.repository.AttachmentFileRepository;
 import com.leo.erp.attachment.repository.UploadRuleRepository;
 import com.leo.erp.attachment.service.storage.AttachmentStorageResolver;
+import com.leo.erp.attachment.service.storage.DirectUploadAttachmentStorage;
 import com.leo.erp.attachment.service.storage.LocalAttachmentStorage;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.support.ModuleCatalog;
@@ -15,8 +16,10 @@ import org.springframework.core.io.Resource;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.unit.DataSize;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.net.URI;
 import java.lang.reflect.Proxy;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
@@ -81,8 +84,8 @@ class AttachmentServiceTest {
         assertThat(response.id()).isEqualTo(9001L);
         assertThat(response.fileName()).isEqualTo("renamed-contract.pdf");
         assertThat(store.get(9001L).getAccessKey()).isNotBlank();
-        assertThat(response.previewUrl()).isEqualTo("/api/attachment/9001/preview?accessKey=" + store.get(9001L).getAccessKey());
-        assertThat(response.downloadUrl()).isEqualTo("/api/attachment/9001/download?accessKey=" + store.get(9001L).getAccessKey());
+        assertThat(response.previewUrl()).isEqualTo("/api/attachments/9001/preview?accessKey=" + store.get(9001L).getAccessKey());
+        assertThat(response.downloadUrl()).isEqualTo("/api/attachments/9001/download?accessKey=" + store.get(9001L).getAccessKey());
         assertThat(store.get(9001L).getOriginalFileName()).isEqualTo("contract.pdf");
         assertThat(store.get(9001L).getStoragePath()).isEqualTo(
                 "local:attachments/" + LocalDate.now().getYear() + "/" + String.format("%02d", LocalDate.now().getMonthValue()) + "/9001/renamed-contract.pdf"
@@ -107,9 +110,9 @@ class AttachmentServiceTest {
 
         AttachmentView response = service.upload(file, "PAGE_UPLOAD", "freight-statement");
 
-        assertThat(response.previewUrl()).isEqualTo("/api/attachment/9002/preview?accessKey="
+        assertThat(response.previewUrl()).isEqualTo("/api/attachments/9002/preview?accessKey="
                 + store.get(9002L).getAccessKey() + "&moduleKey=freight-statement");
-        assertThat(response.downloadUrl()).isEqualTo("/api/attachment/9002/download?accessKey="
+        assertThat(response.downloadUrl()).isEqualTo("/api/attachments/9002/download?accessKey="
                 + store.get(9002L).getAccessKey() + "&moduleKey=freight-statement");
     }
 
@@ -263,6 +266,138 @@ class AttachmentServiceTest {
                 .hasMessageContaining("附件不存在");
     }
 
+    @Test
+    void shouldPrepareDirectUploadWhenConfiguredStorageSupportsIt() {
+        Map<Long, AttachmentFile> store = new LinkedHashMap<>();
+        AttachmentProperties properties = localProperties();
+        properties.getStorage().setType("s3");
+        RecordingDirectStorage storage = new RecordingDirectStorage("s3:test-bucket/attachments/2026/07/9400/direct.pdf");
+
+        AttachmentService service = new AttachmentService(
+                attachmentRepository(store),
+                new FixedIdGenerator(9400L),
+                properties,
+                filenameResolver,
+                new StubUploadRuleService("direct.pdf"),
+                new AttachmentStorageResolver(List.of(storage), properties), null, null
+        );
+
+        AttachmentService.DirectUploadPrepareResult result = service.prepareDirectUpload(
+                "direct.pdf", "application/pdf", 128L, "PAGE_UPLOAD", "sales-order",
+                "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", 11L);
+
+        assertThat(result.attachmentId()).isEqualTo(9400L);
+        assertThat(result.objectKey()).contains("/9400/direct.pdf");
+        assertThat(result.storagePath()).isEqualTo("s3:test-bucket/attachments/2026/07/9400/direct.pdf");
+        assertThat(result.uploadUrl()).isEqualTo(URI.create("https://upload.example.com/direct.pdf"));
+        assertThat(result.method()).isEqualTo("PUT");
+        assertThat(result.headers()).containsEntry("Content-Type", "application/pdf");
+        assertThat(result.token()).isNotBlank();
+        assertThat(storage.preparedKey).contains("/9400/direct.pdf");
+    }
+
+    @Test
+    void shouldCompleteDirectUploadAndPersistMetadata() {
+        Map<Long, AttachmentFile> store = new LinkedHashMap<>();
+        AttachmentProperties properties = localProperties();
+        properties.getStorage().setType("s3");
+        RecordingDirectStorage storage = new RecordingDirectStorage("s3:test-bucket/attachments/2026/07/9500/complete.pdf");
+
+        AttachmentService service = new AttachmentService(
+                attachmentRepository(store),
+                new FixedIdGenerator(9500L),
+                properties,
+                filenameResolver,
+                new StubUploadRuleService("complete.pdf"),
+                new AttachmentStorageResolver(List.of(storage), properties), null, null
+        );
+
+        AttachmentService.DirectUploadPrepareResult prepared = service.prepareDirectUpload(
+                "complete.pdf", "application/pdf", 256L, "PAGE_UPLOAD", "sales-order",
+                "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789", 12L);
+        AttachmentView view = service.completeDirectUpload(
+                prepared.attachmentId(), prepared.token(), "sales-order", 12L);
+
+        assertThat(storage.verifiedStoragePath).isEqualTo(prepared.storagePath());
+        assertThat(storage.verifiedSha256Hex).isEqualTo("abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789");
+        assertThat(view.id()).isEqualTo(9500L);
+        assertThat(view.fileName()).isEqualTo("complete.pdf");
+        assertThat(store.get(9500L).getStoragePath()).isEqualTo(prepared.storagePath());
+        assertThat(store.get(9500L).getFileSize()).isEqualTo(256L);
+    }
+
+    @Test
+    void shouldRejectDirectUploadCompletionWhenUserDoesNotMatchToken() {
+        AttachmentProperties properties = localProperties();
+        properties.getStorage().setType("s3");
+        RecordingDirectStorage storage = new RecordingDirectStorage("s3:test-bucket/attachments/2026/07/9550/complete.pdf");
+
+        AttachmentService service = new AttachmentService(
+                attachmentRepository(new LinkedHashMap<>()),
+                new FixedIdGenerator(9550L),
+                properties,
+                filenameResolver,
+                new StubUploadRuleService("complete.pdf"),
+                new AttachmentStorageResolver(List.of(storage), properties), null, null
+        );
+        AttachmentService.DirectUploadPrepareResult prepared = service.prepareDirectUpload(
+                "complete.pdf", "application/pdf", 256L, "PAGE_UPLOAD", "sales-order",
+                "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789", 12L);
+
+        assertThatThrownBy(() -> service.completeDirectUpload(prepared.attachmentId(), prepared.token(), "sales-order", 13L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("直传凭证无效");
+        assertThat(storage.verifiedStoragePath).isNull();
+    }
+
+    @Test
+    void shouldRejectDirectUploadCompletionWhenTokenDoesNotMatch() {
+        AttachmentProperties properties = localProperties();
+        properties.getStorage().setType("s3");
+        RecordingDirectStorage storage = new RecordingDirectStorage("s3:test-bucket/attachments/2026/07/9600/complete.pdf");
+
+        AttachmentService service = new AttachmentService(
+                attachmentRepository(new LinkedHashMap<>()),
+                new FixedIdGenerator(9600L),
+                properties,
+                filenameResolver,
+                new StubUploadRuleService("complete.pdf"),
+                new AttachmentStorageResolver(List.of(storage), properties), null, null
+        );
+        AttachmentService.DirectUploadPrepareResult prepared = service.prepareDirectUpload(
+                "complete.pdf", "application/pdf", 256L, "PAGE_UPLOAD", "sales-order",
+                "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789", 12L);
+
+        assertThatThrownBy(() -> service.completeDirectUpload(prepared.attachmentId(), "bad-token", "sales-order", 12L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("直传凭证无效");
+    }
+
+    @Test
+    void shouldReturnPresignedPreviewUrlForS3AttachmentWhenWatermarkIsNotRequired() {
+        Map<Long, AttachmentFile> store = new LinkedHashMap<>();
+        AttachmentProperties properties = localProperties();
+        properties.getStorage().setType("s3");
+        RecordingDirectStorage storage = new RecordingDirectStorage("s3:test-bucket/attachments/2026/07/9700/preview.pdf");
+        AttachmentFile entity = attachmentEntity(9700L, "preview.pdf", "application/pdf", storage.storagePath);
+        store.put(9700L, entity);
+
+        AttachmentService service = new AttachmentService(
+                attachmentRepository(store),
+                new FixedIdGenerator(9700L),
+                properties,
+                filenameResolver,
+                new StubUploadRuleService("preview.pdf"),
+                new AttachmentStorageResolver(List.of(storage), properties), null, null
+        );
+
+        AttachmentService.PresignedAttachmentUrl url = service.createPresignedAccessUrl(
+                9700L, "access-key-9700", true, false, "sales-order");
+
+        assertThat(url.url()).isEqualTo(URI.create("https://download.example.com/preview.pdf"));
+        assertThat(url.inline()).isTrue();
+    }
+
     private AttachmentProperties localProperties() {
         AttachmentProperties properties = new AttachmentProperties();
         properties.setMaxFileSize(DataSize.ofMegabytes(5));
@@ -270,6 +405,20 @@ class AttachmentServiceTest {
         properties.getStorage().setKeyPrefix("attachments");
         properties.getStorage().getLocal().setPath(tempDir.toString());
         return properties;
+    }
+
+    private AttachmentFile attachmentEntity(Long id, String fileName, String contentType, String storagePath) {
+        AttachmentFile entity = new AttachmentFile();
+        entity.setId(id);
+        entity.setFileName(fileName);
+        entity.setOriginalFileName(fileName);
+        entity.setFileExtension(filenameResolver.parseFilenameParts(fileName, contentType).extension());
+        entity.setContentType(contentType);
+        entity.setFileSize(7L);
+        entity.setStoragePath(storagePath);
+        entity.setAccessKey("access-key-" + id);
+        entity.setSourceType("PAGE_UPLOAD");
+        return entity;
     }
 
     private AttachmentFileRepository attachmentRepository(Map<Long, AttachmentFile> store) {
@@ -350,6 +499,60 @@ class AttachmentServiceTest {
                         default -> throw new UnsupportedOperationException(method.getName());
                     }
             );
+        }
+    }
+
+    private static final class RecordingDirectStorage implements DirectUploadAttachmentStorage {
+
+        private final String storagePath;
+        private String preparedKey;
+        private String verifiedStoragePath;
+        private String verifiedSha256Hex;
+
+        private RecordingDirectStorage(String storagePath) {
+            this.storagePath = storagePath;
+        }
+
+        @Override
+        public String type() {
+            return "s3";
+        }
+
+        @Override
+        public String store(String objectKey, MultipartFile file) {
+            throw new UnsupportedOperationException("direct upload test storage");
+        }
+
+        @Override
+        public Resource load(String storagePath) {
+            throw new UnsupportedOperationException("direct upload test storage");
+        }
+
+        @Override
+        public void delete(String storagePath) {
+        }
+
+        @Override
+        public PresignedUpload prepareDirectUpload(String objectKey, String contentType, long fileSize, String sha256Hex) {
+            this.preparedKey = objectKey;
+            return new PresignedUpload(
+                    URI.create("https://upload.example.com/direct.pdf"),
+                    "PUT",
+                    Map.of("Content-Type", contentType, "x-amz-checksum-sha256", "ASNFZ4mrze8BI0VniavN7wEjRWeJq83vASNFZ4mrze8="),
+                    storagePath,
+                    java.time.Instant.now().plusSeconds(600)
+            );
+        }
+
+        @Override
+        public void verifyDirectUpload(String storagePath, long expectedFileSize, String expectedSha256Hex) {
+            this.verifiedStoragePath = storagePath;
+            this.verifiedSha256Hex = expectedSha256Hex;
+        }
+
+        @Override
+        public URI createPresignedAccessUrl(String storagePath, String fileName, String contentType, boolean inline) {
+            return URI.create("https://download.example.com/" + fileName);
         }
     }
 }

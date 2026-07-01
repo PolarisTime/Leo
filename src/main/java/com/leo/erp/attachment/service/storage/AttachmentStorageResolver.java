@@ -8,6 +8,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.net.URI;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
@@ -31,6 +32,23 @@ public class AttachmentStorageResolver {
         return getConfiguredStorage().store(objectKey, file);
     }
 
+    public DirectUploadAttachmentStorage.PresignedUpload prepareDirectUpload(
+            String objectKey, String contentType, long fileSize, String sha256Hex) {
+        return getConfiguredDirectUploadStorage().prepareDirectUpload(objectKey, contentType, fileSize, sha256Hex);
+    }
+
+    public void verifyDirectUpload(String storagePath, long expectedFileSize, String expectedSha256Hex) {
+        resolveDirectUploadByStoragePath(storagePath).verifyDirectUpload(storagePath, expectedFileSize, expectedSha256Hex);
+    }
+
+    public URI createPresignedAccessUrl(String storagePath, String fileName, String contentType, boolean inline) {
+        AttachmentStorage storage = resolveByStoragePath(storagePath);
+        if (storage instanceof DirectUploadAttachmentStorage directStorage) {
+            return directStorage.createPresignedAccessUrl(storagePath, fileName, contentType, inline);
+        }
+        return null;
+    }
+
     public Resource load(String storagePath) throws IOException {
         return resolveByStoragePath(storagePath).load(storagePath);
     }
@@ -46,6 +64,22 @@ public class AttachmentStorageResolver {
             throw new BusinessException(ErrorCode.INTERNAL_ERROR, "未配置可用的附件存储后端: " + configuredType);
         }
         return storage;
+    }
+
+    private DirectUploadAttachmentStorage getConfiguredDirectUploadStorage() {
+        AttachmentStorage storage = getConfiguredStorage();
+        if (storage instanceof DirectUploadAttachmentStorage directStorage) {
+            return directStorage;
+        }
+        throw new BusinessException(ErrorCode.VALIDATION_ERROR, "当前附件存储不支持直传");
+    }
+
+    private DirectUploadAttachmentStorage resolveDirectUploadByStoragePath(String storagePath) {
+        AttachmentStorage storage = resolveByStoragePath(storagePath);
+        if (storage instanceof DirectUploadAttachmentStorage directStorage) {
+            return directStorage;
+        }
+        throw new BusinessException(ErrorCode.VALIDATION_ERROR, "当前附件存储不支持直传");
     }
 
     private AttachmentStorage resolveByStoragePath(String storagePath) {

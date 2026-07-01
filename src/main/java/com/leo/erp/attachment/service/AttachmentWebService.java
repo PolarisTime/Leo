@@ -2,6 +2,9 @@ package com.leo.erp.attachment.service;
 
 import com.leo.erp.attachment.mapper.AttachmentWebMapper;
 import com.leo.erp.attachment.web.dto.AttachmentBindingResponse;
+import com.leo.erp.attachment.web.dto.AttachmentDirectUploadCompleteRequest;
+import com.leo.erp.attachment.web.dto.AttachmentDirectUploadPrepareRequest;
+import com.leo.erp.attachment.web.dto.AttachmentDirectUploadPrepareResponse;
 import com.leo.erp.attachment.web.dto.AttachmentUploadResponse;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
@@ -26,6 +29,26 @@ public class AttachmentWebService {
 
     public AttachmentUploadResponse upload(MultipartFile file, String sourceType, String moduleKey) throws IOException {
         return attachmentWebMapper.toUploadResponse(attachmentService.upload(file, sourceType, moduleKey));
+    }
+
+    public AttachmentDirectUploadPrepareResponse prepareDirectUpload(
+            AttachmentDirectUploadPrepareRequest request, String moduleKey, Long ownerUserId) {
+        AttachmentService.DirectUploadPrepareResult result = attachmentService.prepareDirectUpload(
+                request.fileName(),
+                request.contentType(),
+                request.fileSize(),
+                request.sourceType(),
+                moduleKey,
+                request.sha256Hex(),
+                ownerUserId
+        );
+        return attachmentWebMapper.toDirectUploadPrepareResponse(result);
+    }
+
+    public AttachmentUploadResponse completeDirectUpload(
+            AttachmentDirectUploadCompleteRequest request, String moduleKey, Long ownerUserId) {
+        return attachmentWebMapper.toUploadResponse(
+                attachmentService.completeDirectUpload(request.attachmentId(), request.token(), moduleKey, ownerUserId));
     }
 
     public AttachmentBindingResponse detail(String moduleKey, Long recordId) {

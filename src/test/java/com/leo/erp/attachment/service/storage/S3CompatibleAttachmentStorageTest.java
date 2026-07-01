@@ -15,8 +15,12 @@ import software.amazon.awssdk.services.s3.model.GetObjectResponse;
 import software.amazon.awssdk.services.s3.model.NoSuchKeyException;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.services.s3.model.PutObjectResponse;
+import software.amazon.awssdk.services.s3.presigner.S3Presigner;
+import software.amazon.awssdk.services.s3.presigner.model.PresignedPutObjectRequest;
+import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignRequest;
 
 import java.io.ByteArrayInputStream;
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -115,6 +119,40 @@ class S3CompatibleAttachmentStorageTest {
         S3CompatibleAttachmentStorage storage = createStorage(properties, s3Client);
 
         storage.delete("s3:test-bucket/attachments/missing.pdf");
+    }
+
+    @Test
+    void shouldSignDirectUploadWithSha256Checksum() throws Exception {
+        AttachmentProperties properties = s3Properties();
+        S3ClientProvider clientProvider = mock(S3ClientProvider.class);
+        S3Presigner presigner = mock(S3Presigner.class);
+        when(clientProvider.getPresigner(properties.getStorage().getS3())).thenReturn(presigner);
+        PresignedPutObjectRequest presigned = mock(PresignedPutObjectRequest.class);
+        when(presigned.url()).thenReturn(URI.create("https://upload.example.com/test.pdf").toURL());
+        when(presigned.httpRequest()).thenReturn(
+                software.amazon.awssdk.http.SdkHttpFullRequest.builder()
+                        .method(software.amazon.awssdk.http.SdkHttpMethod.PUT)
+                        .uri(URI.create("https://upload.example.com/test.pdf"))
+                        .putHeader("x-amz-checksum-sha256", "ASNFZ4mrze8BI0VniavN7wEjRWeJq83vASNFZ4mrze8=")
+                        .build()
+        );
+        when(presigned.expiration()).thenReturn(java.time.Instant.parse("2026-07-01T08:00:00Z"));
+        when(presigner.presignPutObject(org.mockito.ArgumentMatchers.<PutObjectPresignRequest>any()))
+                .thenReturn(presigned);
+        S3CompatibleAttachmentStorage storage = new S3CompatibleAttachmentStorage(
+                properties, clientProvider, new S3PathParser());
+
+        storage.prepareDirectUpload(
+                "attachments/2026/04/1/test.pdf",
+                "application/pdf",
+                128L,
+                "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+        );
+
+        verify(presigner).presignPutObject(org.mockito.ArgumentMatchers.<PutObjectPresignRequest>argThat(request ->
+                "ASNFZ4mrze8BI0VniavN7wEjRWeJq83vASNFZ4mrze8="
+                        .equals(request.putObjectRequest().checksumSHA256())
+        ));
     }
 
     private AttachmentProperties s3Properties() {

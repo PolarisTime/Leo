@@ -3,6 +3,8 @@ package com.leo.erp.attachment.service;
 import com.leo.erp.attachment.config.AttachmentProperties;
 import com.leo.erp.attachment.domain.entity.AttachmentFile;
 import com.leo.erp.attachment.repository.AttachmentFileRepository;
+import com.leo.erp.attachment.service.AttachmentDirectUploadTokenService.DirectUploadTokenPayload;
+import com.leo.erp.attachment.service.storage.DirectUploadAttachmentStorage;
 import com.leo.erp.attachment.service.storage.AttachmentStorageResolver;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
@@ -19,11 +21,13 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.net.URI;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.Locale;
@@ -39,6 +43,9 @@ public class AttachmentService {
     private static final Logger log = LoggerFactory.getLogger(AttachmentService.class);
     private static final String SOURCE_PAGE_UPLOAD = "PAGE_UPLOAD";
     private static final String SOURCE_CLIPBOARD = "CLIPBOARD_PASTE";
+    private static final String TEST_DIRECT_UPLOAD_TOKEN_SECRET =
+            "leo-direct-upload-test-secret-must-be-long-enough";
+    private static final String SHA256_HEX_PATTERN = "^[0-9a-fA-F]{64}$";
 
     private final AttachmentFileRepository repository;
     private final SnowflakeIdGenerator idGenerator;
@@ -49,6 +56,7 @@ public class AttachmentService {
     private final ImageWatermarkService imageWatermarkService;
     private final PdfWatermarkService pdfWatermarkService;
     private final AttachmentMetadataService metadataService;
+    private final AttachmentDirectUploadTokenService directUploadTokenService;
 
     public AttachmentService(AttachmentFileRepository repository,
                              SnowflakeIdGenerator idGenerator,
@@ -60,7 +68,8 @@ public class AttachmentService {
                              PdfWatermarkService pdfWatermarkService) {
         this(repository, idGenerator, properties, filenameResolver, uploadRuleService, storageResolver,
                 imageWatermarkService, pdfWatermarkService,
-                new AttachmentMetadataService(repository, filenameResolver));
+                new AttachmentMetadataService(repository, filenameResolver),
+                new AttachmentDirectUploadTokenService(TEST_DIRECT_UPLOAD_TOKEN_SECRET));
     }
 
     @Autowired
@@ -72,7 +81,8 @@ public class AttachmentService {
                              AttachmentStorageResolver storageResolver,
                              ImageWatermarkService imageWatermarkService,
                              PdfWatermarkService pdfWatermarkService,
-                             AttachmentMetadataService metadataService) {
+                             AttachmentMetadataService metadataService,
+                             AttachmentDirectUploadTokenService directUploadTokenService) {
         this.repository = repository;
         this.idGenerator = idGenerator;
         this.properties = properties;
@@ -82,6 +92,7 @@ public class AttachmentService {
         this.imageWatermarkService = imageWatermarkService;
         this.pdfWatermarkService = pdfWatermarkService;
         this.metadataService = metadataService;
+        this.directUploadTokenService = directUploadTokenService;
     }
 
     public AttachmentView upload(MultipartFile file, String sourceType) throws IOException {
@@ -132,6 +143,75 @@ public class AttachmentService {
                 presentation.previewUrl(),
                 presentation.downloadUrl()
         );
+    }
+
+    public DirectUploadPrepareResult prepareDirectUpload(
+            String fileName,
+            String contentType,
+            long fileSize,
+            String sourceType,
+            String moduleKey,
+            String sha256Hex,
+            Long ownerUserId) {
+        requirePageUploadEnabled(moduleKey);
+        validateUploadMetadata(fileName, fileSize);
+        String normalizedSha256Hex = normalizeSha256Hex(sha256Hex);
+        Long normalizedOwnerUserId = normalizeOwnerUserId(ownerUserId);
+
+        String normalizedSourceType = normalizeSourceType(sourceType);
+        String originalFileName = normalizeOriginalFileName(fileName, contentType, normalizedSourceType);
+        String candidateFileName = uploadRuleService.buildPageUploadFileName(moduleKey, originalFileName, contentType);
+        long attachmentId = idGenerator.nextId();
+        String storedFileName = extractFileName(candidateFileName);
+        String objectKey = buildObjectKey(attachmentId, storedFileName);
+        DirectUploadAttachmentStorage.PresignedUpload presigned =
+                storageResolver.prepareDirectUpload(objectKey, contentType, fileSize, normalizedSha256Hex);
+        DirectUploadTokenPayload payload = new DirectUploadTokenPayload(
+                attachmentId,
+                objectKey,
+                presigned.storagePath(),
+                storedFileName,
+                originalFileName,
+                contentType,
+                fileSize,
+                normalizedSourceType,
+                normalizeModuleKey(moduleKey),
+                normalizedOwnerUserId,
+                normalizedSha256Hex,
+                presigned.expiresAt().getEpochSecond()
+        );
+        return new DirectUploadPrepareResult(
+                attachmentId,
+                directUploadTokenService.issue(payload),
+                objectKey,
+                presigned.storagePath(),
+                presigned.uploadUrl(),
+                presigned.method(),
+                presigned.headers(),
+                presigned.expiresAt()
+        );
+    }
+
+    public AttachmentView completeDirectUpload(Long attachmentId, String token, String moduleKey, Long ownerUserId) {
+        Long normalizedOwnerUserId = normalizeOwnerUserId(ownerUserId);
+        DirectUploadTokenPayload payload = directUploadTokenService.verify(token, attachmentId, moduleKey, normalizedOwnerUserId);
+        storageResolver.verifyDirectUpload(payload.storagePath(), payload.fileSize(), payload.sha256Hex());
+        AttachmentFile saved;
+        try {
+            saved = metadataService.saveUploadedFileMetadata(
+                    payload.attachmentId(),
+                    payload.storedFileName(),
+                    payload.originalFileName(),
+                    payload.contentType(),
+                    payload.fileSize(),
+                    payload.sourceType(),
+                    payload.storagePath()
+            );
+        } catch (RuntimeException | Error ex) {
+            cleanupStoredFileQuietly(payload.storagePath());
+            throw ex;
+        }
+        return toResponse(saved, moduleKey);
     }
 
     @Transactional(readOnly = true)
@@ -250,6 +330,27 @@ public class AttachmentService {
         return new AttachmentDownloadResource(resource, mediaType, contentDisposition.toString());
     }
 
+    @Transactional(readOnly = true)
+    public PresignedAttachmentUrl createPresignedAccessUrl(
+            Long id, String accessKey, boolean inline, boolean watermark, String moduleKey) {
+        if (watermark) {
+            return null;
+        }
+        AttachmentFile entity = getAttachment(id, accessKey);
+        String previewType = detectPreviewType(entity);
+        if (inline && "none".equals(previewType)) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "当前附件不支持预览");
+        }
+        String responseContentType = inline ? resolveResponseContentType(entity, previewType) : entity.getContentType();
+        URI url = storageResolver.createPresignedAccessUrl(
+                entity.getStoragePath(),
+                entity.getFileName(),
+                responseContentType,
+                inline
+        );
+        return url == null ? null : new PresignedAttachmentUrl(url, inline);
+    }
+
     private void requirePageUploadEnabled(String moduleKey) {
         if (!uploadRuleService.isPageUploadEnabled(moduleKey)) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "当前页面未启用附件标志");
@@ -264,16 +365,36 @@ public class AttachmentService {
         if (file == null || file.isEmpty()) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "上传文件不能为空");
         }
-        if (file.getSize() > properties.getMaxFileSize().toBytes()) {
+        validateUploadMetadata(file.getOriginalFilename(), file.getSize());
+    }
+
+    private void validateUploadMetadata(String originalFilename, long fileSize) {
+        if (fileSize <= 0) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "上传文件不能为空");
+        }
+        if (fileSize > properties.getMaxFileSize().toBytes()) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "上传文件超过大小限制");
         }
-        String originalFilename = file.getOriginalFilename();
         if (originalFilename != null && !originalFilename.isBlank() && originalFilename.contains(".")) {
             String ext = originalFilename.substring(originalFilename.lastIndexOf('.') + 1).toLowerCase(Locale.ROOT);
             if (BLOCKED_ATTACHMENT_EXTENSIONS.contains(ext)) {
                 throw new BusinessException(ErrorCode.VALIDATION_ERROR, "不支持的文件类型: ." + ext);
             }
         }
+    }
+
+    private String normalizeSha256Hex(String sha256Hex) {
+        if (sha256Hex == null || !sha256Hex.matches(SHA256_HEX_PATTERN)) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "文件校验值无效");
+        }
+        return sha256Hex.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private Long normalizeOwnerUserId(Long ownerUserId) {
+        if (ownerUserId == null) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "直传用户无效");
+        }
+        return ownerUserId;
     }
 
     private String buildObjectKey(long attachmentId, String fileName) {
@@ -312,10 +433,13 @@ public class AttachmentService {
     }
 
     private String normalizeOriginalFileName(MultipartFile file, String sourceType) {
-        String originalFileName = file.getOriginalFilename();
+        return normalizeOriginalFileName(file.getOriginalFilename(), file.getContentType(), sourceType);
+    }
+
+    private String normalizeOriginalFileName(String originalFileName, String contentType, String sourceType) {
         if (originalFileName == null || originalFileName.isBlank()) {
             String baseName = SOURCE_CLIPBOARD.equals(sourceType) ? "clipboard" : "upload";
-            AttachmentFilenameResolver.FilenameParts parts = filenameResolver.parseFilenameParts("", file.getContentType());
+            AttachmentFilenameResolver.FilenameParts parts = filenameResolver.parseFilenameParts("", contentType);
             return parts.extension().isBlank() ? baseName : baseName + "." + parts.extension();
         }
         return originalFileName;
@@ -379,7 +503,7 @@ public class AttachmentService {
     private AttachmentPresentation toPresentation(AttachmentFile entity, String moduleKey) {
         String previewType = detectPreviewType(entity);
         boolean previewSupported = !"none".equals(previewType);
-        String baseUrl = "/api/attachment/" + entity.getId();
+        String baseUrl = "/api/attachments/" + entity.getId();
         String accessKey = urlEncode(entity.getAccessKey());
         String moduleQuery = toModuleQuery(moduleKey);
         return new AttachmentPresentation(
@@ -404,6 +528,10 @@ public class AttachmentService {
             return "";
         }
         return "&moduleKey=" + urlEncode(moduleKey.trim());
+    }
+
+    private String normalizeModuleKey(String moduleKey) {
+        return moduleKey == null ? "" : moduleKey.trim();
     }
 
     private String detectPreviewType(AttachmentFile entity) {
@@ -473,6 +601,24 @@ public class AttachmentService {
             Resource resource,
             Boolean previewSupported,
             String previewType
+    ) {
+    }
+
+    public record DirectUploadPrepareResult(
+            Long attachmentId,
+            String token,
+            String objectKey,
+            String storagePath,
+            URI uploadUrl,
+            String method,
+            Map<String, String> headers,
+            Instant expiresAt
+    ) {
+    }
+
+    public record PresignedAttachmentUrl(
+            URI url,
+            boolean inline
     ) {
     }
 }

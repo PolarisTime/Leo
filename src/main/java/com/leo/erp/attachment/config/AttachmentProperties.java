@@ -104,6 +104,10 @@ public class AttachmentProperties {
 
         private Duration readTimeout = Duration.ofSeconds(30);
 
+        private Duration presignUploadTtl = Duration.ofMinutes(10);
+
+        private Duration presignPreviewTtl = Duration.ofMinutes(5);
+
         public String getEndpoint() {
             return endpoint;
         }
@@ -166,6 +170,22 @@ public class AttachmentProperties {
 
         public void setReadTimeout(Duration readTimeout) {
             this.readTimeout = readTimeout;
+        }
+
+        public Duration getPresignUploadTtl() {
+            return presignUploadTtl;
+        }
+
+        public void setPresignUploadTtl(Duration presignUploadTtl) {
+            this.presignUploadTtl = presignUploadTtl;
+        }
+
+        public Duration getPresignPreviewTtl() {
+            return presignPreviewTtl;
+        }
+
+        public void setPresignPreviewTtl(Duration presignPreviewTtl) {
+            this.presignPreviewTtl = presignPreviewTtl;
         }
     }
 }
