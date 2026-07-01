@@ -21,6 +21,11 @@ public class SalesOrderResponseAssembler {
     }
 
     SalesOrderResponse toDetailResponse(SalesOrder entity) {
+        return toDetailResponse(entity, item -> true);
+    }
+
+    SalesOrderResponse toDetailResponse(SalesOrder entity,
+                                        java.util.function.Predicate<SalesOrderItem> itemFilter) {
         SalesOrderResponse response = salesOrderMapper.toResponse(entity);
         return new SalesOrderResponse(
                 response.id(),
@@ -39,7 +44,7 @@ public class SalesOrderResponseAssembler {
                 response.totalAmount(),
                 response.status(),
                 response.remark(),
-                entity.getItems().stream().map(this::toItemResponse).toList()
+                entity.getItems().stream().filter(itemFilter).map(this::toItemResponse).toList()
         );
     }
 

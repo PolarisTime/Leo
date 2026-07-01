@@ -1,5 +1,6 @@
 package com.leo.erp.purchase.order.web.dto;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 public record PurchaseOrderImportCandidateResponse(
@@ -10,6 +11,8 @@ public record PurchaseOrderImportCandidateResponse(
         String settlementCompanyName,
         String buyerName,
         LocalDateTime orderDate,
+        BigDecimal totalWeight,
+        BigDecimal totalAmount,
         String status,
         Integer importableQuantity
 ) {
@@ -22,6 +25,6 @@ public record PurchaseOrderImportCandidateResponse(
             String status,
             Integer importableQuantity
     ) {
-        this(id, orderNo, supplierName, null, null, buyerName, orderDate, status, importableQuantity);
+        this(id, orderNo, supplierName, null, null, buyerName, orderDate, null, null, status, importableQuantity);
     }
 }

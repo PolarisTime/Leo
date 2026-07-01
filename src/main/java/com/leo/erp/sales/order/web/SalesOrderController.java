@@ -81,6 +81,27 @@ public class SalesOrderController {
         ));
     }
 
+    @Operation(summary = "分页查询销售订单出库导入候选")
+    @GetMapping("/outbound-import-candidate")
+    @RequiresPermission(resource = "sales-order", action = "read")
+    public ApiResponse<PageResponse<SalesOrderResponse>> outboundImportCandidates(
+            @BindPageQuery(sortFieldKey = "sales-order") PageQuery query,
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) String customerName,
+            @RequestParam(required = false) String projectName,
+            @RequestParam(required = false) Long settlementCompanyId,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate
+    ) {
+        return ApiResponse.success(PageResponse.from(
+                service.outboundImportCandidates(
+                        query,
+                        PageFilter.of(keyword, customerName, projectName, settlementCompanyId, status, startDate, endDate)
+                )
+        ));
+    }
+
     @Operation(summary = "查询销售订单详情")
     @GetMapping("/{id}")
     @RequiresPermission(resource = "sales-order", action = "read")

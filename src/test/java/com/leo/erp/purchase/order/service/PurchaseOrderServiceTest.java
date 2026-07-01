@@ -347,6 +347,7 @@ class PurchaseOrderServiceTest {
         );
 
         PurchaseOrder order = buildOrder();
+        order.setStatus("已审核");
         PurchaseOrderItem item1 = buildItem(11L, order);
         item1.setQuantity(10);
         PurchaseOrderItem item2 = buildItem(12L, order);
@@ -381,11 +382,171 @@ class PurchaseOrderServiceTest {
                 assertThat(candidate.importableQuantity()).isEqualTo(6)
         );
         assertThat(salesPage.getContent()).singleElement().satisfies(candidate ->
-                assertThat(candidate.status()).isEqualTo("草稿")
+                assertThat(candidate.status()).isEqualTo("已审核")
         );
-        verify(repository, times(2)).findByIdInAndDeletedFlagFalse(List.of(1L));
         verify(purchaseInboundItemQueryService).summarizeAllocatedQuantityBySourcePurchaseOrderItemIds(List.of(11L, 12L));
         verify(itemAllocationRepo).summarizeSalesByPurchaseOrderItems(List.of(11L, 12L), null);
+    }
+
+    @Test
+    void shouldExposeTotalsOnImportCandidates() {
+        PurchaseOrderRepository repository = mock(PurchaseOrderRepository.class);
+        PurchaseInboundItemQueryService purchaseInboundItemQueryService = mock(PurchaseInboundItemQueryService.class);
+        PurchaseOrderService service = service(
+                repository,
+                mock(SnowflakeIdGenerator.class),
+                mock(PurchaseOrderMapper.class),
+                mock(TradeItemMaterialSupport.class),
+                mock(WarehouseSelectionSupport.class),
+                mock(SupplierRepository.class),
+                purchaseInboundItemQueryService,
+                mock(ItemAllocationNativeRepository.class),
+                mock(PurchaseOrderItemPieceWeightService.class),
+                mock(WorkflowTransitionGuard.class),
+                mock(JdbcTemplate.class)
+        );
+
+        PurchaseOrder order = buildOrder();
+        order.setStatus("已审核");
+        order.setTotalWeight(new BigDecimal("12.345"));
+        order.setTotalAmount(new BigDecimal("67890.12"));
+        PurchaseOrderItem item = buildItem(11L, order);
+        order.getItems().add(item);
+
+        when(repository.findAll(any(Specification.class), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(order)));
+        when(repository.findByIdInAndDeletedFlagFalse(List.of(1L))).thenReturn(List.of(order));
+        when(purchaseInboundItemQueryService.summarizeAllocatedQuantityBySourcePurchaseOrderItemIds(List.of(11L)))
+                .thenReturn(Map.of());
+
+        var page = service.importCandidates(
+                PageQuery.of(0, 20, null, null),
+                PageFilter.of("", null, null, null, null),
+                "purchase-inbound"
+        );
+
+        assertThat(page.getContent()).singleElement().satisfies(candidate -> {
+            assertThat(candidate.totalWeight()).isEqualByComparingTo("12.345");
+            assertThat(candidate.totalAmount()).isEqualByComparingTo("67890.12");
+        });
+    }
+
+    @Test
+    void shouldExposeOnlyAuditedPurchaseInboundCandidatesWithRemainingQuantity() {
+        PurchaseOrderRepository repository = mock(PurchaseOrderRepository.class);
+        PurchaseInboundItemQueryService purchaseInboundItemQueryService = mock(PurchaseInboundItemQueryService.class);
+        PurchaseOrderService service = service(
+                repository,
+                mock(SnowflakeIdGenerator.class),
+                mock(PurchaseOrderMapper.class),
+                mock(TradeItemMaterialSupport.class),
+                mock(WarehouseSelectionSupport.class),
+                mock(SupplierRepository.class),
+                purchaseInboundItemQueryService,
+                mock(ItemAllocationNativeRepository.class),
+                mock(PurchaseOrderItemPieceWeightService.class),
+                mock(WorkflowTransitionGuard.class),
+                mock(JdbcTemplate.class)
+        );
+
+        PurchaseOrder auditedOpen = buildOrder();
+        auditedOpen.setStatus("已审核");
+        PurchaseOrderItem auditedOpenItem = buildItem(11L, auditedOpen);
+        auditedOpen.getItems().add(auditedOpenItem);
+
+        PurchaseOrder auditedFull = buildOrder();
+        auditedFull.setId(2L);
+        auditedFull.setOrderNo("PO-002");
+        auditedFull.setStatus("已审核");
+        PurchaseOrderItem auditedFullItem = buildItem(12L, auditedFull);
+        auditedFull.getItems().add(auditedFullItem);
+
+        PurchaseOrder draftOpen = buildOrder();
+        draftOpen.setId(3L);
+        draftOpen.setOrderNo("PO-003");
+        draftOpen.setStatus("草稿");
+        PurchaseOrderItem draftOpenItem = buildItem(13L, draftOpen);
+        draftOpen.getItems().add(draftOpenItem);
+
+        when(repository.findAll(any(Specification.class), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(auditedOpen, auditedFull, draftOpen)));
+        when(repository.findByIdInAndDeletedFlagFalse(List.of(1L, 2L, 3L)))
+                .thenReturn(List.of(auditedOpen, auditedFull, draftOpen));
+        when(purchaseInboundItemQueryService.summarizeAllocatedQuantityBySourcePurchaseOrderItemIds(
+                List.of(11L, 12L, 13L)
+        )).thenReturn(Map.of(11L, 9L, 12L, 10L));
+
+        var page = service.importCandidates(
+                PageQuery.of(0, 20, null, null),
+                PageFilter.of("", null, null, null, null),
+                "purchase-inbound"
+        );
+
+        assertThat(page.getContent()).singleElement().satisfies(candidate -> {
+            assertThat(candidate.id()).isEqualTo(1L);
+            assertThat(candidate.status()).isEqualTo("已审核");
+            assertThat(candidate.importableQuantity()).isEqualTo(1);
+        });
+        assertThat(page.getTotalElements()).isEqualTo(1);
+    }
+
+    @Test
+    void shouldExposeOnlyAuditedSalesOrderCandidatesWithRemainingQuantity() {
+        PurchaseOrderRepository repository = mock(PurchaseOrderRepository.class);
+        ItemAllocationNativeRepository itemAllocationRepo = mock(ItemAllocationNativeRepository.class);
+        PurchaseOrderService service = service(
+                repository,
+                mock(SnowflakeIdGenerator.class),
+                mock(PurchaseOrderMapper.class),
+                mock(TradeItemMaterialSupport.class),
+                mock(WarehouseSelectionSupport.class),
+                mock(SupplierRepository.class),
+                mock(PurchaseInboundItemQueryService.class),
+                itemAllocationRepo,
+                mock(PurchaseOrderItemPieceWeightService.class),
+                mock(WorkflowTransitionGuard.class),
+                mock(JdbcTemplate.class)
+        );
+
+        PurchaseOrder auditedOpen = buildOrder();
+        auditedOpen.setStatus("已审核");
+        PurchaseOrderItem auditedOpenItem = buildItem(11L, auditedOpen);
+        auditedOpen.getItems().add(auditedOpenItem);
+
+        PurchaseOrder auditedFull = buildOrder();
+        auditedFull.setId(2L);
+        auditedFull.setOrderNo("PO-002");
+        auditedFull.setStatus("已审核");
+        PurchaseOrderItem auditedFullItem = buildItem(12L, auditedFull);
+        auditedFull.getItems().add(auditedFullItem);
+
+        PurchaseOrder draftOpen = buildOrder();
+        draftOpen.setId(3L);
+        draftOpen.setOrderNo("PO-003");
+        draftOpen.setStatus("草稿");
+        PurchaseOrderItem draftOpenItem = buildItem(13L, draftOpen);
+        draftOpen.getItems().add(draftOpenItem);
+
+        when(repository.findAll(any(Specification.class), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(auditedOpen, auditedFull, draftOpen)));
+        when(itemAllocationRepo.summarizeSalesByPurchaseOrderItems(List.of(11L, 12L, 13L), null))
+                .thenReturn(List.of(
+                        allocationProjection(11L, 9L),
+                        allocationProjection(12L, 10L)
+                ));
+
+        var page = service.importCandidates(
+                PageQuery.of(0, 20, null, null),
+                PageFilter.of("", null, null, null, null),
+                "sales-order"
+        );
+
+        assertThat(page.getContent()).singleElement().satisfies(candidate -> {
+            assertThat(candidate.id()).isEqualTo(1L);
+            assertThat(candidate.status()).isEqualTo("已审核");
+            assertThat(candidate.importableQuantity()).isEqualTo(1);
+        });
+        assertThat(page.getTotalElements()).isEqualTo(1);
     }
 
     @Test

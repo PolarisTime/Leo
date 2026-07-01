@@ -20,6 +20,7 @@ import com.leo.erp.system.company.domain.entity.CompanySetting;
 import com.leo.erp.system.company.service.CompanySettingService;
 import java.util.function.Function;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -90,23 +91,47 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
                 .and(Specs.equalValueIfPresent("settlementCompanyId", filter.settlementCompanyId()))
                 .and(Specs.equalIfPresent("status", filter.status()))
                 .and(Specs.betweenIfPresent("orderDate", filter.startDate(), filter.endDate()));
-        Page<PurchaseOrder> page = pageEntities(query, spec, purchaseOrderRepository);
-        if (page.isEmpty()) {
-            return page.map(order -> toImportCandidateResponse(order, 0));
-        }
+        return importableCandidates(query, spec, candidateUsage);
+    }
 
-        List<Long> orderIds = page.getContent().stream()
-                .map(PurchaseOrder::getId)
-                .toList();
-        Map<Long, PurchaseOrder> detailMap = purchaseOrderRepository.findByIdInAndDeletedFlagFalse(orderIds).stream()
-                .collect(Collectors.toMap(PurchaseOrder::getId, Function.identity()));
+    private Page<PurchaseOrderImportCandidateResponse> importableCandidates(
+            PageQuery query,
+            Specification<PurchaseOrder> baseSpec,
+            PurchaseOrderAvailabilityService.ImportCandidateUsage usage
+    ) {
+        Specification<PurchaseOrder> spec = baseSpec.and(Specs.equalIfPresent("status", StatusConstants.AUDITED));
+        List<PurchaseOrder> orders = new java.util.ArrayList<>();
+        int pageIndex = 0;
+        Page<PurchaseOrder> orderPage;
+        do {
+            orderPage = pageEntities(
+                    PageQuery.of(pageIndex, 200, query.sortBy(), query.direction()),
+                    spec,
+                    purchaseOrderRepository
+            );
+            orders.addAll(orderPage.getContent());
+            pageIndex++;
+        } while (orderPage.hasNext());
         Map<Long, Integer> importableQuantityMap =
-                availabilityService.buildImportableQuantityMap(detailMap.values().stream().toList(), candidateUsage);
-
-        return page.map(order -> toImportCandidateResponse(
-                order,
-                importableQuantityMap.getOrDefault(order.getId(), 0)
-        ));
+                availabilityService.buildImportableQuantityMap(
+                        orders,
+                        usage
+                );
+        List<PurchaseOrderImportCandidateResponse> candidates = orders.stream()
+                .filter(order -> StatusConstants.AUDITED.equals(order.getStatus()))
+                .map(order -> toImportCandidateResponse(
+                        order,
+                        importableQuantityMap.getOrDefault(order.getId(), 0)
+                ))
+                .filter(candidate -> candidate.importableQuantity() != null && candidate.importableQuantity() > 0)
+                .toList();
+        int start = Math.min(query.page() * query.size(), candidates.size());
+        int end = Math.min(start + query.size(), candidates.size());
+        return new PageImpl<>(
+                candidates.subList(start, end),
+                query.toPageable("id"),
+                candidates.size()
+        );
     }
 
     @Override
@@ -123,6 +148,8 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
                 order.getSettlementCompanyName(),
                 order.getBuyerName(),
                 order.getOrderDate(),
+                order.getTotalWeight(),
+                order.getTotalAmount(),
                 order.getStatus(),
                 importableQuantity
         );

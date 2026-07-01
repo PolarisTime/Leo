@@ -1,6 +1,7 @@
 package com.leo.erp.sales.order.web;
 
 import com.leo.erp.common.api.ApiResponse;
+import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.api.PageResponse;
 import com.leo.erp.common.web.dto.FileDownloadResponse;
@@ -14,6 +15,7 @@ import com.leo.erp.sales.order.web.dto.SalesOrderResponse;
 import com.leo.erp.system.operationlog.support.OperationLogResultCollector;
 import com.leo.erp.system.operationlog.support.OperationLoggable;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.http.MediaType;
@@ -78,6 +80,25 @@ class SalesOrderControllerTest {
 
         assertThat(response.code()).isEqualTo(0);
         assertThat(response.data().content()).hasSize(1);
+    }
+
+    @Test
+    void outboundImportCandidatesReturnsPaginatedSalesOrders() {
+        SalesOrderResponse order = mock(SalesOrderResponse.class);
+        Page<SalesOrderResponse> page = new PageImpl<>(List.of(order));
+        PageQuery query = new PageQuery(0, 20, null, null);
+        when(service.outboundImportCandidates(any(), any())).thenReturn(page);
+
+        ApiResponse<PageResponse<SalesOrderResponse>> response = controller.outboundImportCandidates(
+                query, "test", "customer", "project", 7L, "active", null, null);
+
+        assertThat(response.code()).isEqualTo(0);
+        assertThat(response.data().content()).hasSize(1);
+        ArgumentCaptor<PageFilter> filterCaptor = ArgumentCaptor.forClass(PageFilter.class);
+        verify(service).outboundImportCandidates(eq(query), filterCaptor.capture());
+        assertThat(filterCaptor.getValue().name()).isEqualTo("customer");
+        assertThat(filterCaptor.getValue().projectName()).isEqualTo("project");
+        assertThat(filterCaptor.getValue().settlementCompanyId()).isEqualTo(7L);
     }
 
     @Test

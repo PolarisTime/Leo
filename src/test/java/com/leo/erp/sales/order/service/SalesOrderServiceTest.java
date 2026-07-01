@@ -26,6 +26,8 @@ import com.leo.erp.sales.outbound.domain.entity.SalesOutboundItem;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.InOrder;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -39,6 +41,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentCaptor.forClass;
 import static org.mockito.ArgumentMatchers.anyInt;
@@ -216,6 +219,94 @@ class SalesOrderServiceTest {
         assertThatThrownBy(() -> service.create(request))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("销售订单号已存在");
+    }
+
+    @Test
+    void shouldExposeOnlyAuditedOutboundImportCandidatesWithUnoccupiedItems() {
+        SalesOrderRepository repository = mock(SalesOrderRepository.class);
+        SalesOrderMapper mapper = mock(SalesOrderMapper.class);
+        SalesOrderItemRepository salesOrderItemRepository = mock(SalesOrderItemRepository.class);
+        SalesOrderService service = service(
+                repository,
+                mock(SnowflakeIdGenerator.class),
+                mapper,
+                mock(TradeItemMaterialSupport.class),
+                mock(PurchaseItemQueryAppService.class),
+                mock(PurchaseItemPieceWeightAppService.class),
+                salesOrderItemRepository,
+                mock(WarehouseSelectionSupport.class),
+                stubbedSalesOrderItemMapper(),
+                mock(WorkflowTransitionGuard.class)
+        );
+
+        var auditedOpen = auditedSalesOrder("SO-001", StatusConstants.AUDITED, new BigDecimal("4000.00"));
+        auditedOpen.getItems().get(0).setId(101L);
+        SalesOrderItem occupiedItemOnOpenOrder = new SalesOrderItem();
+        occupiedItemOnOpenOrder.setId(104L);
+        occupiedItemOnOpenOrder.setSalesOrder(auditedOpen);
+        occupiedItemOnOpenOrder.setLineNo(2);
+        occupiedItemOnOpenOrder.setMaterialCode("M2");
+        occupiedItemOnOpenOrder.setBrand("宝钢");
+        occupiedItemOnOpenOrder.setCategory("螺纹钢");
+        occupiedItemOnOpenOrder.setMaterial("HRB400");
+        occupiedItemOnOpenOrder.setSpec("20");
+        occupiedItemOnOpenOrder.setUnit("吨");
+        occupiedItemOnOpenOrder.setQuantity(1);
+        occupiedItemOnOpenOrder.setQuantityUnit("件");
+        occupiedItemOnOpenOrder.setPieceWeightTon(new BigDecimal("1.000"));
+        occupiedItemOnOpenOrder.setPiecesPerBundle(1);
+        occupiedItemOnOpenOrder.setWeightTon(new BigDecimal("1.000"));
+        occupiedItemOnOpenOrder.setUnitPrice(new BigDecimal("4000.00"));
+        occupiedItemOnOpenOrder.setAmount(new BigDecimal("4000.00"));
+        auditedOpen.getItems().add(occupiedItemOnOpenOrder);
+
+        var auditedOccupied = auditedSalesOrder("SO-002", StatusConstants.AUDITED, new BigDecimal("4000.00"));
+        auditedOccupied.setId(2L);
+        auditedOccupied.getItems().get(0).setId(102L);
+
+        var draftOpen = auditedSalesOrder("SO-003", "草稿", new BigDecimal("4000.00"));
+        draftOpen.setId(3L);
+        draftOpen.getItems().get(0).setId(103L);
+
+        when(repository.findAll(any(Specification.class), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(auditedOpen, auditedOccupied, draftOpen)));
+        when(salesOrderItemRepository.findOccupiedSourceSalesOrderItemIds(anyCollection()))
+                .thenReturn(List.of(102L, 104L));
+        when(mapper.toResponse(any())).thenAnswer(invocation -> {
+            com.leo.erp.sales.order.domain.entity.SalesOrder order = invocation.getArgument(0);
+            return new SalesOrderResponse(
+                    order.getId(),
+                    order.getOrderNo(),
+                    order.getPurchaseInboundNo(),
+                    order.getPurchaseOrderNo(),
+                    order.getCustomerCode(),
+                    order.getCustomerName(),
+                    order.getProjectId(),
+                    order.getProjectName(),
+                    order.getSettlementCompanyId(),
+                    order.getSettlementCompanyName(),
+                    order.getDeliveryDate(),
+                    order.getSalesName(),
+                    order.getTotalWeight(),
+                    order.getTotalAmount(),
+                    order.getStatus(),
+                    order.getRemark(),
+                    List.of()
+            );
+        });
+
+        var page = service.outboundImportCandidates(
+                com.leo.erp.common.api.PageQuery.of(0, 20, null, null),
+                com.leo.erp.common.api.PageFilter.of("", null, null, null, null)
+        );
+
+        assertThat(page.getContent()).singleElement().satisfies(candidate -> {
+            assertThat(candidate.id()).isEqualTo(1L);
+            assertThat(candidate.orderNo()).isEqualTo("SO-001");
+            assertThat(candidate.status()).isEqualTo(StatusConstants.AUDITED);
+            assertThat(candidate.items()).extracting("id").containsExactly(101L);
+        });
+        assertThat(page.getTotalElements()).isEqualTo(1);
     }
 
     @Test
@@ -1468,7 +1559,8 @@ class SalesOrderServiceTest {
                         purchaseAllocationService,
                         completionSyncService,
                         new SalesOrderCompletionPolicy()
-                )
+                ),
+                salesOrderItemRepository
         );
     }
 
