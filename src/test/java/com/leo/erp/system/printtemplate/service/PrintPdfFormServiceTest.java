@@ -1,9 +1,13 @@
 package com.leo.erp.system.printtemplate.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.itextpdf.kernel.pdf.PdfDocument;
+import com.itextpdf.kernel.pdf.PdfReader;
+import com.itextpdf.kernel.pdf.canvas.parser.PdfTextExtractor;
 import com.leo.erp.common.error.BusinessException;
 import org.junit.jupiter.api.Test;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.util.Collections;
 import java.util.List;
@@ -117,6 +121,33 @@ class PrintPdfFormServiceTest {
         byte[] pdf = service.generateFromPayload(payload);
 
         assertThat(pdf).startsWith("%PDF".getBytes());
+    }
+
+    @Test
+    void generateFromPayloadShouldRenderStaticTextWithDataVariables() throws IOException {
+        PrintScriptService printScriptService = mock(PrintScriptService.class);
+        PrintPdfFormService service = service(printScriptService);
+
+        Map<String, Object> payload = Map.of(
+                "templateType", "PDF_FORM",
+                "templateHtml", """
+                        {
+                          "page": {"width": 595, "height": 842},
+                          "static": [
+                            {"type": "text", "text": "${settlementCompanyName}（供货单）", "left": 20, "top": 20, "width": 300, "height": 20, "fontSize": 12}
+                          ]
+                        }
+                        """,
+                "data", Map.of("settlementCompanyName", "当前结算主体"),
+                "items", Collections.emptyList()
+        );
+
+        byte[] pdf = service.generateFromPayload(payload);
+
+        try (PdfDocument document = new PdfDocument(new PdfReader(new ByteArrayInputStream(pdf)))) {
+            String text = PdfTextExtractor.getTextFromPage(document.getFirstPage());
+            assertThat(text).contains("当前结算主体（供货单）");
+        }
     }
 
     @Test

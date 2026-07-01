@@ -1,7 +1,7 @@
 {
   "page": {"width": 595, "height": 842},
   "static": [
-    {"type": "text", "text": "嘉兴颖捷建材有限公司（供货单）", "left": 28, "top": 14, "width": 539, "height": 24, "fontSize": 16, "align": "center"},
+    {"type": "text", "text": "${settlementCompanyName}（供货单）", "left": 28, "top": 14, "width": 539, "height": 24, "fontSize": 16, "align": "center"},
     {"type": "rect", "left": 28, "top": 62, "width": 539, "height": 32},
     {"type": "line", "x1": 378, "y1": 62, "x2": 378, "y2": 94},
     {"type": "rect", "left": 28, "top": 94, "width": 539, "height": 32},

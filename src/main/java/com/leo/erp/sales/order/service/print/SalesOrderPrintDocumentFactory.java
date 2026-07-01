@@ -30,6 +30,7 @@ public class SalesOrderPrintDocumentFactory {
 
         return new SalesOrderPrintDocument(
                 order.getOrderNo(),
+                order.getSettlementCompanyName(),
                 order.getCustomerName(),
                 order.getProjectName(),
                 safeOptions.hideRemark() ? "" : order.getRemark(),

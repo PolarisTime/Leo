@@ -200,6 +200,9 @@ public class SalesOrderPrintExportService {
         if ("orderNo".equals(field)) {
             return document.orderNo();
         }
+        if ("settlementCompanyName".equals(field)) {
+            return document.settlementCompanyName();
+        }
         if ("customerName".equals(field)) {
             return document.customerName();
         }

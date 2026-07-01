@@ -79,6 +79,51 @@ class PrintScriptServiceTest {
     }
 
     @Test
+    void shouldMatchSettlementCompanyNameFromCurrentCompanySettings() {
+        JdbcTemplate jdbc = mock(JdbcTemplate.class);
+        PrintScriptService service = printScriptService(repository("sales-order"), jdbc);
+
+        when(jdbc.queryForMap(anyString(), eq(1L))).thenReturn(Map.of(
+                "id", 1L,
+                "order_no", "SO-001",
+                "settlement_company_id", 7L,
+                "settlement_company_name", "历史主体",
+                "deleted_flag", false
+        ));
+        when(jdbc.queryForList(anyString(), eq(1L))).thenReturn(List.of());
+        when(jdbc.queryForList(anyString(), eq(String.class), eq(7L))).thenReturn(List.of("当前结算主体"));
+        when(jdbc.queryForList(anyString(), eq(String.class), eq("SO-001"))).thenReturn(List.of());
+
+        Map<String, Object> result = service.generateFromRecord("1", "sales-order", 1L);
+
+        Map<?, ?> data = (Map<?, ?>) result.get("data");
+        assertThat(data.get("settlementCompanyId")).isEqualTo("7");
+        assertThat(data.get("settlementCompanyName")).isEqualTo("当前结算主体");
+    }
+
+    @Test
+    void shouldKeepSettlementCompanySnapshotWhenCurrentCompanySettingMissing() {
+        JdbcTemplate jdbc = mock(JdbcTemplate.class);
+        PrintScriptService service = printScriptService(repository("sales-order"), jdbc);
+
+        when(jdbc.queryForMap(anyString(), eq(1L))).thenReturn(Map.of(
+                "id", 1L,
+                "order_no", "SO-001",
+                "settlement_company_id", 7L,
+                "settlement_company_name", "历史主体",
+                "deleted_flag", false
+        ));
+        when(jdbc.queryForList(anyString(), eq(1L))).thenReturn(List.of());
+        when(jdbc.queryForList(anyString(), eq(String.class), eq(7L))).thenReturn(List.of());
+        when(jdbc.queryForList(anyString(), eq(String.class), eq("SO-001"))).thenReturn(List.of());
+
+        Map<String, Object> result = service.generateFromRecord("1", "sales-order", 1L);
+
+        Map<?, ?> data = (Map<?, ?>) result.get("data");
+        assertThat(data.get("settlementCompanyName")).isEqualTo("历史主体");
+    }
+
+    @Test
     void shouldEnrichCustomerStatementItemsWithBillTime() {
         JdbcTemplate jdbc = mock(JdbcTemplate.class);
         PrintScriptService service = printScriptService(repository("customer-statement"), jdbc);

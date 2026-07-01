@@ -31,7 +31,7 @@ class PrintTemplateFileSyncRunnerTest {
         runner(repository).run(new DefaultApplicationArguments());
 
         assertThat(template.getTemplateHtml()).contains("\"page\"");
-        assertThat(template.getTemplateHtml()).contains("嘉兴颖捷建材有限公司");
+        assertThat(template.getTemplateHtml()).contains("${settlementCompanyName}（供货单）");
         assertThat(template.getSourceChecksum()).hasSize(64);
         assertThat(template.getVersionNo()).isEqualTo(2);
         verify(repository).save(template);

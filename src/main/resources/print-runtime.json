@@ -191,7 +191,8 @@
     "amount": {"itemField": "amount", "outputField": "totalAmount", "format": "price"}
   },
   "templateDefaults": {
-    "remark": "无"
+    "remark": "无",
+    "settlementCompanyName": "嘉兴颖捷建材有限公司"
   },
   "legacyLayout": {
     "dynamicFields": [

@@ -19,6 +19,8 @@ class PrintRecordEnricher {
     private static final String TYPE_DATA_LOOKUP = "dataLookup";
     private static final String TYPE_ITEM_LOOKUP_BY_FIELD = "itemLookupByField";
     private static final String RESULT_LIST = "list";
+    private static final String SETTLEMENT_COMPANY_ID = "settlementCompanyId";
+    private static final String SETTLEMENT_COMPANY_NAME = "settlementCompanyName";
 
     private final JdbcTemplate jdbc;
     private final PrintRecordFieldFormatter formatter;
@@ -42,6 +44,27 @@ class PrintRecordEnricher {
             } catch (RuntimeException ex) {
                 log.debug("打印字段补充失败, moduleKey={}, type={}", moduleKey, type, ex);
             }
+        }
+        enrichSettlementCompanyName(data);
+    }
+
+    private void enrichSettlementCompanyName(Map<String, String> data) {
+        Object argument = longArgument(formatter.value(data, SETTLEMENT_COMPANY_ID));
+        if (argument == null) {
+            return;
+        }
+        try {
+            List<String> values = jdbc.queryForList(
+                    "SELECT company_name FROM sys_company_setting WHERE id = ? AND deleted_flag = FALSE",
+                    String.class,
+                    argument
+            );
+            String companyName = values == null || values.isEmpty() ? null : values.get(0);
+            if (companyName != null && !companyName.isBlank()) {
+                data.put(SETTLEMENT_COMPANY_NAME, companyName);
+            }
+        } catch (RuntimeException ex) {
+            log.debug("打印结算主体匹配失败, settlementCompanyId={}", argument, ex);
         }
     }
 
@@ -87,6 +110,17 @@ class PrintRecordEnricher {
             }
         }
         return rawValue;
+    }
+
+    private Long longArgument(String rawValue) {
+        if (rawValue == null || rawValue.isBlank()) {
+            return null;
+        }
+        try {
+            return Long.valueOf(rawValue.trim());
+        } catch (NumberFormatException ex) {
+            return null;
+        }
     }
 
     private void applyItemLookup(Map<String, String> data, List<Map<String, String>> items, JsonNode rule) {

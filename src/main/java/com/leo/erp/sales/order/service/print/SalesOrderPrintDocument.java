@@ -5,6 +5,7 @@ import java.util.List;
 
 public record SalesOrderPrintDocument(
         String orderNo,
+        String settlementCompanyName,
         String customerName,
         String projectName,
         String remark,
@@ -14,6 +15,7 @@ public record SalesOrderPrintDocument(
 
     public SalesOrderPrintDocument {
         orderNo = orderNo == null ? "" : orderNo;
+        settlementCompanyName = settlementCompanyName == null ? "" : settlementCompanyName;
         customerName = customerName == null ? "" : customerName;
         projectName = projectName == null ? "" : projectName;
         remark = remark == null ? "" : remark;

@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leo.erp.sales.order.domain.entity.SalesOrder;
 import com.leo.erp.sales.order.domain.entity.SalesOrderItem;
 import com.leo.erp.sales.order.repository.SalesOrderRepository;
+import com.leo.erp.sales.order.service.print.SalesOrderPrintDocument;
 import com.leo.erp.sales.order.service.print.SalesOrderPrintDocumentFactory;
 import com.leo.erp.system.printtemplate.service.PrintRuntimeProperties;
 import com.leo.erp.system.printtemplate.service.PrintXlsxExportLayoutProvider;
@@ -110,6 +111,17 @@ class SalesOrderPrintExportServiceTest {
             assertThat(text(formatter, sheet, 8, 0)).isEqualTo("品牌1");
             assertThat(text(formatter, sheet, 9, 0)).isEqualTo("品牌2");
         }
+    }
+
+    @Test
+    void shouldCarrySettlementCompanyNameInPrintDocument() {
+        SalesOrder order = salesOrder(1);
+        order.setSettlementCompanyName("当前结算主体");
+
+        SalesOrderPrintDocument document = new SalesOrderPrintDocumentFactory()
+                .create(order, SalesOrderPrintXlsxOptions.defaults(), 7);
+
+        assertThat(document.settlementCompanyName()).isEqualTo("当前结算主体");
     }
 
     private SalesOrder salesOrder(int itemCount) {

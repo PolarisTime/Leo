@@ -48,7 +48,13 @@ public class PrintPdfPageContentRenderer {
         }
     }
 
-    void drawStatic(PdfCanvas canvas, PdfFont font, JsonNode staticConfig, PrintPdfDrawingSupport.PageMetrics pageMetrics) {
+    void drawStatic(
+            PdfCanvas canvas,
+            PdfFont font,
+            JsonNode staticConfig,
+            Map<String, String> variables,
+            PrintPdfDrawingSupport.PageMetrics pageMetrics
+    ) {
         for (JsonNode element : drawing.childObjects(staticConfig)) {
             String type = text(element, "type", "text").trim().toLowerCase();
             if ("rect".equals(type)) {
@@ -71,7 +77,7 @@ public class PrintPdfPageContentRenderer {
                 drawing.drawCanvasText(
                         canvas,
                         font,
-                        text(element, "text", ""),
+                        valueResolver.applyTemplate(text(element, "text", ""), variables),
                         drawing.number(element, "left", 0f),
                         drawing.number(element, "top", 0f),
                         drawing.number(element, "width", 100f),

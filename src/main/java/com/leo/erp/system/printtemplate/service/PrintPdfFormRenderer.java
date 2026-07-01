@@ -73,7 +73,7 @@ public class PrintPdfFormRenderer {
         int itemIndex = 0;
         do {
             PdfCanvas canvas = new PdfCanvas(pdf.addNewPage(new PageSize(pageMetrics.width(), pageMetrics.height())));
-            pageContentRenderer.drawStatic(canvas, font, root.path("static"), pageMetrics);
+            pageContentRenderer.drawStatic(canvas, font, root.path("static"), variables, pageMetrics);
             pageContentRenderer.drawFields(canvas, fieldsConfig, data, font, pageMetrics);
             int rowsOnPage = 0;
             if (tableConfig.isObject()) {
