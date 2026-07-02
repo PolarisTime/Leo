@@ -3,6 +3,7 @@ package com.leo.erp.attachment.service.storage;
 import com.leo.erp.attachment.config.AttachmentProperties;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
+import com.leo.erp.system.oss.service.OssSettingService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.InputStreamResource;
 import org.springframework.core.io.Resource;
@@ -45,15 +46,25 @@ public class S3CompatibleAttachmentStorage implements DirectUploadAttachmentStor
     private final AttachmentProperties properties;
     private final S3ClientProvider clientProvider;
     private final S3PathParser pathParser;
+    private final OssSettingService ossSettingService;
 
     @Autowired
     public S3CompatibleAttachmentStorage(
             AttachmentProperties properties,
             S3ClientProvider clientProvider,
-            S3PathParser pathParser) {
+            S3PathParser pathParser,
+            OssSettingService ossSettingService) {
         this.properties = properties;
         this.clientProvider = clientProvider;
         this.pathParser = pathParser;
+        this.ossSettingService = ossSettingService;
+    }
+
+    public S3CompatibleAttachmentStorage(
+            AttachmentProperties properties,
+            S3ClientProvider clientProvider,
+            S3PathParser pathParser) {
+        this(properties, clientProvider, pathParser, null);
     }
 
     @Override
@@ -81,6 +92,23 @@ public class S3CompatibleAttachmentStorage implements DirectUploadAttachmentStor
             throw new IOException("S3 上传失败: " + describeS3Error(ex), ex);
         } finally {
             Files.deleteIfExists(tempFile);
+        }
+    }
+
+    @Override
+    public String storeBytes(String objectKey, byte[] content, String contentType) throws IOException {
+        AttachmentProperties.S3 s3 = requireS3Config();
+        try {
+            S3Client s3Client = clientProvider.getClient(s3);
+            PutObjectRequest request = PutObjectRequest.builder()
+                    .bucket(s3.getBucket())
+                    .key(objectKey)
+                    .contentType(contentType)
+                    .build();
+            s3Client.putObject(request, RequestBody.fromBytes(content));
+            return pathParser.buildStoragePath(s3.getBucket(), objectKey);
+        } catch (S3Exception ex) {
+            throw new IOException("S3 上传失败: " + describeS3Error(ex), ex);
         }
     }
 
@@ -210,7 +238,9 @@ public class S3CompatibleAttachmentStorage implements DirectUploadAttachmentStor
     }
 
     private AttachmentProperties.S3 requireS3Config() {
-        AttachmentProperties.S3 s3 = properties.getStorage().getS3();
+        AttachmentProperties.S3 s3 = ossSettingService == null
+                ? properties.getStorage().getS3()
+                : ossSettingService.resolveRuntimeSetting().s3();
         if (pathParser.isBlank(s3.getEndpoint()) || pathParser.isBlank(s3.getBucket())
                 || pathParser.isBlank(s3.getRegion()) || pathParser.isBlank(s3.getAccessKey())
                 || pathParser.isBlank(s3.getSecretKey())) {

@@ -1,5 +1,6 @@
 package com.leo.erp.system.schedule.service;
 
+import com.leo.erp.attachment.service.AttachmentManifestExportService;
 import com.leo.erp.system.database.service.DatabaseExportTaskService;
 import com.leo.erp.system.schedule.config.MaintenanceScheduleProperties;
 import org.junit.jupiter.api.BeforeEach;
@@ -18,6 +19,7 @@ class MaintenanceScheduledTasksTest {
     private OperationLogArchiveService operationLogArchiveService;
     private DatabaseExportTaskService databaseExportTaskService;
     private RedisCacheHealthCheckService redisCacheHealthCheckService;
+    private AttachmentManifestExportService attachmentManifestExportService;
 
     @BeforeEach
     void setUp() {
@@ -26,6 +28,7 @@ class MaintenanceScheduledTasksTest {
         operationLogArchiveService = mock(OperationLogArchiveService.class);
         databaseExportTaskService = mock(DatabaseExportTaskService.class);
         redisCacheHealthCheckService = mock(RedisCacheHealthCheckService.class);
+        attachmentManifestExportService = mock(AttachmentManifestExportService.class);
     }
 
     private MaintenanceScheduledTasks tasks() {
@@ -34,7 +37,8 @@ class MaintenanceScheduledTasksTest {
                 scheduledDatabaseBackupService,
                 operationLogArchiveService,
                 databaseExportTaskService,
-                redisCacheHealthCheckService
+                redisCacheHealthCheckService,
+                attachmentManifestExportService
         );
     }
 
@@ -121,6 +125,33 @@ class MaintenanceScheduledTasksTest {
         doThrow(new RuntimeException("test error")).when(redisCacheHealthCheckService).verifyAndRefreshCaches();
 
         tasks().runRedisCacheHealthCheck();
+        // exception should be caught and logged, not propagated
+    }
+
+    @Test
+    void shouldRunAttachmentManifestExport_whenEnabled() {
+        properties.getAttachmentManifestExport().setEnabled(true);
+
+        tasks().runAttachmentManifestExport();
+
+        verify(attachmentManifestExportService).exportDaily();
+    }
+
+    @Test
+    void shouldSkipAttachmentManifestExport_whenDisabled() {
+        properties.getAttachmentManifestExport().setEnabled(false);
+
+        tasks().runAttachmentManifestExport();
+
+        verify(attachmentManifestExportService, never()).exportDaily();
+    }
+
+    @Test
+    void shouldHandleAttachmentManifestExportException() {
+        properties.getAttachmentManifestExport().setEnabled(true);
+        doThrow(new RuntimeException("test error")).when(attachmentManifestExportService).exportDaily();
+
+        tasks().runAttachmentManifestExport();
         // exception should be caught and logged, not propagated
     }
 }

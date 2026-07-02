@@ -22,6 +22,17 @@ class S3ClientProviderTest {
     }
 
     @Test
+    void shouldRebuildClientWhenConfigChanges() {
+        S3ClientProvider provider = new S3ClientProvider();
+
+        S3Client first = provider.getClient(s3Config("http://127.0.0.1:9000"));
+        S3Client second = provider.getClient(s3Config("http://127.0.0.1:9001"));
+
+        assertThat(second).isNotSameAs(first);
+        provider.destroy();
+    }
+
+    @Test
     void shouldDestroyBeforeClientIsCreated() {
         S3ClientProvider provider = new S3ClientProvider();
 

@@ -9,6 +9,7 @@ import com.leo.erp.attachment.service.storage.AttachmentStorageResolver;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
+import com.leo.erp.system.oss.service.OssSettingService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.MediaType;
@@ -59,6 +60,7 @@ public class AttachmentService {
     private final PdfWatermarkService pdfWatermarkService;
     private final AttachmentMetadataService metadataService;
     private final AttachmentDirectUploadTokenService directUploadTokenService;
+    private final OssSettingService ossSettingService;
 
     public AttachmentService(AttachmentFileRepository repository,
                              SnowflakeIdGenerator idGenerator,
@@ -71,7 +73,8 @@ public class AttachmentService {
         this(repository, idGenerator, properties, filenameResolver, uploadRuleService, storageResolver,
                 imageWatermarkService, pdfWatermarkService,
                 new AttachmentMetadataService(repository, filenameResolver),
-                new AttachmentDirectUploadTokenService(TEST_DIRECT_UPLOAD_TOKEN_SECRET));
+                new AttachmentDirectUploadTokenService(TEST_DIRECT_UPLOAD_TOKEN_SECRET),
+                null);
     }
 
     @Autowired
@@ -84,7 +87,8 @@ public class AttachmentService {
                              ImageWatermarkService imageWatermarkService,
                              PdfWatermarkService pdfWatermarkService,
                              AttachmentMetadataService metadataService,
-                             AttachmentDirectUploadTokenService directUploadTokenService) {
+                             AttachmentDirectUploadTokenService directUploadTokenService,
+                             OssSettingService ossSettingService) {
         this.repository = repository;
         this.idGenerator = idGenerator;
         this.properties = properties;
@@ -95,6 +99,21 @@ public class AttachmentService {
         this.pdfWatermarkService = pdfWatermarkService;
         this.metadataService = metadataService;
         this.directUploadTokenService = directUploadTokenService;
+        this.ossSettingService = ossSettingService;
+    }
+
+    public AttachmentService(AttachmentFileRepository repository,
+                             SnowflakeIdGenerator idGenerator,
+                             AttachmentProperties properties,
+                             AttachmentFilenameResolver filenameResolver,
+                             UploadRuleService uploadRuleService,
+                             AttachmentStorageResolver storageResolver,
+                             ImageWatermarkService imageWatermarkService,
+                             PdfWatermarkService pdfWatermarkService,
+                             AttachmentMetadataService metadataService,
+                             AttachmentDirectUploadTokenService directUploadTokenService) {
+        this(repository, idGenerator, properties, filenameResolver, uploadRuleService, storageResolver,
+                imageWatermarkService, pdfWatermarkService, metadataService, directUploadTokenService, null);
     }
 
     public AttachmentView upload(MultipartFile file, String sourceType) throws IOException {
@@ -414,7 +433,9 @@ public class AttachmentService {
     }
 
     private String normalizedKeyPrefix() {
-        String keyPrefix = properties.getStorage().getKeyPrefix();
+        String keyPrefix = ossSettingService == null
+                ? properties.getStorage().getKeyPrefix()
+                : ossSettingService.resolveRuntimeSetting().keyPrefix();
         if (keyPrefix == null || keyPrefix.isBlank()) {
             return "";
         }

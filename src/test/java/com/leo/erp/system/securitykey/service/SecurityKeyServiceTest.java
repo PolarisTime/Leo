@@ -6,6 +6,8 @@ import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.security.jwt.JwtProperties;
 import com.leo.erp.security.totp.TotpProperties;
+import com.leo.erp.system.oss.domain.entity.OssSetting;
+import com.leo.erp.system.oss.repository.OssSettingRepository;
 import com.leo.erp.system.securitykey.domain.entity.SecuritySecret;
 import com.leo.erp.system.securitykey.repository.SecuritySecretRepository;
 import com.leo.erp.system.securitykey.web.dto.SecurityKeyOverviewResponse;
@@ -193,6 +195,7 @@ class SecurityKeyServiceTest {
     void shouldRotateTotpKeyAndReencryptExistingSecrets() {
         SecuritySecretRepository repository = mock(SecuritySecretRepository.class);
         UserAccountRepository userAccountRepository = mock(UserAccountRepository.class);
+        OssSettingRepository ossSettingRepository = mock(OssSettingRepository.class);
         SnowflakeIdGenerator idGenerator = mock(SnowflakeIdGenerator.class);
         TotpSecretCryptor cryptor = mock(TotpSecretCryptor.class);
         when(idGenerator.nextId()).thenReturn(201L, 202L);
@@ -213,6 +216,13 @@ class SecurityKeyServiceTest {
         account.setTotpSecret("old-encrypted");
         when(userAccountRepository.findByTotpSecretIsNotNullAndDeletedFlagFalse()).thenReturn(List.of(account));
         when(userAccountRepository.saveAll(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        OssSetting ossSetting = new OssSetting();
+        ossSetting.setId(3001L);
+        ossSetting.setEncryptedSecretKey("old-oss-encrypted");
+        when(ossSettingRepository.findByEncryptedSecretKeyIsNotNullAndDeletedFlagFalse()).thenReturn(List.of(ossSetting));
+        when(ossSettingRepository.saveAll(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(cryptor.decrypt("old-oss-encrypted", "leo-dev-totp-key-change-me-20260425")).thenReturn("oss-secret");
+        when(cryptor.encrypt(eq("oss-secret"), any())).thenAnswer(invocation -> "new-oss-encrypted-" + invocation.getArgument(1));
 
         SecurityKeyService service = new SecurityKeyService(
                 repository,
@@ -220,14 +230,17 @@ class SecurityKeyServiceTest {
                 idGenerator,
                 new JwtProperties("leo-erp", "leo-erp-jwt-secret-key-2026-must-be-long-enough-for-hs512", 1_800_000L, 604_800_000L),
                 new TotpProperties("LeoERP", "leo-dev-totp-key-change-me-20260425"),
-                cryptor
+                cryptor,
+                ossSettingRepository
         );
 
         SecurityKeyRotateResponse response = service.rotateTotpMasterKey();
 
         verify(userAccountRepository).saveAll(List.of(account));
+        verify(ossSettingRepository).saveAll(List.of(ossSetting));
         assertThat(account.getTotpSecret()).startsWith("new-encrypted-");
-        assertThat(response.processedRecordCount()).isEqualTo(1);
+        assertThat(ossSetting.getEncryptedSecretKey()).startsWith("new-oss-encrypted-");
+        assertThat(response.processedRecordCount()).isEqualTo(2);
         assertThat(response.activeVersion()).isEqualTo(2);
     }
 

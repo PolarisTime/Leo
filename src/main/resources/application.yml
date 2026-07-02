@@ -254,6 +254,10 @@ leo:
       # 每 5 分钟校验关键主数据下拉缓存，发现空缓存污染时自动重建
       enabled: ${LEO_MAINTENANCE_REDIS_CACHE_HEALTH_CHECK_ENABLED:true}
       cron: ${LEO_MAINTENANCE_REDIS_CACHE_HEALTH_CHECK_CRON:0 */5 * * * *}
+    attachment-manifest-export:
+      # 每天 02:05 导出附件恢复清单到附件存储的隔离前缀
+      enabled: ${LEO_MAINTENANCE_ATTACHMENT_MANIFEST_EXPORT_ENABLED:true}
+      cron: ${LEO_MAINTENANCE_ATTACHMENT_MANIFEST_EXPORT_CRON:0 5 2 * * *}
   company:
     bootstrap:
       # 兼容旧配置；启动期灌库已废弃，首次初始化请使用网页 OOBE (/api/setup)

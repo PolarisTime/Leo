@@ -20,28 +20,36 @@ public class S3ClientProvider implements DisposableBean {
 
     private volatile S3Client client;
     private volatile S3Presigner presigner;
+    private volatile String clientFingerprint;
+    private volatile String presignerFingerprint;
 
     public S3Client getClient(AttachmentProperties.S3 s3) {
+        String fingerprint = fingerprint(s3);
         S3Client current = client;
-        if (current != null) {
+        if (current != null && fingerprint.equals(clientFingerprint)) {
             return current;
         }
         synchronized (this) {
-            if (client == null) {
+            if (client == null || !fingerprint.equals(clientFingerprint)) {
+                closeQuietly(client);
                 client = buildClient(s3);
+                clientFingerprint = fingerprint;
             }
             return client;
         }
     }
 
     public S3Presigner getPresigner(AttachmentProperties.S3 s3) {
+        String fingerprint = fingerprint(s3);
         S3Presigner current = presigner;
-        if (current != null) {
+        if (current != null && fingerprint.equals(presignerFingerprint)) {
             return current;
         }
         synchronized (this) {
-            if (presigner == null) {
+            if (presigner == null || !fingerprint.equals(presignerFingerprint)) {
+                closeQuietly(presigner);
                 presigner = buildPresigner(s3);
+                presignerFingerprint = fingerprint;
             }
             return presigner;
         }
@@ -56,6 +64,34 @@ public class S3ClientProvider implements DisposableBean {
         S3Presigner currentPresigner = presigner;
         if (currentPresigner != null) {
             currentPresigner.close();
+        }
+    }
+
+    private String fingerprint(AttachmentProperties.S3 s3) {
+        return String.join("|",
+                value(s3.getEndpoint()),
+                value(s3.getRegion()),
+                value(s3.getBucket()),
+                value(s3.getAccessKey()),
+                value(s3.getSecretKey()),
+                String.valueOf(s3.isPathStyleAccess()),
+                String.valueOf(s3.getConnectTimeout()),
+                String.valueOf(s3.getReadTimeout())
+        );
+    }
+
+    private String value(String value) {
+        return value == null ? "" : value;
+    }
+
+    private void closeQuietly(AutoCloseable closeable) {
+        if (closeable == null) {
+            return;
+        }
+        try {
+            closeable.close();
+        } catch (Exception ignored) {
+            // Best-effort close before replacing a cached S3 client.
         }
     }
 

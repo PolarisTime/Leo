@@ -7,6 +7,8 @@ import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.security.jwt.JwtProperties;
 import com.leo.erp.security.totp.TotpProperties;
+import com.leo.erp.system.oss.domain.entity.OssSetting;
+import com.leo.erp.system.oss.repository.OssSettingRepository;
 import com.leo.erp.system.securitykey.domain.entity.SecuritySecret;
 import com.leo.erp.system.securitykey.repository.SecuritySecretRepository;
 import com.leo.erp.system.securitykey.web.dto.SecurityKeyItemResponse;
@@ -14,6 +16,7 @@ import com.leo.erp.system.securitykey.web.dto.SecurityKeyOverviewResponse;
 import com.leo.erp.system.securitykey.web.dto.SecurityKeyRotateResponse;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.beans.factory.annotation.Autowired;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -43,6 +46,7 @@ public class SecurityKeyService {
     private final JwtProperties jwtProperties;
     private final TotpProperties totpProperties;
     private final TotpSecretCryptor totpSecretCryptor;
+    private final OssSettingRepository ossSettingRepository;
     private final SecureRandom secureRandom = new SecureRandom();
 
     public SecurityKeyService(SecuritySecretRepository repository,
@@ -51,12 +55,24 @@ public class SecurityKeyService {
                               JwtProperties jwtProperties,
                               TotpProperties totpProperties,
                               TotpSecretCryptor totpSecretCryptor) {
+        this(repository, userAccountRepository, idGenerator, jwtProperties, totpProperties, totpSecretCryptor, null);
+    }
+
+    @Autowired
+    public SecurityKeyService(SecuritySecretRepository repository,
+                              UserAccountRepository userAccountRepository,
+                              SnowflakeIdGenerator idGenerator,
+                              JwtProperties jwtProperties,
+                              TotpProperties totpProperties,
+                              TotpSecretCryptor totpSecretCryptor,
+                              OssSettingRepository ossSettingRepository) {
         this.repository = repository;
         this.userAccountRepository = userAccountRepository;
         this.idGenerator = idGenerator;
         this.jwtProperties = jwtProperties;
         this.totpProperties = totpProperties;
         this.totpSecretCryptor = totpSecretCryptor;
+        this.ossSettingRepository = ossSettingRepository;
     }
 
     public SecurityKeyOverviewResponse getOverview() {
@@ -167,6 +183,7 @@ public class SecurityKeyService {
         if (!accounts.isEmpty()) {
             userAccountRepository.saveAll(accounts);
         }
+        int ossSecretCount = reencryptOssSecrets(current.secretValue(), newSecret);
 
         SecuritySecret currentActive = repository
                 .findFirstBySecretTypeAndStatusAndDeletedFlagFalseOrderByKeyVersionDesc(SECRET_TYPE_TOTP, STATUS_ACTIVE)
@@ -190,7 +207,26 @@ public class SecurityKeyService {
                 null,
                 "通过系统设置轮转生成"
         );
-        return buildRotateResponse(SECRET_TYPE_TOTP, active, accounts.size(), "2FA 主密钥轮转并完成密钥重加密");
+        return buildRotateResponse(SECRET_TYPE_TOTP, active, accounts.size() + ossSecretCount, "2FA 主密钥轮转并完成密钥重加密");
+    }
+
+    private int reencryptOssSecrets(String oldSecret, String newSecret) {
+        if (ossSettingRepository == null) {
+            return 0;
+        }
+        List<OssSetting> settings = new ArrayList<>(ossSettingRepository.findByEncryptedSecretKeyIsNotNullAndDeletedFlagFalse());
+        for (OssSetting setting : settings) {
+            try {
+                String plainSecret = totpSecretCryptor.decrypt(setting.getEncryptedSecretKey(), oldSecret);
+                setting.setEncryptedSecretKey(totpSecretCryptor.encrypt(plainSecret, newSecret));
+            } catch (IllegalStateException ex) {
+                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "OSS Secret Key 无法使用当前主密钥解密，请重新保存 OSS 设置后再轮转");
+            }
+        }
+        if (!settings.isEmpty()) {
+            ossSettingRepository.saveAll(settings);
+        }
+        return settings.size();
     }
 
     private SecurityKeyItemResponse buildItemResponse(String secretType, String keyName, int protectedCount) {
