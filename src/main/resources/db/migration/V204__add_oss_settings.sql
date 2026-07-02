@@ -6,7 +6,7 @@ CREATE TABLE IF NOT EXISTS sys_oss_setting (
     bucket VARCHAR(128) NOT NULL,
     region VARCHAR(64) NOT NULL,
     access_key VARCHAR(255) NOT NULL,
-    encrypted_secret_key TEXT,
+    encrypted_secret_key TEXT NOT NULL,
     key_prefix VARCHAR(255) NOT NULL DEFAULT 'attachments',
     path_style_access BOOLEAN NOT NULL DEFAULT TRUE,
     encrypted_storage BOOLEAN NOT NULL DEFAULT FALSE,
