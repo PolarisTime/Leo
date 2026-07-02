@@ -13,9 +13,13 @@ import com.leo.erp.logistics.bill.web.dto.FreightBillItemRequest;
 import com.leo.erp.logistics.bill.web.dto.FreightBillItemResponse;
 import com.leo.erp.logistics.bill.web.dto.FreightBillRequest;
 import com.leo.erp.logistics.bill.web.dto.FreightBillResponse;
+import com.leo.erp.master.carrier.domain.entity.Carrier;
+import com.leo.erp.master.carrier.repository.CarrierRepository;
 import com.leo.erp.sales.outbound.domain.entity.SalesOutbound;
 import com.leo.erp.sales.outbound.repository.SalesOutboundRepository;
 import com.leo.erp.security.permission.WorkflowTransitionGuard;
+import com.leo.erp.system.company.domain.entity.CompanySetting;
+import com.leo.erp.system.company.service.CompanySettingService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mapstruct.factory.Mappers;
@@ -68,6 +72,14 @@ class FreightBillServiceTest {
     private FreightBillService createService(FreightBillRepository repository,
                                              SalesOutboundRepository salesOutboundRepository,
                                              FreightBillSourceService sourceService) {
+        return createService(repository, salesOutboundRepository, sourceService, null, null);
+    }
+
+    private FreightBillService createService(FreightBillRepository repository,
+                                             SalesOutboundRepository salesOutboundRepository,
+                                             FreightBillSourceService sourceService,
+                                             CarrierRepository carrierRepository,
+                                             CompanySettingService companySettingService) {
         return new FreightBillService(
                 repository,
                 salesOutboundRepository,
@@ -75,7 +87,9 @@ class FreightBillServiceTest {
                 Mappers.getMapper(FreightBillMapper.class),
                 sourceService,
                 new FreightBillApplyService(),
-                mock(WorkflowTransitionGuard.class)
+                mock(WorkflowTransitionGuard.class),
+                carrierRepository,
+                companySettingService
         );
     }
 
@@ -324,6 +338,50 @@ class FreightBillServiceTest {
         FreightBillResponse response = service.create(request);
 
         assertThat(response.vehiclePlate()).isNull();
+    }
+
+    @Test
+    void shouldUseExplicitSettlementCompanyInsteadOfCarrierDefault() {
+        FreightBillRepository repository = mock(FreightBillRepository.class);
+        FreightBillSourceService sourceService = mock(FreightBillSourceService.class);
+        CarrierRepository carrierRepository = mock(CarrierRepository.class);
+        CompanySettingService companySettingService = mock(CompanySettingService.class);
+        when(sourceService.validateSources(any(FreightBillRequest.class), any()))
+                .thenReturn(new FreightBillSourceService.SourceValidationContext(Map.of(), Map.of()));
+        when(repository.existsByBillNoAndDeletedFlagFalse("FB-SETTLEMENT")).thenReturn(false);
+        when(repository.save(any(FreightBill.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        Carrier carrier = new Carrier();
+        carrier.setDefaultSettlementCompanyId(7L);
+        carrier.setDefaultSettlementCompanyName("嘉兴颖捷建材有限公司");
+        when(carrierRepository.findFirstByCarrierNameAndDeletedFlagFalseOrderByCarrierCodeAsc("物流甲"))
+                .thenReturn(Optional.of(carrier));
+        when(companySettingService.requireActiveSettlementCompany(9L))
+                .thenReturn(companySetting(9L, "TEST9"));
+        FreightBillService service = createService(
+                repository,
+                mock(SalesOutboundRepository.class),
+                sourceService,
+                carrierRepository,
+                companySettingService
+        );
+
+        FreightBillResponse response = service.create(new FreightBillRequest(
+                "FB-SETTLEMENT",
+                "物流甲",
+                9L,
+                null,
+                null,
+                "客户甲",
+                "项目甲",
+                LocalDate.of(2026, 5, 4),
+                new BigDecimal("20.00"),
+                null,
+                null,
+                List.of(buildItemRequest("OB-001"))
+        ));
+
+        assertThat(response.settlementCompanyId()).isEqualTo(9L);
+        assertThat(response.settlementCompanyName()).isEqualTo("TEST9");
     }
 
     @Test
@@ -1079,5 +1137,12 @@ class FreightBillServiceTest {
         service.update(1L, request);
 
         verify(repository, never()).existsByBillNoAndDeletedFlagFalse("FB-KEEP");
+    }
+
+    private CompanySetting companySetting(Long id, String companyName) {
+        CompanySetting companySetting = new CompanySetting();
+        companySetting.setId(id);
+        companySetting.setCompanyName(companyName);
+        return companySetting;
     }
 }

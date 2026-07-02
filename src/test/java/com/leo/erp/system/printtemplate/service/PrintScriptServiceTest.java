@@ -81,7 +81,7 @@ class PrintScriptServiceTest {
     @Test
     void shouldMatchSettlementCompanyNameFromCurrentCompanySettings() {
         JdbcTemplate jdbc = mock(JdbcTemplate.class);
-        PrintScriptService service = printScriptService(repository("sales-order"), jdbc);
+        PrintScriptService service = printScriptService(repository("sales-order", 7L, "当前结算主体"), jdbc);
 
         when(jdbc.queryForMap(anyString(), eq(1L))).thenReturn(Map.of(
                 "id", 1L,
@@ -104,7 +104,7 @@ class PrintScriptServiceTest {
     @Test
     void shouldKeepSettlementCompanySnapshotWhenCurrentCompanySettingMissing() {
         JdbcTemplate jdbc = mock(JdbcTemplate.class);
-        PrintScriptService service = printScriptService(repository("sales-order"), jdbc);
+        PrintScriptService service = printScriptService(repository("sales-order", 7L, "历史主体"), jdbc);
 
         when(jdbc.queryForMap(anyString(), eq(1L))).thenReturn(Map.of(
                 "id", 1L,
@@ -121,6 +121,27 @@ class PrintScriptServiceTest {
 
         Map<?, ?> data = (Map<?, ?>) result.get("data");
         assertThat(data.get("settlementCompanyName")).isEqualTo("历史主体");
+    }
+
+    @Test
+    void shouldRejectPrintTemplateWhenSettlementCompanyMismatchesRecord() {
+        JdbcTemplate jdbc = mock(JdbcTemplate.class);
+        PrintScriptService service = printScriptService(repository("sales-order", 8L, "主体B"), jdbc);
+
+        when(jdbc.queryForMap(anyString(), eq(1L))).thenReturn(Map.of(
+                "id", 1L,
+                "order_no", "SO-001",
+                "settlement_company_id", 7L,
+                "settlement_company_name", "主体A",
+                "deleted_flag", false
+        ));
+        when(jdbc.queryForList(anyString(), eq(1L))).thenReturn(List.of());
+        when(jdbc.queryForList(anyString(), eq(String.class), eq(7L))).thenReturn(List.of("主体A"));
+        when(jdbc.queryForList(anyString(), eq(String.class), eq("SO-001"))).thenReturn(List.of());
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.generateFromRecord("1", "sales-order", 1L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("打印模板与当前结算主体不匹配");
     }
 
     @Test
@@ -681,6 +702,10 @@ class PrintScriptServiceTest {
         return repository(billType, "COORD", "LODOP.PRINT_INIT('模板');");
     }
 
+    private PrintTemplateRepository repository(String billType, Long settlementCompanyId, String settlementCompanyName) {
+        return repository(billType, "COORD", "LODOP.PRINT_INIT('模板');", "ACTIVE", settlementCompanyId, settlementCompanyName);
+    }
+
     private PrintScriptService printScriptService(PrintTemplateRepository repository, JdbcTemplate jdbc) {
         return printScriptService(repository, jdbc, mock(AttachmentRecordAccessService.class));
     }
@@ -722,6 +747,17 @@ class PrintScriptServiceTest {
     }
 
     private PrintTemplateRepository repository(String billType, String templateType, String templateHtml, String status) {
+        return repository(billType, templateType, templateHtml, status, null, null);
+    }
+
+    private PrintTemplateRepository repository(
+            String billType,
+            String templateType,
+            String templateHtml,
+            String status,
+            Long settlementCompanyId,
+            String settlementCompanyName
+    ) {
         PrintTemplate template = new PrintTemplate();
         template.setId(1L);
         template.setBillType(billType);
@@ -729,6 +765,8 @@ class PrintScriptServiceTest {
         template.setTemplateHtml(templateHtml);
         template.setTemplateType(templateType);
         template.setStatus(status);
+        template.setSettlementCompanyId(settlementCompanyId);
+        template.setSettlementCompanyName(settlementCompanyName);
 
         PrintTemplateRepository repository = mock(PrintTemplateRepository.class);
         when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(template));

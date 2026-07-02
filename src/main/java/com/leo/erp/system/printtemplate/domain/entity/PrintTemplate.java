@@ -38,6 +38,12 @@ public class PrintTemplate extends AbstractAuditableEntity {
     @Column(name = "asset_ref", length = 255)
     private String assetRef;
 
+    @Column(name = "settlement_company_id")
+    private Long settlementCompanyId;
+
+    @Column(name = "settlement_company_name", length = 128)
+    private String settlementCompanyName;
+
     @Column(name = "version_no", nullable = false)
     private Integer versionNo = 1;
 

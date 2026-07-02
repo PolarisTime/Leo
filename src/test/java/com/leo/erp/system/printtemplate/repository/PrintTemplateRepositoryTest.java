@@ -62,18 +62,34 @@ class PrintTemplateRepositoryTest {
 
     @Test
     void existsByBillTypeAndTemplateNameShouldReturnTrueWhenExists() {
-        when(repository.existsByBillTypeAndTemplateNameAndDeletedFlagFalse("purchase-order", "模板A")).thenReturn(true);
+        when(repository.existsByBillTypeAndSettlementCompanyIdAndTemplateNameAndDeletedFlagFalse(
+                "purchase-order",
+                7L,
+                "模板A"
+        )).thenReturn(true);
 
-        boolean result = repository.existsByBillTypeAndTemplateNameAndDeletedFlagFalse("purchase-order", "模板A");
+        boolean result = repository.existsByBillTypeAndSettlementCompanyIdAndTemplateNameAndDeletedFlagFalse(
+                "purchase-order",
+                7L,
+                "模板A"
+        );
 
         assertThat(result).isTrue();
     }
 
     @Test
     void existsByBillTypeAndTemplateNameShouldReturnFalseWhenNotExists() {
-        when(repository.existsByBillTypeAndTemplateNameAndDeletedFlagFalse("purchase-order", "不存在")).thenReturn(false);
+        when(repository.existsByBillTypeAndSettlementCompanyIdAndTemplateNameAndDeletedFlagFalse(
+                "purchase-order",
+                7L,
+                "不存在"
+        )).thenReturn(false);
 
-        boolean result = repository.existsByBillTypeAndTemplateNameAndDeletedFlagFalse("purchase-order", "不存在");
+        boolean result = repository.existsByBillTypeAndSettlementCompanyIdAndTemplateNameAndDeletedFlagFalse(
+                "purchase-order",
+                7L,
+                "不存在"
+        );
 
         assertThat(result).isFalse();
     }

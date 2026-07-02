@@ -24,6 +24,8 @@ class PrintTemplateMapperTest {
         entity.setTemplateType("COORD");
         entity.setEngine("LODOP");
         entity.setAssetRef(null);
+        entity.setSettlementCompanyId(330050675528433664L);
+        entity.setSettlementCompanyName("TEST9");
         entity.setVersionNo(3);
         entity.setStatus("ACTIVE");
         entity.setIsDefault(false);
@@ -41,6 +43,8 @@ class PrintTemplateMapperTest {
         assertThat(response.templateType()).isEqualTo("COORD");
         assertThat(response.engine()).isEqualTo("LODOP");
         assertThat(response.assetRef()).isNull();
+        assertThat(response.settlementCompanyId()).isEqualTo("330050675528433664");
+        assertThat(response.settlementCompanyName()).isEqualTo("TEST9");
         assertThat(response.versionNo()).isEqualTo(3);
         assertThat(response.status()).isEqualTo("ACTIVE");
         assertThat(response.createTime()).isEqualTo(LocalDateTime.of(2026, 1, 15, 10, 0, 0));

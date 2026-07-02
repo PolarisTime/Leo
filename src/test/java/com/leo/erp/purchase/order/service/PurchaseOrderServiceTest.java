@@ -26,6 +26,7 @@ import com.leo.erp.system.norule.service.SystemSwitchService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
@@ -248,6 +249,84 @@ class PurchaseOrderServiceTest {
                 "已审核",
                 "完成采购"
         );
+    }
+
+    @Test
+    void shouldSaveExplicitSettlementCompanyFromRequest() {
+        PurchaseOrderRepository repository = mock(PurchaseOrderRepository.class);
+        SnowflakeIdGenerator idGenerator = mock(SnowflakeIdGenerator.class);
+        PurchaseOrderMapper mapper = mock(PurchaseOrderMapper.class);
+        TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
+        WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
+        SupplierRepository supplierRepository = mock(SupplierRepository.class);
+        PurchaseInboundItemQueryService purchaseInboundItemQueryService = mock(PurchaseInboundItemQueryService.class);
+        ItemAllocationNativeRepository itemAllocationRepo = mock(ItemAllocationNativeRepository.class);
+        PurchaseOrderItemPieceWeightService pieceWeightService = mock(PurchaseOrderItemPieceWeightService.class);
+        WorkflowTransitionGuard workflowTransitionGuard = mock(WorkflowTransitionGuard.class);
+        CompanySettingService companySettingService = mock(CompanySettingService.class);
+        PurchaseOrderService service = service(
+                repository,
+                idGenerator,
+                mapper,
+                materialSupport,
+                warehouseSelectionSupport,
+                supplierRepository,
+                purchaseInboundItemQueryService,
+                itemAllocationRepo,
+                pieceWeightService,
+                workflowTransitionGuard,
+                mock(JdbcTemplate.class),
+                companySettingService
+        );
+
+        when(repository.existsByOrderNoAndDeletedFlagFalse("PO-TEST9")).thenReturn(false);
+        when(supplierRepository.findFirstBySupplierNameAndDeletedFlagFalseOrderBySupplierCodeAsc("供应商A"))
+                .thenReturn(Optional.of(supplier("供应商A")));
+        when(companySettingService.requireActiveSettlementCompany(9L))
+                .thenReturn(companySetting(9L, "TEST9"));
+        when(idGenerator.nextId()).thenReturn(1L, 11L);
+        when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(materialMap("M1"));
+        when(materialSupport.normalizeBatchNo(any(), anyString(), anyInt(), eq(false))).thenReturn("B1");
+        when(warehouseSelectionSupport.normalizeWarehouseName("一号库", 1, true)).thenReturn("一号库");
+        when(purchaseInboundItemQueryService.summarizeWeightAdjustmentBySourcePurchaseOrderItemIds(any()))
+                .thenReturn(Map.of());
+        when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(mapper.toResponse(any())).thenReturn(summaryResponse("草稿"));
+        PurchaseOrderRequest request = new PurchaseOrderRequest(
+                "PO-TEST9",
+                "供应商A",
+                LocalDateTime.of(2026, 4, 26, 0, 0),
+                "李四",
+                9L,
+                "草稿",
+                "备注",
+                List.of(new PurchaseOrderItemRequest(
+                        null,
+                        "M1",
+                        "宝钢",
+                        "螺纹钢",
+                        "HRB400",
+                        "18",
+                        "12m",
+                        "吨",
+                        "一号库",
+                        "B1",
+                        10,
+                        "支",
+                        new BigDecimal("0.100"),
+                        1,
+                        new BigDecimal("1.000"),
+                        new BigDecimal("4000.00"),
+                        new BigDecimal("4000.00")
+                ))
+        );
+
+        service.create(request);
+
+        ArgumentCaptor<PurchaseOrder> orderCaptor = ArgumentCaptor.forClass(PurchaseOrder.class);
+        verify(repository).save(orderCaptor.capture());
+        assertThat(orderCaptor.getValue().getSettlementCompanyId()).isEqualTo(9L);
+        assertThat(orderCaptor.getValue().getSettlementCompanyName()).isEqualTo("TEST9");
     }
 
     @Test
@@ -1281,6 +1360,34 @@ class PurchaseOrderServiceTest {
                                          PurchaseOrderItemPieceWeightService purchaseOrderItemPieceWeightService,
                                          WorkflowTransitionGuard workflowTransitionGuard,
                                          JdbcTemplate jdbc) {
+        return service(
+                purchaseOrderRepository,
+                snowflakeIdGenerator,
+                purchaseOrderMapper,
+                tradeItemMaterialSupport,
+                warehouseSelectionSupport,
+                supplierRepository,
+                purchaseInboundItemQueryService,
+                itemAllocationRepo,
+                purchaseOrderItemPieceWeightService,
+                workflowTransitionGuard,
+                jdbc,
+                null
+        );
+    }
+
+    private PurchaseOrderService service(PurchaseOrderRepository purchaseOrderRepository,
+                                         SnowflakeIdGenerator snowflakeIdGenerator,
+                                         PurchaseOrderMapper purchaseOrderMapper,
+                                         TradeItemMaterialSupport tradeItemMaterialSupport,
+                                         WarehouseSelectionSupport warehouseSelectionSupport,
+                                         SupplierRepository supplierRepository,
+                                         PurchaseInboundItemQueryService purchaseInboundItemQueryService,
+                                         ItemAllocationNativeRepository itemAllocationRepo,
+                                         PurchaseOrderItemPieceWeightService purchaseOrderItemPieceWeightService,
+                                         WorkflowTransitionGuard workflowTransitionGuard,
+                                         JdbcTemplate jdbc,
+                                         CompanySettingService companySettingService) {
         TradeItemMaterialSupportTestDoubles.stubMaterialCodeNormalization(tradeItemMaterialSupport);
         PurchaseOrderAvailabilityService availabilityService = new PurchaseOrderAvailabilityService(
                 purchaseInboundItemQueryService,
@@ -1300,11 +1407,18 @@ class PurchaseOrderServiceTest {
                 ),
                 new PurchaseOrderPieceWeightQueryService(jdbc),
                 workflowTransitionGuard,
-                null
+                companySettingService
         );
     }
 
     private Map<String, TradeMaterialSnapshot> materialMap(String materialCode) {
         return Map.of(materialCode, new TradeMaterialSnapshot(materialCode, Boolean.FALSE));
+    }
+
+    private CompanySetting companySetting(Long id, String companyName) {
+        CompanySetting companySetting = new CompanySetting();
+        companySetting.setId(id);
+        companySetting.setCompanyName(companyName);
+        return companySetting;
     }
 }

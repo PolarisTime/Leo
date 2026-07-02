@@ -69,6 +69,7 @@ public class PrintScriptService {
         List<Map<String, String>> items = recordData.items();
 
         recordEnricher.enrich(moduleKey, data, items);
+        assertTemplateMatchesSettlementCompany(template, data);
         items = applyItemOrder(items, options);
         items = layoutPreparer.prepare(moduleKey, template.getTemplateName(), template.getTemplateHtml(), data, items);
         applyPrintOptions(data, items, options);
@@ -83,6 +84,37 @@ public class PrintScriptService {
         result.put("data", data);
         result.put("items", items);
         return result;
+    }
+
+    private void assertTemplateMatchesSettlementCompany(PrintTemplate template, Map<String, String> data) {
+        if (matchesSettlementCompany(template, data)) {
+            return;
+        }
+        throw new BusinessException(ErrorCode.VALIDATION_ERROR, "打印模板与当前结算主体不匹配");
+    }
+
+    private boolean matchesSettlementCompany(PrintTemplate template, Map<String, String> data) {
+        String recordCompanyId = normalizeText(data.get("settlementCompanyId"));
+        String recordCompanyName = normalizeText(data.get("settlementCompanyName"));
+        String templateCompanyId = template.getSettlementCompanyId() == null
+                ? ""
+                : String.valueOf(template.getSettlementCompanyId());
+        String templateCompanyName = normalizeText(template.getSettlementCompanyName());
+
+        if (!templateCompanyId.isBlank()) {
+            if (!recordCompanyId.isBlank()) {
+                return templateCompanyId.equals(recordCompanyId);
+            }
+            return !templateCompanyName.isBlank() && templateCompanyName.equals(recordCompanyName);
+        }
+        if (!templateCompanyName.isBlank()) {
+            return templateCompanyName.equals(recordCompanyName);
+        }
+        return recordCompanyId.isBlank() && recordCompanyName.isBlank();
+    }
+
+    private String normalizeText(String value) {
+        return value == null ? "" : value.trim();
     }
 
     public List<String> listBrands(String moduleKey, List<Long> recordIds) {

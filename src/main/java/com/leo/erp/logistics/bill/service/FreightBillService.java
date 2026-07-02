@@ -19,6 +19,8 @@ import com.leo.erp.sales.outbound.domain.entity.SalesOutbound;
 import com.leo.erp.sales.outbound.repository.SalesOutboundRepository;
 import com.leo.erp.security.permission.DataScopeContext;
 import com.leo.erp.security.permission.WorkflowTransitionGuard;
+import com.leo.erp.system.company.domain.entity.CompanySetting;
+import com.leo.erp.system.company.service.CompanySettingService;
 import com.leo.erp.logistics.bill.web.dto.*;
 import jakarta.persistence.criteria.Join;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -39,6 +41,7 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
     private final FreightBillApplyService freightBillApplyService;
     private final WorkflowTransitionGuard workflowTransitionGuard;
     private final CarrierRepository carrierRepository;
+    private final CompanySettingService companySettingService;
 
     public FreightBillService(FreightBillRepository repository,
                               SalesOutboundRepository salesOutboundRepository,
@@ -51,7 +54,6 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
                 freightBillApplyService, workflowTransitionGuard, null);
     }
 
-    @Autowired
     public FreightBillService(FreightBillRepository repository,
                               SalesOutboundRepository salesOutboundRepository,
                               SnowflakeIdGenerator idGenerator,
@@ -60,6 +62,20 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
                               FreightBillApplyService freightBillApplyService,
                               WorkflowTransitionGuard workflowTransitionGuard,
                               CarrierRepository carrierRepository) {
+        this(repository, salesOutboundRepository, idGenerator, freightBillMapper, freightBillSourceService,
+                freightBillApplyService, workflowTransitionGuard, carrierRepository, null);
+    }
+
+    @Autowired
+    public FreightBillService(FreightBillRepository repository,
+                              SalesOutboundRepository salesOutboundRepository,
+                              SnowflakeIdGenerator idGenerator,
+                              FreightBillMapper freightBillMapper,
+                              FreightBillSourceService freightBillSourceService,
+                              FreightBillApplyService freightBillApplyService,
+                              WorkflowTransitionGuard workflowTransitionGuard,
+                              CarrierRepository carrierRepository,
+                              CompanySettingService companySettingService) {
         super(idGenerator);
         this.repository = repository;
         this.salesOutboundRepository = salesOutboundRepository;
@@ -68,6 +84,7 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
         this.freightBillApplyService = freightBillApplyService;
         this.workflowTransitionGuard = workflowTransitionGuard;
         this.carrierRepository = carrierRepository;
+        this.companySettingService = companySettingService;
     }
 
     public Page<FreightBillResponse> page(PageQuery query, PageFilter filter) {
@@ -145,6 +162,8 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
         return new FreightBillRequest(
                 resolveCreateBusinessNo("freight-bill", request.billNo(), entityId),
                 request.carrierName(),
+                request.settlementCompanyId(),
+                request.settlementCompanyName(),
                 request.vehiclePlate(),
                 request.customerName(),
                 request.projectName(),
@@ -161,6 +180,8 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
         return new FreightBillRequest(
                 entity.getBillNo(),
                 request.carrierName(),
+                request.settlementCompanyId(),
+                request.settlementCompanyName(),
                 request.vehiclePlate(),
                 request.customerName(),
                 request.projectName(),
@@ -223,7 +244,7 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
         );
         entity.setBillNo(request.billNo());
         entity.setCarrierName(request.carrierName());
-        applyCarrierSettlementCompany(entity, request.carrierName());
+        applySettlementCompany(entity, request);
         entity.setVehiclePlate(emptyToNull(request.vehiclePlate()));
         entity.setBillTime(request.billTime());
         entity.setUnitPrice(request.unitPrice());
@@ -235,11 +256,17 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
         freightBillApplyService.applyItems(entity, request, sourceContext, this::nextId);
     }
 
-    private void applyCarrierSettlementCompany(FreightBill entity, String carrierName) {
+    private void applySettlementCompany(FreightBill entity, FreightBillRequest request) {
+        SettlementCompanySnapshot requestedSettlementCompany = resolveRequestedSettlementCompany(request);
+        if (requestedSettlementCompany.id() != null) {
+            entity.setSettlementCompanyId(requestedSettlementCompany.id());
+            entity.setSettlementCompanyName(requestedSettlementCompany.name());
+            return;
+        }
         if (carrierRepository == null) {
             return;
         }
-        String normalizedCarrierName = emptyToNull(carrierName);
+        String normalizedCarrierName = emptyToNull(request.carrierName());
         if (normalizedCarrierName == null) {
             entity.setSettlementCompanyId(null);
             entity.setSettlementCompanyName(null);
@@ -256,6 +283,21 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
         entity.setSettlementCompanyName(carrier.getDefaultSettlementCompanyName());
     }
 
+    private SettlementCompanySnapshot resolveRequestedSettlementCompany(FreightBillRequest request) {
+        Long settlementCompanyId = request.settlementCompanyId();
+        if (settlementCompanyId == null) {
+            return SettlementCompanySnapshot.EMPTY;
+        }
+        if (companySettingService == null) {
+            return new SettlementCompanySnapshot(
+                    settlementCompanyId,
+                    emptyToNull(request.settlementCompanyName())
+            );
+        }
+        CompanySetting company = companySettingService.requireActiveSettlementCompany(settlementCompanyId);
+        return new SettlementCompanySnapshot(company.getId(), company.getCompanyName());
+    }
+
     private String emptyToNull(String value) {
         return BusinessDocumentValidator.trimToNull(value);
     }
@@ -266,6 +308,10 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
             return explicitName;
         }
         return emptyToNull(item.getBrand());
+    }
+
+    private record SettlementCompanySnapshot(Long id, String name) {
+        private static final SettlementCompanySnapshot EMPTY = new SettlementCompanySnapshot(null, null);
     }
 
     private Specification<SalesOutbound> importableSalesOutboundStatus(String status) {

@@ -14,7 +14,15 @@ public interface PrintTemplateRepository extends JpaRepository<PrintTemplate, Lo
 
     Optional<PrintTemplate> findByIdAndDeletedFlagFalse(Long id);
 
-    boolean existsByBillTypeAndTemplateNameAndDeletedFlagFalse(String billType, String templateName);
+    boolean existsByBillTypeAndSettlementCompanyIdAndTemplateNameAndDeletedFlagFalse(
+            String billType,
+            Long settlementCompanyId,
+            String templateName
+    );
 
-    boolean existsByBillTypeAndTemplateCodeAndDeletedFlagFalse(String billType, String templateCode);
+    boolean existsByBillTypeAndSettlementCompanyIdAndTemplateCodeAndDeletedFlagFalse(
+            String billType,
+            Long settlementCompanyId,
+            String templateCode
+    );
 }

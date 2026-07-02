@@ -5,6 +5,8 @@ import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.service.AbstractCrudService;
 import com.leo.erp.common.support.ModuleCatalog;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
+import com.leo.erp.system.company.domain.entity.CompanySetting;
+import com.leo.erp.system.company.repository.CompanySettingRepository;
 import com.leo.erp.system.printtemplate.domain.entity.PrintTemplate;
 import com.leo.erp.system.printtemplate.repository.PrintTemplateRepository;
 import com.leo.erp.system.printtemplate.mapper.PrintTemplateMapper;
@@ -44,12 +46,14 @@ public class PrintTemplateService extends AbstractCrudService<PrintTemplate, Pri
     private static final long MAX_UPLOAD_JSON_BYTES = 1024L * 1024L;
 
     private final PrintTemplateRepository repository;
+    private final CompanySettingRepository companySettingRepository;
     private final PrintTemplateMapper printTemplateMapper;
     private final ModuleCatalog moduleCatalog;
     private final PrintPdfFormTemplateValidator pdfFormTemplateValidator;
     private final PrintRuntimeProperties runtimeProperties;
 
     public PrintTemplateService(PrintTemplateRepository repository,
+                                CompanySettingRepository companySettingRepository,
                                 SnowflakeIdGenerator idGenerator,
                                 PrintTemplateMapper printTemplateMapper,
                                 ModuleCatalog moduleCatalog,
@@ -57,6 +61,7 @@ public class PrintTemplateService extends AbstractCrudService<PrintTemplate, Pri
                                 PrintRuntimeProperties runtimeProperties) {
         super(idGenerator);
         this.repository = repository;
+        this.companySettingRepository = companySettingRepository;
         this.printTemplateMapper = printTemplateMapper;
         this.moduleCatalog = moduleCatalog;
         this.pdfFormTemplateValidator = pdfFormTemplateValidator;
@@ -97,11 +102,20 @@ public class PrintTemplateService extends AbstractCrudService<PrintTemplate, Pri
         String billType = normalizeBillType(request.billType());
         String templateName = normalizeTemplateName(request.templateName());
         String templateCode = normalizeTemplateCode(request.templateCode());
-        if (repository.existsByBillTypeAndTemplateNameAndDeletedFlagFalse(billType, templateName)) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "同一单据已存在同名打印模板");
+        Long settlementCompanyId = request.settlementCompanyId();
+        if (repository.existsByBillTypeAndSettlementCompanyIdAndTemplateNameAndDeletedFlagFalse(
+                billType,
+                settlementCompanyId,
+                templateName
+        )) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "同一单据和结算主体下已存在同名打印模板");
         }
-        if (repository.existsByBillTypeAndTemplateCodeAndDeletedFlagFalse(billType, templateCode)) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "同一单据已存在同编码打印模板");
+        if (repository.existsByBillTypeAndSettlementCompanyIdAndTemplateCodeAndDeletedFlagFalse(
+                billType,
+                settlementCompanyId,
+                templateCode
+        )) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "同一单据和结算主体下已存在同编码打印模板");
         }
     }
 
@@ -110,15 +124,30 @@ public class PrintTemplateService extends AbstractCrudService<PrintTemplate, Pri
         String billType = normalizeBillType(request.billType());
         String templateName = normalizeTemplateName(request.templateName());
         String templateCode = normalizeTemplateCode(request.templateCode());
-        boolean duplicatedName = repository.existsByBillTypeAndTemplateNameAndDeletedFlagFalse(billType, templateName)
-                && !(entity.getBillType().equals(billType) && entity.getTemplateName().equals(templateName));
+        Long settlementCompanyId = request.settlementCompanyId();
+        boolean duplicatedName = repository.existsByBillTypeAndSettlementCompanyIdAndTemplateNameAndDeletedFlagFalse(
+                billType,
+                settlementCompanyId,
+                templateName
+        ) && !(
+                entity.getBillType().equals(billType)
+                        && Objects.equals(entity.getSettlementCompanyId(), settlementCompanyId)
+                        && entity.getTemplateName().equals(templateName)
+        );
         if (duplicatedName) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "同一单据已存在同名打印模板");
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "同一单据和结算主体下已存在同名打印模板");
         }
-        boolean duplicatedCode = repository.existsByBillTypeAndTemplateCodeAndDeletedFlagFalse(billType, templateCode)
-                && !(entity.getBillType().equals(billType) && Objects.equals(entity.getTemplateCode(), templateCode));
+        boolean duplicatedCode = repository.existsByBillTypeAndSettlementCompanyIdAndTemplateCodeAndDeletedFlagFalse(
+                billType,
+                settlementCompanyId,
+                templateCode
+        ) && !(
+                entity.getBillType().equals(billType)
+                        && Objects.equals(entity.getSettlementCompanyId(), settlementCompanyId)
+                        && Objects.equals(entity.getTemplateCode(), templateCode)
+        );
         if (duplicatedCode) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "同一单据已存在同编码打印模板");
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "同一单据和结算主体下已存在同编码打印模板");
         }
     }
 
@@ -140,6 +169,9 @@ public class PrintTemplateService extends AbstractCrudService<PrintTemplate, Pri
     @Override
     protected PrintTemplateRequest normalizeCreateRequest(PrintTemplateRequest request, long entityId) {
         String templateCode = request.templateCode();
+        SettlementCompanySnapshot settlementCompany = normalizeSettlementCompanySnapshot(
+                request.settlementCompanyId()
+        );
         return new PrintTemplateRequest(
                 request.billType(),
                 request.templateName(),
@@ -148,6 +180,8 @@ public class PrintTemplateService extends AbstractCrudService<PrintTemplate, Pri
                 request.templateType(),
                 request.engine(),
                 request.assetRef(),
+                settlementCompany.id(),
+                settlementCompany.name(),
                 request.versionNo(),
                 request.status()
         );
@@ -159,6 +193,9 @@ public class PrintTemplateService extends AbstractCrudService<PrintTemplate, Pri
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "文件托管模板请通过上传 JSON 或修改源文件后重启同步");
         }
         String templateCode = request.templateCode();
+        SettlementCompanySnapshot settlementCompany = normalizeSettlementCompanySnapshot(
+                request.settlementCompanyId()
+        );
         return new PrintTemplateRequest(
                 request.billType(),
                 request.templateName(),
@@ -167,6 +204,8 @@ public class PrintTemplateService extends AbstractCrudService<PrintTemplate, Pri
                 request.templateType(),
                 request.engine(),
                 request.assetRef(),
+                settlementCompany.id(),
+                settlementCompany.name(),
                 request.versionNo(),
                 request.status()
         );
@@ -190,6 +229,8 @@ public class PrintTemplateService extends AbstractCrudService<PrintTemplate, Pri
         entity.setTemplateType(templateType);
         entity.setEngine(engine);
         entity.setAssetRef(assetRef);
+        entity.setSettlementCompanyId(request.settlementCompanyId());
+        entity.setSettlementCompanyName(request.settlementCompanyName());
         entity.setVersionNo(normalizeVersionNo(request.versionNo()));
         entity.setStatus(normalizeStatus(request.status()));
     }
@@ -210,6 +251,18 @@ public class PrintTemplateService extends AbstractCrudService<PrintTemplate, Pri
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "模板名称不能为空");
         }
         return templateName.trim();
+    }
+
+    private SettlementCompanySnapshot normalizeSettlementCompanySnapshot(Long settlementCompanyId) {
+        if (settlementCompanyId == null) {
+            return new SettlementCompanySnapshot(null, null);
+        }
+        CompanySetting company = companySettingRepository.findByIdAndDeletedFlagFalse(settlementCompanyId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.VALIDATION_ERROR, "结算主体不存在"));
+        return new SettlementCompanySnapshot(company.getId(), company.getCompanyName());
+    }
+
+    private record SettlementCompanySnapshot(Long id, String name) {
     }
 
     private String normalizeTemplateCode(String templateCode) {

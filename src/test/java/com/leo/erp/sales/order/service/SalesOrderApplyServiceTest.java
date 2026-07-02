@@ -6,18 +6,23 @@ import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.support.TradeItemMaterialSupport;
 import com.leo.erp.common.support.TradeMaterialSnapshot;
 import com.leo.erp.common.support.WarehouseSelectionSupport;
+import com.leo.erp.master.customer.domain.entity.Customer;
+import com.leo.erp.master.customer.repository.CustomerRepository;
 import com.leo.erp.sales.order.domain.entity.SalesOrder;
 import com.leo.erp.sales.order.domain.entity.SalesOrderItem;
 import com.leo.erp.sales.order.repository.SalesOrderItemRepository;
 import com.leo.erp.sales.order.web.dto.SalesOrderItemRequest;
 import com.leo.erp.sales.order.web.dto.SalesOrderRequest;
 import com.leo.erp.security.permission.WorkflowTransitionGuard;
+import com.leo.erp.system.company.domain.entity.CompanySetting;
+import com.leo.erp.system.company.service.CompanySettingService;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -127,12 +132,85 @@ class SalesOrderApplyServiceTest {
         verify(pieceWeightAppService).releaseSalesOrderItems(List.of());
     }
 
+    @Test
+    void shouldUseExplicitSettlementCompanyInsteadOfCustomerDefault() {
+        TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
+        WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
+        PurchaseItemPieceWeightAppService pieceWeightAppService = mock(PurchaseItemPieceWeightAppService.class);
+        CustomerRepository customerRepository = mock(CustomerRepository.class);
+        CompanySettingService companySettingService = mock(CompanySettingService.class);
+        SalesOrderApplyService service = service(
+                materialSupport,
+                warehouseSelectionSupport,
+                mock(PurchaseItemQueryAppService.class),
+                pieceWeightAppService,
+                mock(SalesOrderItemRepository.class),
+                mock(WorkflowTransitionGuard.class),
+                customerRepository,
+                companySettingService
+        );
+        SalesOrder order = new SalesOrder();
+        SalesOrderRequest request = new SalesOrderRequest(
+                "SO-001",
+                "REQ-PI",
+                "REQ-PO",
+                "C001",
+                "客户A",
+                1001L,
+                "项目A",
+                9L,
+                null,
+                LocalDate.of(2026, 4, 26),
+                "张三",
+                StatusConstants.AUDITED,
+                "备注",
+                List.of(itemRequest(null, null, 2))
+        );
+        Customer customer = new Customer();
+        customer.setDefaultSettlementCompanyId(7L);
+        customer.setDefaultSettlementCompanyName("嘉兴颖捷建材有限公司");
+        when(customerRepository.findByCustomerCodeAndDeletedFlagFalse("C001"))
+                .thenReturn(Optional.of(customer));
+        when(companySettingService.requireActiveSettlementCompany(9L))
+                .thenReturn(companySetting(9L, "TEST9"));
+        when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(Map.of("M1", material()));
+        when(materialSupport.normalizeMaterialCode(any(), anyInt())).thenAnswer(invocation ->
+                ((String) invocation.getArgument(0)).trim());
+        when(materialSupport.normalizeBatchNo(any(), eq("B1"), eq(1), eq(true))).thenReturn("B1");
+        when(warehouseSelectionSupport.normalizeWarehouseName("一号库", 1, true)).thenReturn("一号库");
+
+        service.apply(order, request, new AtomicLong(31L)::getAndIncrement);
+
+        assertThat(order.getSettlementCompanyId()).isEqualTo(9L);
+        assertThat(order.getSettlementCompanyName()).isEqualTo("TEST9");
+    }
+
     private SalesOrderApplyService service(TradeItemMaterialSupport materialSupport,
                                            WarehouseSelectionSupport warehouseSelectionSupport,
                                            PurchaseItemQueryAppService purchaseItemQueryAppService,
                                            PurchaseItemPieceWeightAppService pieceWeightAppService,
                                            SalesOrderItemRepository salesOrderItemRepository,
                                            WorkflowTransitionGuard workflowTransitionGuard) {
+        return service(
+                materialSupport,
+                warehouseSelectionSupport,
+                purchaseItemQueryAppService,
+                pieceWeightAppService,
+                salesOrderItemRepository,
+                workflowTransitionGuard,
+                null,
+                null
+        );
+    }
+
+    private SalesOrderApplyService service(TradeItemMaterialSupport materialSupport,
+                                           WarehouseSelectionSupport warehouseSelectionSupport,
+                                           PurchaseItemQueryAppService purchaseItemQueryAppService,
+                                           PurchaseItemPieceWeightAppService pieceWeightAppService,
+                                           SalesOrderItemRepository salesOrderItemRepository,
+                                           WorkflowTransitionGuard workflowTransitionGuard,
+                                           CustomerRepository customerRepository,
+                                           CompanySettingService companySettingService) {
         SalesOrderPurchaseAllocationService purchaseAllocationService =
                 new SalesOrderPurchaseAllocationService(purchaseItemQueryAppService, pieceWeightAppService);
         return new SalesOrderApplyService(
@@ -141,7 +219,9 @@ class SalesOrderApplyServiceTest {
                 new SalesOrderWeightResolver(pieceWeightAppService),
                 purchaseAllocationService,
                 new SalesOrderItemMapper(materialSupport, warehouseSelectionSupport),
-                workflowTransitionGuard
+                workflowTransitionGuard,
+                customerRepository,
+                companySettingService
         );
     }
 
@@ -210,5 +290,12 @@ class SalesOrderApplyServiceTest {
 
     private TradeMaterialSnapshot material() {
         return new TradeMaterialSnapshot("M1", Boolean.TRUE);
+    }
+
+    private CompanySetting companySetting(Long id, String companyName) {
+        CompanySetting companySetting = new CompanySetting();
+        companySetting.setId(id);
+        companySetting.setCompanyName(companyName);
+        return companySetting;
     }
 }

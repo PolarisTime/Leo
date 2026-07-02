@@ -13,6 +13,8 @@ import com.leo.erp.sales.order.domain.entity.SalesOrderItem;
 import com.leo.erp.sales.order.web.dto.SalesOrderItemRequest;
 import com.leo.erp.sales.order.web.dto.SalesOrderRequest;
 import com.leo.erp.security.permission.WorkflowTransitionGuard;
+import com.leo.erp.system.company.domain.entity.CompanySetting;
+import com.leo.erp.system.company.service.CompanySettingService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -32,6 +34,7 @@ public class SalesOrderApplyService {
     private final SalesOrderItemMapper salesOrderItemMapper;
     private final WorkflowTransitionGuard workflowTransitionGuard;
     private final CustomerRepository customerRepository;
+    private final CompanySettingService companySettingService;
 
     public SalesOrderApplyService(TradeItemMaterialSupport tradeItemMaterialSupport,
                                   SalesOrderSourceAllocationService sourceAllocationService,
@@ -43,7 +46,6 @@ public class SalesOrderApplyService {
                 salesOrderItemMapper, workflowTransitionGuard, null);
     }
 
-    @Autowired
     public SalesOrderApplyService(TradeItemMaterialSupport tradeItemMaterialSupport,
                                   SalesOrderSourceAllocationService sourceAllocationService,
                                   SalesOrderWeightResolver weightResolver,
@@ -51,6 +53,19 @@ public class SalesOrderApplyService {
                                   SalesOrderItemMapper salesOrderItemMapper,
                                   WorkflowTransitionGuard workflowTransitionGuard,
                                   CustomerRepository customerRepository) {
+        this(tradeItemMaterialSupport, sourceAllocationService, weightResolver, purchaseAllocationService,
+                salesOrderItemMapper, workflowTransitionGuard, customerRepository, null);
+    }
+
+    @Autowired
+    public SalesOrderApplyService(TradeItemMaterialSupport tradeItemMaterialSupport,
+                                  SalesOrderSourceAllocationService sourceAllocationService,
+                                  SalesOrderWeightResolver weightResolver,
+                                  SalesOrderPurchaseAllocationService purchaseAllocationService,
+                                  SalesOrderItemMapper salesOrderItemMapper,
+                                  WorkflowTransitionGuard workflowTransitionGuard,
+                                  CustomerRepository customerRepository,
+                                  CompanySettingService companySettingService) {
         this.tradeItemMaterialSupport = tradeItemMaterialSupport;
         this.sourceAllocationService = sourceAllocationService;
         this.weightResolver = weightResolver;
@@ -58,6 +73,7 @@ public class SalesOrderApplyService {
         this.salesOrderItemMapper = salesOrderItemMapper;
         this.workflowTransitionGuard = workflowTransitionGuard;
         this.customerRepository = customerRepository;
+        this.companySettingService = companySettingService;
     }
 
     void apply(SalesOrder entity, SalesOrderRequest request, LongSupplier nextIdSupplier) {
@@ -155,6 +171,12 @@ public class SalesOrderApplyService {
         if (shouldPreserveExistingSettlementCompany(entity)) {
             return;
         }
+        SettlementCompanySnapshot requestedSettlementCompany = resolveRequestedSettlementCompany(request);
+        if (requestedSettlementCompany.id() != null) {
+            entity.setSettlementCompanyId(requestedSettlementCompany.id());
+            entity.setSettlementCompanyName(requestedSettlementCompany.name());
+            return;
+        }
         Customer customer = resolveCustomer(request);
         if (customer == null) {
             entity.setSettlementCompanyId(null);
@@ -192,6 +214,28 @@ public class SalesOrderApplyService {
                 .orElse(null);
     }
 
+    private SettlementCompanySnapshot resolveRequestedSettlementCompany(SalesOrderRequest request) {
+        Long settlementCompanyId = request.settlementCompanyId();
+        if (settlementCompanyId == null) {
+            return SettlementCompanySnapshot.EMPTY;
+        }
+        if (companySettingService == null) {
+            return new SettlementCompanySnapshot(
+                    settlementCompanyId,
+                    trimToNull(request.settlementCompanyName())
+            );
+        }
+        CompanySetting company = companySettingService.requireActiveSettlementCompany(settlementCompanyId);
+        return new SettlementCompanySnapshot(company.getId(), company.getCompanyName());
+    }
+
+    private String trimToNull(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        return value.trim();
+    }
+
     private void applyPurchaseSettlementCompany(
             SalesOrderItem item,
             com.leo.erp.allocation.appservice.PurchaseItemQueryAppService.SourceInboundItemRecord sourceInboundItem,
@@ -212,5 +256,9 @@ public class SalesOrderApplyService {
     }
 
     private record ItemTotals(BigDecimal weightTon, BigDecimal amount) {
+    }
+
+    private record SettlementCompanySnapshot(Long id, String name) {
+        private static final SettlementCompanySnapshot EMPTY = new SettlementCompanySnapshot(null, null);
     }
 }

@@ -11,6 +11,8 @@ public record PrintTemplateResponse(
         String templateType,
         String engine,
         String assetRef,
+        String settlementCompanyId,
+        String settlementCompanyName,
         Integer versionNo,
         String status,
         String syncMode,

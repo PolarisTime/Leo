@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.support.ModuleCatalog;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
+import com.leo.erp.system.company.domain.entity.CompanySetting;
+import com.leo.erp.system.company.repository.CompanySettingRepository;
 import com.leo.erp.system.printtemplate.domain.entity.PrintTemplate;
 import com.leo.erp.system.printtemplate.repository.PrintTemplateRepository;
 import com.leo.erp.system.printtemplate.mapper.PrintTemplateMapper;
@@ -63,8 +65,8 @@ class PrintTemplateServiceTest {
                 PrintTemplateRepository.class.getClassLoader(),
                 new Class[]{PrintTemplateRepository.class},
                 (proxy, method, args) -> switch (method.getName()) {
-                    case "existsByBillTypeAndTemplateNameAndDeletedFlagFalse" -> false;
-                    case "existsByBillTypeAndTemplateCodeAndDeletedFlagFalse" -> false;
+                    case "existsByBillTypeAndSettlementCompanyIdAndTemplateNameAndDeletedFlagFalse" -> false;
+                    case "existsByBillTypeAndSettlementCompanyIdAndTemplateCodeAndDeletedFlagFalse" -> false;
                     case "findAllByBillTypeAndDeletedFlagFalseOrderByUpdatedAtDescIdDesc" -> java.util.List.of();
                     case "save" -> args[0];
                     case "toString" -> "PrintTemplateRepositoryStub";
@@ -80,8 +82,8 @@ class PrintTemplateServiceTest {
                 PrintTemplateRepository.class.getClassLoader(),
                 new Class[]{PrintTemplateRepository.class},
                 (proxy, method, args) -> switch (method.getName()) {
-                    case "existsByBillTypeAndTemplateNameAndDeletedFlagFalse" -> false;
-                    case "existsByBillTypeAndTemplateCodeAndDeletedFlagFalse" -> false;
+                    case "existsByBillTypeAndSettlementCompanyIdAndTemplateNameAndDeletedFlagFalse" -> false;
+                    case "existsByBillTypeAndSettlementCompanyIdAndTemplateCodeAndDeletedFlagFalse" -> false;
                     case "findByIdAndDeletedFlagFalse" -> Optional.of(template);
                     case "save" -> args[0];
                     case "toString" -> "PrintTemplateRepositoryStub";
@@ -101,6 +103,7 @@ class PrintTemplateServiceTest {
         PrintRuntimeProperties runtimeProperties = new PrintRuntimeProperties(objectMapper);
         return new PrintTemplateService(
                 repository,
+                companySettingRepository(),
                 new SnowflakeIdGenerator(0L),
                 mapper(),
                 new ModuleCatalog(),
@@ -290,6 +293,50 @@ class PrintTemplateServiceTest {
     }
 
     @Test
+    void shouldCreateTemplateWithSettlementCompany() {
+        PrintTemplateService service = service(repository());
+
+        var result = service.create(new PrintTemplateRequest(
+                "sales-order",
+                "TEST9 模板",
+                "TEST9_TEMPLATE",
+                "LODOP.PRINT_INIT('安全内容');",
+                "COORD",
+                "LODOP",
+                null,
+                330050675528433664L,
+                "错误主体",
+                1,
+                "ACTIVE"
+        ));
+
+        assertThat(result.settlementCompanyId()).isEqualTo("330050675528433664");
+        assertThat(result.settlementCompanyName()).isEqualTo("TEST9");
+    }
+
+    @Test
+    void shouldIgnoreSettlementCompanyNameWithoutId() {
+        PrintTemplateService service = service(repository());
+
+        var result = service.create(new PrintTemplateRequest(
+                "sales-order",
+                "未关联模板",
+                "UNASSIGNED_TEMPLATE",
+                "LODOP.PRINT_INIT('安全内容');",
+                "COORD",
+                "LODOP",
+                null,
+                null,
+                "伪造主体",
+                1,
+                "ACTIVE"
+        ));
+
+        assertThat(result.settlementCompanyId()).isNull();
+        assertThat(result.settlementCompanyName()).isNull();
+    }
+
+    @Test
     void shouldListByBillType() {
         PrintTemplateService service = service(repository());
 
@@ -475,5 +522,26 @@ class PrintTemplateServiceTest {
 
     private String minimalPdfFormLayout() {
         return "{\"static\":[{\"type\":\"text\",\"text\":\"测试\",\"left\":20,\"top\":20,\"width\":100,\"height\":20}]}";
+    }
+
+    private CompanySettingRepository companySettingRepository() {
+        return (CompanySettingRepository) Proxy.newProxyInstance(
+                CompanySettingRepository.class.getClassLoader(),
+                new Class[]{CompanySettingRepository.class},
+                (proxy, method, args) -> switch (method.getName()) {
+                    case "findByIdAndDeletedFlagFalse" -> Optional.of(companySetting((Long) args[0], "TEST9"));
+                    case "toString" -> "CompanySettingRepositoryStub";
+                    case "hashCode" -> System.identityHashCode(proxy);
+                    case "equals" -> proxy == args[0];
+                    default -> throw new UnsupportedOperationException(method.getName());
+                }
+        );
+    }
+
+    private CompanySetting companySetting(Long id, String companyName) {
+        CompanySetting company = new CompanySetting();
+        company.setId(id);
+        company.setCompanyName(companyName);
+        return company;
     }
 }
