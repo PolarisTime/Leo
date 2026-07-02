@@ -2,6 +2,8 @@ package com.leo.erp.system.oss.web;
 
 import com.leo.erp.common.api.ApiResponse;
 import com.leo.erp.system.oss.service.OssSettingService;
+import com.leo.erp.system.oss.web.dto.OssCorsConfigureRequest;
+import com.leo.erp.system.oss.web.dto.OssOperationResult;
 import com.leo.erp.system.oss.web.dto.OssSettingRequest;
 import com.leo.erp.system.oss.web.dto.OssSettingResponse;
 import org.junit.jupiter.api.Test;
@@ -40,5 +42,33 @@ class OssSettingControllerTest {
         assertThat(response.message()).isEqualTo("保存成功");
         assertThat(response.data()).isEqualTo(setting);
         verify(service).save(request);
+    }
+
+    @Test
+    void testStorageReturnsOperationResult() {
+        OssSettingRequest request = mock(OssSettingRequest.class);
+        OssOperationResult result = new OssOperationResult(true, "READ", "存储测试通过", "diagnostics/test.txt", java.util.List.of());
+        when(service.testStorage(request)).thenReturn(result);
+
+        ApiResponse<OssOperationResult> response = controller.testStorage(request);
+
+        assertThat(response.code()).isEqualTo(0);
+        assertThat(response.message()).isEqualTo("测试完成");
+        assertThat(response.data()).isEqualTo(result);
+        verify(service).testStorage(request);
+    }
+
+    @Test
+    void configureCorsReturnsOperationResult() {
+        OssCorsConfigureRequest request = mock(OssCorsConfigureRequest.class);
+        OssOperationResult result = new OssOperationResult(true, "CORS", "CORS 配置完成", null, java.util.List.of());
+        when(service.configureCors(request)).thenReturn(result);
+
+        ApiResponse<OssOperationResult> response = controller.configureCors(request);
+
+        assertThat(response.code()).isEqualTo(0);
+        assertThat(response.message()).isEqualTo("配置完成");
+        assertThat(response.data()).isEqualTo(result);
+        verify(service).configureCors(request);
     }
 }

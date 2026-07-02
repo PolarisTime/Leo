@@ -182,6 +182,37 @@ class PurchaseContractServiceTest {
     }
 
     @Test
+    void shouldAllowHeaderUpdateWhenLineItemsUnchanged() {
+        var entity = createEntityWithItem();
+        var repo = repositoryReturning(entity);
+        var svc = new PurchaseContractService(repo, new SnowflakeIdGenerator(1), purchaseContractMapper, workflowTransitionGuard);
+
+        var result = svc.update(1L, new PurchaseContractRequest("PC-001", "供应商A",
+                LocalDate.now(), LocalDate.now(), LocalDate.now().plusYears(1),
+                "采购乙", "草稿", "仅修改表头", List.of(matchingItemRequest())));
+
+        assertThat(result).isNotNull();
+    }
+
+    @Test
+    void shouldRejectLineItemChangesOnUpdate() {
+        var entity = createEntityWithItem();
+        var repo = repositoryReturning(entity);
+        var svc = new PurchaseContractService(repo, new SnowflakeIdGenerator(1), purchaseContractMapper, workflowTransitionGuard);
+        var changedItem = new PurchaseContractItemRequest(
+                11L, "M001", "品牌A", "类别", "材质", "规格", "6m", "吨",
+                101, "件", new BigDecimal("0.500"), 10, new BigDecimal("50.000"),
+                new BigDecimal("3000.00"), new BigDecimal("150000.00")
+        );
+
+        assertThatThrownBy(() -> svc.update(1L, new PurchaseContractRequest("PC-001", "供应商A",
+                LocalDate.now(), LocalDate.now(), LocalDate.now().plusYears(1),
+                "采购甲", "草稿", "备注", List.of(changedItem))))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("采购合同明细不允许编辑");
+    }
+
+    @Test
     void shouldDeleteContract_whenExists() {
         service.delete(1L);
     }
@@ -212,5 +243,54 @@ class PurchaseContractServiceTest {
         entity.setTotalAmount(new BigDecimal("100"));
         entity.setItems(new ArrayList<>());
         return entity;
+    }
+
+    private static PurchaseContract createEntityWithItem() {
+        var entity = createEntity(1L, "PC-001");
+        var item = new PurchaseContractItem();
+        item.setId(11L);
+        item.setPurchaseContract(entity);
+        item.setLineNo(1);
+        item.setMaterialCode("M001");
+        item.setBrand("品牌A");
+        item.setCategory("类别");
+        item.setMaterial("材质");
+        item.setSpec("规格");
+        item.setLength("6m");
+        item.setUnit("吨");
+        item.setQuantity(100);
+        item.setQuantityUnit("件");
+        item.setPieceWeightTon(new BigDecimal("0.500"));
+        item.setPiecesPerBundle(10);
+        item.setWeightTon(new BigDecimal("50.000"));
+        item.setUnitPrice(new BigDecimal("3000.00"));
+        item.setAmount(new BigDecimal("150000.00"));
+        entity.setItems(new ArrayList<>(List.of(item)));
+        return entity;
+    }
+
+    private static PurchaseContractItemRequest matchingItemRequest() {
+        return new PurchaseContractItemRequest(
+                11L, "M001", "品牌A", "类别", "材质", "规格", "6m", "吨",
+                100, "件", new BigDecimal("0.500"), 10, new BigDecimal("50.000"),
+                new BigDecimal("3000.00"), new BigDecimal("150000.00")
+        );
+    }
+
+    private static PurchaseContractRepository repositoryReturning(PurchaseContract entity) {
+        return (PurchaseContractRepository) Proxy.newProxyInstance(
+                PurchaseContractRepository.class.getClassLoader(),
+                new Class[]{PurchaseContractRepository.class},
+                (proxy, method, args) -> switch (method.getName()) {
+                    case "findByIdAndDeletedFlagFalse" -> Optional.of(entity);
+                    case "findById" -> Optional.of(entity);
+                    case "existsByContractNoAndDeletedFlagFalse" -> false;
+                    case "save" -> args[0];
+                    case "toString" -> "PurchaseContractRepositoryStub";
+                    case "hashCode" -> System.identityHashCode(proxy);
+                    case "equals" -> proxy == args[0];
+                    default -> throw new UnsupportedOperationException(method.getName());
+                }
+        );
     }
 }

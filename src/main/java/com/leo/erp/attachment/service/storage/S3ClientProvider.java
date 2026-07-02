@@ -75,6 +75,8 @@ public class S3ClientProvider implements DisposableBean {
                 value(s3.getAccessKey()),
                 value(s3.getSecretKey()),
                 String.valueOf(s3.isPathStyleAccess()),
+                String.valueOf(s3.isEncryptedStorage()),
+                String.valueOf(s3.isServerProxyOnly()),
                 String.valueOf(s3.getConnectTimeout()),
                 String.valueOf(s3.getReadTimeout())
         );

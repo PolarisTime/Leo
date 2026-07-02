@@ -2,6 +2,7 @@ package com.leo.erp.attachment.service.storage;
 
 import com.leo.erp.attachment.config.AttachmentProperties;
 import com.leo.erp.common.error.BusinessException;
+import com.leo.erp.system.securitykey.service.SecurityKeyService;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockMultipartFile;
 import software.amazon.awssdk.core.ResponseInputStream;
@@ -30,6 +31,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.any;
 
 class S3CompatibleAttachmentStorageTest {
 
@@ -126,6 +128,7 @@ class S3CompatibleAttachmentStorageTest {
     @Test
     void shouldSignDirectUploadWithSha256Checksum() throws Exception {
         AttachmentProperties properties = s3Properties();
+        properties.getStorage().getS3().setServerProxyOnly(false);
         S3ClientProvider clientProvider = mock(S3ClientProvider.class);
         S3Presigner presigner = mock(S3Presigner.class);
         when(clientProvider.getPresigner(properties.getStorage().getS3())).thenReturn(presigner);
@@ -160,6 +163,7 @@ class S3CompatibleAttachmentStorageTest {
     @Test
     void shouldVerifyDirectUploadByReadingObjectWhenHeadChecksumIsMissing() {
         AttachmentProperties properties = s3Properties();
+        properties.getStorage().getS3().setServerProxyOnly(false);
         S3Client s3Client = mock(S3Client.class);
         when(s3Client.headObject(org.mockito.ArgumentMatchers.<HeadObjectRequest>any())).thenReturn(
                 HeadObjectResponse.builder()
@@ -183,6 +187,84 @@ class S3CompatibleAttachmentStorageTest {
                 request.bucket().equals("test-bucket")
                         && request.key().equals("attachments/2026/04/1/test.txt")
         ));
+    }
+
+    @Test
+    void shouldDisableDirectUploadWhenServerProxyOnlyIsEnabled() {
+        AttachmentProperties properties = s3Properties();
+        properties.getStorage().getS3().setServerProxyOnly(true);
+        S3CompatibleAttachmentStorage storage = new S3CompatibleAttachmentStorage(
+                properties,
+                mock(S3ClientProvider.class),
+                new S3PathParser()
+        );
+
+        assertThatThrownBy(() -> storage.prepareDirectUpload(
+                "attachments/2026/04/1/test.pdf",
+                "application/pdf",
+                128L,
+                "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+        ))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("当前 OSS 设置仅允许后端中转访问");
+    }
+
+    @Test
+    void shouldNotCreatePresignedAccessUrlWhenServerProxyOnlyIsEnabled() {
+        AttachmentProperties properties = s3Properties();
+        properties.getStorage().getS3().setServerProxyOnly(true);
+        S3CompatibleAttachmentStorage storage = new S3CompatibleAttachmentStorage(
+                properties,
+                mock(S3ClientProvider.class),
+                new S3PathParser()
+        );
+
+        assertThat(storage.createPresignedAccessUrl(
+                "s3:test-bucket/attachments/2026/04/1/test.pdf",
+                "test.pdf",
+                "application/pdf",
+                true
+        )).isNull();
+    }
+
+    @Test
+    void shouldStoreEncryptedObjectAndLoadPlainContentWhenEncryptedStorageIsEnabled() throws Exception {
+        AttachmentProperties properties = s3Properties();
+        properties.getStorage().getS3().setEncryptedStorage(true);
+        S3Client s3Client = mock(S3Client.class);
+        when(s3Client.putObject(
+                org.mockito.ArgumentMatchers.<PutObjectRequest>any(),
+                org.mockito.ArgumentMatchers.<RequestBody>any()))
+                .thenReturn(PutObjectResponse.builder().build());
+        S3ClientProvider clientProvider = mock(S3ClientProvider.class);
+        when(clientProvider.getClient(properties.getStorage().getS3())).thenReturn(s3Client);
+        SecurityKeyService securityKeyService = mock(SecurityKeyService.class);
+        when(securityKeyService.getActiveTotpMaterial()).thenReturn(new SecurityKeyService.ResolvedSecretMaterial(
+                "TEST",
+                1,
+                "test-attachment-content-secret",
+                null,
+                null,
+                "fingerprint"
+        ));
+        S3CompatibleAttachmentStorage storage = new S3CompatibleAttachmentStorage(
+                properties,
+                clientProvider,
+                new S3PathParser(),
+                null,
+                new AttachmentContentCryptor(securityKeyService)
+        );
+
+        storage.storeBytes("attachments/2026/04/1/test.txt", "hello".getBytes(StandardCharsets.UTF_8), "text/plain");
+
+        verify(s3Client).putObject(any(PutObjectRequest.class), org.mockito.ArgumentMatchers.<RequestBody>argThat(body -> {
+            try {
+                return !new String(body.contentStreamProvider().newStream().readAllBytes(), StandardCharsets.UTF_8)
+                        .equals("hello");
+            } catch (Exception ex) {
+                return false;
+            }
+        }));
     }
 
     private AttachmentProperties s3Properties() {

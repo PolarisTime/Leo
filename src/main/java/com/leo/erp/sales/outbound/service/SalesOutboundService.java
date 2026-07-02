@@ -10,6 +10,7 @@ import com.leo.erp.common.support.BusinessStatusValidator;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.sales.outbound.domain.entity.SalesOutbound;
+import com.leo.erp.sales.outbound.domain.entity.SalesOutboundItem;
 import com.leo.erp.sales.outbound.repository.SalesOutboundRepository;
 import com.leo.erp.security.permission.WorkflowTransitionGuard;
 import com.leo.erp.sales.outbound.web.dto.*;
@@ -20,7 +21,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Service
 public class SalesOutboundService extends AbstractCrudService<SalesOutbound, SalesOutboundRequest, SalesOutboundResponse> {
@@ -100,6 +104,9 @@ public class SalesOutboundService extends AbstractCrudService<SalesOutbound, Sal
 
     @Override
     protected SalesOutboundRequest normalizeUpdateRequest(SalesOutbound entity, SalesOutboundRequest request) {
+        if (hasImportedSalesOrder(entity)) {
+            return restrictImportedOutboundUpdate(entity, request);
+        }
         return new SalesOutboundRequest(
                 entity.getOutboundNo(),
                 entity.getSalesOrderNo(),
@@ -110,6 +117,67 @@ public class SalesOutboundService extends AbstractCrudService<SalesOutbound, Sal
                 request.status(),
                 request.remark(),
                 request.items()
+        );
+    }
+
+    private boolean hasImportedSalesOrder(SalesOutbound entity) {
+        if (entity.getSalesOrderNo() != null && !entity.getSalesOrderNo().isBlank()) {
+            return true;
+        }
+        return entity.getItems().stream()
+                .anyMatch(item -> item.getSourceSalesOrderItemId() != null);
+    }
+
+    private SalesOutboundRequest restrictImportedOutboundUpdate(SalesOutbound entity, SalesOutboundRequest request) {
+        Map<Long, SalesOutboundItemRequest> requestItemsById = request.items().stream()
+                .filter(item -> item.id() != null)
+                .collect(Collectors.toMap(
+                        SalesOutboundItemRequest::id,
+                        Function.identity(),
+                        (left, right) -> left
+                ));
+        List<SalesOutboundItemRequest> restrictedItems = entity.getItems().stream()
+                .sorted(java.util.Comparator.comparing(SalesOutboundItem::getLineNo, java.util.Comparator.nullsLast(Integer::compareTo)))
+                .map(item -> restrictImportedOutboundItem(item, requestItemsById.get(item.getId())))
+                .toList();
+        return new SalesOutboundRequest(
+                entity.getOutboundNo(),
+                entity.getSalesOrderNo(),
+                entity.getCustomerName(),
+                entity.getProjectName(),
+                entity.getWarehouseName(),
+                request.outboundDate(),
+                request.status(),
+                request.remark(),
+                restrictedItems
+        );
+    }
+
+    private SalesOutboundItemRequest restrictImportedOutboundItem(
+            SalesOutboundItem item,
+            SalesOutboundItemRequest requestItem
+    ) {
+        Integer nextQuantity = requestItem == null ? item.getQuantity() : requestItem.quantity();
+        return new SalesOutboundItemRequest(
+                item.getId(),
+                null,
+                item.getSourceSalesOrderItemId(),
+                item.getMaterialCode(),
+                item.getBrand(),
+                item.getCategory(),
+                item.getMaterial(),
+                item.getSpec(),
+                item.getLength(),
+                item.getUnit(),
+                item.getWarehouseName(),
+                item.getBatchNo(),
+                nextQuantity,
+                item.getQuantityUnit(),
+                item.getPieceWeightTon(),
+                item.getPiecesPerBundle(),
+                item.getWeightTon(),
+                item.getUnitPrice(),
+                item.getAmount()
         );
     }
 

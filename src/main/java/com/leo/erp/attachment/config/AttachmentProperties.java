@@ -98,7 +98,11 @@ public class AttachmentProperties {
 
         private String secretKey;
 
-        private boolean pathStyleAccess = true;
+        private boolean pathStyleAccess = false;
+
+        private boolean encryptedStorage = false;
+
+        private boolean serverProxyOnly = true;
 
         private Duration connectTimeout = Duration.ofSeconds(10);
 
@@ -154,6 +158,22 @@ public class AttachmentProperties {
 
         public void setPathStyleAccess(boolean pathStyleAccess) {
             this.pathStyleAccess = pathStyleAccess;
+        }
+
+        public boolean isEncryptedStorage() {
+            return encryptedStorage;
+        }
+
+        public void setEncryptedStorage(boolean encryptedStorage) {
+            this.encryptedStorage = encryptedStorage;
+        }
+
+        public boolean isServerProxyOnly() {
+            return serverProxyOnly;
+        }
+
+        public void setServerProxyOnly(boolean serverProxyOnly) {
+            this.serverProxyOnly = serverProxyOnly;
         }
 
         public Duration getConnectTimeout() {

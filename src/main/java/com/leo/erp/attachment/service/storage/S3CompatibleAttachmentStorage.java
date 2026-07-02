@@ -47,24 +47,27 @@ public class S3CompatibleAttachmentStorage implements DirectUploadAttachmentStor
     private final S3ClientProvider clientProvider;
     private final S3PathParser pathParser;
     private final OssSettingService ossSettingService;
+    private final AttachmentContentCryptor contentCryptor;
 
     @Autowired
     public S3CompatibleAttachmentStorage(
             AttachmentProperties properties,
             S3ClientProvider clientProvider,
             S3PathParser pathParser,
-            OssSettingService ossSettingService) {
+            OssSettingService ossSettingService,
+            AttachmentContentCryptor contentCryptor) {
         this.properties = properties;
         this.clientProvider = clientProvider;
         this.pathParser = pathParser;
         this.ossSettingService = ossSettingService;
+        this.contentCryptor = contentCryptor;
     }
 
     public S3CompatibleAttachmentStorage(
             AttachmentProperties properties,
             S3ClientProvider clientProvider,
             S3PathParser pathParser) {
-        this(properties, clientProvider, pathParser, null);
+        this(properties, clientProvider, pathParser, null, null);
     }
 
     @Override
@@ -77,7 +80,11 @@ public class S3CompatibleAttachmentStorage implements DirectUploadAttachmentStor
         AttachmentProperties.S3 s3 = requireS3Config();
         Path tempFile = Files.createTempFile("leo-s3-upload-", ".bin");
         try (InputStream in = file.getInputStream()) {
-            Files.copy(in, tempFile, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            if (s3.isEncryptedStorage()) {
+                Files.write(tempFile, requireCryptor().encrypt(requireCryptor().readAll(in)));
+            } else {
+                Files.copy(in, tempFile, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            }
         }
         try {
             S3Client s3Client = clientProvider.getClient(s3);
@@ -100,12 +107,13 @@ public class S3CompatibleAttachmentStorage implements DirectUploadAttachmentStor
         AttachmentProperties.S3 s3 = requireS3Config();
         try {
             S3Client s3Client = clientProvider.getClient(s3);
+            byte[] storedContent = s3.isEncryptedStorage() ? requireCryptor().encrypt(content) : content;
             PutObjectRequest request = PutObjectRequest.builder()
                     .bucket(s3.getBucket())
                     .key(objectKey)
                     .contentType(contentType)
                     .build();
-            s3Client.putObject(request, RequestBody.fromBytes(content));
+            s3Client.putObject(request, RequestBody.fromBytes(storedContent));
             return pathParser.buildStoragePath(s3.getBucket(), objectKey);
         } catch (S3Exception ex) {
             throw new IOException("S3 上传失败: " + describeS3Error(ex), ex);
@@ -125,6 +133,13 @@ public class S3CompatibleAttachmentStorage implements DirectUploadAttachmentStor
                     .bucket(s3.getBucket())
                     .key(parsed.objectKey())
                     .build());
+            if (s3.isEncryptedStorage()) {
+                byte[] plainContent;
+                try (response) {
+                    plainContent = requireCryptor().decrypt(requireCryptor().readAll(response));
+                }
+                return new org.springframework.core.io.ByteArrayResource(plainContent);
+            }
             return new InputStreamResource(response);
         } catch (NoSuchKeyException ex) {
             throw new BusinessException(ErrorCode.NOT_FOUND, "附件文件不存在");
@@ -161,6 +176,9 @@ public class S3CompatibleAttachmentStorage implements DirectUploadAttachmentStor
     @Override
     public PresignedUpload prepareDirectUpload(String objectKey, String contentType, long fileSize, String sha256Hex) {
         AttachmentProperties.S3 s3 = requireS3Config();
+        if (s3.isServerProxyOnly() || s3.isEncryptedStorage()) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "当前 OSS 设置仅允许后端中转访问");
+        }
         S3Presigner presigner = clientProvider.getPresigner(s3);
         PutObjectRequest request = PutObjectRequest.builder()
                 .bucket(s3.getBucket())
@@ -220,6 +238,9 @@ public class S3CompatibleAttachmentStorage implements DirectUploadAttachmentStor
     public URI createPresignedAccessUrl(String storagePath, String fileName, String contentType, boolean inline) {
         S3PathParser.ParsedStoragePath parsed = pathParser.parseStoragePath(storagePath);
         AttachmentProperties.S3 s3 = requireS3Config();
+        if (s3.isServerProxyOnly() || s3.isEncryptedStorage()) {
+            return null;
+        }
         if (!parsed.bucket().equals(s3.getBucket())) {
             throw new BusinessException(ErrorCode.INTERNAL_ERROR, "当前 S3 配置与附件桶不一致");
         }
@@ -247,6 +268,13 @@ public class S3CompatibleAttachmentStorage implements DirectUploadAttachmentStor
             throw new BusinessException(ErrorCode.INTERNAL_ERROR, "S3 附件存储配置不完整");
         }
         return s3;
+    }
+
+    private AttachmentContentCryptor requireCryptor() {
+        if (contentCryptor == null) {
+            throw new BusinessException(ErrorCode.INTERNAL_ERROR, "附件加密组件未配置");
+        }
+        return contentCryptor;
     }
 
     private boolean isNotFound(S3Exception ex) {

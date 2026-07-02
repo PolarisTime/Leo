@@ -24,15 +24,23 @@ public class LocalAttachmentStorage implements AttachmentStorage {
 
     private final AttachmentProperties properties;
     private final OssSettingService ossSettingService;
+    private final AttachmentContentCryptor contentCryptor;
 
     public LocalAttachmentStorage(AttachmentProperties properties) {
-        this(properties, null);
+        this(properties, null, null);
+    }
+
+    public LocalAttachmentStorage(AttachmentProperties properties, OssSettingService ossSettingService) {
+        this(properties, ossSettingService, null);
     }
 
     @Autowired
-    public LocalAttachmentStorage(AttachmentProperties properties, OssSettingService ossSettingService) {
+    public LocalAttachmentStorage(AttachmentProperties properties,
+                                  OssSettingService ossSettingService,
+                                  AttachmentContentCryptor contentCryptor) {
         this.properties = properties;
         this.ossSettingService = ossSettingService;
+        this.contentCryptor = contentCryptor;
     }
 
     @Override
@@ -59,7 +67,11 @@ public class LocalAttachmentStorage implements AttachmentStorage {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "非法文件路径");
         }
         Files.createDirectories(targetPath.getParent());
-        Files.copy(inputStream, targetPath, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+        if (isEncryptedStorageEnabled()) {
+            Files.write(targetPath, requireCryptor().encrypt(requireCryptor().readAll(inputStream)));
+        } else {
+            Files.copy(inputStream, targetPath, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+        }
         return PREFIX + objectKey;
     }
 
@@ -69,6 +81,14 @@ public class LocalAttachmentStorage implements AttachmentStorage {
         Path targetPath = resolvePath(storagePath, root);
         if (!Files.exists(targetPath)) {
             throw new BusinessException(ErrorCode.NOT_FOUND, "附件文件不存在");
+        }
+        if (isEncryptedStorageEnabled()) {
+            try {
+                byte[] plainContent = requireCryptor().decrypt(Files.readAllBytes(targetPath));
+                return new org.springframework.core.io.ByteArrayResource(plainContent);
+            } catch (IOException ex) {
+                throw new BusinessException(ErrorCode.INTERNAL_ERROR, "附件读取失败");
+            }
         }
         return new FileSystemResource(targetPath);
     }
@@ -89,6 +109,19 @@ public class LocalAttachmentStorage implements AttachmentStorage {
         } catch (InvalidPathException ex) {
             throw new BusinessException(ErrorCode.INTERNAL_ERROR, "本地附件存储路径配置错误");
         }
+    }
+
+    private boolean isEncryptedStorageEnabled() {
+        return ossSettingService == null
+                ? properties.getStorage().getS3().isEncryptedStorage()
+                : ossSettingService.resolveRuntimeSetting().encryptedStorage();
+    }
+
+    private AttachmentContentCryptor requireCryptor() {
+        if (contentCryptor == null) {
+            throw new BusinessException(ErrorCode.INTERNAL_ERROR, "附件加密组件未配置");
+        }
+        return contentCryptor;
     }
 
     private Path resolvePath(String storagePath, Path root) {

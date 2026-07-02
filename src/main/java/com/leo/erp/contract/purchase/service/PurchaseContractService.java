@@ -25,6 +25,7 @@ import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 
 @Service
@@ -94,6 +95,7 @@ public class PurchaseContractService extends AbstractCrudService<PurchaseContrac
                 && repository.existsByContractNoAndDeletedFlagFalse(request.contractNo())) {
             throw new BusinessException(com.leo.erp.common.error.ErrorCode.BUSINESS_ERROR, "采购合同号已存在");
         }
+        assertLineItemsUnchanged(entity, request);
     }
 
     @Override
@@ -241,5 +243,55 @@ public class PurchaseContractService extends AbstractCrudService<PurchaseContrac
     @Override
     protected PurchaseContractResponse toSavedResponse(PurchaseContract entity) {
         return toDetailResponse(entity);
+    }
+
+    private void assertLineItemsUnchanged(PurchaseContract entity, PurchaseContractRequest request) {
+        List<PurchaseContractItem> entityItems = entity.getItems().stream()
+                .sorted(java.util.Comparator.comparing(PurchaseContractItem::getLineNo))
+                .toList();
+        List<PurchaseContractItemRequest> requestItems = request.items() == null ? List.of() : request.items();
+        if (entityItems.size() != requestItems.size()) {
+            throwReadonlyLineItemsChanged();
+        }
+        for (int i = 0; i < entityItems.size(); i++) {
+            if (!matchesExistingLineItem(entityItems.get(i), requestItems.get(i))) {
+                throwReadonlyLineItemsChanged();
+            }
+        }
+    }
+
+    private boolean matchesExistingLineItem(PurchaseContractItem entityItem, PurchaseContractItemRequest requestItem) {
+        return Objects.equals(entityItem.getId(), requestItem.id())
+                && normalize(entityItem.getMaterialCode()).equals(normalize(requestItem.materialCode()))
+                && normalize(entityItem.getBrand()).equals(normalize(requestItem.brand()))
+                && normalize(entityItem.getCategory()).equals(normalize(requestItem.category()))
+                && normalize(entityItem.getMaterial()).equals(normalize(requestItem.material()))
+                && normalize(entityItem.getSpec()).equals(normalize(requestItem.spec()))
+                && normalize(entityItem.getLength()).equals(normalize(requestItem.length()))
+                && normalize(entityItem.getUnit()).equals(normalize(requestItem.unit()))
+                && Objects.equals(entityItem.getQuantity(), requestItem.quantity())
+                && TradeItemCalculator.normalizeQuantityUnit(entityItem.getQuantityUnit())
+                .equals(TradeItemCalculator.normalizeQuantityUnit(requestItem.quantityUnit()))
+                && compareWeight(entityItem.getPieceWeightTon(), requestItem.pieceWeightTon())
+                && Objects.equals(entityItem.getPiecesPerBundle(), requestItem.piecesPerBundle())
+                && compareWeight(entityItem.getWeightTon(), requestItem.weightTon())
+                && compareAmount(entityItem.getUnitPrice(), requestItem.unitPrice())
+                && compareAmount(entityItem.getAmount(), requestItem.amount());
+    }
+
+    private boolean compareWeight(BigDecimal left, BigDecimal right) {
+        return TradeItemCalculator.scaleWeightTon(left).compareTo(TradeItemCalculator.scaleWeightTon(right)) == 0;
+    }
+
+    private boolean compareAmount(BigDecimal left, BigDecimal right) {
+        return TradeItemCalculator.scaleAmount(left).compareTo(TradeItemCalculator.scaleAmount(right)) == 0;
+    }
+
+    private String normalize(String value) {
+        return value == null ? "" : value.trim();
+    }
+
+    private void throwReadonlyLineItemsChanged() {
+        throw new BusinessException(com.leo.erp.common.error.ErrorCode.BUSINESS_ERROR, "采购合同明细不允许编辑");
     }
 }

@@ -1017,6 +1017,67 @@ class SalesOutboundServiceTest {
         assertThat(existing.getItems().get(0).getSourceSalesOrderItemId()).isEqualTo(9008L);
     }
 
+    @Test
+    void shouldOnlyAllowOutboundDateRemarkAndQuantityWhenUpdatingImportedOutbound() {
+        SalesOutboundRepository repository = mock(SalesOutboundRepository.class);
+        SalesOutboundMapper mapper = mock(SalesOutboundMapper.class);
+        TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
+        WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
+        SalesOrderItemQueryService salesOrderItemQueryService = mock(SalesOrderItemQueryService.class);
+        SalesOutboundService service = createService(repository, mapper, materialSupport,
+                warehouseSelectionSupport, salesOrderItemQueryService);
+
+        SalesOutbound existing = buildExistingOutbound(7004L, "SOO-LOCK", "SO-LOCK");
+        SalesOutboundItem existingItem = buildExistingOutboundItem(8004L, existing, 9010L);
+        SalesOutboundRequest request = new SalesOutboundRequest(
+                "FORGED-NO", "FORGED-SO", "伪造客户", "伪造项目", "二号码头",
+                LocalDate.of(2026, 5, 2), "草稿", "仅允许备注",
+                List.of(new SalesOutboundItemRequest(
+                        8004L, "FORGED-SO", 9010L, "M-FORGED", "伪造品牌", "伪造品类", "伪造材质", "99",
+                        null, "吨", "二号码头", "B-FORGED", 3, "箱",
+                        new BigDecimal("9.999"), 9, new BigDecimal("99.999"),
+                        new BigDecimal("1.00"), null
+                ))
+        );
+        SalesOrderItem sourceSalesOrderItem = buildSalesOrderItem(9010L, "SO-LOCK");
+
+        when(repository.findByIdAndDeletedFlagFalse(7004L)).thenReturn(Optional.of(existing));
+        when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(materialMap("M1"));
+        when(materialSupport.normalizeBatchNo(any(), eq("B1"), eq(1), eq(true))).thenReturn("B1");
+        when(warehouseSelectionSupport.normalizeWarehouseName("一号码头", 1, true)).thenReturn("一号码头");
+        when(salesOrderItemQueryService.findActiveByIdIn(anyCollection())).thenReturn(List.of(sourceSalesOrderItem));
+        when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        stubMapper(mapper);
+
+        service.update(7004L, request);
+
+        assertThat(existing.getOutboundNo()).isEqualTo("SOO-LOCK");
+        assertThat(existing.getSalesOrderNo()).isEqualTo("SO-LOCK");
+        assertThat(existing.getCustomerName()).isEqualTo("客户A");
+        assertThat(existing.getProjectName()).isEqualTo("项目A");
+        assertThat(existing.getWarehouseName()).isEqualTo("一号码头");
+        assertThat(existing.getOutboundDate()).isEqualTo(LocalDate.of(2026, 5, 2));
+        assertThat(existing.getRemark()).isEqualTo("仅允许备注");
+        assertThat(existing.getItems()).singleElement().satisfies(item -> {
+            assertThat(item.getId()).isEqualTo(existingItem.getId());
+            assertThat(item.getSourceSalesOrderItemId()).isEqualTo(9010L);
+            assertThat(item.getMaterialCode()).isEqualTo("M1");
+            assertThat(item.getBrand()).isEqualTo("宝钢");
+            assertThat(item.getCategory()).isEqualTo("盘螺");
+            assertThat(item.getMaterial()).isEqualTo("HRB400");
+            assertThat(item.getSpec()).isEqualTo("10");
+            assertThat(item.getWarehouseName()).isEqualTo("一号码头");
+            assertThat(item.getBatchNo()).isEqualTo("B1");
+            assertThat(item.getQuantity()).isEqualTo(3);
+            assertThat(item.getQuantityUnit()).isEqualTo("件");
+            assertThat(item.getPieceWeightTon()).isEqualByComparingTo("2.24800000");
+            assertThat(item.getPiecesPerBundle()).isZero();
+            assertThat(item.getWeightTon()).isEqualByComparingTo("6.000");
+            assertThat(item.getUnitPrice()).isEqualByComparingTo("3111.00");
+            assertThat(item.getAmount()).isEqualByComparingTo("18666.00");
+        });
+    }
+
     private SalesOutboundService createService(SalesOutboundRepository repository,
                                                 SalesOutboundMapper mapper,
                                                 TradeItemMaterialSupport materialSupport,

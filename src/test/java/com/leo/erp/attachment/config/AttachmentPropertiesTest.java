@@ -22,6 +22,7 @@ class AttachmentPropertiesTest {
         assertThat(properties.getStorage().getLocal()).isNotNull();
         assertThat(properties.getStorage().getLocal().getPath()).isEqualTo("/tmp/leo/uploads");
         assertThat(properties.getStorage().getS3()).isNotNull();
+        assertThat(properties.getStorage().getS3().isPathStyleAccess()).isFalse();
     }
 
     @Test
