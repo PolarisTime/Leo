@@ -1,9 +1,10 @@
 ---
-title: Leo 后端手搓基础设施迁移计划
-date: 2026-07-03
+title: Leo 后端手搓基础设施迁移计划（技术扩写版）
+date: 2026-07-04
 status: draft
 owner: PolarisTime / 浮浮酱
-scope: leo 后端 (Spring Boot)
+scope: leo 后端 (Spring Boot 3.5)
+revision: 2
 ---
 
 # 1. 背景与结论
@@ -11,6 +12,18 @@ scope: leo 后端 (Spring Boot)
 ## 1.1 背景
 
 本次扫描目标是识别 leo 后端中已经由项目自研实现、但存在成熟 Spring / Java / 云原生开源方案可替代的基础设施代码，减少 NIH（Not Invented Here）维护成本。
+
+**项目基线**（截至 2026-07-04）：
+
+| 维度 | 当前值 |
+|---|---|
+| Spring Boot | 3.5.x |
+| Java | 21 |
+| Redis 客户端 | Spring Data Redis (`StringRedisTemplate`) |
+| JSON | Jackson `ObjectMapper` |
+| 数据库 | PostgreSQL（自管 / 云） |
+| S3 SDK | AWS SDK v2（`S3Client` / `S3Presigner`） |
+| 安全 | Spring Security + jjwt + `dev.samstevens.totp` |
 
 扫描范围：
 
@@ -26,7 +39,7 @@ scope: leo 后端 (Spring Boot)
 
 ## 1.2 总体结论
 
-应迁移的不是所有自研代码，而是“通用基础设施且已有成熟生态方案”的部分。
+应迁移的不是所有自研代码，而是"通用基础设施且已有成熟生态方案"的部分。
 
 优先级：
 
@@ -38,243 +51,798 @@ scope: leo 后端 (Spring Boot)
 
 # 2. 迁移原则
 
-- KISS：每个 PR 只处理一类基础设施，不做横向大爆炸改造
-- YAGNI：不引入平台级组件，除非当前代码已经承担了对应平台职责
-- DRY：重复 Redis JSON 缓存、重复限流头、重复响应写出逻辑要收敛
-- SOLID：业务服务不直接依赖第三方 SDK 细节，通过领域接口或基础设施 adapter 隔离
-- Boot 4 兼容：避免引入 Spring Cloud Sleuth、Brave 专有 API、厂商 SDK 强绑定
-- 可回滚：迁移期间保留兼容层，任一 PR 可独立回滚
+- **KISS**：每个 PR 只处理一类基础设施，不做横向大爆炸改造
+- **YAGNI**：不引入平台级组件，除非当前代码已经承担了对应平台职责
+- **DRY**：重复 Redis JSON 缓存、重复限流头、重复响应写出逻辑要收敛
+- **SOLID**：业务服务不直接依赖第三方 SDK 细节，通过领域接口或基础设施 adapter 隔离
+- **Boot 4 兼容**：避免引入 Spring Cloud Sleuth、Brave 专有 API、厂商 SDK 强绑定
+- **可回滚**：迁移期间保留兼容层，任一 PR 可独立回滚
+- **可观测性先行**：任何运行时行为变更（限流、缓存）前，必须先确保 TraceId + Metrics 链路可用
+- **测试基线前置**：每个 PR 合入前跑全量回归（`mvn test`），记录覆盖率基线；后续 PR 覆盖率不得下降
 
 # 3. 迁移清单
 
 ## 3.1 TraceId / 链路追踪
 
-| 项 | 当前实现 | 目标方案 |
+### 3.1.1 当前实现
+
+**`TraceIdFilter`** (`common/config/TraceIdFilter.java`)：
+
+```java
+@Component
+@Order(Ordered.HIGHEST_PRECEDENCE)
+public class TraceIdFilter extends OncePerRequestFilter {
+
+    public static final String TRACE_ID_HEADER = "X-Trace-Id";
+    static final String MDC_KEY = "traceId";
+
+    @Override
+    protected void doFilterInternal(HttpServletRequest request,
+            HttpServletResponse response, FilterChain filterChain)
+            throws ServletException, IOException {
+        String traceId = request.getHeader(TRACE_ID_HEADER);
+        if (traceId == null || traceId.isBlank()) {
+            traceId = UUID.randomUUID().toString()
+                    .substring(0, PrecisionConstants.ID_PREFIX_LENGTH);
+        }
+        response.setHeader(TRACE_ID_HEADER, traceId);
+        try (var ignored = MDC.putCloseable(MDC_KEY, traceId)) {
+            filterChain.doFilter(request, response);
+        }
+    }
+}
+```
+
+**`ApiResponse`** (`common/api/ApiResponse.java`) — 错误响应自动带入 traceId：
+
+```java
+public record ApiResponse<T>(int code, String message, T data,
+        String timestamp, String traceId, RateLimitContext.Snapshot rateLimit) {
+
+    public static ApiResponse<Void> failure(ErrorCode errorCode, String message) {
+        return new ApiResponse<>(errorCode.getCode(), message, null,
+                DateTimeFormatSupport.now(), currentTraceId(), currentRateLimit());
+    }
+
+    private static String currentTraceId() {
+        String traceId = MDC.get("traceId");
+        return (traceId != null && !traceId.isBlank()) ? traceId : null;
+    }
+}
+```
+
+### 3.1.2 当前能力缺口
+
+| 能力 | 现状 | 缺失 |
 |---|---|---|
-| 文件 | `TraceIdFilter`、`ApiResponse`、`logback-spring.xml` | Spring Boot Actuator + Micrometer Tracing + OpenTelemetry |
-| 问题 | 只能做 correlation id，没有 span、采样、跨服务传播、exporter | 使用 Boot 官方 observability 主线 |
-| 计划 | 见 `2026-07-03-traceid-observability-upgrade-plan.md` | 单独实施 |
+| Correlation ID | ✅ `MDC.putCloseable` + `X-Trace-Id` 响应头 | — |
+| Span（跨方法追踪） | ❌ | 无法追踪一次请求内部的 DB 调用、Redis 调用耗时 |
+| 跨服务传播 | ❌ | 无 W3C Trace Context / B3 Propagation |
+| 采样策略 | ❌ | 无法按比例采样或按错误采样 |
+| Exporter | ❌ | 无法导出到 Jaeger / Zipkin / OTel Collector |
+| Baggage | ❌ | 无法跨服务透传业务字段（如 tenantId） |
 
-决策：
+### 3.1.3 目标方案
 
-- 不使用 Spring Cloud Sleuth
-- 不在业务代码直接调用 OpenTelemetry SDK
-- 保留 `X-Trace-Id` 作为兼容响应头
+| 项 | 目标 |
+|---|---|
+| 核心依赖 | Spring Boot Actuator + Micrometer Tracing + OpenTelemetry (OTel) |
+| Bridge | `micrometer-tracing-bridge-otel` |
+| Exporter | OTLP (gRPC/HTTP) → OTel Collector |
+| Span 传播 | W3C Trace Context (`traceparent` / `tracestate`) |
+| 采样 | `management.tracing.sampling.probability`（默认 0.1，生产按需） |
+
+**决策记录**：
+
+- ❌ 不使用 Spring Cloud Sleuth（已废弃）
+- ❌ 不在业务代码直接调用 OpenTelemetry SDK
+- ✅ 保留 `X-Trace-Id` 作为兼容响应头（`ApiResponse.traceId` 字段从 Micrometer `currentTraceContext().context().traceId()` 读取）
+- ✅ `TraceIdFilter` 收敛为仅做 `X-Trace-Id` 兼容头写入，核心链路 ID 由 Micrometer 的 `ObservationFilter` 或 Server HTTP Observation 生成
+
+### 3.1.4 迁移步骤
+
+1. `pom.xml` 引入 `micrometer-tracing-bridge-otel` + `opentelemetry-exporter-otlp`（test scope 用 `zipkin` exporter 供本地开发）
+2. `application.yml` 配置 `management.tracing.sampling.probability` 与 `management.otlp.tracing.endpoint`
+3. 改造 `TraceIdFilter`：读 `ObservationRegistry` 或 `Tracer.currentSpan()` 写入 `ApiResponse.traceId`，不再自行生成 UUID
+4. 删除 `TraceIdFilter` 中的 `MDC.putCloseable`（Micrometer 已通过 `ObservationHandler` 自动注入 MDC）
+5. OTel Collector 不可用时不应阻塞应用启动（`spring.application.defaults` 配置 `management.health.defaults.enabled=false` 仅限 tracing）
+
+### 3.1.5 验收
+
+- 错误响应 `traceId` 与 `logback-spring.xml` 的 `%X{traceId:-}` pattern 一致
+- 前端 `ApiResponse.error.traceId` 展示不回退
+- Collector 不可用（connection refused）不阻塞应用启动
+- W3C `traceparent` header 出现在 outgoing HTTP 请求中
+
+---
 
 ## 3.2 限流
 
-当前实现：
+### 3.2.1 当前实现栈
 
-- `TokenBucketService`
-- `GlobalRateLimitFilter`
-- `RateLimitAspect`
-- `RateLimit`
-- `src/main/resources/db/token_bucket.lua`
+```
+请求入口
+  ├── GlobalRateLimitFilter  (OncePerRequestFilter, Ordered.HIGHEST_PRECEDENCE)
+  │     └── TokenBucketService.tryConsume("global:ip:{ip}", 100, 150, 1)
+  │           └── StringRedisTemplate.execute(DefaultRedisScript, ...)
+  │                 └── db/token_bucket.lua (Hash-based Redis token bucket)
+  │
+  ├── RateLimitAspect        (@Around @RateLimit 注解的 Controller 方法)
+  │     ├── 维度1: API Key    → key="apikey:{hash}"
+  │     ├── 维度2: User       → key="user:{userId}:{method}"
+  │     └── 维度3: IP (legacy) → key="ip:{ip}:{method}" / legacy fixed-window
+  │
+  └── @RateLimit 注解        (定义在 security/permission/RateLimit.java)
+        rate=-1 / capacity=-1 / tokens=1 / maxRequests=10 / duration=1 / timeUnit=MINUTES
+```
 
-问题：
+### 3.2.2 核心实现细节
 
-- 自研 Redis Lua token bucket 需要自己维护原子性、TTL、异常策略、兼容性
-- `pom.xml` 已引入 Resilience4j，但生产代码未使用，属于“依赖存在但能力未落地”
-- 限流语义散在 filter 与 aspect 两处，响应头写出重复
+**`TokenBucketService`** — 自研 Redis Lua token bucket：
 
-目标方案：
+```java
+@Service
+public class TokenBucketService {
+    private static final String KEY_PREFIX = "rate-limit:bucket:";
+    private static final double DEFAULT_RATE = 100.0;   // tokens/sec
+    private static final int DEFAULT_CAPACITY = 150;     // burst
 
-| 方案 | 适用性 | 结论 |
+    private final StringRedisTemplate redisTemplate;
+    private final DefaultRedisScript<List> script;
+    // Lua 脚本: db/token_bucket.lua → KEYS[1]=bucket_key, ARGV[1]=rate,ARGV[2]=capacity,...
+
+    @SuppressWarnings("unchecked")
+    public TokenBucketResult tryConsume(String dimensionKey,
+            double rate, int capacity, int requested) {
+        String bucketKey = KEY_PREFIX + dimensionKey;
+        List<Long> result = redisTemplate.execute(
+                script,
+                List.of(bucketKey),
+                String.valueOf(rate),    // ARGV[1]
+                String.valueOf(capacity), // ARGV[2]
+                String.valueOf(System.currentTimeMillis()), // ARGV[3]
+                String.valueOf(requested), // ARGV[4]
+                String.valueOf(redisTuningProperties.rateLimitBucketTtlFloorSeconds()) // ARGV[5]
+        );
+        if (result == null || result.size() < 3) {
+            return TokenBucketResult.ALLOW_FALLBACK;  // ← fail-open
+        }
+        return new TokenBucketResult(
+                result.get(0) == 1L,  // allowed
+                result.get(1),         // remaining
+                result.get(2));        // retry_after_ms
+    }
+
+    public record TokenBucketResult(boolean allowed, long remaining, long retryAfterMs) {
+        static final TokenBucketResult ALLOW_FALLBACK =
+                new TokenBucketResult(true, 1, 0);  // ← Redis 故障时放行
+    }
+}
+```
+
+**`token_bucket.lua`** — 49 行 Hash-based Redis token bucket：
+
+```lua
+-- KEYS[1]: bucket hash key (fields: tokens, ts)
+-- ARGV[1]=rate, ARGV[2]=capacity, ARGV[3]=now_ms, ARGV[4]=requested, ARGV[5]=ttl_floor_sec
+local bucket_key = KEYS[1]
+local rate = tonumber(ARGV[1])
+local capacity = tonumber(ARGV[2])
+local now = tonumber(ARGV[3])
+local requested = tonumber(ARGV[4])
+local ttl_floor = tonumber(ARGV[5])
+
+local last_tokens = tonumber(redis.call("hget", bucket_key, "tokens"))
+if last_tokens == nil then last_tokens = capacity end
+local last_time = tonumber(redis.call("hget", bucket_key, "ts"))
+if last_time == nil then last_time = now end
+
+local delta = math.max(0, now - last_time)
+local filled = math.min(capacity, last_tokens + (delta * rate / 1000))
+-- ← 毫秒级精度填充
+
+local allowed = filled >= requested
+local new_tokens = filled
+local retry_after = 0
+if allowed then
+    new_tokens = filled - requested
+else
+    retry_after = math.ceil((requested - filled) / rate * 1000)
+end
+
+local fill_time = math.ceil(capacity / rate)
+local ttl = math.max(fill_time * 2, ttl_floor)
+redis.call("hset", bucket_key, "tokens", new_tokens, "ts", now)
+redis.call("expire", bucket_key, ttl)
+return {allowed and 1 or 0, math.floor(new_tokens), retry_after}
+```
+
+**`GlobalRateLimitFilter`** — 全局 IP 限流（所有请求入口的第一道防线）：
+
+```java
+@Component
+public class GlobalRateLimitFilter extends OncePerRequestFilter implements Ordered {
+    private static final double GLOBAL_RATE = 100;
+    private static final int GLOBAL_CAPACITY = 150;
+    private static final Set<String> EXCLUDED_PATHS = Set.of(
+            "/api/health", "/api/auth/ping", "/api/auth/captcha",
+            "/api/setup/status", "/api/meta");
+
+    @Override
+    public int getOrder() { return Ordered.HIGHEST_PRECEDENCE; }
+
+    @Override
+    protected void doFilterInternal(...) {
+        TokenBucketResult result = tokenBucketService.tryConsume(
+                "global:ip:" + ip, GLOBAL_RATE, GLOBAL_CAPACITY, 1);
+        if (!result.allowed()) {
+            response.setStatus(429);
+            response.setHeader("Retry-After", String.valueOf(result.retryAfterSeconds()));
+            response.setHeader("X-RateLimit-Limit", String.valueOf(GLOBAL_CAPACITY));
+            response.setHeader("X-RateLimit-Remaining", "0");
+            // ← 响应头写出（重复：与 RateLimitAspect.reject() 逻辑相同但各自实现）
+        }
+    }
+}
+```
+
+**`@RateLimit` 使用点**（截至扫描）：
+
+| Controller | 方法 | 注解参数 |
 |---|---|---|
-| Bucket4j + Redis | 支持 token bucket 与分布式 bucket，贴合当前算法 | 推荐 |
-| 网关限流 | 适合全局 IP / 路由级限流 | 生产长期推荐 |
-| Resilience4j RateLimiter | 更偏本地实例限流，不天然覆盖 Redis 分布式 token bucket | 不作为主替代 |
+| `AttachmentController` | 文件上传相关方法 | `@RateLimit`（默认值） |
+| `AuthController` | 登录相关方法 | `@RateLimit`（默认值） |
 
-迁移目标：
+### 3.2.3 现存问题
 
-- 用 Bucket4j 替代自研 `token_bucket.lua`
-- 保持 `@RateLimit` 对业务控制器的使用方式不变
-- 保持 `X-RateLimit-*` 与 `Retry-After` 响应头行为不变
-- 全局限流可先接 Bucket4j，长期可迁到网关
+1. **自研 Lua 原子性**：`hget` → 计算 → `hset` + `expire` 非原子 pipeline，Redis `MULTI/EXEC` 或 Lua 脚本本身虽是原子的，但 `ALLOW_FALLBACK` 策略是硬编码的 fail-open，无法按场景定制
+2. **Resilience4j 僵尸依赖**：`pom.xml` 引入 `resilience4j-spring-boot3` + `resilience4j-ratelimiter`，但 `rg resilience4j src/main` = 0 命中，属于纯占位
+3. **响应头写出重复**：`GlobalRateLimitFilter` 和 `RateLimitAspect.reject()` 各有一套 `X-RateLimit-*`/`Retry-After` 写出逻辑，内容相同但代码重复
+4. **限流维度混合**：Aspect 中 API Key / User / IP 三维度 + legacy fixed-window fallback 混在一个方法里，单一 `tryConsume` 超过 80 行
+5. **异常吞掉无可见性**：`TokenBucketService` catch 后仅 `log.error` + fail-open，无 metrics 计数
+
+### 3.2.4 目标方案
+
+**Bucket4j + Redis（`bucket4j-redis` 模块，Lettuce/Jedis backend）**：
+
+Bucket4j 原生提供：
+
+- `Bucket4j.dialect(redis)` → `ProxyManager` → `bucket.tryConsume(n)`
+- 与当前 Redis Lua 实现**算法等价**（token bucket + DistributedBucket），但**维护责任在 Bucket4j 社区**
+- 支持 `BlockingBucket`（等几个 token）和 `SchedulingBucket`（按速率调度），但本项目不需要
+- Lettuce backend 与当前项目假设的 Lettuce 连接器一致（需确认 `pom.xml` 中 `spring-boot-starter-data-redis` 的 connector 选择）
+
+**迁移收敛点**：
+
+```
+新 TokenBucketService (内部改用 Bucket4j)
+    ↑ 对外 API 不变: tryConsume(dimensionKey, rate, capacity, requested) → TokenBucketResult
+    ↑ 响应头写出收敛到单一 RateLimitHeaderWriter
+    ↑ GlobalRateLimitFilter / RateLimitAspect 不感知底层实现变化
+```
+
+**`pom.xml` 变更**：
+
+```xml
+<!-- 删除 -->
+<dependency>
+    <groupId>io.github.resilience4j</groupId>
+    <artifactId>resilience4j-spring-boot3</artifactId>
+</dependency>
+<dependency>
+    <groupId>io.github.resilience4j</groupId>
+    <artifactId>resilience4j-ratelimiter</artifactId>
+</dependency>
+
+<!-- 新增 -->
+<dependency>
+    <groupId>com.bucket4j</groupId>
+    <artifactId>bucket4j-redis</artifactId>
+    <version>8.10.1</version>  <!-- 需与当前 Lettuce 版本对齐 -->
+</dependency>
+```
+
+### 3.2.5 迁移步骤
+
+1. 建立《现状 Redis 故障行为基线》（注入异常/超时，记录 fail-open/fail-closed 行为、Retry-After 存在性）
+2. 新增 `RateLimitHeaderWriter` 收敛 `X-RateLimit-*`/`Retry-After` 写出
+3. 新增 Bucket4j 依赖，`TokenBucketService` 内部实现替换为 Bucket4j ProxyManager
+4. 回放基线场景，确认一致
+5. 删除 `db/token_bucket.lua` + Resilience4j 依赖
+6. 压测确认 QPS 误差 < 5%
+
+### 3.2.6 验证
+
+- 全局 IP 限流（`/api/**` → 429）
+- API Key 限流（`AttachmentController` 上传方法）
+- 用户维度限流（`AuthController` 登录方法）
+- `Retry-After` / `X-RateLimit-Limit` / `X-RateLimit-Remaining` / `X-RateLimit-Reset` 响应头
+- Redis 不可用时 fail-open 与现状一致（ALLOW_FALLBACK）
+- Bucket4j vs 现状 QPS 误差 < 5%（JMeter / wrk2）
+
+---
 
 ## 3.3 缓存
 
-当前实现：
+### 3.3.1 当前实现
 
-- `RedisJsonCacheSupport`
-- `CacheConfig`
-- 业务服务中大量 `getOrLoad(...)`
+**双轨并存**：
 
-问题：
+| 轨道 | 实现 | 使用范围 |
+|---|---|---|
+| 手写 | `RedisJsonCacheSupport` — Jackson 序列化 + `StringRedisTemplate` (`opsForValue().get/set`) | 10+ 业务服务通过 `getOrLoad(key, ttl, type, loader)` |
+| Spring Cache | `CacheConfig` — `RedisCacheManager` with static/hot 双 cache 配置 | **已配置但全项目 0 处 `@Cacheable` 使用** |
 
-- 已配置 `RedisCacheManager`，但多数读缓存未使用 Spring Cache 注解
-- 手写 JSON 序列化、读 miss、写入、失效、scan 删除等逻辑
-- 新人难以从业务方法直接识别缓存语义
+**`RedisJsonCacheSupport` 核心 API**：
 
-目标方案：
+```java
+public <T> T getOrLoad(String key, Duration ttl, TypeReference<T> typeRef, Supplier<T> loader) {
+    Optional<T> cached = read(key, typeRef);   // Redis GET → Jackson deserialize
+    if (cached.isPresent()) return cached.get();
+    T loaded = loader.get();                    // ← 无锁！并发 miss 时 loader 被多次调用
+    write(key, loaded, ttl);                    // Redis SET with TTL jitter
+    return loaded;
+}
 
-- 读缓存迁移到 Spring Cache：`@Cacheable` / `@CacheEvict`
-- 并发原语类 Redis 用法保留手写：CAS、Hash、Set、计数器、幂等、会话快照
+public void deleteByPattern(String pattern) {
+    // RedisConnection.scan() + 批量 delete，有 maxScanKeys 上限保护
+}
 
-计划：
+public void deleteAfterCommit(String key) {
+    afterCommitExecutor.run(() -> delete(key));  // 事务提交后删除
+}
+```
 
-- 参考 `2026-07-03-cache-dual-track-design.md`
-- 本文档只纳入总迁移路线，不重复展开缓存迁移细节
+**`CacheConfig`**（已配置未使用）：
+
+```java
+@Configuration
+@EnableCaching
+public class CacheConfig {
+    public static final String CACHE_STATIC = "static";  // 静态数据（部门、仓库等低频变更）
+    public static final String CACHE_HOT = "hot";        // 热数据（用户会话、计数等）
+
+    @Bean
+    @ConditionalOnBean(RedisConnectionFactory.class)
+    public RedisCacheManager cacheManager(RedisConnectionFactory connectionFactory,
+            ObjectMapper objectMapper, RedisTuningProperties props) {
+        Jackson2JsonRedisSerializer<Object> serializer =
+                new Jackson2JsonRedisSerializer<>(objectMapper, Object.class);
+
+        // static cache: TTL from props.cache.static-ttl, disable null caching
+        RedisCacheConfiguration staticConfig = RedisCacheConfiguration.defaultCacheConfig()
+                .entryTtl(props.withTtlJitter(props.getCache().getStaticTtl()))
+                .disableCachingNullValues()
+                .serializeKeysWith(SerializationPair.fromSerializer(new StringRedisSerializer()))
+                .serializeValuesWith(SerializationPair.fromSerializer(serializer));
+
+        RedisCacheConfiguration hotConfig = /* 同上, TTL 来自 props.cache.hot-ttl */;
+        return RedisCacheManager.builder(connectionFactory)
+                .withCacheConfiguration(CACHE_STATIC, staticConfig)
+                .withCacheConfiguration(CACHE_HOT, hotConfig)
+                .build();
+    }
+}
+```
+
+**`getOrLoad` 调用点**（10+ 服务）：
+
+| 服务 | 使用场景 | 缓存类型建议 |
+|---|---|---|
+| `DepartmentService` | 部门树 | `@Cacheable(CACHE_STATIC)` |
+| `SupplierService` | 供应商下拉 | `@Cacheable(CACHE_STATIC)` |
+| `CustomerService` | 客户下拉 | `@Cacheable(CACHE_STATIC)` |
+| `CompanySettingService` | 公司配置 | `@Cacheable(CACHE_STATIC)` |
+| `GeneralSettingQueryService` | 系统开关 | `@Cacheable(CACHE_STATIC)` |
+| `DashboardSummaryService` | 仪表板汇总 | `@Cacheable(CACHE_HOT)` |
+| `SystemSwitchService` | 功能开关 | `@Cacheable(CACHE_STATIC)` |
+| `WarehouseSelectionSupport` | 仓库选项 | `@Cacheable(CACHE_STATIC)` |
+| `TradeItemMaterialSupport` | 物料选项 | `@Cacheable(CACHE_STATIC)` |
+
+### 3.3.2 现存问题
+
+1. **getOrLoad 无锁**：并发 cache miss 时 `loader.get()` 被多次调用（thundering herd），Redis `SETNX` + 短暂过期锁可缓解但当前未实现
+2. **CacheConfig 已配未用**：`RedisCacheManager` 静态/hot 双 cache + Jackson 序列化 + TTL jitter 全套就绪，全项目 0 处 `@Cacheable`
+3. **新人识别成本高**：`getOrLoad(...)` 不如 `@Cacheable("static")` 直观，缓存语义藏在方法体内
+4. **空值处理不一致**：`CacheConfig` 已 `disableCachingNullValues()`，但 `RedisJsonCacheSupport` 的 `read()` 对空 JSON 反序列化失败时直接 `delete(key)`，不区分"值为空"和"序列化异常"
+
+### 3.3.3 目标方案
+
+**读缓存迁移到 Spring Cache `@Cacheable` / `@CacheEvict`**：
+
+```java
+// 迁移前
+public List<DepartmentDTO> getDepartmentTree() {
+    return redisJsonCacheSupport.getOrLoad(
+            "dept:tree", Duration.ofHours(2), new TypeReference<>() {}, this::loadDeptTree);
+}
+
+// 迁移后
+@Cacheable(value = CacheConfig.CACHE_STATIC, key = "'dept:tree'")
+public List<DepartmentDTO> getDepartmentTree() {
+    return loadDeptTree();
+}
+```
+
+**并发原语类 Redis 用法保留手写**：
+- CAS / 分布式锁 / Hash / Set / Sorted Set 计数器
+- 幂等状态机（`ACQUIRED` / `DUPLICATE_PENDING` / `DUPLICATE_COMPLETED`）
+- 会话快照 / 临时令牌
+
+### 3.3.4 迁移步骤
+
+详见子文档 `2026-07-03-cache-dual-track-design.md`。
+
+**关键约束**：
+
+- **复用现有 `CacheConfig.RedisCacheManager`**（含 static/hot 双 cache），不新增 CacheManager Bean
+- 空 list 不缓存（`unless = "#result?.size() == 0"`）
+- 事务回滚后同步 evict（`@CacheEvict` 在 `@Transactional` 方法上 + `afterCommitExecutor`）
+- TTL 命名空间使用 `spring.cache.redis.time-to-live` 配置项，不复用 `RedisTuningProperties` 手写 TTL 参数
+
+### 3.3.5 验证
+
+- 空 list 不缓存
+- 事务回滚不误删缓存（`@Transactional` + `@CacheEvict` 在 commit 前/后行为）
+- TTL 命名空间正确（static 2h / hot 5min）
+- `scanBatchSize` / `deleteBatchSize` / `maxScanKeys` 参数在 pattern 删除中有效
+- 缓存命中率（迁移后 7 天）不低于迁移前
+
+---
 
 ## 3.4 对象存储 S3
 
-当前实现：
+### 3.4.1 当前实现
 
-- 主路径：`S3CompatibleAttachmentStorage` 已使用 AWS SDK v2 `S3Client` / `S3Presigner`
-- 历史残留：`S3Signer` 手写 SigV4，`DefaultS3RequestExecutor` 手写 `HttpClient`
+**生产路径**：`S3CompatibleAttachmentStorage` 已使用 AWS SDK v2：
 
-问题：
+```java
+// 主路径已使用 SDK v2
+S3Client s3Client;        // 标准 SDK 客户端
+S3Presigner s3Presigner;  // 预签名 URL 生成
+```
 
-- `S3Signer` / `S3RequestExecutor` / `DefaultS3RequestExecutor` 只被测试引用，生产代码无引用
-- 手写 SigV4 容易在 canonical header、query、path escaping、payload hash 上出兼容问题
-- 与 AWS SDK v2 重复
+**历史残留**（3 个文件，仅测试引用）：
 
-目标方案：
+| 文件 | 内容 | 生产引用 |
+|---|---|---|
+| `S3Signer.java` | 手写 AWS SigV4 签名（canonical request → StringToSign → HMAC-SHA256） | 0（仅自身） |
+| `S3RequestExecutor.java` | 手写 HTTP 请求执行接口 | 0（仅自身） |
+| `DefaultS3RequestExecutor.java` | `HttpURLConnection` 的实现 | 0（仅自身） |
 
-- 删除 `S3Signer`
-- 删除 `S3RequestExecutor`
-- 删除 `DefaultS3RequestExecutor`
-- 删除对应测试
-- 主路径继续统一使用 AWS SDK v2
+### 3.4.2 问题
+
+- 手写 SigV4 容易在 canonical header 大小写、query parameter escaping、payload hash、chunked transfer encoding 上出兼容性 bug
+- 这三个文件的维护成本（安全修复、JDK 升级适配）由项目承担，但收益为零
+- AWS SDK v2 已覆盖签名、重试、连接池、DNS 故障转移，手写版本是纯冗余
+
+### 3.4.3 目标方案
+
+**纯删除**：
+
+- `S3Signer.java`
+- `S3RequestExecutor.java`
+- `DefaultS3RequestExecutor.java`
+- `S3SignerTest.java`
+- `S3RequestExecutorTest.java`
+- `DefaultS3RequestExecutorTest.java`
+
+主路径继续统一使用 AWS SDK v2。
+
+### 3.4.4 验证
+
+- `rg S3Signer\|S3RequestExecutor\|DefaultS3RequestExecutor src/main` = 0
+- `S3CompatibleAttachmentStorageTest`（附件上传/下载/预签名直传）通过
+- `AttachmentStorageResolverTest` 通过
+
+---
 
 ## 3.5 密钥加密
 
-当前实现：
+### 3.5.1 当前实现
 
-- `TotpSecretCryptor`
-- `OssSecretCryptor`
-- `AttachmentContentCryptor`
-- `SecurityKeyService`
+**加密体系**（4 个组件）：
 
-问题：
+```
+SecurityKeyService          ← 密钥生命周期管理（来源、版本、轮换）
+    ├── TotpSecretCryptor   ← AES-256/GCM/NoPadding, 12-byte IV, 128-bit tag
+    │       └── deriveKey() ← UTF-8 bytes → 截断/补零到 32 bytes (!!)
+    │
+    ├── OssSecretCryptor    ← 复用 TotpSecretCryptor, key = SecurityKeyService.getActiveTotpMaterial().secretValue()
+    │
+    └── AttachmentContentCryptor ← 独立 AES-256/GCM, MAGIC="LEOENC1", key = SHA-256("attachment-content:" + totpMaterial)
+```
 
-- AES/GCM 自行封装，密钥派生存在自定义截断/补零逻辑
-- TOTP、OSS Secret、附件内容复用同一安全材料衍生不同用途密钥
-- 缺少成熟 envelope encryption、key id、版本化密钥、轮换协议
+**`TotpSecretCryptor.deriveKey()` 的问题**：
 
-目标方案候选：
+```java
+private SecretKey deriveKey(String encryptionKey) {
+    byte[] keyBytes = encryptionKey.getBytes(StandardCharsets.UTF_8);
+    byte[] padded = new byte[32];
+    System.arraycopy(keyBytes, 0, padded, 0, Math.min(keyBytes.length, 32));
+    return new SecretKeySpec(padded, "AES");
+}
+// 问题：
+// 1. 输入 key < 32 bytes 时：尾部补 0x00（弱密钥）
+// 2. 输入 key > 32 bytes 时：截断（丢失熵）
+// 3. 应使用 PBKDF2 / HKDF 而非截断补零
+```
+
+**`AttachmentContentCryptor.key()` 的键派生**：
+
+```java
+private SecretKeySpec key() {
+    String material = securityKeyService.getActiveTotpMaterial().secretValue();
+    byte[] digest = MessageDigest.getInstance("SHA-256")
+            .digest(("attachment-content:" + material).getBytes(StandardCharsets.UTF_8));
+    return new SecretKeySpec(digest, "AES");
+}
+// 优点：使用了 domain-separated SHA-256 派生，比 TotpSecretCryptor 好
+// 问题：仍缺标准 KDF（如 HKDF-SHA256），且未包含 IV/nonce 防复用
+```
+
+**`SecurityKeyService` 密钥生命周期**：
+
+```java
+// 密钥来源
+SOURCE_CONFIG    = "CONFIG_FILE"    // 启动兜底（环境变量 LEO_JWT_SECRET / TOTP_ENCRYPTION_KEY）
+SOURCE_DATABASE  = "DATABASE"       // 数据库托管（security_secret 表）
+
+// 密钥状态
+STATUS_ACTIVE    // 当前主密钥
+STATUS_RETIRED   // 已轮转，仍在验证窗口期内（JWT 验证旧 token 签名）
+
+// 轮转流程（rotateTotpMasterKey）：
+// 1. 生成新 48-byte Base64 随机 secret
+// 2. 用旧 key 解密所有 UserAccount.totpSecret
+// 3. 用新 key 重新加密
+// 4. 用旧 key 解密所有 OssSetting.encryptedSecretKey
+// 5. 用新 key 重新加密
+// 6. retire 旧 key, persist 新 key
+```
+
+### 3.5.2 现存问题
+
+| 问题 | 严重程度 | 详情 |
+|---|---|---|
+| 自研 deriveKey 截断/补零 | **高** | 非标准 KDF，熵损失或弱密钥风险 |
+| 同一安全材料派生多个用途密钥 | **中** | TOTP / OSS / Attachment 三个 cryptor 共享 `totpMaterial`，虽 `AttachmentContentCryptor` 做了 domain separation，但 `OssSecretCryptor` 直接用原始 `secretValue()` |
+| 缺 envelope encryption | **中** | 无 key id / version 标记在密文上，无法判断用哪个 key 解密 |
+| 缺 key rotation 自动重加密 | **高** | `rotateTotpMasterKey` 是同步全量扫描 `UserAccount` + `OssSetting`，如在轮转中新增账号/设置会遗漏 |
+| IV 用 `SecureRandom` 而非 `SecureRandom.getInstanceStrong()` | **低** | `AttachmentContentCryptor` 用了 `new SecureRandom()`（普通强度），`TotpSecretCryptor` 用了 `getInstanceStrong()`（高强度）——不一致 |
+
+### 3.5.3 目标方案选型
 
 | 方案 | 适用性 | 结论 |
 |---|---|---|
-| 云 KMS / Vault Transit | 生产最佳，支持密钥托管与轮换 | 长期推荐 |
-| Google Tink | 应用内 envelope encryption，封装更成熟 | 中期可选 |
-| Spring Security Crypto | 简单本地加密封装 | 可作为过渡 |
+| **Google Tink** | 应用内 AEAD + envelope encryption + key versioning，原生 Java 支持 | **中期推荐**：比 Spring Security Crypto 强，比 KMS 轻 |
+| 云 KMS / Vault Transit | 生产最佳，支持密钥托管与轮换 | **长期推荐**：外部化密钥管理 |
+| Spring Security Crypto | `Encryptors` 仅 PBKDF2 + CBC/GCM，无 key id/轮换 | ❌ 过渡价值低，建议跳过直接上 Tink |
+| 保持现有但规范化 KDF | 最小改动 | ❌ 不改"自己维护加密库"的本质 |
 
-迁移目标：
+**推荐路径**：
 
-- 先新增 `SecretEncryptionService` 抽象，不让业务直接依赖具体加密实现
-- 新写入数据使用新 envelope 格式，包含版本与 key id
-- 旧数据读取保留 legacy decrypt
-- 后台任务逐步重加密旧数据
+```
+新写入 → Tink AEAD (AES-256-GCM, key id + version in ciphertext prefix)
+旧读取 → legacy adapter (保留现有 TotpSecretCryptor / OssSecretCryptor 解密能力)
+旧重加密 → 后台批量 → 全部完成后删除 legacy adapter
+```
+
+**Tink envelope 密文格式**（5-byte prefix）：
+
+```
+[0x01] [key_id: 4 bytes big-endian] [IV: 12 bytes] [ciphertext + tag]
+```
+
+迁移后无需在密文额外维护 key version 字段，Tink 原生支持 `KeysetHandle` 轮换。
+
+### 3.5.4 迁移步骤（PR5 拆分）
+
+详见 PR5a / PR5b / PR5c 三阶段。
+
+**迁移前必须**：
+
+- 审计所有 call site：哪些方法读/写 `encryptedSecret` → 列清单
+- 确认 `SecurityKeyService.rotateTotpMasterKey()` 的同步全量扫描边界（UserAccount 数量、OssSetting 数量）
+- 建立当前密文总条数基线
+
+### 3.5.5 验证
+
+- TOTP Secret 旧数据（Base64[IV|ciphertext]）可读
+- OSS Secret 旧数据可读
+- 新数据可加解密（Tink AEAD）
+- 错误密钥无法解密 → `GeneralSecurityException`
+- `KeysetHandle.rotate()` 后新旧 key 均可解密
+- key rotation 单测（新旧 key 交叉解密）
+
+---
 
 ## 3.6 ID 生成
 
-当前实现：
+### 3.6.1 当前实现
 
-- `SnowflakeIdGenerator`
-- 大量业务实体直接使用 `nextId()`
-- 代码仍使用 `SnowflakeIdGenerator.getInstance()` 静态入口，实测仅 4 处（见下），迁移面可控
+**`SnowflakeIdGenerator`** (`common/support/SnowflakeIdGenerator.java`)：
 
-`getInstance()` 静态调用现存清单（截至 2026-07-04 扫描）：
+```java
+@Component
+public class SnowflakeIdGenerator {
+    private static volatile SnowflakeIdGenerator instance;
 
-| 文件 | 行 | 上下文 |
-|---|---|---|
-| `common/support/TradeItemMaterialSupport.java` | 91 | `piece.setId(SnowflakeIdGenerator.getInstance().nextId())` |
-| `common/service/AbstractCrudService.java` | 56 | `idGenerator != null ? idGenerator : SnowflakeIdGenerator.getInstance()`（带回退） |
-| `common/service/BusinessCreateIdResolver.java` | 168 | `idGenerator != null ? idGenerator : SnowflakeIdGenerator.getInstance()`（带回退） |
-| `purchase/order/service/PurchaseOrderItemPieceWeightService.java` | 210 | `piece.setId(SnowflakeIdGenerator.getInstance().nextId())` |
+    private static final long EPOCH = 1704038400000L;   // 2024-01-01 00:00:00 UTC
+    private static final long MAX_MACHINE_ID = 1023L;    // 10-bit
+    private static final long SEQUENCE_MASK = 4095L;     // 12-bit
 
-注：`SnowflakeIdGenerator` 本身已是 `@Component` + 构造器注入 `@Value("${leo.id.machine-id:0}")`，DI 化仅剩上述 4 处调用方改造，PR6 工作量收敛在 4 个文件。
+    private final long machineId;                        // 构造器注入 @Value("${leo.id.machine-id:0}")
 
-问题：
+    @PostConstruct
+    void registerInstance() { instance = this; }
 
-- 默认 `leo.id.machine-id=0`，多实例部署时有 ID 冲突风险
-- `synchronized` 单实例生成，吞吐和时钟回拨策略都由项目维护
-- 静态 `getInstance()` 破坏 DI，可测试性差
+    public static SnowflakeIdGenerator getInstance() { return instance; }
 
-目标方案候选：
+    public synchronized long nextId() {                  // ← synchronized
+        long timestamp = System.currentTimeMillis();
+        if (timestamp < lastTimestamp) {
+            throw new IllegalStateException("系统时钟回拨，无法生成雪花ID");
+            // ← 仅抛异常，无等待/重试/预留 sequence
+        }
+        if (timestamp == lastTimestamp) {
+            sequence = (sequence + 1) & SEQUENCE_MASK;   // 4096 IDs/ms 上限
+            if (sequence == 0L) {
+                timestamp = waitUntilNextMillis(timestamp); // ← 自旋等待
+            }
+        } else {
+            sequence = 0L;
+        }
+        lastTimestamp = timestamp;
+        return ((timestamp - EPOCH) << 22) | (machineId << 12) | sequence;
+    }
+}
+```
+
+**bit 分配**：
+
+```
+[41-bit timestamp delta] [10-bit machine-id] [12-bit sequence]
+```
+
+**`getInstance()` 静态调用现存清单**（4 处）：
+
+| 文件 | 上下文 |
+|---|---|
+| `TradeItemMaterialSupport.java:91` | `piece.setId(SnowflakeIdGenerator.getInstance().nextId())` |
+| `AbstractCrudService.java:56` | `idGenerator != null ? idGenerator : SnowflakeIdGenerator.getInstance()` |
+| `BusinessCreateIdResolver.java:168` | 同上带回退 |
+| `PurchaseOrderItemPieceWeightService.java:210` | `piece.setId(SnowflakeIdGenerator.getInstance().nextId())` |
+
+**`application.yml` 默认值**：`leo.id.machine-id: ${LEO_MACHINE_ID:0}` → 多实例部署时默认 ID 冲突。
+
+### 3.6.2 现存问题
+
+| 问题 | 详情 |
+|---|---|
+| `synchronized` 瓶颈 | 单 JVM 最多 ~4M IDs/s（受 `System.currentTimeMillis()` 精度和 synchronized 开销限制），当前业务量够用但架构上不自洽 |
+| 时钟回拨无容忍 | 仅抛 `IllegalStateException`，NTP 微调也应导致 crash |
+| 静态 `getInstance()` | 4 处绕过 DI，可测试性差 |
+| 默认 `machine-id=0` | 生产多实例零配置即冲突 |
+
+### 3.6.3 目标方案选型
 
 | 方案 | 适用性 | 结论 |
 |---|---|---|
-| PostgreSQL sequence / identity | 数据库强一致，简单可靠 | 长期推荐，但迁移影响面大 |
-| UUIDv7 / ULID / TSID | 应用生成、趋势递增、无机器号 | 可评估 |
-| 继续 Snowflake 但用成熟库 | 降低算法维护成本 | 过渡可选 |
+| **TSID** (`com.github.f4b6a3:tsid-creator`) | 应用生成、趋势递增、无机器号、128-bit（比 Snowflake 64-bit 碰撞概率更低） | **中期推荐**：零配置，无机器号冲突，迁移面等同于 UUID |
+| PostgreSQL `BIGINT GENERATED ALWAYS AS IDENTITY` | 数据库强一致，简单 | **长期推荐**：新模块优先使用，老实体 FK 兼容需评估 |
+| UUIDv7 | 应用生成、时间排序、128-bit | **可选**：空间开销比 TSID 大（36-char string vs 13-char TSID） |
+| 继续 Snowflake 用成熟库 | 降低算法维护 | 过渡：`com.github.f4b6a3:tsid-creator` 本身也支持 Snowflake 兼容模式 |
 
-短期目标：
+### 3.6.4 迁移步骤
 
-- 禁止新增 `SnowflakeIdGenerator.getInstance()` 调用
-- 所有使用方改为构造器注入
-- 启动时校验生产环境必须显式配置唯一 `leo.id.machine-id`
+**短期（PR6）**：
 
-长期目标：
+1. 新增 `leo.id.strict-machine-id` 开关，生产环境 `machine-id=0` 时启动失败
+2. 禁止新增 `getInstance()` 调用（lint 规则 + code review）
+3. 4 处存量调用改为构造器注入
+4. 编写 ADR：TSID vs DB sequence vs UUIDv7 选型
 
-- 新模块优先使用 DB sequence 或 UUIDv7/TSID
-- 老实体迁移需单独评估数据库主键和前端 ID 兼容性
+**长期**：
+
+- 新模块（`finance.*`、`mcp.*`）优先使用 `@Id @GeneratedValue(strategy = GenerationType.IDENTITY)` 或 TSID
+- 老实体迁移需单独评估 FK 兼容性（所有以 Snowflake ID 为 FK 的表需同步迁移或添加映射表）
+
+---
 
 ## 3.7 幂等
 
-当前实现：
+### 3.7.1 当前实现
 
-- `HttpIdempotencyFilter`
-- `HttpIdempotencyService`
-- `IdempotentAspect`
-- `IdempotentKeyService`
+**两套幂等机制**：
 
-判断：
+| 机制 | 触发方式 | 实现 |
+|---|---|---|
+| HTTP Header 幂等 | `Idempotency-Key` 请求头 | `HttpIdempotencyFilter` → `HttpIdempotencyService` |
+| 方法注解幂等 | `@Idempotent` 注解 | `IdempotentAspect` → `IdempotentKeyService` |
 
-- 这是业务协议的一部分，不是纯技术轮子
-- Redis Lua 状态机表达了 `ACQUIRED`、`DUPLICATE_PENDING`、`DUPLICATE_COMPLETED`、`PARAMETER_MISMATCH`
-- 可替代方案存在，但未必能直接覆盖当前响应语义
+**状态机**：
 
-目标方案：
+```
+ACQUIRED            ← 首次请求，执行业务逻辑
+DUPLICATE_PENDING   ← 重复请求，前一个请求还在执行
+DUPLICATE_COMPLETED ← 重复请求，前一个请求已执行完成（直接返回缓存结果）
+PARAMETER_MISMATCH  ← 相同 idempotency key 但请求体不同
+```
 
-- 短期保留
-- 收敛两套幂等：HTTP Header 幂等和方法注解幂等要明确使用边界
-- 中期可评估 Spring Integration Idempotent Receiver 或 Redisson 原语
+**`IdempotentKeyService` key 生成**：基于请求体 SHA-256 + 用户 ID + URI 的复合 key。
+
+### 3.7.2 判断
+
+这是**业务协议**的一部分，不是纯技术轮子：
+
+- Redis Lua 状态机表达了复杂的业务语义（`PARAMETER_MISMATCH` 异常）
+- 可替代方案（Spring Integration Idempotent Receiver、Redisson）存在，但不能直接覆盖当前四态语义
+
+### 3.7.3 目标方案
+
+- **短期保留**
+- 收敛两套幂等的使用边界：HTTP Header 幂等用于外部 API / webhook，方法注解幂等用于内部 service 防重
+- 收敛两套幂等的 Redis key 前缀规范
+- 中期评估 Redisson `RLock` / `RSemaphore` 是否可简化状态机
+
+---
 
 ## 3.8 数据库备份
 
-当前实现：
+### 3.8.1 当前实现
 
-- `DatabaseBackupService` 在应用内调用 `pg_dump` / `psql`
-- `ScheduledDatabaseBackupService`
-- `DatabaseExportTaskService`
+**`DatabaseBackupService`** (`system/database/service/DatabaseBackupService.java`)：
 
-问题：
+- 应用进程内通过 `ProcessBuilder` 调 `pg_dump` / `psql`
+- 密码通过环境变量 `PGPASSWORD` 注入（进程可见性风险）
+- 备份超时、一致性（`--lock-wait-timeout`、`--no-owner`）、压缩（`-Z`）由应用配置
+- `DatabaseBackupProperties` 下管理连接参数
 
-- 业务应用承担数据库运维职责
-- 进程权限、命令可用性、密码环境变量、超时、备份一致性都由应用维护
-- 生产环境更适合专业备份工具或云数据库备份
+**`ScheduledDatabaseBackupService`**：定时任务触发备份。
 
-目标方案：
+**`DatabaseExportTaskService`**：用户触发的数据导出（Excel/CSV），复用同一套连接配置。
+
+### 3.8.2 问题
+
+- **职责错位**：业务应用不应承担数据库运维
+- **进程权限**：应用容器需安装 `pg_dump` 二进制 + 访问数据库端口 + 读取密码
+- **备份一致性**：`pg_dump` 默认非 `--lock-wait-timeout` 且不保证 point-in-time
+- **生产级工具缺失**：无 WAL 归档、PITR、增量备份、备份校验
+
+### 3.8.3 目标方案
 
 | 场景 | 方案 |
 |---|---|
-| 自管 PostgreSQL | pgBackRest / Barman / WAL-G |
-| 云数据库 | 云厂商自动备份 + PITR |
-| 应用内导出 | 保留为开发/小规模部署辅助能力，不作为生产主备份 |
+| 自管 PostgreSQL | pgBackRest（增量 + PITR + 并行） / WAL-G（云存储） |
+| 云数据库 | 云厂商自动备份（RDS Automated Backup / Cloud SQL Export） + PITR |
+| 应用内导出 | 保留为**开发/小规模部署辅助**，不作为生产主备份 |
 
-短期目标：
+### 3.8.4 验证
 
-- 明确标注应用内备份不是生产级备份
-- 生产配置默认禁用导入能力
-- 导出任务继续可用，但不替代数据库备份体系
+- 生产配置默认禁用 `leo.database.import.enabled=false`
+- 开发环境 `DatabaseExportTaskService` 导出仍可用
+- 运维文档 `docs/ops/database-backup.md` 交付（pgBackRest/WAL-G 配置示例 + 恢复流程）
+
+---
 
 # 4. 不迁移清单
 
-| 模块 | 判断 |
-|---|---|
-| JWT | 使用 `jjwt`，不是手写 JWT |
-| TOTP 算法 | 使用 `dev.samstevens.totp`，不是手写 TOTP |
-| 密码哈希 | 使用 Spring Security `PasswordEncoder` |
-| Excel 导入导出 | 使用 Apache POI / Commons CSV，业务映射自定义合理 |
-| PDF 水印和打印表单 | 使用 iText，版式渲染是业务能力 |
-| 操作日志 | 审计语义强，Spring Interceptor/Advice 只是承载方式 |
-| 分页参数 | 虽可用 Spring `Pageable`，但当前有 sort 白名单与统一错误语义，先保留 |
+| 模块 | 判断 | 理由 |
+|---|---|---|
+| JWT | ✅ 保留 | 使用 `jjwt` (io.jsonwebtoken)，不是手写 JWT |
+| TOTP 算法 | ✅ 保留 | 使用 `dev.samstevens.totp`，不是手写 TOTP |
+| 密码哈希 | ✅ 保留 | `Spring Security PasswordEncoder` (BCrypt/Argon2) |
+| Excel 导入导出 | ✅ 保留 | Apache POI / Commons CSV，业务字段映射自定义合理 |
+| PDF 水印和打印表单 | ✅ 保留 | 使用 iText，版式渲染是业务能力 |
+| 操作日志 | ✅ 保留 | 审计语义强，Spring Interceptor/AOP 只是承载方式 |
+| 分页参数 | ✅ 保留 | 有 sort 白名单 + 统一错误语义（`@PageableDefault` + `SortHandlerMethodArgumentResolver` 自定义），大于 Spring `Pageable` 默认能力 |
+
+---
 
 # 5. 实施顺序
 
-## 5.0 PR 依赖关系
+## 5.0 PR 依赖 DAG
 
 ```
 PR1 (S3 删除, 独立)
@@ -291,310 +859,260 @@ PR4 (限流迁移) ←── 依赖 PR2 可观测性 + PR3 Redis 配置稳定
    │
    ├── PR6 (ID 治理, 与 PR4 可并行)
    │
-PR5 (密钥迁移, 独立, 见 5.1 拆分)
+PR5a (密钥抽象, 只读不改, 可与第一阶段并行)
    │
+PR5b (新格式双写灰度, 严格灰度节奏)
+   │
+PR5c (后台重加密)
+
 PR7 (DB 备份外部化, 文档级, 独立)
 ```
 
-依赖推断：
-
-- PR1 纯删代码，无任何前置依赖，应立即执行
-- PR2、PR3 互不依赖，可与 PR1 并行，但 PR3 改的 Redis 连接配置需先于 PR4 稳定
-- PR4 依赖 PR2（限流误拦需要 TraceId + 指标观测）和 PR3（Redis 配置不可在限流迁移期同时变动）
-- PR5、PR6、PR7 相互独立，可分别排期
-
 ## 5.1 PR 列表
 
-范围：
+### PR1：删除 S3 历史残留
 
-- 删除 `S3Signer`
-- 删除 `S3RequestExecutor`
-- 删除 `DefaultS3RequestExecutor`
-- 删除对应测试
+**范围**：删除 6 个文件（3 生产 + 3 测试）
 
-验证：
+**验证**：`S3CompatibleAttachmentStorageTest` / `AttachmentStorageResolverTest` / 附件上传/下载/预签名直传
 
-- `S3CompatibleAttachmentStorageTest`
-- `AttachmentStorageResolverTest`
-- 附件上传、下载、预签名直传相关测试
+**风险**：低。`rg S3Signer\|S3RequestExecutor src/main` 确认生产代码无引用。
 
-风险：
+**回滚**：还原被删除文件。
 
-- 低。生产代码无引用。
+---
 
-回滚：
+### PR2：TraceId 迁移到 Micrometer Tracing
 
-- 还原被删除文件即可。
+**范围**：按子文档 `2026-07-03-traceid-observability-upgrade-plan.md` 实施。
 
-## PR2：TraceId 迁移到 Micrometer Tracing
+**pom.xml 新增**：
+```xml
+<dependency>
+    <groupId>io.micrometer</groupId>
+    <artifactId>micrometer-tracing-bridge-otel</artifactId>
+</dependency>
+<dependency>
+    <groupId>io.opentelemetry</groupId>
+    <artifactId>opentelemetry-exporter-otlp</artifactId>
+</dependency>
+```
 
-范围：
+**application.yml 新增**：
+```yaml
+management:
+  tracing:
+    sampling:
+      probability: ${LEO_TRACING_SAMPLING:0.1}
+  otlp:
+    tracing:
+      endpoint: ${LEO_OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4318/v1/traces}
+```
 
-- 按 `2026-07-03-traceid-observability-upgrade-plan.md` 实施
-- 引入 Actuator、Micrometer Tracing、OTel exporter
-- 收敛 `TraceIdFilter`
+**TraceIdFilter 改造**：收敛为仅兼容 `X-Trace-Id` 写入（不再自行生成 UUID），核心链路 ID 由 Micrometer Tracer 提供。
 
-验证：
+**验证**：
+- 错误响应 `ApiResponse.traceId` 与 `logback-spring.xml` `%X{traceId:-}` 一致
+- Collector 不可用不阻塞启动
+- W3C `traceparent` 出现在 outgoing HTTP 请求头中
 
-- 错误响应 traceId 与日志 traceId 一致
-- 前端错误展示不回退
-- Collector 不可用不阻塞应用启动
+**风险**：中。影响日志排查链路。
 
-风险：
+**回滚**：恢复旧 `TraceIdFilter` + logback pattern。
 
-- 中。影响日志排查链路。
+---
 
-回滚：
+### PR3：缓存双轨制迁移
 
-- 恢复旧 `TraceIdFilter` 与 logback pattern。
+**范围**：按子文档 `2026-07-03-cache-dual-track-design.md` 实施。
 
-## PR3：缓存双轨制迁移
+**关键约束**：复用现有 `CacheConfig.RedisCacheManager`（static/hot 双 cache），不新增 CacheManager Bean。
 
-范围：
-
-- 按 `2026-07-03-cache-dual-track-design.md` 实施
-- 读缓存改 Spring Cache
-- Redis 并发原语保留手写
-- **复用现有 `CacheConfig` 的 `RedisCacheManager` Bean**（已含 static / hot 双 cache 配置），不新增 CacheManager Bean，避免双 manager 冲突
-
-验证：
-
-- 空 list 不缓存
+**验证**：
+- 空 list 不缓存（`unless = "#result?.size() == 0"`）
 - 事务回滚不误删缓存
-- TTL 命名空间正确
-- Redis 健康检查正常
+- TTL 命名空间正确（static 2h / hot 5min）
+- 缓存命中率（迁移后 7 天）不低于迁移前
 
-风险：
+**风险**：中。影响 10+ 业务服务读路径。
 
-- 中。影响多个下拉选项和系统配置读路径。
+**回滚**：恢复对应业务服务 `RedisJsonCacheSupport.getOrLoad(...)`。
 
-回滚：
+---
 
-- 恢复对应业务服务 `RedisJsonCacheSupport.getOrLoad(...)`。
+### PR4：限流迁移 Bucket4j
 
-## PR4：限流迁移 Bucket4j
+**范围**：
+- 新增 `bucket4j-redis` 依赖
+- `TokenBucketService` 内部实现替换为 Bucket4j ProxyManager
+- 新增 `RateLimitHeaderWriter` 收敛 `X-RateLimit-*`/`Retry-After` 写出
+- 删除 `db/token_bucket.lua` + Resilience4j 依赖
 
-范围：
+**前置基线**（合入前必须建立）：
+- 注入 Redis 连接异常/高延迟，记录当前 `TokenBucketService` 的 fail-open 行为
+- PR4 合入后回放同一基线，确认一致
 
-- 新增 Bucket4j Redis 依赖
-- 新增 `RateLimiterGateway` 或 `DistributedRateLimiter`
-- 保持 `@RateLimit` 注解不变
-- 替换 `TokenBucketService` 内部实现
-- 删除 `token_bucket.lua`
-- 移除未使用 Resilience4j 依赖，或明确保留用于后续熔断/重试
+**验证**：
+- 全局 IP 限流 / API Key 限流 / 用户维度限流
+- `Retry-After` / `X-RateLimit-*` 响应头与现状一致
+- Redis 不可用时 fail-open 行为与现状一致
+- Bucket4j vs 现状 QPS 误差 < 5%
 
-前置基线（合入前必须先建立）：
+**风险**：中高。影响所有请求入口。
 
-- 建立《现状 Redis 故障行为基线》：注入 Redis 连接异常 / 高延迟，记录当前 `TokenBucketService` 是 fail-open（放行）还是 fail-closed（拒绝）、`Retry-After` 头是否丢失、异常是否吞掉
-- PR4 合入后回放同一基线场景，逐项比对，确认 Bucket4j 行为"与现状一致"再删除 `token_bucket.lua`
+**回滚**：feature flag 一键切回旧 `TokenBucketService`。
 
-验证：
+---
 
-- 全局 IP 限流
-- API Key 限流
-- 用户维度限流
-- `Retry-After` 与 `X-RateLimit-*` 响应头
-- Redis 不可用时 fail-open / fail-closed 策略与现状一致
+### PR5a：密钥抽象 + legacy 适配器（只读不改）
 
-风险：
+**范围**：
+- 新增 `SecretEncryptionService` 接口
+- 新增 `LegacyTotpSecretEncryptionAdapter`（包装 `TotpSecretCryptor`）
+- 新增 `LegacyOssSecretEncryptionAdapter`（包装 `OssSecretCryptor`）
+- 新增 `LegacyAttachmentContentEncryptionAdapter`（包装 `AttachmentContentCryptor`）
+- **不修改任何写入路径**
 
-- 中高。影响所有请求入口。
+**验证**：现有密钥通过 legacy 适配器可正确解密；写入路径行为不变。
 
-回滚：
+**风险**：低。纯新增，不改写入。
 
-- 保留旧 `TokenBucketService` 分支或 feature flag，一键切回 Redis Lua。
+---
 
-## PR5：密钥加密抽象与新格式（拆分 5a / 5b / 5c）
+### PR5b：新写入切 Tink AEAD 格式（含双写灰度）
 
-PR5 安全敏感，影响登录、2FA、OSS，一次性改完回滚成本过高，故拆为三步独立合入，每步可独立回滚。
+**范围**：
+- 引入 `com.google.crypto.tink:tink` 依赖
+- 新写入使用 Tink AEAD（AES-256-GCM, KeysetHandle）
+- 读链路先尝试 Tink → 失败回退 legacy
+- 灰度：新功能写入先用新格式 → 全部写入用新格式 → 稳定 7 天
 
-### PR5a：新增抽象与 legacy 适配器（只读不改）
-
-范围：
-
-- 新增 `SecretEncryptionService` 抽象
-- 新增 legacy 适配器：包装现有 `TotpSecretCryptor` / `OssSecretCryptor` / `AttachmentContentCryptor` 旧格式读取能力
-- 本步**不修改任何写入路径**，只新增并行读通道，业务行为完全不变
-
-验证：
-
-- 现有密钥通过 legacy 适配器可正确解密
-- 抽象层不破坏现有单测
-- 写入路径仍是旧格式（黑盒不变）
-
-风险：**低**。纯新增，不改写入。
-
-回滚：删除新生成的类即可，无数据迁移。
-
-### PR5b：新写入切 envelope 格式（含双写灰度）
-
-范围：
-
-- 新写入数据使用 versioned envelope 格式（含 key id + version）
-- 读链路先尝试 envelope，失败回退 legacy
-- 双写灰度：先在「新格式写入」开启，**旧数据不主动重写**
-- 灰度策略见下表
-
-灰度阈值与监控：
+**灰度阈值**：
 
 | 阶段 | 比例 | 监控指标 | 回滚触发 |
 |---|---|---|---|
-| 灰度 1 | 新功能写入用新格式，存量写入不变 | 解密失败率（应 = 0） | 解密失败率 > 0.01% 立即回滚 |
-| 灰度 2 | 全部写入用新格式 | 解密失败率、回退 legacy 命中率 | 回退命中率 > 5% 暂停观察 |
-| 灰度 3 | 稳定 7 天后进入 PR5c 重加密 | 解密失败率 | — |
+| 灰度 1 | 新功能写入用新格式 | 解密失败率 = 0% | > 0.01% 回滚 |
+| 灰度 2 | 全部写入用新格式 | 回退 legacy 命中率 < 5% | > 5% 暂停 |
+| 灰度 3 | 稳定 7 天 | 解密失败率 = 0% | — |
 
-验证：
+**验证**：旧数据回退可读；新数据 Tink 加解密；错误密钥解密失败；KeysetHandle 轮换。
 
-- TOTP Secret 旧数据可读（回退 legacy 成功）
-- OSS Secret 旧数据可读
-- 新数据可加解密
-- 错误密钥无法解密
-- key rotation 单测
+**风险**：高。安全敏感且影响 2FA 登录、OSS 凭据。
 
-风险：**高**。安全敏感且影响登录、2FA、OSS。
+**回滚**：写链路切回旧格式（legacy adapter 保留，Tink 格式数据仍可解）。
 
-回滚：**写链路切回旧格式**（legacy 适配器保留，新生成的 envelope 数据后续可解，因 key 仍在）。预期单次回滚完成。
+---
 
 ### PR5c：后台批量重加密 + 清理 legacy
 
-范围：
+**范围**：
+- 后台任务分批重加密旧数据（每批 100 条，可暂停）
+- 完成并稳定 N 天后，清理 legacy decrypt 路径
 
-- 后台任务分批重加密旧数据为 envelope 格式
-- 分批批次小（如每批 100 条），每批可暂停
-- 全部完成并稳定 N 天后，清理 legacy decrypt 路径（需单独 PR 评审）
+**验证**：重加密前后都可解；解密失败率持续 0；进度可监控/暂停/恢复。
 
-验证：
+**回滚**：停止后台任务，已处理数据保持 Tink，未处理数据保持 legacy。
 
-- 重加密前后数据都可解
-- 进度可监控、可暂停、可恢复
-- 解密失败率持续为 0
+---
 
-风险：**中**。后台任务不影响写入主路径。
+### PR6：ID 生成治理
 
-回滚：停止后台任务，已重加密数据保持 envelope，未处理数据保持 legacy，回退写链路至 PR5b 灰度 2 状态。
+**范围**：
+- 禁止新增 `getInstance()` 调用
+- 4 处存量静态调用改构造器注入
+- 新增 `leo.id.strict-machine-id` 开关
+- 编写 ADR：TSID vs DB sequence vs UUIDv7 选型
 
-风险登记更新：R2 由「envelope 一次切」降级，因双写 + 灰度 + 三步可独立回滚，整体可控。
+**验证**：
+- `strict-machine-id=true` 且 `machine-id=0` → 启动失败
+- 4 处 DI 改造后单测通过
+- 多线程并发 0 冲突
+- `getInstance()` 残留 = 0 处
 
-## PR6：ID 生成治理
+---
 
-范围：
+### PR7：数据库备份职责外部化
 
-- 删除新增代码中的 `SnowflakeIdGenerator.getInstance()` 调用（现存仅 4 处，见第 3.6 节清单）
-- 4 处存量静态调用改为构造器注入（`TradeItemMaterialSupport`、`AbstractCrudService`、`BusinessCreateIdResolver`、`PurchaseOrderItemPieceWeightService`）
-- 生产环境启动校验 `leo.id.machine-id`
-- 编写新 ID 策略 ADR：DB sequence vs UUIDv7/TSID
+**范围**：文档标注 + 禁用进口 + 运维文档。
 
-生产环境判定依据：
+**验证**：`leo.database.import.enabled=false` 时接口不可用；开发环境导出仍可用。
 
-- 引入独立开关 `leo.id.strict-machine-id`（默认 `false`，生产配置显式 `true`），开启后 `machine-id == 0` 即启动失败
-- 不依赖 `spring.profiles.active` 判定生产环境，避免 profile 套娃与误判
-- 测试 / 开发环境不开启此开关，避免本地启动无故失败
-
-验证：
-
-- 所有实体创建测试
-- 多线程 ID 唯一性测试
-- 配置缺失启动失败测试（`strict-machine-id=true` 且 `machine-id=0` 时启动抛错）
-- 4 处 `getInstance()` 改造后 DI 单测通过
-
-风险：
-
-- 中。短期不换 ID 算法，只治理风险。
-
-回滚：
-
-- 放宽启动校验，保留旧生成器。
-
-## PR7：数据库备份职责外部化
-
-范围：
-
-- 文档标注应用内备份定位
-- 生产默认禁用导入能力
-- 新增运维文档：pgBackRest / WAL-G / 云数据库备份选型
-
-验证：
-
-- 配置关闭导入时接口不可用
-- 开发环境导出仍可用
-
-风险：
-
-- 中。影响运维流程，不应和业务发布混在一起。
-
-回滚：
-
-- 恢复旧配置默认值。
+---
 
 # 6. 依赖调整计划
 
 | 依赖 | 当前状态 | 计划 |
 |---|---|---|
-| `resilience4j-spring-boot3` | 已引入，生产代码未使用 | PR4 决策：不用则删除 |
-| `resilience4j-ratelimiter` | 已引入，生产代码未使用 | PR4 决策：不用则删除 |
+| `resilience4j-spring-boot3` (2.3.0) | 生产代码 0 使用 | PR4 删除 |
+| `resilience4j-ratelimiter` | 同上 | PR4 删除 |
 | AWS SDK v2 S3 | 已使用 | 保留 |
-| Bucket4j | 未引入 | PR4 引入 |
-| Actuator / Micrometer Tracing / OTel exporter | 未引入 | PR2 引入 |
-| Tink / KMS SDK / Vault SDK | 未引入 | PR5 评估后选择，不提前引入 |
+| `bucket4j-redis` | 未引入 | PR4 引入 (8.10.1) |
+| `micrometer-tracing-bridge-otel` | 未引入 | PR2 引入 |
+| `opentelemetry-exporter-otlp` | 未引入 | PR2 引入 |
+| `com.google.crypto.tink:tink` | 未引入 | PR5b 引入 (1.15+) |
+
+---
 
 # 7. 验收标准
 
-## 7.1 项级验收（清单）
+## 7.1 项级验收
 
-- [ ] S3 手写 SigV4 与手写 HttpClient 残留删除
+- [ ] S3 手写 SigV4 / HttpClient 残留删除
 - [ ] traceId 不再由手写 filter 生成核心链路 ID
 - [ ] 读缓存业务点迁移到 Spring Cache，Redis 并发原语保留
 - [ ] 限流不再依赖自研 Redis Lua token bucket
-- [ ] 未使用的 Resilience4j 依赖被删除或有明确用途
-- [ ] 密钥加密有版本化 envelope 与 legacy 兼容读取
-- [ ] 生产环境不能使用默认 `leo.id.machine-id=0` 静默启动
-- [ ] 应用内数据库备份不再被定义为生产级主备份方案
-- [ ] 每个 PR 均有单测或集成测试覆盖，并能独立回滚
+- [ ] 未使用的 Resilience4j 依赖被删除
+- [ ] 密钥加密有 Tink AEAD envelope + legacy 兼容读取
+- [ ] 生产环境不能使用默认 `machine-id=0` 静默启动
+- [ ] 应用内 DB 备份不再定义为生产主备份
+- [ ] 每个 PR 有单测/集成测试覆盖，可独立回滚
 
-## 7.2 量化阈值（PR 合入判定）
+## 7.2 量化阈值
 
 | PR | 指标 | 阈值 | 采集方式 |
 |---|---|---|---|
-| PR4 | 限流 QPS 误差（Bucket4j vs 现状基线） | < 5% | 压测对比 |
-| PR4 | Redis 故障 fail-open/fail-closed 行为 | 与现状 100% 一致 | 故障注入基线回放 |
-| PR5b | envelope 写入解密失败率 | = 0% | 生产监控 + 单测 |
+| PR4 | 限流 QPS 误差（Bucket4j vs 现状） | < 5% | wrk2/JMeter 压测对比 |
+| PR4 | Redis 故障 fail-open 行为 | 与现状 100% 一致 | 故障注入基线回放 |
+| PR5b | Tink 写入解密失败率 | = 0% | 生产监控 + 单测 |
 | PR5b | legacy 回退命中率（灰度初期） | < 5% | 读链路埋点 |
 | PR5c | 重加密后历史数据解密失败率 | = 0% | 全量抽样校验 |
-| PR3 | 缓存命中率（迁移后 7 天） | 不低于迁移前 | Redis 指标 |
-| PR3 | 脏读 / 缓存不失效事件 | = 0 起 | 事务回滚与 evict 单测 |
+| PR3 | 缓存命中率（迁移后 7 天） | 不低于迁移前 | Redis INFO stats |
+| PR3 | 脏读 / 缓存不失效 | = 0 起 | 事务回滚与 evict 单测 |
 | PR2 | 错误 body / X-Trace-Id / log 三方一致 | 100% | 一致性集成测试 |
-| PR6 | `getInstance()` 残留调用 | = 0 处 | 静态扫描 |
+| PR6 | `getInstance()` 残留 | = 0 处 | 静态扫描 |
 | PR6 | 多线程并发 ID 唯一性 | 0 冲突 | 并发单测 |
+
+---
 
 # 8. 风险登记
 
 | ID | 风险 | 等级 | 缓解 |
 |---|---|---|---|
-| R1 | 限流迁移导致误拦截正常请求 | 高 | feature flag + 压测 + 回滚旧 TokenBucket |
-| R2 | 密钥迁移导致旧 secret 无法解密 | 中 | 拆分 5a/5b/5c 三步独立回滚 + 双写灰度 + 解密失败率监控触发回滚（详见 PR5） |
-| R3 | ID 生成策略调整影响历史主键 | 高 | 短期只治理配置和 DI，不直接换算法 |
-| R4 | 缓存迁移导致脏读或缓存不失效 | 中 | 事务回滚与 evict 单测 |
-| R5 | TraceId 迁移后排障链路断裂 | 中 | 错误 body/header/log 三方一致性测试 |
-| R6 | 删除 S3 残留误删隐藏路径 | 低 | `rg` 确认生产代码无引用，附件测试覆盖 |
+| R1 | 限流迁移导致误拦截 | 高 | feature flag + 压测 + 回滚旧 TokenBucket |
+| R2 | 密钥迁移导致旧 secret 无法解密 | 中 | PR5a/5b/5c 三步独立回滚 + 双写灰度 + 监控触发回滚 |
+| R3 | ID 策略调整影响历史主键 | 高 | 短期只治理 DI/配置，不换算法 |
+| R4 | 缓存迁移导致脏读/缓存不失效 | 中 | 事务回滚与 evict 单测 |
+| R5 | TraceId 迁移排障链路断裂 | 中 | 三方一致性测试 |
+| R6 | S3 残留误删 | 低 | `rg` 确认生产代码无引用 + 附件测试 |
+
+---
 
 # 9. 推荐执行节奏
 
-第一阶段先做低风险降噪：
+**第一阶段**（低风险降噪）：
 
-1. PR1 S3 残留删除
-2. PR2 TraceId 迁移
-3. PR3 缓存迁移
+1. PR1 S3 残留删除（1d）
+2. PR2 TraceId 迁移（2d）
+3. PR3 缓存迁移（3d）
 
-第二阶段处理运行时行为：
+**第二阶段**（运行时行为）：
 
-4. PR4 限流迁移
-5. PR6 ID 生成治理
+4. PR4 限流迁移（3d）
+5. PR6 ID 生成治理（2d）
 
-第三阶段处理安全与运维：
+**第三阶段**（安全与运维）：
 
-6. PR5a 密钥抽象 + legacy 适配器（只读）
-7. PR5b 新格式双写灰度
-8. PR5c 后台重加密 + 清理 legacy
-9. PR7 数据库备份外部化
-
-注：PR5a 应在安全可控前提下尽早合入（可与第一阶段并行），为后续留出双写窗口；PR5b/PR5c 严格按灰度节奏推进。
+6. PR5a 密钥抽象 + legacy（2d，可与第一阶段并行）
+7. PR5b Tink 新格式双写灰度（3d + 7d 观察期）
+8. PR5c 后台重加密（1d 代码 + 后台运行 1-2 周）
+9. PR7 DB 备份外部化（1d 文档 + 配置）
