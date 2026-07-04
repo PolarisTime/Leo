@@ -48,15 +48,18 @@ start_backend() {
     echo "JAR 不存在: $JAR_FILE" >&2
     exit 1
   fi
-  env -u RUNNER_TRACKING_ID setsid nohup java \
-    -Xms512m -Xmx2g \
-    -XX:+UseG1GC \
-    -XX:MaxGCPauseMillis=200 \
-    -XX:+HeapDumpOnOutOfMemoryError \
-    -XX:HeapDumpPath="$STEELX_ROOT/shared/heapdump.hprof" \
-    -Dserver.port="$SERVER_PORT" \
-    -Dspring.profiles.active=prod \
-    -jar "$JAR_FILE" > "$BACKEND_LOG_FILE" 2>&1 &
+  {
+    printf '\n===== %s starting %s =====\n' "$(date -Is)" "$JAR_FILE"
+    env -u RUNNER_TRACKING_ID setsid java \
+      -Xms512m -Xmx2g \
+      -XX:+UseG1GC \
+      -XX:MaxGCPauseMillis=200 \
+      -XX:+HeapDumpOnOutOfMemoryError \
+      -XX:HeapDumpPath="$STEELX_ROOT/shared/heapdump.hprof" \
+      -Dserver.port="$SERVER_PORT" \
+      -Dspring.profiles.active=prod \
+      -jar "$JAR_FILE"
+  } >> "$BACKEND_LOG_FILE" 2>&1 &
   echo "$!" > "$BACKEND_PID_FILE"
   echo "steelx 后端启动 PID=$(cat "$BACKEND_PID_FILE")"
 }

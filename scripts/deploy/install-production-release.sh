@@ -195,7 +195,7 @@ else
 fi
 start_backend
 
-if ! healthcheck 120; then
+if ! healthcheck 240; then
   rollback "后端健康检查未通过: $HEALTHCHECK_URL"
   exit 1
 fi
