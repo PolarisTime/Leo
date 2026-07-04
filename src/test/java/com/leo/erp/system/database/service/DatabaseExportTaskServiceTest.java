@@ -9,6 +9,7 @@ import com.leo.erp.system.database.repository.DatabaseExportTaskRepository;
 import com.leo.erp.system.database.web.dto.DatabaseExportTaskResponse;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 
 import java.io.IOException;
 import java.lang.reflect.Proxy;
@@ -34,6 +35,29 @@ class DatabaseExportTaskServiceTest {
     private DatabaseExportTaskMapper exportTaskMapper;
     private SnowflakeIdGenerator snowflakeIdGenerator;
     private DatabaseExportTaskService service;
+
+    @Test
+    void shouldCreateBeanWithProductionConstructor() {
+        new ApplicationContextRunner()
+                .withPropertyValues(
+                        "spring.datasource.username=leo",
+                        "spring.datasource.password=secret"
+                )
+                .withBean(DatabaseExportTaskRepository.class, () -> {
+                    var repository = mock(DatabaseExportTaskRepository.class);
+                    when(repository.findByStatusInAndDeletedFlagFalse(any())).thenReturn(List.of());
+                    return repository;
+                })
+                .withBean(DatabaseBackupService.class, () -> mock(DatabaseBackupService.class))
+                .withBean(DatabaseBackupProperties.class, DatabaseBackupProperties::new)
+                .withBean(DatabaseExportTaskMapper.class, () -> mock(DatabaseExportTaskMapper.class))
+                .withBean(SnowflakeIdGenerator.class, () -> new SnowflakeIdGenerator(1))
+                .withBean(DatabaseExportTaskService.class)
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    assertThat(context).hasSingleBean(DatabaseExportTaskService.class);
+                });
+    }
 
     @BeforeEach
     void setUp() throws IOException, InterruptedException {

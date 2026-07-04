@@ -14,6 +14,7 @@ import com.leo.erp.system.database.web.dto.DatabaseExportTaskResponse;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import java.util.concurrent.TimeUnit;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.dao.DataAccessException;
 import org.springframework.beans.factory.annotation.Value;
@@ -78,6 +79,7 @@ public class DatabaseExportTaskService {
         );
     }
 
+    @Autowired
     public DatabaseExportTaskService(DatabaseExportTaskRepository taskRepository,
                                      DatabaseBackupService databaseBackupService,
                                      DatabaseBackupProperties backupProperties,
