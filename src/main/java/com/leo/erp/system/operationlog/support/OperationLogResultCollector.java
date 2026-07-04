@@ -16,7 +16,6 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
-import java.util.Objects;
 import java.util.StringJoiner;
 
 @Component
@@ -119,7 +118,7 @@ public class OperationLogResultCollector {
             return metadata.moduleName();
         }
         String moduleKey = readValue(parseRequestBody(request), moduleNameField);
-        if (moduleKey == null || moduleKey.isBlank()) {
+        if (moduleKey == null) {
             return metadata.moduleName();
         }
         return moduleCatalog == null ? moduleKey : moduleCatalog.resolveModuleName(moduleKey);
@@ -257,7 +256,7 @@ public class OperationLogResultCollector {
 
     private Object readField(Object source, String fieldName) {
         Class<?> type = source.getClass();
-        while (type != null && !Objects.equals(type, Object.class)) {
+        while (type != Object.class) {
             try {
                 Field field = type.getDeclaredField(fieldName);
                 field.setAccessible(true);

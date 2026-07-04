@@ -62,9 +62,17 @@ class ControllerRequiresPermissionCoverageTest {
 
         Set<Class<?>> classes = new TreeSet<>((left, right) -> left.getName().compareTo(right.getName()));
         for (BeanDefinition beanDefinition : scanner.findCandidateComponents(BASE_PACKAGE)) {
-            classes.add(Class.forName(beanDefinition.getBeanClassName()));
+            Class<?> controllerClass = Class.forName(beanDefinition.getBeanClassName());
+            if (!isNestedTestFixture(controllerClass)) {
+                classes.add(controllerClass);
+            }
         }
         return classes;
+    }
+
+    private boolean isNestedTestFixture(Class<?> controllerClass) {
+        Class<?> enclosingClass = controllerClass.getEnclosingClass();
+        return enclosingClass != null && enclosingClass.getSimpleName().endsWith("Test");
     }
 
     private boolean isRequestHandler(Method method) {

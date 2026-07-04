@@ -22,6 +22,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -166,6 +167,24 @@ class AuthControllerTest {
 
         assertThat(response.code()).isEqualTo(0);
         assertThat(response.data()).isEqualTo(step1Response);
+    }
+
+    @Test
+    void loginShouldNotWriteCookie_whenRefreshTokenIsBlank() {
+        LoginRequest request = mock(LoginRequest.class);
+        HttpServletRequest httpRequest = mock(HttpServletRequest.class);
+        HttpServletResponse httpResponse = mock(HttpServletResponse.class);
+        TokenResponse body = new TokenResponse("access", "  ", "Bearer", 3600L, 86400L, null);
+        when(httpRequest.getHeader("User-Agent")).thenReturn("test-agent");
+        when(httpRequest.getRequestURI()).thenReturn("/auth/login");
+        when(httpRequest.getMethod()).thenReturn("POST");
+        when(clientIpResolver.resolveClientIpOrUnknown(httpRequest)).thenReturn("127.0.0.1");
+        when(authSessionWebService.login(eq(request), any())).thenReturn(body);
+
+        ApiResponse<LoginResponseBody> response = controller.login(request, httpRequest, httpResponse);
+
+        assertThat(response.code()).isEqualTo(0);
+        verify(authTokenCookieSupport, never()).writeRefreshTokenCookie(any(), any(), any());
     }
 
     @Test

@@ -3,6 +3,7 @@ package com.leo.erp.system.service;
 import com.leo.erp.system.database.web.dto.DatabaseStatusResponse;
 import org.junit.jupiter.api.Test;
 
+import java.lang.reflect.Method;
 import java.time.LocalDateTime;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -202,5 +203,37 @@ class HealthPageRendererTest {
         String html = renderer.renderPublic("2024-01-01", jvm);
 
         assertThat(html).contains("3 天 2 小时");
+    }
+
+    @Test
+    void shouldRenderDetailedPage_withDownStatusAndNullValues() {
+        var jvm = new HealthPageRenderer.JvmStatus(
+                null, null, null, 512L, 1024L, 512L, 1, 1
+        );
+        var pg = new DatabaseStatusResponse.PostgresStatus(
+                null, 5432, null, null,
+                0L, 0L, 0L, null, 0L, null, "DOWN"
+        );
+        var redis = new DatabaseStatusResponse.RedisStatus(
+                null, 6379, 0, null,
+                512L, 1024L, 0L, 0L, null, 0L, 0L, 0.0, null
+        );
+
+        String html = renderer.renderDetailed(null, jvm, pg, redis, null);
+
+        assertThat(html).contains("status-down");
+        assertThat(html).contains("512 B");
+        assertThat(html).contains("<dt>启动时间</dt><dd>未知</dd>");
+    }
+
+    @Test
+    void shouldFormatDurationBoundaries() throws Exception {
+        Method formatDuration = HealthPageRenderer.class.getDeclaredMethod("formatDuration", long.class);
+        formatDuration.setAccessible(true);
+
+        assertThat(formatDuration.invoke(renderer, 30_000L)).isEqualTo("30 秒");
+        assertThat(formatDuration.invoke(renderer, 5 * 60_000L)).isEqualTo("5 分钟");
+        assertThat(formatDuration.invoke(renderer, 2 * 3_600_000L + 15 * 60_000L)).isEqualTo("2 小时 15 分钟");
+        assertThat(formatDuration.invoke(renderer, 3 * 86_400_000L + 2 * 3_600_000L)).isEqualTo("3 天 2 小时");
     }
 }

@@ -52,7 +52,7 @@ public class RateLimitAspect {
             TokenBucketService.TokenBucketResult r = tokenBucketService.tryConsume(
                     key, resolveRate(rateLimit), resolveCapacity(rateLimit), rateLimit.tokens());
             if (!r.allowed()) {
-                return reject(response, r, rateLimit);
+                throw reject(response, r, rateLimit);
             }
             setRateLimitResult(request, response, r, rateLimit);
             return joinPoint.proceed();
@@ -65,7 +65,7 @@ public class RateLimitAspect {
             TokenBucketService.TokenBucketResult r = tokenBucketService.tryConsume(
                     key, resolveRate(rateLimit), resolveCapacity(rateLimit), rateLimit.tokens());
             if (!r.allowed()) {
-                return reject(response, r, rateLimit);
+                throw reject(response, r, rateLimit);
             }
             setRateLimitResult(request, response, r, rateLimit);
             return joinPoint.proceed();
@@ -93,7 +93,7 @@ public class RateLimitAspect {
         TokenBucketService.TokenBucketResult r = tokenBucketService.tryConsume(
                 key, rateLimit.rate(), rateLimit.capacity(), rateLimit.tokens());
         if (!r.allowed()) {
-            return reject(response, r, rateLimit);
+            throw reject(response, r, rateLimit);
         }
         setRateLimitResult(request, response, r, rateLimit);
         return joinPoint.proceed();
@@ -107,7 +107,7 @@ public class RateLimitAspect {
         return rl.capacity() > 0 ? rl.capacity() : DEFAULT_CAPACITY;
     }
 
-    private Object reject(HttpServletResponse response, TokenBucketService.TokenBucketResult r, RateLimit rl) {
+    private BusinessException reject(HttpServletResponse response, TokenBucketService.TokenBucketResult r, RateLimit rl) {
         HttpServletRequest request = currentRequest();
         long retryAfterSeconds = r.retryAfterSeconds();
         RateLimitContext.set(request, RateLimitContext.Snapshot.rejected(resolveCapacity(rl), retryAfterSeconds));
@@ -118,7 +118,7 @@ public class RateLimitAspect {
             response.setHeader("X-RateLimit-Remaining", "0");
             response.setHeader("X-RateLimit-Reset", String.valueOf(retryAfterSeconds));
         }
-        throw new BusinessException(ErrorCode.RATE_LIMITED,
+        return new BusinessException(ErrorCode.RATE_LIMITED,
                 "请求过于频繁，请在 " + retryAfterSeconds + " 秒后重试");
     }
 

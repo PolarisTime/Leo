@@ -66,4 +66,9 @@ class SalesOutboundMapperTest {
         assertThat(response.remark()).isNull();
         assertThat(response.items()).isNull();
     }
+
+    @Test
+    void shouldReturnNullWhenEntityIsNull() {
+        assertThat(mapper.toResponse(null)).isNull();
+    }
 }

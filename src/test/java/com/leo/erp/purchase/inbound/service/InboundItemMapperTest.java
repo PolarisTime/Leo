@@ -246,6 +246,114 @@ class InboundItemMapperTest {
         assertThat(item.getSettlementMode()).isEqualTo("现结");
     }
 
+    @Test
+    void shouldUseLineSettlementModeWhenPresentAndHeaderWhenLineBlank() {
+        TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
+        WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
+        InboundItemMapper mapper = new InboundItemMapper(materialSupport, warehouseSelectionSupport);
+
+        when(materialSupport.normalizeBatchNo(any(), anyString(), anyInt(), anyBoolean())).thenReturn("B1");
+        when(warehouseSelectionSupport.normalizeWarehouseName("一号库", 1, true)).thenReturn("一号库");
+
+        PurchaseInboundItem lineModeItem = new PurchaseInboundItem();
+        mapper.applyItemFields(new PurchaseInbound(), requestWithSettlementMode("月结"), lineModeItem,
+                1, "M1", material(), Map.of(), contextWithSettlementMode("现结"));
+
+        PurchaseInboundItem headerModeItem = new PurchaseInboundItem();
+        mapper.applyItemFields(new PurchaseInbound(), requestWithSettlementMode(" "), headerModeItem,
+                1, "M1", material(), Map.of(), contextWithSettlementMode("承兑"));
+        PurchaseInboundItem defaultModeItem = new PurchaseInboundItem();
+        mapper.applyItemFields(new PurchaseInbound(), requestWithSettlementMode(" "), defaultModeItem,
+                1, "M1", material(), Map.of(), contextWithSettlementMode(" "));
+
+        assertThat(lineModeItem.getSettlementMode()).isEqualTo("月结");
+        assertThat(headerModeItem.getSettlementMode()).isEqualTo("承兑");
+        assertThat(defaultModeItem.getSettlementMode()).isEqualTo("现结");
+    }
+
+    @Test
+    void shouldClearSettlementCompanyWhenSourceItemMissingOrDetached() {
+        TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
+        WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
+        InboundItemMapper mapper = new InboundItemMapper(materialSupport, warehouseSelectionSupport);
+
+        when(materialSupport.normalizeBatchNo(any(), anyString(), anyInt(), anyBoolean())).thenReturn("B1");
+        when(warehouseSelectionSupport.normalizeWarehouseName("一号库", 1, true)).thenReturn("一号库");
+
+        PurchaseInboundItem missingSourceItem = new PurchaseInboundItem();
+        InboundItemMapper.ItemMappingResult missingResult = mapper.applyItemFields(
+                new PurchaseInbound(), requestWithSourceItemId(201L), missingSourceItem,
+                1, "M1", material(), Map.of(), contextWithSettlementMode("现结"));
+
+        PurchaseInboundItem detachedSourceItem = new PurchaseInboundItem();
+        InboundItemMapper.ItemMappingResult detachedResult = mapper.applyItemFields(
+                new PurchaseInbound(), requestWithSourceItemId(202L), detachedSourceItem,
+                1, "M1", material(), Map.of(202L, new PurchaseOrderItem()), contextWithSettlementMode("现结"));
+
+        assertThat(missingResult.sourceOrderNo()).isNull();
+        assertThat(missingSourceItem.getSettlementCompanyId()).isNull();
+        assertThat(missingSourceItem.getSettlementCompanyName()).isNull();
+        assertThat(detachedResult.sourceOrderNo()).isNull();
+        assertThat(detachedSourceItem.getSettlementCompanyId()).isNull();
+        assertThat(detachedSourceItem.getSettlementCompanyName()).isNull();
+    }
+
+    @Test
+    void shouldCopySettlementCompanyFromLinkedSourceOrder() {
+        TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
+        WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
+        InboundItemMapper mapper = new InboundItemMapper(materialSupport, warehouseSelectionSupport);
+
+        when(materialSupport.normalizeBatchNo(any(), anyString(), anyInt(), anyBoolean())).thenReturn("B1");
+        when(warehouseSelectionSupport.normalizeWarehouseName("一号库", 1, true)).thenReturn("一号库");
+
+        PurchaseOrder sourceOrder = new PurchaseOrder();
+        sourceOrder.setOrderNo("PO-SETTLEMENT");
+        sourceOrder.setSettlementCompanyId(3001L);
+        sourceOrder.setSettlementCompanyName("结算公司");
+        PurchaseOrderItem sourceOrderItem = new PurchaseOrderItem();
+        sourceOrderItem.setPurchaseOrder(sourceOrder);
+
+        PurchaseInboundItem item = new PurchaseInboundItem();
+        InboundItemMapper.ItemMappingResult result = mapper.applyItemFields(
+                new PurchaseInbound(), requestWithSourceItemId(201L), item,
+                1, "M1", material(), Map.of(201L, sourceOrderItem), contextWithSettlementMode("现结"));
+
+        assertThat(result.sourceOrderNo()).isEqualTo("PO-SETTLEMENT");
+        assertThat(item.getSettlementCompanyId()).isEqualTo(3001L);
+        assertThat(item.getSettlementCompanyName()).isEqualTo("结算公司");
+    }
+
+    private PurchaseInboundItemRequest requestWithSettlementMode(String settlementMode) {
+        return new PurchaseInboundItemRequest(
+                null, "M1", "宝钢", "螺纹钢", "HRB400", "18", "12m", "吨",
+                null, "一号库", settlementMode, "B1", 10, "支",
+                new BigDecimal("0.100"), 1, new BigDecimal("1.000"),
+                null, null, null,
+                new BigDecimal("4000.00"), new BigDecimal("4000.00")
+        );
+    }
+
+    private PurchaseInboundItemRequest requestWithSourceItemId(Long sourcePurchaseOrderItemId) {
+        return new PurchaseInboundItemRequest(
+                null, "M1", "宝钢", "螺纹钢", "HRB400", "18", "12m", "吨",
+                sourcePurchaseOrderItemId, "一号库", "现结", "B1", 10, "支",
+                new BigDecimal("0.100"), 1, new BigDecimal("1.000"),
+                null, null, null,
+                new BigDecimal("4000.00"), new BigDecimal("4000.00")
+        );
+    }
+
+    private InboundItemMapper.ItemMappingContext contextWithSettlementMode(String settlementMode) {
+        WeightSettlementResult ws = new WeightSettlementResult(
+                new BigDecimal("1.000"), null,
+                BigDecimal.ZERO.setScale(PrecisionConstants.WEIGHT_SCALE),
+                BigDecimal.ZERO.setScale(2),
+                new BigDecimal("0.100"), new BigDecimal("1.000")
+        );
+        return new InboundItemMapper.ItemMappingContext(ws, "一号库", settlementMode);
+    }
+
     private TradeMaterialSnapshot material() {
         return new TradeMaterialSnapshot("M1", Boolean.FALSE);
     }

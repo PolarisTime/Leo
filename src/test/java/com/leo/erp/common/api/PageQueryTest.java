@@ -22,6 +22,9 @@ class PageQueryTest {
         assertThatThrownBy(() -> PageQuery.of(0, 0, null, null))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("size 必须在1到200之间");
+        assertThatThrownBy(() -> PageQuery.of(0, 201, null, null))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("size 必须在1到200之间");
     }
 
     @Test
@@ -39,6 +42,13 @@ class PageQueryTest {
     }
 
     @Test
+    void shouldRejectInvalidSortFieldFormat() {
+        assertThatThrownBy(() -> PageQuery.of(0, 20, "1bad", "asc"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("sortBy 格式不合法");
+    }
+
+    @Test
     void shouldNormalizeValidValues() {
         PageQuery query = PageQuery.of(1, 50, " updatedAt ", " DESC ");
 
@@ -46,5 +56,34 @@ class PageQueryTest {
         assertThat(query.size()).isEqualTo(50);
         assertThat(query.sortBy()).isEqualTo("updatedAt");
         assertThat(query.direction()).isEqualTo("desc");
+    }
+
+    @Test
+    void shouldUseDefaultsAndFallbackSortWhenValuesAreBlank() {
+        PageQuery query = PageQuery.of(null, null, " ", " ");
+
+        assertThat(query.page()).isZero();
+        assertThat(query.size()).isEqualTo(20);
+        assertThat(query.sortBy()).isNull();
+        assertThat(query.direction()).isNull();
+        assertThat(query.toPageable("createdAt").getSort().getOrderFor("createdAt")).isNotNull();
+    }
+
+    @Test
+    void shouldUseDefaultSortWhenPageableSortFieldIsBlank() {
+        PageQuery query = new PageQuery(0, 20, " ", "asc");
+
+        var order = query.toPageable("createdAt").getSort().getOrderFor("createdAt");
+
+        assertThat(order).isNotNull();
+        assertThat(order.isAscending()).isTrue();
+    }
+
+    @Test
+    void shouldBuildAscendingPageableWhenDirectionIsAsc() {
+        PageQuery query = PageQuery.of(0, 10, "id", "asc");
+
+        assertThat(query.toPageable("createdAt").getSort().getOrderFor("id").isAscending()).isTrue();
+        assertThat(query.toPageable("createdAt").getSort().getOrderFor("createdAt")).isNull();
     }
 }

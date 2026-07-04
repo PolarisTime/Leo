@@ -13,6 +13,7 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 class PaymentAllocationResponseAssemblerTest {
@@ -55,6 +56,25 @@ class PaymentAllocationResponseAssemblerTest {
         assertThat(response.statementNo()).isEqualTo("WL-DZ-001");
         assertThat(response.statementBalanceAmount()).isEqualByComparingTo("800.00");
         assertThat(response.allocatedAmount()).isEqualByComparingTo("200.00");
+    }
+
+    @Test
+    void shouldReturnZeroBalanceWhenSourceStatementIdIsMissing() {
+        SupplierStatementQueryService supplierQueryService = mock(SupplierStatementQueryService.class);
+        FreightStatementQueryService freightQueryService = mock(FreightStatementQueryService.class);
+        PaymentAllocationResponseAssembler assembler = new PaymentAllocationResponseAssembler(
+                supplierQueryService,
+                freightQueryService
+        );
+
+        var supplierResponse = assembler.toResponses(payment("供应商", allocation(101L, 1, null, "300.00"))).get(0);
+        var freightResponse = assembler.toResponses(payment("物流商", allocation(301L, 1, null, "200.00"))).get(0);
+
+        assertThat(supplierResponse.statementNo()).isNull();
+        assertThat(supplierResponse.statementBalanceAmount()).isEqualByComparingTo(BigDecimal.ZERO);
+        assertThat(freightResponse.statementNo()).isNull();
+        assertThat(freightResponse.statementBalanceAmount()).isEqualByComparingTo(BigDecimal.ZERO);
+        verifyNoInteractions(supplierQueryService, freightQueryService);
     }
 
     private Payment payment(String businessType, PaymentAllocation allocation) {

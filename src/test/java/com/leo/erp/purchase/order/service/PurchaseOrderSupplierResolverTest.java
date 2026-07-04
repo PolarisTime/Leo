@@ -39,4 +39,17 @@ class PurchaseOrderSupplierResolverTest {
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("供应商不存在，请先在主数据供应商资料中维护");
     }
+
+    @Test
+    void shouldNormalizeNullSupplierNameToEmptyText() {
+        SupplierRepository supplierRepository = mock(SupplierRepository.class);
+        when(supplierRepository.findFirstBySupplierNameAndDeletedFlagFalseOrderBySupplierCodeAsc(""))
+                .thenReturn(Optional.empty());
+
+        PurchaseOrderSupplierResolver resolver = new PurchaseOrderSupplierResolver(supplierRepository);
+
+        assertThatThrownBy(() -> resolver.requireMasterSupplierName(null))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("供应商不存在，请先在主数据供应商资料中维护");
+    }
 }

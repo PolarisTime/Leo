@@ -90,6 +90,80 @@ class SalesOrderCompletionSyncServiceTest {
     }
 
     @Test
+    void shouldNotOverwriteExistingOriginalWeightWhenSyncingOutboundWeight() {
+        SalesOrderRepository salesOrderRepository = mock(SalesOrderRepository.class);
+        SalesOrderOutboundQueryService outboundQueryService = mock(SalesOrderOutboundQueryService.class);
+        SalesOrderCompletionSyncService service = new SalesOrderCompletionSyncService(
+                salesOrderRepository, outboundQueryService);
+        SalesOrder order = buildOrder("SO-ORIGINAL-001", "已审核", 2);
+        SalesOrderItem orderItem = order.getItems().get(0);
+        orderItem.setOriginalWeightTon(new BigDecimal("6.000"));
+        orderItem.setWeightTon(new BigDecimal("5.000"));
+        orderItem.setUnitPrice(new BigDecimal("3000.00"));
+        orderItem.setAmount(new BigDecimal("15000.00"));
+        SalesOrderOutboundQueryService.OutboundRecord outbound =
+                buildOutbound("SO-ORIGINAL-001", "已审核", orderItem.getId(), 2, new BigDecimal("4.500"));
+
+        when(salesOrderRepository.findByOrderNoInAndDeletedFlagFalse(any())).thenReturn(List.of(order));
+        when(outboundQueryService.findActiveOutbounds()).thenReturn(List.of(outbound));
+
+        service.syncBySalesOrderReference("SO-ORIGINAL-001");
+
+        assertThat(orderItem.getOriginalWeightTon()).isEqualByComparingTo("6.000");
+        assertThat(orderItem.getWeightTon()).isEqualByComparingTo("4.500");
+        assertThat(orderItem.getAmount()).isEqualByComparingTo("13500.00");
+    }
+
+    @Test
+    void shouldNotStoreOriginalWeightWhenOutboundWeightMatchesCurrentWeight() {
+        SalesOrderRepository salesOrderRepository = mock(SalesOrderRepository.class);
+        SalesOrderOutboundQueryService outboundQueryService = mock(SalesOrderOutboundQueryService.class);
+        SalesOrderCompletionSyncService service = new SalesOrderCompletionSyncService(
+                salesOrderRepository, outboundQueryService);
+        SalesOrder order = buildOrder("SO-SAME-WEIGHT-001", "已审核", 2);
+        SalesOrderItem orderItem = order.getItems().get(0);
+        orderItem.setWeightTon(new BigDecimal("4.500"));
+        orderItem.setUnitPrice(new BigDecimal("3000.00"));
+        orderItem.setAmount(new BigDecimal("13500.00"));
+        SalesOrderOutboundQueryService.OutboundRecord outbound =
+                buildOutbound("SO-SAME-WEIGHT-001", "已审核", orderItem.getId(), 2, new BigDecimal("4.500"));
+
+        when(salesOrderRepository.findByOrderNoInAndDeletedFlagFalse(any())).thenReturn(List.of(order));
+        when(outboundQueryService.findActiveOutbounds()).thenReturn(List.of(outbound));
+
+        service.syncBySalesOrderReference("SO-SAME-WEIGHT-001");
+
+        assertThat(orderItem.getOriginalWeightTon()).isNull();
+        assertThat(orderItem.getWeightTon()).isEqualByComparingTo("4.500");
+        assertThat(orderItem.getAmount()).isEqualByComparingTo("13500.00");
+    }
+
+    @Test
+    void shouldSyncWeightWithoutAmountWhenOrderItemHasNoUnitPrice() {
+        SalesOrderRepository salesOrderRepository = mock(SalesOrderRepository.class);
+        SalesOrderOutboundQueryService outboundQueryService = mock(SalesOrderOutboundQueryService.class);
+        SalesOrderCompletionSyncService service = new SalesOrderCompletionSyncService(
+                salesOrderRepository, outboundQueryService);
+        SalesOrder order = buildOrder("SO-NO-PRICE-001", "已审核", 2);
+        SalesOrderItem orderItem = order.getItems().get(0);
+        orderItem.setWeightTon(new BigDecimal("5.000"));
+        orderItem.setUnitPrice(null);
+        orderItem.setAmount(new BigDecimal("15000.00"));
+        SalesOrderOutboundQueryService.OutboundRecord outbound =
+                buildOutbound("SO-NO-PRICE-001", "已审核", orderItem.getId(), 2, new BigDecimal("4.500"));
+
+        when(salesOrderRepository.findByOrderNoInAndDeletedFlagFalse(any())).thenReturn(List.of(order));
+        when(outboundQueryService.findActiveOutbounds()).thenReturn(List.of(outbound));
+
+        service.syncBySalesOrderReference("SO-NO-PRICE-001");
+
+        assertThat(orderItem.getOriginalWeightTon()).isEqualByComparingTo("5.000");
+        assertThat(orderItem.getWeightTon()).isEqualByComparingTo("4.500");
+        assertThat(orderItem.getAmount()).isEqualByComparingTo("15000.00");
+        assertThat(order.getTotalAmount()).isEqualByComparingTo("15000.00");
+    }
+
+    @Test
     void shouldRevertCompletedSalesOrderWhenNoAuditedOutboundRemains() {
         SalesOrderRepository salesOrderRepository = mock(SalesOrderRepository.class);
         SalesOrderOutboundQueryService outboundQueryService = mock(SalesOrderOutboundQueryService.class);
@@ -167,6 +241,25 @@ class SalesOrderCompletionSyncServiceTest {
 
         assertThat(order.getStatus()).isEqualTo("完成销售");
         verify(salesOrderRepository).saveAll(any());
+    }
+
+    @Test
+    void shouldIgnoreBlankSegmentsInCommaSeparatedSalesOrderReferences() {
+        SalesOrderRepository salesOrderRepository = mock(SalesOrderRepository.class);
+        SalesOrderOutboundQueryService outboundQueryService = mock(SalesOrderOutboundQueryService.class);
+        SalesOrderCompletionSyncService service = new SalesOrderCompletionSyncService(
+                salesOrderRepository, outboundQueryService);
+
+        SalesOrder order = buildOrder("SO-004B", "已审核", 10);
+        SalesOrderOutboundQueryService.OutboundRecord outbound =
+                buildOutbound("SO-004B,  ,", "已审核", order.getItems().get(0).getId(), 10);
+
+        when(salesOrderRepository.findByOrderNoInAndDeletedFlagFalse(any())).thenReturn(List.of(order));
+        when(outboundQueryService.findActiveOutbounds()).thenReturn(List.of(outbound));
+
+        service.syncBySalesOrderReference("SO-004B");
+
+        assertThat(order.getStatus()).isEqualTo("完成销售");
     }
 
     @Test

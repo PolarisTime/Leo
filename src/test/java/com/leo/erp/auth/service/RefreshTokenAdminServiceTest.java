@@ -49,6 +49,26 @@ class RefreshTokenAdminServiceTest {
     }
 
     @Test
+    void shouldFallbackToUserIdWhenPageWithUserInfoCannotLoadUser() {
+        RefreshTokenSession session = session(1L, 404L, "sid-missing-user");
+
+        RefreshTokenAdminService service = new RefreshTokenAdminService(
+                refreshTokenRepository(List.of(session)),
+                userAccountRepository(),
+                blacklistService(),
+                sessionActivityService(Map.of()),
+                afterCommitExecutor()
+        );
+
+        RefreshTokenAdminResponse record = service.pageWithUserInfo(PageQuery.of(0, 20, null, null), null)
+                .getContent()
+                .getFirst();
+
+        assertThat(record.loginName()).isEqualTo("404");
+        assertThat(record.userName()).isEqualTo("--");
+    }
+
+    @Test
     void shouldCountOnlineUsersAndSessions() {
         RefreshTokenSession first = session(1L, 101L, "sid-1");
         RefreshTokenSession second = session(2L, 101L, "sid-2");

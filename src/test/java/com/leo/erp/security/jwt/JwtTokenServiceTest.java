@@ -6,6 +6,7 @@ import io.jsonwebtoken.ExpiredJwtException;
 import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
+import io.jsonwebtoken.security.SignatureException;
 import org.junit.jupiter.api.Test;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 
@@ -19,6 +20,7 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -312,5 +314,146 @@ class JwtTokenServiceTest {
                 .compact();
 
         assertThrows(JwtException.class, () -> jwtTokenService.parseAccessToken(token));
+    }
+
+    @Test
+    void shouldRejectAccessTokenWhenVerificationMaterialsAreEmpty() {
+        JwtProperties properties = jwtProperties();
+        SecurityKeyService securityKeyService = mock(SecurityKeyService.class);
+        when(securityKeyService.getJwtVerificationMaterials()).thenReturn(List.of());
+        JwtTokenService jwtTokenService = new JwtTokenService(properties, securityKeyService);
+
+        IllegalStateException failure = assertThrows(
+                IllegalStateException.class,
+                () -> jwtTokenService.parseAccessToken("token")
+        );
+
+        assertEquals("未找到可用的 JWT 验签密钥", failure.getMessage());
+    }
+
+    @Test
+    void shouldThrowLastJwtExceptionWhenAllVerificationMaterialsFail() {
+        JwtProperties properties = jwtProperties();
+        SecurityKeyService.ResolvedSecretMaterial invalidMaterial = jwtMaterial(1, "short", null);
+        SecurityKeyService.ResolvedSecretMaterial wrongLastMaterial = jwtMaterial(
+                2,
+                "leo-erp-jwt-secret-key-2027-wrong-hs384-material-enough",
+                null
+        );
+        SecurityKeyService securityKeyService = mock(SecurityKeyService.class);
+        when(securityKeyService.getJwtVerificationMaterials()).thenReturn(List.of(invalidMaterial, wrongLastMaterial));
+        JwtTokenService jwtTokenService = new JwtTokenService(properties, securityKeyService);
+
+        String token = Jwts.builder()
+                .issuer("leo-erp")
+                .subject("admin")
+                .issuedAt(Date.from(Instant.now()))
+                .expiration(Date.from(Instant.now().plusSeconds(600)))
+                .signWith(Keys.hmacShaKeyFor(properties.getSecret().getBytes(StandardCharsets.UTF_8)))
+                .compact();
+
+        JwtException failure = assertThrows(JwtException.class, () -> jwtTokenService.parseAccessToken(token));
+
+        assertEquals(SignatureException.class, failure.getClass());
+    }
+
+    @Test
+    void shouldReturnNullWhenUserIdAndSessionIdClaimsAreMissing() {
+        JwtProperties properties = jwtProperties();
+        SecurityKeyService.ResolvedSecretMaterial active = jwtMaterial(1, properties.getSecret(), null);
+        SecurityKeyService securityKeyService = mock(SecurityKeyService.class);
+        when(securityKeyService.getJwtVerificationMaterials()).thenReturn(List.of(active));
+        JwtTokenService jwtTokenService = new JwtTokenService(properties, securityKeyService);
+
+        String token = Jwts.builder()
+                .issuer("leo-erp")
+                .subject("admin")
+                .issuedAt(Date.from(Instant.now()))
+                .expiration(Date.from(Instant.now().plusSeconds(600)))
+                .signWith(Keys.hmacShaKeyFor(properties.getSecret().getBytes(StandardCharsets.UTF_8)))
+                .compact();
+
+        assertNull(jwtTokenService.extractUserId(token));
+        assertNull(jwtTokenService.extractSessionId(token));
+    }
+
+    @Test
+    void shouldReturnConfiguredExpirationDurations() {
+        JwtProperties properties = jwtProperties(300_000L, 1_800_000L);
+        JwtTokenService jwtTokenService = new JwtTokenService(properties, mock(SecurityKeyService.class));
+
+        assertEquals(300_000L, jwtTokenService.getAccessExpirationMs());
+        assertEquals(1_800_000L, jwtTokenService.getRefreshExpirationMs());
+    }
+
+    @Test
+    void shouldRejectRetiredKeyTokenWithoutIssuedAt() {
+        JwtProperties properties = jwtProperties();
+        LocalDateTime retiredAt = LocalDateTime.now().minusMinutes(10).withNano(0);
+        SecurityKeyService.ResolvedSecretMaterial retiredKey = jwtMaterial(1, properties.getSecret(), retiredAt);
+        SecurityKeyService securityKeyService = mock(SecurityKeyService.class);
+        when(securityKeyService.getJwtVerificationMaterials()).thenReturn(List.of(retiredKey));
+        JwtTokenService jwtTokenService = new JwtTokenService(properties, securityKeyService);
+
+        String token = Jwts.builder()
+                .issuer("leo-erp")
+                .subject("admin")
+                .claim("uid", 1001L)
+                .claim("sid", "session-1001")
+                .expiration(Date.from(Instant.now().plusSeconds(600)))
+                .signWith(Keys.hmacShaKeyFor(properties.getSecret().getBytes(StandardCharsets.UTF_8)))
+                .compact();
+
+        assertThrows(JwtException.class, () -> jwtTokenService.parseAccessToken(token));
+    }
+
+    @Test
+    void shouldRejectRetiredKeyTokenWithoutExpiration() {
+        JwtProperties properties = jwtProperties();
+        LocalDateTime retiredAt = LocalDateTime.now().minusMinutes(10).withNano(0);
+        SecurityKeyService.ResolvedSecretMaterial retiredKey = jwtMaterial(1, properties.getSecret(), retiredAt);
+        SecurityKeyService securityKeyService = mock(SecurityKeyService.class);
+        when(securityKeyService.getJwtVerificationMaterials()).thenReturn(List.of(retiredKey));
+        JwtTokenService jwtTokenService = new JwtTokenService(properties, securityKeyService);
+
+        Instant issuedAt = retiredAt.minusMinutes(1).atZone(ZoneId.systemDefault()).toInstant();
+        String token = Jwts.builder()
+                .issuer("leo-erp")
+                .subject("admin")
+                .claim("uid", 1001L)
+                .claim("sid", "session-1001")
+                .issuedAt(Date.from(issuedAt))
+                .signWith(Keys.hmacShaKeyFor(properties.getSecret().getBytes(StandardCharsets.UTF_8)))
+                .compact();
+
+        assertThrows(JwtException.class, () -> jwtTokenService.parseAccessToken(token));
+    }
+
+    private static JwtProperties jwtProperties() {
+        return jwtProperties(1_800_000L, 604_800_000L);
+    }
+
+    private static JwtProperties jwtProperties(long accessExpirationMs, long refreshExpirationMs) {
+        return new JwtProperties(
+                "leo-erp",
+                "leo-erp-jwt-secret-key-2026-must-be-long-enough-for-hs512",
+                accessExpirationMs,
+                refreshExpirationMs
+        );
+    }
+
+    private static SecurityKeyService.ResolvedSecretMaterial jwtMaterial(
+            int version,
+            String secret,
+            LocalDateTime retiredAt
+    ) {
+        return new SecurityKeyService.ResolvedSecretMaterial(
+                SecurityKeyService.SOURCE_DATABASE,
+                version,
+                secret,
+                retiredAt == null ? null : retiredAt.minusDays(30),
+                retiredAt,
+                "FP-" + version
+        );
     }
 }

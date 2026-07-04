@@ -119,4 +119,29 @@ class MaterialRepositoryTest {
 
         assertThat(count).isEqualTo(2);
     }
+
+    @Test
+    void listActiveMaterials_shouldMapMaterialCodeAndBatchFlag() {
+        MaterialRepository realDefaultRepository = org.mockito.Mockito.mock(
+                MaterialRepository.class,
+                org.mockito.Mockito.CALLS_REAL_METHODS
+        );
+        Material batchManaged = new Material();
+        batchManaged.setMaterialCode("M001");
+        batchManaged.setBatchNoEnabled(true);
+        Material notBatchManaged = new Material();
+        notBatchManaged.setMaterialCode("M002");
+        notBatchManaged.setBatchNoEnabled(null);
+        when(realDefaultRepository.findByDeletedFlagFalseOrderByMaterialCodeAsc())
+                .thenReturn(List.of(batchManaged, notBatchManaged));
+
+        var result = realDefaultRepository.listActiveMaterials();
+
+        assertThat(result)
+                .extracting("materialCode", "batchNoEnabled")
+                .containsExactly(
+                        org.assertj.core.groups.Tuple.tuple("M001", true),
+                        org.assertj.core.groups.Tuple.tuple("M002", false)
+                );
+    }
 }

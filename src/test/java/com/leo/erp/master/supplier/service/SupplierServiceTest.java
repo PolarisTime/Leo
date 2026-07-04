@@ -16,6 +16,7 @@ import com.leo.erp.master.supplier.web.dto.SupplierRequest;
 import com.leo.erp.master.supplier.web.dto.SupplierResponse;
 import org.junit.jupiter.api.Test;
 
+import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 import java.util.List;
 import java.util.Optional;
@@ -115,6 +116,37 @@ class SupplierServiceTest {
         });
         verify(cache, never()).delete(anyString());
         verify(cache).write(eq("leo:supplier:all"), eq(result), any());
+    }
+
+    @Test
+    void shouldReturnCachedEmptyOptionsWhenDatabaseAlsoEmpty() {
+        SupplierRepository repository = mock(SupplierRepository.class);
+        when(repository.findByDeletedFlagFalseAndStatusOrderBySupplierCodeAsc(StatusConstants.NORMAL))
+                .thenReturn(List.of());
+        RedisJsonCacheSupport cache = mock(RedisJsonCacheSupport.class);
+        when(cache.getOrLoad(anyString(), any(), any(TypeReference.class), any())).thenReturn(List.of());
+        SupplierService service = new SupplierService(repository, new SnowflakeIdGenerator(1), null, cache);
+
+        List<SupplierOptionResponse> result = service.listActiveOptions();
+
+        assertThat(result).isEmpty();
+        verify(cache, never()).write(anyString(), any(), any());
+    }
+
+    @Test
+    void shouldExposeCacheName() {
+        SupplierService service = new SupplierService(null, new SnowflakeIdGenerator(1), null);
+
+        assertThat(service.cacheName()).isEqualTo("leo:supplier:all");
+    }
+
+    @Test
+    void shouldSkipWritingActiveOptionsCacheWhenRedisUnavailable() throws Exception {
+        SupplierService service = new SupplierService(null, new SnowflakeIdGenerator(1), null);
+        Method method = SupplierService.class.getDeclaredMethod("writeActiveOptionsCache", List.class);
+        method.setAccessible(true);
+
+        method.invoke(service, List.of(new SupplierOptionResponse(1L, "供应商甲", "供应商甲")));
     }
 
     @Test
@@ -432,6 +464,26 @@ class SupplierServiceTest {
         service.delete(1L);
 
         verify(referenceGuard).assertNoReferences(eq("该供应商"), any(List.class));
+    }
+
+    @Test
+    void shouldDeleteWithoutReferenceCheckWhenReferenceGuardMissing() {
+        var repository = (SupplierRepository) Proxy.newProxyInstance(
+                SupplierRepository.class.getClassLoader(),
+                new Class[]{SupplierRepository.class},
+                (proxy, method, args) -> switch (method.getName()) {
+                    case "findByIdAndDeletedFlagFalse" -> Optional.of(createSupplier(1L, "S001"));
+                    case "findById" -> Optional.of(createSupplier(1L, "S001"));
+                    case "save" -> args[0];
+                    case "toString" -> "SupplierRepositoryStub";
+                    case "hashCode" -> System.identityHashCode(proxy);
+                    case "equals" -> proxy == args[0];
+                    default -> throw new UnsupportedOperationException(method.getName());
+                }
+        );
+        var service = new SupplierService(repository, new SnowflakeIdGenerator(1), null);
+
+        service.delete(1L);
     }
 
     @Test

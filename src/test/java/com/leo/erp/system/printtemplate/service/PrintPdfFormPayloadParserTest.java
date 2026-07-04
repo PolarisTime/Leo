@@ -62,4 +62,34 @@ class PrintPdfFormPayloadParserTest {
                 Map.of("spec", "Ф18")
         );
     }
+
+    @Test
+    void shouldUseEmptyCollectionsWhenDataAndItemsHaveUnexpectedTypes() {
+        PrintPdfFormPayload result = parser.parse(Map.of(
+                "templateType", "PDF_FORM",
+                "templateHtml", "{\"static\":[]}",
+                "data", "invalid",
+                "items", "invalid"
+        ));
+
+        assertThat(result.data()).isEmpty();
+        assertThat(result.items()).isEmpty();
+    }
+
+    @Test
+    void shouldIgnoreNonStringKeysInDataMaps() {
+        Map<Object, Object> data = new HashMap<>();
+        data.put("billNo", "SO-001");
+        data.put(1, "ignored");
+
+        PrintPdfFormPayload result = parser.parse(Map.of(
+                "templateType", "PDF_FORM",
+                "templateHtml", "{\"static\":[]}",
+                "data", data,
+                "items", List.of(data)
+        ));
+
+        assertThat(result.data()).containsExactly(Map.entry("billNo", "SO-001"));
+        assertThat(result.items()).containsExactly(Map.of("billNo", "SO-001"));
+    }
 }

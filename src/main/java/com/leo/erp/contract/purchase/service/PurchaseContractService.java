@@ -251,11 +251,11 @@ public class PurchaseContractService extends AbstractCrudService<PurchaseContrac
                 .toList();
         List<PurchaseContractItemRequest> requestItems = request.items() == null ? List.of() : request.items();
         if (entityItems.size() != requestItems.size()) {
-            throwReadonlyLineItemsChanged();
+            throw readonlyLineItemsChanged();
         }
         for (int i = 0; i < entityItems.size(); i++) {
             if (!matchesExistingLineItem(entityItems.get(i), requestItems.get(i))) {
-                throwReadonlyLineItemsChanged();
+                throw readonlyLineItemsChanged();
             }
         }
     }
@@ -291,7 +291,7 @@ public class PurchaseContractService extends AbstractCrudService<PurchaseContrac
         return value == null ? "" : value.trim();
     }
 
-    private void throwReadonlyLineItemsChanged() {
-        throw new BusinessException(com.leo.erp.common.error.ErrorCode.BUSINESS_ERROR, "采购合同明细不允许编辑");
+    private BusinessException readonlyLineItemsChanged() {
+        return new BusinessException(com.leo.erp.common.error.ErrorCode.BUSINESS_ERROR, "采购合同明细不允许编辑");
     }
 }

@@ -76,4 +76,19 @@ class AttachmentBindingControllerTest {
         verify(attachmentRecordAccessService).assertRecordAccessible(principal, "sales-order", "read", 2L);
         verify(attachmentWebService).counts("sales-order", List.of(1L, 2L));
     }
+
+    @Test
+    void countsFiltersZeroRecordIdBeforeAccessCheck() {
+        SecurityPrincipal principal = mock(SecurityPrincipal.class);
+        AttachmentBindingCountResponse counts = new AttachmentBindingCountResponse("sales-order", Map.of(7L, 1));
+
+        when(modulePermissionGuard.requirePermission(principal, "sales-order", "read")).thenReturn("sales-order");
+        when(attachmentWebService.counts(eq("sales-order"), eq(List.of(7L)))).thenReturn(counts);
+
+        ApiResponse<AttachmentBindingCountResponse> response = controller.counts(principal, "sales-order", "0,7,0");
+
+        assertThat(response.data()).isEqualTo(counts);
+        verify(attachmentRecordAccessService).assertRecordAccessible(principal, "sales-order", "read", 7L);
+        verify(attachmentWebService).counts("sales-order", List.of(7L));
+    }
 }

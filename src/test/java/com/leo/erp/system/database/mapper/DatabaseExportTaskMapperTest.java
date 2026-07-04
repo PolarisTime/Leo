@@ -50,4 +50,9 @@ class DatabaseExportTaskMapperTest {
         assertThat(response.fileName()).isNull();
         assertThat(response.failureReason()).isNull();
     }
+
+    @Test
+    void shouldReturnNullWhenTaskIsNull() {
+        assertThat(mapper.toResponse(null)).isNull();
+    }
 }

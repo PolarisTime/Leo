@@ -18,6 +18,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import java.lang.reflect.Proxy;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -274,6 +275,45 @@ class AttachmentBindingServiceTest {
     }
 
     @Test
+    void shouldReturnEmptyMap_forListByRecordIds_whenNoBindingsFound() {
+        AttachmentBindingService service = new AttachmentBindingService(
+                bindingRepository(List.of(), new AtomicReference<>(List.of()), new AtomicReference<>(List.of()), new AtomicReference<>(false)),
+                attachmentService(Map.of()),
+                enabledUploadRuleService(),
+                new FixedIdGenerator(),
+                new ModuleCatalog(),
+                attachmentFileRepository()
+        );
+
+        Map<Long, List<AttachmentView>> result = service.listByRecordIds("sales-order", List.of(1L, 2L));
+
+        assertThat(result).isEmpty();
+    }
+
+    @Test
+    void shouldSkipMissingAttachmentViews_forListByRecordIds() {
+        List<AttachmentBinding> bindings = List.of(
+                binding(1L, "sales-order", 1L, 10L, 1),
+                binding(2L, "sales-order", 1L, 11L, 2)
+        );
+        Map<Long, AttachmentView> attachments = new LinkedHashMap<>();
+        attachments.put(10L, attachment(10L, "A.pdf"));
+        AttachmentBindingService service = new AttachmentBindingService(
+                bindingRepository(bindings, new AtomicReference<>(List.of()), new AtomicReference<>(List.of()), new AtomicReference<>(false)),
+                attachmentService(attachments),
+                enabledUploadRuleService(),
+                new FixedIdGenerator(),
+                new ModuleCatalog(),
+                attachmentFileRepository()
+        );
+
+        Map<Long, List<AttachmentView>> result = service.listByRecordIds("sales-order", List.of(1L));
+
+        assertThat(result).containsOnlyKeys(1L);
+        assertThat(result.get(1L)).extracting(AttachmentView::id).containsExactly(10L);
+    }
+
+    @Test
     void shouldReturnGroupedAttachments_forListByRecordIds() {
         List<AttachmentBinding> bindings = List.of(
                 binding(1L, "sales-order", 1L, 10L, 1),
@@ -348,6 +388,22 @@ class AttachmentBindingServiceTest {
                 Map.entry(2L, 1),
                 Map.entry(3L, 0)
         );
+    }
+
+    @Test
+    void shouldReturnEmptyMap_forCountByRecordIds_whenAllRecordIdsInvalid() {
+        AttachmentBindingService service = new AttachmentBindingService(
+                bindingRepository(List.of(), new AtomicReference<>(List.of()), new AtomicReference<>(List.of()), new AtomicReference<>(false)),
+                attachmentService(Map.of()),
+                enabledUploadRuleService(),
+                new FixedIdGenerator(),
+                new ModuleCatalog(),
+                attachmentFileRepository()
+        );
+
+        Map<Long, Integer> result = service.countByRecordIds("sales-order", Arrays.asList(null, 0L, -1L));
+
+        assertThat(result).isEmpty();
     }
 
     @Test
@@ -526,6 +582,42 @@ class AttachmentBindingServiceTest {
         assertThatThrownBy(() -> service.replace("sales-order", 9L, List.of(10L)))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("附件不属于当前用户或当前业务记录");
+    }
+
+    @Test
+    void shouldRejectReplace_whenUnauthenticated() {
+        SecurityContextHolder.clearContext();
+        AttachmentBindingService service = new AttachmentBindingService(
+                bindingRepository(List.of(), new AtomicReference<>(List.of()), new AtomicReference<>(List.of()), new AtomicReference<>(false)),
+                attachmentService(Map.of(10L, attachment(10L, "test.pdf"))),
+                enabledUploadRuleService(),
+                new FixedIdGenerator(101L),
+                new ModuleCatalog(),
+                attachmentFileRepository()
+        );
+
+        assertThatThrownBy(() -> service.replace("sales-order", 9L, List.of(10L)))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("未登录");
+    }
+
+    @Test
+    void shouldRejectReplace_whenAuthenticationPrincipalUnsupported() {
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken("tester", null)
+        );
+        AttachmentBindingService service = new AttachmentBindingService(
+                bindingRepository(List.of(), new AtomicReference<>(List.of()), new AtomicReference<>(List.of()), new AtomicReference<>(false)),
+                attachmentService(Map.of(10L, attachment(10L, "test.pdf"))),
+                enabledUploadRuleService(),
+                new FixedIdGenerator(101L),
+                new ModuleCatalog(),
+                attachmentFileRepository()
+        );
+
+        assertThatThrownBy(() -> service.replace("sales-order", 9L, List.of(10L)))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("未登录");
     }
 
     @Test

@@ -16,6 +16,9 @@ import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 class PermissionResolverTest {
@@ -56,6 +59,23 @@ class PermissionResolverTest {
         UserPermissionSnapshot snapshot = resolver.getUserPermissionSnapshot(1001L);
 
         assertThat(snapshot).isSameAs(cached);
+    }
+
+    @Test
+    void shouldReturnPermissionMapFromSnapshot() {
+        UserRoleRepository userRoleRepository = mock(UserRoleRepository.class);
+        RolePermissionRepository rolePermissionRepository = mock(RolePermissionRepository.class);
+        RoleSettingRepository roleSettingRepository = mock(RoleSettingRepository.class);
+        PermissionCache cache = mock(PermissionCache.class);
+
+        Map<String, Set<String>> permissionMap = Map.of("material", Set.of("read"));
+        when(cache.read(1001L)).thenReturn(new UserPermissionSnapshot(permissionMap, Map.of()));
+
+        PermissionResolver resolver = new PermissionResolver(userRoleRepository, rolePermissionRepository, roleSettingRepository, cache);
+
+        Map<String, Set<String>> result = resolver.getUserPermissionMap(1001L);
+
+        assertThat(result).isSameAs(permissionMap);
     }
 
     @Test
@@ -140,6 +160,65 @@ class PermissionResolverTest {
     }
 
     @Test
+    void shouldReturnEmptyRolesWhenUserRoleIdsAreNull() {
+        UserRoleRepository userRoleRepository = mock(UserRoleRepository.class);
+        RolePermissionRepository rolePermissionRepository = mock(RolePermissionRepository.class);
+        RoleSettingRepository roleSettingRepository = mock(RoleSettingRepository.class);
+        PermissionCache cache = mock(PermissionCache.class);
+
+        when(userRoleRepository.findByUserIdAndDeletedFlagFalse(1001L))
+                .thenReturn(List.of(userRole(null), userRole(null)));
+
+        PermissionResolver resolver = new PermissionResolver(userRoleRepository, rolePermissionRepository, roleSettingRepository, cache);
+
+        List<RoleSetting> roles = resolver.resolveActiveRoles(1001L);
+
+        assertThat(roles).isEmpty();
+        verifyNoInteractions(roleSettingRepository, rolePermissionRepository);
+    }
+
+    @Test
+    void shouldSkipDuplicateAncestorRole() {
+        UserRoleRepository userRoleRepository = mock(UserRoleRepository.class);
+        RolePermissionRepository rolePermissionRepository = mock(RolePermissionRepository.class);
+        RoleSettingRepository roleSettingRepository = mock(RoleSettingRepository.class);
+        PermissionCache cache = mock(PermissionCache.class);
+
+        when(userRoleRepository.findByUserIdAndDeletedFlagFalse(1001L))
+                .thenReturn(List.of(userRole(2L), userRole(3L)));
+        when(roleSettingRepository.findByIdAndDeletedFlagFalse(2L)).thenReturn(Optional.of(role(2L, 1L)));
+        when(roleSettingRepository.findByIdAndDeletedFlagFalse(3L)).thenReturn(Optional.of(role(3L, 1L)));
+        when(roleSettingRepository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(role(1L, null)));
+
+        PermissionResolver resolver = new PermissionResolver(userRoleRepository, rolePermissionRepository, roleSettingRepository, cache);
+
+        List<RoleSetting> roles = resolver.resolveActiveRoles(1001L);
+
+        assertThat(roles).extracting(RoleSetting::getId).containsExactly(2L, 3L, 1L);
+        verify(roleSettingRepository, times(1)).findByIdAndDeletedFlagFalse(1L);
+    }
+
+    @Test
+    void shouldNotEnqueueParentWhenAlreadyVisited() {
+        UserRoleRepository userRoleRepository = mock(UserRoleRepository.class);
+        RolePermissionRepository rolePermissionRepository = mock(RolePermissionRepository.class);
+        RoleSettingRepository roleSettingRepository = mock(RoleSettingRepository.class);
+        PermissionCache cache = mock(PermissionCache.class);
+
+        when(userRoleRepository.findByUserIdAndDeletedFlagFalse(1001L))
+                .thenReturn(List.of(userRole(1L), userRole(2L)));
+        when(roleSettingRepository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(role(1L, null)));
+        when(roleSettingRepository.findByIdAndDeletedFlagFalse(2L)).thenReturn(Optional.of(role(2L, 1L)));
+
+        PermissionResolver resolver = new PermissionResolver(userRoleRepository, rolePermissionRepository, roleSettingRepository, cache);
+
+        List<RoleSetting> roles = resolver.resolveActiveRoles(1001L);
+
+        assertThat(roles).extracting(RoleSetting::getId).containsExactly(1L, 2L);
+        verify(roleSettingRepository, times(1)).findByIdAndDeletedFlagFalse(1L);
+    }
+
+    @Test
     void shouldReturnEmptySummaryForNullRoles() {
         UserRoleRepository userRoleRepository = mock(UserRoleRepository.class);
         RolePermissionRepository rolePermissionRepository = mock(RolePermissionRepository.class);
@@ -165,5 +244,36 @@ class PermissionResolverTest {
         String summary = resolver.getPermissionSummaryForRoles(List.of());
 
         assertThat(summary).isEmpty();
+    }
+
+    @Test
+    void shouldReturnEmptySummaryWhenRolesHaveOnlyNullIds() {
+        UserRoleRepository userRoleRepository = mock(UserRoleRepository.class);
+        RolePermissionRepository rolePermissionRepository = mock(RolePermissionRepository.class);
+        RoleSettingRepository roleSettingRepository = mock(RoleSettingRepository.class);
+        PermissionCache cache = mock(PermissionCache.class);
+        RoleSetting role = new RoleSetting();
+
+        PermissionResolver resolver = new PermissionResolver(userRoleRepository, rolePermissionRepository, roleSettingRepository, cache);
+
+        String summary = resolver.getPermissionSummaryForRoles(List.of(role));
+
+        assertThat(summary).isEmpty();
+        verifyNoInteractions(rolePermissionRepository);
+    }
+
+    private UserRole userRole(Long roleId) {
+        UserRole userRole = new UserRole();
+        userRole.setRoleId(roleId);
+        return userRole;
+    }
+
+    private RoleSetting role(Long id, Long parentId) {
+        RoleSetting role = new RoleSetting();
+        role.setId(id);
+        role.setParentId(parentId);
+        role.setStatus(StatusConstants.NORMAL);
+        role.setDataScope(ResourcePermissionCatalog.SCOPE_SELF);
+        return role;
     }
 }

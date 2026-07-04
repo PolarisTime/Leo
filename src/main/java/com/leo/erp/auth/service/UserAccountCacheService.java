@@ -39,7 +39,7 @@ public class UserAccountCacheService {
         }
         List<String> keys = Arrays.stream(loginNames)
                 .map(this::normalizeOptionalValue)
-                .filter(value -> value != null && !value.isBlank())
+                .filter(value -> value != null)
                 .distinct()
                 .map(this::loginNameOwnerCacheKey)
                 .toList();

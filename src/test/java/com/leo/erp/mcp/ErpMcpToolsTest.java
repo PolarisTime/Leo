@@ -17,6 +17,7 @@ import com.leo.erp.report.inventory.service.InventoryReportService;
 import com.leo.erp.sales.order.service.SalesOrderService;
 import com.leo.erp.sales.outbound.service.SalesOutboundService;
 import com.leo.erp.search.service.GlobalSearchService;
+import com.leo.erp.search.web.GlobalSearchResponse;
 import com.leo.erp.system.printtemplate.service.PrintScriptService;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
@@ -36,6 +37,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -57,6 +59,35 @@ class ErpMcpToolsTest {
                 .withBean(ErpMcpQueryFacade.class, () -> mock(ErpMcpQueryFacade.class))
                 .withUserConfiguration(McpToolsConfiguration.class)
                 .run(context -> assertThat(context).hasSingleBean(ErpMcpTools.class));
+    }
+
+    @Test
+    void shouldDelegateToolCallsToQueryFacade() {
+        ErpMcpQueryFacade facade = mock(ErpMcpQueryFacade.class);
+        ErpMcpTools tools = new ErpMcpTools(facade);
+        List<GlobalSearchResponse> searchResponses = List.of(
+                new GlobalSearchResponse("sales-order", "销售单", "SO-001", "SO-001", "测试客户", false)
+        );
+        PageResponse<Object> pageResponse = new PageResponse<>(List.of("row"), 1, 1, 0, 20, false);
+        Map<String, Object> record = Map.of("id", 1L);
+        Map<String, Object> options = Map.of("content", List.of("客户A"));
+        Map<String, Object> preview = Map.of("businessNo", "SO-001");
+        when(facade.globalSearch("SO", List.of("sales-order"), 10)).thenReturn(searchResponses);
+        doReturn(pageResponse).when(facade).queryRecords("sales-order", "SO", "已审核", 0, 20);
+        when(facade.getRecord("sales-order", 1L)).thenReturn(record);
+        when(facade.listOptions("customer", "客户", 20)).thenReturn(options);
+        when(facade.printPayloadPreview("sales-order", 1L, "tpl")).thenReturn(preview);
+
+        assertThat(tools.globalSearch("SO", List.of("sales-order"), 10)).isSameAs(searchResponses);
+        assertThat(tools.queryRecords("sales-order", "SO", "已审核", 0, 20)).isSameAs(pageResponse);
+        assertThat(tools.getRecord("sales-order", 1L)).isSameAs(record);
+        assertThat(tools.listOptions("customer", "客户", 20)).isSameAs(options);
+        assertThat(tools.printPayloadPreview("sales-order", 1L, "tpl")).isSameAs(preview);
+        verify(facade).globalSearch("SO", List.of("sales-order"), 10);
+        verify(facade).queryRecords("sales-order", "SO", "已审核", 0, 20);
+        verify(facade).getRecord("sales-order", 1L);
+        verify(facade).listOptions("customer", "客户", 20);
+        verify(facade).printPayloadPreview("sales-order", 1L, "tpl");
     }
 
     @Configuration(proxyBeanMethods = false)

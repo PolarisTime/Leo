@@ -26,6 +26,101 @@ class PermissionAspectTest {
     }
 
     @Test
+    void shouldRejectWhenAuthenticationMissing() {
+        PermissionAspect aspect = new PermissionAspect(permissionService(true));
+        AtomicBoolean proceeded = new AtomicBoolean(false);
+
+        assertThatThrownBy(() -> aspect.checkPermission(joinPoint(proceeded), requiresPermission("sales-order", "read")))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("未登录");
+        assertThat(proceeded.get()).isFalse();
+    }
+
+    @Test
+    void shouldRejectWhenPrincipalIsNotSecurityPrincipal() {
+        PermissionAspect aspect = new PermissionAspect(permissionService(true));
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken("plain-user", null, List.of())
+        );
+        AtomicBoolean proceeded = new AtomicBoolean(false);
+
+        assertThatThrownBy(() -> aspect.checkPermission(joinPoint(proceeded), requiresPermission("sales-order", "read")))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("未登录");
+        assertThat(proceeded.get()).isFalse();
+    }
+
+    @Test
+    void shouldProceedForAuthenticatedOnlyEndpointWithoutApiKey() throws Throwable {
+        AtomicBoolean proceeded = new AtomicBoolean(false);
+        PermissionAspect aspect = new PermissionAspect(permissionService(true));
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken(principal(), null, List.of())
+        );
+
+        Object result = aspect.checkPermission(joinPoint(proceeded), authenticatedOnly(false));
+
+        assertThat(result).isNull();
+        assertThat(proceeded.get()).isTrue();
+    }
+
+    @Test
+    void shouldRejectBlankPermissionConfiguration() {
+        PermissionAspect aspect = new PermissionAspect(permissionService(true));
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken(principal(), null, List.of())
+        );
+        AtomicBoolean proceeded = new AtomicBoolean(false);
+
+        assertThatThrownBy(() -> aspect.checkPermission(joinPoint(proceeded), requiresPermission(" ", "read")))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("权限注解配置错误");
+        assertThat(proceeded.get()).isFalse();
+    }
+
+    @Test
+    void shouldRejectBlankPermissionAction() {
+        PermissionAspect aspect = new PermissionAspect(permissionService(true));
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken(principal(), null, List.of())
+        );
+        AtomicBoolean proceeded = new AtomicBoolean(false);
+
+        assertThatThrownBy(() -> aspect.checkPermission(joinPoint(proceeded), requiresPermission("sales-order", " ")))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("权限注解配置错误");
+        assertThat(proceeded.get()).isFalse();
+    }
+
+    @Test
+    void shouldRejectWhenUserHasNoPermission() {
+        PermissionAspect aspect = new PermissionAspect(permissionService(false));
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken(principal(), null, List.of())
+        );
+        AtomicBoolean proceeded = new AtomicBoolean(false);
+
+        assertThatThrownBy(() -> aspect.checkPermission(joinPoint(proceeded), requiresPermission("sales-order", "read")))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("无操作权限");
+        assertThat(proceeded.get()).isFalse();
+    }
+
+    @Test
+    void shouldUseAllScopeForNonBusinessResource() throws Throwable {
+        AtomicBoolean proceeded = new AtomicBoolean(false);
+        PermissionAspect aspect = new PermissionAspect(permissionService(true));
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken(principal(), null, List.of())
+        );
+
+        aspect.checkPermission(joinPoint(proceeded), requiresPermission("operation-log", "read"));
+
+        assertThat(proceeded.get()).isTrue();
+        assertThat(DataScopeContext.current()).isNull();
+    }
+
+    @Test
     void shouldRejectApiKeyWhenResourceNotAllowed() {
         PermissionAspect aspect = new PermissionAspect(permissionService(true));
         UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
@@ -83,6 +178,24 @@ class PermissionAspectTest {
                 List.of()
         );
         authentication.setDetails(new ApiKeyAuthenticationDetails(null, List.of("sales-order"), List.of("read")));
+        SecurityContextHolder.getContext().setAuthentication(authentication);
+
+        Object result = aspect.checkPermission(joinPoint(proceeded), requiresPermission("sales-order", "read"));
+
+        assertThat(result).isNull();
+        assertThat(proceeded.get()).isTrue();
+    }
+
+    @Test
+    void shouldProceedWhenApiKeyDoesNotRestrictResources() throws Throwable {
+        AtomicBoolean proceeded = new AtomicBoolean(false);
+        PermissionAspect aspect = new PermissionAspect(permissionService(true));
+        UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
+                principal(),
+                null,
+                List.of()
+        );
+        authentication.setDetails(new ApiKeyAuthenticationDetails(null, List.of(), List.of("read")));
         SecurityContextHolder.getContext().setAuthentication(authentication);
 
         Object result = aspect.checkPermission(joinPoint(proceeded), requiresPermission("sales-order", "read"));

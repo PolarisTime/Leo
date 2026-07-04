@@ -14,7 +14,11 @@ import com.leo.erp.system.securitykey.web.dto.SecurityKeyOverviewResponse;
 import com.leo.erp.system.securitykey.web.dto.SecurityKeyRotateResponse;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.mockito.MockedStatic;
+import org.mockito.Mockito;
 
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -319,5 +323,348 @@ class SecurityKeyServiceTest {
         assertThatThrownBy(service::rotateTotpMasterKey)
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("locked-user");
+    }
+
+    @Test
+    void shouldRejectBlankTotpSecretWhenEnabledAccountRotates() {
+        SecuritySecretRepository repository = mock(SecuritySecretRepository.class);
+        UserAccountRepository userAccountRepository = mock(UserAccountRepository.class);
+        SnowflakeIdGenerator idGenerator = mock(SnowflakeIdGenerator.class);
+        TotpSecretCryptor cryptor = mock(TotpSecretCryptor.class);
+        when(repository.findFirstBySecretTypeAndStatusAndDeletedFlagFalseOrderByKeyVersionDesc(
+                SecurityKeyService.SECRET_TYPE_TOTP, "ACTIVE"))
+                .thenReturn(Optional.empty());
+        UserAccount account = new UserAccount();
+        account.setLoginName("enabled-user");
+        account.setTotpEnabled(Boolean.TRUE);
+        account.setTotpSecret(" ");
+        when(userAccountRepository.findByTotpSecretIsNotNullAndDeletedFlagFalse()).thenReturn(List.of(account));
+        SecurityKeyService service = new SecurityKeyService(
+                repository,
+                userAccountRepository,
+                idGenerator,
+                new JwtProperties("leo-erp", "leo-erp-jwt-secret-key-2026-must-be-long-enough-for-hs512", 1_800_000L, 604_800_000L),
+                new TotpProperties("LeoERP", "leo-dev-totp-key-change-me-20260425"),
+                cryptor
+        );
+
+        assertThatThrownBy(service::rotateTotpMasterKey)
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("enabled-user");
+    }
+
+    @Test
+    void shouldRejectInvalidOssSecretWhenRotatingTotpMasterKey() {
+        SecuritySecretRepository repository = mock(SecuritySecretRepository.class);
+        UserAccountRepository userAccountRepository = mock(UserAccountRepository.class);
+        OssSettingRepository ossSettingRepository = mock(OssSettingRepository.class);
+        SnowflakeIdGenerator idGenerator = mock(SnowflakeIdGenerator.class);
+        TotpSecretCryptor cryptor = mock(TotpSecretCryptor.class);
+        when(repository.findFirstBySecretTypeAndStatusAndDeletedFlagFalseOrderByKeyVersionDesc(
+                SecurityKeyService.SECRET_TYPE_TOTP, "ACTIVE"))
+                .thenReturn(Optional.empty());
+        when(userAccountRepository.findByTotpSecretIsNotNullAndDeletedFlagFalse()).thenReturn(List.of());
+        OssSetting ossSetting = new OssSetting();
+        ossSetting.setEncryptedSecretKey("broken-oss-secret");
+        when(ossSettingRepository.findByEncryptedSecretKeyIsNotNullAndDeletedFlagFalse()).thenReturn(List.of(ossSetting));
+        when(cryptor.decrypt("broken-oss-secret", "leo-dev-totp-key-change-me-20260425"))
+                .thenThrow(new IllegalStateException("decrypt failed"));
+        SecurityKeyService service = new SecurityKeyService(
+                repository,
+                userAccountRepository,
+                idGenerator,
+                new JwtProperties("leo-erp", "leo-erp-jwt-secret-key-2026-must-be-long-enough-for-hs512", 1_800_000L, 604_800_000L),
+                new TotpProperties("LeoERP", "leo-dev-totp-key-change-me-20260425"),
+                cryptor,
+                ossSettingRepository
+        );
+
+        assertThatThrownBy(service::rotateTotpMasterKey)
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("OSS Secret Key 无法使用当前主密钥解密");
+    }
+
+    @Test
+    void shouldRejectMissingConfigMaterialWhenDatabaseSecretMissing() {
+        SecuritySecretRepository repository = mock(SecuritySecretRepository.class);
+        UserAccountRepository userAccountRepository = mock(UserAccountRepository.class);
+        when(repository.findFirstBySecretTypeAndStatusAndDeletedFlagFalseOrderByKeyVersionDesc(
+                SecurityKeyService.SECRET_TYPE_TOTP, "ACTIVE"))
+                .thenReturn(Optional.empty());
+        SecurityKeyService service = new SecurityKeyService(
+                repository,
+                userAccountRepository,
+                mock(SnowflakeIdGenerator.class),
+                new JwtProperties("leo-erp", "leo-erp-jwt-secret-key-2026-must-be-long-enough-for-hs512", 1_800_000L, 604_800_000L),
+                new TotpProperties("LeoERP", null),
+                mock(TotpSecretCryptor.class)
+        );
+
+        assertThatThrownBy(service::getActiveTotpMaterial)
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("TOTP_ENCRYPTION_KEY 未配置");
+    }
+
+    @Test
+    void shouldRejectShortJwtConfigMaterial() {
+        SecuritySecretRepository repository = mock(SecuritySecretRepository.class);
+        when(repository.findFirstBySecretTypeAndStatusAndDeletedFlagFalseOrderByKeyVersionDesc(
+                SecurityKeyService.SECRET_TYPE_JWT, "ACTIVE"))
+                .thenReturn(Optional.empty());
+        SecurityKeyService service = new SecurityKeyService(
+                repository,
+                mock(UserAccountRepository.class),
+                mock(SnowflakeIdGenerator.class),
+                new JwtProperties("leo-erp", "short", 1_800_000L, 604_800_000L),
+                new TotpProperties("LeoERP", "leo-dev-totp-key-change-me-20260425"),
+                mock(TotpSecretCryptor.class)
+        );
+
+        assertThatThrownBy(service::getActiveJwtMaterial)
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("LEO_JWT_SECRET 长度不能少于 32 位");
+    }
+
+    @Test
+    void shouldFallbackToConfigJwtVerificationMaterialWhenDatabaseReturnsNoKeys() {
+        SecuritySecretRepository repository = mock(SecuritySecretRepository.class);
+        when(repository.findBySecretTypeAndStatusInAndDeletedFlagFalseOrderByKeyVersionDesc(
+                eq(SecurityKeyService.SECRET_TYPE_JWT), anyCollection()))
+                .thenReturn(List.of());
+        SecurityKeyService service = new SecurityKeyService(
+                repository,
+                mock(UserAccountRepository.class),
+                mock(SnowflakeIdGenerator.class),
+                new JwtProperties("leo-erp", "leo-erp-jwt-secret-key-2026-must-be-long-enough-for-hs512", 1_800_000L, 604_800_000L),
+                new TotpProperties("LeoERP", "leo-dev-totp-key-change-me-20260425"),
+                mock(TotpSecretCryptor.class)
+        );
+
+        List<SecurityKeyService.ResolvedSecretMaterial> materials = service.getJwtVerificationMaterials();
+
+        assertThat(materials).hasSize(1);
+        assertThat(materials.get(0).source()).isEqualTo(SecurityKeyService.SOURCE_CONFIG);
+        assertThat(materials.get(0).version()).isZero();
+    }
+
+    @Test
+    void shouldKeepRetiredJwtVerificationMaterialWhenRetiredAtIsMissing() {
+        SecuritySecretRepository repository = mock(SecuritySecretRepository.class);
+        SecuritySecret retiredWithoutTime = new SecuritySecret();
+        retiredWithoutTime.setSecretType(SecurityKeyService.SECRET_TYPE_JWT);
+        retiredWithoutTime.setKeyVersion(2);
+        retiredWithoutTime.setSecretValue("leo-erp-jwt-secret-key-2027-retired-without-time-is-usable");
+        retiredWithoutTime.setStatus("RETIRED");
+        when(repository.findBySecretTypeAndStatusInAndDeletedFlagFalseOrderByKeyVersionDesc(
+                eq(SecurityKeyService.SECRET_TYPE_JWT), anyCollection()))
+                .thenReturn(List.of(retiredWithoutTime));
+        SecurityKeyService service = new SecurityKeyService(
+                repository,
+                mock(UserAccountRepository.class),
+                mock(SnowflakeIdGenerator.class),
+                new JwtProperties("leo-erp", "leo-erp-jwt-secret-key-2026-must-be-long-enough-for-hs512", 1_800_000L, 604_800_000L),
+                new TotpProperties("LeoERP", "leo-dev-totp-key-change-me-20260425"),
+                mock(TotpSecretCryptor.class)
+        );
+
+        assertThat(service.getJwtVerificationMaterials())
+                .extracting(SecurityKeyService.ResolvedSecretMaterial::version)
+                .containsExactly(2);
+    }
+
+    @Test
+    void shouldRotateJwtKeyAndRetireExistingDatabaseSecret() {
+        SecuritySecretRepository repository = mock(SecuritySecretRepository.class);
+        SnowflakeIdGenerator idGenerator = mock(SnowflakeIdGenerator.class);
+        SecuritySecret currentActive = new SecuritySecret();
+        currentActive.setId(401L);
+        currentActive.setSecretType(SecurityKeyService.SECRET_TYPE_JWT);
+        currentActive.setSecretName("JWT 主密钥");
+        currentActive.setKeyVersion(7);
+        currentActive.setSecretValue("leo-erp-jwt-secret-key-2027-current-active-material-is-long-enough");
+        currentActive.setStatus("ACTIVE");
+        when(repository.findFirstBySecretTypeAndStatusAndDeletedFlagFalseOrderByKeyVersionDesc(
+                SecurityKeyService.SECRET_TYPE_JWT, "ACTIVE"))
+                .thenReturn(Optional.of(currentActive), Optional.of(currentActive));
+        when(repository.findFirstBySecretTypeAndDeletedFlagFalseOrderByKeyVersionDesc(SecurityKeyService.SECRET_TYPE_JWT))
+                .thenReturn(Optional.of(currentActive));
+        when(repository.findBySecretTypeAndStatusInAndDeletedFlagFalseOrderByKeyVersionDesc(
+                eq(SecurityKeyService.SECRET_TYPE_JWT), anyCollection()))
+                .thenReturn(List.of(currentActive));
+        when(idGenerator.nextId()).thenReturn(402L);
+        when(repository.save(any(SecuritySecret.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        SecurityKeyService service = new SecurityKeyService(
+                repository,
+                mock(UserAccountRepository.class),
+                idGenerator,
+                new JwtProperties("leo-erp", "leo-erp-jwt-secret-key-2026-must-be-long-enough-for-hs512", 1_800_000L, 604_800_000L),
+                new TotpProperties("LeoERP", "leo-dev-totp-key-change-me-20260425"),
+                mock(TotpSecretCryptor.class)
+        );
+
+        SecurityKeyRotateResponse response = service.rotateJwtMasterKey();
+
+        assertThat(currentActive.getStatus()).isEqualTo("RETIRED");
+        assertThat(currentActive.getSecretName()).isEqualTo("JWT 历史主密钥");
+        assertThat(currentActive.getRetiredAt()).isNotNull();
+        assertThat(response.activeVersion()).isEqualTo(8);
+        verify(repository, times(2)).save(any(SecuritySecret.class));
+    }
+
+    @Test
+    void shouldRotateTotpKeyAndRetireExistingDatabaseSecretWhenOssSettingsAreEmpty() {
+        SecuritySecretRepository repository = mock(SecuritySecretRepository.class);
+        UserAccountRepository userAccountRepository = mock(UserAccountRepository.class);
+        OssSettingRepository ossSettingRepository = mock(OssSettingRepository.class);
+        SnowflakeIdGenerator idGenerator = mock(SnowflakeIdGenerator.class);
+        SecuritySecret currentActive = new SecuritySecret();
+        currentActive.setId(501L);
+        currentActive.setSecretType(SecurityKeyService.SECRET_TYPE_TOTP);
+        currentActive.setSecretName("2FA 主密钥");
+        currentActive.setKeyVersion(5);
+        currentActive.setSecretValue("leo-dev-totp-key-managed-by-database-20260427");
+        currentActive.setStatus("ACTIVE");
+        when(repository.findFirstBySecretTypeAndStatusAndDeletedFlagFalseOrderByKeyVersionDesc(
+                SecurityKeyService.SECRET_TYPE_TOTP, "ACTIVE"))
+                .thenReturn(Optional.of(currentActive), Optional.of(currentActive));
+        when(repository.findFirstBySecretTypeAndDeletedFlagFalseOrderByKeyVersionDesc(SecurityKeyService.SECRET_TYPE_TOTP))
+                .thenReturn(Optional.of(currentActive));
+        when(repository.findBySecretTypeAndStatusInAndDeletedFlagFalseOrderByKeyVersionDesc(
+                eq(SecurityKeyService.SECRET_TYPE_TOTP), anyCollection()))
+                .thenReturn(List.of(currentActive));
+        when(userAccountRepository.findByTotpSecretIsNotNullAndDeletedFlagFalse()).thenReturn(List.of());
+        when(ossSettingRepository.findByEncryptedSecretKeyIsNotNullAndDeletedFlagFalse()).thenReturn(List.of());
+        when(idGenerator.nextId()).thenReturn(502L);
+        when(repository.save(any(SecuritySecret.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        SecurityKeyService service = new SecurityKeyService(
+                repository,
+                userAccountRepository,
+                idGenerator,
+                new JwtProperties("leo-erp", "leo-erp-jwt-secret-key-2026-must-be-long-enough-for-hs512", 1_800_000L, 604_800_000L),
+                new TotpProperties("LeoERP", "leo-dev-totp-key-change-me-20260425"),
+                mock(TotpSecretCryptor.class),
+                ossSettingRepository
+        );
+
+        SecurityKeyRotateResponse response = service.rotateTotpMasterKey();
+
+        assertThat(currentActive.getStatus()).isEqualTo("RETIRED");
+        assertThat(currentActive.getSecretName()).isEqualTo("2FA 历史主密钥");
+        assertThat(currentActive.getRetiredAt()).isNotNull();
+        assertThat(response.activeVersion()).isEqualTo(6);
+        assertThat(response.processedRecordCount()).isZero();
+        verify(ossSettingRepository, times(0)).saveAll(any());
+    }
+
+    @Test
+    void shouldClearNullOrBlankTotpSecretsForDisabledAccountsWhenRotating() {
+        SecuritySecretRepository repository = mock(SecuritySecretRepository.class);
+        UserAccountRepository userAccountRepository = mock(UserAccountRepository.class);
+        SnowflakeIdGenerator idGenerator = mock(SnowflakeIdGenerator.class);
+        UserAccount nullSecretAccount = new UserAccount();
+        nullSecretAccount.setLoginName("null-secret");
+        nullSecretAccount.setTotpEnabled(Boolean.FALSE);
+        nullSecretAccount.setTotpSecret(null);
+        UserAccount blankSecretAccount = new UserAccount();
+        blankSecretAccount.setLoginName("blank-secret");
+        blankSecretAccount.setTotpEnabled(Boolean.FALSE);
+        blankSecretAccount.setTotpSecret(" ");
+        when(repository.findFirstBySecretTypeAndStatusAndDeletedFlagFalseOrderByKeyVersionDesc(
+                SecurityKeyService.SECRET_TYPE_TOTP, "ACTIVE"))
+                .thenReturn(Optional.empty(), Optional.empty());
+        when(repository.findFirstBySecretTypeAndDeletedFlagFalseOrderByKeyVersionDesc(SecurityKeyService.SECRET_TYPE_TOTP))
+                .thenReturn(Optional.empty());
+        when(repository.findBySecretTypeAndStatusInAndDeletedFlagFalseOrderByKeyVersionDesc(
+                eq(SecurityKeyService.SECRET_TYPE_TOTP), anyCollection()))
+                .thenReturn(List.of());
+        when(userAccountRepository.findByTotpSecretIsNotNullAndDeletedFlagFalse())
+                .thenReturn(List.of(nullSecretAccount, blankSecretAccount));
+        when(userAccountRepository.saveAll(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(idGenerator.nextId()).thenReturn(601L, 602L);
+        when(repository.save(any(SecuritySecret.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        SecurityKeyService service = new SecurityKeyService(
+                repository,
+                userAccountRepository,
+                idGenerator,
+                new JwtProperties("leo-erp", "leo-erp-jwt-secret-key-2026-must-be-long-enough-for-hs512", 1_800_000L, 604_800_000L),
+                new TotpProperties("LeoERP", "leo-dev-totp-key-change-me-20260425"),
+                mock(TotpSecretCryptor.class)
+        );
+
+        SecurityKeyRotateResponse response = service.rotateTotpMasterKey();
+
+        assertThat(nullSecretAccount.getTotpSecret()).isNull();
+        assertThat(blankSecretAccount.getTotpSecret()).isNull();
+        assertThat(response.processedRecordCount()).isEqualTo(2);
+        verify(userAccountRepository).saveAll(List.of(nullSecretAccount, blankSecretAccount));
+    }
+
+    @Test
+    void shouldRejectBlankJwtConfigMaterialWhenDatabaseSecretMissing() {
+        SecuritySecretRepository repository = mock(SecuritySecretRepository.class);
+        when(repository.findFirstBySecretTypeAndStatusAndDeletedFlagFalseOrderByKeyVersionDesc(
+                SecurityKeyService.SECRET_TYPE_JWT, "ACTIVE"))
+                .thenReturn(Optional.empty());
+        SecurityKeyService service = new SecurityKeyService(
+                repository,
+                mock(UserAccountRepository.class),
+                mock(SnowflakeIdGenerator.class),
+                new JwtProperties("leo-erp", " ", 1_800_000L, 604_800_000L),
+                new TotpProperties("LeoERP", "leo-dev-totp-key-change-me-20260425"),
+                mock(TotpSecretCryptor.class)
+        );
+
+        assertThatThrownBy(service::getActiveJwtMaterial)
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("JWT 主密钥")
+                .hasMessageContaining("LEO_JWT_SECRET 未配置");
+    }
+
+    @Test
+    void shouldResolveActiveJwtMaterialFromConfigFallback() {
+        SecuritySecretRepository repository = mock(SecuritySecretRepository.class);
+        String jwtSecret = "leo-erp-jwt-secret-key-2026-must-be-long-enough-for-hs512";
+        when(repository.findFirstBySecretTypeAndStatusAndDeletedFlagFalseOrderByKeyVersionDesc(
+                SecurityKeyService.SECRET_TYPE_JWT, "ACTIVE"))
+                .thenReturn(Optional.empty());
+        SecurityKeyService service = new SecurityKeyService(
+                repository,
+                mock(UserAccountRepository.class),
+                mock(SnowflakeIdGenerator.class),
+                new JwtProperties("leo-erp", jwtSecret, 1_800_000L, 604_800_000L),
+                new TotpProperties("LeoERP", "leo-dev-totp-key-change-me-20260425"),
+                mock(TotpSecretCryptor.class)
+        );
+
+        SecurityKeyService.ResolvedSecretMaterial material = service.getActiveJwtMaterial();
+
+        assertThat(material.source()).isEqualTo(SecurityKeyService.SOURCE_CONFIG);
+        assertThat(material.version()).isZero();
+        assertThat(material.secretValue()).isEqualTo(jwtSecret);
+    }
+
+    @Test
+    void shouldWrapFingerprintAlgorithmFailure() throws NoSuchAlgorithmException {
+        SecuritySecretRepository repository = mock(SecuritySecretRepository.class);
+        when(repository.findFirstBySecretTypeAndStatusAndDeletedFlagFalseOrderByKeyVersionDesc(
+                SecurityKeyService.SECRET_TYPE_JWT, "ACTIVE"))
+                .thenReturn(Optional.empty());
+        SecurityKeyService service = new SecurityKeyService(
+                repository,
+                mock(UserAccountRepository.class),
+                mock(SnowflakeIdGenerator.class),
+                new JwtProperties("leo-erp", "leo-erp-jwt-secret-key-2026-must-be-long-enough-for-hs512", 1_800_000L, 604_800_000L),
+                new TotpProperties("LeoERP", "leo-dev-totp-key-change-me-20260425"),
+                mock(TotpSecretCryptor.class)
+        );
+
+        try (MockedStatic<MessageDigest> messageDigest = Mockito.mockStatic(MessageDigest.class)) {
+            messageDigest.when(() -> MessageDigest.getInstance("SHA-256"))
+                    .thenThrow(new NoSuchAlgorithmException("missing algorithm"));
+
+            assertThatThrownBy(service::getActiveJwtMaterial)
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessageContaining("生成密钥指纹失败");
+        }
     }
 }

@@ -447,29 +447,24 @@ public class DatabaseStatusService {
                 )
                 SELECT * FROM activity, db, meta
                 """;
-        try (ResultSet rs = stmt.executeQuery(sql)) {
-            if (rs.next()) {
-                return new PostgresOverview(
-                        rs.getLong("total_connections"),
-                        rs.getLong("active_connections"),
-                        rs.getLong("idle_in_transaction_connections"),
-                        rs.getLong("lock_wait_sessions"),
-                        rs.getLong("blocked_sessions"),
-                        rs.getLong("long_transactions"),
-                        rs.getLong("longest_transaction_seconds"),
-                        rs.getLong("longest_query_seconds"),
-                        rs.getLong("xact_commit"),
-                        rs.getLong("xact_rollback"),
-                        rs.getLong("deadlocks"),
-                        rs.getLong("temp_files"),
-                        rs.getLong("temp_bytes"),
-                        rs.getDouble("cache_hit_rate"),
-                        rs.getString("database_size"),
-                        rs.getLong("uptime_seconds")
-                );
-            }
-        }
-        return PostgresOverview.empty();
+        return queryFirst(stmt, sql, rs -> new PostgresOverview(
+                rs.getLong("total_connections"),
+                rs.getLong("active_connections"),
+                rs.getLong("idle_in_transaction_connections"),
+                rs.getLong("lock_wait_sessions"),
+                rs.getLong("blocked_sessions"),
+                rs.getLong("long_transactions"),
+                rs.getLong("longest_transaction_seconds"),
+                rs.getLong("longest_query_seconds"),
+                rs.getLong("xact_commit"),
+                rs.getLong("xact_rollback"),
+                rs.getLong("deadlocks"),
+                rs.getLong("temp_files"),
+                rs.getLong("temp_bytes"),
+                rs.getDouble("cache_hit_rate"),
+                rs.getString("database_size"),
+                rs.getLong("uptime_seconds")
+        ), PostgresOverview.empty());
     }
 
     private PostgresActivity getPostgresActivity(Statement stmt) throws SQLException {
@@ -485,20 +480,15 @@ public class DatabaseStatusService {
                 FROM pg_stat_activity
                 WHERE datname = current_database()
                 """;
-        try (ResultSet rs = stmt.executeQuery(sql)) {
-            if (rs.next()) {
-                return new PostgresActivity(
-                        rs.getLong("active_sessions"),
-                        rs.getLong("idle_in_transaction_sessions"),
-                        rs.getLong("lock_wait_sessions"),
-                        rs.getLong("blocked_sessions"),
-                        rs.getLong("long_transactions"),
-                        rs.getLong("longest_transaction_seconds"),
-                        rs.getLong("longest_query_seconds")
-                );
-            }
-        }
-        return PostgresActivity.empty();
+        return queryFirst(stmt, sql, rs -> new PostgresActivity(
+                rs.getLong("active_sessions"),
+                rs.getLong("idle_in_transaction_sessions"),
+                rs.getLong("lock_wait_sessions"),
+                rs.getLong("blocked_sessions"),
+                rs.getLong("long_transactions"),
+                rs.getLong("longest_transaction_seconds"),
+                rs.getLong("longest_query_seconds")
+        ), PostgresActivity.empty());
     }
 
     private PostgresTuningSettings getPostgresTuningSettings(Statement stmt) throws SQLException {
@@ -528,30 +518,51 @@ public class DatabaseStatusService {
                     COALESCE(current_setting('pg_stat_statements.track', true), '未启用') AS pg_stat_statements_track
                 FROM activity
                 """;
-        try (ResultSet rs = stmt.executeQuery(sql)) {
-            if (rs.next()) {
-                return new PostgresTuningSettings(
-                        rs.getLong("max_connections"),
-                        rs.getLong("total_connections"),
-                        rs.getLong("active_connections"),
-                        hikari.maximumPoolSize(),
-                        hikari.minimumIdle(),
-                        hikari.leakDetectionThresholdMs(),
-                        rs.getString("statement_timeout"),
-                        rs.getString("idle_in_transaction_session_timeout"),
-                        rs.getString("lock_timeout"),
-                        rs.getString("track_io_timing"),
-                        rs.getString("shared_buffers"),
-                        rs.getString("effective_cache_size"),
-                        rs.getString("work_mem"),
-                        rs.getString("maintenance_work_mem"),
-                        rs.getString("max_wal_size"),
-                        rs.getString("checkpoint_timeout"),
-                        rs.getString("pg_stat_statements_track")
-                );
+        return queryFirst(stmt, sql, rs -> new PostgresTuningSettings(
+                rs.getLong("max_connections"),
+                rs.getLong("total_connections"),
+                rs.getLong("active_connections"),
+                hikari.maximumPoolSize(),
+                hikari.minimumIdle(),
+                hikari.leakDetectionThresholdMs(),
+                rs.getString("statement_timeout"),
+                rs.getString("idle_in_transaction_session_timeout"),
+                rs.getString("lock_timeout"),
+                rs.getString("track_io_timing"),
+                rs.getString("shared_buffers"),
+                rs.getString("effective_cache_size"),
+                rs.getString("work_mem"),
+                rs.getString("maintenance_work_mem"),
+                rs.getString("max_wal_size"),
+                rs.getString("checkpoint_timeout"),
+                rs.getString("pg_stat_statements_track")
+        ), PostgresTuningSettings.empty());
+    }
+
+    private <T> T queryFirst(Statement stmt, String sql, ResultSetMapper<T> mapper, T emptyValue) throws SQLException {
+        ResultSet rs = stmt.executeQuery(sql);
+        SQLException failure = null;
+        try {
+            return rs.next() ? mapper.map(rs) : emptyValue;
+        } catch (SQLException ex) {
+            failure = ex;
+            throw ex;
+        } finally {
+            try {
+                rs.close();
+            } catch (SQLException closeEx) {
+                if (failure != null) {
+                    failure.addSuppressed(closeEx);
+                } else {
+                    throw closeEx;
+                }
             }
         }
-        return PostgresTuningSettings.empty();
+    }
+
+    @FunctionalInterface
+    private interface ResultSetMapper<T> {
+        T map(ResultSet rs) throws SQLException;
     }
 
     private HikariPoolSettings getHikariPoolSettings() {

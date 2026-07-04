@@ -4,6 +4,7 @@ import com.leo.erp.allocation.repository.ItemAllocationNativeRepository;
 import com.leo.erp.purchase.inbound.service.InboundItemMapper;
 
 import com.leo.erp.common.error.BusinessException;
+import com.leo.erp.common.service.CrudRuntimeSettings;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.TradeItemMaterialSupport;
 import com.leo.erp.common.support.TradeItemMaterialSupportTestDoubles;
@@ -25,9 +26,14 @@ import com.leo.erp.purchase.order.repository.PurchaseOrderRepository;
 import com.leo.erp.purchase.order.service.PurchaseOrderItemPieceWeightService;
 import com.leo.erp.purchase.order.service.PurchaseOrderItemQueryService;
 import com.leo.erp.security.permission.WorkflowTransitionGuard;
+import com.leo.erp.security.support.SecurityPrincipal;
 import com.leo.erp.sales.order.service.SalesOrderItemQueryService;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
@@ -48,6 +54,11 @@ import static org.mockito.Mockito.when;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class PurchaseInboundServiceTest {
+
+    @AfterEach
+    void tearDownSecurityContext() {
+        SecurityContextHolder.clearContext();
+    }
 
     @BeforeEach
     void setUpIdGenerator() {
@@ -633,6 +644,52 @@ class PurchaseInboundServiceTest {
     }
 
     @Test
+    void shouldRejectDuplicateInboundNoWhenValidateUpdateNumberChanged() {
+        PurchaseInboundRepository repository = mock(PurchaseInboundRepository.class);
+        PurchaseInboundService service = newService(repository, mock(PurchaseInboundMapper.class),
+                mock(ItemAllocationNativeRepository.class));
+        PurchaseInbound inbound = inbound();
+        inbound.setInboundNo("PI-001");
+        when(repository.existsByInboundNoAndDeletedFlagFalse("PI-002")).thenReturn(true);
+
+        assertThatThrownBy(() -> service.validateUpdate(inbound, updateRequestWithInboundNo("PI-002")))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("采购入库单号已存在");
+    }
+
+    @Test
+    void shouldAllowChangedInboundNoWhenNoDuplicateExists() {
+        PurchaseInboundRepository repository = mock(PurchaseInboundRepository.class);
+        PurchaseInboundService service = newService(repository, mock(PurchaseInboundMapper.class),
+                mock(ItemAllocationNativeRepository.class));
+        PurchaseInbound inbound = inbound();
+        inbound.setInboundNo("PI-001");
+        when(repository.existsByInboundNoAndDeletedFlagFalse("PI-002")).thenReturn(false);
+
+        service.validateUpdate(inbound, updateRequestWithInboundNo("PI-002"));
+    }
+
+    @Test
+    void shouldUseVisibleLookupAndReturnInboundNotFoundMessageForAdminDetail() {
+        PurchaseInboundRepository repository = mock(PurchaseInboundRepository.class);
+        PurchaseInboundService service = newService(repository, mock(PurchaseInboundMapper.class),
+                mock(ItemAllocationNativeRepository.class));
+        CrudRuntimeSettings runtimeSettings = mock(CrudRuntimeSettings.class);
+        when(runtimeSettings.shouldAdminSeeDeletedRecords()).thenReturn(true);
+        ReflectionTestUtils.invokeMethod(service, "setCrudRuntimeSettings", runtimeSettings);
+        var principal = new SecurityPrincipal(1L, "admin", "", true, List.of(new SimpleGrantedAuthority("ROLE_ADMIN")));
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken(principal, null, principal.getAuthorities())
+        );
+        when(repository.findById(404L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.detail(404L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("采购入库不存在");
+        verify(repository).findById(404L);
+    }
+
+    @Test
     void shouldReturnPieceWeightsDistributedEvenly() {
         PurchaseInboundRepository repository = mock(PurchaseInboundRepository.class);
         PurchaseInboundItemRepository inboundItemRepository = mock(PurchaseInboundItemRepository.class);
@@ -979,6 +1036,21 @@ class PurchaseInboundServiceTest {
                         null, null, null,
                         new BigDecimal("4000.00"), new BigDecimal("1600.00")
                 ))
+        );
+    }
+
+    private PurchaseInboundRequest updateRequestWithInboundNo(String inboundNo) {
+        PurchaseInboundRequest request = request();
+        return new PurchaseInboundRequest(
+                inboundNo,
+                request.purchaseOrderNo(),
+                request.supplierName(),
+                request.warehouseName(),
+                request.inboundDate(),
+                request.settlementMode(),
+                request.status(),
+                request.remark(),
+                request.items()
         );
     }
 

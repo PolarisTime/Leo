@@ -154,6 +154,41 @@ class AttachmentControllerTest {
     }
 
     @Test
+    void accessUrlAppliesWatermarkWhenPrincipalIsMissing() {
+        when(modulePermissionGuard.requirePermission(null, "sales-order", "read")).thenReturn("sales-order");
+        when(systemSwitchService.shouldWatermarkAttachments()).thenReturn(true);
+        when(attachmentService.createPresignedAccessUrl(1L, "access-key", false, true, "sales-order"))
+                .thenReturn(null);
+
+        ApiResponse<AttachmentAccessUrlResponse> response =
+                controller.accessUrl(null, 1L, "sales-order", "access-key", false);
+
+        assertThat(response.data().presigned()).isFalse();
+        verify(attachmentService).createPresignedAccessUrl(1L, "access-key", false, true, "sales-order");
+    }
+
+    @Test
+    void accessUrlSkipsWatermarkWhenEnabledButAdmin() {
+        SecurityPrincipal principal = mock(SecurityPrincipal.class);
+        org.springframework.security.core.GrantedAuthority adminAuthority =
+                mock(org.springframework.security.core.GrantedAuthority.class);
+
+        when(modulePermissionGuard.requirePermission(principal, "sales-order", "read")).thenReturn("sales-order");
+        when(adminAuthority.getAuthority()).thenReturn("ROLE_ADMIN");
+        Collection<? extends org.springframework.security.core.GrantedAuthority> adminAuthorities = List.of(adminAuthority);
+        doReturn(adminAuthorities).when(principal).getAuthorities();
+        when(systemSwitchService.shouldWatermarkAttachments()).thenReturn(true);
+        when(attachmentService.createPresignedAccessUrl(1L, "access-key", false, false, "sales-order"))
+                .thenReturn(null);
+
+        ApiResponse<AttachmentAccessUrlResponse> response =
+                controller.accessUrl(principal, 1L, "sales-order", "access-key", false);
+
+        assertThat(response.data().presigned()).isFalse();
+        verify(attachmentService).createPresignedAccessUrl(1L, "access-key", false, false, "sales-order");
+    }
+
+    @Test
     void previewRedirectsToPresignedUrlWhenAvailable() {
         SecurityPrincipal principal = mock(SecurityPrincipal.class);
         AttachmentService.PresignedAttachmentUrl presignedUrl =
@@ -188,6 +223,24 @@ class AttachmentControllerTest {
 
         assertThat(response.getStatusCode().is2xxSuccessful()).isTrue();
         assertThat(response.getBody()).isEqualTo(resource);
+        verify(attachmentRecordAccessService).assertAttachmentAccessible(principal, "sales-order", "read", 1L);
+    }
+
+    @Test
+    void downloadRedirectsToPresignedUrlWhenAvailable() {
+        SecurityPrincipal principal = mock(SecurityPrincipal.class);
+        AttachmentService.PresignedAttachmentUrl presignedUrl =
+                new AttachmentService.PresignedAttachmentUrl(URI.create("https://download.example.com/test.pdf"), false);
+
+        when(modulePermissionGuard.requirePermission(principal, "sales-order", "read")).thenReturn("sales-order");
+        when(systemSwitchService.shouldWatermarkAttachments()).thenReturn(false);
+        when(attachmentService.createPresignedAccessUrl(1L, "access-key", false, false, "sales-order"))
+                .thenReturn(presignedUrl);
+
+        ResponseEntity<Resource> response = controller.download(principal, 1L, "sales-order", "access-key");
+
+        assertThat(response.getStatusCode().is3xxRedirection()).isTrue();
+        assertThat(response.getHeaders().getLocation()).isEqualTo(presignedUrl.url());
         verify(attachmentRecordAccessService).assertAttachmentAccessible(principal, "sales-order", "read", 1L);
     }
 

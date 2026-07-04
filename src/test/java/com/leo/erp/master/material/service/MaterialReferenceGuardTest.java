@@ -47,4 +47,13 @@ class MaterialReferenceGuardTest {
                     assertThat(check.value()).isEqualTo("MAT-001");
                 });
     }
+
+    @Test
+    void shouldSkipCheck_whenReferenceGuardIsMissing() {
+        MaterialReferenceGuard guard = new MaterialReferenceGuard(null);
+        Material material = new Material();
+        material.setMaterialCode("MAT-001");
+
+        guard.assertNoReferences(material);
+    }
 }

@@ -5,19 +5,36 @@ import com.leo.erp.system.printtemplate.domain.entity.PrintTemplate;
 import com.leo.erp.system.printtemplate.repository.PrintTemplateRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.DefaultApplicationArguments;
+import org.springframework.core.io.ClassPathResource;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.attribute.PosixFilePermission;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class PrintTemplateFileSyncRunnerTest {
+
+    @Test
+    void shouldReturnWhenNoFileManagedTemplatesExist() {
+        PrintTemplateRepository repository = mock(PrintTemplateRepository.class);
+        when(repository.findAllBySyncModeAndDeletedFlagFalse(PrintTemplateFileSyncRunner.SYNC_MODE_FILE))
+                .thenReturn(List.of());
+
+        runner(repository).run(new DefaultApplicationArguments());
+
+        verify(repository, never()).save(any(PrintTemplate.class));
+    }
 
     @Test
     void shouldSyncFileManagedTemplateFromClasspath() {
@@ -53,6 +70,79 @@ class PrintTemplateFileSyncRunnerTest {
     }
 
     @Test
+    void shouldSkipTemplateWithoutSourceRef() {
+        PrintTemplate template = template("old", null);
+        template.setSourceRef(" ");
+        PrintTemplateRepository repository = repositoryWithSingle(template);
+
+        runner(repository).run(new DefaultApplicationArguments());
+
+        assertThat(template.getTemplateHtml()).isEqualTo("old");
+        verify(repository, never()).save(any(PrintTemplate.class));
+    }
+
+    @Test
+    void shouldSkipTemplateWithNullSourceRef() {
+        PrintTemplate template = template("old", null);
+        template.setSourceRef(null);
+        PrintTemplateRepository repository = repositoryWithSingle(template);
+
+        runner(repository).run(new DefaultApplicationArguments());
+
+        assertThat(template.getTemplateHtml()).isEqualTo("old");
+        verify(repository, never()).save(any(PrintTemplate.class));
+    }
+
+    @Test
+    void shouldSyncWhenChecksumMatchesButContentDiffers() {
+        String content = currentContent();
+        PrintTemplate template = template("old", PrintTemplateChecksum.sha256(content));
+        PrintTemplateRepository repository = repositoryWithSingle(template);
+
+        runner(repository).run(new DefaultApplicationArguments());
+
+        assertThat(template.getTemplateHtml()).isEqualTo(content);
+        verify(repository).save(template);
+    }
+
+    @Test
+    void shouldSyncWhenContentMatchesButChecksumDiffers() {
+        String content = currentContent();
+        PrintTemplate template = template(content, "wrong-checksum");
+        PrintTemplateRepository repository = repositoryWithSingle(template);
+
+        runner(repository).run(new DefaultApplicationArguments());
+
+        assertThat(template.getSourceChecksum()).isEqualTo(PrintTemplateChecksum.sha256(content));
+        verify(repository).save(template);
+    }
+
+    @Test
+    void shouldTreatNullVersionAsInitialVersionWhenSyncing() {
+        PrintTemplate template = template("old", null);
+        template.setVersionNo(null);
+        PrintTemplateRepository repository = repositoryWithSingle(template);
+
+        runner(repository).run(new DefaultApplicationArguments());
+
+        assertThat(template.getVersionNo()).isEqualTo(2);
+        verify(repository).save(template);
+    }
+
+    @Test
+    void shouldSkipPdfFormValidationForNonPdfFormTemplate() {
+        PrintTemplate template = template("old", null);
+        template.setTemplateType("HTML");
+        PrintTemplateRepository repository = repositoryWithSingle(template);
+        PrintPdfFormTemplateValidator validator = mock(PrintPdfFormTemplateValidator.class);
+
+        new PrintTemplateFileSyncRunner(repository, validator).run(new DefaultApplicationArguments());
+
+        verify(validator, never()).validate(anyString());
+        verify(repository).save(template);
+    }
+
+    @Test
     void shouldRejectSourceRefOutsidePrintFormsDirectory() {
         PrintTemplate template = template("old", null);
         template.setSourceRef("application.yml");
@@ -62,6 +152,111 @@ class PrintTemplateFileSyncRunnerTest {
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("源文件路径不合法");
         verify(repository, never()).save(any(PrintTemplate.class));
+    }
+
+    @Test
+    void shouldRejectUnsafeSourceRefPath() {
+        PrintTemplate template = template("old", null);
+        template.setSourceRef("../print-forms/yingjie-a4-remark.layout.json");
+        PrintTemplateRepository repository = repositoryWithSingle(template);
+
+        assertThatThrownBy(() -> runner(repository).run(new DefaultApplicationArguments()))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("源文件路径不合法");
+        verify(repository, never()).save(any(PrintTemplate.class));
+    }
+
+    @Test
+    void shouldRejectAbsoluteSourceRefPath() {
+        PrintTemplate template = template("old", null);
+        template.setSourceRef("/print-forms/yingjie-a4-remark.layout.json");
+        PrintTemplateRepository repository = repositoryWithSingle(template);
+
+        assertThatThrownBy(() -> runner(repository).run(new DefaultApplicationArguments()))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("源文件路径不合法");
+        verify(repository, never()).save(any(PrintTemplate.class));
+    }
+
+    @Test
+    void shouldRejectBackslashSourceRefPath() {
+        PrintTemplate template = template("old", null);
+        template.setSourceRef("print-forms\\yingjie-a4-remark.layout.json");
+        PrintTemplateRepository repository = repositoryWithSingle(template);
+
+        assertThatThrownBy(() -> runner(repository).run(new DefaultApplicationArguments()))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("源文件路径不合法");
+        verify(repository, never()).save(any(PrintTemplate.class));
+    }
+
+    @Test
+    void shouldRejectSourceRefWithInvalidSuffix() {
+        PrintTemplate template = template("old", null);
+        template.setSourceRef("print-forms/yingjie-a4-remark.json");
+        PrintTemplateRepository repository = repositoryWithSingle(template);
+
+        assertThatThrownBy(() -> runner(repository).run(new DefaultApplicationArguments()))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("源文件路径不合法");
+        verify(repository, never()).save(any(PrintTemplate.class));
+    }
+
+    @Test
+    void shouldRejectSourceRefWithInvalidPrefix() {
+        PrintTemplate template = template("old", null);
+        template.setSourceRef("forms/yingjie-a4-remark.layout.json");
+        PrintTemplateRepository repository = repositoryWithSingle(template);
+
+        assertThatThrownBy(() -> runner(repository).run(new DefaultApplicationArguments()))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("源文件路径不合法");
+        verify(repository, never()).save(any(PrintTemplate.class));
+    }
+
+    @Test
+    void shouldRejectMissingClasspathTemplateFile() {
+        PrintTemplate template = template("old", null);
+        template.setSourceRef("print-forms/missing.layout.json");
+        PrintTemplateRepository repository = repositoryWithSingle(template);
+
+        assertThatThrownBy(() -> runner(repository).run(new DefaultApplicationArguments()))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("源文件不存在");
+        verify(repository, never()).save(any(PrintTemplate.class));
+    }
+
+    @Test
+    void shouldRejectDirectoryResourceContentThatIsNotValidJson() {
+        PrintTemplate template = template("old", null);
+        template.setSourceRef("print-forms/unreadable.layout.json");
+        PrintTemplateRepository repository = repositoryWithSingle(template);
+
+        assertThatThrownBy(() -> runner(repository).run(new DefaultApplicationArguments()))
+                .isInstanceOf(com.leo.erp.common.error.BusinessException.class)
+                .hasMessageContaining("不是合法 JSON");
+        verify(repository, never()).save(any(PrintTemplate.class));
+    }
+
+    @Test
+    void shouldWrapClasspathReadFailure() throws Exception {
+        String sourceRef = "print-forms/read-failure.layout.json";
+        Path path = new ClassPathResource(sourceRef).getFile().toPath();
+        Set<PosixFilePermission> originalPermissions = Files.getPosixFilePermissions(path);
+        PrintTemplate template = template("old", null);
+        template.setSourceRef(sourceRef);
+        PrintTemplateRepository repository = repositoryWithSingle(template);
+
+        try {
+            Files.setPosixFilePermissions(path, Set.of());
+
+            assertThatThrownBy(() -> runner(repository).run(new DefaultApplicationArguments()))
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessageContaining("读取打印模板源文件失败");
+            verify(repository, never()).save(any(PrintTemplate.class));
+        } finally {
+            Files.setPosixFilePermissions(path, originalPermissions);
+        }
     }
 
     @Test

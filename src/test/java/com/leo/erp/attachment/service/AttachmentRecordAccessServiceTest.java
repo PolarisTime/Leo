@@ -360,6 +360,180 @@ class AttachmentRecordAccessServiceTest {
         service.assertRecordAccessible(principal, "purchase-order", "read", 1L);
     }
 
+    @Test
+    void shouldThrowException_whenNormalizedModuleKeyBlankAfterSlashTrim() {
+        var principal = new SecurityPrincipal(1L, "admin", "admin", true, List.of());
+
+        assertThatThrownBy(() -> service.assertRecordAccessible(principal, "/", "read", 1L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("缺少模块标识");
+    }
+
+    @Test
+    void shouldThrowException_whenPrincipalNullForRecordAccess() {
+        assertThatThrownBy(() -> service.assertRecordAccessible(null, "purchase-order", "read", 1L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("无数据权限");
+    }
+
+    @Test
+    void shouldPass_whenBusinessModuleHasNoPermissionCatalogEntry() {
+        var registrar = new BusinessEntityRegistrar();
+        registrar.register("custom-order", TestBusinessEntity.class);
+        BusinessRecordEntityCatalog.setRegistrar(registrar);
+
+        var principal = new SecurityPrincipal(1L, "admin", "admin", true, List.of());
+
+        service.assertRecordAccessible(principal, "custom-order", "read", 1L);
+    }
+
+    @Test
+    void shouldRestorePreviousDataScopeContext_afterRecordAccess() {
+        DataScopeContext.set(9L, "previous-resource", "self", Set.of(9L));
+        DataScopeContext.Context previous = DataScopeContext.current();
+        when(permissionService.getUserDataScope(eq(1L), anyString(), eq("read"))).thenReturn("all");
+        var principal = new SecurityPrincipal(1L, "admin", "admin", true, List.of());
+
+        service.assertRecordAccessible(principal, "purchase-order", "read", 1L);
+
+        assertThat(DataScopeContext.current()).isEqualTo(previous);
+    }
+
+    @Test
+    void shouldThrowException_assertAttachmentAccessible_whenBoundRecordMissing() {
+        when(entityManager.find(any(), anyLong())).thenReturn(null);
+        var principal = new SecurityPrincipal(1L, "admin", "admin", true, List.of());
+
+        assertThatThrownBy(() -> service.assertAttachmentAccessible(principal, "purchase-order", "read", 1L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("无数据权限");
+    }
+
+    @Test
+    void shouldThrowException_whenUnboundAttachmentNotFound() {
+        when(attachmentBindingRepository.findByAttachmentIdAndDeletedFlagFalseOrderByModuleKeyAscRecordIdAscSortOrderAscIdAsc(
+                eq(1L))).thenReturn(List.of());
+        when(attachmentFileRepository.findByIdAndDeletedFlagFalse(eq(1L))).thenReturn(java.util.Optional.empty());
+        var principal = new SecurityPrincipal(1L, "admin", "admin", true, List.of());
+
+        assertThatThrownBy(() -> service.assertAttachmentAccessible(principal, "read", 1L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("附件不存在或已删除");
+    }
+
+    @Test
+    void shouldRejectUnboundAttachmentWhenPrincipalNull() {
+        AttachmentFile attachment = new AttachmentFile();
+        attachment.setId(1L);
+        attachment.setCreatedBy(1L);
+        when(attachmentBindingRepository.findByAttachmentIdAndDeletedFlagFalseOrderByModuleKeyAscRecordIdAscSortOrderAscIdAsc(
+                eq(1L))).thenReturn(List.of());
+        when(attachmentFileRepository.findByIdAndDeletedFlagFalse(eq(1L))).thenReturn(java.util.Optional.of(attachment));
+
+        assertThatThrownBy(() -> service.assertAttachmentAccessible(null, "read", 1L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("无附件访问权限");
+    }
+
+    @Test
+    void shouldPass_assertAttachmentAccessibleWithoutModule_whenBoundRecordAccessible() {
+        when(permissionService.getUserDataScope(eq(1L), anyString(), eq("read"))).thenReturn("all");
+        var principal = new SecurityPrincipal(1L, "admin", "admin", true, List.of());
+
+        service.assertAttachmentAccessible(principal, "read", 1L);
+    }
+
+    @Test
+    void shouldRejectAttachmentAccessWithoutModule_whenBindingModuleNotBusinessModule() {
+        AttachmentBinding binding = createBinding();
+        binding.setModuleKey("unknown-module");
+        when(attachmentBindingRepository.findByAttachmentIdAndDeletedFlagFalseOrderByModuleKeyAscRecordIdAscSortOrderAscIdAsc(
+                eq(1L))).thenReturn(List.of(binding));
+        var principal = new SecurityPrincipal(1L, "admin", "admin", true, List.of());
+
+        assertThatThrownBy(() -> service.assertAttachmentAccessible(principal, "read", 1L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("无数据权限");
+    }
+
+    @Test
+    void shouldRejectAttachmentAccessWithoutModule_whenBoundRecordMissing() {
+        when(entityManager.find(any(), anyLong())).thenReturn(null);
+        var principal = new SecurityPrincipal(1L, "admin", "admin", true, List.of());
+
+        assertThatThrownBy(() -> service.assertAttachmentAccessible(principal, "read", 1L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("无数据权限");
+    }
+
+    @Test
+    void shouldRejectAttachmentAccessWithoutModule_whenBoundRecordDeleted() {
+        TestBusinessEntity deletedEntity = createTestEntity();
+        deletedEntity.setDeletedFlag(true);
+        when(entityManager.find(any(), anyLong())).thenReturn(deletedEntity);
+        var principal = new SecurityPrincipal(1L, "admin", "admin", true, List.of());
+
+        assertThatThrownBy(() -> service.assertAttachmentAccessible(principal, "read", 1L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("无数据权限");
+    }
+
+    @Test
+    void shouldAllowRecordAccessWhenAuthenticationDetailsAreNotApiKey() {
+        var principal = new SecurityPrincipal(1L, "admin", "admin", true, List.of());
+        var auth = new UsernamePasswordAuthenticationToken(principal, null, principal.getAuthorities());
+        auth.setDetails("web-session");
+        SecurityContextHolder.getContext().setAuthentication(auth);
+
+        service.assertRecordAccessible(principal, "purchase-order", "read", 1L);
+    }
+
+    @Test
+    void shouldAllowRecordAccessWhenApiKeyAllowsResourceAndAction() {
+        var principal = new SecurityPrincipal(1L, "admin", "admin", true, List.of());
+        var auth = new UsernamePasswordAuthenticationToken(principal, null, principal.getAuthorities());
+        auth.setDetails(new ApiKeyAuthenticationDetails(null, List.of("purchase-order"), List.of("read")));
+        SecurityContextHolder.getContext().setAuthentication(auth);
+
+        service.assertRecordAccessible(principal, "purchase-order", "read", 1L);
+    }
+
+    @Test
+    void shouldRejectRecordAccessWhenApiKeyResourcesMissing() {
+        var principal = new SecurityPrincipal(1L, "admin", "admin", true, List.of());
+        var auth = new UsernamePasswordAuthenticationToken(principal, null, principal.getAuthorities());
+        auth.setDetails(new ApiKeyAuthenticationDetails(null, null, List.of("read")));
+        SecurityContextHolder.getContext().setAuthentication(auth);
+
+        assertThatThrownBy(() -> service.assertRecordAccessible(principal, "purchase-order", "read", 1L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("无数据权限");
+    }
+
+    @Test
+    void shouldRejectRecordAccessWhenApiKeyActionsMissing() {
+        var principal = new SecurityPrincipal(1L, "admin", "admin", true, List.of());
+        var auth = new UsernamePasswordAuthenticationToken(principal, null, principal.getAuthorities());
+        auth.setDetails(new ApiKeyAuthenticationDetails(null, List.of("purchase-order"), null));
+        SecurityContextHolder.getContext().setAuthentication(auth);
+
+        assertThatThrownBy(() -> service.assertRecordAccessible(principal, "purchase-order", "read", 1L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("无数据权限");
+    }
+
+    @Test
+    void shouldRejectRecordAccessWhenApiKeyLacksAction() {
+        var principal = new SecurityPrincipal(1L, "admin", "admin", true, List.of());
+        var auth = new UsernamePasswordAuthenticationToken(principal, null, principal.getAuthorities());
+        auth.setDetails(new ApiKeyAuthenticationDetails(null, List.of("purchase-order"), List.of("update")));
+        SecurityContextHolder.getContext().setAuthentication(auth);
+
+        assertThatThrownBy(() -> service.assertRecordAccessible(principal, "purchase-order", "read", 1L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("无数据权限");
+    }
+
     private static TestBusinessEntity createTestEntity() {
         return new TestBusinessEntity();
     }

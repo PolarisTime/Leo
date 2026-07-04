@@ -59,12 +59,19 @@ public class HttpIdempotencyFilter extends OncePerRequestFilter {
         String fingerprint = fingerprint(request, body);
         HttpIdempotencyService.Decision decision =
                 idempotencyService.start(scopedKey, fingerprint, DEFAULT_TTL);
+        HttpIdempotencyService.Status status = decision.status();
 
-        switch (decision.status()) {
-            case ACQUIRED -> continueRequest(replayableRequest, response, filterChain, scopedKey, fingerprint);
-            case DUPLICATE_PENDING -> writeFailure(request, response, "请勿重复提交，请等待当前请求处理完成");
-            case DUPLICATE_COMPLETED -> writeSuccess(response);
-            case PARAMETER_MISMATCH -> writeFailure(request, response, "幂等键已用于不同请求，请重新生成幂等键后再提交");
+        if (status == null) {
+            throw new NullPointerException("decision.status");
+        }
+        if (status == HttpIdempotencyService.Status.ACQUIRED) {
+            continueRequest(replayableRequest, response, filterChain, scopedKey, fingerprint);
+        } else if (status == HttpIdempotencyService.Status.DUPLICATE_PENDING) {
+            writeFailure(request, response, "请勿重复提交，请等待当前请求处理完成");
+        } else if (status == HttpIdempotencyService.Status.DUPLICATE_COMPLETED) {
+            writeSuccess(response);
+        } else {
+            writeFailure(request, response, "幂等键已用于不同请求，请重新生成幂等键后再提交");
         }
     }
 

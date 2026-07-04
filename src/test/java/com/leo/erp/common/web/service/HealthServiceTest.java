@@ -3,10 +3,14 @@ package com.leo.erp.common.web.service;
 import com.leo.erp.common.web.dto.HealthCheckResponse;
 import com.leo.erp.common.web.dto.HealthResponse;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
+import org.slf4j.MDC;
 import org.springframework.dao.DataAccessException;
 import org.springframework.data.redis.connection.RedisConnection;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
+
+import java.io.File;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
@@ -35,6 +39,44 @@ class HealthServiceTest {
     }
 
     @Test
+    void healthShouldIncludeTraceIdFromMdc() {
+        JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+        when(jdbcTemplate.queryForObject("SELECT 1", Integer.class)).thenReturn(1);
+        RedisConnectionFactory redisFactory = mock(RedisConnectionFactory.class);
+        RedisConnection redisConnection = mock(RedisConnection.class);
+        when(redisFactory.getConnection()).thenReturn(redisConnection);
+        HealthService service = new HealthService(jdbcTemplate, redisFactory, "leo-test", "0.2.0");
+        MDC.put("traceId", "trace-123");
+        try {
+            HealthResponse response = service.health();
+
+            assertThat(response.traceId()).isEqualTo("trace-123");
+        } finally {
+            MDC.remove("traceId");
+        }
+    }
+
+    @Test
+    void healthShouldReturnDegradedWhenDiskFreeSpaceWarns() {
+        JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+        when(jdbcTemplate.queryForObject("SELECT 1", Integer.class)).thenReturn(1);
+        RedisConnectionFactory redisFactory = mock(RedisConnectionFactory.class);
+        RedisConnection redisConnection = mock(RedisConnection.class);
+        when(redisFactory.getConnection()).thenReturn(redisConnection);
+        HealthService service = new HealthService(jdbcTemplate, redisFactory, "leo", "0.1.0");
+
+        try (var files = Mockito.mockConstruction(File.class, (file, context) -> {
+            when(file.getFreeSpace()).thenReturn(512L * 1024 * 1024);
+            when(file.getTotalSpace()).thenReturn(10L * 1024 * 1024 * 1024);
+        })) {
+            HealthResponse response = service.health();
+
+            assertThat(response.status()).isEqualTo("DEGRADED");
+            assertThat(response.disk().status()).isEqualTo("WARN");
+        }
+    }
+
+    @Test
     void healthShouldReturnDegradedWhenDatabaseDown() {
         JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
         when(jdbcTemplate.queryForObject("SELECT 1", Integer.class))
@@ -51,6 +93,22 @@ class HealthServiceTest {
         assertThat(response.status()).isEqualTo("DEGRADED");
         assertThat(response.db().isUp()).isFalse();
         assertThat(response.redis().isUp()).isTrue();
+    }
+
+    @Test
+    void healthShouldReturnDegradedWhenRedisDown() {
+        JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+        when(jdbcTemplate.queryForObject("SELECT 1", Integer.class)).thenReturn(1);
+        RedisConnectionFactory redisFactory = mock(RedisConnectionFactory.class);
+        when(redisFactory.getConnection()).thenThrow(mock(DataAccessException.class));
+
+        HealthService service = new HealthService(jdbcTemplate, redisFactory, "leo", "0.1.0");
+
+        HealthResponse response = service.health();
+
+        assertThat(response.status()).isEqualTo("DEGRADED");
+        assertThat(response.db().isUp()).isTrue();
+        assertThat(response.redis().isUp()).isFalse();
     }
 
     @Test

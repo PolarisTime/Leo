@@ -149,4 +149,24 @@ class AuthTokenCookieSupportTest {
         String result = authTokenCookieSupport.resolveRefreshToken(request, null);
         assertThat(result).isNull();
     }
+
+    @Test
+    void shouldReturnNullWhenFallbackIsBlankAndNoCookieToken() {
+        when(request.getCookies()).thenReturn(null);
+
+        String result = authTokenCookieSupport.resolveRefreshToken(request, "  ");
+
+        assertThat(result).isNull();
+    }
+
+    @Test
+    void shouldSkipCookieWithNullValue() {
+        when(cookieProperties.refreshTokenName()).thenReturn("refresh_token");
+        Cookie cookie = new Cookie("refresh_token", null);
+        when(request.getCookies()).thenReturn(new Cookie[]{cookie});
+
+        String result = authTokenCookieSupport.resolveRefreshToken(request, "fallback-token");
+
+        assertThat(result).isEqualTo("fallback-token");
+    }
 }

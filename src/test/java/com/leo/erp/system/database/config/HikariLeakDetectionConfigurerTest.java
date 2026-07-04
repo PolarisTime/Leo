@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.ObjectProvider;
 
 import javax.sql.DataSource;
+import java.sql.SQLException;
 
 import static org.mockito.Mockito.*;
 
@@ -58,6 +59,38 @@ class HikariLeakDetectionConfigurerTest {
     void shouldSkip_whenDataSourceIsNotHikari() throws Exception {
         var dataSource = mock(DataSource.class);
         when(dataSource.isWrapperFor(HikariDataSource.class)).thenReturn(false);
+
+        var dataSourceProvider = mock(ObjectProvider.class);
+        when(dataSourceProvider.getIfAvailable()).thenReturn(dataSource);
+        var configurer = new HikariLeakDetectionConfigurer(dataSourceProvider, 5000);
+
+        configurer.configureLeakDetection();
+
+        verify(dataSource).isWrapperFor(HikariDataSource.class);
+    }
+
+    @Test
+    void shouldConfigure_whenDataSourceWrapsHikari() throws Exception {
+        var hikari = mock(HikariDataSource.class);
+        var configMXBean = mock(com.zaxxer.hikari.HikariConfigMXBean.class);
+        when(hikari.getHikariConfigMXBean()).thenReturn(configMXBean);
+        var dataSource = mock(DataSource.class);
+        when(dataSource.isWrapperFor(HikariDataSource.class)).thenReturn(true);
+        when(dataSource.unwrap(HikariDataSource.class)).thenReturn(hikari);
+
+        var dataSourceProvider = mock(ObjectProvider.class);
+        when(dataSourceProvider.getIfAvailable()).thenReturn(dataSource);
+        var configurer = new HikariLeakDetectionConfigurer(dataSourceProvider, 6000);
+
+        configurer.configureLeakDetection();
+
+        verify(configMXBean).setLeakDetectionThreshold(6000);
+    }
+
+    @Test
+    void shouldSkip_whenWrappedDataSourceCannotBeUnwrapped() throws Exception {
+        var dataSource = mock(DataSource.class);
+        when(dataSource.isWrapperFor(HikariDataSource.class)).thenThrow(new SQLException("unwrap failed"));
 
         var dataSourceProvider = mock(ObjectProvider.class);
         when(dataSourceProvider.getIfAvailable()).thenReturn(dataSource);

@@ -2,6 +2,7 @@ package com.leo.erp.finance.payment.service;
 
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
+import com.leo.erp.common.service.CrudRuntimeSettings;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.finance.payment.domain.entity.Payment;
@@ -20,6 +21,10 @@ import com.leo.erp.statement.freight.service.FreightStatementQueryService;
 import com.leo.erp.statement.supplier.domain.entity.SupplierStatement;
 import com.leo.erp.statement.supplier.service.SupplierStatementQueryService;
 import org.junit.jupiter.api.Test;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
@@ -937,6 +942,28 @@ class PaymentServiceTest {
     }
 
     @Test
+    void shouldValidateChangedUniquePaymentNoOnUpdate() {
+        PaymentRepository paymentRepository = mock(PaymentRepository.class);
+        Payment existing = buildPaymentEntity(1L, "FK-001");
+        existing.setDeletedFlag(false);
+        when(paymentRepository.existsByPaymentNoAndDeletedFlagFalse("FK-NEW")).thenReturn(false);
+
+        PaymentService service = service(
+                paymentRepository, mock(PaymentAllocationRepository.class),
+                new SnowflakeIdGenerator(0L), mock(PaymentMapper.class),
+                mock(SupplierStatementQueryService.class), mock(FreightStatementQueryService.class),
+                mock(ApplicationEventPublisher.class), mock(ResourceRecordAccessGuard.class),
+                mock(WorkflowTransitionGuard.class)
+        );
+
+        ReflectionTestUtils.invokeMethod(service, "validateUpdate", existing, new PaymentRequest(
+                "FK-NEW", "供应商", "供应商A", null,
+                LocalDate.of(2026, 4, 26), "银行转账",
+                new BigDecimal("100.00"), "草稿", "财务A", null, List.of()
+        ));
+    }
+
+    @Test
     void shouldReturnDetailForExistingPayment() {
         PaymentRepository paymentRepository = mock(PaymentRepository.class);
         PaymentMapper paymentMapper = mock(PaymentMapper.class);
@@ -962,6 +989,46 @@ class PaymentServiceTest {
 
         assertThat(result).isNotNull();
         assertThat(result.paymentNo()).isEqualTo("FK-001");
+    }
+
+    @Test
+    void shouldReturnDeletedPaymentDetailForAdminWhenRuntimeAllows() {
+        PaymentRepository paymentRepository = mock(PaymentRepository.class);
+        PaymentMapper paymentMapper = mock(PaymentMapper.class);
+        Payment deleted = buildPaymentEntity(1L, "FK-DELETED");
+        deleted.setDeletedFlag(true);
+        when(paymentRepository.findById(1L)).thenReturn(Optional.of(deleted));
+        when(paymentMapper.toResponse(deleted)).thenReturn(
+                new PaymentResponse(1L, "FK-DELETED", "供应商", "供应商A", null,
+                        LocalDate.of(2026, 4, 26), "银行转账", new BigDecimal("100.00"),
+                        "已删除", "财务A", null, null)
+        );
+
+        PaymentService service = service(
+                paymentRepository, mock(PaymentAllocationRepository.class),
+                new SnowflakeIdGenerator(0L), paymentMapper,
+                mock(SupplierStatementQueryService.class), mock(FreightStatementQueryService.class),
+                mock(ApplicationEventPublisher.class), mock(ResourceRecordAccessGuard.class),
+                mock(WorkflowTransitionGuard.class)
+        );
+        CrudRuntimeSettings runtimeSettings = mock(CrudRuntimeSettings.class);
+        when(runtimeSettings.shouldAdminSeeDeletedRecords()).thenReturn(true);
+        ReflectionTestUtils.invokeMethod(service, "setCrudRuntimeSettings", runtimeSettings);
+
+        try {
+            SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
+                    "admin",
+                    null,
+                    List.of(new SimpleGrantedAuthority("ROLE_ADMIN"))
+            ));
+
+            PaymentResponse result = service.detail(1L);
+
+            assertThat(result.paymentNo()).isEqualTo("FK-DELETED");
+            verify(paymentRepository).findById(1L);
+        } finally {
+            SecurityContextHolder.clearContext();
+        }
     }
 
     @Test

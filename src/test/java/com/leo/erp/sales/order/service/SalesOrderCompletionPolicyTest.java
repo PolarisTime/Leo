@@ -27,6 +27,11 @@ class SalesOrderCompletionPolicyTest {
         assertThat(policy.shouldSyncAfterSave(null)).isFalse();
     }
 
+    @Test
+    void shouldSkipOrderWithNullStatus() {
+        assertThat(policy.shouldSyncAfterSave(order(null))).isFalse();
+    }
+
     private SalesOrder order(String status) {
         SalesOrder order = new SalesOrder();
         order.setStatus(status);

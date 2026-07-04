@@ -12,10 +12,17 @@ import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.support.AfterCommitExecutor;
 import com.leo.erp.security.jwt.AccessTokenBlacklistService;
 import com.leo.erp.security.jwt.SessionActivityService;
+import jakarta.persistence.criteria.CriteriaBuilder;
+import jakarta.persistence.criteria.CriteriaQuery;
+import jakarta.persistence.criteria.Expression;
+import jakarta.persistence.criteria.Path;
+import jakarta.persistence.criteria.Predicate;
+import jakarta.persistence.criteria.Root;
 import org.junit.jupiter.api.Test;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 
 import java.lang.reflect.Proxy;
 import java.time.LocalDateTime;
@@ -26,7 +33,9 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class RefreshTokenAdminServiceExtendedTest {
@@ -193,6 +202,9 @@ class RefreshTokenAdminServiceExtendedTest {
                         if (args.length == 2 && args[1] instanceof Pageable pageable) {
                             yield new PageImpl<>(sessions, pageable, sessions.size());
                         }
+                        if (args.length == 1 && args[0] instanceof Specification<?> spec) {
+                            executeRefreshTokenSpec((Specification<RefreshTokenSession>) spec);
+                        }
                         yield sessions;
                     }
                     case "findById" -> sessions.stream()
@@ -244,6 +256,24 @@ class RefreshTokenAdminServiceExtendedTest {
                 if (action != null) action.run();
             }
         };
+    }
+
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private static void executeRefreshTokenSpec(Specification<RefreshTokenSession> spec) {
+        Root<RefreshTokenSession> root = mock(Root.class);
+        CriteriaQuery<?> query = mock(CriteriaQuery.class);
+        CriteriaBuilder criteriaBuilder = mock(CriteriaBuilder.class);
+        Path path = mock(Path.class);
+        Predicate predicate = mock(Predicate.class);
+        when(root.get(any(String.class))).thenReturn(path);
+        when(criteriaBuilder.isFalse(any(Expression.class))).thenReturn(predicate);
+        when(criteriaBuilder.isNull(any(Expression.class))).thenReturn(predicate);
+        when(criteriaBuilder.and(org.mockito.ArgumentMatchers.<Predicate[]>any())).thenReturn(predicate);
+        when(criteriaBuilder.and(any(Predicate.class), any(Predicate.class))).thenReturn(predicate);
+
+        spec.toPredicate(root, query, criteriaBuilder);
+
+        verify(root, org.mockito.Mockito.atLeastOnce()).get(any(String.class));
     }
 
     private RefreshTokenSession session(Long id, Long userId, String tokenId) {

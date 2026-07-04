@@ -20,6 +20,7 @@ class ReplayableBodyHttpServletRequestTest {
 
         ServletInputStream first = request.getInputStream();
         assertThat(first.isReady()).isTrue();
+        first.setReadListener(null);
         assertThat(first.isFinished()).isFalse();
         assertThat((char) first.read()).isEqualTo('a');
         assertThat(first.readAllBytes()).isEqualTo("bc".getBytes(StandardCharsets.UTF_8));

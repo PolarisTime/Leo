@@ -11,6 +11,8 @@ import java.io.StringWriter;
 import java.math.BigDecimal;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 class ScaledBigDecimalSerializerTest {
 
@@ -46,6 +48,18 @@ class ScaledBigDecimalSerializerTest {
         SerializerProvider provider = new ObjectMapper().getSerializerProvider();
 
         JsonSerializer<?> result = serializer.createContextual(provider, null);
+        assertThat(result).isSameAs(serializer);
+    }
+
+    @Test
+    void createContextual_withNullPropertyName_returnsSelf() throws JsonMappingException {
+        ScaledBigDecimalSerializer serializer = new ScaledBigDecimalSerializer();
+        SerializerProvider provider = new ObjectMapper().getSerializerProvider();
+        BeanProperty property = mock(BeanProperty.class);
+        when(property.getName()).thenReturn(null);
+
+        JsonSerializer<?> result = serializer.createContextual(provider, property);
+
         assertThat(result).isSameAs(serializer);
     }
 

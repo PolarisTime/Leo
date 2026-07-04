@@ -149,14 +149,14 @@ public class UploadRuleService implements PageUploadRuleQueryService {
     private String resolveDefaultRenamePattern() {
         return repository.findByRuleCodeAndDeletedFlagFalse(LEGACY_PAGE_UPLOAD_RULE_CODE)
                 .map(UploadRule::getRenamePattern)
-                .filter(pattern -> pattern != null && !pattern.isBlank())
+                .filter(pattern -> !pattern.isBlank())
                 .orElse(DEFAULT_RENAME_PATTERN);
     }
 
     private String resolveDefaultRemark(String moduleKey) {
         return repository.findByRuleCodeAndDeletedFlagFalse(LEGACY_PAGE_UPLOAD_RULE_CODE)
                 .map(UploadRule::getRemark)
-                .filter(remark -> remark != null && !remark.isBlank())
+                .filter(remark -> !remark.isBlank())
                 .orElse("适用于" + resolveModuleName(moduleKey) + "页面选择文件和剪贴板粘贴上传");
     }
 

@@ -14,24 +14,47 @@ import com.leo.erp.common.support.PrecisionConstants;
 
 import java.io.IOException;
 import java.util.UUID;
+import java.util.regex.Pattern;
 
 @Component
-@Order(Ordered.HIGHEST_PRECEDENCE)
+@Order(TraceIdFilter.TRACE_ID_FILTER_ORDER)
 public class TraceIdFilter extends OncePerRequestFilter {
 
     public static final String TRACE_ID_HEADER = "X-Trace-Id";
+    static final int TRACE_ID_FILTER_ORDER = Ordered.HIGHEST_PRECEDENCE + 2;
     static final String MDC_KEY = "traceId";
+    private static final int MAX_TRACE_ID_LENGTH = 128;
+    private static final Pattern SAFE_TRACE_ID = Pattern.compile("[A-Za-z0-9._:-]+");
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
             throws ServletException, IOException {
-        String traceId = request.getHeader(TRACE_ID_HEADER);
-        if (traceId == null || traceId.isBlank()) {
+        String existingTraceId = normalizeTraceId(MDC.get(MDC_KEY));
+        if (existingTraceId != null) {
+            response.setHeader(TRACE_ID_HEADER, existingTraceId);
+            filterChain.doFilter(request, response);
+            return;
+        }
+
+        String traceId = normalizeTraceId(request.getHeader(TRACE_ID_HEADER));
+        if (traceId == null) {
             traceId = UUID.randomUUID().toString().substring(0, PrecisionConstants.ID_PREFIX_LENGTH);
         }
+
         response.setHeader(TRACE_ID_HEADER, traceId);
         try (var ignored = MDC.putCloseable(MDC_KEY, traceId)) {
             filterChain.doFilter(request, response);
         }
+    }
+
+    private static String normalizeTraceId(String traceId) {
+        if (traceId == null) {
+            return null;
+        }
+        String normalized = traceId.trim();
+        if (normalized.isEmpty() || normalized.length() > MAX_TRACE_ID_LENGTH) {
+            return null;
+        }
+        return SAFE_TRACE_ID.matcher(normalized).matches() ? normalized : null;
     }
 }

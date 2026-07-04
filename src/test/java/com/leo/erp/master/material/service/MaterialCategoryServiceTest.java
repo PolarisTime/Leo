@@ -364,6 +364,39 @@ class MaterialCategoryServiceTest {
     }
 
     @Test
+    void shouldNormalizeBlankStatusToNormal() {
+        var repository = (MaterialCategoryRepository) Proxy.newProxyInstance(
+                MaterialCategoryRepository.class.getClassLoader(),
+                new Class[]{MaterialCategoryRepository.class},
+                (proxy, method, args) -> switch (method.getName()) {
+                    case "findByCategoryCodeAndDeletedFlagFalse" -> Optional.empty();
+                    case "save" -> args[0];
+                    case "toString" -> "MaterialCategoryRepositoryStub";
+                    case "hashCode" -> System.identityHashCode(proxy);
+                    case "equals" -> proxy == args[0];
+                    default -> throw new UnsupportedOperationException(method.getName());
+                }
+        );
+        var mapper = (MaterialCategoryMapper) Proxy.newProxyInstance(
+                MaterialCategoryMapper.class.getClassLoader(),
+                new Class[]{MaterialCategoryMapper.class},
+                (proxy, method, args) -> switch (method.getName()) {
+                    case "toResponse" -> toResponse((MaterialCategory) args[0]);
+                    case "toString" -> "MaterialCategoryMapperStub";
+                    case "hashCode" -> System.identityHashCode(proxy);
+                    case "equals" -> proxy == args[0];
+                    default -> throw new UnsupportedOperationException(method.getName());
+                }
+        );
+        var service = new MaterialCategoryService(repository, new SnowflakeIdGenerator(1), mapper);
+
+        var request = new MaterialCategoryRequest("C001", "钢材", null, null, null, null, "  ", null);
+        var result = service.create(request);
+
+        assertThat(result.status()).isEqualTo("正常");
+    }
+
+    @Test
     void shouldThrowException_whenCategoryNameIsNull() {
         var repository = (MaterialCategoryRepository) Proxy.newProxyInstance(
                 MaterialCategoryRepository.class.getClassLoader(),
@@ -421,6 +454,36 @@ class MaterialCategoryServiceTest {
         } catch (java.lang.reflect.InvocationTargetException e) {
             assertThat(e.getCause()).isInstanceOf(BusinessException.class);
         }
+        try {
+            required.invoke(service, "  ", "字段");
+        } catch (java.lang.reflect.InvocationTargetException e) {
+            assertThat(e.getCause()).isInstanceOf(BusinessException.class);
+        }
+    }
+
+    @Test
+    void shouldRejectTolerancePercentBelowZeroOrAboveOneHundred() {
+        var repository = (MaterialCategoryRepository) Proxy.newProxyInstance(
+                MaterialCategoryRepository.class.getClassLoader(),
+                new Class[]{MaterialCategoryRepository.class},
+                (proxy, method, args) -> switch (method.getName()) {
+                    case "findByCategoryCodeAndDeletedFlagFalse" -> Optional.empty();
+                    case "toString" -> "MaterialCategoryRepositoryStub";
+                    case "hashCode" -> System.identityHashCode(proxy);
+                    case "equals" -> proxy == args[0];
+                    default -> throw new UnsupportedOperationException(method.getName());
+                }
+        );
+        var service = new MaterialCategoryService(repository, new SnowflakeIdGenerator(1), null);
+
+        assertThatThrownBy(() -> service.create(new MaterialCategoryRequest(
+                "C001", "钢材", 1, false, new BigDecimal("-0.01"), null, "正常", null)))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("采购过磅上差百分比必须在0到100之间");
+        assertThatThrownBy(() -> service.create(new MaterialCategoryRequest(
+                "C001", "钢材", 1, false, null, new BigDecimal("100.01"), "正常", null)))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("采购过磅下差百分比必须在0到100之间");
     }
 
     private static MaterialCategory createCategory(Long id, String code) {

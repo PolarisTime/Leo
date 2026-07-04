@@ -5,6 +5,7 @@ import com.leo.erp.security.support.SecurityPrincipal;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 
@@ -108,6 +109,19 @@ class WorkflowTransitionGuardTest {
     }
 
     @Test
+    void shouldThrow_whenPrincipalHasUnexpectedType() {
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken("admin", null, List.of())
+        );
+        WorkflowTransitionGuard guard = new WorkflowTransitionGuard(new ModulePermissionGuard(permissionService));
+
+        assertThatThrownBy(() -> guard.assertAuditPermissionForProtectedValue(
+                "order", "draft", "audited", "audited"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("未登录");
+    }
+
+    @Test
     void shouldWorkWithVarargsProtectedValues() {
         WorkflowTransitionGuard guard = new WorkflowTransitionGuard(new ModulePermissionGuard(permissionService));
         assertThatCode(() -> guard.assertAuditPermissionForProtectedValue(
@@ -120,6 +134,22 @@ class WorkflowTransitionGuardTest {
         WorkflowTransitionGuard guard = new WorkflowTransitionGuard(new ModulePermissionGuard(permissionService));
         assertThatCode(() -> guard.assertAuditPermissionForProtectedValue(
                 "order", null, "audited", "audited"))
+                .doesNotThrowAnyException();
+    }
+
+    @Test
+    void shouldTrimValuesBeforeComparing() {
+        WorkflowTransitionGuard guard = new WorkflowTransitionGuard(new ModulePermissionGuard(permissionService));
+        assertThatCode(() -> guard.assertAuditPermissionForProtectedValue(
+                "order", " audited ", "audited", "audited"))
+                .doesNotThrowAnyException();
+    }
+
+    @Test
+    void shouldIgnoreBlankProtectedValues() {
+        WorkflowTransitionGuard guard = new WorkflowTransitionGuard(new ModulePermissionGuard(permissionService));
+        assertThatCode(() -> guard.assertAuditPermissionForProtectedValue(
+                "order", "draft", "completed", List.of(" ", "")))
                 .doesNotThrowAnyException();
     }
 }

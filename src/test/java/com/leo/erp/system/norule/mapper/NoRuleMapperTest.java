@@ -56,4 +56,9 @@ class NoRuleMapperTest {
         assertThat(response).isNotNull();
         assertThat(response.remark()).isNull();
     }
+
+    @Test
+    void shouldReturnNullWhenEntityIsNull() {
+        assertThat(mapper.toResponse(null)).isNull();
+    }
 }

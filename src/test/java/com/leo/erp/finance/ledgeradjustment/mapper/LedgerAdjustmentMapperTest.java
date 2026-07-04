@@ -40,4 +40,9 @@ class LedgerAdjustmentMapperTest {
         assertThat(response.amount()).isEqualByComparingTo("100.00");
         assertThat(response.status()).isEqualTo("已审核");
     }
+
+    @Test
+    void shouldReturnNullWhenEntityIsNull() {
+        assertThat(mapper.toResponse(null)).isNull();
+    }
 }

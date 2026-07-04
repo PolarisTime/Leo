@@ -37,6 +37,12 @@ spring:
         # 生产环境不需要 SQL 格式化输出
         format_sql: false
 
+management:
+  tracing:
+    sampling:
+      # 生产默认按 10% 采样；排障时可临时通过环境变量提高。
+      probability: ${LEO_TRACING_SAMPLING_PROBABILITY:0.1}
+
 logging:
   level:
     com.leo.erp.system.web.HealthPageController: WARN

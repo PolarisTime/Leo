@@ -534,6 +534,74 @@ class SalesOutboundServiceTest {
     }
 
     @Test
+    void shouldAllowChangedOutboundNoWhenNoDuplicateExists() {
+        SalesOutboundRepository repository = mock(SalesOutboundRepository.class);
+        SalesOutboundService service = createService(repository, mock(SalesOutboundMapper.class),
+                mock(TradeItemMaterialSupport.class), mock(WarehouseSelectionSupport.class),
+                mock(SalesOrderItemQueryService.class));
+        SalesOutbound existing = new SalesOutbound();
+        existing.setOutboundNo("SOO-OLD");
+        SalesOutboundRequest request = new SalesOutboundRequest(
+                "SOO-NEW", null, "C", "P", "W",
+                LocalDate.now(), "草稿", null,
+                List.of(new SalesOutboundItemRequest(
+                        null, 9001L, "M1", "宝钢", "盘螺", "HRB400", "10", null, "吨",
+                        "W", null, 1, "件",
+                        new BigDecimal("2.000"), 1, new BigDecimal("2.000"),
+                        new BigDecimal("3000.00"), new BigDecimal("6000.00")
+                ))
+        );
+        when(repository.existsByOutboundNoAndDeletedFlagFalse("SOO-NEW")).thenReturn(false);
+
+        service.validateUpdate(existing, request);
+
+        verify(repository).existsByOutboundNoAndDeletedFlagFalse("SOO-NEW");
+    }
+
+    @Test
+    void shouldTreatBlankHeaderSourceNoWithSourceItemAsImportedWhenUpdating() {
+        SalesOutboundRepository repository = mock(SalesOutboundRepository.class);
+        SalesOutboundMapper mapper = mock(SalesOutboundMapper.class);
+        TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
+        WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
+        SalesOrderItemQueryService salesOrderItemQueryService = mock(SalesOrderItemQueryService.class);
+        SalesOutboundService service = createService(repository, mapper, materialSupport,
+                warehouseSelectionSupport, salesOrderItemQueryService);
+
+        SalesOutbound existing = buildExistingOutbound(7003L, "SOO-BLANK-SOURCE", "   ");
+        existing.getItems().clear();
+        SalesOutboundItem existingItem = buildExistingOutboundItem(8003L, existing, 9008L);
+        existing.setItems(new ArrayList<>(List.of(existingItem)));
+        SalesOutboundRequest request = new SalesOutboundRequest(
+                "FORGED", "FORGED-SO", "篡改客户", "篡改项目", "篡改仓库",
+                LocalDate.of(2026, 4, 30), "草稿", null,
+                List.of(new SalesOutboundItemRequest(
+                        8003L, null, null, "M1", "宝钢", "盘螺", "HRB400", "10", null, "吨",
+                        "篡改仓库", "B1", 2, "件",
+                        new BigDecimal("2.249"), 0, new BigDecimal("2.248"),
+                        new BigDecimal("3111.00"), null
+                ))
+        );
+        SalesOrderItem sourceSalesOrderItem = buildSalesOrderItem(9008L, "SO-BLANK-SOURCE");
+
+        when(repository.findByIdAndDeletedFlagFalse(7003L)).thenReturn(Optional.of(existing));
+        when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(materialMap("M1"));
+        when(materialSupport.normalizeBatchNo(any(), eq("B1"), eq(1), eq(true))).thenReturn("B1");
+        when(warehouseSelectionSupport.normalizeWarehouseName("一号码头", 1, true)).thenReturn("一号码头");
+        when(salesOrderItemQueryService.findActiveByIdIn(anyCollection())).thenReturn(List.of(sourceSalesOrderItem));
+        when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        stubMapper(mapper);
+
+        service.update(7003L, request);
+
+        assertThat(existing.getOutboundNo()).isEqualTo("SOO-BLANK-SOURCE");
+        assertThat(existing.getSalesOrderNo()).isEqualTo("SO-BLANK-SOURCE");
+        assertThat(existing.getCustomerName()).isEqualTo("客户A");
+        assertThat(existing.getItems()).singleElement()
+                .satisfies(item -> assertThat(item.getSourceSalesOrderItemId()).isEqualTo(9008L));
+    }
+
+    @Test
     void shouldResolveOutboundWeightFromPieceWeightRecords() {
         SalesOutboundRepository repository = mock(SalesOutboundRepository.class);
         SalesOutboundMapper mapper = mock(SalesOutboundMapper.class);
@@ -1076,6 +1144,257 @@ class SalesOutboundServiceTest {
             assertThat(item.getUnitPrice()).isEqualByComparingTo("3111.00");
             assertThat(item.getAmount()).isEqualByComparingTo("18666.00");
         });
+    }
+
+    @Test
+    void shouldPageSalesOutboundsWithFilter() {
+        SalesOutboundRepository repository = mock(SalesOutboundRepository.class);
+        SalesOutboundMapper mapper = mock(SalesOutboundMapper.class);
+        SalesOutboundService service = createService(
+                repository,
+                mapper,
+                mock(TradeItemMaterialSupport.class),
+                mock(WarehouseSelectionSupport.class),
+                mock(SalesOrderItemQueryService.class)
+        );
+        SalesOutbound outbound = buildExistingOutbound(7005L, "SOO-PAGE", "SO-PAGE");
+        outbound.setTotalWeight(new BigDecimal("2.000"));
+        outbound.setTotalAmount(new BigDecimal("6000.00"));
+        when(repository.findAll(
+                any(org.springframework.data.jpa.domain.Specification.class),
+                any(org.springframework.data.domain.Pageable.class)
+        )).thenReturn(new org.springframework.data.domain.PageImpl<>(List.of(outbound)));
+        stubMapper(mapper);
+
+        var page = service.page(
+                com.leo.erp.common.api.PageQuery.of(0, 20, "outboundDate", "desc"),
+                com.leo.erp.common.api.PageFilter.of(
+                        "SOO",
+                        "客户A",
+                        "项目A",
+                        9L,
+                        StatusConstants.DRAFT,
+                        LocalDate.of(2026, 4, 1),
+                        LocalDate.of(2026, 4, 30)
+                )
+        );
+
+        assertThat(page.getContent()).singleElement().satisfies(response -> {
+            assertThat(response.outboundNo()).isEqualTo("SOO-PAGE");
+            assertThat(response.salesOrderNo()).isEqualTo("SO-PAGE");
+        });
+        verify(repository).findAll(
+                any(org.springframework.data.jpa.domain.Specification.class),
+                any(org.springframework.data.domain.Pageable.class)
+        );
+    }
+
+    @Test
+    void shouldAllowRegularUpdateWhenOutboundWasNotImported() {
+        SalesOutboundRepository repository = mock(SalesOutboundRepository.class);
+        SalesOutboundMapper mapper = mock(SalesOutboundMapper.class);
+        TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
+        WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
+        SalesOrderItemQueryService salesOrderItemQueryService = mock(SalesOrderItemQueryService.class);
+        SalesOutboundService service = createService(repository, mapper, materialSupport,
+                warehouseSelectionSupport, salesOrderItemQueryService);
+        SalesOutbound existing = buildExistingOutbound(7006L, "SOO-PLAIN", null);
+        SalesOutboundRequest request = new SalesOutboundRequest(
+                "FORGED-OUTBOUND-NO", "FORGED-SO", "客户B", "项目B", "二号码头",
+                LocalDate.of(2026, 5, 3), StatusConstants.DRAFT, "普通更新备注",
+                List.of(new SalesOutboundItemRequest(
+                        "SO-PLAIN-SRC", 9011L, "M1", "宝钢", "盘螺", "HRB400", "10", null, "吨",
+                        "二号码头", "B1", 2, "件",
+                        new BigDecimal("2.000"), 1, new BigDecimal("4.000"),
+                        new BigDecimal("3000.00"), null
+                ))
+        );
+        SalesOrderItem sourceSalesOrderItem = buildSalesOrderItem(9011L, "SO-PLAIN-SRC");
+        sourceSalesOrderItem.getSalesOrder().setCustomerName("客户B");
+        sourceSalesOrderItem.getSalesOrder().setProjectName("项目B");
+        sourceSalesOrderItem.setWarehouseName("二号码头");
+
+        when(repository.findByIdAndDeletedFlagFalse(7006L)).thenReturn(Optional.of(existing));
+        when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(materialMap("M1"));
+        when(materialSupport.normalizeBatchNo(any(), eq("B1"), eq(1), eq(true))).thenReturn("B1");
+        when(warehouseSelectionSupport.normalizeWarehouseName("二号码头", 1, true)).thenReturn("二号码头");
+        when(salesOrderItemQueryService.findActiveByIdIn(anyCollection())).thenReturn(List.of(sourceSalesOrderItem));
+        when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        stubMapper(mapper);
+
+        service.update(7006L, request);
+
+        assertThat(existing.getOutboundNo()).isEqualTo("SOO-PLAIN");
+        assertThat(existing.getSalesOrderNo()).isEqualTo("SO-PLAIN-SRC");
+        assertThat(existing.getCustomerName()).isEqualTo("客户B");
+        assertThat(existing.getProjectName()).isEqualTo("项目B");
+        assertThat(existing.getWarehouseName()).isEqualTo("二号码头");
+        assertThat(existing.getRemark()).isEqualTo("普通更新备注");
+        assertThat(existing.getItems()).singleElement().satisfies(item -> {
+            assertThat(item.getSourceSalesOrderItemId()).isEqualTo(9011L);
+            assertThat(item.getWeightTon()).isEqualByComparingTo("4.000");
+            assertThat(item.getAmount()).isEqualByComparingTo("12000.00");
+        });
+    }
+
+    @Test
+    void shouldTreatPersistedSourceItemAsImportedWhenHeaderSalesOrderNoMissing() {
+        SalesOutboundRepository repository = mock(SalesOutboundRepository.class);
+        SalesOutboundMapper mapper = mock(SalesOutboundMapper.class);
+        TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
+        WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
+        SalesOrderItemQueryService salesOrderItemQueryService = mock(SalesOrderItemQueryService.class);
+        SalesOutboundService service = createService(repository, mapper, materialSupport,
+                warehouseSelectionSupport, salesOrderItemQueryService);
+        SalesOutbound existing = buildExistingOutbound(7007L, "SOO-ITEM-LOCK", null);
+        SalesOutboundItem existingItem = buildExistingOutboundItem(8007L, existing, 9012L);
+        existingItem.setQuantity(4);
+        SalesOutboundRequest request = new SalesOutboundRequest(
+                "FORGED-NO", "FORGED-SO", "伪造客户", "伪造项目", "二号码头",
+                LocalDate.of(2026, 5, 4), StatusConstants.DRAFT, "按已有明细更新",
+                List.of(new SalesOutboundItemRequest(
+                        9999L, "FORGED-SO", 9999L, "M-FORGED", "伪造品牌", "伪造品类", "伪造材质", "99",
+                        null, "吨", "二号码头", "B-FORGED", 1, "箱",
+                        new BigDecimal("9.999"), 9, new BigDecimal("9.999"),
+                        new BigDecimal("1.00"), null
+                ))
+        );
+        SalesOrderItem sourceSalesOrderItem = buildSalesOrderItem(9012L, "SO-ITEM-LOCK");
+
+        when(repository.findByIdAndDeletedFlagFalse(7007L)).thenReturn(Optional.of(existing));
+        when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(materialMap("M1"));
+        when(materialSupport.normalizeBatchNo(any(), eq("B1"), eq(1), eq(true))).thenReturn("B1");
+        when(warehouseSelectionSupport.normalizeWarehouseName("一号码头", 1, true)).thenReturn("一号码头");
+        when(salesOrderItemQueryService.findActiveByIdIn(anyCollection())).thenReturn(List.of(sourceSalesOrderItem));
+        when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        stubMapper(mapper);
+
+        service.update(7007L, request);
+
+        assertThat(existing.getSalesOrderNo()).isEqualTo("SO-ITEM-LOCK");
+        assertThat(existing.getCustomerName()).isEqualTo("客户A");
+        assertThat(existing.getItems()).singleElement().satisfies(item -> {
+            assertThat(item.getId()).isEqualTo(8007L);
+            assertThat(item.getSourceSalesOrderItemId()).isEqualTo(9012L);
+            assertThat(item.getQuantity()).isEqualTo(4);
+        });
+    }
+
+    @Test
+    void shouldRejectDuplicateOutboundNoWhenValidateUpdateReceivesChangedOutboundNo() {
+        SalesOutboundRepository repository = mock(SalesOutboundRepository.class);
+        SalesOutboundService service = createService(
+                repository,
+                mock(SalesOutboundMapper.class),
+                mock(TradeItemMaterialSupport.class),
+                mock(WarehouseSelectionSupport.class),
+                mock(SalesOrderItemQueryService.class)
+        );
+        SalesOutbound existing = buildExistingOutbound(7008L, "SOO-OLD", null);
+        SalesOutboundRequest request = new SalesOutboundRequest(
+                "SOO-NEW", null, "客户A", "项目A", "一号库",
+                LocalDate.of(2026, 5, 5), StatusConstants.DRAFT, null,
+                List.of(new SalesOutboundItemRequest(
+                        null, 9013L, "M1", "宝钢", "盘螺", "HRB400", "10", null, "吨",
+                        "一号库", null, 1, "件",
+                        new BigDecimal("2.000"), 1, new BigDecimal("2.000"),
+                        new BigDecimal("3000.00"), null
+                ))
+        );
+        when(repository.existsByOutboundNoAndDeletedFlagFalse("SOO-NEW")).thenReturn(true);
+
+        assertThatThrownBy(() -> service.validateUpdate(existing, request))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("销售出库单号已存在");
+    }
+
+    @Test
+    void shouldKeepFirstDuplicateRequestItemWhenRestrictingImportedOutboundUpdate() {
+        SalesOutboundRepository repository = mock(SalesOutboundRepository.class);
+        SalesOutboundMapper mapper = mock(SalesOutboundMapper.class);
+        TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
+        WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
+        SalesOrderItemQueryService salesOrderItemQueryService = mock(SalesOrderItemQueryService.class);
+        SalesOutboundService service = createService(repository, mapper, materialSupport,
+                warehouseSelectionSupport, salesOrderItemQueryService);
+        SalesOutbound existing = buildExistingOutbound(7009L, "SOO-DUP-ITEM", "SO-DUP-ITEM");
+        buildExistingOutboundItem(8009L, existing, 9014L);
+        SalesOutboundRequest request = new SalesOutboundRequest(
+                "FORGED-NO", "FORGED-SO", "伪造客户", "伪造项目", "二号码头",
+                LocalDate.of(2026, 5, 6), StatusConstants.DRAFT, "重复明细",
+                List.of(
+                        new SalesOutboundItemRequest(
+                                8009L, "FORGED-SO", 9014L, "M-FORGED", "伪造品牌", "伪造品类", "伪造材质", "99",
+                                null, "吨", "二号码头", "B-FORGED", 2, "箱",
+                                new BigDecimal("9.999"), 9, new BigDecimal("99.999"),
+                                new BigDecimal("1.00"), null
+                        ),
+                        new SalesOutboundItemRequest(
+                                8009L, "FORGED-SO", 9014L, "M-FORGED", "伪造品牌", "伪造品类", "伪造材质", "99",
+                                null, "吨", "二号码头", "B-FORGED", 8, "箱",
+                                new BigDecimal("9.999"), 9, new BigDecimal("99.999"),
+                                new BigDecimal("1.00"), null
+                        )
+                )
+        );
+        SalesOrderItem sourceSalesOrderItem = buildSalesOrderItem(9014L, "SO-DUP-ITEM");
+
+        when(repository.findByIdAndDeletedFlagFalse(7009L)).thenReturn(Optional.of(existing));
+        when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(materialMap("M1"));
+        when(materialSupport.normalizeBatchNo(any(), eq("B1"), eq(1), eq(true))).thenReturn("B1");
+        when(warehouseSelectionSupport.normalizeWarehouseName("一号码头", 1, true)).thenReturn("一号码头");
+        when(salesOrderItemQueryService.findActiveByIdIn(anyCollection())).thenReturn(List.of(sourceSalesOrderItem));
+        when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        stubMapper(mapper);
+
+        service.update(7009L, request);
+
+        assertThat(existing.getItems()).singleElement()
+                .satisfies(item -> assertThat(item.getQuantity()).isEqualTo(2));
+    }
+
+    @Test
+    void shouldTreatExistingItemWithNullSourceAsRegularOutboundWhenHeaderSourceMissing() {
+        SalesOutboundService service = createService(
+                mock(SalesOutboundRepository.class),
+                mock(SalesOutboundMapper.class),
+                mock(TradeItemMaterialSupport.class),
+                mock(WarehouseSelectionSupport.class),
+                mock(SalesOrderItemQueryService.class)
+        );
+        SalesOutbound existing = buildExistingOutbound(7010L, "SOO-REGULAR", null);
+        buildExistingOutboundItem(8010L, existing, null);
+        SalesOutboundRequest request = new SalesOutboundRequest(
+                "SOO-REGULAR", null, "客户B", "项目B", "二号码头",
+                LocalDate.of(2026, 5, 7), StatusConstants.DRAFT, "普通单据",
+                List.of()
+        );
+
+        SalesOutboundRequest normalized = service.normalizeUpdateRequest(existing, request);
+
+        assertThat(normalized.customerName()).isEqualTo("客户B");
+        assertThat(normalized.projectName()).isEqualTo("项目B");
+        assertThat(normalized.warehouseName()).isEqualTo("二号码头");
+    }
+
+    @Test
+    void shouldExposeVisibleLookupAndNotFoundMessageForDeletedAdminView() {
+        SalesOutboundRepository repository = mock(SalesOutboundRepository.class);
+        SalesOutboundService service = createService(
+                repository,
+                mock(SalesOutboundMapper.class),
+                mock(TradeItemMaterialSupport.class),
+                mock(WarehouseSelectionSupport.class),
+                mock(SalesOrderItemQueryService.class)
+        );
+        SalesOutbound deleted = buildExistingOutbound(7011L, "SOO-DELETED", null);
+        deleted.setDeletedFlag(true);
+        when(repository.findById(7011L)).thenReturn(Optional.of(deleted));
+
+        Optional<SalesOutbound> visible = service.findVisibleEntity(7011L);
+
+        assertThat(visible).containsSame(deleted);
+        assertThat(service.notFoundMessage()).isEqualTo("销售出库不存在");
     }
 
     private SalesOutboundService createService(SalesOutboundRepository repository,

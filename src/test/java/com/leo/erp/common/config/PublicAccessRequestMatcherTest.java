@@ -4,12 +4,21 @@ import com.leo.erp.common.web.PublicAccess;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.method.HandlerMethod;
+import org.springframework.web.servlet.mvc.condition.ConsumesRequestCondition;
+import org.springframework.web.servlet.mvc.condition.HeadersRequestCondition;
+import org.springframework.web.servlet.mvc.condition.ParamsRequestCondition;
+import org.springframework.web.servlet.mvc.condition.PatternsRequestCondition;
+import org.springframework.web.servlet.mvc.condition.PathPatternsRequestCondition;
+import org.springframework.web.servlet.mvc.condition.ProducesRequestCondition;
+import org.springframework.web.servlet.mvc.condition.RequestMethodsRequestCondition;
 import org.springframework.web.servlet.mvc.method.RequestMappingInfo;
 import org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping;
 
 import java.util.Map;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
@@ -65,6 +74,84 @@ class PublicAccessRequestMatcherTest {
         assertThat(matcher.matches(request)).isTrue();
     }
 
+    @Test
+    void shouldMatchClassLevelPublicAccessWithHttpMethod() throws Exception {
+        RequestMappingInfo info = RequestMappingInfo
+                .paths("/api/class-public/test")
+                .methods(RequestMethod.POST)
+                .build();
+        HandlerMethod handlerMethod = new HandlerMethod(
+                new ClassLevelPublicAccessController(),
+                ClassLevelPublicAccessController.class.getMethod("classPublicEndpoint"));
+        RequestMappingHandlerMapping handlerMapping = mock(RequestMappingHandlerMapping.class);
+        when(handlerMapping.getHandlerMethods()).thenReturn(Map.of(info, handlerMethod));
+
+        PublicAccessRequestMatcher matcher = new PublicAccessRequestMatcher(handlerMapping);
+
+        MockHttpServletRequest post = new MockHttpServletRequest("POST", "/api/class-public/test");
+        post.setServletPath("/api/class-public/test");
+        MockHttpServletRequest get = new MockHttpServletRequest("GET", "/api/class-public/test");
+        get.setServletPath("/api/class-public/test");
+        assertThat(matcher.matches(post)).isTrue();
+        assertThat(matcher.matches(get)).isFalse();
+    }
+
+    @Test
+    void shouldFallbackToLegacyPatternsCondition() throws Exception {
+        RequestMappingInfo info = legacyRequestMappingInfo("/legacy/public/{id}");
+        HandlerMethod handlerMethod = new HandlerMethod(
+                new PublicAccessTestController(),
+                PublicAccessTestController.class.getMethod("publicWithPath"));
+        RequestMappingHandlerMapping handlerMapping = mock(RequestMappingHandlerMapping.class);
+        when(handlerMapping.getHandlerMethods()).thenReturn(Map.of(info, handlerMethod));
+
+        PublicAccessRequestMatcher matcher = new PublicAccessRequestMatcher(handlerMapping);
+
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/legacy/public/100");
+        request.setServletPath("/legacy/public/100");
+        assertThat(matcher.matches(request)).isTrue();
+    }
+
+    @Test
+    void shouldFallbackToLegacyPatternsConditionWhenPathPatternsAreEmpty() throws Exception {
+        RequestMappingInfo info = mock(RequestMappingInfo.class);
+        PathPatternsRequestCondition pathPatterns = mock(PathPatternsRequestCondition.class);
+        when(pathPatterns.getPatternValues()).thenReturn(Set.of());
+        when(info.getPathPatternsCondition()).thenReturn(pathPatterns);
+        when(info.getPatternsCondition()).thenReturn(new PatternsRequestCondition("/legacy-empty/public/{id}"));
+        when(info.getMethodsCondition()).thenReturn(new RequestMethodsRequestCondition());
+        HandlerMethod handlerMethod = new HandlerMethod(
+                new PublicAccessTestController(),
+                PublicAccessTestController.class.getMethod("publicWithPath"));
+        RequestMappingHandlerMapping handlerMapping = mock(RequestMappingHandlerMapping.class);
+        when(handlerMapping.getHandlerMethods()).thenReturn(Map.of(info, handlerMethod));
+
+        PublicAccessRequestMatcher matcher = new PublicAccessRequestMatcher(handlerMapping);
+
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/legacy-empty/public/100");
+        request.setServletPath("/legacy-empty/public/100");
+        assertThat(matcher.matches(request)).isTrue();
+    }
+
+    @Test
+    void shouldIgnoreLegacyMappingWithoutPatterns() throws Exception {
+        RequestMappingInfo info = mock(RequestMappingInfo.class);
+        when(info.getPathPatternsCondition()).thenReturn(null);
+        when(info.getPatternsCondition()).thenReturn(null);
+        when(info.getMethodsCondition()).thenReturn(new RequestMethodsRequestCondition());
+        HandlerMethod handlerMethod = new HandlerMethod(
+                new PublicAccessTestController(),
+                PublicAccessTestController.class.getMethod("publicEndpoint"));
+        RequestMappingHandlerMapping handlerMapping = mock(RequestMappingHandlerMapping.class);
+        when(handlerMapping.getHandlerMethods()).thenReturn(Map.of(info, handlerMethod));
+
+        PublicAccessRequestMatcher matcher = new PublicAccessRequestMatcher(handlerMapping);
+
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/public/test");
+        request.setServletPath("/api/public/test");
+        assertThat(matcher.matches(request)).isFalse();
+    }
+
     private RequestMappingHandlerMapping handlerMappingWithPublicEndpoint() {
         try {
             RequestMappingInfo info = RequestMappingInfo.paths("/api/public/test").build();
@@ -93,6 +180,18 @@ class PublicAccessRequestMatcherTest {
         }
     }
 
+    private RequestMappingInfo legacyRequestMappingInfo(String... patterns) {
+        return new RequestMappingInfo(
+                null,
+                patterns.length == 0 ? null : new PatternsRequestCondition(patterns),
+                new RequestMethodsRequestCondition(),
+                new ParamsRequestCondition(),
+                new HeadersRequestCondition(),
+                new ConsumesRequestCondition(),
+                new ProducesRequestCondition(),
+                null);
+    }
+
     @RestController
     static class PublicAccessTestController {
         @RequestMapping("/api/public/test")
@@ -109,5 +208,12 @@ class PublicAccessRequestMatcherTest {
         @RequestMapping("/api/private/test")
         @com.leo.erp.security.permission.RequiresPermission(resource = "test", action = "read")
         public String privateEndpoint() { return "private"; }
+    }
+
+    @RestController
+    @PublicAccess
+    static class ClassLevelPublicAccessController {
+        @RequestMapping(value = "/api/class-public/test", method = RequestMethod.POST)
+        public String classPublicEndpoint() { return "public"; }
     }
 }

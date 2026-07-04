@@ -49,6 +49,17 @@ class IdempotentAspectTest {
     }
 
     @Test
+    void shouldProceed_whenKeyExpressionIsNull() throws Throwable {
+        Idempotent idempotent = mockIdempotent(null);
+        when(joinPoint.proceed()).thenReturn("result");
+
+        Object result = aspect.enforceIdempotency(joinPoint, idempotent);
+
+        assertThat(result).isEqualTo("result");
+        verify(keyService, never()).tryAcquire(any(), any());
+    }
+
+    @Test
     void shouldAcquireAndComplete_whenKeyAvailable() throws Throwable {
         Idempotent idempotent = mockIdempotent("#key");
         when(joinPoint.proceed()).thenReturn("success");
@@ -75,6 +86,31 @@ class IdempotentAspectTest {
         verify(joinPoint, never()).proceed();
         verify(duplicateService, never()).markCompleted(any(), any(), any());
         verify(duplicateService, never()).release(any());
+    }
+
+    @Test
+    void shouldProceedWhenDuplicateCheckDoesNotThrow() throws Throwable {
+        when(keyService.tryAcquire(any(), any())).thenReturn(false);
+        when(joinPoint.proceed()).thenReturn("success");
+        Idempotent idempotent = mockIdempotent("#key");
+
+        Object result = aspect.enforceIdempotency(joinPoint, idempotent);
+
+        assertThat(result).isEqualTo("success");
+        verify(keyService).throwIfDuplicate("TestService.test():test-key");
+        verify(keyService).markCompleted("TestService.test():test-key", "completed", Duration.ofHours(1));
+    }
+
+    @Test
+    void shouldProceedWhenResolvedKeyIsBlank() throws Throwable {
+        when(joinPoint.getArgs()).thenReturn(new Object[]{" "});
+        when(joinPoint.proceed()).thenReturn("result");
+        Idempotent idempotent = mockIdempotent("#key");
+
+        Object result = aspect.enforceIdempotency(joinPoint, idempotent);
+
+        assertThat(result).isEqualTo("result");
+        verify(keyService, never()).tryAcquire(any(), any());
     }
 
     @Test

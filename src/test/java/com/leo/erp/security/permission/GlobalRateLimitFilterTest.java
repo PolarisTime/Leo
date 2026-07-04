@@ -4,7 +4,10 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leo.erp.common.support.ClientIpResolver;
 import jakarta.servlet.FilterChain;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.slf4j.MDC;
+import org.springframework.core.Ordered;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 
@@ -15,6 +18,46 @@ import static org.assertj.core.api.Assertions.assertThat;
 class GlobalRateLimitFilterTest {
 
     private final ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
+
+    @AfterEach
+    void tearDown() {
+        MDC.clear();
+    }
+
+    @Test
+    void shouldRunAfterTracingObservationAndTraceHeaderFilter() {
+        GlobalRateLimitFilter filter = new GlobalRateLimitFilter(
+                tokenBucketService(new TokenBucketService.TokenBucketResult(true, 148, 0)),
+                clientIpResolver(),
+                objectMapper
+        );
+
+        assertThat(filter.getOrder()).isEqualTo(Ordered.HIGHEST_PRECEDENCE + 3);
+    }
+
+    @Test
+    void excludedPathSkipsTokenBucket() throws Exception {
+        AtomicBoolean tokenBucketInvoked = new AtomicBoolean(false);
+        GlobalRateLimitFilter filter = new GlobalRateLimitFilter(
+                new TokenBucketService(null, null) {
+                    @Override
+                    public TokenBucketResult tryConsume(String dimensionKey, double rate, int capacity, int requested) {
+                        tokenBucketInvoked.set(true);
+                        return new TokenBucketResult(true, 148, 0);
+                    }
+                },
+                clientIpResolver(),
+                objectMapper
+        );
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/health/ready");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        AtomicBoolean chainInvoked = new AtomicBoolean(false);
+
+        filter.doFilter(request, response, (req, res) -> chainInvoked.set(true));
+
+        assertThat(chainInvoked.get()).isTrue();
+        assertThat(tokenBucketInvoked.get()).isFalse();
+    }
 
     @Test
     void allowedRequestAddsRateLimitHeadersAndContext() throws Exception {
@@ -49,6 +92,7 @@ class GlobalRateLimitFilterTest {
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/auth/me");
         MockHttpServletResponse response = new MockHttpServletResponse();
         AtomicBoolean chainInvoked = new AtomicBoolean(false);
+        MDC.put("traceId", "0123456789abcdef0123456789abcdef");
 
         filter.doFilter(request, response, (req, res) -> chainInvoked.set(true));
 
@@ -56,6 +100,7 @@ class GlobalRateLimitFilterTest {
         assertThat(chainInvoked.get()).isFalse();
         assertThat(response.getStatus()).isEqualTo(429);
         assertThat(body.path("code").asInt()).isEqualTo(4290);
+        assertThat(body.path("traceId").asText()).isEqualTo("0123456789abcdef0123456789abcdef");
         assertThat(body.path("rateLimit").path("limit").asInt()).isEqualTo(150);
         assertThat(body.path("rateLimit").path("remaining").asInt()).isZero();
         assertThat(body.path("rateLimit").path("resetSeconds").asInt()).isEqualTo(2);

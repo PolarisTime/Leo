@@ -2,6 +2,7 @@ package com.leo.erp.finance.receipt.service;
 
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
+import com.leo.erp.common.service.CrudRuntimeSettings;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.finance.receipt.domain.entity.Receipt;
@@ -23,6 +24,10 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -731,6 +736,27 @@ class ReceiptServiceTest {
     }
 
     @Test
+    void shouldValidateChangedUniqueReceiptNoOnUpdate() {
+        ReceiptRepository receiptRepository = mock(ReceiptRepository.class);
+        Receipt existing = buildReceiptEntity(1L, "SK-001");
+        existing.setDeletedFlag(false);
+        when(receiptRepository.existsByReceiptNoAndDeletedFlagFalse("SK-NEW")).thenReturn(false);
+
+        ReceiptService service = service(
+                receiptRepository, mock(ReceiptAllocationRepository.class),
+                new SnowflakeIdGenerator(0L), mock(ReceiptMapper.class),
+                mock(CustomerStatementQueryService.class), mock(ApplicationEventPublisher.class),
+                mock(ResourceRecordAccessGuard.class), mock(WorkflowTransitionGuard.class)
+        );
+
+        ReflectionTestUtils.invokeMethod(service, "validateUpdate", existing, new ReceiptRequest(
+                "SK-NEW", null, "客户A", null, "项目A", null,
+                LocalDate.of(2026, 4, 26), "银行转账",
+                new BigDecimal("100.00"), "草稿", "财务A", null, List.of()
+        ));
+    }
+
+    @Test
     void shouldReturnDetailForExistingReceipt() {
         ReceiptRepository receiptRepository = mock(ReceiptRepository.class);
         Receipt existing = buildReceiptEntity(1L, "SK-001");
@@ -756,6 +782,45 @@ class ReceiptServiceTest {
 
         assertThat(result).isNotNull();
         assertThat(result.receiptNo()).isEqualTo("SK-001");
+    }
+
+    @Test
+    void shouldReturnDeletedReceiptDetailForAdminWhenRuntimeAllows() {
+        ReceiptRepository receiptRepository = mock(ReceiptRepository.class);
+        ReceiptMapper receiptMapper = mock(ReceiptMapper.class);
+        Receipt deleted = buildReceiptEntity(1L, "SK-DELETED");
+        deleted.setDeletedFlag(true);
+        when(receiptRepository.findById(1L)).thenReturn(Optional.of(deleted));
+        when(receiptMapper.toResponse(deleted)).thenReturn(
+                new ReceiptResponse(1L, "SK-DELETED", null, "客户A", null, "项目A", null,
+                        LocalDate.of(2026, 4, 26), "银行转账", new BigDecimal("100.00"),
+                        "已删除", "财务A", null, null)
+        );
+
+        ReceiptService service = service(
+                receiptRepository, mock(ReceiptAllocationRepository.class),
+                new SnowflakeIdGenerator(0L), receiptMapper,
+                mock(CustomerStatementQueryService.class), mock(ApplicationEventPublisher.class),
+                mock(ResourceRecordAccessGuard.class), mock(WorkflowTransitionGuard.class)
+        );
+        CrudRuntimeSettings runtimeSettings = mock(CrudRuntimeSettings.class);
+        when(runtimeSettings.shouldAdminSeeDeletedRecords()).thenReturn(true);
+        ReflectionTestUtils.invokeMethod(service, "setCrudRuntimeSettings", runtimeSettings);
+
+        try {
+            SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
+                    "admin",
+                    null,
+                    List.of(new SimpleGrantedAuthority("ROLE_ADMIN"))
+            ));
+
+            ReceiptResponse result = service.detail(1L);
+
+            assertThat(result.receiptNo()).isEqualTo("SK-DELETED");
+            verify(receiptRepository).findById(1L);
+        } finally {
+            SecurityContextHolder.clearContext();
+        }
     }
 
     @Test

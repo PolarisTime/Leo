@@ -16,6 +16,7 @@ import java.util.List;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -424,6 +425,80 @@ class InventoryReportQueryRepositoryTest {
     }
 
     @Test
+    void listBindsAllStockFiltersToSqlParameters() {
+        CapturedQuery query = captureListQuery(
+                new PageQuery(0, 10, null, null), "  AbC  ", "二号码头", "盘螺", false);
+
+        assertThat(query.sql()).contains("(stock.quantity > 0 OR stock.weight_ton > 0)");
+        assertThat(query.sql()).contains("LOWER(COALESCE(stock.material_code, '')) LIKE :keyword");
+        assertThat(query.sql()).contains("LOWER(COALESCE(stock.brand, '')) LIKE :keyword");
+        assertThat(query.sql()).contains("LOWER(COALESCE(stock.spec, '')) LIKE :keyword");
+        assertThat(query.sql()).contains("LOWER(COALESCE(stock.material, '')) LIKE :keyword");
+        assertThat(query.sql()).contains("stock.warehouse_name = :warehouseName");
+        assertThat(query.sql()).contains("stock.category = :category");
+        assertThat(query.params().getValue("keyword")).isEqualTo("%abc%");
+        assertThat(query.params().getValue("warehouseName")).isEqualTo("二号码头");
+        assertThat(query.params().getValue("category")).isEqualTo("盘螺");
+    }
+
+    @Test
+    void listBuildsSqlForSupportedSortFields() {
+        assertThat(captureListQuery(
+                new PageQuery(0, 10, "category", "asc"), null, null, null, false).sql())
+                .contains("ROW_NUMBER() OVER (ORDER BY LOWER(COALESCE(report.category, '')) ASC");
+        assertThat(captureListQuery(
+                new PageQuery(0, 10, "warehouseName", "desc"), null, null, null, false).sql())
+                .contains("ROW_NUMBER() OVER (ORDER BY LOWER(COALESCE(report.warehouse_name, '')) DESC");
+        assertThat(captureListQuery(
+                new PageQuery(0, 10, "quantity", "asc"), null, null, null, false).sql())
+                .contains("ROW_NUMBER() OVER (ORDER BY report.quantity ASC");
+        assertThat(captureListQuery(
+                new PageQuery(0, 10, "weightTon", "desc"), null, null, null, false).sql())
+                .contains("ROW_NUMBER() OVER (ORDER BY report.weight_ton DESC");
+    }
+
+    @Test
+    void listAddsDataScopeOwnerFilterForInboundAndOutboundSql() {
+        DataScopeContext.set(7L, "inventory-report", "self", Set.of(7L, 8L));
+
+        CapturedQuery query = captureListQuery(new PageQuery(0, 10, null, null), null, null, null, false);
+
+        assertThat(query.sql()).contains("AND inbound.created_by IN (:dataScopeOwnerUserIds)");
+        assertThat(query.sql()).contains("AND outbound.created_by IN (:dataScopeOwnerUserIds)");
+        assertThat(query.params().getValue("dataScopeOwnerUserIds")).isEqualTo(Set.of(7L, 8L));
+    }
+
+    @Test
+    void listMapsNullItemsJsonToEmptyItems() {
+        when(jdbcTemplate.query(anyString(), any(MapSqlParameterSource.class), any(RowMapper.class)))
+                .thenAnswer(invocation -> {
+                    @SuppressWarnings("unchecked")
+                    RowMapper<InventoryReportResponse> mapper = invocation.getArgument(2, RowMapper.class);
+                    return List.of(mapper.mapRow(resultSetWithItems(null), 0));
+                });
+
+        List<InventoryReportResponse> result = repository.list(
+                new PageQuery(0, 10, null, null), null, null, null, false);
+
+        assertThat(result.getFirst().items()).isEmpty();
+    }
+
+    @Test
+    void listRejectsMalformedItemsJson() {
+        when(jdbcTemplate.query(anyString(), any(MapSqlParameterSource.class), any(RowMapper.class)))
+                .thenAnswer(invocation -> {
+                    @SuppressWarnings("unchecked")
+                    RowMapper<InventoryReportResponse> mapper = invocation.getArgument(2, RowMapper.class);
+                    return List.of(mapper.mapRow(resultSetWithItems("not-json"), 0));
+                });
+
+        assertThatThrownBy(() -> repository.list(
+                new PageQuery(0, 10, null, null), null, null, null, false))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("Failed to parse inventory report items");
+    }
+
+    @Test
     void listWithDataScopeSelfAddsOwnerFilter() {
         DataScopeContext.set(1L, "inventory-report", "self");
         when(jdbcTemplate.query(anyString(), any(MapSqlParameterSource.class), any(RowMapper.class)))
@@ -454,5 +529,43 @@ class InventoryReportQueryRepositoryTest {
         repository.page(new PageQuery(0, 10, "materialCode", null), null, null, null, false);
 
         verify(jdbcTemplate).queryForObject(anyString(), any(MapSqlParameterSource.class), eq(Number.class));
+    }
+
+    private CapturedQuery captureListQuery(PageQuery query, String keyword, String warehouseName, String category,
+                                           boolean includeOutbound) {
+        NamedParameterJdbcTemplate localJdbcTemplate = mock(NamedParameterJdbcTemplate.class);
+        InventoryReportQueryRepository localRepository = new InventoryReportQueryRepository(localJdbcTemplate);
+        when(localJdbcTemplate.query(anyString(), any(MapSqlParameterSource.class), any(RowMapper.class)))
+                .thenReturn(List.of());
+
+        localRepository.list(query, keyword, warehouseName, category, includeOutbound);
+
+        var sql = forClass(String.class);
+        var params = forClass(MapSqlParameterSource.class);
+        verify(localJdbcTemplate).query(sql.capture(), params.capture(), any(RowMapper.class));
+        return new CapturedQuery(sql.getValue(), params.getValue());
+    }
+
+    private static ResultSet resultSetWithItems(Object itemsJson) throws Exception {
+        ResultSet rs = mock(ResultSet.class);
+        when(rs.getLong("id")).thenReturn(1L);
+        when(rs.getString("material_code")).thenReturn("M-001");
+        when(rs.getString("brand")).thenReturn("品牌A");
+        when(rs.getString("material")).thenReturn("材质A");
+        when(rs.getString("category")).thenReturn("类别A");
+        when(rs.getString("spec")).thenReturn("规格A");
+        when(rs.getString("length")).thenReturn("9m");
+        when(rs.getString("warehouse_name")).thenReturn("一号仓");
+        when(rs.getString("batch_no")).thenReturn("B-001");
+        when(rs.getInt("quantity")).thenReturn(10);
+        when(rs.getString("quantity_unit")).thenReturn("件");
+        when(rs.getBigDecimal("weight_ton")).thenReturn(new BigDecimal("5.250"));
+        when(rs.getString("unit")).thenReturn("吨");
+        when(rs.getBigDecimal("piece_weight_ton")).thenReturn(new BigDecimal("0.525"));
+        when(rs.getObject("items_json")).thenReturn(itemsJson);
+        return rs;
+    }
+
+    private record CapturedQuery(String sql, MapSqlParameterSource params) {
     }
 }

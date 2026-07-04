@@ -330,6 +330,34 @@ class JwtAuthenticationFilterTest {
     }
 
     @Test
+    void shouldAuthenticateWhenSessionIdClaimMissing() throws ServletException, IOException {
+        SecurityContextHolder.clearContext();
+        SecurityPrincipal principal = SecurityPrincipal.authenticated(5L, "nosid", List.of());
+        Claims claims = Jwts.claims().add("uid", 5L).build();
+        AtomicReference<String> touchedSessionId = new AtomicReference<>("not-touched");
+
+        JwtAuthenticationFilter filter = new JwtAuthenticationFilter(
+                new StubJwtTokenService(claims),
+                authenticatedUserCacheService(Optional.of(principal), new AtomicBoolean()),
+                new NoOpBlacklistService(),
+                new StubSessionActivityService(new AtomicBoolean(), touchedSessionId),
+                new ObjectMapper()
+        );
+
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.addHeader("Authorization", "Bearer valid-token");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        AtomicBoolean chainInvoked = new AtomicBoolean(false);
+
+        filter.doFilter(request, response, (req, res) -> chainInvoked.set(true));
+
+        assertThat(chainInvoked.get()).isTrue();
+        assertThat(SecurityContextHolder.getContext().getAuthentication()).isNotNull();
+        assertThat(touchedSessionId.get()).isNull();
+        SecurityContextHolder.clearContext();
+    }
+
+    @Test
     void shouldNotBlacklistWhenIssuedAtIsNull() throws ServletException, IOException {
         SecurityContextHolder.clearContext();
         SecurityPrincipal principal = SecurityPrincipal.authenticated(4L, "noiat", List.of());

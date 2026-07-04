@@ -136,4 +136,67 @@ class FreightStatementWebMapperTest {
                 .extracting(item -> item.id(), item -> item.sourceNo(), item -> item.warehouseName())
                 .containsExactly(101L, "WL-1", "一号库");
     }
+
+    @Test
+    void shouldReturnNullWhenMappingNullSource() {
+        assertThat(mapper.toCommand(null)).isNull();
+        assertThat(mapper.toItemCommand(null)).isNull();
+        assertThat(mapper.toResponse(null)).isNull();
+        assertThat(mapper.toItemResponse(null)).isNull();
+    }
+
+    @Test
+    void shouldKeepNullItemsWhenMappingStatement() {
+        FreightStatementRequest request = new FreightStatementRequest(
+                "FS-NULL",
+                "SF",
+                "顺丰",
+                1L,
+                "结算公司",
+                LocalDate.of(2026, 5, 1),
+                LocalDate.of(2026, 5, 31),
+                new BigDecimal("0.000"),
+                new BigDecimal("0.00"),
+                BigDecimal.ZERO,
+                BigDecimal.ZERO,
+                "草稿",
+                "未签署",
+                null,
+                null,
+                null
+        );
+
+        FreightStatementCommand command = mapper.toCommand(request);
+
+        assertThat(command.items()).isNull();
+        assertThat(command.settlementCompanyId()).isEqualTo(1L);
+        assertThat(command.settlementCompanyName()).isEqualTo("结算公司");
+
+        FreightStatementView view = new FreightStatementView(
+                2L,
+                "FS-NULL",
+                "SF",
+                "顺丰",
+                1L,
+                "结算公司",
+                LocalDate.of(2026, 5, 1),
+                LocalDate.of(2026, 5, 31),
+                new BigDecimal("0.000"),
+                new BigDecimal("0.00"),
+                BigDecimal.ZERO,
+                BigDecimal.ZERO,
+                "草稿",
+                "未签署",
+                null,
+                List.of(),
+                null,
+                null
+        );
+
+        FreightStatementResponse response = mapper.toResponse(view);
+
+        assertThat(response.items()).isNull();
+        assertThat(response.settlementCompanyId()).isEqualTo(1L);
+        assertThat(response.settlementCompanyName()).isEqualTo("结算公司");
+    }
 }

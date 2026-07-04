@@ -66,4 +66,17 @@ class PrintTemplateMapperTest {
         assertThat(response).isNotNull();
         assertThat(response.billType()).isEqualTo("sales-order");
     }
+
+    @Test
+    void shouldReturnNullResponseForNullEntityAndNullStringIds() {
+        assertThat(mapper.toResponse(null)).isNull();
+
+        PrintTemplate entity = new PrintTemplate();
+        entity.setTemplateName("空 ID 模板");
+
+        PrintTemplateResponse response = mapper.toResponse(entity);
+
+        assertThat(response.id()).isNull();
+        assertThat(response.settlementCompanyId()).isNull();
+    }
 }

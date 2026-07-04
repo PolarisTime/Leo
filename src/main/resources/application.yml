@@ -375,8 +375,26 @@ springdoc:
     # Swagger UI 访问路径
     path: /doc
 
+# 可观测性配置
+management:
+  tracing:
+    sampling:
+      # 本地和测试默认全采样，便于排查；生产环境在 application-prod.yml 中默认降为 10%。
+      probability: ${LEO_TRACING_SAMPLING_PROBABILITY:1.0}
+  otlp:
+    tracing:
+      # 默认不导出，避免本地/CI 依赖外部 Collector；部署时通过环境变量显式开启。
+      export:
+        enabled: ${LEO_OTLP_TRACING_EXPORT_ENABLED:false}
+      endpoint: ${LEO_OTLP_TRACING_ENDPOINT:http://localhost:4318/v1/traces}
+      connect-timeout: ${LEO_OTLP_TRACING_CONNECT_TIMEOUT:1s}
+      timeout: ${LEO_OTLP_TRACING_TIMEOUT:5s}
+
 # 日志级别配置
 logging:
+  pattern:
+    correlation: "[%X{traceId:-},%X{spanId:-}] "
+  include-application-name: false
   level:
     # 健康检查页面单独开 DEBUG，便于排查探活请求
     com.leo.erp.system.web.HealthPageController: DEBUG

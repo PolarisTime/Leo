@@ -95,8 +95,8 @@ public class SalesOutboundSourceService {
                 java.util.Set.of(StatusConstants.AUDITED),
                 "第" + lineNo + "行来源销售订单未审核，不能作为来源单据"
         );
-        assertSameOrderText(headerCustomerName, sourceSalesOrder == null ? null : sourceSalesOrder.getCustomerName(), lineNo, "客户");
-        assertSameOrderText(headerProjectName, sourceSalesOrder == null ? null : sourceSalesOrder.getProjectName(), lineNo, "项目");
+        assertSameOrderText(headerCustomerName, sourceSalesOrder.getCustomerName(), lineNo, "客户");
+        assertSameOrderText(headerProjectName, sourceSalesOrder.getProjectName(), lineNo, "项目");
         BusinessDocumentValidator.requireSameSourceText(request.materialCode(), sourceSalesOrderItem.getMaterialCode(), lineNo, "来源销售订单明细", "物料编码");
         BusinessDocumentValidator.requireSameSourceText(request.brand(), sourceSalesOrderItem.getBrand(), lineNo, "来源销售订单明细", "品牌");
         BusinessDocumentValidator.requireSameSourceText(request.category(), sourceSalesOrderItem.getCategory(), lineNo, "来源销售订单明细", "品类");

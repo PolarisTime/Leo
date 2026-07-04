@@ -66,4 +66,9 @@ class FreightBillMapperTest {
         assertThat(response.vehiclePlate()).isNull();
         assertThat(response.remark()).isNull();
     }
+
+    @Test
+    void shouldReturnNull_whenEntityIsNull() {
+        assertThat(mapper.toResponse(null)).isNull();
+    }
 }

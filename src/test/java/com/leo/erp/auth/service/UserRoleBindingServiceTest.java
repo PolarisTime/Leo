@@ -13,9 +13,12 @@ import com.leo.erp.system.role.repository.RoleSettingRepository;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 
+import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -102,6 +105,40 @@ class UserRoleBindingServiceTest {
                 new FixedIdGenerator(101L),
                 rolePermissionRepository(List.of(permission(12L, "material", "update"))),
                 permissionService(Map.of("material", Set.of("read")))
+        );
+
+        assertThatThrownBy(() -> service.replaceUserRolesWithinCurrentPrincipalBounds(9L, List.of(manager)))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("不能授予超出自身权限范围的角色");
+    }
+
+    @Test
+    void shouldRejectBindingRoleWhenAllowedActionsDoNotContainAction() {
+        authenticate(7L, "operator", List.of(new SimpleGrantedAuthority("ROLE_USER")));
+        RoleSetting manager = role("MANAGER", "经理", 12L);
+        UserRoleBindingService service = new UserRoleBindingService(
+                userRoleRepository(null, null),
+                roleSettingRepository(List.of(), List.of()),
+                new FixedIdGenerator(101L),
+                rolePermissionRepository(List.of(permission(12L, "material", "delete"))),
+                permissionService(Map.of("material", Set.of("read", "update")))
+        );
+
+        assertThatThrownBy(() -> service.replaceUserRolesWithinCurrentPrincipalBounds(9L, List.of(manager)))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("不能授予超出自身权限范围的角色");
+    }
+
+    @Test
+    void shouldRejectBindingRoleWhenResourcePermissionIsMissing() {
+        authenticate(7L, "operator", List.of(new SimpleGrantedAuthority("ROLE_USER")));
+        RoleSetting manager = role("MANAGER", "经理", 12L);
+        UserRoleBindingService service = new UserRoleBindingService(
+                userRoleRepository(null, null),
+                roleSettingRepository(List.of(), List.of()),
+                new FixedIdGenerator(101L),
+                rolePermissionRepository(List.of(permission(12L, "material", "read"))),
+                permissionService(Map.of("supplier", Set.of("read")))
         );
 
         assertThatThrownBy(() -> service.replaceUserRolesWithinCurrentPrincipalBounds(9L, List.of(manager)))
@@ -202,6 +239,324 @@ class UserRoleBindingServiceTest {
         );
 
         assertThat(service.resolveRolesForUser(9L)).isEmpty();
+    }
+
+    @Test
+    void shouldReturnEmptyWhenResolvingBlankRoleIdentifiers() {
+        UserRoleBindingService service = new UserRoleBindingService(
+                userRoleRepository(null, null),
+                roleSettingRepository(List.of(), List.of()),
+                new FixedIdGenerator(100L)
+        );
+
+        assertThat(service.resolveRoles(null)).isEmpty();
+        assertThat(service.resolveRoles(List.of())).isEmpty();
+        assertThat(service.resolveRoles(List.of("", " ", ", ,"))).isEmpty();
+    }
+
+    @Test
+    void shouldResolveCommaSeparatedRoleIdentifiersOnceInInputOrder() {
+        RoleSetting staff = role("STAFF", "员工", 11L);
+        RoleSetting finance = role("FINANCE", "财务", 12L);
+        UserRoleBindingService service = new UserRoleBindingService(
+                userRoleRepository(null, null),
+                roleSettingRepository(List.of(staff, finance), List.of()),
+                new FixedIdGenerator(100L)
+        );
+
+        List<RoleSetting> roles = service.resolveRoles(List.of(" STAFF,FINANCE ", "STAFF"));
+
+        assertThat(roles).extracting(RoleSetting::getId).containsExactly(11L, 12L);
+    }
+
+    @Test
+    void shouldResolveRolesByIdsAndRejectMissingIds() {
+        RoleSetting staff = role("STAFF", "员工", 11L);
+        UserRoleBindingService service = new UserRoleBindingService(
+                userRoleRepository(null, null),
+                roleSettingRepositoryWithIds(List.of(staff)),
+                new FixedIdGenerator(100L)
+        );
+
+        assertThat(service.resolveRolesByIds(null)).isEmpty();
+        assertThat(service.resolveRolesByIds(List.of())).isEmpty();
+        assertThat(service.resolveRolesByIds(java.util.Arrays.asList(null, null))).isEmpty();
+        assertThat(service.resolveRolesByIds(java.util.Arrays.asList(11L, 11L, null))).containsExactly(staff);
+        assertThatThrownBy(() -> service.resolveRolesByIds(List.of(11L, 12L)))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("角色不存在: [12]");
+    }
+
+    @Test
+    void shouldReturnDefaultAuthorityAndNormalizeRoleAuthorities() {
+        UserRoleBindingService service = new UserRoleBindingService(
+                userRoleRepository(null, null),
+                roleSettingRepository(List.of(), List.of()),
+                new FixedIdGenerator(100L)
+        );
+
+        assertThat(service.toGrantedAuthorities(null))
+                .extracting(authority -> authority.getAuthority())
+                .containsExactly("ROLE_USER");
+        assertThat(service.toGrantedAuthorities(List.of()))
+                .extracting(authority -> authority.getAuthority())
+                .containsExactly("ROLE_USER");
+        assertThat(service.toGrantedAuthorities(List.of(
+                role(" finance manager ", "财务", 11L),
+                role("finance manager", "财务", 12L),
+                role(null, "空编码", 13L),
+                role(" ", "空白编码", 14L)
+        ))).extracting(authority -> authority.getAuthority())
+                .containsExactly("ROLE_FINANCE_MANAGER");
+    }
+
+    @Test
+    void shouldReturnEmptyRoleNamesForNullOrEmptyRoles() {
+        UserRoleBindingService service = new UserRoleBindingService(
+                userRoleRepository(null, null),
+                roleSettingRepository(List.of(), List.of()),
+                new FixedIdGenerator(100L)
+        );
+
+        assertThat(service.joinRoleNames(null)).isEmpty();
+        assertThat(service.joinRoleNames(List.of())).isEmpty();
+    }
+
+    @Test
+    void shouldSkipSavingWhenReplacingWithNoRoles() {
+        AtomicLong deletedUserId = new AtomicLong(-1L);
+        AtomicReference<List<UserRole>> savedBindings = new AtomicReference<>(List.of());
+        UserRoleBindingService service = new UserRoleBindingService(
+                userRoleRepository(deletedUserId, savedBindings),
+                roleSettingRepository(List.of(), List.of()),
+                new FixedIdGenerator(100L)
+        );
+
+        service.replaceUserRoles(9L, null);
+        service.replaceUserRoles(9L, List.of());
+
+        assertThat(deletedUserId.get()).isEqualTo(9L);
+        assertThat(savedBindings.get()).isEmpty();
+    }
+
+    @Test
+    void shouldAllowRoleBindingWhenPrincipalMissingOrAdmin() {
+        AtomicLong deletedUserId = new AtomicLong(-1L);
+        AtomicReference<List<UserRole>> savedBindings = new AtomicReference<>(List.of());
+        UserRoleBindingService service = new UserRoleBindingService(
+                userRoleRepository(deletedUserId, savedBindings),
+                roleSettingRepository(List.of(), List.of()),
+                new FixedIdGenerator(101L, 102L),
+                rolePermissionRepository(List.of(permission(11L, "material", "read"))),
+                permissionService(Map.of())
+        );
+
+        service.replaceUserRolesWithinCurrentPrincipalBounds(9L, List.of(role("ADMIN", "管理员", 11L)));
+        authenticate(7L, "admin", List.of(new SimpleGrantedAuthority("ROLE_ADMIN")));
+        service.replaceUserRolesWithinCurrentPrincipalBounds(10L, List.of(role("ADMIN", "管理员", 11L)));
+
+        assertThat(deletedUserId.get()).isEqualTo(10L);
+        assertThat(savedBindings.get()).extracting(UserRole::getUserId, UserRole::getRoleId)
+                .containsExactly(org.assertj.core.groups.Tuple.tuple(10L, 11L));
+    }
+
+    @Test
+    void shouldSkipPermissionBoundCheckWhenRequestedRolesAreEmptyOrDependenciesMissing() {
+        authenticate(7L, "operator", List.of(new SimpleGrantedAuthority("ROLE_USER")));
+        UserRoleBindingService withoutPermissionDependencies = new UserRoleBindingService(
+                userRoleRepository(null, null),
+                roleSettingRepository(List.of(), List.of()),
+                new FixedIdGenerator(100L)
+        );
+        UserRoleBindingService withNullRoleId = new UserRoleBindingService(
+                userRoleRepository(null, null),
+                roleSettingRepository(List.of(), List.of()),
+                new FixedIdGenerator(100L),
+                rolePermissionRepository(List.of(permission(11L, "material", "read"))),
+                permissionService(Map.of())
+        );
+        UserRoleBindingService withoutPermissionService = new UserRoleBindingService(
+                userRoleRepository(null, null),
+                roleSettingRepository(List.of(), List.of()),
+                new FixedIdGenerator(100L),
+                rolePermissionRepository(List.of(permission(11L, "material", "read"))),
+                null
+        );
+
+        withoutPermissionDependencies.assertCurrentPrincipalCanBindRoles(9L, null);
+        withoutPermissionDependencies.assertCurrentPrincipalCanBindRoles(9L, List.of(role("STAFF", "员工", 11L)));
+        withNullRoleId.assertCurrentPrincipalCanBindRoles(9L, List.of(role("STAFF", "员工", null)));
+        withoutPermissionService.assertCurrentPrincipalCanBindRoles(9L, List.of(role("STAFF", "员工", 11L)));
+    }
+
+    @Test
+    void shouldIgnoreNullRoleWhenCheckingAdminRole() {
+        authenticate(7L, "operator", List.of(new SimpleGrantedAuthority("ROLE_USER")));
+        UserRoleBindingService service = new UserRoleBindingService(
+                userRoleRepository(null, null),
+                roleSettingRepository(List.of(), List.of()),
+                new FixedIdGenerator(100L)
+        );
+
+        service.assertCurrentPrincipalCanBindRoles(9L, java.util.Arrays.asList((RoleSetting) null));
+    }
+
+    @Test
+    void shouldReturnOnlyNormalRolesForUserAndIgnoreMissingOrNullBindings() {
+        RoleSetting normal = role("NORMAL", "正常角色", 11L);
+        RoleSetting disabled = role("DISABLED", "禁用角色", 12L);
+        disabled.setStatus("禁用");
+        UserRoleBindingService service = new UserRoleBindingService(
+                userRoleRepositoryWithBindings(List.of(binding(null, 9L), binding(11L, 9L), binding(12L, 9L), binding(13L, 9L)), null),
+                roleSettingRepositoryWithIds(List.of(normal, disabled)),
+                new FixedIdGenerator(100L)
+        );
+
+        List<RoleSetting> roles = service.resolveRolesForUser(9L);
+
+        assertThat(roles).extracting(RoleSetting::getId).containsExactly(11L);
+    }
+
+    @Test
+    void shouldReturnEmptyWhenUserBindingsHaveNoRoleIdsOrNoRolesFound() {
+        UserRoleBindingService withoutRoleIds = new UserRoleBindingService(
+                userRoleRepositoryWithBindings(List.of(binding(null, 9L)), null),
+                roleSettingRepositoryWithIds(List.of()),
+                new FixedIdGenerator(100L)
+        );
+        UserRoleBindingService withoutFoundRoles = new UserRoleBindingService(
+                userRoleRepositoryWithBindings(List.of(binding(11L, 9L)), null),
+                roleSettingRepositoryWithIds(List.of()),
+                new FixedIdGenerator(100L)
+        );
+
+        assertThat(withoutRoleIds.resolveRolesForUser(9L)).isEmpty();
+        assertThat(withoutFoundRoles.resolveRolesForUser(9L)).isEmpty();
+    }
+
+    @Test
+    void shouldIgnorePermissionRowsThatDoNotBelongToRequestedRole() {
+        authenticate(7L, "operator", List.of(new SimpleGrantedAuthority("ROLE_USER")));
+        UserRoleBindingService service = new UserRoleBindingService(
+                userRoleRepository(null, null),
+                roleSettingRepository(List.of(), List.of()),
+                new FixedIdGenerator(100L),
+                rolePermissionRepository(List.of(permission(99L, "material", "read"))),
+                permissionService(Map.of("material", Set.of("read")))
+        );
+
+        service.assertCurrentPrincipalCanBindRoles(9L, List.of(role("STAFF", "员工", 11L)));
+    }
+
+    @Test
+    void shouldTreatAuthenticationWithNullAuthoritiesAsNonAdmin() {
+        SecurityPrincipal principal = SecurityPrincipal.authenticated(7L, "operator", List.of());
+        SecurityContextHolder.getContext().setAuthentication(new Authentication() {
+            @Override
+            public Collection<? extends GrantedAuthority> getAuthorities() {
+                return null;
+            }
+
+            @Override
+            public Object getCredentials() {
+                return null;
+            }
+
+            @Override
+            public Object getDetails() {
+                return null;
+            }
+
+            @Override
+            public Object getPrincipal() {
+                return principal;
+            }
+
+            @Override
+            public boolean isAuthenticated() {
+                return true;
+            }
+
+            @Override
+            public void setAuthenticated(boolean isAuthenticated) {
+            }
+
+            @Override
+            public String getName() {
+                return principal.username();
+            }
+        });
+        UserRoleBindingService service = new UserRoleBindingService(
+                userRoleRepository(null, null),
+                roleSettingRepository(List.of(), List.of()),
+                new FixedIdGenerator(100L),
+                rolePermissionRepository(List.of()),
+                permissionService(Map.of())
+        );
+
+        service.assertCurrentPrincipalCanBindRoles(9L, List.of(role("STAFF", "员工", 11L)));
+    }
+
+    @Test
+    void shouldTreatAuthenticationWithNonPrincipalValueAsAnonymous() {
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken("anonymous", null, List.of())
+        );
+        AtomicLong deletedUserId = new AtomicLong(-1L);
+        AtomicReference<List<UserRole>> savedBindings = new AtomicReference<>(List.of());
+        UserRoleBindingService service = new UserRoleBindingService(
+                userRoleRepository(deletedUserId, savedBindings),
+                roleSettingRepository(List.of(), List.of()),
+                new FixedIdGenerator(101L),
+                rolePermissionRepository(List.of(permission(11L, "material", "read"))),
+                permissionService(Map.of())
+        );
+
+        service.replaceUserRolesWithinCurrentPrincipalBounds(9L, List.of(role("ADMIN", "管理员", 11L)));
+
+        assertThat(savedBindings.get()).extracting(UserRole::getRoleId).containsExactly(11L);
+    }
+
+    @Test
+    void shouldRejectAdminRoleWithNullCodeForNonAdminPrincipalWhenPermissionMissing() {
+        authenticate(7L, "operator", List.of(new SimpleGrantedAuthority("ROLE_USER")));
+        RoleSetting roleWithoutCode = role(null, "管理员", 11L);
+        UserRoleBindingService service = new UserRoleBindingService(
+                userRoleRepository(null, null),
+                roleSettingRepository(List.of(), List.of()),
+                new FixedIdGenerator(100L),
+                rolePermissionRepository(List.of(permission(11L, "material", "delete"))),
+                permissionService(Map.of("material", Set.of("read")))
+        );
+
+        assertThatThrownBy(() -> service.assertCurrentPrincipalCanBindRoles(9L, List.of(roleWithoutCode)))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("不能授予超出自身权限范围的角色");
+    }
+
+    @Test
+    void shouldNormalizeNullAndBlankRoleIdentifiersIndividually() {
+        UserRoleBindingService service = new UserRoleBindingService(
+                userRoleRepository(null, null),
+                roleSettingRepository(List.of(), List.of()),
+                new FixedIdGenerator(100L)
+        );
+
+        assertThat(service.resolveRoles(java.util.Arrays.asList(null, " , "))).isEmpty();
+    }
+
+    @Test
+    void shouldTreatMissingAuthenticationAsNonAdminForPrivateCheck() throws Exception {
+        SecurityContextHolder.clearContext();
+        UserRoleBindingService service = new UserRoleBindingService(
+                userRoleRepository(null, null),
+                roleSettingRepository(List.of(), List.of()),
+                new FixedIdGenerator(100L)
+        );
+        Method method = UserRoleBindingService.class.getDeclaredMethod("currentPrincipalIsAdmin");
+        method.setAccessible(true);
+
+        assertThat(method.invoke(service)).isEqualTo(false);
     }
 
     private UserRoleRepository userRoleRepository(AtomicLong deletedUserId, AtomicReference<List<UserRole>> savedBindings) {
@@ -326,7 +681,7 @@ class UserRoleBindingServiceTest {
 
     private UserRole binding(Long roleId, Long userId) {
         UserRole binding = new UserRole();
-        binding.setId(roleId * 10);
+        binding.setId(roleId == null ? null : roleId * 10);
         binding.setRoleId(roleId);
         binding.setUserId(userId);
         return binding;

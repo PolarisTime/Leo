@@ -99,6 +99,18 @@ class LoginAttemptServiceTest {
     }
 
     @Test
+    void shouldNormalizeNullLoginNameWhenClearingFailures() {
+        StringRedisTemplate redisTemplate = mock(StringRedisTemplate.class);
+        AuthProperties properties = new AuthProperties();
+        LoginAttemptService service = new LoginAttemptService(redisTemplate, properties);
+
+        service.clearFailures(null);
+
+        verify(redisTemplate).delete("auth:login:fail:");
+        verify(redisTemplate).delete("auth:login:lock:");
+    }
+
+    @Test
     void shouldSkipClearFailuresWhenProtectionDisabled() {
         AuthProperties properties = new AuthProperties();
         properties.getLoginProtection().setEnabled(false);

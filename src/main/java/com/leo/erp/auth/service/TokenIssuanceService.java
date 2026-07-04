@@ -60,7 +60,7 @@ public class TokenIssuanceService {
         if (activeOpt.isEmpty()) {
             Optional<RefreshTokenSession> previousSession = sessionManagementService.findPreviousTokenSession(refreshToken);
             if (previousSession.isPresent()) {
-                handlePreviousRefreshToken(previousSession.get());
+                throw previousRefreshTokenException(previousSession.get());
             }
             Optional<RefreshTokenSession> anySession = sessionManagementService.findSessionByHash(refreshToken);
             if (anySession.isPresent() && anySession.get().getRevokeReason() == RevokeReason.CONCURRENT_LIMIT) {
@@ -85,16 +85,16 @@ public class TokenIssuanceService {
         return issueAccessTokenForSession(user, refreshResult.session(), refreshResult.refreshToken());
     }
 
-    private void handlePreviousRefreshToken(RefreshTokenSession session) {
+    private RuntimeException previousRefreshTokenException(RefreshTokenSession session) {
         if (sessionManagementService.isPreviousTokenInGraceWindow(session)) {
-            throw new BusinessException(
+            return new BusinessException(
                     ErrorCode.REFRESH_TOKEN_REUSE_CONFLICT,
                     ErrorCode.REFRESH_TOKEN_REUSE_CONFLICT.getMessage()
             );
         }
         sessionManagementService.revokeSession(session, RevokeReason.REUSE_DETECTED);
         eventPublisher.publishEvent(new SessionInvalidatedEvent(session.getUserId(), session.getTokenId(), true));
-        throw new BadCredentialsException("refreshToken无效或已过期");
+        return new BadCredentialsException("refreshToken无效或已过期");
     }
 
     @Transactional

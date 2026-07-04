@@ -49,4 +49,9 @@ class ProjectMapperTest {
         assertThat(response.projectManager()).isNull();
         assertThat(response.remark()).isNull();
     }
+
+    @Test
+    void shouldReturnNull_whenEntityIsNull() {
+        assertThat(mapper.toResponse(null)).isNull();
+    }
 }

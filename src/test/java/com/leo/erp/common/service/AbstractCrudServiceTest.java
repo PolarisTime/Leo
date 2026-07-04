@@ -1,16 +1,24 @@
 package com.leo.erp.common.service;
 
+import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.persistence.AbstractAuditableEntity;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
+import com.leo.erp.security.permission.DataScopeContext;
 import com.leo.erp.security.support.SecurityPrincipal;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.data.jpa.domain.Specification;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
@@ -31,6 +39,10 @@ class AbstractCrudServiceTest {
     void tearDown() {
         SecurityContextHolder.clearContext();
         RequestContextHolder.resetRequestAttributes();
+        DataScopeContext.clear();
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
     }
 
     @Test
@@ -91,10 +103,12 @@ class AbstractCrudServiceTest {
     void updateStatusShouldReturnSameWhenStatusUnchanged() {
         TestCrudService service = new TestCrudService();
         service.addEntity(1L, "DRAFT");
+        int saveCount = service.saveCount();
 
         var result = service.updateStatus(1L, "DRAFT");
 
         assertThat(result).isEqualTo("response");
+        assertThat(service.saveCount()).isEqualTo(saveCount);
     }
 
     @Test
@@ -286,6 +300,15 @@ class AbstractCrudServiceTest {
     }
 
     @Test
+    void resolveCreateBusinessNoShouldThrowWhenNoServiceAndRequestedNoBlank() {
+        TestCrudService service = new TestCrudService();
+
+        assertThatThrownBy(() -> service.publicResolveCreateBusinessNo("module", "  "))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("编号规则服务不可用");
+    }
+
+    @Test
     void resolveCreateBusinessNoShouldUseRequestedNoWhenNoService() {
         TestCrudService service = new TestCrudService();
 
@@ -310,6 +333,20 @@ class AbstractCrudServiceTest {
     }
 
     @Test
+    void resolveCreateBusinessNoShouldUseRequestedNoWhenSnowflakeBusinessNoDisabled() {
+        TestCrudService service = new TestCrudService();
+        service.setCrudRuntimeSettingsForTest(mock(CrudRuntimeSettings.class,
+                (invocation) -> {
+                    if (invocation.getMethod().getName().equals("shouldUseSnowflakeIdAsBusinessNo")) return false;
+                    return null;
+                }));
+
+        String result = service.publicResolveCreateBusinessNo("module", "BIZ-001", 12345L);
+
+        assertThat(result).isEqualTo("BIZ-001");
+    }
+
+    @Test
     void resolveCreateBusinessNoShouldThrowWhenSnowflakeIdInvalid() {
         TestCrudService service = new TestCrudService();
         service.enableSnowflakeIdAsBusinessNo();
@@ -320,6 +357,21 @@ class AbstractCrudServiceTest {
                 }));
 
         assertThatThrownBy(() -> service.publicResolveCreateBusinessNo("module", null, 0L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("雪花ID尚未分配");
+    }
+
+    @Test
+    void resolveCreateBusinessNoShouldThrowWhenSnowflakeIdMissing() {
+        TestCrudService service = new TestCrudService();
+        service.enableSnowflakeIdAsBusinessNo();
+        service.setCrudRuntimeSettingsForTest(mock(CrudRuntimeSettings.class,
+                (invocation) -> {
+                    if (invocation.getMethod().getName().equals("shouldUseSnowflakeIdAsBusinessNo")) return true;
+                    return null;
+                }));
+
+        assertThatThrownBy(() -> service.publicResolveCreateBusinessNo("module", null, null))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("雪花ID尚未分配");
     }
@@ -406,6 +458,41 @@ class AbstractCrudServiceTest {
     }
 
     @Test
+    void detailShouldReturnDeletedEntityWhenAdminViewEnabled() {
+        TestCrudService service = new TestCrudService();
+        service.addEntity(1L, "DRAFT");
+        service.getEntity(1L).setDeletedFlag(true);
+        service.enableAdminViewDeleted();
+        service.setCrudRuntimeSettingsForTest(mock(CrudRuntimeSettings.class,
+                (invocation) -> {
+                    if (invocation.getMethod().getName().equals("shouldAdminSeeDeletedRecords")) return true;
+                    return null;
+                }));
+        setupAdminPrincipal();
+
+        var result = service.detail(1L);
+
+        assertThat(result).isEqualTo("response");
+    }
+
+    @Test
+    void detailShouldHideDeletedEntityWhenRuntimeSwitchDisabled() {
+        TestCrudService service = new TestCrudService();
+        service.addEntity(1L, "DRAFT");
+        service.getEntity(1L).setDeletedFlag(true);
+        service.enableAdminViewDeleted();
+        service.setCrudRuntimeSettingsForTest(mock(CrudRuntimeSettings.class,
+                (invocation) -> {
+                    if (invocation.getMethod().getName().equals("shouldAdminSeeDeletedRecords")) return false;
+                    return null;
+                }));
+        setupAdminPrincipal();
+
+        assertThatThrownBy(() -> service.detail(1L))
+                .isInstanceOf(BusinessException.class);
+    }
+
+    @Test
     void currentUserIsAdminShouldReturnFalseWhenNoAuth() {
         SecurityContextHolder.clearContext();
         TestCrudService service = new TestCrudService();
@@ -416,9 +503,48 @@ class AbstractCrudServiceTest {
                     return null;
                 }));
         service.addEntity(1L, "DRAFT");
+        service.getEntity(1L).setDeletedFlag(true);
 
-        var result = service.detail(1L);
-        assertThat(result).isEqualTo("response");
+        assertThatThrownBy(() -> service.detail(1L))
+                .isInstanceOf(BusinessException.class);
+    }
+
+    @Test
+    void currentUserIsAdminShouldReturnFalseWhenAuthoritiesNull() {
+        Authentication authentication = mock(Authentication.class);
+        when(authentication.getAuthorities()).thenReturn(null);
+        SecurityContextHolder.getContext().setAuthentication(authentication);
+        TestCrudService service = new TestCrudService();
+        service.addEntity(1L, "DRAFT");
+        service.getEntity(1L).setDeletedFlag(true);
+        service.enableAdminViewDeleted();
+        service.setCrudRuntimeSettingsForTest(mock(CrudRuntimeSettings.class,
+                (invocation) -> {
+                    if (invocation.getMethod().getName().equals("shouldAdminSeeDeletedRecords")) return true;
+                    return null;
+                }));
+
+        assertThatThrownBy(() -> service.detail(1L))
+                .isInstanceOf(BusinessException.class);
+    }
+
+    @Test
+    void currentUserIsAdminShouldReturnFalseWhenAuthorityIsNull() {
+        var principal = new SecurityPrincipal(1L, "user", "", false, List.of(() -> null));
+        var auth = new UsernamePasswordAuthenticationToken(principal, null, principal.getAuthorities());
+        SecurityContextHolder.getContext().setAuthentication(auth);
+        TestCrudService service = new TestCrudService();
+        service.addEntity(1L, "DRAFT");
+        service.getEntity(1L).setDeletedFlag(true);
+        service.enableAdminViewDeleted();
+        service.setCrudRuntimeSettingsForTest(mock(CrudRuntimeSettings.class,
+                (invocation) -> {
+                    if (invocation.getMethod().getName().equals("shouldAdminSeeDeletedRecords")) return true;
+                    return null;
+                }));
+
+        assertThatThrownBy(() -> service.detail(1L))
+                .isInstanceOf(BusinessException.class);
     }
 
     @Test
@@ -428,6 +554,51 @@ class AbstractCrudServiceTest {
 
         var result = service.detail(1L);
         assertThat(result).isEqualTo("response");
+    }
+
+    @Test
+    void nextIdShouldUseDefaultGeneratorWhenServiceHasNoGenerator() {
+        ReflectionTestUtils.invokeMethod(new SnowflakeIdGenerator(0L), "registerInstance");
+        TestCrudService service = new TestCrudService(null);
+
+        long id = service.nextId();
+
+        assertThat(id).isPositive();
+    }
+
+    @Test
+    void pageShouldApplyDataScopeWhenServiceKeepsDefaultScope() {
+        TestCrudService service = new TestCrudService();
+        service.enableDataScope();
+        JpaSpecificationExecutor<TestEntity> repository = mock(JpaSpecificationExecutor.class);
+        when(repository.findAll(
+                org.mockito.ArgumentMatchers.any(Specification.class),
+                org.mockito.ArgumentMatchers.any(org.springframework.data.domain.Pageable.class)
+        )).thenReturn(org.springframework.data.domain.Page.empty());
+
+        service.publicPage(new PageQuery(0, 10, null, null), null, repository);
+
+        verify(repository).findAll(
+                org.mockito.ArgumentMatchers.any(Specification.class),
+                org.mockito.ArgumentMatchers.any(org.springframework.data.domain.Pageable.class)
+        );
+    }
+
+    @Test
+    void pageShouldSkipDataScopeWhenDataScopeDisabled() {
+        TestCrudService service = new TestCrudService();
+        JpaSpecificationExecutor<TestEntity> repository = mock(JpaSpecificationExecutor.class);
+        when(repository.findAll(
+                org.mockito.ArgumentMatchers.any(Specification.class),
+                org.mockito.ArgumentMatchers.any(org.springframework.data.domain.Pageable.class)
+        )).thenReturn(org.springframework.data.domain.Page.empty());
+
+        service.publicPage(new PageQuery(0, 10, null, null), null, repository);
+
+        verify(repository).findAll(
+                org.mockito.ArgumentMatchers.any(Specification.class),
+                org.mockito.ArgumentMatchers.any(org.springframework.data.domain.Pageable.class)
+        );
     }
 
     @Test
@@ -464,6 +635,160 @@ class AbstractCrudServiceTest {
     }
 
     @Test
+    void createShouldConsumeReservedBusinessNoAfterCommitWhenSynchronizationActive() {
+        setupAdminPrincipal();
+        TestCrudService service = new TestCrudService();
+        service.useBusinessNoAsRequest();
+        var noRuleService = mock(BusinessNumberAllocator.class);
+        service.setNoRuleSequenceServiceForTest(noRuleService);
+        BusinessPreallocationService preallocationService = mock(BusinessPreallocationService.class);
+        when(preallocationService.isBusinessNoReservedByPrincipal(
+                org.mockito.ArgumentMatchers.eq("test"),
+                org.mockito.ArgumentMatchers.eq("NO-001"),
+                org.mockito.ArgumentMatchers.any(SecurityPrincipal.class)
+        )).thenReturn(true);
+        service.setPreallocatedBusinessNoServiceForTest(preallocationService);
+        TransactionSynchronizationManager.initSynchronization();
+
+        service.create("NO-001");
+        verify(preallocationService, never()).consumeBusinessNo("test", "NO-001");
+        for (TransactionSynchronization synchronization : TransactionSynchronizationManager.getSynchronizations()) {
+            synchronization.afterCommit();
+        }
+
+        verify(preallocationService).consumeBusinessNo("test", "NO-001");
+    }
+
+    @Test
+    void consumeReservedBusinessNoAfterCommitShouldIgnoreMissingPreconditions() {
+        TestCrudService serviceWithoutPreallocation = new TestCrudService();
+        ReflectionTestUtils.invokeMethod(serviceWithoutPreallocation, "consumeReservedBusinessNoAfterCommit", "test", "NO-001");
+
+        TestCrudService service = new TestCrudService();
+        BusinessPreallocationService preallocationService = mock(BusinessPreallocationService.class);
+        service.setPreallocatedBusinessNoServiceForTest(preallocationService);
+
+        ReflectionTestUtils.invokeMethod(service, "consumeReservedBusinessNoAfterCommit", "test", null);
+        ReflectionTestUtils.invokeMethod(service, "consumeReservedBusinessNoAfterCommit", "test", "  ");
+
+        verify(preallocationService, never()).consumeBusinessNo(
+                org.mockito.ArgumentMatchers.anyString(),
+                org.mockito.ArgumentMatchers.anyString()
+        );
+    }
+
+    @Test
+    void combineSpecificationsShouldReturnLeftWhenRightIsNull() {
+        TestCrudService service = new TestCrudService();
+        Specification<TestEntity> left = (root, query, criteriaBuilder) -> criteriaBuilder.conjunction();
+
+        @SuppressWarnings("unchecked")
+        Specification<TestEntity> result = ReflectionTestUtils.invokeMethod(
+                service,
+                "combineSpecifications",
+                left,
+                null
+        );
+
+        assertThat(result).isSameAs(left);
+    }
+
+    @Test
+    void createShouldUseAllocatorWhenReservedBusinessNoHasNoPrincipal() {
+        SecurityContextHolder.clearContext();
+        TestCrudService service = new TestCrudService();
+        service.useBusinessNoAsRequest();
+        var noRuleService = mock(BusinessNumberAllocator.class);
+        when(noRuleService.nextValueByModuleKey("test")).thenReturn("NO-ALLOCATED");
+        service.setNoRuleSequenceServiceForTest(noRuleService);
+        BusinessPreallocationService preallocationService = mock(BusinessPreallocationService.class);
+        service.setPreallocatedBusinessNoServiceForTest(preallocationService);
+
+        service.create("NO-001");
+
+        assertThat(service.lastAppliedRequest()).isEqualTo("NO-ALLOCATED");
+        verify(preallocationService, never()).isBusinessNoReservedByPrincipal(
+                org.mockito.ArgumentMatchers.anyString(),
+                org.mockito.ArgumentMatchers.anyString(),
+                org.mockito.ArgumentMatchers.any(SecurityPrincipal.class)
+        );
+        verify(preallocationService, never()).consumeBusinessNo("test", "NO-001");
+    }
+
+    @Test
+    void createShouldUseAllocatorWhenAuthenticationPrincipalIsNotSecurityPrincipal() {
+        var auth = new UsernamePasswordAuthenticationToken(
+                "operator",
+                null,
+                List.of(new SimpleGrantedAuthority("ROLE_ADMIN"))
+        );
+        SecurityContextHolder.getContext().setAuthentication(auth);
+        TestCrudService service = new TestCrudService();
+        service.useBusinessNoAsRequest();
+        var noRuleService = mock(BusinessNumberAllocator.class);
+        when(noRuleService.nextValueByModuleKey("test")).thenReturn("NO-ALLOCATED");
+        service.setNoRuleSequenceServiceForTest(noRuleService);
+        BusinessPreallocationService preallocationService = mock(BusinessPreallocationService.class);
+        service.setPreallocatedBusinessNoServiceForTest(preallocationService);
+
+        service.create("NO-001");
+
+        assertThat(service.lastAppliedRequest()).isEqualTo("NO-ALLOCATED");
+        verify(preallocationService, never()).isBusinessNoReservedByPrincipal(
+                org.mockito.ArgumentMatchers.anyString(),
+                org.mockito.ArgumentMatchers.anyString(),
+                org.mockito.ArgumentMatchers.any(SecurityPrincipal.class)
+        );
+        verify(preallocationService, never()).consumeBusinessNo("test", "NO-001");
+    }
+
+    @Test
+    void createShouldUseAllocatorWhenRequestedNoMissingWithPreallocationService() {
+        setupAdminPrincipal();
+        TestCrudService service = new TestCrudService();
+        service.useBusinessNoAsRequest();
+        var noRuleService = mock(BusinessNumberAllocator.class);
+        when(noRuleService.nextValueByModuleKey("test")).thenReturn("NO-ALLOCATED");
+        service.setNoRuleSequenceServiceForTest(noRuleService);
+        BusinessPreallocationService preallocationService = mock(BusinessPreallocationService.class);
+        service.setPreallocatedBusinessNoServiceForTest(preallocationService);
+
+        service.create(null);
+
+        assertThat(service.lastAppliedRequest()).isEqualTo("NO-ALLOCATED");
+        verify(preallocationService, never()).isBusinessNoReservedByPrincipal(
+                org.mockito.ArgumentMatchers.anyString(),
+                org.mockito.ArgumentMatchers.anyString(),
+                org.mockito.ArgumentMatchers.any(SecurityPrincipal.class)
+        );
+    }
+
+    @Test
+    void createShouldUseAllocatorWhenRequestedNoBlank() {
+        setupAdminPrincipal();
+        TestCrudService service = new TestCrudService();
+        service.useBusinessNoAsRequest();
+        var noRuleService = mock(BusinessNumberAllocator.class);
+        when(noRuleService.nextValueByModuleKey("test")).thenReturn("NO-ALLOCATED");
+        service.setNoRuleSequenceServiceForTest(noRuleService);
+        BusinessPreallocationService preallocationService = mock(BusinessPreallocationService.class);
+        service.setPreallocatedBusinessNoServiceForTest(preallocationService);
+
+        service.create("  ");
+
+        assertThat(service.lastAppliedRequest()).isEqualTo("NO-ALLOCATED");
+        verify(preallocationService, never()).isBusinessNoReservedByPrincipal(
+                org.mockito.ArgumentMatchers.anyString(),
+                org.mockito.ArgumentMatchers.anyString(),
+                org.mockito.ArgumentMatchers.any(SecurityPrincipal.class)
+        );
+        verify(preallocationService, never()).consumeBusinessNo(
+                org.mockito.ArgumentMatchers.anyString(),
+                org.mockito.ArgumentMatchers.anyString()
+        );
+    }
+
+    @Test
     void resolveCreateBusinessNoShouldThrowWhenServiceReturnsBlank() {
         TestCrudService service = new TestCrudService();
         var noRuleService = mock(BusinessNumberAllocator.class);
@@ -471,6 +796,30 @@ class AbstractCrudServiceTest {
         service.setNoRuleSequenceServiceForTest(noRuleService);
 
         assertThatThrownBy(() -> service.publicResolveCreateBusinessNo("test", null))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("模块未配置编号规则");
+    }
+
+    @Test
+    void nextBusinessNoShouldThrowWhenAllocatorReturnsBlank() {
+        TestCrudService service = new TestCrudService();
+        var noRuleService = mock(BusinessNumberAllocator.class);
+        when(noRuleService.nextValueByModuleKey("test")).thenReturn("  ");
+        service.setNoRuleSequenceServiceForTest(noRuleService);
+
+        assertThatThrownBy(() -> service.publicNextBusinessNo("test"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("模块未配置编号规则");
+    }
+
+    @Test
+    void nextBusinessNoShouldThrowWhenAllocatorReturnsNull() {
+        TestCrudService service = new TestCrudService();
+        var noRuleService = mock(BusinessNumberAllocator.class);
+        when(noRuleService.nextValueByModuleKey("test")).thenReturn(null);
+        service.setNoRuleSequenceServiceForTest(noRuleService);
+
+        assertThatThrownBy(() -> service.publicNextBusinessNo("test"))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("模块未配置编号规则");
     }
@@ -513,10 +862,16 @@ class AbstractCrudServiceTest {
         private boolean adminViewDeleted = false;
         private boolean failOnSave = false;
         private boolean useBusinessNoAsRequest = false;
+        private boolean applyDataScope = false;
         private String lastAppliedRequest;
+        private int saveCount = 0;
 
         TestCrudService() {
             super(new SnowflakeIdGenerator(0L));
+        }
+
+        TestCrudService(SnowflakeIdGenerator idGenerator) {
+            super(idGenerator);
         }
 
         void addEntity(Long id, String status) {
@@ -562,8 +917,16 @@ class AbstractCrudServiceTest {
             this.useBusinessNoAsRequest = true;
         }
 
+        void enableDataScope() {
+            this.applyDataScope = true;
+        }
+
         String lastAppliedRequest() {
             return lastAppliedRequest;
+        }
+
+        int saveCount() {
+            return saveCount;
         }
 
         @Override
@@ -593,6 +956,11 @@ class AbstractCrudServiceTest {
         }
 
         @Override
+        protected Optional<TestEntity> findVisibleEntity(Long id) {
+            return Optional.ofNullable(store.get(id));
+        }
+
+        @Override
         protected String notFoundMessage() {
             return "Not found";
         }
@@ -607,6 +975,7 @@ class AbstractCrudServiceTest {
             if (failOnSave) {
                 throw new IllegalStateException("save failed");
             }
+            saveCount++;
             store.put(entity.getId(), entity);
             return entity;
         }
@@ -623,7 +992,7 @@ class AbstractCrudServiceTest {
 
         @Override
         protected boolean shouldApplyDataScope() {
-            return false;
+            return applyDataScope;
         }
 
         @Override
@@ -633,6 +1002,14 @@ class AbstractCrudServiceTest {
 
         String publicNextBusinessNo(String moduleKey) {
             return nextBusinessNo(moduleKey);
+        }
+
+        org.springframework.data.domain.Page<String> publicPage(
+                PageQuery query,
+                Specification<TestEntity> specification,
+                JpaSpecificationExecutor<TestEntity> repository
+        ) {
+            return page(query, specification, repository);
         }
 
         String publicResolveCreateBusinessNo(String moduleKey, String requestedNo) {

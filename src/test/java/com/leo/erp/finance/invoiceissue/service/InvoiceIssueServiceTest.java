@@ -364,6 +364,32 @@ class InvoiceIssueServiceTest {
     }
 
     @Test
+    void validateUpdateRejectsDuplicateIssueNoWhenChanged() {
+        InvoiceIssue existing = new InvoiceIssue();
+        existing.setIssueNo("KP-OLD");
+        when(repository.existsByIssueNoAndDeletedFlagFalse("KP-DUP")).thenReturn(true);
+
+        BusinessException exception = assertThrows(BusinessException.class, () -> service.validateUpdate(
+                existing,
+                buildRequest("KP-DUP", 101L, new BigDecimal("0.300"), new BigDecimal("3333.33"), new BigDecimal("1000.00"))
+        ));
+
+        assertEquals("开票单号已存在", exception.getMessage());
+    }
+
+    @Test
+    void validateUpdateAllowsChangedUniqueIssueNo() {
+        InvoiceIssue existing = new InvoiceIssue();
+        existing.setIssueNo("KP-OLD");
+        when(repository.existsByIssueNoAndDeletedFlagFalse("KP-NEW")).thenReturn(false);
+
+        service.validateUpdate(
+                existing,
+                buildRequest("KP-NEW", 101L, new BigDecimal("0.300"), new BigDecimal("3333.33"), new BigDecimal("1000.00"))
+        );
+    }
+
+    @Test
     void updateAllowsSameIssueNo() {
         InvoiceIssue existing = new InvoiceIssue();
         existing.setId(1L);
@@ -437,6 +463,19 @@ class InvoiceIssueServiceTest {
 
         assertThat(result).isNotNull();
         assertThat(result.issueNo()).isEqualTo("KP-001");
+    }
+
+    @Test
+    void findVisibleEntityShouldUseRepositoryFindById() {
+        InvoiceIssue deleted = new InvoiceIssue();
+        deleted.setId(7L);
+        deleted.setIssueNo("KP-DELETED");
+        deleted.setDeletedFlag(true);
+        when(repository.findById(7L)).thenReturn(Optional.of(deleted));
+
+        Optional<InvoiceIssue> result = service.findVisibleEntity(7L);
+
+        assertThat(result).containsSame(deleted);
     }
 
     @Test

@@ -25,11 +25,20 @@ class S3PathParserTest {
         assertThatThrownBy(() -> parser.parseStoragePath("invalid-path"))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("S3 附件路径格式错误");
+        assertThatThrownBy(() -> parser.parseStoragePath(null))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("S3 附件路径格式错误");
     }
 
     @Test
     void shouldThrowExceptionForMissingSlash() {
         assertThatThrownBy(() -> parser.parseStoragePath("s3:bucket"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("S3 附件路径格式错误");
+        assertThatThrownBy(() -> parser.parseStoragePath("s3:/object-key"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("S3 附件路径格式错误");
+        assertThatThrownBy(() -> parser.parseStoragePath("s3:bucket/"))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("S3 附件路径格式错误");
     }
@@ -43,12 +52,24 @@ class S3PathParserTest {
     @Test
     void shouldBuildUriWithPathStyleAccess() {
         AttachmentProperties.S3 s3 = new AttachmentProperties.S3();
-        s3.setEndpoint("http://localhost:9000");
+        s3.setEndpoint("http://localhost:9000/api/");
         s3.setBucket("test-bucket");
         s3.setPathStyleAccess(true);
 
         URI uri = parser.buildUri("test-key", s3);
-        assertThat(uri.toString()).isEqualTo("http://localhost:9000/test-bucket/test-key");
+        assertThat(uri.toString()).isEqualTo("http://localhost:9000/api/test-bucket/test-key");
+    }
+
+    @Test
+    void shouldEncodeBucketAndObjectKeyWhenBuildingPathStyleUri() {
+        AttachmentProperties.S3 s3 = new AttachmentProperties.S3();
+        s3.setEndpoint("http://localhost:9000");
+        s3.setBucket("bucket with spaces");
+        s3.setPathStyleAccess(true);
+
+        URI uri = parser.buildUri("dir/file name.pdf", s3);
+
+        assertThat(uri.toString()).isEqualTo("http://localhost:9000/bucket%2520with%2520spaces/dir/file%2520name.pdf");
     }
 
     @Test
@@ -60,6 +81,18 @@ class S3PathParserTest {
 
         URI uri = parser.buildUri("test-key", s3);
         assertThat(uri.toString()).isEqualTo("http://test-bucket.s3.amazonaws.com/test-key");
+    }
+
+    @Test
+    void shouldWrapUriSyntaxFailureWhenVirtualHostBucketIsInvalid() {
+        AttachmentProperties.S3 s3 = new AttachmentProperties.S3();
+        s3.setEndpoint("http://localhost");
+        s3.setBucket("bad bucket");
+        s3.setPathStyleAccess(false);
+
+        assertThatThrownBy(() -> parser.buildUri("test-key", s3))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("S3 Endpoint 配置错误");
     }
 
     @Test
@@ -94,6 +127,13 @@ class S3PathParserTest {
         URI uri = URI.create("https://localhost:443/test");
         String host = parser.hostHeader(uri);
         assertThat(host).isEqualTo("localhost");
+    }
+
+    @Test
+    void shouldReturnHostHeaderWithNonDefaultHttpsPort() {
+        URI uri = URI.create("https://localhost:8443/test");
+        String host = parser.hostHeader(uri);
+        assertThat(host).isEqualTo("localhost:8443");
     }
 
     @Test

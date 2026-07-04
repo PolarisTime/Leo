@@ -47,4 +47,9 @@ class SupplierMapperTest {
         assertThat(response.contactName()).isNull();
         assertThat(response.city()).isNull();
     }
+
+    @Test
+    void shouldReturnNull_whenSupplierIsNull() {
+        assertThat(mapper.toResponse(null)).isNull();
+    }
 }

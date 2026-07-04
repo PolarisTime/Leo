@@ -3,6 +3,7 @@ package com.leo.erp.logistics.bill.service;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.api.PageQuery;
+import com.leo.erp.common.service.CrudRuntimeSettings;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.logistics.bill.domain.entity.FreightBill;
@@ -17,13 +18,26 @@ import com.leo.erp.master.carrier.domain.entity.Carrier;
 import com.leo.erp.master.carrier.repository.CarrierRepository;
 import com.leo.erp.sales.outbound.domain.entity.SalesOutbound;
 import com.leo.erp.sales.outbound.repository.SalesOutboundRepository;
+import com.leo.erp.security.support.SecurityPrincipal;
 import com.leo.erp.security.permission.WorkflowTransitionGuard;
 import com.leo.erp.system.company.domain.entity.CompanySetting;
 import com.leo.erp.system.company.service.CompanySettingService;
+import jakarta.persistence.criteria.CriteriaBuilder;
+import jakarta.persistence.criteria.CriteriaQuery;
+import jakarta.persistence.criteria.Expression;
+import jakarta.persistence.criteria.Join;
+import jakarta.persistence.criteria.Path;
+import jakarta.persistence.criteria.Predicate;
+import jakarta.persistence.criteria.Root;
+import jakarta.persistence.criteria.Subquery;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mapstruct.factory.Mappers;
 import org.mockito.ArgumentCaptor;
+import org.mockito.Answers;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import org.springframework.data.domain.Page;
@@ -55,6 +69,7 @@ class FreightBillServiceTest {
     @BeforeEach
     void setUpIdGenerator() {
         ReflectionTestUtils.invokeMethod(new SnowflakeIdGenerator(0L), "registerInstance");
+        SecurityContextHolder.clearContext();
     }
 
     private FreightBillService createService(FreightBillRepository repository) {
@@ -187,8 +202,79 @@ class FreightBillServiceTest {
         verify(salesOutboundRepository).findAll(any(Specification.class), any(Pageable.class));
     }
 
+    @Test
+    void pageShouldDelegateToRepositoryAndMapResponses() {
+        FreightBillRepository repository = mock(FreightBillRepository.class);
+        FreightBill bill = new FreightBill();
+        bill.setId(9L);
+        bill.setBillNo("FB-PAGE");
+        bill.setCarrierName("物流甲");
+        bill.setSettlementCompanyId(7L);
+        bill.setSettlementCompanyName("结算主体A");
+        bill.setCustomerName("客户甲");
+        bill.setProjectName("项目甲");
+        bill.setBillTime(LocalDate.of(2026, 6, 1));
+        bill.setUnitPrice(new BigDecimal("20.00"));
+        bill.setTotalWeight(new BigDecimal("2.500"));
+        bill.setTotalFreight(new BigDecimal("50.00"));
+        bill.setStatus(StatusConstants.UNAUDITED);
+        when(repository.findAll(any(Specification.class), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(bill)));
+        FreightBillService service = createService(repository);
+
+        var page = service.page(
+                PageQuery.of(0, 20, "billTime", "desc"),
+                PageFilter.of(
+                        "FB",
+                        "物流甲",
+                        7L,
+                        StatusConstants.UNAUDITED,
+                        LocalDate.of(2026, 6, 1),
+                        LocalDate.of(2026, 6, 30)
+                )
+        );
+
+        assertThat(page.getContent()).singleElement()
+                .satisfies(response -> assertThat(response.billNo()).isEqualTo("FB-PAGE"));
+        verify(repository).findAll(any(Specification.class), any(Pageable.class));
+    }
+
     // ======================== create tests ========================
 
+    @Test
+    void constructorsWithoutOptionalResolversShouldStillCreateService() {
+        FreightBillRepository repository = mock(FreightBillRepository.class);
+        FreightBillSourceService sourceService = mock(FreightBillSourceService.class);
+        when(sourceService.validateSources(any(FreightBillRequest.class), any()))
+                .thenReturn(new FreightBillSourceService.SourceValidationContext(Map.of(), Map.of()));
+        when(repository.existsByBillNoAndDeletedFlagFalse("FB-CTOR1")).thenReturn(false);
+        when(repository.existsByBillNoAndDeletedFlagFalse("FB-CTOR2")).thenReturn(false);
+        when(repository.save(any(FreightBill.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        FreightBillService withoutCarrierRepository = new FreightBillService(
+                repository,
+                mock(SalesOutboundRepository.class),
+                new SnowflakeIdGenerator(),
+                Mappers.getMapper(FreightBillMapper.class),
+                sourceService,
+                new FreightBillApplyService(),
+                mock(WorkflowTransitionGuard.class)
+        );
+        FreightBillService withoutCompanySettingService = new FreightBillService(
+                repository,
+                mock(SalesOutboundRepository.class),
+                new SnowflakeIdGenerator(),
+                Mappers.getMapper(FreightBillMapper.class),
+                sourceService,
+                new FreightBillApplyService(),
+                mock(WorkflowTransitionGuard.class),
+                mock(CarrierRepository.class)
+        );
+
+        assertThat(withoutCarrierRepository.create(buildRequest("FB-CTOR1", buildItemRequest("OB-001"))).billNo())
+                .isEqualTo("FB-CTOR1");
+        assertThat(withoutCompanySettingService.create(buildRequest("FB-CTOR2", buildItemRequest("OB-002"))).billNo())
+                .isEqualTo("FB-CTOR2");
+    }
 
     @Test
     void shouldSaveVehiclePlateAndExposeItInResponse() {
@@ -382,6 +468,129 @@ class FreightBillServiceTest {
 
         assertThat(response.settlementCompanyId()).isEqualTo(9L);
         assertThat(response.settlementCompanyName()).isEqualTo("TEST9");
+    }
+
+    @Test
+    void shouldUseRequestedSettlementCompanyNameWhenCompanyServiceIsMissing() {
+        FreightBillRepository repository = mock(FreightBillRepository.class);
+        FreightBillSourceService sourceService = mock(FreightBillSourceService.class);
+        when(sourceService.validateSources(any(FreightBillRequest.class), any()))
+                .thenReturn(new FreightBillSourceService.SourceValidationContext(Map.of(), Map.of()));
+        when(repository.existsByBillNoAndDeletedFlagFalse("FB-REQ-SETTLEMENT")).thenReturn(false);
+        when(repository.save(any(FreightBill.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        FreightBillService service = createService(
+                repository,
+                mock(SalesOutboundRepository.class),
+                sourceService,
+                mock(CarrierRepository.class),
+                null
+        );
+
+        FreightBillResponse response = service.create(new FreightBillRequest(
+                "FB-REQ-SETTLEMENT",
+                "物流甲",
+                12L,
+                "  结算主体B  ",
+                null,
+                "客户甲",
+                "项目甲",
+                LocalDate.of(2026, 5, 4),
+                new BigDecimal("20.00"),
+                null,
+                null,
+                List.of(buildItemRequest("OB-001"))
+        ));
+
+        assertThat(response.settlementCompanyId()).isEqualTo(12L);
+        assertThat(response.settlementCompanyName()).isEqualTo("结算主体B");
+    }
+
+    @Test
+    void shouldClearSettlementCompanyWhenCarrierNameIsBlank() {
+        FreightBillRepository repository = mock(FreightBillRepository.class);
+        FreightBillSourceService sourceService = mock(FreightBillSourceService.class);
+        when(sourceService.validateSources(any(FreightBillRequest.class), any()))
+                .thenReturn(new FreightBillSourceService.SourceValidationContext(Map.of(), Map.of()));
+        when(repository.existsByBillNoAndDeletedFlagFalse("FB-BLANK-CARRIER")).thenReturn(false);
+        when(repository.save(any(FreightBill.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        FreightBillService service = createService(
+                repository,
+                mock(SalesOutboundRepository.class),
+                sourceService,
+                mock(CarrierRepository.class),
+                null
+        );
+
+        FreightBillResponse response = service.create(new FreightBillRequest(
+                "FB-BLANK-CARRIER",
+                "   ",
+                null,
+                null,
+                null,
+                "客户甲",
+                "项目甲",
+                LocalDate.of(2026, 5, 4),
+                new BigDecimal("20.00"),
+                null,
+                null,
+                List.of(buildItemRequest("OB-001"))
+        ));
+
+        assertThat(response.settlementCompanyId()).isNull();
+        assertThat(response.settlementCompanyName()).isNull();
+    }
+
+    @Test
+    void shouldClearSettlementCompanyWhenCarrierHasNoDefault() {
+        FreightBillRepository repository = mock(FreightBillRepository.class);
+        FreightBillSourceService sourceService = mock(FreightBillSourceService.class);
+        CarrierRepository carrierRepository = mock(CarrierRepository.class);
+        when(sourceService.validateSources(any(FreightBillRequest.class), any()))
+                .thenReturn(new FreightBillSourceService.SourceValidationContext(Map.of(), Map.of()));
+        when(repository.existsByBillNoAndDeletedFlagFalse("FB-NO-CARRIER")).thenReturn(false);
+        when(repository.save(any(FreightBill.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(carrierRepository.findFirstByCarrierNameAndDeletedFlagFalseOrderByCarrierCodeAsc("物流甲"))
+                .thenReturn(Optional.empty());
+        FreightBillService service = createService(
+                repository,
+                mock(SalesOutboundRepository.class),
+                sourceService,
+                carrierRepository,
+                null
+        );
+
+        FreightBillResponse response = service.create(buildRequest("FB-NO-CARRIER", buildItemRequest("OB-001")));
+
+        assertThat(response.settlementCompanyId()).isNull();
+        assertThat(response.settlementCompanyName()).isNull();
+    }
+
+    @Test
+    void shouldUseCarrierDefaultSettlementCompanyWhenPresent() {
+        FreightBillRepository repository = mock(FreightBillRepository.class);
+        FreightBillSourceService sourceService = mock(FreightBillSourceService.class);
+        CarrierRepository carrierRepository = mock(CarrierRepository.class);
+        Carrier carrier = new Carrier();
+        carrier.setDefaultSettlementCompanyId(7L);
+        carrier.setDefaultSettlementCompanyName("默认结算主体");
+        when(sourceService.validateSources(any(FreightBillRequest.class), any()))
+                .thenReturn(new FreightBillSourceService.SourceValidationContext(Map.of(), Map.of()));
+        when(repository.existsByBillNoAndDeletedFlagFalse("FB-CARRIER-DEFAULT")).thenReturn(false);
+        when(repository.save(any(FreightBill.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(carrierRepository.findFirstByCarrierNameAndDeletedFlagFalseOrderByCarrierCodeAsc("物流甲"))
+                .thenReturn(Optional.of(carrier));
+        FreightBillService service = createService(
+                repository,
+                mock(SalesOutboundRepository.class),
+                sourceService,
+                carrierRepository,
+                null
+        );
+
+        FreightBillResponse response = service.create(buildRequest("FB-CARRIER-DEFAULT", buildItemRequest("OB-001")));
+
+        assertThat(response.settlementCompanyId()).isEqualTo(7L);
+        assertThat(response.settlementCompanyName()).isEqualTo("默认结算主体");
     }
 
     @Test
@@ -621,6 +830,80 @@ class FreightBillServiceTest {
                 .hasMessageContaining("物流单不存在");
     }
 
+    @Test
+    void shouldThrowWhenUpdateRequestBillNoConflictsWithExistingBill() {
+        FreightBillRepository repository = mock(FreightBillRepository.class);
+        FreightBill existing = new FreightBill();
+        existing.setId(1L);
+        existing.setBillNo("FB-OLD");
+        existing.setStatus(StatusConstants.UNAUDITED);
+        existing.setItems(new ArrayList<>());
+
+        when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(existing));
+        when(repository.existsByBillNoAndDeletedFlagFalse("FB-DUP")).thenReturn(true);
+
+        FreightBillService service = new FreightBillService(
+                repository,
+                mock(SalesOutboundRepository.class),
+                new SnowflakeIdGenerator(),
+                Mappers.getMapper(FreightBillMapper.class),
+                mock(FreightBillSourceService.class),
+                new FreightBillApplyService(),
+                mock(WorkflowTransitionGuard.class),
+                null,
+                null
+        ) {
+            @Override
+            protected FreightBillRequest normalizeUpdateRequest(FreightBill entity, FreightBillRequest request) {
+                return request;
+            }
+        };
+
+        assertThatThrownBy(() -> service.update(1L, buildRequest("FB-DUP", buildItemRequest("OB-001"))))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("物流单号已存在");
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    void shouldAllowUpdateRequestBillNoChangeWhenNewBillNoDoesNotExist() {
+        FreightBillRepository repository = mock(FreightBillRepository.class);
+        FreightBillSourceService sourceService = mock(FreightBillSourceService.class);
+        FreightBill existing = new FreightBill();
+        existing.setId(1L);
+        existing.setBillNo("FB-OLD");
+        existing.setStatus(StatusConstants.UNAUDITED);
+        existing.setItems(new ArrayList<>());
+
+        when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(existing));
+        when(repository.existsByBillNoAndDeletedFlagFalse("FB-FREE")).thenReturn(false);
+        when(repository.save(any(FreightBill.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(sourceService.validateSources(any(FreightBillRequest.class), any()))
+                .thenReturn(new FreightBillSourceService.SourceValidationContext(Map.of(), Map.of()));
+
+        FreightBillService service = new FreightBillService(
+                repository,
+                mock(SalesOutboundRepository.class),
+                new SnowflakeIdGenerator(),
+                Mappers.getMapper(FreightBillMapper.class),
+                sourceService,
+                new FreightBillApplyService(),
+                mock(WorkflowTransitionGuard.class),
+                null,
+                null
+        ) {
+            @Override
+            protected FreightBillRequest normalizeUpdateRequest(FreightBill entity, FreightBillRequest request) {
+                return request;
+            }
+        };
+
+        FreightBillResponse response = service.update(1L, buildRequest("FB-FREE", buildItemRequest("OB-001")));
+
+        assertThat(response.billNo()).isEqualTo("FB-FREE");
+        verify(repository).existsByBillNoAndDeletedFlagFalse("FB-FREE");
+    }
+
     // ======================== detail tests ========================
 
     @Test
@@ -672,6 +955,29 @@ class FreightBillServiceTest {
         assertThat(response.items()).hasSize(1);
         assertThat(response.items().get(0).sourceNo()).isEqualTo("OB-001");
         assertThat(response.items().get(0).materialName()).isEqualTo("宝钢");
+    }
+
+    @Test
+    void shouldReturnMapperResponseWhenSavedEntityHasNoItems() {
+        FreightBillRepository repository = mock(FreightBillRepository.class);
+        FreightBill entity = new FreightBill();
+        entity.setId(1L);
+        entity.setBillNo("FB-NO-ITEM");
+        entity.setCarrierName("物流甲");
+        entity.setCustomerName("客户甲");
+        entity.setProjectName("项目甲");
+        entity.setBillTime(LocalDate.of(2026, 5, 4));
+        entity.setUnitPrice(new BigDecimal("20.00"));
+        entity.setTotalWeight(BigDecimal.ZERO);
+        entity.setTotalFreight(BigDecimal.ZERO);
+        entity.setStatus(StatusConstants.UNAUDITED);
+        entity.setItems(new ArrayList<>());
+        when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(entity));
+        FreightBillService service = createService(repository);
+
+        FreightBillResponse response = service.detail(1L);
+
+        assertThat(response.items()).isEmpty();
     }
 
     @Test
@@ -728,6 +1034,36 @@ class FreightBillServiceTest {
         assertThatThrownBy(() -> service.detail(999L))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("物流单不存在");
+    }
+
+    @Test
+    void shouldFindVisibleEntityByIdWhenAdminViewsDeletedRecords() {
+        FreightBillRepository repository = mock(FreightBillRepository.class);
+        FreightBill deleted = new FreightBill();
+        deleted.setId(1L);
+        deleted.setBillNo("FB-DELETED");
+        deleted.setCarrierName("物流甲");
+        deleted.setCustomerName("客户甲");
+        deleted.setProjectName("项目甲");
+        deleted.setBillTime(LocalDate.of(2026, 5, 4));
+        deleted.setUnitPrice(new BigDecimal("20.00"));
+        deleted.setTotalWeight(BigDecimal.ZERO);
+        deleted.setTotalFreight(BigDecimal.ZERO);
+        deleted.setStatus(StatusConstants.DELETED);
+        deleted.setDeletedFlag(true);
+        deleted.setItems(new ArrayList<>());
+        when(repository.findById(1L)).thenReturn(Optional.of(deleted));
+        FreightBillService service = createService(repository);
+        CrudRuntimeSettings runtimeSettings = mock(CrudRuntimeSettings.class);
+        when(runtimeSettings.shouldAdminSeeDeletedRecords()).thenReturn(true);
+        ReflectionTestUtils.invokeMethod(service, "setCrudRuntimeSettings", runtimeSettings);
+        setupAdminPrincipal();
+
+        FreightBillResponse response = service.detail(1L);
+
+        assertThat(response.billNo()).isEqualTo("FB-DELETED");
+        verify(repository).findById(1L);
+        verify(repository, never()).findByIdAndDeletedFlagFalse(1L);
     }
 
     // ======================== delete tests ========================
@@ -905,6 +1241,119 @@ class FreightBillServiceTest {
 
         assertThat(results).isNotNull();
         assertThat(results).isEmpty();
+    }
+
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    @Test
+    void importCandidatesShouldRejectNonAuditedRequestedStatusInSpecification() {
+        FreightBillRepository repository = mock(FreightBillRepository.class);
+        FreightBillService service = createService(repository);
+        Specification<SalesOutbound> spec = ReflectionTestUtils.invokeMethod(
+                service,
+                "importableSalesOutboundStatus",
+                StatusConstants.UNAUDITED
+        );
+        CriteriaBuilder cb = mock(CriteriaBuilder.class);
+        CriteriaQuery query = mock(CriteriaQuery.class);
+        Root<SalesOutbound> root = mockRoot();
+        Predicate disjunction = mock(Predicate.class);
+        when(cb.disjunction()).thenReturn(disjunction);
+
+        Predicate predicate = spec.toPredicate(root, query, cb);
+
+        assertThat(predicate).isSameAs(disjunction);
+        verify(cb).disjunction();
+    }
+
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    @Test
+    void importCandidatesShouldFilterAuditedStatusInSpecification() {
+        FreightBillRepository repository = mock(FreightBillRepository.class);
+        FreightBillService service = createService(repository);
+        Specification<SalesOutbound> spec = ReflectionTestUtils.invokeMethod(
+                service,
+                "importableSalesOutboundStatus",
+                StatusConstants.AUDITED
+        );
+        CriteriaBuilder cb = mock(CriteriaBuilder.class);
+        CriteriaQuery query = mock(CriteriaQuery.class);
+        Root<SalesOutbound> root = mockRoot();
+        Path<Object> statusPath = root.get("status");
+        Predicate audited = mock(Predicate.class);
+
+        when(cb.equal(statusPath, StatusConstants.AUDITED)).thenReturn(audited);
+
+        Predicate predicate = spec.toPredicate(root, query, cb);
+
+        assertThat(predicate).isSameAs(audited);
+        verify(cb).equal(statusPath, StatusConstants.AUDITED);
+    }
+
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    @Test
+    void importCandidatesShouldFilterAuditedStatusWhenRequestedStatusIsBlank() {
+        FreightBillRepository repository = mock(FreightBillRepository.class);
+        FreightBillService service = createService(repository);
+        Specification<SalesOutbound> spec = ReflectionTestUtils.invokeMethod(
+                service,
+                "importableSalesOutboundStatus",
+                "   "
+        );
+        CriteriaBuilder cb = mock(CriteriaBuilder.class);
+        CriteriaQuery query = mock(CriteriaQuery.class);
+        Root<SalesOutbound> root = mockRoot();
+        Path<Object> statusPath = root.get("status");
+        Predicate audited = mock(Predicate.class);
+
+        when(cb.equal(statusPath, StatusConstants.AUDITED)).thenReturn(audited);
+
+        Predicate predicate = spec.toPredicate(root, query, cb);
+
+        assertThat(predicate).isSameAs(audited);
+        verify(cb).equal(statusPath, StatusConstants.AUDITED);
+    }
+
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    @Test
+    void importCandidatesShouldBuildUnoccupiedSourceSubquerySpecification() {
+        FreightBillRepository repository = mock(FreightBillRepository.class);
+        FreightBillService service = createService(repository);
+        Specification<SalesOutbound> spec = ReflectionTestUtils.invokeMethod(service, "sourceOutboundNotOccupied");
+        CriteriaBuilder cb = mock(CriteriaBuilder.class);
+        CriteriaQuery query = mock(CriteriaQuery.class);
+        Subquery<Long> subquery = mock(Subquery.class);
+        Root<FreightBill> billRoot = mockRoot();
+        Join<FreightBill, FreightBillItem> itemJoin = mock(Join.class, Answers.RETURNS_DEEP_STUBS);
+        Root<SalesOutbound> root = mockRoot();
+        Predicate billNotDeleted = mock(Predicate.class);
+        Predicate sourceNoMatches = mock(Predicate.class);
+        Predicate exists = mock(Predicate.class);
+        Predicate notExists = mock(Predicate.class);
+        Expression<Long> literal = mock(Expression.class);
+        Expression<String> trimmedSourceNo = mock(Expression.class);
+
+        when(cb.isFalse(any(Expression.class))).thenReturn(billNotDeleted);
+        when(cb.equal(any(Expression.class), any(Expression.class))).thenReturn(sourceNoMatches);
+        when(cb.literal(1L)).thenReturn(literal);
+        when(cb.trim(any(Expression.class))).thenReturn(trimmedSourceNo);
+        when(cb.exists(subquery)).thenReturn(exists);
+        when(cb.not(exists)).thenReturn(notExists);
+        when(query.subquery(Long.class)).thenReturn(subquery);
+        when(subquery.from(FreightBill.class)).thenReturn(billRoot);
+        org.mockito.Mockito.doReturn(itemJoin).when(billRoot).<FreightBill, FreightBillItem>join("items");
+        when(subquery.select(literal)).thenReturn(subquery);
+        when(subquery.where(any(Predicate[].class))).thenReturn(subquery);
+
+        Predicate predicate = spec.toPredicate(root, query, cb);
+
+        assertThat(predicate).isSameAs(notExists);
+        verify(query).subquery(Long.class);
+        verify(billRoot).<FreightBill, FreightBillItem>join("items");
+        verify(cb).isFalse(billRoot.get("deletedFlag"));
+        verify(cb).trim(itemJoin.get("sourceNo"));
+        verify(cb).equal(trimmedSourceNo, root.get("outboundNo"));
+        verify(cb).exists(subquery);
+        verify(cb).not(exists);
     }
 
     // ======================== apply status normalization tests ========================
@@ -1144,5 +1593,28 @@ class FreightBillServiceTest {
         companySetting.setId(id);
         companySetting.setCompanyName(companyName);
         return companySetting;
+    }
+
+    private void setupAdminPrincipal() {
+        SecurityPrincipal principal = new SecurityPrincipal(
+                1L,
+                "admin",
+                "",
+                true,
+                List.of(new SimpleGrantedAuthority("ROLE_ADMIN"))
+        );
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken(principal, null, principal.getAuthorities())
+        );
+    }
+
+    @SuppressWarnings("unchecked")
+    private <T> Root<T> mockRoot() {
+        Root<T> root = mock(Root.class, Answers.RETURNS_DEEP_STUBS);
+        Map<String, Path<?>> expressions = new java.util.HashMap<>();
+        when(root.get(any(String.class))).thenAnswer(invocation ->
+                expressions.computeIfAbsent(invocation.getArgument(0), ignored -> mock(Path.class))
+        );
+        return root;
     }
 }

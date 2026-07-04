@@ -67,6 +67,35 @@ class PurchaseInboundAllocationServiceTest {
                 .hasMessageContaining("剩余可用 1 件");
     }
 
+    @Test
+    void shouldRejectMissingSourcePurchaseOrderItemIdBeforeAvailabilityMath() {
+        PurchaseInboundAllocationService service =
+                new PurchaseInboundAllocationService(mock(PurchaseInboundItemRepository.class));
+        PurchaseOrderItem sourceItem = new PurchaseOrderItem();
+        sourceItem.setQuantity(6);
+        PurchaseInboundAllocationService.AllocationContext context =
+                new PurchaseInboundAllocationService.AllocationContext(Map.of(), new java.util.HashMap<>());
+
+        assertThatThrownBy(() -> service.validateAvailableQuantity(itemRequest(null, 1), sourceItem, 3, context))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("第3行来源采购订单明细不能为空");
+    }
+
+    @Test
+    void shouldTreatNullQuantitiesAsZeroWhenValidatingAvailableQuantity() {
+        PurchaseInboundAllocationService service =
+                new PurchaseInboundAllocationService(mock(PurchaseInboundItemRepository.class));
+        PurchaseOrderItem sourceItem = new PurchaseOrderItem();
+        sourceItem.setId(201L);
+        sourceItem.setQuantity(null);
+        PurchaseInboundAllocationService.AllocationContext context =
+                new PurchaseInboundAllocationService.AllocationContext(Map.of(), new java.util.HashMap<>());
+
+        service.validateAvailableQuantity(itemRequest(201L, null), sourceItem, 4, context);
+
+        assertThat(context.requestAllocatedQuantityMap()).containsEntry(201L, 0);
+    }
+
     private PurchaseInboundRequest request(PurchaseInboundItemRequest... items) {
         return new PurchaseInboundRequest(
                 "PI-001",
@@ -81,7 +110,7 @@ class PurchaseInboundAllocationServiceTest {
         );
     }
 
-    private PurchaseInboundItemRequest itemRequest(Long sourcePurchaseOrderItemId, int quantity) {
+    private PurchaseInboundItemRequest itemRequest(Long sourcePurchaseOrderItemId, Integer quantity) {
         return new PurchaseInboundItemRequest(
                 null, "M1", "宝钢", "螺纹钢", "HRB400", "18", "12m", "吨",
                 sourcePurchaseOrderItemId, "一号库", "理算", "B1", quantity, "支",

@@ -74,28 +74,8 @@ class UserAccountAdminMapperTest {
         assertThat(response.roleIds()).isNull();
     }
 
-    private static class UserAccountAdminMapperImpl implements UserAccountAdminMapper {
-        @Override
-        public UserAccountAdminResponse toResponse(UserAccount entity) {
-            if (entity == null) {
-                return null;
-            }
-            return new UserAccountAdminResponse(
-                    entity.getId(),
-                    entity.getLoginName(),
-                    entity.getUserName(),
-                    entity.getMobile(),
-                    entity.getDepartmentId(),
-                    entity.getDepartmentName(),
-                    null, // roleNames - ignored
-                    null, // roleIds - ignored
-                    entity.getDataScope(),
-                    entity.getPermissionSummary(),
-                    entity.getLastLoginDate(),
-                    fromStatus(entity.getStatus()),
-                    entity.getRemark(),
-                    entity.getTotpEnabled()
-            );
-        }
+    @Test
+    void shouldReturnNullWhenEntityIsNull() {
+        assertThat(mapper.toResponse(null)).isNull();
     }
 }

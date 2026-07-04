@@ -7,8 +7,11 @@ import com.leo.erp.system.department.repository.DepartmentRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.lang.reflect.Constructor;
+import java.lang.reflect.Field;
 import java.lang.reflect.Proxy;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
@@ -135,6 +138,15 @@ class DepartmentScopeResolverTest {
     }
 
     @Test
+    void shouldTreatNullRepositoryOptionsAsMissingRepositories() {
+        DepartmentScopeResolver resolver = new DepartmentScopeResolver(null, null);
+
+        Set<Long> userIds = resolver.getOwnerUserIds(1L, ResourcePermissionCatalog.SCOPE_DEPARTMENT);
+
+        assertThat(userIds).containsExactly(1L);
+    }
+
+    @Test
     void shouldCacheDepartmentUsers() {
         DepartmentScopeResolver resolver = new DepartmentScopeResolver(
                 Optional.of(userAccountRepository), Optional.of(departmentRepository));
@@ -144,6 +156,51 @@ class DepartmentScopeResolverTest {
 
         assertThat(first).isEqualTo(second);
         assertThat(first).contains(1L, 2L, 3L);
+    }
+
+    @Test
+    void shouldRefreshCacheWhenCachedDepartmentUsersDoNotContainCurrentUser() {
+        UserAccountRepository switchingRepo = (UserAccountRepository) Proxy.newProxyInstance(
+                UserAccountRepository.class.getClassLoader(),
+                new Class[]{UserAccountRepository.class},
+                (proxy, method, args) -> switch (method.getName()) {
+                    case "findByIdAndDeletedFlagFalse" -> {
+                        Long userId = (Long) args[0];
+                        yield Optional.of(userAccount(userId, 10L));
+                    }
+                    case "findByDepartmentIdAndDeletedFlagFalse" -> List.of(userAccount(2L, 10L), userAccount(3L, 10L));
+                    case "toString" -> "SwitchingUserAccountRepoStub";
+                    case "hashCode" -> System.identityHashCode(proxy);
+                    case "equals" -> proxy == args[0];
+                    default -> throw new UnsupportedOperationException(method.getName());
+                }
+        );
+        DepartmentScopeResolver resolver = new DepartmentScopeResolver(
+                Optional.of(switchingRepo), Optional.of(departmentRepository));
+
+        Set<Long> first = resolver.getOwnerUserIds(1L, ResourcePermissionCatalog.SCOPE_DEPARTMENT);
+        Set<Long> second = resolver.getOwnerUserIds(4L, ResourcePermissionCatalog.SCOPE_DEPARTMENT);
+
+        assertThat(first).contains(1L, 2L, 3L);
+        assertThat(second).contains(2L, 3L, 4L);
+    }
+
+    @Test
+    void shouldRefreshExpiredDepartmentUserCache() throws Exception {
+        DepartmentScopeResolver resolver = new DepartmentScopeResolver(
+                Optional.of(userAccountRepository), Optional.of(departmentRepository));
+        Field cacheField = DepartmentScopeResolver.class.getDeclaredField("departmentUserCache");
+        cacheField.setAccessible(true);
+        @SuppressWarnings("unchecked")
+        Map<Long, Object> cache = (Map<Long, Object>) cacheField.get(resolver);
+        Class<?> entryType = Class.forName("com.leo.erp.security.permission.DepartmentScopeResolver$DepartmentCacheEntry");
+        Constructor<?> constructor = entryType.getDeclaredConstructor(Set.class, long.class);
+        constructor.setAccessible(true);
+        cache.put(10L, constructor.newInstance(Set.of(99L), 0L));
+
+        Set<Long> userIds = resolver.getOwnerUserIds(1L, ResourcePermissionCatalog.SCOPE_DEPARTMENT);
+
+        assertThat(userIds).contains(1L, 2L, 3L);
     }
 
     @Test
@@ -215,6 +272,50 @@ class DepartmentScopeResolverTest {
         Set<Long> userIds = resolver.getOwnerUserIds(1L, ResourcePermissionCatalog.SCOPE_DEPARTMENT);
 
         assertThat(userIds).contains(1L);
+    }
+
+    @Test
+    void shouldIgnoreAlreadyVisitedDepartmentsWhenHierarchyContainsDuplicateIds() {
+        DepartmentRepository duplicateRepo = (DepartmentRepository) Proxy.newProxyInstance(
+                DepartmentRepository.class.getClassLoader(),
+                new Class[]{DepartmentRepository.class},
+                (proxy, method, args) -> switch (method.getName()) {
+                    case "findByIdAndDeletedFlagFalse" -> Optional.of(department(10L, "总部", null, "正常"));
+                    case "findByStatusAndDeletedFlagFalseOrderBySortOrderAscIdAsc" -> List.of(
+                            department(20L, "研发部", 10L, "正常"),
+                            department(20L, "研发部重复数据", 10L, "正常"),
+                            department(30L, "后端组", 20L, "正常")
+                    );
+                    case "toString" -> "DuplicateDeptRepoStub";
+                    case "hashCode" -> System.identityHashCode(proxy);
+                    case "equals" -> proxy == args[0];
+                    default -> throw new UnsupportedOperationException(method.getName());
+                }
+        );
+        UserAccountRepository repo = (UserAccountRepository) Proxy.newProxyInstance(
+                UserAccountRepository.class.getClassLoader(),
+                new Class[]{UserAccountRepository.class},
+                (proxy, method, args) -> switch (method.getName()) {
+                    case "findByIdAndDeletedFlagFalse" -> Optional.of(userAccount(1L, 10L));
+                    case "findByDepartmentIdAndDeletedFlagFalse" -> {
+                        Long departmentId = (Long) args[0];
+                        yield departmentId.equals(20L)
+                                ? List.of(userAccount(2L, 20L))
+                                : departmentId.equals(30L)
+                                ? List.of(userAccount(3L, 30L))
+                                : List.of();
+                    }
+                    case "toString" -> "DuplicateUserAccountRepoStub";
+                    case "hashCode" -> System.identityHashCode(proxy);
+                    case "equals" -> proxy == args[0];
+                    default -> throw new UnsupportedOperationException(method.getName());
+                }
+        );
+        DepartmentScopeResolver resolver = new DepartmentScopeResolver(Optional.of(repo), Optional.of(duplicateRepo));
+
+        Set<Long> userIds = resolver.getOwnerUserIds(1L, ResourcePermissionCatalog.SCOPE_DEPARTMENT);
+
+        assertThat(userIds).containsExactlyInAnyOrder(1L, 2L, 3L);
     }
 
     @Test

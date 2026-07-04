@@ -49,4 +49,9 @@ class WarehouseMapperTest {
         assertThat(response.contactName()).isNull();
         assertThat(response.address()).isNull();
     }
+
+    @Test
+    void shouldReturnNull_whenEntityIsNull() {
+        assertThat(mapper.toResponse(null)).isNull();
+    }
 }

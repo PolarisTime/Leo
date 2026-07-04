@@ -24,12 +24,14 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -269,6 +271,86 @@ class InvoiceReceiptServiceTest {
     }
 
     @Test
+    void createRejectsSourcePurchaseOrderWithNullOrderNo() {
+        PurchaseOrderItem sourceItem = buildPurchaseOrderItem(206L, "M-1", new BigDecimal("0.300"), new BigDecimal("1000.00"));
+        sourceItem.getPurchaseOrder().setOrderNo(null);
+
+        when(repository.existsByReceiveNoAndDeletedFlagFalse("SP-NULL-ORDER-NO")).thenReturn(false);
+        when(purchaseOrderItemQueryService.findActiveByIdIn(anyCollection())).thenReturn(List.of(sourceItem));
+        when(repository.summarizeAllocatedBySourcePurchaseOrderItemIds(anyCollection(), nullable(Long.class)))
+                .thenReturn(List.of());
+
+        BusinessException exception = assertThrows(BusinessException.class, () -> service.create(buildRequest(
+                "SP-NULL-ORDER-NO", 206L, new BigDecimal("0.300"), new BigDecimal("3333.33"), new BigDecimal("1000.00")
+        )));
+
+        assertEquals("第1行来源采购订单不存在", exception.getMessage());
+    }
+
+    @Test
+    void createRejectsSourcePurchaseOrderItemWithoutOrder() {
+        PurchaseOrderItem sourceItem = buildPurchaseOrderItem(205L, "M-1", new BigDecimal("0.300"), new BigDecimal("1000.00"));
+        sourceItem.setPurchaseOrder(null);
+
+        when(repository.existsByReceiveNoAndDeletedFlagFalse("SP-NO-ORDER")).thenReturn(false);
+        when(purchaseOrderItemQueryService.findActiveByIdIn(anyCollection())).thenReturn(List.of(sourceItem));
+        when(repository.summarizeAllocatedBySourcePurchaseOrderItemIds(anyCollection(), nullable(Long.class)))
+                .thenReturn(List.of());
+
+        BusinessException exception = assertThrows(BusinessException.class, () -> service.create(buildRequest(
+                "SP-NO-ORDER", 205L, new BigDecimal("0.300"), new BigDecimal("3333.33"), new BigDecimal("1000.00")
+        )));
+
+        assertEquals("第1行来源采购订单不存在", exception.getMessage());
+    }
+
+    @Test
+    void validateSourcePurchaseOrderAllocationRejectsMissingSourceId() {
+        InvoiceReceiptSourceService sourceService = new InvoiceReceiptSourceService(
+                repository,
+                purchaseOrderItemQueryService
+        );
+
+        BusinessException exception = assertThrows(BusinessException.class, () -> ReflectionTestUtils.invokeMethod(
+                sourceService,
+                "validateSourcePurchaseOrderAllocation",
+                buildRequest("SP-MISSING", null, new BigDecimal("0.300"), new BigDecimal("3333.33"), new BigDecimal("1000.00"))
+                        .items()
+                        .get(0),
+                1,
+                null,
+                Map.of(),
+                Map.of(),
+                new java.util.HashMap<>()
+        ));
+
+        assertEquals("第1行来源采购订单明细不能为空", exception.getMessage());
+    }
+
+    @Test
+    void validateSourcePurchaseOrderAllocationRejectsMissingSourceItem() {
+        InvoiceReceiptSourceService sourceService = new InvoiceReceiptSourceService(
+                repository,
+                purchaseOrderItemQueryService
+        );
+
+        BusinessException exception = assertThrows(BusinessException.class, () -> ReflectionTestUtils.invokeMethod(
+                sourceService,
+                "validateSourcePurchaseOrderAllocation",
+                buildRequest("SP-MISSING", 999L, new BigDecimal("0.300"), new BigDecimal("3333.33"), new BigDecimal("1000.00"))
+                        .items()
+                        .get(0),
+                1,
+                null,
+                Map.of(),
+                Map.of(),
+                new java.util.HashMap<>()
+        ));
+
+        assertEquals("第1行来源采购订单明细不存在", exception.getMessage());
+    }
+
+    @Test
     void createRejectsSourcePurchaseOrderItemAmountExceeded() {
         PurchaseOrderItem sourceItem = buildPurchaseOrderItem(204L, "M-1", new BigDecimal("1.100"), new BigDecimal("6000.00"));
 
@@ -318,6 +400,32 @@ class InvoiceReceiptServiceTest {
         service.update(1L, request);
 
         assertThat(existing.getReceiveNo()).isEqualTo("SP-OLD");
+    }
+
+    @Test
+    void validateUpdateRejectsDuplicateReceiveNoWhenChanged() {
+        InvoiceReceipt existing = new InvoiceReceipt();
+        existing.setReceiveNo("SP-OLD");
+        when(repository.existsByReceiveNoAndDeletedFlagFalse("SP-DUP")).thenReturn(true);
+
+        BusinessException exception = assertThrows(BusinessException.class, () -> service.validateUpdate(
+                existing,
+                buildRequest("SP-DUP", 201L, new BigDecimal("0.300"), new BigDecimal("3333.33"), new BigDecimal("1000.00"))
+        ));
+
+        assertEquals("收票单号已存在", exception.getMessage());
+    }
+
+    @Test
+    void validateUpdateAllowsChangedUniqueReceiveNo() {
+        InvoiceReceipt existing = new InvoiceReceipt();
+        existing.setReceiveNo("SP-OLD");
+        when(repository.existsByReceiveNoAndDeletedFlagFalse("SP-NEW")).thenReturn(false);
+
+        service.validateUpdate(
+                existing,
+                buildRequest("SP-NEW", 201L, new BigDecimal("0.300"), new BigDecimal("3333.33"), new BigDecimal("1000.00"))
+        );
     }
 
     @Test
@@ -475,6 +583,19 @@ class InvoiceReceiptServiceTest {
 
         assertThat(result).isNotNull();
         assertThat(result.receiveNo()).isEqualTo("SP-001");
+    }
+
+    @Test
+    void findVisibleEntityShouldUseRepositoryFindById() {
+        InvoiceReceipt deleted = new InvoiceReceipt();
+        deleted.setId(7L);
+        deleted.setReceiveNo("SP-DELETED");
+        deleted.setDeletedFlag(true);
+        when(repository.findById(7L)).thenReturn(Optional.of(deleted));
+
+        Optional<InvoiceReceipt> result = service.findVisibleEntity(7L);
+
+        assertThat(result).containsSame(deleted);
     }
 
     @Test

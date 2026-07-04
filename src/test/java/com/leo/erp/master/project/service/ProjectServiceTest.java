@@ -267,6 +267,26 @@ class ProjectServiceTest {
     }
 
     @Test
+    void shouldDeleteWithoutReferenceGuard() {
+        var repository = (ProjectRepository) Proxy.newProxyInstance(
+                ProjectRepository.class.getClassLoader(),
+                new Class[]{ProjectRepository.class},
+                (proxy, method, args) -> switch (method.getName()) {
+                    case "findByIdAndDeletedFlagFalse" -> Optional.of(createProject(1L, "P001"));
+                    case "findById" -> Optional.of(createProject(1L, "P001"));
+                    case "save" -> args[0];
+                    case "toString" -> "ProjectRepositoryStub";
+                    case "hashCode" -> System.identityHashCode(proxy);
+                    case "equals" -> proxy == args[0];
+                    default -> throw new UnsupportedOperationException(method.getName());
+                }
+        );
+        var service = new ProjectService(new SnowflakeIdGenerator(1), repository, null);
+
+        service.delete(1L);
+    }
+
+    @Test
     void shouldThrowException_whenDeleteWithReferences() {
         var repository = (ProjectRepository) Proxy.newProxyInstance(
                 ProjectRepository.class.getClassLoader(),

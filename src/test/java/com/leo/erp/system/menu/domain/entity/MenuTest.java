@@ -64,4 +64,19 @@ class MenuTest {
 
         assertThat(menu.getParentCode()).isNull();
     }
+
+    @Test
+    void shouldSetAndGetMenuActionFields() {
+        MenuAction action = new MenuAction();
+
+        action.setId(1L);
+        action.setMenuCode("system:company");
+        action.setActionCode("read");
+        action.setActionName("查看");
+
+        assertThat(action.getId()).isEqualTo(1L);
+        assertThat(action.getMenuCode()).isEqualTo("system:company");
+        assertThat(action.getActionCode()).isEqualTo("read");
+        assertThat(action.getActionName()).isEqualTo("查看");
+    }
 }

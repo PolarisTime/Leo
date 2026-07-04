@@ -70,4 +70,9 @@ class PurchaseInboundMapperTest {
         assertThat(response.totalWeighWeightTon()).isNull();
         assertThat(response.totalWeightAdjustmentTon()).isNull();
     }
+
+    @Test
+    void shouldReturnNullWhenEntityIsNull() {
+        assertThat(mapper.toResponse(null)).isNull();
+    }
 }

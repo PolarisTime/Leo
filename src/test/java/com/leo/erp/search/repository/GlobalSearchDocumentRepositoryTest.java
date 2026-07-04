@@ -1,7 +1,11 @@
 package com.leo.erp.search.repository;
 
 import java.lang.reflect.Proxy;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import javax.sql.DataSource;
 import org.junit.jupiter.api.Test;
@@ -72,19 +76,135 @@ class GlobalSearchDocumentRepositoryTest {
         assertThat(jdbcTemplate.sql).isNull();
     }
 
+    @Test
+    void searchReturnsEmptyWithoutQueryWhenModuleAccessesMissing() {
+        RecordingNamedParameterJdbcTemplate nullAccessJdbcTemplate = new RecordingNamedParameterJdbcTemplate();
+        GlobalSearchDocumentRepository nullAccessRepository = new GlobalSearchDocumentRepository(nullAccessJdbcTemplate);
+
+        assertThat(nullAccessRepository.search("CG", null, 20, null)).isEmpty();
+        assertThat(nullAccessJdbcTemplate.sql).isNull();
+
+        RecordingNamedParameterJdbcTemplate emptyAccessJdbcTemplate = new RecordingNamedParameterJdbcTemplate();
+        GlobalSearchDocumentRepository emptyAccessRepository = new GlobalSearchDocumentRepository(emptyAccessJdbcTemplate);
+
+        assertThat(emptyAccessRepository.search("CG", null, 20, List.of())).isEmpty();
+        assertThat(emptyAccessJdbcTemplate.sql).isNull();
+    }
+
+    @Test
+    void searchSkipsInvalidModuleKeysBeforeQuerying() {
+        RecordingNamedParameterJdbcTemplate jdbcTemplate = new RecordingNamedParameterJdbcTemplate();
+        GlobalSearchDocumentRepository repository = new GlobalSearchDocumentRepository(jdbcTemplate);
+
+        List<GlobalSearchDocument> results = repository.search(
+                "CG",
+                null,
+                20,
+                List.of(
+                        new GlobalSearchModuleAccess(null, Set.of(1L)),
+                        GlobalSearchModuleAccess.all("  ")
+                )
+        );
+
+        assertThat(results).isEmpty();
+        assertThat(jdbcTemplate.sql).isNull();
+    }
+
+    @Test
+    void searchUsesEmptyLikePatternsForMissingKeywords() {
+        for (String keyword : new String[]{null, "  "}) {
+            RecordingNamedParameterJdbcTemplate jdbcTemplate = new RecordingNamedParameterJdbcTemplate();
+            GlobalSearchDocumentRepository repository = new GlobalSearchDocumentRepository(jdbcTemplate);
+
+            repository.search(
+                    keyword,
+                    null,
+                    5,
+                    List.of(GlobalSearchModuleAccess.all("sales-order"))
+            );
+
+            assertThat(jdbcTemplate.params.getValue("keyword")).isEqualTo(keyword);
+            assertThat(jdbcTemplate.params.getValue("pattern")).isEqualTo("%%");
+            assertThat(jdbcTemplate.params.getValue("prefixPattern")).isEqualTo("%");
+            assertThat(jdbcTemplate.params.getValue("limit")).isEqualTo(5);
+        }
+    }
+
+    @Test
+    void searchMapsRowsToDocuments() {
+        RecordingNamedParameterJdbcTemplate jdbcTemplate = new RecordingNamedParameterJdbcTemplate();
+        Map<String, Object> row = Map.of(
+                "module_key", "sales-order",
+                "record_id", 42L,
+                "primary_no", "SO-42",
+                "summary", "Sales order summary",
+                "matched_by_track_id", true
+        );
+        jdbcTemplate.returnRows(List.of(row));
+        GlobalSearchDocumentRepository repository = new GlobalSearchDocumentRepository(jdbcTemplate);
+
+        List<GlobalSearchDocument> results = repository.search(
+                "SO-42",
+                42L,
+                1,
+                List.of(GlobalSearchModuleAccess.all("sales-order"))
+        );
+
+        assertThat(results).containsExactly(new GlobalSearchDocument(
+                "sales-order",
+                42L,
+                "SO-42",
+                "Sales order summary",
+                true
+        ));
+    }
+
     private static final class RecordingNamedParameterJdbcTemplate extends NamedParameterJdbcTemplate {
         private String sql;
         private MapSqlParameterSource params;
+        private List<Map<String, Object>> rows = List.of();
 
         private RecordingNamedParameterJdbcTemplate() {
             super(dataSource());
+        }
+
+        private void returnRows(List<Map<String, Object>> rows) {
+            this.rows = List.copyOf(rows);
         }
 
         @Override
         public <T> List<T> query(String sql, SqlParameterSource paramSource, RowMapper<T> rowMapper) {
             this.sql = sql;
             this.params = (MapSqlParameterSource) paramSource;
-            return List.of();
+            List<T> results = new ArrayList<>();
+            for (int index = 0; index < rows.size(); index++) {
+                results.add(map(rowMapper, rows.get(index), index));
+            }
+            return results;
+        }
+
+        private static <T> T map(RowMapper<T> rowMapper, Map<String, Object> row, int rowNum) {
+            try {
+                return rowMapper.mapRow(resultSet(row), rowNum);
+            } catch (SQLException ex) {
+                throw new IllegalStateException(ex);
+            }
+        }
+
+        private static ResultSet resultSet(Map<String, Object> row) {
+            return (ResultSet) Proxy.newProxyInstance(
+                    ResultSet.class.getClassLoader(),
+                    new Class[]{ResultSet.class},
+                    (proxy, method, args) -> switch (method.getName()) {
+                        case "getString" -> row.get((String) args[0]);
+                        case "getLong" -> ((Number) row.get((String) args[0])).longValue();
+                        case "getBoolean" -> row.get((String) args[0]);
+                        case "toString" -> "ResultSetStub";
+                        case "hashCode" -> System.identityHashCode(proxy);
+                        case "equals" -> proxy == args[0];
+                        default -> throw new UnsupportedOperationException(method.getName());
+                    }
+            );
         }
 
         private static DataSource dataSource() {

@@ -9,6 +9,7 @@ import com.leo.erp.finance.receivablepayable.web.dto.ReceivablePayableResponse;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentMatchers;
 
+import java.lang.reflect.Method;
 import java.math.BigDecimal;
 import java.util.List;
 
@@ -50,6 +51,20 @@ class ReceivablePayableServiceTest {
         var result = service.page(new PageQuery(0, 10, "id", "desc"), "应收", "客户", "已对账", "未结清", "test");
 
         assertThat(result).isNotNull();
+    }
+
+    @Test
+    void shouldTrimBlankFiltersToNull() {
+        var queryRepository = mock(ReceivablePayableQueryRepository.class);
+        when(queryRepository.page(any(), eq(null), eq(null), eq(null), eq(null), eq("keyword")))
+                .thenReturn(org.springframework.data.domain.Page.empty());
+        var excelExportService = mock(ExcelExportService.class);
+        var service = new ReceivablePayableService(queryRepository, excelExportService);
+
+        var result = service.page(new PageQuery(0, 10, "id", "desc"), " ", " ", " ", " ", "keyword");
+
+        assertThat(result).isNotNull();
+        verify(queryRepository).page(any(), eq(null), eq(null), eq(null), eq(null), eq("keyword"));
     }
 
     @Test
@@ -109,6 +124,22 @@ class ReceivablePayableServiceTest {
 
         assertThat(result).isNotNull();
         assertThat(result.id()).isEqualTo(VALID_COMPOSITE_KEY);
+    }
+
+    @Test
+    void shouldReturnDetailWithSafeAmounts_whenSummaryAmountsArePresent() {
+        var summary = buildResponse(VALID_COMPOSITE_KEY, "应收", "客户", "客户A");
+        var queryRepository = mock(ReceivablePayableQueryRepository.class);
+        when(queryRepository.findSummary(anyString(), anyString(), anyString(), anyString())).thenReturn(summary);
+        when(queryRepository.detailItems(anyString(), anyString(), anyString(), anyString())).thenReturn(List.of());
+        var excelExportService = mock(ExcelExportService.class);
+        var service = new ReceivablePayableService(queryRepository, excelExportService);
+
+        var result = service.detail(VALID_COMPOSITE_KEY);
+
+        assertThat(result.recognizedAmount()).isEqualByComparingTo(BigDecimal.TEN);
+        assertThat(result.settledAmount()).isEqualByComparingTo(BigDecimal.ZERO);
+        assertThat(result.balanceAmount()).isEqualByComparingTo(BigDecimal.TEN);
     }
 
     @Test
@@ -193,6 +224,36 @@ class ReceivablePayableServiceTest {
         assertThatThrownBy(() -> service.detail("应收:客户"))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("应收应付汇总ID不合法");
+    }
+
+    @Test
+    void shouldThrowException_whenDetailIdHasBlankParts() {
+        var queryRepository = mock(ReceivablePayableQueryRepository.class);
+        var excelExportService = mock(ExcelExportService.class);
+        var service = new ReceivablePayableService(queryRepository, excelExportService);
+
+        assertThatThrownBy(() -> service.detail("应收:客户:已对账: "))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("应收应付汇总ID不合法");
+        assertThatThrownBy(() -> service.detail(" :客户:已对账:CUS001"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("应收应付汇总ID不合法");
+        assertThatThrownBy(() -> service.detail("应收: :已对账:CUS001"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("应收应付汇总ID不合法");
+        assertThatThrownBy(() -> service.detail("应收:客户: :CUS001"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("应收应付汇总ID不合法");
+    }
+
+    @Test
+    void shouldRejectNullCounterpartyKey() throws Exception {
+        var service = new ReceivablePayableService(mock(ReceivablePayableQueryRepository.class),
+                mock(ExcelExportService.class));
+        Method method = ReceivablePayableService.class.getDeclaredMethod("isValidCounterpartyKey", String.class);
+        method.setAccessible(true);
+
+        assertThat(method.invoke(service, new Object[]{null})).isEqualTo(false);
     }
 
     @Test
@@ -319,6 +380,31 @@ class ReceivablePayableServiceTest {
 
         assertThat(result).isNotNull();
         assertThat(result.id()).isEqualTo(nameHashKey);
+    }
+
+    @Test
+    void shouldNormalizeNameHashKeyToLowerCase() {
+        var nameHashKey = "应收:客户:未对账:name:ABCDEFABCDEFABCDEFABCDEF12345678";
+        var summary = buildResponse(nameHashKey, "应收", "客户", "客户A");
+        var queryRepository = mock(ReceivablePayableQueryRepository.class);
+        when(queryRepository.findSummary(anyString(), anyString(), anyString(), anyString())).thenReturn(summary);
+        when(queryRepository.detailItems(anyString(), anyString(), anyString(), anyString())).thenReturn(List.of());
+        var excelExportService = mock(ExcelExportService.class);
+        var service = new ReceivablePayableService(queryRepository, excelExportService);
+
+        service.detail(nameHashKey);
+
+        verify(queryRepository).findSummary("应收", "客户", "name:abcdefabcdefabcdefabcdef12345678", "未对账");
+    }
+
+    @Test
+    void shouldNormalizeSafeNullAmountToZero() throws Exception {
+        var service = new ReceivablePayableService(mock(ReceivablePayableQueryRepository.class),
+                mock(ExcelExportService.class));
+        Method method = ReceivablePayableService.class.getDeclaredMethod("safe", BigDecimal.class);
+        method.setAccessible(true);
+
+        assertThat(method.invoke(service, new Object[]{null})).isEqualTo(BigDecimal.ZERO);
     }
 
     @Test

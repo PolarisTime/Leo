@@ -19,7 +19,6 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.RecordComponent;
-import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -116,13 +115,6 @@ public class ExcelExportService {
         } else if (value instanceof Instant inst) {
             cell.setCellStyle(dateStyle);
             cell.setCellValue(inst.toEpochMilli());
-        } else if (value instanceof BigDecimal bd) {
-            if (!format.isBlank()) {
-                CellStyle style = cell.getSheet().getWorkbook().createCellStyle();
-                style.setDataFormat(helper.createDataFormat().getFormat(format));
-                cell.setCellStyle(style);
-            }
-            cell.setCellValue(bd.doubleValue());
         } else {
             cell.setCellValue(value.toString());
         }

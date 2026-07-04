@@ -4,12 +4,14 @@ import com.leo.erp.logistics.bill.domain.entity.FreightBill;
 import com.leo.erp.logistics.bill.domain.entity.FreightBillItem;
 import com.leo.erp.logistics.bill.web.dto.FreightBillItemRequest;
 import com.leo.erp.logistics.bill.web.dto.FreightBillRequest;
+import com.leo.erp.sales.outbound.domain.entity.SalesOutboundItem;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -63,6 +65,51 @@ class FreightBillApplyServiceTest {
 
         assertThat(bill.getCustomerName()).isEqualTo("多客户");
         assertThat(bill.getProjectName()).isEqualTo("多项目");
+    }
+
+    @Test
+    void shouldUseMultipleLabelsAndZeroTotalsWhenItemsAreEmpty() {
+        FreightBill bill = new FreightBill();
+        FreightBillItem existing = new FreightBillItem();
+        existing.setId(30L);
+        bill.setItems(new ArrayList<>(List.of(existing)));
+
+        service.applyItems(
+                bill,
+                request(new BigDecimal("20.00")),
+                new AtomicLong(31L)::getAndIncrement
+        );
+
+        assertThat(bill.getCustomerName()).isEqualTo("多客户");
+        assertThat(bill.getProjectName()).isEqualTo("多项目");
+        assertThat(bill.getTotalWeight()).isEqualByComparingTo(BigDecimal.ZERO);
+        assertThat(bill.getTotalFreight()).isEqualTo(new BigDecimal("0.00"));
+        assertThat(bill.getItems()).isEmpty();
+    }
+
+    @Test
+    void shouldApplySalesOutboundItemSnapshotToItems() {
+        FreightBill bill = new FreightBill();
+        bill.setItems(new ArrayList<>());
+        SalesOutboundItem sourceOutboundItem = sourceOutboundItem(61L, 71L, "结算主体甲");
+        FreightBillSourceService.SourceValidationContext sourceContext =
+                new FreightBillSourceService.SourceValidationContext(Map.of(), Map.of(1, sourceOutboundItem));
+
+        service.applyItems(
+                bill,
+                request(
+                        new BigDecimal("20.00"),
+                        item(null, "OB-001", "客户甲", "项目甲", null, "宝钢", 2, new BigDecimal("1.250"))
+                ),
+                sourceContext,
+                new AtomicLong(81L)::getAndIncrement
+        );
+
+        assertThat(bill.getItems()).singleElement().satisfies(item -> {
+            assertThat(item.getSourceSalesOutboundItemId()).isEqualTo(61L);
+            assertThat(item.getSettlementCompanyId()).isEqualTo(71L);
+            assertThat(item.getSettlementCompanyName()).isEqualTo("结算主体甲");
+        });
     }
 
     @Test
@@ -133,5 +180,13 @@ class FreightBillApplyServiceTest {
                 null,
                 "一号库"
         );
+    }
+
+    private SalesOutboundItem sourceOutboundItem(Long id, Long settlementCompanyId, String settlementCompanyName) {
+        SalesOutboundItem item = new SalesOutboundItem();
+        item.setId(id);
+        item.setSettlementCompanyId(settlementCompanyId);
+        item.setSettlementCompanyName(settlementCompanyName);
+        return item;
     }
 }

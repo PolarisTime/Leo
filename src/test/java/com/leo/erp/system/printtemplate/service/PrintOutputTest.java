@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -93,11 +94,13 @@ class PrintOutputTest {
 
     @Test
     void shouldCopyOnlyStringEntriesFromPayloadMaps() {
+        Map<Object, Object> data = new LinkedHashMap<>();
+        data.put(123, "ignored");
+        data.put("customerName", "客户甲");
+        data.put("invalidNumber", 12);
+
         PrintOutput output = PrintOutput.fromPayload(Map.of(
-                "data", Map.of(
-                        "customerName", "客户甲",
-                        "invalidNumber", 12
-                ),
+                "data", data,
                 "items", List.of(
                         Map.of("brand", "中杭", "ignored", 1),
                         "not-a-map"

@@ -1,7 +1,11 @@
 package com.leo.erp.auth.support;
 
 import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
 
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.Arrays;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -36,6 +40,19 @@ class ApiKeySupportTest {
     }
 
     @Test
+    void shouldWrapUnavailableSha256Algorithm() {
+        try (var digest = Mockito.mockStatic(MessageDigest.class)) {
+            digest.when(() -> MessageDigest.getInstance("SHA-256"))
+                    .thenThrow(new NoSuchAlgorithmException("missing"));
+
+            assertThatThrownBy(() -> ApiKeySupport.hashKey("key"))
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessageContaining("SHA-256不可用")
+                    .hasCauseInstanceOf(NoSuchAlgorithmException.class);
+        }
+    }
+
+    @Test
     void shouldParseAllowedResources() {
         List<String> resources = ApiKeySupport.parseAllowedResources("user,role,menu");
 
@@ -54,6 +71,13 @@ class ApiKeySupportTest {
         List<String> resources = ApiKeySupport.parseAllowedResources("user,role,user,menu,role");
 
         assertThat(resources).containsExactly("user", "role", "menu");
+    }
+
+    @Test
+    void shouldIgnoreBlankItemsWhenParsingAllowedResources() {
+        List<String> resources = ApiKeySupport.parseAllowedResources(" user, ,role,, ");
+
+        assertThat(resources).containsExactly("user", "role");
     }
 
     @Test
@@ -85,6 +109,13 @@ class ApiKeySupportTest {
     }
 
     @Test
+    void shouldIgnoreBlankItemsWhenJoiningAllowedResources() {
+        String joined = ApiKeySupport.joinAllowedResources(List.of(" user ", " ", "role", ""));
+
+        assertThat(joined).isEqualTo("user,role");
+    }
+
+    @Test
     void shouldReturnEmptyStringForNullList() {
         String joined = ApiKeySupport.joinAllowedResources(null);
 
@@ -110,6 +141,80 @@ class ApiKeySupportTest {
         String joined = ApiKeySupport.joinAllowedActions(List.of("read", "write"));
 
         assertThat(joined).isEqualTo("read,write");
+    }
+
+    @Test
+    void shouldNormalizeAllowedResources() {
+        List<String> resources = ApiKeySupport.normalizeAllowedResources(
+                Arrays.asList(" Material ", null, "material", " ", "SUPPLIER")
+        );
+
+        assertThat(resources).containsExactly("material", "supplier");
+    }
+
+    @Test
+    void shouldRejectNullAllowedResources() {
+        assertThatThrownBy(() -> ApiKeySupport.normalizeAllowedResources(null))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("API Key 允许访问资源不能为空");
+    }
+
+    @Test
+    void shouldRejectEmptyAllowedResources() {
+        assertThatThrownBy(() -> ApiKeySupport.normalizeAllowedResources(List.of()))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("API Key 允许访问资源不能为空");
+    }
+
+    @Test
+    void shouldRejectBlankOnlyAllowedResources() {
+        assertThatThrownBy(() -> ApiKeySupport.normalizeAllowedResources(List.of(" ", "")))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("API Key 允许访问资源不能为空");
+    }
+
+    @Test
+    void shouldRejectUnknownAllowedResource() {
+        assertThatThrownBy(() -> ApiKeySupport.normalizeAllowedResources(List.of("missing-resource")))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("API Key 允许访问资源不合法");
+    }
+
+    @Test
+    void shouldNormalizeAllowedActions() {
+        List<String> actions = ApiKeySupport.normalizeAllowedActions(
+                Arrays.asList(" view ", null, "READ", " ", "edit")
+        );
+
+        assertThat(actions).containsExactly("read", "update");
+    }
+
+    @Test
+    void shouldRejectNullAllowedActions() {
+        assertThatThrownBy(() -> ApiKeySupport.normalizeAllowedActions(null))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("API Key 允许动作不能为空");
+    }
+
+    @Test
+    void shouldRejectEmptyAllowedActions() {
+        assertThatThrownBy(() -> ApiKeySupport.normalizeAllowedActions(List.of()))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("API Key 允许动作不能为空");
+    }
+
+    @Test
+    void shouldRejectBlankOnlyAllowedActions() {
+        assertThatThrownBy(() -> ApiKeySupport.normalizeAllowedActions(List.of(" ", "")))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("API Key 允许动作不能为空");
+    }
+
+    @Test
+    void shouldRejectUnknownAllowedAction() {
+        assertThatThrownBy(() -> ApiKeySupport.normalizeAllowedActions(List.of("missing-action")))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("API Key 允许动作不合法");
     }
 
     @Test

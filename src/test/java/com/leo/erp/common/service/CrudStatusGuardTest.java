@@ -25,15 +25,38 @@ class CrudStatusGuardTest {
     }
 
     @Test
+    void shouldReturnEmptyWhenStatusValueIsBlank() {
+        TestStatusEntity entity = new TestStatusEntity();
+        entity.setStatus(" ");
+
+        assertThat(guard.resolveStatus(entity)).isEmpty();
+    }
+
+    @Test
     void shouldReturnEmptyWhenNoStatusGetter() {
         assertThat(guard.resolveStatus(new Object())).isEmpty();
     }
 
     @Test
+    void shouldWrapStatusGetterFailure() {
+        assertThatThrownBy(() -> guard.resolveStatus(new ThrowingStatusEntity()))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("读取单据状态失败");
+    }
+
+    @Test
     void shouldRejectBlankStatus() {
+        assertThatThrownBy(() -> guard.normalizeRequiredStatus(null))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("状态不能为空");
         assertThatThrownBy(() -> guard.normalizeRequiredStatus(" "))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("状态不能为空");
+    }
+
+    @Test
+    void shouldNormalizeRequiredStatusByTrimming() {
+        assertThat(guard.normalizeRequiredStatus(" 草稿 ")).isEqualTo("草稿");
     }
 
     @Test
@@ -75,6 +98,46 @@ class CrudStatusGuardTest {
     }
 
     @Test
+    void shouldSkipRequestTransitionWhenAllowedTransitionsAreEmpty() {
+        TestStatusEntity entity = new TestStatusEntity();
+        entity.setStatus(StatusConstants.AUDITED);
+
+        guard.assertRequestStatusTransitionAllowed(entity, Optional.of(StatusConstants.DRAFT), Set.of());
+    }
+
+    @Test
+    void shouldSkipRequestTransitionWhenCurrentStatusMissing() {
+        TestStatusEntity entity = new TestStatusEntity();
+        entity.setStatus(StatusConstants.AUDITED);
+
+        guard.assertRequestStatusTransitionAllowed(entity, Optional.empty(), Set.of("草稿->已审核"));
+    }
+
+    @Test
+    void shouldSkipRequestTransitionWhenNextStatusMissing() {
+        TestStatusEntity entity = new TestStatusEntity();
+        entity.setStatus(" ");
+
+        guard.assertRequestStatusTransitionAllowed(entity, Optional.of(StatusConstants.DRAFT), Set.of("草稿->已审核"));
+    }
+
+    @Test
+    void shouldSkipRequestTransitionWhenStatusDoesNotChange() {
+        TestStatusEntity entity = new TestStatusEntity();
+        entity.setStatus(StatusConstants.DRAFT);
+
+        guard.assertRequestStatusTransitionAllowed(entity, Optional.of(StatusConstants.DRAFT), Set.of("草稿->已审核"));
+    }
+
+    @Test
+    void shouldValidateRequestStatusTransitionWhenStatusChanges() {
+        TestStatusEntity entity = new TestStatusEntity();
+        entity.setStatus(StatusConstants.AUDITED);
+
+        guard.assertRequestStatusTransitionAllowed(entity, Optional.of(StatusConstants.DRAFT), Set.of("草稿->已审核"));
+    }
+
+    @Test
     void shouldAllowConfiguredTransition() {
         guard.validateStatusTransition(Set.of("草稿->已审核"), "草稿", "已审核");
     }
@@ -96,6 +159,20 @@ class CrudStatusGuardTest {
     }
 
     @Test
+    void shouldRejectStatusWriteWhenSetterMissing() {
+        assertThatThrownBy(() -> guard.writeStatus(new Object(), "已审核"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("当前模块不支持状态变更");
+    }
+
+    @Test
+    void shouldWrapStatusSetterFailure() {
+        assertThatThrownBy(() -> guard.writeStatus(new ThrowingSetterEntity(), "已审核"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("写入单据状态失败");
+    }
+
+    @Test
     void shouldMarkDeletedStatusWhenEnabled() {
         TestStatusEntity entity = new TestStatusEntity();
         entity.setStatus("草稿");
@@ -103,6 +180,24 @@ class CrudStatusGuardTest {
         guard.markDeletedStatus(entity, true);
 
         assertThat(entity.getStatus()).isEqualTo(StatusConstants.DELETED);
+    }
+
+    @Test
+    void shouldSkipDeletedStatusWhenDisabledOrSetterMissing() {
+        TestStatusEntity entity = new TestStatusEntity();
+        entity.setStatus("草稿");
+
+        guard.markDeletedStatus(entity, false);
+        guard.markDeletedStatus(new Object(), true);
+
+        assertThat(entity.getStatus()).isEqualTo("草稿");
+    }
+
+    @Test
+    void shouldWrapDeletedStatusSetterFailure() {
+        assertThatThrownBy(() -> guard.markDeletedStatus(new ThrowingSetterEntity(), true))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("写入单据删除状态失败");
     }
 
     private static class TestStatusEntity {
@@ -114,6 +209,18 @@ class CrudStatusGuardTest {
 
         public void setStatus(String status) {
             this.status = status;
+        }
+    }
+
+    private static class ThrowingStatusEntity {
+        public String getStatus() {
+            throw new IllegalStateException("boom");
+        }
+    }
+
+    private static class ThrowingSetterEntity {
+        public void setStatus(String status) {
+            throw new IllegalStateException("boom");
         }
     }
 }

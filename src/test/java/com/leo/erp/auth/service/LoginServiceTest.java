@@ -322,6 +322,53 @@ class LoginServiceTest {
     }
 
     @Test
+    void loginShouldNormalizeNullLoginName() {
+        UserAccountRepository userRepo = mock(UserAccountRepository.class);
+        when(userRepo.findByLoginNameAndDeletedFlagFalse("")).thenReturn(java.util.Optional.empty());
+
+        LoginAttemptService attemptService = mock(LoginAttemptService.class);
+        LoginService service = new LoginService(
+                userRepo, mock(PasswordEncoder.class), mock(TotpService.class), attemptService,
+                mock(StringRedisTemplate.class), mock(TokenIssuanceService.class),
+                null, null,
+                mock(CaptchaService.class)
+        );
+
+        assertThatThrownBy(() -> service.login(new LoginRequest(null, "pass", null, null), CTX))
+                .isInstanceOf(BadCredentialsException.class);
+
+        verify(attemptService).ensureLoginAllowed("");
+    }
+
+    @Test
+    void loginShouldIssueTokensWhenTotpEnabledButSecretMissing() {
+        UserAccount user = normalUser();
+        user.setTotpEnabled(true);
+        user.setTotpSecret(null);
+
+        UserAccountRepository userRepo = mock(UserAccountRepository.class);
+        when(userRepo.findByLoginNameAndDeletedFlagFalse("admin")).thenReturn(java.util.Optional.of(user));
+
+        PasswordEncoder encoder = mock(PasswordEncoder.class);
+        when(encoder.matches("secret", "hash")).thenReturn(true);
+
+        TokenIssuanceService tokenIssuance = mock(TokenIssuanceService.class);
+        TokenResponse tokenResponse = new TokenResponse("access", "refresh", "Bearer", 300, 1800, null);
+        when(tokenIssuance.issueTokens(any(), anyString(), anyString())).thenReturn(tokenResponse);
+
+        LoginService service = new LoginService(
+                userRepo, encoder, mock(TotpService.class), mock(LoginAttemptService.class),
+                mock(StringRedisTemplate.class), tokenIssuance,
+                mock(OperationLogService.class), mock(SystemSwitchService.class),
+                mock(CaptchaService.class)
+        );
+
+        LoginResponseBody response = service.login(new LoginRequest("admin", "secret", null, null), CTX);
+
+        assertThat(response).isSameAs(tokenResponse);
+    }
+
+    @Test
     void loginShouldRejectWhenCaptchaRequiredButInvalid() {
         LoginAttemptService attemptService = mock(LoginAttemptService.class);
         SystemSwitchService switchService = mock(SystemSwitchService.class);
@@ -343,6 +390,121 @@ class LoginServiceTest {
 
         verify(attemptService).ensureLoginAllowed("admin");
         verify(userRepo, never()).findByLoginNameAndDeletedFlagFalse("admin");
+    }
+
+    @Test
+    void loginShouldRejectWhenCaptchaRequiredButServiceMissing() {
+        LoginAttemptService attemptService = mock(LoginAttemptService.class);
+        SystemSwitchService switchService = mock(SystemSwitchService.class);
+        when(switchService.shouldRequireLoginCaptcha()).thenReturn(true);
+
+        UserAccountRepository userRepo = mock(UserAccountRepository.class);
+        LoginService service = new LoginService(
+                userRepo, mock(PasswordEncoder.class), mock(TotpService.class), attemptService,
+                mock(StringRedisTemplate.class), mock(TokenIssuanceService.class),
+                mock(OperationLogService.class), switchService,
+                null
+        );
+
+        assertThatThrownBy(() -> service.login(new LoginRequest("admin", "secret", "captcha-id", "1234"), CTX))
+                .isInstanceOf(BadCredentialsException.class)
+                .hasMessageContaining("图形验证码错误或已过期");
+
+        verify(userRepo, never()).findByLoginNameAndDeletedFlagFalse("admin");
+    }
+
+    @Test
+    void loginShouldContinueWhenCaptchaRequiredAndValid() {
+        UserAccount user = normalUser();
+        UserAccountRepository userRepo = mock(UserAccountRepository.class);
+        when(userRepo.findByLoginNameAndDeletedFlagFalse("admin")).thenReturn(java.util.Optional.of(user));
+
+        PasswordEncoder encoder = mock(PasswordEncoder.class);
+        when(encoder.matches("secret", "hash")).thenReturn(true);
+
+        TokenIssuanceService tokenIssuance = mock(TokenIssuanceService.class);
+        TokenResponse tokenResponse = new TokenResponse("access", "refresh", "Bearer", 300, 1800, null);
+        when(tokenIssuance.issueTokens(any(), anyString(), anyString())).thenReturn(tokenResponse);
+
+        SystemSwitchService switchService = mock(SystemSwitchService.class);
+        when(switchService.shouldRequireLoginCaptcha()).thenReturn(true);
+        CaptchaService captchaService = mock(CaptchaService.class);
+        when(captchaService.verify("captcha-id", "1234")).thenReturn(true);
+
+        LoginService service = new LoginService(
+                userRepo, encoder, mock(TotpService.class), mock(LoginAttemptService.class),
+                mock(StringRedisTemplate.class), tokenIssuance,
+                mock(OperationLogService.class), switchService,
+                captchaService
+        );
+
+        LoginResponseBody response = service.login(new LoginRequest("admin", "secret", "captcha-id", "1234"), CTX);
+
+        assertThat(response).isSameAs(tokenResponse);
+    }
+
+    @Test
+    void loginShouldReplacePreviousTempTokenWhenGeneratingNewTotpToken() {
+        UserAccount user = normalUser();
+        user.setTotpEnabled(true);
+        user.setTotpSecret("encrypted-secret");
+
+        UserAccountRepository userRepo = mock(UserAccountRepository.class);
+        when(userRepo.findByLoginNameAndDeletedFlagFalse("admin")).thenReturn(java.util.Optional.of(user));
+
+        PasswordEncoder encoder = mock(PasswordEncoder.class);
+        when(encoder.matches("secret", "hash")).thenReturn(true);
+
+        @SuppressWarnings("unchecked")
+        ValueOperations<String, String> valueOps = mock(ValueOperations.class);
+        when(valueOps.get("auth:2fa:user-temp:1")).thenReturn("old-token");
+        StringRedisTemplate redis = mock(StringRedisTemplate.class);
+        when(redis.opsForValue()).thenReturn(valueOps);
+
+        LoginService service = new LoginService(
+                userRepo, encoder, mock(TotpService.class), mock(LoginAttemptService.class),
+                redis, mock(TokenIssuanceService.class),
+                mock(OperationLogService.class), mock(SystemSwitchService.class),
+                mock(CaptchaService.class)
+        );
+
+        LoginStep1Response response = (LoginStep1Response) service.login(
+                new LoginRequest("admin", "secret", null, null), CTX);
+
+        assertThat(response.tempToken()).startsWith("1.");
+        verify(redis).delete("auth:2fa:temp:old-token");
+        verify(valueOps).set("auth:2fa:temp:" + response.tempToken(), "1", Duration.ofMinutes(5));
+    }
+
+    @Test
+    void loginShouldKeepBlankPreviousTempTokenWhenGeneratingNewTotpToken() {
+        UserAccount user = normalUser();
+        user.setTotpEnabled(true);
+        user.setTotpSecret("encrypted-secret");
+
+        UserAccountRepository userRepo = mock(UserAccountRepository.class);
+        when(userRepo.findByLoginNameAndDeletedFlagFalse("admin")).thenReturn(java.util.Optional.of(user));
+
+        PasswordEncoder encoder = mock(PasswordEncoder.class);
+        when(encoder.matches("secret", "hash")).thenReturn(true);
+
+        @SuppressWarnings("unchecked")
+        ValueOperations<String, String> valueOps = mock(ValueOperations.class);
+        when(valueOps.get("auth:2fa:user-temp:1")).thenReturn(" ");
+        StringRedisTemplate redis = mock(StringRedisTemplate.class);
+        when(redis.opsForValue()).thenReturn(valueOps);
+
+        LoginService service = new LoginService(
+                userRepo, encoder, mock(TotpService.class), mock(LoginAttemptService.class),
+                redis, mock(TokenIssuanceService.class),
+                mock(OperationLogService.class), mock(SystemSwitchService.class),
+                mock(CaptchaService.class)
+        );
+
+        LoginResponseBody response = service.login(new LoginRequest("admin", "secret", null, null), CTX);
+
+        assertThat(response).isInstanceOf(LoginStep1Response.class);
+        verify(redis, never()).delete(anyString());
     }
 
     @Test
@@ -373,6 +535,43 @@ class LoginServiceTest {
     }
 
     @Test
+    void recordAuthenticationLogShouldSkipWhenSwitchServiceNull() {
+        OperationLogService logService = mock(OperationLogService.class);
+
+        LoginService service = new LoginService(
+                null, null, null, null, null, null, logService, null, null
+        );
+
+        service.recordAuthenticationLog("登录", null, "admin", CTX, "成功", "测试");
+
+        verify(logService, never()).record(any());
+    }
+
+    @Test
+    void recordLoginSuccessShouldHandleNullUser() {
+        SystemSwitchService switchService = mock(SystemSwitchService.class);
+        when(switchService.shouldRecordAuthenticationOperationLogs()).thenReturn(true);
+
+        java.util.List<OperationLogCommand> commands = new java.util.ArrayList<>();
+        OperationLogService logService = new OperationLogService(null, null, null, null) {
+            @Override
+            public void record(OperationLogCommand command) { commands.add(command); }
+        };
+
+        LoginService service = new LoginService(
+                null, null, null, null, null, null, logService, switchService, null
+        );
+
+        service.recordLoginSuccess(null, CTX);
+
+        assertThat(commands).hasSize(1);
+        assertThat(commands.get(0).businessNo()).isNull();
+        assertThat(commands.get(0).operatorId()).isNull();
+        assertThat(commands.get(0).operatorName()).isNull();
+        assertThat(commands.get(0).loginName()).isNull();
+    }
+
+    @Test
     void recordAuthenticationLogShouldUseDefaultMethodWhenBlank() {
         SystemSwitchService switchService = mock(SystemSwitchService.class);
         when(switchService.shouldRecordAuthenticationOperationLogs()).thenReturn(true);
@@ -395,6 +594,31 @@ class LoginServiceTest {
         assertThat(commands).hasSize(1);
         assertThat(commands.get(0).requestMethod()).isEqualTo("POST");
         assertThat(commands.get(0).requestPath()).isEqualTo("/auth/login");
+    }
+
+    @Test
+    void recordAuthenticationLogShouldUseDefaultMethodWhenMethodBlank() {
+        SystemSwitchService switchService = mock(SystemSwitchService.class);
+        when(switchService.shouldRecordAuthenticationOperationLogs()).thenReturn(true);
+
+        java.util.List<OperationLogCommand> commands = new java.util.ArrayList<>();
+        OperationLogService logService = new OperationLogService(null, null, null, null) {
+            @Override
+            public void record(OperationLogCommand command) { commands.add(command); }
+        };
+
+        LoginService service = new LoginService(
+                null, null, null, null, null, null, logService, switchService, null
+        );
+
+        LoginService.AuthRequestContext ctxBlankMethod = new LoginService.AuthRequestContext(
+                "127.0.0.1", "JUnit", "/custom", " ");
+
+        service.recordAuthenticationLog("登录", null, "admin", ctxBlankMethod, "成功", "测试");
+
+        assertThat(commands).hasSize(1);
+        assertThat(commands.get(0).requestMethod()).isEqualTo("POST");
+        assertThat(commands.get(0).requestPath()).isEqualTo("/custom");
     }
 
     @Test

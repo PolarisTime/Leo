@@ -161,6 +161,23 @@ class SalesOrderControllerTest {
     }
 
     @Test
+    void exportPrintXlsxPostUsesDefaultOptionsWhenPayloadIsNull() {
+        byte[] content = new byte[]{1, 2, 3};
+        when(printExportService.exportSalesOrderPrint(eq(1L), any())).thenReturn(new FileDownloadResponse(
+                "SO-001-套打.xlsx",
+                MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
+                content
+        ));
+
+        var response = controller.exportPrintXlsx(1L, null, request);
+
+        assertThat(response.getBody()).isEqualTo(content);
+        ArgumentCaptor<SalesOrderPrintXlsxOptions> optionsCaptor = ArgumentCaptor.forClass(SalesOrderPrintXlsxOptions.class);
+        verify(printExportService).exportSalesOrderPrint(eq(1L), optionsCaptor.capture());
+        assertThat(optionsCaptor.getValue()).isEqualTo(SalesOrderPrintXlsxOptions.defaults());
+    }
+
+    @Test
     void exportPrintXlsxHasOperationLogAnnotation() throws Exception {
         OperationLoggable annotation = SalesOrderController.class
                 .getMethod("exportPrintXlsx", Long.class, SalesOrderPrintXlsxRequest.class, HttpServletRequest.class)

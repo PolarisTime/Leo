@@ -49,4 +49,34 @@ class ApiKeyUsageServiceTest {
 
         verify(apiKeyRepository, never()).updateLastUsedAt(any(), any());
     }
+
+    @Test
+    void shouldIgnoreNullApiKeyId() {
+        ApiKeyRepository apiKeyRepository = mock(ApiKeyRepository.class);
+        StringRedisTemplate redisTemplate = mock(StringRedisTemplate.class);
+
+        ApiKeyUsageService service = new ApiKeyUsageService(apiKeyRepository, redisTemplate);
+
+        service.markUsed(null);
+
+        verify(redisTemplate, never()).opsForValue();
+        verify(apiKeyRepository, never()).updateLastUsedAt(any(), any());
+    }
+
+    @Test
+    void shouldPersistLastUsedAtWhenRedisWriteFails() {
+        ApiKeyRepository apiKeyRepository = mock(ApiKeyRepository.class);
+        StringRedisTemplate redisTemplate = mock(StringRedisTemplate.class);
+        @SuppressWarnings("unchecked")
+        ValueOperations<String, String> valueOperations = mock(ValueOperations.class);
+        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+        when(valueOperations.setIfAbsent(eq("api-key:usage:99"), any(String.class), eq(Duration.ofMinutes(1))))
+                .thenThrow(new RuntimeException("redis unavailable"));
+
+        ApiKeyUsageService service = new ApiKeyUsageService(apiKeyRepository, redisTemplate);
+
+        service.markUsed(99L);
+
+        verify(apiKeyRepository).updateLastUsedAt(eq(99L), any());
+    }
 }

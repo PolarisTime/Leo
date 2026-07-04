@@ -5,6 +5,7 @@ import com.leo.erp.attachment.service.AttachmentView;
 import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.error.BusinessException;
+import com.leo.erp.common.service.CrudRuntimeSettings;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.logistics.bill.domain.entity.FreightBill;
@@ -18,6 +19,7 @@ import com.leo.erp.statement.freight.domain.entity.FreightStatement;
 import com.leo.erp.statement.freight.domain.entity.FreightStatementItem;
 import com.leo.erp.statement.freight.mapper.FreightStatementWebMapper;
 import com.leo.erp.statement.freight.repository.FreightStatementRepository;
+import com.leo.erp.statement.freight.web.dto.FreightStatementRequest;
 import com.leo.erp.statement.freight.web.dto.FreightStatementResponse;
 import com.leo.erp.statement.service.StatementSettlementSyncService;
 import org.junit.jupiter.api.BeforeEach;
@@ -25,6 +27,10 @@ import org.junit.jupiter.api.Test;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.jpa.domain.Specification;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.lang.reflect.Proxy;
 import java.math.BigDecimal;
@@ -36,6 +42,8 @@ import java.util.Set;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 class FreightStatementServiceTest {
 
@@ -96,6 +104,59 @@ class FreightStatementServiceTest {
     void shouldReturnResponseSearchResults_whenCallingResponseSearch() {
         var result = service.responseSearch("FS", 10);
         assertThat(result).isNotNull();
+    }
+
+    @Test
+    void shouldMapResponseDetailThroughWebMapper() {
+        FreightStatementResponse response = response(1L, "FS-001");
+        org.mockito.Mockito.when(freightStatementWebMapper.toResponse(org.mockito.ArgumentMatchers.any()))
+                .thenReturn(response);
+
+        FreightStatementResponse result = service.responseDetail(1L);
+
+        assertThat(result).isSameAs(response);
+        verify(freightStatementWebMapper).toResponse(org.mockito.ArgumentMatchers.any(FreightStatementView.class));
+    }
+
+    @Test
+    void shouldMapResponseCreateThroughRequestMapper() {
+        FreightStatementCommand command = command("FS-NEW", "物流甲", BigDecimal.ZERO, item(null, "FB-001"));
+        FreightStatementResponse response = response(100L, "FS-NEW");
+        when(freightStatementWebMapper.toCommand(org.mockito.ArgumentMatchers.any())).thenReturn(command);
+        when(freightStatementWebMapper.toResponse(org.mockito.ArgumentMatchers.any())).thenReturn(response);
+        var svc = service(repository(List.of(), false, List.of()), freightBillRepository, carrierRepository);
+
+        FreightStatementResponse result = svc.responseCreate(request());
+
+        assertThat(result).isSameAs(response);
+        verify(freightStatementWebMapper).toCommand(org.mockito.ArgumentMatchers.any());
+        verify(freightStatementWebMapper).toResponse(org.mockito.ArgumentMatchers.any(FreightStatementView.class));
+    }
+
+    @Test
+    void shouldMapResponseUpdateAndKeepOriginalStatementNo() {
+        FreightStatementCommand command = command("IGNORED", "物流甲", BigDecimal.ZERO, item(null, "FB-001"));
+        FreightStatementResponse response = response(1L, "FS-OLD");
+        when(freightStatementWebMapper.toCommand(org.mockito.ArgumentMatchers.any())).thenReturn(command);
+        when(freightStatementWebMapper.toResponse(org.mockito.ArgumentMatchers.any())).thenReturn(response);
+        var svc = service(repository(List.of(createEntity(1L, "FS-OLD")), false, List.of()), freightBillRepository, carrierRepository);
+
+        FreightStatementResponse result = svc.responseUpdate(1L, request());
+
+        assertThat(result).isSameAs(response);
+        verify(freightStatementWebMapper).toCommand(org.mockito.ArgumentMatchers.any());
+        verify(freightStatementWebMapper).toResponse(org.mockito.ArgumentMatchers.any(FreightStatementView.class));
+    }
+
+    @Test
+    void shouldMapResponseUpdateStatusThroughWebMapper() {
+        FreightStatementResponse response = response(1L, "FS-001");
+        when(freightStatementWebMapper.toResponse(org.mockito.ArgumentMatchers.any())).thenReturn(response);
+
+        FreightStatementResponse result = service.responseUpdateStatus(1L, StatusConstants.AUDITED);
+
+        assertThat(result).isSameAs(response);
+        verify(freightStatementWebMapper).toResponse(org.mockito.ArgumentMatchers.any(FreightStatementView.class));
     }
 
     @Test
@@ -160,6 +221,15 @@ class FreightStatementServiceTest {
     }
 
     @Test
+    void shouldReportNotFoundMessageWhenDetailMissing() {
+        var svc = service(repository(List.of(), false, List.of()), freightBillRepository, carrierRepository);
+
+        assertThatThrownBy(() -> svc.detail(99L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("物流对账单不存在");
+    }
+
+    @Test
     void shouldRejectCreate_whenSourceBillCarrierDiffers() {
         var bill = createFreightBill("FB-001");
         bill.setCarrierName("物流乙");
@@ -199,6 +269,67 @@ class FreightStatementServiceTest {
         assertThatThrownBy(() -> svc.update(1L, command("FS-UPDATED", "物流甲", BigDecimal.ZERO, item(404L, "FB-001"))))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("第1行子项ID不存在");
+    }
+
+    @Test
+    void shouldRejectUpdateWhenChangedStatementNoAlreadyExists() {
+        FreightStatement entity = createEntity(1L, "FS-OLD");
+        var svc = service(repository(List.of(entity), true, List.of()), freightBillRepository, carrierRepository);
+
+        assertThatThrownBy(() -> ReflectionTestUtils.invokeMethod(
+                svc,
+                "validateUpdate",
+                entity,
+                command("FS-NEW", "物流甲", BigDecimal.ZERO, item(null, "FB-001"))
+        ))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("物流对账单号已存在");
+    }
+
+    @Test
+    void shouldAllowUnchangedStatementNoWhenDuplicateExists() {
+        FreightStatement entity = createEntity(1L, "FS-001");
+        var svc = service(repository(List.of(entity), true, List.of()), freightBillRepository, carrierRepository);
+
+        ReflectionTestUtils.invokeMethod(
+                svc,
+                "validateUpdate",
+                entity,
+                command("FS-001", "物流甲", BigDecimal.ZERO, item(null, "FB-001"))
+        );
+    }
+
+    @Test
+    void shouldAllowChangedStatementNoWhenNoDuplicateExists() {
+        FreightStatement entity = createEntity(1L, "FS-OLD");
+        var svc = service(repository(List.of(entity), false, List.of()), freightBillRepository, carrierRepository);
+
+        ReflectionTestUtils.invokeMethod(
+                svc,
+                "validateUpdate",
+                entity,
+                command("FS-NEW", "物流甲", BigDecimal.ZERO, item(null, "FB-001"))
+        );
+    }
+
+    @Test
+    void shouldLoadVisibleDeletedDetailForAdminWhenRuntimeSettingAllows() {
+        FreightStatement deleted = createEntity(2L, "FS-DELETED");
+        deleted.setDeletedFlag(true);
+        var svc = service(repository(List.of(deleted), false, List.of()), freightBillRepository, carrierRepository);
+        CrudRuntimeSettings runtimeSettings = mock(CrudRuntimeSettings.class);
+        when(runtimeSettings.shouldAdminSeeDeletedRecords()).thenReturn(true);
+        ReflectionTestUtils.invokeMethod(svc, "setCrudRuntimeSettings", runtimeSettings);
+        SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
+                "admin",
+                null,
+                List.of(new SimpleGrantedAuthority("ROLE_ADMIN"))
+        ));
+
+        FreightStatementView result = svc.detail(2L);
+
+        assertThat(result.statementNo()).isEqualTo("FS-DELETED");
+        SecurityContextHolder.clearContext();
     }
 
     private FreightStatementService service(FreightStatementRepository repo,
@@ -392,5 +523,43 @@ class FreightStatementServiceTest {
         item.setWeightTon(new BigDecimal("2.000"));
         item.setWarehouseName("仓库甲");
         return item;
+    }
+
+    private static FreightStatementRequest request() {
+        return new FreightStatementRequest(
+                "FS-REQ",
+                "物流甲",
+                LocalDate.of(2026, 1, 1),
+                LocalDate.of(2026, 1, 31),
+                BigDecimal.ONE,
+                BigDecimal.TEN,
+                BigDecimal.ZERO,
+                BigDecimal.TEN,
+                StatusConstants.PENDING_AUDIT,
+                StatusConstants.UNSIGNED,
+                null,
+                "备注",
+                List.of()
+        );
+    }
+
+    private static FreightStatementResponse response(Long id, String statementNo) {
+        return new FreightStatementResponse(
+                id,
+                statementNo,
+                "物流甲",
+                LocalDate.of(2026, 1, 1),
+                LocalDate.of(2026, 1, 31),
+                BigDecimal.ONE,
+                BigDecimal.TEN,
+                BigDecimal.ZERO,
+                BigDecimal.TEN,
+                StatusConstants.PENDING_AUDIT,
+                StatusConstants.UNSIGNED,
+                null,
+                List.of(),
+                "备注",
+                List.of()
+        );
     }
 }

@@ -1,7 +1,9 @@
 package com.leo.erp.system.norule.service;
 
 import com.leo.erp.common.error.BusinessException;
+import com.leo.erp.common.support.RedisJsonCacheSupport;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
+import com.leo.erp.system.company.service.CompanySettingService;
 import com.leo.erp.system.norule.domain.entity.NoRule;
 import com.leo.erp.system.norule.mapper.NoRuleMapper;
 import com.leo.erp.system.norule.repository.NoRuleRepository;
@@ -9,6 +11,7 @@ import com.leo.erp.system.norule.web.dto.NoRuleRequest;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Method;
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -17,6 +20,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -35,6 +40,15 @@ class NoRuleServiceTest {
         NoRuleService service = buildService();
 
         assertThatThrownBy(() -> invokeValidateUpdate(service, request(" ")))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("至少需要勾选一个记录动作");
+    }
+
+    @Test
+    void shouldRejectNullDetailedOperationLogActions() throws Exception {
+        NoRuleService service = buildService();
+
+        assertThatThrownBy(() -> invokeValidateUpdate(service, request(null)))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("至少需要勾选一个记录动作");
     }
@@ -88,6 +102,38 @@ class NoRuleServiceTest {
                 "RULE_TEST", "测试规则", "测试单据", "TEST", "yyyy", 4, "YEARLY", "TEST0001", "正常", null
         ));
         assertThat(result).isNotNull();
+    }
+
+    @Test
+    void shouldDefaultBlankOrNullStatusAndEvictDerivedCachesOnCreate() {
+        NoRuleRepository repository = mock(NoRuleRepository.class);
+        when(repository.existsBySettingCodeAndDeletedFlagFalse(any())).thenReturn(false);
+        when(repository.save(any(NoRule.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        NoRuleMapper noRuleMapper = mock(NoRuleMapper.class);
+        when(noRuleMapper.toResponse(any(NoRule.class))).thenAnswer(invocation -> response(invocation.getArgument(0)));
+        RedisJsonCacheSupport redisJsonCacheSupport = mock(RedisJsonCacheSupport.class);
+        NoRuleService service = new NoRuleService(
+                repository, new SnowflakeIdGenerator(1), noRuleMapper,
+                mock(NoRuleSequenceService.class), mock(SystemSwitchService.class),
+                mock(PreallocatedBusinessNoService.class), redisJsonCacheSupport
+        );
+
+        var nullStatusResult = service.create(new NoRuleRequest(
+                "RULE_NULL_STATUS", "测试规则", "测试单据", "TEST", "yyyy", 4, "YEARLY", "TEST0001", null, null
+        ));
+        var blankStatusResult = service.create(new NoRuleRequest(
+                "RULE_BLANK_STATUS", "测试规则", "测试单据", "TEST", "yyyy", 4, "YEARLY", "TEST0001", " ", null
+        ));
+
+        assertThat(nullStatusResult.status()).isEqualTo("正常");
+        assertThat(blankStatusResult.status()).isEqualTo("正常");
+        verify(redisJsonCacheSupport, times(2)).delete(List.of(
+                SystemSwitchService.SWITCH_CACHE_KEY,
+                GeneralSettingQueryService.PUBLIC_DISPLAY_SWITCHES_CACHE_KEY,
+                GeneralSettingQueryService.PUBLIC_CLIENT_SETTINGS_CACHE_KEY,
+                CompanySettingService.CURRENT_COMPANY_CACHE_KEY,
+                CompanySettingService.CURRENT_TAX_RATE_CACHE_KEY
+        ));
     }
 
     @Test
@@ -154,6 +200,30 @@ class NoRuleServiceTest {
     }
 
     @Test
+    void shouldUpdateChangedSettingCodeWhenUnique() {
+        NoRuleRepository repository = mock(NoRuleRepository.class);
+        NoRule entity = new NoRule();
+        entity.setSettingCode("RULE_OLD");
+        when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(entity));
+        when(repository.existsBySettingCodeAndDeletedFlagFalse("RULE_NEW")).thenReturn(false);
+        when(repository.save(any(NoRule.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        NoRuleMapper noRuleMapper = mock(NoRuleMapper.class);
+        when(noRuleMapper.toResponse(any(NoRule.class))).thenAnswer(invocation -> response(invocation.getArgument(0)));
+        NoRuleService service = new NoRuleService(
+                repository, new SnowflakeIdGenerator(1), noRuleMapper,
+                mock(NoRuleSequenceService.class), mock(SystemSwitchService.class),
+                mock(PreallocatedBusinessNoService.class), null
+        );
+
+        var result = service.update(1L, new NoRuleRequest(
+                "RULE_NEW", "测试规则", "测试单据", "TEST", "yyyy", 4, "YEARLY", "TEST0001", "正常", null
+        ));
+
+        assertThat(result.settingCode()).isEqualTo("RULE_NEW");
+        verify(repository).existsBySettingCodeAndDeletedFlagFalse("RULE_NEW");
+    }
+
+    @Test
     void shouldNotValidateSettingCodeUniquenessOnUpdateWhenUnchanged() throws Exception {
         NoRuleRepository repository = mock(NoRuleRepository.class);
         NoRuleService service = new NoRuleService(
@@ -215,6 +285,32 @@ class NoRuleServiceTest {
     }
 
     @Test
+    void shouldAcceptNullSettingCodeRuleTemplate() throws Exception {
+        NoRuleService service = buildService();
+
+        assertThatCode(() -> invokeValidateCreate(service, new NoRuleRequest(
+                null, "测试设置", "测试单据", "TEST", "yyyy", 4, "YEARLY", "TEST0001", "正常", null
+        ))).doesNotThrowAnyException();
+    }
+
+    @Test
+    void shouldAcceptRuleTemplateWithNullPrefix() throws Exception {
+        NoRuleRepository repository = mock(NoRuleRepository.class);
+        when(repository.existsBySettingCodeAndDeletedFlagFalse("RULE_TEST")).thenReturn(false);
+        NoRuleSequenceService sequenceService = mock(NoRuleSequenceService.class);
+        when(sequenceService.usesMagicVariables("")).thenReturn(false);
+        NoRuleService service = new NoRuleService(
+                repository, new SnowflakeIdGenerator(1), mock(NoRuleMapper.class),
+                sequenceService, mock(SystemSwitchService.class),
+                mock(PreallocatedBusinessNoService.class), null
+        );
+
+        assertThatCode(() -> invokeValidateCreate(service, new NoRuleRequest(
+                "RULE_TEST", "测试规则", "测试单据", null, "yyyy", 4, "YEARLY", "TEST0001", "正常", null
+        ))).doesNotThrowAnyException();
+    }
+
+    @Test
     void shouldNextNumberWithSnowflakeId() {
         SystemSwitchService systemSwitchService = mock(SystemSwitchService.class);
         when(systemSwitchService.shouldUseSnowflakeIdAsBusinessNo()).thenReturn(true);
@@ -249,6 +345,26 @@ class NoRuleServiceTest {
         assertThat(result.moduleKey()).isEqualTo("TEST");
         assertThat(result.generatedNo()).isEqualTo("TEST0001");
         verify(preallocatedBusinessNoService).reserveBusinessNo(eq("TEST"), eq("TEST0001"), eq(principal));
+    }
+
+    @Test
+    void shouldNextNumberWithSequenceWithoutPrincipal() {
+        SystemSwitchService systemSwitchService = mock(SystemSwitchService.class);
+        when(systemSwitchService.shouldUseSnowflakeIdAsBusinessNo()).thenReturn(false);
+        NoRuleSequenceService noRuleSequenceService = mock(NoRuleSequenceService.class);
+        when(noRuleSequenceService.nextValueByModuleKey("TEST")).thenReturn("TEST0001");
+        PreallocatedBusinessNoService preallocatedBusinessNoService = mock(PreallocatedBusinessNoService.class);
+        NoRuleService service = new NoRuleService(
+                mock(NoRuleRepository.class), new SnowflakeIdGenerator(1), mock(NoRuleMapper.class),
+                noRuleSequenceService, systemSwitchService,
+                preallocatedBusinessNoService, null
+        );
+
+        var result = service.nextNumber("TEST", null);
+
+        assertThat(result.generatedNo()).isEqualTo("TEST0001");
+        assertThat(result.generatedId()).isNull();
+        verify(preallocatedBusinessNoService, never()).reserveBusinessNo(any(), any(), any());
     }
 
     @Test
@@ -290,6 +406,14 @@ class NoRuleServiceTest {
                 sampleNo,
                 "正常",
                 "remark"
+        );
+    }
+
+    private static com.leo.erp.system.norule.web.dto.NoRuleResponse response(NoRule entity) {
+        return new com.leo.erp.system.norule.web.dto.NoRuleResponse(
+                entity.getId(), entity.getSettingCode(), entity.getSettingName(), entity.getBillName(),
+                entity.getPrefix(), entity.getDateRule(), entity.getSerialLength(),
+                entity.getResetRule(), entity.getSampleNo(), entity.getStatus(), entity.getRemark()
         );
     }
 

@@ -1,7 +1,10 @@
 package com.leo.erp.common.api;
 
 import org.junit.jupiter.api.Test;
+import org.mockito.MockedStatic;
+import org.mockito.Mockito;
 import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.web.context.request.RequestContextHolder;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -26,6 +29,16 @@ class RateLimitContextTest {
     @Test
     void shouldReturnNullForNullRequest() {
         assertThat(RateLimitContext.current((MockHttpServletRequest) null)).isNull();
+    }
+
+    @Test
+    void shouldReturnNullWhenRequestContextLookupFails() {
+        try (MockedStatic<RequestContextHolder> holder = Mockito.mockStatic(RequestContextHolder.class)) {
+            holder.when(RequestContextHolder::getRequestAttributes)
+                    .thenThrow(new IllegalStateException("request context unavailable"));
+
+            assertThat(RateLimitContext.current()).isNull();
+        }
     }
 
     @Test

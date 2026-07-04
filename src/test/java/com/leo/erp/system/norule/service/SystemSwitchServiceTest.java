@@ -6,8 +6,10 @@ import com.leo.erp.system.norule.domain.entity.NoRule;
 import com.leo.erp.system.norule.repository.NoRuleRepository;
 import org.junit.jupiter.api.Test;
 
+import java.lang.reflect.Method;
 import java.time.Duration;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.function.Supplier;
 
@@ -111,6 +113,13 @@ class SystemSwitchServiceTest {
     }
 
     @Test
+    void shouldFallbackWhenRepositoryUnavailable() {
+        SystemSwitchService service = new SystemSwitchService(null);
+
+        assertThat(service.isEnabled("CUSTOM_SWITCH")).isFalse();
+    }
+
+    @Test
     void shouldReadUnknownSwitchDirectlyFromRepository() {
         NoRuleRepository repository = mock(NoRuleRepository.class);
         when(repository.findBySettingCodeAndDeletedFlagFalse("CUSTOM_SWITCH")).thenReturn(
@@ -134,6 +143,23 @@ class SystemSwitchServiceTest {
 
         assertThat(service.getMaxConcurrentSessions()).isEqualTo(3);
         assertThat(service.getDefaultListPageSize()).isEqualTo(20);
+    }
+
+    @Test
+    void shouldFallbackNullAndZeroPageSizeValues() {
+        NoRuleRepository nullRepository = mock(NoRuleRepository.class);
+        when(nullRepository.findBySettingCodeInAndDeletedFlagFalse(any())).thenReturn(List.of(
+                rule(SystemSwitchService.DEFAULT_LIST_PAGE_SIZE_SETTING, "正常", null)
+        ));
+        SystemSwitchService nullService = new SystemSwitchService(nullRepository);
+        assertThat(nullService.getDefaultListPageSize()).isEqualTo(20);
+
+        NoRuleRepository zeroRepository = mock(NoRuleRepository.class);
+        when(zeroRepository.findBySettingCodeInAndDeletedFlagFalse(any())).thenReturn(List.of(
+                rule(SystemSwitchService.DEFAULT_LIST_PAGE_SIZE_SETTING, "正常", "0")
+        ));
+        SystemSwitchService zeroService = new SystemSwitchService(zeroRepository);
+        assertThat(zeroService.getDefaultListPageSize()).isEqualTo(20);
     }
 
     @Test
@@ -186,6 +212,33 @@ class SystemSwitchServiceTest {
     }
 
     @Test
+    void shouldUseDefaultHiddenAuditedStatusForNullOrBlankSample() {
+        NoRuleRepository nullRepository = mock(NoRuleRepository.class);
+        when(nullRepository.findBySettingCodeInAndDeletedFlagFalse(any())).thenReturn(List.of(
+                rule(SystemSwitchService.HIDE_AUDITED_LIST_RECORDS_SWITCH, "正常", null)
+        ));
+        when(nullRepository.findBySettingCodeAndDeletedFlagFalse(
+                SystemSwitchService.HIDE_AUDITED_LIST_RECORDS_SWITCH
+        )).thenReturn(Optional.of(
+                rule(SystemSwitchService.HIDE_AUDITED_LIST_RECORDS_SWITCH, "正常", null)
+        ));
+        SystemSwitchService nullService = new SystemSwitchService(nullRepository);
+        assertThat(nullService.getHiddenAuditedStatuses()).containsExactly("已审核");
+
+        NoRuleRepository blankRepository = mock(NoRuleRepository.class);
+        when(blankRepository.findBySettingCodeInAndDeletedFlagFalse(any())).thenReturn(List.of(
+                rule(SystemSwitchService.HIDE_AUDITED_LIST_RECORDS_SWITCH, "正常", " ")
+        ));
+        when(blankRepository.findBySettingCodeAndDeletedFlagFalse(
+                SystemSwitchService.HIDE_AUDITED_LIST_RECORDS_SWITCH
+        )).thenReturn(Optional.of(
+                rule(SystemSwitchService.HIDE_AUDITED_LIST_RECORDS_SWITCH, "正常", " ")
+        ));
+        SystemSwitchService blankService = new SystemSwitchService(blankRepository);
+        assertThat(blankService.getHiddenAuditedStatuses()).containsExactly("已审核");
+    }
+
+    @Test
     void shouldReturnEmptyHiddenAuditedStatusesWhenSwitchDisabledOrOff() {
         NoRuleRepository disabledRepository = mock(NoRuleRepository.class);
         when(disabledRepository.findBySettingCodeInAndDeletedFlagFalse(any())).thenReturn(List.of(
@@ -222,6 +275,37 @@ class SystemSwitchServiceTest {
         ));
         SystemSwitchService unknownService = new SystemSwitchService(unknownRepository);
         assertThat(unknownService.shouldRecordDetailedPageAction("print")).isTrue();
+    }
+
+    @Test
+    void shouldParseDetailedPageActionsWithNullAndEmptyItems() {
+        NoRuleRepository nullRepository = mock(NoRuleRepository.class);
+        when(nullRepository.findBySettingCodeInAndDeletedFlagFalse(any())).thenReturn(List.of(
+                rule(SystemSwitchService.OPERATION_LOG_DETAILED_PAGE_ACTIONS_SWITCH, "正常", null)
+        ));
+        SystemSwitchService nullService = new SystemSwitchService(nullRepository);
+        assertThat(nullService.shouldRecordDetailedPageAction("audit")).isTrue();
+
+        NoRuleRepository emptyItemRepository = mock(NoRuleRepository.class);
+        when(emptyItemRepository.findBySettingCodeInAndDeletedFlagFalse(any())).thenReturn(List.of(
+                rule(SystemSwitchService.OPERATION_LOG_DETAILED_PAGE_ACTIONS_SWITCH, "正常", "QUERY, ,EDIT")
+        ));
+        SystemSwitchService emptyItemService = new SystemSwitchService(emptyItemRepository);
+        assertThat(emptyItemService.shouldRecordDetailedPageAction("edit")).isTrue();
+        assertThat(emptyItemService.shouldRecordDetailedPageAction("delete")).isFalse();
+    }
+
+    @Test
+    void shouldKeepFirstKnownSwitchWhenRepositoryReturnsDuplicates() {
+        NoRuleRepository repository = mock(NoRuleRepository.class);
+        when(repository.findBySettingCodeInAndDeletedFlagFalse(any())).thenReturn(List.of(
+                rule(SystemSwitchService.SHOW_SNOWFLAKE_ID_SWITCH, "正常", ""),
+                rule(SystemSwitchService.SHOW_SNOWFLAKE_ID_SWITCH, "禁用", "")
+        ));
+
+        SystemSwitchService service = new SystemSwitchService(repository);
+
+        assertThat(service.shouldShowSnowflakeId()).isTrue();
     }
 
     @Test
@@ -279,6 +363,17 @@ class SystemSwitchServiceTest {
         service.evictCache();
 
         assertThat(service.shouldShowSnowflakeId()).isFalse();
+    }
+
+    @Test
+    void shouldReturnEmptyKnownSwitchMapWhenRepositoryUnavailable() throws Exception {
+        SystemSwitchService service = new SystemSwitchService(null, mock(RedisJsonCacheSupport.class));
+
+        Method method = SystemSwitchService.class.getDeclaredMethod("loadKnownSwitches");
+        method.setAccessible(true);
+        Map<?, ?> switches = (Map<?, ?>) method.invoke(service);
+
+        assertThat(switches).isEmpty();
     }
 
     private NoRule rule(String code, String status, String sampleNo) {

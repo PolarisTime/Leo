@@ -5,6 +5,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leo.erp.common.error.ErrorCode;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.MockedStatic;
+import org.mockito.Mockito;
 import org.slf4j.MDC;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.web.context.request.RequestContextHolder;
@@ -137,6 +139,26 @@ class ApiResponseTest {
         ApiResponse<Void> response = ApiResponse.failure(ErrorCode.INTERNAL_ERROR, "错误");
 
         assertThat(response.traceId()).isNull();
+    }
+
+    @Test
+    void failureHasNullTraceIdWhenMdcValueIsBlank() {
+        MDC.put("traceId", "   ");
+
+        ApiResponse<Void> response = ApiResponse.failure(ErrorCode.INTERNAL_ERROR, "错误");
+
+        assertThat(response.traceId()).isNull();
+    }
+
+    @Test
+    void failureHasNullTraceIdWhenMdcLookupFails() {
+        try (MockedStatic<MDC> mdc = Mockito.mockStatic(MDC.class)) {
+            mdc.when(() -> MDC.get("traceId")).thenThrow(new IllegalStateException("MDC unavailable"));
+
+            ApiResponse<Void> response = ApiResponse.failure(ErrorCode.INTERNAL_ERROR, "错误");
+
+            assertThat(response.traceId()).isNull();
+        }
     }
 
     @Test

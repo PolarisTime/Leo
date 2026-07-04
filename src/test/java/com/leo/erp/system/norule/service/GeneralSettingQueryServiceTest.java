@@ -119,10 +119,16 @@ class GeneralSettingQueryServiceTest {
 
         assertThat(settingCodes(service.page(PageQuery.of(0, 20, null, null), "page_upload_po", null).getContent()))
                 .containsExactly("PAGE_UPLOAD_PO");
+        assertThat(settingCodes(service.page(PageQuery.of(0, 20, null, null), "采购订单", null).getContent()))
+                .containsExactly("PAGE_UPLOAD_PO");
         assertThat(settingCodes(service.page(PageQuery.of(0, 20, null, null), "销售规则", null).getContent()))
                 .containsExactly("PAGE_UPLOAD_SO");
         assertThat(settingCodes(service.page(PageQuery.of(0, 20, null, null), "{INV}", null).getContent()))
                 .containsExactly("PAGE_UPLOAD_INV");
+        assertThat(settingCodes(service.page(PageQuery.of(0, 20, null, null), "采购备注", null).getContent()))
+                .containsExactly("PAGE_UPLOAD_PO");
+        assertThat(settingCodes(service.page(PageQuery.of(0, 20, null, null), " ", " ").getContent()))
+                .containsExactly("PAGE_UPLOAD_INV", "PAGE_UPLOAD_PO", "PAGE_UPLOAD_SO");
         assertThat(service.page(PageQuery.of(0, 20, null, null), "missing", null).getContent()).isEmpty();
     }
 
@@ -156,6 +162,23 @@ class GeneralSettingQueryServiceTest {
         );
         assertThat(settingCodes(pageTwo)).containsExactly("PAGE_UPLOAD_SALES_ORDER");
         assertThat(emptyPage).isEmpty();
+    }
+
+    @Test
+    void shouldSortUnknownSettingsByDefaultedBillNameAndSettingCode() {
+        NoRule unknownB = noRule(7L, "ZZ_B", "未知设置B", null, null, "正常");
+        NoRule unknownA = noRule(8L, "ZZ_A", "未知设置A", null, null, "正常");
+
+        GeneralSettingQueryService service = new GeneralSettingQueryService(
+                noRuleRepository(List.of(unknownB, unknownA)),
+                mapper(),
+                () -> List.of()
+        );
+
+        List<GeneralSettingResponse> records = service.page(PageQuery.of(0, 20, null, null), null, null).getContent();
+
+        assertThat(settingCodes(records)).containsExactly("ZZ_A", "ZZ_B");
+        assertThat(records).extracting(GeneralSettingResponse::billName).containsOnlyNulls();
     }
 
     @Test

@@ -15,11 +15,13 @@ import com.leo.erp.system.oss.web.dto.OssSettingResponse;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.DigestUtils;
 import software.amazon.awssdk.core.ClientEndpointProvider;
 import software.amazon.awssdk.core.client.config.SdkClientConfiguration;
 import software.amazon.awssdk.core.client.config.SdkClientOption;
 import software.amazon.awssdk.core.ResponseInputStream;
 import software.amazon.awssdk.core.sync.RequestBody;
+import software.amazon.awssdk.http.ContentStreamProvider;
 import software.amazon.awssdk.protocols.xml.AwsS3ProtocolFactory;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.CORSConfiguration;
@@ -35,13 +37,12 @@ import software.amazon.awssdk.services.s3.transform.PutBucketCorsRequestMarshall
 import java.io.IOException;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
 import java.util.Locale;
+import java.util.Optional;
 import java.util.UUID;
 
 @Service
@@ -313,7 +314,7 @@ public class OssSettingService {
         s3.setEncryptedStorage(setting.isEncryptedStorage());
         s3.setServerProxyOnly(setting.isServerProxyOnly());
         return new ResolvedOssSetting(
-                STORAGE_MODE_SERVER_S3.equals(setting.getStorageMode()) ? "s3" : "local",
+                "s3",
                 normalizeKeyPrefix(setting.getKeyPrefix()),
                 valueOrDefault(attachmentProperties.getStorage().getLocal().getPath(), "/tmp/leo/uploads"),
                 s3,
@@ -441,29 +442,32 @@ public class OssSettingService {
     }
 
     private String calculatePutBucketCorsContentMd5(String endpoint, PutBucketCorsRequest request) {
+        SdkClientConfiguration clientConfiguration = SdkClientConfiguration.builder()
+                .option(
+                        SdkClientOption.CLIENT_ENDPOINT_PROVIDER,
+                        ClientEndpointProvider.forEndpointOverride(URI.create(normalizeEndpoint(endpoint)))
+                )
+                .build();
+        AwsS3ProtocolFactory protocolFactory = AwsS3ProtocolFactory.builder()
+                .clientConfiguration(clientConfiguration)
+                .build();
+        byte[] body = readCorsBody(new PutBucketCorsRequestMarshaller(protocolFactory)
+                .marshall(request)
+                .contentStreamProvider());
+        return Base64.getEncoder().encodeToString(DigestUtils.md5Digest(body));
+    }
+
+    byte[] readCorsBody(Optional<ContentStreamProvider> bodyProvider) {
+        return bodyProvider
+                .map(this::readCorsBody)
+                .orElseThrow(() -> new BusinessException(ErrorCode.INTERNAL_ERROR, "OSS CORS 请求体为空"));
+    }
+
+    byte[] readCorsBody(ContentStreamProvider bodyProvider) {
         try {
-            SdkClientConfiguration clientConfiguration = SdkClientConfiguration.builder()
-                    .option(
-                            SdkClientOption.CLIENT_ENDPOINT_PROVIDER,
-                            ClientEndpointProvider.forEndpointOverride(URI.create(normalizeEndpoint(endpoint)))
-                    )
-                    .build();
-            AwsS3ProtocolFactory protocolFactory = AwsS3ProtocolFactory.builder()
-                    .clientConfiguration(clientConfiguration)
-                    .build();
-            byte[] body = new PutBucketCorsRequestMarshaller(protocolFactory)
-                    .marshall(request)
-                    .contentStreamProvider()
-                    .orElseThrow(() -> new BusinessException(ErrorCode.INTERNAL_ERROR, "OSS CORS 请求体为空"))
-                    .newStream()
-                    .readAllBytes();
-            return Base64.getEncoder().encodeToString(MessageDigest.getInstance("MD5").digest(body));
-        } catch (BusinessException ex) {
-            throw ex;
+            return bodyProvider.newStream().readAllBytes();
         } catch (IOException ex) {
             throw new BusinessException(ErrorCode.INTERNAL_ERROR, "生成 OSS CORS Content-MD5 失败: 请求体读取异常");
-        } catch (NoSuchAlgorithmException ex) {
-            throw new BusinessException(ErrorCode.INTERNAL_ERROR, "生成 OSS CORS Content-MD5 失败: MD5 算法不可用");
         }
     }
 
@@ -475,9 +479,10 @@ public class OssSettingService {
         try {
             URI uri = URI.create(normalized);
             String scheme = uri.getScheme();
+            String rawPath = valueOrEmpty(uri.getRawPath());
             if (!("http".equalsIgnoreCase(scheme) || "https".equalsIgnoreCase(scheme))
                     || uri.getHost() == null
-                    || uri.getRawPath() != null && !uri.getRawPath().isBlank() && !"/".equals(uri.getRawPath())
+                    || !rawPath.isBlank() && !"/".equals(rawPath)
                     || uri.getRawQuery() != null
                     || uri.getRawFragment() != null) {
                 throw new IllegalArgumentException("invalid origin");

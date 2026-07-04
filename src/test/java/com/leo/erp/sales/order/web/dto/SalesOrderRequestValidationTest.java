@@ -308,6 +308,28 @@ class SalesOrderRequestValidationTest {
         assertThat(violations).isEmpty();
     }
 
+    @Test
+    void shouldKeepSettlementFieldsEmptyWhenUsingCustomerCodeConstructor() {
+        SalesOrderRequest request = new SalesOrderRequest(
+                "SO001",
+                "PI001",
+                "C001",
+                "客户名称",
+                1L,
+                "项目名称",
+                LocalDate.of(2026, 4, 25),
+                "销售员",
+                "草稿",
+                "备注",
+                List.of()
+        );
+
+        assertThat(request.purchaseOrderNo()).isNull();
+        assertThat(request.customerCode()).isEqualTo("C001");
+        assertThat(request.settlementCompanyId()).isNull();
+        assertThat(request.settlementCompanyName()).isNull();
+    }
+
     private static Validator validator() {
         LocalValidatorFactoryBean bean = new LocalValidatorFactoryBean();
         bean.afterPropertiesSet();

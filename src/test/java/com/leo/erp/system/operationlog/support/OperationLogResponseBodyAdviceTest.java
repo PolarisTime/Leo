@@ -51,6 +51,31 @@ class OperationLogResponseBodyAdviceTest {
     }
 
     @Test
+    void shouldPassThrough_whenResponseEntityBodyIsNotApiResponse() {
+        var servletRequest = mock(HttpServletRequest.class);
+        var servletServerRequest = mock(ServletServerHttpRequest.class);
+        when(servletServerRequest.getServletRequest()).thenReturn(servletRequest);
+        var responseEntity = ResponseEntity.ok("data");
+
+        Object result = advice.beforeBodyWrite(responseEntity, null, null, null, servletServerRequest, null);
+
+        verify(servletRequest, never()).setAttribute(anyString(), any());
+        assertThat(result).isEqualTo(responseEntity);
+    }
+
+    @Test
+    void shouldPassThrough_whenServletBodyIsNotApiResponse() {
+        var servletRequest = mock(HttpServletRequest.class);
+        var servletServerRequest = mock(ServletServerHttpRequest.class);
+        when(servletServerRequest.getServletRequest()).thenReturn(servletRequest);
+
+        Object result = advice.beforeBodyWrite("data", null, null, null, servletServerRequest, null);
+
+        verify(servletRequest, never()).setAttribute(anyString(), any());
+        assertThat(result).isEqualTo("data");
+    }
+
+    @Test
     void shouldPassThrough_whenRequestNotServletServerRequest() {
         var serverRequest = mock(org.springframework.http.server.ServerHttpRequest.class);
         var body = "some body";

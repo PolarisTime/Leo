@@ -57,4 +57,50 @@ class CompanySettingMapperTest {
         assertThat(response).isNotNull();
         assertThat(response.settlementAccounts()).isEmpty();
     }
+
+    @Test
+    void shouldReturnNullWhenAllSourcesAreNull() {
+        assertThat(mapper.toResponse(null, null, null)).isNull();
+    }
+
+    @Test
+    void shouldMapAdditionalSourcesWhenEntityIsNull() {
+        List<CompanySettlementAccountResponse> accounts = List.of(
+                new CompanySettlementAccountResponse(1L, "账户A", "银行A", "账号A", "通用", "正常", null)
+        );
+
+        CompanySettingResponse response = mapper.toResponse(null, new BigDecimal("0.13"), accounts);
+
+        assertThat(response).isNotNull();
+        assertThat(response.id()).isNull();
+        assertThat(response.taxRate()).isEqualByComparingTo("0.13");
+        assertThat(response.settlementAccounts()).containsExactlyElementsOf(accounts);
+        assertThat(response.settlementAccounts()).isNotSameAs(accounts);
+    }
+
+    @Test
+    void shouldMapSettlementAccountsWhenEntityAndTaxRateAreNull() {
+        List<CompanySettlementAccountResponse> accounts = List.of(
+                new CompanySettlementAccountResponse(1L, "账户A", "银行A", "账号A", "通用", "正常", null)
+        );
+
+        CompanySettingResponse response = mapper.toResponse(null, null, accounts);
+
+        assertThat(response).isNotNull();
+        assertThat(response.taxRate()).isNull();
+        assertThat(response.settlementAccounts()).containsExactlyElementsOf(accounts);
+    }
+
+    @Test
+    void shouldKeepSettlementAccountsNullWhenSourceAccountsAreNull() {
+        CompanySetting entity = new CompanySetting();
+        entity.setId(3L);
+        entity.setCompanyName("公司C");
+
+        CompanySettingResponse response = mapper.toResponse(entity, null, null);
+
+        assertThat(response).isNotNull();
+        assertThat(response.id()).isEqualTo(3L);
+        assertThat(response.settlementAccounts()).isNull();
+    }
 }

@@ -57,4 +57,10 @@ class MaterialCategoryMapperTest {
         assertThat(response.purchaseWeighOverTolerancePercent()).isEqualByComparingTo("3.00");
         assertThat(response.purchaseWeighUnderTolerancePercent()).isEqualByComparingTo("4.00");
     }
+
+    @Test
+    void shouldReturnNull_whenCategoryIsNull() {
+        assertThat(mapper.toResponse(null)).isNull();
+        assertThat(mapper.toOptionResponse(null)).isNull();
+    }
 }

@@ -12,6 +12,7 @@ import org.junit.jupiter.api.Test;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -104,6 +105,91 @@ class PurchaseInboundSourceValidatorTest {
         validator.validateLine(line, 1, request, context);
 
         assertThat(context.requestAllocatedQuantityMap()).containsEntry(201L, 4);
+    }
+
+    @Test
+    void shouldDelegateAllocatedQuantityMapLoading() {
+        PurchaseInboundItemRepository inboundItemRepository = mock(PurchaseInboundItemRepository.class);
+        PurchaseInboundSourceValidator validator = new PurchaseInboundSourceValidator(
+                mock(PurchaseOrderItemQueryService.class),
+                new PurchaseInboundAllocationService(inboundItemRepository)
+        );
+        PurchaseInboundItemRepository.PurchaseOrderAllocationSummary summary =
+                mock(PurchaseInboundItemRepository.PurchaseOrderAllocationSummary.class);
+        when(summary.getSourcePurchaseOrderItemId()).thenReturn(201L);
+        when(summary.getTotalQuantity()).thenReturn(2L);
+        when(inboundItemRepository.summarizeAllocatedQuantityBySourcePurchaseOrderItemIdsExcludingInbound(
+                List.of(201L),
+                1L
+        )).thenReturn(List.of(summary));
+
+        Map<Long, Integer> result = validator.loadAllocatedQuantityMap(List.of(201L), 1L);
+
+        assertThat(result).containsEntry(201L, 2);
+    }
+
+    @Test
+    void shouldRejectWhenSourcePurchaseOrderItemIsNotLoaded() {
+        PurchaseOrderItemQueryService itemQueryService = mock(PurchaseOrderItemQueryService.class);
+        PurchaseInboundItemRepository inboundItemRepository = mock(PurchaseInboundItemRepository.class);
+        PurchaseInboundSourceValidator validator = new PurchaseInboundSourceValidator(
+                itemQueryService,
+                new PurchaseInboundAllocationService(inboundItemRepository)
+        );
+        PurchaseInboundRequest request = request(List.of(itemRequest(999L, 4)));
+        when(itemQueryService.findActiveByIdIn(List.of(999L))).thenReturn(List.of());
+        when(inboundItemRepository.summarizeAllocatedQuantityBySourcePurchaseOrderItemIdsExcludingInbound(
+                eq(List.of(999L)),
+                any()
+        )).thenReturn(List.of());
+        PurchaseInboundSourceValidator.SourceValidationContext context =
+                validator.prepareContext(request, null, List.of());
+
+        assertThatThrownBy(() -> validator.validateLine(request.items().get(0), 1, request, context))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("来源采购订单明细不存在");
+    }
+
+    @Test
+    void shouldRejectWhenSourcePurchaseOrderIsMissing() {
+        PurchaseOrderItemQueryService itemQueryService = mock(PurchaseOrderItemQueryService.class);
+        PurchaseInboundItemRepository inboundItemRepository = mock(PurchaseInboundItemRepository.class);
+        PurchaseInboundSourceValidator validator = new PurchaseInboundSourceValidator(
+                itemQueryService,
+                new PurchaseInboundAllocationService(inboundItemRepository)
+        );
+        PurchaseOrderItem sourceItem = sourcePurchaseOrderItem(201L, 10);
+        sourceItem.setPurchaseOrder(null);
+        PurchaseInboundRequest request = request(List.of(itemRequest(201L, 4)));
+        when(itemQueryService.findActiveByIdIn(List.of(201L))).thenReturn(List.of(sourceItem));
+        when(inboundItemRepository.summarizeAllocatedQuantityBySourcePurchaseOrderItemIdsExcludingInbound(
+                eq(List.of(201L)),
+                any()
+        )).thenReturn(List.of());
+        PurchaseInboundSourceValidator.SourceValidationContext context =
+                validator.prepareContext(request, null, List.of());
+
+        assertThatThrownBy(() -> validator.validateLine(request.items().get(0), 1, request, context))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("来源采购订单未审核");
+    }
+
+    @Test
+    void shouldExposeAllocatedQuantityMapFromSourceValidationContext() {
+        PurchaseInboundAllocationService.AllocationContext allocationContext =
+                new PurchaseInboundAllocationService.AllocationContext(
+                        Map.of(201L, 2),
+                        new java.util.HashMap<>()
+                );
+        PurchaseInboundSourceValidator.SourceValidationContext context =
+                new PurchaseInboundSourceValidator.SourceValidationContext(
+                        List.of(201L),
+                        List.of(201L),
+                        Map.of(),
+                        allocationContext
+                );
+
+        assertThat(context.allocatedQuantityMap()).containsEntry(201L, 2);
     }
 
     private PurchaseOrderItem sourcePurchaseOrderItem(Long id, Integer quantity) {

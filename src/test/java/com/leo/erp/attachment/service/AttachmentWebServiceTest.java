@@ -4,6 +4,7 @@ import com.leo.erp.attachment.mapper.AttachmentWebMapper;
 import com.leo.erp.attachment.web.dto.AttachmentDirectUploadCompleteRequest;
 import com.leo.erp.attachment.web.dto.AttachmentDirectUploadPrepareRequest;
 import com.leo.erp.attachment.web.dto.AttachmentDirectUploadPrepareResponse;
+import com.leo.erp.attachment.web.dto.AttachmentBindingCountResponse;
 import com.leo.erp.attachment.web.dto.AttachmentBindingResponse;
 import com.leo.erp.attachment.web.dto.AttachmentUploadResponse;
 import org.junit.jupiter.api.Test;
@@ -142,5 +143,23 @@ class AttachmentWebServiceTest {
 
         assertThat(result).isEqualTo(expected);
         verify(bindingService).replace("sales-order", 1L, attachmentIds);
+    }
+
+    @Test
+    void countsShouldDelegateAndWrapResponse() {
+        AttachmentService attachmentService = mock(AttachmentService.class);
+        AttachmentBindingService bindingService = mock(AttachmentBindingService.class);
+        AttachmentWebMapper mapper = mock(AttachmentWebMapper.class);
+        List<Long> recordIds = List.of(1L, 2L, 3L);
+        Map<Long, Integer> counts = Map.of(1L, 2, 2L, 0);
+        when(bindingService.countByRecordIds("sales-order", recordIds)).thenReturn(counts);
+
+        AttachmentWebService service = new AttachmentWebService(attachmentService, bindingService, mapper);
+
+        AttachmentBindingCountResponse result = service.counts("sales-order", recordIds);
+
+        assertThat(result.moduleKey()).isEqualTo("sales-order");
+        assertThat(result.counts()).isEqualTo(counts);
+        verify(bindingService).countByRecordIds("sales-order", recordIds);
     }
 }

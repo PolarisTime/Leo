@@ -8,7 +8,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
-import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 
@@ -20,6 +20,24 @@ class UserAccountCacheServiceTest {
         var service = new UserAccountCacheService(redisJsonCacheSupport, null, null, null);
 
         service.evictLoginNameCache("admin", "user1");
+
+        verify(redisJsonCacheSupport).delete(List.of(
+                "auth:user:login-name:owner:admin",
+                "auth:user:login-name:owner:user1"
+        ));
+    }
+
+    @Test
+    void shouldEvictDistinctTrimmedLoginNameCacheAndIgnoreNullOrBlankValues() {
+        var redisJsonCacheSupport = mock(RedisJsonCacheSupport.class);
+        var service = new UserAccountCacheService(redisJsonCacheSupport, null, null, null);
+
+        service.evictLoginNameCache(" admin ", null, "admin", " ", "user1");
+
+        verify(redisJsonCacheSupport).delete(List.of(
+                "auth:user:login-name:owner:admin",
+                "auth:user:login-name:owner:user1"
+        ));
     }
 
     @Test
@@ -51,6 +69,8 @@ class UserAccountCacheServiceTest {
         var service = new UserAccountCacheService(redisJsonCacheSupport, null, null, null);
 
         service.evictLoginNameCache("", "  ");
+
+        verify(redisJsonCacheSupport, never()).delete(org.mockito.ArgumentMatchers.anyList());
     }
 
     @Test
@@ -59,6 +79,8 @@ class UserAccountCacheServiceTest {
         var service = new UserAccountCacheService(null, null, dashboardSummaryService, null);
 
         service.evictDashboard(1L);
+
+        verify(dashboardSummaryService).evictCache(1L);
     }
 
     @Test
@@ -74,6 +96,8 @@ class UserAccountCacheServiceTest {
         var service = new UserAccountCacheService(null, authenticatedUserCacheService, null, null);
 
         service.evictAuthenticatedUser(1L);
+
+        verify(authenticatedUserCacheService).evict(1L);
     }
 
     @Test
@@ -109,5 +133,7 @@ class UserAccountCacheServiceTest {
         var service = new UserAccountCacheService(null, null, null, permissionService);
 
         service.evictPermissionCache(1L);
+
+        verify(permissionService).evictCache(1L);
     }
 }

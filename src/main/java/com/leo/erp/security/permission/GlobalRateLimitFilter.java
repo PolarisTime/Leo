@@ -25,6 +25,8 @@ import java.util.Set;
 @Component
 public class GlobalRateLimitFilter extends OncePerRequestFilter implements Ordered {
 
+    static final int FILTER_ORDER = Ordered.HIGHEST_PRECEDENCE + 3;
+
     private static final double GLOBAL_RATE = 100;   // tokens/sec
     private static final int GLOBAL_CAPACITY = 150;  // burst
 
@@ -47,7 +49,7 @@ public class GlobalRateLimitFilter extends OncePerRequestFilter implements Order
 
     @Override
     public int getOrder() {
-        return Ordered.HIGHEST_PRECEDENCE;
+        return FILTER_ORDER;
     }
 
     @Override

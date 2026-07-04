@@ -69,4 +69,9 @@ class OperationLogMapperTest {
         assertThat(response.authType()).isNull();
         assertThat(response.remark()).isNull();
     }
+
+    @Test
+    void shouldReturnNullWhenEntityIsNull() {
+        assertThat(mapper.toResponse(null)).isNull();
+    }
 }

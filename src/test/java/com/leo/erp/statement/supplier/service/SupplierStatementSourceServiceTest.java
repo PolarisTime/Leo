@@ -1,13 +1,26 @@
 package com.leo.erp.statement.supplier.service;
 
+import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.support.StatusConstants;
+import com.leo.erp.master.supplier.domain.entity.Supplier;
+import com.leo.erp.master.supplier.repository.SupplierRepository;
 import com.leo.erp.purchase.inbound.domain.entity.PurchaseInbound;
+import com.leo.erp.purchase.inbound.domain.entity.PurchaseInboundItem;
 import com.leo.erp.purchase.inbound.repository.PurchaseInboundRepository;
 import com.leo.erp.purchase.inbound.service.PurchaseInboundItemQueryService;
+import com.leo.erp.statement.supplier.domain.entity.SupplierStatement;
+import com.leo.erp.statement.supplier.domain.entity.SupplierStatementItem;
 import com.leo.erp.statement.supplier.repository.SupplierStatementRepository;
 import com.leo.erp.statement.supplier.web.dto.SupplierStatementCandidateResponse;
+import com.leo.erp.statement.supplier.web.dto.SupplierStatementItemRequest;
+import com.leo.erp.statement.supplier.web.dto.SupplierStatementRequest;
+import jakarta.persistence.criteria.CriteriaBuilder;
+import jakarta.persistence.criteria.CriteriaQuery;
+import jakarta.persistence.criteria.Path;
+import jakarta.persistence.criteria.Predicate;
+import jakarta.persistence.criteria.Root;
 import org.junit.jupiter.api.Test;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
@@ -16,10 +29,15 @@ import org.springframework.data.jpa.domain.Specification;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 class SupplierStatementSourceServiceTest {
@@ -51,6 +69,394 @@ class SupplierStatementSourceServiceTest {
         assertThat(candidates.get(0).status()).isEqualTo(StatusConstants.PURCHASE_COMPLETED);
     }
 
+    @Test
+    void shouldApplySourceInboundItemsAndResolveSupplierCode() {
+        SupplierStatementRepository repository = mock(SupplierStatementRepository.class);
+        PurchaseInboundItemQueryService itemQueryService = mock(PurchaseInboundItemQueryService.class);
+        SupplierRepository supplierRepository = mock(SupplierRepository.class);
+        PurchaseInboundItem sourceItem = sourceInboundItem(10L, sourceInbound());
+        Supplier supplier = new Supplier();
+        supplier.setSupplierCode("SUP-001");
+        when(itemQueryService.findAllActiveByIdIn(List.of(10L))).thenReturn(List.of(sourceItem));
+        when(repository.findAllBySourceNosExcludingCurrentStatement(Set.of("RK-001"), 99L)).thenReturn(List.of());
+        when(supplierRepository.findFirstBySupplierNameAndDeletedFlagFalseOrderBySupplierCodeAsc("供应商甲"))
+                .thenReturn(java.util.Optional.of(supplier));
+        SupplierStatement entity = new SupplierStatement();
+        entity.setId(99L);
+        SupplierStatementSourceService service = new SupplierStatementSourceService(
+                repository,
+                mock(PurchaseInboundRepository.class),
+                itemQueryService,
+                supplierRepository
+        );
+
+        SupplierStatementSourceService.SourceApplyResult result = service.applyItems(
+                entity,
+                supplierRequest(null, "供应商甲", 1L, "结算主体A", 10L),
+                () -> 1000L
+        );
+
+        assertThat(result.purchaseAmount()).isEqualByComparingTo("123.45");
+        assertThat(result.settlementCompanyId()).isEqualTo(1L);
+        assertThat(result.settlementCompanyName()).isEqualTo("结算主体A");
+        assertThat(entity.getSupplierCode()).isEqualTo("SUP-001");
+        assertThat(entity.getItems()).hasSize(1);
+        assertThat(entity.getItems().get(0).getId()).isEqualTo(1000L);
+        assertThat(entity.getItems().get(0).getSourceNo()).isEqualTo("RK-001");
+        assertThat(entity.getItems().get(0).getAmount()).isEqualByComparingTo("123.45");
+    }
+
+    @Test
+    void shouldRejectOccupiedSourceInbound() {
+        SupplierStatementRepository repository = mock(SupplierStatementRepository.class);
+        PurchaseInboundItemQueryService itemQueryService = mock(PurchaseInboundItemQueryService.class);
+        PurchaseInbound sourceInbound = sourceInbound();
+        PurchaseInboundItem sourceItem = sourceInboundItem(10L, sourceInbound);
+        SupplierStatement occupied = new SupplierStatement();
+        SupplierStatementItem occupiedItem = new SupplierStatementItem();
+        occupiedItem.setSourceNo("RK-001");
+        occupied.getItems().add(occupiedItem);
+        when(itemQueryService.findAllActiveByIdIn(List.of(10L))).thenReturn(List.of(sourceItem));
+        when(repository.findAllBySourceNosExcludingCurrentStatement(Set.of("RK-001"), 99L)).thenReturn(List.of(occupied));
+        SupplierStatement entity = new SupplierStatement();
+        entity.setId(99L);
+        SupplierStatementSourceService service = new SupplierStatementSourceService(
+                repository,
+                mock(PurchaseInboundRepository.class),
+                itemQueryService,
+                null
+        );
+
+        assertThatThrownBy(() -> service.applyItems(entity, supplierRequest("SUP", "供应商甲", 1L, "结算主体A", 10L), () -> 1000L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("来源采购入库单RK-001已生成供应商对账单");
+    }
+
+    @Test
+    void shouldRejectMissingSourceInboundItem() {
+        PurchaseInboundItemQueryService itemQueryService = mock(PurchaseInboundItemQueryService.class);
+        when(itemQueryService.findAllActiveByIdIn(List.of(10L))).thenReturn(List.of());
+        SupplierStatement entity = new SupplierStatement();
+        entity.setId(99L);
+        SupplierStatementSourceService service = new SupplierStatementSourceService(
+                mock(SupplierStatementRepository.class),
+                mock(PurchaseInboundRepository.class),
+                itemQueryService,
+                null
+        );
+
+        assertThatThrownBy(() -> service.applyItems(entity, supplierRequest("SUP", "供应商甲", null, null, 10L), () -> 1000L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("供应商对账单来源采购入库单不能为空");
+    }
+
+    @Test
+    void shouldCollectOccupiedInboundNosWithCurrentStatementAndIgnoreBlankSources() {
+        SupplierStatementRepository repository = mock(SupplierStatementRepository.class);
+        SupplierStatement occupied = new SupplierStatement();
+        SupplierStatementItem blankItem = new SupplierStatementItem();
+        blankItem.setSourceNo(" ");
+        SupplierStatementItem nullItem = new SupplierStatementItem();
+        nullItem.setSourceNo(null);
+        SupplierStatementItem sourceItem = new SupplierStatementItem();
+        sourceItem.setSourceNo(" RK-001 ");
+        occupied.getItems().addAll(List.of(blankItem, nullItem, sourceItem));
+        when(repository.findAll(any(Specification.class))).thenReturn(List.of(occupied));
+        SupplierStatementSourceService service = new SupplierStatementSourceService(
+                repository,
+                mock(PurchaseInboundRepository.class),
+                mock(PurchaseInboundItemQueryService.class),
+                null
+        );
+
+        Set<String> occupiedInboundNos = service.collectOccupiedInboundNos(99L);
+
+        assertThat(occupiedInboundNos).containsExactly("RK-001");
+    }
+
+    @Test
+    void collectOccupiedInboundNosShouldAddCurrentStatementExclusionPredicate() {
+        SupplierStatementRepository repository = mock(SupplierStatementRepository.class);
+        SupplierStatementSourceService service = new SupplierStatementSourceService(
+                repository,
+                mock(PurchaseInboundRepository.class),
+                mock(PurchaseInboundItemQueryService.class),
+                null
+        );
+
+        service.collectOccupiedInboundNos(99L);
+
+        @SuppressWarnings("unchecked")
+        org.mockito.ArgumentCaptor<Specification<SupplierStatement>> captor =
+                org.mockito.ArgumentCaptor.forClass(Specification.class);
+        verify(repository).findAll(captor.capture());
+        Root<SupplierStatement> root = mock(Root.class);
+        CriteriaQuery<?> query = mock(CriteriaQuery.class);
+        CriteriaBuilder criteriaBuilder = mock(CriteriaBuilder.class);
+        @SuppressWarnings("unchecked")
+        Path<Boolean> deletedFlagPath = mock(Path.class);
+        @SuppressWarnings("unchecked")
+        Path<Object> idPath = mock(Path.class);
+        Predicate notDeletedPredicate = mock(Predicate.class);
+        Predicate excludeCurrentPredicate = mock(Predicate.class);
+        Predicate combinedPredicate = mock(Predicate.class);
+        when(root.<Boolean>get("deletedFlag")).thenReturn(deletedFlagPath);
+        when(root.get("id")).thenReturn(idPath);
+        when(criteriaBuilder.isFalse(deletedFlagPath)).thenReturn(notDeletedPredicate);
+        when(criteriaBuilder.notEqual(idPath, 99L)).thenReturn(excludeCurrentPredicate);
+        when(criteriaBuilder.and(notDeletedPredicate, excludeCurrentPredicate)).thenReturn(combinedPredicate);
+
+        Predicate result = captor.getValue().toPredicate(root, query, criteriaBuilder);
+
+        assertThat(result).isSameAs(combinedPredicate);
+        verify(criteriaBuilder).notEqual(idPath, 99L);
+    }
+
+    @Test
+    void shouldRejectEmptySourceInboundItemIdsWithoutQueryingSourceItems() {
+        PurchaseInboundItemQueryService itemQueryService = mock(PurchaseInboundItemQueryService.class);
+        SupplierStatementSourceService service = new SupplierStatementSourceService(
+                mock(SupplierStatementRepository.class),
+                mock(PurchaseInboundRepository.class),
+                itemQueryService,
+                null
+        );
+        Long sourceItemId = null;
+
+        assertThatThrownBy(() -> service.applyItems(
+                new SupplierStatement(),
+                supplierRequest("SUP", "供应商甲", null, null, sourceItemId),
+                () -> 1000L
+        ))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("供应商对账单来源采购入库单不能为空");
+        verifyNoInteractions(itemQueryService);
+    }
+
+    @Test
+    void shouldRejectDifferentSettlementCompanyFromSourceInbound() {
+        PurchaseInbound sourceInbound = sourceInbound();
+        sourceInbound.setSettlementCompanyId(2L);
+        PurchaseInboundItem sourceItem = sourceInboundItem(10L, sourceInbound);
+        PurchaseInboundItemQueryService itemQueryService = mock(PurchaseInboundItemQueryService.class);
+        when(itemQueryService.findAllActiveByIdIn(List.of(10L))).thenReturn(List.of(sourceItem));
+        SupplierStatementSourceService service = new SupplierStatementSourceService(
+                mock(SupplierStatementRepository.class),
+                mock(PurchaseInboundRepository.class),
+                itemQueryService,
+                null
+        );
+
+        assertThatThrownBy(() -> service.applyItems(
+                new SupplierStatement(),
+                supplierRequest("SUP", "供应商甲", 1L, "结算主体A", 10L),
+                () -> 1000L
+        ))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("来源采购入库单存在不同采购结算主体");
+    }
+
+    @Test
+    void shouldUseEmptySettlementCompanyWhenSourceInboundsHaveNoSettlementCompany() {
+        SupplierStatementRepository repository = mock(SupplierStatementRepository.class);
+        PurchaseInboundItemQueryService itemQueryService = mock(PurchaseInboundItemQueryService.class);
+        PurchaseInbound sourceInbound = sourceInbound();
+        sourceInbound.setSettlementCompanyId(null);
+        sourceInbound.setSettlementCompanyName(" ");
+        PurchaseInboundItem sourceItem = sourceInboundItem(10L, sourceInbound);
+        when(itemQueryService.findAllActiveByIdIn(List.of(10L))).thenReturn(List.of(sourceItem));
+        when(repository.findAllBySourceNosExcludingCurrentStatement(Set.of("RK-001"), null)).thenReturn(List.of());
+        SupplierStatementSourceService service = new SupplierStatementSourceService(
+                repository,
+                mock(PurchaseInboundRepository.class),
+                itemQueryService,
+                null
+        );
+
+        SupplierStatementSourceService.SourceApplyResult result = service.applyItems(
+                new SupplierStatement(),
+                supplierRequest("SUP", "供应商甲", null, null, 10L),
+                () -> 1000L
+        );
+
+        assertThat(result.settlementCompanyId()).isNull();
+        assertThat(result.settlementCompanyName()).isNull();
+    }
+
+    @Test
+    void shouldUseSettlementCompanyNameWhenSourceInboundHasNameOnly() {
+        SupplierStatementRepository repository = mock(SupplierStatementRepository.class);
+        PurchaseInboundItemQueryService itemQueryService = mock(PurchaseInboundItemQueryService.class);
+        PurchaseInbound sourceInbound = sourceInbound();
+        sourceInbound.setSettlementCompanyId(null);
+        sourceInbound.setSettlementCompanyName("  结算主体名称  ");
+        PurchaseInboundItem sourceItem = sourceInboundItem(10L, sourceInbound);
+        when(itemQueryService.findAllActiveByIdIn(List.of(10L))).thenReturn(List.of(sourceItem));
+        when(repository.findAllBySourceNosExcludingCurrentStatement(Set.of("RK-001"), null)).thenReturn(List.of());
+        SupplierStatementSourceService service = new SupplierStatementSourceService(
+                repository,
+                mock(PurchaseInboundRepository.class),
+                itemQueryService,
+                null
+        );
+
+        SupplierStatementSourceService.SourceApplyResult result = service.applyItems(
+                new SupplierStatement(),
+                supplierRequest("SUP", "供应商甲", null, null, 10L),
+                () -> 1000L
+        );
+
+        assertThat(result.settlementCompanyId()).isNull();
+        assertThat(result.settlementCompanyName()).isEqualTo("结算主体名称");
+    }
+
+    @Test
+    void shouldRejectConflictingSourceSettlementCompaniesWithoutRequestSettlementCompany() {
+        SupplierStatementRepository repository = mock(SupplierStatementRepository.class);
+        PurchaseInboundItemQueryService itemQueryService = mock(PurchaseInboundItemQueryService.class);
+        PurchaseInbound firstInbound = sourceInbound();
+        PurchaseInbound secondInbound = sourceInbound();
+        secondInbound.setInboundNo("RK-002");
+        secondInbound.setSettlementCompanyId(2L);
+        secondInbound.setSettlementCompanyName("结算主体B");
+        PurchaseInboundItem firstItem = sourceInboundItem(10L, firstInbound);
+        PurchaseInboundItem secondItem = sourceInboundItem(20L, secondInbound);
+        when(itemQueryService.findAllActiveByIdIn(List.of(10L, 20L))).thenReturn(List.of(firstItem, secondItem));
+        when(repository.findAllBySourceNosExcludingCurrentStatement(Set.of("RK-001", "RK-002"), null)).thenReturn(List.of());
+        SupplierStatementSourceService service = new SupplierStatementSourceService(
+                repository,
+                mock(PurchaseInboundRepository.class),
+                itemQueryService,
+                null
+        );
+
+        assertThatThrownBy(() -> service.applyItems(
+                new SupplierStatement(),
+                supplierRequest(
+                        "SUP",
+                        "供应商甲",
+                        null,
+                        null,
+                        List.of(supplierItemRequest(10L), supplierItemRequest(20L))
+                ),
+                () -> 1000L
+        ))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("来源采购入库单存在不同采购结算主体");
+    }
+
+    @Test
+    void shouldRejectBlankSourceInboundItemIdOnRequestedLine() {
+        SupplierStatementRepository repository = mock(SupplierStatementRepository.class);
+        PurchaseInboundItemQueryService itemQueryService = mock(PurchaseInboundItemQueryService.class);
+        PurchaseInboundItem sourceItem = sourceInboundItem(10L, sourceInbound());
+        when(itemQueryService.findAllActiveByIdIn(List.of(10L))).thenReturn(List.of(sourceItem));
+        when(repository.findAllBySourceNosExcludingCurrentStatement(Set.of("RK-001"), null)).thenReturn(List.of());
+        SupplierStatementSourceService service = new SupplierStatementSourceService(
+                repository,
+                mock(PurchaseInboundRepository.class),
+                itemQueryService,
+                null
+        );
+
+        assertThatThrownBy(() -> service.applyItems(
+                new SupplierStatement(),
+                supplierRequest(
+                        "SUP",
+                        "供应商甲",
+                        1L,
+                        "结算主体A",
+                        List.of(supplierItemRequest(10L), supplierItemRequest(null))
+                ),
+                () -> 1000L
+        ))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("第2行来源采购入库明细不能为空");
+    }
+
+    @Test
+    void shouldRejectMissingSourceInboundItemOnRequestedLine() {
+        SupplierStatementRepository repository = mock(SupplierStatementRepository.class);
+        PurchaseInboundItemQueryService itemQueryService = mock(PurchaseInboundItemQueryService.class);
+        PurchaseInboundItem sourceItem = sourceInboundItem(10L, sourceInbound());
+        when(itemQueryService.findAllActiveByIdIn(List.of(10L, 20L))).thenReturn(List.of(sourceItem));
+        when(repository.findAllBySourceNosExcludingCurrentStatement(Set.of("RK-001"), null)).thenReturn(List.of());
+        SupplierStatementSourceService service = new SupplierStatementSourceService(
+                repository,
+                mock(PurchaseInboundRepository.class),
+                itemQueryService,
+                null
+        );
+
+        assertThatThrownBy(() -> service.applyItems(
+                new SupplierStatement(),
+                supplierRequest(
+                        "SUP",
+                        "供应商甲",
+                        1L,
+                        "结算主体A",
+                        List.of(supplierItemRequest(10L), supplierItemRequest(20L))
+                ),
+                () -> 1000L
+        ))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("第2行来源采购入库明细不存在");
+    }
+
+    @Test
+    void shouldIgnoreBlankOccupiedSourceNosWhenCheckingRequestedInbounds() {
+        SupplierStatementRepository repository = mock(SupplierStatementRepository.class);
+        PurchaseInboundItemQueryService itemQueryService = mock(PurchaseInboundItemQueryService.class);
+        PurchaseInboundItem sourceItem = sourceInboundItem(10L, sourceInbound());
+        SupplierStatement occupied = new SupplierStatement();
+        SupplierStatementItem nullItem = new SupplierStatementItem();
+        nullItem.setSourceNo(null);
+        SupplierStatementItem blankItem = new SupplierStatementItem();
+        blankItem.setSourceNo(" ");
+        occupied.getItems().addAll(List.of(nullItem, blankItem));
+        when(itemQueryService.findAllActiveByIdIn(List.of(10L))).thenReturn(List.of(sourceItem));
+        when(repository.findAllBySourceNosExcludingCurrentStatement(Set.of("RK-001"), null)).thenReturn(List.of(occupied));
+        SupplierStatementSourceService service = new SupplierStatementSourceService(
+                repository,
+                mock(PurchaseInboundRepository.class),
+                itemQueryService,
+                null
+        );
+
+        SupplierStatementSourceService.SourceApplyResult result = service.applyItems(
+                new SupplierStatement(),
+                supplierRequest("SUP", "供应商甲", 1L, "结算主体A", 10L),
+                () -> 1000L
+        );
+
+        assertThat(result.purchaseAmount()).isEqualByComparingTo("123.45");
+        verify(repository).findAllBySourceNosExcludingCurrentStatement(eq(Set.of("RK-001")), eq(null));
+    }
+
+    @Test
+    void shouldLeaveSupplierCodeEmptyWhenRequestCodeAndSupplierNameAreBlank() {
+        SupplierStatementRepository repository = mock(SupplierStatementRepository.class);
+        PurchaseInboundItemQueryService itemQueryService = mock(PurchaseInboundItemQueryService.class);
+        SupplierRepository supplierRepository = mock(SupplierRepository.class);
+        PurchaseInbound sourceInbound = sourceInbound();
+        sourceInbound.setSupplierName(" ");
+        PurchaseInboundItem sourceItem = sourceInboundItem(10L, sourceInbound);
+        when(itemQueryService.findAllActiveByIdIn(List.of(10L))).thenReturn(List.of(sourceItem));
+        when(repository.findAllBySourceNosExcludingCurrentStatement(Set.of("RK-001"), null)).thenReturn(List.of());
+        SupplierStatement entity = new SupplierStatement();
+        SupplierStatementSourceService service = new SupplierStatementSourceService(
+                repository,
+                mock(PurchaseInboundRepository.class),
+                itemQueryService,
+                supplierRepository
+        );
+
+        service.applyItems(entity, supplierRequest(" ", " ", 1L, "结算主体A", 10L), () -> 1000L);
+
+        assertThat(entity.getSupplierCode()).isNull();
+        verifyNoInteractions(supplierRepository);
+    }
+
     private PurchaseInbound sourceInbound() {
         PurchaseInbound inbound = new PurchaseInbound();
         inbound.setId(1L);
@@ -58,10 +464,103 @@ class SupplierStatementSourceServiceTest {
         inbound.setSupplierName("供应商甲");
         inbound.setWarehouseName("一号仓");
         inbound.setInboundDate(LocalDate.of(2026, 5, 6));
+        inbound.setSettlementCompanyId(1L);
+        inbound.setSettlementCompanyName("结算主体A");
         inbound.setSettlementMode("按重量");
         inbound.setTotalWeight(new BigDecimal("1.000"));
         inbound.setTotalAmount(new BigDecimal("1000.00"));
         inbound.setStatus(StatusConstants.PURCHASE_COMPLETED);
         return inbound;
+    }
+
+    private SupplierStatementRequest supplierRequest(String supplierCode,
+                                                     String supplierName,
+                                                     Long settlementCompanyId,
+                                                     String settlementCompanyName,
+                                                     Long sourceInboundItemId) {
+        return new SupplierStatementRequest(
+                "ST-001",
+                supplierCode,
+                supplierName,
+                settlementCompanyId,
+                settlementCompanyName,
+                LocalDate.of(2026, 5, 1),
+                LocalDate.of(2026, 5, 31),
+                BigDecimal.ZERO,
+                BigDecimal.ZERO,
+                BigDecimal.ZERO,
+                "草稿",
+                null,
+                List.of(supplierItemRequest(sourceInboundItemId))
+        );
+    }
+
+    private SupplierStatementRequest supplierRequest(String supplierCode,
+                                                     String supplierName,
+                                                     Long settlementCompanyId,
+                                                     String settlementCompanyName,
+                                                     List<SupplierStatementItemRequest> items) {
+        return new SupplierStatementRequest(
+                "ST-001",
+                supplierCode,
+                supplierName,
+                settlementCompanyId,
+                settlementCompanyName,
+                LocalDate.of(2026, 5, 1),
+                LocalDate.of(2026, 5, 31),
+                BigDecimal.ZERO,
+                BigDecimal.ZERO,
+                BigDecimal.ZERO,
+                "草稿",
+                null,
+                items
+        );
+    }
+
+    private SupplierStatementItemRequest supplierItemRequest(Long sourceInboundItemId) {
+        return new SupplierStatementItemRequest(
+                "RK-001",
+                sourceInboundItemId,
+                "M001",
+                "HRB",
+                "螺纹钢",
+                "钢材",
+                "12",
+                "9m",
+                "吨",
+                "B001",
+                1,
+                "件",
+                new BigDecimal("1.234"),
+                1,
+                new BigDecimal("1.234"),
+                new BigDecimal("100.00"),
+                new BigDecimal("123.45")
+        );
+    }
+
+    private PurchaseInboundItem sourceInboundItem(Long id, PurchaseInbound inbound) {
+        PurchaseInboundItem item = new PurchaseInboundItem();
+        item.setId(id);
+        item.setPurchaseInbound(inbound);
+        item.setMaterialCode("M001");
+        item.setBrand("HRB");
+        item.setCategory("螺纹钢");
+        item.setMaterial("钢材");
+        item.setSpec("12");
+        item.setLength("9m");
+        item.setUnit("吨");
+        item.setBatchNo("B001");
+        item.setQuantity(1);
+        item.setQuantityUnit("件");
+        item.setPieceWeightTon(new BigDecimal("1.234"));
+        item.setPiecesPerBundle(1);
+        item.setWeightTon(new BigDecimal("1.234"));
+        item.setWeighWeightTon(new BigDecimal("1.235"));
+        item.setWeightAdjustmentTon(new BigDecimal("0.001"));
+        item.setWeightAdjustmentAmount(new BigDecimal("0.10"));
+        item.setUnitPrice(new BigDecimal("100.00"));
+        item.setAmount(new BigDecimal("123.45"));
+        return item;
     }
 }

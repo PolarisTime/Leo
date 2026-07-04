@@ -1,7 +1,11 @@
 package com.leo.erp.security.permission;
 
+import com.leo.erp.system.role.domain.entity.RolePermission;
 import org.junit.jupiter.api.Test;
 
+import java.lang.reflect.Constructor;
+import java.lang.reflect.Method;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -88,6 +92,12 @@ class ResourcePermissionCatalogTest {
                 .contains("company-setting");
         assertThat(ResourcePermissionCatalog.resolveResourceByPath("/company-settings/current"))
                 .contains("company-setting");
+        assertThat(ResourcePermissionCatalog.resolveResourceByPath("/role-setting/1/permission"))
+                .contains("role");
+        assertThat(ResourcePermissionCatalog.resolveResourceByPath("/role-setting/1/action/edit"))
+                .contains("role");
+        assertThat(ResourcePermissionCatalog.resolveResourceByPath("/general-setting/upload-rule/edit"))
+                .contains("general-setting");
     }
 
     @Test
@@ -127,6 +137,17 @@ class ResourcePermissionCatalogTest {
     }
 
     @Test
+    void shouldIgnoreNullActionsWhenResolvingVisibleMenuCodes() {
+        Map<String, Set<String>> permissionMap = new java.util.HashMap<>();
+        permissionMap.put("material", null);
+        permissionMap.put("unknown", Set.of("read"));
+
+        Set<String> menuCodes = ResourcePermissionCatalog.resolveVisibleMenuCodes(permissionMap);
+
+        assertThat(menuCodes).isEmpty();
+    }
+
+    @Test
     void shouldNormalizeActionAliases() {
         assertThat(ResourcePermissionCatalog.normalizeAction("view")).isEqualTo("read");
         assertThat(ResourcePermissionCatalog.normalizeAction("edit")).isEqualTo("update");
@@ -136,13 +157,17 @@ class ResourcePermissionCatalogTest {
     @Test
     void shouldNormalizeDataScope() {
         assertThat(ResourcePermissionCatalog.normalizeDataScope("all")).isEqualTo("all");
+        assertThat(ResourcePermissionCatalog.normalizeDataScope("全部数据")).isEqualTo("all");
         assertThat(ResourcePermissionCatalog.normalizeDataScope("全部")).isEqualTo("all");
         assertThat(ResourcePermissionCatalog.normalizeDataScope("department")).isEqualTo("department");
         assertThat(ResourcePermissionCatalog.normalizeDataScope("本部门")).isEqualTo("department");
+        assertThat(ResourcePermissionCatalog.normalizeDataScope("custom")).isEqualTo("custom");
+        assertThat(ResourcePermissionCatalog.normalizeDataScope("自定义范围")).isEqualTo("custom");
         assertThat(ResourcePermissionCatalog.normalizeDataScope("self")).isEqualTo("self");
         assertThat(ResourcePermissionCatalog.normalizeDataScope("本人")).isEqualTo("self");
         assertThat(ResourcePermissionCatalog.normalizeDataScope(null)).isEqualTo("self");
         assertThat(ResourcePermissionCatalog.normalizeDataScope("")).isEqualTo("self");
+        assertThat(ResourcePermissionCatalog.normalizeDataScope("未知")).isEqualTo("self");
     }
 
     @Test
@@ -157,6 +182,14 @@ class ResourcePermissionCatalogTest {
         Set<String> codes = ResourcePermissionCatalog.allowedResourceCodes();
         assertThat(codes).isNotEmpty();
         assertThat(codes).contains("material", "supplier", "customer", "ledger-adjustment");
+    }
+
+    @Test
+    void shouldExposeEntriesAndActionOptions() {
+        assertThat(ResourcePermissionCatalog.entries()).isNotEmpty();
+        assertThat(ResourcePermissionCatalog.actionOptions())
+                .extracting(ResourcePermissionCatalog.ActionOption::code)
+                .contains("read", "create", "update", "delete");
     }
 
     @Test
@@ -218,5 +251,62 @@ class ResourcePermissionCatalogTest {
         assertThat(labels).isNotEmpty();
         assertThat(labels).containsEntry("read", "查看");
         assertThat(labels).containsEntry("create", "新增");
+    }
+
+    @Test
+    void shouldNormalizeResourcesAndActions() {
+        assertThat(ResourcePermissionCatalog.normalizeResource(" /Material ")).isEqualTo("material");
+        assertThat(ResourcePermissionCatalog.normalizeResource(null)).isEmpty();
+        assertThat(ResourcePermissionCatalog.isKnownAction("view")).isTrue();
+        assertThat(ResourcePermissionCatalog.isKnownAction("missing-action")).isFalse();
+        assertThat(ResourcePermissionCatalog.actionTitle("unknown", "view")).isEqualTo("read");
+    }
+
+    @Test
+    void shouldBuildPermissionSummaryForEmptySmallAndLargeCollections() {
+        assertThat(ResourcePermissionCatalog.buildPermissionSummary(null)).isEmpty();
+        assertThat(ResourcePermissionCatalog.buildPermissionSummary(List.of())).isEmpty();
+
+        assertThat(ResourcePermissionCatalog.buildPermissionSummary(List.of(
+                permission("material", "read"),
+                permission("material", "read"),
+                permission("supplier", "edit")
+        ))).isEqualTo("商品资料-查看、供应商资料-编辑");
+
+        assertThat(ResourcePermissionCatalog.buildPermissionSummary(List.of(
+                permission("material", "read"),
+                permission("supplier", "read"),
+                permission("customer", "read"),
+                permission("project", "read"),
+                permission("carrier", "read"),
+                permission("warehouse", "read"),
+                permission("purchase-order", "read")
+        ))).endsWith(" 等7项");
+    }
+
+    @Test
+    void shouldInstantiatePrivateConstructorForCoverage() throws Exception {
+        Constructor<ResourcePermissionCatalog> constructor = ResourcePermissionCatalog.class.getDeclaredConstructor();
+        constructor.setAccessible(true);
+
+        assertThat(constructor.newInstance()).isNotNull();
+    }
+
+    @Test
+    void shouldCalculateLongestPrefixLength() throws Exception {
+        Method method = ResourcePermissionCatalog.class.getDeclaredMethod("longestPrefixLength", List.class, String.class);
+        method.setAccessible(true);
+
+        assertThat(method.invoke(null, List.of("/material"), "/material")).isEqualTo("/material".length());
+        assertThat(method.invoke(null, List.of("/material", "/material-categories"), "/material-categories/1"))
+                .isEqualTo("/material-categories".length());
+        assertThat(method.invoke(null, List.of("/supplier"), "/material")).isEqualTo(0);
+    }
+
+    private RolePermission permission(String resourceCode, String actionCode) {
+        RolePermission permission = new RolePermission();
+        permission.setResourceCode(resourceCode);
+        permission.setActionCode(actionCode);
+        return permission;
     }
 }

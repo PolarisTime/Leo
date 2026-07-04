@@ -62,4 +62,9 @@ class MaterialMapperTest {
         assertThat(response.length()).isNull();
         assertThat(response.remark()).isNull();
     }
+
+    @Test
+    void shouldReturnNull_whenMaterialIsNull() {
+        assertThat(mapper.toResponse(null)).isNull();
+    }
 }

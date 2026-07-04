@@ -7,9 +7,14 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -25,6 +30,20 @@ class ExternalProcessRunnerTest {
 
         assertThat(result.output()).isEqualTo("ok");
         assertThat(result.exitCode()).isEqualTo(0);
+    }
+
+    @Test
+    void shouldStartRealProcessAndCaptureOutput() throws Exception {
+        ExternalProcessRunner runner = new ExternalProcessRunner();
+
+        ExternalProcessRunner.ProcessResult result = runner.run(
+                new ProcessBuilder("sh", "-c", "printf ok"),
+                Duration.ofSeconds(5),
+                "shell"
+        );
+
+        assertThat(result.exitCode()).isZero();
+        assertThat(result.output()).isEqualTo("ok");
     }
 
     @Test
@@ -75,10 +94,65 @@ class ExternalProcessRunnerTest {
     }
 
     @Test
+    void shouldWrapUnexpectedOutputReadFailure() {
+        CompletableFuture<String> failedFuture = new CompletableFuture<>();
+        failedFuture.completeExceptionally(new IllegalStateException("boom"));
+        ExternalProcessRunner runner = new ExternalProcessRunner();
+
+        assertThatThrownBy(() -> invokeJoinOutput(runner, failedFuture))
+                .isInstanceOf(IOException.class)
+                .hasMessageContaining("读取进程输出失败")
+                .hasCauseInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
+    void shouldPropagateIoOutputReadFailure() {
+        CompletableFuture<String> failedFuture = new CompletableFuture<>();
+        failedFuture.completeExceptionally(new IOException("stream broken"));
+        ExternalProcessRunner runner = new ExternalProcessRunner();
+
+        assertThatThrownBy(() -> invokeJoinOutput(runner, failedFuture))
+                .isInstanceOf(IOException.class)
+                .hasMessageContaining("stream broken");
+    }
+
+    @Test
+    void shouldWrapOutputJoinTimeout() {
+        ExternalProcessRunner runner = new ExternalProcessRunner();
+
+        assertThatThrownBy(() -> invokeJoinOutput(runner, new ImmediateTimeoutFuture()))
+                .isInstanceOf(IOException.class)
+                .hasMessageContaining("读取进程输出超时")
+                .hasCauseInstanceOf(TimeoutException.class);
+    }
+
+    @Test
+    void shouldPropagateInterruptedOutputWait() {
+        CompletableFuture<String> future = new CompletableFuture<>();
+        ExternalProcessRunner runner = new ExternalProcessRunner();
+        Thread.currentThread().interrupt();
+
+        assertThatThrownBy(() -> invokeJoinOutput(runner, future))
+                .isInstanceOf(InterruptedException.class);
+        assertThat(Thread.interrupted()).isFalse();
+    }
+
+    @Test
     void processResultShouldContainExitCodeAndOutput() {
         ExternalProcessRunner.ProcessResult result = new ExternalProcessRunner.ProcessResult(0, "hello");
         assertThat(result.exitCode()).isEqualTo(0);
         assertThat(result.output()).isEqualTo("hello");
+    }
+
+    private String invokeJoinOutput(ExternalProcessRunner runner, CompletableFuture<String> future)
+            throws Throwable {
+        Method method = ExternalProcessRunner.class.getDeclaredMethod("joinOutput", CompletableFuture.class);
+        method.setAccessible(true);
+        try {
+            return (String) method.invoke(runner, future);
+        } catch (InvocationTargetException ex) {
+            throw ex.getCause();
+        }
     }
 
     private static final class TestRunner extends ExternalProcessRunner {
@@ -152,6 +226,14 @@ class ExternalProcessRunnerTest {
         @Override
         public boolean isAlive() {
             return !finished && !destroyedForcibly;
+        }
+    }
+
+    private static final class ImmediateTimeoutFuture extends CompletableFuture<String> {
+
+        @Override
+        public String get(long timeout, TimeUnit unit) throws ExecutionException, TimeoutException {
+            throw new TimeoutException("timeout");
         }
     }
 }

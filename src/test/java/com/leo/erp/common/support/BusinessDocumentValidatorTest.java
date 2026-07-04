@@ -84,6 +84,9 @@ class BusinessDocumentValidatorTest {
         assertThatThrownBy(() -> BusinessDocumentValidator.requireSameDecimal(null, new BigDecimal("1.0"), "数值不一致"))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("数值不一致");
+        assertThatThrownBy(() -> BusinessDocumentValidator.requireSameDecimal(new BigDecimal("1.0"), null, "数值不一致"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("数值不一致");
     }
 
     @Test

@@ -1,12 +1,14 @@
 package com.leo.erp.system.operationlog.support;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.MissingNode;
 import com.leo.erp.common.api.ApiResponse;
 import com.leo.erp.common.support.ClientIpResolver;
 import com.leo.erp.common.support.ModuleCatalog;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.junit.jupiter.api.Test;
+import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.web.servlet.HandlerMapping;
 import org.springframework.web.util.ContentCachingRequestWrapper;
 
@@ -94,6 +96,15 @@ class OperationLogResultCollectorTest {
     @Test
     void shouldReturnNull_whenApiResponseMessageIsBlank() {
         var apiResponse = new ApiResponse<>(0, "  ", "data", null);
+
+        String result = collector.resolveRemark(apiResponse, null);
+
+        assertThat(result).isNull();
+    }
+
+    @Test
+    void shouldReturnNull_whenApiResponseMessageIsNull() {
+        var apiResponse = new ApiResponse<>(0, null, "data", null);
 
         String result = collector.resolveRemark(apiResponse, null);
 
@@ -248,6 +259,98 @@ class OperationLogResultCollectorTest {
     }
 
     @Test
+    void shouldTrimStringAttributesAndFallbackWhenBusinessNoAttributeBlank() {
+        var metadata = new OperationLogMetadata("销售订单", "", "打印", new String[]{"businessNo"}, "id", "moduleKey", false);
+        HttpServletRequest request = mock(HttpServletRequest.class);
+        when(request.getAttribute(OperationLogResultCollector.BUSINESS_NO_ATTRIBUTE)).thenReturn("   ");
+        var apiResponse = new ApiResponse<>(0, "成功", Map.of("businessNo", "SO-002"), null);
+
+        String result = collector.resolveBusinessNo(request, apiResponse, metadata);
+
+        assertThat(result).isEqualTo("SO-002");
+    }
+
+    @Test
+    void shouldResolveRecordIdFromStringAttribute() {
+        var metadata = new OperationLogMetadata("销售订单", "", "查看", new String[0], "id", "", false);
+        HttpServletRequest request = mock(HttpServletRequest.class);
+        when(request.getAttribute(OperationLogResultCollector.RECORD_ID_ATTRIBUTE)).thenReturn(" 42 ");
+
+        Long result = collector.resolveRecordId(request, null, metadata);
+
+        assertThat(result).isEqualTo(42L);
+    }
+
+    @Test
+    void shouldIgnoreInvalidRecordIdAttributeAndResolvedValue() {
+        var metadata = new OperationLogMetadata("销售订单", "", "查看", new String[0], "id", "", false);
+        HttpServletRequest request = mock(HttpServletRequest.class);
+        when(request.getAttribute(OperationLogResultCollector.RECORD_ID_ATTRIBUTE)).thenReturn("not-number");
+        var apiResponse = new ApiResponse<>(0, "成功", Map.of("id", "abc"), null);
+
+        Long result = collector.resolveRecordId(request, apiResponse, metadata);
+
+        assertThat(result).isNull();
+    }
+
+    @Test
+    void shouldReturnNullRecordId_whenAttributeBlankAndFieldNull() {
+        var metadata = new OperationLogMetadata("销售订单", "", "查看", new String[0], null, "", false);
+        HttpServletRequest request = mock(HttpServletRequest.class);
+        when(request.getAttribute(OperationLogResultCollector.RECORD_ID_ATTRIBUTE)).thenReturn("   ");
+
+        Long result = collector.resolveRecordId(request, null, metadata);
+
+        assertThat(result).isNull();
+    }
+
+    @Test
+    void shouldResolveRecordIdFromUriVariablesWhenResponseAndRequestMissing() {
+        var metadata = new OperationLogMetadata("销售订单", "", "查看", new String[0], "id", "", false);
+        HttpServletRequest request = mock(HttpServletRequest.class);
+        when(request.getAttribute(HandlerMapping.URI_TEMPLATE_VARIABLES_ATTRIBUTE)).thenReturn(Map.of("id", "77"));
+
+        Long result = collector.resolveRecordId(request, null, metadata);
+
+        assertThat(result).isEqualTo(77L);
+    }
+
+    @Test
+    void shouldResolveModuleKeyFromResponseRequestAndUriVariables() {
+        var metadata = new OperationLogMetadata("销售订单", "", "查看", new String[0], "", "moduleKey", false);
+        HttpServletRequest responseRequest = mock(HttpServletRequest.class);
+        var apiResponse = new ApiResponse<>(0, "成功", Map.of("moduleKey", "sales-order"), null);
+
+        assertThat(collector.resolveModuleKey(responseRequest, apiResponse, metadata)).isEqualTo("sales-order");
+
+        ContentCachingRequestWrapper bodyRequest = mock(ContentCachingRequestWrapper.class);
+        when(bodyRequest.getContentAsByteArray())
+                .thenReturn("{\"moduleKey\":\"purchase-order\"}".getBytes(StandardCharsets.UTF_8));
+
+        assertThat(collector.resolveModuleKey(bodyRequest, null, metadata)).isEqualTo("purchase-order");
+
+        HttpServletRequest uriRequest = mock(HttpServletRequest.class);
+        when(uriRequest.getAttribute(HandlerMapping.URI_TEMPLATE_VARIABLES_ATTRIBUTE))
+                .thenReturn(Map.of("moduleKey", "inventory-report"));
+
+        assertThat(collector.resolveModuleKey(uriRequest, null, metadata)).isEqualTo("inventory-report");
+    }
+
+    @Test
+    void shouldReturnNullModuleKey_whenUriVariablesAbsentOrMissingValue() {
+        var metadata = new OperationLogMetadata("销售订单", "", "查看", new String[0], "", "moduleKey", false);
+        HttpServletRequest absentUriRequest = mock(HttpServletRequest.class);
+
+        assertThat(collector.resolveModuleKey(absentUriRequest, null, metadata)).isNull();
+
+        HttpServletRequest missingValueRequest = mock(HttpServletRequest.class);
+        when(missingValueRequest.getAttribute(HandlerMapping.URI_TEMPLATE_VARIABLES_ATTRIBUTE))
+                .thenReturn(new HashMap<>());
+
+        assertThat(collector.resolveModuleKey(missingValueRequest, null, metadata)).isNull();
+    }
+
+    @Test
     void shouldResolveModuleName_fromRequestBodyModuleKey() {
         var metadata = new OperationLogMetadata("打印", "moduleKey", "打印", new String[]{"recordId"}, "", "", false);
         ContentCachingRequestWrapper request = mock(ContentCachingRequestWrapper.class);
@@ -258,6 +361,41 @@ class OperationLogResultCollectorTest {
         String result = collector.resolveModuleName(request, metadata);
 
         assertThat(result).isEqualTo("销售订单");
+    }
+
+    @Test
+    void shouldResolveModuleNameFallbacks() {
+        assertThat(collector.resolveModuleName(mock(HttpServletRequest.class), null)).isNull();
+
+        var nullFieldMetadata = new OperationLogMetadata("空字段模块", null, "查看", new String[0], "", "", false);
+        assertThat(collector.resolveModuleName(mock(HttpServletRequest.class), nullFieldMetadata)).isEqualTo("空字段模块");
+
+        var fixedMetadata = new OperationLogMetadata("固定模块", " ", "查看", new String[0], "", "", false);
+        assertThat(collector.resolveModuleName(mock(HttpServletRequest.class), fixedMetadata)).isEqualTo("固定模块");
+
+        var missingBodyMetadata = new OperationLogMetadata("默认模块", "moduleKey", "查看", new String[0], "", "", false);
+        ContentCachingRequestWrapper blankRequest = mock(ContentCachingRequestWrapper.class);
+        when(blankRequest.getContentAsByteArray()).thenReturn("   ".getBytes(StandardCharsets.UTF_8));
+        assertThat(collector.resolveModuleName(blankRequest, missingBodyMetadata)).isEqualTo("默认模块");
+
+        ContentCachingRequestWrapper trimmedBlankRequest = mock(ContentCachingRequestWrapper.class);
+        String body = "{\"moduleKey\":\"   \"}";
+        when(trimmedBlankRequest.getContentAsByteArray()).thenReturn(body.getBytes(StandardCharsets.UTF_8));
+        assertThat(collector.resolveModuleName(trimmedBlankRequest, missingBodyMetadata)).isEqualTo("默认模块");
+
+        ContentCachingRequestWrapper nullModuleKeyRequest = mock(ContentCachingRequestWrapper.class);
+        when(nullModuleKeyRequest.getContentAsByteArray()).thenReturn("{\"moduleKey\":null}".getBytes(StandardCharsets.UTF_8));
+        assertThat(collector.resolveModuleName(nullModuleKeyRequest, missingBodyMetadata)).isEqualTo("默认模块");
+
+        OperationLogResultCollector collectorWithoutCatalog = new OperationLogResultCollector(
+                objectMapper,
+                clientIpResolver,
+                null
+        );
+        ContentCachingRequestWrapper request = mock(ContentCachingRequestWrapper.class);
+        when(request.getContentAsByteArray())
+                .thenReturn("{\"moduleKey\":\"raw-module\"}".getBytes(StandardCharsets.UTF_8));
+        assertThat(collectorWithoutCatalog.resolveModuleName(request, missingBodyMetadata)).isEqualTo("raw-module");
     }
 
     @Test
@@ -319,6 +457,28 @@ class OperationLogResultCollectorTest {
     }
 
     @Test
+    void shouldReturnNullBusinessNo_whenUriIdMissing() {
+        var request = mock(HttpServletRequest.class);
+        var metadata = new OperationLogMetadata("测试模块", "", "查看", new String[0], "", "", false);
+        when(request.getAttribute(HandlerMapping.URI_TEMPLATE_VARIABLES_ATTRIBUTE)).thenReturn(new HashMap<>());
+
+        String result = collector.resolveBusinessNo(request, null, metadata);
+
+        assertThat(result).isNull();
+    }
+
+    @Test
+    void shouldIgnoreNullAndBlankBusinessNoFields() {
+        var request = mock(HttpServletRequest.class);
+        var metadata = new OperationLogMetadata("测试模块", "", "创建", new String[]{null, " "}, "", "", false);
+        var apiResponse = new ApiResponse<>(0, "成功", Map.of("orderNo", "ORD001"), null);
+
+        String result = collector.resolveBusinessNo(request, apiResponse, metadata);
+
+        assertThat(result).isNull();
+    }
+
+    @Test
     void shouldReadValue_fromJsonNode() throws Exception {
         var metadata = new OperationLogMetadata("测试模块", "", "创建", new String[]{"orderNo"}, "", "", false);
         var jsonNode = objectMapper.readTree("{\"orderNo\":\"JSON001\"}");
@@ -331,6 +491,21 @@ class OperationLogResultCollectorTest {
     }
 
     @Test
+    void shouldIgnoreJsonNodeNullBlankAndMissingTextValues() throws Exception {
+        var metadata = new OperationLogMetadata("测试模块", "", "创建", new String[]{"orderNo"}, "", "", false);
+        var request = mock(HttpServletRequest.class);
+        var nullValueResponse = new ApiResponse<>(0, "成功", objectMapper.readTree("{\"orderNo\":null}"), null);
+        var blankValueResponse = new ApiResponse<>(0, "成功", objectMapper.readTree("{\"orderNo\":\"   \"}"), null);
+        var missingTextNode = objectMapper.createObjectNode()
+                .set("orderNo", MissingNode.getInstance());
+        var missingTextResponse = new ApiResponse<>(0, "成功", missingTextNode, null);
+
+        assertThat(collector.resolveBusinessNo(request, nullValueResponse, metadata)).isNull();
+        assertThat(collector.resolveBusinessNo(request, blankValueResponse, metadata)).isNull();
+        assertThat(collector.resolveBusinessNo(request, missingTextResponse, metadata)).isNull();
+    }
+
+    @Test
     void shouldReadValue_fromMap() {
         var metadata = new OperationLogMetadata("测试模块", "", "创建", new String[]{"key"}, "", "", false);
         Map<String, Object> data = Map.of("key", "val123");
@@ -340,6 +515,74 @@ class OperationLogResultCollectorTest {
         String result = collector.resolveBusinessNo(request, apiResponse, metadata);
 
         assertThat(result).isEqualTo("val123");
+    }
+
+    @Test
+    void shouldIgnoreNullValueFromMap() {
+        var metadata = new OperationLogMetadata("测试模块", "", "创建", new String[]{"key"}, "", "", false);
+        Map<String, Object> data = new HashMap<>();
+        data.put("key", null);
+        var apiResponse = new ApiResponse<>(0, "成功", data, null);
+        var request = mock(HttpServletRequest.class);
+
+        String result = collector.resolveBusinessNo(request, apiResponse, metadata);
+
+        assertThat(result).isNull();
+    }
+
+    @Test
+    void shouldReadValueFromNoArgMethodNamedAsField() {
+        var metadata = new OperationLogMetadata("测试模块", "", "创建", new String[]{"ticketNo"}, "", "", false);
+        var apiResponse = new ApiResponse<>(0, "成功", new MethodOnlyData(), null);
+        var request = mock(HttpServletRequest.class);
+
+        String result = collector.resolveBusinessNo(request, apiResponse, metadata);
+
+        assertThat(result).isEqualTo("METHOD-001");
+    }
+
+    @Test
+    void shouldReadValueFromInheritedFieldWhenNoAccessorExists() {
+        var metadata = new OperationLogMetadata("测试模块", "", "创建", new String[]{"inheritedNo"}, "", "", false);
+        var apiResponse = new ApiResponse<>(0, "成功", new ChildOrderData(), null);
+        var request = mock(HttpServletRequest.class);
+
+        String result = collector.resolveBusinessNo(request, apiResponse, metadata);
+
+        assertThat(result).isEqualTo("BASE-001");
+    }
+
+    @Test
+    void shouldReturnNullWhenNoPojoAccessorOrFieldExists() {
+        var metadata = new OperationLogMetadata("测试模块", "", "创建", new String[]{"missingNo"}, "", "", false);
+        var apiResponse = new ApiResponse<>(0, "成功", new NoReadableData(), null);
+        var request = mock(HttpServletRequest.class);
+
+        String result = collector.resolveBusinessNo(request, apiResponse, metadata);
+
+        assertThat(result).isNull();
+    }
+
+    @Test
+    void shouldReturnNullWhenPojoFieldMissingThroughSuperclassChain() {
+        var metadata = new OperationLogMetadata("测试模块", "", "创建", new String[]{"missingNo"}, "", "", false);
+        var apiResponse = new ApiResponse<>(0, "成功", new ChildOrderData(), null);
+        var request = mock(HttpServletRequest.class);
+
+        String result = collector.resolveBusinessNo(request, apiResponse, metadata);
+
+        assertThat(result).isNull();
+    }
+
+    @Test
+    void shouldReturnNullWhenPojoValueTrimsToEmpty() {
+        var metadata = new OperationLogMetadata("测试模块", "", "创建", new String[]{"blankNo"}, "", "", false);
+        var apiResponse = new ApiResponse<>(0, "成功", new BlankFieldData(), null);
+        var request = mock(HttpServletRequest.class);
+
+        String result = collector.resolveBusinessNo(request, apiResponse, metadata);
+
+        assertThat(result).isNull();
     }
 
     @Test
@@ -389,5 +632,25 @@ class OperationLogResultCollectorTest {
         public Long getId() {
             return id;
         }
+    }
+
+    static class MethodOnlyData {
+        public String ticketNo() {
+            return "METHOD-001";
+        }
+    }
+
+    static class BaseOrderData {
+        private final String inheritedNo = "BASE-001";
+    }
+
+    static class ChildOrderData extends BaseOrderData {
+    }
+
+    static class NoReadableData {
+    }
+
+    static class BlankFieldData {
+        private final String blankNo = "   ";
     }
 }

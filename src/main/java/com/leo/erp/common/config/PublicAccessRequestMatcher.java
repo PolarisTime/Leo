@@ -41,11 +41,7 @@ public class PublicAccessRequestMatcher implements RequestMatcher {
         if (AnnotatedElementUtils.hasAnnotation(handlerMethod.getMethod(), PublicAccess.class)) {
             return true;
         }
-        if (AnnotatedElementUtils.hasAnnotation(handlerMethod.getBeanType(), PublicAccess.class)) {
-            return true;
-        }
-        return handlerMethod.getMethod().isAnnotationPresent(PublicAccess.class)
-                || handlerMethod.getBeanType().isAnnotationPresent(PublicAccess.class);
+        return AnnotatedElementUtils.hasAnnotation(handlerMethod.getBeanType(), PublicAccess.class);
     }
 
     @Override

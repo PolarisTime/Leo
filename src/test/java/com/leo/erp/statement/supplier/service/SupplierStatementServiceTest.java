@@ -3,6 +3,7 @@ package com.leo.erp.statement.supplier.service;
 import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.error.BusinessException;
+import com.leo.erp.common.service.CrudRuntimeSettings;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.purchase.inbound.domain.entity.PurchaseInbound;
@@ -13,6 +14,7 @@ import com.leo.erp.security.permission.WorkflowTransitionGuard;
 import com.leo.erp.statement.supplier.domain.entity.SupplierStatement;
 import com.leo.erp.statement.supplier.mapper.SupplierStatementMapper;
 import com.leo.erp.statement.supplier.repository.SupplierStatementRepository;
+import com.leo.erp.statement.supplier.web.dto.SupplierStatementCandidateResponse;
 import com.leo.erp.statement.supplier.web.dto.SupplierStatementItemRequest;
 import com.leo.erp.statement.supplier.web.dto.SupplierStatementRequest;
 import com.leo.erp.statement.supplier.web.dto.SupplierStatementResponse;
@@ -20,6 +22,10 @@ import org.junit.jupiter.api.Test;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -171,6 +177,39 @@ class SupplierStatementServiceTest {
     }
 
     @Test
+    void shouldReturnCandidatePage_whenCallingCandidatePage() {
+        SupplierStatementRepository repository = mock(SupplierStatementRepository.class);
+        PurchaseInboundRepository purchaseInboundRepository = mock(PurchaseInboundRepository.class);
+        PurchaseInbound inbound = new PurchaseInbound();
+        inbound.setId(10L);
+        inbound.setInboundNo("IN-001");
+        inbound.setSupplierName("供应商甲");
+        inbound.setWarehouseName("一号仓");
+        inbound.setInboundDate(LocalDate.of(2026, 5, 1));
+        inbound.setSettlementMode("月结");
+        inbound.setTotalWeight(new BigDecimal("1.000"));
+        inbound.setTotalAmount(new BigDecimal("1000.00"));
+        inbound.setStatus("完成采购");
+        when(repository.findAll(any(Specification.class))).thenReturn(List.of());
+        when(purchaseInboundRepository.findAll(any(Specification.class), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(inbound)));
+        SupplierStatementService service = service(
+                repository,
+                mock(SupplierStatementMapper.class),
+                purchaseInboundRepository,
+                mock(PurchaseInboundItemQueryService.class),
+                mock(WorkflowTransitionGuard.class)
+        );
+
+        var result = service.candidatePage(new PageQuery(0, 10, "id", "desc"), PageFilter.of(null, null, null, null));
+
+        assertThat(result.getContent())
+                .extracting(SupplierStatementCandidateResponse::inboundNo)
+                .containsExactly("IN-001");
+        verify(purchaseInboundRepository).findAll(any(Specification.class), any(Pageable.class));
+    }
+
+    @Test
     void shouldReturnException_whenCreateWithDuplicateStatementNo() {
         SupplierStatementRepository repository = mock(SupplierStatementRepository.class);
         when(repository.existsByStatementNoAndDeletedFlagFalse("GYDZ-001")).thenReturn(true);
@@ -186,6 +225,70 @@ class SupplierStatementServiceTest {
         assertThatThrownBy(() -> service.create(buildRequest(new BigDecimal("1000.00"))))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("供应商对账单号已存在");
+    }
+
+    @Test
+    void validateUpdateShouldRejectDuplicateChangedStatementNo() {
+        SupplierStatementRepository repository = mock(SupplierStatementRepository.class);
+        SupplierStatement entity = createSupplierStatement(1L, "GYDZ-OLD");
+        when(repository.existsByStatementNoAndDeletedFlagFalse("GYDZ-001")).thenReturn(true);
+        SupplierStatementService service = service(
+                repository,
+                mock(SupplierStatementMapper.class),
+                mock(PurchaseInboundRepository.class),
+                mock(PurchaseInboundItemQueryService.class),
+                mock(WorkflowTransitionGuard.class)
+        );
+
+        assertThatThrownBy(() -> service.validateUpdate(entity, buildRequest(new BigDecimal("1000.00"))))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("供应商对账单号已存在");
+    }
+
+    @Test
+    void validateUpdateShouldAllowChangedStatementNoWhenUnique() {
+        SupplierStatementRepository repository = mock(SupplierStatementRepository.class);
+        SupplierStatement entity = createSupplierStatement(1L, "GYDZ-OLD");
+        when(repository.existsByStatementNoAndDeletedFlagFalse("GYDZ-001")).thenReturn(false);
+        SupplierStatementService service = service(
+                repository,
+                mock(SupplierStatementMapper.class),
+                mock(PurchaseInboundRepository.class),
+                mock(PurchaseInboundItemQueryService.class),
+                mock(WorkflowTransitionGuard.class)
+        );
+
+        service.validateUpdate(entity, buildRequest(new BigDecimal("1000.00")));
+
+        verify(repository).existsByStatementNoAndDeletedFlagFalse("GYDZ-001");
+    }
+
+    @Test
+    void detailShouldUseVisibleLookupAndSupplierNotFoundMessageForAdminDeletedView() {
+        SupplierStatementRepository repository = mock(SupplierStatementRepository.class);
+        when(repository.findById(404L)).thenReturn(Optional.empty());
+        SupplierStatementService service = service(
+                repository,
+                mock(SupplierStatementMapper.class),
+                mock(PurchaseInboundRepository.class),
+                mock(PurchaseInboundItemQueryService.class),
+                mock(WorkflowTransitionGuard.class)
+        );
+        CrudRuntimeSettings runtimeSettings = mock(CrudRuntimeSettings.class);
+        when(runtimeSettings.shouldAdminSeeDeletedRecords()).thenReturn(true);
+        ReflectionTestUtils.invokeMethod(service, "setCrudRuntimeSettings", runtimeSettings);
+        var principal = com.leo.erp.security.support.SecurityPrincipal.authenticated(
+                1L, "admin", List.of(new SimpleGrantedAuthority("ROLE_ADMIN"))
+        );
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken(principal, null, principal.getAuthorities())
+        );
+
+        assertThatThrownBy(() -> service.detail(404L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("供应商对账单不存在");
+        verify(repository).findById(404L);
+        SecurityContextHolder.clearContext();
     }
 
     @Test

@@ -62,27 +62,42 @@ public class DatabaseExportTaskService {
     private final DatabaseBackupProperties backupProperties;
     private final DatabaseExportTaskMapper exportTaskMapper;
     private final SnowflakeIdGenerator snowflakeIdGenerator;
-    private final ExecutorService executorService = new ThreadPoolExecutor(
-            1, 1,
-            0L, TimeUnit.MILLISECONDS,
-            new LinkedBlockingQueue<>(1),
-            r -> {
-                Thread thread = new Thread(r, "database-export-task-worker");
-                thread.setDaemon(true);
-                return thread;
-            },
-            new ThreadPoolExecutor.DiscardPolicy());
+    private final ExecutorService executorService;
+
+    private static ExecutorService defaultExecutorService() {
+        return new ThreadPoolExecutor(
+                1, 1,
+                0L, TimeUnit.MILLISECONDS,
+                new LinkedBlockingQueue<>(1),
+                r -> {
+                    Thread thread = new Thread(r, "database-export-task-worker");
+                    thread.setDaemon(true);
+                    return thread;
+                },
+                new ThreadPoolExecutor.DiscardPolicy()
+        );
+    }
 
     public DatabaseExportTaskService(DatabaseExportTaskRepository taskRepository,
                                      DatabaseBackupService databaseBackupService,
                                      DatabaseBackupProperties backupProperties,
                                      DatabaseExportTaskMapper exportTaskMapper,
                                      SnowflakeIdGenerator snowflakeIdGenerator) {
+        this(taskRepository, databaseBackupService, backupProperties, exportTaskMapper, snowflakeIdGenerator, defaultExecutorService());
+    }
+
+    DatabaseExportTaskService(DatabaseExportTaskRepository taskRepository,
+                              DatabaseBackupService databaseBackupService,
+                              DatabaseBackupProperties backupProperties,
+                              DatabaseExportTaskMapper exportTaskMapper,
+                              SnowflakeIdGenerator snowflakeIdGenerator,
+                              ExecutorService executorService) {
         this.taskRepository = taskRepository;
         this.databaseBackupService = databaseBackupService;
         this.backupProperties = backupProperties;
         this.exportTaskMapper = exportTaskMapper;
         this.snowflakeIdGenerator = snowflakeIdGenerator;
+        this.executorService = executorService;
     }
 
     @PostConstruct

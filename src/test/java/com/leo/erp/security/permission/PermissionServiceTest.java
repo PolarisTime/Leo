@@ -23,12 +23,16 @@ import java.util.Collection;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
+import static org.mockito.Mockito.when;
 
 class PermissionServiceTest {
 
@@ -396,6 +400,61 @@ class PermissionServiceTest {
     }
 
     @Test
+    void shouldSkipDataScopeWhenParsedResourceIsBlank() {
+        PermissionService service = permissionServiceWithSnapshot(new UserPermissionSnapshot(
+                Map.of(),
+                Map.of(
+                        ":read", ResourcePermissionCatalog.SCOPE_ALL,
+                        "material:read", ResourcePermissionCatalog.SCOPE_SELF
+                )
+        ));
+
+        assertThat(service.getUserDataScopes(1L))
+                .containsOnly(Map.entry("material", ResourcePermissionCatalog.SCOPE_SELF));
+    }
+
+    @Test
+    void shouldDenyPermissionWhenActionsAreMissingOrDoNotContainAction() {
+        PermissionService missingActions = permissionServiceWithSnapshot(new UserPermissionSnapshot(Map.of(), Map.of()));
+        PermissionService missingAction = permissionServiceWithSnapshot(new UserPermissionSnapshot(
+                Map.of("material", Set.of("read")),
+                Map.of()
+        ));
+
+        assertThat(missingActions.can(1L, "material", "read")).isFalse();
+        assertThat(missingAction.can(1L, "material", "update")).isFalse();
+    }
+
+    @Test
+    void shouldReturnWhenDepartmentScopeIsMissing() {
+        PermissionService service = new PermissionService(null, null, null, null);
+
+        assertThatCode(() -> service.evictDepartmentUserCache(10L)).doesNotThrowAnyException();
+        assertThatCode(service::clearDepartmentUserCache).doesNotThrowAnyException();
+    }
+
+    @Test
+    void shouldDelegateDepartmentUserCacheEvictionWhenDepartmentScopeExists() {
+        DepartmentScopeResolver departmentScope = mock(DepartmentScopeResolver.class);
+        PermissionService service = new PermissionService(null, null, null, departmentScope);
+
+        service.evictDepartmentUserCache(10L);
+
+        verify(departmentScope).evictDepartmentUserCache(10L);
+    }
+
+    @Test
+    void shouldOnlyClearDepartmentScopeWhenEvictAllCacheHasNoPermissionCache() {
+        DepartmentScopeResolver departmentScope = mock(DepartmentScopeResolver.class);
+        PermissionService service = new PermissionService(null, null, null, departmentScope);
+
+        service.evictAllCache();
+
+        verify(departmentScope).clearDepartmentUserCache();
+        verifyNoMoreInteractions(departmentScope);
+    }
+
+    @Test
     void shouldUseConstructorWithRedisJsonCacheSupport() {
         RoleSetting role = role(10L, "ADMIN", "全部数据");
         RolePermission perm = permission(10L, "material", "read");
@@ -410,6 +469,12 @@ class PermissionServiceTest {
         );
 
         assertThat(service.can(1L, "material", "read")).isTrue();
+    }
+
+    private PermissionService permissionServiceWithSnapshot(UserPermissionSnapshot snapshot) {
+        PermissionResolver resolver = mock(PermissionResolver.class);
+        when(resolver.getUserPermissionSnapshot(1L)).thenReturn(snapshot);
+        return new PermissionService(resolver, null, null, null);
     }
 
     private PermissionService permissionService(UserRoleRepository userRoleRepository,

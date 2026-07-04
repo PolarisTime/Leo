@@ -516,14 +516,6 @@ public class MaterialService extends AbstractCrudService<Material, MaterialReque
         return value == null ? null : value.trim();
     }
 
-    private Integer parseInteger(String value, int rowNumber, String label) {
-        try {
-            return Integer.valueOf(value);
-        } catch (NumberFormatException ex) {
-            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "第" + rowNumber + "行【" + label + "】格式不正确");
-        }
-    }
-
     private BigDecimal parseBigDecimal(String value, int rowNumber, String label) {
         try {
             return new BigDecimal(value.trim());

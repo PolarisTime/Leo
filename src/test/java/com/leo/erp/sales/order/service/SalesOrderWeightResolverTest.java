@@ -14,6 +14,8 @@ import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class SalesOrderWeightResolverTest {
@@ -87,6 +89,181 @@ class SalesOrderWeightResolverTest {
 
         assertThat(pieceWeightTon).isEqualByComparingTo("1.234");
         assertThat(weightTon).isEqualByComparingTo("4.936");
+    }
+
+    @Test
+    void shouldUseRequestedPieceWeightWhenSourcePurchaseOrderItemMissing() {
+        SalesOrderWeightResolver resolver = new SalesOrderWeightResolver(mock(PurchaseItemPieceWeightAppService.class));
+        SalesOrderSourceContext context = context(
+                List.of(),
+                List.of(301L),
+                Map.of(),
+                Map.of(),
+                Map.of(),
+                Map.of(),
+                new HashMap<>(),
+                new HashMap<>()
+        );
+
+        BigDecimal pieceWeightTon = resolver.resolvePieceWeightTon(
+                request(null, 301L, 5, new BigDecimal("0.333")),
+                context
+        );
+
+        assertThat(pieceWeightTon).isEqualByComparingTo("0.333");
+    }
+
+    @Test
+    void shouldUseDefaultWeightWhenInboundQuantityCannotBeAllocated() {
+        SalesOrderWeightResolver resolver = new SalesOrderWeightResolver(mock(PurchaseItemPieceWeightAppService.class));
+        SalesOrderSourceContext context = context(
+                List.of(401L),
+                List.of(),
+                Map.of(401L, sourceInboundRecord(401L, 10, new BigDecimal("9.876"))),
+                Map.of(),
+                Map.of(),
+                Map.of(),
+                new HashMap<>(),
+                new HashMap<>()
+        );
+
+        assertThat(resolver.resolveWeightTon(
+                request(401L, null, null, new BigDecimal("1.000")),
+                new BigDecimal("1.000"),
+                context
+        )).isEqualByComparingTo("0.000");
+        assertThat(resolver.resolveWeightTon(
+                request(401L, null, 0, new BigDecimal("1.000")),
+                new BigDecimal("1.000"),
+                context
+        )).isEqualByComparingTo("0.000");
+    }
+
+    @Test
+    void shouldUseDefaultWeightWhenInboundSourceCannotProvideWeighWeight() {
+        SalesOrderWeightResolver resolver = new SalesOrderWeightResolver(mock(PurchaseItemPieceWeightAppService.class));
+        SalesOrderSourceContext missingSourceContext = context(
+                List.of(401L),
+                List.of(),
+                Map.of(),
+                Map.of(),
+                Map.of(),
+                Map.of(),
+                new HashMap<>(),
+                new HashMap<>()
+        );
+        SalesOrderSourceContext missingWeightContext = context(
+                List.of(401L),
+                List.of(),
+                Map.of(401L, sourceInboundRecord(401L, 10, null)),
+                Map.of(),
+                Map.of(),
+                Map.of(),
+                new HashMap<>(),
+                new HashMap<>()
+        );
+
+        assertThat(resolver.resolveWeightTon(
+                request(401L, null, 3, new BigDecimal("1.000")),
+                new BigDecimal("1.000"),
+                missingSourceContext
+        )).isEqualByComparingTo("3.000");
+        assertThat(resolver.resolveWeightTon(
+                request(401L, null, 3, new BigDecimal("1.000")),
+                new BigDecimal("1.000"),
+                missingWeightContext
+        )).isEqualByComparingTo("3.000");
+    }
+
+    @Test
+    void shouldUseDefaultWeightWhenInboundSourceQuantityIsMissingOrNotFullyConsumed() {
+        SalesOrderWeightResolver resolver = new SalesOrderWeightResolver(mock(PurchaseItemPieceWeightAppService.class));
+        SalesOrderSourceContext missingQuantityContext = context(
+                List.of(401L),
+                List.of(),
+                Map.of(401L, sourceInboundRecord(401L, null, new BigDecimal("9.876"))),
+                Map.of(),
+                Map.of(),
+                Map.of(),
+                new HashMap<>(),
+                new HashMap<>()
+        );
+        SalesOrderSourceContext remainingQuantityContext = context(
+                List.of(401L),
+                List.of(),
+                Map.of(401L, sourceInboundRecord(401L, 10, new BigDecimal("9.876"))),
+                Map.of(),
+                Map.of(401L, new SalesOrderSourceAllocation(2, new BigDecimal("2.000"))),
+                Map.of(),
+                new HashMap<>(Map.of(401L, new SalesOrderSourceAllocation(3, new BigDecimal("3.000")))),
+                new HashMap<>()
+        );
+
+        assertThat(resolver.resolveWeightTon(
+                request(401L, null, 3, new BigDecimal("1.000")),
+                new BigDecimal("1.000"),
+                missingQuantityContext
+        )).isEqualByComparingTo("3.000");
+        assertThat(resolver.resolveWeightTon(
+                request(401L, null, 3, new BigDecimal("1.000")),
+                new BigDecimal("1.000"),
+                remainingQuantityContext
+        )).isEqualByComparingTo("3.000");
+    }
+
+    @Test
+    void shouldClampNegativeInboundResidualWeightToZero() {
+        SalesOrderWeightResolver resolver = new SalesOrderWeightResolver(mock(PurchaseItemPieceWeightAppService.class));
+        SalesOrderSourceContext context = context(
+                List.of(401L),
+                List.of(),
+                Map.of(401L, sourceInboundRecord(401L, 5, new BigDecimal("4.000"))),
+                Map.of(),
+                Map.of(401L, new SalesOrderSourceAllocation(2, new BigDecimal("3.000"))),
+                Map.of(),
+                new HashMap<>(Map.of(401L, new SalesOrderSourceAllocation(1, new BigDecimal("2.000")))),
+                new HashMap<>()
+        );
+
+        BigDecimal weightTon = resolver.resolveWeightTon(
+                request(401L, null, 2, new BigDecimal("1.000")),
+                new BigDecimal("1.000"),
+                context
+        );
+
+        assertThat(weightTon).isEqualByComparingTo("0.000");
+    }
+
+    @Test
+    void shouldUseEmptyRemainingWeightsWhenPurchaseOrderIdsAreEmptyOrLookupReturnsNull() {
+        PurchaseItemPieceWeightAppService pieceWeightAppService = mock(PurchaseItemPieceWeightAppService.class);
+        SalesOrderWeightResolver resolver = new SalesOrderWeightResolver(pieceWeightAppService);
+        SalesOrderSourceContext emptyContext = context(
+                List.of(),
+                List.of(),
+                Map.of(),
+                Map.of(),
+                Map.of(),
+                Map.of(),
+                new HashMap<>(),
+                new HashMap<>()
+        );
+        SalesOrderSourceContext lookupContext = context(
+                List.of(),
+                List.of(301L),
+                Map.of(),
+                Map.of(),
+                Map.of(),
+                Map.of(),
+                new HashMap<>(),
+                new HashMap<>()
+        );
+        when(pieceWeightAppService.summarizeRemainingWeightByPurchaseOrderItemIds(List.of(301L)))
+                .thenReturn(null);
+
+        assertThat(resolver.withPurchaseOrderRemainingWeights(emptyContext).purchaseOrderRemainingWeightMap()).isEmpty();
+        verify(pieceWeightAppService, never()).summarizeRemainingWeightByPurchaseOrderItemIds(List.of());
+        assertThat(resolver.withPurchaseOrderRemainingWeights(lookupContext).purchaseOrderRemainingWeightMap()).isEmpty();
     }
 
     private SalesOrderSourceContext context(

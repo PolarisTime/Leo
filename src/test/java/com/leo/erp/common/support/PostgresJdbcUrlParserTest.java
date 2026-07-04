@@ -31,6 +31,17 @@ class PostgresJdbcUrlParserTest {
     }
 
     @Test
+    void shouldUseDefaultPortWhenJdbcUrlHasZeroPort() {
+        PostgresJdbcUrlParser.ParsedJdbcUrl parsed = PostgresJdbcUrlParser.parse(
+                "jdbc:postgresql://localhost:0/leo"
+        );
+
+        assertThat(parsed.host()).isEqualTo("localhost");
+        assertThat(parsed.port()).isEqualTo(5432);
+        assertThat(parsed.database()).isEqualTo("leo");
+    }
+
+    @Test
     void shouldRejectInvalidJdbcUrl() {
         assertThatThrownBy(() -> PostgresJdbcUrlParser.parse("jdbc:mysql://localhost:3306/leo"))
                 .isInstanceOf(BusinessException.class)
@@ -49,6 +60,18 @@ class PostgresJdbcUrlParserTest {
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("JDBC URL");
         assertThatThrownBy(() -> PostgresJdbcUrlParser.parse("jdbc:postgresql://localhost/"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("JDBC URL");
+        assertThatThrownBy(() -> PostgresJdbcUrlParser.parse("jdbc:postgresql:///leo"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("JDBC URL");
+        assertThatThrownBy(() -> PostgresJdbcUrlParser.parse("jdbc:postgresql://localhost/%20"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("JDBC URL");
+        assertThatThrownBy(() -> PostgresJdbcUrlParser.parse("jdbc:postgresql://localhost?sslmode=require"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("JDBC URL");
+        assertThatThrownBy(() -> PostgresJdbcUrlParser.parse("jdbc:postgresql://localhost:5432?sslmode=require#%20"))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("JDBC URL");
     }

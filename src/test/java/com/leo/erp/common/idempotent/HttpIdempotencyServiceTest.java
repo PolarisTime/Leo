@@ -11,6 +11,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -79,6 +80,40 @@ class HttpIdempotencyServiceTest {
     }
 
     @Test
+    void startFallsThroughWhenRedisTemplateMissing() {
+        HttpIdempotencyService service = new HttpIdempotencyService(null);
+
+        HttpIdempotencyService.Decision decision =
+                service.start("scope-1", "fingerprint-1", Duration.ofHours(1));
+
+        assertThat(decision.status()).isEqualTo(HttpIdempotencyService.Status.ACQUIRED);
+    }
+
+    @Test
+    void startReturnsDuplicatePendingForUnknownRedisStatus() {
+        when(redisTemplate.execute(any(RedisScript.class), eq(List.of("http-idempotency:scope-1")), any(), any(), any(), any(), any()))
+                .thenReturn("UNKNOWN");
+        HttpIdempotencyService service = new HttpIdempotencyService(redisTemplate);
+
+        HttpIdempotencyService.Decision decision =
+                service.start("scope-1", "fingerprint-1", Duration.ZERO);
+
+        assertThat(decision.status()).isEqualTo(HttpIdempotencyService.Status.DUPLICATE_PENDING);
+    }
+
+    @Test
+    void startReturnsDuplicatePendingWhenRedisStatusIsNull() {
+        when(redisTemplate.execute(any(RedisScript.class), eq(List.of("http-idempotency:scope-1")), any(), any(), any(), any(), any()))
+                .thenReturn(null);
+        HttpIdempotencyService service = new HttpIdempotencyService(redisTemplate);
+
+        HttpIdempotencyService.Decision decision =
+                service.start("scope-1", "fingerprint-1", Duration.ofMillis(-1));
+
+        assertThat(decision.status()).isEqualTo(HttpIdempotencyService.Status.DUPLICATE_PENDING);
+    }
+
+    @Test
     void markCompletedStoresCompletedFingerprint() {
         HttpIdempotencyService service = new HttpIdempotencyService(redisTemplate);
 
@@ -94,6 +129,17 @@ class HttpIdempotencyServiceTest {
     }
 
     @Test
+    void markCompletedShouldIgnoreMissingRedisTemplateAndRuntimeFailure() {
+        new HttpIdempotencyService(null).markCompleted("scope-1", "fingerprint-1", Duration.ofSeconds(1));
+        when(redisTemplate.execute(any(RedisScript.class), any(List.class), any(), any(), any()))
+                .thenThrow(new IllegalStateException("redis down"));
+
+        new HttpIdempotencyService(redisTemplate).markCompleted("scope-1", "fingerprint-1", Duration.ofSeconds(1));
+
+        verify(redisTemplate).execute(any(RedisScript.class), any(List.class), any(), any(), any());
+    }
+
+    @Test
     void releaseDeletesOnlyMatchingPendingKey() {
         HttpIdempotencyService service = new HttpIdempotencyService(redisTemplate);
 
@@ -104,5 +150,18 @@ class HttpIdempotencyServiceTest {
                 eq(List.of("http-idempotency:scope-1")),
                 eq("PENDING:fingerprint-1")
         );
+    }
+
+    @Test
+    void releaseShouldIgnoreMissingRedisTemplateAndRuntimeFailure() {
+        StringRedisTemplate unusedRedisTemplate = mock(StringRedisTemplate.class);
+        new HttpIdempotencyService(null).release("scope-1", "fingerprint-1");
+        verifyNoInteractions(unusedRedisTemplate);
+        when(redisTemplate.execute(any(RedisScript.class), any(List.class), any()))
+                .thenThrow(new IllegalStateException("redis down"));
+
+        new HttpIdempotencyService(redisTemplate).release("scope-1", "fingerprint-1");
+
+        verify(redisTemplate).execute(any(RedisScript.class), any(List.class), any());
     }
 }

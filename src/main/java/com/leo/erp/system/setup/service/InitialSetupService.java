@@ -291,9 +291,7 @@ public class InitialSetupService {
     }
 
     private void evictCachedAdminTotpSecret(String loginName) {
-        if (redisTemplate != null) {
-            redisTemplate.delete(OOBE_TOTP_SECRET_PREFIX + loginName);
-        }
+        redisTemplate.delete(OOBE_TOTP_SECRET_PREFIX + loginName);
     }
 
     private String createCompanyRecord(InitialSetupCompanyRequest request) {

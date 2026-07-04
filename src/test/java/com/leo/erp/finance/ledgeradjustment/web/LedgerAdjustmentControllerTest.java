@@ -35,6 +35,18 @@ class LedgerAdjustmentControllerTest {
     }
 
     @Test
+    void shouldSearchWithProvidedKeywordAndUncappedLimit() {
+        LedgerAdjustmentService service = mock(LedgerAdjustmentService.class);
+        LedgerAdjustmentResponse response = response(2L);
+        when(service.search(" LA ", 100)).thenReturn(List.of(response));
+        LedgerAdjustmentController controller = new LedgerAdjustmentController(service);
+
+        assertThat(controller.search(" LA ", 100).data()).containsExactly(response);
+
+        verify(service).search(" LA ", 100);
+    }
+
+    @Test
     void shouldPageWithFilters() {
         LedgerAdjustmentService service = mock(LedgerAdjustmentService.class);
         PageQuery query = PageQuery.of(1, 20, "adjustmentDate", "desc");

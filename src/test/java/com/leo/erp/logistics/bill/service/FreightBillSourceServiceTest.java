@@ -122,6 +122,140 @@ class FreightBillSourceServiceTest {
     }
 
     @Test
+    void shouldBuildOccupiedMessageWithoutBlankBillNoAndCarrierName() {
+        FreightBillRepository freightBillRepository = mock(FreightBillRepository.class);
+        SalesOutboundRepository salesOutboundRepository = mock(SalesOutboundRepository.class);
+        FreightBillSourceService service = new FreightBillSourceService(freightBillRepository, salesOutboundRepository);
+
+        FreightBill occupiedBill = new FreightBill();
+        occupiedBill.setBillNo("   ");
+        occupiedBill.setCarrierName("   ");
+        FreightBillItem occupiedItem = new FreightBillItem();
+        occupiedItem.setSourceNo(" OB-001 ");
+        occupiedBill.setItems(List.of(occupiedItem));
+
+        when(freightBillRepository.findAllBySourceNosExcludingCurrentBill(anyCollection(), any()))
+                .thenReturn(List.of(occupiedBill));
+
+        assertThatThrownBy(() -> service.validateSources(request(item("OB-001")), null))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("销售出库单OB-001已归集到物流单");
+    }
+
+    @Test
+    void shouldContinueWhenOccupiedBillDoesNotMatchRequestedSourceNo() {
+        FreightBillRepository freightBillRepository = mock(FreightBillRepository.class);
+        SalesOutboundRepository salesOutboundRepository = mock(SalesOutboundRepository.class);
+        FreightBillSourceService service = new FreightBillSourceService(freightBillRepository, salesOutboundRepository);
+
+        FreightBill occupiedBill = new FreightBill();
+        occupiedBill.setBillNo("FB-OTHER");
+        occupiedBill.setCarrierName("快速物流");
+        FreightBillItem occupiedItem = new FreightBillItem();
+        occupiedItem.setSourceNo("OB-OTHER");
+        occupiedBill.setItems(List.of(occupiedItem));
+        SalesOutbound outbound = outbound(StatusConstants.AUDITED);
+
+        when(freightBillRepository.findAllBySourceNosExcludingCurrentBill(anyCollection(), any()))
+                .thenReturn(List.of(occupiedBill));
+        when(salesOutboundRepository.findByOutboundNoInAndDeletedFlagFalse(Set.of("OB-001")))
+                .thenReturn(List.of(outbound));
+
+        FreightBillSourceService.SourceValidationContext context =
+                service.validateSources(request(item("OB-001")), null);
+
+        assertThat(context.outboundMap()).containsEntry("OB-001", outbound);
+    }
+
+    @Test
+    void shouldRejectMissingSourceOutboundItem() {
+        FreightBillRepository freightBillRepository = mock(FreightBillRepository.class);
+        SalesOutboundRepository salesOutboundRepository = mock(SalesOutboundRepository.class);
+        FreightBillSourceService service = new FreightBillSourceService(freightBillRepository, salesOutboundRepository);
+
+        when(freightBillRepository.findAllBySourceNosExcludingCurrentBill(anyCollection(), any()))
+                .thenReturn(List.of());
+        when(salesOutboundRepository.findByOutboundNoInAndDeletedFlagFalse(Set.of("OB-001")))
+                .thenReturn(List.of(outbound(StatusConstants.AUDITED)));
+        FreightBillItemRequest unmatched = new FreightBillItemRequest(
+                "OB-001", "客户甲", "项目甲", "M-NOT-FOUND", null, "宝钢", "钢材", "HRB400", "18", "12m",
+                2, "件", new BigDecimal("1.250"), 0, "B001", null, "一号库"
+        );
+
+        assertThatThrownBy(() -> service.validateSources(request(unmatched), null))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("来源销售出库明细不存在");
+    }
+
+    @Test
+    void shouldUseRequestedWeightWhenWeightTonIsProvided() {
+        FreightBillRepository freightBillRepository = mock(FreightBillRepository.class);
+        SalesOutboundRepository salesOutboundRepository = mock(SalesOutboundRepository.class);
+        FreightBillSourceService service = new FreightBillSourceService(freightBillRepository, salesOutboundRepository);
+        SalesOutbound outbound = outbound(StatusConstants.AUDITED);
+        outbound.getItems().get(0).setWeightTon(new BigDecimal("2.750"));
+
+        when(freightBillRepository.findAllBySourceNosExcludingCurrentBill(anyCollection(), any()))
+                .thenReturn(List.of());
+        when(salesOutboundRepository.findByOutboundNoInAndDeletedFlagFalse(Set.of("OB-001")))
+                .thenReturn(List.of(outbound));
+        FreightBillItemRequest requestItem = new FreightBillItemRequest(
+                "OB-001", "客户甲", "项目甲", "M001", null, "宝钢", "钢材", "HRB400", "18", "12m",
+                2, "件", new BigDecimal("1.250"), 0, "B001", new BigDecimal("2.750"), "一号库"
+        );
+
+        FreightBillSourceService.SourceValidationContext context =
+                service.validateSources(request(requestItem), null);
+
+        assertThat(context.sourceItemMap()).containsEntry(1, outbound.getItems().get(0));
+    }
+
+    @Test
+    void shouldMatchSourceOutboundItemById() {
+        FreightBillRepository freightBillRepository = mock(FreightBillRepository.class);
+        SalesOutboundRepository salesOutboundRepository = mock(SalesOutboundRepository.class);
+        FreightBillSourceService service = new FreightBillSourceService(freightBillRepository, salesOutboundRepository);
+        SalesOutbound outbound = outbound(StatusConstants.AUDITED);
+        outbound.getItems().get(0).setId(20L);
+
+        when(freightBillRepository.findAllBySourceNosExcludingCurrentBill(anyCollection(), any()))
+                .thenReturn(List.of());
+        when(salesOutboundRepository.findByOutboundNoInAndDeletedFlagFalse(Set.of("OB-001")))
+                .thenReturn(List.of(outbound));
+        FreightBillItemRequest requestItem = new FreightBillItemRequest(
+                null, "OB-001", 20L, "客户甲", "项目甲", "M001", null, "宝钢", "钢材", "HRB400", "18", "12m",
+                2, "件", new BigDecimal("1.250"), 0, "B001", null, "一号库"
+        );
+
+        FreightBillSourceService.SourceValidationContext context =
+                service.validateSources(request(requestItem), null);
+
+        assertThat(context.sourceItemMap()).containsEntry(1, outbound.getItems().get(0));
+    }
+
+    @Test
+    void shouldRejectMissingSourceOutboundItemById() {
+        FreightBillRepository freightBillRepository = mock(FreightBillRepository.class);
+        SalesOutboundRepository salesOutboundRepository = mock(SalesOutboundRepository.class);
+        FreightBillSourceService service = new FreightBillSourceService(freightBillRepository, salesOutboundRepository);
+        SalesOutbound outbound = outbound(StatusConstants.AUDITED);
+        outbound.getItems().get(0).setId(20L);
+
+        when(freightBillRepository.findAllBySourceNosExcludingCurrentBill(anyCollection(), any()))
+                .thenReturn(List.of());
+        when(salesOutboundRepository.findByOutboundNoInAndDeletedFlagFalse(Set.of("OB-001")))
+                .thenReturn(List.of(outbound));
+        FreightBillItemRequest requestItem = new FreightBillItemRequest(
+                null, "OB-001", 99L, "客户甲", "项目甲", "M001", null, "宝钢", "钢材", "HRB400", "18", "12m",
+                2, "件", new BigDecimal("1.250"), 0, "B001", null, "一号库"
+        );
+
+        assertThatThrownBy(() -> service.validateSources(request(requestItem), null))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("来源销售出库明细不存在");
+    }
+
+    @Test
     void shouldSkipRepositoryChecksWhenSourceNoIsBlank() {
         FreightBillRepository freightBillRepository = mock(FreightBillRepository.class);
         SalesOutboundRepository salesOutboundRepository = mock(SalesOutboundRepository.class);

@@ -11,10 +11,14 @@ import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.jdbc.core.namedparam.SqlParameterSource;
 
 import javax.sql.DataSource;
+import java.sql.Date;
+import java.sql.ResultSet;
 import java.lang.reflect.Proxy;
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -106,6 +110,31 @@ class ReceivablePayableQueryRepositoryTest {
     }
 
     @Test
+    void shouldTreatNullCountAsEmptyPage() {
+        RecordingNamedParameterJdbcTemplate jdbcTemplate = new RecordingNamedParameterJdbcTemplate();
+        jdbcTemplate.total = null;
+        ReceivablePayableQueryRepository repository = new ReceivablePayableQueryRepository(jdbcTemplate);
+
+        var page = repository.page(new PageQuery(0, 10, "id", "desc"), null, null, null, null, null);
+
+        assertThat(page.getContent()).isEmpty();
+        assertThat(page.getTotalElements()).isZero();
+        assertThat(jdbcTemplate.dataSql).isNull();
+    }
+
+    @Test
+    void shouldIgnoreBlankKeyword() {
+        RecordingNamedParameterJdbcTemplate jdbcTemplate = new RecordingNamedParameterJdbcTemplate();
+        jdbcTemplate.total = 0L;
+        ReceivablePayableQueryRepository repository = new ReceivablePayableQueryRepository(jdbcTemplate);
+
+        repository.page(new PageQuery(0, 10, "id", "desc"), null, null, null, null, "   ");
+
+        assertThat(jdbcTemplate.countSql).doesNotContain("LOWER(rp.counterparty_name) LIKE :keyword");
+        assertThat(jdbcTemplate.lastParams.getValues()).doesNotContainKey("keyword");
+    }
+
+    @Test
     void shouldAddDirectionFilterWhenProvided() {
         RecordingNamedParameterJdbcTemplate jdbcTemplate = new RecordingNamedParameterJdbcTemplate();
         jdbcTemplate.total = 0L;
@@ -166,6 +195,30 @@ class ReceivablePayableQueryRepositoryTest {
     }
 
     @Test
+    void shouldSortByCounterpartyCodeWhenRequested() {
+        RecordingNamedParameterJdbcTemplate jdbcTemplate = new RecordingNamedParameterJdbcTemplate();
+        jdbcTemplate.total = 1L;
+        jdbcTemplate.rows = List.of(buildResponse());
+        ReceivablePayableQueryRepository repository = new ReceivablePayableQueryRepository(jdbcTemplate);
+
+        repository.page(new PageQuery(0, 10, "counterpartyCode", "asc"), null, null, null, null, null);
+
+        assertThat(jdbcTemplate.dataSql).contains("rp.counterparty_code ASC");
+    }
+
+    @Test
+    void shouldSortByReconciliationStatusWhenRequested() {
+        RecordingNamedParameterJdbcTemplate jdbcTemplate = new RecordingNamedParameterJdbcTemplate();
+        jdbcTemplate.total = 1L;
+        jdbcTemplate.rows = List.of(buildResponse());
+        ReceivablePayableQueryRepository repository = new ReceivablePayableQueryRepository(jdbcTemplate);
+
+        repository.page(new PageQuery(0, 10, "reconciliationStatus", "desc"), null, null, null, null, null);
+
+        assertThat(jdbcTemplate.dataSql).contains("rp.reconciliation_status DESC");
+    }
+
+    @Test
     void shouldSortByRecognizedAmountWhenRequested() {
         RecordingNamedParameterJdbcTemplate jdbcTemplate = new RecordingNamedParameterJdbcTemplate();
         jdbcTemplate.total = 1L;
@@ -178,6 +231,18 @@ class ReceivablePayableQueryRepositoryTest {
     }
 
     @Test
+    void shouldSortBySettledAmountWhenRequested() {
+        RecordingNamedParameterJdbcTemplate jdbcTemplate = new RecordingNamedParameterJdbcTemplate();
+        jdbcTemplate.total = 1L;
+        jdbcTemplate.rows = List.of(buildResponse());
+        ReceivablePayableQueryRepository repository = new ReceivablePayableQueryRepository(jdbcTemplate);
+
+        repository.page(new PageQuery(0, 10, "settledAmount", "desc"), null, null, null, null, null);
+
+        assertThat(jdbcTemplate.dataSql).contains("rp.settled_amount DESC");
+    }
+
+    @Test
     void shouldSortByBalanceAmountWhenRequested() {
         RecordingNamedParameterJdbcTemplate jdbcTemplate = new RecordingNamedParameterJdbcTemplate();
         jdbcTemplate.total = 1L;
@@ -187,6 +252,26 @@ class ReceivablePayableQueryRepositoryTest {
         repository.page(new PageQuery(0, 10, "balanceAmount", "asc"), null, null, null, null, null);
 
         assertThat(jdbcTemplate.dataSql).contains("rp.balance_amount ASC");
+    }
+
+    @Test
+    void shouldSortByAgingBucketsWhenRequested() {
+        RecordingNamedParameterJdbcTemplate jdbcTemplate = new RecordingNamedParameterJdbcTemplate();
+        jdbcTemplate.total = 1L;
+        jdbcTemplate.rows = List.of(buildResponse());
+        ReceivablePayableQueryRepository repository = new ReceivablePayableQueryRepository(jdbcTemplate);
+
+        repository.page(new PageQuery(0, 10, "days0To30Amount", "asc"), null, null, null, null, null);
+        assertThat(jdbcTemplate.dataSql).contains("rp.days_0_to_30_amount ASC");
+
+        repository.page(new PageQuery(0, 10, "days31To60Amount", "desc"), null, null, null, null, null);
+        assertThat(jdbcTemplate.dataSql).contains("rp.days_31_to_60_amount DESC");
+
+        repository.page(new PageQuery(0, 10, "days61To90Amount", "asc"), null, null, null, null, null);
+        assertThat(jdbcTemplate.dataSql).contains("rp.days_61_to_90_amount ASC");
+
+        repository.page(new PageQuery(0, 10, "daysOver90Amount", "desc"), null, null, null, null, null);
+        assertThat(jdbcTemplate.dataSql).contains("rp.days_over_90_amount DESC");
     }
 
     @Test
@@ -453,11 +538,131 @@ class ReceivablePayableQueryRepositoryTest {
             repository.page(new PageQuery(0, 10, "id", "desc"), null, null, null, null, null);
 
             assertThat(jdbcTemplate.countSql).doesNotContain("source.created_by IN (:dataScopeOwnerUserIds)");
-            assertThat(jdbcTemplate.countSql).doesNotContain("WHERE 1 = 0");
-            assertThat(jdbcTemplate.lastParams.getValues()).doesNotContainKey("dataScopeOwnerUserIds");
-        } finally {
-            DataScopeContext.clear();
-        }
+        assertThat(jdbcTemplate.countSql).doesNotContain("WHERE 1 = 0");
+        assertThat(jdbcTemplate.lastParams.getValues()).doesNotContainKey("dataScopeOwnerUserIds");
+    } finally {
+        DataScopeContext.clear();
+    }
+    }
+
+    @Test
+    void shouldMapSummaryRowsFromResultSet() {
+        RecordingNamedParameterJdbcTemplate jdbcTemplate = new RecordingNamedParameterJdbcTemplate();
+        jdbcTemplate.total = 1L;
+        jdbcTemplate.resultSetRows = List.of(Map.ofEntries(
+                Map.entry("id", "应收:客户:未对账:CUS001"),
+                Map.entry("direction", "应收"),
+                Map.entry("counterparty_type", "客户"),
+                Map.entry("counterparty_code", "CUS001"),
+                Map.entry("counterparty_name", "客户甲"),
+                Map.entry("reconciliation_status", "未对账"),
+                Map.entry("recognized_amount", new BigDecimal("800.00")),
+                Map.entry("settled_amount", new BigDecimal("300.00")),
+                Map.entry("balance_amount", new BigDecimal("500.00")),
+                Map.entry("days_0_to_30_amount", new BigDecimal("100.00")),
+                Map.entry("days_31_to_60_amount", new BigDecimal("200.00")),
+                Map.entry("days_61_to_90_amount", new BigDecimal("150.00")),
+                Map.entry("days_over_90_amount", new BigDecimal("50.00")),
+                Map.entry("entry_count", 3L),
+                Map.entry("status", "未结清"),
+                Map.entry("remark", "测试备注")
+        ));
+        ReceivablePayableQueryRepository repository = new ReceivablePayableQueryRepository(jdbcTemplate);
+
+        var result = repository.page(new PageQuery(0, 10, null, null), null, null, null, null, null);
+
+        assertThat(result.getContent()).singleElement().satisfies(row -> {
+            assertThat(row.id()).isEqualTo("应收:客户:未对账:CUS001");
+            assertThat(row.direction()).isEqualTo("应收");
+            assertThat(row.counterpartyType()).isEqualTo("客户");
+            assertThat(row.counterpartyCode()).isEqualTo("CUS001");
+            assertThat(row.counterpartyName()).isEqualTo("客户甲");
+            assertThat(row.reconciliationStatus()).isEqualTo("未对账");
+            assertThat(row.recognizedAmount()).isEqualByComparingTo("800.00");
+            assertThat(row.settledAmount()).isEqualByComparingTo("300.00");
+            assertThat(row.balanceAmount()).isEqualByComparingTo("500.00");
+            assertThat(row.days0To30Amount()).isEqualByComparingTo("100.00");
+            assertThat(row.days31To60Amount()).isEqualByComparingTo("200.00");
+            assertThat(row.days61To90Amount()).isEqualByComparingTo("150.00");
+            assertThat(row.daysOver90Amount()).isEqualByComparingTo("50.00");
+            assertThat(row.entryCount()).isEqualTo(3L);
+            assertThat(row.status()).isEqualTo("未结清");
+            assertThat(row.remark()).isEqualTo("测试备注");
+        });
+    }
+
+    @Test
+    void shouldMapDetailRowsFromResultSetIncludingNullableDates() {
+        RecordingNamedParameterJdbcTemplate jdbcTemplate = new RecordingNamedParameterJdbcTemplate();
+        jdbcTemplate.resultSetRows = List.of(Map.ofEntries(
+                Map.entry("id", "detail-1"),
+                Map.entry("entry_role", "RECOGNITION"),
+                Map.entry("source_type", "销售订单"),
+                Map.entry("source_document_id", 9L),
+                Map.entry("document_no", "SO-001"),
+                Map.entry("source_no", "ST-001"),
+                Map.entry("project_name", "项目甲"),
+                Map.entry("reconciliation_status", "已对账"),
+                Map.entry("accounting_date", Date.valueOf(LocalDate.of(2026, 5, 1))),
+                Map.entry("debit_amount", new BigDecimal("100.00")),
+                Map.entry("credit_amount", new BigDecimal("20.00")),
+                Map.entry("balance_amount", new BigDecimal("80.00")),
+                Map.entry("age_days", 15),
+                Map.entry("status", "完成销售"),
+                Map.entry("remark", "明细备注")
+        ));
+        ReceivablePayableQueryRepository repository = new ReceivablePayableQueryRepository(jdbcTemplate);
+
+        var result = repository.detailItems("应收", "客户", "CUS001", "已对账");
+
+        assertThat(result).singleElement().satisfies(row -> {
+            assertThat(row.id()).isEqualTo("detail-1");
+            assertThat(row.entryRole()).isEqualTo("RECOGNITION");
+            assertThat(row.sourceType()).isEqualTo("销售订单");
+            assertThat(row.sourceDocumentId()).isEqualTo(9L);
+            assertThat(row.documentNo()).isEqualTo("SO-001");
+            assertThat(row.sourceNo()).isEqualTo("ST-001");
+            assertThat(row.projectName()).isEqualTo("项目甲");
+            assertThat(row.reconciliationStatus()).isEqualTo("已对账");
+            assertThat(row.accountingDate()).isEqualTo(LocalDate.of(2026, 5, 1));
+            assertThat(row.dueDate()).isNull();
+            assertThat(row.debitAmount()).isEqualByComparingTo("100.00");
+            assertThat(row.creditAmount()).isEqualByComparingTo("20.00");
+            assertThat(row.balanceAmount()).isEqualByComparingTo("80.00");
+            assertThat(row.ageDays()).isEqualTo(15);
+            assertThat(row.status()).isEqualTo("完成销售");
+            assertThat(row.remark()).isEqualTo("明细备注");
+        });
+    }
+
+    @Test
+    void shouldMapDetailRowsFromResultSetWhenAccountingDateIsNullAndDueDateExists() {
+        RecordingNamedParameterJdbcTemplate jdbcTemplate = new RecordingNamedParameterJdbcTemplate();
+        jdbcTemplate.resultSetRows = List.of(Map.ofEntries(
+                Map.entry("id", "detail-2"),
+                Map.entry("entry_role", "SETTLEMENT"),
+                Map.entry("source_type", "收款单"),
+                Map.entry("source_document_id", 10L),
+                Map.entry("document_no", "SK-001"),
+                Map.entry("source_no", "ST-001"),
+                Map.entry("project_name", "项目甲"),
+                Map.entry("reconciliation_status", "已对账"),
+                Map.entry("due_date", Date.valueOf(LocalDate.of(2026, 5, 2))),
+                Map.entry("debit_amount", BigDecimal.ZERO),
+                Map.entry("credit_amount", new BigDecimal("20.00")),
+                Map.entry("balance_amount", new BigDecimal("-20.00")),
+                Map.entry("age_days", 0),
+                Map.entry("status", "已收款"),
+                Map.entry("remark", "明细备注")
+        ));
+        ReceivablePayableQueryRepository repository = new ReceivablePayableQueryRepository(jdbcTemplate);
+
+        var result = repository.detailItems("应收", "客户", "CUS001", "已对账");
+
+        assertThat(result).singleElement().satisfies(row -> {
+            assertThat(row.accountingDate()).isNull();
+            assertThat(row.dueDate()).isEqualTo(LocalDate.of(2026, 5, 2));
+        });
     }
 
     private ReceivablePayableResponse buildResponse() {
@@ -507,6 +712,7 @@ class ReceivablePayableQueryRepositoryTest {
         private Long total = 0L;
         private List<ReceivablePayableResponse> rows = List.of();
         private List<ReceivablePayableDetailItemResponse> detailItems = List.of();
+        private List<Map<String, Object>> resultSetRows = List.of();
         private String countSql;
         private String dataSql;
         private MapSqlParameterSource lastParams;
@@ -527,10 +733,43 @@ class ReceivablePayableQueryRepositoryTest {
         public <T> List<T> query(String sql, SqlParameterSource paramSource, RowMapper<T> rowMapper) {
             this.dataSql = sql;
             this.lastParams = (MapSqlParameterSource) paramSource;
+            if (!resultSetRows.isEmpty()) {
+                return resultSetRows.stream()
+                        .map(row -> mapRow(rowMapper, row))
+                        .toList();
+            }
             if (!detailItems.isEmpty() && detailItems.get(0) instanceof ReceivablePayableDetailItemResponse) {
                 return (List<T>) detailItems;
             }
             return (List<T>) rows;
+        }
+
+        private <T> T mapRow(RowMapper<T> rowMapper, Map<String, Object> row) {
+            try {
+                return rowMapper.mapRow(resultSet(row), 0);
+            } catch (java.sql.SQLException ex) {
+                throw new IllegalStateException(ex);
+            }
+        }
+
+        private static ResultSet resultSet(Map<String, Object> row) {
+            Map<String, Object> values = new HashMap<>(row);
+            return (ResultSet) Proxy.newProxyInstance(
+                    ResultSet.class.getClassLoader(),
+                    new Class[]{ResultSet.class},
+                    (proxy, method, args) -> switch (method.getName()) {
+                        case "getString" -> (String) values.get((String) args[0]);
+                        case "getBigDecimal" -> (BigDecimal) values.get((String) args[0]);
+                        case "getLong" -> ((Number) values.get((String) args[0])).longValue();
+                        case "getInt" -> ((Number) values.get((String) args[0])).intValue();
+                        case "getDate" -> (Date) values.get((String) args[0]);
+                        case "wasNull" -> false;
+                        case "toString" -> "ResultSetStub";
+                        case "hashCode" -> System.identityHashCode(proxy);
+                        case "equals" -> proxy == args[0];
+                        default -> throw new UnsupportedOperationException(method.getName());
+                    }
+            );
         }
 
         private static DataSource dataSource() {

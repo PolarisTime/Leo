@@ -26,6 +26,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 class SalesContractServiceTest {
 
@@ -86,6 +87,37 @@ class SalesContractServiceTest {
         var result = service.detail(1L);
         assertThat(result).isNotNull();
         assertThat(result.id()).isEqualTo(1L);
+    }
+
+    @Test
+    void shouldMapItems_whenReturningDetail() {
+        var repo = mock(SalesContractRepository.class);
+        var entity = createEntity(1L, "SC-001");
+        entity.getItems().add(createItem(11L, 2));
+        when(repo.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(entity));
+        var svc = new SalesContractService(repo, new SnowflakeIdGenerator(1), salesContractMapper, workflowTransitionGuard);
+
+        var result = svc.detail(1L);
+
+        assertThat(result.items()).hasSize(1);
+        var item = result.items().get(0);
+        assertThat(item.id()).isEqualTo(11L);
+        assertThat(item.lineNo()).isEqualTo(2);
+        assertThat(item.materialCode()).isEqualTo("M001");
+        assertThat(item.quantityUnit()).isEqualTo("件");
+        assertThat(item.weightTon()).isEqualByComparingTo("1.25000000");
+        assertThat(item.amount()).isEqualByComparingTo("1250.00");
+    }
+
+    @Test
+    void shouldThrowNotFound_whenDetailMissing() {
+        var repo = mock(SalesContractRepository.class);
+        when(repo.findByIdAndDeletedFlagFalse(404L)).thenReturn(Optional.empty());
+        var svc = new SalesContractService(repo, new SnowflakeIdGenerator(1), salesContractMapper, workflowTransitionGuard);
+
+        assertThatThrownBy(() -> svc.detail(404L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("销售合同不存在");
     }
 
     @Test
@@ -182,6 +214,38 @@ class SalesContractServiceTest {
     }
 
     @Test
+    void shouldAllowValidateUpdate_whenContractNoChangedWithoutDuplicate() {
+        var repo = mock(SalesContractRepository.class);
+        when(repo.existsByContractNoAndDeletedFlagFalse("SC-002")).thenReturn(false);
+        var svc = new SalesContractService(repo, new SnowflakeIdGenerator(1), salesContractMapper, workflowTransitionGuard);
+
+        svc.validateUpdate(createEntity(1L, "SC-001"), request("SC-002"));
+    }
+
+    @Test
+    void shouldRejectValidateUpdate_whenContractNoChangedToDuplicate() {
+        var repo = mock(SalesContractRepository.class);
+        when(repo.existsByContractNoAndDeletedFlagFalse("SC-002")).thenReturn(true);
+        var svc = new SalesContractService(repo, new SnowflakeIdGenerator(1), salesContractMapper, workflowTransitionGuard);
+
+        assertThatThrownBy(() -> svc.validateUpdate(createEntity(1L, "SC-001"), request("SC-002")))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("销售合同号已存在");
+    }
+
+    @Test
+    void shouldFindVisibleEntityById() {
+        var repo = mock(SalesContractRepository.class);
+        var entity = createEntity(1L, "SC-001");
+        when(repo.findById(1L)).thenReturn(Optional.of(entity));
+        var svc = new SalesContractService(repo, new SnowflakeIdGenerator(1), salesContractMapper, workflowTransitionGuard);
+
+        var result = svc.findVisibleEntity(1L);
+
+        assertThat(result.orElseThrow()).isSameAs(entity);
+    }
+
+    @Test
     void shouldDeleteContract_whenExists() {
         service.delete(1L);
     }
@@ -213,5 +277,31 @@ class SalesContractServiceTest {
         entity.setTotalAmount(new BigDecimal("100"));
         entity.setItems(new ArrayList<>());
         return entity;
+    }
+
+    private static SalesContractItem createItem(Long id, Integer lineNo) {
+        var item = new SalesContractItem();
+        item.setId(id);
+        item.setLineNo(lineNo);
+        item.setMaterialCode("M001");
+        item.setBrand("品牌A");
+        item.setCategory("类别");
+        item.setMaterial("材质");
+        item.setSpec("规格");
+        item.setLength("6m");
+        item.setUnit("吨");
+        item.setQuantity(10);
+        item.setQuantityUnit("件");
+        item.setPieceWeightTon(new BigDecimal("0.12500000"));
+        item.setPiecesPerBundle(5);
+        item.setWeightTon(new BigDecimal("1.25000000"));
+        item.setUnitPrice(new BigDecimal("1000.00"));
+        item.setAmount(new BigDecimal("1250.00"));
+        return item;
+    }
+
+    private static SalesContractRequest request(String contractNo) {
+        return new SalesContractRequest(contractNo, "客户A", "项目A", LocalDate.now(),
+                LocalDate.now(), LocalDate.now().plusYears(1), "销售甲", "草稿", "备注", List.of());
     }
 }

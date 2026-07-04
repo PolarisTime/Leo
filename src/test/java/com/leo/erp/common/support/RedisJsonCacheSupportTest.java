@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.data.redis.connection.RedisConnection;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.core.Cursor;
+import org.springframework.data.redis.core.ScanOptions;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.transaction.support.TransactionSynchronization;
@@ -26,6 +27,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
@@ -131,8 +133,78 @@ class RedisJsonCacheSupportTest {
     }
 
     @Test
+    void shouldReturnEmpty_whenReadTypeReferenceArgumentsAreMissing() {
+        RedisJsonCacheSupport nullRedisSupport = new RedisJsonCacheSupport(null, objectMapper, redisTuningProperties);
+        RedisJsonCacheSupport nullMapperSupport = new RedisJsonCacheSupport(redisTemplate, null, redisTuningProperties);
+
+        assertThat(nullRedisSupport.read("test-key", new TypeReference<String>() {})).isEmpty();
+        assertThat(nullMapperSupport.read("test-key", new TypeReference<String>() {})).isEmpty();
+        assertThat(support.read(null, new TypeReference<String>() {})).isEmpty();
+        assertThat(support.read("test-key", (TypeReference<String>) null)).isEmpty();
+    }
+
+    @Test
+    void shouldReturnEmpty_whenReadClassArgumentsAreMissing() {
+        RedisJsonCacheSupport nullRedisSupport = new RedisJsonCacheSupport(null, objectMapper, redisTuningProperties);
+        RedisJsonCacheSupport nullMapperSupport = new RedisJsonCacheSupport(redisTemplate, null, redisTuningProperties);
+
+        assertThat(nullRedisSupport.read("test-key", String.class)).isEmpty();
+        assertThat(nullMapperSupport.read("test-key", String.class)).isEmpty();
+        assertThat(support.read(null, String.class)).isEmpty();
+        assertThat(support.read("test-key", (Class<String>) null)).isEmpty();
+    }
+
+    @Test
+    void shouldReturnEmpty_whenCachedValueIsBlank() {
+        ValueOperations<String, String> blankOps = mock(ValueOperations.class);
+        when(blankOps.get("blank-key")).thenReturn(" ");
+        StringRedisTemplate blankRedis = mock(StringRedisTemplate.class);
+        when(blankRedis.opsForValue()).thenReturn(blankOps);
+        RedisJsonCacheSupport blankSupport = new RedisJsonCacheSupport(blankRedis, objectMapper, redisTuningProperties);
+
+        assertThat(blankSupport.read("blank-key", String.class)).isEmpty();
+        assertThat(blankSupport.read("blank-key", new TypeReference<String>() {})).isEmpty();
+    }
+
+    @Test
+    void shouldDeleteAndReturnEmpty_whenClassReadHasInvalidJson() {
+        ValueOperations<String, String> badOps = mock(ValueOperations.class);
+        when(badOps.get("bad-key")).thenReturn("{invalid-json}");
+        StringRedisTemplate badRedis = mock(StringRedisTemplate.class);
+        when(badRedis.opsForValue()).thenReturn(badOps);
+        when(badRedis.delete("bad-key")).thenReturn(true);
+        RedisJsonCacheSupport badSupport = new RedisJsonCacheSupport(badRedis, objectMapper, redisTuningProperties);
+
+        assertThat(badSupport.read("bad-key", String.class)).isEmpty();
+
+        verify(badRedis).delete("bad-key");
+    }
+
+    @Test
+    void shouldReturnEmpty_whenClassReadThrowsRedisException() {
+        ValueOperations<String, String> errOps = mock(ValueOperations.class);
+        when(errOps.get("test-key")).thenThrow(new RuntimeException("Redis down"));
+        StringRedisTemplate errRedis = mock(StringRedisTemplate.class);
+        when(errRedis.opsForValue()).thenReturn(errOps);
+        RedisJsonCacheSupport errSupport = new RedisJsonCacheSupport(errRedis, objectMapper, redisTuningProperties);
+
+        assertThat(errSupport.read("test-key", String.class)).isEmpty();
+    }
+
+    @Test
     void shouldWriteToRedis() {
         support.write("test-key", "test-value", Duration.ofMinutes(5));
+    }
+
+    @Test
+    void shouldSkipWrite_whenObjectMapperIsNull() {
+        RedisJsonCacheSupport nullSupport = new RedisJsonCacheSupport(redisTemplate, null, redisTuningProperties);
+        nullSupport.write("test-key", "test-value", Duration.ofMinutes(5));
+    }
+
+    @Test
+    void shouldSkipWrite_whenKeyIsNull() {
+        support.write(null, "test-value", Duration.ofMinutes(5));
     }
 
     @Test
@@ -165,8 +237,46 @@ class RedisJsonCacheSupportTest {
     }
 
     @Test
+    void shouldHandleRedisWriteFailureGracefully() {
+        doAnswer(invocation -> {
+            throw new RuntimeException("Redis write failed");
+        }).when(valueOps).set(eq("test-key"), anyString(), any(Duration.class));
+
+        support.write("test-key", "test-value", Duration.ofMinutes(5));
+    }
+
+    @Test
     void shouldDeleteSingleKey() {
         support.delete("test-key");
+    }
+
+    @Test
+    void shouldSkipDelete_whenRedisTemplateIsNull() {
+        RedisJsonCacheSupport nullSupport = new RedisJsonCacheSupport(null, objectMapper, redisTuningProperties);
+        nullSupport.delete("test-key");
+    }
+
+    @Test
+    void shouldHandleDeleteFailureGracefully() {
+        StringRedisTemplate errRedis = mock(StringRedisTemplate.class);
+        when(errRedis.delete("test-key")).thenThrow(new RuntimeException("Redis delete failed"));
+        RedisJsonCacheSupport errSupport = new RedisJsonCacheSupport(errRedis, objectMapper, redisTuningProperties);
+
+        errSupport.delete("test-key");
+    }
+
+    @Test
+    void shouldDeleteSingleKeyImmediately_whenAfterCommitExecutorIsMissing() {
+        support.deleteAfterCommit("test-key");
+
+        verify(redisTemplate).delete("test-key");
+    }
+
+    @Test
+    void shouldSkipDeleteAfterCommit_whenKeyIsNull() {
+        support.deleteAfterCommit((String) null);
+
+        verify(redisTemplate, never()).delete((String) null);
     }
 
     @Test
@@ -196,6 +306,39 @@ class RedisJsonCacheSupportTest {
     @Test
     void shouldDeleteCollection() {
         support.delete(List.of("key1", "key2"));
+    }
+
+    @Test
+    void shouldHandleCollectionDeleteFailureGracefully() {
+        List<String> keys = List.of("key1", "key2");
+        StringRedisTemplate errRedis = mock(StringRedisTemplate.class);
+        when(errRedis.delete(keys)).thenThrow(new RuntimeException("Redis delete failed"));
+        RedisJsonCacheSupport errSupport = new RedisJsonCacheSupport(errRedis, objectMapper, redisTuningProperties);
+
+        errSupport.delete(keys);
+    }
+
+    @Test
+    void shouldSkipCollectionDelete_whenRedisTemplateIsNull() {
+        RedisJsonCacheSupport nullSupport = new RedisJsonCacheSupport(null, objectMapper, redisTuningProperties);
+        nullSupport.delete(List.of("key1"));
+    }
+
+    @Test
+    void shouldDeleteCollectionImmediately_whenAfterCommitExecutorIsMissing() {
+        List<String> keys = List.of("key1", "key2");
+
+        support.deleteAfterCommit(keys);
+
+        verify(redisTemplate).delete(keys);
+    }
+
+    @Test
+    void shouldSkipCollectionDeleteAfterCommit_whenKeysAreNullOrEmpty() {
+        support.deleteAfterCommit((Collection<String>) null);
+        support.deleteAfterCommit(List.of());
+
+        verify(redisTemplate, never()).delete(List.of());
     }
 
     @Test
@@ -231,7 +374,7 @@ class RedisJsonCacheSupportTest {
     @Test
     void shouldDeleteByPattern() {
         RedisConnection connection = mock(RedisConnection.class);
-        when(connection.scan(any())).thenReturn(new ByteArrayCursor(List.of(
+        when(connection.scan(any(ScanOptions.class))).thenReturn(new ByteArrayCursor(List.of(
                 "key:1".getBytes(StandardCharsets.UTF_8),
                 "key:2".getBytes(StandardCharsets.UTF_8))));
         RedisConnectionFactory connectionFactory = mock(RedisConnectionFactory.class);
@@ -243,6 +386,46 @@ class RedisJsonCacheSupportTest {
         RedisJsonCacheSupport scanSupport = new RedisJsonCacheSupport(scanRedis, objectMapper, redisTuningProperties);
 
         scanSupport.deleteByPattern("key:*");
+
+        verify(scanRedis).delete(List.of("key:1", "key:2"));
+    }
+
+    @Test
+    void shouldDeleteByPatternInBatches() {
+        RedisTuningProperties batchProps = new RedisTuningProperties();
+        batchProps.getScan().setDeleteBatchSize(10);
+        RedisConnection connection = mock(RedisConnection.class);
+        when(connection.scan(any(ScanOptions.class))).thenReturn(new ByteArrayCursor(List.of(
+                "key:1".getBytes(StandardCharsets.UTF_8),
+                "key:2".getBytes(StandardCharsets.UTF_8),
+                "key:3".getBytes(StandardCharsets.UTF_8),
+                "key:4".getBytes(StandardCharsets.UTF_8),
+                "key:5".getBytes(StandardCharsets.UTF_8),
+                "key:6".getBytes(StandardCharsets.UTF_8),
+                "key:7".getBytes(StandardCharsets.UTF_8),
+                "key:8".getBytes(StandardCharsets.UTF_8),
+                "key:9".getBytes(StandardCharsets.UTF_8),
+                "key:10".getBytes(StandardCharsets.UTF_8),
+                "key:11".getBytes(StandardCharsets.UTF_8))));
+        RedisConnectionFactory connectionFactory = mock(RedisConnectionFactory.class);
+        when(connectionFactory.getConnection()).thenReturn(connection);
+        StringRedisTemplate scanRedis = mock(StringRedisTemplate.class);
+        when(scanRedis.getConnectionFactory()).thenReturn(connectionFactory);
+        List<List<String>> deletedBatches = new ArrayList<>();
+        when(scanRedis.delete(any(Collection.class))).thenAnswer(invocation -> {
+            Collection<?> keys = invocation.getArgument(0);
+            deletedBatches.add(keys.stream().map(String::valueOf).toList());
+            return (long) keys.size();
+        });
+        RedisJsonCacheSupport scanSupport = new RedisJsonCacheSupport(scanRedis, objectMapper, batchProps);
+
+        scanSupport.deleteByPattern("key:*");
+
+        assertThat(deletedBatches).containsExactly(
+                List.of("key:1", "key:2", "key:3", "key:4", "key:5",
+                        "key:6", "key:7", "key:8", "key:9", "key:10"),
+                List.of("key:11")
+        );
     }
 
     @Test
@@ -283,7 +466,7 @@ class RedisJsonCacheSupportTest {
     void shouldHandleConnectionCloseException() {
         AtomicBoolean closeCalled = new AtomicBoolean(false);
         RedisConnection connection = mock(RedisConnection.class);
-        when(connection.scan(any())).thenReturn(new ByteArrayCursor(List.of()));
+        when(connection.scan(any(ScanOptions.class))).thenReturn(new ByteArrayCursor(List.of()));
         doAnswer(invocation -> {
             closeCalled.set(true);
             throw new RuntimeException("Close error");
@@ -301,15 +484,15 @@ class RedisJsonCacheSupportTest {
     @Test
     void shouldRespectMaxScanLimit() {
         RedisTuningProperties limitedProps = new RedisTuningProperties();
-        limitedProps.getScan().setMaxKeys(1);
-        limitedProps.getScan().setDeleteBatchSize(1);
+        limitedProps.getScan().setMaxKeys(100);
+        limitedProps.getScan().setDeleteBatchSize(10);
 
         List<byte[]> manyKeys = new ArrayList<>();
-        for (int i = 0; i < 5; i++) {
+        for (int i = 0; i < 150; i++) {
             manyKeys.add(("key:" + i).getBytes(StandardCharsets.UTF_8));
         }
         RedisConnection connection = mock(RedisConnection.class);
-        when(connection.scan(any())).thenReturn(new ByteArrayCursor(manyKeys));
+        when(connection.scan(any(ScanOptions.class))).thenReturn(new ByteArrayCursor(manyKeys));
         RedisConnectionFactory connectionFactory = mock(RedisConnectionFactory.class);
         when(connectionFactory.getConnection()).thenReturn(connection);
         StringRedisTemplate limitRedis = mock(StringRedisTemplate.class);
@@ -317,6 +500,23 @@ class RedisJsonCacheSupportTest {
         when(limitRedis.delete(any(Collection.class))).thenReturn(1L);
         RedisJsonCacheSupport limitSupport = new RedisJsonCacheSupport(limitRedis, objectMapper, limitedProps);
         limitSupport.deleteByPattern("key:*");
+
+        verify(limitRedis, org.mockito.Mockito.times(10)).delete(any(Collection.class));
+    }
+
+    @Test
+    void shouldNotDeleteWhenPatternScanFindsNoKeys() {
+        RedisConnection connection = mock(RedisConnection.class);
+        when(connection.scan(any(ScanOptions.class))).thenReturn(new ByteArrayCursor(List.of()));
+        RedisConnectionFactory connectionFactory = mock(RedisConnectionFactory.class);
+        when(connectionFactory.getConnection()).thenReturn(connection);
+        StringRedisTemplate emptyRedis = mock(StringRedisTemplate.class);
+        when(emptyRedis.getConnectionFactory()).thenReturn(connectionFactory);
+        RedisJsonCacheSupport emptySupport = new RedisJsonCacheSupport(emptyRedis, objectMapper, redisTuningProperties);
+
+        emptySupport.deleteByPattern("key:*");
+
+        verify(emptyRedis, never()).delete(any(Collection.class));
     }
 
     private static final class ByteArrayCursor implements Cursor<byte[]> {

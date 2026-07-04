@@ -17,6 +17,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
@@ -696,6 +697,425 @@ class PrintScriptServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("打印模板已禁用");
         verify(jdbc, never()).queryForMap(anyString(), eq(1L));
+    }
+
+    @Test
+    void shouldRejectMissingTemplateBeforeLoadingPrintData() {
+        JdbcTemplate jdbc = mock(JdbcTemplate.class);
+        PrintTemplateRepository repository = mock(PrintTemplateRepository.class);
+        when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.empty());
+        PrintScriptService service = printScriptService(repository, jdbc);
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.generateFromRecord("1", "sales-order", 1L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("打印模板不存在");
+        verify(jdbc, never()).queryForMap(anyString(), eq(1L));
+    }
+
+    @Test
+    void shouldRejectTemplateModuleMismatchBeforeLoadingPrintData() {
+        JdbcTemplate jdbc = mock(JdbcTemplate.class);
+        PrintScriptService service = printScriptService(repository("sales-order"), jdbc);
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.generateFromRecord("1", "purchase-order", 1L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("打印模板与当前模块不匹配");
+        verify(jdbc, never()).queryForMap(anyString(), eq(1L));
+    }
+
+    @Test
+    void shouldReturnEmptyBrandsWhenRecordIdsAreNullOrEmpty() {
+        JdbcTemplate jdbc = mock(JdbcTemplate.class);
+        AttachmentRecordAccessService accessService = mock(AttachmentRecordAccessService.class);
+        PrintScriptService service = printScriptService(repository("sales-order"), jdbc, accessService);
+
+        assertThat(service.listBrands("sales-order", null)).isEmpty();
+        assertThat(service.listBrands("sales-order", List.of())).isEmpty();
+        verify(accessService, never()).assertRecordAccessible(org.mockito.ArgumentMatchers.any(), anyString(), anyString(), anyLong());
+    }
+
+    @Test
+    void shouldReturnEmptyPrintItemsWhenRecordIdsAreNullOrEmpty() {
+        JdbcTemplate jdbc = mock(JdbcTemplate.class);
+        AttachmentRecordAccessService accessService = mock(AttachmentRecordAccessService.class);
+        PrintScriptService service = printScriptService(repository("sales-order"), jdbc, accessService);
+
+        assertThat(service.listPrintItems("sales-order", null)).isEmpty();
+        assertThat(service.listPrintItems("sales-order", List.of())).isEmpty();
+        verify(accessService, never()).assertRecordAccessible(org.mockito.ArgumentMatchers.any(), anyString(), anyString(), anyLong());
+    }
+
+    @Test
+    void shouldRejectListBrandsWhenCurrentUserIsMissing() {
+        SecurityContextHolder.clearContext();
+        JdbcTemplate jdbc = mock(JdbcTemplate.class);
+        PrintScriptService service = printScriptService(repository("sales-order"), jdbc);
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.listBrands("sales-order", List.of(1L)))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("未登录");
+    }
+
+    @Test
+    void shouldGenerateWhenPrintOptionsAreNullAndBusinessNoIsMissing() {
+        JdbcTemplate jdbc = mock(JdbcTemplate.class);
+        PrintScriptService service = printScriptService(repository("purchase-order"), jdbc);
+        when(jdbc.queryForMap(anyString(), eq(1L))).thenReturn(Map.of(
+                "id", 1L,
+                "deleted_flag", false
+        ));
+        when(jdbc.queryForList(anyString(), eq(1L))).thenReturn(List.of(Map.of(
+                "line_no", 1,
+                "quantity", 2,
+                "weight_ton", new BigDecimal("1.000")
+        )));
+
+        Map<String, Object> result = service.generateFromRecord("1", "purchase-order", 1L, null);
+
+        assertThat(result.get("businessNo")).isEqualTo("");
+        assertThat((List<?>) result.get("items")).hasSize(1);
+    }
+
+    @Test
+    void shouldMatchSettlementCompanyBySnapshotNameWhenTemplateHasCompanyIdButRecordIdIsBlank() {
+        JdbcTemplate jdbc = mock(JdbcTemplate.class);
+        PrintScriptService service = printScriptService(repository("sales-order", 7L, "历史主体"), jdbc);
+        when(jdbc.queryForMap(anyString(), eq(1L))).thenReturn(Map.of(
+                "id", 1L,
+                "order_no", "SO-001",
+                "settlement_company_name", "历史主体",
+                "deleted_flag", false
+        ));
+        when(jdbc.queryForList(anyString(), eq(1L))).thenReturn(List.of());
+        when(jdbc.queryForList(anyString(), eq(String.class), eq("SO-001"))).thenReturn(List.of());
+
+        Map<String, Object> result = service.generateFromRecord("1", "sales-order", 1L);
+
+        assertThat(result.get("templateName")).isEqualTo("模板");
+    }
+
+    @Test
+    void shouldMatchSettlementCompanyBySnapshotNameWhenTemplateHasOnlyCompanyName() {
+        JdbcTemplate jdbc = mock(JdbcTemplate.class);
+        PrintScriptService service = printScriptService(
+                repository("sales-order", "COORD", "LODOP.PRINT_INIT('模板');", "ACTIVE", null, "历史主体"),
+                jdbc
+        );
+        when(jdbc.queryForMap(anyString(), eq(1L))).thenReturn(Map.of(
+                "id", 1L,
+                "order_no", "SO-001",
+                "settlement_company_name", "历史主体",
+                "deleted_flag", false
+        ));
+        when(jdbc.queryForList(anyString(), eq(1L))).thenReturn(List.of());
+        when(jdbc.queryForList(anyString(), eq(String.class), eq("SO-001"))).thenReturn(List.of());
+
+        Map<String, Object> result = service.generateFromRecord("1", "sales-order", 1L);
+
+        assertThat(result.get("templateName")).isEqualTo("模板");
+    }
+
+    @Test
+    void shouldDefaultTemplateTypeWhenTemplateTypeIsMissing() {
+        JdbcTemplate jdbc = mock(JdbcTemplate.class);
+        PrintScriptService service = printScriptService(repository("purchase-order", (String) null, "plain-template"), jdbc);
+        when(jdbc.queryForMap(anyString(), eq(1L))).thenReturn(Map.of(
+                "id", 1L,
+                "order_no", "PO-001",
+                "deleted_flag", false
+        ));
+        when(jdbc.queryForList(anyString(), eq(1L))).thenReturn(List.of());
+
+        Map<String, Object> result = service.generateFromRecord("1", "purchase-order", 1L);
+
+        assertThat(result.get("templateType")).isEqualTo("COORD");
+    }
+
+    @Test
+    void shouldApplyGlobalBrandOverride() {
+        JdbcTemplate jdbc = mock(JdbcTemplate.class);
+        PrintScriptService service = printScriptService(repository("purchase-order"), jdbc);
+        when(jdbc.queryForMap(anyString(), eq(1L))).thenReturn(Map.of(
+                "id", 1L,
+                "order_no", "PO-001",
+                "deleted_flag", false
+        ));
+        when(jdbc.queryForList(anyString(), eq(1L))).thenReturn(List.of(Map.of(
+                "id", 11L,
+                "line_no", 1,
+                "brand", "原品牌",
+                "quantity", 1,
+                "weight_ton", new BigDecimal("1.000")
+        )));
+
+        Map<String, Object> result = service.generateFromRecord(
+                "1",
+                "purchase-order",
+                1L,
+                new PrintRenderOptions(false, false, "  统一品牌  ", Map.of(), Map.of(), List.of())
+        );
+
+        List<?> items = (List<?>) result.get("items");
+        assertThat(((Map<?, ?>) items.get(0)).get("brand")).isEqualTo("统一品牌");
+    }
+
+    @Test
+    void shouldIgnoreBlankItemBrandOverrideAndBlankOriginalBrand() {
+        JdbcTemplate jdbc = mock(JdbcTemplate.class);
+        PrintScriptService service = printScriptService(repository("purchase-order"), jdbc);
+        when(jdbc.queryForMap(anyString(), eq(1L))).thenReturn(Map.of(
+                "id", 1L,
+                "order_no", "PO-001",
+                "deleted_flag", false
+        ));
+        when(jdbc.queryForList(anyString(), eq(1L))).thenReturn(List.of(
+                Map.of(
+                        "id", 11L,
+                        "line_no", 1,
+                        "quantity", 1,
+                        "weight_ton", new BigDecimal("1.000")
+                )
+        ));
+
+        Map<String, Object> result = service.generateFromRecord(
+                "1",
+                "purchase-order",
+                1L,
+                new PrintRenderOptions(false, false, "", Map.of("原品牌", "新品牌"), Map.of("11", " "), List.of())
+        );
+
+        List<?> items = (List<?>) result.get("items");
+        assertThat(((Map<?, ?>) items.get(0)).get("brand")).isNull();
+    }
+
+    @Test
+    void shouldKeepOriginalOrderWhenItemOrderProvidedButItemsHaveNoIds() {
+        JdbcTemplate jdbc = mock(JdbcTemplate.class);
+        PrintScriptService service = printScriptService(repository("purchase-order"), jdbc);
+        when(jdbc.queryForMap(anyString(), eq(1L))).thenReturn(Map.of(
+                "id", 1L,
+                "order_no", "PO-001",
+                "deleted_flag", false
+        ));
+        when(jdbc.queryForList(anyString(), eq(1L))).thenReturn(List.of(Map.of(
+                "line_no", 1,
+                "brand", "品牌",
+                "quantity", 1,
+                "weight_ton", new BigDecimal("1.000")
+        )));
+
+        Map<String, Object> result = service.generateFromRecord(
+                "1",
+                "purchase-order",
+                1L,
+                new PrintRenderOptions(false, false, "", Map.of(), Map.of(), List.of("missing"))
+        );
+
+        List<?> items = (List<?>) result.get("items");
+        assertThat(((Map<?, ?>) items.get(0)).get("index")).isEqualTo("1");
+    }
+
+    @Test
+    void shouldSkipBlankItemIdAndBlankOriginalBrandWhenApplyingPrintOptions() {
+        PrintScriptService service = printScriptService(repository("purchase-order"), mock(JdbcTemplate.class));
+        Map<String, String> data = new java.util.LinkedHashMap<>();
+        java.util.LinkedHashMap<String, String> blankIdItem = new java.util.LinkedHashMap<>();
+        blankIdItem.put("id", "");
+        blankIdItem.put("brand", "原品牌");
+        java.util.LinkedHashMap<String, String> blankBrandItem = new java.util.LinkedHashMap<>();
+        blankBrandItem.put("id", "11");
+        blankBrandItem.put("brand", "");
+        List<Map<String, String>> items = new java.util.ArrayList<>(List.of(blankIdItem, blankBrandItem));
+
+        ReflectionTestUtils.invokeMethod(
+                service,
+                "applyPrintOptions",
+                data,
+                items,
+                new PrintRenderOptions(false, false, "", Map.of("其他品牌", "新品牌"), Map.of("99", "覆盖品牌"), List.of())
+        );
+
+        assertThat(blankIdItem.get("brand")).isEqualTo("原品牌");
+        assertThat(blankBrandItem.get("brand")).isEmpty();
+    }
+
+    @Test
+    void shouldRejectSettlementCompanyWhenTemplateHasCompanyIdButNoNameAndRecordIdIsBlank() {
+        JdbcTemplate jdbc = mock(JdbcTemplate.class);
+        PrintScriptService service = printScriptService(repository("sales-order", 7L, " "), jdbc);
+        when(jdbc.queryForMap(anyString(), eq(1L))).thenReturn(Map.of(
+                "id", 1L,
+                "order_no", "SO-001",
+                "settlement_company_name", "历史主体",
+                "deleted_flag", false
+        ));
+        when(jdbc.queryForList(anyString(), eq(1L))).thenReturn(List.of());
+        when(jdbc.queryForList(anyString(), eq(String.class), eq("SO-001"))).thenReturn(List.of());
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.generateFromRecord("1", "sales-order", 1L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("打印模板与当前结算主体不匹配");
+    }
+
+    @Test
+    void shouldRejectSettlementCompanyWhenTemplateCompanyIdFallbackNameMismatches() {
+        JdbcTemplate jdbc = mock(JdbcTemplate.class);
+        PrintScriptService service = printScriptService(repository("sales-order", 7L, "主体B"), jdbc);
+        when(jdbc.queryForMap(anyString(), eq(1L))).thenReturn(Map.of(
+                "id", 1L,
+                "order_no", "SO-001",
+                "settlement_company_name", "主体A",
+                "deleted_flag", false
+        ));
+        when(jdbc.queryForList(anyString(), eq(1L))).thenReturn(List.of());
+        when(jdbc.queryForList(anyString(), eq(String.class), eq("SO-001"))).thenReturn(List.of());
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.generateFromRecord("1", "sales-order", 1L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("打印模板与当前结算主体不匹配");
+    }
+
+    @Test
+    void shouldRejectSettlementCompanyWhenTemplateHasNoCompanyButRecordHasCompanyId() {
+        JdbcTemplate jdbc = mock(JdbcTemplate.class);
+        PrintScriptService service = printScriptService(repository("purchase-order"), jdbc);
+        when(jdbc.queryForMap(anyString(), eq(1L))).thenReturn(Map.of(
+                "id", 1L,
+                "order_no", "PO-001",
+                "settlement_company_id", 7L,
+                "deleted_flag", false
+        ));
+        when(jdbc.queryForList(anyString(), eq(1L))).thenReturn(List.of());
+        when(jdbc.queryForList(anyString(), eq(String.class), eq(7L))).thenReturn(List.of("主体A"));
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.generateFromRecord("1", "purchase-order", 1L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("打印模板与当前结算主体不匹配");
+    }
+
+    @Test
+    void shouldRejectSettlementCompanyWhenTemplateHasNoCompanyButRecordHasCompanyName() {
+        JdbcTemplate jdbc = mock(JdbcTemplate.class);
+        PrintScriptService service = printScriptService(repository("purchase-order"), jdbc);
+        when(jdbc.queryForMap(anyString(), eq(1L))).thenReturn(Map.of(
+                "id", 1L,
+                "order_no", "PO-001",
+                "settlement_company_name", "主体A",
+                "deleted_flag", false
+        ));
+        when(jdbc.queryForList(anyString(), eq(1L))).thenReturn(List.of());
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.generateFromRecord("1", "purchase-order", 1L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("打印模板与当前结算主体不匹配");
+    }
+
+    @Test
+    void shouldRejectListBrandsWhenAuthenticationPrincipalIsNotSecurityPrincipal() {
+        SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken("tester", null));
+        JdbcTemplate jdbc = mock(JdbcTemplate.class);
+        PrintScriptService service = printScriptService(repository("sales-order"), jdbc);
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.listBrands("sales-order", List.of(1L)))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("未登录");
+    }
+
+    @Test
+    void shouldIgnoreNullPrintOptionCollectionsWhenApplyingPrintOptions() {
+        PrintScriptService service = printScriptService(repository("purchase-order"), mock(JdbcTemplate.class));
+        PrintRenderOptions options = mock(PrintRenderOptions.class);
+        when(options.brandOverride()).thenReturn(null);
+        when(options.brandOverridesByItemId()).thenReturn(null);
+        when(options.brandOverrides()).thenReturn(null);
+        java.util.LinkedHashMap<String, String> item = new java.util.LinkedHashMap<>();
+        item.put("id", "11");
+        item.put("brand", "原品牌");
+        java.util.LinkedHashMap<String, String> nullIdItem = new java.util.LinkedHashMap<>();
+        nullIdItem.put("brand", "无ID品牌");
+        List<Map<String, String>> items = new java.util.ArrayList<>(List.of(item, nullIdItem));
+
+        ReflectionTestUtils.invokeMethod(service, "applyPrintOptions", new java.util.LinkedHashMap<>(), items, options);
+
+        assertThat(item.get("brand")).isEqualTo("原品牌");
+        assertThat(nullIdItem.get("brand")).isEqualTo("无ID品牌");
+    }
+
+    @Test
+    void shouldSkipBlankBrandOverridesWhenApplyingPrintOptions() {
+        PrintScriptService service = printScriptService(repository("purchase-order"), mock(JdbcTemplate.class));
+        PrintRenderOptions options = mock(PrintRenderOptions.class);
+        when(options.brandOverride()).thenReturn("");
+        when(options.brandOverridesByItemId()).thenReturn(Map.of("11", " "));
+        when(options.brandOverrides()).thenReturn(Map.of("原品牌", " "));
+        java.util.LinkedHashMap<String, String> item = new java.util.LinkedHashMap<>();
+        item.put("id", "11");
+        item.put("brand", "原品牌");
+        java.util.LinkedHashMap<String, String> nullIdItem = new java.util.LinkedHashMap<>();
+        nullIdItem.put("brand", "无ID品牌");
+        List<Map<String, String>> items = new java.util.ArrayList<>(List.of(item, nullIdItem));
+
+        ReflectionTestUtils.invokeMethod(service, "applyPrintOptions", new java.util.LinkedHashMap<>(), items, options);
+
+        assertThat(item.get("brand")).isEqualTo("原品牌");
+        assertThat(nullIdItem.get("brand")).isEqualTo("无ID品牌");
+    }
+
+    @Test
+    void shouldReturnOriginalItemsWhenItemOrderIsNullOrItemsAreEmpty() {
+        PrintScriptService service = printScriptService(repository("purchase-order"), mock(JdbcTemplate.class));
+        PrintRenderOptions nullOrderOptions = mock(PrintRenderOptions.class);
+        when(nullOrderOptions.itemOrder()).thenReturn(null);
+        java.util.LinkedHashMap<String, String> item = new java.util.LinkedHashMap<>();
+        item.put("id", "11");
+        List<Map<String, String>> items = new java.util.ArrayList<>(List.of(item));
+
+        List<Map<String, String>> orderedWhenOrderMissing = ReflectionTestUtils.invokeMethod(
+                service,
+                "applyItemOrder",
+                items,
+                nullOrderOptions
+        );
+
+        PrintRenderOptions emptyItemsOptions = mock(PrintRenderOptions.class);
+        when(emptyItemsOptions.itemOrder()).thenReturn(List.of("11"));
+        List<Map<String, String>> orderedWhenItemsMissing = ReflectionTestUtils.invokeMethod(
+                service,
+                "applyItemOrder",
+                List.of(),
+                emptyItemsOptions
+        );
+
+        assertThat(orderedWhenOrderMissing).isSameAs(items);
+        assertThat(orderedWhenItemsMissing).isEmpty();
+    }
+
+    @Test
+    void shouldKeepNullAndBlankIdItemsWhenApplyingItemOrder() {
+        PrintScriptService service = printScriptService(repository("purchase-order"), mock(JdbcTemplate.class));
+        PrintRenderOptions options = mock(PrintRenderOptions.class);
+        when(options.itemOrder()).thenReturn(List.of("missing", "11", "11"));
+        java.util.LinkedHashMap<String, String> selectedItem = new java.util.LinkedHashMap<>();
+        selectedItem.put("id", "11");
+        selectedItem.put("brand", "品牌1");
+        java.util.LinkedHashMap<String, String> nullIdItem = new java.util.LinkedHashMap<>();
+        nullIdItem.put("brand", "无ID品牌");
+        java.util.LinkedHashMap<String, String> blankIdItem = new java.util.LinkedHashMap<>();
+        blankIdItem.put("id", " ");
+        blankIdItem.put("brand", "空ID品牌");
+        java.util.LinkedHashMap<String, String> remainingItem = new java.util.LinkedHashMap<>();
+        remainingItem.put("id", "12");
+        remainingItem.put("brand", "品牌2");
+        List<Map<String, String>> items = new java.util.ArrayList<>(List.of(
+                selectedItem,
+                nullIdItem,
+                blankIdItem,
+                remainingItem
+        ));
+
+        List<Map<String, String>> orderedItems = ReflectionTestUtils.invokeMethod(service, "applyItemOrder", items, options);
+
+        assertThat(orderedItems).containsExactly(selectedItem, nullIdItem, blankIdItem, remainingItem);
     }
 
     private PrintTemplateRepository repository(String billType) {

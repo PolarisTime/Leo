@@ -284,7 +284,7 @@ public class DepartmentService extends AbstractCrudService<Department, Departmen
         Throwable cause = ex;
         while (cause != null) {
             String message = cause.getMessage();
-            if (message != null && (message.contains("department_code") || message.contains("uk_sys_department_code_active"))) {
+            if (message != null && message.contains("department_code")) {
                 return true;
             }
             cause = cause.getCause();

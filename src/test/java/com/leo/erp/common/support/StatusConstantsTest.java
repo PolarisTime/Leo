@@ -1,8 +1,11 @@
 package com.leo.erp.common.support;
 
+import com.leo.erp.common.error.BusinessException;
+import com.leo.erp.common.error.ErrorCode;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class StatusConstantsTest {
 
@@ -104,5 +107,54 @@ class StatusConstantsTest {
                 .containsExactlyInAnyOrder("已确认");
         assertThat(StatusConstants.SETTLEABLE_FREIGHT_STATEMENT_STATUS)
                 .containsExactlyInAnyOrder("已审核");
+    }
+
+    @Test
+    void shouldNormalizeRequiredActiveStatus() {
+        assertThat(StatusConstants.normalizeActiveStatus(" 正常 ", "状态")).isEqualTo("正常");
+        assertThat(StatusConstants.normalizeActiveStatus("禁用", "状态")).isEqualTo("禁用");
+    }
+
+    @Test
+    void shouldRejectBlankRequiredActiveStatus() {
+        assertThatThrownBy(() -> StatusConstants.normalizeActiveStatus("   ", "状态"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("状态不能为空")
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.VALIDATION_ERROR);
+    }
+
+    @Test
+    void shouldRejectNullRequiredActiveStatus() {
+        assertThatThrownBy(() -> StatusConstants.normalizeActiveStatus(null, "状态"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("状态不能为空")
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.VALIDATION_ERROR);
+    }
+
+    @Test
+    void shouldRejectUnknownRequiredActiveStatus() {
+        assertThatThrownBy(() -> StatusConstants.normalizeActiveStatus("未知", "状态"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("状态不合法")
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.VALIDATION_ERROR);
+    }
+
+    @Test
+    void shouldNormalizeOptionalActiveStatus() {
+        assertThat(StatusConstants.normalizeOptionalActiveStatus(null, "状态")).isNull();
+        assertThat(StatusConstants.normalizeOptionalActiveStatus("   ", "状态")).isNull();
+        assertThat(StatusConstants.normalizeOptionalActiveStatus(" 禁用 ", "状态")).isEqualTo("禁用");
+    }
+
+    @Test
+    void shouldRejectUnknownOptionalActiveStatus() {
+        assertThatThrownBy(() -> StatusConstants.normalizeOptionalActiveStatus("未知", "状态"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("状态不合法")
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.VALIDATION_ERROR);
     }
 }

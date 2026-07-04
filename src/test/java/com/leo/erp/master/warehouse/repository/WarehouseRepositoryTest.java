@@ -99,6 +99,22 @@ class WarehouseRepositoryTest {
     }
 
     @Test
+    void listActiveWarehouseNames_shouldSkipNullAndBlankNames() {
+        Warehouse nullName = new Warehouse();
+        nullName.setWarehouseName(null);
+        Warehouse blankName = new Warehouse();
+        blankName.setWarehouseName("   ");
+        Warehouse activeWarehouse = new Warehouse();
+        activeWarehouse.setWarehouseName(" 仓库A ");
+
+        WarehouseRepository repo = warehouseRepositoryReturning(List.of(nullName, blankName, activeWarehouse));
+
+        List<String> result = repo.listActiveWarehouseNames();
+
+        assertThat(result).containsExactly("仓库A");
+    }
+
+    @Test
     void findByIdAndDeletedFlagFalse_shouldReturnWarehouseWhenExistsAndNotDeleted() {
         Warehouse warehouse = new Warehouse();
         warehouse.setId(1L);

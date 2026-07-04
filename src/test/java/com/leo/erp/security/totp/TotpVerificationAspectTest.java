@@ -34,6 +34,30 @@ class TotpVerificationAspectTest {
     }
 
     @Test
+    void shouldRejectWhenAuthenticationMissing() {
+        TotpVerificationAspect aspect = new TotpVerificationAspect(mock(UserAccountRepository.class), mock(TotpService.class));
+
+        assertThatThrownBy(() -> aspect.verify(joinPoint(new AtomicBoolean(false)), requiresTotpVerification()))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("未登录");
+    }
+
+    @Test
+    void shouldRejectWhenPrincipalIsNotSecurityPrincipal() {
+        TotpVerificationAspect aspect = new TotpVerificationAspect(mock(UserAccountRepository.class), mock(TotpService.class));
+        UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
+                "admin",
+                null,
+                List.of()
+        );
+        SecurityContextHolder.getContext().setAuthentication(authentication);
+
+        assertThatThrownBy(() -> aspect.verify(joinPoint(new AtomicBoolean(false)), requiresTotpVerification()))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("未登录");
+    }
+
+    @Test
     void shouldRejectApiKeyRequests() {
         TotpVerificationAspect aspect = new TotpVerificationAspect(mock(UserAccountRepository.class), mock(TotpService.class));
         UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
@@ -48,6 +72,20 @@ class TotpVerificationAspectTest {
         assertThatThrownBy(() -> aspect.verify(joinPoint(new AtomicBoolean(false)), requiresTotpVerification()))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("API Key 不支持执行需要2FA验证的敏感操作");
+    }
+
+    @Test
+    void shouldRejectWhenCurrentUserMissing() {
+        UserAccountRepository repository = mock(UserAccountRepository.class);
+        TotpService totpService = mock(TotpService.class);
+        TotpVerificationAspect aspect = new TotpVerificationAspect(repository, totpService);
+        when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.empty());
+
+        SecurityContextHolder.getContext().setAuthentication(userAuthentication());
+
+        assertThatThrownBy(() -> aspect.verify(joinPoint(new AtomicBoolean(false)), requiresTotpVerification()))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("登录状态已失效，请重新登录");
     }
 
     @Test
@@ -72,6 +110,67 @@ class TotpVerificationAspectTest {
     }
 
     @Test
+    void shouldRejectWhenTotpSecretMissing() {
+        UserAccountRepository repository = mock(UserAccountRepository.class);
+        TotpService totpService = mock(TotpService.class);
+        TotpVerificationAspect aspect = new TotpVerificationAspect(repository, totpService);
+        UserAccount account = enabledAccount();
+        account.setTotpSecret(null);
+        when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(account));
+
+        SecurityContextHolder.getContext().setAuthentication(userAuthentication());
+
+        assertThatThrownBy(() -> aspect.verify(joinPoint(new AtomicBoolean(false)), requiresTotpVerification()))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("当前账号未启用2FA");
+    }
+
+    @Test
+    void shouldRejectWhenTotpSecretBlank() {
+        UserAccountRepository repository = mock(UserAccountRepository.class);
+        TotpService totpService = mock(TotpService.class);
+        TotpVerificationAspect aspect = new TotpVerificationAspect(repository, totpService);
+        UserAccount account = enabledAccount();
+        account.setTotpSecret("   ");
+        when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(account));
+
+        SecurityContextHolder.getContext().setAuthentication(userAuthentication());
+
+        assertThatThrownBy(() -> aspect.verify(joinPoint(new AtomicBoolean(false)), requiresTotpVerification()))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("当前账号未启用2FA");
+    }
+
+    @Test
+    void shouldRejectWhenRequestContextMissing() {
+        UserAccountRepository repository = mock(UserAccountRepository.class);
+        TotpService totpService = mock(TotpService.class);
+        TotpVerificationAspect aspect = new TotpVerificationAspect(repository, totpService);
+        when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(enabledAccount()));
+
+        SecurityContextHolder.getContext().setAuthentication(userAuthentication());
+
+        assertThatThrownBy(() -> aspect.verify(joinPoint(new AtomicBoolean(false)), requiresTotpVerification()))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("无法读取2FA校验请求上下文");
+    }
+
+    @Test
+    void shouldRejectWhenTotpCodeMissing() {
+        UserAccountRepository repository = mock(UserAccountRepository.class);
+        TotpService totpService = mock(TotpService.class);
+        TotpVerificationAspect aspect = new TotpVerificationAspect(repository, totpService);
+        when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(enabledAccount()));
+
+        SecurityContextHolder.getContext().setAuthentication(userAuthentication());
+        RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(new MockHttpServletRequest()));
+
+        assertThatThrownBy(() -> aspect.verify(joinPoint(new AtomicBoolean(false)), requiresTotpVerification()))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("请提供6位2FA验证码");
+    }
+
+    @Test
     void shouldRejectWhenTotpCodeInvalid() {
         UserAccountRepository repository = mock(UserAccountRepository.class);
         TotpService totpService = mock(TotpService.class);
@@ -87,6 +186,90 @@ class TotpVerificationAspectTest {
         assertThatThrownBy(() -> aspect.verify(joinPoint(new AtomicBoolean(false)), requiresTotpVerification()))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("请提供6位2FA验证码");
+    }
+
+    @Test
+    void shouldRejectWhenTotpSecretCannotBeDecrypted() {
+        UserAccountRepository repository = mock(UserAccountRepository.class);
+        TotpService totpService = mock(TotpService.class);
+        TotpVerificationAspect aspect = new TotpVerificationAspect(repository, totpService);
+        UserAccount account = enabledAccount();
+        when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(account));
+        when(totpService.decryptSecret("encrypted-secret")).thenThrow(new IllegalStateException("invalid secret"));
+
+        SecurityContextHolder.getContext().setAuthentication(userAuthentication());
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.addHeader(TotpVerificationAspect.TOTP_HEADER_NAME, "123456");
+        RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(request));
+
+        assertThatThrownBy(() -> aspect.verify(joinPoint(new AtomicBoolean(false)), requiresTotpVerification()))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("当前账号2FA密钥不可用，请重新生成后再试");
+    }
+
+    @Test
+    void shouldRejectWhenTotpCodeDoesNotMatch() {
+        UserAccountRepository repository = mock(UserAccountRepository.class);
+        TotpService totpService = mock(TotpService.class);
+        TotpVerificationAspect aspect = new TotpVerificationAspect(repository, totpService);
+        UserAccount account = enabledAccount();
+        when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(account));
+        when(totpService.decryptSecret("encrypted-secret")).thenReturn("plain-secret");
+        when(totpService.verifyCode("plain-secret", "123456")).thenReturn(false);
+
+        SecurityContextHolder.getContext().setAuthentication(userAuthentication());
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.addHeader(TotpVerificationAspect.TOTP_HEADER_NAME, "123456");
+        RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(request));
+
+        assertThatThrownBy(() -> aspect.verify(joinPoint(new AtomicBoolean(false)), requiresTotpVerification()))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("2FA验证码错误或已过期");
+    }
+
+    @Test
+    void shouldProceedWhenHeaderMissingAndTotpParameterMatches() throws Throwable {
+        UserAccountRepository repository = mock(UserAccountRepository.class);
+        TotpService totpService = mock(TotpService.class);
+        TotpVerificationAspect aspect = new TotpVerificationAspect(repository, totpService);
+        UserAccount account = enabledAccount();
+        when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(account));
+        when(totpService.decryptSecret("encrypted-secret")).thenReturn("plain-secret");
+        when(totpService.verifyCode("plain-secret", "123456")).thenReturn(true);
+
+        SecurityContextHolder.getContext().setAuthentication(userAuthentication());
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.setParameter("totpCode", " 123456 ");
+        RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(request));
+        AtomicBoolean proceeded = new AtomicBoolean(false);
+
+        Object result = aspect.verify(joinPoint(proceeded), requiresTotpVerification());
+
+        assertThat(result).isNull();
+        assertThat(proceeded.get()).isTrue();
+    }
+
+    @Test
+    void shouldProceedWhenHeaderBlankAndTotpParameterMatches() throws Throwable {
+        UserAccountRepository repository = mock(UserAccountRepository.class);
+        TotpService totpService = mock(TotpService.class);
+        TotpVerificationAspect aspect = new TotpVerificationAspect(repository, totpService);
+        UserAccount account = enabledAccount();
+        when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(account));
+        when(totpService.decryptSecret("encrypted-secret")).thenReturn("plain-secret");
+        when(totpService.verifyCode("plain-secret", "123456")).thenReturn(true);
+
+        SecurityContextHolder.getContext().setAuthentication(userAuthentication());
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.addHeader(TotpVerificationAspect.TOTP_HEADER_NAME, "   ");
+        request.setParameter("totpCode", "123456");
+        RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(request));
+        AtomicBoolean proceeded = new AtomicBoolean(false);
+
+        Object result = aspect.verify(joinPoint(proceeded), requiresTotpVerification());
+
+        assertThat(result).isNull();
+        assertThat(proceeded.get()).isTrue();
     }
 
     @Test

@@ -83,6 +83,17 @@ class JacksonConfigTest {
     }
 
     @Test
+    void customizer_deserializesEpochStringToLocalDateTime() throws Exception {
+        ObjectMapper mapper = buildMapper();
+
+        LocalDateTime original = LocalDateTime.of(2024, 6, 15, 10, 30, 0);
+        long epoch = original.atZone(ZoneId.of("Asia/Shanghai")).toInstant().toEpochMilli();
+
+        LocalDateTime result = mapper.readValue("\"" + epoch + "\"", LocalDateTime.class);
+        assertThat(result).isEqualTo(original);
+    }
+
+    @Test
     void customizer_deserializesEpochMillisToLocalDate() throws Exception {
         ObjectMapper mapper = buildMapper();
 
@@ -107,6 +118,17 @@ class JacksonConfigTest {
 
         LocalDate result = mapper.readValue("\"2024-06-15 10:30:00\"", LocalDate.class);
         assertThat(result).isEqualTo(LocalDate.of(2024, 6, 15));
+    }
+
+    @Test
+    void customizer_deserializesEpochStringToLocalDate() throws Exception {
+        ObjectMapper mapper = buildMapper();
+
+        LocalDate original = LocalDate.of(2024, 6, 15);
+        long epoch = original.atStartOfDay(ZoneId.of("Asia/Shanghai")).toInstant().toEpochMilli();
+
+        LocalDate result = mapper.readValue("\"" + epoch + "\"", LocalDate.class);
+        assertThat(result).isEqualTo(original);
     }
 
     private ObjectMapper buildMapper() {

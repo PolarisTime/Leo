@@ -1,6 +1,7 @@
 package com.leo.erp.system.operationlog.support;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.leo.erp.common.api.ApiResponse;
 import com.leo.erp.common.support.ClientIpResolver;
 import com.leo.erp.common.support.ModuleCatalog;
 import com.leo.erp.security.permission.RequiresPermission;
@@ -13,6 +14,11 @@ import org.springframework.web.method.HandlerMethod;
 import org.springframework.web.servlet.HandlerMapping;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
 
 class OperationLogInterceptorTest {
 
@@ -24,6 +30,77 @@ class OperationLogInterceptorTest {
         OperationLogCommandRecorder commandRecorder = new OperationLogCommandRecorder(
                 new OperationLogService(null, null, null, null), resultCollector);
         return new OperationLogInterceptor(metadataResolver, resultCollector, commandRecorder);
+    }
+
+    @Test
+    void shouldIgnoreNonHandlerMethodHandler() {
+        OperationLogMetadataResolver metadataResolver = mock(OperationLogMetadataResolver.class);
+        OperationLogResultCollector resultCollector = mock(OperationLogResultCollector.class);
+        OperationLogCommandRecorder commandRecorder = mock(OperationLogCommandRecorder.class);
+        OperationLogInterceptor interceptor = new OperationLogInterceptor(metadataResolver, resultCollector, commandRecorder);
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/purchase-order");
+
+        boolean handled = interceptor.preHandle(request, new MockHttpServletResponse(), new Object());
+
+        assertThat(handled).isTrue();
+        assertThat(request.getAttribute(OperationLogInterceptor.METADATA_ATTRIBUTE)).isNull();
+        verifyNoInteractions(metadataResolver, resultCollector, commandRecorder);
+    }
+
+    @Test
+    void shouldNotStoreMetadataWhenResolverReturnsNull() throws Exception {
+        OperationLogMetadataResolver metadataResolver = mock(OperationLogMetadataResolver.class);
+        OperationLogResultCollector resultCollector = mock(OperationLogResultCollector.class);
+        OperationLogCommandRecorder commandRecorder = mock(OperationLogCommandRecorder.class);
+        OperationLogInterceptor interceptor = new OperationLogInterceptor(metadataResolver, resultCollector, commandRecorder);
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/purchase-order");
+        HandlerMethod handlerMethod = new HandlerMethod(new TestController(), TestController.class.getMethod("page"));
+        when(metadataResolver.resolveMetadata(handlerMethod, request)).thenReturn(null);
+
+        boolean handled = interceptor.preHandle(request, new MockHttpServletResponse(), handlerMethod);
+
+        assertThat(handled).isTrue();
+        assertThat(request.getAttribute(OperationLogInterceptor.METADATA_ATTRIBUTE)).isNull();
+        verify(metadataResolver).resolveMetadata(handlerMethod, request);
+        verifyNoInteractions(resultCollector, commandRecorder);
+    }
+
+    @Test
+    void shouldSkipAfterCompletionWhenMetadataMissing() {
+        OperationLogResultCollector resultCollector = mock(OperationLogResultCollector.class);
+        OperationLogCommandRecorder commandRecorder = mock(OperationLogCommandRecorder.class);
+        OperationLogInterceptor interceptor = new OperationLogInterceptor(
+                mock(OperationLogMetadataResolver.class), resultCollector, commandRecorder);
+
+        interceptor.afterCompletion(
+                new MockHttpServletRequest("POST", "/api/purchase-order"),
+                new MockHttpServletResponse(),
+                new Object(),
+                null
+        );
+
+        verifyNoInteractions(resultCollector, commandRecorder);
+    }
+
+    @Test
+    void shouldRecordCommandWithCollectedApiResponseWhenMetadataExists() {
+        OperationLogResultCollector resultCollector = mock(OperationLogResultCollector.class);
+        OperationLogCommandRecorder commandRecorder = mock(OperationLogCommandRecorder.class);
+        OperationLogInterceptor interceptor = new OperationLogInterceptor(
+                mock(OperationLogMetadataResolver.class), resultCollector, commandRecorder);
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/purchase-order");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        response.setStatus(418);
+        OperationLogMetadata metadata = new OperationLogMetadata("采购订单", "", "新增", new String[0], "", "", true);
+        ApiResponse<String> apiResponse = new ApiResponse<>(0, "OK", "payload", "now");
+        Exception ex = new IllegalStateException("failed");
+        request.setAttribute(OperationLogInterceptor.METADATA_ATTRIBUTE, metadata);
+        doReturn(apiResponse).when(resultCollector).extractApiResponse(request);
+
+        interceptor.afterCompletion(request, response, new Object(), ex);
+
+        verify(resultCollector).extractApiResponse(request);
+        verify(commandRecorder).record(request, metadata, apiResponse, ex, 418);
     }
 
     @Test

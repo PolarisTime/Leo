@@ -65,6 +65,36 @@ class PurchaseOrderResponseAssemblerTest {
         assertThat(new PurchaseOrderResponseAssembler(mapper, availabilityService).toSummaryResponse(order)).isSameAs(summary);
     }
 
+    @Test
+    void shouldLeaveSettlementCompanyEmptyWhenItemHasNoParentOrder() {
+        PurchaseOrder order = order();
+        order.getItems().get(0).setPurchaseOrder(null);
+        PurchaseInboundItemQueryService inboundQueryService = mock(PurchaseInboundItemQueryService.class);
+        ItemAllocationNativeRepository allocationRepo = mock(ItemAllocationNativeRepository.class);
+        PurchaseOrderItemPieceWeightService pieceWeightService = mock(PurchaseOrderItemPieceWeightService.class);
+        PurchaseOrderAvailabilityService availabilityService = new PurchaseOrderAvailabilityService(
+                inboundQueryService,
+                allocationRepo,
+                pieceWeightService
+        );
+        PurchaseOrderMapper mapper = mock(PurchaseOrderMapper.class);
+        when(mapper.toResponse(order)).thenReturn(summary(order));
+        when(inboundQueryService.summarizeAllocatedQuantityBySourcePurchaseOrderItemIds(List.of(11L)))
+                .thenReturn(Map.of());
+        when(allocationRepo.summarizeSalesByPurchaseOrderItems(List.of(11L), null))
+                .thenReturn(List.of());
+        when(pieceWeightService.summarizeRemainingWeightByPurchaseOrderItemIds(List.of(11L)))
+                .thenReturn(Map.of());
+
+        PurchaseOrderResponse response = new PurchaseOrderResponseAssembler(mapper, availabilityService)
+                .toDetailResponse(order);
+
+        assertThat(response.items()).singleElement().satisfies(item -> {
+            assertThat(item.settlementCompanyId()).isNull();
+            assertThat(item.settlementCompanyName()).isNull();
+        });
+    }
+
     private PurchaseOrder order() {
         PurchaseOrder order = new PurchaseOrder();
         order.setId(1L);

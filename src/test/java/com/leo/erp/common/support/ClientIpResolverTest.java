@@ -3,7 +3,11 @@ package com.leo.erp.common.support;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockHttpServletRequest;
 
+import java.lang.reflect.Constructor;
+import java.lang.reflect.Method;
+
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class ClientIpResolverTest {
 
@@ -220,5 +224,35 @@ class ClientIpResolverTest {
         String ip = resolver.resolveClientIp(request);
 
         assertThat(ip).isEqualTo("10.0.0.1");
+    }
+
+    @Test
+    void shouldRejectInvalidCidrAddressSpec() {
+        assertThatThrownBy(() -> new ClientIpResolver("bad-host/24"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Invalid CIDR address");
+    }
+
+    @Test
+    void shouldNotMatchAddressWithDifferentFamilyThanTrustedCidr() {
+        ClientIpResolver resolver = new ClientIpResolver("10.0.0.0/8");
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.setRemoteAddr("2001:db8::1");
+
+        String ip = resolver.resolveClientIp(request);
+
+        assertThat(ip).isEqualTo("2001:db8::1");
+    }
+
+    @Test
+    void trustedProxyMatcherShouldRejectNullIp() throws Exception {
+        Class<?> matcherType = Class.forName("com.leo.erp.common.support.ClientIpResolver$TrustedProxyMatcher");
+        Constructor<?> constructor = matcherType.getDeclaredConstructor(String.class);
+        constructor.setAccessible(true);
+        Object matcher = constructor.newInstance("10.0.0.0/8");
+        Method matches = matcherType.getDeclaredMethod("matches", String.class);
+        matches.setAccessible(true);
+
+        assertThat((Boolean) matches.invoke(matcher, new Object[]{null})).isFalse();
     }
 }

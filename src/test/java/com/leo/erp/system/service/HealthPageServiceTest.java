@@ -78,4 +78,73 @@ class HealthPageServiceTest {
         assertThat(result).isEqualTo("<html>detailed</html>");
         verify(dbStatusService).getStatus();
     }
+
+    @Test
+    void renderShouldReturnPublicPageWhenAuthenticatedPrincipalHasNoPermission() {
+        SecurityPrincipal principal = SecurityPrincipal.authenticated(2L, "auditor", List.of());
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken(principal, "", principal.getAuthorities())
+        );
+
+        DatabaseStatusService dbStatusService = mock(DatabaseStatusService.class);
+        PermissionService permissionService = mock(PermissionService.class);
+        when(permissionService.can(2L, "database", "read")).thenReturn(false);
+        HealthPageRenderer renderer = mock(HealthPageRenderer.class);
+        when(renderer.getJvmStatus()).thenReturn(new HealthPageRenderer.JvmStatus(
+                "17.0.1", "OpenJDK", "1 天", 50_000_000L, 200_000_000L, 30_000_000L, 20, 4
+        ));
+        when(renderer.renderPublic(anyString(), any())).thenReturn("<html>public</html>");
+
+        HealthPageService service = new HealthPageService(dbStatusService, permissionService, renderer);
+
+        String result = service.render();
+
+        assertThat(result).isEqualTo("<html>public</html>");
+        verify(permissionService).can(2L, "database", "read");
+        verifyNoInteractions(dbStatusService);
+    }
+
+    @Test
+    void renderShouldReturnPublicPageWhenAuthenticatedPrincipalTypeIsUnsupported() {
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken("admin", "", List.of())
+        );
+
+        DatabaseStatusService dbStatusService = mock(DatabaseStatusService.class);
+        PermissionService permissionService = mock(PermissionService.class);
+        HealthPageRenderer renderer = mock(HealthPageRenderer.class);
+        when(renderer.getJvmStatus()).thenReturn(new HealthPageRenderer.JvmStatus(
+                "17.0.1", "OpenJDK", "1 天", 50_000_000L, 200_000_000L, 30_000_000L, 20, 4
+        ));
+        when(renderer.renderPublic(anyString(), any())).thenReturn("<html>public</html>");
+
+        HealthPageService service = new HealthPageService(dbStatusService, permissionService, renderer);
+
+        String result = service.render();
+
+        assertThat(result).isEqualTo("<html>public</html>");
+        verifyNoInteractions(permissionService, dbStatusService);
+    }
+
+    @Test
+    void renderShouldReturnPublicPageWhenAuthenticationIsNotAuthenticated() {
+        var authentication = mock(org.springframework.security.core.Authentication.class);
+        when(authentication.isAuthenticated()).thenReturn(false);
+        SecurityContextHolder.getContext().setAuthentication(authentication);
+
+        DatabaseStatusService dbStatusService = mock(DatabaseStatusService.class);
+        PermissionService permissionService = mock(PermissionService.class);
+        HealthPageRenderer renderer = mock(HealthPageRenderer.class);
+        when(renderer.getJvmStatus()).thenReturn(new HealthPageRenderer.JvmStatus(
+                "17.0.1", "OpenJDK", "1 天", 50_000_000L, 200_000_000L, 30_000_000L, 20, 4
+        ));
+        when(renderer.renderPublic(anyString(), any())).thenReturn("<html>public</html>");
+
+        HealthPageService service = new HealthPageService(dbStatusService, permissionService, renderer);
+
+        String result = service.render();
+
+        assertThat(result).isEqualTo("<html>public</html>");
+        verifyNoInteractions(permissionService, dbStatusService);
+    }
 }

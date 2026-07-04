@@ -116,4 +116,17 @@ class IoReportServiceTest {
 
         verify(repository).page(query, null, null, date, date);
     }
+
+    @Test
+    void shouldAcceptOpenEndedStartDateRange() {
+        PageQuery query = new PageQuery(0, 20, null, null);
+        LocalDate start = LocalDate.of(2026, 6, 1);
+        Page<IoReportResponse> expected = new PageImpl<>(List.of());
+        when(repository.page(any(), isNull(), isNull(), eq(start), isNull())).thenReturn(expected);
+
+        Page<IoReportResponse> result = service.page(query, null, null, start, null);
+
+        assertThat(result).isEqualTo(expected);
+        verify(repository).page(query, null, null, start, null);
+    }
 }

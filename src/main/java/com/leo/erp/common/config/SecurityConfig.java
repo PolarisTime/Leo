@@ -97,6 +97,7 @@ public class SecurityConfig {
         configuration.setAllowedOrigins(normalizeList(cors.getAllowedOrigins()));
         configuration.setAllowedMethods(normalizeList(cors.getAllowedMethods()));
         configuration.setAllowedHeaders(normalizeList(cors.getAllowedHeaders()));
+        configuration.setExposedHeaders(List.of(TraceIdFilter.TRACE_ID_HEADER));
         configuration.setAllowCredentials(cors.isAllowCredentials());
         configuration.setMaxAge(cors.getMaxAgeSeconds());
 

@@ -6,6 +6,7 @@ import com.leo.erp.statement.customer.domain.entity.CustomerStatement;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 
 import java.util.List;
@@ -53,5 +54,44 @@ class ResourceRecordAccessGuardTest {
         assertThat(DataScopeContext.current()).isNotNull();
         assertThat(DataScopeContext.current().resource()).isEqualTo("receipt");
         assertThat(DataScopeContext.current().scope()).isEqualTo(ResourcePermissionCatalog.SCOPE_ALL);
+    }
+
+    @Test
+    void shouldAssertCurrentUserCanAccessFromSecurityContext() {
+        PermissionService permissionService = mock(PermissionService.class);
+        when(permissionService.can(1L, "customer-statement", "read")).thenReturn(true);
+        when(permissionService.getUserDataScope(1L, "customer-statement", "read"))
+                .thenReturn(ResourcePermissionCatalog.SCOPE_SELF);
+        when(permissionService.getDataScopeOwnerUserIds(1L, ResourcePermissionCatalog.SCOPE_SELF)).thenReturn(Set.of(1L));
+        ResourceRecordAccessGuard guard = new ResourceRecordAccessGuard(
+                new ModulePermissionGuard(permissionService),
+                permissionService
+        );
+        SecurityPrincipal principal = SecurityPrincipal.authenticated(1L, "tester", List.of());
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken(principal, null, principal.getAuthorities())
+        );
+        CustomerStatement statement = new CustomerStatement();
+        statement.setCreatedBy(1L);
+
+        guard.assertCurrentUserCanAccess("customer-statement", "read", statement);
+
+        assertThat(DataScopeContext.current()).isNull();
+    }
+
+    @Test
+    void shouldRejectCurrentUserWhenPrincipalIsNotSecurityPrincipal() {
+        PermissionService permissionService = mock(PermissionService.class);
+        ResourceRecordAccessGuard guard = new ResourceRecordAccessGuard(
+                new ModulePermissionGuard(permissionService),
+                permissionService
+        );
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken("tester", null, List.of())
+        );
+
+        assertThatThrownBy(() -> guard.assertCurrentUserCanAccess("customer-statement", "read", new CustomerStatement()))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("未登录");
     }
 }

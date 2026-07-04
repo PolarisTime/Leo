@@ -37,7 +37,7 @@ public class PrintLayoutLodopRenderer {
         }
         try {
             JsonNode root = objectMapper.readTree(templateHtml);
-            return root != null && root.isObject() && root.path("table").isObject();
+            return root != null && root.path("table").isObject();
         } catch (IOException ignored) {
             return false;
         }
@@ -256,7 +256,7 @@ public class PrintLayoutLodopRenderer {
     }
 
     private String applyTemplate(String template, Map<String, String> variables) {
-        if (template == null || template.isEmpty()) {
+        if (template.isEmpty()) {
             return "";
         }
         Matcher matcher = TEMPLATE_PLACEHOLDER.matcher(template);

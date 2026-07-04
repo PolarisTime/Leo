@@ -108,7 +108,7 @@ public class PurchaseInboundSourceValidator {
                 Set.of(StatusConstants.AUDITED),
                 "第" + lineNo + "行来源采购订单未审核，不能作为来源单据"
         );
-        assertSourceOrderText(headerSupplierName, sourceOrder == null ? null : sourceOrder.getSupplierName(), lineNo, "供应商");
+        assertSourceOrderText(headerSupplierName, sourceOrder.getSupplierName(), lineNo, "供应商");
         assertSourceItemText(request.materialCode(), sourceItem.getMaterialCode(), lineNo, "物料编码");
         assertSourceItemText(request.brand(), sourceItem.getBrand(), lineNo, "品牌");
         assertSourceItemText(request.category(), sourceItem.getCategory(), lineNo, "品类");

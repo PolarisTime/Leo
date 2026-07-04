@@ -130,6 +130,29 @@ class SpecsTest {
     }
 
     @Test
+    void equalValueIfPresent_nullValue_returnsConjunction() {
+        when(cb.conjunction()).thenReturn(mock(Predicate.class));
+
+        Specification<Object> spec = Specs.equalValueIfPresent("status", null);
+        Predicate result = spec.toPredicate(root, query, cb);
+
+        verify(cb).conjunction();
+        assertThat(result).isNotNull();
+    }
+
+    @Test
+    void equalValueIfPresent_withValue_returnsEqualPredicate() {
+        var path = mock(jakarta.persistence.criteria.Path.class);
+        when(root.get("status")).thenReturn(path);
+        when(cb.equal(path, 1)).thenReturn(mock(Predicate.class));
+
+        Specification<Object> spec = Specs.equalValueIfPresent("status", 1);
+        spec.toPredicate(root, query, cb);
+
+        verify(cb).equal(path, 1);
+    }
+
+    @Test
     void betweenIfPresent_bothPresent_returnsAndPredicate() {
         var path = mock(jakarta.persistence.criteria.Path.class);
         when(root.get("amount")).thenReturn(path);

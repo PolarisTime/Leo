@@ -19,6 +19,7 @@ import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.multipart.support.MissingServletRequestPartException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.List;
 
@@ -122,6 +123,16 @@ class GlobalExceptionHandlerTest {
     }
 
     @Test
+    void shouldHandleMethodArgumentTypeMismatchWithBlankName() {
+        MethodArgumentTypeMismatchException ex = mock(MethodArgumentTypeMismatchException.class);
+        when(ex.getName()).thenReturn("   ");
+
+        ResponseEntity<ApiResponse<Void>> response = handler.handleMethodArgumentTypeMismatch(ex, request);
+
+        assertThat(response.getBody().message()).isEqualTo("参数: 参数格式错误");
+    }
+
+    @Test
     void shouldHandleMissingServletRequestParameter() {
         MissingServletRequestParameterException ex = new MissingServletRequestParameterException("page", "int");
 
@@ -153,6 +164,8 @@ class GlobalExceptionHandlerTest {
 
     @Test
     void shouldMapBusinessExceptionToCorrectHttpStatus() {
+        assertThat(handler.handleBusinessException(new BusinessException(ErrorCode.SUCCESS, ""), request)
+                .getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(handler.handleBusinessException(new BusinessException(ErrorCode.UNAUTHORIZED, ""), request)
                 .getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
         assertThat(handler.handleBusinessException(new BusinessException(ErrorCode.FORBIDDEN, ""), request)
@@ -169,6 +182,18 @@ class GlobalExceptionHandlerTest {
                 .getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
         assertThat(handler.handleBusinessException(new BusinessException(ErrorCode.BUSINESS_ERROR, ""), request)
                 .getStatusCode()).isEqualTo(HttpStatus.UNPROCESSABLE_ENTITY);
+    }
+
+    @Test
+    void shouldResolveNullErrorCodeToUnprocessableEntity() {
+        HttpStatus status = ReflectionTestUtils.invokeMethod(handler, "resolveStatus", (Object) null);
+
+        assertThat(status).isEqualTo(HttpStatus.UNPROCESSABLE_ENTITY);
+    }
+
+    @Test
+    void shouldLogClientExceptionWithoutRequest() {
+        ReflectionTestUtils.invokeMethod(handler, "logClientException", null, null, "业务错误");
     }
 
     @Test
@@ -194,6 +219,15 @@ class GlobalExceptionHandlerTest {
     @Test
     void shouldHandleUnauthorizedWithNullMessage() {
         BadCredentialsException ex = new BadCredentialsException(null);
+
+        ResponseEntity<ApiResponse<Void>> response = handler.handleUnauthorized(ex, request);
+
+        assertThat(response.getBody().message()).isEqualTo("认证失败");
+    }
+
+    @Test
+    void shouldHandleUnauthorizedWithBlankMessage() {
+        BadCredentialsException ex = new BadCredentialsException("   ");
 
         ResponseEntity<ApiResponse<Void>> response = handler.handleUnauthorized(ex, request);
 

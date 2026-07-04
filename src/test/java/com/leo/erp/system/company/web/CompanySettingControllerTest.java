@@ -4,6 +4,7 @@ import com.leo.erp.common.api.ApiResponse;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.api.PageResponse;
 import com.leo.erp.system.company.service.CompanySettingService;
+import com.leo.erp.system.company.web.dto.CompanySettingOptionResponse;
 import com.leo.erp.system.company.web.dto.CompanySettingRequest;
 import com.leo.erp.system.company.web.dto.CompanySettingResponse;
 import org.junit.jupiter.api.Test;
@@ -46,6 +47,18 @@ class CompanySettingControllerTest {
 
         assertThat(response.code()).isEqualTo(0);
         assertThat(response.data()).isEqualTo(setting);
+    }
+
+    @Test
+    void optionsReturnsActiveCompanySettings() {
+        var option = new CompanySettingOptionResponse(1L, "Test Company");
+        when(companySettingService.listActiveOptions()).thenReturn(List.of(option));
+
+        ApiResponse<List<CompanySettingOptionResponse>> response = controller.options();
+
+        assertThat(response.code()).isEqualTo(0);
+        assertThat(response.data()).containsExactly(option);
+        verify(companySettingService).listActiveOptions();
     }
 
     @Test

@@ -3,6 +3,7 @@ package com.leo.erp.common.support;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.web.OptionResponse;
 import org.junit.jupiter.api.Test;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.Arrays;
 import java.time.Duration;
@@ -107,6 +108,16 @@ class WarehouseSelectionSupportTest {
     }
 
     @Test
+    void evictCacheShouldDeleteAfterCommitWhenRedisPresent() {
+        RedisJsonCacheSupport cache = mock(RedisJsonCacheSupport.class);
+        WarehouseSelectionSupport support = new WarehouseSelectionSupport(repository(List.of()), cache);
+
+        support.evictCache();
+
+        verify(cache).deleteAfterCommit("leo:warehouse:all");
+    }
+
+    @Test
     void listActiveOptionsShouldReturnOptions() {
         WarehouseSelectionSupport support = new WarehouseSelectionSupport(repository(List.of("一号库", "二号库")));
 
@@ -153,6 +164,37 @@ class WarehouseSelectionSupportTest {
     }
 
     @Test
+    void listActiveOptionsShouldUseCachedNamesWithoutRefreshWhenCacheHit() {
+        RedisJsonCacheSupport cache = mock(RedisJsonCacheSupport.class);
+        WarehouseCatalog catalog = mock(WarehouseCatalog.class);
+        when(cache.getOrLoad(anyString(), any(Duration.class), any(com.fasterxml.jackson.core.type.TypeReference.class), any(Supplier.class)))
+                .thenReturn(Arrays.asList(" 一号库 ", "", null));
+        WarehouseSelectionSupport support = new WarehouseSelectionSupport(catalog, cache);
+
+        List<OptionResponse> options = support.listActiveOptions();
+
+        assertThat(options).singleElement().satisfies(option -> {
+            assertThat(option.label()).isEqualTo("一号库");
+            assertThat(option.value()).isEqualTo("一号库");
+        });
+        verify(catalog, never()).listActiveWarehouseNames();
+        verify(cache, never()).write(anyString(), any(), any(Duration.class));
+    }
+
+    @Test
+    void listActiveOptionsShouldReturnEmptyWhenCacheAndCatalogAreEmpty() {
+        RedisJsonCacheSupport cache = mock(RedisJsonCacheSupport.class);
+        when(cache.getOrLoad(anyString(), any(Duration.class), any(com.fasterxml.jackson.core.type.TypeReference.class), any(Supplier.class)))
+                .thenReturn(List.of());
+        WarehouseSelectionSupport support = new WarehouseSelectionSupport(repository(List.of()), cache);
+
+        List<OptionResponse> options = support.listActiveOptions();
+
+        assertThat(options).isEmpty();
+        verify(cache, never()).write(anyString(), any(), any(Duration.class));
+    }
+
+    @Test
     void shouldRefreshWarehouseCacheDuringHealthCheck_whenCachedSizeDiffersFromCatalog() {
         RedisJsonCacheSupport cache = mock(RedisJsonCacheSupport.class);
         WarehouseSelectionSupport support = new WarehouseSelectionSupport(repository(List.of("一号库")), cache);
@@ -195,6 +237,49 @@ class WarehouseSelectionSupportTest {
         assertThat(result.refreshed()).isTrue();
         verify(cache).delete("leo:warehouse:all");
         verify(cache, never()).write(anyString(), any(), any(Duration.class));
+    }
+
+    @Test
+    void verifyAndRefreshCacheShouldReturnEmptyWhenCatalogIsNullAndNoRedis() {
+        WarehouseSelectionSupport support = new WarehouseSelectionSupport(null);
+
+        var result = support.verifyAndRefreshCache();
+
+        assertThat(result.cacheName()).isEqualTo("leo:warehouse:all");
+        assertThat(result.currentSize()).isZero();
+        assertThat(result.refreshedSize()).isZero();
+        assertThat(result.refreshed()).isFalse();
+    }
+
+    @Test
+    void verifyAndRefreshCacheShouldReturnEmptyWhenCatalogIsNullAndRedisHasNoValue() {
+        RedisJsonCacheSupport cache = mock(RedisJsonCacheSupport.class);
+        when(cache.read(anyString(), any(com.fasterxml.jackson.core.type.TypeReference.class)))
+                .thenReturn(Optional.empty());
+        WarehouseSelectionSupport support = new WarehouseSelectionSupport(null, cache);
+
+        var result = support.verifyAndRefreshCache();
+
+        assertThat(result.cacheName()).isEqualTo("leo:warehouse:all");
+        assertThat(result.currentSize()).isZero();
+        assertThat(result.refreshedSize()).isZero();
+        assertThat(result.refreshed()).isFalse();
+        verify(cache, never()).delete(anyString());
+        verify(cache, never()).write(anyString(), any(), any(Duration.class));
+    }
+
+    @Test
+    void writeActiveWarehouseNameCacheShouldNoOpWhenRedisMissing() {
+        WarehouseSelectionSupport support = new WarehouseSelectionSupport(repository(List.of()));
+
+        ReflectionTestUtils.invokeMethod(support, "writeActiveWarehouseNameCache", List.of("一号库"));
+    }
+
+    @Test
+    void cacheNameShouldReturnWarehouseCacheKey() {
+        WarehouseSelectionSupport support = new WarehouseSelectionSupport(repository(List.of()));
+
+        assertThat(support.cacheName()).isEqualTo("leo:warehouse:all");
     }
 
     @Test

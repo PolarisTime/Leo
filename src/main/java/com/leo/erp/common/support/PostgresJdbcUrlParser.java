@@ -23,10 +23,10 @@ public final class PostgresJdbcUrlParser {
             String host = uri.getHost();
             int port = uri.getPort() > 0 ? uri.getPort() : DEFAULT_PORT;
             String path = uri.getPath();
-            if (host == null || host.isBlank() || path == null || path.isBlank() || "/".equals(path)) {
+            if (host == null || path.isBlank() || "/".equals(path)) {
                 throw new BusinessException(ErrorCode.INTERNAL_ERROR, "PostgreSQL JDBC URL 配置错误");
             }
-            String database = path.startsWith("/") ? path.substring(1) : path;
+            String database = path.substring(1);
             if (database.isBlank()) {
                 throw new BusinessException(ErrorCode.INTERNAL_ERROR, "PostgreSQL JDBC URL 配置错误");
             }

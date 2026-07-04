@@ -14,12 +14,16 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.function.Supplier;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.startsWith;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 class UserAccountValidationServiceTest {
@@ -44,6 +48,17 @@ class UserAccountValidationServiceTest {
     }
 
     @Test
+    void normalizeLoginNameShouldThrowWhenBlank() {
+        UserAccountValidationService service = new UserAccountValidationService(
+                null, null, null, null
+        );
+
+        assertThatThrownBy(() -> service.normalizeLoginName(" "))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("登录账号不能为空");
+    }
+
+    @Test
     void ensureLoginNameAvailableShouldThrowWhenAlreadyExists() {
         UserAccountRepository repository = mock(UserAccountRepository.class);
         UserAccount existing = new UserAccount();
@@ -56,6 +71,125 @@ class UserAccountValidationServiceTest {
 
         assertThatThrownBy(() -> service.ensureLoginNameAvailable("admin", 2L))
                 .isInstanceOf(BusinessException.class);
+    }
+
+    @Test
+    void ensureLoginNameAvailableShouldAllowSameUserIdFromOwnerCacheAndRepository() {
+        UserAccountRepository repository = mock(UserAccountRepository.class);
+        RedisJsonCacheSupport cacheSupport = mock(RedisJsonCacheSupport.class);
+        UserAccount existing = new UserAccount();
+        existing.setId(10L);
+        when(cacheSupport.getOrLoad(startsWith("auth:user:login-name:owner:"), any(), eq(Long.class), any()))
+                .thenReturn(10L);
+        when(repository.findByLoginNameAndDeletedFlagFalse("admin")).thenReturn(Optional.of(existing));
+
+        UserAccountValidationService service = new UserAccountValidationService(
+                repository, null, cacheSupport, null
+        );
+
+        service.ensureLoginNameAvailable("admin", 10L);
+
+        verify(repository).findByLoginNameAndDeletedFlagFalse("admin");
+    }
+
+    @Test
+    void ensureLoginNameAvailableShouldThrowWhenSecondRepositoryCheckFindsDifferentUser() {
+        UserAccountRepository repository = mock(UserAccountRepository.class);
+        RedisJsonCacheSupport cacheSupport = mock(RedisJsonCacheSupport.class);
+        UserAccount existing = new UserAccount();
+        existing.setId(20L);
+        when(cacheSupport.getOrLoad(startsWith("auth:user:login-name:owner:"), any(), eq(Long.class), any()))
+                .thenReturn(0L);
+        when(repository.findByLoginNameAndDeletedFlagFalse("admin")).thenReturn(Optional.of(existing));
+
+        UserAccountValidationService service = new UserAccountValidationService(
+                repository, null, cacheSupport, null
+        );
+
+        assertThatThrownBy(() -> service.ensureLoginNameAvailable("admin", 10L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("登录账号已存在");
+        verify(repository).findByLoginNameAndDeletedFlagFalse("admin");
+    }
+
+    @Test
+    void resolveLoginNameAvailabilityShouldUseRedisOwnerCacheValue() {
+        UserAccountRepository repository = mock(UserAccountRepository.class);
+        RedisJsonCacheSupport cacheSupport = mock(RedisJsonCacheSupport.class);
+        when(cacheSupport.getOrLoad(startsWith("auth:user:login-name:owner:"), any(), eq(Long.class), any()))
+                .thenReturn(5L);
+
+        UserAccountValidationService service = new UserAccountValidationService(
+                repository, null, cacheSupport, null
+        );
+
+        LoginNameAvailabilityResponse response = service.resolveLoginNameAvailability("admin", 7L);
+
+        assertThat(response.available()).isFalse();
+        assertThat(response.message()).isEqualTo("登录账号已存在");
+        verifyNoInteractions(repository);
+    }
+
+    @Test
+    void resolveLoginNameAvailabilityShouldReturnAvailableWhenRedisOwnerCacheReturnsNull() {
+        UserAccountRepository repository = mock(UserAccountRepository.class);
+        RedisJsonCacheSupport cacheSupport = mock(RedisJsonCacheSupport.class);
+        when(cacheSupport.getOrLoad(startsWith("auth:user:login-name:owner:"), any(), eq(Long.class), any()))
+                .thenReturn(null);
+
+        UserAccountValidationService service = new UserAccountValidationService(
+                repository, null, cacheSupport, null
+        );
+
+        LoginNameAvailabilityResponse response = service.resolveLoginNameAvailability("admin", 7L);
+
+        assertThat(response.available()).isTrue();
+        assertThat(response.message()).isNull();
+        verifyNoInteractions(repository);
+    }
+
+    @Test
+    void loadLoginNameOwnerIdShouldLoadRepositoryResultThroughRedisWhenCacheMisses() {
+        UserAccountRepository repository = mock(UserAccountRepository.class);
+        RedisJsonCacheSupport cacheSupport = mock(RedisJsonCacheSupport.class);
+        UserAccount existing = new UserAccount();
+        existing.setId(12L);
+        when(repository.findByLoginNameAndDeletedFlagFalse("cached")).thenReturn(Optional.of(existing));
+        when(cacheSupport.getOrLoad(startsWith("auth:user:login-name:owner:"), any(), eq(Long.class), any()))
+                .thenAnswer(invocation -> invocation.<Supplier<Long>>getArgument(3).get());
+
+        UserAccountValidationService service = new UserAccountValidationService(
+                repository, null, cacheSupport, null
+        );
+
+        Long ownerId = service.loadLoginNameOwnerId("cached");
+
+        assertThat(ownerId).isEqualTo(12L);
+        verify(cacheSupport).getOrLoad(
+                eq("auth:user:login-name:owner:cached"),
+                any(),
+                eq(Long.class),
+                any()
+        );
+        verify(repository).findByLoginNameAndDeletedFlagFalse("cached");
+    }
+
+    @Test
+    void loadLoginNameOwnerIdShouldCacheNotFoundMarkerWhenRepositoryIsEmpty() {
+        UserAccountRepository repository = mock(UserAccountRepository.class);
+        RedisJsonCacheSupport cacheSupport = mock(RedisJsonCacheSupport.class);
+        when(repository.findByLoginNameAndDeletedFlagFalse("missing")).thenReturn(Optional.empty());
+        when(cacheSupport.getOrLoad(startsWith("auth:user:login-name:owner:"), any(), eq(Long.class), any()))
+                .thenAnswer(invocation -> invocation.<Supplier<Long>>getArgument(3).get());
+
+        UserAccountValidationService service = new UserAccountValidationService(
+                repository, null, cacheSupport, null
+        );
+
+        Long ownerId = service.loadLoginNameOwnerId("missing");
+
+        assertThat(ownerId).isZero();
+        verify(repository).findByLoginNameAndDeletedFlagFalse("missing");
     }
 
     @Test
@@ -130,6 +264,43 @@ class UserAccountValidationServiceTest {
     }
 
     @Test
+    void applyDepartmentShouldThrowWhenDepartmentIdIsNull() {
+        DepartmentRepository departmentRepository = mock(DepartmentRepository.class);
+        UserAccountValidationService service = new UserAccountValidationService(
+                null, departmentRepository, null, null
+        );
+
+        assertThatThrownBy(() -> service.applyDepartment(new UserAccount(), null))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("请选择所属部门");
+        verifyNoInteractions(departmentRepository);
+    }
+
+    @Test
+    void applyDepartmentShouldThrowWhenRepositoryIsMissing() {
+        UserAccountValidationService service = new UserAccountValidationService(
+                null, null, null, null
+        );
+
+        assertThatThrownBy(() -> service.applyDepartment(new UserAccount(), 10L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("部门不存在");
+    }
+
+    @Test
+    void applyDepartmentShouldThrowWhenDepartmentNotFound() {
+        DepartmentRepository departmentRepository = mock(DepartmentRepository.class);
+        when(departmentRepository.findByIdAndDeletedFlagFalse(10L)).thenReturn(Optional.empty());
+        UserAccountValidationService service = new UserAccountValidationService(
+                null, departmentRepository, null, null
+        );
+
+        assertThatThrownBy(() -> service.applyDepartment(new UserAccount(), 10L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("部门不存在");
+    }
+
+    @Test
     void resolveInitialPasswordShouldReturnProvidedPassword() {
         UserAccountValidationService service = new UserAccountValidationService(
                 null, null, null, null
@@ -166,6 +337,44 @@ class UserAccountValidationServiceTest {
     }
 
     @Test
+    void resolveEffectiveDataScopeShouldNormalizeAllAliasToAllData() {
+        UserAccountValidationService service = new UserAccountValidationService(
+                null, null, null, null
+        );
+
+        RoleSetting role = new RoleSetting();
+        role.setDataScope("全部");
+
+        assertThat(service.resolveEffectiveDataScope(List.of(role))).isEqualTo("全部数据");
+    }
+
+    @Test
+    void resolveEffectiveDataScopeShouldUseSelfForBlankDataScope() {
+        UserAccountValidationService service = new UserAccountValidationService(
+                null, null, null, null
+        );
+
+        RoleSetting role = new RoleSetting();
+        role.setDataScope(" ");
+
+        assertThat(service.resolveEffectiveDataScope(List.of(role))).isEqualTo("本人");
+    }
+
+    @Test
+    void resolveEffectiveDataScopeShouldThrowForInvalidScope() {
+        UserAccountValidationService service = new UserAccountValidationService(
+                null, null, null, null
+        );
+
+        RoleSetting role = new RoleSetting();
+        role.setDataScope("跨组织");
+
+        assertThatThrownBy(() -> service.resolveEffectiveDataScope(List.of(role)))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("数据范围不合法");
+    }
+
+    @Test
     void shouldRequireTotpSetupForNewUserShouldDelegate() {
         SystemSwitchService switchService = mock(SystemSwitchService.class);
         when(switchService.shouldForceUserTotpOnFirstLogin()).thenReturn(true);
@@ -175,6 +384,27 @@ class UserAccountValidationServiceTest {
         );
 
         assertThat(service.shouldRequireTotpSetupForNewUser()).isTrue();
+    }
+
+    @Test
+    void shouldRequireTotpSetupForNewUserShouldReturnFalseWhenSwitchServiceIsMissing() {
+        UserAccountValidationService service = new UserAccountValidationService(
+                null, null, null, null
+        );
+
+        assertThat(service.shouldRequireTotpSetupForNewUser()).isFalse();
+    }
+
+    @Test
+    void shouldRequireTotpSetupForNewUserShouldReturnFalseWhenSwitchIsDisabled() {
+        SystemSwitchService switchService = mock(SystemSwitchService.class);
+        when(switchService.shouldForceUserTotpOnFirstLogin()).thenReturn(false);
+
+        UserAccountValidationService service = new UserAccountValidationService(
+                null, null, null, switchService
+        );
+
+        assertThat(service.shouldRequireTotpSetupForNewUser()).isFalse();
     }
 
     @Test

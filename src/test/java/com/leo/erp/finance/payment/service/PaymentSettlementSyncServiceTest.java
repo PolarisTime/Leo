@@ -12,6 +12,7 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 class PaymentSettlementSyncServiceTest {
@@ -50,6 +51,18 @@ class PaymentSettlementSyncServiceTest {
         assertThat(captor.getAllValues())
                 .extracting(event -> event.statementId() + ":" + event.businessType())
                 .containsExactly("11:供应商", "12:供应商", "21:物流商");
+    }
+
+    @Test
+    void shouldSkipInvalidStatementLinks() {
+        ApplicationEventPublisher eventPublisher = mock(ApplicationEventPublisher.class);
+        PaymentSettlementSyncService service = new PaymentSettlementSyncService(eventPublisher);
+        Payment payment = payment(null, allocation(21L));
+
+        service.captureOriginalAllocationState(payment("供应商", allocation(null)));
+        service.syncLinkedStatements(payment);
+
+        verify(eventPublisher, never()).publishEvent(org.mockito.ArgumentMatchers.any());
     }
 
     private static Payment payment(String businessType, PaymentAllocation... allocations) {

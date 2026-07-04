@@ -102,6 +102,19 @@ class WarehouseServiceTest {
     }
 
     @Test
+    void shouldAllowChangedWarehouseCodeWhenUniqueDuringValidateUpdate() {
+        WarehouseRepository repository = mock(WarehouseRepository.class);
+        when(repository.existsByWarehouseCodeAndDeletedFlagFalse("WH002")).thenReturn(false);
+        var service = new WarehouseService(repository, new SnowflakeIdGenerator(1), null, null);
+        Warehouse entity = createWarehouse(1L, "WH001");
+        WarehouseRequest request = new WarehouseRequest("WH002", "二号库", "室内", null, null, null, "正常", null);
+
+        service.validateUpdate(entity, request);
+
+        verify(repository).existsByWarehouseCodeAndDeletedFlagFalse("WH002");
+    }
+
+    @Test
     void shouldReturnDetail_whenEntityExists() {
         var repository = (WarehouseRepository) Proxy.newProxyInstance(
                 WarehouseRepository.class.getClassLoader(),
@@ -285,6 +298,29 @@ class WarehouseServiceTest {
         service.delete(1L);
 
         verify(referenceGuard).assertNoReferences(eq("该仓库"), any(List.class));
+        verify(warehouseSelectionSupport).evictCache();
+    }
+
+    @Test
+    void shouldDeleteWithoutReferenceCheckWhenReferenceGuardMissing() {
+        var repository = (WarehouseRepository) Proxy.newProxyInstance(
+                WarehouseRepository.class.getClassLoader(),
+                new Class[]{WarehouseRepository.class},
+                (proxy, method, args) -> switch (method.getName()) {
+                    case "findByIdAndDeletedFlagFalse" -> Optional.of(createWarehouse(1L, "WH001"));
+                    case "findById" -> Optional.of(createWarehouse(1L, "WH001"));
+                    case "save" -> args[0];
+                    case "toString" -> "WarehouseRepositoryStub";
+                    case "hashCode" -> System.identityHashCode(proxy);
+                    case "equals" -> proxy == args[0];
+                    default -> throw new UnsupportedOperationException(method.getName());
+                }
+        );
+        var warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
+        var service = new WarehouseService(repository, new SnowflakeIdGenerator(1), null, warehouseSelectionSupport);
+
+        service.delete(1L);
+
         verify(warehouseSelectionSupport).evictCache();
     }
 

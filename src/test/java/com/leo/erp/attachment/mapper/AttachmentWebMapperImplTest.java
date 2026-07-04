@@ -1,15 +1,21 @@
 package com.leo.erp.attachment.mapper;
 
 import com.leo.erp.attachment.service.AttachmentView;
+import com.leo.erp.attachment.service.AttachmentService;
 import com.leo.erp.attachment.web.dto.AttachmentBindingResponse;
+import com.leo.erp.attachment.web.dto.AttachmentDirectUploadPrepareResponse;
 import com.leo.erp.attachment.web.dto.AttachmentResponse;
 import com.leo.erp.attachment.web.dto.AttachmentUploadResponse;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 
+import java.net.URI;
+import java.time.Instant;
 import java.time.LocalDateTime;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -43,6 +49,65 @@ class AttachmentWebMapperImplTest {
     }
 
     @Test
+    void shouldReturnNullWhenUploadResponseSourceIsNull() {
+        assertThat(mapper.toUploadResponse(null)).isNull();
+    }
+
+    @Test
+    void shouldMapToDirectUploadPrepareResponseWithCopiedHeaders() {
+        Map<String, String> headers = new LinkedHashMap<>();
+        headers.put("Content-Type", "application/pdf");
+        headers.put("x-amz-checksum-sha256", "checksum");
+        AttachmentService.DirectUploadPrepareResult result = new AttachmentService.DirectUploadPrepareResult(
+                11L,
+                "token",
+                "attachments/2026/07/11/test.pdf",
+                "s3:test-bucket/attachments/2026/07/11/test.pdf",
+                URI.create("https://upload.example.com/test.pdf"),
+                "PUT",
+                headers,
+                Instant.parse("2026-07-01T08:00:00Z")
+        );
+
+        AttachmentDirectUploadPrepareResponse response = mapper.toDirectUploadPrepareResponse(result);
+
+        assertThat(response.attachmentId()).isEqualTo(11L);
+        assertThat(response.token()).isEqualTo("token");
+        assertThat(response.objectKey()).isEqualTo("attachments/2026/07/11/test.pdf");
+        assertThat(response.storagePath()).isEqualTo("s3:test-bucket/attachments/2026/07/11/test.pdf");
+        assertThat(response.uploadUrl()).isEqualTo(URI.create("https://upload.example.com/test.pdf"));
+        assertThat(response.method()).isEqualTo("PUT");
+        assertThat(response.headers()).containsExactlyEntriesOf(headers);
+        assertThat(response.expiresAt()).isEqualTo(Instant.parse("2026-07-01T08:00:00Z"));
+
+        headers.put("late-change", "ignored");
+        assertThat(response.headers()).doesNotContainKey("late-change");
+    }
+
+    @Test
+    void shouldMapDirectUploadPrepareResponseWithNullHeaders() {
+        AttachmentService.DirectUploadPrepareResult result = new AttachmentService.DirectUploadPrepareResult(
+                12L,
+                "token",
+                "object-key",
+                "s3:test-bucket/object-key",
+                URI.create("https://upload.example.com/object-key"),
+                "PUT",
+                null,
+                Instant.parse("2026-07-01T09:00:00Z")
+        );
+
+        AttachmentDirectUploadPrepareResponse response = mapper.toDirectUploadPrepareResponse(result);
+
+        assertThat(response.headers()).isNull();
+    }
+
+    @Test
+    void shouldReturnNullWhenDirectUploadPrepareSourceIsNull() {
+        assertThat(mapper.toDirectUploadPrepareResponse(null)).isNull();
+    }
+
+    @Test
     void shouldMapToResponse() {
         AttachmentView view = createView();
 
@@ -63,6 +128,11 @@ class AttachmentWebMapperImplTest {
         assertThat(response.downloadUrl()).isEqualTo("/api/attachment/1/download");
         assertThat(response.storageType()).isEqualTo("s3");
         assertThat(response.storageLabel()).isEqualTo("S3存储");
+    }
+
+    @Test
+    void shouldReturnNullWhenResponseSourceIsNull() {
+        assertThat(mapper.toResponse(null)).isNull();
     }
 
     @Test
@@ -93,6 +163,11 @@ class AttachmentWebMapperImplTest {
     }
 
     @Test
+    void shouldReturnNullWhenResponseListSourceIsNull() {
+        assertThat(mapper.toResponses(null)).isNull();
+    }
+
+    @Test
     void shouldMapToBindingResponse() {
         AttachmentView view = createView();
 
@@ -112,6 +187,41 @@ class AttachmentWebMapperImplTest {
         assertThat(response.moduleKey()).isEqualTo("sales-order");
         assertThat(response.recordId()).isEqualTo(1L);
         assertThat(response.attachments()).isEmpty();
+    }
+
+    @Test
+    void shouldReturnNullWhenBindingInputsAreAllNull() {
+        assertThat(mapper.toBindingResponse(null, null, null)).isNull();
+    }
+
+    @Test
+    void shouldMapBindingResponseWhenOnlyRecordIdIsPresent() {
+        AttachmentBindingResponse response = mapper.toBindingResponse(null, 9L, null);
+
+        assertThat(response.moduleKey()).isNull();
+        assertThat(response.recordId()).isEqualTo(9L);
+        assertThat(response.attachments()).isNull();
+    }
+
+    @Test
+    void shouldMapBindingResponseWhenOnlyViewsArePresent() {
+        AttachmentView view = createView();
+
+        AttachmentBindingResponse response = mapper.toBindingResponse(null, null, List.of(view));
+
+        assertThat(response.moduleKey()).isNull();
+        assertThat(response.recordId()).isNull();
+        assertThat(response.attachments()).hasSize(1);
+        assertThat(response.attachments().getFirst().id()).isEqualTo(1L);
+    }
+
+    @Test
+    void shouldMapBindingResponseWithNullAttachmentsWhenOnlyViewsIsNull() {
+        AttachmentBindingResponse response = mapper.toBindingResponse("sales-order", 1L, null);
+
+        assertThat(response.moduleKey()).isEqualTo("sales-order");
+        assertThat(response.recordId()).isEqualTo(1L);
+        assertThat(response.attachments()).isNull();
     }
 
     @Test

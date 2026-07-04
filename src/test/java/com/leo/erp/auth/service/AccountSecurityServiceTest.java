@@ -8,6 +8,7 @@ import com.leo.erp.auth.web.dto.CurrentUserSecurityResponse;
 import com.leo.erp.auth.web.dto.TotpSetupResponse;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.security.jwt.AuthenticatedUserCacheService;
+import com.leo.erp.system.dashboard.service.DashboardSummaryService;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Proxy;
@@ -17,6 +18,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class AccountSecurityServiceTest {
@@ -96,6 +98,32 @@ class AccountSecurityServiceTest {
         assertThat(savedAccount.get().getTotpEnabled()).isFalse();
         assertThat(response.totpEnabled()).isFalse();
         assertThat(response.forceTotpSetup()).isFalse();
+    }
+
+    @Test
+    void shouldDisable2faWhenSystemSwitchAllowsAndEvictDashboard() {
+        UserAccount account = user(1L, "leo", "encoded:Old@123");
+        account.setTotpSecret("encrypted-secret");
+        account.setTotpEnabled(Boolean.TRUE);
+        AtomicReference<UserAccount> savedAccount = new AtomicReference<>();
+        DashboardSummaryService dashboardSummaryService = mock(DashboardSummaryService.class);
+        com.leo.erp.system.norule.service.SystemSwitchService switchService =
+                mock(com.leo.erp.system.norule.service.SystemSwitchService.class);
+        when(switchService.shouldForbidDisable2fa()).thenReturn(false);
+        AccountSecurityService service = new AccountSecurityService(
+                repository(account, savedAccount),
+                new StubPasswordEncoder(),
+                null,
+                authenticatedUserCacheService(),
+                dashboardSummaryService,
+                switchService
+        );
+
+        CurrentUserSecurityResponse response = service.disable2fa(1L);
+
+        assertThat(savedAccount.get().getTotpEnabled()).isFalse();
+        assertThat(response.forbidDisable2fa()).isFalse();
+        verify(dashboardSummaryService).evictCache(1L);
     }
 
     @Test

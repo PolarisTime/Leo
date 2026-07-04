@@ -12,6 +12,7 @@ import com.leo.erp.auth.web.dto.TotpEnableRequest;
 import com.leo.erp.auth.web.dto.TotpSetupResponse;
 import com.leo.erp.auth.web.dto.UserAccountCreateResponse;
 import com.leo.erp.auth.web.dto.UserAccountAdminResponse;
+import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.security.jwt.AuthenticatedUserCacheService;
 import com.leo.erp.system.department.domain.entity.Department;
@@ -19,8 +20,15 @@ import com.leo.erp.system.department.repository.DepartmentRepository;
 import com.leo.erp.system.norule.service.SystemSwitchService;
 import com.leo.erp.system.role.domain.entity.RoleSetting;
 import com.leo.erp.system.role.repository.RoleSettingRepository;
+import jakarta.persistence.criteria.CriteriaBuilder;
+import jakarta.persistence.criteria.CriteriaQuery;
+import jakarta.persistence.criteria.Root;
 import org.junit.jupiter.api.Test;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 
+import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -30,6 +38,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.mock;
 
 class UserAccountAdminServiceTest {
 
@@ -511,6 +520,96 @@ class UserAccountAdminServiceTest {
     }
 
     @Test
+    void shouldResolveRolesByNameWhenRoleIdsAreProvidedAsEmptyList() {
+        UserAccount existing = new UserAccount();
+        existing.setId(42L);
+        existing.setLoginName("tester");
+        existing.setUserName("测试用户");
+        existing.setDepartmentId(10L);
+        existing.setStatus(UserStatus.NORMAL);
+
+        RoleSetting role = role("PURCHASER", "采购专员", 11L);
+        StubUserRoleBindingService roleBindingService = new StubUserRoleBindingService(List.of(role));
+        AtomicReference<UserAccount> savedUser = new AtomicReference<>();
+        UserAccountAdminService service = createService(
+                repositoryForUpdate(existing, savedUser),
+                new FixedIdGenerator(100L),
+                new StubPasswordEncoder(),
+                mapper(),
+                null,
+                roleBindingService,
+                new StubPermissionService("采购权限"),
+                authProperties(),
+                null,
+                authenticatedUserCacheService(),
+                null,
+                null,
+                departmentRepository()
+        );
+
+        service.update(42L, new com.leo.erp.auth.web.dto.UserAccountAdminRequest(
+                "tester",
+                null,
+                "测试用户",
+                "",
+                10L,
+                List.of("采购专员"), List.of(),
+                "本部门",
+                "",
+                "正常",
+                ""
+        ));
+
+        assertThat(savedUser.get()).isNotNull();
+        assertThat(roleBindingService.replaceCalled()).isTrue();
+        assertThat(roleBindingService.replacedRoles()).containsExactly(role);
+    }
+
+    @Test
+    void shouldAllowUpdatingEntityWithoutIdWhenRolePayloadIsOmitted() {
+        UserAccount existing = new UserAccount();
+        existing.setId(null);
+        existing.setLoginName("legacy");
+        existing.setUserName("旧用户");
+        existing.setDepartmentId(10L);
+        existing.setStatus(UserStatus.NORMAL);
+
+        RoleSetting role = role("PURCHASER", "采购专员", 11L);
+        AtomicReference<UserAccount> savedUser = new AtomicReference<>();
+        UserAccountAdminService service = createService(
+                repositoryForUpdate(existing, savedUser),
+                new FixedIdGenerator(100L),
+                new StubPasswordEncoder(),
+                mapper(),
+                null,
+                new StubUserRoleBindingService(List.of(role)),
+                new StubPermissionService("采购权限"),
+                authProperties(),
+                null,
+                authenticatedUserCacheService(),
+                null,
+                null,
+                departmentRepository()
+        );
+
+        UserAccountAdminResponse response = service.update(42L, new com.leo.erp.auth.web.dto.UserAccountAdminRequest(
+                "legacy",
+                null,
+                "旧用户",
+                "",
+                10L,
+                null, null,
+                "本部门",
+                "",
+                "正常",
+                ""
+        ));
+
+        assertThat(response.id()).isNull();
+        assertThat(savedUser.get()).isNotNull();
+    }
+
+    @Test
     void shouldRejectRemovingLastActiveAdminRole() {
         UserAccount existing = adminUser();
         StubUserRoleBindingService roleBindingService = new StubUserRoleBindingService(List.of(adminRole())) {
@@ -618,6 +717,71 @@ class UserAccountAdminServiceTest {
 
         assertThat(savedUser.get()).isNotNull();
         assertThat(savedUser.get().isDeletedFlag()).isTrue();
+    }
+
+    @Test
+    void shouldAllowDeletingUserWhenResolvedRolesAreEmptyOrHaveNullCode() {
+        AtomicReference<UserAccount> emptyRoleSavedUser = new AtomicReference<>();
+        UserAccountAdminService emptyRoleService = createService(
+                repositoryForDelete(user("empty-role", 50L), emptyRoleSavedUser),
+                new FixedIdGenerator(100L),
+                new StubPasswordEncoder(),
+                mapper(),
+                null,
+                new StubUserRoleBindingService(List.of()),
+                new StubPermissionService(""),
+                authProperties(),
+                null,
+                authenticatedUserCacheService(),
+                null,
+                null,
+                null
+        );
+        AtomicReference<UserAccount> nullCodeSavedUser = new AtomicReference<>();
+        UserAccountAdminService nullCodeService = createService(
+                repositoryForDelete(user("null-code", 51L), nullCodeSavedUser),
+                new FixedIdGenerator(100L),
+                new StubPasswordEncoder(),
+                mapper(),
+                null,
+                new StubUserRoleBindingService(List.of(role(null, "无编码角色", 11L))),
+                new StubPermissionService(""),
+                authProperties(),
+                null,
+                authenticatedUserCacheService(),
+                null,
+                null,
+                null
+        );
+
+        emptyRoleService.delete(50L);
+        nullCodeService.delete(51L);
+
+        assertThat(emptyRoleSavedUser.get().isDeletedFlag()).isTrue();
+        assertThat(nullCodeSavedUser.get().isDeletedFlag()).isTrue();
+    }
+
+    @Test
+    void shouldTreatNullRoleAsNonAdminRole() throws Exception {
+        UserAccountAdminService service = createService(
+                repositoryForNotFound(),
+                new FixedIdGenerator(100L),
+                new StubPasswordEncoder(),
+                mapper(),
+                null,
+                new StubUserRoleBindingService(List.of()),
+                new StubPermissionService(""),
+                authProperties(),
+                null,
+                authenticatedUserCacheService(),
+                null,
+                null,
+                null
+        );
+        Method method = UserAccountAdminService.class.getDeclaredMethod("isAdminRole", RoleSetting.class);
+        method.setAccessible(true);
+
+        assertThat(method.invoke(service, new Object[]{null})).isEqualTo(false);
     }
 
     @Test
@@ -855,6 +1019,44 @@ class UserAccountAdminServiceTest {
     }
 
     @Test
+    void shouldAllowMultipleRolesWhenConflictRepositoryReturnsEmpty() {
+        RoleSetting roleA = role("PURCHASER", "采购专员", 11L);
+        RoleSetting roleB = role("SALESMAN", "销售专员", 12L);
+        AtomicReference<UserAccount> savedUser = new AtomicReference<>();
+        UserAccountAdminService service = createServiceWithConflictRepo(
+                repositoryForWrite(savedUser),
+                new FixedIdGenerator(100L),
+                new StubPasswordEncoder(),
+                mapper(),
+                null,
+                new StubUserRoleBindingService(List.of(roleA, roleB)),
+                new StubPermissionService(""),
+                authProperties(),
+                null,
+                authenticatedUserCacheService(),
+                null,
+                null,
+                departmentRepository(),
+                roleConflictRepository(List.of())
+        );
+
+        service.create(new com.leo.erp.auth.web.dto.UserAccountAdminRequest(
+                "tester",
+                "Init@123",
+                "测试用户",
+                "13800000000",
+                10L,
+                List.of("采购专员", "销售专员"), null,
+                "全部数据",
+                "",
+                "正常",
+                ""
+        ));
+
+        assertThat(savedUser.get()).isNotNull();
+    }
+
+    @Test
     void shouldResolveRolesByIdsWhenProvided() {
         RoleSetting role = new RoleSetting();
         role.setId(11L);
@@ -936,6 +1138,318 @@ class UserAccountAdminServiceTest {
                 .hasMessageContaining("登录账号已存在");
     }
 
+    @Test
+    void shouldHandleLoginNameConflictWhenConstraintMessageOnlyContainsLoginName() {
+        RoleSetting role = role("PURCHASER", "采购专员", 11L);
+        UserAccountAdminService service = createService(
+                repositoryWithDataIntegrityViolation("unique_login_name_index"),
+                new FixedIdGenerator(100L),
+                new StubPasswordEncoder(),
+                mapper(),
+                null,
+                new StubUserRoleBindingService(List.of(role)),
+                new StubPermissionService(""),
+                authProperties(),
+                null,
+                authenticatedUserCacheService(),
+                null,
+                null,
+                departmentRepository()
+        );
+
+        assertThatThrownBy(() -> service.create(new com.leo.erp.auth.web.dto.UserAccountAdminRequest(
+                "tester",
+                "Init@123",
+                "测试用户",
+                "13800000000",
+                10L,
+                List.of("采购专员"), null,
+                "全部数据",
+                "",
+                "正常",
+                ""
+        )))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("登录账号已存在");
+    }
+
+    @Test
+    void shouldPageUsersWithoutStatusFilter() {
+        UserAccount entity = new UserAccount();
+        entity.setId(7L);
+        entity.setLoginName("tester");
+        entity.setUserName("测试用户");
+        entity.setDepartmentName("总部");
+        entity.setStatus(UserStatus.NORMAL);
+        RoleSetting role = role("PURCHASER", "采购专员", 11L);
+        UserAccountAdminService service = createService(
+                repositoryForPage(entity),
+                new FixedIdGenerator(100L),
+                new StubPasswordEncoder(),
+                mapper(),
+                null,
+                new StubUserRoleBindingService(List.of(role)),
+                new StubPermissionService("采购权限"),
+                authProperties(),
+                null,
+                authenticatedUserCacheService(),
+                null,
+                null,
+                null
+        );
+
+        var page = service.page(PageQuery.of(0, 20, null, null), "test", null);
+
+        assertThat(page.getContent()).hasSize(1);
+        assertThat(page.getContent().getFirst().roleNames()).containsExactly("采购专员");
+        assertThat(page.getContent().getFirst().permissionSummary()).isEqualTo("采购权限");
+    }
+
+    @Test
+    void shouldPageUsersWithBlankStatusFilterAsUnfiltered() {
+        UserAccount entity = new UserAccount();
+        entity.setId(9L);
+        entity.setLoginName("blank-status");
+        entity.setUserName("空白状态");
+        entity.setStatus(UserStatus.NORMAL);
+        UserAccountAdminService service = createService(
+                repositoryForPage(entity),
+                new FixedIdGenerator(100L),
+                new StubPasswordEncoder(),
+                mapper(),
+                null,
+                new StubUserRoleBindingService(List.of()),
+                new StubPermissionService(""),
+                authProperties(),
+                null,
+                authenticatedUserCacheService(),
+                null,
+                null,
+                null
+        );
+
+        var page = service.page(PageQuery.of(0, 20, null, null), "", " ");
+
+        assertThat(page.getContent()).hasSize(1);
+        assertThat(page.getContent().getFirst().loginName()).isEqualTo("blank-status");
+    }
+
+    @Test
+    void shouldPageUsersWithStatusFilter() {
+        UserAccount entity = new UserAccount();
+        entity.setId(8L);
+        entity.setLoginName("disabled");
+        entity.setUserName("禁用用户");
+        entity.setStatus(UserStatus.DISABLED);
+        UserAccountAdminService service = createService(
+                repositoryForPage(entity),
+                new FixedIdGenerator(100L),
+                new StubPasswordEncoder(),
+                mapper(),
+                null,
+                new StubUserRoleBindingService(List.of()),
+                new StubPermissionService(""),
+                authProperties(),
+                null,
+                authenticatedUserCacheService(),
+                null,
+                null,
+                null
+        );
+
+        var page = service.page(PageQuery.of(0, 20, null, null), "", "禁用");
+
+        assertThat(page.getContent()).hasSize(1);
+        assertThat(page.getContent().getFirst().status()).isEqualTo("禁用");
+    }
+
+    @Test
+    void shouldPropagateDataIntegrityViolationWhenItIsNotLoginNameConflict() {
+        RoleSetting role = role("PURCHASER", "采购专员", 11L);
+        UserAccountAdminService service = createService(
+                repositoryWithDataIntegrityViolation("sys_user_mobile_key"),
+                new FixedIdGenerator(100L),
+                new StubPasswordEncoder(),
+                mapper(),
+                null,
+                new StubUserRoleBindingService(List.of(role)),
+                new StubPermissionService(""),
+                authProperties(),
+                null,
+                authenticatedUserCacheService(),
+                null,
+                null,
+                departmentRepository()
+        );
+
+        assertThatThrownBy(() -> service.create(new com.leo.erp.auth.web.dto.UserAccountAdminRequest(
+                "tester",
+                "Init@123",
+                "测试用户",
+                "13800000000",
+                10L,
+                List.of("采购专员"), null,
+                "全部数据",
+                "",
+                "正常",
+                ""
+        )))
+                .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
+    }
+
+    @Test
+    void shouldPropagateDataIntegrityViolationWhenMessageIsNull() {
+        RoleSetting role = role("PURCHASER", "采购专员", 11L);
+        UserAccountAdminService service = createService(
+                repositoryWithDataIntegrityViolationException(new org.springframework.dao.DataIntegrityViolationException(null)),
+                new FixedIdGenerator(100L),
+                new StubPasswordEncoder(),
+                mapper(),
+                null,
+                new StubUserRoleBindingService(List.of(role)),
+                new StubPermissionService(""),
+                authProperties(),
+                null,
+                authenticatedUserCacheService(),
+                null,
+                null,
+                departmentRepository()
+        );
+
+        assertThatThrownBy(() -> service.create(new com.leo.erp.auth.web.dto.UserAccountAdminRequest(
+                "tester",
+                "Init@123",
+                "测试用户",
+                "13800000000",
+                10L,
+                List.of("采购专员"), null,
+                "全部数据",
+                "",
+                "正常",
+                ""
+        )))
+                .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
+    }
+
+    @Test
+    void shouldIgnoreNonMatchingRoleConflictRecords() {
+        RoleSetting roleA = role("PURCHASER", "采购专员", 11L);
+        RoleSetting roleB = role("SALESMAN", "销售专员", 12L);
+        com.leo.erp.system.role.domain.entity.RoleConflict unrelated =
+                new com.leo.erp.system.role.domain.entity.RoleConflict();
+        unrelated.setRoleId(99L);
+        unrelated.setConflictRoleId(12L);
+        AtomicReference<UserAccount> savedUser = new AtomicReference<>();
+        UserAccountAdminService service = createServiceWithConflictRepo(
+                repositoryForWrite(savedUser),
+                new FixedIdGenerator(100L),
+                new StubPasswordEncoder(),
+                mapper(),
+                null,
+                new StubUserRoleBindingService(List.of(roleA, roleB)),
+                new StubPermissionService(""),
+                authProperties(),
+                null,
+                authenticatedUserCacheService(),
+                null,
+                null,
+                departmentRepository(),
+                roleConflictRepository(List.of(unrelated))
+        );
+
+        service.create(new com.leo.erp.auth.web.dto.UserAccountAdminRequest(
+                "tester",
+                "Init@123",
+                "测试用户",
+                "13800000000",
+                10L,
+                List.of("采购专员", "销售专员"), null,
+                "全部数据",
+                "",
+                "正常",
+                ""
+        ));
+
+        assertThat(savedUser.get()).isNotNull();
+    }
+
+    @Test
+    void shouldAllowUpdatingAdminWhenAnotherActiveAdminExists() {
+        UserAccount existing = adminUser();
+        StubUserRoleBindingService roleBindingService = new StubUserRoleBindingService(List.of(adminRole()));
+        AtomicReference<UserAccount> savedUser = new AtomicReference<>();
+        UserAccountAdminService service = createServiceWithAdminGuard(
+                repositoryForUpdate(existing, savedUser),
+                mapper(),
+                roleBindingService,
+                new StubPermissionService(""),
+                departmentRepository(),
+                roleSettingRepository(adminRole()),
+                userRoleRepositoryWithOtherActiveAdmins(2)
+        );
+
+        service.update(42L, new com.leo.erp.auth.web.dto.UserAccountAdminRequest(
+                "admin",
+                null,
+                "系统管理员",
+                "",
+                10L,
+                null, List.of(11L),
+                "全部数据",
+                "",
+                "禁用",
+                ""
+        ));
+
+        assertThat(savedUser.get()).isNotNull();
+    }
+
+    @Test
+    void shouldAllowDeletingAdminWhenAdminRoleSettingIsMissing() {
+        UserAccount existing = adminUser();
+        AtomicReference<UserAccount> savedUser = new AtomicReference<>();
+        UserAccountAdminService service = createServiceWithAdminGuard(
+                repositoryForDelete(existing, savedUser),
+                mapper(),
+                new StubUserRoleBindingService(List.of(adminRole())),
+                new StubPermissionService(""),
+                null,
+                roleSettingRepository(null),
+                userRoleRepositoryWithOtherActiveAdmins(0)
+        );
+
+        service.delete(42L);
+
+        assertThat(savedUser.get()).isNotNull();
+        assertThat(savedUser.get().isDeletedFlag()).isTrue();
+    }
+
+    @Test
+    void shouldAllowDeletingAdminWhenAdminGuardRepositoriesAreNotConfigured() {
+        UserAccount existing = adminUser();
+        AtomicReference<UserAccount> savedUser = new AtomicReference<>();
+        UserAccountAdminService service = createService(
+                repositoryForDelete(existing, savedUser),
+                new FixedIdGenerator(100L),
+                new StubPasswordEncoder(),
+                mapper(),
+                null,
+                new StubUserRoleBindingService(List.of(adminRole())),
+                new StubPermissionService(""),
+                authProperties(),
+                null,
+                authenticatedUserCacheService(),
+                null,
+                null,
+                null
+        );
+
+        service.delete(42L);
+
+        assertThat(savedUser.get()).isNotNull();
+        assertThat(savedUser.get().isDeletedFlag()).isTrue();
+    }
+
     private UserAccountRepository repositoryForUpdate(UserAccount existing, AtomicReference<UserAccount> savedUser) {
         return (UserAccountRepository) Proxy.newProxyInstance(
                 UserAccountRepository.class.getClassLoader(),
@@ -954,6 +1468,32 @@ class UserAccountAdminServiceTest {
                     default -> throw new UnsupportedOperationException(method.getName());
                 }
         );
+    }
+
+    private UserAccountRepository repositoryForPage(UserAccount entity) {
+        return (UserAccountRepository) Proxy.newProxyInstance(
+                UserAccountRepository.class.getClassLoader(),
+                new Class[]{UserAccountRepository.class},
+                (proxy, method, args) -> switch (method.getName()) {
+                    case "findAll" -> {
+                        executeUserAccountSpec(args[0]);
+                        yield new PageImpl<>(List.of(entity), Pageable.unpaged(), 1);
+                    }
+                    case "toString" -> "UserAccountRepositoryPageStub";
+                    case "hashCode" -> System.identityHashCode(proxy);
+                    case "equals" -> proxy == args[0];
+                    default -> throw new UnsupportedOperationException(method.getName());
+                }
+        );
+    }
+
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private void executeUserAccountSpec(Object specificationArg) {
+        Specification<UserAccount> specification = (Specification<UserAccount>) specificationArg;
+        Root<UserAccount> root = (Root<UserAccount>) mock(Root.class);
+        CriteriaQuery<?> query = mock(CriteriaQuery.class);
+        CriteriaBuilder criteriaBuilder = mock(CriteriaBuilder.class);
+        specification.toPredicate(root, query, criteriaBuilder);
     }
 
     private UserAccountRepository repositoryForDelete(UserAccount existing, AtomicReference<UserAccount> savedUser) {
@@ -1009,6 +1549,13 @@ class UserAccountAdminServiceTest {
     }
 
     private UserAccountRepository repositoryWithDataIntegrityViolation(String constraintMessage) {
+        return repositoryWithDataIntegrityViolationException(
+                new org.springframework.dao.DataIntegrityViolationException("Duplicate entry for key " + constraintMessage)
+        );
+    }
+
+    private UserAccountRepository repositoryWithDataIntegrityViolationException(
+            org.springframework.dao.DataIntegrityViolationException exception) {
         return (UserAccountRepository) Proxy.newProxyInstance(
                 UserAccountRepository.class.getClassLoader(),
                 new Class[]{UserAccountRepository.class},
@@ -1017,8 +1564,7 @@ class UserAccountAdminServiceTest {
                     case "findByLoginNameAndDeletedFlagFalse", "findByLoginName" -> Optional.empty();
                     case "existsByLoginNameAndDeletedFlagFalse", "existsByLoginName" -> false;
                     case "save" -> {
-                        throw new org.springframework.dao.DataIntegrityViolationException(
-                                "Duplicate entry for key " + constraintMessage);
+                        throw exception;
                     }
                     case "toString" -> "UserAccountRepositoryConflictStub";
                     case "hashCode" -> System.identityHashCode(proxy);
@@ -1189,11 +1735,25 @@ class UserAccountAdminServiceTest {
         return existing;
     }
 
+    private UserAccount user(String loginName, Long id) {
+        UserAccount user = new UserAccount();
+        user.setId(id);
+        user.setLoginName(loginName);
+        user.setUserName("测试用户");
+        user.setDepartmentId(10L);
+        user.setStatus(UserStatus.NORMAL);
+        return user;
+    }
+
     private RoleSetting adminRole() {
+        return role("ADMIN", "系统管理员", 11L);
+    }
+
+    private RoleSetting role(String roleCode, String roleName, Long id) {
         RoleSetting role = new RoleSetting();
-        role.setId(11L);
-        role.setRoleName("系统管理员");
-        role.setRoleCode("ADMIN");
+        role.setId(id);
+        role.setRoleName(roleName);
+        role.setRoleCode(roleCode);
         role.setStatus("正常");
         return role;
     }
@@ -1203,7 +1763,7 @@ class UserAccountAdminServiceTest {
                 RoleSettingRepository.class.getClassLoader(),
                 new Class[]{RoleSettingRepository.class},
                 (proxy, method, args) -> switch (method.getName()) {
-                    case "findByRoleCodeAndDeletedFlagFalse" -> Optional.of(role);
+                    case "findByRoleCodeAndDeletedFlagFalse" -> Optional.ofNullable(role);
                     case "toString" -> "RoleSettingRepositoryStub";
                     case "hashCode" -> System.identityHashCode(proxy);
                     case "equals" -> proxy == args[0];
@@ -1281,6 +1841,11 @@ class UserAccountAdminServiceTest {
             this.replacedRoles = roles;
         }
 
+        @Override
+        public void replaceUserRolesWithinCurrentPrincipalBounds(Long userId, java.util.Collection<RoleSetting> roles) {
+            replaceUserRoles(userId, roles);
+        }
+
         boolean replaceCalled() {
             return replaceCalled;
         }
@@ -1309,6 +1874,10 @@ class UserAccountAdminServiceTest {
 
         @Override
         public void evictDepartmentUserCache(Long departmentId) {
+        }
+
+        @Override
+        public void clearDepartmentUserCache() {
         }
 
         @Override

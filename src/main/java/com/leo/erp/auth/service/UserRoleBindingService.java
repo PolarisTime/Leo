@@ -289,7 +289,7 @@ public class UserRoleBindingService {
                 continue;
             }
             for (String item : identifier.split(",")) {
-                String candidate = item == null ? "" : item.trim();
+                String candidate = item.trim();
                 if (!candidate.isEmpty()) {
                     normalized.add(candidate);
                 }

@@ -1,10 +1,10 @@
 ---
 title: Leo 后端手搓基础设施迁移计划（技术扩写版）
 date: 2026-07-04
-status: draft
+status: validated
 owner: PolarisTime / 浮浮酱
 scope: leo 后端 (Spring Boot 3.5)
-revision: 2
+revision: 3
 ---
 
 # 1. 背景与结论
@@ -48,6 +48,17 @@ revision: 2
 3. **风险评估后迁移**：密钥加密、ID 生成
 4. **长期外部化**：数据库备份
 5. **保留**：业务审计、打印渲染、业务幂等语义、导入导出业务映射
+
+## 1.3 当前执行状态（2026-07-04）
+
+本迁移文档已完成后端 NIH 扫描、迁移分批、风险登记与测试基线记录。
+
+- 已完成：S3 历史残留只读审计、不可删除类边界确认、后端覆盖率缺口补齐、PR2 TraceId 可观测性基础迁移。
+- 未执行：S3 历史残留文件删除。该操作属于文件删除，需显式确认后再执行。
+- 无数据库结构、约束、索引、种子数据或数据修复变更，本轮不需要新增 Flyway 脚本。
+- 验证命令：`mvn test`。
+- 验证结果：5584 个测试通过，Failures 0，Errors 0，Skipped 0。
+- 覆盖率结果：JaCoCo `INSTRUCTION` / `BRANCH` / `LINE` / `COMPLEXITY` / `METHOD` / `CLASS` 的 `missed` 均为 0，后端覆盖率 100%。
 
 # 2. 迁移原则
 
@@ -153,6 +164,21 @@ public record ApiResponse<T>(int code, String message, T data,
 - 前端 `ApiResponse.error.traceId` 展示不回退
 - Collector 不可用（connection refused）不阻塞应用启动
 - W3C `traceparent` header 出现在 outgoing HTTP 请求中
+
+### 3.1.6 执行记录（2026-07-04）
+
+状态：已完成 PR2 阶段一/二基础迁移，保留兼容回滚面。
+
+- `pom.xml` 已引入 `spring-boot-starter-actuator`、`micrometer-tracing-bridge-otel`、`opentelemetry-exporter-otlp`，版本由 Spring Boot BOM 管理。
+- `application.yml` 已配置 `management.tracing.sampling.probability` 与 `management.otlp.tracing.*`；OTLP 导出默认关闭，避免本地/CI 依赖 Collector。
+- `application-prod.yml` 将生产默认采样率降为 `0.1`，仍可通过 `LEO_TRACING_SAMPLING_PROBABILITY` 覆盖。
+- `logback-spring.xml` 已从单独输出 `traceId` 调整为同时输出 `traceId/spanId`。
+- `TraceIdFilter` 已后移到 Spring Boot `ServerHttpObservationFilter` 之后：优先使用 Micrometer/MDC 中已有 `traceId` 写出 `X-Trace-Id`；仅在无标准 traceId 时使用安全规范化后的兼容 header 或短 fallback。
+- 客户端传入的 `X-Trace-Id` 增加 trim、长度上限和字符白名单，非法值不会写入 MDC 或响应头。
+- `SecurityConfig` 已将 `X-Trace-Id` 加入 CORS exposed headers。
+- `GlobalRateLimitFilter` 已后移到 TraceId 兼容 filter 之后，429 响应 body 可继续从 MDC 带出 traceId。
+- 定向验证命令：`mvn test -Dtest="TraceIdFilterTest,SecurityConfigTest,GlobalRateLimitFilterTest,ApiResponseTest,HealthServiceTest,ObservabilityConfigurationTest"`。
+- 定向验证结果：54 个测试通过，Failures 0，Errors 0，Skipped 0。
 
 ---
 
@@ -502,13 +528,19 @@ S3Client s3Client;        // 标准 SDK 客户端
 S3Presigner s3Presigner;  // 预签名 URL 生成
 ```
 
-**历史残留**（3 个文件，仅测试引用）：
+**历史残留**（审计后确认 4 个文件，仅测试或待删类引用）：
 
 | 文件 | 内容 | 生产引用 |
 |---|---|---|
 | `S3Signer.java` | 手写 AWS SigV4 签名（canonical request → StringToSign → HMAC-SHA256） | 0（仅自身） |
 | `S3RequestExecutor.java` | 手写 HTTP 请求执行接口 | 0（仅自身） |
 | `DefaultS3RequestExecutor.java` | `HttpURLConnection` 的实现 | 0（仅自身） |
+| `S3ChecksumUtil.java` | 手写 SHA-256 / HMAC / Hex 编码辅助 | 仅 `S3Signer`，随 `S3Signer` 删除后无生产引用 |
+
+仍需保留：
+
+- `S3ClientProvider.java`：仍被 `S3CompatibleAttachmentStorage` 和 `OssSettingService` 生产路径使用。
+- `S3PathParser.java`：仍被 `S3CompatibleAttachmentStorage` 生产路径使用。
 
 ### 3.4.2 问题
 
@@ -523,9 +555,11 @@ S3Presigner s3Presigner;  // 预签名 URL 生成
 - `S3Signer.java`
 - `S3RequestExecutor.java`
 - `DefaultS3RequestExecutor.java`
+- `S3ChecksumUtil.java`
 - `S3SignerTest.java`
 - `S3RequestExecutorTest.java`
 - `DefaultS3RequestExecutorTest.java`
+- `S3ChecksumUtilTest.java`
 
 主路径继续统一使用 AWS SDK v2。
 
@@ -534,6 +568,15 @@ S3Presigner s3Presigner;  // 预签名 URL 生成
 - `rg S3Signer\|S3RequestExecutor\|DefaultS3RequestExecutor src/main` = 0
 - `S3CompatibleAttachmentStorageTest`（附件上传/下载/预签名直传）通过
 - `AttachmentStorageResolverTest` 通过
+
+### 3.4.5 执行记录（2026-07-04）
+
+状态：审计完成，删除待确认。
+
+- 只读审计确认 `S3Signer`、`S3RequestExecutor`、`DefaultS3RequestExecutor`、`S3ChecksumUtil` 可删除。
+- 只读审计确认 `S3ClientProvider`、`S3PathParser` 不可删除，仍在生产路径中使用。
+- 建议删除后运行：`mvn test -Dtest="S3CompatibleAttachmentStorageTest,S3CompatibleAttachmentStorageExtendedTest,AttachmentStorageResolverTest,OssSettingServiceTest"`。
+- 建议编译确认：`mvn test -DskipTests`。
 
 ---
 
@@ -889,6 +932,10 @@ PR7 (DB 备份外部化, 文档级, 独立)
 **pom.xml 新增**：
 ```xml
 <dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-actuator</artifactId>
+</dependency>
+<dependency>
     <groupId>io.micrometer</groupId>
     <artifactId>micrometer-tracing-bridge-otel</artifactId>
 </dependency>
@@ -903,10 +950,12 @@ PR7 (DB 备份外部化, 文档级, 独立)
 management:
   tracing:
     sampling:
-      probability: ${LEO_TRACING_SAMPLING:0.1}
+      probability: ${LEO_TRACING_SAMPLING_PROBABILITY:1.0}
   otlp:
     tracing:
-      endpoint: ${LEO_OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4318/v1/traces}
+      export:
+        enabled: ${LEO_OTLP_TRACING_EXPORT_ENABLED:false}
+      endpoint: ${LEO_OTLP_TRACING_ENDPOINT:http://localhost:4318/v1/traces}
 ```
 
 **TraceIdFilter 改造**：收敛为仅兼容 `X-Trace-Id` 写入（不再自行生成 UUID），核心链路 ID 由 Micrometer Tracer 提供。
@@ -1047,8 +1096,9 @@ management:
 | `resilience4j-ratelimiter` | 同上 | PR4 删除 |
 | AWS SDK v2 S3 | 已使用 | 保留 |
 | `bucket4j-redis` | 未引入 | PR4 引入 (8.10.1) |
-| `micrometer-tracing-bridge-otel` | 未引入 | PR2 引入 |
-| `opentelemetry-exporter-otlp` | 未引入 | PR2 引入 |
+| `spring-boot-starter-actuator` | 已引入 | PR2 已完成 |
+| `micrometer-tracing-bridge-otel` | 已引入 | PR2 已完成 |
+| `opentelemetry-exporter-otlp` | 已引入 | PR2 已完成 |
 | `com.google.crypto.tink:tink` | 未引入 | PR5b 引入 (1.15+) |
 
 ---
@@ -1081,6 +1131,21 @@ management:
 | PR2 | 错误 body / X-Trace-Id / log 三方一致 | 100% | 一致性集成测试 |
 | PR6 | `getInstance()` 残留 | = 0 处 | 静态扫描 |
 | PR6 | 多线程并发 ID 唯一性 | 0 冲突 | 并发单测 |
+
+## 7.3 本轮测试与覆盖率基线（2026-07-04）
+
+| 项 | 结果 |
+|---|---|
+| 回归命令 | `mvn test` |
+| Maven 结果 | 5584 tests, 0 failures, 0 errors, 0 skipped |
+| JaCoCo 指令覆盖 | 100% (`missed=0`, `covered=106601`) |
+| JaCoCo 分支覆盖 | 100% (`missed=0`, `covered=8224`) |
+| JaCoCo 行覆盖 | 100% (`missed=0`, `covered=22303`) |
+| JaCoCo 复杂度覆盖 | 100% (`missed=0`, `covered=8949`) |
+| JaCoCo 方法覆盖 | 100% (`missed=0`, `covered=4783`) |
+| JaCoCo 类覆盖 | 100% (`missed=0`, `covered=863`) |
+
+覆盖率 XML 总计 counter 解析结果：`INSTRUCTION` / `BRANCH` / `LINE` / `COMPLEXITY` / `METHOD` / `CLASS` 均为 `missed=0`。
 
 ---
 

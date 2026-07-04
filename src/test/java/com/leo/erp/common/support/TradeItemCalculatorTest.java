@@ -140,8 +140,18 @@ class TradeItemCalculatorTest {
     }
 
     @Test
+    void shouldReturnNullRepresentableWhenQuantityIsNull() {
+        assertThat(TradeItemCalculator.calculateRepresentableAveragePieceWeightTon(null, new BigDecimal("5.000"))).isNull();
+    }
+
+    @Test
     void shouldReturnNullRepresentableWhenWeightIsZero() {
         assertThat(TradeItemCalculator.calculateRepresentableAveragePieceWeightTon(10, BigDecimal.ZERO)).isNull();
+    }
+
+    @Test
+    void shouldReturnNullRepresentableWhenAverageCannotRecreateWeight() {
+        assertThat(TradeItemCalculator.calculateRepresentableAveragePieceWeightTon(3, new BigDecimal("1.00000000"))).isNull();
     }
 
     @Test

@@ -1341,6 +1341,177 @@ class PurchaseOrderServiceTest {
                 .isEqualTo(100L);
     }
 
+    @Test
+    void shouldValidateChangedOrderNoAgainstDuplicates() {
+        PurchaseOrderRepository repository = mock(PurchaseOrderRepository.class);
+        PurchaseOrderService service = service(
+                repository,
+                mock(SnowflakeIdGenerator.class),
+                mock(PurchaseOrderMapper.class),
+                mock(TradeItemMaterialSupport.class),
+                mock(WarehouseSelectionSupport.class),
+                mock(SupplierRepository.class),
+                mock(PurchaseInboundItemQueryService.class),
+                mock(ItemAllocationNativeRepository.class),
+                mock(PurchaseOrderItemPieceWeightService.class),
+                mock(WorkflowTransitionGuard.class),
+                mock(JdbcTemplate.class)
+        );
+        PurchaseOrder order = buildOrder();
+        PurchaseOrderRequest request = new PurchaseOrderRequest(
+                "PO-002",
+                "供应商A",
+                LocalDateTime.of(2026, 4, 26, 0, 0),
+                "李四",
+                1L,
+                "草稿",
+                null,
+                List.of()
+        );
+        when(repository.existsByOrderNoAndDeletedFlagFalse("PO-002")).thenReturn(false, true);
+
+        service.validateUpdate(order, request);
+        assertThatThrownBy(() -> service.validateUpdate(order, request))
+                .hasMessageContaining("采购订单号已存在");
+        verify(repository, times(2)).existsByOrderNoAndDeletedFlagFalse("PO-002");
+    }
+
+    @Test
+    void shouldResolveDeletedDetailForAdminAndReportMissingOrder() {
+        PurchaseOrderRepository repository = mock(PurchaseOrderRepository.class);
+        PurchaseOrderMapper mapper = mock(PurchaseOrderMapper.class);
+        SystemSwitchService systemSwitchService = mock(SystemSwitchService.class);
+        PurchaseOrderService service = service(
+                repository,
+                mock(SnowflakeIdGenerator.class),
+                mapper,
+                mock(TradeItemMaterialSupport.class),
+                mock(WarehouseSelectionSupport.class),
+                mock(SupplierRepository.class),
+                mock(PurchaseInboundItemQueryService.class),
+                mock(ItemAllocationNativeRepository.class),
+                mock(PurchaseOrderItemPieceWeightService.class),
+                mock(WorkflowTransitionGuard.class),
+                mock(JdbcTemplate.class)
+        );
+        PurchaseOrder deleted = buildOrder();
+        deleted.setDeletedFlag(true);
+        deleted.setStatus("已删除");
+
+        when(systemSwitchService.shouldAdminSeeDeletedRecords()).thenReturn(true);
+        when(repository.findById(1L)).thenReturn(Optional.of(deleted));
+        when(repository.findById(404L)).thenReturn(Optional.empty());
+        when(mapper.toResponse(deleted)).thenReturn(summaryResponse("已删除"));
+        ReflectionTestUtils.setField(service, "crudRuntimeSettings", systemSwitchService);
+        SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
+                "admin",
+                null,
+                List.of(new SimpleGrantedAuthority("ROLE_ADMIN"))
+        ));
+
+        PurchaseOrderResponse response = service.detail(1L);
+
+        assertThat(response.status()).isEqualTo("已删除");
+        assertThatThrownBy(() -> service.detail(404L))
+                .hasMessageContaining("采购订单不存在");
+        verify(repository).findById(1L);
+        verify(repository).findById(404L);
+        verify(repository, never()).findByIdAndDeletedFlagFalse(any());
+    }
+
+    @Test
+    void shouldPageImportCandidatesAcrossBatches() {
+        PurchaseOrderRepository repository = mock(PurchaseOrderRepository.class);
+        PurchaseOrderAvailabilityService availabilityService = mock(PurchaseOrderAvailabilityService.class);
+        PurchaseOrderService service = new PurchaseOrderService(
+                repository,
+                mock(SnowflakeIdGenerator.class),
+                availabilityService,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null
+        );
+        PurchaseOrder fullyImportedOrder = buildOrder();
+        fullyImportedOrder.setStatus("已审核");
+        PurchaseOrder importableOrder = buildOrder();
+        importableOrder.setId(2L);
+        importableOrder.setOrderNo("PO-002");
+        importableOrder.setStatus("已审核");
+
+        when(repository.findAll(any(Specification.class), any(Pageable.class)))
+                .thenReturn(
+                        new PageImpl<>(
+                                List.of(fullyImportedOrder),
+                                org.springframework.data.domain.PageRequest.of(0, 200),
+                                201
+                        ),
+                        new PageImpl<>(
+                                List.of(importableOrder),
+                                org.springframework.data.domain.PageRequest.of(1, 200),
+                                201
+                        )
+                );
+        Map<Long, Integer> importableQuantityMap = new java.util.HashMap<>();
+        importableQuantityMap.put(1L, 0);
+        importableQuantityMap.put(2L, 3);
+        when(availabilityService.buildImportableQuantityMap(
+                any(),
+                eq(PurchaseOrderAvailabilityService.ImportCandidateUsage.PURCHASE_INBOUND)
+        )).thenReturn(importableQuantityMap);
+
+        var page = service.importCandidates(
+                PageQuery.of(0, 20, null, null),
+                PageFilter.of("", null, null, null, null),
+                "purchase-inbound"
+        );
+
+        assertThat(page.getContent()).singleElement().satisfies(candidate -> {
+            assertThat(candidate.id()).isEqualTo(2L);
+            assertThat(candidate.importableQuantity()).isEqualTo(3);
+        });
+        verify(repository, times(2)).findAll(any(Specification.class), any(Pageable.class));
+    }
+
+    @Test
+    void shouldEnforceSettlementCompanyMutableRules() {
+        PurchaseOrderService service = service(
+                mock(PurchaseOrderRepository.class),
+                mock(SnowflakeIdGenerator.class),
+                mock(PurchaseOrderMapper.class),
+                mock(TradeItemMaterialSupport.class),
+                mock(WarehouseSelectionSupport.class),
+                mock(SupplierRepository.class),
+                mock(PurchaseInboundItemQueryService.class),
+                mock(ItemAllocationNativeRepository.class),
+                mock(PurchaseOrderItemPieceWeightService.class),
+                mock(WorkflowTransitionGuard.class),
+                mock(JdbcTemplate.class)
+        );
+        PurchaseOrder newOrder = buildOrder();
+        newOrder.setId(null);
+        newOrder.setSettlementCompanyId(1L);
+        newOrder.setStatus("已审核");
+        PurchaseOrder draftOrder = buildOrder();
+        draftOrder.setSettlementCompanyId(1L);
+        draftOrder.setStatus("草稿");
+        PurchaseOrder auditedOrder = buildOrder();
+        auditedOrder.setSettlementCompanyId(1L);
+        auditedOrder.setStatus("已审核");
+
+        assertThat((Object) ReflectionTestUtils.invokeMethod(service, "assertSettlementCompanyMutable", newOrder, 2L)).isNull();
+        assertThat((Object) ReflectionTestUtils.invokeMethod(service, "assertSettlementCompanyMutable", draftOrder, 2L)).isNull();
+        assertThat((Object) ReflectionTestUtils.invokeMethod(service, "assertSettlementCompanyMutable", auditedOrder, 1L)).isNull();
+        assertThatThrownBy(() -> ReflectionTestUtils.invokeMethod(
+                service,
+                "assertSettlementCompanyMutable",
+                auditedOrder,
+                2L
+        )).hasMessageContaining("已审核采购订单不允许修改采购结算主体");
+    }
+
     private ItemAllocationNativeRepository.AllocationProjection allocationProjection(Long sourceItemId, Long totalQuantity) {
         return new ItemAllocationNativeRepository.AllocationProjection() {
             @Override public Long getSourceItemId() { return sourceItemId; }

@@ -123,7 +123,7 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
                         order,
                         importableQuantityMap.getOrDefault(order.getId(), 0)
                 ))
-                .filter(candidate -> candidate.importableQuantity() != null && candidate.importableQuantity() > 0)
+                .filter(candidate -> candidate.importableQuantity() > 0)
                 .toList();
         int start = Math.min(query.page() * query.size(), candidates.size());
         int end = Math.min(start + query.size(), candidates.size());

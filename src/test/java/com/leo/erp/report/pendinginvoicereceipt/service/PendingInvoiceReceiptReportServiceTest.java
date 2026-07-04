@@ -6,6 +6,10 @@ import com.leo.erp.purchase.order.domain.entity.PurchaseOrder;
 import com.leo.erp.purchase.order.domain.entity.PurchaseOrderItem;
 import com.leo.erp.purchase.order.repository.PurchaseOrderRepository;
 import com.leo.erp.report.pendinginvoicereceipt.web.dto.PendingInvoiceReceiptReportResponse;
+import jakarta.persistence.criteria.CriteriaBuilder;
+import jakarta.persistence.criteria.CriteriaQuery;
+import jakarta.persistence.criteria.Predicate;
+import jakarta.persistence.criteria.Root;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -17,8 +21,10 @@ import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
@@ -26,6 +32,7 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -144,6 +151,29 @@ class PendingInvoiceReceiptReportServiceTest {
         );
 
         assertThat(page.getTotalElements()).isZero();
+    }
+
+    @Test
+    void pageKeepsItemWhenWeightFullyInvoicedButAmountStillPending() {
+        PurchaseOrder order = purchaseOrder(
+                purchaseOrderItem(302L, "2.000", "200.00")
+        );
+        when(purchaseOrderRepository.findAll(anySpecification(), any(Pageable.class))).thenReturn(new PageImpl<>(List.of(order)));
+        when(invoiceReceiptRepository.summarizeAllocatedBySourcePurchaseOrderItemIds(any(), isNull()))
+                .thenReturn(List.of(summary(302L, "2.000", "50.00")));
+
+        Page<PendingInvoiceReceiptReportResponse> page = service.page(
+                PageQuery.of(0, 20, null, null),
+                null,
+                null,
+                null,
+                null
+        );
+
+        assertThat(page.getTotalElements()).isEqualTo(1);
+        PendingInvoiceReceiptReportResponse row = page.getContent().getFirst();
+        assertThat(row.pendingInvoiceWeightTon()).isEqualByComparingTo(BigDecimal.ZERO);
+        assertThat(row.pendingInvoiceAmount()).isEqualByComparingTo("150.00");
     }
 
     @Test
@@ -400,6 +430,63 @@ class PendingInvoiceReceiptReportServiceTest {
     }
 
     @Test
+    void pageReturnsEmptyWhenKeywordDoesNotMatchNullSearchableFields() {
+        PurchaseOrderItem item = purchaseOrderItem(909L, "1.000", "100.00");
+        item.setMaterialCode(null);
+        item.setBrand(null);
+        item.setMaterial(null);
+        item.setCategory(null);
+        item.setSpec(null);
+        PurchaseOrder order = purchaseOrder(item);
+        order.setOrderNo(null);
+        order.setSupplierName(null);
+        when(purchaseOrderRepository.findAll(anySpecification(), any(Pageable.class))).thenReturn(new PageImpl<>(List.of(order)));
+        when(invoiceReceiptRepository.summarizeAllocatedBySourcePurchaseOrderItemIds(any(), isNull()))
+                .thenReturn(List.of());
+
+        Page<PendingInvoiceReceiptReportResponse> page = service.page(
+                PageQuery.of(0, 20, null, null),
+                "不存在的关键字",
+                null,
+                null,
+                null
+        );
+
+        assertThat(page.getTotalElements()).isZero();
+    }
+
+    @Test
+    void matchesKeywordAllowsInvoiceTitleOnlyMatch() {
+        PendingInvoiceReceiptReportResponse row = new PendingInvoiceReceiptReportResponse(
+                1L,
+                "PO-001",
+                "供应商A",
+                "专用发票抬头",
+                LocalDateTime.of(2026, 4, 26, 0, 0),
+                "M-001",
+                "品牌A",
+                "材质A",
+                "品类A",
+                "规格A",
+                "9m",
+                1,
+                "件",
+                new BigDecimal("1.000"),
+                BigDecimal.ZERO,
+                new BigDecimal("1.000"),
+                new BigDecimal("100.00"),
+                new BigDecimal("100.00"),
+                BigDecimal.ZERO,
+                new BigDecimal("100.00"),
+                "未收票"
+        );
+
+        Boolean matches = ReflectionTestUtils.invokeMethod(service, "matchesKeyword", row, "专用发票");
+
+        assertThat(matches).isTrue();
+    }
+
+    @Test
     void pageTreatsBlankKeywordAsNull() {
         PurchaseOrder order = purchaseOrder(
                 purchaseOrderItem(908L, "1.000", "100.00")
@@ -548,6 +635,121 @@ class PendingInvoiceReceiptReportServiceTest {
         assertThat(page.getContent()).hasSize(1);
     }
 
+    @Test
+    void pageFiltersNullItemIdsFromProgressQuery() {
+        PurchaseOrder order = purchaseOrder(
+                purchaseOrderItem(null, "1.000", "100.00"),
+                purchaseOrderItem(1300L, "2.000", "200.00")
+        );
+        when(purchaseOrderRepository.findAll(anySpecification(), any(Pageable.class))).thenReturn(new PageImpl<>(List.of(order)));
+        when(invoiceReceiptRepository.summarizeAllocatedBySourcePurchaseOrderItemIds(any(), isNull()))
+                .thenReturn(List.of());
+
+        Page<PendingInvoiceReceiptReportResponse> page = service.page(
+                PageQuery.of(0, 20, null, null),
+                null,
+                null,
+                null,
+                null
+        );
+
+        assertThat(page.getTotalElements()).isEqualTo(2);
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<Collection<Long>> sourceItemIds = ArgumentCaptor.forClass(Collection.class);
+        verify(invoiceReceiptRepository).summarizeAllocatedBySourcePurchaseOrderItemIds(sourceItemIds.capture(), isNull());
+        assertThat(sourceItemIds.getValue()).containsExactly(1300L);
+    }
+
+    @Test
+    void pageTreatsNullProgressTotalsAsZero() {
+        PurchaseOrder order = purchaseOrder(
+                purchaseOrderItem(1301L, "1.000", "100.00")
+        );
+        when(purchaseOrderRepository.findAll(anySpecification(), any(Pageable.class))).thenReturn(new PageImpl<>(List.of(order)));
+        when(invoiceReceiptRepository.summarizeAllocatedBySourcePurchaseOrderItemIds(any(), isNull()))
+                .thenReturn(List.of(summary(1301L, null, null)));
+
+        Page<PendingInvoiceReceiptReportResponse> page = service.page(
+                PageQuery.of(0, 20, null, null),
+                null,
+                null,
+                null,
+                null
+        );
+
+        assertThat(page.getTotalElements()).isEqualTo(1);
+        PendingInvoiceReceiptReportResponse row = page.getContent().getFirst();
+        assertThat(row.receivedInvoiceWeightTon()).isEqualByComparingTo(BigDecimal.ZERO);
+        assertThat(row.receivedInvoiceAmount()).isEqualByComparingTo(BigDecimal.ZERO);
+        assertThat(row.pendingInvoiceWeightTon()).isEqualByComparingTo("1.000");
+        assertThat(row.pendingInvoiceAmount()).isEqualByComparingTo("100.00");
+    }
+
+    @Test
+    void supplierNameSpecUsesConjunctionForMissingSupplierName() {
+        assertConjunction(supplierNameSpec(null));
+        assertConjunction(supplierNameSpec("   "));
+    }
+
+    @Test
+    void supplierNameSpecTrimsAndMatchesSupplierName() {
+        Root<PurchaseOrder> root = mockRoot();
+        CriteriaBuilder criteriaBuilder = mock(CriteriaBuilder.class);
+        CriteriaQuery<?> criteriaQuery = mock(CriteriaQuery.class);
+        var supplierNamePath = mock(jakarta.persistence.criteria.Path.class);
+        Predicate predicate = mock(Predicate.class);
+        when(root.get("supplierName")).thenReturn(supplierNamePath);
+        when(criteriaBuilder.equal(supplierNamePath, "供应商A")).thenReturn(predicate);
+
+        Predicate result = supplierNameSpec("  供应商A  ").toPredicate(root, criteriaQuery, criteriaBuilder);
+
+        assertThat(result).isSameAs(predicate);
+        verify(root).get("supplierName");
+        verify(criteriaBuilder).equal(supplierNamePath, "供应商A");
+    }
+
+    @Test
+    void dateSpecsUseConjunctionForMissingDates() {
+        assertConjunction(startDateSpec(null));
+        assertConjunction(endDateSpec(null));
+    }
+
+    @Test
+    void startDateSpecUsesGreaterThanOrEqualTo() {
+        Root<PurchaseOrder> root = mockRoot();
+        CriteriaBuilder criteriaBuilder = mock(CriteriaBuilder.class);
+        CriteriaQuery<?> criteriaQuery = mock(CriteriaQuery.class);
+        var orderDatePath = mock(jakarta.persistence.criteria.Path.class);
+        Predicate predicate = mock(Predicate.class);
+        LocalDate startDate = LocalDate.of(2026, 1, 1);
+        when(root.get("orderDate")).thenReturn(orderDatePath);
+        when(criteriaBuilder.greaterThanOrEqualTo(orderDatePath, startDate)).thenReturn(predicate);
+
+        Predicate result = startDateSpec(startDate).toPredicate(root, criteriaQuery, criteriaBuilder);
+
+        assertThat(result).isSameAs(predicate);
+        verify(root).get("orderDate");
+        verify(criteriaBuilder).greaterThanOrEqualTo(orderDatePath, startDate);
+    }
+
+    @Test
+    void endDateSpecUsesLessThanOrEqualTo() {
+        Root<PurchaseOrder> root = mockRoot();
+        CriteriaBuilder criteriaBuilder = mock(CriteriaBuilder.class);
+        CriteriaQuery<?> criteriaQuery = mock(CriteriaQuery.class);
+        var orderDatePath = mock(jakarta.persistence.criteria.Path.class);
+        Predicate predicate = mock(Predicate.class);
+        LocalDate endDate = LocalDate.of(2026, 6, 30);
+        when(root.get("orderDate")).thenReturn(orderDatePath);
+        when(criteriaBuilder.lessThanOrEqualTo(orderDatePath, endDate)).thenReturn(predicate);
+
+        Predicate result = endDateSpec(endDate).toPredicate(root, criteriaQuery, criteriaBuilder);
+
+        assertThat(result).isSameAs(predicate);
+        verify(root).get("orderDate");
+        verify(criteriaBuilder).lessThanOrEqualTo(orderDatePath, endDate);
+    }
+
     @SuppressWarnings("unchecked")
     private Specification<PurchaseOrder> anySpecification() {
         return any(Specification.class);
@@ -594,13 +796,57 @@ class PendingInvoiceReceiptReportServiceTest {
 
             @Override
             public BigDecimal getTotalWeightTon() {
-                return new BigDecimal(weightTon);
+                return weightTon == null ? null : new BigDecimal(weightTon);
             }
 
             @Override
             public BigDecimal getTotalAmount() {
-                return new BigDecimal(amount);
+                return amount == null ? null : new BigDecimal(amount);
             }
         };
+    }
+
+    private void assertConjunction(Specification<PurchaseOrder> spec) {
+        CriteriaBuilder criteriaBuilder = mock(CriteriaBuilder.class);
+        CriteriaQuery<?> criteriaQuery = mock(CriteriaQuery.class);
+        Predicate predicate = mock(Predicate.class);
+        when(criteriaBuilder.conjunction()).thenReturn(predicate);
+
+        Predicate result = spec.toPredicate(mockRoot(), criteriaQuery, criteriaBuilder);
+
+        assertThat(result).isSameAs(predicate);
+        verify(criteriaBuilder).conjunction();
+    }
+
+    @SuppressWarnings("unchecked")
+    private Root<PurchaseOrder> mockRoot() {
+        return mock(Root.class);
+    }
+
+    @SuppressWarnings("unchecked")
+    private Specification<PurchaseOrder> supplierNameSpec(String supplierName) {
+        return (Specification<PurchaseOrder>) ReflectionTestUtils.invokeMethod(
+                service,
+                "supplierNameSpec",
+                (Object) supplierName
+        );
+    }
+
+    @SuppressWarnings("unchecked")
+    private Specification<PurchaseOrder> startDateSpec(LocalDate startDate) {
+        return (Specification<PurchaseOrder>) ReflectionTestUtils.invokeMethod(
+                service,
+                "startDateSpec",
+                (Object) startDate
+        );
+    }
+
+    @SuppressWarnings("unchecked")
+    private Specification<PurchaseOrder> endDateSpec(LocalDate endDate) {
+        return (Specification<PurchaseOrder>) ReflectionTestUtils.invokeMethod(
+                service,
+                "endDateSpec",
+                (Object) endDate
+        );
     }
 }

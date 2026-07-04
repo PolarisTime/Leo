@@ -86,6 +86,25 @@ class ManagedEntityItemSupportTest {
     }
 
     @Test
+    void shouldIgnoreExistingItemsWithoutIdWhenIndexing() {
+        List<TestEntity> existing = new ArrayList<>(List.of(new TestEntity(null, "Draft")));
+        List<TestRequest> requests = List.of();
+
+        List<TestEntity> result = ManagedEntityItemSupport.syncById(
+                existing,
+                requests,
+                TestEntity::id,
+                TestRequest::id,
+                () -> new TestEntity(null, null),
+                () -> 100L,
+                (entity, id) -> entity.id = id
+        );
+
+        assertThat(result).isEmpty();
+        assertThat(existing).isEmpty();
+    }
+
+    @Test
     void shouldThrowOnDuplicateRequestId() {
         List<TestEntity> existing = new ArrayList<>(List.of(new TestEntity(1L, "Existing")));
         List<TestRequest> requests = List.of(

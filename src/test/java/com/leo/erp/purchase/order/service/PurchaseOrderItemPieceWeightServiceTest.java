@@ -16,6 +16,7 @@ import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -181,6 +182,103 @@ class PurchaseOrderItemPieceWeightServiceTest {
     }
 
     @Test
+    void shouldSkipInvalidItemsAfterFilteringValidIdsWhenRegenerating() {
+        PurchaseOrderItemPieceWeightRepository repository = mock(PurchaseOrderItemPieceWeightRepository.class);
+        PurchaseOrderItemPieceWeightService service = new PurchaseOrderItemPieceWeightService(repository, mock(JdbcTemplate.class));
+
+        PurchaseOrderItem nullIdItem = new PurchaseOrderItem();
+        nullIdItem.setId(null);
+        nullIdItem.setQuantity(5);
+
+        PurchaseOrderItem nullQuantityItem = new PurchaseOrderItem();
+        nullQuantityItem.setId(201L);
+        nullQuantityItem.setQuantity(null);
+
+        service.regenerateForPurchaseOrderItems(List.of(nullIdItem, nullQuantityItem));
+
+        verify(repository, org.mockito.Mockito.never()).saveAll(any());
+        verify(repository, org.mockito.Mockito.never()).deleteUnallocatedByPurchaseOrderItemIdIn(any());
+    }
+
+    @Test
+    void shouldSkipWhenAllPiecesAlreadyAllocatedDuringRegeneration() {
+        PurchaseOrderItemPieceWeightRepository repository = mock(PurchaseOrderItemPieceWeightRepository.class);
+        PurchaseOrderItemPieceWeightService service = new PurchaseOrderItemPieceWeightService(repository, mock(JdbcTemplate.class));
+
+        PurchaseOrderItem item = new PurchaseOrderItem();
+        item.setId(201L);
+        item.setQuantity(2);
+        item.setWeightTon(new BigDecimal("4.000"));
+
+        PurchaseOrderItemPieceWeight allocated1 = piece(201L, 1, "2.000");
+        allocated1.setSalesOrderItemId(301L);
+        PurchaseOrderItemPieceWeight allocated2 = piece(201L, 2, "2.000");
+        allocated2.setSalesOrderItemId(302L);
+        when(repository.findByPurchaseOrderItemIdOrderByPieceNoAsc(201L)).thenReturn(List.of(allocated1, allocated2));
+
+        service.regenerateForPurchaseOrderItems(List.of(item));
+
+        verify(repository, org.mockito.Mockito.never()).deleteUnallocatedByPurchaseOrderItemIdIn(any());
+        verify(repository, org.mockito.Mockito.never()).saveAll(any());
+    }
+
+    @Test
+    void shouldUseInboundActualWeightWhenRegeneratingPieces() {
+        PurchaseOrderItemPieceWeightRepository repository = mock(PurchaseOrderItemPieceWeightRepository.class);
+        JdbcTemplate jdbc = mock(JdbcTemplate.class);
+        PurchaseOrderItemPieceWeightService service = new PurchaseOrderItemPieceWeightService(repository, jdbc);
+
+        PurchaseOrderItem item = new PurchaseOrderItem();
+        item.setId(201L);
+        item.setQuantity(2);
+        item.setWeightTon(new BigDecimal("10.000"));
+
+        when(repository.findByPurchaseOrderItemIdOrderByPieceNoAsc(201L)).thenReturn(List.of());
+        when(jdbc.queryForList(any(String.class), eq(BigDecimal.class), eq(201L)))
+                .thenReturn(List.of(new BigDecimal("1.200"), new BigDecimal("1.800")));
+
+        service.regenerateForPurchaseOrderItems(List.of(item));
+
+        @SuppressWarnings({"rawtypes", "unchecked"})
+        ArgumentCaptor<Iterable<PurchaseOrderItemPieceWeight>> captor = ArgumentCaptor.forClass(Iterable.class);
+        verify(repository).saveAll(captor.capture());
+        assertThat(captor.getValue())
+                .extracting(PurchaseOrderItemPieceWeight::getWeightTon)
+                .containsExactly(
+                        new BigDecimal("1.50000000"),
+                        new BigDecimal("1.50000000")
+                );
+    }
+
+    @Test
+    void shouldClampNegativeUnallocatedWeightToZeroWhenRegenerating() {
+        PurchaseOrderItemPieceWeightRepository repository = mock(PurchaseOrderItemPieceWeightRepository.class);
+        PurchaseOrderItemPieceWeightService service = new PurchaseOrderItemPieceWeightService(repository, mock(JdbcTemplate.class));
+
+        PurchaseOrderItem item = new PurchaseOrderItem();
+        item.setId(201L);
+        item.setQuantity(3);
+        item.setWeightTon(new BigDecimal("3.000"));
+
+        PurchaseOrderItemPieceWeight allocated = piece(201L, 1, "5.000");
+        allocated.setSalesOrderItemId(301L);
+        PurchaseOrderItemPieceWeight unallocated = piece(201L, 2, "1.000");
+        when(repository.findByPurchaseOrderItemIdOrderByPieceNoAsc(201L)).thenReturn(List.of(allocated, unallocated));
+
+        service.regenerateForPurchaseOrderItems(List.of(item));
+
+        @SuppressWarnings({"rawtypes", "unchecked"})
+        ArgumentCaptor<Iterable<PurchaseOrderItemPieceWeight>> captor = ArgumentCaptor.forClass(Iterable.class);
+        verify(repository).saveAll(captor.capture());
+        assertThat(captor.getValue())
+                .extracting(PurchaseOrderItemPieceWeight::getPieceNo, PurchaseOrderItemPieceWeight::getWeightTon)
+                .containsExactly(
+                        org.assertj.core.groups.Tuple.tuple(2, new BigDecimal("0.00000000")),
+                        org.assertj.core.groups.Tuple.tuple(3, new BigDecimal("0.00000000"))
+                );
+    }
+
+    @Test
     void shouldReturnZeroWhenAllocatingWithNullSourceItem() {
         PurchaseOrderItemPieceWeightRepository repository = mock(PurchaseOrderItemPieceWeightRepository.class);
         PurchaseOrderItemPieceWeightService service = new PurchaseOrderItemPieceWeightService(repository, mock(JdbcTemplate.class));
@@ -199,6 +297,19 @@ class PurchaseOrderItemPieceWeightServiceTest {
         item.setId(null);
 
         BigDecimal result = service.allocateForSalesOrderItem(item, 5, 301L, 1);
+
+        assertThat(result).isEqualByComparingTo("0");
+    }
+
+    @Test
+    void shouldReturnZeroWhenAllocatingWithNullQuantity() {
+        PurchaseOrderItemPieceWeightRepository repository = mock(PurchaseOrderItemPieceWeightRepository.class);
+        PurchaseOrderItemPieceWeightService service = new PurchaseOrderItemPieceWeightService(repository, mock(JdbcTemplate.class));
+
+        PurchaseOrderItem item = new PurchaseOrderItem();
+        item.setId(201L);
+
+        BigDecimal result = service.allocateForSalesOrderItem(item, null, 301L, 1);
 
         assertThat(result).isEqualByComparingTo("0");
     }
@@ -318,6 +429,16 @@ class PurchaseOrderItemPieceWeightServiceTest {
     }
 
     @Test
+    void shouldDoNothingWhenReleasingWithOnlyNullIds() {
+        PurchaseOrderItemPieceWeightRepository repository = mock(PurchaseOrderItemPieceWeightRepository.class);
+        PurchaseOrderItemPieceWeightService service = new PurchaseOrderItemPieceWeightService(repository, mock(JdbcTemplate.class));
+
+        service.releaseSalesOrderItems(java.util.Arrays.asList(null, null));
+
+        verify(repository, org.mockito.Mockito.never()).releaseBySalesOrderItemIdIn(any());
+    }
+
+    @Test
     void shouldDelegateReleaseWhenValidIdsProvided() {
         PurchaseOrderItemPieceWeightRepository repository = mock(PurchaseOrderItemPieceWeightRepository.class);
         PurchaseOrderItemPieceWeightService service = new PurchaseOrderItemPieceWeightService(repository, mock(JdbcTemplate.class));
@@ -368,6 +489,60 @@ class PurchaseOrderItemPieceWeightServiceTest {
         assertThat(result).hasSize(2);
         assertThat(result.get(1L)).isEqualByComparingTo("4.074");
         assertThat(result.get(2L)).isEqualByComparingTo("6.110");
+    }
+
+    @Test
+    void shouldReturnWhenEnsuringGeneratedWithInvalidSourceItem() {
+        PurchaseOrderItemPieceWeightRepository repository = mock(PurchaseOrderItemPieceWeightRepository.class);
+        PurchaseOrderItemPieceWeightService service = new PurchaseOrderItemPieceWeightService(repository, mock(JdbcTemplate.class));
+
+        ReflectionTestUtils.invokeMethod(service, "ensureGenerated", (Object) null);
+
+        PurchaseOrderItem nullIdItem = new PurchaseOrderItem();
+        nullIdItem.setId(null);
+        ReflectionTestUtils.invokeMethod(service, "ensureGenerated", nullIdItem);
+
+        verify(repository, org.mockito.Mockito.never()).findByPurchaseOrderItemIdOrderByPieceNoAsc(any());
+        verify(repository, org.mockito.Mockito.never()).saveAll(any());
+    }
+
+    @Test
+    void shouldReturnWhenEnsuringGeneratedWithInvalidQuantity() {
+        PurchaseOrderItemPieceWeightRepository repository = mock(PurchaseOrderItemPieceWeightRepository.class);
+        PurchaseOrderItemPieceWeightService service = new PurchaseOrderItemPieceWeightService(repository, mock(JdbcTemplate.class));
+
+        PurchaseOrderItem nullQuantityItem = new PurchaseOrderItem();
+        nullQuantityItem.setId(201L);
+        nullQuantityItem.setQuantity(null);
+
+        PurchaseOrderItem zeroQuantityItem = new PurchaseOrderItem();
+        zeroQuantityItem.setId(202L);
+        zeroQuantityItem.setQuantity(0);
+
+        when(repository.findByPurchaseOrderItemIdOrderByPieceNoAsc(201L)).thenReturn(List.of());
+        when(repository.findByPurchaseOrderItemIdOrderByPieceNoAsc(202L)).thenReturn(List.of());
+
+        ReflectionTestUtils.invokeMethod(service, "ensureGenerated", nullQuantityItem);
+        ReflectionTestUtils.invokeMethod(service, "ensureGenerated", zeroQuantityItem);
+
+        verify(repository, org.mockito.Mockito.never()).saveAll(any());
+    }
+
+    @Test
+    void shouldReturnEmptyPiecesWhenBuildingWithNullPieceNos() {
+        PurchaseOrderItemPieceWeightRepository repository = mock(PurchaseOrderItemPieceWeightRepository.class);
+        PurchaseOrderItemPieceWeightService service = new PurchaseOrderItemPieceWeightService(repository, mock(JdbcTemplate.class));
+
+        @SuppressWarnings("unchecked")
+        List<PurchaseOrderItemPieceWeight> result = ReflectionTestUtils.invokeMethod(
+                service,
+                "buildPieceWeights",
+                201L,
+                null,
+                new BigDecimal("1.000")
+        );
+
+        assertThat(result).isEmpty();
     }
 
     private PurchaseOrderItemPieceWeight piece(Long purchaseOrderItemId, int pieceNo, String weightTon) {

@@ -12,7 +12,6 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 public final class ResourcePermissionCatalog {
 
@@ -141,19 +140,11 @@ public final class ResourcePermissionCatalog {
             entry("print-template", "打印模板", "系统", false, List.of("/print-template"), CRUD_ACTIONS)
     );
 
-    private static final Map<String, Entry> ENTRIES_BY_CODE = ENTRIES.stream()
-            .collect(Collectors.toMap(Entry::code, entry -> entry, (left, right) -> left, LinkedHashMap::new));
+    private static final Map<String, Entry> ENTRIES_BY_CODE = entriesByCode();
 
-    private static final Map<String, Entry> ENTRIES_BY_MENU_CODE = ENTRIES.stream()
-            .flatMap(entry -> entry.menuCodes().stream().map(menuCode -> Map.entry(normalizeKey(menuCode), entry)))
-            .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, (left, right) -> left, LinkedHashMap::new));
+    private static final Map<String, Entry> ENTRIES_BY_MENU_CODE = entriesByMenuCode();
 
-    private static final List<ActionOption> ACTION_OPTIONS = ENTRIES.stream()
-            .flatMap(entry -> entry.actions().stream())
-            .collect(Collectors.toMap(ActionOption::code, option -> option, (left, right) -> left, LinkedHashMap::new))
-            .values()
-            .stream()
-            .toList();
+    private static final List<ActionOption> ACTION_OPTIONS = actionOptionsFromEntries();
 
     private ResourcePermissionCatalog() {
     }
@@ -172,6 +163,34 @@ public final class ResourcePermissionCatalog {
 
     public static List<ActionOption> actionOptions() {
         return ACTION_OPTIONS;
+    }
+
+    private static Map<String, Entry> entriesByCode() {
+        Map<String, Entry> entries = new LinkedHashMap<>();
+        for (Entry entry : ENTRIES) {
+            entries.putIfAbsent(entry.code(), entry);
+        }
+        return Collections.unmodifiableMap(entries);
+    }
+
+    private static Map<String, Entry> entriesByMenuCode() {
+        Map<String, Entry> entries = new LinkedHashMap<>();
+        for (Entry entry : ENTRIES) {
+            for (String menuCode : entry.menuCodes()) {
+                entries.putIfAbsent(normalizeKey(menuCode), entry);
+            }
+        }
+        return Collections.unmodifiableMap(entries);
+    }
+
+    private static List<ActionOption> actionOptionsFromEntries() {
+        Map<String, ActionOption> actions = new LinkedHashMap<>();
+        for (Entry entry : ENTRIES) {
+            for (ActionOption action : entry.actions()) {
+                actions.putIfAbsent(action.code(), action);
+            }
+        }
+        return List.copyOf(actions.values());
     }
 
     public static boolean isKnownResource(String resourceCode) {
@@ -221,11 +240,16 @@ public final class ResourcePermissionCatalog {
                 || path.matches("^/role-setting/[^/]+/action(?:/.*)?$")) {
             return Optional.of("role");
         }
-        return ENTRIES.stream()
-                .filter(entry -> entry.pathPrefixes().stream().anyMatch(prefix ->
-                        path.equals(prefix) || path.startsWith(prefix + "/")))
-                .max(Comparator.comparingInt(entry -> longestPrefixLength(entry.pathPrefixes(), path)))
-                .map(Entry::code);
+        Entry matched = null;
+        int matchedPrefixLength = 0;
+        for (Entry entry : ENTRIES) {
+            int prefixLength = longestPrefixLength(entry.pathPrefixes(), path);
+            if (prefixLength > matchedPrefixLength) {
+                matched = entry;
+                matchedPrefixLength = prefixLength;
+            }
+        }
+        return Optional.ofNullable(matched).map(Entry::code);
     }
 
     public static Set<String> resolveVisibleMenuCodes(Map<String, Set<String>> permissionMap) {

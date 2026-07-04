@@ -133,6 +133,56 @@ class PurchaseOrderApplyServiceTest {
         assertThat(order.getTotalAmount()).isEqualByComparingTo("7250.00");
     }
 
+    @Test
+    void shouldCalculateWeightWhenRequestWeightIsMissing() {
+        TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
+        WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
+        PurchaseInboundItemQueryService inboundItemQueryService = mock(PurchaseInboundItemQueryService.class);
+        PurchaseOrderApplyService service = new PurchaseOrderApplyService(
+                materialSupport,
+                warehouseSelectionSupport,
+                inboundItemQueryService
+        );
+        PurchaseOrder order = new PurchaseOrder();
+        PurchaseOrderRequest request = request(List.of(
+                new PurchaseOrderItemRequest(
+                        null,
+                        "M1",
+                        "宝钢",
+                        "螺纹钢",
+                        "HRB400",
+                        "18",
+                        "12m",
+                        "吨",
+                        "一号库",
+                        "B1",
+                        4,
+                        null,
+                        new BigDecimal("0.250"),
+                        1,
+                        null,
+                        new BigDecimal("4000.00"),
+                        null
+                )
+        ));
+
+        when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(Map.of(
+                "M1", new TradeMaterialSnapshot("M1", true)
+        ));
+        TradeItemMaterialSupportTestDoubles.stubMaterialCodeNormalization(materialSupport);
+        when(warehouseSelectionSupport.normalizeWarehouseName("一号库", 1, true)).thenReturn("一号库");
+        when(materialSupport.normalizeBatchNo(any(), eq("B1"), eq(1), eq(false))).thenReturn("B1");
+        when(inboundItemQueryService.summarizeWeightAdjustmentBySourcePurchaseOrderItemIds(List.of(101L)))
+                .thenReturn(Map.of());
+
+        service.applyItems(order, request, new AtomicLong(101L)::getAndIncrement);
+
+        assertThat(order.getItems()).singleElement().satisfies(item -> {
+            assertThat(item.getWeightTon()).isEqualByComparingTo("1.000");
+            assertThat(item.getAmount()).isEqualByComparingTo("4000.00");
+        });
+    }
+
     private PurchaseOrderRequest request(List<PurchaseOrderItemRequest> items) {
         return new PurchaseOrderRequest(
                 "PO-001",

@@ -30,6 +30,19 @@ class TokenBucketServiceTest {
     }
 
     @Test
+    void tryConsumeShouldReturnAllowFallbackWhenRedisReturnsShortResult() {
+        StringRedisTemplate redisTemplate = mock(StringRedisTemplate.class);
+        doReturn(List.of(1L, 50L)).when(redisTemplate)
+                .execute(any(DefaultRedisScript.class), anyList(), anyString(), anyString(), anyString(), anyString(), anyString());
+
+        TokenBucketService service = new TokenBucketService(redisTemplate, new RedisTuningProperties());
+
+        TokenBucketService.TokenBucketResult result = service.tryConsume("test-key", 1);
+
+        assertThat(result.allowed()).isTrue();
+    }
+
+    @Test
     void tryConsumeShouldReturnAllowedWhenTokensAvailable() {
         StringRedisTemplate redisTemplate = mock(StringRedisTemplate.class);
         doReturn(List.of(1L, 50L, 0L)).when(redisTemplate).execute(any(DefaultRedisScript.class), anyList(), anyString(), anyString(), anyString(), anyString(), anyString());

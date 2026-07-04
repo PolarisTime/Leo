@@ -3,10 +3,13 @@ package com.leo.erp.attachment.service;
 import com.leo.erp.attachment.domain.entity.UploadRule;
 import com.leo.erp.attachment.mapper.UploadRuleWebMapper;
 import com.leo.erp.attachment.repository.UploadRuleRepository;
+import com.leo.erp.attachment.web.dto.UploadRuleRequest;
+import com.leo.erp.attachment.web.dto.UploadRuleResponse;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.setting.PageUploadRuleSummary;
 import com.leo.erp.common.support.ModuleCatalog;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
+import com.leo.erp.common.support.StatusConstants;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
@@ -130,6 +133,214 @@ class UploadRuleServiceTest {
         assertThatThrownBy(() -> service.getPageUploadRule("unknown-module"))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("页面模块不合法");
+    }
+
+    @Test
+    void shouldMapResponseDetailThroughWebMapper() {
+        UploadRuleWebMapper mapper = Mockito.mock(UploadRuleWebMapper.class);
+        mapDetailsToResponses(mapper);
+
+        UploadRuleService service = uploadRuleService(new LinkedHashMap<>(), new FixedIdGenerator(1L), mapper);
+
+        UploadRuleResponse response = service.responseDetail(null);
+
+        assertThat(response.moduleKey()).isEqualTo("general-setting");
+        assertThat(response.moduleName()).isEqualTo("通用设置");
+        assertThat(response.ruleCode()).isEqualTo("PAGE_UPLOAD_GENERAL_SETTING");
+        assertThat(response.renamePattern()).isEqualTo(UploadRuleService.DEFAULT_RENAME_PATTERN);
+        Mockito.verify(mapper).toResponse(Mockito.any(PageUploadRuleDetail.class));
+    }
+
+    @Test
+    void shouldMapRequestAndResponseWhenUpdatingThroughWebMapper() {
+        Map<Long, UploadRule> store = new LinkedHashMap<>();
+        UploadRuleWebMapper mapper = Mockito.mock(UploadRuleWebMapper.class);
+        UploadRuleRequest request = new UploadRuleRequest("WEB_{originName}", StatusConstants.NORMAL, "客户上传");
+        Mockito.when(mapper.toCommand(request))
+                .thenReturn(new UpdatePageUploadRuleCommand("WEB_{originName}", StatusConstants.NORMAL, "客户上传"));
+        mapDetailsToResponses(mapper);
+
+        UploadRuleService service = uploadRuleService(store, new FixedIdGenerator(500L), mapper);
+
+        UploadRuleResponse response = service.responseUpdate(" customer ", request);
+
+        assertThat(response.id()).isEqualTo(500L);
+        assertThat(response.moduleKey()).isEqualTo("customer");
+        assertThat(response.renamePattern()).isEqualTo("WEB_{originName}");
+        assertThat(response.status()).isEqualTo(StatusConstants.NORMAL);
+        assertThat(store.get(500L).getRemark()).isEqualTo("客户上传");
+        Mockito.verify(mapper).toCommand(request);
+    }
+
+    @Test
+    void shouldReportPageUploadEnabledByStoredStatus() {
+        Map<Long, UploadRule> store = new LinkedHashMap<>();
+        UploadRule disabledRule = uploadRule(
+                10L,
+                "customer",
+                "PAGE_UPLOAD_CUSTOMER",
+                "客户上传命名规则",
+                "{originName}",
+                StatusConstants.DISABLED,
+                null
+        );
+        UploadRule enabledRule = uploadRule(
+                11L,
+                "sales-order",
+                "PAGE_UPLOAD_SALES_ORDER",
+                "销售订单上传命名规则",
+                "{originName}",
+                StatusConstants.NORMAL,
+                null
+        );
+        store.put(disabledRule.getId(), disabledRule);
+        store.put(enabledRule.getId(), enabledRule);
+
+        UploadRuleService service = uploadRuleService(store);
+
+        assertThat(service.isPageUploadEnabled("customer")).isFalse();
+        assertThat(service.isPageUploadEnabled("sales-order")).isTrue();
+    }
+
+    @Test
+    void shouldUseGeneralSettingWhenModuleKeyIsNullOrBlank() {
+        UploadRuleService service = uploadRuleService(new LinkedHashMap<>());
+
+        PageUploadRuleDetail nullModuleRule = service.getPageUploadRule(null);
+        PageUploadRuleDetail blankModuleRule = service.getPageUploadRule("   ");
+
+        assertThat(nullModuleRule.moduleKey()).isEqualTo("general-setting");
+        assertThat(blankModuleRule.moduleKey()).isEqualTo("general-setting");
+        assertThat(blankModuleRule.ruleCode()).isEqualTo("PAGE_UPLOAD_GENERAL_SETTING");
+        assertThat(blankModuleRule.remark()).isEqualTo("适用于通用设置页面选择文件和剪贴板粘贴上传");
+    }
+
+    @Test
+    void shouldFallbackToBuiltInDefaultsWhenLegacyTemplateFieldsAreBlankOrNull() {
+        Map<Long, UploadRule> blankStore = new LinkedHashMap<>();
+        UploadRule blankLegacy = uploadRule(
+                1L,
+                "legacy-page-upload",
+                UploadRuleService.LEGACY_PAGE_UPLOAD_RULE_CODE,
+                "页面上传文件命名规则",
+                "   ",
+                StatusConstants.NORMAL,
+                "\t"
+        );
+        blankStore.put(blankLegacy.getId(), blankLegacy);
+        Map<Long, UploadRule> nullStore = new LinkedHashMap<>();
+        UploadRule nullLegacy = uploadRule(
+                2L,
+                "legacy-page-upload",
+                UploadRuleService.LEGACY_PAGE_UPLOAD_RULE_CODE,
+                "页面上传文件命名规则",
+                null,
+                StatusConstants.NORMAL,
+                null
+        );
+        nullStore.put(nullLegacy.getId(), nullLegacy);
+
+        PageUploadRuleDetail blankDetail = uploadRuleService(blankStore).getPageUploadRule("sales-order");
+        PageUploadRuleDetail nullDetail = uploadRuleService(nullStore).getPageUploadRule("sales-order");
+
+        assertThat(blankDetail.renamePattern()).isEqualTo(UploadRuleService.DEFAULT_RENAME_PATTERN);
+        assertThat(blankDetail.remark()).isEqualTo("适用于销售订单页面选择文件和剪贴板粘贴上传");
+        assertThat(nullDetail.renamePattern()).isEqualTo(UploadRuleService.DEFAULT_RENAME_PATTERN);
+        assertThat(nullDetail.remark()).isEqualTo("适用于销售订单页面选择文件和剪贴板粘贴上传");
+    }
+
+    @Test
+    void shouldFallbackToBuiltInDefaultsWhenLegacyTemplateHasMixedNullAndBlankFields() {
+        Map<Long, UploadRule> store = new LinkedHashMap<>();
+        UploadRule legacy = uploadRule(
+                1L,
+                "legacy-page-upload",
+                UploadRuleService.LEGACY_PAGE_UPLOAD_RULE_CODE,
+                "页面上传文件命名规则",
+                null,
+                StatusConstants.NORMAL,
+                "   "
+        );
+        store.put(legacy.getId(), legacy);
+
+        PageUploadRuleDetail detail = uploadRuleService(store).getPageUploadRule("sales-order");
+
+        assertThat(detail.renamePattern()).isEqualTo(UploadRuleService.DEFAULT_RENAME_PATTERN);
+        assertThat(detail.remark()).isEqualTo("适用于销售订单页面选择文件和剪贴板粘贴上传");
+    }
+
+    @Test
+    void shouldRejectInvalidStatusBeforeSaving() {
+        Map<Long, UploadRule> store = new LinkedHashMap<>();
+        UploadRuleService service = uploadRuleService(
+                store,
+                new FixedIdGenerator(700L),
+                Mockito.mock(UploadRuleWebMapper.class)
+        );
+
+        assertThatThrownBy(() -> service.updatePageUploadRule(
+                "customer",
+                new UpdatePageUploadRuleCommand("{originName}", "停用", null)
+        ))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("上传规则状态不合法");
+        assertThat(store).isEmpty();
+    }
+
+    private UploadRuleService uploadRuleService(Map<Long, UploadRule> store) {
+        return uploadRuleService(store, new FixedIdGenerator(1L), Mockito.mock(UploadRuleWebMapper.class));
+    }
+
+    private UploadRuleService uploadRuleService(Map<Long, UploadRule> store,
+                                                SnowflakeIdGenerator idGenerator,
+                                                UploadRuleWebMapper mapper) {
+        return new UploadRuleService(
+                uploadRuleRepository(store),
+                idGenerator,
+                new AttachmentFilenameResolver(),
+                new ModuleCatalog(),
+                mapper
+        );
+    }
+
+    private void mapDetailsToResponses(UploadRuleWebMapper mapper) {
+        Mockito.when(mapper.toResponse(Mockito.any(PageUploadRuleDetail.class)))
+                .thenAnswer(invocation -> {
+                    PageUploadRuleDetail detail = invocation.getArgument(0);
+                    return toResponse(detail);
+                });
+    }
+
+    private UploadRuleResponse toResponse(PageUploadRuleDetail detail) {
+        return new UploadRuleResponse(
+                detail.id(),
+                detail.moduleKey(),
+                detail.moduleName(),
+                detail.ruleCode(),
+                detail.ruleName(),
+                detail.renamePattern(),
+                detail.status(),
+                detail.remark(),
+                detail.previewFileName()
+        );
+    }
+
+    private UploadRule uploadRule(long id,
+                                  String moduleKey,
+                                  String ruleCode,
+                                  String ruleName,
+                                  String renamePattern,
+                                  String status,
+                                  String remark) {
+        UploadRule rule = new UploadRule();
+        rule.setId(id);
+        rule.setModuleKey(moduleKey);
+        rule.setRuleCode(ruleCode);
+        rule.setRuleName(ruleName);
+        rule.setRenamePattern(renamePattern);
+        rule.setStatus(status);
+        rule.setRemark(remark);
+        return rule;
     }
 
     private UploadRuleRepository uploadRuleRepository(Map<Long, UploadRule> store) {

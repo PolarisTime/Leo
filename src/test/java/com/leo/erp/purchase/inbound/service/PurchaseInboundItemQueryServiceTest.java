@@ -1,6 +1,7 @@
 package com.leo.erp.purchase.inbound.service;
 
 import com.leo.erp.common.error.BusinessException;
+import com.leo.erp.purchase.inbound.domain.entity.PurchaseInbound;
 import com.leo.erp.purchase.inbound.domain.entity.PurchaseInboundItem;
 import com.leo.erp.purchase.inbound.repository.PurchaseInboundItemRepository;
 import com.leo.erp.security.permission.ResourceRecordAccessGuard;
@@ -15,6 +16,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -96,7 +98,7 @@ class PurchaseInboundItemQueryServiceTest {
         PurchaseInboundItemRepository repository = mock(PurchaseInboundItemRepository.class);
         ResourceRecordAccessGuard accessGuard = mock(ResourceRecordAccessGuard.class);
 
-        com.leo.erp.purchase.inbound.domain.entity.PurchaseInbound inbound = new com.leo.erp.purchase.inbound.domain.entity.PurchaseInbound();
+        PurchaseInbound inbound = new PurchaseInbound();
         inbound.setId(100L);
 
         PurchaseInboundItem item1 = new PurchaseInboundItem();
@@ -118,6 +120,59 @@ class PurchaseInboundItemQueryServiceTest {
     }
 
     @Test
+    void findAllActiveByIdInShouldCheckEachPersistedParentOnlyOnce() {
+        PurchaseInboundItemRepository repository = mock(PurchaseInboundItemRepository.class);
+        ResourceRecordAccessGuard accessGuard = mock(ResourceRecordAccessGuard.class);
+
+        PurchaseInbound inbound = new PurchaseInbound();
+        inbound.setId(100L);
+        PurchaseInbound otherInbound = new PurchaseInbound();
+        otherInbound.setId(101L);
+
+        PurchaseInboundItem item1 = itemWithParent(1L, inbound);
+        PurchaseInboundItem item2 = itemWithParent(2L, inbound);
+        PurchaseInboundItem item3 = itemWithParent(3L, otherInbound);
+
+        when(repository.findAllActiveByIdIn(List.of(1L, 2L, 3L))).thenReturn(List.of(item1, item2, item3));
+
+        PurchaseInboundItemQueryService service = new PurchaseInboundItemQueryService(repository, accessGuard);
+
+        assertThat(service.findAllActiveByIdIn(List.of(1L, 2L, 3L))).containsExactly(item1, item2, item3);
+        verify(accessGuard).assertCurrentUserCanAccess("purchase-inbound", "read", inbound);
+        verify(accessGuard).assertCurrentUserCanAccess("purchase-inbound", "read", otherInbound);
+    }
+
+    @Test
+    void findAllActiveByIdInShouldCheckEachTransientParentOnlyOnce() {
+        PurchaseInboundItemRepository repository = mock(PurchaseInboundItemRepository.class);
+        ResourceRecordAccessGuard accessGuard = mock(ResourceRecordAccessGuard.class);
+
+        PurchaseInbound inbound = new PurchaseInbound();
+        PurchaseInboundItem item1 = itemWithParent(1L, inbound);
+        PurchaseInboundItem item2 = itemWithParent(2L, inbound);
+
+        when(repository.findAllActiveByIdIn(List.of(1L, 2L))).thenReturn(List.of(item1, item2));
+
+        PurchaseInboundItemQueryService service = new PurchaseInboundItemQueryService(repository, accessGuard);
+
+        assertThat(service.findAllActiveByIdIn(List.of(1L, 2L))).containsExactly(item1, item2);
+        verify(accessGuard).assertCurrentUserCanAccess("purchase-inbound", "read", inbound);
+    }
+
+    @Test
+    void findAllActiveByIdInShouldSkipAccessWhenGuardIsMissing() {
+        PurchaseInboundItemRepository repository = mock(PurchaseInboundItemRepository.class);
+        PurchaseInbound inbound = new PurchaseInbound();
+        inbound.setId(100L);
+        PurchaseInboundItem item = itemWithParent(1L, inbound);
+        when(repository.findAllActiveByIdIn(List.of(1L))).thenReturn(List.of(item));
+
+        PurchaseInboundItemQueryService service = new PurchaseInboundItemQueryService(repository, null);
+
+        assertThat(service.findAllActiveByIdIn(List.of(1L))).containsExactly(item);
+    }
+
+    @Test
     void findAllActiveByIdInShouldSkipAccessCheckWhenParentIsNull() {
         PurchaseInboundItemRepository repository = mock(PurchaseInboundItemRepository.class);
         ResourceRecordAccessGuard accessGuard = mock(ResourceRecordAccessGuard.class);
@@ -133,6 +188,7 @@ class PurchaseInboundItemQueryServiceTest {
         List<PurchaseInboundItem> result = service.findAllActiveByIdIn(List.of(1L));
 
         assertThat(result).singleElement().isEqualTo(item);
+        verify(accessGuard, never()).assertCurrentUserCanAccess("purchase-inbound", "read", item.getPurchaseInbound());
     }
 
     @Test
@@ -140,7 +196,7 @@ class PurchaseInboundItemQueryServiceTest {
         PurchaseInboundItemRepository repository = mock(PurchaseInboundItemRepository.class);
         ResourceRecordAccessGuard accessGuard = mock(ResourceRecordAccessGuard.class);
 
-        com.leo.erp.purchase.inbound.domain.entity.PurchaseInbound inbound = new com.leo.erp.purchase.inbound.domain.entity.PurchaseInbound();
+        PurchaseInbound inbound = new PurchaseInbound();
         inbound.setId(100L);
 
         PurchaseInboundItem item = new PurchaseInboundItem();
@@ -225,5 +281,12 @@ class PurchaseInboundItemQueryServiceTest {
         List<PurchaseInboundItem> result = service.findAllActiveBySourcePurchaseOrderItemIds(List.of(201L));
 
         assertThat(result).singleElement().isEqualTo(item);
+    }
+
+    private PurchaseInboundItem itemWithParent(Long id, PurchaseInbound inbound) {
+        PurchaseInboundItem item = new PurchaseInboundItem();
+        item.setId(id);
+        item.setPurchaseInbound(inbound);
+        return item;
     }
 }

@@ -23,6 +23,11 @@ class CompanyBootstrapPropertiesTest {
     }
 
     @Test
+    void shouldInstantiateConfiguration() {
+        assertThat(new CompanyBootstrapConfig()).isNotNull();
+    }
+
+    @Test
     void shouldSetAndGetEnabled() {
         var properties = new CompanyBootstrapProperties();
         properties.setEnabled(true);

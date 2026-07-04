@@ -14,6 +14,8 @@ import com.leo.erp.master.customer.repository.CustomerRepository;
 import com.leo.erp.master.customer.web.dto.CustomerOptionResponse;
 import com.leo.erp.master.customer.web.dto.CustomerRequest;
 import com.leo.erp.master.customer.web.dto.CustomerResponse;
+import com.leo.erp.system.company.domain.entity.CompanySetting;
+import com.leo.erp.system.company.service.CompanySettingService;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Method;
@@ -98,6 +100,34 @@ class CustomerServiceTest {
         assertThat(result).hasSize(1);
         verify(redisJsonCacheSupport, never()).delete(anyString());
         verify(redisJsonCacheSupport).write(eq("leo:customer:all"), eq(result), any(Duration.class));
+    }
+
+    @Test
+    void shouldReturnCachedEmptyOptions_whenCacheAndDatabaseAreEmpty() {
+        CustomerRepository repository = mock(CustomerRepository.class);
+        when(repository.findByDeletedFlagFalseAndStatusOrderByCustomerCodeAsc(StatusConstants.NORMAL))
+                .thenReturn(List.of());
+        RedisJsonCacheSupport redisJsonCacheSupport = mock(RedisJsonCacheSupport.class);
+        when(redisJsonCacheSupport.getOrLoad(
+                eq("leo:customer:all"),
+                any(Duration.class),
+                any(TypeReference.class),
+                any(Supplier.class)
+        )).thenReturn(List.of());
+
+        CustomerService service = new CustomerService(repository, null, mock(CustomerMapper.class), redisJsonCacheSupport);
+
+        List<CustomerOptionResponse> result = service.listActiveOptions();
+
+        assertThat(result).isEmpty();
+        verify(redisJsonCacheSupport, never()).write(anyString(), any(), any(Duration.class));
+    }
+
+    @Test
+    void shouldReturnCacheName() {
+        CustomerService service = new CustomerService(mock(CustomerRepository.class), null, mock(CustomerMapper.class));
+
+        assertThat(service.cacheName()).isEqualTo("leo:customer:all");
     }
 
     @Test
@@ -447,6 +477,26 @@ class CustomerServiceTest {
     }
 
     @Test
+    void shouldDeleteWithoutReferenceGuard() {
+        var repository = (CustomerRepository) Proxy.newProxyInstance(
+                CustomerRepository.class.getClassLoader(),
+                new Class[]{CustomerRepository.class},
+                (proxy, method, args) -> switch (method.getName()) {
+                    case "findByIdAndDeletedFlagFalse" -> Optional.of(createCustomer(1L, "C001"));
+                    case "findById" -> Optional.of(createCustomer(1L, "C001"));
+                    case "save" -> args[0];
+                    case "toString" -> "CustomerRepositoryStub";
+                    case "hashCode" -> System.identityHashCode(proxy);
+                    case "equals" -> proxy == args[0];
+                    default -> throw new UnsupportedOperationException(method.getName());
+                }
+        );
+        var service = new CustomerService(repository, new SnowflakeIdGenerator(1), null);
+
+        service.delete(1L);
+    }
+
+    @Test
     void shouldThrowException_whenDeleteWithReferences() {
         var repository = (CustomerRepository) Proxy.newProxyInstance(
                 CustomerRepository.class.getClassLoader(),
@@ -505,6 +555,47 @@ class CustomerServiceTest {
     }
 
     @Test
+    void shouldResolveSettlementCompany_whenCreatingWithCompanyService() {
+        var repository = (CustomerRepository) Proxy.newProxyInstance(
+                CustomerRepository.class.getClassLoader(),
+                new Class[]{CustomerRepository.class},
+                (proxy, method, args) -> switch (method.getName()) {
+                    case "existsByCustomerCodeAndDeletedFlagFalse" -> false;
+                    case "save" -> args[0];
+                    case "toString" -> "CustomerRepositoryStub";
+                    case "hashCode" -> System.identityHashCode(proxy);
+                    case "equals" -> proxy == args[0];
+                    default -> throw new UnsupportedOperationException(method.getName());
+                }
+        );
+        var mapper = (CustomerMapper) Proxy.newProxyInstance(
+                CustomerMapper.class.getClassLoader(),
+                new Class[]{CustomerMapper.class},
+                (proxy, method, args) -> switch (method.getName()) {
+                    case "toResponse" -> toResponse((Customer) args[0]);
+                    case "toString" -> "CustomerMapperStub";
+                    case "hashCode" -> System.identityHashCode(proxy);
+                    case "equals" -> proxy == args[0];
+                    default -> throw new UnsupportedOperationException(method.getName());
+                }
+        );
+        var company = new CompanySetting();
+        company.setId(99L);
+        company.setCompanyName("默认结算主体");
+        var companySettingService = mock(CompanySettingService.class);
+        when(companySettingService.requireActiveSettlementCompany(99L)).thenReturn(company);
+        var service = new CustomerService(repository, new SnowflakeIdGenerator(1), mapper,
+                null, null, companySettingService);
+
+        var request = new CustomerRequest("C001", "客户甲", null, null, null, null,
+                "项目A", null, null, 99L, "正常", null);
+        CustomerResponse response = service.create(request);
+
+        assertThat(response.defaultSettlementCompanyId()).isEqualTo(99L);
+        assertThat(response.defaultSettlementCompanyName()).isEqualTo("默认结算主体");
+    }
+
+    @Test
     void shouldTestOptionLabel_withDifferentProjectNames() throws Exception {
         var service = new CustomerService(null, null, null);
         Method optionLabel = CustomerService.class.getDeclaredMethod("optionLabel", Customer.class);
@@ -531,6 +622,15 @@ class CustomerServiceTest {
         assertThat(optionLabel.invoke(service, c4)).isEqualTo("客户甲");
     }
 
+    @Test
+    void shouldSkipActiveOptionsCacheWrite_whenRedisIsNull() throws Exception {
+        var service = new CustomerService(null, null, null);
+        Method method = CustomerService.class.getDeclaredMethod("writeActiveOptionsCache", List.class);
+        method.setAccessible(true);
+
+        method.invoke(service, List.of());
+    }
+
     private static Customer createCustomer(Long id, String code) {
         Customer c = new Customer();
         c.setId(id);
@@ -546,7 +646,8 @@ class CustomerServiceTest {
                 c.getId(), c.getCustomerCode(), c.getCustomerName(),
                 c.getContactName(), c.getContactPhone(), c.getCity(),
                 c.getSettlementMode(), c.getProjectName(), c.getProjectNameAbbr(),
-                c.getProjectAddress(), c.getStatus(), c.getRemark()
+                c.getProjectAddress(), c.getDefaultSettlementCompanyId(),
+                c.getDefaultSettlementCompanyName(), c.getStatus(), c.getRemark()
         );
     }
 }

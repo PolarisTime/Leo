@@ -8,10 +8,12 @@ import org.junit.jupiter.params.provider.CsvSource;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -58,6 +60,50 @@ class NoRuleSequenceServiceTest {
     }
 
     @Test
+    void shouldUseDefaultsAndResetSerialWhenNullableRuleFieldsAreMissing() {
+        NoRuleRepository repository = mock(NoRuleRepository.class);
+        NoRule rule = activeRule();
+        rule.setPrefix(null);
+        rule.setDateRule(null);
+        rule.setResetRule(null);
+        rule.setSerialLength(null);
+        rule.setCurrentPeriod("2026");
+        rule.setNextSerialValue(null);
+        when(repository.findBySettingCodeAndDeletedFlagFalseForUpdate(NoRuleSequenceService.BATCH_NO_RULE_CODE))
+                .thenReturn(Optional.of(rule));
+        NoRuleSequenceService service = new NoRuleSequenceService(
+                repository,
+                Clock.fixed(Instant.parse("2026-04-07T00:00:00Z"), ZoneId.of("Asia/Shanghai"))
+        );
+
+        String generated = service.nextValue(NoRuleSequenceService.BATCH_NO_RULE_CODE);
+
+        assertThat(generated).isEqualTo("20261");
+        assertThat(rule.getCurrentPeriod()).isEqualTo("2026");
+        assertThat(rule.getNextSerialValue()).isEqualTo(2L);
+    }
+
+    @Test
+    void shouldResetSerialWhenNextSerialValueIsLessThanOne() {
+        NoRuleRepository repository = mock(NoRuleRepository.class);
+        NoRule rule = activeRule();
+        rule.setCurrentPeriod("2026");
+        rule.setNextSerialValue(0L);
+        when(repository.findBySettingCodeAndDeletedFlagFalseForUpdate(NoRuleSequenceService.BATCH_NO_RULE_CODE))
+                .thenReturn(Optional.of(rule));
+        NoRuleSequenceService service = new NoRuleSequenceService(
+                repository,
+                Clock.fixed(Instant.parse("2026-04-07T00:00:00Z"), ZoneId.of("Asia/Shanghai"))
+        );
+
+        String generated = service.nextValue(NoRuleSequenceService.BATCH_NO_RULE_CODE);
+
+        assertThat(generated).isEqualTo("2026LOT000001");
+        assertThat(rule.getNextSerialValue()).isEqualTo(2L);
+        assertThat(rule.getCurrentPeriod()).isEqualTo("2026");
+    }
+
+    @Test
     void shouldResolveMagicVariablesInTemplate() {
         NoRuleRepository repository = mock(NoRuleRepository.class);
         NoRule rule = activeRule();
@@ -75,6 +121,156 @@ class NoRuleSequenceServiceTest {
         String generated = service.nextValue(NoRuleSequenceService.BATCH_NO_RULE_CODE);
 
         assertThat(generated).isEqualTo("SO-20260427-000007");
+    }
+
+    @Test
+    void shouldResolveDateTokenWithMonthDateRule() {
+        NoRuleRepository repository = mock(NoRuleRepository.class);
+        NoRule rule = activeRule();
+        rule.setPrefix("SO-{date}-{seq}");
+        rule.setDateRule("YYYYMM");
+        rule.setResetRule("MONTHLY");
+        rule.setSerialLength(3);
+        rule.setCurrentPeriod("202604");
+        rule.setNextSerialValue(7L);
+        when(repository.findBySettingCodeAndDeletedFlagFalseForUpdate(NoRuleSequenceService.BATCH_NO_RULE_CODE))
+                .thenReturn(Optional.of(rule));
+        NoRuleSequenceService service = new NoRuleSequenceService(
+                repository,
+                Clock.fixed(Instant.parse("2026-04-07T00:00:00Z"), ZoneId.of("Asia/Shanghai"))
+        );
+
+        String generated = service.nextValue(NoRuleSequenceService.BATCH_NO_RULE_CODE);
+
+        assertThat(generated).isEqualTo("SO-202604-007");
+        assertThat(rule.getNextSerialValue()).isEqualTo(8L);
+    }
+
+    @Test
+    void shouldKeepUnknownMagicVariableLiteralAndUseMonthDayTokens() {
+        NoRuleRepository repository = mock(NoRuleRepository.class);
+        NoRule rule = activeRule();
+        rule.setPrefix("{yy}-{mm}-{dd}-{yyyymm}-{unknown}-{seq}");
+        rule.setDateRule("NONE");
+        rule.setResetRule("MONTHLY");
+        rule.setCurrentPeriod("202604");
+        rule.setNextSerialValue(3L);
+        rule.setSerialLength(2);
+        when(repository.findBySettingCodeAndDeletedFlagFalseForUpdate(NoRuleSequenceService.BATCH_NO_RULE_CODE))
+                .thenReturn(Optional.of(rule));
+        NoRuleSequenceService service = new NoRuleSequenceService(
+                repository,
+                Clock.fixed(Instant.parse("2026-04-07T00:00:00Z"), ZoneId.of("Asia/Shanghai"))
+        );
+
+        String generated = service.nextValue(NoRuleSequenceService.BATCH_NO_RULE_CODE);
+
+        assertThat(generated).isEqualTo("26-04-07-202604-{unknown}-03");
+        assertThat(rule.getCurrentPeriod()).isEqualTo("202604");
+        assertThat(rule.getNextSerialValue()).isEqualTo(4L);
+    }
+
+    @Test
+    void shouldKeepNullTokenAsEmptyLiteralWhenResolvingTokenValue() throws Exception {
+        NoRuleSequenceService service = new NoRuleSequenceService(
+                mock(NoRuleRepository.class),
+                Clock.fixed(Instant.parse("2026-04-07T00:00:00Z"), ZoneId.of("Asia/Shanghai"))
+        );
+        var method = NoRuleSequenceService.class.getDeclaredMethod(
+                "resolveTokenValue",
+                String.class,
+                NoRule.class,
+                LocalDate.class,
+                long.class
+        );
+        method.setAccessible(true);
+
+        String resolved = (String) method.invoke(service, null, activeRule(), LocalDate.of(2026, 4, 7), 3L);
+
+        assertThat(resolved).isEqualTo("{null}");
+    }
+
+    @Test
+    void shouldReturnNullForUnknownModuleKey() {
+        NoRuleSequenceService service = new NoRuleSequenceService(
+                mock(NoRuleRepository.class),
+                Clock.fixed(Instant.parse("2026-04-07T00:00:00Z"), ZoneId.of("Asia/Shanghai"))
+        );
+
+        assertThat(service.nextValueByModuleKey("unknown-module")).isNull();
+    }
+
+    @Test
+    void shouldRejectMissingRule() {
+        NoRuleRepository repository = mock(NoRuleRepository.class);
+        when(repository.findBySettingCodeAndDeletedFlagFalseForUpdate("RULE_MISSING")).thenReturn(Optional.empty());
+        NoRuleSequenceService service = new NoRuleSequenceService(
+                repository,
+                Clock.fixed(Instant.parse("2026-04-07T00:00:00Z"), ZoneId.of("Asia/Shanghai"))
+        );
+
+        assertThatThrownBy(() -> service.nextValue("RULE_MISSING"))
+                .isInstanceOf(com.leo.erp.common.error.BusinessException.class)
+                .hasMessageContaining("编号规则不存在");
+    }
+
+    @Test
+    void shouldRejectDisabledRule() {
+        NoRuleRepository repository = mock(NoRuleRepository.class);
+        NoRule rule = activeRule();
+        rule.setStatus("停用");
+        when(repository.findBySettingCodeAndDeletedFlagFalseForUpdate(NoRuleSequenceService.BATCH_NO_RULE_CODE))
+                .thenReturn(Optional.of(rule));
+        NoRuleSequenceService service = new NoRuleSequenceService(
+                repository,
+                Clock.fixed(Instant.parse("2026-04-07T00:00:00Z"), ZoneId.of("Asia/Shanghai"))
+        );
+
+        assertThatThrownBy(() -> service.nextValue(NoRuleSequenceService.BATCH_NO_RULE_CODE))
+                .isInstanceOf(com.leo.erp.common.error.BusinessException.class)
+                .hasMessageContaining("编号规则未启用");
+    }
+
+    @Test
+    void shouldRejectGeneratedValueLongerThanLimit() {
+        NoRuleRepository repository = mock(NoRuleRepository.class);
+        NoRule rule = activeRule();
+        rule.setPrefix("X".repeat(70));
+        rule.setDateRule("NONE");
+        rule.setNextSerialValue(1L);
+        when(repository.findBySettingCodeAndDeletedFlagFalseForUpdate(NoRuleSequenceService.BATCH_NO_RULE_CODE))
+                .thenReturn(Optional.of(rule));
+        NoRuleSequenceService service = new NoRuleSequenceService(
+                repository,
+                Clock.fixed(Instant.parse("2026-04-07T00:00:00Z"), ZoneId.of("Asia/Shanghai"))
+        );
+
+        assertThatThrownBy(() -> service.nextValue(NoRuleSequenceService.BATCH_NO_RULE_CODE))
+                .isInstanceOf(com.leo.erp.common.error.BusinessException.class)
+                .hasMessageContaining("编号规则生成结果长度不能超过64");
+    }
+
+    @Test
+    void shouldDetectSequenceToken() {
+        NoRuleSequenceService service = new NoRuleSequenceService(
+                mock(NoRuleRepository.class),
+                Clock.fixed(Instant.parse("2026-04-07T00:00:00Z"), ZoneId.of("Asia/Shanghai"))
+        );
+
+        assertThat(service.usesMagicVariables("PO-{seq}")).isTrue();
+        assertThat(service.usesMagicVariables("PO")).isFalse();
+        assertThat(service.containsSequenceToken("PO-{SEQ}")).isTrue();
+        assertThat(service.containsSequenceToken("PO-{yyyy}")).isFalse();
+        assertThat(service.containsSequenceToken(null)).isFalse();
+    }
+
+    @Test
+    void shouldReturnFalseForBlankTokenInputs() {
+        NoRuleSequenceService service = new NoRuleSequenceService(mock(NoRuleRepository.class));
+
+        assertThat(service.usesMagicVariables(null)).isFalse();
+        assertThat(service.usesMagicVariables("   ")).isFalse();
+        assertThat(service.containsSequenceToken("   ")).isFalse();
     }
 
     @ParameterizedTest

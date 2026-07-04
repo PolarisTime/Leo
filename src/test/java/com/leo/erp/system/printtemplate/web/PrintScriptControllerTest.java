@@ -168,7 +168,7 @@ class PrintScriptControllerTest {
         SecurityPrincipal principal = mock(SecurityPrincipal.class);
         Map<String, Object> payload = new HashMap<>();
         payload.put("moduleKey", "sales-order");
-        payload.put("recordIds", List.of("1", "abc", " 2 ", ""));
+        payload.put("recordIds", java.util.Arrays.asList("1", "abc", " 2 ", "", null));
 
         when(modulePermissionGuard.requirePermission(principal, "sales-order", "read")).thenReturn("sales-order");
         when(printScriptService.listPrintItems("sales-order", List.of(1L, 2L))).thenReturn(List.of());

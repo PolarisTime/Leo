@@ -340,6 +340,74 @@ class CustomerStatementServiceTest {
     }
 
     @Test
+    void validateUpdateShouldRejectDuplicateChangedStatementNo() {
+        CustomerStatementRepository repository = mock(CustomerStatementRepository.class);
+        CustomerStatement entity = createCustomerStatement(1L, "KHDZ-OLD");
+        when(repository.existsByStatementNoAndDeletedFlagFalse("KHDZ-001")).thenReturn(true);
+        TestableCustomerStatementService service = testableService(
+                repository,
+                mock(CustomerStatementMapper.class),
+                mock(SalesOrderRepository.class),
+                mock(SalesOrderItemQueryService.class),
+                mock(WorkflowTransitionGuard.class)
+        );
+
+        assertThatThrownBy(() -> service.validateUpdate(entity, buildRequest(new BigDecimal("1000.00"))))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("客户对账单号已存在");
+    }
+
+    @Test
+    void validateUpdateShouldAllowChangedStatementNoWhenUnique() {
+        CustomerStatementRepository repository = mock(CustomerStatementRepository.class);
+        CustomerStatement entity = createCustomerStatement(1L, "KHDZ-OLD");
+        when(repository.existsByStatementNoAndDeletedFlagFalse("KHDZ-001")).thenReturn(false);
+        TestableCustomerStatementService service = testableService(
+                repository,
+                mock(CustomerStatementMapper.class),
+                mock(SalesOrderRepository.class),
+                mock(SalesOrderItemQueryService.class),
+                mock(WorkflowTransitionGuard.class)
+        );
+
+        service.validateUpdate(entity, buildRequest(new BigDecimal("1000.00")));
+
+        verify(repository).existsByStatementNoAndDeletedFlagFalse("KHDZ-001");
+    }
+
+    @Test
+    void findVisibleEntityShouldUseRepositoryFindById() {
+        CustomerStatementRepository repository = mock(CustomerStatementRepository.class);
+        CustomerStatement entity = createCustomerStatement(1L, "KHDZ-001");
+        when(repository.findById(1L)).thenReturn(Optional.of(entity));
+        TestableCustomerStatementService service = testableService(
+                repository,
+                mock(CustomerStatementMapper.class),
+                mock(SalesOrderRepository.class),
+                mock(SalesOrderItemQueryService.class),
+                mock(WorkflowTransitionGuard.class)
+        );
+
+        Optional<CustomerStatement> result = service.findVisibleEntity(1L);
+
+        assertThat(result).containsSame(entity);
+        verify(repository).findById(1L);
+    }
+
+    @Test
+    void notFoundMessageShouldReturnCustomerStatementMissingMessage() {
+        TestableCustomerStatementService service = testableService(
+                mock(CustomerStatementRepository.class),
+                mock(CustomerStatementMapper.class),
+                mock(SalesOrderRepository.class),
+                mock(SalesOrderItemQueryService.class),
+                mock(WorkflowTransitionGuard.class)
+        );
+
+        assertThat(service.notFoundMessage()).isEqualTo("客户对账单不存在");
+    }
+
+    @Test
     void shouldReturnException_whenUpdateWithDuplicateStatementNo() {
         CustomerStatementRepository repository = mock(CustomerStatementRepository.class);
         CustomerStatement statement = createCustomerStatement(1L, "KHDZ-OLD");
@@ -439,6 +507,23 @@ class CustomerStatementServiceTest {
                 salesOrderItemQueryService,
                 workflowTransitionGuard,
                 null
+        );
+    }
+
+    private TestableCustomerStatementService testableService(CustomerStatementRepository repository,
+                                                            CustomerStatementMapper mapper,
+                                                            SalesOrderRepository salesOrderRepository,
+                                                            SalesOrderItemQueryService salesOrderItemQueryService,
+                                                            WorkflowTransitionGuard workflowTransitionGuard) {
+        CustomerStatementSourceService sourceService =
+                new CustomerStatementSourceService(repository, salesOrderRepository, salesOrderItemQueryService, null);
+        return new TestableCustomerStatementService(
+                repository,
+                new SnowflakeIdGenerator(0L),
+                new CustomerStatementResponseAssembler(mapper),
+                workflowTransitionGuard,
+                sourceService,
+                new CustomerStatementApplyService(workflowTransitionGuard, sourceService)
         );
     }
 
@@ -544,5 +629,32 @@ class CustomerStatementServiceTest {
         item.setUnitPrice(new BigDecimal("1000.00"));
         item.setAmount(new BigDecimal("1000.00"));
         return item;
+    }
+
+    private static class TestableCustomerStatementService extends CustomerStatementService {
+
+        TestableCustomerStatementService(CustomerStatementRepository repository,
+                                         SnowflakeIdGenerator idGenerator,
+                                         CustomerStatementResponseAssembler responseAssembler,
+                                         WorkflowTransitionGuard workflowTransitionGuard,
+                                         CustomerStatementSourceService customerStatementSourceService,
+                                         CustomerStatementApplyService applyService) {
+            super(repository, idGenerator, responseAssembler, workflowTransitionGuard, customerStatementSourceService, applyService);
+        }
+
+        @Override
+        protected void validateUpdate(CustomerStatement entity, CustomerStatementRequest request) {
+            super.validateUpdate(entity, request);
+        }
+
+        @Override
+        protected Optional<CustomerStatement> findVisibleEntity(Long id) {
+            return super.findVisibleEntity(id);
+        }
+
+        @Override
+        protected String notFoundMessage() {
+            return super.notFoundMessage();
+        }
     }
 }

@@ -185,6 +185,413 @@ class SalesOrderApplyServiceTest {
         assertThat(order.getSettlementCompanyName()).isEqualTo("TEST9");
     }
 
+    @Test
+    void shouldUseCustomerDefaultSettlementCompanyWhenRequestHasNoSettlementCompany() {
+        TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
+        WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
+        CustomerRepository customerRepository = mock(CustomerRepository.class);
+        SalesOrderApplyService service = service(
+                materialSupport,
+                warehouseSelectionSupport,
+                mock(PurchaseItemQueryAppService.class),
+                mock(PurchaseItemPieceWeightAppService.class),
+                mock(SalesOrderItemRepository.class),
+                mock(WorkflowTransitionGuard.class),
+                customerRepository,
+                null
+        );
+        SalesOrder order = new SalesOrder();
+        SalesOrderRequest request = request(List.of(itemRequest(null, null, 2)));
+        Customer customer = new Customer();
+        customer.setDefaultSettlementCompanyId(7L);
+        customer.setDefaultSettlementCompanyName("客户默认结算主体");
+        when(customerRepository.findByCustomerCodeAndDeletedFlagFalse("C001"))
+                .thenReturn(Optional.of(customer));
+        when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(Map.of("M1", material()));
+        when(materialSupport.normalizeMaterialCode(any(), anyInt())).thenAnswer(invocation ->
+                ((String) invocation.getArgument(0)).trim());
+        when(materialSupport.normalizeBatchNo(any(), eq("B1"), eq(1), eq(true))).thenReturn("B1");
+        when(warehouseSelectionSupport.normalizeWarehouseName("一号库", 1, true)).thenReturn("一号库");
+
+        service.apply(order, request, new AtomicLong(41L)::getAndIncrement);
+
+        assertThat(order.getSettlementCompanyId()).isEqualTo(7L);
+        assertThat(order.getSettlementCompanyName()).isEqualTo("客户默认结算主体");
+    }
+
+    @Test
+    void shouldLookupCustomerDefaultByCustomerAndProjectWhenCustomerCodeMissing() {
+        TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
+        WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
+        CustomerRepository customerRepository = mock(CustomerRepository.class);
+        SalesOrderApplyService service = service(
+                materialSupport,
+                warehouseSelectionSupport,
+                mock(PurchaseItemQueryAppService.class),
+                mock(PurchaseItemPieceWeightAppService.class),
+                mock(SalesOrderItemRepository.class),
+                mock(WorkflowTransitionGuard.class),
+                customerRepository,
+                null
+        );
+        SalesOrder order = new SalesOrder();
+        SalesOrderRequest request = new SalesOrderRequest(
+                "SO-001",
+                "REQ-PI",
+                "REQ-PO",
+                null,
+                " 客户A ",
+                1001L,
+                " 项目A ",
+                null,
+                null,
+                LocalDate.of(2026, 4, 26),
+                "张三",
+                StatusConstants.AUDITED,
+                "备注",
+                List.of(itemRequest(null, null, 1))
+        );
+        Customer customer = new Customer();
+        customer.setDefaultSettlementCompanyId(8L);
+        customer.setDefaultSettlementCompanyName("按客户项目匹配主体");
+        when(customerRepository.findFirstByCustomerNameAndProjectNameAndDeletedFlagFalseOrderByCustomerCodeAsc("客户A", "项目A"))
+                .thenReturn(Optional.of(customer));
+        when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(Map.of("M1", material()));
+        when(materialSupport.normalizeMaterialCode(any(), anyInt())).thenAnswer(invocation ->
+                ((String) invocation.getArgument(0)).trim());
+        when(materialSupport.normalizeBatchNo(any(), eq("B1"), eq(1), eq(true))).thenReturn("B1");
+        when(warehouseSelectionSupport.normalizeWarehouseName("一号库", 1, true)).thenReturn("一号库");
+
+        service.apply(order, request, new AtomicLong(51L)::getAndIncrement);
+
+        assertThat(order.getSettlementCompanyId()).isEqualTo(8L);
+        assertThat(order.getSettlementCompanyName()).isEqualTo("按客户项目匹配主体");
+    }
+
+    @Test
+    void shouldLookupCustomerDefaultByNameWhenCustomerCodeIsBlank() {
+        TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
+        WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
+        CustomerRepository customerRepository = mock(CustomerRepository.class);
+        SalesOrderApplyService service = service(
+                materialSupport,
+                warehouseSelectionSupport,
+                mock(PurchaseItemQueryAppService.class),
+                mock(PurchaseItemPieceWeightAppService.class),
+                mock(SalesOrderItemRepository.class),
+                mock(WorkflowTransitionGuard.class),
+                customerRepository,
+                null
+        );
+        SalesOrder order = new SalesOrder();
+        SalesOrderRequest request = request("   ", " 客户A ", " 项目A ", null, null, List.of(itemRequest(null, null, 1)));
+        Customer customer = new Customer();
+        customer.setDefaultSettlementCompanyId(18L);
+        customer.setDefaultSettlementCompanyName("空编码匹配主体");
+        when(customerRepository.findFirstByCustomerNameAndProjectNameAndDeletedFlagFalseOrderByCustomerCodeAsc("客户A", "项目A"))
+                .thenReturn(Optional.of(customer));
+        stubSingleItemApply(materialSupport, warehouseSelectionSupport);
+
+        service.apply(order, request, new AtomicLong(131L)::getAndIncrement);
+
+        assertThat(order.getSettlementCompanyId()).isEqualTo(18L);
+        assertThat(order.getSettlementCompanyName()).isEqualTo("空编码匹配主体");
+        verify(customerRepository, org.mockito.Mockito.never()).findByCustomerCodeAndDeletedFlagFalse(any());
+    }
+
+    @Test
+    void shouldPreserveExistingSettlementCompanyForAuditedOrder() {
+        TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
+        WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
+        CustomerRepository customerRepository = mock(CustomerRepository.class);
+        SalesOrderApplyService service = service(
+                materialSupport,
+                warehouseSelectionSupport,
+                mock(PurchaseItemQueryAppService.class),
+                mock(PurchaseItemPieceWeightAppService.class),
+                mock(SalesOrderItemRepository.class),
+                mock(WorkflowTransitionGuard.class),
+                customerRepository,
+                null
+        );
+        SalesOrder order = new SalesOrder();
+        order.setStatus(StatusConstants.AUDITED);
+        order.setSettlementCompanyId(3L);
+        order.setSettlementCompanyName("原结算主体");
+        when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(Map.of("M1", material()));
+        when(materialSupport.normalizeMaterialCode(any(), anyInt())).thenAnswer(invocation ->
+                ((String) invocation.getArgument(0)).trim());
+        when(materialSupport.normalizeBatchNo(any(), eq("B1"), eq(1), eq(true))).thenReturn("B1");
+        when(warehouseSelectionSupport.normalizeWarehouseName("一号库", 1, true)).thenReturn("一号库");
+
+        service.apply(order, request(List.of(itemRequest(null, null, 1))), new AtomicLong(61L)::getAndIncrement);
+
+        assertThat(order.getSettlementCompanyId()).isEqualTo(3L);
+        assertThat(order.getSettlementCompanyName()).isEqualTo("原结算主体");
+        verify(customerRepository, org.mockito.Mockito.never()).findByCustomerCodeAndDeletedFlagFalse(any());
+    }
+
+    @Test
+    void shouldUseRequestSettlementCompanyNameWhenCompanySettingServiceMissing() {
+        TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
+        WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
+        SalesOrderApplyService service = service(
+                materialSupport,
+                warehouseSelectionSupport,
+                mock(PurchaseItemQueryAppService.class),
+                mock(PurchaseItemPieceWeightAppService.class),
+                mock(SalesOrderItemRepository.class),
+                mock(WorkflowTransitionGuard.class),
+                null,
+                null
+        );
+        SalesOrder order = new SalesOrder();
+        SalesOrderRequest request = new SalesOrderRequest(
+                "SO-001",
+                "REQ-PI",
+                "REQ-PO",
+                "C001",
+                "客户A",
+                1001L,
+                "项目A",
+                12L,
+                "  手填结算主体  ",
+                LocalDate.of(2026, 4, 26),
+                "张三",
+                StatusConstants.AUDITED,
+                "备注",
+                List.of(itemRequest(null, null, 1))
+        );
+        when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(Map.of("M1", material()));
+        when(materialSupport.normalizeMaterialCode(any(), anyInt())).thenAnswer(invocation ->
+                ((String) invocation.getArgument(0)).trim());
+        when(materialSupport.normalizeBatchNo(any(), eq("B1"), eq(1), eq(true))).thenReturn("B1");
+        when(warehouseSelectionSupport.normalizeWarehouseName("一号库", 1, true)).thenReturn("一号库");
+
+        service.apply(order, request, new AtomicLong(71L)::getAndIncrement);
+
+        assertThat(order.getSettlementCompanyId()).isEqualTo(12L);
+        assertThat(order.getSettlementCompanyName()).isEqualTo("手填结算主体");
+    }
+
+    @Test
+    void shouldPreserveExistingSettlementCompanyForSalesCompletedOrder() {
+        TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
+        WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
+        CustomerRepository customerRepository = mock(CustomerRepository.class);
+        SalesOrderApplyService service = service(
+                materialSupport,
+                warehouseSelectionSupport,
+                mock(PurchaseItemQueryAppService.class),
+                mock(PurchaseItemPieceWeightAppService.class),
+                mock(SalesOrderItemRepository.class),
+                mock(WorkflowTransitionGuard.class),
+                customerRepository,
+                null
+        );
+        SalesOrder order = new SalesOrder();
+        order.setStatus(StatusConstants.SALES_COMPLETED);
+        order.setSettlementCompanyId(13L);
+        order.setSettlementCompanyName("已完成结算主体");
+        stubSingleItemApply(materialSupport, warehouseSelectionSupport);
+
+        service.apply(order, request(List.of(itemRequest(null, null, 1))), new AtomicLong(81L)::getAndIncrement);
+
+        assertThat(order.getSettlementCompanyId()).isEqualTo(13L);
+        assertThat(order.getSettlementCompanyName()).isEqualTo("已完成结算主体");
+        org.mockito.Mockito.verifyNoInteractions(customerRepository);
+    }
+
+    @Test
+    void shouldClearSettlementCompanyWhenCustomerRepositoryMissing() {
+        TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
+        WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
+        SalesOrderApplyService service = service(
+                materialSupport,
+                warehouseSelectionSupport,
+                mock(PurchaseItemQueryAppService.class),
+                mock(PurchaseItemPieceWeightAppService.class),
+                mock(SalesOrderItemRepository.class),
+                mock(WorkflowTransitionGuard.class),
+                null,
+                null
+        );
+        SalesOrder order = new SalesOrder();
+        order.setStatus(StatusConstants.DRAFT);
+        order.setSettlementCompanyId(14L);
+        order.setSettlementCompanyName("旧结算主体");
+        stubSingleItemApply(materialSupport, warehouseSelectionSupport);
+
+        service.apply(order, request(List.of(itemRequest(null, null, 1))), new AtomicLong(91L)::getAndIncrement);
+
+        assertThat(order.getSettlementCompanyId()).isNull();
+        assertThat(order.getSettlementCompanyName()).isNull();
+    }
+
+    @Test
+    void shouldSkipCustomerLookupWhenCustomerNameBlank() {
+        TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
+        WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
+        CustomerRepository customerRepository = mock(CustomerRepository.class);
+        SalesOrderApplyService service = service(
+                materialSupport,
+                warehouseSelectionSupport,
+                mock(PurchaseItemQueryAppService.class),
+                mock(PurchaseItemPieceWeightAppService.class),
+                mock(SalesOrderItemRepository.class),
+                mock(WorkflowTransitionGuard.class),
+                customerRepository,
+                null
+        );
+        SalesOrder order = new SalesOrder();
+        order.setStatus(StatusConstants.DRAFT);
+        order.setSettlementCompanyId(15L);
+        order.setSettlementCompanyName("旧结算主体");
+        SalesOrderRequest request = request(null, " ", "项目A", null, null, List.of(itemRequest(null, null, 1)));
+        stubSingleItemApply(materialSupport, warehouseSelectionSupport);
+
+        service.apply(order, request, new AtomicLong(101L)::getAndIncrement);
+
+        assertThat(order.getSettlementCompanyId()).isNull();
+        assertThat(order.getSettlementCompanyName()).isNull();
+        org.mockito.Mockito.verifyNoInteractions(customerRepository);
+    }
+
+    @Test
+    void shouldSkipCustomerLookupWhenCustomerNameMissing() {
+        TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
+        WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
+        CustomerRepository customerRepository = mock(CustomerRepository.class);
+        SalesOrderApplyService service = service(
+                materialSupport,
+                warehouseSelectionSupport,
+                mock(PurchaseItemQueryAppService.class),
+                mock(PurchaseItemPieceWeightAppService.class),
+                mock(SalesOrderItemRepository.class),
+                mock(WorkflowTransitionGuard.class),
+                customerRepository,
+                null
+        );
+        SalesOrder order = new SalesOrder();
+        order.setStatus(StatusConstants.DRAFT);
+        order.setSettlementCompanyId(20L);
+        order.setSettlementCompanyName("旧结算主体");
+        SalesOrderRequest request = request(null, null, "项目A", null, null, List.of(itemRequest(null, null, 1)));
+        stubSingleItemApply(materialSupport, warehouseSelectionSupport);
+
+        service.apply(order, request, new AtomicLong(151L)::getAndIncrement);
+
+        assertThat(order.getSettlementCompanyId()).isNull();
+        assertThat(order.getSettlementCompanyName()).isNull();
+        org.mockito.Mockito.verifyNoInteractions(customerRepository);
+    }
+
+    @Test
+    void shouldSkipCustomerLookupWhenProjectNameMissing() {
+        TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
+        WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
+        CustomerRepository customerRepository = mock(CustomerRepository.class);
+        SalesOrderApplyService service = service(
+                materialSupport,
+                warehouseSelectionSupport,
+                mock(PurchaseItemQueryAppService.class),
+                mock(PurchaseItemPieceWeightAppService.class),
+                mock(SalesOrderItemRepository.class),
+                mock(WorkflowTransitionGuard.class),
+                customerRepository,
+                null
+        );
+        SalesOrder order = new SalesOrder();
+        order.setStatus(StatusConstants.DRAFT);
+        order.setSettlementCompanyId(16L);
+        order.setSettlementCompanyName("旧结算主体");
+        SalesOrderRequest request = request(null, "客户A", null, null, null, List.of(itemRequest(null, null, 1)));
+        stubSingleItemApply(materialSupport, warehouseSelectionSupport);
+
+        service.apply(order, request, new AtomicLong(111L)::getAndIncrement);
+
+        assertThat(order.getSettlementCompanyId()).isNull();
+        assertThat(order.getSettlementCompanyName()).isNull();
+        org.mockito.Mockito.verifyNoInteractions(customerRepository);
+    }
+
+    @Test
+    void shouldSkipCustomerLookupWhenProjectNameBlank() {
+        TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
+        WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
+        CustomerRepository customerRepository = mock(CustomerRepository.class);
+        SalesOrderApplyService service = service(
+                materialSupport,
+                warehouseSelectionSupport,
+                mock(PurchaseItemQueryAppService.class),
+                mock(PurchaseItemPieceWeightAppService.class),
+                mock(SalesOrderItemRepository.class),
+                mock(WorkflowTransitionGuard.class),
+                customerRepository,
+                null
+        );
+        SalesOrder order = new SalesOrder();
+        order.setStatus(StatusConstants.DRAFT);
+        order.setSettlementCompanyId(21L);
+        order.setSettlementCompanyName("旧结算主体");
+        SalesOrderRequest request = request(null, "客户A", " ", null, null, List.of(itemRequest(null, null, 1)));
+        stubSingleItemApply(materialSupport, warehouseSelectionSupport);
+
+        service.apply(order, request, new AtomicLong(161L)::getAndIncrement);
+
+        assertThat(order.getSettlementCompanyId()).isNull();
+        assertThat(order.getSettlementCompanyName()).isNull();
+        org.mockito.Mockito.verifyNoInteractions(customerRepository);
+    }
+
+    @Test
+    void shouldSetNullSettlementCompanyNameWhenRequestNameBlankAndCompanySettingServiceMissing() {
+        TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
+        WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
+        SalesOrderApplyService service = service(
+                materialSupport,
+                warehouseSelectionSupport,
+                mock(PurchaseItemQueryAppService.class),
+                mock(PurchaseItemPieceWeightAppService.class),
+                mock(SalesOrderItemRepository.class),
+                mock(WorkflowTransitionGuard.class),
+                null,
+                null
+        );
+        SalesOrder order = new SalesOrder();
+        SalesOrderRequest request = request("C001", "客户A", "项目A", 17L, "   ", List.of(itemRequest(null, null, 1)));
+        stubSingleItemApply(materialSupport, warehouseSelectionSupport);
+
+        service.apply(order, request, new AtomicLong(121L)::getAndIncrement);
+
+        assertThat(order.getSettlementCompanyId()).isEqualTo(17L);
+        assertThat(order.getSettlementCompanyName()).isNull();
+    }
+
+    @Test
+    void shouldSetNullSettlementCompanyNameWhenRequestNameMissingAndCompanySettingServiceMissing() {
+        TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
+        WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
+        SalesOrderApplyService service = service(
+                materialSupport,
+                warehouseSelectionSupport,
+                mock(PurchaseItemQueryAppService.class),
+                mock(PurchaseItemPieceWeightAppService.class),
+                mock(SalesOrderItemRepository.class),
+                mock(WorkflowTransitionGuard.class),
+                null,
+                null
+        );
+        SalesOrder order = new SalesOrder();
+        SalesOrderRequest request = request("C001", "客户A", "项目A", 19L, null, List.of(itemRequest(null, null, 1)));
+        stubSingleItemApply(materialSupport, warehouseSelectionSupport);
+
+        service.apply(order, request, new AtomicLong(141L)::getAndIncrement);
+
+        assertThat(order.getSettlementCompanyId()).isEqualTo(19L);
+        assertThat(order.getSettlementCompanyName()).isNull();
+    }
+
     private SalesOrderApplyService service(TradeItemMaterialSupport materialSupport,
                                            WarehouseSelectionSupport warehouseSelectionSupport,
                                            PurchaseItemQueryAppService purchaseItemQueryAppService,
@@ -226,20 +633,40 @@ class SalesOrderApplyServiceTest {
     }
 
     private SalesOrderRequest request(List<SalesOrderItemRequest> items) {
+        return request("C001", "客户A", "项目A", null, null, items);
+    }
+
+    private SalesOrderRequest request(String customerCode,
+                                      String customerName,
+                                      String projectName,
+                                      Long settlementCompanyId,
+                                      String settlementCompanyName,
+                                      List<SalesOrderItemRequest> items) {
         return new SalesOrderRequest(
                 "SO-001",
                 "REQ-PI",
                 "REQ-PO",
-                "C001",
-                "客户A",
+                customerCode,
+                customerName,
                 1001L,
-                "项目A",
+                projectName,
+                settlementCompanyId,
+                settlementCompanyName,
                 LocalDate.of(2026, 4, 26),
                 "张三",
                 StatusConstants.AUDITED,
                 "备注",
                 items
         );
+    }
+
+    private void stubSingleItemApply(TradeItemMaterialSupport materialSupport,
+                                     WarehouseSelectionSupport warehouseSelectionSupport) {
+        when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(Map.of("M1", material()));
+        when(materialSupport.normalizeMaterialCode(any(), anyInt())).thenAnswer(invocation ->
+                ((String) invocation.getArgument(0)).trim());
+        when(materialSupport.normalizeBatchNo(any(), eq("B1"), eq(1), eq(true))).thenReturn("B1");
+        when(warehouseSelectionSupport.normalizeWarehouseName("一号库", 1, true)).thenReturn("一号库");
     }
 
     private SalesOrderItemRequest itemRequest(Long sourceInboundItemId,

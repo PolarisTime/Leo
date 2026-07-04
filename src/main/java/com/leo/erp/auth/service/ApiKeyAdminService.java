@@ -249,23 +249,24 @@ public class ApiKeyAdminService {
 
     private Specification<ApiKey> buildStatusSpec(String status) {
         String normalizedStatus = normalizeStatus(status);
-        return switch (normalizedStatus) {
-            case "有效" -> (root, criteriaQuery, criteriaBuilder) -> criteriaBuilder.and(
+        if (ApiKeyStatus.ACTIVE.displayName().equals(normalizedStatus)) {
+            return (root, criteriaQuery, criteriaBuilder) -> criteriaBuilder.and(
                     criteriaBuilder.equal(root.get("status"), ApiKeyStatus.ACTIVE),
                     criteriaBuilder.or(
                             criteriaBuilder.isNull(root.get("expiresAt")),
                             criteriaBuilder.greaterThan(root.get("expiresAt"), LocalDateTime.now())
                     )
             );
-            case "已过期" -> (root, criteriaQuery, criteriaBuilder) -> criteriaBuilder.and(
+        }
+        if (EXPIRED_STATUS.equals(normalizedStatus)) {
+            return (root, criteriaQuery, criteriaBuilder) -> criteriaBuilder.and(
                     criteriaBuilder.equal(root.get("status"), ApiKeyStatus.ACTIVE),
                     criteriaBuilder.isNotNull(root.get("expiresAt")),
                     criteriaBuilder.lessThanOrEqualTo(root.get("expiresAt"), LocalDateTime.now())
             );
-            case "已禁用" -> (root, criteriaQuery, criteriaBuilder) ->
-                    criteriaBuilder.equal(root.get("status"), ApiKeyStatus.DISABLED);
-            default -> throw new BusinessException(ErrorCode.VALIDATION_ERROR, "API Key 状态不合法");
-        };
+        }
+        return (root, criteriaQuery, criteriaBuilder) ->
+                criteriaBuilder.equal(root.get("status"), ApiKeyStatus.DISABLED);
     }
 
     private String resolveStatus(ApiKey entity) {

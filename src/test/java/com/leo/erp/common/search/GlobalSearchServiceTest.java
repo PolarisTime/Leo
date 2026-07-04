@@ -1,5 +1,7 @@
 package com.leo.erp.search.service;
 
+import com.leo.erp.common.error.BusinessException;
+import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.search.repository.GlobalSearchDocument;
 import com.leo.erp.search.repository.GlobalSearchDocumentRepository;
 import com.leo.erp.search.repository.GlobalSearchModuleAccess;
@@ -9,6 +11,7 @@ import com.leo.erp.security.permission.ModulePermissionGuard;
 import com.leo.erp.security.permission.PermissionService;
 import com.leo.erp.security.permission.ResourcePermissionCatalog;
 import com.leo.erp.security.support.SecurityPrincipal;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
 import org.junit.jupiter.api.AfterEach;
@@ -20,7 +23,10 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.lang.reflect.Method;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyLong;
@@ -30,6 +36,7 @@ import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 class GlobalSearchServiceTest {
@@ -48,6 +55,65 @@ class GlobalSearchServiceTest {
 
         assertThat(annotation).isNotNull();
         assertThat(annotation.propagation()).isEqualTo(Propagation.NOT_SUPPORTED);
+    }
+
+    @Test
+    void searchOverloadUsesDefaultModulesAndClampsLimit() {
+        PermissionService permissionService = mock(PermissionService.class);
+        ModulePermissionGuard modulePermissionGuard = mock(ModulePermissionGuard.class);
+        GlobalSearchDocumentRepository documentRepository = mock(GlobalSearchDocumentRepository.class);
+        GlobalSearchService service = new GlobalSearchService(
+                permissionService,
+                modulePermissionGuard,
+                documentRepository
+        );
+        authenticate(1L);
+
+        when(modulePermissionGuard.requireResourcePermission(any(), anyString(), eq(ResourcePermissionCatalog.READ)))
+                .thenAnswer(invocation -> new ModulePermissionGuard.PermissionCheck(
+                        invocation.getArgument(1, String.class),
+                        invocation.getArgument(1, String.class),
+                        ResourcePermissionCatalog.READ
+                ));
+        when(permissionService.getUserDataScope(eq(1L), anyString(), eq(ResourcePermissionCatalog.READ)))
+                .thenReturn(ResourcePermissionCatalog.SCOPE_ALL);
+        when(documentRepository.search(eq("keyword"), isNull(), eq(50), anyList()))
+                .thenReturn(List.of(new GlobalSearchDocument(
+                        "purchase-order",
+                        1L,
+                        "CG20260001",
+                        "供应商甲",
+                        false
+                )));
+
+        List<GlobalSearchResponse> results = service.search(" keyword ", 99);
+
+        ArgumentCaptor<List<GlobalSearchModuleAccess>> accessCaptor = ArgumentCaptor.forClass(List.class);
+        verify(documentRepository).search(eq("keyword"), isNull(), eq(50), accessCaptor.capture());
+        assertThat(accessCaptor.getValue())
+                .hasSize(15)
+                .allSatisfy(access -> assertThat(access.allDataScope()).isTrue());
+        assertThat(results).singleElement().satisfies(item -> {
+            assertThat(item.moduleKey()).isEqualTo("purchase-order");
+            assertThat(item.title()).isEqualTo("采购订单");
+        });
+    }
+
+    @Test
+    void searchReturnsEmptyForBlankKeywordBeforeResolvingPermissions() {
+        PermissionService permissionService = mock(PermissionService.class);
+        ModulePermissionGuard modulePermissionGuard = mock(ModulePermissionGuard.class);
+        GlobalSearchDocumentRepository documentRepository = mock(GlobalSearchDocumentRepository.class);
+        GlobalSearchService service = new GlobalSearchService(
+                permissionService,
+                modulePermissionGuard,
+                documentRepository
+        );
+
+        assertThat(service.search(null, 20, List.of("purchase-order"))).isEmpty();
+        assertThat(service.search("   ", 20, List.of("purchase-order"))).isEmpty();
+
+        verifyNoInteractions(permissionService, modulePermissionGuard, documentRepository);
     }
 
     @Test
@@ -87,6 +153,100 @@ class GlobalSearchServiceTest {
             assertThat(item.matchedByTrackId()).isFalse();
         });
         assertThat(DataScopeContext.current()).isNull();
+    }
+
+    @Test
+    void searchNormalizesCommaSeparatedModuleKeysAndLimitFloor() {
+        PermissionService permissionService = mock(PermissionService.class);
+        GlobalSearchDocumentRepository documentRepository = mock(GlobalSearchDocumentRepository.class);
+        GlobalSearchService service = createService(permissionService, documentRepository);
+        authenticate(1L);
+
+        when(permissionService.can(anyLong(), anyString(), anyString())).thenReturn(false);
+        when(permissionService.can(1L, "purchase-order", ResourcePermissionCatalog.READ)).thenReturn(true);
+        when(permissionService.getUserDataScope(1L, "purchase-order", ResourcePermissionCatalog.READ))
+                .thenReturn(ResourcePermissionCatalog.SCOPE_ALL);
+        when(documentRepository.search(eq("CG20260001"), isNull(), eq(1), anyList()))
+                .thenReturn(List.of(new GlobalSearchDocument(
+                        "purchase-order",
+                        1L,
+                        "CG20260001",
+                        "供应商甲",
+                        false
+                )));
+
+        List<GlobalSearchResponse> results = service.search(
+                "CG20260001",
+                0,
+                Arrays.asList(null, " purchase-order,unknown ", "", "sales-order")
+        );
+
+        ArgumentCaptor<List<GlobalSearchModuleAccess>> accessCaptor = ArgumentCaptor.forClass(List.class);
+        verify(documentRepository).search(eq("CG20260001"), isNull(), eq(1), accessCaptor.capture());
+        assertThat(accessCaptor.getValue()).singleElement().satisfies(access ->
+                assertThat(access.moduleKey()).isEqualTo("purchase-order"));
+        assertThat(results).hasSize(1);
+    }
+
+    @Test
+    void searchUsesDefaultModulesWhenModuleKeysAreEmpty() {
+        PermissionService permissionService = mock(PermissionService.class);
+        ModulePermissionGuard modulePermissionGuard = mock(ModulePermissionGuard.class);
+        GlobalSearchDocumentRepository documentRepository = mock(GlobalSearchDocumentRepository.class);
+        GlobalSearchService service = new GlobalSearchService(
+                permissionService,
+                modulePermissionGuard,
+                documentRepository
+        );
+        authenticate(1L);
+
+        when(modulePermissionGuard.requireResourcePermission(any(), anyString(), eq(ResourcePermissionCatalog.READ)))
+                .thenAnswer(invocation -> new ModulePermissionGuard.PermissionCheck(
+                        invocation.getArgument(1, String.class),
+                        invocation.getArgument(1, String.class),
+                        ResourcePermissionCatalog.READ
+                ));
+        when(permissionService.getUserDataScope(eq(1L), anyString(), eq(ResourcePermissionCatalog.READ)))
+                .thenReturn(ResourcePermissionCatalog.SCOPE_ALL);
+        when(documentRepository.search(eq("keyword"), isNull(), eq(20), anyList()))
+                .thenReturn(List.of());
+
+        service.search("keyword", 20, List.of());
+
+        ArgumentCaptor<List<GlobalSearchModuleAccess>> accessCaptor = ArgumentCaptor.forClass(List.class);
+        verify(documentRepository).search(eq("keyword"), isNull(), eq(20), accessCaptor.capture());
+        assertThat(accessCaptor.getValue()).hasSize(15);
+    }
+
+    @Test
+    void searchThrowsWhenAuthenticationPrincipalHasUnexpectedType() {
+        PermissionService permissionService = mock(PermissionService.class);
+        GlobalSearchDocumentRepository documentRepository = mock(GlobalSearchDocumentRepository.class);
+        GlobalSearchService service = createService(permissionService, documentRepository);
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken("leo", "", List.of())
+        );
+
+        assertThatThrownBy(() -> service.search("CG20260001", 20, List.of("purchase-order")))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(error -> assertThat(((BusinessException) error).getErrorCode())
+                        .isEqualTo(ErrorCode.UNAUTHORIZED))
+                .hasMessageContaining("未登录");
+    }
+
+    @Test
+    void searchReturnsEmptyWhenEveryRequestedModuleIsForbidden() {
+        PermissionService permissionService = mock(PermissionService.class);
+        GlobalSearchDocumentRepository documentRepository = mock(GlobalSearchDocumentRepository.class);
+        GlobalSearchService service = createService(permissionService, documentRepository);
+        authenticate(1L);
+
+        when(permissionService.can(anyLong(), anyString(), anyString())).thenReturn(false);
+
+        List<GlobalSearchResponse> results = service.search("CG20260001", 20, List.of("purchase-order"));
+
+        assertThat(results).isEmpty();
+        verify(documentRepository, never()).search(anyString(), isNull(), anyInt(), anyList());
     }
 
     @Test
@@ -132,6 +292,127 @@ class GlobalSearchServiceTest {
 
         assertThat(results).isEmpty();
         verify(documentRepository, never()).search(anyString(), anyLong(), anyInt(), anyList());
+    }
+
+    @Test
+    void searchThrowsWhenSecurityContextDoesNotContainPrincipal() {
+        PermissionService permissionService = mock(PermissionService.class);
+        GlobalSearchDocumentRepository documentRepository = mock(GlobalSearchDocumentRepository.class);
+        GlobalSearchService service = createService(permissionService, documentRepository);
+
+        assertThatThrownBy(() -> service.search("CG20260001", 20, List.of("purchase-order")))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(error -> assertThat(((BusinessException) error).getErrorCode())
+                        .isEqualTo(ErrorCode.UNAUTHORIZED))
+                .hasMessageContaining("未登录");
+
+        verifyNoInteractions(documentRepository);
+    }
+
+    @Test
+    void searchPropagatesNonForbiddenPermissionFailure() {
+        PermissionService permissionService = mock(PermissionService.class);
+        ModulePermissionGuard modulePermissionGuard = mock(ModulePermissionGuard.class);
+        GlobalSearchDocumentRepository documentRepository = mock(GlobalSearchDocumentRepository.class);
+        GlobalSearchService service = new GlobalSearchService(
+                permissionService,
+                modulePermissionGuard,
+                documentRepository
+        );
+        authenticate(1L);
+
+        when(modulePermissionGuard.requireResourcePermission(any(), eq("purchase-order"), eq(ResourcePermissionCatalog.READ)))
+                .thenThrow(new BusinessException(ErrorCode.INTERNAL_ERROR, "权限配置错误"));
+
+        assertThatThrownBy(() -> service.search("CG20260001", 20, List.of("purchase-order")))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(error -> assertThat(((BusinessException) error).getErrorCode())
+                        .isEqualTo(ErrorCode.INTERNAL_ERROR))
+                .hasMessageContaining("权限配置错误");
+
+        verifyNoInteractions(documentRepository);
+    }
+
+    @Test
+    void searchTreatsNonBusinessResourceAsAllDataScope() {
+        PermissionService permissionService = mock(PermissionService.class);
+        ModulePermissionGuard modulePermissionGuard = mock(ModulePermissionGuard.class);
+        GlobalSearchDocumentRepository documentRepository = mock(GlobalSearchDocumentRepository.class);
+        GlobalSearchService service = new GlobalSearchService(
+                permissionService,
+                modulePermissionGuard,
+                documentRepository
+        );
+        authenticate(1L);
+
+        when(modulePermissionGuard.requireResourcePermission(any(), eq("purchase-order"), eq(ResourcePermissionCatalog.READ)))
+                .thenReturn(new ModulePermissionGuard.PermissionCheck(
+                        "purchase-order",
+                        "company-setting",
+                        ResourcePermissionCatalog.READ
+                ));
+        when(documentRepository.search(eq("CG20260001"), isNull(), eq(20), anyList()))
+                .thenReturn(List.of());
+
+        service.search("CG20260001", 20, List.of("purchase-order"));
+
+        ArgumentCaptor<List<GlobalSearchModuleAccess>> accessCaptor = ArgumentCaptor.forClass(List.class);
+        verify(documentRepository).search(eq("CG20260001"), isNull(), eq(20), accessCaptor.capture());
+        assertThat(accessCaptor.getValue()).singleElement().satisfies(access -> {
+            assertThat(access.moduleKey()).isEqualTo("purchase-order");
+            assertThat(access.ownerUserIds()).isNull();
+        });
+        verifyNoInteractions(permissionService);
+    }
+
+    @Test
+    void searchFallsBackToPrincipalWhenDataScopeOwnersAreUnavailable() {
+        PermissionService permissionService = mock(PermissionService.class);
+        GlobalSearchDocumentRepository documentRepository = mock(GlobalSearchDocumentRepository.class);
+        GlobalSearchService service = createService(permissionService, documentRepository);
+        authenticate(9L);
+
+        when(permissionService.can(9L, "purchase-order", ResourcePermissionCatalog.READ)).thenReturn(true);
+        when(permissionService.getUserDataScope(9L, "purchase-order", ResourcePermissionCatalog.READ))
+                .thenReturn(ResourcePermissionCatalog.SCOPE_DEPARTMENT);
+        when(permissionService.getDataScopeOwnerUserIds(9L, ResourcePermissionCatalog.SCOPE_DEPARTMENT))
+                .thenReturn(null);
+        when(documentRepository.search(eq("CG20260001"), isNull(), eq(20), anyList()))
+                .thenReturn(List.of());
+
+        service.search("CG20260001", 20, List.of("purchase-order"));
+
+        ArgumentCaptor<List<GlobalSearchModuleAccess>> accessCaptor = ArgumentCaptor.forClass(List.class);
+        verify(documentRepository).search(eq("CG20260001"), isNull(), eq(20), accessCaptor.capture());
+        assertThat(accessCaptor.getValue()).singleElement().satisfies(access ->
+                assertThat(access.ownerUserIds()).containsExactly(9L));
+    }
+
+    @Test
+    void searchFiltersDocumentsWithoutRecordIdAndDefaultsBlankFields() {
+        PermissionService permissionService = mock(PermissionService.class);
+        GlobalSearchDocumentRepository documentRepository = mock(GlobalSearchDocumentRepository.class);
+        GlobalSearchService service = createService(permissionService, documentRepository);
+        authenticate(1L);
+
+        when(permissionService.can(1L, "purchase-order", ResourcePermissionCatalog.READ)).thenReturn(true);
+        when(permissionService.getUserDataScope(1L, "purchase-order", ResourcePermissionCatalog.READ))
+                .thenReturn(ResourcePermissionCatalog.SCOPE_ALL);
+        when(documentRepository.search(eq("CG20260001"), isNull(), eq(20), anyList()))
+                .thenReturn(List.of(
+                        new GlobalSearchDocument("purchase-order", null, "IGNORED", "ignored", false),
+                        new GlobalSearchDocument("unknown-module", 8L, "   ", null, false)
+                ));
+
+        List<GlobalSearchResponse> results = service.search("CG20260001", 20, List.of("purchase-order"));
+
+        assertThat(results).singleElement().satisfies(item -> {
+            assertThat(item.moduleKey()).isEqualTo("unknown-module");
+            assertThat(item.title()).isEqualTo("unknown-module");
+            assertThat(item.trackId()).isEqualTo("8");
+            assertThat(item.primaryNo()).isEqualTo("8");
+            assertThat(item.summary()).isEmpty();
+        });
     }
 
     @Test
@@ -201,6 +482,22 @@ class GlobalSearchServiceTest {
             assertThat(item.title()).isEqualTo("台账调整单");
             assertThat(item.primaryNo()).isEqualTo("TZ20260001");
         });
+    }
+
+    @Test
+    void privateHelpersHandleNullInputsDefensively() throws Exception {
+        GlobalSearchService service = new GlobalSearchService(
+                mock(PermissionService.class),
+                mock(ModulePermissionGuard.class),
+                mock(GlobalSearchDocumentRepository.class)
+        );
+        Method resolveModuleKeys = GlobalSearchService.class.getDeclaredMethod("resolveModuleKeys", Set.class);
+        Method isLikelyTrackId = GlobalSearchService.class.getDeclaredMethod("isLikelyTrackId", String.class);
+        resolveModuleKeys.setAccessible(true);
+        isLikelyTrackId.setAccessible(true);
+
+        assertThat((List<String>) resolveModuleKeys.invoke(service, new Object[]{null})).hasSize(15);
+        assertThat((Boolean) isLikelyTrackId.invoke(service, new Object[]{null})).isFalse();
     }
 
     private GlobalSearchService createService(PermissionService permissionService,

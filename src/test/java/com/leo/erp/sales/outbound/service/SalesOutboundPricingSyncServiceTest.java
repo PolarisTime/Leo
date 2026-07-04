@@ -11,6 +11,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -49,6 +50,55 @@ class SalesOutboundPricingSyncServiceTest {
                 eq(StatusConstants.AUDITED),
                 eq(List.of())
         );
+    }
+
+    @Test
+    void shouldSkipRepositoryWhenNullInputsOrNoUnitPrices() {
+        SalesOutboundRepository repository = mock(SalesOutboundRepository.class);
+        SalesOutboundPricingSyncService service = new SalesOutboundPricingSyncService(repository);
+
+        service.syncAuditedOutboundPricing(null, Map.of(101L, BigDecimal.ONE));
+        service.syncAuditedOutboundPricing(List.of(101L), null);
+        service.syncAuditedOutboundPricing(List.of(101L), Map.of());
+
+        verify(repository, never()).findAllByStatusAndSourceSalesOrderItemIds(
+                eq(StatusConstants.AUDITED),
+                eq(List.of(101L))
+        );
+    }
+
+    @Test
+    void shouldReturnWhenNoAuditedOutboundsFound() {
+        SalesOutboundRepository repository = mock(SalesOutboundRepository.class);
+        when(repository.findAllByStatusAndSourceSalesOrderItemIds(
+                eq(StatusConstants.AUDITED),
+                eq(List.of(101L))
+        )).thenReturn(List.of());
+        SalesOutboundPricingSyncService service = new SalesOutboundPricingSyncService(repository);
+
+        service.syncAuditedOutboundPricing(List.of(101L), Map.of(101L, new BigDecimal("3888.00")));
+
+        verify(repository, never()).saveAll(any());
+    }
+
+    @Test
+    void shouldKeepExistingItemPricingWhenNoUnitPriceMappingExists() {
+        SalesOutboundRepository repository = mock(SalesOutboundRepository.class);
+        SalesOutbound outbound = outbound(202L, new BigDecimal("1.500"));
+        outbound.getItems().get(0).setUnitPrice(new BigDecimal("1000.00"));
+        outbound.getItems().get(0).setAmount(new BigDecimal("1500.00"));
+        when(repository.findAllByStatusAndSourceSalesOrderItemIds(
+                eq(StatusConstants.AUDITED),
+                eq(List.of(202L))
+        )).thenReturn(List.of(outbound));
+        SalesOutboundPricingSyncService service = new SalesOutboundPricingSyncService(repository);
+
+        service.syncAuditedOutboundPricing(List.of(202L), Map.of(101L, new BigDecimal("3888.00")));
+
+        assertThat(outbound.getItems().get(0).getUnitPrice()).isEqualByComparingTo("1000.00");
+        assertThat(outbound.getItems().get(0).getAmount()).isEqualByComparingTo("1500.00");
+        assertThat(outbound.getTotalAmount()).isEqualByComparingTo("1500.00");
+        verify(repository).saveAll(List.of(outbound));
     }
 
     private SalesOutbound outbound(Long sourceSalesOrderItemId, BigDecimal weightTon) {

@@ -6,9 +6,11 @@ import com.leo.erp.security.permission.ResourcePermissionCatalog;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.lang.reflect.Field;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class BusinessRecordEntityCatalogTest {
 
@@ -68,5 +70,21 @@ class BusinessRecordEntityCatalogTest {
     void shouldNormalizeModuleKeyBeforeLookup() {
         assertThat(BusinessRecordEntityCatalog.findEntityType("/Material")).contains(Material.class);
         assertThat(BusinessRecordEntityCatalog.hasEntity(" MATERIAL ")).isTrue();
+    }
+
+    @Test
+    void shouldFailFastWhenRegistrarIsNotInitialized() throws Exception {
+        Field registrar = BusinessRecordEntityCatalog.class.getDeclaredField("registrar");
+        registrar.setAccessible(true);
+        BusinessEntityRegistrar original = (BusinessEntityRegistrar) registrar.get(null);
+        registrar.set(null, null);
+
+        try {
+            assertThatThrownBy(() -> BusinessRecordEntityCatalog.moduleKeys())
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessageContaining("BusinessEntityRegistrar not initialized");
+        } finally {
+            BusinessRecordEntityCatalog.setRegistrar(original);
+        }
     }
 }

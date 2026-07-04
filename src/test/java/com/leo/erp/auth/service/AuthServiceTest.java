@@ -8,6 +8,7 @@ import com.leo.erp.auth.repository.UserAccountRepository;
 import org.springframework.context.ApplicationEventPublisher;
 import com.leo.erp.auth.web.dto.LoginResponseBody;
 import com.leo.erp.auth.web.dto.LoginRequest;
+import com.leo.erp.auth.web.dto.TokenResponse;
 import com.leo.erp.common.config.RedisTuningProperties;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
@@ -279,6 +280,95 @@ class AuthServiceTest {
         assertThat(command.resultStatus()).isEqualTo("成功");
         assertThat(command.operatorId()).isEqualTo(42L);
         assertThat(command.operatorName()).isEqualTo("测试用户");
+    }
+
+    @Test
+    void shouldDelegateLoginTotpRefreshAndCaptchaFacadeMethods() {
+        LoginService loginService = Mockito.mock(LoginService.class);
+        TokenIssuanceService tokenService = Mockito.mock(TokenIssuanceService.class);
+        SessionManagementService sessionService = Mockito.mock(SessionManagementService.class);
+        CaptchaService captchaService = Mockito.mock(CaptchaService.class);
+        SystemSwitchService switchService = systemSwitchService(true);
+        AuthService authService = new AuthService(loginService, tokenService, sessionService, captchaService, switchService);
+        LoginRequest loginRequest = new LoginRequest("tester", "secret", null, null);
+        TokenResponse loginResponse = tokenResponse("login-access", "login-refresh");
+        TokenResponse totpResponse = tokenResponse("totp-access", "totp-refresh");
+        TokenResponse refreshResponse = tokenResponse("refresh-access", "refresh-token");
+        Mockito.when(loginService.login(loginRequest, AUTH_CONTEXT)).thenReturn(loginResponse);
+        Mockito.when(loginService.verifyTotpAndIssueTokens("temp-token", "123456", TOTP_CONTEXT)).thenReturn(totpResponse);
+        Mockito.when(tokenService.refresh("refresh-token", "127.0.0.1", "JUnit")).thenReturn(refreshResponse);
+        Mockito.when(captchaService.generate()).thenReturn(new CaptchaService.CaptchaResult("captcha-id", "image"));
+
+        assertThat(authService.login(loginRequest, AUTH_CONTEXT)).isSameAs(loginResponse);
+        assertThat(authService.verifyTotpAndIssueTokens("temp-token", "123456", TOTP_CONTEXT)).isSameAs(totpResponse);
+        assertThat(authService.refresh("refresh-token", "127.0.0.1", "JUnit")).isSameAs(refreshResponse);
+        assertThat(authService.captcha())
+                .extracting("captchaId", "captchaImage", "required")
+                .containsExactly("captcha-id", "image", false);
+    }
+
+    @Test
+    void shouldIgnoreBlankLogoutToken() {
+        LoginService loginService = Mockito.mock(LoginService.class);
+        TokenIssuanceService tokenService = Mockito.mock(TokenIssuanceService.class);
+        SessionManagementService sessionService = Mockito.mock(SessionManagementService.class);
+        AuthService authService = new AuthService(
+                loginService,
+                tokenService,
+                sessionService,
+                captchaService(),
+                systemSwitchService(true)
+        );
+
+        authService.logout("  ", LOGOUT_CONTEXT);
+
+        Mockito.verifyNoInteractions(sessionService);
+        Mockito.verifyNoInteractions(tokenService);
+        Mockito.verifyNoInteractions(loginService);
+    }
+
+    @Test
+    void shouldIgnoreNullLogoutToken() {
+        LoginService loginService = Mockito.mock(LoginService.class);
+        TokenIssuanceService tokenService = Mockito.mock(TokenIssuanceService.class);
+        SessionManagementService sessionService = Mockito.mock(SessionManagementService.class);
+        AuthService authService = new AuthService(
+                loginService,
+                tokenService,
+                sessionService,
+                captchaService(),
+                systemSwitchService(true)
+        );
+
+        authService.logout(null, LOGOUT_CONTEXT);
+
+        Mockito.verifyNoInteractions(sessionService);
+        Mockito.verifyNoInteractions(tokenService);
+        Mockito.verifyNoInteractions(loginService);
+    }
+
+    @Test
+    void shouldRecordLogoutWithNullLoginNameWhenSessionUserMissing() {
+        LoginService loginService = Mockito.mock(LoginService.class);
+        TokenIssuanceService tokenService = Mockito.mock(TokenIssuanceService.class);
+        SessionManagementService sessionService = Mockito.mock(SessionManagementService.class);
+        RefreshTokenSession session = token(12L);
+        Mockito.when(sessionService.findActiveSession("refresh-token")).thenReturn(Optional.of(session));
+        Mockito.when(sessionService.findUserById(session.getUserId())).thenReturn(null);
+        AuthService authService = new AuthService(
+                loginService,
+                tokenService,
+                sessionService,
+                captchaService(),
+                systemSwitchService(true)
+        );
+
+        authService.logout("refresh-token", LOGOUT_CONTEXT);
+
+        Mockito.verify(tokenService).revokeSession(session);
+        Mockito.verify(loginService).recordAuthenticationLog(
+                "退出登录", null, null, LOGOUT_CONTEXT, "成功", "退出成功"
+        );
     }
 
     // --- Helpers ---
@@ -600,6 +690,10 @@ class AuthServiceTest {
                 roleBinding != null ? roleBinding : userRoleBindingService(),
                 sessionMgmt, NOOP_EVENT_PUBLISHER
         );
+    }
+
+    private TokenResponse tokenResponse(String accessToken, String refreshToken) {
+        return new TokenResponse(accessToken, refreshToken, "Bearer", 300L, 1800L, null);
     }
 
     // --- LoginService 2FA failure recording ---

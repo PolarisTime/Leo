@@ -173,7 +173,7 @@ public class ReceivablePayableService {
         String direction = validateDirection(parts[0]);
         String counterpartyType = validateCounterpartyType(parts[1]);
         String reconciliationStatus = validateReconciliationStatus(parts[2]);
-        String counterpartyKey = parts[3] == null ? "" : parts[3].trim();
+        String counterpartyKey = parts[3].trim();
         if (direction == null || counterpartyType == null || reconciliationStatus == null || !isValidCounterpartyKey(counterpartyKey)) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "应收应付汇总ID不合法");
         }
@@ -190,7 +190,6 @@ public class ReceivablePayableService {
         }
         String normalized = value.trim();
         return normalized.matches("[A-Za-z0-9._-]{1,64}")
-                || normalized.matches("[a-fA-F0-9]{32}")
                 || normalized.matches("name:[a-fA-F0-9]{32}");
     }
 

@@ -17,6 +17,8 @@ import com.leo.erp.master.carrier.web.dto.CarrierRequest;
 import com.leo.erp.master.carrier.web.dto.CarrierResponse;
 import com.leo.erp.master.carrier.web.dto.VehicleInfo;
 import com.leo.erp.master.carrier.web.dto.VehicleItem;
+import com.leo.erp.system.company.domain.entity.CompanySetting;
+import com.leo.erp.system.company.service.CompanySettingService;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Method;
@@ -131,6 +133,26 @@ class CarrierServiceTest {
         assertThatThrownBy(() -> service.update(1L, new CarrierRequest("CR002", "物流乙", null, null, null, null, null, 1L, "正常", null)))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("物流方编码已存在");
+    }
+
+    @Test
+    void shouldUpdateSuccessfully_whenCarrierCodeChangedAndNewCodeUnique() {
+        Carrier existing = createCarrier(1L, "CR001");
+        CarrierRepository repository = mock(CarrierRepository.class);
+        CarrierMapper mapper = mock(CarrierMapper.class);
+        when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(existing));
+        when(repository.existsByCarrierCodeAndDeletedFlagFalse("CR002")).thenReturn(false);
+        when(repository.save(any(Carrier.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(mapper.toResponse(any(Carrier.class))).thenAnswer(invocation -> toResponse(invocation.getArgument(0)));
+        var service = new CarrierService(repository, mock(VehicleRepository.class), new SnowflakeIdGenerator(1), mapper);
+
+        var request = new CarrierRequest("CR002", "物流乙", null, null, null, null, "按吨", 1L, "正常", null);
+        var result = service.update(1L, request);
+
+        assertThat(result.carrierCode()).isEqualTo("CR002");
+        assertThat(result.carrierName()).isEqualTo("物流乙");
+        verify(repository).existsByCarrierCodeAndDeletedFlagFalse("CR002");
+        verify(repository).save(existing);
     }
 
     @Test
@@ -363,6 +385,20 @@ class CarrierServiceTest {
     }
 
     @Test
+    void shouldDeleteSuccessfully_whenReferenceGuardIsNull() {
+        Carrier existing = createCarrier(1L, "CR001");
+        CarrierRepository repository = mock(CarrierRepository.class);
+        when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(existing));
+        when(repository.save(any(Carrier.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        var service = new CarrierService(repository, mock(VehicleRepository.class), new SnowflakeIdGenerator(1), null);
+
+        service.delete(1L);
+
+        assertThat(existing.isDeletedFlag()).isTrue();
+        verify(repository).save(existing);
+    }
+
+    @Test
     void shouldThrowException_whenDeleteWithReferences() {
         var repository = (CarrierRepository) Proxy.newProxyInstance(
                 CarrierRepository.class.getClassLoader(),
@@ -418,6 +454,36 @@ class CarrierServiceTest {
 
         assertThat(result).isNotNull();
         assertThat(result.carrierCode()).isEqualTo("CR001");
+    }
+
+    @Test
+    void shouldResolveDefaultSettlementCompanyName_whenCompanySettingServiceProvided() {
+        CarrierRepository repository = mock(CarrierRepository.class);
+        CarrierMapper mapper = mock(CarrierMapper.class);
+        CompanySettingService companySettingService = mock(CompanySettingService.class);
+        CompanySetting company = new CompanySetting();
+        company.setId(9L);
+        company.setCompanyName("上海结算主体");
+        when(repository.existsByCarrierCodeAndDeletedFlagFalse("CR001")).thenReturn(false);
+        when(repository.save(any(Carrier.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(mapper.toResponse(any(Carrier.class))).thenAnswer(invocation -> toResponse(invocation.getArgument(0)));
+        when(companySettingService.requireActiveSettlementCompany(9L)).thenReturn(company);
+        var service = new CarrierService(
+                repository,
+                mock(VehicleRepository.class),
+                new SnowflakeIdGenerator(1),
+                mapper,
+                null,
+                null,
+                companySettingService
+        );
+
+        var request = new CarrierRequest("CR001", "物流甲", null, null, null, null, "按吨", 9L, "正常", null);
+        var result = service.create(request);
+
+        assertThat(result.defaultSettlementCompanyId()).isEqualTo(9L);
+        assertThat(result.defaultSettlementCompanyName()).isEqualTo("上海结算主体");
+        verify(companySettingService).requireActiveSettlementCompany(9L);
     }
 
     @Test
@@ -589,6 +655,7 @@ class CarrierServiceTest {
         assertThat((boolean) matches.invoke(service, response, "不存在", null)).isFalse();
         assertThat((boolean) matches.invoke(service, response, null, "正常")).isTrue();
         assertThat((boolean) matches.invoke(service, response, null, "停用")).isFalse();
+        assertThat((boolean) matches.invoke(service, response, null, "  ")).isTrue();
     }
 
     @Test
@@ -693,7 +760,8 @@ class CarrierServiceTest {
         return new CarrierResponse(
                 c.getId(), c.getCarrierCode(), c.getCarrierName(),
                 c.getContactName(), c.getContactPhone(), c.getVehicleType(),
-                vehicles, c.getPriceMode(), c.getStatus(), c.getRemark()
+                vehicles, c.getPriceMode(), c.getDefaultSettlementCompanyId(),
+                c.getDefaultSettlementCompanyName(), c.getStatus(), c.getRemark()
         );
     }
 }

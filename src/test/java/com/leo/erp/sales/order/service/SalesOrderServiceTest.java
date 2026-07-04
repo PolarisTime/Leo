@@ -2,7 +2,9 @@ package com.leo.erp.sales.order.service;
 
 import com.leo.erp.allocation.appservice.PurchaseItemQueryAppService;
 import com.leo.erp.allocation.appservice.PurchaseItemPieceWeightAppService;
+import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.error.BusinessException;
+import com.leo.erp.common.service.CrudRuntimeSettings;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.support.TradeItemMaterialSupport;
@@ -23,12 +25,17 @@ import com.leo.erp.sales.order.web.dto.SalesOrderRequest;
 import com.leo.erp.sales.order.web.dto.SalesOrderResponse;
 import com.leo.erp.sales.outbound.domain.entity.SalesOutbound;
 import com.leo.erp.sales.outbound.domain.entity.SalesOutboundItem;
+import com.leo.erp.security.support.SecurityPrincipal;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.InOrder;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
@@ -58,6 +65,11 @@ class SalesOrderServiceTest {
     @BeforeEach
     void setUpIdGenerator() {
         ReflectionTestUtils.invokeMethod(new SnowflakeIdGenerator(0L), "registerInstance");
+    }
+
+    @AfterEach
+    void clearSecurityContext() {
+        SecurityContextHolder.clearContext();
     }
 
     @Test
@@ -259,6 +271,23 @@ class SalesOrderServiceTest {
         occupiedItemOnOpenOrder.setUnitPrice(new BigDecimal("4000.00"));
         occupiedItemOnOpenOrder.setAmount(new BigDecimal("4000.00"));
         auditedOpen.getItems().add(occupiedItemOnOpenOrder);
+        SalesOrderItem nullIdItemOnOpenOrder = new SalesOrderItem();
+        nullIdItemOnOpenOrder.setSalesOrder(auditedOpen);
+        nullIdItemOnOpenOrder.setLineNo(3);
+        nullIdItemOnOpenOrder.setMaterialCode("M3");
+        nullIdItemOnOpenOrder.setBrand("宝钢");
+        nullIdItemOnOpenOrder.setCategory("螺纹钢");
+        nullIdItemOnOpenOrder.setMaterial("HRB400");
+        nullIdItemOnOpenOrder.setSpec("22");
+        nullIdItemOnOpenOrder.setUnit("吨");
+        nullIdItemOnOpenOrder.setQuantity(1);
+        nullIdItemOnOpenOrder.setQuantityUnit("件");
+        nullIdItemOnOpenOrder.setPieceWeightTon(new BigDecimal("1.000"));
+        nullIdItemOnOpenOrder.setPiecesPerBundle(1);
+        nullIdItemOnOpenOrder.setWeightTon(new BigDecimal("1.000"));
+        nullIdItemOnOpenOrder.setUnitPrice(new BigDecimal("4000.00"));
+        nullIdItemOnOpenOrder.setAmount(new BigDecimal("4000.00"));
+        auditedOpen.getItems().add(nullIdItemOnOpenOrder);
 
         var auditedOccupied = auditedSalesOrder("SO-002", StatusConstants.AUDITED, new BigDecimal("4000.00"));
         auditedOccupied.setId(2L);
@@ -307,6 +336,226 @@ class SalesOrderServiceTest {
             assertThat(candidate.items()).extracting("id").containsExactly(101L);
         });
         assertThat(page.getTotalElements()).isEqualTo(1);
+    }
+
+    @Test
+    void shouldPageSalesOrdersWithFilter() {
+        SalesOrderRepository repository = mock(SalesOrderRepository.class);
+        SalesOrderMapper mapper = mock(SalesOrderMapper.class);
+        SalesOrderService service = service(
+                repository,
+                mock(SnowflakeIdGenerator.class),
+                mapper,
+                mock(TradeItemMaterialSupport.class),
+                mock(PurchaseItemQueryAppService.class),
+                mock(PurchaseItemPieceWeightAppService.class),
+                mock(SalesOrderItemRepository.class),
+                mock(WarehouseSelectionSupport.class),
+                stubbedSalesOrderItemMapper(),
+                mock(WorkflowTransitionGuard.class)
+        );
+        var order = auditedSalesOrder("SO-PAGE-001", StatusConstants.AUDITED, new BigDecimal("3000.00"));
+        when(repository.findAll(any(Specification.class), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(order)));
+        when(mapper.toResponse(any())).thenAnswer(invocation -> {
+            com.leo.erp.sales.order.domain.entity.SalesOrder source = invocation.getArgument(0);
+            return new SalesOrderResponse(
+                    source.getId(),
+                    source.getOrderNo(),
+                    source.getPurchaseInboundNo(),
+                    source.getPurchaseOrderNo(),
+                    source.getCustomerCode(),
+                    source.getCustomerName(),
+                    source.getProjectId(),
+                    source.getProjectName(),
+                    source.getSettlementCompanyId(),
+                    source.getSettlementCompanyName(),
+                    source.getDeliveryDate(),
+                    source.getSalesName(),
+                    source.getTotalWeight(),
+                    source.getTotalAmount(),
+                    source.getStatus(),
+                    source.getRemark(),
+                    List.of()
+            );
+        });
+
+        var page = service.page(
+                PageQuery.of(0, 20, "deliveryDate", "desc"),
+                com.leo.erp.common.api.PageFilter.of(
+                        "SO",
+                        "客户A",
+                        "项目A",
+                        9L,
+                        StatusConstants.AUDITED,
+                        LocalDate.of(2026, 4, 1),
+                        LocalDate.of(2026, 4, 30)
+                )
+        );
+
+        assertThat(page.getContent()).singleElement().satisfies(response -> {
+            assertThat(response.orderNo()).isEqualTo("SO-PAGE-001");
+            assertThat(response.status()).isEqualTo(StatusConstants.AUDITED);
+        });
+        verify(repository).findAll(any(Specification.class), any(Pageable.class));
+    }
+
+    @Test
+    void shouldReturnNoOutboundCandidatesWhenOrdersHaveNoItemIds() {
+        SalesOrderRepository repository = mock(SalesOrderRepository.class);
+        SalesOrderItemRepository salesOrderItemRepository = mock(SalesOrderItemRepository.class);
+        SalesOrderService service = service(
+                repository,
+                mock(SnowflakeIdGenerator.class),
+                mock(SalesOrderMapper.class),
+                mock(TradeItemMaterialSupport.class),
+                mock(PurchaseItemQueryAppService.class),
+                mock(PurchaseItemPieceWeightAppService.class),
+                salesOrderItemRepository,
+                mock(WarehouseSelectionSupport.class),
+                stubbedSalesOrderItemMapper(),
+                mock(WorkflowTransitionGuard.class)
+        );
+        var order = auditedSalesOrder("SO-NO-ITEM-ID", StatusConstants.AUDITED, new BigDecimal("3000.00"));
+        order.getItems().get(0).setId(null);
+        when(repository.findAll(any(Specification.class), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(order)));
+
+        var page = service.outboundImportCandidates(
+                PageQuery.of(0, 20, null, null),
+                com.leo.erp.common.api.PageFilter.of("", null, null, null, null)
+        );
+
+        assertThat(page.getContent()).isEmpty();
+        assertThat(page.getTotalElements()).isZero();
+        verify(salesOrderItemRepository, never()).findOccupiedSourceSalesOrderItemIds(anyCollection());
+    }
+
+    @Test
+    void shouldReadAllEntityPagesWhenBuildingOutboundCandidates() {
+        SalesOrderRepository repository = mock(SalesOrderRepository.class);
+        SalesOrderMapper mapper = mock(SalesOrderMapper.class);
+        SalesOrderItemRepository salesOrderItemRepository = mock(SalesOrderItemRepository.class);
+        SalesOrderService service = service(
+                repository,
+                mock(SnowflakeIdGenerator.class),
+                mapper,
+                mock(TradeItemMaterialSupport.class),
+                mock(PurchaseItemQueryAppService.class),
+                mock(PurchaseItemPieceWeightAppService.class),
+                salesOrderItemRepository,
+                mock(WarehouseSelectionSupport.class),
+                stubbedSalesOrderItemMapper(),
+                mock(WorkflowTransitionGuard.class)
+        );
+        var firstOrder = auditedSalesOrder("SO-CAND-001", StatusConstants.AUDITED, new BigDecimal("3000.00"));
+        firstOrder.getItems().get(0).setId(101L);
+        var secondOrder = auditedSalesOrder("SO-CAND-002", StatusConstants.AUDITED, new BigDecimal("3000.00"));
+        secondOrder.setId(2L);
+        secondOrder.getItems().get(0).setId(102L);
+        when(repository.findAll(any(Specification.class), any(Pageable.class)))
+                .thenReturn(
+                        new PageImpl<>(
+                                List.of(firstOrder),
+                                org.springframework.data.domain.PageRequest.of(0, 200),
+                                201
+                        ),
+                        new PageImpl<>(
+                                List.of(secondOrder),
+                                org.springframework.data.domain.PageRequest.of(1, 200),
+                                201
+                        )
+                );
+        when(salesOrderItemRepository.findOccupiedSourceSalesOrderItemIds(anyCollection()))
+                .thenReturn(List.of());
+        when(mapper.toResponse(any())).thenAnswer(invocation -> {
+            com.leo.erp.sales.order.domain.entity.SalesOrder order = invocation.getArgument(0);
+            return new SalesOrderResponse(
+                    order.getId(),
+                    order.getOrderNo(),
+                    order.getPurchaseInboundNo(),
+                    order.getPurchaseOrderNo(),
+                    order.getCustomerCode(),
+                    order.getCustomerName(),
+                    order.getProjectId(),
+                    order.getProjectName(),
+                    order.getSettlementCompanyId(),
+                    order.getSettlementCompanyName(),
+                    order.getDeliveryDate(),
+                    order.getSalesName(),
+                    order.getTotalWeight(),
+                    order.getTotalAmount(),
+                    order.getStatus(),
+                    order.getRemark(),
+                    List.of()
+            );
+        });
+
+        var page = service.outboundImportCandidates(
+                PageQuery.of(0, 20, null, null),
+                com.leo.erp.common.api.PageFilter.of("", null, null, null, null)
+        );
+
+        assertThat(page.getContent()).extracting(SalesOrderResponse::orderNo)
+                .containsExactly("SO-CAND-001", "SO-CAND-002");
+        verify(repository, org.mockito.Mockito.times(2)).findAll(any(Specification.class), any(Pageable.class));
+    }
+
+    @Test
+    void shouldUseVisibleEntityLookupForAdminDetailIncludingDeletedRecords() {
+        SalesOrderRepository repository = mock(SalesOrderRepository.class);
+        SalesOrderMapper mapper = mock(SalesOrderMapper.class);
+        SalesOrderService service = service(
+                repository,
+                mock(SnowflakeIdGenerator.class),
+                mapper,
+                mock(TradeItemMaterialSupport.class),
+                mock(PurchaseItemQueryAppService.class),
+                mock(PurchaseItemPieceWeightAppService.class),
+                mock(SalesOrderItemRepository.class),
+                mock(WarehouseSelectionSupport.class),
+                stubbedSalesOrderItemMapper(),
+                mock(WorkflowTransitionGuard.class)
+        );
+        CrudRuntimeSettings runtimeSettings = mock(CrudRuntimeSettings.class);
+        when(runtimeSettings.shouldAdminSeeDeletedRecords()).thenReturn(true);
+        ReflectionTestUtils.invokeMethod(service, "setCrudRuntimeSettings", runtimeSettings);
+        var principal = new SecurityPrincipal(
+                1L,
+                "admin",
+                "",
+                true,
+                List.of(new SimpleGrantedAuthority("ROLE_ADMIN"))
+        );
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken(principal, null, principal.getAuthorities())
+        );
+        var deletedOrder = auditedSalesOrder("SO-DELETED-001", StatusConstants.DELETED, new BigDecimal("3000.00"));
+        deletedOrder.setDeletedFlag(true);
+        when(repository.findById(1L)).thenReturn(Optional.of(deletedOrder), Optional.empty());
+        when(mapper.toResponse(deletedOrder)).thenReturn(new SalesOrderResponse(
+                1L,
+                "SO-DELETED-001",
+                null,
+                null,
+                "客户A",
+                "项目A",
+                LocalDate.of(2026, 4, 26),
+                "张三",
+                new BigDecimal("4.500"),
+                new BigDecimal("13500.00"),
+                StatusConstants.DELETED,
+                "备注",
+                List.of()
+        ));
+
+        SalesOrderResponse response = service.detail(1L);
+
+        assertThat(response.orderNo()).isEqualTo("SO-DELETED-001");
+        assertThatThrownBy(() -> service.detail(1L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("销售订单不存在");
+        verify(repository, never()).findByIdAndDeletedFlagFalse(1L);
     }
 
     @Test
@@ -922,6 +1171,116 @@ class SalesOrderServiceTest {
         assertThatThrownBy(() -> service.create(request))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("销售订单号已存在");
+    }
+
+    @Test
+    void shouldRejectDuplicateOrderNoWhenValidateUpdateReceivesChangedOrderNo() {
+        SalesOrderRepository repository = mock(SalesOrderRepository.class);
+        SalesOrderService service = service(
+                repository,
+                mock(SnowflakeIdGenerator.class),
+                mock(SalesOrderMapper.class),
+                mock(TradeItemMaterialSupport.class),
+                mock(PurchaseItemQueryAppService.class),
+                mock(PurchaseItemPieceWeightAppService.class),
+                mock(SalesOrderItemRepository.class),
+                mock(WarehouseSelectionSupport.class),
+                stubbedSalesOrderItemMapper(),
+                mock(WorkflowTransitionGuard.class)
+        );
+        var order = new com.leo.erp.sales.order.domain.entity.SalesOrder();
+        order.setOrderNo("SO-OLD");
+        SalesOrderRequest request = new SalesOrderRequest(
+                "SO-NEW",
+                null,
+                null,
+                "客户A",
+                "项目A",
+                LocalDate.of(2026, 4, 26),
+                "张三",
+                StatusConstants.DRAFT,
+                null,
+                List.of(new SalesOrderItemRequest(
+                        "M1",
+                        "宝钢",
+                        "盘螺",
+                        "HRB400",
+                        "8",
+                        null,
+                        "吨",
+                        null,
+                        null,
+                        "一号库",
+                        null,
+                        1,
+                        "件",
+                        new BigDecimal("2.000"),
+                        1,
+                        new BigDecimal("2.000"),
+                        new BigDecimal("3000.00"),
+                        new BigDecimal("6000.00")
+                ))
+        );
+        when(repository.existsByOrderNoAndDeletedFlagFalse("SO-NEW")).thenReturn(true);
+
+        assertThatThrownBy(() -> service.validateUpdate(order, request))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("销售订单号已存在");
+    }
+
+    @Test
+    void shouldAllowChangedOrderNoWhenNoDuplicateExists() {
+        SalesOrderRepository repository = mock(SalesOrderRepository.class);
+        SalesOrderService service = service(
+                repository,
+                mock(SnowflakeIdGenerator.class),
+                mock(SalesOrderMapper.class),
+                mock(TradeItemMaterialSupport.class),
+                mock(PurchaseItemQueryAppService.class),
+                mock(PurchaseItemPieceWeightAppService.class),
+                mock(SalesOrderItemRepository.class),
+                mock(WarehouseSelectionSupport.class),
+                stubbedSalesOrderItemMapper(),
+                mock(WorkflowTransitionGuard.class)
+        );
+        var order = new com.leo.erp.sales.order.domain.entity.SalesOrder();
+        order.setOrderNo("SO-OLD");
+        SalesOrderRequest request = new SalesOrderRequest(
+                "SO-NEW",
+                null,
+                null,
+                "客户A",
+                "项目A",
+                LocalDate.of(2026, 4, 26),
+                "张三",
+                StatusConstants.DRAFT,
+                null,
+                List.of(new SalesOrderItemRequest(
+                        "M1",
+                        "宝钢",
+                        "盘螺",
+                        "HRB400",
+                        "8",
+                        null,
+                        "吨",
+                        null,
+                        null,
+                        "一号库",
+                        null,
+                        1,
+                        "件",
+                        new BigDecimal("2.000"),
+                        1,
+                        new BigDecimal("2.000"),
+                        new BigDecimal("3000.00"),
+                        new BigDecimal("6000.00")
+                ))
+        );
+        when(repository.existsByOrderNoAndDeletedFlagFalse("SO-NEW")).thenReturn(false);
+
+        service.validateUpdate(order, request);
+
+        verify(repository).existsByOrderNoAndDeletedFlagFalse("SO-NEW");
     }
 
     @Test
