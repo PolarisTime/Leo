@@ -18,7 +18,7 @@ RUN apt-get update \
 
 COPY --from=build /workspace/target/*.jar /app/app.jar
 
-ENV SPRING_PROFILES_ACTIVE=docker
+ENV SPRING_PROFILES_ACTIVE=prod
 
 EXPOSE 11211
 

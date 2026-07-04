@@ -211,9 +211,11 @@ jobs:
         run: |
           docker run -d --name leo-backend-smoke \
             --network host \
+            -e SPRING_PROFILES_ACTIVE=prod \
             -e SPRING_DATASOURCE_URL="$SPRING_DATASOURCE_URL" \
             -e SPRING_DATASOURCE_USERNAME="$SPRING_DATASOURCE_USERNAME" \
             -e SPRING_DATASOURCE_PASSWORD="$SPRING_DATASOURCE_PASSWORD" \
+            -e SPRING_FLYWAY_ENABLED=false \
             -e SPRING_DATA_REDIS_HOST=localhost \
             -e SPRING_DATA_REDIS_PORT="$SPRING_DATA_REDIS_PORT" \
             -e SPRING_DATA_REDIS_DATABASE="$SPRING_DATA_REDIS_DATABASE" \
@@ -222,8 +224,8 @@ jobs:
             -e TOTP_ENCRYPTION_KEY="$TOTP_ENCRYPTION_KEY" \
             -e LEO_MACHINE_ID="$LEO_MACHINE_ID" \
             leo-backend:ci
-          trap 'docker logs leo-backend-smoke --tail 100 || true; docker rm -f leo-backend-smoke || true' EXIT
-          timeout 90 bash -c 'until curl -fsS http://127.0.0.1:11211/api/health; do sleep 3; done'
+          trap 'docker ps -a --filter name=leo-backend-smoke; docker logs leo-backend-smoke --tail 300 || true; docker rm -f leo-backend-smoke || true' EXIT
+          timeout 240 bash -c 'until curl --max-time 5 -fsS http://127.0.0.1:11211/api/health; do sleep 3; done'
 
       - name: Upload backend artifact
         uses: actions/upload-artifact@v4
