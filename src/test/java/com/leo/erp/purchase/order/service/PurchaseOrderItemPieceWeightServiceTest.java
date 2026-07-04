@@ -1,10 +1,12 @@
 package com.leo.erp.purchase.order.service;
 
+import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.purchase.order.domain.entity.PurchaseOrderItem;
 import com.leo.erp.purchase.order.domain.entity.PurchaseOrderItemPieceWeight;
 import com.leo.erp.purchase.order.repository.PurchaseOrderItemPieceWeightRepository;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.junit.jupiter.api.Test;
+import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.mockito.ArgumentCaptor;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -20,6 +22,20 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class PurchaseOrderItemPieceWeightServiceTest {
+
+    @Test
+    void shouldCreateBeanWithProductionConstructor() {
+        new ApplicationContextRunner()
+                .withBean(PurchaseOrderItemPieceWeightRepository.class,
+                        () -> mock(PurchaseOrderItemPieceWeightRepository.class))
+                .withBean(JdbcTemplate.class, () -> mock(JdbcTemplate.class))
+                .withBean(SnowflakeIdGenerator.class, SnowflakeIdGenerator::new)
+                .withBean(PurchaseOrderItemPieceWeightService.class)
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    assertThat(context).hasSingleBean(PurchaseOrderItemPieceWeightService.class);
+                });
+    }
 
     @Test
     void shouldDistributeResidualWeightToPieceWeights() {

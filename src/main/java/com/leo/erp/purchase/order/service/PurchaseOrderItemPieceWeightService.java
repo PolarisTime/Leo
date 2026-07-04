@@ -8,6 +8,7 @@ import com.leo.erp.common.support.TradeItemCalculator;
 import com.leo.erp.purchase.order.domain.entity.PurchaseOrderItem;
 import com.leo.erp.purchase.order.domain.entity.PurchaseOrderItemPieceWeight;
 import com.leo.erp.purchase.order.repository.PurchaseOrderItemPieceWeightRepository;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -32,6 +33,7 @@ public class PurchaseOrderItemPieceWeightService {
     private final JdbcTemplate jdbc;
     private final SnowflakeIdGenerator snowflakeIdGenerator;
 
+    @Autowired
     public PurchaseOrderItemPieceWeightService(PurchaseOrderItemPieceWeightRepository repository,
                                                 JdbcTemplate jdbc,
                                                 SnowflakeIdGenerator snowflakeIdGenerator) {
