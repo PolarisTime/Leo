@@ -26,7 +26,6 @@ import com.leo.erp.sales.order.web.dto.SalesOrderResponse;
 import com.leo.erp.sales.outbound.domain.entity.SalesOutbound;
 import com.leo.erp.sales.outbound.domain.entity.SalesOutboundItem;
 import com.leo.erp.security.support.SecurityPrincipal;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.InOrder;
@@ -61,11 +60,6 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class SalesOrderServiceTest {
-
-    @BeforeEach
-    void setUpIdGenerator() {
-        ReflectionTestUtils.invokeMethod(new SnowflakeIdGenerator(0L), "registerInstance");
-    }
 
     @AfterEach
     void clearSecurityContext() {

@@ -20,10 +20,8 @@ import com.leo.erp.sales.outbound.web.dto.SalesOutboundRequest;
 import com.leo.erp.sales.outbound.web.dto.SalesOutboundResponse;
 import com.leo.erp.purchase.order.service.PurchaseOrderItemPieceWeightService;
 import com.leo.erp.security.permission.WorkflowTransitionGuard;
-import org.junit.jupiter.api.BeforeEach;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.junit.jupiter.api.Test;
-import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -45,11 +43,6 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class SalesOutboundServiceTest {
-
-    @BeforeEach
-    void setUpIdGenerator() {
-        ReflectionTestUtils.invokeMethod(new SnowflakeIdGenerator(0L), "registerInstance");
-    }
 
     @Test
     void shouldResolveHeaderWarehouseFromFirstLineWarehouseWhenHeaderWarehouseMissing() {

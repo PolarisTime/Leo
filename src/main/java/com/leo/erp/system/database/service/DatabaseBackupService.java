@@ -6,6 +6,7 @@ import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.support.PostgresJdbcUrlParser;
 import com.leo.erp.system.database.config.DatabaseBackupProperties;
+import com.leo.erp.system.database.config.DatabaseImportProperties;
 import org.springframework.boot.autoconfigure.jdbc.DataSourceProperties;
 import org.springframework.stereotype.Service;
 
@@ -27,13 +28,16 @@ public class DatabaseBackupService {
 
     private final ExternalProcessRunner processRunner;
     private final DatabaseBackupProperties backupProperties;
+    private final DatabaseImportProperties importProperties;
     private final DataSourceProperties dataSourceProperties;
 
     public DatabaseBackupService(ExternalProcessRunner processRunner,
                                  DatabaseBackupProperties backupProperties,
+                                 DatabaseImportProperties importProperties,
                                  DataSourceProperties dataSourceProperties) {
         this.processRunner = processRunner;
         this.backupProperties = backupProperties;
+        this.importProperties = importProperties;
         this.dataSourceProperties = dataSourceProperties;
     }
 
@@ -66,6 +70,7 @@ public class DatabaseBackupService {
     }
 
     public void importBackup(Path sqlFile, String databaseUsername, String databasePassword) throws IOException, InterruptedException {
+        validateImportEnabled();
         validateImportFile(sqlFile);
         validateDatabaseCredentials(databaseUsername, databasePassword);
         Path autoBackup = null;
@@ -108,6 +113,12 @@ public class DatabaseBackupService {
 
     private static final Set<String> ALLOWED_IMPORT_EXTENSIONS = Set.of(".sql", ".dump", ".pgdump");
     private static final long MAX_IMPORT_FILE_SIZE = 500L * 1024 * 1024;
+
+    private void validateImportEnabled() {
+        if (!importProperties.isEnabled()) {
+            throw new BusinessException(ErrorCode.FORBIDDEN, "数据库备份导入已禁用");
+        }
+    }
 
     private void validateImportFile(Path file) {
         if (file == null || !Files.exists(file)) {

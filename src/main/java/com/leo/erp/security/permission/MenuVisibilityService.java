@@ -1,13 +1,11 @@
 package com.leo.erp.security.permission;
 
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.leo.erp.common.support.RedisJsonCacheSupport;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.system.menu.domain.entity.Menu;
 import com.leo.erp.system.menu.repository.MenuRepository;
 import org.springframework.stereotype.Component;
 
-import java.time.Duration;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -18,16 +16,10 @@ import java.util.stream.Collectors;
 @Component
 class MenuVisibilityService {
 
-    static final String MENU_CACHE_KEY_PREFIX = "leo:menu:all";
-    static final Duration MENU_CACHE_TTL = Duration.ofMinutes(30);
-    private static final TypeReference<List<MenuSnapshot>> MENU_LIST_TYPE = new TypeReference<>() { };
-
     private final MenuRepository menuRepository;
-    private final RedisJsonCacheSupport redisJsonCacheSupport;
 
     MenuVisibilityService(MenuRepository menuRepository, Optional<RedisJsonCacheSupport> redisJsonCacheSupport) {
         this.menuRepository = menuRepository;
-        this.redisJsonCacheSupport = redisJsonCacheSupport == null ? null : redisJsonCacheSupport.orElse(null);
     }
 
     Set<String> getVisibleMenuCodes(Map<String, Set<String>> permissionMap) {
@@ -69,32 +61,9 @@ class MenuVisibilityService {
         if (menuRepository == null) {
             return List.of();
         }
-        if (redisJsonCacheSupport == null) {
-            return menuRepository.findByStatusAndDeletedFlagFalseOrderBySortOrder(StatusConstants.NORMAL).stream()
-                    .map(MenuVisibilityService::toMenuSnapshot)
-                    .toList();
-        }
-        String cacheKey = MENU_CACHE_KEY_PREFIX + ":" + activeMenuCacheSignature();
-        return redisJsonCacheSupport.getOrLoad(
-                cacheKey,
-                MENU_CACHE_TTL,
-                MENU_LIST_TYPE,
-                () -> menuRepository.findByStatusAndDeletedFlagFalseOrderBySortOrder(StatusConstants.NORMAL).stream()
-                        .map(MenuVisibilityService::toMenuSnapshot)
-                        .toList()
-        );
-    }
-
-    private String activeMenuCacheSignature() {
-        try {
-            String signature = menuRepository.activeMenuCacheSignature(StatusConstants.NORMAL);
-            if (signature != null && !signature.isBlank()) {
-                return Integer.toHexString(signature.hashCode());
-            }
-        } catch (RuntimeException ignored) {
-            // If signature query fails, keep a stable fallback key and load menus normally.
-        }
-        return "default";
+        return menuRepository.findByStatusAndDeletedFlagFalseOrderBySortOrder(StatusConstants.NORMAL).stream()
+                .map(MenuVisibilityService::toMenuSnapshot)
+                .toList();
     }
 
     private static MenuSnapshot toMenuSnapshot(Menu menu) {

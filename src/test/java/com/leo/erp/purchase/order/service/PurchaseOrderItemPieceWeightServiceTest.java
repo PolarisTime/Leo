@@ -1,11 +1,9 @@
 package com.leo.erp.purchase.order.service;
 
-import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.purchase.order.domain.entity.PurchaseOrderItem;
 import com.leo.erp.purchase.order.domain.entity.PurchaseOrderItemPieceWeight;
 import com.leo.erp.purchase.order.repository.PurchaseOrderItemPieceWeightRepository;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -22,11 +20,6 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class PurchaseOrderItemPieceWeightServiceTest {
-
-    @BeforeEach
-    void setUpIdGenerator() {
-        ReflectionTestUtils.invokeMethod(new SnowflakeIdGenerator(0L), "registerInstance");
-    }
 
     @Test
     void shouldDistributeResidualWeightToPieceWeights() {

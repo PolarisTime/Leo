@@ -2,6 +2,7 @@ package com.leo.erp.system.norule.service;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.leo.erp.common.api.PageQuery;
+import com.leo.erp.common.config.CacheConfig;
 import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.support.RedisJsonCacheSupport;
 import com.leo.erp.common.setting.PageUploadRuleQueryService;
@@ -17,10 +18,12 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.cache.annotation.Caching;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -31,11 +34,7 @@ import java.util.Set;
 public class GeneralSettingQueryService {
 
     public static final String PUBLIC_DISPLAY_SWITCHES_CACHE_KEY = "leo:system:public-display-switches";
-    private static final Duration PUBLIC_DISPLAY_SWITCHES_CACHE_TTL = Duration.ofMinutes(5);
-    private static final TypeReference<List<GeneralSettingResponse>> PUBLIC_DISPLAY_SWITCH_LIST_TYPE = new TypeReference<>() { };
     public static final String PUBLIC_CLIENT_SETTINGS_CACHE_KEY = "leo:system:public-client-settings";
-    private static final Duration PUBLIC_CLIENT_SETTINGS_CACHE_TTL = Duration.ofMinutes(5);
-    private static final TypeReference<List<GeneralSettingResponse>> PUBLIC_CLIENT_SETTING_LIST_TYPE = new TypeReference<>() { };
 
     private static final Map<String, Integer> GENERAL_SETTING_ORDER = Map.ofEntries(
             Map.entry("RULE_MAT", 10),
@@ -157,34 +156,29 @@ public class GeneralSettingQueryService {
     }
 
     @Transactional(readOnly = true)
+    @Cacheable(value = CacheConfig.CACHE_STATIC, key = "'" + PUBLIC_DISPLAY_SWITCHES_CACHE_KEY + "'",
+            unless = "#result == null || #result.isEmpty()")
     public List<GeneralSettingResponse> publicDisplaySwitches() {
-        if (redisJsonCacheSupport == null) {
-            return loadPublicDisplaySwitches();
-        }
-        return redisJsonCacheSupport.getOrLoad(
-                PUBLIC_DISPLAY_SWITCHES_CACHE_KEY,
-                PUBLIC_DISPLAY_SWITCHES_CACHE_TTL,
-                PUBLIC_DISPLAY_SWITCH_LIST_TYPE,
-                this::loadPublicDisplaySwitches
-        );
+        return loadPublicDisplaySwitches();
     }
 
     @Transactional(readOnly = true)
+    @Cacheable(value = CacheConfig.CACHE_STATIC, key = "'" + PUBLIC_CLIENT_SETTINGS_CACHE_KEY + "'",
+            unless = "#result == null || #result.isEmpty()")
     public List<GeneralSettingResponse> publicClientSettings() {
-        if (redisJsonCacheSupport == null) {
-            return loadPublicClientSettings();
-        }
-        return redisJsonCacheSupport.getOrLoad(
-                PUBLIC_CLIENT_SETTINGS_CACHE_KEY,
-                PUBLIC_CLIENT_SETTINGS_CACHE_TTL,
-                PUBLIC_CLIENT_SETTING_LIST_TYPE,
-                this::loadPublicClientSettings
-        );
+        return loadPublicClientSettings();
     }
 
+    @Caching(evict = {
+            @CacheEvict(value = CacheConfig.CACHE_STATIC, key = "'" + PUBLIC_DISPLAY_SWITCHES_CACHE_KEY + "'"),
+            @CacheEvict(value = CacheConfig.CACHE_STATIC, key = "'" + PUBLIC_CLIENT_SETTINGS_CACHE_KEY + "'")
+    })
     public void evictPublicDisplaySwitchesCache() {
         if (redisJsonCacheSupport != null) {
-            redisJsonCacheSupport.delete(PUBLIC_DISPLAY_SWITCHES_CACHE_KEY);
+            redisJsonCacheSupport.delete(List.of(
+                    PUBLIC_DISPLAY_SWITCHES_CACHE_KEY,
+                    PUBLIC_CLIENT_SETTINGS_CACHE_KEY
+            ));
         }
     }
 

@@ -1,14 +1,13 @@
 package com.leo.erp.master.carrier.service;
 
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.leo.erp.common.api.PageQuery;
+import com.leo.erp.common.config.CacheConfig;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.service.AbstractCrudService;
 import com.leo.erp.common.support.MasterDataReferenceGuard;
 import com.leo.erp.common.support.MasterDataReferenceGuard.ReferenceCheck;
-import com.leo.erp.common.support.RedisJsonCacheSupport;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.master.carrier.domain.entity.Carrier;
@@ -22,31 +21,25 @@ import com.leo.erp.master.carrier.web.dto.CarrierResponse;
 import com.leo.erp.master.carrier.web.dto.VehicleItem;
 import com.leo.erp.system.company.domain.entity.CompanySetting;
 import com.leo.erp.system.company.service.CompanySettingService;
-import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.Duration;
-import java.util.Comparator;
 import java.util.List;
-import java.util.Locale;
 import java.util.Optional;
 
 @Service
 public class CarrierService extends AbstractCrudService<Carrier, CarrierRequest, CarrierResponse> {
 
     private static final String CARRIER_CACHE_KEY = "leo:carrier:all";
-    private static final Duration CARRIER_CACHE_TTL = Duration.ofMinutes(30);
-    private static final TypeReference<List<CarrierResponse>> CARRIER_LIST_TYPE = new TypeReference<>() { };
 
     private final CarrierRepository carrierRepository;
     private final VehicleRepository vehicleRepository;
     private final CarrierMapper carrierMapper;
-    private final RedisJsonCacheSupport redisJsonCacheSupport;
     private final MasterDataReferenceGuard referenceGuard;
     private final CompanySettingService companySettingService;
 
@@ -55,14 +48,13 @@ public class CarrierService extends AbstractCrudService<Carrier, CarrierRequest,
                           VehicleRepository vehicleRepository,
                           SnowflakeIdGenerator snowflakeIdGenerator,
                           CarrierMapper carrierMapper,
-                          RedisJsonCacheSupport redisJsonCacheSupport,
+                          com.leo.erp.common.support.RedisJsonCacheSupport redisJsonCacheSupport,
                           MasterDataReferenceGuard referenceGuard,
                           CompanySettingService companySettingService) {
         super(snowflakeIdGenerator);
         this.carrierRepository = carrierRepository;
         this.vehicleRepository = vehicleRepository;
         this.carrierMapper = carrierMapper;
-        this.redisJsonCacheSupport = redisJsonCacheSupport;
         this.referenceGuard = referenceGuard;
         this.companySettingService = companySettingService;
     }
@@ -78,7 +70,7 @@ public class CarrierService extends AbstractCrudService<Carrier, CarrierRequest,
                           VehicleRepository vehicleRepository,
                           SnowflakeIdGenerator snowflakeIdGenerator,
                           CarrierMapper carrierMapper,
-                          RedisJsonCacheSupport redisJsonCacheSupport) {
+                          com.leo.erp.common.support.RedisJsonCacheSupport redisJsonCacheSupport) {
         this(carrierRepository, vehicleRepository, snowflakeIdGenerator, carrierMapper, redisJsonCacheSupport, null, null);
     }
 
@@ -86,13 +78,43 @@ public class CarrierService extends AbstractCrudService<Carrier, CarrierRequest,
                           VehicleRepository vehicleRepository,
                           SnowflakeIdGenerator snowflakeIdGenerator,
                           CarrierMapper carrierMapper,
-                          RedisJsonCacheSupport redisJsonCacheSupport,
+                          com.leo.erp.common.support.RedisJsonCacheSupport redisJsonCacheSupport,
                           MasterDataReferenceGuard referenceGuard) {
         this(carrierRepository, vehicleRepository, snowflakeIdGenerator, carrierMapper, redisJsonCacheSupport,
                 referenceGuard, null);
     }
 
+    @Override
+    @Transactional
+    @CacheEvict(value = CacheConfig.CACHE_OPTIONS, key = "'" + CARRIER_CACHE_KEY + "'")
+    public CarrierResponse create(CarrierRequest request) {
+        return super.create(request);
+    }
+
+    @Override
+    @Transactional
+    @CacheEvict(value = CacheConfig.CACHE_OPTIONS, key = "'" + CARRIER_CACHE_KEY + "'")
+    public CarrierResponse update(Long id, CarrierRequest request) {
+        return super.update(id, request);
+    }
+
+    @Override
+    @Transactional
+    @CacheEvict(value = CacheConfig.CACHE_OPTIONS, key = "'" + CARRIER_CACHE_KEY + "'")
+    public CarrierResponse updateStatus(Long id, String status) {
+        return super.updateStatus(id, status);
+    }
+
+    @Override
+    @Transactional
+    @CacheEvict(value = CacheConfig.CACHE_OPTIONS, key = "'" + CARRIER_CACHE_KEY + "'")
+    public void delete(Long id) {
+        super.delete(id);
+    }
+
     @org.springframework.transaction.annotation.Transactional(readOnly = true)
+    @Cacheable(value = CacheConfig.CACHE_OPTIONS, key = "'" + CARRIER_CACHE_KEY + "'",
+            unless = "#result == null || #result.isEmpty()")
     public List<CarrierOptionResponse> listActiveOptions() {
         return carrierRepository.findByDeletedFlagFalseAndStatusOrderByCarrierCodeAsc(StatusConstants.NORMAL).stream()
                 .map(c -> new CarrierOptionResponse(c.getId(), c.getCarrierName(), c.getCarrierName(), resolveVehiclePlates(c)))
@@ -186,9 +208,7 @@ public class CarrierService extends AbstractCrudService<Carrier, CarrierRequest,
 
     @Override
     protected Carrier saveEntity(Carrier entity) {
-        Carrier saved = carrierRepository.save(entity);
-        evictCache();
-        return saved;
+        return carrierRepository.save(entity);
     }
 
     @Override
@@ -247,68 +267,10 @@ public class CarrierService extends AbstractCrudService<Carrier, CarrierRequest,
         );
     }
 
-    private List<CarrierResponse> loadCachedResponses() {
-        if (redisJsonCacheSupport == null) {
-            return carrierRepository.findByDeletedFlagFalseOrderByCarrierCodeAsc().stream()
-                    .map(carrierMapper::toResponse)
-                    .toList();
-        }
-        return redisJsonCacheSupport.getOrLoad(
-                CARRIER_CACHE_KEY,
-                CARRIER_CACHE_TTL,
-                CARRIER_LIST_TYPE,
-                () -> carrierRepository.findByDeletedFlagFalseOrderByCarrierCodeAsc().stream()
-                        .map(carrierMapper::toResponse)
-                        .toList()
-        );
-    }
-
     private List<String> resolveVehiclePlates(Carrier carrier) {
         return carrier.getVehicles().stream()
                 .map(Vehicle::getPlate)
                 .toList();
-    }
-
-    private boolean matches(CarrierResponse item, String keyword, String status) {
-        if (status != null && !status.isBlank() && !status.trim().equals(item.status())) {
-            return false;
-        }
-        if (keyword == null || keyword.isBlank()) {
-            return true;
-        }
-        String value = keyword.trim().toLowerCase(Locale.ROOT);
-        return contains(item.carrierCode(), value)
-                || contains(item.carrierName(), value)
-                || contains(item.contactName(), value);
-    }
-
-    private Comparator<CarrierResponse> buildComparator(PageQuery query) {
-        Comparator<CarrierResponse> comparator = switch (query.sortBy() == null ? "" : query.sortBy()) {
-            case "carrierCode" -> Comparator.comparing(CarrierResponse::carrierCode, Comparator.nullsLast(String::compareToIgnoreCase));
-            case "carrierName" -> Comparator.comparing(CarrierResponse::carrierName, Comparator.nullsLast(String::compareToIgnoreCase));
-            case "contactName" -> Comparator.comparing(CarrierResponse::contactName, Comparator.nullsLast(String::compareToIgnoreCase));
-            case "vehicleType" -> Comparator.comparing(CarrierResponse::vehicleType, Comparator.nullsLast(String::compareToIgnoreCase));
-            case "priceMode" -> Comparator.comparing(CarrierResponse::priceMode, Comparator.nullsLast(String::compareToIgnoreCase));
-            case "status" -> Comparator.comparing(CarrierResponse::status, Comparator.nullsLast(String::compareToIgnoreCase));
-            default -> Comparator.comparing(CarrierResponse::id, Comparator.nullsLast(Long::compareTo));
-        };
-        return "asc".equalsIgnoreCase(query.direction()) ? comparator : comparator.reversed();
-    }
-
-    private Page<CarrierResponse> toPage(List<CarrierResponse> rows, PageQuery query) {
-        int start = Math.min(query.page() * query.size(), rows.size());
-        int end = Math.min(start + query.size(), rows.size());
-        return new PageImpl<>(rows.subList(start, end), PageRequest.of(query.page(), query.size()), rows.size());
-    }
-
-    private boolean contains(String source, String keyword) {
-        return source != null && source.toLowerCase(Locale.ROOT).contains(keyword);
-    }
-
-    private void evictCache() {
-        if (redisJsonCacheSupport != null) {
-            redisJsonCacheSupport.deleteAfterCommit(CARRIER_CACHE_KEY);
-        }
     }
 
     private SettlementCompanySnapshot resolveSettlementCompany(Long id) {

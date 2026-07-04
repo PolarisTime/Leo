@@ -2,6 +2,7 @@ package com.leo.erp.master.supplier.service;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.leo.erp.common.api.PageQuery;
+import com.leo.erp.common.config.CacheConfig;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.support.MasterDataReferenceGuard;
@@ -15,6 +16,8 @@ import com.leo.erp.master.supplier.web.dto.SupplierOptionResponse;
 import com.leo.erp.master.supplier.web.dto.SupplierRequest;
 import com.leo.erp.master.supplier.web.dto.SupplierResponse;
 import org.junit.jupiter.api.Test;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
@@ -55,7 +58,7 @@ class SupplierServiceTest {
     }
 
     @Test
-    void shouldReturnCachedOptions_whenRedisAvailable() {
+    void shouldLoadOptionsThroughSpringCachePath_whenLegacyRedisCachePresent() {
         var repository = (SupplierRepository) Proxy.newProxyInstance(
                 SupplierRepository.class.getClassLoader(),
                 new Class[]{SupplierRepository.class},
@@ -68,7 +71,6 @@ class SupplierServiceTest {
                 }
         );
         var cache = mock(RedisJsonCacheSupport.class);
-        when(cache.getOrLoad(anyString(), any(), any(TypeReference.class), any())).thenReturn(List.of(new SupplierOptionResponse(1L, "供应商甲", "供应商甲")));
         var service = new SupplierService(repository, new SnowflakeIdGenerator(1), null, cache);
 
         var result = service.listActiveOptions();
@@ -105,7 +107,6 @@ class SupplierServiceTest {
         when(repository.findByDeletedFlagFalseAndStatusOrderBySupplierCodeAsc(StatusConstants.NORMAL))
                 .thenReturn(List.of(supplier));
         RedisJsonCacheSupport cache = mock(RedisJsonCacheSupport.class);
-        when(cache.getOrLoad(anyString(), any(), any(TypeReference.class), any())).thenReturn(List.of());
         SupplierService service = new SupplierService(repository, new SnowflakeIdGenerator(1), null, cache);
 
         List<SupplierOptionResponse> result = service.listActiveOptions();
@@ -115,7 +116,7 @@ class SupplierServiceTest {
             assertThat(option.label()).isEqualTo("供应商甲");
         });
         verify(cache, never()).delete(anyString());
-        verify(cache).write(eq("leo:supplier:all"), eq(result), any());
+        verify(cache, never()).write(eq("leo:supplier:all"), eq(result), any());
     }
 
     @Test
@@ -124,7 +125,6 @@ class SupplierServiceTest {
         when(repository.findByDeletedFlagFalseAndStatusOrderBySupplierCodeAsc(StatusConstants.NORMAL))
                 .thenReturn(List.of());
         RedisJsonCacheSupport cache = mock(RedisJsonCacheSupport.class);
-        when(cache.getOrLoad(anyString(), any(), any(TypeReference.class), any())).thenReturn(List.of());
         SupplierService service = new SupplierService(repository, new SnowflakeIdGenerator(1), null, cache);
 
         List<SupplierOptionResponse> result = service.listActiveOptions();
@@ -141,12 +141,38 @@ class SupplierServiceTest {
     }
 
     @Test
-    void shouldSkipWritingActiveOptionsCacheWhenRedisUnavailable() throws Exception {
-        SupplierService service = new SupplierService(null, new SnowflakeIdGenerator(1), null);
-        Method method = SupplierService.class.getDeclaredMethod("writeActiveOptionsCache", List.class);
-        method.setAccessible(true);
+    void shouldDeclareSpringCacheAnnotationsForOptions() throws Exception {
+        Method readMethod = SupplierService.class.getMethod("listActiveOptions");
+        Cacheable cacheable = readMethod.getAnnotation(Cacheable.class);
+        Method createMethod = SupplierService.class.getMethod("create", SupplierRequest.class);
+        Method updateMethod = SupplierService.class.getMethod("update", Long.class, SupplierRequest.class);
+        Method updateStatusMethod = SupplierService.class.getMethod("updateStatus", Long.class, String.class);
+        Method deleteMethod = SupplierService.class.getMethod("delete", Long.class);
 
-        method.invoke(service, List.of(new SupplierOptionResponse(1L, "供应商甲", "供应商甲")));
+        assertThat(cacheable.value()).containsExactly(CacheConfig.CACHE_OPTIONS);
+        assertThat(cacheable.key()).isEqualTo("'leo:supplier:all'");
+        assertThat(cacheable.unless()).isEqualTo("#result == null || #result.isEmpty()");
+        assertThat(createMethod.getAnnotation(CacheEvict.class).value()).containsExactly(CacheConfig.CACHE_OPTIONS);
+        assertThat(updateMethod.getAnnotation(CacheEvict.class).key()).isEqualTo("'leo:supplier:all'");
+        assertThat(updateStatusMethod.getAnnotation(CacheEvict.class).key()).isEqualTo("'leo:supplier:all'");
+        assertThat(deleteMethod.getAnnotation(CacheEvict.class).key()).isEqualTo("'leo:supplier:all'");
+    }
+
+    @Test
+    void shouldKeepUpdateStatusOnSpringCacheEvictionPath() {
+        Supplier supplier = createSupplier(1L, "S001");
+        SupplierRepository repository = mock(SupplierRepository.class);
+        SupplierMapper mapper = mock(SupplierMapper.class);
+        RedisJsonCacheSupport cache = mock(RedisJsonCacheSupport.class);
+        when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(supplier));
+        when(mapper.toResponse(supplier)).thenReturn(toResponse(supplier));
+        SupplierService service = new SupplierService(repository, new SnowflakeIdGenerator(1), mapper, cache);
+
+        SupplierResponse response = service.updateStatus(1L, StatusConstants.NORMAL);
+
+        assertThat(response.id()).isEqualTo(1L);
+        verify(repository, never()).save(any());
+        verify(cache, never()).deleteAfterCommit("leo:supplier:all");
     }
 
     @Test
@@ -317,7 +343,7 @@ class SupplierServiceTest {
         var result = service.update(1L, request);
 
         assertThat(result).isNotNull();
-        verify(cache).deleteAfterCommit("leo:supplier:all");
+        verify(cache, never()).deleteAfterCommit("leo:supplier:all");
     }
 
     @Test
@@ -541,7 +567,7 @@ class SupplierServiceTest {
         var request = new SupplierRequest("S001", "供应商甲", null, null, null, "正常", null);
         service.create(request);
 
-        verify(cache).deleteAfterCommit("leo:supplier:all");
+        verify(cache, never()).deleteAfterCommit("leo:supplier:all");
     }
 
     private static Supplier createSupplier(Long id, String code) {

@@ -44,6 +44,7 @@ class PurchaseInboundDeleteServiceTest {
         inbound.setId(1L);
         inbound.getItems().add(inboundItem(101L, 201L));
         inbound.getItems().add(inboundItem(102L, 201L));
+        inbound.getItems().add(inboundItem(103L, null));
 
         PurchaseOrder order = new PurchaseOrder();
         order.setId(301L);

@@ -385,7 +385,7 @@ class NoRuleServiceTest {
     private static NoRuleService buildService() {
         return new NoRuleService(
                 mock(NoRuleRepository.class),
-                null,
+                new SnowflakeIdGenerator(1),
                 mock(NoRuleMapper.class),
                 mock(NoRuleSequenceService.class),
                 mock(SystemSwitchService.class),

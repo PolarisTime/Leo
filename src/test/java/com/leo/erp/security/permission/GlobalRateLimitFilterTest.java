@@ -29,7 +29,8 @@ class GlobalRateLimitFilterTest {
         GlobalRateLimitFilter filter = new GlobalRateLimitFilter(
                 tokenBucketService(new TokenBucketService.TokenBucketResult(true, 148, 0)),
                 clientIpResolver(),
-                objectMapper
+                objectMapper,
+                new RateLimitHeaderWriter()
         );
 
         assertThat(filter.getOrder()).isEqualTo(Ordered.HIGHEST_PRECEDENCE + 3);
@@ -39,7 +40,7 @@ class GlobalRateLimitFilterTest {
     void excludedPathSkipsTokenBucket() throws Exception {
         AtomicBoolean tokenBucketInvoked = new AtomicBoolean(false);
         GlobalRateLimitFilter filter = new GlobalRateLimitFilter(
-                new TokenBucketService(null, null) {
+                new TokenBucketService() {
                     @Override
                     public TokenBucketResult tryConsume(String dimensionKey, double rate, int capacity, int requested) {
                         tokenBucketInvoked.set(true);
@@ -47,7 +48,8 @@ class GlobalRateLimitFilterTest {
                     }
                 },
                 clientIpResolver(),
-                objectMapper
+                objectMapper,
+                new RateLimitHeaderWriter()
         );
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/health/ready");
         MockHttpServletResponse response = new MockHttpServletResponse();
@@ -64,7 +66,8 @@ class GlobalRateLimitFilterTest {
         GlobalRateLimitFilter filter = new GlobalRateLimitFilter(
                 tokenBucketService(new TokenBucketService.TokenBucketResult(true, 148, 0)),
                 clientIpResolver(),
-                objectMapper
+                objectMapper,
+                new RateLimitHeaderWriter()
         );
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/auth/me");
         MockHttpServletResponse response = new MockHttpServletResponse();
@@ -87,7 +90,8 @@ class GlobalRateLimitFilterTest {
         GlobalRateLimitFilter filter = new GlobalRateLimitFilter(
                 tokenBucketService(new TokenBucketService.TokenBucketResult(false, 0, 2_000)),
                 clientIpResolver(),
-                objectMapper
+                objectMapper,
+                new RateLimitHeaderWriter()
         );
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/auth/me");
         MockHttpServletResponse response = new MockHttpServletResponse();
@@ -108,7 +112,7 @@ class GlobalRateLimitFilterTest {
     }
 
     private TokenBucketService tokenBucketService(TokenBucketService.TokenBucketResult result) {
-        return new TokenBucketService(null, null) {
+        return new TokenBucketService() {
             @Override
             public TokenBucketResult tryConsume(String dimensionKey, double rate, int capacity, int requested) {
                 return result;

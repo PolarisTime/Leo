@@ -17,7 +17,7 @@ class TraceIdFilterTest {
     }
 
     @Test
-    void generatesTraceIdWhenHeaderMissing() throws Exception {
+    void doesNotGenerateTraceIdWhenHeaderMissing() throws Exception {
         TraceIdFilter filter = new TraceIdFilter();
         MockHttpServletRequest request = new MockHttpServletRequest();
         MockHttpServletResponse response = new MockHttpServletResponse();
@@ -25,9 +25,8 @@ class TraceIdFilterTest {
 
         filter.doFilterInternal(request, response, chain);
 
-        String traceId = response.getHeader(TraceIdFilter.TRACE_ID_HEADER);
-        assertThat(traceId).isNotBlank();
-        assertThat(traceId).hasSize(8);
+        assertThat(response.getHeader(TraceIdFilter.TRACE_ID_HEADER)).isNull();
+        assertThat(MDC.get(TraceIdFilter.MDC_KEY)).isNull();
         verify(chain).doFilter(request, response);
     }
 
@@ -62,7 +61,7 @@ class TraceIdFilterTest {
     }
 
     @Test
-    void ignoresUnsafeTraceIdHeaderAndUsesGeneratedFallback() throws Exception {
+    void ignoresUnsafeTraceIdHeaderWithoutFallback() throws Exception {
         TraceIdFilter filter = new TraceIdFilter();
         MockHttpServletRequest request = new MockHttpServletRequest();
         request.addHeader(TraceIdFilter.TRACE_ID_HEADER, "bad\ntrace");
@@ -71,14 +70,13 @@ class TraceIdFilterTest {
 
         filter.doFilterInternal(request, response, chain);
 
-        String traceId = response.getHeader(TraceIdFilter.TRACE_ID_HEADER);
-        assertThat(traceId).isNotBlank();
-        assertThat(traceId).doesNotContain("\n");
-        assertThat(traceId).isNotEqualTo("bad\ntrace");
+        assertThat(response.getHeader(TraceIdFilter.TRACE_ID_HEADER)).isNull();
+        assertThat(MDC.get(TraceIdFilter.MDC_KEY)).isNull();
+        verify(chain).doFilter(request, response);
     }
 
     @Test
-    void ignoresOverlongTraceIdHeaderAndUsesGeneratedFallback() throws Exception {
+    void ignoresOverlongTraceIdHeaderWithoutFallback() throws Exception {
         TraceIdFilter filter = new TraceIdFilter();
         MockHttpServletRequest request = new MockHttpServletRequest();
         request.addHeader(TraceIdFilter.TRACE_ID_HEADER, "a".repeat(129));
@@ -87,28 +85,30 @@ class TraceIdFilterTest {
 
         filter.doFilterInternal(request, response, chain);
 
-        assertThat(response.getHeader(TraceIdFilter.TRACE_ID_HEADER)).hasSize(8);
+        assertThat(response.getHeader(TraceIdFilter.TRACE_ID_HEADER)).isNull();
+        assertThat(MDC.get(TraceIdFilter.MDC_KEY)).isNull();
     }
 
     @Test
-    void exposesFallbackTraceIdInMdcDuringFilterChain() throws Exception {
+    void doesNotWriteHeaderTraceIdIntoMdcDuringFilterChain() throws Exception {
         TraceIdFilter filter = new TraceIdFilter();
         MockHttpServletRequest request = new MockHttpServletRequest();
+        request.addHeader(TraceIdFilter.TRACE_ID_HEADER, "legacy-trace-id");
         MockHttpServletResponse response = new MockHttpServletResponse();
         FilterChain chain = mock(FilterChain.class);
         doAnswer(invocation -> {
-            assertThat(MDC.get(TraceIdFilter.MDC_KEY)).isNotBlank();
+            assertThat(MDC.get(TraceIdFilter.MDC_KEY)).isNull();
             return null;
         }).when(chain).doFilter(request, response);
 
         filter.doFilterInternal(request, response, chain);
 
-        assertThat(response.getHeader(TraceIdFilter.TRACE_ID_HEADER)).isNotBlank();
+        assertThat(response.getHeader(TraceIdFilter.TRACE_ID_HEADER)).isEqualTo("legacy-trace-id");
         assertThat(MDC.get(TraceIdFilter.MDC_KEY)).isNull();
     }
 
     @Test
-    void generatesTraceIdWhenHeaderIsBlank() throws Exception {
+    void ignoresBlankTraceIdHeaderWithoutFallback() throws Exception {
         TraceIdFilter filter = new TraceIdFilter();
         MockHttpServletRequest request = new MockHttpServletRequest();
         request.addHeader(TraceIdFilter.TRACE_ID_HEADER, "   ");
@@ -117,13 +117,12 @@ class TraceIdFilterTest {
 
         filter.doFilterInternal(request, response, chain);
 
-        String traceId = response.getHeader(TraceIdFilter.TRACE_ID_HEADER);
-        assertThat(traceId).isNotBlank();
-        assertThat(traceId).isNotEqualTo("   ");
+        assertThat(response.getHeader(TraceIdFilter.TRACE_ID_HEADER)).isNull();
+        assertThat(MDC.get(TraceIdFilter.MDC_KEY)).isNull();
     }
 
     @Test
-    void setsTraceIdInMDC() throws Exception {
+    void doesNotSetHeaderTraceIdInMdc() throws Exception {
         TraceIdFilter filter = new TraceIdFilter();
         MockHttpServletRequest request = new MockHttpServletRequest();
         request.addHeader(TraceIdFilter.TRACE_ID_HEADER, "mdc-test-id");
@@ -132,7 +131,7 @@ class TraceIdFilterTest {
 
         filter.doFilterInternal(request, response, chain);
 
-        // After filter completes, MDC should be cleared (try-with-resources)
+        assertThat(response.getHeader(TraceIdFilter.TRACE_ID_HEADER)).isEqualTo("mdc-test-id");
         assertThat(MDC.get(TraceIdFilter.MDC_KEY)).isNull();
     }
 

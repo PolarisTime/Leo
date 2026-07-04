@@ -2,6 +2,7 @@ package com.leo.erp.master.customer.service;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.leo.erp.common.api.PageQuery;
+import com.leo.erp.common.config.CacheConfig;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.support.MasterDataReferenceGuard;
@@ -17,13 +18,14 @@ import com.leo.erp.master.customer.web.dto.CustomerResponse;
 import com.leo.erp.system.company.domain.entity.CompanySetting;
 import com.leo.erp.system.company.service.CompanySettingService;
 import org.junit.jupiter.api.Test;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
-import java.util.function.Supplier;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -39,23 +41,22 @@ import static org.mockito.Mockito.when;
 class CustomerServiceTest {
 
     @Test
-    void shouldReturnCustomerOptionsFromRedisWhenCached() {
+    void shouldLoadCustomerOptionsThroughSpringCachePath() {
         CustomerRepository repository = mock(CustomerRepository.class);
         RedisJsonCacheSupport redisJsonCacheSupport = mock(RedisJsonCacheSupport.class);
-        CustomerOptionResponse cached = new CustomerOptionResponse(
-                1L, "客户甲 / 项目A", "客户甲", "C001", "客户甲", "项目A", "XMA"
-        );
-        when(redisJsonCacheSupport.getOrLoad(
-                eq("leo:customer:all"),
-                any(Duration.class),
-                any(TypeReference.class),
-                any(Supplier.class)
-        )).thenReturn(List.of(cached));
+        Customer customer = createCustomer(1L, "C001");
+        when(repository.findByDeletedFlagFalseAndStatusOrderByCustomerCodeAsc(StatusConstants.NORMAL))
+                .thenReturn(List.of(customer));
 
-        CustomerService service = new CustomerService(repository, null, mock(CustomerMapper.class), redisJsonCacheSupport);
+        CustomerService service = new CustomerService(repository, new SnowflakeIdGenerator(1),
+                mock(CustomerMapper.class), redisJsonCacheSupport);
 
-        assertThat(service.listActiveOptions()).containsExactly(cached);
-        verify(repository, never()).findByDeletedFlagFalseOrderByCustomerCodeAsc();
+        List<CustomerOptionResponse> result = service.listActiveOptions();
+
+        assertThat(result).singleElement().satisfies(option -> {
+            assertThat(option.customerCode()).isEqualTo("C001");
+            assertThat(option.label()).isEqualTo("客户甲 / 项目A");
+        });
     }
 
     @Test
@@ -86,20 +87,15 @@ class CustomerServiceTest {
         when(repository.findByDeletedFlagFalseAndStatusOrderByCustomerCodeAsc(StatusConstants.NORMAL))
                 .thenReturn(List.of(customer));
         RedisJsonCacheSupport redisJsonCacheSupport = mock(RedisJsonCacheSupport.class);
-        when(redisJsonCacheSupport.getOrLoad(
-                eq("leo:customer:all"),
-                any(Duration.class),
-                any(TypeReference.class),
-                any(Supplier.class)
-        )).thenReturn(List.of());
 
-        CustomerService service = new CustomerService(repository, null, mock(CustomerMapper.class), redisJsonCacheSupport);
+        CustomerService service = new CustomerService(repository, new SnowflakeIdGenerator(1),
+                mock(CustomerMapper.class), redisJsonCacheSupport);
 
         List<CustomerOptionResponse> result = service.listActiveOptions();
 
         assertThat(result).hasSize(1);
         verify(redisJsonCacheSupport, never()).delete(anyString());
-        verify(redisJsonCacheSupport).write(eq("leo:customer:all"), eq(result), any(Duration.class));
+        verify(redisJsonCacheSupport, never()).write(eq("leo:customer:all"), eq(result), any(Duration.class));
     }
 
     @Test
@@ -108,14 +104,9 @@ class CustomerServiceTest {
         when(repository.findByDeletedFlagFalseAndStatusOrderByCustomerCodeAsc(StatusConstants.NORMAL))
                 .thenReturn(List.of());
         RedisJsonCacheSupport redisJsonCacheSupport = mock(RedisJsonCacheSupport.class);
-        when(redisJsonCacheSupport.getOrLoad(
-                eq("leo:customer:all"),
-                any(Duration.class),
-                any(TypeReference.class),
-                any(Supplier.class)
-        )).thenReturn(List.of());
 
-        CustomerService service = new CustomerService(repository, null, mock(CustomerMapper.class), redisJsonCacheSupport);
+        CustomerService service = new CustomerService(repository, new SnowflakeIdGenerator(1),
+                mock(CustomerMapper.class), redisJsonCacheSupport);
 
         List<CustomerOptionResponse> result = service.listActiveOptions();
 
@@ -125,7 +116,8 @@ class CustomerServiceTest {
 
     @Test
     void shouldReturnCacheName() {
-        CustomerService service = new CustomerService(mock(CustomerRepository.class), null, mock(CustomerMapper.class));
+        CustomerService service = new CustomerService(mock(CustomerRepository.class), new SnowflakeIdGenerator(1),
+                mock(CustomerMapper.class));
 
         assertThat(service.cacheName()).isEqualTo("leo:customer:all");
     }
@@ -138,7 +130,8 @@ class CustomerServiceTest {
                 .thenReturn(List.of(customer));
         RedisJsonCacheSupport redisJsonCacheSupport = mock(RedisJsonCacheSupport.class);
 
-        CustomerService service = new CustomerService(repository, null, mock(CustomerMapper.class), redisJsonCacheSupport);
+        CustomerService service = new CustomerService(repository, new SnowflakeIdGenerator(1),
+                mock(CustomerMapper.class), redisJsonCacheSupport);
 
         var result = service.verifyAndRefreshCache();
 
@@ -165,7 +158,8 @@ class CustomerServiceTest {
                 any(TypeReference.class)
         )).thenReturn(Optional.of(List.of(cached)));
 
-        CustomerService service = new CustomerService(repository, null, mock(CustomerMapper.class), redisJsonCacheSupport);
+        CustomerService service = new CustomerService(repository, new SnowflakeIdGenerator(1),
+                mock(CustomerMapper.class), redisJsonCacheSupport);
 
         var result = service.verifyAndRefreshCache();
 
@@ -189,7 +183,8 @@ class CustomerServiceTest {
                 any(TypeReference.class)
         )).thenReturn(Optional.of(List.of(cached)));
 
-        CustomerService service = new CustomerService(repository, null, mock(CustomerMapper.class), redisJsonCacheSupport);
+        CustomerService service = new CustomerService(repository, new SnowflakeIdGenerator(1),
+                mock(CustomerMapper.class), redisJsonCacheSupport);
 
         var result = service.verifyAndRefreshCache();
 
@@ -327,7 +322,7 @@ class CustomerServiceTest {
         var result = service.update(1L, request);
 
         assertThat(result).isNotNull();
-        verify(cache).deleteAfterCommit("leo:customer:all");
+        verify(cache, never()).deleteAfterCommit("leo:customer:all");
     }
 
     @Test
@@ -551,7 +546,7 @@ class CustomerServiceTest {
         var request = new CustomerRequest("C001", "客户甲", null, null, null, null, "项目A", null, null, 1L, "正常", null);
         service.create(request);
 
-        verify(cache).deleteAfterCommit("leo:customer:all");
+        verify(cache, never()).deleteAfterCommit("leo:customer:all");
     }
 
     @Test
@@ -597,7 +592,7 @@ class CustomerServiceTest {
 
     @Test
     void shouldTestOptionLabel_withDifferentProjectNames() throws Exception {
-        var service = new CustomerService(null, null, null);
+        var service = new CustomerService(null, new SnowflakeIdGenerator(1), null);
         Method optionLabel = CustomerService.class.getDeclaredMethod("optionLabel", Customer.class);
         optionLabel.setAccessible(true);
 
@@ -623,12 +618,22 @@ class CustomerServiceTest {
     }
 
     @Test
-    void shouldSkipActiveOptionsCacheWrite_whenRedisIsNull() throws Exception {
-        var service = new CustomerService(null, null, null);
-        Method method = CustomerService.class.getDeclaredMethod("writeActiveOptionsCache", List.class);
-        method.setAccessible(true);
+    void shouldDeclareSpringCacheAnnotationsForOptions() throws Exception {
+        Method readMethod = CustomerService.class.getDeclaredMethod("listActiveOptions");
+        Cacheable cacheable = readMethod.getAnnotation(Cacheable.class);
+        assertThat(cacheable.value()).containsExactly(CacheConfig.CACHE_OPTIONS);
+        assertThat(cacheable.key()).isEqualTo("'leo:customer:all'");
 
-        method.invoke(service, List.of());
+        Method createMethod = CustomerService.class.getDeclaredMethod("create", CustomerRequest.class);
+        Method updateMethod = CustomerService.class.getDeclaredMethod("update", Long.class, CustomerRequest.class);
+        Method updateStatusMethod = CustomerService.class.getDeclaredMethod("updateStatus", Long.class, String.class);
+        Method deleteMethod = CustomerService.class.getDeclaredMethod("delete", Long.class);
+
+        assertThat(createMethod.getAnnotation(CacheEvict.class).value()).containsExactly(CacheConfig.CACHE_OPTIONS);
+        assertThat(createMethod.getAnnotation(CacheEvict.class).key()).isEqualTo("'leo:customer:all'");
+        assertThat(updateMethod.getAnnotation(CacheEvict.class).key()).isEqualTo("'leo:customer:all'");
+        assertThat(updateStatusMethod.getAnnotation(CacheEvict.class).key()).isEqualTo("'leo:customer:all'");
+        assertThat(deleteMethod.getAnnotation(CacheEvict.class).key()).isEqualTo("'leo:customer:all'");
     }
 
     private static Customer createCustomer(Long id, String code) {

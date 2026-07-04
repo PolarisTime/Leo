@@ -1,6 +1,7 @@
 package com.leo.erp.system.company.service;
 
 import com.leo.erp.common.api.PageQuery;
+import com.leo.erp.common.config.CacheConfig;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
@@ -29,11 +30,13 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.data.domain.Page;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.cache.annotation.Caching;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -47,7 +50,6 @@ public class CompanySettingService extends AbstractCrudService<CompanySetting, C
     public static final String CURRENT_COMPANY_CACHE_KEY = "leo:company:current";
     public static final String CURRENT_TAX_RATE_CACHE_KEY = "leo:company:tax-rate";
     private static final BigDecimal DEFAULT_COMPANY_TAX_RATE = new BigDecimal("0.1300");
-    private static final Duration COMPANY_CACHE_TTL = Duration.ofMinutes(10);
     private static final TypeReference<List<CompanySettlementAccountResponse>> SETTLEMENT_ACCOUNT_LIST_TYPE = new TypeReference<>() { };
 
     private final CompanySettingRepository companySettingRepository;
@@ -107,16 +109,10 @@ public class CompanySettingService extends AbstractCrudService<CompanySetting, C
     }
 
     @Transactional(readOnly = true)
+    @Cacheable(value = CacheConfig.CACHE_STATIC, key = "'" + CURRENT_COMPANY_CACHE_KEY + "'",
+            unless = "#result == null")
     public CompanySettingResponse current() {
-        if (redisJsonCacheSupport == null) {
-            return loadCurrent();
-        }
-        return redisJsonCacheSupport.getOrLoad(
-                CURRENT_COMPANY_CACHE_KEY,
-                COMPANY_CACHE_TTL,
-                CompanySettingResponse.class,
-                this::loadCurrent
-        );
+        return loadCurrent();
     }
 
     @Transactional(readOnly = true)
@@ -146,16 +142,10 @@ public class CompanySettingService extends AbstractCrudService<CompanySetting, C
 
     @Transactional(readOnly = true)
     @Override
+    @Cacheable(value = CacheConfig.CACHE_STATIC, key = "'" + CURRENT_TAX_RATE_CACHE_KEY + "'",
+            unless = "#result == null")
     public BigDecimal resolveCurrentTaxRate() {
-        if (redisJsonCacheSupport == null) {
-            return loadCurrentTaxRate();
-        }
-        return redisJsonCacheSupport.getOrLoad(
-                CURRENT_TAX_RATE_CACHE_KEY,
-                COMPANY_CACHE_TTL,
-                BigDecimal.class,
-                this::loadCurrentTaxRate
-        );
+        return loadCurrentTaxRate();
     }
 
     private BigDecimal loadCurrentTaxRate() {
@@ -175,6 +165,10 @@ public class CompanySettingService extends AbstractCrudService<CompanySetting, C
     }
 
     @Transactional
+    @Caching(evict = {
+            @CacheEvict(value = CacheConfig.CACHE_STATIC, key = "'" + CURRENT_COMPANY_CACHE_KEY + "'"),
+            @CacheEvict(value = CacheConfig.CACHE_STATIC, key = "'" + CURRENT_TAX_RATE_CACHE_KEY + "'")
+    })
     public CompanySettingResponse saveCurrent(CompanySettingRequest request) {
         CompanySetting entity = findCurrentEntity()
                 .orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_ERROR, "请先通过首次初始化页面创建默认结算主体"));
@@ -186,6 +180,46 @@ public class CompanySettingService extends AbstractCrudService<CompanySetting, C
         evictCache();
         dashboardSummaryService.evictAllCache();
         return toResponse(saved);
+    }
+
+    @Override
+    @Transactional
+    @Caching(evict = {
+            @CacheEvict(value = CacheConfig.CACHE_STATIC, key = "'" + CURRENT_COMPANY_CACHE_KEY + "'"),
+            @CacheEvict(value = CacheConfig.CACHE_STATIC, key = "'" + CURRENT_TAX_RATE_CACHE_KEY + "'")
+    })
+    public CompanySettingResponse create(CompanySettingRequest request) {
+        return super.create(request);
+    }
+
+    @Override
+    @Transactional
+    @Caching(evict = {
+            @CacheEvict(value = CacheConfig.CACHE_STATIC, key = "'" + CURRENT_COMPANY_CACHE_KEY + "'"),
+            @CacheEvict(value = CacheConfig.CACHE_STATIC, key = "'" + CURRENT_TAX_RATE_CACHE_KEY + "'")
+    })
+    public CompanySettingResponse update(Long id, CompanySettingRequest request) {
+        return super.update(id, request);
+    }
+
+    @Override
+    @Transactional
+    @Caching(evict = {
+            @CacheEvict(value = CacheConfig.CACHE_STATIC, key = "'" + CURRENT_COMPANY_CACHE_KEY + "'"),
+            @CacheEvict(value = CacheConfig.CACHE_STATIC, key = "'" + CURRENT_TAX_RATE_CACHE_KEY + "'")
+    })
+    public CompanySettingResponse updateStatus(Long id, String status) {
+        return super.updateStatus(id, status);
+    }
+
+    @Override
+    @Transactional
+    @Caching(evict = {
+            @CacheEvict(value = CacheConfig.CACHE_STATIC, key = "'" + CURRENT_COMPANY_CACHE_KEY + "'"),
+            @CacheEvict(value = CacheConfig.CACHE_STATIC, key = "'" + CURRENT_TAX_RATE_CACHE_KEY + "'")
+    })
+    public void delete(Long id) {
+        super.delete(id);
     }
 
     @Override
@@ -288,7 +322,6 @@ public class CompanySettingService extends AbstractCrudService<CompanySetting, C
     @Override
     protected CompanySetting saveEntity(CompanySetting entity) {
         CompanySetting saved = companySettingRepository.save(entity);
-        evictCache();
         dashboardSummaryService.evictAllCache();
         return saved;
     }

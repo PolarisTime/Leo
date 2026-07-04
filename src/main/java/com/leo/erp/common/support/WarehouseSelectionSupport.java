@@ -83,29 +83,7 @@ public class WarehouseSelectionSupport implements RedisCacheHealthCheck {
     }
 
     private List<String> loadActiveWarehouseNames() {
-        if (warehouseCatalog == null) {
-            return List.of();
-        }
-        List<String> names;
-        if (redisJsonCacheSupport == null) {
-            names = loadActiveWarehouseNamesFromCatalog();
-        } else {
-            names = redisJsonCacheSupport.getOrLoad(
-                    WAREHOUSE_CACHE_KEY,
-                    WAREHOUSE_CACHE_TTL,
-                    WAREHOUSE_LIST_TYPE,
-                    this::loadActiveWarehouseNamesFromCatalog
-            );
-            if (names.isEmpty()) {
-                List<String> refreshed = loadActiveWarehouseNamesFromCatalog();
-                if (refreshed.isEmpty()) {
-                    return List.of();
-                }
-                writeActiveWarehouseNameCache(refreshed);
-                names = refreshed;
-            }
-        }
-        return normalizeWarehouseNames(names);
+        return loadActiveWarehouseNamesFromCatalog();
     }
 
     private List<String> loadActiveWarehouseNamesFromCatalog() {
@@ -120,12 +98,6 @@ public class WarehouseSelectionSupport implements RedisCacheHealthCheck {
                 .filter(name -> name != null && !name.isBlank())
                 .map(String::trim)
                 .toList();
-    }
-
-    private void writeActiveWarehouseNameCache(List<String> names) {
-        if (redisJsonCacheSupport != null) {
-            redisJsonCacheSupport.write(WAREHOUSE_CACHE_KEY, names, WAREHOUSE_CACHE_TTL);
-        }
     }
 
     @Override

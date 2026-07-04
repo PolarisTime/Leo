@@ -83,13 +83,6 @@ class PermissionCache {
         redisTemplate.opsForSet().remove(USER_INDEX_KEY, String.valueOf(userId));
     }
 
-    void evictMetadata(String menuCacheKeyPrefix) {
-        if (redisJsonCacheSupport == null) {
-            return;
-        }
-        redisJsonCacheSupport.deleteByPattern(menuCacheKeyPrefix + "*");
-    }
-
     void evictAll() {
         if (evictIndexedUsers()) {
             return;

@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.leo.erp.auth.domain.entity.UserAccount;
 import com.leo.erp.auth.repository.UserAccountRepository;
 import com.leo.erp.common.api.PageQuery;
+import com.leo.erp.common.config.CacheConfig;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
@@ -23,6 +24,8 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -67,6 +70,34 @@ public class DepartmentService extends AbstractCrudService<Department, Departmen
         this(departmentRepository, userAccountRepository, permissionService, idGenerator, null);
     }
 
+    @Override
+    @Transactional
+    @CacheEvict(value = CacheConfig.CACHE_OPTIONS, key = "'" + DEPARTMENT_OPTIONS_CACHE_KEY + "'")
+    public DepartmentResponse create(DepartmentRequest request) {
+        return super.create(request);
+    }
+
+    @Override
+    @Transactional
+    @CacheEvict(value = CacheConfig.CACHE_OPTIONS, key = "'" + DEPARTMENT_OPTIONS_CACHE_KEY + "'")
+    public DepartmentResponse update(Long id, DepartmentRequest request) {
+        return super.update(id, request);
+    }
+
+    @Override
+    @Transactional
+    @CacheEvict(value = CacheConfig.CACHE_OPTIONS, key = "'" + DEPARTMENT_OPTIONS_CACHE_KEY + "'")
+    public DepartmentResponse updateStatus(Long id, String status) {
+        return super.updateStatus(id, status);
+    }
+
+    @Override
+    @Transactional
+    @CacheEvict(value = CacheConfig.CACHE_OPTIONS, key = "'" + DEPARTMENT_OPTIONS_CACHE_KEY + "'")
+    public void delete(Long id) {
+        super.delete(id);
+    }
+
     @Transactional(readOnly = true)
     public Page<DepartmentResponse> page(PageQuery query, String keyword, String status) {
         Specification<Department> spec = Specs.<Department>notDeleted()
@@ -81,25 +112,10 @@ public class DepartmentService extends AbstractCrudService<Department, Departmen
     }
 
     @Transactional(readOnly = true)
+    @Cacheable(value = CacheConfig.CACHE_OPTIONS, key = "'" + DEPARTMENT_OPTIONS_CACHE_KEY + "'",
+            unless = "#result == null || #result.isEmpty()")
     public List<DepartmentOptionResponse> options() {
-        if (redisJsonCacheSupport == null) {
-            return loadOptions();
-        }
-        List<DepartmentOptionResponse> options = redisJsonCacheSupport.getOrLoad(
-                DEPARTMENT_OPTIONS_CACHE_KEY,
-                DEPARTMENT_OPTIONS_CACHE_TTL,
-                DEPARTMENT_OPTION_LIST_TYPE,
-                this::loadOptions
-        );
-        if (options.isEmpty()) {
-            List<DepartmentOptionResponse> refreshed = loadOptions();
-            if (refreshed.isEmpty()) {
-                return options;
-            }
-            writeOptionsCache(refreshed);
-            return refreshed;
-        }
-        return options;
+        return loadOptions();
     }
 
     private List<DepartmentOptionResponse> loadOptions() {
@@ -111,12 +127,6 @@ public class DepartmentService extends AbstractCrudService<Department, Departmen
                         department.getDepartmentName()
                 ))
                 .toList();
-    }
-
-    private void writeOptionsCache(List<DepartmentOptionResponse> options) {
-        if (redisJsonCacheSupport != null) {
-            redisJsonCacheSupport.write(DEPARTMENT_OPTIONS_CACHE_KEY, options, DEPARTMENT_OPTIONS_CACHE_TTL);
-        }
     }
 
     @Override
@@ -185,7 +195,6 @@ public class DepartmentService extends AbstractCrudService<Department, Departmen
     protected Department saveEntity(Department entity) {
         try {
             Department saved = departmentRepository.save(entity);
-            evictOptionsCache();
             permissionService.clearDepartmentUserCache();
             syncBoundUserDepartmentName(saved);
             return saved;
@@ -194,12 +203,6 @@ public class DepartmentService extends AbstractCrudService<Department, Departmen
                 throw new BusinessException(ErrorCode.BUSINESS_ERROR, "部门编码已存在");
             }
             throw ex;
-        }
-    }
-
-    private void evictOptionsCache() {
-        if (redisJsonCacheSupport != null) {
-            redisJsonCacheSupport.deleteAfterCommit(DEPARTMENT_OPTIONS_CACHE_KEY);
         }
     }
 

@@ -11,33 +11,29 @@ import lombok.extern.slf4j.Slf4j;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
-import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
-
-import java.time.Duration;
 
 @Slf4j
 @Aspect
 @Component
 public class RateLimitAspect {
 
-    private static final String KEY_PREFIX = "rate-limit:";
     private static final double DEFAULT_RATE = 100;
     private static final int DEFAULT_CAPACITY = 150;
 
     private final TokenBucketService tokenBucketService;
-    private final StringRedisTemplate redisTemplate;
     private final ClientIpResolver clientIpResolver;
+    private final RateLimitHeaderWriter headerWriter;
 
     public RateLimitAspect(TokenBucketService tokenBucketService,
-                           StringRedisTemplate redisTemplate,
-                           ClientIpResolver clientIpResolver) {
+                           ClientIpResolver clientIpResolver,
+                           RateLimitHeaderWriter headerWriter) {
         this.tokenBucketService = tokenBucketService;
-        this.redisTemplate = redisTemplate;
         this.clientIpResolver = clientIpResolver;
+        this.headerWriter = headerWriter;
     }
 
     @Around("@annotation(rateLimit)")
@@ -71,27 +67,11 @@ public class RateLimitAspect {
             return joinPoint.proceed();
         }
 
-        // --- 维度3: IP (legacy compatible) ---
+        // --- 维度3: IP ---
         String clientIp = clientIpResolver.resolveClientIpOrUnknown(request);
         String key = "ip:" + clientIp + ":" + joinPoint.getSignature().toShortString();
-
-        if (rateLimit.rate() <= 0) {
-            // Legacy fixed-window fallback
-            long windowSeconds = rateLimit.timeUnit().toSeconds(rateLimit.duration());
-            String legacyKey = KEY_PREFIX + clientIp + ":" + joinPoint.getSignature().toShortString();
-            Long count = redisTemplate.opsForValue().increment(legacyKey);
-            if (count != null && count == 1L) {
-                redisTemplate.expire(legacyKey, Duration.ofSeconds(windowSeconds));
-            }
-            if (count != null && count > rateLimit.maxRequests()) {
-                log.warn("Rate limit exceeded (legacy): key={}", legacyKey);
-                throw new BusinessException(ErrorCode.RATE_LIMITED, "请求过于频繁，请稍后重试");
-            }
-            return joinPoint.proceed();
-        }
-
         TokenBucketService.TokenBucketResult r = tokenBucketService.tryConsume(
-                key, rateLimit.rate(), rateLimit.capacity(), rateLimit.tokens());
+                key, resolveRate(rateLimit), resolveCapacity(rateLimit), rateLimit.tokens());
         if (!r.allowed()) {
             throw reject(response, r, rateLimit);
         }
@@ -113,10 +93,7 @@ public class RateLimitAspect {
         RateLimitContext.set(request, RateLimitContext.Snapshot.rejected(resolveCapacity(rl), retryAfterSeconds));
         if (response != null) {
             response.setStatus(HttpStatus.TOO_MANY_REQUESTS.value());
-            response.setHeader("Retry-After", String.valueOf(retryAfterSeconds));
-            response.setHeader("X-RateLimit-Limit", String.valueOf(resolveCapacity(rl)));
-            response.setHeader("X-RateLimit-Remaining", "0");
-            response.setHeader("X-RateLimit-Reset", String.valueOf(retryAfterSeconds));
+            headerWriter.writeRejected(response, resolveCapacity(rl), retryAfterSeconds);
         }
         return new BusinessException(ErrorCode.RATE_LIMITED,
                 "请求过于频繁，请在 " + retryAfterSeconds + " 秒后重试");
@@ -127,10 +104,7 @@ public class RateLimitAspect {
                                     TokenBucketService.TokenBucketResult r,
                                     RateLimit rl) {
         RateLimitContext.set(request, RateLimitContext.Snapshot.allowed(resolveCapacity(rl), r.remaining()));
-        if (response != null) {
-            response.setHeader("X-RateLimit-Limit", String.valueOf(resolveCapacity(rl)));
-            response.setHeader("X-RateLimit-Remaining", String.valueOf(r.remaining()));
-        }
+        headerWriter.writeAllowed(response, resolveCapacity(rl), r.remaining());
     }
 
     private String resolveUserId(HttpServletRequest request) {

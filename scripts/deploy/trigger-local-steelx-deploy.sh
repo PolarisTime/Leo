@@ -83,6 +83,8 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+NGINX_CLIENT_BODY_TEMP_PATH="$STEELX_ROOT/frontend/nginx-client-body"
+
 require_command() {
   local command_name="$1"
   if ! command -v "$command_name" >/dev/null 2>&1; then
@@ -172,8 +174,8 @@ if ss -ltnpH "( sport = :$HTTP_REDIRECT_PORT )" 2>/dev/null | grep -v 'nginx' | 
   exit 1
 fi
 
-mkdir -p "$STEELX_ROOT/shared" "$STEELX_ROOT/logs" "$STEELX_ROOT/run"
-chmod 700 "$STEELX_ROOT/shared"
+mkdir -p "$STEELX_ROOT/shared" "$STEELX_ROOT/logs" "$STEELX_ROOT/run" "$NGINX_CLIENT_BODY_TEMP_PATH"
+chmod 700 "$STEELX_ROOT/shared" "$NGINX_CLIENT_BODY_TEMP_PATH"
 
 APP_DB_PASSWORD_FILE="$STEELX_ROOT/shared/.db-password"
 if [[ ! -f "$APP_DB_PASSWORD_FILE" ]]; then
@@ -302,6 +304,8 @@ server {
     index index.html;
 
     client_max_body_size 25m;
+    client_body_temp_path $NGINX_CLIENT_BODY_TEMP_PATH 1 2;
+    client_body_buffer_size 64k;
 
     location /assets/ {
         try_files \$uri =404;

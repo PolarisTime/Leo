@@ -10,10 +10,7 @@ import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
-import com.leo.erp.common.support.PrecisionConstants;
-
 import java.io.IOException;
-import java.util.UUID;
 import java.util.regex.Pattern;
 
 @Component
@@ -37,14 +34,10 @@ public class TraceIdFilter extends OncePerRequestFilter {
         }
 
         String traceId = normalizeTraceId(request.getHeader(TRACE_ID_HEADER));
-        if (traceId == null) {
-            traceId = UUID.randomUUID().toString().substring(0, PrecisionConstants.ID_PREFIX_LENGTH);
+        if (traceId != null) {
+            response.setHeader(TRACE_ID_HEADER, traceId);
         }
-
-        response.setHeader(TRACE_ID_HEADER, traceId);
-        try (var ignored = MDC.putCloseable(MDC_KEY, traceId)) {
-            filterChain.doFilter(request, response);
-        }
+        filterChain.doFilter(request, response);
     }
 
     private static String normalizeTraceId(String traceId) {

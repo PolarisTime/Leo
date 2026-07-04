@@ -68,7 +68,6 @@ class FreightBillServiceTest {
 
     @BeforeEach
     void setUpIdGenerator() {
-        ReflectionTestUtils.invokeMethod(new SnowflakeIdGenerator(0L), "registerInstance");
         SecurityContextHolder.clearContext();
     }
 

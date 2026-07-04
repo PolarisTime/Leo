@@ -2,6 +2,7 @@ package com.leo.erp.master.customer.service;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.leo.erp.common.api.PageQuery;
+import com.leo.erp.common.config.CacheConfig;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
@@ -23,6 +24,8 @@ import com.leo.erp.system.company.service.CompanySettingService;
 import org.springframework.data.domain.Page;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -79,26 +82,39 @@ public class CustomerService extends AbstractCrudService<Customer, CustomerReque
         this(customerRepository, snowflakeIdGenerator, customerMapper, redisJsonCacheSupport, referenceGuard, null);
     }
 
+    @Override
+    @Transactional
+    @CacheEvict(value = CacheConfig.CACHE_OPTIONS, key = "'" + CUSTOMER_CACHE_KEY + "'")
+    public CustomerResponse create(CustomerRequest request) {
+        return super.create(request);
+    }
+
+    @Override
+    @Transactional
+    @CacheEvict(value = CacheConfig.CACHE_OPTIONS, key = "'" + CUSTOMER_CACHE_KEY + "'")
+    public CustomerResponse update(Long id, CustomerRequest request) {
+        return super.update(id, request);
+    }
+
+    @Override
+    @Transactional
+    @CacheEvict(value = CacheConfig.CACHE_OPTIONS, key = "'" + CUSTOMER_CACHE_KEY + "'")
+    public CustomerResponse updateStatus(Long id, String status) {
+        return super.updateStatus(id, status);
+    }
+
+    @Override
+    @Transactional
+    @CacheEvict(value = CacheConfig.CACHE_OPTIONS, key = "'" + CUSTOMER_CACHE_KEY + "'")
+    public void delete(Long id) {
+        super.delete(id);
+    }
+
     @Transactional(readOnly = true)
+    @Cacheable(value = CacheConfig.CACHE_OPTIONS, key = "'" + CUSTOMER_CACHE_KEY + "'",
+            unless = "#result == null || #result.isEmpty()")
     public List<CustomerOptionResponse> listActiveOptions() {
-        if (redisJsonCacheSupport == null) {
-            return loadActiveOptions();
-        }
-        List<CustomerOptionResponse> options = redisJsonCacheSupport.getOrLoad(
-                CUSTOMER_CACHE_KEY,
-                CUSTOMER_CACHE_TTL,
-                CUSTOMER_OPTION_LIST_TYPE,
-                this::loadActiveOptions
-        );
-        if (options.isEmpty()) {
-            List<CustomerOptionResponse> refreshed = loadActiveOptions();
-            if (refreshed.isEmpty()) {
-                return options;
-            }
-            writeActiveOptionsCache(refreshed);
-            return refreshed;
-        }
-        return options;
+        return loadActiveOptions();
     }
 
     private List<CustomerOptionResponse> loadActiveOptions() {
@@ -115,12 +131,6 @@ public class CustomerService extends AbstractCrudService<Customer, CustomerReque
                         c.getDefaultSettlementCompanyName()
                 ))
                 .toList();
-    }
-
-    private void writeActiveOptionsCache(List<CustomerOptionResponse> options) {
-        if (redisJsonCacheSupport != null) {
-            redisJsonCacheSupport.write(CUSTOMER_CACHE_KEY, options, CUSTOMER_CACHE_TTL);
-        }
     }
 
     @Override
@@ -217,9 +227,7 @@ public class CustomerService extends AbstractCrudService<Customer, CustomerReque
 
     @Override
     protected Customer saveEntity(Customer entity) {
-        Customer saved = customerRepository.save(entity);
-        evictCache();
-        return saved;
+        return customerRepository.save(entity);
     }
 
     @Override
@@ -302,12 +310,6 @@ public class CustomerService extends AbstractCrudService<Customer, CustomerReque
                         "客户"
                 )
         );
-    }
-
-    private void evictCache() {
-        if (redisJsonCacheSupport != null) {
-            redisJsonCacheSupport.deleteAfterCommit(CUSTOMER_CACHE_KEY);
-        }
     }
 
     private SettlementCompanySnapshot resolveSettlementCompany(Long id) {

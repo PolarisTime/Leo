@@ -131,13 +131,12 @@ public class PermissionService {
     }
 
     public void evictMetadataCache() {
-        cache.evictMetadata(MenuVisibilityService.MENU_CACHE_KEY_PREFIX);
+        // Menu metadata is loaded directly after the NIH cache migration.
     }
 
     public void evictAllCache() {
         clearDepartmentUserCache();
         if (cache != null) {
-            cache.evictMetadata(MenuVisibilityService.MENU_CACHE_KEY_PREFIX);
             cache.evictAll();
         }
     }

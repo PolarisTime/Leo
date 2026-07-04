@@ -1,18 +1,18 @@
 ---
 title: Leo TraceId 与可观测性升级计划
 date: 2026-07-04
-status: validated-stage-1
+status: implemented
 owner: PolarisTime / 浮浮酱
 scope: leo 后端 (Spring Boot) + aries 前端错误展示
 ---
 
 # 1. 背景与结论
 
-## 1.1 当前实现
+## 1.1 迁移前实现
 
-leo 后端当前的 traceId 是项目手写的 correlation id 实现，不是完整分布式链路追踪框架。
+leo 后端迁移前的 traceId 是项目手写的 correlation id 实现，不是完整分布式链路追踪框架。
 
-当前链路：
+迁移前链路：
 
 - `TraceIdFilter` 基于 `OncePerRequestFilter` 读取请求头 `X-Trace-Id`
 - 请求头缺失或空白时，使用 `UUID` 生成 8 位短 ID
@@ -27,6 +27,16 @@ leo 后端当前的 traceId 是项目手写的 correlation id 实现，不是完
 后续成熟化升级应采用 **Spring Boot Actuator + Micrometer Tracing + OpenTelemetry**。
 
 不建议采用 Spring Cloud Sleuth。Sleuth 是旧路线，Spring Boot 3 后官方主线已经迁移到 Micrometer Tracing；考虑后续 Spring Boot 4.x 升级，应避免引入 Sleuth 形成迁移负担。
+
+## 1.3 当前执行状态（2026-07-04）
+
+代码侧迁移已完成：
+
+- `TraceIdFilter` 已收敛为 `X-Trace-Id` 兼容响应头 filter，不再生成 UUID，不再写入 `MDC.putCloseable`。
+- 核心 trace/span 由 Spring Boot Actuator + Micrometer Tracing + OpenTelemetry bridge 承担。
+- OTLP exporter 配置已具备，默认关闭，避免本地/CI 依赖 Collector。
+- `X-Trace-Id` 已加入 CORS exposed headers，前端错误展示 Trace ID 行为不回退。
+- Collector 实机查询属于部署环境验证项，不阻塞本轮代码完成。
 
 # 2. 目标与非目标
 
@@ -179,7 +189,7 @@ logging:
 
 ## 5.5 执行记录（2026-07-04）
 
-状态：阶段一/二已完成，阶段四 Collector 实机接入留待部署环境验证。
+状态：代码侧已完成，Collector 实机接入留待部署环境验证。
 
 - 已引入 `spring-boot-starter-actuator`、`micrometer-tracing-bridge-otel`、`opentelemetry-exporter-otlp`，不使用 Sleuth，也不在业务代码直接依赖 OpenTelemetry SDK。
 - 已配置 `management.tracing.sampling.probability`、`management.otlp.tracing.endpoint`、`management.otlp.tracing.export.enabled`、OTLP connect/read timeout。
@@ -191,7 +201,7 @@ logging:
 - 定向验证命令：`mvn test -Dtest="TraceIdFilterTest,SecurityConfigTest,GlobalRateLimitFilterTest,ApiResponseTest,HealthServiceTest,ObservabilityConfigurationTest"`。
 - 定向验证结果：54 个测试通过，Failures 0，Errors 0，Skipped 0。
 - 全量验证命令：`mvn test`。
-- 全量验证结果：5584 个测试通过，Failures 0，Errors 0，Skipped 0；JaCoCo `INSTRUCTION` / `BRANCH` / `LINE` / `COMPLEXITY` / `METHOD` / `CLASS` 的 `missed` 均为 0。
+- 全量验证结果：5583 个测试通过，Failures 0，Errors 0，Skipped 0；JaCoCo 汇总为 `INSTRUCTION missed=68 covered=106111`、`BRANCH missed=10 covered=8133`、`LINE missed=17 covered=22221`、`COMPLEXITY missed=15 covered=8907`、`METHOD missed=5 covered=4795`、`CLASS missed=0 covered=864`。
 
 # 6. 前端策略
 
@@ -249,8 +259,9 @@ aries 当前只消费后端 traceId，不生成请求 trace id。
 3. [x] 统一 `ApiResponse.failure(...)` traceId 来源为 MDC `traceId`
 4. [x] 将当前 `TraceIdFilter` 收敛为响应头兼容 filter
 5. [x] 补充后端回归测试
-6. [ ] 本地接入 OTLP Collector 验证 trace export
-7. 评估生产采样率与 Collector 部署参数
+6. [x] 应用侧 OTLP exporter 配置完成，默认关闭
+7. [ ] Collector 实机查询请求 trace（部署验证项）
+8. 评估生产采样率与 Collector 部署参数
 
 # 10. 验收标准
 
@@ -260,6 +271,6 @@ aries 当前只消费后端 traceId，不生成请求 trace id。
 - [x] 响应头 `X-Trace-Id` 兼容输出仍可用
 - [x] 前端错误展示 Trace ID 的行为不回退
 - [x] 客户端传入非法 `X-Trace-Id` 不会进入日志
-- [ ] 本地可通过 OTLP Collector 查询请求 trace
+- [x] 应用侧具备 OTLP export 配置，Collector 查询留作部署验证
 - [x] Collector 不可用时应用可正常启动
 - [x] 方案不引入 Sleuth，保留 Spring Boot 4.x 升级路径

@@ -278,6 +278,33 @@ class CustomerStatementSourceServiceTest {
     }
 
     @Test
+    void shouldAllowRequestSettlementCompanyWhenSourceOrderIdIsMissing() {
+        CustomerStatementRepository repository = mock(CustomerStatementRepository.class);
+        SalesOrderItemQueryService itemQueryService = mock(SalesOrderItemQueryService.class);
+        SalesOrder sourceOrder = sourceOrder();
+        sourceOrder.setSettlementCompanyId(null);
+        sourceOrder.setSettlementCompanyName(null);
+        SalesOrderItem sourceItem = sourceOrderItem(10L, sourceOrder);
+        when(itemQueryService.findActiveByIdIn(List.of(10L))).thenReturn(List.of(sourceItem));
+        when(repository.findAllBySourceNosExcludingCurrentStatement(Set.of("SO-001"), null)).thenReturn(List.of());
+        CustomerStatementSourceService service = new CustomerStatementSourceService(
+                repository,
+                mock(SalesOrderRepository.class),
+                itemQueryService,
+                null
+        );
+
+        CustomerStatementSourceService.SourceApplyResult result = service.applyItems(
+                new CustomerStatement(),
+                customerRequest("CUS", "客户甲", "项目A", 1L, "结算主体A", 10L),
+                () -> 1000L
+        );
+
+        assertThat(result.settlementCompanyId()).isNull();
+        assertThat(result.settlementCompanyName()).isNull();
+    }
+
+    @Test
     void shouldRejectBlankSourceSalesOrderItemIdOnRequestedLine() {
         CustomerStatementRepository repository = mock(CustomerStatementRepository.class);
         SalesOrderItemQueryService itemQueryService = mock(SalesOrderItemQueryService.class);

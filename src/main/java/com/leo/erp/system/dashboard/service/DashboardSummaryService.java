@@ -1,12 +1,13 @@
 package com.leo.erp.system.dashboard.service;
 
-import com.leo.erp.common.support.RedisJsonCacheSupport;
 import com.leo.erp.auth.domain.entity.UserAccount;
 import com.leo.erp.auth.repository.RefreshTokenSessionRepository;
 import com.leo.erp.auth.repository.UserAccountRepository;
 import com.leo.erp.auth.service.UserRoleBindingService;
+import com.leo.erp.common.config.CacheConfig;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
+import com.leo.erp.common.support.RedisJsonCacheSupport;
 import com.leo.erp.security.permission.PermissionService;
 import com.leo.erp.master.customer.repository.CustomerRepository;
 import com.leo.erp.master.material.repository.MaterialRepository;
@@ -19,11 +20,12 @@ import com.leo.erp.system.menu.repository.MenuRepository;
 import com.leo.erp.system.role.domain.entity.RoleSetting;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
-import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -33,7 +35,6 @@ import java.util.Set;
 public class DashboardSummaryService {
 
     private static final String DASHBOARD_CACHE_PREFIX = "leo:dashboard:";
-    private static final Duration DASHBOARD_CACHE_TTL = Duration.ofMinutes(2);
 
     private final UserAccountRepository userAccountRepository;
     private final CompanySettingRepository companySettingRepository;
@@ -83,18 +84,13 @@ public class DashboardSummaryService {
     }
 
     @Transactional(readOnly = true)
+    @Cacheable(value = CacheConfig.CACHE_HOT, key = "'" + DASHBOARD_CACHE_PREFIX + "' + #userId",
+            unless = "#result == null")
     public DashboardSummaryResponse getSummary(Long userId) {
-        if (redisJsonCacheSupport == null) {
-            return buildSummary(userId);
-        }
-        return redisJsonCacheSupport.getOrLoad(
-                dashboardCacheKey(userId),
-                DASHBOARD_CACHE_TTL,
-                DashboardSummaryResponse.class,
-                () -> buildSummary(userId)
-        );
+        return buildSummary(userId);
     }
 
+    @CacheEvict(value = CacheConfig.CACHE_HOT, key = "'" + DASHBOARD_CACHE_PREFIX + "' + #userId")
     public void evictCache(Long userId) {
         if (redisJsonCacheSupport == null || userId == null) {
             return;

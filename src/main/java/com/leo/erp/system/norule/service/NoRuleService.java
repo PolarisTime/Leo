@@ -2,6 +2,7 @@ package com.leo.erp.system.norule.service;
 
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
+import com.leo.erp.common.config.CacheConfig;
 import com.leo.erp.common.service.AbstractCrudService;
 import com.leo.erp.common.support.RedisJsonCacheSupport;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
@@ -14,7 +15,10 @@ import com.leo.erp.system.norule.web.dto.NoRuleGenerateResponse;
 import com.leo.erp.system.norule.web.dto.NoRuleRequest;
 import com.leo.erp.system.norule.web.dto.NoRuleResponse;
 import com.leo.erp.system.norule.web.dto.StatementGeneratorRulesResponse;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Caching;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Arrays;
 import java.util.LinkedHashSet;
@@ -76,6 +80,58 @@ public class NoRuleService extends AbstractCrudService<NoRule, NoRuleRequest, No
                 systemSwitchService.shouldDefaultCustomerStatementReceiptAmountToZero(),
                 systemSwitchService.shouldDefaultSupplierStatementToFullPayment()
         );
+    }
+
+    @Override
+    @Transactional
+    @Caching(evict = {
+            @CacheEvict(value = CacheConfig.CACHE_STATIC, key = "'" + SystemSwitchService.SWITCH_CACHE_KEY + "'"),
+            @CacheEvict(value = CacheConfig.CACHE_STATIC, key = "'" + GeneralSettingQueryService.PUBLIC_DISPLAY_SWITCHES_CACHE_KEY + "'"),
+            @CacheEvict(value = CacheConfig.CACHE_STATIC, key = "'" + GeneralSettingQueryService.PUBLIC_CLIENT_SETTINGS_CACHE_KEY + "'"),
+            @CacheEvict(value = CacheConfig.CACHE_STATIC, key = "'" + CompanySettingService.CURRENT_COMPANY_CACHE_KEY + "'"),
+            @CacheEvict(value = CacheConfig.CACHE_STATIC, key = "'" + CompanySettingService.CURRENT_TAX_RATE_CACHE_KEY + "'")
+    })
+    public NoRuleResponse create(NoRuleRequest request) {
+        return super.create(request);
+    }
+
+    @Override
+    @Transactional
+    @Caching(evict = {
+            @CacheEvict(value = CacheConfig.CACHE_STATIC, key = "'" + SystemSwitchService.SWITCH_CACHE_KEY + "'"),
+            @CacheEvict(value = CacheConfig.CACHE_STATIC, key = "'" + GeneralSettingQueryService.PUBLIC_DISPLAY_SWITCHES_CACHE_KEY + "'"),
+            @CacheEvict(value = CacheConfig.CACHE_STATIC, key = "'" + GeneralSettingQueryService.PUBLIC_CLIENT_SETTINGS_CACHE_KEY + "'"),
+            @CacheEvict(value = CacheConfig.CACHE_STATIC, key = "'" + CompanySettingService.CURRENT_COMPANY_CACHE_KEY + "'"),
+            @CacheEvict(value = CacheConfig.CACHE_STATIC, key = "'" + CompanySettingService.CURRENT_TAX_RATE_CACHE_KEY + "'")
+    })
+    public NoRuleResponse update(Long id, NoRuleRequest request) {
+        return super.update(id, request);
+    }
+
+    @Override
+    @Transactional
+    @Caching(evict = {
+            @CacheEvict(value = CacheConfig.CACHE_STATIC, key = "'" + SystemSwitchService.SWITCH_CACHE_KEY + "'"),
+            @CacheEvict(value = CacheConfig.CACHE_STATIC, key = "'" + GeneralSettingQueryService.PUBLIC_DISPLAY_SWITCHES_CACHE_KEY + "'"),
+            @CacheEvict(value = CacheConfig.CACHE_STATIC, key = "'" + GeneralSettingQueryService.PUBLIC_CLIENT_SETTINGS_CACHE_KEY + "'"),
+            @CacheEvict(value = CacheConfig.CACHE_STATIC, key = "'" + CompanySettingService.CURRENT_COMPANY_CACHE_KEY + "'"),
+            @CacheEvict(value = CacheConfig.CACHE_STATIC, key = "'" + CompanySettingService.CURRENT_TAX_RATE_CACHE_KEY + "'")
+    })
+    public NoRuleResponse updateStatus(Long id, String status) {
+        return super.updateStatus(id, status);
+    }
+
+    @Override
+    @Transactional
+    @Caching(evict = {
+            @CacheEvict(value = CacheConfig.CACHE_STATIC, key = "'" + SystemSwitchService.SWITCH_CACHE_KEY + "'"),
+            @CacheEvict(value = CacheConfig.CACHE_STATIC, key = "'" + GeneralSettingQueryService.PUBLIC_DISPLAY_SWITCHES_CACHE_KEY + "'"),
+            @CacheEvict(value = CacheConfig.CACHE_STATIC, key = "'" + GeneralSettingQueryService.PUBLIC_CLIENT_SETTINGS_CACHE_KEY + "'"),
+            @CacheEvict(value = CacheConfig.CACHE_STATIC, key = "'" + CompanySettingService.CURRENT_COMPANY_CACHE_KEY + "'"),
+            @CacheEvict(value = CacheConfig.CACHE_STATIC, key = "'" + CompanySettingService.CURRENT_TAX_RATE_CACHE_KEY + "'")
+    })
+    public void delete(Long id) {
+        super.delete(id);
     }
 
     @Override

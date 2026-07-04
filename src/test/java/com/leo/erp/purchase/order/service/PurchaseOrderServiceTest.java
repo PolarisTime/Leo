@@ -24,7 +24,6 @@ import com.leo.erp.system.company.service.CompanySettingService;
 import org.springframework.jdbc.core.JdbcTemplate;
 import com.leo.erp.system.norule.service.SystemSwitchService;
 import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.data.domain.PageImpl;
@@ -55,11 +54,6 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class PurchaseOrderServiceTest {
-
-    @BeforeEach
-    void setUpIdGenerator() {
-        ReflectionTestUtils.invokeMethod(new SnowflakeIdGenerator(0L), "registerInstance");
-    }
 
     @AfterEach
     void clearSecurityContext() {

@@ -21,6 +21,11 @@ class RedisTuningPropertiesTest {
     }
 
     @Test
+    void shouldHaveDefaultCacheOptionsTtl() {
+        assertThat(properties.getCache().getOptionsTtl()).isEqualTo(Duration.ofMinutes(30));
+    }
+
+    @Test
     void shouldHaveDefaultTtlJitterPercent() {
         assertThat(properties.getCache().getTtlJitterPercent()).isEqualTo(10);
     }
@@ -35,6 +40,12 @@ class RedisTuningPropertiesTest {
     void shouldSetCacheHotTtl() {
         properties.getCache().setHotTtl(Duration.ofMinutes(30));
         assertThat(properties.getCache().getHotTtl()).isEqualTo(Duration.ofMinutes(30));
+    }
+
+    @Test
+    void shouldSetCacheOptionsTtl() {
+        properties.getCache().setOptionsTtl(Duration.ofMinutes(45));
+        assertThat(properties.getCache().getOptionsTtl()).isEqualTo(Duration.ofMinutes(45));
     }
 
     @Test

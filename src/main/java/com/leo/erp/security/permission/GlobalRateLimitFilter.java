@@ -38,13 +38,16 @@ public class GlobalRateLimitFilter extends OncePerRequestFilter implements Order
     private final TokenBucketService tokenBucketService;
     private final ClientIpResolver clientIpResolver;
     private final ObjectMapper objectMapper;
+    private final RateLimitHeaderWriter headerWriter;
 
     public GlobalRateLimitFilter(TokenBucketService tokenBucketService,
                                  ClientIpResolver clientIpResolver,
-                                 ObjectMapper objectMapper) {
+                                 ObjectMapper objectMapper,
+                                 RateLimitHeaderWriter headerWriter) {
         this.tokenBucketService = tokenBucketService;
         this.clientIpResolver = clientIpResolver;
         this.objectMapper = objectMapper;
+        this.headerWriter = headerWriter;
     }
 
     @Override
@@ -78,10 +81,7 @@ public class GlobalRateLimitFilter extends OncePerRequestFilter implements Order
             RateLimitContext.set(request, snapshot);
             response.setStatus(HttpStatus.TOO_MANY_REQUESTS.value());
             response.setContentType("application/json;charset=UTF-8");
-            response.setHeader("Retry-After", String.valueOf(retryAfterSeconds));
-            response.setHeader("X-RateLimit-Limit", String.valueOf(GLOBAL_CAPACITY));
-            response.setHeader("X-RateLimit-Remaining", "0");
-            response.setHeader("X-RateLimit-Reset", String.valueOf(retryAfterSeconds));
+            headerWriter.writeRejected(response, GLOBAL_CAPACITY, retryAfterSeconds);
             ApiResponse<Void> body = ApiResponse.failure(
                     ErrorCode.RATE_LIMITED,
                     "请求过于频繁，请在 " + retryAfterSeconds + " 秒后重试",
@@ -92,8 +92,7 @@ public class GlobalRateLimitFilter extends OncePerRequestFilter implements Order
             return;
         }
         RateLimitContext.set(request, RateLimitContext.Snapshot.allowed(GLOBAL_CAPACITY, result.remaining()));
-        response.setHeader("X-RateLimit-Limit", String.valueOf(GLOBAL_CAPACITY));
-        response.setHeader("X-RateLimit-Remaining", String.valueOf(result.remaining()));
+        headerWriter.writeAllowed(response, GLOBAL_CAPACITY, result.remaining());
         chain.doFilter(request, response);
     }
 }

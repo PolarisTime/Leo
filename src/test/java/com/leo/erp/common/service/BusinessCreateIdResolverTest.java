@@ -53,6 +53,13 @@ class BusinessCreateIdResolverTest {
     }
 
     @Test
+    void shouldRejectMissingSnowflakeIdGenerator() {
+        assertThatThrownBy(() -> new BusinessCreateIdResolver(null, null, getClass()))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("SnowflakeIdGenerator");
+    }
+
+    @Test
     void shouldUsePreallocatedIdWithoutConsumeService() {
         MockHttpServletRequest request = new MockHttpServletRequest();
         request.addHeader("X-Preallocated-Id", "123456789");

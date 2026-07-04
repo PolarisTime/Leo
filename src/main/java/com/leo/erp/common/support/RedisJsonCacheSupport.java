@@ -19,7 +19,6 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
-import java.util.function.Supplier;
 
 @Slf4j
 @Component
@@ -41,28 +40,6 @@ public class RedisJsonCacheSupport {
     @Autowired(required = false)
     public void setAfterCommitExecutor(AfterCommitExecutor afterCommitExecutor) {
         this.afterCommitExecutor = afterCommitExecutor;
-    }
-
-    public <T> T getOrLoad(String key, Duration ttl, TypeReference<T> typeReference, Supplier<T> loader) {
-        Optional<T> cached = read(key, typeReference);
-        if (cached.isPresent()) {
-            return cached.get();
-        }
-
-        T loaded = loader.get();
-        write(key, loaded, ttl);
-        return loaded;
-    }
-
-    public <T> T getOrLoad(String key, Duration ttl, Class<T> type, Supplier<T> loader) {
-        Optional<T> cached = read(key, type);
-        if (cached.isPresent()) {
-            return cached.get();
-        }
-
-        T loaded = loader.get();
-        write(key, loaded, ttl);
-        return loaded;
     }
 
     public <T> Optional<T> read(String key, TypeReference<T> typeReference) {

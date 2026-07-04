@@ -29,7 +29,6 @@ import com.leo.erp.security.permission.WorkflowTransitionGuard;
 import com.leo.erp.security.support.SecurityPrincipal;
 import com.leo.erp.sales.order.service.SalesOrderItemQueryService;
 import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -58,11 +57,6 @@ class PurchaseInboundServiceTest {
     @AfterEach
     void tearDownSecurityContext() {
         SecurityContextHolder.clearContext();
-    }
-
-    @BeforeEach
-    void setUpIdGenerator() {
-        ReflectionTestUtils.invokeMethod(new SnowflakeIdGenerator(0L), "registerInstance");
     }
 
     @Test

@@ -25,20 +25,32 @@ public class TradeItemMaterialSupport implements RedisCacheHealthCheck {
     private final RedisJsonCacheSupport redisJsonCacheSupport;
     private final TradeItemRuntimeSettings tradeItemRuntimeSettings;
     private final BusinessNumberAllocator businessNumberAllocator;
+    private final SnowflakeIdGenerator snowflakeIdGenerator;
 
     @Autowired
     public TradeItemMaterialSupport(MaterialCatalog materialCatalog,
                                     RedisJsonCacheSupport redisJsonCacheSupport,
                                     TradeItemRuntimeSettings tradeItemRuntimeSettings,
-                                    BusinessNumberAllocator businessNumberAllocator) {
+                                    BusinessNumberAllocator businessNumberAllocator,
+                                    SnowflakeIdGenerator snowflakeIdGenerator) {
         this.materialCatalog = materialCatalog;
         this.redisJsonCacheSupport = redisJsonCacheSupport;
         this.tradeItemRuntimeSettings = tradeItemRuntimeSettings;
         this.businessNumberAllocator = businessNumberAllocator;
+        this.snowflakeIdGenerator = Objects.requireNonNull(snowflakeIdGenerator,
+                "SnowflakeIdGenerator must not be null");
+    }
+
+    TradeItemMaterialSupport(MaterialCatalog materialCatalog,
+                             RedisJsonCacheSupport redisJsonCacheSupport,
+                             TradeItemRuntimeSettings tradeItemRuntimeSettings,
+                             BusinessNumberAllocator businessNumberAllocator) {
+        this(materialCatalog, redisJsonCacheSupport, tradeItemRuntimeSettings, businessNumberAllocator,
+                new SnowflakeIdGenerator(0L));
     }
 
     public TradeItemMaterialSupport(MaterialCatalog materialCatalog) {
-        this(materialCatalog, null, null, null);
+        this(materialCatalog, null, null, null, new SnowflakeIdGenerator(0L));
     }
 
     public Map<String, TradeMaterialSnapshot> loadMaterialMap(Collection<String> materialCodes) {
@@ -88,7 +100,7 @@ public class TradeItemMaterialSupport implements RedisCacheHealthCheck {
         if (shouldAutoGenerateBatchNo()) {
             // 前端已生成雪花 ID 则直接使用，否则后端补生成
             if (normalized == null) {
-                long id = SnowflakeIdGenerator.getInstance().nextId();
+                long id = snowflakeIdGenerator.nextId();
                 normalized = Long.toString(id, 36).toUpperCase();
             }
         }
@@ -113,27 +125,7 @@ public class TradeItemMaterialSupport implements RedisCacheHealthCheck {
     }
 
     private Map<String, TradeMaterialSnapshot> loadActiveMaterialsByCode() {
-        List<TradeMaterialSnapshot> snapshots;
-        if (materialCatalog == null) {
-            snapshots = List.of();
-        } else if (redisJsonCacheSupport == null) {
-            snapshots = materialCatalog.listActiveMaterials();
-        } else {
-            snapshots = redisJsonCacheSupport.getOrLoad(
-                    MATERIAL_CACHE_KEY,
-                    MATERIAL_CACHE_TTL,
-                    MATERIAL_LIST_TYPE,
-                    this::loadActiveMaterialsFromCatalog
-            );
-            if (snapshots.isEmpty()) {
-                List<TradeMaterialSnapshot> refreshed = loadActiveMaterialsFromCatalog();
-                if (refreshed.isEmpty()) {
-                    return Map.of();
-                }
-                writeMaterialCache(refreshed);
-                snapshots = refreshed;
-            }
-        }
+        List<TradeMaterialSnapshot> snapshots = loadActiveMaterialsFromCatalog();
 
         Map<String, TradeMaterialSnapshot> materialsByCode = new LinkedHashMap<>();
         snapshots.forEach(snapshot -> {
@@ -150,12 +142,6 @@ public class TradeItemMaterialSupport implements RedisCacheHealthCheck {
             return List.of();
         }
         return materialCatalog.listActiveMaterials();
-    }
-
-    private void writeMaterialCache(List<TradeMaterialSnapshot> snapshots) {
-        if (redisJsonCacheSupport != null) {
-            redisJsonCacheSupport.write(MATERIAL_CACHE_KEY, snapshots, MATERIAL_CACHE_TTL);
-        }
     }
 
     @Override

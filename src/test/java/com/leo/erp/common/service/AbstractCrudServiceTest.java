@@ -74,6 +74,16 @@ class AbstractCrudServiceTest {
     }
 
     @Test
+    void defaultFindVisibleEntityShouldDelegateToActiveEntity() {
+        TestCrudService service = new TestCrudService();
+        service.addEntity(1L, "DRAFT");
+
+        Optional<TestEntity> result = service.publicDefaultFindVisibleEntity(1L);
+
+        assertThat(result).contains(service.getEntity(1L));
+    }
+
+    @Test
     void updateShouldThrowWhenEntityNotFound() {
         TestCrudService service = new TestCrudService();
 
@@ -557,13 +567,10 @@ class AbstractCrudServiceTest {
     }
 
     @Test
-    void nextIdShouldUseDefaultGeneratorWhenServiceHasNoGenerator() {
-        ReflectionTestUtils.invokeMethod(new SnowflakeIdGenerator(0L), "registerInstance");
-        TestCrudService service = new TestCrudService(null);
-
-        long id = service.nextId();
-
-        assertThat(id).isPositive();
+    void shouldRejectMissingSnowflakeIdGenerator() {
+        assertThatThrownBy(() -> new TestCrudService(null))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("SnowflakeIdGenerator");
     }
 
     @Test
@@ -1018,6 +1025,10 @@ class AbstractCrudServiceTest {
 
         String publicResolveCreateBusinessNo(String moduleKey, String requestedNo, Long entityId) {
             return resolveCreateBusinessNo(moduleKey, requestedNo, entityId);
+        }
+
+        Optional<TestEntity> publicDefaultFindVisibleEntity(Long id) {
+            return super.findVisibleEntity(id);
         }
     }
 }

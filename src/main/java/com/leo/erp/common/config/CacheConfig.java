@@ -18,6 +18,7 @@ public class CacheConfig {
 
     public static final String CACHE_STATIC = "static";
     public static final String CACHE_HOT = "hot";
+    public static final String CACHE_OPTIONS = "options";
 
     @Bean
     @ConditionalOnBean(RedisConnectionFactory.class)
@@ -38,9 +39,17 @@ public class CacheConfig {
                 .serializeKeysWith(RedisSerializationContext.SerializationPair.fromSerializer(new StringRedisSerializer()))
                 .serializeValuesWith(RedisSerializationContext.SerializationPair.fromSerializer(serializer));
 
+        RedisCacheConfiguration optionsConfig = RedisCacheConfiguration.defaultCacheConfig()
+                .entryTtl(redisTuningProperties.withTtlJitter(redisTuningProperties.getCache().getOptionsTtl()))
+                .disableCachingNullValues()
+                .serializeKeysWith(RedisSerializationContext.SerializationPair.fromSerializer(new StringRedisSerializer()))
+                .serializeValuesWith(RedisSerializationContext.SerializationPair.fromSerializer(serializer));
+
         return RedisCacheManager.builder(connectionFactory)
                 .withCacheConfiguration(CACHE_STATIC, staticConfig)
                 .withCacheConfiguration(CACHE_HOT, hotConfig)
+                .withCacheConfiguration(CACHE_OPTIONS, optionsConfig)
+                .transactionAware()
                 .build();
     }
 }

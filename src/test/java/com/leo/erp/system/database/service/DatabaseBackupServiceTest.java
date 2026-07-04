@@ -3,6 +3,7 @@ package com.leo.erp.system.database.service;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.support.ExternalProcessRunner;
 import com.leo.erp.system.database.config.DatabaseBackupProperties;
+import com.leo.erp.system.database.config.DatabaseImportProperties;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.autoconfigure.jdbc.DataSourceProperties;
 
@@ -89,6 +90,33 @@ class DatabaseBackupServiceTest {
         service.importBackup(tempFile, "leo", "secret");
 
         assertThat(processRunner.actions).containsExactly("psql");
+    }
+
+    @Test
+    void shouldFailFastAndNotStartProcess_whenImportDisabled() throws Exception {
+        RecordingProcessRunner processRunner = new RecordingProcessRunner();
+        DatabaseBackupService service = newService(processRunner, true, false);
+        Path tempFile = Files.createTempFile("backup-import-disabled-", ".sql");
+        tempFile.toFile().deleteOnExit();
+        Files.writeString(tempFile, "select 1;");
+
+        assertThatThrownBy(() -> service.importBackup(tempFile, "leo", "secret"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("数据库备份导入已禁用");
+
+        assertThat(processRunner.actions).isEmpty();
+    }
+
+    @Test
+    void shouldCheckImportSwitchBeforeImportFileValidation() {
+        RecordingProcessRunner processRunner = new RecordingProcessRunner();
+        DatabaseBackupService service = newService(processRunner, true, false);
+
+        assertThatThrownBy(() -> service.importBackup(Path.of("/tmp/leo-missing-import.sql"), "leo", "secret"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("数据库备份导入已禁用");
+
+        assertThat(processRunner.actions).isEmpty();
     }
 
     @Test
@@ -275,13 +303,21 @@ class DatabaseBackupServiceTest {
     }
 
     private DatabaseBackupService newService(ExternalProcessRunner processRunner, boolean autoBackupBeforeImport) {
+        return newService(processRunner, autoBackupBeforeImport, true);
+    }
+
+    private DatabaseBackupService newService(ExternalProcessRunner processRunner,
+                                             boolean autoBackupBeforeImport,
+                                             boolean importEnabled) {
         DatabaseBackupProperties properties = new DatabaseBackupProperties();
         properties.setAutoBackupBeforeImport(autoBackupBeforeImport);
+        DatabaseImportProperties importProperties = new DatabaseImportProperties();
+        importProperties.setEnabled(importEnabled);
         DataSourceProperties dataSourceProperties = new DataSourceProperties();
         dataSourceProperties.setUrl("jdbc:postgresql://localhost:5432/leo");
         dataSourceProperties.setUsername("leo");
         dataSourceProperties.setPassword("secret");
-        return new DatabaseBackupService(processRunner, properties, dataSourceProperties);
+        return new DatabaseBackupService(processRunner, properties, importProperties, dataSourceProperties);
     }
 
     private static final class RecordingProcessRunner extends ExternalProcessRunner {

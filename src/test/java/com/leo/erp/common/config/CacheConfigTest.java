@@ -23,6 +23,11 @@ class CacheConfigTest {
     }
 
     @Test
+    void cacheOptions_constantValue() {
+        assertThat(CacheConfig.CACHE_OPTIONS).isEqualTo("options");
+    }
+
+    @Test
     void cacheManager_createsManagerWithConfigs() {
         CacheConfig cacheConfig = new CacheConfig();
         RedisConnectionFactory connectionFactory = mock(RedisConnectionFactory.class);

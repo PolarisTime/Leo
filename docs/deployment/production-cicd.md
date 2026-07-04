@@ -226,7 +226,72 @@ PGPASSWORD="<postgres-admin-password>" \
 
 脚本会安装 `/etc/nginx/conf.d/steelx.conf`，执行 `nginx -t` 后 reload Nginx。执行用户需要 root 权限，或具备免密 sudo 执行 `install`、`nginx -t`、`nginx -s reload` 的权限。生产实例对外地址为 `https://in1ove.com`，`http://in1ove.com` 会跳转到 HTTPS。
 
-完成首次初始化后，后续自动化发布走 GitHub Actions `deploy_target=local`。本机 runner 直接下载 release archive 并调用 `scripts/deploy/install-production-release.sh` 发布到 `/instance/steelx`，不会重新写数据库、Nginx 或 TLS 配置。
+完成首次初始化后，后续自动化发布走 GitHub Actions `deploy_target=local`。本机 runner 直接下载 release archive 并调用 `scripts/deploy/install-production-release.sh` 发布到 `/instance/steelx`，不会重新写数据库。
+
+本机 runner 会在 release 安装成功后调用 `scripts/deploy/install-steelx-nginx-config.sh` 安装 SteelX Nginx 配置。该脚本会生成 `/instance/steelx/shared/nginx-steelx.conf`，备份并覆盖 `/etc/nginx/conf.d/steelx.conf`，执行 `nginx -t` 后 reload Nginx；如校验或 reload 失败，会尝试恢复上一版配置。SteelX 上传请求体临时目录固定在 `/instance/steelx/frontend/nginx-client-body`，不放入 `/instance/steelx/frontend/current`。
+
+## 生产部署核验规范
+
+任何声称“代码已经部署进生产”的结论，必须同时核验生产 release manifest 和 GitHub Actions 成功记录，不允许只依据本地文件、分支名或 runner 最近运行状态判断。
+
+核验步骤：
+
+1. 读取当前生产 release manifest：
+
+```bash
+jq . /instance/steelx/current/manifest.json
+```
+
+重点字段：
+
+- `runId`：本次生产部署对应的 GitHub Actions run。
+- `runNumber`：部署序号。
+- `leoSha`：实际打包部署的 Leo commit。
+- `leoRef` / `ariesRef`：触发部署时选择的后端和前端 ref。
+- `deployTarget`：必须为 `local`。
+- `dryRun`：必须为 `false`。
+
+2. 使用 manifest 中的 `runId` 查询 GitHub Actions：
+
+```bash
+gh run view "$(jq -r '.runId' /instance/steelx/current/manifest.json)" \
+  --repo PolarisTime/Leo \
+  --json databaseId,displayTitle,status,conclusion,headBranch,headSha,jobs,url
+```
+
+必须确认：
+
+- workflow conclusion 为 `success`。
+- `Deploy Production Local` job 为 `success`。
+- `headSha` 与 manifest 的 `leoSha` 一致。
+- run title 中 `target=local` 且 `dry_run=false`。
+
+3. 对比当前仓库代码与已部署 commit：
+
+```bash
+deployed_sha="$(jq -r '.leoSha' /instance/steelx/current/manifest.json)"
+git rev-parse HEAD
+git merge-base --is-ancestor "$deployed_sha" HEAD
+git rev-list --count "$deployed_sha"..HEAD
+git status --short
+```
+
+判断规则：
+
+- `git rev-parse HEAD` 等于 `deployed_sha`，且 `git status --short` 为空：当前工作区代码与生产后端代码一致。
+- `git rev-list --count "$deployed_sha"..HEAD` 大于 `0`：当前分支有提交尚未部署。
+- `git status --short` 非空：当前工作区有未提交改动，必然尚未通过 CI/CD 部署。
+- 新增或修改 `.github/workflows/*`、`scripts/deploy/*`、`deploy/nginx/*`、`docs/deployment/*` 后，必须提交并推送到部署使用的 `leo_ref`，再触发 `deploy_target=local`，生产才会应用。
+
+4. Nginx 配置类变更的额外核验：
+
+```bash
+rg -n "client_body_temp_path|client_body_buffer_size" \
+  /instance/steelx/shared/nginx-steelx.conf \
+  /etc/nginx/conf.d/steelx.conf
+```
+
+只有当上述文件内容与本次目标配置一致，且对应的 GitHub Actions run 成功，才能判定 Nginx 配置变更已通过 CI/CD 生效。
 
 生产回滚到上一版：
 

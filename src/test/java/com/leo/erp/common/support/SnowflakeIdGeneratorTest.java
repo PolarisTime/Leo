@@ -46,6 +46,15 @@ class SnowflakeIdGeneratorTest {
     }
 
     @Test
+    void shouldRejectDefaultMachineIdWhenStrictModeEnabled() {
+        assertThatThrownBy(() -> new SnowflakeIdGenerator(0L, true))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("strict-machine-id");
+
+        assertThat(new SnowflakeIdGenerator(1L, true).nextId()).isPositive();
+    }
+
+    @Test
     void shouldRejectClockRollback() throws Exception {
         SnowflakeIdGenerator generator = new SnowflakeIdGenerator(0L);
         Field lastTimestamp = SnowflakeIdGenerator.class.getDeclaredField("lastTimestamp");

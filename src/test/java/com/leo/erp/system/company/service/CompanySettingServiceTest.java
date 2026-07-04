@@ -1,6 +1,7 @@
 package com.leo.erp.system.company.service;
 
 import com.leo.erp.common.error.BusinessException;
+import com.leo.erp.common.config.CacheConfig;
 import com.leo.erp.common.support.MasterDataReferenceGuard;
 import com.leo.erp.common.support.RedisJsonCacheSupport;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
@@ -18,10 +19,12 @@ import com.leo.erp.system.norule.repository.NoRuleRepository;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.cache.annotation.Caching;
 
+import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 import java.math.BigDecimal;
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -203,7 +206,7 @@ class CompanySettingServiceTest {
                     default -> throw new UnsupportedOperationException(method.getName());
                 }
         );
-        var service = new CompanySettingService(repository, null, null, null, null, null);
+        var service = new CompanySettingService(repository, new SnowflakeIdGenerator(1), null, null, null, null);
 
         assertThatThrownBy(() -> service.saveCurrent(new CompanySettingRequest(
                 "公司A", null, List.of(), null, null
@@ -253,7 +256,7 @@ class CompanySettingServiceTest {
                     default -> throw new UnsupportedOperationException(method.getName());
                 }
         );
-        var service = new CompanySettingService(repository, null, null, null, null, null);
+        var service = new CompanySettingService(repository, new SnowflakeIdGenerator(1), null, null, null, null);
 
         var options = service.listActiveOptions();
 
@@ -277,7 +280,7 @@ class CompanySettingServiceTest {
                     default -> throw new UnsupportedOperationException(method.getName());
                 }
         );
-        var service = new CompanySettingService(repository, null, null, null, null, null);
+        var service = new CompanySettingService(repository, new SnowflakeIdGenerator(1), null, null, null, null);
 
         CompanySetting result = service.requireActiveSettlementCompany(1L);
 
@@ -297,7 +300,7 @@ class CompanySettingServiceTest {
                     default -> throw new UnsupportedOperationException(method.getName());
                 }
         );
-        var service = new CompanySettingService(repository, null, null, null, null, null);
+        var service = new CompanySettingService(repository, new SnowflakeIdGenerator(1), null, null, null, null);
 
         assertThatThrownBy(() -> service.requireActiveSettlementCompany(1L))
                 .isInstanceOf(BusinessException.class)
@@ -317,7 +320,7 @@ class CompanySettingServiceTest {
                     default -> throw new UnsupportedOperationException(method.getName());
                 }
         );
-        var service = new CompanySettingService(repository, null, null, null, null, null);
+        var service = new CompanySettingService(repository, new SnowflakeIdGenerator(1), null, null, null, null);
 
         var result = service.page(new com.leo.erp.common.api.PageQuery(0, 10, "id", "desc"), null, null);
 
@@ -380,28 +383,56 @@ class CompanySettingServiceTest {
     }
 
     @Test
-    void shouldLoadCurrentFromCacheSupportWhenAvailable() {
+    void shouldLoadCurrentFromRepositoryOnSpringCachePath() {
         var repository = mock(CompanySettingRepository.class);
         var cache = mock(RedisJsonCacheSupport.class);
         var expected = new CompanySettingResponse(1L, "公司A", "税号", "银行", "账号",
                 new BigDecimal("0.1300"), List.of(), "正常", null);
-        when(cache.getOrLoad(eq(CompanySettingService.CURRENT_COMPANY_CACHE_KEY),
-                any(Duration.class), eq(CompanySettingResponse.class), any())).thenReturn(expected);
-        var service = new CompanySettingService(repository, new SnowflakeIdGenerator(1), mock(CompanySettingMapper.class),
+        var mapper = mock(CompanySettingMapper.class);
+        var entity = createCompanySetting(1L);
+        when(repository.findFirstByStatusAndDeletedFlagFalseOrderByIdAsc(StatusConstants.NORMAL))
+                .thenReturn(Optional.of(entity));
+        when(mapper.toResponse(eq(entity), any(BigDecimal.class), any())).thenReturn(expected);
+        var service = new CompanySettingService(repository, new SnowflakeIdGenerator(1), mapper,
                 mock(DashboardSummaryService.class), mock(NoRuleRepository.class), new ObjectMapper(), cache);
 
         var result = service.current();
 
         assertThat(result).isSameAs(expected);
-        verify(repository, never()).findFirstByStatusAndDeletedFlagFalseOrderByIdAsc(any());
     }
 
     @Test
-    void shouldResolveCurrentTaxRateFromCacheSupportWhenAvailable() {
+    void shouldDeclareSpringCacheAnnotationsForCurrentSettings() throws Exception {
+        Method current = CompanySettingService.class.getDeclaredMethod("current");
+        Cacheable currentCacheable = current.getAnnotation(Cacheable.class);
+        assertThat(currentCacheable.value()).containsExactly(CacheConfig.CACHE_STATIC);
+        assertThat(currentCacheable.key()).isEqualTo("'" + CompanySettingService.CURRENT_COMPANY_CACHE_KEY + "'");
+
+        Method taxRate = CompanySettingService.class.getDeclaredMethod("resolveCurrentTaxRate");
+        Cacheable taxRateCacheable = taxRate.getAnnotation(Cacheable.class);
+        assertThat(taxRateCacheable.value()).containsExactly(CacheConfig.CACHE_STATIC);
+        assertThat(taxRateCacheable.key()).isEqualTo("'" + CompanySettingService.CURRENT_TAX_RATE_CACHE_KEY + "'");
+
+        Method saveCurrent = CompanySettingService.class.getDeclaredMethod("saveCurrent", CompanySettingRequest.class);
+        Caching caching = saveCurrent.getAnnotation(Caching.class);
+        assertThat(caching.evict()).hasSize(2);
+        assertThat(caching.evict())
+                .extracting(evict -> evict.key())
+                .containsExactlyInAnyOrder(
+                        "'" + CompanySettingService.CURRENT_COMPANY_CACHE_KEY + "'",
+                        "'" + CompanySettingService.CURRENT_TAX_RATE_CACHE_KEY + "'"
+                );
+    }
+
+    @Test
+    void shouldResolveCurrentTaxRateFromRepositoryOnSpringCachePath() {
         var cache = mock(RedisJsonCacheSupport.class);
-        when(cache.getOrLoad(eq(CompanySettingService.CURRENT_TAX_RATE_CACHE_KEY),
-                any(Duration.class), eq(BigDecimal.class), any())).thenReturn(new BigDecimal("0.0600"));
-        var service = new CompanySettingService(mock(CompanySettingRepository.class), new SnowflakeIdGenerator(1),
+        var repository = mock(CompanySettingRepository.class);
+        CompanySetting current = createCompanySetting(1L);
+        current.setTaxRate(new BigDecimal("0.0600"));
+        when(repository.findFirstByStatusAndDeletedFlagFalseOrderByIdAsc(StatusConstants.NORMAL))
+                .thenReturn(Optional.of(current));
+        var service = new CompanySettingService(repository, new SnowflakeIdGenerator(1),
                 mock(CompanySettingMapper.class), mock(DashboardSummaryService.class), mock(NoRuleRepository.class),
                 new ObjectMapper(), cache);
 
@@ -441,7 +472,7 @@ class CompanySettingServiceTest {
 
     @Test
     void shouldRejectNullSettlementCompanyId() {
-        var service = new CompanySettingService(mock(CompanySettingRepository.class), null, null, null, null, null);
+        var service = new CompanySettingService(mock(CompanySettingRepository.class), new SnowflakeIdGenerator(1), null, null, null, null);
 
         assertThatThrownBy(() -> service.requireActiveSettlementCompany(null))
                 .isInstanceOf(BusinessException.class)

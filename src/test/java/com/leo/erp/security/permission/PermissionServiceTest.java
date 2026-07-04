@@ -31,6 +31,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
@@ -366,7 +367,7 @@ class PermissionServiceTest {
     }
 
     @Test
-    void shouldDelegateEvictMetadataCache() {
+    void shouldIgnoreEvictMetadataCacheAfterMenuCacheRemoval() {
         com.leo.erp.common.support.RedisJsonCacheSupport cacheSupport =
                 mock(com.leo.erp.common.support.RedisJsonCacheSupport.class);
 
@@ -378,7 +379,7 @@ class PermissionServiceTest {
 
         service.evictMetadataCache();
 
-        verify(cacheSupport).deleteByPattern("leo:menu:all*");
+        verifyNoInteractions(cacheSupport);
     }
 
     @Test

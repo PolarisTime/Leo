@@ -18,6 +18,7 @@ import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -29,11 +30,20 @@ public class PurchaseOrderItemPieceWeightService {
 
     private final PurchaseOrderItemPieceWeightRepository repository;
     private final JdbcTemplate jdbc;
+    private final SnowflakeIdGenerator snowflakeIdGenerator;
 
     public PurchaseOrderItemPieceWeightService(PurchaseOrderItemPieceWeightRepository repository,
-                                                JdbcTemplate jdbc) {
+                                                JdbcTemplate jdbc,
+                                                SnowflakeIdGenerator snowflakeIdGenerator) {
         this.repository = repository;
         this.jdbc = jdbc;
+        this.snowflakeIdGenerator = Objects.requireNonNull(snowflakeIdGenerator,
+                "SnowflakeIdGenerator must not be null");
+    }
+
+    PurchaseOrderItemPieceWeightService(PurchaseOrderItemPieceWeightRepository repository,
+                                        JdbcTemplate jdbc) {
+        this(repository, jdbc, new SnowflakeIdGenerator(0L));
     }
 
     @Transactional
@@ -207,7 +217,7 @@ public class PurchaseOrderItemPieceWeightService {
                 pieceWeightTon = pieceWeightTon.add(adjustment);
             }
             PurchaseOrderItemPieceWeight piece = new PurchaseOrderItemPieceWeight();
-            piece.setId(SnowflakeIdGenerator.getInstance().nextId());
+            piece.setId(snowflakeIdGenerator.nextId());
             piece.setPurchaseOrderItemId(purchaseOrderItemId);
             piece.setPieceNo(pieceNo);
             piece.setWeightTon(TradeItemCalculator.scaleWeightTon(pieceWeightTon));

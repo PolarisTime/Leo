@@ -4,23 +4,16 @@ import com.leo.erp.common.support.RedisJsonCacheSupport;
 import com.leo.erp.system.menu.domain.entity.Menu;
 import com.leo.erp.system.menu.repository.MenuRepository;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.NullAndEmptySource;
-import org.junit.jupiter.params.provider.ValueSource;
 
 import java.lang.reflect.Proxy;
-import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 class MenuVisibilityServiceTest {
 
@@ -103,25 +96,17 @@ class MenuVisibilityServiceTest {
     }
 
     @Test
-    void shouldUseRedisCache_whenCacheSupportAvailable() {
+    void shouldLoadRepositoryWhenCacheSupportAvailable() {
         MenuRepository menuRepository = menuRepository(
                 menu("dashboard", "仪表盘", null)
         );
         RedisJsonCacheSupport cacheSupport = mock(RedisJsonCacheSupport.class);
-        when(cacheSupport.getOrLoad(any(), any(java.time.Duration.class),
-                any(com.fasterxml.jackson.core.type.TypeReference.class), any()))
-                .thenAnswer(invocation -> {
-                    @SuppressWarnings("unchecked")
-                    java.util.function.Supplier<List<?>> supplier = invocation.getArgument(3);
-                    return supplier.get();
-                });
         MenuVisibilityService service = new MenuVisibilityService(menuRepository, Optional.of(cacheSupport));
 
         List<Menu> menus = service.getActiveMenus();
 
         assertThat(menus).hasSize(1);
-        verify(cacheSupport).getOrLoad(org.mockito.ArgumentMatchers.startsWith("leo:menu:all:"),
-                any(java.time.Duration.class), any(com.fasterxml.jackson.core.type.TypeReference.class), any());
+        verifyNoInteractions(cacheSupport);
     }
 
     @Test
@@ -140,32 +125,6 @@ class MenuVisibilityServiceTest {
         assertThat(result).doesNotContain("second-root");
     }
 
-    @ParameterizedTest
-    @NullAndEmptySource
-    @ValueSource(strings = "   ")
-    void shouldUseDefaultCacheKeyWhenSignatureIsNullOrBlank(String signature) {
-        MenuRepository menuRepository = menuRepositoryWithSignature(signature);
-        RedisJsonCacheSupport cacheSupport = cacheSupportLoadingFromSupplier();
-        MenuVisibilityService service = new MenuVisibilityService(menuRepository, Optional.of(cacheSupport));
-
-        assertThat(service.getActiveMenus()).hasSize(1);
-
-        verify(cacheSupport).getOrLoad(eq("leo:menu:all:default"),
-                any(Duration.class), any(com.fasterxml.jackson.core.type.TypeReference.class), any());
-    }
-
-    @Test
-    void shouldUseDefaultCacheKeyWhenSignatureLookupFails() {
-        MenuRepository menuRepository = menuRepositoryThrowingSignature();
-        RedisJsonCacheSupport cacheSupport = cacheSupportLoadingFromSupplier();
-        MenuVisibilityService service = new MenuVisibilityService(menuRepository, Optional.of(cacheSupport));
-
-        assertThat(service.getActiveMenus()).hasSize(1);
-
-        verify(cacheSupport).getOrLoad(eq("leo:menu:all:default"),
-                any(Duration.class), any(com.fasterxml.jackson.core.type.TypeReference.class), any());
-    }
-
     @SuppressWarnings("unchecked")
     private MenuRepository menuRepository(Menu... menus) {
         return (MenuRepository) Proxy.newProxyInstance(
@@ -180,47 +139,6 @@ class MenuVisibilityServiceTest {
                     default -> throw new UnsupportedOperationException(method.getName());
                 }
         );
-    }
-
-    private MenuRepository menuRepositoryWithSignature(String signature) {
-        return menuRepository(List.of(menu("dashboard", "仪表盘", null)), signature, false);
-    }
-
-    private MenuRepository menuRepositoryThrowingSignature() {
-        return menuRepository(List.of(menu("dashboard", "仪表盘", null)), null, true);
-    }
-
-    @SuppressWarnings("unchecked")
-    private MenuRepository menuRepository(List<Menu> menus, String signature, boolean throwSignature) {
-        return (MenuRepository) Proxy.newProxyInstance(
-                MenuRepository.class.getClassLoader(),
-                new Class[]{MenuRepository.class},
-                (proxy, method, args) -> switch (method.getName()) {
-                    case "findByStatusAndDeletedFlagFalseOrderBySortOrder" -> menus;
-                    case "activeMenuCacheSignature" -> {
-                        if (throwSignature) {
-                            throw new IllegalStateException("signature unavailable");
-                        }
-                        yield signature;
-                    }
-                    case "toString" -> "MenuRepositoryStub";
-                    case "hashCode" -> System.identityHashCode(proxy);
-                    case "equals" -> proxy == args[0];
-                    default -> throw new UnsupportedOperationException(method.getName());
-                }
-        );
-    }
-
-    private RedisJsonCacheSupport cacheSupportLoadingFromSupplier() {
-        RedisJsonCacheSupport cacheSupport = mock(RedisJsonCacheSupport.class);
-        when(cacheSupport.getOrLoad(any(), any(Duration.class),
-                any(com.fasterxml.jackson.core.type.TypeReference.class), any()))
-                .thenAnswer(invocation -> {
-                    @SuppressWarnings("unchecked")
-                    java.util.function.Supplier<List<?>> supplier = invocation.getArgument(3);
-                    return supplier.get();
-                });
-        return cacheSupport;
     }
 
     private Menu menu(String code, String name, String parentCode) {

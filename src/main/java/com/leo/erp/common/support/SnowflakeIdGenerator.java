@@ -1,14 +1,11 @@
 package com.leo.erp.common.support;
 
-import jakarta.annotation.PostConstruct;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 @Component
 public class SnowflakeIdGenerator {
-
-    private static volatile SnowflakeIdGenerator instance;
 
     private static final long EPOCH = 1704038400000L;
     private static final long MAX_MACHINE_ID = 1023L;
@@ -19,24 +16,23 @@ public class SnowflakeIdGenerator {
     private long sequence = 0L;
 
     public SnowflakeIdGenerator() {
-        this(0L);
+        this(0L, false);
+    }
+
+    public SnowflakeIdGenerator(@Value("${leo.id.machine-id:0}") long machineId) {
+        this(machineId, false);
     }
 
     @Autowired
-    public SnowflakeIdGenerator(@Value("${leo.id.machine-id:0}") long machineId) {
+    public SnowflakeIdGenerator(@Value("${leo.id.machine-id:0}") long machineId,
+                                @Value("${leo.id.strict-machine-id:false}") boolean strictMachineId) {
         if (machineId < 0 || machineId > MAX_MACHINE_ID) {
             throw new IllegalArgumentException("leo.id.machine-id 必须在 0-1023 之间");
         }
+        if (strictMachineId && machineId == 0L) {
+            throw new IllegalArgumentException("leo.id.strict-machine-id=true 时 leo.id.machine-id 不能为 0");
+        }
         this.machineId = machineId;
-    }
-
-    @PostConstruct
-    void registerInstance() {
-        instance = this;
-    }
-
-    public static SnowflakeIdGenerator getInstance() {
-        return instance;
     }
 
     public synchronized long nextId() {

@@ -288,6 +288,14 @@ jobs:
       PROD_KEEP_RELEASES: ${{ vars.PROD_KEEP_RELEASES || '5' }}
       PROD_START_COMMAND: ${{ vars.PROD_START_COMMAND || 'STEELX_ROOT=/instance/steelx bash /instance/steelx/shared/steelx-process.sh start' }}
       PROD_STOP_COMMAND: ${{ vars.PROD_STOP_COMMAND || 'STEELX_ROOT=/instance/steelx bash /instance/steelx/shared/steelx-process.sh stop' }}
+      PROD_BACKEND_PORT: ${{ vars.PROD_BACKEND_PORT || '57217' }}
+      PROD_NGINX_FRONTEND_PORT: ${{ vars.PROD_NGINX_FRONTEND_PORT || '443' }}
+      PROD_NGINX_HTTP_REDIRECT_PORT: ${{ vars.PROD_NGINX_HTTP_REDIRECT_PORT || '80' }}
+      PROD_NGINX_SERVER_NAME: ${{ vars.PROD_NGINX_SERVER_NAME || 'in1ove.com' }}
+      PROD_NGINX_SSL_CERTIFICATE: ${{ vars.PROD_NGINX_SSL_CERTIFICATE || '/instance/ssl/fullchain.crt' }}
+      PROD_NGINX_SSL_CERTIFICATE_KEY: ${{ vars.PROD_NGINX_SSL_CERTIFICATE_KEY || '/instance/ssl/privkey.key' }}
+      PROD_NGINX_WORKER_USER: ${{ vars.PROD_NGINX_WORKER_USER || 'sakura' }}
+      PROD_NGINX_WORKER_GROUP: ${{ vars.PROD_NGINX_WORKER_GROUP || 'sakura' }}
     steps:
       - name: Checkout Leo deploy scripts
         uses: actions/checkout@v4
@@ -327,6 +335,21 @@ jobs:
             --keep-releases "$PROD_KEEP_RELEASES" \
             --start-command "$PROD_START_COMMAND" \
             --stop-command "$PROD_STOP_COMMAND"
+
+      - name: Install SteelX Nginx config
+        run: |
+          set -euo pipefail
+          bash scripts/deploy/install-steelx-nginx-config.sh \
+            --release-root "$PROD_RELEASE_ROOT" \
+            --frontend-root "$PROD_FRONTEND_ROOT" \
+            --backend-port "$PROD_BACKEND_PORT" \
+            --frontend-port "$PROD_NGINX_FRONTEND_PORT" \
+            --http-redirect-port "$PROD_NGINX_HTTP_REDIRECT_PORT" \
+            --server-name "$PROD_NGINX_SERVER_NAME" \
+            --ssl-certificate "$PROD_NGINX_SSL_CERTIFICATE" \
+            --ssl-certificate-key "$PROD_NGINX_SSL_CERTIFICATE_KEY" \
+            --nginx-worker-user "$PROD_NGINX_WORKER_USER" \
+            --nginx-worker-group "$PROD_NGINX_WORKER_GROUP"
 
   deploy-ssh:
     name: Deploy Production SSH

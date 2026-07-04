@@ -147,10 +147,8 @@ class WarehouseSelectionSupportTest {
     }
 
     @Test
-    void shouldRefreshCache_whenCachedNamesAreEmptyButCatalogHasActiveNames() {
+    void shouldLoadCatalogNamesWhenCacheSupportIsProvided() {
         RedisJsonCacheSupport cache = mock(RedisJsonCacheSupport.class);
-        when(cache.getOrLoad(anyString(), any(Duration.class), any(com.fasterxml.jackson.core.type.TypeReference.class), any(Supplier.class)))
-                .thenReturn(List.of());
         WarehouseSelectionSupport support = new WarehouseSelectionSupport(repository(List.of("一号库")), cache);
 
         List<OptionResponse> options = support.listActiveOptions();
@@ -159,16 +157,14 @@ class WarehouseSelectionSupportTest {
             assertThat(option.label()).isEqualTo("一号库");
             assertThat(option.value()).isEqualTo("一号库");
         });
-        verify(cache, never()).delete(anyString());
-        verify(cache).write(eq("leo:warehouse:all"), eq(List.of("一号库")), any(Duration.class));
+        verify(cache, never()).write(anyString(), any(), any(Duration.class));
     }
 
     @Test
-    void listActiveOptionsShouldUseCachedNamesWithoutRefreshWhenCacheHit() {
+    void listActiveOptionsShouldUseCatalogNamesWhenCacheSupportIsProvided() {
         RedisJsonCacheSupport cache = mock(RedisJsonCacheSupport.class);
         WarehouseCatalog catalog = mock(WarehouseCatalog.class);
-        when(cache.getOrLoad(anyString(), any(Duration.class), any(com.fasterxml.jackson.core.type.TypeReference.class), any(Supplier.class)))
-                .thenReturn(Arrays.asList(" 一号库 ", "", null));
+        when(catalog.listActiveWarehouseNames()).thenReturn(Arrays.asList(" 一号库 ", "", null));
         WarehouseSelectionSupport support = new WarehouseSelectionSupport(catalog, cache);
 
         List<OptionResponse> options = support.listActiveOptions();
@@ -177,15 +173,13 @@ class WarehouseSelectionSupportTest {
             assertThat(option.label()).isEqualTo("一号库");
             assertThat(option.value()).isEqualTo("一号库");
         });
-        verify(catalog, never()).listActiveWarehouseNames();
+        verify(catalog).listActiveWarehouseNames();
         verify(cache, never()).write(anyString(), any(), any(Duration.class));
     }
 
     @Test
-    void listActiveOptionsShouldReturnEmptyWhenCacheAndCatalogAreEmpty() {
+    void listActiveOptionsShouldReturnEmptyWhenCatalogIsEmpty() {
         RedisJsonCacheSupport cache = mock(RedisJsonCacheSupport.class);
-        when(cache.getOrLoad(anyString(), any(Duration.class), any(com.fasterxml.jackson.core.type.TypeReference.class), any(Supplier.class)))
-                .thenReturn(List.of());
         WarehouseSelectionSupport support = new WarehouseSelectionSupport(repository(List.of()), cache);
 
         List<OptionResponse> options = support.listActiveOptions();
@@ -266,13 +260,6 @@ class WarehouseSelectionSupportTest {
         assertThat(result.refreshed()).isFalse();
         verify(cache, never()).delete(anyString());
         verify(cache, never()).write(anyString(), any(), any(Duration.class));
-    }
-
-    @Test
-    void writeActiveWarehouseNameCacheShouldNoOpWhenRedisMissing() {
-        WarehouseSelectionSupport support = new WarehouseSelectionSupport(repository(List.of()));
-
-        ReflectionTestUtils.invokeMethod(support, "writeActiveWarehouseNameCache", List.of("一号库"));
     }
 
     @Test

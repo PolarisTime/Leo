@@ -163,6 +163,8 @@ leo:
       static-ttl: ${LEO_REDIS_CACHE_STATIC_TTL:7d}
       # 热点缓存默认 TTL
       hot-ttl: ${LEO_REDIS_CACHE_HOT_TTL:10m}
+      # 下拉选项缓存默认 TTL
+      options-ttl: ${LEO_REDIS_CACHE_OPTIONS_TTL:30m}
       # 写缓存时附加 TTL 抖动，降低同一时刻集中失效
       ttl-jitter-percent: ${LEO_REDIS_CACHE_TTL_JITTER_PERCENT:10}
     scan:
@@ -216,6 +218,9 @@ leo:
     read-only: false
     # Hikari 连接泄漏检测阈值，默认关闭；排障时通过环境变量临时开启
     hikari-leak-detection-threshold: ${LEO_DATABASE_HIKARI_LEAK_DETECTION_THRESHOLD:0}
+    import:
+      # 是否允许通过备份文件导入数据库
+      enabled: ${LEO_DATABASE_IMPORT_ENABLED:true}
     backup:
       # 导入前是否自动备份数据库
       auto-backup-before-import: true
@@ -361,6 +366,8 @@ leo:
   id:
     # 雪花 ID 机器标识，范围 0-1023，多实例部署时必须确保唯一
     machine-id: ${LEO_MACHINE_ID:0}
+    # 是否禁止使用默认 machine-id=0；生产环境必须开启
+    strict-machine-id: ${LEO_ID_STRICT_MACHINE_ID:false}
 
 # OpenAPI / Swagger 文档配置
 springdoc:
@@ -398,25 +405,3 @@ logging:
   level:
     # 健康检查页面单独开 DEBUG，便于排查探活请求
     com.leo.erp.system.web.HealthPageController: DEBUG
-
-# Resilience4j 熔断降级与限流配置 (GB/T 34944-2017 软件容错)
-resilience4j:
-  circuitbreaker:
-    configs:
-      default:
-        sliding-window-size: 10
-        failure-rate-threshold: 50
-        wait-duration-in-open-state: 30s
-        permitted-number-of-calls-in-half-open-state: 3
-    instances:
-      database-export:
-        base-config: default
-  ratelimiter:
-    configs:
-      default:
-        limit-for-period: 100
-        limit-refresh-period: 1s
-        timeout-duration: 500ms
-    instances:
-      global-api:
-        base-config: default

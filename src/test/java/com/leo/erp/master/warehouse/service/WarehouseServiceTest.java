@@ -53,7 +53,7 @@ class WarehouseServiceTest {
     void shouldReturnActiveOptions_whenCallingListActiveOptions() {
         var warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
         when(warehouseSelectionSupport.listActiveOptions()).thenReturn(List.of(new OptionResponse("一号库", "一号库")));
-        var service = new WarehouseService(null, null, null, warehouseSelectionSupport);
+        var service = new WarehouseService(null, new SnowflakeIdGenerator(1), null, warehouseSelectionSupport);
 
         var result = service.listActiveOptions();
 

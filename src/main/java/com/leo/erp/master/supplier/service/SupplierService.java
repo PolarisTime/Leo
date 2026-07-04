@@ -2,6 +2,7 @@ package com.leo.erp.master.supplier.service;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.leo.erp.common.api.PageQuery;
+import com.leo.erp.common.config.CacheConfig;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
@@ -21,6 +22,8 @@ import com.leo.erp.master.supplier.web.dto.SupplierResponse;
 import org.springframework.data.domain.Page;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -66,38 +69,45 @@ public class SupplierService extends AbstractCrudService<Supplier, SupplierReque
         this(supplierRepository, snowflakeIdGenerator, supplierMapper, redisJsonCacheSupport, null);
     }
 
+    @Override
+    @Transactional
+    @CacheEvict(value = CacheConfig.CACHE_OPTIONS, key = "'" + SUPPLIER_CACHE_KEY + "'")
+    public SupplierResponse create(SupplierRequest request) {
+        return super.create(request);
+    }
+
+    @Override
+    @Transactional
+    @CacheEvict(value = CacheConfig.CACHE_OPTIONS, key = "'" + SUPPLIER_CACHE_KEY + "'")
+    public SupplierResponse update(Long id, SupplierRequest request) {
+        return super.update(id, request);
+    }
+
+    @Override
+    @Transactional
+    @CacheEvict(value = CacheConfig.CACHE_OPTIONS, key = "'" + SUPPLIER_CACHE_KEY + "'")
+    public SupplierResponse updateStatus(Long id, String status) {
+        return super.updateStatus(id, status);
+    }
+
+    @Override
+    @Transactional
+    @CacheEvict(value = CacheConfig.CACHE_OPTIONS, key = "'" + SUPPLIER_CACHE_KEY + "'")
+    public void delete(Long id) {
+        super.delete(id);
+    }
+
     @Transactional(readOnly = true)
+    @Cacheable(value = CacheConfig.CACHE_OPTIONS, key = "'" + SUPPLIER_CACHE_KEY + "'",
+            unless = "#result == null || #result.isEmpty()")
     public List<SupplierOptionResponse> listActiveOptions() {
-        if (redisJsonCacheSupport == null) {
-            return loadActiveOptions();
-        }
-        List<SupplierOptionResponse> options = redisJsonCacheSupport.getOrLoad(
-                SUPPLIER_CACHE_KEY,
-                SUPPLIER_CACHE_TTL,
-                SUPPLIER_OPTION_LIST_TYPE,
-                this::loadActiveOptions
-        );
-        if (options.isEmpty()) {
-            List<SupplierOptionResponse> refreshed = loadActiveOptions();
-            if (refreshed.isEmpty()) {
-                return options;
-            }
-            writeActiveOptionsCache(refreshed);
-            return refreshed;
-        }
-        return options;
+        return loadActiveOptions();
     }
 
     private List<SupplierOptionResponse> loadActiveOptions() {
         return supplierRepository.findByDeletedFlagFalseAndStatusOrderBySupplierCodeAsc(StatusConstants.NORMAL).stream()
                 .map(s -> new SupplierOptionResponse(s.getId(), s.getSupplierName(), s.getSupplierName()))
                 .toList();
-    }
-
-    private void writeActiveOptionsCache(List<SupplierOptionResponse> options) {
-        if (redisJsonCacheSupport != null) {
-            redisJsonCacheSupport.write(SUPPLIER_CACHE_KEY, options, SUPPLIER_CACHE_TTL);
-        }
     }
 
     @Override
@@ -179,9 +189,7 @@ public class SupplierService extends AbstractCrudService<Supplier, SupplierReque
 
     @Override
     protected Supplier saveEntity(Supplier entity) {
-        Supplier saved = supplierRepository.save(entity);
-        evictCache();
-        return saved;
+        return supplierRepository.save(entity);
     }
 
     @Override
@@ -243,9 +251,4 @@ public class SupplierService extends AbstractCrudService<Supplier, SupplierReque
         );
     }
 
-    private void evictCache() {
-        if (redisJsonCacheSupport != null) {
-            redisJsonCacheSupport.deleteAfterCommit(SUPPLIER_CACHE_KEY);
-        }
-    }
 }

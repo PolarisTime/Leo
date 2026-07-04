@@ -16,6 +16,8 @@ import org.springframework.web.context.request.RequestAttributes;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
+import java.util.Objects;
+
 public class BusinessCreateIdResolver {
 
     private static final String PREALLOCATED_ID_HEADER = "X-Preallocated-Id";
@@ -28,6 +30,9 @@ public class BusinessCreateIdResolver {
     public BusinessCreateIdResolver(SnowflakeIdGenerator idGenerator,
                                     BusinessPreallocationService businessPreallocationService,
                                     Class<?> ownerClass) {
+        if (idGenerator == null) {
+            throw new IllegalArgumentException("SnowflakeIdGenerator must not be null");
+        }
         this.idGenerator = idGenerator;
         this.businessPreallocationService = businessPreallocationService;
         this.logger = LoggerFactory.getLogger(ownerClass);
@@ -37,7 +42,7 @@ public class BusinessCreateIdResolver {
         PreallocatedEntityId preallocatedId = resolvePreallocatedIdFromRequest();
         return preallocatedId != null
                 ? new CreateEntityId(preallocatedId.id(), preallocatedId.moduleKey())
-                : new CreateEntityId(idGen().nextId(), null);
+                : new CreateEntityId(idGenerator.nextId(), null);
     }
 
     public void consumeAfterCommit(CreateEntityId createEntityId) {
@@ -162,10 +167,6 @@ public class BusinessCreateIdResolver {
     private boolean isKnownModuleKey(String moduleKey) {
         return ResourcePermissionCatalog.isKnownResource(moduleKey)
                 || ResourcePermissionCatalog.resolveResourceByMenuCode(moduleKey).isPresent();
-    }
-
-    private SnowflakeIdGenerator idGen() {
-        return idGenerator != null ? idGenerator : SnowflakeIdGenerator.getInstance();
     }
 
     private record PreallocatedEntityId(Long id, String moduleKey) {

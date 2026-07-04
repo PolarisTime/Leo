@@ -10,6 +10,7 @@ public class RedisTuningProperties {
 
     private static final Duration DEFAULT_STATIC_TTL = Duration.ofDays(7);
     private static final Duration DEFAULT_HOT_TTL = Duration.ofMinutes(10);
+    private static final Duration DEFAULT_OPTIONS_TTL = Duration.ofMinutes(30);
     private static final Duration DEFAULT_PERMISSION_TTL = Duration.ofMinutes(5);
     private static final Duration DEFAULT_INDEX_TTL = Duration.ofDays(1);
     private static final Duration DEFAULT_AUTH_USER_TTL = Duration.ofMinutes(2);
@@ -121,6 +122,7 @@ public class RedisTuningProperties {
     public static class Cache {
         private Duration staticTtl = DEFAULT_STATIC_TTL;
         private Duration hotTtl = DEFAULT_HOT_TTL;
+        private Duration optionsTtl = DEFAULT_OPTIONS_TTL;
         private int ttlJitterPercent = 10;
 
         public Duration getStaticTtl() {
@@ -137,6 +139,14 @@ public class RedisTuningProperties {
 
         public void setHotTtl(Duration hotTtl) {
             this.hotTtl = hotTtl;
+        }
+
+        public Duration getOptionsTtl() {
+            return optionsTtl;
+        }
+
+        public void setOptionsTtl(Duration optionsTtl) {
+            this.optionsTtl = optionsTtl;
         }
 
         public int getTtlJitterPercent() {

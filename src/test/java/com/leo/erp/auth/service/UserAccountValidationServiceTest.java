@@ -22,6 +22,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.startsWith;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -74,36 +75,30 @@ class UserAccountValidationServiceTest {
     }
 
     @Test
-    void ensureLoginNameAvailableShouldAllowSameUserIdFromOwnerCacheAndRepository() {
+    void ensureLoginNameAvailableShouldAllowSameUserIdFromRepositoryChecks() {
         UserAccountRepository repository = mock(UserAccountRepository.class);
-        RedisJsonCacheSupport cacheSupport = mock(RedisJsonCacheSupport.class);
         UserAccount existing = new UserAccount();
         existing.setId(10L);
-        when(cacheSupport.getOrLoad(startsWith("auth:user:login-name:owner:"), any(), eq(Long.class), any()))
-                .thenReturn(10L);
         when(repository.findByLoginNameAndDeletedFlagFalse("admin")).thenReturn(Optional.of(existing));
 
         UserAccountValidationService service = new UserAccountValidationService(
-                repository, null, cacheSupport, null
+                repository, null, null, null
         );
 
         service.ensureLoginNameAvailable("admin", 10L);
 
-        verify(repository).findByLoginNameAndDeletedFlagFalse("admin");
+        verify(repository, times(2)).findByLoginNameAndDeletedFlagFalse("admin");
     }
 
     @Test
     void ensureLoginNameAvailableShouldThrowWhenSecondRepositoryCheckFindsDifferentUser() {
         UserAccountRepository repository = mock(UserAccountRepository.class);
-        RedisJsonCacheSupport cacheSupport = mock(RedisJsonCacheSupport.class);
         UserAccount existing = new UserAccount();
         existing.setId(20L);
-        when(cacheSupport.getOrLoad(startsWith("auth:user:login-name:owner:"), any(), eq(Long.class), any()))
-                .thenReturn(0L);
         when(repository.findByLoginNameAndDeletedFlagFalse("admin")).thenReturn(Optional.of(existing));
 
         UserAccountValidationService service = new UserAccountValidationService(
-                repository, null, cacheSupport, null
+                repository, null, null, null
         );
 
         assertThatThrownBy(() -> service.ensureLoginNameAvailable("admin", 10L))
@@ -113,77 +108,63 @@ class UserAccountValidationServiceTest {
     }
 
     @Test
-    void resolveLoginNameAvailabilityShouldUseRedisOwnerCacheValue() {
+    void resolveLoginNameAvailabilityShouldUseRepositoryOwnerValue() {
         UserAccountRepository repository = mock(UserAccountRepository.class);
-        RedisJsonCacheSupport cacheSupport = mock(RedisJsonCacheSupport.class);
-        when(cacheSupport.getOrLoad(startsWith("auth:user:login-name:owner:"), any(), eq(Long.class), any()))
-                .thenReturn(5L);
+        UserAccount existing = new UserAccount();
+        existing.setId(5L);
+        when(repository.findByLoginNameAndDeletedFlagFalse("admin")).thenReturn(Optional.of(existing));
 
         UserAccountValidationService service = new UserAccountValidationService(
-                repository, null, cacheSupport, null
+                repository, null, null, null
         );
 
         LoginNameAvailabilityResponse response = service.resolveLoginNameAvailability("admin", 7L);
 
         assertThat(response.available()).isFalse();
         assertThat(response.message()).isEqualTo("登录账号已存在");
-        verifyNoInteractions(repository);
+        verify(repository).findByLoginNameAndDeletedFlagFalse("admin");
     }
 
     @Test
-    void resolveLoginNameAvailabilityShouldReturnAvailableWhenRedisOwnerCacheReturnsNull() {
+    void resolveLoginNameAvailabilityShouldReturnAvailableWhenRepositoryIsEmpty() {
         UserAccountRepository repository = mock(UserAccountRepository.class);
-        RedisJsonCacheSupport cacheSupport = mock(RedisJsonCacheSupport.class);
-        when(cacheSupport.getOrLoad(startsWith("auth:user:login-name:owner:"), any(), eq(Long.class), any()))
-                .thenReturn(null);
+        when(repository.findByLoginNameAndDeletedFlagFalse("admin")).thenReturn(Optional.empty());
 
         UserAccountValidationService service = new UserAccountValidationService(
-                repository, null, cacheSupport, null
+                repository, null, null, null
         );
 
         LoginNameAvailabilityResponse response = service.resolveLoginNameAvailability("admin", 7L);
 
         assertThat(response.available()).isTrue();
         assertThat(response.message()).isNull();
-        verifyNoInteractions(repository);
+        verify(repository).findByLoginNameAndDeletedFlagFalse("admin");
     }
 
     @Test
-    void loadLoginNameOwnerIdShouldLoadRepositoryResultThroughRedisWhenCacheMisses() {
+    void loadLoginNameOwnerIdShouldLoadRepositoryResult() {
         UserAccountRepository repository = mock(UserAccountRepository.class);
-        RedisJsonCacheSupport cacheSupport = mock(RedisJsonCacheSupport.class);
         UserAccount existing = new UserAccount();
         existing.setId(12L);
         when(repository.findByLoginNameAndDeletedFlagFalse("cached")).thenReturn(Optional.of(existing));
-        when(cacheSupport.getOrLoad(startsWith("auth:user:login-name:owner:"), any(), eq(Long.class), any()))
-                .thenAnswer(invocation -> invocation.<Supplier<Long>>getArgument(3).get());
 
         UserAccountValidationService service = new UserAccountValidationService(
-                repository, null, cacheSupport, null
+                repository, null, null, null
         );
 
         Long ownerId = service.loadLoginNameOwnerId("cached");
 
         assertThat(ownerId).isEqualTo(12L);
-        verify(cacheSupport).getOrLoad(
-                eq("auth:user:login-name:owner:cached"),
-                any(),
-                eq(Long.class),
-                any()
-        );
         verify(repository).findByLoginNameAndDeletedFlagFalse("cached");
     }
 
     @Test
     void loadLoginNameOwnerIdShouldCacheNotFoundMarkerWhenRepositoryIsEmpty() {
         UserAccountRepository repository = mock(UserAccountRepository.class);
-        RedisJsonCacheSupport cacheSupport = mock(RedisJsonCacheSupport.class);
         when(repository.findByLoginNameAndDeletedFlagFalse("missing")).thenReturn(Optional.empty());
-        when(cacheSupport.getOrLoad(startsWith("auth:user:login-name:owner:"), any(), eq(Long.class), any()))
-                .thenAnswer(invocation -> invocation.<Supplier<Long>>getArgument(3).get());
 
         UserAccountValidationService service = new UserAccountValidationService(
-                repository, null, cacheSupport, null
+                repository, null, null, null
         );
 
         Long ownerId = service.loadLoginNameOwnerId("missing");

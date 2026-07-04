@@ -21,6 +21,7 @@ import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 
@@ -34,6 +35,9 @@ public abstract class AbstractCrudService<E extends AbstractAuditableEntity, Req
     private final CrudStatusGuard statusGuard = new CrudStatusGuard();
 
     protected AbstractCrudService(SnowflakeIdGenerator idGenerator) {
+        if (idGenerator == null) {
+            throw new IllegalArgumentException("SnowflakeIdGenerator must not be null");
+        }
         this.idGenerator = idGenerator;
     }
 
@@ -50,10 +54,6 @@ public abstract class AbstractCrudService<E extends AbstractAuditableEntity, Req
     @Autowired(required = false)
     protected void setBusinessPreallocationService(BusinessPreallocationService businessPreallocationService) {
         this.businessPreallocationService = businessPreallocationService;
-    }
-
-    private SnowflakeIdGenerator idGen() {
-        return idGenerator != null ? idGenerator : SnowflakeIdGenerator.getInstance();
     }
 
     private Logger logger() {
@@ -177,7 +177,7 @@ public abstract class AbstractCrudService<E extends AbstractAuditableEntity, Req
     }
 
     protected final long nextId() {
-        return idGen().nextId();
+        return idGenerator.nextId();
     }
 
     protected void validateCreate(Req request) {

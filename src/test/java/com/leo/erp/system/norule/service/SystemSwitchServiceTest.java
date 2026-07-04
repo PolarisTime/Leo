@@ -1,30 +1,26 @@
 package com.leo.erp.system.norule.service;
 
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.leo.erp.common.support.RedisJsonCacheSupport;
 import com.leo.erp.system.norule.domain.entity.NoRule;
 import com.leo.erp.system.norule.repository.NoRuleRepository;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Method;
-import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.function.Supplier;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class SystemSwitchServiceTest {
 
     @Test
-    void shouldLoadKnownSwitchesThroughRedisSnapshot() {
+    void shouldLoadKnownSwitchesFromRepositoryWhenCacheSupportIsProvided() {
         NoRuleRepository repository = mock(NoRuleRepository.class);
         RedisJsonCacheSupport redisJsonCacheSupport = mock(RedisJsonCacheSupport.class);
         when(repository.findBySettingCodeInAndDeletedFlagFalse(any())).thenReturn(List.of(
@@ -33,12 +29,6 @@ class SystemSwitchServiceTest {
                 rule(SystemSwitchService.OPERATION_LOG_DETAILED_PAGE_ACTIONS_SWITCH, "正常", "QUERY,EDIT"),
                 rule(SystemSwitchService.USE_SNOWFLAKE_ID_AS_BUSINESS_NO_SWITCH, "禁用", "")
         ));
-        when(redisJsonCacheSupport.getOrLoad(
-                eq(SystemSwitchService.SWITCH_CACHE_KEY),
-                any(Duration.class),
-                any(TypeReference.class),
-                any(Supplier.class)
-        )).thenAnswer(invocation -> ((Supplier<?>) invocation.getArgument(3)).get());
 
         SystemSwitchService service = new SystemSwitchService(repository, redisJsonCacheSupport);
 
@@ -48,12 +38,7 @@ class SystemSwitchServiceTest {
         assertThat(service.getDefaultListPageSize()).isEqualTo(20);
         assertThat(service.shouldRecordDetailedPageAction("edit")).isTrue();
         assertThat(service.shouldRecordDetailedPageAction("delete")).isFalse();
-        verify(redisJsonCacheSupport, atLeastOnce()).getOrLoad(
-                eq(SystemSwitchService.SWITCH_CACHE_KEY),
-                any(Duration.class),
-                any(TypeReference.class),
-                any(Supplier.class)
-        );
+        verifyNoInteractions(redisJsonCacheSupport);
     }
 
     @Test

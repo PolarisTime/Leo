@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.leo.erp.auth.domain.entity.UserAccount;
 import com.leo.erp.auth.repository.UserAccountRepository;
 import com.leo.erp.common.api.PageQuery;
+import com.leo.erp.common.config.CacheConfig;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.support.RedisJsonCacheSupport;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
@@ -15,6 +16,8 @@ import com.leo.erp.system.department.web.dto.DepartmentRequest;
 import com.leo.erp.system.department.web.dto.DepartmentResponse;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
@@ -26,7 +29,6 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
@@ -54,7 +56,7 @@ class DepartmentServiceTest {
                 departmentRepository,
                 userAccountRepository,
                 permissionService,
-                null
+                new SnowflakeIdGenerator(1)
         );
 
         assertThatThrownBy(() -> service.delete(10L))
@@ -77,7 +79,7 @@ class DepartmentServiceTest {
                 departmentRepository,
                 userAccountRepository,
                 permissionService,
-                null
+                new SnowflakeIdGenerator(1)
         );
 
         assertThatThrownBy(() -> service.delete(10L))
@@ -101,7 +103,7 @@ class DepartmentServiceTest {
                 departmentRepository,
                 userAccountRepository,
                 permissionService,
-                null
+                new SnowflakeIdGenerator(1)
         );
 
         service.delete(10L);
@@ -130,7 +132,7 @@ class DepartmentServiceTest {
                 departmentRepository,
                 userAccountRepository,
                 permissionService,
-                null
+                new SnowflakeIdGenerator(1)
         );
 
         service.update(10L, new DepartmentRequest(
@@ -169,7 +171,7 @@ class DepartmentServiceTest {
                 departmentRepository,
                 userAccountRepository,
                 permissionService,
-                null
+                new SnowflakeIdGenerator(1)
         );
 
         service.update(10L, new DepartmentRequest(
@@ -201,7 +203,7 @@ class DepartmentServiceTest {
                 departmentRepository,
                 userAccountRepository,
                 permissionService,
-                null
+                new SnowflakeIdGenerator(1)
         );
 
         var method = getMethod("syncBoundUserDepartmentName", Department.class);
@@ -263,7 +265,7 @@ class DepartmentServiceTest {
                 departmentRepository,
                 userAccountRepository,
                 permissionService,
-                null
+                new SnowflakeIdGenerator(1)
         );
 
         assertThatThrownBy(() -> service.update(10L, new DepartmentRequest(
@@ -332,7 +334,7 @@ class DepartmentServiceTest {
                 departmentRepository,
                 userAccountRepository,
                 permissionService,
-                null
+                new SnowflakeIdGenerator(1)
         );
 
         assertThatThrownBy(() -> service.update(10L, new DepartmentRequest(
@@ -423,7 +425,7 @@ class DepartmentServiceTest {
                 departmentRepository,
                 userAccountRepository,
                 permissionService,
-                null
+                new SnowflakeIdGenerator(1)
         );
 
         List<DepartmentOptionResponse> options = service.options();
@@ -441,8 +443,6 @@ class DepartmentServiceTest {
         PermissionService permissionService = mock(PermissionService.class);
         RedisJsonCacheSupport cacheSupport = mock(RedisJsonCacheSupport.class);
 
-        when(cacheSupport.getOrLoad(anyString(), any(Duration.class), any(TypeReference.class), any()))
-                .thenReturn(List.of());
         when(departmentRepository.findByStatusAndDeletedFlagFalseOrderBySortOrderAscIdAsc("正常"))
                 .thenReturn(List.of());
 
@@ -450,7 +450,7 @@ class DepartmentServiceTest {
                 departmentRepository,
                 userAccountRepository,
                 permissionService,
-                null,
+                new SnowflakeIdGenerator(1),
                 cacheSupport
         );
 
@@ -461,30 +461,26 @@ class DepartmentServiceTest {
     }
 
     @Test
-    void shouldReturnOptionsFromCache_whenCacheAvailable() {
+    void shouldLoadOptionsThroughSpringCachePath_whenLegacyRedisCachePresent() {
         DepartmentRepository departmentRepository = mock(DepartmentRepository.class);
         UserAccountRepository userAccountRepository = mock(UserAccountRepository.class);
         PermissionService permissionService = mock(PermissionService.class);
         RedisJsonCacheSupport cacheSupport = mock(RedisJsonCacheSupport.class);
-
-        List<DepartmentOptionResponse> cachedOptions = List.of(
-                new DepartmentOptionResponse(1L, "HQ", "总部")
-        );
-        when(cacheSupport.getOrLoad(anyString(), any(Duration.class), any(TypeReference.class), any()))
-                .thenReturn(cachedOptions);
+        Department dept = department();
+        when(departmentRepository.findByStatusAndDeletedFlagFalseOrderBySortOrderAscIdAsc("正常"))
+                .thenReturn(List.of(dept));
 
         DepartmentService service = new DepartmentService(
                 departmentRepository,
                 userAccountRepository,
                 permissionService,
-                null,
+                new SnowflakeIdGenerator(1),
                 cacheSupport
         );
 
         List<DepartmentOptionResponse> options = service.options();
 
-        assertThat(options).isEqualTo(cachedOptions);
-        verify(cacheSupport).getOrLoad(anyString(), any(Duration.class), any(TypeReference.class), any());
+        assertThat(options).hasSize(1);
     }
 
     @Test
@@ -496,14 +492,12 @@ class DepartmentServiceTest {
         Department dept = department();
         when(departmentRepository.findByStatusAndDeletedFlagFalseOrderBySortOrderAscIdAsc("正常"))
                 .thenReturn(List.of(dept));
-        when(cacheSupport.getOrLoad(anyString(), any(Duration.class), any(TypeReference.class), any()))
-                .thenReturn(List.of());
 
         DepartmentService service = new DepartmentService(
                 departmentRepository,
                 userAccountRepository,
                 permissionService,
-                null,
+                new SnowflakeIdGenerator(1),
                 cacheSupport
         );
 
@@ -511,7 +505,48 @@ class DepartmentServiceTest {
 
         assertThat(options).hasSize(1);
         verify(cacheSupport, never()).delete(anyString());
-        verify(cacheSupport).write(eq("leo:department:options"), eq(options), any(Duration.class));
+        verify(cacheSupport, never()).write(eq("leo:department:options"), eq(options), any(Duration.class));
+    }
+
+    @Test
+    void shouldDeclareSpringCacheAnnotationsForOptions() throws Exception {
+        var readMethod = DepartmentService.class.getMethod("options");
+        Cacheable cacheable = readMethod.getAnnotation(Cacheable.class);
+        var createMethod = DepartmentService.class.getMethod("create", DepartmentRequest.class);
+        var updateMethod = DepartmentService.class.getMethod("update", Long.class, DepartmentRequest.class);
+        var updateStatusMethod = DepartmentService.class.getMethod("updateStatus", Long.class, String.class);
+        var deleteMethod = DepartmentService.class.getMethod("delete", Long.class);
+
+        assertThat(cacheable.value()).containsExactly(CacheConfig.CACHE_OPTIONS);
+        assertThat(cacheable.key()).isEqualTo("'leo:department:options'");
+        assertThat(cacheable.unless()).isEqualTo("#result == null || #result.isEmpty()");
+        assertThat(createMethod.getAnnotation(CacheEvict.class).value()).containsExactly(CacheConfig.CACHE_OPTIONS);
+        assertThat(updateMethod.getAnnotation(CacheEvict.class).key()).isEqualTo("'leo:department:options'");
+        assertThat(updateStatusMethod.getAnnotation(CacheEvict.class).key()).isEqualTo("'leo:department:options'");
+        assertThat(deleteMethod.getAnnotation(CacheEvict.class).key()).isEqualTo("'leo:department:options'");
+    }
+
+    @Test
+    void shouldKeepUpdateStatusOnSpringCacheEvictionPath() {
+        DepartmentRepository departmentRepository = mock(DepartmentRepository.class);
+        UserAccountRepository userAccountRepository = mock(UserAccountRepository.class);
+        PermissionService permissionService = mock(PermissionService.class);
+        RedisJsonCacheSupport cacheSupport = mock(RedisJsonCacheSupport.class);
+        Department department = department();
+        when(departmentRepository.findByIdAndDeletedFlagFalse(10L)).thenReturn(Optional.of(department));
+        DepartmentService service = new DepartmentService(
+                departmentRepository,
+                userAccountRepository,
+                permissionService,
+                new SnowflakeIdGenerator(1),
+                cacheSupport
+        );
+
+        DepartmentResponse response = service.updateStatus(10L, "正常");
+
+        assertThat(response.id()).isEqualTo(10L);
+        verify(departmentRepository, never()).save(any());
+        verify(cacheSupport, never()).deleteAfterCommit("leo:department:options");
     }
 
     @Test
@@ -523,14 +558,12 @@ class DepartmentServiceTest {
         Department dept = department();
         when(departmentRepository.findByStatusAndDeletedFlagFalseOrderBySortOrderAscIdAsc("正常"))
                 .thenReturn(List.of(dept));
-        when(cacheSupport.getOrLoad(anyString(), any(Duration.class), any(TypeReference.class), any()))
-                .thenReturn(List.of());
 
         DepartmentService service = new DepartmentService(
                 departmentRepository,
                 userAccountRepository,
                 permissionService,
-                null,
+                new SnowflakeIdGenerator(1),
                 cacheSupport
         );
 
@@ -560,7 +593,7 @@ class DepartmentServiceTest {
                 departmentRepository,
                 userAccountRepository,
                 permissionService,
-                null,
+                new SnowflakeIdGenerator(1),
                 cacheSupport
         );
 
@@ -591,7 +624,7 @@ class DepartmentServiceTest {
                 departmentRepository,
                 userAccountRepository,
                 permissionService,
-                null,
+                new SnowflakeIdGenerator(1),
                 cacheSupport
         );
 
@@ -617,7 +650,7 @@ class DepartmentServiceTest {
                 departmentRepository,
                 userAccountRepository,
                 permissionService,
-                null
+                new SnowflakeIdGenerator(1)
         );
 
         var result = service.verifyAndRefreshCache();
@@ -644,7 +677,7 @@ class DepartmentServiceTest {
                 departmentRepository,
                 userAccountRepository,
                 permissionService,
-                null,
+                new SnowflakeIdGenerator(1),
                 cacheSupport
         );
 
@@ -670,7 +703,7 @@ class DepartmentServiceTest {
                 departmentRepository,
                 userAccountRepository,
                 permissionService,
-                null
+                new SnowflakeIdGenerator(1)
         );
 
         Page<DepartmentResponse> result = service.page(new PageQuery(0, 10, null, null), null, "正常");
@@ -698,7 +731,7 @@ class DepartmentServiceTest {
                 departmentRepository,
                 userAccountRepository,
                 permissionService,
-                null
+                new SnowflakeIdGenerator(1)
         );
 
         Page<DepartmentResponse> result = service.page(new PageQuery(0, 10, null, null), " HQ ", " 正常 ");
@@ -718,7 +751,7 @@ class DepartmentServiceTest {
                 departmentRepository,
                 userAccountRepository,
                 permissionService,
-                null
+                new SnowflakeIdGenerator(1)
         );
 
         assertThatThrownBy(() -> service.page(new PageQuery(0, 10, null, null), null, "无效"))
@@ -783,7 +816,7 @@ class DepartmentServiceTest {
                 ""
         ));
 
-        verify(cacheSupport).deleteAfterCommit(anyString());
+        verify(cacheSupport, never()).deleteAfterCommit(anyString());
     }
 
     @Test
@@ -957,7 +990,7 @@ class DepartmentServiceTest {
                 mock(DepartmentRepository.class),
                 mock(UserAccountRepository.class),
                 mock(PermissionService.class),
-                null
+                new SnowflakeIdGenerator(1)
         );
 
         assertThat(service.cacheName()).isEqualTo("leo:department:options");
@@ -974,7 +1007,7 @@ class DepartmentServiceTest {
                 departmentRepository,
                 userAccountRepository,
                 permissionService,
-                null
+                new SnowflakeIdGenerator(1)
         );
 
         assertThatThrownBy(() -> service.detail(404L))
@@ -1005,7 +1038,7 @@ class DepartmentServiceTest {
                 departmentRepository,
                 userAccountRepository,
                 permissionService,
-                null
+                new SnowflakeIdGenerator(1)
         );
 
         DepartmentResponse response = service.detail(20L);
@@ -1027,7 +1060,7 @@ class DepartmentServiceTest {
                 departmentRepository,
                 userAccountRepository,
                 permissionService,
-                null
+                new SnowflakeIdGenerator(1)
         );
 
         Page<DepartmentResponse> result = service.page(new PageQuery(0, 10, null, null), null, " ");
@@ -1088,7 +1121,7 @@ class DepartmentServiceTest {
                 departmentRepository,
                 userAccountRepository,
                 permissionService,
-                null
+                new SnowflakeIdGenerator(1)
         );
 
         assertThatThrownBy(() -> service.update(10L, new DepartmentRequest(
@@ -1165,18 +1198,8 @@ class DepartmentServiceTest {
     }
 
     @Test
-    void shouldIgnoreDirectOptionsCacheWriteWhenCacheSupportMissing() {
-        DepartmentService service = new DepartmentService(
-                mock(DepartmentRepository.class),
-                mock(UserAccountRepository.class),
-                mock(PermissionService.class),
-                null
-        );
-        var method = getMethod("writeOptionsCache", List.class);
-
-        assertThat(method).isNotNull();
-        assertThatCode(() -> method.invoke(service, List.of(new DepartmentOptionResponse(1L, "HQ", "总部"))))
-                .doesNotThrowAnyException();
+    void shouldRemoveLegacyOptionsCacheWriter() {
+        assertThat(getMethod("writeOptionsCache", List.class)).isNull();
     }
 
     private java.lang.reflect.Method getMethod(String name, Class<?>... paramTypes) {

@@ -136,10 +136,8 @@ class TradeItemMaterialSupportTest {
     }
 
     @Test
-    void shouldRejectMaterialWhenCacheAndCatalogAreBothEmpty() {
+    void shouldRejectMaterialWhenCatalogIsEmptyAndCacheSupportIsProvided() {
         RedisJsonCacheSupport cache = mock(RedisJsonCacheSupport.class);
-        when(cache.getOrLoad(anyString(), any(Duration.class), any(TypeReference.class), any(Supplier.class)))
-                .thenReturn(List.of());
         TradeItemMaterialSupport support = new TradeItemMaterialSupport(
                 repository(List.of()),
                 cache,
@@ -154,10 +152,8 @@ class TradeItemMaterialSupportTest {
     }
 
     @Test
-    void shouldRefreshCache_whenCachedMaterialsAreEmptyButCatalogHasActiveMaterials() {
+    void shouldLoadCatalogMaterialsWhenCacheSupportIsProvided() {
         RedisJsonCacheSupport cache = mock(RedisJsonCacheSupport.class);
-        when(cache.getOrLoad(anyString(), any(Duration.class), any(TypeReference.class), any(Supplier.class)))
-                .thenReturn(List.of());
         TradeItemMaterialSupport support = new TradeItemMaterialSupport(
                 repository(List.of(batchManagedMaterial("MAT-001"))),
                 cache,
@@ -168,16 +164,14 @@ class TradeItemMaterialSupportTest {
         Map<String, TradeMaterialSnapshot> materialMap = support.loadMaterialMap(List.of("MAT-001"));
 
         assertThat(materialMap).containsKey("MAT-001");
-        verify(cache, never()).delete(anyString());
-        verify(cache).write(eq("leo:material:all"), eq(List.of(batchManagedMaterial("MAT-001"))), any(Duration.class));
+        verify(cache, never()).write(anyString(), any(), any(Duration.class));
     }
 
     @Test
-    void shouldUseCachedMaterialsAndIgnoreBlankCodes() {
+    void shouldUseCatalogMaterialsAndIgnoreBlankCodes() {
         RedisJsonCacheSupport cache = mock(RedisJsonCacheSupport.class);
-        when(cache.getOrLoad(anyString(), any(Duration.class), any(TypeReference.class), any(Supplier.class)))
-                .thenReturn(List.of(new TradeMaterialSnapshot(" ", Boolean.TRUE), batchManagedMaterial("MAT-001")));
         MaterialCatalog catalog = mock(MaterialCatalog.class);
+        when(catalog.listActiveMaterials()).thenReturn(List.of(new TradeMaterialSnapshot(" ", Boolean.TRUE), batchManagedMaterial("MAT-001")));
         TradeItemMaterialSupport support = new TradeItemMaterialSupport(
                 catalog,
                 cache,
@@ -188,7 +182,7 @@ class TradeItemMaterialSupportTest {
         Map<String, TradeMaterialSnapshot> materialMap = support.loadMaterialMap(List.of("MAT-001"));
 
         assertThat(materialMap).containsOnlyKeys("MAT-001");
-        verify(catalog, never()).listActiveMaterials();
+        verify(catalog).listActiveMaterials();
         verify(cache, never()).write(anyString(), any(), any(Duration.class));
     }
 
@@ -334,10 +328,7 @@ class TradeItemMaterialSupportTest {
     }
 
     @Test
-    void shouldAutoGenerateBatchNoWhenSwitchEnabled() throws Exception {
-        java.lang.reflect.Field instanceField = SnowflakeIdGenerator.class.getDeclaredField("instance");
-        instanceField.setAccessible(true);
-        instanceField.set(null, new SnowflakeIdGenerator(1L));
+    void shouldAutoGenerateBatchNoWhenSwitchEnabled() {
         TradeItemRuntimeSettings tradeItemRuntimeSettings = mock(TradeItemRuntimeSettings.class);
         BusinessNumberAllocator businessNumberAllocator = mock(BusinessNumberAllocator.class);
         when(tradeItemRuntimeSettings.shouldAutoGenerateBatchNo()).thenReturn(true);
@@ -385,20 +376,6 @@ class TradeItemMaterialSupportTest {
         String normalized = support.normalizeBatchNo(batchManagedMaterial("MAT-001"), null, 1, false);
 
         assertThat(normalized).isNull();
-    }
-
-    @Test
-    void writeMaterialCacheDoesNothingWhenRedisCacheUnavailable() throws Exception {
-        TradeItemMaterialSupport support = new TradeItemMaterialSupport(
-                repository(List.of(batchManagedMaterial("MAT-001"))),
-                null,
-                null,
-                null
-        );
-        Method method = TradeItemMaterialSupport.class.getDeclaredMethod("writeMaterialCache", List.class);
-        method.setAccessible(true);
-
-        method.invoke(support, List.of(batchManagedMaterial("MAT-001")));
     }
 
     private TradeMaterialSnapshot batchManagedMaterial(String materialCode) {

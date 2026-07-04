@@ -10,15 +10,12 @@ import org.aspectj.lang.reflect.MethodSignature;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
 import java.lang.reflect.Method;
-import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -38,7 +35,6 @@ class RateLimitAspectTest {
     private MockHttpServletResponse response;
     private RateLimitAspect aspect;
     private TokenBucketService tokenBucketService;
-    private StringRedisTemplate redisTemplate;
     private ProceedingJoinPoint joinPoint;
 
     @BeforeEach
@@ -51,15 +47,9 @@ class RateLimitAspectTest {
         lenient().when(tokenBucketService.tryConsume(anyString(), anyDouble(), anyInt(), anyInt()))
                 .thenReturn(new TokenBucketService.TokenBucketResult(true, 148, 0));
 
-        ValueOperations<String, String> valueOps = mock(ValueOperations.class);
-        lenient().when(valueOps.increment(anyString())).thenReturn(1L);
-        lenient().when(valueOps.get(anyString())).thenReturn(null);
-        redisTemplate = mock(StringRedisTemplate.class);
-        lenient().when(redisTemplate.opsForValue()).thenReturn(valueOps);
-
         ClientIpResolver clientIpResolver = new ClientIpResolver("");
 
-        aspect = new RateLimitAspect(tokenBucketService, redisTemplate, clientIpResolver);
+        aspect = new RateLimitAspect(tokenBucketService, clientIpResolver, new RateLimitHeaderWriter());
         joinPoint = mock(ProceedingJoinPoint.class);
         when(joinPoint.proceed()).thenReturn("proceeded");
         when(joinPoint.getSignature()).thenReturn(mock(MethodSignature.class));
@@ -88,7 +78,7 @@ class RateLimitAspectTest {
         TokenBucketService rejectingService = mock(TokenBucketService.class);
         when(rejectingService.tryConsume(anyString(), anyDouble(), anyInt(), anyInt()))
                 .thenReturn(new TokenBucketService.TokenBucketResult(false, 0, 5000));
-        aspect = new RateLimitAspect(rejectingService, redisTemplate, new ClientIpResolver(""));
+        aspect = new RateLimitAspect(rejectingService, new ClientIpResolver(""), new RateLimitHeaderWriter());
         request.addHeader("X-API-Key", "test-api-key");
 
         assertThatThrownBy(() -> aspect.enforce(joinPoint, mockRateLimit(-1, -1, 1)))
@@ -133,7 +123,7 @@ class RateLimitAspectTest {
         TokenBucketService rejectingService = mock(TokenBucketService.class);
         when(rejectingService.tryConsume(anyString(), anyDouble(), anyInt(), anyInt()))
                 .thenReturn(new TokenBucketService.TokenBucketResult(false, 0, 2000));
-        aspect = new RateLimitAspect(rejectingService, redisTemplate, new ClientIpResolver(""));
+        aspect = new RateLimitAspect(rejectingService, new ClientIpResolver(""), new RateLimitHeaderWriter());
         request.setUserPrincipal(() -> "user-001");
 
         assertThatThrownBy(() -> aspect.enforce(joinPoint, mockRateLimit(25, 40, 2)))
@@ -145,42 +135,34 @@ class RateLimitAspectTest {
     }
 
     @Test
-    void shouldUseLegacyFallback_whenRateIsZeroOrNegative() throws Throwable {
+    void shouldUseTokenBucketDefaults_whenRateIsZeroOrNegative() throws Throwable {
         RateLimit rateLimit = mockRateLimit(0, -1, 1);
         request.setRemoteAddr("192.168.1.1");
 
         Object result = aspect.enforce(joinPoint, rateLimit);
 
         assertThat(result).isEqualTo("proceeded");
-        verify(redisTemplate).expire(anyString(), any());
+        verify(tokenBucketService).tryConsume(
+                eq("ip:192.168.1.1:TestController.test()"),
+                eq(100.0),
+                eq(150),
+                eq(1));
+        assertThat(response.getHeader("X-RateLimit-Limit")).isEqualTo("150");
     }
 
     @Test
-    void shouldProceed_whenLegacyCounterReturnsNull() throws Throwable {
-        ValueOperations<String, String> countingOps = mock(ValueOperations.class);
-        when(countingOps.increment(anyString())).thenReturn(null);
-        StringRedisTemplate countingRedis = mock(StringRedisTemplate.class);
-        when(countingRedis.opsForValue()).thenReturn(countingOps);
-        aspect = new RateLimitAspect(tokenBucketService, countingRedis, new ClientIpResolver(""));
-
-        Object result = aspect.enforce(joinPoint, mockRateLimit(0, -1, 1));
-
-        assertThat(result).isEqualTo("proceeded");
-    }
-
-    @Test
-    void shouldThrowRateLimitException_whenLegacyCountExceedsMax() {
-        ValueOperations<String, String> countingOps = mock(ValueOperations.class);
-        when(countingOps.increment(anyString())).thenReturn(11L);
-        StringRedisTemplate countingRedis = mock(StringRedisTemplate.class);
-        when(countingRedis.opsForValue()).thenReturn(countingOps);
-        aspect = new RateLimitAspect(tokenBucketService, countingRedis, new ClientIpResolver(""));
+    void shouldReject_whenDefaultTokenBucketExceedsLimit() {
+        TokenBucketService rejectingService = mock(TokenBucketService.class);
+        when(rejectingService.tryConsume(anyString(), anyDouble(), anyInt(), anyInt()))
+                .thenReturn(new TokenBucketService.TokenBucketResult(false, 0, 4000));
+        aspect = new RateLimitAspect(rejectingService, new ClientIpResolver(""), new RateLimitHeaderWriter());
         request.setRemoteAddr("192.168.1.1");
         RateLimit rateLimit = mockRateLimit(0, -1, 1);
 
         assertThatThrownBy(() -> aspect.enforce(joinPoint, rateLimit))
                 .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("请求过于频繁，请稍后重试");
+                .hasMessageContaining("4 秒后重试");
+        assertThat(response.getHeader("X-RateLimit-Limit")).isEqualTo("150");
     }
 
     @Test
@@ -200,7 +182,7 @@ class RateLimitAspectTest {
         TokenBucketService rejectingService = mock(TokenBucketService.class);
         when(rejectingService.tryConsume(anyString(), anyDouble(), anyInt(), anyInt()))
                 .thenReturn(new TokenBucketService.TokenBucketResult(false, 0, 1000));
-        aspect = new RateLimitAspect(rejectingService, redisTemplate, new ClientIpResolver(""));
+        aspect = new RateLimitAspect(rejectingService, new ClientIpResolver(""), new RateLimitHeaderWriter());
 
         assertThatThrownBy(() -> aspect.enforce(joinPoint, mockRateLimit(10, 20, 1)))
                 .isInstanceOf(BusinessException.class)
@@ -227,7 +209,7 @@ class RateLimitAspectTest {
         TokenBucketService rejectingService = mock(TokenBucketService.class);
         when(rejectingService.tryConsume(anyString(), anyDouble(), anyInt(), anyInt()))
                 .thenReturn(new TokenBucketService.TokenBucketResult(false, 0, 3000));
-        aspect = new RateLimitAspect(rejectingService, redisTemplate, new ClientIpResolver(""));
+        aspect = new RateLimitAspect(rejectingService, new ClientIpResolver(""), new RateLimitHeaderWriter());
 
         assertThatThrownBy(() -> aspect.enforce(joinPoint, mockRateLimit(10, 20, 1)))
                 .isInstanceOf(BusinessException.class)
@@ -258,9 +240,6 @@ class RateLimitAspectTest {
         when(rl.rate()).thenReturn(rate);
         when(rl.capacity()).thenReturn(capacity);
         when(rl.tokens()).thenReturn(tokens);
-        when(rl.maxRequests()).thenReturn(10);
-        when(rl.duration()).thenReturn(1);
-        when(rl.timeUnit()).thenReturn(TimeUnit.MINUTES);
         return rl;
     }
 

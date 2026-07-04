@@ -1,6 +1,7 @@
 package com.leo.erp.master.carrier.service;
 
 import com.leo.erp.common.api.PageQuery;
+import com.leo.erp.common.config.CacheConfig;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.support.MasterDataReferenceGuard;
@@ -20,6 +21,8 @@ import com.leo.erp.master.carrier.web.dto.VehicleItem;
 import com.leo.erp.system.company.domain.entity.CompanySetting;
 import com.leo.erp.system.company.service.CompanySettingService;
 import org.junit.jupiter.api.Test;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
@@ -30,10 +33,10 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -62,7 +65,7 @@ class CarrierServiceTest {
 
         when(repository.findByDeletedFlagFalseAndStatusOrderByCarrierCodeAsc(StatusConstants.NORMAL)).thenReturn(List.of(carrier));
 
-        CarrierService service = new CarrierService(repository, vehicleRepository, null, mapper);
+        CarrierService service = new CarrierService(repository, vehicleRepository, new SnowflakeIdGenerator(1), mapper);
 
         List<CarrierOptionResponse> options = service.listActiveOptions();
 
@@ -221,7 +224,7 @@ class CarrierServiceTest {
         var result = service.update(1L, request);
 
         assertThat(result).isNotNull();
-        verify(cache).deleteAfterCommit("leo:carrier:all");
+        verify(cache, never()).deleteAfterCommit("leo:carrier:all");
     }
 
     @Test
@@ -521,7 +524,7 @@ class CarrierServiceTest {
 
     @Test
     void shouldTestPrivateUtilityMethods_viaReflection() throws Exception {
-        CarrierService service = new CarrierService(null, null, null, null);
+        CarrierService service = new CarrierService(null, null, new SnowflakeIdGenerator(1), null);
 
         Method emptyToNull = CarrierService.class.getDeclaredMethod("emptyToNull", String.class);
         emptyToNull.setAccessible(true);
@@ -534,213 +537,22 @@ class CarrierServiceTest {
     }
 
     @Test
-    void shouldTestLoadCachedResponses_withoutRedis() throws Exception {
-        Carrier carrier = createCarrier(1L, "CR001");
-        var repository = (CarrierRepository) Proxy.newProxyInstance(
-                CarrierRepository.class.getClassLoader(),
-                new Class[]{CarrierRepository.class},
-                (proxy, method, args) -> switch (method.getName()) {
-                    case "findByDeletedFlagFalseOrderByCarrierCodeAsc" -> List.of(carrier);
-                    case "toString" -> "CarrierRepositoryStub";
-                    case "hashCode" -> System.identityHashCode(proxy);
-                    case "equals" -> proxy == args[0];
-                    default -> throw new UnsupportedOperationException(method.getName());
-                }
-        );
-        var mapper = (CarrierMapper) Proxy.newProxyInstance(
-                CarrierMapper.class.getClassLoader(),
-                new Class[]{CarrierMapper.class},
-                (proxy, method, args) -> switch (method.getName()) {
-                    case "toResponse" -> new CarrierResponse(1L, "CR001", "物流甲", null, null, null, List.of(), null, "正常", null);
-                    case "toString" -> "CarrierMapperStub";
-                    case "hashCode" -> System.identityHashCode(proxy);
-                    case "equals" -> proxy == args[0];
-                    default -> throw new UnsupportedOperationException(method.getName());
-                }
-        );
-        var service = new CarrierService(repository, null, null, mapper);
+    void shouldDeclareSpringCacheAnnotationsForOptions() throws Exception {
+        Method readMethod = CarrierService.class.getDeclaredMethod("listActiveOptions");
+        Cacheable cacheable = readMethod.getAnnotation(Cacheable.class);
+        assertThat(cacheable.value()).containsExactly(CacheConfig.CACHE_OPTIONS);
+        assertThat(cacheable.key()).isEqualTo("'leo:carrier:all'");
 
-        Method loadCachedResponses = CarrierService.class.getDeclaredMethod("loadCachedResponses");
-        loadCachedResponses.setAccessible(true);
+        Method createMethod = CarrierService.class.getDeclaredMethod("create", CarrierRequest.class);
+        Method updateMethod = CarrierService.class.getDeclaredMethod("update", Long.class, CarrierRequest.class);
+        Method updateStatusMethod = CarrierService.class.getDeclaredMethod("updateStatus", Long.class, String.class);
+        Method deleteMethod = CarrierService.class.getDeclaredMethod("delete", Long.class);
 
-        @SuppressWarnings("unchecked")
-        List<CarrierResponse> result = (List<CarrierResponse>) loadCachedResponses.invoke(service);
-
-        assertThat(result).hasSize(1);
-        assertThat(result.get(0).carrierCode()).isEqualTo("CR001");
-    }
-
-    @Test
-    void shouldTestLoadCachedResponses_withRedis() throws Exception {
-        Carrier carrier = createCarrier(1L, "CR001");
-        var repository = (CarrierRepository) Proxy.newProxyInstance(
-                CarrierRepository.class.getClassLoader(),
-                new Class[]{CarrierRepository.class},
-                (proxy, method, args) -> switch (method.getName()) {
-                    case "findByDeletedFlagFalseOrderByCarrierCodeAsc" -> List.of(carrier);
-                    case "toString" -> "CarrierRepositoryStub";
-                    case "hashCode" -> System.identityHashCode(proxy);
-                    case "equals" -> proxy == args[0];
-                    default -> throw new UnsupportedOperationException(method.getName());
-                }
-        );
-        var mapper = (CarrierMapper) Proxy.newProxyInstance(
-                CarrierMapper.class.getClassLoader(),
-                new Class[]{CarrierMapper.class},
-                (proxy, method, args) -> switch (method.getName()) {
-                    case "toResponse" -> new CarrierResponse(1L, "CR001", "物流甲", null, null, null, List.of(), null, "正常", null);
-                    case "toString" -> "CarrierMapperStub";
-                    case "hashCode" -> System.identityHashCode(proxy);
-                    case "equals" -> proxy == args[0];
-                    default -> throw new UnsupportedOperationException(method.getName());
-                }
-        );
-        var cache = mock(RedisJsonCacheSupport.class);
-        when(cache.<List<CarrierResponse>>getOrLoad(anyString(), any(java.time.Duration.class), any(com.fasterxml.jackson.core.type.TypeReference.class), any())).thenAnswer(invocation -> {
-            @SuppressWarnings("unchecked")
-            var loader = (java.util.function.Supplier<List<CarrierResponse>>) invocation.getArgument(3);
-            return loader.get();
-        });
-        var service = new CarrierService(repository, null, null, mapper, cache);
-
-        Method loadCachedResponses = CarrierService.class.getDeclaredMethod("loadCachedResponses");
-        loadCachedResponses.setAccessible(true);
-
-        @SuppressWarnings("unchecked")
-        List<CarrierResponse> result = (List<CarrierResponse>) loadCachedResponses.invoke(service);
-
-        assertThat(result).hasSize(1);
-    }
-
-    @Test
-    void shouldTestLoadCachedResponses_withCacheDirect() throws Exception {
-        var mapper = (CarrierMapper) Proxy.newProxyInstance(
-                CarrierMapper.class.getClassLoader(),
-                new Class[]{CarrierMapper.class},
-                (proxy, method, args) -> switch (method.getName()) {
-                    case "toResponse" -> new CarrierResponse(1L, "CR001", "物流甲", null, null, null, List.of(), null, "正常", null);
-                    case "toString" -> "CarrierMapperStub";
-                    case "hashCode" -> System.identityHashCode(proxy);
-                    case "equals" -> proxy == args[0];
-                    default -> throw new UnsupportedOperationException(method.getName());
-                }
-        );
-        var cache = mock(RedisJsonCacheSupport.class);
-        var cachedResponse = new CarrierResponse(1L, "CR001", "物流甲", null, null, null, List.of(), null, "正常", null);
-        when(cache.<List<CarrierResponse>>getOrLoad(anyString(), any(java.time.Duration.class), any(com.fasterxml.jackson.core.type.TypeReference.class), any())).thenReturn(List.of(cachedResponse));
-        var service = new CarrierService(null, null, null, mapper, cache);
-
-        Method loadCachedResponses = CarrierService.class.getDeclaredMethod("loadCachedResponses");
-        loadCachedResponses.setAccessible(true);
-
-        @SuppressWarnings("unchecked")
-        List<CarrierResponse> result = (List<CarrierResponse>) loadCachedResponses.invoke(service);
-
-        assertThat(result).hasSize(1);
-    }
-
-    @Test
-    void shouldTestMatches_viaReflection() throws Exception {
-        var service = new CarrierService(null, null, null, null);
-        Method matches = CarrierService.class.getDeclaredMethod("matches", CarrierResponse.class, String.class, String.class);
-        matches.setAccessible(true);
-
-        var response = new CarrierResponse(1L, "CR001", "物流甲", "张三", null, null, List.of(), null, "正常", null);
-
-        assertThat((boolean) matches.invoke(service, response, null, null)).isTrue();
-        assertThat((boolean) matches.invoke(service, response, "", null)).isTrue();
-        assertThat((boolean) matches.invoke(service, response, "CR001", null)).isTrue();
-        assertThat((boolean) matches.invoke(service, response, "物流", null)).isTrue();
-        assertThat((boolean) matches.invoke(service, response, "张三", null)).isTrue();
-        assertThat((boolean) matches.invoke(service, response, "不存在", null)).isFalse();
-        assertThat((boolean) matches.invoke(service, response, null, "正常")).isTrue();
-        assertThat((boolean) matches.invoke(service, response, null, "停用")).isFalse();
-        assertThat((boolean) matches.invoke(service, response, null, "  ")).isTrue();
-    }
-
-    @Test
-    void shouldTestContains_viaReflection() throws Exception {
-        var service = new CarrierService(null, null, null, null);
-        Method contains = CarrierService.class.getDeclaredMethod("contains", String.class, String.class);
-        contains.setAccessible(true);
-
-        assertThat((boolean) contains.invoke(service, "Hello World", "hello")).isTrue();
-        assertThat((boolean) contains.invoke(service, "Hello World", "xyz")).isFalse();
-        assertThat((boolean) contains.invoke(service, null, "test")).isFalse();
-    }
-
-    @Test
-    void shouldTestEvictCache_withoutRedis() throws Exception {
-        var service = new CarrierService(null, null, null, null);
-        Method evictCache = CarrierService.class.getDeclaredMethod("evictCache");
-        evictCache.setAccessible(true);
-
-        evictCache.invoke(service);
-    }
-
-    @Test
-    void shouldTestEvictCache_withRedis() throws Exception {
-        var cache = mock(RedisJsonCacheSupport.class);
-        var service = new CarrierService(null, null, null, null, cache);
-        Method evictCache = CarrierService.class.getDeclaredMethod("evictCache");
-        evictCache.setAccessible(true);
-
-        evictCache.invoke(service);
-
-        verify(cache).deleteAfterCommit("leo:carrier:all");
-    }
-
-    @Test
-    void shouldTestBuildComparator_viaReflection() throws Exception {
-        var service = new CarrierService(null, null, null, null);
-        Method buildComparator = CarrierService.class.getDeclaredMethod("buildComparator", PageQuery.class);
-        buildComparator.setAccessible(true);
-
-        var r1 = new CarrierResponse(1L, "CR001", "A物流", null, null, null, List.of(), null, "正常", null);
-        var r2 = new CarrierResponse(2L, "CR002", "B物流", null, null, null, List.of(), null, "正常", null);
-
-        var comparatorById = (java.util.Comparator<CarrierResponse>) buildComparator.invoke(service, new PageQuery(0, 10, null, "asc"));
-        assertThat(comparatorById.compare(r1, r2)).isLessThan(0);
-
-        var comparatorByCode = (java.util.Comparator<CarrierResponse>) buildComparator.invoke(service, new PageQuery(0, 10, "carrierCode", "desc"));
-        assertThat(comparatorByCode.compare(r1, r2)).isGreaterThan(0);
-
-        var comparatorByName = (java.util.Comparator<CarrierResponse>) buildComparator.invoke(service, new PageQuery(0, 10, "carrierName", "asc"));
-        assertThat(comparatorByName.compare(r1, r2)).isLessThan(0);
-
-        var comparatorByContact = (java.util.Comparator<CarrierResponse>) buildComparator.invoke(service, new PageQuery(0, 10, "contactName", "asc"));
-        assertThat(comparatorByContact).isNotNull();
-
-        var comparatorByVehicleType = (java.util.Comparator<CarrierResponse>) buildComparator.invoke(service, new PageQuery(0, 10, "vehicleType", "asc"));
-        assertThat(comparatorByVehicleType).isNotNull();
-
-        var comparatorByPriceMode = (java.util.Comparator<CarrierResponse>) buildComparator.invoke(service, new PageQuery(0, 10, "priceMode", "asc"));
-        assertThat(comparatorByPriceMode).isNotNull();
-
-        var comparatorByStatus = (java.util.Comparator<CarrierResponse>) buildComparator.invoke(service, new PageQuery(0, 10, "status", "asc"));
-        assertThat(comparatorByStatus).isNotNull();
-    }
-
-    @Test
-    void shouldTestToPage_viaReflection() throws Exception {
-        var service = new CarrierService(null, null, null, null);
-        Method toPage = CarrierService.class.getDeclaredMethod("toPage", List.class, PageQuery.class);
-        toPage.setAccessible(true);
-
-        var items = List.of(
-                new CarrierResponse(1L, "CR001", "物流甲", null, null, null, List.of(), null, "正常", null),
-                new CarrierResponse(2L, "CR002", "物流乙", null, null, null, List.of(), null, "正常", null),
-                new CarrierResponse(3L, "CR003", "物流丙", null, null, null, List.of(), null, "正常", null)
-        );
-
-        @SuppressWarnings("unchecked")
-        var page0 = (org.springframework.data.domain.Page<CarrierResponse>) toPage.invoke(service, items, new PageQuery(0, 2, null, null));
-        assertThat(page0.getContent()).hasSize(2);
-        assertThat(page0.getTotalElements()).isEqualTo(3);
-
-        @SuppressWarnings("unchecked")
-        var page1 = (org.springframework.data.domain.Page<CarrierResponse>) toPage.invoke(service, items, new PageQuery(1, 2, null, null));
-        assertThat(page1.getContent()).hasSize(1);
+        assertThat(createMethod.getAnnotation(CacheEvict.class).value()).containsExactly(CacheConfig.CACHE_OPTIONS);
+        assertThat(createMethod.getAnnotation(CacheEvict.class).key()).isEqualTo("'leo:carrier:all'");
+        assertThat(updateMethod.getAnnotation(CacheEvict.class).key()).isEqualTo("'leo:carrier:all'");
+        assertThat(updateStatusMethod.getAnnotation(CacheEvict.class).key()).isEqualTo("'leo:carrier:all'");
+        assertThat(deleteMethod.getAnnotation(CacheEvict.class).key()).isEqualTo("'leo:carrier:all'");
     }
 
     private static Carrier createCarrier(Long id, String code) {

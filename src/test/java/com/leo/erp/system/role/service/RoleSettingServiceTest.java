@@ -1430,6 +1430,49 @@ class RoleSettingServiceTest {
     }
 
     @Test
+    void shouldValidateDataScopeWithSelfScopeWhenExistingPermissionsAreEmpty() {
+        authenticate(7L, "operator", List.of(new SimpleGrantedAuthority("ROLE_USER")));
+        RoleSettingService service = new RoleSettingService(
+                roleRepository(),
+                rolePermissionRepository(),
+                userRoleRepository(List.of()),
+                new SnowflakeIdGenerator(0L),
+                permissionService(Map.of()),
+                mock(AuthenticatedUserCacheService.class)
+        );
+
+        assertThatThrownBy(() -> ReflectionTestUtils.invokeMethod(
+                service, "assertCurrentPrincipalCanGrantDataScope", "全部数据", List.<RolePermission>of()
+        ))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("不能授予超出自身数据范围的角色");
+    }
+
+    @Test
+    void shouldValidateDataScopeWithSelfScopeWhenActionsByResourceIsNull() throws Exception {
+        authenticate(7L, "operator", List.of(new SimpleGrantedAuthority("ROLE_USER")));
+        RoleSettingService service = new RoleSettingService(
+                roleRepository(),
+                rolePermissionRepository(),
+                userRoleRepository(List.of()),
+                new SnowflakeIdGenerator(0L),
+                permissionService(Map.of()),
+                mock(AuthenticatedUserCacheService.class)
+        );
+        var method = RoleSettingService.class.getDeclaredMethod(
+                "assertCurrentPrincipalCanGrantDataScope",
+                String.class,
+                Map.class
+        );
+        method.setAccessible(true);
+
+        assertThatThrownBy(() -> method.invoke(service, "全部数据", (Map<String, Set<String>>) null))
+                .hasCauseInstanceOf(BusinessException.class)
+                .cause()
+                .hasMessageContaining("不能授予超出自身数据范围的角色");
+    }
+
+    @Test
     void shouldAllowGrantingSelfDataScopeWithValidExistingPermissions() {
         authenticate(7L, "operator", List.of(new SimpleGrantedAuthority("ROLE_USER")));
         RolePermission permission = rolePermission(1L, "material", "read");
@@ -1444,6 +1487,44 @@ class RoleSettingServiceTest {
 
         ReflectionTestUtils.invokeMethod(
                 service, "assertCurrentPrincipalCanGrantDataScope", "本人", List.of(permission)
+        );
+    }
+
+    @Test
+    void shouldRejectBroaderDataScopeWithValidExistingPermissions() {
+        authenticate(7L, "operator", List.of(new SimpleGrantedAuthority("ROLE_USER")));
+        RolePermission permission = rolePermission(1L, "material", "read");
+        RoleSettingService service = new RoleSettingService(
+                roleRepository(),
+                rolePermissionRepository(),
+                userRoleRepository(List.of()),
+                new SnowflakeIdGenerator(0L),
+                permissionService(Map.of("material", Set.of("read")), Map.of("material:read", "self")),
+                mock(AuthenticatedUserCacheService.class)
+        );
+
+        assertThatThrownBy(() -> ReflectionTestUtils.invokeMethod(
+                service, "assertCurrentPrincipalCanGrantDataScope", "全部数据", List.of(permission)
+        ))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("不能授予超出自身数据范围的角色");
+    }
+
+    @Test
+    void shouldAllowAdminToGrantAnyDataScopeWithValidExistingPermissions() {
+        authenticate(7L, "admin", List.of(new SimpleGrantedAuthority("ROLE_ADMIN")));
+        RolePermission permission = rolePermission(1L, "material", "read");
+        RoleSettingService service = new RoleSettingService(
+                roleRepository(),
+                rolePermissionRepository(),
+                userRoleRepository(List.of()),
+                new SnowflakeIdGenerator(0L),
+                permissionService(Map.of()),
+                mock(AuthenticatedUserCacheService.class)
+        );
+
+        ReflectionTestUtils.invokeMethod(
+                service, "assertCurrentPrincipalCanGrantDataScope", "全部数据", List.of(permission)
         );
     }
 

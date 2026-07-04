@@ -42,7 +42,6 @@ public class SystemSwitchService implements CrudRuntimeSettings, PageQuerySettin
     public static final String OOBE_COMPLETED_SWITCH = "SYS_OOBE_COMPLETED";
     public static final String SWITCH_CACHE_KEY = "leo:system:switches";
     private static final Duration SWITCH_CACHE_TTL = Duration.ofMinutes(5);
-    private static final TypeReference<Map<String, SwitchSnapshot>> SWITCH_MAP_TYPE = new TypeReference<>() { };
     private static final int DEFAULT_MAX_SESSIONS = 3;
     private static final int DEFAULT_LIST_PAGE_SIZE = 20;
     private static final Set<String> DEFAULT_DETAILED_PAGE_ACTIONS = Set.of(
@@ -252,15 +251,7 @@ public class SystemSwitchService implements CrudRuntimeSettings, PageQuerySettin
         if (noRuleRepository == null) {
             return Map.of();
         }
-        if (redisJsonCacheSupport == null) {
-            return loadKnownSwitchesFromDatabase();
-        }
-        return redisJsonCacheSupport.getOrLoad(
-                SWITCH_CACHE_KEY,
-                SWITCH_CACHE_TTL,
-                SWITCH_MAP_TYPE,
-                this::loadKnownSwitchesFromDatabase
-        );
+        return loadKnownSwitchesFromDatabase();
     }
 
     private Map<String, SwitchSnapshot> loadKnownSwitchesFromDatabase() {

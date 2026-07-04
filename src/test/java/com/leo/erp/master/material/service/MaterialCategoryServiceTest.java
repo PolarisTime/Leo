@@ -418,7 +418,7 @@ class MaterialCategoryServiceTest {
 
     @Test
     void shouldTestNormalizeCode_viaReflection() throws Exception {
-        var service = new MaterialCategoryService(null, null, null);
+        var service = new MaterialCategoryService(null, new SnowflakeIdGenerator(1), null);
         Method normalizeCode = MaterialCategoryService.class.getDeclaredMethod("normalizeCode", String.class);
         normalizeCode.setAccessible(true);
 
@@ -429,7 +429,7 @@ class MaterialCategoryServiceTest {
 
     @Test
     void shouldTestOptional_viaReflection() throws Exception {
-        var service = new MaterialCategoryService(null, null, null);
+        var service = new MaterialCategoryService(null, new SnowflakeIdGenerator(1), null);
         Method optional = MaterialCategoryService.class.getDeclaredMethod("optional", String.class);
         optional.setAccessible(true);
 
@@ -442,7 +442,7 @@ class MaterialCategoryServiceTest {
 
     @Test
     void shouldTestRequired_viaReflection() throws Exception {
-        var service = new MaterialCategoryService(null, null, null);
+        var service = new MaterialCategoryService(null, new SnowflakeIdGenerator(1), null);
         Method required = MaterialCategoryService.class.getDeclaredMethod("required", String.class, String.class);
         required.setAccessible(true);
 

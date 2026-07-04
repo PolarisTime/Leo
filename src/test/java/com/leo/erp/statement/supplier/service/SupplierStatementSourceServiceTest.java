@@ -257,6 +257,33 @@ class SupplierStatementSourceServiceTest {
     }
 
     @Test
+    void shouldAllowRequestSettlementCompanyWhenSourceInboundIdIsMissing() {
+        SupplierStatementRepository repository = mock(SupplierStatementRepository.class);
+        PurchaseInboundItemQueryService itemQueryService = mock(PurchaseInboundItemQueryService.class);
+        PurchaseInbound sourceInbound = sourceInbound();
+        sourceInbound.setSettlementCompanyId(null);
+        sourceInbound.setSettlementCompanyName(null);
+        PurchaseInboundItem sourceItem = sourceInboundItem(10L, sourceInbound);
+        when(itemQueryService.findAllActiveByIdIn(List.of(10L))).thenReturn(List.of(sourceItem));
+        when(repository.findAllBySourceNosExcludingCurrentStatement(Set.of("RK-001"), null)).thenReturn(List.of());
+        SupplierStatementSourceService service = new SupplierStatementSourceService(
+                repository,
+                mock(PurchaseInboundRepository.class),
+                itemQueryService,
+                null
+        );
+
+        SupplierStatementSourceService.SourceApplyResult result = service.applyItems(
+                new SupplierStatement(),
+                supplierRequest("SUP", "供应商甲", 1L, "结算主体A", 10L),
+                () -> 1000L
+        );
+
+        assertThat(result.settlementCompanyId()).isNull();
+        assertThat(result.settlementCompanyName()).isNull();
+    }
+
+    @Test
     void shouldUseEmptySettlementCompanyWhenSourceInboundsHaveNoSettlementCompany() {
         SupplierStatementRepository repository = mock(SupplierStatementRepository.class);
         PurchaseInboundItemQueryService itemQueryService = mock(PurchaseInboundItemQueryService.class);

@@ -4,7 +4,6 @@ import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
-import java.util.concurrent.TimeUnit;
 
 /**
  * Token-bucket rate limiting on controller methods.
@@ -22,13 +21,4 @@ public @interface RateLimit {
 
     /** Tokens consumed per request (e.g. 5 for file upload). */
     int tokens() default 1;
-
-    /** Max requests within the window (legacy fixed-window fallback). */
-    int maxRequests() default 10;
-
-    /** Window duration (legacy fallback). */
-    int duration() default 1;
-
-    /** Time unit for the window (legacy fallback). */
-    TimeUnit timeUnit() default TimeUnit.MINUTES;
 }

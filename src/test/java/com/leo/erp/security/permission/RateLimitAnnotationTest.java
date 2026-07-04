@@ -2,7 +2,8 @@ package com.leo.erp.security.permission;
 
 import org.junit.jupiter.api.Test;
 
-import java.util.concurrent.TimeUnit;
+import java.lang.reflect.Method;
+import java.util.Arrays;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -15,9 +16,6 @@ class RateLimitAnnotationTest {
         assertThat(annotation.rate()).isEqualTo(-1);
         assertThat(annotation.capacity()).isEqualTo(-1);
         assertThat(annotation.tokens()).isEqualTo(1);
-        assertThat(annotation.maxRequests()).isEqualTo(10);
-        assertThat(annotation.duration()).isEqualTo(1);
-        assertThat(annotation.timeUnit()).isEqualTo(TimeUnit.MINUTES);
     }
 
     @Test
@@ -27,9 +25,12 @@ class RateLimitAnnotationTest {
         assertThat(annotation.rate()).isEqualTo(10.0);
         assertThat(annotation.capacity()).isEqualTo(100);
         assertThat(annotation.tokens()).isEqualTo(5);
-        assertThat(annotation.maxRequests()).isEqualTo(50);
-        assertThat(annotation.duration()).isEqualTo(2);
-        assertThat(annotation.timeUnit()).isEqualTo(TimeUnit.SECONDS);
+    }
+
+    @Test
+    void shouldExposeOnlyTokenBucketAttributes() {
+        assertThat(Arrays.stream(RateLimit.class.getDeclaredMethods()).map(Method::getName))
+                .containsExactlyInAnyOrder("rate", "capacity", "tokens");
     }
 
     @Test
@@ -46,7 +47,7 @@ class RateLimitAnnotationTest {
         @RateLimit
         public void defaultRateLimit() {}
 
-        @RateLimit(rate = 10.0, capacity = 100, tokens = 5, maxRequests = 50, duration = 2, timeUnit = TimeUnit.SECONDS)
+        @RateLimit(rate = 10.0, capacity = 100, tokens = 5)
         public void customRateLimit() {}
     }
 }

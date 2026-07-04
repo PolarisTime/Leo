@@ -15,7 +15,6 @@ import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Service;
 
 import java.security.SecureRandom;
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -31,14 +30,11 @@ public class UserAccountValidationService {
     private static final String ALL_PASSWORD_CHARS = UPPERCASE_PASSWORD_CHARS + LOWERCASE_PASSWORD_CHARS + DIGIT_PASSWORD_CHARS;
     private static final int GENERATED_PASSWORD_LENGTH = 8;
     private static final int MAX_LOGIN_NAME_LENGTH = 64;
-    private static final String LOGIN_NAME_OWNER_CACHE_PREFIX = "auth:user:login-name:owner:";
-    private static final Duration LOGIN_NAME_OWNER_CACHE_TTL = Duration.ofMinutes(10);
     private static final Long LOGIN_NAME_NOT_FOUND = 0L;
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
     private final UserAccountRepository repository;
     private final DepartmentRepository departmentRepository;
-    private final RedisJsonCacheSupport redisJsonCacheSupport;
     private final SystemSwitchService systemSwitchService;
 
     public UserAccountValidationService(
@@ -48,7 +44,6 @@ public class UserAccountValidationService {
             @Nullable SystemSwitchService systemSwitchService) {
         this.repository = repository;
         this.departmentRepository = departmentRepository;
-        this.redisJsonCacheSupport = redisJsonCacheSupport;
         this.systemSwitchService = systemSwitchService;
     }
 
@@ -80,19 +75,9 @@ public class UserAccountValidationService {
     }
 
     public Long loadLoginNameOwnerId(String loginName) {
-        if (redisJsonCacheSupport == null) {
-            return repository.findByLoginNameAndDeletedFlagFalse(loginName)
-                    .map(UserAccount::getId)
-                    .orElse(LOGIN_NAME_NOT_FOUND);
-        }
-        return redisJsonCacheSupport.getOrLoad(
-                loginNameOwnerCacheKey(loginName),
-                LOGIN_NAME_OWNER_CACHE_TTL,
-                Long.class,
-                () -> repository.findByLoginNameAndDeletedFlagFalse(loginName)
-                        .map(UserAccount::getId)
-                        .orElse(LOGIN_NAME_NOT_FOUND)
-        );
+        return repository.findByLoginNameAndDeletedFlagFalse(loginName)
+                .map(UserAccount::getId)
+                .orElse(LOGIN_NAME_NOT_FOUND);
     }
 
     public String resolveInitialPassword(String password) {
@@ -195,10 +180,6 @@ public class UserAccountValidationService {
             case "本部门" -> 2;
             default -> 1;
         };
-    }
-
-    private String loginNameOwnerCacheKey(String loginName) {
-        return LOGIN_NAME_OWNER_CACHE_PREFIX + loginName;
     }
 
     private char randomChar(String source) {
