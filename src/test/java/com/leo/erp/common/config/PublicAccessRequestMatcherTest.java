@@ -2,6 +2,7 @@ package com.leo.erp.common.config;
 
 import com.leo.erp.common.web.PublicAccess;
 import org.junit.jupiter.api.Test;
+import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestMethod;
@@ -150,6 +151,19 @@ class PublicAccessRequestMatcherTest {
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/public/test");
         request.setServletPath("/api/public/test");
         assertThat(matcher.matches(request)).isFalse();
+    }
+
+    @Test
+    void shouldUseMvcHandlerMappingWhenActuatorMappingAlsoExists() {
+        RequestMappingHandlerMapping handlerMapping = handlerMappingWithPublicEndpoint();
+        RequestMappingHandlerMapping actuatorMapping = mock(RequestMappingHandlerMapping.class);
+        when(actuatorMapping.getHandlerMethods()).thenReturn(Map.of());
+
+        new ApplicationContextRunner()
+                .withBean("requestMappingHandlerMapping", RequestMappingHandlerMapping.class, () -> handlerMapping)
+                .withBean("controllerEndpointHandlerMapping", RequestMappingHandlerMapping.class, () -> actuatorMapping)
+                .withBean(PublicAccessRequestMatcher.class)
+                .run(context -> assertThat(context).hasSingleBean(PublicAccessRequestMatcher.class));
     }
 
     private RequestMappingHandlerMapping handlerMappingWithPublicEndpoint() {

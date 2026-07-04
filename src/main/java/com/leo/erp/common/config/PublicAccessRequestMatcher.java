@@ -1,6 +1,7 @@
 package com.leo.erp.common.config;
 
 import com.leo.erp.common.web.PublicAccess;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.core.annotation.AnnotatedElementUtils;
 import org.springframework.security.web.util.matcher.AntPathRequestMatcher;
 import org.springframework.security.web.util.matcher.OrRequestMatcher;
@@ -23,7 +24,8 @@ public class PublicAccessRequestMatcher implements RequestMatcher {
 
     private final RequestMatcher delegate;
 
-    public PublicAccessRequestMatcher(RequestMappingHandlerMapping handlerMapping) {
+    public PublicAccessRequestMatcher(
+            @Qualifier("requestMappingHandlerMapping") RequestMappingHandlerMapping handlerMapping) {
         List<RequestMatcher> matchers = new ArrayList<>();
         handlerMapping.getHandlerMethods().forEach((mapping, handlerMethod) -> {
             boolean publicAccess = isPublicAccess(handlerMethod);
