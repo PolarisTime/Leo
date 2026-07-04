@@ -8,6 +8,7 @@ import com.leo.erp.system.norule.domain.entity.NoRule;
 import com.leo.erp.system.norule.mapper.NoRuleMapper;
 import com.leo.erp.system.norule.repository.NoRuleRepository;
 import com.leo.erp.system.norule.web.dto.NoRuleRequest;
+import com.leo.erp.system.runtimeconfig.service.RuntimeConfigService;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Method;
@@ -129,10 +130,9 @@ class NoRuleServiceTest {
         assertThat(blankStatusResult.status()).isEqualTo("正常");
         verify(redisJsonCacheSupport, times(2)).delete(List.of(
                 SystemSwitchService.SWITCH_CACHE_KEY,
-                GeneralSettingQueryService.PUBLIC_DISPLAY_SWITCHES_CACHE_KEY,
-                GeneralSettingQueryService.PUBLIC_CLIENT_SETTINGS_CACHE_KEY,
                 CompanySettingService.CURRENT_COMPANY_CACHE_KEY,
-                CompanySettingService.CURRENT_TAX_RATE_CACHE_KEY
+                CompanySettingService.CURRENT_TAX_RATE_CACHE_KEY,
+                RuntimeConfigService.RUNTIME_CONFIG_CACHE_KEY
         ));
     }
 

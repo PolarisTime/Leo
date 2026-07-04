@@ -1,7 +1,6 @@
 package com.leo.erp.common.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.cache.annotation.EnableCaching;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -21,7 +20,6 @@ public class CacheConfig {
     public static final String CACHE_OPTIONS = "options";
 
     @Bean
-    @ConditionalOnBean(RedisConnectionFactory.class)
     public RedisCacheManager cacheManager(RedisConnectionFactory connectionFactory,
                                           ObjectMapper objectMapper,
                                           RedisTuningProperties redisTuningProperties) {

@@ -159,6 +159,18 @@ leo:
   # 部署在 nginx / CDN 后面时，填入代理的内网地址。
   # 示例: "127.0.0.1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
   trusted-proxies: ${LEO_TRUSTED_PROXIES:127.0.0.1}
+  feature-flags:
+    unleash:
+      # 默认关闭；启用后 runtime-config 的 feature 字段通过 OpenFeature/Unleash 读取。
+      enabled: ${LEO_FEATURE_FLAGS_UNLEASH_ENABLED:false}
+      api-url: ${LEO_FEATURE_FLAGS_UNLEASH_API_URL:}
+      api-key: ${LEO_FEATURE_FLAGS_UNLEASH_API_KEY:}
+      app-name: ${LEO_FEATURE_FLAGS_UNLEASH_APP_NAME:leo-erp}
+      environment: ${LEO_FEATURE_FLAGS_UNLEASH_ENVIRONMENT:default}
+      instance-id: ${LEO_FEATURE_FLAGS_UNLEASH_INSTANCE_ID:leo-erp}
+      connect-timeout: ${LEO_FEATURE_FLAGS_UNLEASH_CONNECT_TIMEOUT:2s}
+      read-timeout: ${LEO_FEATURE_FLAGS_UNLEASH_READ_TIMEOUT:2s}
+      synchronous-fetch-on-initialisation: ${LEO_FEATURE_FLAGS_UNLEASH_SYNC_FETCH:false}
   redis:
     cache:
       # 静态缓存默认 TTL

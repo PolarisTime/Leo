@@ -27,6 +27,8 @@
         <aws.sdk.version>2.46.19</aws.sdk.version>
         <bucket4j.version>8.19.0</bucket4j.version>
         <tink.version>1.18.0</tink.version>
+        <openfeature.sdk.version>1.20.2</openfeature.sdk.version>
+        <openfeature.unleash-provider.version>0.1.3-alpha</openfeature.unleash-provider.version>
         <maven.checkstyle.plugin.version>3.6.0</maven.checkstyle.plugin.version>
         <checkstyle.version>10.26.1</checkstyle.version>
         <spotbugs.maven.plugin.version>4.9.3.0</spotbugs.maven.plugin.version>
@@ -202,6 +204,18 @@
             <groupId>com.google.crypto.tink</groupId>
             <artifactId>tink</artifactId>
             <version>${tink.version}</version>
+        </dependency>
+
+        <!-- Feature flags -->
+        <dependency>
+            <groupId>dev.openfeature</groupId>
+            <artifactId>sdk</artifactId>
+            <version>${openfeature.sdk.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>dev.openfeature.contrib.providers</groupId>
+            <artifactId>unleash</artifactId>
+            <version>${openfeature.unleash-provider.version}</version>
         </dependency>
 
         <!-- Spring AI MCP Server -->

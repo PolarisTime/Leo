@@ -16,6 +16,7 @@ import com.leo.erp.system.company.web.dto.CompanySettlementAccountRequest;
 import com.leo.erp.system.company.web.dto.CompanySettlementAccountResponse;
 import com.leo.erp.system.dashboard.service.DashboardSummaryService;
 import com.leo.erp.system.norule.repository.NoRuleRepository;
+import com.leo.erp.system.runtimeconfig.service.RuntimeConfigService;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
@@ -378,7 +379,8 @@ class CompanySettingServiceTest {
         assertThat(result).isNotNull();
         verify(cache).delete(List.of(
                 CompanySettingService.CURRENT_COMPANY_CACHE_KEY,
-                CompanySettingService.CURRENT_TAX_RATE_CACHE_KEY
+                CompanySettingService.CURRENT_TAX_RATE_CACHE_KEY,
+                RuntimeConfigService.RUNTIME_CONFIG_CACHE_KEY
         ));
     }
 
@@ -415,12 +417,13 @@ class CompanySettingServiceTest {
 
         Method saveCurrent = CompanySettingService.class.getDeclaredMethod("saveCurrent", CompanySettingRequest.class);
         Caching caching = saveCurrent.getAnnotation(Caching.class);
-        assertThat(caching.evict()).hasSize(2);
+        assertThat(caching.evict()).hasSize(3);
         assertThat(caching.evict())
                 .extracting(evict -> evict.key())
                 .containsExactlyInAnyOrder(
                         "'" + CompanySettingService.CURRENT_COMPANY_CACHE_KEY + "'",
-                        "'" + CompanySettingService.CURRENT_TAX_RATE_CACHE_KEY + "'"
+                        "'" + CompanySettingService.CURRENT_TAX_RATE_CACHE_KEY + "'",
+                        "'" + RuntimeConfigService.RUNTIME_CONFIG_CACHE_KEY + "'"
                 );
     }
 

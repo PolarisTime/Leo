@@ -24,6 +24,7 @@ import com.leo.erp.system.company.web.dto.CompanySettlementAccountResponse;
 import com.leo.erp.system.dashboard.service.DashboardSummaryService;
 import com.leo.erp.system.norule.domain.entity.NoRule;
 import com.leo.erp.system.norule.repository.NoRuleRepository;
+import com.leo.erp.system.runtimeconfig.service.RuntimeConfigService;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -167,7 +168,8 @@ public class CompanySettingService extends AbstractCrudService<CompanySetting, C
     @Transactional
     @Caching(evict = {
             @CacheEvict(value = CacheConfig.CACHE_STATIC, key = "'" + CURRENT_COMPANY_CACHE_KEY + "'"),
-            @CacheEvict(value = CacheConfig.CACHE_STATIC, key = "'" + CURRENT_TAX_RATE_CACHE_KEY + "'")
+            @CacheEvict(value = CacheConfig.CACHE_STATIC, key = "'" + CURRENT_TAX_RATE_CACHE_KEY + "'"),
+            @CacheEvict(value = CacheConfig.CACHE_HOT, key = "'" + RuntimeConfigService.RUNTIME_CONFIG_CACHE_KEY + "'")
     })
     public CompanySettingResponse saveCurrent(CompanySettingRequest request) {
         CompanySetting entity = findCurrentEntity()
@@ -186,7 +188,8 @@ public class CompanySettingService extends AbstractCrudService<CompanySetting, C
     @Transactional
     @Caching(evict = {
             @CacheEvict(value = CacheConfig.CACHE_STATIC, key = "'" + CURRENT_COMPANY_CACHE_KEY + "'"),
-            @CacheEvict(value = CacheConfig.CACHE_STATIC, key = "'" + CURRENT_TAX_RATE_CACHE_KEY + "'")
+            @CacheEvict(value = CacheConfig.CACHE_STATIC, key = "'" + CURRENT_TAX_RATE_CACHE_KEY + "'"),
+            @CacheEvict(value = CacheConfig.CACHE_HOT, key = "'" + RuntimeConfigService.RUNTIME_CONFIG_CACHE_KEY + "'")
     })
     public CompanySettingResponse create(CompanySettingRequest request) {
         return super.create(request);
@@ -196,7 +199,8 @@ public class CompanySettingService extends AbstractCrudService<CompanySetting, C
     @Transactional
     @Caching(evict = {
             @CacheEvict(value = CacheConfig.CACHE_STATIC, key = "'" + CURRENT_COMPANY_CACHE_KEY + "'"),
-            @CacheEvict(value = CacheConfig.CACHE_STATIC, key = "'" + CURRENT_TAX_RATE_CACHE_KEY + "'")
+            @CacheEvict(value = CacheConfig.CACHE_STATIC, key = "'" + CURRENT_TAX_RATE_CACHE_KEY + "'"),
+            @CacheEvict(value = CacheConfig.CACHE_HOT, key = "'" + RuntimeConfigService.RUNTIME_CONFIG_CACHE_KEY + "'")
     })
     public CompanySettingResponse update(Long id, CompanySettingRequest request) {
         return super.update(id, request);
@@ -206,7 +210,8 @@ public class CompanySettingService extends AbstractCrudService<CompanySetting, C
     @Transactional
     @Caching(evict = {
             @CacheEvict(value = CacheConfig.CACHE_STATIC, key = "'" + CURRENT_COMPANY_CACHE_KEY + "'"),
-            @CacheEvict(value = CacheConfig.CACHE_STATIC, key = "'" + CURRENT_TAX_RATE_CACHE_KEY + "'")
+            @CacheEvict(value = CacheConfig.CACHE_STATIC, key = "'" + CURRENT_TAX_RATE_CACHE_KEY + "'"),
+            @CacheEvict(value = CacheConfig.CACHE_HOT, key = "'" + RuntimeConfigService.RUNTIME_CONFIG_CACHE_KEY + "'")
     })
     public CompanySettingResponse updateStatus(Long id, String status) {
         return super.updateStatus(id, status);
@@ -216,7 +221,8 @@ public class CompanySettingService extends AbstractCrudService<CompanySetting, C
     @Transactional
     @Caching(evict = {
             @CacheEvict(value = CacheConfig.CACHE_STATIC, key = "'" + CURRENT_COMPANY_CACHE_KEY + "'"),
-            @CacheEvict(value = CacheConfig.CACHE_STATIC, key = "'" + CURRENT_TAX_RATE_CACHE_KEY + "'")
+            @CacheEvict(value = CacheConfig.CACHE_STATIC, key = "'" + CURRENT_TAX_RATE_CACHE_KEY + "'"),
+            @CacheEvict(value = CacheConfig.CACHE_HOT, key = "'" + RuntimeConfigService.RUNTIME_CONFIG_CACHE_KEY + "'")
     })
     public void delete(Long id) {
         super.delete(id);
@@ -424,7 +430,11 @@ public class CompanySettingService extends AbstractCrudService<CompanySetting, C
 
     public void evictCache() {
         if (redisJsonCacheSupport != null) {
-            redisJsonCacheSupport.delete(List.of(CURRENT_COMPANY_CACHE_KEY, CURRENT_TAX_RATE_CACHE_KEY));
+            redisJsonCacheSupport.delete(List.of(
+                    CURRENT_COMPANY_CACHE_KEY,
+                    CURRENT_TAX_RATE_CACHE_KEY,
+                    RuntimeConfigService.RUNTIME_CONFIG_CACHE_KEY
+            ));
         }
     }
 

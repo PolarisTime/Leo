@@ -2,8 +2,11 @@ package com.leo.erp.common.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
-import org.springframework.data.redis.connection.RedisConnectionFactory;
+import org.springframework.boot.test.context.runner.ApplicationContextRunner;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.cache.RedisCacheManager;
+import org.springframework.data.redis.connection.RedisConnectionFactory;
 
 import java.time.Duration;
 
@@ -51,5 +54,31 @@ class CacheConfigTest {
         RedisCacheManager manager = cacheConfig.cacheManager(connectionFactory, objectMapper, props);
 
         assertThat(manager).isNotNull();
+    }
+
+    @Test
+    void cacheManager_isRegisteredWhenRedisConnectionFactoryExists() {
+        new ApplicationContextRunner()
+                .withUserConfiguration(CacheConfig.class, CacheConfigTestDependencies.class)
+                .run(context -> assertThat(context).hasSingleBean(RedisCacheManager.class));
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    static class CacheConfigTestDependencies {
+
+        @Bean
+        RedisConnectionFactory redisConnectionFactory() {
+            return mock(RedisConnectionFactory.class);
+        }
+
+        @Bean
+        ObjectMapper objectMapper() {
+            return new ObjectMapper();
+        }
+
+        @Bean
+        RedisTuningProperties redisTuningProperties() {
+            return new RedisTuningProperties();
+        }
     }
 }

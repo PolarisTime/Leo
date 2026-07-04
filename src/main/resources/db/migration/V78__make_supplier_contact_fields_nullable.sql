@@ -1,3 +1,0 @@
-ALTER TABLE md_supplier ALTER COLUMN contact_name DROP NOT NULL;
-ALTER TABLE md_supplier ALTER COLUMN contact_phone DROP NOT NULL;
-ALTER TABLE md_supplier ALTER COLUMN city DROP NOT NULL;

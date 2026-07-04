@@ -46,28 +46,6 @@ class NoRuleControllerTest {
     }
 
     @Test
-    void displaySwitchesReturnsList() {
-        GeneralSettingResponse item = mock(GeneralSettingResponse.class);
-        when(generalSettingQueryService.publicDisplaySwitches()).thenReturn(List.of(item));
-
-        ApiResponse<List<GeneralSettingResponse>> response = controller.displaySwitches();
-
-        assertThat(response.code()).isEqualTo(0);
-        assertThat(response.data()).hasSize(1);
-    }
-
-    @Test
-    void clientSettingsReturnsList() {
-        GeneralSettingResponse item = mock(GeneralSettingResponse.class);
-        when(generalSettingQueryService.publicClientSettings()).thenReturn(List.of(item));
-
-        ApiResponse<List<GeneralSettingResponse>> response = controller.clientSettings();
-
-        assertThat(response.code()).isEqualTo(0);
-        assertThat(response.data()).hasSize(1);
-    }
-
-    @Test
     void statementGeneratorRulesReturnsRules() {
         StatementGeneratorRulesResponse rules = mock(StatementGeneratorRulesResponse.class);
         when(noRuleService.statementGeneratorRules()).thenReturn(rules);

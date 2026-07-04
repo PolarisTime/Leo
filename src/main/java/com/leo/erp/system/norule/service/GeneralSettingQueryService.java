@@ -1,10 +1,7 @@
 package com.leo.erp.system.norule.service;
 
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.leo.erp.common.api.PageQuery;
-import com.leo.erp.common.config.CacheConfig;
 import com.leo.erp.common.persistence.Specs;
-import com.leo.erp.common.support.RedisJsonCacheSupport;
 import com.leo.erp.common.setting.PageUploadRuleQueryService;
 import com.leo.erp.common.setting.PageUploadRuleSummary;
 import com.leo.erp.system.company.service.CompanySettingService;
@@ -17,10 +14,6 @@ import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.cache.annotation.CacheEvict;
-import org.springframework.cache.annotation.Cacheable;
-import org.springframework.cache.annotation.Caching;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -28,13 +21,9 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 @Service
 public class GeneralSettingQueryService {
-
-    public static final String PUBLIC_DISPLAY_SWITCHES_CACHE_KEY = "leo:system:public-display-switches";
-    public static final String PUBLIC_CLIENT_SETTINGS_CACHE_KEY = "leo:system:public-client-settings";
 
     private static final Map<String, Integer> GENERAL_SETTING_ORDER = Map.ofEntries(
             Map.entry("RULE_MAT", 10),
@@ -83,49 +72,16 @@ public class GeneralSettingQueryService {
             Map.entry("PAGE_UPLOAD", 900)
     );
 
-    private static final Set<String> PUBLIC_DISPLAY_SWITCH_CODES = Set.of(
-            "UI_WEIGHT_ONLY_PURCHASE_INBOUNDS",
-            "UI_WEIGHT_ONLY_SALES_OUTBOUNDS",
-            SystemSwitchService.HIDE_AUDITED_LIST_RECORDS_SWITCH,
-            SystemSwitchService.SHOW_SNOWFLAKE_ID_SWITCH
-    );
-    private static final Set<String> PUBLIC_CLIENT_SETTING_CODES = Set.of(
-            "UI_WEIGHT_ONLY_PURCHASE_INBOUNDS",
-            "UI_WEIGHT_ONLY_SALES_OUTBOUNDS",
-            CompanySettingService.DEFAULT_TAX_RATE_SETTING_CODE,
-            SystemSwitchService.CUSTOMER_STATEMENT_RECEIPT_ZERO_FROM_SALES_ORDER_SWITCH,
-            SystemSwitchService.SUPPLIER_STATEMENT_FULL_PAYMENT_FROM_PURCHASE_SWITCH,
-            SystemSwitchService.SHOW_SNOWFLAKE_ID_SWITCH,
-            SystemSwitchService.DEFAULT_LIST_PAGE_SIZE_SETTING,
-            SystemSwitchService.USE_SNOWFLAKE_ID_AS_BUSINESS_NO_SWITCH,
-            SystemSwitchService.UI_WATERMARK_ENABLED_SWITCH,
-            "SYS_WATERMARK_CONTENT",
-            "SYS_WATERMARK_FONT_SIZE",
-            "SYS_WATERMARK_ROTATE",
-            "SYS_WATERMARK_COLOR",
-            "SYS_WATERMARK_DENSITY"
-    );
-
     private final NoRuleRepository noRuleRepository;
     private final NoRuleMapper noRuleMapper;
     private final PageUploadRuleQueryService pageUploadRuleQueryService;
-    private final RedisJsonCacheSupport redisJsonCacheSupport;
-
-    @Autowired
-    public GeneralSettingQueryService(NoRuleRepository noRuleRepository,
-                                      NoRuleMapper noRuleMapper,
-                                      PageUploadRuleQueryService pageUploadRuleQueryService,
-                                      RedisJsonCacheSupport redisJsonCacheSupport) {
-        this.noRuleRepository = noRuleRepository;
-        this.noRuleMapper = noRuleMapper;
-        this.pageUploadRuleQueryService = pageUploadRuleQueryService;
-        this.redisJsonCacheSupport = redisJsonCacheSupport;
-    }
 
     public GeneralSettingQueryService(NoRuleRepository noRuleRepository,
                                       NoRuleMapper noRuleMapper,
                                       PageUploadRuleQueryService pageUploadRuleQueryService) {
-        this(noRuleRepository, noRuleMapper, pageUploadRuleQueryService, null);
+        this.noRuleRepository = noRuleRepository;
+        this.noRuleMapper = noRuleMapper;
+        this.pageUploadRuleQueryService = pageUploadRuleQueryService;
     }
 
     @Transactional(readOnly = true)
@@ -153,49 +109,6 @@ public class GeneralSettingQueryService {
                 PageRequest.of(query.page(), query.size()),
                 merged.size()
         );
-    }
-
-    @Transactional(readOnly = true)
-    @Cacheable(value = CacheConfig.CACHE_STATIC, key = "'" + PUBLIC_DISPLAY_SWITCHES_CACHE_KEY + "'",
-            unless = "#result == null || #result.isEmpty()")
-    public List<GeneralSettingResponse> publicDisplaySwitches() {
-        return loadPublicDisplaySwitches();
-    }
-
-    @Transactional(readOnly = true)
-    @Cacheable(value = CacheConfig.CACHE_STATIC, key = "'" + PUBLIC_CLIENT_SETTINGS_CACHE_KEY + "'",
-            unless = "#result == null || #result.isEmpty()")
-    public List<GeneralSettingResponse> publicClientSettings() {
-        return loadPublicClientSettings();
-    }
-
-    @Caching(evict = {
-            @CacheEvict(value = CacheConfig.CACHE_STATIC, key = "'" + PUBLIC_DISPLAY_SWITCHES_CACHE_KEY + "'"),
-            @CacheEvict(value = CacheConfig.CACHE_STATIC, key = "'" + PUBLIC_CLIENT_SETTINGS_CACHE_KEY + "'")
-    })
-    public void evictPublicDisplaySwitchesCache() {
-        if (redisJsonCacheSupport != null) {
-            redisJsonCacheSupport.delete(List.of(
-                    PUBLIC_DISPLAY_SWITCHES_CACHE_KEY,
-                    PUBLIC_CLIENT_SETTINGS_CACHE_KEY
-            ));
-        }
-    }
-
-    private List<GeneralSettingResponse> loadPublicDisplaySwitches() {
-        return noRuleRepository.findBySettingCodeInAndDeletedFlagFalse(PUBLIC_DISPLAY_SWITCH_CODES).stream()
-                .map(noRuleMapper::toResponse)
-                .map(this::toGeneralSettingResponse)
-                .sorted(generalSettingComparator())
-                .toList();
-    }
-
-    private List<GeneralSettingResponse> loadPublicClientSettings() {
-        return noRuleRepository.findBySettingCodeInAndDeletedFlagFalse(PUBLIC_CLIENT_SETTING_CODES).stream()
-                .map(noRuleMapper::toResponse)
-                .map(this::toGeneralSettingResponse)
-                .sorted(generalSettingComparator())
-                .toList();
     }
 
     private GeneralSettingResponse toGeneralSettingResponse(NoRuleResponse rule) {

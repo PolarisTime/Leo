@@ -28,8 +28,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.List;
-
 @RestController
 @Validated
 @RequestMapping("/general-settings")
@@ -55,18 +53,6 @@ public class NoRuleController {
             @RequestParam(required = false) String status
     ) {
         return ApiResponse.success(PageResponse.from(generalSettingQueryService.page(query, keyword, status)));
-    }
-
-    @GetMapping("/display-switch")
-    @RequiresPermission(authenticatedOnly = true)
-    public ApiResponse<List<GeneralSettingResponse>> displaySwitches() {
-        return ApiResponse.success(generalSettingQueryService.publicDisplaySwitches());
-    }
-
-    @GetMapping("/client-setting")
-    @RequiresPermission(authenticatedOnly = true)
-    public ApiResponse<List<GeneralSettingResponse>> clientSettings() {
-        return ApiResponse.success(generalSettingQueryService.publicClientSettings());
     }
 
     @GetMapping("/statement-generator-rule")
