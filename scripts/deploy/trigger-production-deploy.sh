@@ -4,14 +4,11 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LEO_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
-WORKSPACE_DIR="$(cd "$LEO_DIR/.." && pwd)"
-ARIES_DIR="$WORKSPACE_DIR/aries"
 
 REPO="PolarisTime/Leo"
 WORKFLOW="deploy-production.yml"
 WORKFLOW_REF="main"
 LEO_REF=""
-ARIES_REF=""
 DRY_RUN=false
 DEPLOY_TARGET="local"
 CONFIRM_PRODUCTION=false
@@ -26,7 +23,6 @@ usage() {
 
 选项:
   --leo-ref <ref>          后端部署 ref，默认使用 leo 当前分支
-  --aries-ref <ref>        前端部署 ref，默认使用 aries 当前分支
   --workflow-ref <ref>     触发 workflow 所在 ref，默认 main
   --repo <owner/repo>      GitHub 仓库，默认 PolarisTime/Leo
   --dry-run               只触发构建打包，不部署生产
@@ -39,15 +35,14 @@ usage() {
 
 示例:
   bash leo/scripts/deploy/trigger-production-deploy.sh --dry-run
-  bash leo/scripts/deploy/trigger-production-deploy.sh --confirm-production --leo-ref main --aries-ref dev --watch
-  bash leo/scripts/deploy/trigger-production-deploy.sh --confirm-production --deploy-target ssh --leo-ref main --aries-ref dev --watch
+  bash leo/scripts/deploy/trigger-production-deploy.sh --confirm-production --leo-ref main --watch
+  bash leo/scripts/deploy/trigger-production-deploy.sh --confirm-production --deploy-target ssh --leo-ref main --watch
 EOF
 }
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --leo-ref) LEO_REF="$2"; shift 2 ;;
-    --aries-ref) ARIES_REF="$2"; shift 2 ;;
     --workflow-ref) WORKFLOW_REF="$2"; shift 2 ;;
     --repo) REPO="$2"; shift 2 ;;
     --dry-run) DRY_RUN=true; shift ;;
@@ -125,18 +120,10 @@ if [[ "$DEPLOY_TARGET" != "local" && "$DEPLOY_TARGET" != "ssh" ]]; then
   exit 1
 fi
 
-if [[ ! -d "$ARIES_DIR/.git" ]]; then
-  echo "未找到前端仓库: $ARIES_DIR" >&2
-  exit 1
-fi
-
 LEO_REF="${LEO_REF:-$(current_branch_or_head "$LEO_DIR")}"
-ARIES_REF="${ARIES_REF:-$(current_branch_or_head "$ARIES_DIR")}"
 
 ensure_clean_worktree "$LEO_DIR" "Leo"
-ensure_clean_worktree "$ARIES_DIR" "Aries"
 ensure_branch_pushed "$LEO_DIR" "$LEO_REF" "Leo"
-ensure_branch_pushed "$ARIES_DIR" "$ARIES_REF" "Aries"
 
 if [[ "$DRY_RUN" != "true" && "$CONFIRM_PRODUCTION" != "true" ]]; then
   cat >&2 <<EOF
@@ -160,7 +147,6 @@ echo "  repo:         $REPO"
 echo "  workflow:     $WORKFLOW"
 echo "  workflow ref: $WORKFLOW_REF"
 echo "  leo ref:      $LEO_REF"
-echo "  aries ref:    $ARIES_REF"
 echo "  target:       $DEPLOY_TARGET"
 echo "  dry run:      $DRY_RUN"
 
@@ -168,7 +154,6 @@ gh workflow run "$WORKFLOW" \
   --repo "$REPO" \
   --ref "$WORKFLOW_REF" \
   -f "leo_ref=$LEO_REF" \
-  -f "aries_ref=$ARIES_REF" \
   -f "dry_run=$DRY_RUN" \
   -f "deploy_target=$DEPLOY_TARGET" \
   -f "release_note=$RELEASE_NOTE"

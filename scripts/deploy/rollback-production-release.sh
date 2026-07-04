@@ -4,7 +4,6 @@ set -euo pipefail
 
 TARGET_RELEASE="previous"
 RELEASE_ROOT="/opt/leo"
-FRONTEND_ROOT="/var/www/leo"
 BACKEND_SERVICE="leo-backend"
 HEALTHCHECK_URL="http://127.0.0.1:11211/api/auth/ping"
 START_COMMAND=""
@@ -16,7 +15,6 @@ usage() {
   sudo bash rollback-production-release.sh \
     [--target-release previous|<release-id>] \
     [--release-root /opt/leo] \
-    [--frontend-root /var/www/leo] \
     [--backend-service leo-backend] \
     [--healthcheck-url http://127.0.0.1:11211/api/auth/ping] \
     [--start-command <command>] \
@@ -28,7 +26,6 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --target-release) TARGET_RELEASE="$2"; shift 2 ;;
     --release-root) RELEASE_ROOT="$2"; shift 2 ;;
-    --frontend-root) FRONTEND_ROOT="$2"; shift 2 ;;
     --backend-service) BACKEND_SERVICE="$2"; shift 2 ;;
     --healthcheck-url) HEALTHCHECK_URL="$2"; shift 2 ;;
     --start-command) START_COMMAND="$2"; shift 2 ;;
@@ -56,8 +53,6 @@ releases_dir="$RELEASE_ROOT/releases"
 current_link="$RELEASE_ROOT/current"
 previous_link="$RELEASE_ROOT/previous"
 shared_dir="$RELEASE_ROOT/shared"
-frontend_releases_dir="$FRONTEND_ROOT/releases"
-frontend_current_link="$FRONTEND_ROOT/current"
 
 lock_file="$RELEASE_ROOT/deploy.lock"
 exec 9>"$lock_file"
@@ -88,16 +83,6 @@ if [[ ! -d "$target_backend" || ! -f "$target_backend/backend/leo.jar" ]]; then
 fi
 
 release_id="$(basename "$target_backend")"
-target_frontend="$frontend_releases_dir/$release_id"
-if [[ ! -d "$target_frontend" || ! -f "$target_frontend/index.html" ]]; then
-  echo "目标前端 release 不存在或不完整: $target_frontend" >&2
-  exit 1
-fi
-
-old_frontend_target=""
-if [[ -L "$frontend_current_link" ]]; then
-  old_frontend_target="$(readlink -f "$frontend_current_link")"
-fi
 
 healthcheck() {
   local timeout_seconds="${1:-90}"
@@ -148,13 +133,9 @@ if ! healthcheck 120; then
   echo "回滚后健康检查失败，恢复回滚前版本" >&2
   ln -sfn "$current_target" "$current_link"
   start_backend || true
-  if [[ -n "$old_frontend_target" ]]; then
-    ln -sfn "$old_frontend_target" "$frontend_current_link"
-  fi
   exit 1
 fi
 
-ln -sfn "$target_frontend" "$frontend_current_link"
 run_hook "post-rollback.sh"
 
 echo "回滚完成: $release_id"

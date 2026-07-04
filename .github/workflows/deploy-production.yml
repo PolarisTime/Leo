@@ -1,18 +1,16 @@
 name: production-deploy
-run-name: "production deploy: Leo ${{ inputs.leo_ref }} / Aries ${{ inputs.aries_ref }} / target=${{ inputs.deploy_target }} / dry_run=${{ inputs.dry_run }}"
+run-name: "production deploy: Leo ${{ inputs.leo_ref || github.ref_name }} / target=${{ inputs.deploy_target || 'local' }} / dry_run=${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || false }}"
 
 on:
+  push:
+    tags:
+      - "v*.*.*"
   workflow_dispatch:
     inputs:
       leo_ref:
         description: "Backend Git ref to deploy"
         required: true
         default: "main"
-        type: string
-      aries_ref:
-        description: "Frontend Git ref to deploy"
-        required: true
-        default: "dev"
         type: string
       dry_run:
         description: "Build and package only; do not deploy to production"
@@ -39,12 +37,6 @@ permissions:
 concurrency:
   group: production-deploy
   cancel-in-progress: false
-
-env:
-  ARIES_REPOSITORY: PolarisTime/Aries
-  NODE_VERSION: "24.16.0"
-  PNPM_VERSION: "10.33.0"
-  VITE_API_BASE_URL: /api
 
 jobs:
   backend:
@@ -91,7 +83,7 @@ jobs:
       - name: Checkout Leo
         uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.leo_ref }}
+          ref: ${{ inputs.leo_ref || github.ref_name }}
 
       - name: Set up JDK 21
         uses: actions/setup-java@v4
@@ -136,59 +128,10 @@ jobs:
           path: target/*.jar
           if-no-files-found: error
 
-  frontend:
-    name: Build Frontend
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        shell: bash
-        working-directory: aries
-    steps:
-      - name: Checkout Aries
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ env.ARIES_REPOSITORY }}
-          ref: ${{ inputs.aries_ref }}
-          path: aries
-          token: ${{ secrets.ARIES_REPOSITORY_TOKEN || github.token }}
-
-      - name: Set up pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: ${{ env.PNPM_VERSION }}
-          run_install: false
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: pnpm
-          cache-dependency-path: aries/pnpm-lock.yaml
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Lint
-        run: pnpm lint
-
-      - name: Unit tests
-        run: pnpm test:unit
-
-      - name: Build
-        run: pnpm build
-
-      - name: Upload frontend artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: aries-frontend-dist
-          path: aries/dist/**
-          if-no-files-found: error
-
   package:
     name: Package Release
     needs:
       - backend
-      - frontend
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -197,7 +140,7 @@ jobs:
       - name: Checkout Leo deploy scripts
         uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.leo_ref }}
+          ref: ${{ inputs.leo_ref || github.ref_name }}
 
       - name: Download backend artifact
         uses: actions/download-artifact@v4
@@ -205,39 +148,31 @@ jobs:
           name: leo-backend-jar
           path: release-input/backend
 
-      - name: Download frontend artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: aries-frontend-dist
-          path: release-input/frontend
-
       - name: Create production release archive
         run: |
           set -euo pipefail
-          release_id="leo-${GITHUB_RUN_NUMBER}-${GITHUB_SHA::12}"
-          mkdir -p release/backend release/frontend release/deploy
+          leo_sha="$(git rev-parse HEAD)"
+          release_id="leo-${GITHUB_RUN_NUMBER}-${leo_sha::12}"
+          mkdir -p release/backend release/deploy
           backend_jar="$(find release-input/backend -maxdepth 1 -type f -name '*.jar' | head -1)"
           if [[ -z "$backend_jar" ]]; then
             echo "Backend jar artifact not found" >&2
             exit 1
           fi
           cp "$backend_jar" release/backend/leo.jar
-          cp -a release-input/frontend/. release/frontend/
           cp scripts/deploy/install-production-release.sh release/deploy/
           jq -n \
             --arg releaseId "$release_id" \
-            --arg leoRef "${{ inputs.leo_ref }}" \
-            --arg ariesRef "${{ inputs.aries_ref }}" \
-            --arg leoSha "$GITHUB_SHA" \
+            --arg leoRef "${{ inputs.leo_ref || github.ref_name }}" \
+            --arg leoSha "$leo_sha" \
             --arg runId "$GITHUB_RUN_ID" \
             --arg runNumber "$GITHUB_RUN_NUMBER" \
-            --arg deployTarget "${{ inputs.deploy_target }}" \
-            --argjson dryRun "${{ inputs.dry_run }}" \
-            --arg releaseNote "${{ inputs.release_note }}" \
+            --arg deployTarget "${{ inputs.deploy_target || 'local' }}" \
+            --argjson dryRun "${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || false }}" \
+            --arg releaseNote "${{ inputs.release_note || '' }}" \
             '{
               releaseId: $releaseId,
               leoRef: $leoRef,
-              ariesRef: $ariesRef,
               leoSha: $leoSha,
               runId: $runId,
               runNumber: $runNumber,
@@ -260,20 +195,19 @@ jobs:
   dry-run:
     name: Dry Run Summary
     needs: package
-    if: ${{ inputs.dry_run }}
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
     runs-on: ubuntu-latest
     steps:
       - name: Print summary
         run: |
           echo "Dry run completed. Release archive was built but not deployed."
-          echo "Leo ref:   ${{ inputs.leo_ref }}"
-          echo "Aries ref: ${{ inputs.aries_ref }}"
-          echo "Target:    ${{ inputs.deploy_target }}"
+          echo "Leo ref:   ${{ inputs.leo_ref || github.ref_name }}"
+          echo "Target:    ${{ inputs.deploy_target || 'local' }}"
 
   deploy-local:
     name: Deploy Production Local
     needs: package
-    if: ${{ !inputs.dry_run && inputs.deploy_target == 'local' }}
+    if: ${{ (github.event_name == 'push' || !inputs.dry_run) && (github.event_name == 'push' || inputs.deploy_target == 'local') }}
     runs-on:
       - self-hosted
       - linux
@@ -284,25 +218,16 @@ jobs:
         shell: bash
     env:
       PROD_RELEASE_ROOT: ${{ vars.PROD_RELEASE_ROOT || '/instance/steelx' }}
-      PROD_FRONTEND_ROOT: ${{ vars.PROD_FRONTEND_ROOT || '/instance/steelx/frontend' }}
       PROD_BACKEND_SERVICE: ${{ vars.PROD_BACKEND_SERVICE || 'steelx-local' }}
       PROD_HEALTHCHECK_URL: ${{ vars.PROD_HEALTHCHECK_URL || 'http://127.0.0.1:57217/api/health' }}
       PROD_KEEP_RELEASES: ${{ vars.PROD_KEEP_RELEASES || '5' }}
       PROD_START_COMMAND: ${{ vars.PROD_START_COMMAND || 'STEELX_ROOT=/instance/steelx bash /instance/steelx/shared/steelx-process.sh start' }}
       PROD_STOP_COMMAND: ${{ vars.PROD_STOP_COMMAND || 'STEELX_ROOT=/instance/steelx bash /instance/steelx/shared/steelx-process.sh stop' }}
-      PROD_BACKEND_PORT: ${{ vars.PROD_BACKEND_PORT || '57217' }}
-      PROD_NGINX_FRONTEND_PORT: ${{ vars.PROD_NGINX_FRONTEND_PORT || '443' }}
-      PROD_NGINX_HTTP_REDIRECT_PORT: ${{ vars.PROD_NGINX_HTTP_REDIRECT_PORT || '80' }}
-      PROD_NGINX_SERVER_NAME: ${{ vars.PROD_NGINX_SERVER_NAME || 'in1ove.com' }}
-      PROD_NGINX_SSL_CERTIFICATE: ${{ vars.PROD_NGINX_SSL_CERTIFICATE || '/instance/ssl/fullchain.crt' }}
-      PROD_NGINX_SSL_CERTIFICATE_KEY: ${{ vars.PROD_NGINX_SSL_CERTIFICATE_KEY || '/instance/ssl/privkey.key' }}
-      PROD_NGINX_WORKER_USER: ${{ vars.PROD_NGINX_WORKER_USER || 'sakura' }}
-      PROD_NGINX_WORKER_GROUP: ${{ vars.PROD_NGINX_WORKER_GROUP || 'sakura' }}
     steps:
       - name: Checkout Leo deploy scripts
         uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.leo_ref }}
+          ref: ${{ inputs.leo_ref || github.ref_name }}
 
       - name: Download release archive
         uses: actions/download-artifact@v4
@@ -331,33 +256,20 @@ jobs:
             --archive production-release/leo-production-release.tar.gz \
             --sha256-file production-release/leo-production-release.tar.gz.sha256 \
             --release-root "$PROD_RELEASE_ROOT" \
-            --frontend-root "$PROD_FRONTEND_ROOT" \
             --backend-service "$PROD_BACKEND_SERVICE" \
             --healthcheck-url "$PROD_HEALTHCHECK_URL" \
             --keep-releases "$PROD_KEEP_RELEASES" \
             --start-command "$PROD_START_COMMAND" \
             --stop-command "$PROD_STOP_COMMAND"
 
-      - name: Install SteelX Nginx config
-        run: |
-          set -euo pipefail
-          bash scripts/deploy/install-steelx-nginx-config.sh \
-            --release-root "$PROD_RELEASE_ROOT" \
-            --frontend-root "$PROD_FRONTEND_ROOT" \
-            --backend-port "$PROD_BACKEND_PORT" \
-            --frontend-port "$PROD_NGINX_FRONTEND_PORT" \
-            --http-redirect-port "$PROD_NGINX_HTTP_REDIRECT_PORT" \
-            --server-name "$PROD_NGINX_SERVER_NAME" \
-            --ssl-certificate "$PROD_NGINX_SSL_CERTIFICATE" \
-            --ssl-certificate-key "$PROD_NGINX_SSL_CERTIFICATE_KEY" \
-            --nginx-worker-user "$PROD_NGINX_WORKER_USER" \
-            --nginx-worker-group "$PROD_NGINX_WORKER_GROUP"
-
   deploy-ssh:
     name: Deploy Production SSH
     needs: package
-    if: ${{ !inputs.dry_run && inputs.deploy_target == 'ssh' }}
-    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'workflow_dispatch' && !inputs.dry_run && inputs.deploy_target == 'ssh' }}
+    runs-on:
+      - self-hosted
+      - linux
+      - steelx-production
     environment: production
     defaults:
       run:
@@ -369,7 +281,6 @@ jobs:
       PROD_SSH_PRIVATE_KEY: ${{ secrets.PROD_SSH_PRIVATE_KEY }}
       PROD_SSH_KNOWN_HOSTS: ${{ secrets.PROD_SSH_KNOWN_HOSTS }}
       PROD_RELEASE_ROOT: ${{ vars.PROD_RELEASE_ROOT || '/instance/steelx' }}
-      PROD_FRONTEND_ROOT: ${{ vars.PROD_FRONTEND_ROOT || '/instance/steelx/frontend' }}
       PROD_BACKEND_SERVICE: ${{ vars.PROD_BACKEND_SERVICE || 'steelx-local' }}
       PROD_HEALTHCHECK_URL: ${{ vars.PROD_HEALTHCHECK_URL || 'http://127.0.0.1:57217/api/health' }}
       PROD_KEEP_RELEASES: ${{ vars.PROD_KEEP_RELEASES || '5' }}
@@ -379,7 +290,7 @@ jobs:
       - name: Checkout Leo deploy scripts
         uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.leo_ref }}
+          ref: ${{ inputs.leo_ref || github.ref_name }}
 
       - name: Download release archive
         uses: actions/download-artifact@v4
@@ -428,7 +339,6 @@ jobs:
           remote_command+=" --archive $(quote "$REMOTE_ARCHIVE")"
           remote_command+=" --sha256-file $(quote "$REMOTE_SHA256")"
           remote_command+=" --release-root $(quote "$PROD_RELEASE_ROOT")"
-          remote_command+=" --frontend-root $(quote "$PROD_FRONTEND_ROOT")"
           remote_command+=" --backend-service $(quote "$PROD_BACKEND_SERVICE")"
           remote_command+=" --healthcheck-url $(quote "$PROD_HEALTHCHECK_URL")"
           remote_command+=" --keep-releases $(quote "$PROD_KEEP_RELEASES")"

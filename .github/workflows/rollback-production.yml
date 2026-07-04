@@ -39,7 +39,6 @@ jobs:
         shell: bash
     env:
       PROD_RELEASE_ROOT: ${{ vars.PROD_RELEASE_ROOT || '/instance/steelx' }}
-      PROD_FRONTEND_ROOT: ${{ vars.PROD_FRONTEND_ROOT || '/instance/steelx/frontend' }}
       PROD_BACKEND_SERVICE: ${{ vars.PROD_BACKEND_SERVICE || 'steelx-local' }}
       PROD_HEALTHCHECK_URL: ${{ vars.PROD_HEALTHCHECK_URL || 'http://127.0.0.1:57217/api/health' }}
       PROD_START_COMMAND: ${{ vars.PROD_START_COMMAND || 'STEELX_ROOT=/instance/steelx bash /instance/steelx/shared/steelx-process.sh start' }}
@@ -67,7 +66,6 @@ jobs:
           bash scripts/deploy/rollback-production-release.sh \
             --target-release "${{ inputs.target_release }}" \
             --release-root "$PROD_RELEASE_ROOT" \
-            --frontend-root "$PROD_FRONTEND_ROOT" \
             --backend-service "$PROD_BACKEND_SERVICE" \
             --healthcheck-url "$PROD_HEALTHCHECK_URL" \
             --start-command "$PROD_START_COMMAND" \
@@ -76,7 +74,10 @@ jobs:
   rollback-ssh:
     name: Rollback Production SSH
     if: ${{ inputs.deploy_target == 'ssh' }}
-    runs-on: ubuntu-latest
+    runs-on:
+      - self-hosted
+      - linux
+      - steelx-production
     environment: production
     defaults:
       run:
@@ -88,7 +89,6 @@ jobs:
       PROD_SSH_PRIVATE_KEY: ${{ secrets.PROD_SSH_PRIVATE_KEY }}
       PROD_SSH_KNOWN_HOSTS: ${{ secrets.PROD_SSH_KNOWN_HOSTS }}
       PROD_RELEASE_ROOT: ${{ vars.PROD_RELEASE_ROOT || '/instance/steelx' }}
-      PROD_FRONTEND_ROOT: ${{ vars.PROD_FRONTEND_ROOT || '/instance/steelx/frontend' }}
       PROD_BACKEND_SERVICE: ${{ vars.PROD_BACKEND_SERVICE || 'steelx-local' }}
       PROD_HEALTHCHECK_URL: ${{ vars.PROD_HEALTHCHECK_URL || 'http://127.0.0.1:57217/api/health' }}
       PROD_START_COMMAND: ${{ vars.PROD_START_COMMAND || 'STEELX_ROOT=/instance/steelx bash /instance/steelx/shared/steelx-process.sh start' }}
@@ -121,7 +121,6 @@ jobs:
           remote_command="sudo bash -s --"
           remote_command+=" --target-release $(quote "${{ inputs.target_release }}")"
           remote_command+=" --release-root $(quote "$PROD_RELEASE_ROOT")"
-          remote_command+=" --frontend-root $(quote "$PROD_FRONTEND_ROOT")"
           remote_command+=" --backend-service $(quote "$PROD_BACKEND_SERVICE")"
           remote_command+=" --healthcheck-url $(quote "$PROD_HEALTHCHECK_URL")"
           if [[ -n "$PROD_START_COMMAND" ]]; then

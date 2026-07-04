@@ -4,15 +4,10 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LEO_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
-WORKSPACE_DIR="$(cd "$LEO_DIR/.." && pwd)"
 
 STEELX_ROOT="/instance/steelx"
 BACKEND_PORT="57217"
-FRONTEND_PORT="443"
-HTTP_REDIRECT_PORT="80"
-SERVER_NAME="in1ove.com"
-SSL_CERTIFICATE="/instance/ssl/fullchain.crt"
-SSL_CERTIFICATE_KEY="/instance/ssl/privkey.key"
+CORS_ALLOWED_ORIGINS="https://in1ove.com"
 DB_NAME="Master_Prod"
 APP_DB_USER="steelx_app"
 DB_HOST=""
@@ -37,11 +32,7 @@ usage() {
   --confirm                    确认执行本地生产部署
   --root <dir>                 部署目录，默认 /instance/steelx
   --backend-port <port>        后端端口，默认 57217
-  --frontend-port <port>       Nginx HTTPS 前端端口，默认 443
-  --http-redirect-port <port>  HTTP 跳转端口，默认 80
-  --server-name <name>         服务域名，默认 in1ove.com
-  --ssl-certificate <path>     TLS 证书链，默认 /instance/ssl/fullchain.crt
-  --ssl-certificate-key <path> TLS 私钥，默认 /instance/ssl/privkey.key
+  --cors-allowed-origins <url> CORS 允许来源，默认 https://in1ove.com
   --db-name <name>             数据库名，默认 Master_Prod
   --app-db-user <name>         应用数据库用户，默认 steelx_app
   --db-host <host>             PostgreSQL 主机，默认沿用开发环境
@@ -62,11 +53,7 @@ while [[ $# -gt 0 ]]; do
     --confirm) CONFIRM=true; shift ;;
     --root) STEELX_ROOT="$2"; shift 2 ;;
     --backend-port) BACKEND_PORT="$2"; shift 2 ;;
-    --frontend-port) FRONTEND_PORT="$2"; shift 2 ;;
-    --http-redirect-port) HTTP_REDIRECT_PORT="$2"; shift 2 ;;
-    --server-name) SERVER_NAME="$2"; shift 2 ;;
-    --ssl-certificate) SSL_CERTIFICATE="$2"; shift 2 ;;
-    --ssl-certificate-key) SSL_CERTIFICATE_KEY="$2"; shift 2 ;;
+    --cors-allowed-origins) CORS_ALLOWED_ORIGINS="$2"; shift 2 ;;
     --db-name) DB_NAME="$2"; shift 2 ;;
     --app-db-user) APP_DB_USER="$2"; shift 2 ;;
     --db-host) DB_HOST="$2"; shift 2 ;;
@@ -83,8 +70,6 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-NGINX_CLIENT_BODY_TEMP_PATH="$STEELX_ROOT/frontend/nginx-client-body"
-
 require_command() {
   local command_name="$1"
   if ! command -v "$command_name" >/dev/null 2>&1; then
@@ -96,24 +81,6 @@ require_command() {
 require_command openssl
 require_command psql
 require_command redis-cli
-require_command ss
-require_command nginx
-
-run_as_root() {
-  if [[ "$(id -u)" -eq 0 ]]; then
-    "$@"
-    return
-  fi
-  if ! command -v sudo >/dev/null 2>&1; then
-    echo "当前用户不是 root，且缺少 sudo，无法安装 Nginx 配置。" >&2
-    exit 1
-  fi
-  if [[ -n "${STEELX_SUDO_PASSWORD:-}" ]]; then
-    printf '%s\n' "$STEELX_SUDO_PASSWORD" | sudo -S "$@"
-    return
-  fi
-  sudo -n "$@"
-}
 
 # shellcheck disable=SC1091
 source "$LEO_DIR/scripts/env/dev.sh"
@@ -126,11 +93,6 @@ REDIS_HOST="${REDIS_HOST:-${SPRING_DATA_REDIS_HOST:-127.0.0.1}}"
 REDIS_PORT="${REDIS_PORT:-${SPRING_DATA_REDIS_PORT:-16379}}"
 REDIS_DATABASE="${REDIS_DATABASE:-${SPRING_DATA_REDIS_DATABASE:-3}}"
 REDIS_PASSWORD="${REDIS_PASSWORD:-${SPRING_DATA_REDIS_PASSWORD:-}}"
-if [[ "$FRONTEND_PORT" == "443" ]]; then
-  FRONTEND_PUBLIC_ORIGIN="https://$SERVER_NAME"
-else
-  FRONTEND_PUBLIC_ORIGIN="https://$SERVER_NAME:$FRONTEND_PORT"
-fi
 
 if [[ "$CONFIRM" != "true" ]]; then
   cat >&2 <<EOF
@@ -139,10 +101,7 @@ if [[ "$CONFIRM" != "true" ]]; then
 该操作会：
 - 创建或修改 PostgreSQL 数据库 $DB_NAME 与应用用户 $APP_DB_USER
 - 写入部署目录 $STEELX_ROOT
-- 安装 /etc/nginx/conf.d/steelx.conf 并 reload Nginx
-- 使用 $SSL_CERTIFICATE 与 $SSL_CERTIFICATE_KEY 为 $FRONTEND_PUBLIC_ORIGIN 启用 HTTPS
-- 将 $HTTP_REDIRECT_PORT 端口 HTTP 请求 301 跳转到 HTTPS
-- 构建前后端 release 包
+- 构建后端 release 包
 - 停止并启动 steelx 后端进程
 
 确认执行请追加 --confirm。
@@ -156,26 +115,8 @@ if [[ -z "$DB_ADMIN_PASSWORD" ]]; then
   exit 1
 fi
 
-if [[ ! -f "$SSL_CERTIFICATE" ]]; then
-  echo "TLS 证书链不存在: $SSL_CERTIFICATE" >&2
-  exit 1
-fi
-if [[ ! -f "$SSL_CERTIFICATE_KEY" ]]; then
-  echo "TLS 私钥不存在: $SSL_CERTIFICATE_KEY" >&2
-  exit 1
-fi
-
-if ss -ltnpH "( sport = :$FRONTEND_PORT )" 2>/dev/null | grep -v 'nginx' | grep -q .; then
-  echo "HTTPS 端口 $FRONTEND_PORT 已被非 Nginx 进程占用" >&2
-  exit 1
-fi
-if ss -ltnpH "( sport = :$HTTP_REDIRECT_PORT )" 2>/dev/null | grep -v 'nginx' | grep -q .; then
-  echo "HTTP 跳转端口 $HTTP_REDIRECT_PORT 已被非 Nginx 进程占用" >&2
-  exit 1
-fi
-
-mkdir -p "$STEELX_ROOT/shared" "$STEELX_ROOT/logs" "$STEELX_ROOT/run" "$NGINX_CLIENT_BODY_TEMP_PATH"
-chmod 700 "$STEELX_ROOT/shared" "$NGINX_CLIENT_BODY_TEMP_PATH"
+mkdir -p "$STEELX_ROOT/shared" "$STEELX_ROOT/logs" "$STEELX_ROOT/run"
+chmod 700 "$STEELX_ROOT/shared"
 
 APP_DB_PASSWORD_FILE="$STEELX_ROOT/shared/.db-password"
 if [[ ! -f "$APP_DB_PASSWORD_FILE" ]]; then
@@ -224,8 +165,7 @@ SQL
 cat > "$STEELX_ROOT/shared/steelx.env" <<EOF
 SERVER_PORT=$BACKEND_PORT
 SPRING_PROFILES_ACTIVE=prod
-FRONTEND_PORT=$FRONTEND_PORT
-LEO_CORS_ALLOWED_ORIGINS=$FRONTEND_PUBLIC_ORIGIN
+LEO_CORS_ALLOWED_ORIGINS=$CORS_ALLOWED_ORIGINS
 SPRING_DATASOURCE_HOST=$DB_HOST
 SPRING_DATASOURCE_PORT=$DB_PORT
 SPRING_DATASOURCE_DB=$DB_NAME
@@ -252,7 +192,6 @@ chmod 600 "$STEELX_ROOT/shared/steelx.env"
 build_args=(
   --output-dir "$LEO_DIR/target/steelx-release"
   --release-name "steelx-1.1.0"
-  --api-base-url "/api"
 )
 if [[ "$SKIP_TESTS" == "true" ]]; then
   build_args+=(--skip-tests)
@@ -273,73 +212,11 @@ bash "$SCRIPT_DIR/install-production-release.sh" \
   --archive "$archive" \
   --sha256-file "$sha_file" \
   --release-root "$STEELX_ROOT" \
-  --frontend-root "$STEELX_ROOT/frontend" \
   --backend-service "steelx-local" \
   --healthcheck-url "http://127.0.0.1:$BACKEND_PORT/api/health" \
   --keep-releases 5 \
   --start-command "$start_command" \
   --stop-command "$stop_command"
 
-nginx_conf="$STEELX_ROOT/shared/nginx-steelx.conf"
-cat > "$nginx_conf" <<EOF
-server {
-    listen $HTTP_REDIRECT_PORT;
-    server_name $SERVER_NAME;
-
-    return 301 https://$SERVER_NAME\$request_uri;
-}
-
-server {
-    listen $FRONTEND_PORT ssl;
-    http2 on;
-    server_name $SERVER_NAME;
-
-    ssl_certificate $SSL_CERTIFICATE;
-    ssl_certificate_key $SSL_CERTIFICATE_KEY;
-    ssl_protocols TLSv1.2 TLSv1.3;
-    ssl_session_cache shared:STEELXSSL:10m;
-    ssl_session_timeout 10m;
-
-    root $STEELX_ROOT/frontend/current;
-    index index.html;
-
-    client_max_body_size 25m;
-    client_body_temp_path $NGINX_CLIENT_BODY_TEMP_PATH 1 2;
-    client_body_buffer_size 64k;
-
-    location /assets/ {
-        try_files \$uri =404;
-        expires 30d;
-        add_header Cache-Control "public, max-age=2592000, immutable";
-    }
-
-    location /api/ {
-        proxy_pass http://127.0.0.1:$BACKEND_PORT/api/;
-        proxy_http_version 1.1;
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-        proxy_set_header X-Forwarded-Port \$server_port;
-        proxy_read_timeout 120s;
-    }
-
-    location / {
-        try_files \$uri \$uri/ /index.html;
-    }
-}
-EOF
-
-if [[ -d "/etc/nginx/conf.d" ]]; then
-  install_path="/etc/nginx/conf.d/steelx.conf"
-  run_as_root install -m 0644 "$nginx_conf" "$install_path"
-  run_as_root nginx -t
-  run_as_root nginx -s reload
-else
-  echo "未找到 /etc/nginx/conf.d，请手动安装 Nginx 配置: $nginx_conf" >&2
-fi
-
 echo "steelx 已部署:"
-echo "  前端目录: $STEELX_ROOT/frontend/current"
-echo "  前端地址: $FRONTEND_PUBLIC_ORIGIN"
 echo "  后端地址: http://127.0.0.1:$BACKEND_PORT/api"

@@ -5,7 +5,6 @@ set -euo pipefail
 ARCHIVE=""
 SHA256_FILE=""
 RELEASE_ROOT="/opt/leo"
-FRONTEND_ROOT="/var/www/leo"
 BACKEND_SERVICE="leo-backend"
 HEALTHCHECK_URL="http://127.0.0.1:11211/api/auth/ping"
 KEEP_RELEASES=5
@@ -19,7 +18,6 @@ usage() {
     --archive /tmp/leo-production-release.tar.gz \
     [--sha256-file /tmp/leo-production-release.tar.gz.sha256] \
     [--release-root /opt/leo] \
-    [--frontend-root /var/www/leo] \
     [--backend-service leo-backend] \
     [--healthcheck-url http://127.0.0.1:11211/api/auth/ping] \
     [--keep-releases 5] \
@@ -33,7 +31,6 @@ while [[ $# -gt 0 ]]; do
     --archive) ARCHIVE="$2"; shift 2 ;;
     --sha256-file) SHA256_FILE="$2"; shift 2 ;;
     --release-root) RELEASE_ROOT="$2"; shift 2 ;;
-    --frontend-root) FRONTEND_ROOT="$2"; shift 2 ;;
     --backend-service) BACKEND_SERVICE="$2"; shift 2 ;;
     --healthcheck-url) HEALTHCHECK_URL="$2"; shift 2 ;;
     --keep-releases) KEEP_RELEASES="$2"; shift 2 ;;
@@ -83,11 +80,8 @@ current_link="$RELEASE_ROOT/current"
 previous_link="$RELEASE_ROOT/previous"
 shared_dir="$RELEASE_ROOT/shared"
 release_dir="$releases_dir/$release_id"
-frontend_releases_dir="$FRONTEND_ROOT/releases"
-frontend_current_link="$FRONTEND_ROOT/current"
-frontend_release_dir="$frontend_releases_dir/$release_id"
 
-mkdir -p "$RELEASE_ROOT" "$releases_dir" "$shared_dir" "$FRONTEND_ROOT" "$frontend_releases_dir"
+mkdir -p "$RELEASE_ROOT" "$releases_dir" "$shared_dir"
 lock_file="$RELEASE_ROOT/deploy.lock"
 exec 9>"$lock_file"
 if ! flock -n 9; then
@@ -103,20 +97,12 @@ if [[ -n "$SHA256_FILE" ]]; then
 fi
 
 old_backend_target=""
-old_frontend_target=""
 if [[ -L "$current_link" ]]; then
   old_backend_target="$(readlink -f "$current_link")"
-fi
-if [[ -L "$frontend_current_link" ]]; then
-  old_frontend_target="$(readlink -f "$frontend_current_link")"
 fi
 
 if [[ -e "$current_link" && ! -L "$current_link" ]]; then
   echo "$current_link 已存在但不是软链，拒绝发布" >&2
-  exit 1
-fi
-if [[ -e "$frontend_current_link" && ! -L "$frontend_current_link" ]]; then
-  echo "$frontend_current_link 已存在但不是软链，拒绝发布" >&2
   exit 1
 fi
 
@@ -126,9 +112,6 @@ rollback() {
   if [[ -n "$old_backend_target" && -d "$old_backend_target" ]]; then
     ln -sfn "$old_backend_target" "$current_link"
     start_backend || true
-  fi
-  if [[ -n "$old_frontend_target" && -d "$old_frontend_target" ]]; then
-    ln -sfn "$old_frontend_target" "$frontend_current_link"
   fi
 }
 
@@ -190,19 +173,14 @@ prune_old_releases() {
 }
 
 echo "准备发布: $release_id"
-mkdir -p "$release_dir" "$frontend_release_dir"
+mkdir -p "$release_dir"
 tar -xzf "$ARCHIVE" -C "$release_dir"
 
 if [[ ! -f "$release_dir/backend/leo.jar" ]]; then
   echo "发布包缺少 backend/leo.jar" >&2
   exit 1
 fi
-if [[ ! -f "$release_dir/frontend/index.html" ]]; then
-  echo "发布包缺少 frontend/index.html" >&2
-  exit 1
-fi
 
-cp -a "$release_dir/frontend/." "$frontend_release_dir/"
 run_hook "pre-deploy.sh"
 
 if [[ -n "$old_backend_target" ]]; then
@@ -222,11 +200,9 @@ if ! healthcheck 120; then
   exit 1
 fi
 
-ln -sfn "$frontend_release_dir" "$frontend_current_link"
 run_hook "post-deploy.sh"
 
 prune_old_releases "$releases_dir" "$(readlink -f "$current_link")" "$(readlink -f "$previous_link" 2>/dev/null || true)"
-prune_old_releases "$frontend_releases_dir" "$(readlink -f "$frontend_current_link")" "$old_frontend_target"
 
 rm -f -- "$ARCHIVE" "$SHA256_FILE"
 rmdir "$(dirname "$ARCHIVE")" 2>/dev/null || true
