@@ -11,4 +11,5 @@ spring:
     show-sql: false
   flyway:
     enabled: true
+    placeholder-replacement: false
     locations: classpath:db/migration

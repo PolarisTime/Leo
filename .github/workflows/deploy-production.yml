@@ -115,6 +115,7 @@ jobs:
             -Dflyway.password="$SPRING_DATASOURCE_PASSWORD" \
             -Dflyway.locations="filesystem:src/main/resources/db/migration" \
             -Dflyway.cleanDisabled=true \
+            -Dflyway.placeholderReplacement=false \
             -Dflyway.validateMigrationNaming=true
           mvn -B -ntp flyway:validate \
             -Dflyway.url="$SPRING_DATASOURCE_URL" \
@@ -122,6 +123,7 @@ jobs:
             -Dflyway.password="$SPRING_DATASOURCE_PASSWORD" \
             -Dflyway.locations="filesystem:src/main/resources/db/migration" \
             -Dflyway.cleanDisabled=true \
+            -Dflyway.placeholderReplacement=false \
             -Dflyway.validateMigrationNaming=true
 
       - name: Package

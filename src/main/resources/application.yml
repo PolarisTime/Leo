@@ -111,6 +111,8 @@ spring:
     clean-disabled: true
     # 启动时严格校验迁移历史，不掩盖迁移脚本漂移
     validate-on-migrate: true
+    # 迁移脚本会写入业务模板文本（如 ${field}），禁止 Flyway 将其当占位符替换
+    placeholder-replacement: false
     # 迁移脚本目录
     locations: classpath:db/migration
 
