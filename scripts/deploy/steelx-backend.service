@@ -1,0 +1,50 @@
+# SteelX Leo 后端 systemd 服务单元（可选：替代 steelx-process.sh 的自管理进程）
+#
+# 目的：让后端具备崩溃自动重启（Restart=on-failure）与开机自启（WantedBy=multi-user.target），
+#       补齐 steelx-process.sh 缺失的进程守护能力。
+#
+# 安装（在生产宿主执行，需要 root/sudo）：
+#   sudo install -m 0644 steelx-backend.service /etc/systemd/system/steelx-backend.service
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now steelx-backend
+#
+# 切换部署改用 systemd（在 GitHub 仓库 Variables 配置即可，无需改 workflow 代码）：
+#   PROD_BACKEND_SERVICE = steelx-backend
+#   PROD_START_COMMAND   = (留空)   # 留空后 install/rollback-production-release.sh 走 systemctl restart 分支
+#   PROD_STOP_COMMAND    = (留空)
+# 之后部署脚本会用 `systemctl restart steelx-backend`，并保留原有的健康检查 + 失败自动回滚逻辑。
+# 注意：runner 用户需能免密执行 `systemctl restart steelx-backend`（配置 sudoers 或 polkit）。
+#
+# 注意：ExecStart 的 java 路径与端口需与 /instance/steelx/shared/steelx.env 保持一致；
+#       若 JDK 不在 /usr/bin/java，请改为实际路径（which java）。
+
+[Unit]
+Description=SteelX Leo backend (Spring Boot)
+After=network-online.target postgresql.service redis-server.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=sakura
+Group=sakura
+WorkingDirectory=/instance/steelx
+EnvironmentFile=/instance/steelx/shared/steelx.env
+Environment=SPRING_PROFILES_ACTIVE=prod
+Environment=SPRING_AI_MCP_SERVER_ENABLED=false
+ExecStart=/usr/bin/java \
+  -Xms512m -Xmx2g \
+  -XX:+UseG1GC \
+  -XX:MaxGCPauseMillis=200 \
+  -XX:+HeapDumpOnOutOfMemoryError \
+  -XX:HeapDumpPath=/instance/steelx/shared/heapdump.hprof \
+  -Dserver.port=57217 \
+  -Dspring.profiles.active=prod \
+  -jar /instance/steelx/current/backend/leo.jar
+SuccessExitStatus=143
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

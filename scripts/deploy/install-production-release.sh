@@ -6,7 +6,7 @@ ARCHIVE=""
 SHA256_FILE=""
 RELEASE_ROOT="/opt/leo"
 BACKEND_SERVICE="leo-backend"
-HEALTHCHECK_URL="http://127.0.0.1:11211/api/auth/ping"
+HEALTHCHECK_URL="http://127.0.0.1:57217/api/health"
 KEEP_RELEASES=5
 START_COMMAND=""
 STOP_COMMAND=""
@@ -19,7 +19,7 @@ usage() {
     [--sha256-file /tmp/leo-production-release.tar.gz.sha256] \
     [--release-root /opt/leo] \
     [--backend-service leo-backend] \
-    [--healthcheck-url http://127.0.0.1:11211/api/auth/ping] \
+    [--healthcheck-url http://127.0.0.1:57217/api/health] \
     [--keep-releases 5] \
     [--start-command <command>] \
     [--stop-command <command>]

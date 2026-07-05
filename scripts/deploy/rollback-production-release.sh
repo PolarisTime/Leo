@@ -5,7 +5,7 @@ set -euo pipefail
 TARGET_RELEASE="previous"
 RELEASE_ROOT="/opt/leo"
 BACKEND_SERVICE="leo-backend"
-HEALTHCHECK_URL="http://127.0.0.1:11211/api/auth/ping"
+HEALTHCHECK_URL="http://127.0.0.1:57217/api/health"
 START_COMMAND=""
 STOP_COMMAND=""
 
@@ -16,7 +16,7 @@ usage() {
     [--target-release previous|<release-id>] \
     [--release-root /opt/leo] \
     [--backend-service leo-backend] \
-    [--healthcheck-url http://127.0.0.1:11211/api/auth/ping] \
+    [--healthcheck-url http://127.0.0.1:57217/api/health] \
     [--start-command <command>] \
     [--stop-command <command>]
 EOF
