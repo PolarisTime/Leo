@@ -417,13 +417,12 @@ class CompanySettingServiceTest {
 
         Method saveCurrent = CompanySettingService.class.getDeclaredMethod("saveCurrent", CompanySettingRequest.class);
         Caching caching = saveCurrent.getAnnotation(Caching.class);
-        assertThat(caching.evict()).hasSize(3);
+        assertThat(caching.evict()).hasSize(2);
         assertThat(caching.evict())
                 .extracting(evict -> evict.key())
                 .containsExactlyInAnyOrder(
                         "'" + CompanySettingService.CURRENT_COMPANY_CACHE_KEY + "'",
-                        "'" + CompanySettingService.CURRENT_TAX_RATE_CACHE_KEY + "'",
-                        "'" + RuntimeConfigService.RUNTIME_CONFIG_CACHE_KEY + "'"
+                        "'" + CompanySettingService.CURRENT_TAX_RATE_CACHE_KEY + "'"
                 );
     }
 

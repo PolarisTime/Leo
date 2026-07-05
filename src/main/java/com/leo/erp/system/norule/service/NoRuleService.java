@@ -88,8 +88,7 @@ public class NoRuleService extends AbstractCrudService<NoRule, NoRuleRequest, No
     @Caching(evict = {
             @CacheEvict(value = CacheConfig.CACHE_STATIC, key = "'" + SystemSwitchService.SWITCH_CACHE_KEY + "'"),
             @CacheEvict(value = CacheConfig.CACHE_STATIC, key = "'" + CompanySettingService.CURRENT_COMPANY_CACHE_KEY + "'"),
-            @CacheEvict(value = CacheConfig.CACHE_STATIC, key = "'" + CompanySettingService.CURRENT_TAX_RATE_CACHE_KEY + "'"),
-            @CacheEvict(value = CacheConfig.CACHE_HOT, key = "'" + RuntimeConfigService.RUNTIME_CONFIG_CACHE_KEY + "'")
+            @CacheEvict(value = CacheConfig.CACHE_STATIC, key = "'" + CompanySettingService.CURRENT_TAX_RATE_CACHE_KEY + "'")
     })
     public NoRuleResponse create(NoRuleRequest request) {
         return super.create(request);
@@ -100,8 +99,7 @@ public class NoRuleService extends AbstractCrudService<NoRule, NoRuleRequest, No
     @Caching(evict = {
             @CacheEvict(value = CacheConfig.CACHE_STATIC, key = "'" + SystemSwitchService.SWITCH_CACHE_KEY + "'"),
             @CacheEvict(value = CacheConfig.CACHE_STATIC, key = "'" + CompanySettingService.CURRENT_COMPANY_CACHE_KEY + "'"),
-            @CacheEvict(value = CacheConfig.CACHE_STATIC, key = "'" + CompanySettingService.CURRENT_TAX_RATE_CACHE_KEY + "'"),
-            @CacheEvict(value = CacheConfig.CACHE_HOT, key = "'" + RuntimeConfigService.RUNTIME_CONFIG_CACHE_KEY + "'")
+            @CacheEvict(value = CacheConfig.CACHE_STATIC, key = "'" + CompanySettingService.CURRENT_TAX_RATE_CACHE_KEY + "'")
     })
     public NoRuleResponse update(Long id, NoRuleRequest request) {
         return super.update(id, request);
@@ -112,8 +110,7 @@ public class NoRuleService extends AbstractCrudService<NoRule, NoRuleRequest, No
     @Caching(evict = {
             @CacheEvict(value = CacheConfig.CACHE_STATIC, key = "'" + SystemSwitchService.SWITCH_CACHE_KEY + "'"),
             @CacheEvict(value = CacheConfig.CACHE_STATIC, key = "'" + CompanySettingService.CURRENT_COMPANY_CACHE_KEY + "'"),
-            @CacheEvict(value = CacheConfig.CACHE_STATIC, key = "'" + CompanySettingService.CURRENT_TAX_RATE_CACHE_KEY + "'"),
-            @CacheEvict(value = CacheConfig.CACHE_HOT, key = "'" + RuntimeConfigService.RUNTIME_CONFIG_CACHE_KEY + "'")
+            @CacheEvict(value = CacheConfig.CACHE_STATIC, key = "'" + CompanySettingService.CURRENT_TAX_RATE_CACHE_KEY + "'")
     })
     public NoRuleResponse updateStatus(Long id, String status) {
         return super.updateStatus(id, status);
@@ -124,8 +121,7 @@ public class NoRuleService extends AbstractCrudService<NoRule, NoRuleRequest, No
     @Caching(evict = {
             @CacheEvict(value = CacheConfig.CACHE_STATIC, key = "'" + SystemSwitchService.SWITCH_CACHE_KEY + "'"),
             @CacheEvict(value = CacheConfig.CACHE_STATIC, key = "'" + CompanySettingService.CURRENT_COMPANY_CACHE_KEY + "'"),
-            @CacheEvict(value = CacheConfig.CACHE_STATIC, key = "'" + CompanySettingService.CURRENT_TAX_RATE_CACHE_KEY + "'"),
-            @CacheEvict(value = CacheConfig.CACHE_HOT, key = "'" + RuntimeConfigService.RUNTIME_CONFIG_CACHE_KEY + "'")
+            @CacheEvict(value = CacheConfig.CACHE_STATIC, key = "'" + CompanySettingService.CURRENT_TAX_RATE_CACHE_KEY + "'")
     })
     public void delete(Long id) {
         super.delete(id);

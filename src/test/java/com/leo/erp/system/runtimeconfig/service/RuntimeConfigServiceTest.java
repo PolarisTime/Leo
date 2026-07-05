@@ -1,21 +1,34 @@
 package com.leo.erp.system.runtimeconfig.service;
 
+import com.leo.erp.common.support.RedisJsonCacheSupport;
 import com.leo.erp.system.company.service.CompanySettingService;
 import com.leo.erp.system.norule.domain.entity.NoRule;
 import com.leo.erp.system.norule.repository.NoRuleRepository;
 import com.leo.erp.system.norule.service.SystemSwitchService;
 import com.leo.erp.system.runtimeconfig.feature.FeatureFlagService;
+import com.leo.erp.system.runtimeconfig.web.dto.RuntimeBusinessConfig;
+import com.leo.erp.system.runtimeconfig.web.dto.RuntimeBusinessNoConfig;
 import com.leo.erp.system.runtimeconfig.web.dto.RuntimeConfigResponse;
+import com.leo.erp.system.runtimeconfig.web.dto.RuntimeFeatureConfig;
+import com.leo.erp.system.runtimeconfig.web.dto.RuntimeStatementConfig;
+import com.leo.erp.system.runtimeconfig.web.dto.RuntimeUiConfig;
+import com.leo.erp.system.runtimeconfig.web.dto.RuntimeWatermarkConfig;
 import org.junit.jupiter.api.Test;
 
+import java.lang.reflect.Method;
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyCollection;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.when;
 
 class RuntimeConfigServiceTest {
@@ -23,6 +36,50 @@ class RuntimeConfigServiceTest {
     private final NoRuleRepository repository = mock(NoRuleRepository.class);
     private final FeatureFlagService featureFlagService = mock(FeatureFlagService.class);
     private final RuntimeConfigService service = new RuntimeConfigService(repository, featureFlagService);
+
+    @Test
+    void returnsCachedTypedRuntimeConfigWithoutLoadingSettings() {
+        RedisJsonCacheSupport cache = mock(RedisJsonCacheSupport.class);
+        RuntimeConfigResponse cached = runtimeConfig();
+        RuntimeConfigService cachedService = new RuntimeConfigService(repository, featureFlagService, cache);
+        when(cache.read(RuntimeConfigService.RUNTIME_CONFIG_CACHE_KEY, RuntimeConfigResponse.class))
+                .thenReturn(Optional.of(cached));
+
+        RuntimeConfigResponse response = cachedService.getRuntimeConfig();
+
+        assertThat(response).isSameAs(cached);
+        verify(repository, never()).findBySettingCodeInAndDeletedFlagFalse(anyCollection());
+        verify(cache, never()).write(any(), any(), any());
+    }
+
+    @Test
+    void writesTypedRuntimeConfigWhenCacheMisses() {
+        RedisJsonCacheSupport cache = mock(RedisJsonCacheSupport.class);
+        RuntimeConfigService cachedService = new RuntimeConfigService(repository, featureFlagService, cache);
+        when(repository.findBySettingCodeInAndDeletedFlagFalse(anyCollection())).thenReturn(List.of());
+
+        RuntimeConfigResponse response = cachedService.getRuntimeConfig();
+
+        verify(cache).read(RuntimeConfigService.RUNTIME_CONFIG_CACHE_KEY, RuntimeConfigResponse.class);
+        verify(cache).write(eq(RuntimeConfigService.RUNTIME_CONFIG_CACHE_KEY), eq(response), eq(Duration.ofMinutes(10)));
+    }
+
+    @Test
+    void evictsRuntimeConfigCacheKey() {
+        RedisJsonCacheSupport cache = mock(RedisJsonCacheSupport.class);
+        RuntimeConfigService cachedService = new RuntimeConfigService(repository, featureFlagService, cache);
+
+        cachedService.evictCache();
+
+        verify(cache).delete(RuntimeConfigService.RUNTIME_CONFIG_CACHE_KEY);
+    }
+
+    @Test
+    void avoidsUntypedSpringCacheForRuntimeConfig() throws Exception {
+        Method getRuntimeConfig = RuntimeConfigService.class.getDeclaredMethod("getRuntimeConfig");
+        assertThat(getRuntimeConfig.getAnnotations()).noneMatch(annotation ->
+                annotation.annotationType().getName().equals("org.springframework.cache.annotation.Cacheable"));
+    }
 
     @Test
     void returnsStrongRuntimeConfigFromGeneralSettings() {
@@ -113,5 +170,21 @@ class RuntimeConfigServiceTest {
         rule.setStatus(status);
         rule.setSampleNo(sampleNo);
         return rule;
+    }
+
+    private RuntimeConfigResponse runtimeConfig() {
+        return new RuntimeConfigResponse(
+                new RuntimeUiConfig(
+                        20,
+                        false,
+                        new RuntimeWatermarkConfig(false, "{username}  {time}", 18, "rgba(0,0,0,0.08)", -22, 200)
+                ),
+                new RuntimeBusinessConfig(
+                        new BigDecimal("0.13"),
+                        new RuntimeStatementConfig(false, false),
+                        new RuntimeBusinessNoConfig(false)
+                ),
+                new RuntimeFeatureConfig(false, false)
+        );
     }
 }

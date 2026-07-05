@@ -168,8 +168,7 @@ public class CompanySettingService extends AbstractCrudService<CompanySetting, C
     @Transactional
     @Caching(evict = {
             @CacheEvict(value = CacheConfig.CACHE_STATIC, key = "'" + CURRENT_COMPANY_CACHE_KEY + "'"),
-            @CacheEvict(value = CacheConfig.CACHE_STATIC, key = "'" + CURRENT_TAX_RATE_CACHE_KEY + "'"),
-            @CacheEvict(value = CacheConfig.CACHE_HOT, key = "'" + RuntimeConfigService.RUNTIME_CONFIG_CACHE_KEY + "'")
+            @CacheEvict(value = CacheConfig.CACHE_STATIC, key = "'" + CURRENT_TAX_RATE_CACHE_KEY + "'")
     })
     public CompanySettingResponse saveCurrent(CompanySettingRequest request) {
         CompanySetting entity = findCurrentEntity()
@@ -188,8 +187,7 @@ public class CompanySettingService extends AbstractCrudService<CompanySetting, C
     @Transactional
     @Caching(evict = {
             @CacheEvict(value = CacheConfig.CACHE_STATIC, key = "'" + CURRENT_COMPANY_CACHE_KEY + "'"),
-            @CacheEvict(value = CacheConfig.CACHE_STATIC, key = "'" + CURRENT_TAX_RATE_CACHE_KEY + "'"),
-            @CacheEvict(value = CacheConfig.CACHE_HOT, key = "'" + RuntimeConfigService.RUNTIME_CONFIG_CACHE_KEY + "'")
+            @CacheEvict(value = CacheConfig.CACHE_STATIC, key = "'" + CURRENT_TAX_RATE_CACHE_KEY + "'")
     })
     public CompanySettingResponse create(CompanySettingRequest request) {
         return super.create(request);
@@ -199,8 +197,7 @@ public class CompanySettingService extends AbstractCrudService<CompanySetting, C
     @Transactional
     @Caching(evict = {
             @CacheEvict(value = CacheConfig.CACHE_STATIC, key = "'" + CURRENT_COMPANY_CACHE_KEY + "'"),
-            @CacheEvict(value = CacheConfig.CACHE_STATIC, key = "'" + CURRENT_TAX_RATE_CACHE_KEY + "'"),
-            @CacheEvict(value = CacheConfig.CACHE_HOT, key = "'" + RuntimeConfigService.RUNTIME_CONFIG_CACHE_KEY + "'")
+            @CacheEvict(value = CacheConfig.CACHE_STATIC, key = "'" + CURRENT_TAX_RATE_CACHE_KEY + "'")
     })
     public CompanySettingResponse update(Long id, CompanySettingRequest request) {
         return super.update(id, request);
@@ -210,8 +207,7 @@ public class CompanySettingService extends AbstractCrudService<CompanySetting, C
     @Transactional
     @Caching(evict = {
             @CacheEvict(value = CacheConfig.CACHE_STATIC, key = "'" + CURRENT_COMPANY_CACHE_KEY + "'"),
-            @CacheEvict(value = CacheConfig.CACHE_STATIC, key = "'" + CURRENT_TAX_RATE_CACHE_KEY + "'"),
-            @CacheEvict(value = CacheConfig.CACHE_HOT, key = "'" + RuntimeConfigService.RUNTIME_CONFIG_CACHE_KEY + "'")
+            @CacheEvict(value = CacheConfig.CACHE_STATIC, key = "'" + CURRENT_TAX_RATE_CACHE_KEY + "'")
     })
     public CompanySettingResponse updateStatus(Long id, String status) {
         return super.updateStatus(id, status);
@@ -221,8 +217,7 @@ public class CompanySettingService extends AbstractCrudService<CompanySetting, C
     @Transactional
     @Caching(evict = {
             @CacheEvict(value = CacheConfig.CACHE_STATIC, key = "'" + CURRENT_COMPANY_CACHE_KEY + "'"),
-            @CacheEvict(value = CacheConfig.CACHE_STATIC, key = "'" + CURRENT_TAX_RATE_CACHE_KEY + "'"),
-            @CacheEvict(value = CacheConfig.CACHE_HOT, key = "'" + RuntimeConfigService.RUNTIME_CONFIG_CACHE_KEY + "'")
+            @CacheEvict(value = CacheConfig.CACHE_STATIC, key = "'" + CURRENT_TAX_RATE_CACHE_KEY + "'")
     })
     public void delete(Long id) {
         super.delete(id);

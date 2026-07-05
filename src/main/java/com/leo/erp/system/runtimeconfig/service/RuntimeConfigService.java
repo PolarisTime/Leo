@@ -1,6 +1,6 @@
 package com.leo.erp.system.runtimeconfig.service;
 
-import com.leo.erp.common.config.CacheConfig;
+import com.leo.erp.common.support.RedisJsonCacheSupport;
 import com.leo.erp.system.company.service.CompanySettingService;
 import com.leo.erp.system.norule.domain.entity.NoRule;
 import com.leo.erp.system.norule.repository.NoRuleRepository;
@@ -13,11 +13,13 @@ import com.leo.erp.system.runtimeconfig.web.dto.RuntimeFeatureConfig;
 import com.leo.erp.system.runtimeconfig.web.dto.RuntimeStatementConfig;
 import com.leo.erp.system.runtimeconfig.web.dto.RuntimeUiConfig;
 import com.leo.erp.system.runtimeconfig.web.dto.RuntimeWatermarkConfig;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.cache.annotation.Cacheable;
 
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.util.Collection;
 import java.util.Map;
 import java.util.Set;
@@ -39,6 +41,7 @@ public class RuntimeConfigService {
     public static final String WATERMARK_ROTATE_SETTING = "SYS_WATERMARK_ROTATE";
     public static final String WATERMARK_COLOR_SETTING = "SYS_WATERMARK_COLOR";
     public static final String WATERMARK_DENSITY_SETTING = "SYS_WATERMARK_DENSITY";
+    private static final Duration RUNTIME_CONFIG_CACHE_TTL = Duration.ofMinutes(10);
 
     private static final int DEFAULT_PAGE_SIZE = 20;
     private static final int MIN_PAGE_SIZE = 1;
@@ -69,21 +72,45 @@ public class RuntimeConfigService {
 
     private final NoRuleRepository noRuleRepository;
     private final FeatureFlagService featureFlagService;
+    private final RedisJsonCacheSupport redisJsonCacheSupport;
 
     public RuntimeConfigService(NoRuleRepository noRuleRepository, FeatureFlagService featureFlagService) {
+        this(noRuleRepository, featureFlagService, null);
+    }
+
+    @Autowired
+    public RuntimeConfigService(NoRuleRepository noRuleRepository,
+                                FeatureFlagService featureFlagService,
+                                @Nullable RedisJsonCacheSupport redisJsonCacheSupport) {
         this.noRuleRepository = noRuleRepository;
         this.featureFlagService = featureFlagService;
+        this.redisJsonCacheSupport = redisJsonCacheSupport;
     }
 
     @Transactional(readOnly = true)
-    @Cacheable(value = CacheConfig.CACHE_HOT, key = "'" + RUNTIME_CONFIG_CACHE_KEY + "'")
     public RuntimeConfigResponse getRuntimeConfig() {
+        if (redisJsonCacheSupport != null) {
+            var cached = redisJsonCacheSupport.read(RUNTIME_CONFIG_CACHE_KEY, RuntimeConfigResponse.class);
+            if (cached.isPresent()) {
+                return cached.get();
+            }
+        }
         Map<String, NoRule> settings = loadRuntimeSettings();
-        return new RuntimeConfigResponse(
+        RuntimeConfigResponse response = new RuntimeConfigResponse(
                 uiConfig(settings),
                 businessConfig(settings),
                 featureConfig(settings)
         );
+        if (redisJsonCacheSupport != null) {
+            redisJsonCacheSupport.write(RUNTIME_CONFIG_CACHE_KEY, response, RUNTIME_CONFIG_CACHE_TTL);
+        }
+        return response;
+    }
+
+    public void evictCache() {
+        if (redisJsonCacheSupport != null) {
+            redisJsonCacheSupport.delete(RUNTIME_CONFIG_CACHE_KEY);
+        }
     }
 
     private Map<String, NoRule> loadRuntimeSettings() {

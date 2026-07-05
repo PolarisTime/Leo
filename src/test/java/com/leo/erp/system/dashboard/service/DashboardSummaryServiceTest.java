@@ -5,7 +5,6 @@ import com.leo.erp.auth.domain.enums.UserStatus;
 import com.leo.erp.auth.repository.RefreshTokenSessionRepository;
 import com.leo.erp.auth.repository.UserAccountRepository;
 import com.leo.erp.auth.service.UserRoleBindingService;
-import com.leo.erp.common.config.CacheConfig;
 import com.leo.erp.common.support.RedisJsonCacheSupport;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.master.customer.repository.CustomerRepository;
@@ -19,10 +18,9 @@ import com.leo.erp.system.dashboard.web.dto.DashboardSummaryResponse;
 import com.leo.erp.system.menu.domain.entity.Menu;
 import com.leo.erp.system.menu.repository.MenuRepository;
 import org.junit.jupiter.api.Test;
-import org.springframework.cache.annotation.CacheEvict;
-import org.springframework.cache.annotation.Cacheable;
 
 import java.lang.reflect.Method;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.List;
@@ -175,22 +173,66 @@ class DashboardSummaryServiceTest {
         assertThat(response.materialCount()).isEqualTo(10L);
         assertThat(response.supplierCount()).isEqualTo(20L);
         assertThat(response.customerCount()).isEqualTo(30L);
+        verify(redisJsonCacheSupport).read("leo:dashboard:1", DashboardSummaryResponse.class);
+        verify(redisJsonCacheSupport).write("leo:dashboard:1", response, Duration.ofMinutes(10));
         verify(redisJsonCacheSupport).delete("leo:dashboard:1");
         verify(redisJsonCacheSupport, never()).delete("leo:dashboard:null");
         verify(redisJsonCacheSupport).deleteByPattern("leo:dashboard:*");
     }
 
     @Test
-    void shouldDeclareSpringCacheAnnotationsForDashboardSummary() throws Exception {
+    void shouldReturnCachedTypedSummaryWithoutLoadingRepositories() {
+        UserAccountRepository userAccountRepository = mock(UserAccountRepository.class);
+        RedisJsonCacheSupport redisJsonCacheSupport = mock(RedisJsonCacheSupport.class);
+        DashboardSummaryResponse cached = new DashboardSummaryResponse(
+                "leo",
+                "演示公司",
+                "Leo",
+                "leo",
+                "系统管理员",
+                1,
+                1,
+                1,
+                1,
+                false,
+                null,
+                LocalDateTime.of(2026, 7, 5, 22, 0),
+                10,
+                20,
+                30
+        );
+        when(redisJsonCacheSupport.read("leo:dashboard:1", DashboardSummaryResponse.class))
+                .thenReturn(Optional.of(cached));
+        DashboardSummaryService service = new DashboardSummaryService(
+                userAccountRepository,
+                mock(CompanySettingRepository.class),
+                mock(MenuRepository.class),
+                mock(PermissionService.class),
+                mock(UserRoleBindingService.class),
+                mock(RefreshTokenSessionRepository.class),
+                mock(MaterialRepository.class),
+                mock(SupplierRepository.class),
+                mock(CustomerRepository.class),
+                redisJsonCacheSupport,
+                "leo"
+        );
+
+        DashboardSummaryResponse response = service.getSummary(1L);
+
+        assertThat(response).isSameAs(cached);
+        verify(userAccountRepository, never()).findByIdAndDeletedFlagFalse(any(Long.class));
+        verify(redisJsonCacheSupport, never()).write(any(), any(), any());
+    }
+
+    @Test
+    void shouldAvoidUntypedSpringCacheForDashboardSummary() throws Exception {
         Method getSummary = DashboardSummaryService.class.getDeclaredMethod("getSummary", Long.class);
-        Cacheable cacheable = getSummary.getAnnotation(Cacheable.class);
-        assertThat(cacheable.value()).containsExactly(CacheConfig.CACHE_HOT);
-        assertThat(cacheable.key()).isEqualTo("'leo:dashboard:' + #userId");
+        assertThat(getSummary.getAnnotations()).noneMatch(annotation ->
+                annotation.annotationType().getName().equals("org.springframework.cache.annotation.Cacheable"));
 
         Method evictCache = DashboardSummaryService.class.getDeclaredMethod("evictCache", Long.class);
-        CacheEvict cacheEvict = evictCache.getAnnotation(CacheEvict.class);
-        assertThat(cacheEvict.value()).containsExactly(CacheConfig.CACHE_HOT);
-        assertThat(cacheEvict.key()).isEqualTo("'leo:dashboard:' + #userId");
+        assertThat(evictCache.getAnnotations()).noneMatch(annotation ->
+                annotation.annotationType().getName().equals("org.springframework.cache.annotation.CacheEvict"));
     }
 
     @Test
