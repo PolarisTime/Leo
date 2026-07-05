@@ -1,10 +1,11 @@
 package com.leo.erp.common.web;
 
 import com.leo.erp.common.api.ApiResponse;
-import com.leo.erp.common.web.dto.HealthCheckResponse;
 import com.leo.erp.common.web.dto.HealthResponse;
 import com.leo.erp.common.web.service.HealthService;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
@@ -16,34 +17,30 @@ class HealthControllerTest {
     private final HealthController controller = new HealthController(healthService);
 
     @Test
-    void shouldReturnHealthResponse() {
-        HealthResponse healthResponse = new HealthResponse(
-                "UP", "leo", "0.1.0", "trace-123", "2026-01-01 00:00:00",
-                HealthCheckResponse.up(),
-                HealthCheckResponse.up(),
-                HealthCheckResponse.disk("UP", 100L, 500L)
-        );
+    void shouldReturnOkWhenHealthIsUp() {
+        HealthResponse healthResponse = new HealthResponse("UP", "2026-01-01 00:00:00");
         when(healthService.health()).thenReturn(healthResponse);
+        when(healthService.isUp(healthResponse)).thenReturn(true);
 
-        ApiResponse<HealthResponse> response = controller.health();
+        ResponseEntity<ApiResponse<HealthResponse>> response = controller.health();
 
-        assertThat(response.code()).isEqualTo(0);
-        assertThat(response.data()).isEqualTo(healthResponse);
-        assertThat(response.data().status()).isEqualTo("UP");
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody()).isNotNull();
+        assertThat(response.getBody().code()).isEqualTo(0);
+        assertThat(response.getBody().data()).isEqualTo(healthResponse);
+        assertThat(response.getBody().data().status()).isEqualTo("UP");
     }
 
     @Test
-    void shouldReturnDegradedStatusWhenChecksFail() {
-        HealthResponse healthResponse = new HealthResponse(
-                "DEGRADED", "leo", "0.1.0", "", "2026-01-01 00:00:00",
-                HealthCheckResponse.down(),
-                HealthCheckResponse.up(),
-                HealthCheckResponse.disk("UP", 100L, 500L)
-        );
+    void shouldReturnServiceUnavailableWhenHealthIsNotUp() {
+        HealthResponse healthResponse = new HealthResponse("DEGRADED", "2026-01-01 00:00:00");
         when(healthService.health()).thenReturn(healthResponse);
+        when(healthService.isUp(healthResponse)).thenReturn(false);
 
-        ApiResponse<HealthResponse> response = controller.health();
+        ResponseEntity<ApiResponse<HealthResponse>> response = controller.health();
 
-        assertThat(response.data().status()).isEqualTo("DEGRADED");
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE);
+        assertThat(response.getBody()).isNotNull();
+        assertThat(response.getBody().data().status()).isEqualTo("DEGRADED");
     }
 }

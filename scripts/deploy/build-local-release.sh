@@ -6,7 +6,6 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LEO_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 OUTPUT_DIR="$LEO_DIR/target/local-release"
 RELEASE_NAME="leo-local-release"
-LEO_VERSION="1.1.0"
 SKIP_TESTS=false
 
 usage() {
@@ -43,6 +42,16 @@ require_command() {
 require_command mvn
 require_command sha256sum
 
+read_maven_version() {
+  local version
+  version="$(cd "$LEO_DIR" && mvn -q -DforceStdout help:evaluate -Dexpression=project.version)"
+  if [[ -z "$version" ]]; then
+    echo "无法读取 Maven 项目版本" >&2
+    exit 1
+  fi
+  printf '%s\n' "$version"
+}
+
 rm -rf "$OUTPUT_DIR"
 mkdir -p "$OUTPUT_DIR/input/backend" "$OUTPUT_DIR/release/backend" "$OUTPUT_DIR/release/deploy"
 
@@ -62,12 +71,13 @@ cp "$backend_jar" "$OUTPUT_DIR/release/backend/leo.jar"
 
 cp "$LEO_DIR/scripts/deploy/install-production-release.sh" "$OUTPUT_DIR/release/deploy/"
 
+leo_version="$(read_maven_version)"
 leo_ref="$(git -C "$LEO_DIR" rev-parse --short=12 HEAD 2>/dev/null || echo unknown)"
 cat > "$OUTPUT_DIR/release/manifest.json" <<JSON
 {
   "releaseId": "$RELEASE_NAME",
   "target": "local-steelx",
-  "leoVersion": "$LEO_VERSION",
+  "leoVersion": "$leo_version",
   "leoRef": "$leo_ref"
 }
 JSON

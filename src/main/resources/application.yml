@@ -153,8 +153,6 @@ spring:
 
 # 业务自定义配置
 leo:
-  # 应用版本，用于前端页脚和健康检查展示；生产环境可用 LEO_VERSION 覆盖。
-  version: ${LEO_VERSION:1.1.0}
   # 受信代理 IP/CIDR 列表（逗号分隔）。只有来自这些地址的请求才会信任 X-Forwarded-For 头。
   # 部署在 nginx / CDN 后面时，填入代理的内网地址。
   # 示例: "127.0.0.1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
@@ -339,7 +337,7 @@ leo:
   surface:
     health:
       # 是否允许匿名访问健康检查页；生产环境建议关闭，仅保留登录后访问
-      public-access-enabled: ${LEO_HEALTH_PAGE_PUBLIC_ACCESS_ENABLED:true}
+      public-access-enabled: ${LEO_HEALTH_PAGE_PUBLIC_ACCESS_ENABLED:false}
     docs:
       # 是否允许匿名访问 OpenAPI / Swagger 文档；默认仅管理员可访问
       public-access-enabled: ${LEO_DOCS_PUBLIC_ACCESS_ENABLED:false}

@@ -125,6 +125,8 @@ mvn -B -ntp flyway:migrate \
   -Dflyway.locations="filesystem:src/main/resources/db/seed" \
   -Dflyway.table="flyway_seed_history" \
   -Dflyway.sqlMigrationPrefix="S" \
+  -Dflyway.baselineOnMigrate=true \
+  -Dflyway.baselineVersion=0 \
   -Dflyway.cleanDisabled=true \
   -Dflyway.placeholderReplacement=false \
   -Dflyway.validateMigrationNaming=true

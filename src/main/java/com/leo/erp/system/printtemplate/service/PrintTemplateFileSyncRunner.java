@@ -18,9 +18,11 @@ import java.util.List;
 public class PrintTemplateFileSyncRunner implements ApplicationRunner {
 
     static final String SYNC_MODE_FILE = "FILE";
+    private static final String TEMPLATE_TYPE_COORD = "COORD";
     private static final String TEMPLATE_TYPE_PDF_FORM = "PDF_FORM";
     private static final String SOURCE_REF_PREFIX = "print-forms/";
-    private static final String SOURCE_REF_SUFFIX = ".layout.json";
+    private static final String COORD_SOURCE_REF_SUFFIX = ".lodop.txt";
+    private static final String PDF_FORM_SOURCE_REF_SUFFIX = ".layout.json";
 
     private final PrintTemplateRepository repository;
     private final PrintPdfFormTemplateValidator pdfFormTemplateValidator;
@@ -56,7 +58,7 @@ public class PrintTemplateFileSyncRunner implements ApplicationRunner {
             return false;
         }
 
-        String normalizedSourceRef = normalizeSourceRef(sourceRef);
+        String normalizedSourceRef = normalizeSourceRef(template, sourceRef);
         String content = readClasspathText(normalizedSourceRef);
         validateContent(template, content);
         String checksum = PrintTemplateChecksum.sha256(content);
@@ -73,15 +75,25 @@ public class PrintTemplateFileSyncRunner implements ApplicationRunner {
         return true;
     }
 
-    private String normalizeSourceRef(String sourceRef) {
+    private String normalizeSourceRef(PrintTemplate template, String sourceRef) {
         String normalized = sourceRef.trim();
         if (normalized.startsWith("/") || normalized.contains("..") || normalized.contains("\\")) {
             throw new IllegalStateException("打印模板源文件路径不合法: " + sourceRef);
         }
-        if (!normalized.startsWith(SOURCE_REF_PREFIX) || !normalized.endsWith(SOURCE_REF_SUFFIX)) {
+        if (!normalized.startsWith(SOURCE_REF_PREFIX) || !normalized.endsWith(requiredSourceRefSuffix(template))) {
             throw new IllegalStateException("打印模板源文件路径不合法: " + sourceRef);
         }
         return normalized;
+    }
+
+    private String requiredSourceRefSuffix(PrintTemplate template) {
+        if (TEMPLATE_TYPE_PDF_FORM.equals(template.getTemplateType())) {
+            return PDF_FORM_SOURCE_REF_SUFFIX;
+        }
+        if (TEMPLATE_TYPE_COORD.equals(template.getTemplateType())) {
+            return COORD_SOURCE_REF_SUFFIX;
+        }
+        throw new IllegalStateException("打印模板类型不支持文件托管: " + template.getTemplateType());
     }
 
     private void validateContent(PrintTemplate template, String content) {

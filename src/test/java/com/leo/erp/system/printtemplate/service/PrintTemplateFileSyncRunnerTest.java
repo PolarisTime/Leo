@@ -55,6 +55,92 @@ class PrintTemplateFileSyncRunnerTest {
     }
 
     @Test
+    void shouldSyncFileManagedCoordTemplateFromClasspath() {
+        PrintTemplate template = template("old", null);
+        template.setTemplateType("COORD");
+        template.setEngine("LODOP");
+        template.setSourceRef("print-forms/sample-coord.lodop.txt");
+        PrintTemplateRepository repository = repositoryWithSingle(template);
+
+        runner(repository).run(new DefaultApplicationArguments());
+
+        assertThat(template.getTemplateHtml()).isEqualTo("LODOP.PRINT_INIT(\"Sample\");");
+        assertThat(template.getSourceChecksum()).hasSize(64);
+        assertThat(template.getVersionNo()).isEqualTo(2);
+        verify(repository).save(template);
+    }
+
+    @Test
+    void shouldSyncSeededFileManagedTemplatesFromClasspath() {
+        List<PrintTemplate> templates = List.of(
+                seedTemplate(
+                        322775358715723776L,
+                        "freight-bill",
+                        "TPL_322775358715723776",
+                        "物流配送单",
+                        "PDF_FORM",
+                        "PDF_FORM",
+                        "print-forms/freight-bill-delivery.layout.json"
+                ),
+                seedTemplate(
+                        700540000000000024L,
+                        "freight-bill",
+                        "TPL_700540000000000024",
+                        "物流单A版",
+                        "COORD",
+                        "LODOP",
+                        "print-forms/freight-bill-a.lodop.txt"
+                ),
+                seedTemplate(
+                        700540000000000026L,
+                        "freight-statement",
+                        "TPL_700540000000000026",
+                        "物流对账单-汇总",
+                        "COORD",
+                        "LODOP",
+                        "print-forms/freight-statement-summary.lodop.txt"
+                ),
+                seedTemplate(
+                        700540000000000028L,
+                        "customer-statement",
+                        "TPL_700540000000000028",
+                        "客户对账单-A4",
+                        "COORD",
+                        "LODOP",
+                        "print-forms/customer-statement-a4.lodop.txt"
+                ),
+                seedTemplate(
+                        700540000000000029L,
+                        "sales-order",
+                        "SALES_ORDER_YINGJIE_A4_REMARK_PDF",
+                        "颖捷A4打印_带备注 PDF",
+                        "PDF_FORM",
+                        "PDF_FORM",
+                        "print-forms/yingjie-a4-remark.layout.json"
+                )
+        );
+        PrintTemplateRepository repository = mock(PrintTemplateRepository.class);
+        when(repository.findAllBySyncModeAndDeletedFlagFalse(PrintTemplateFileSyncRunner.SYNC_MODE_FILE))
+                .thenReturn(templates);
+        when(repository.save(any(PrintTemplate.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        runner(repository).run(new DefaultApplicationArguments());
+
+        assertThat(templates)
+                .allSatisfy(seed -> {
+                    assertThat(seed.getTemplateHtml()).doesNotContain("文件托管模板待同步");
+                    assertThat(seed.getSourceChecksum()).hasSize(64);
+                    assertThat(seed.getVersionNo()).isEqualTo(2);
+                });
+        assertThat(templates.get(0).getTemplateHtml()).contains("\"物流配送单\"");
+        assertThat(templates.get(1).getTemplateHtml()).contains("LODOP.PRINT_INIT(\"物流单A版\")");
+        assertThat(templates.get(2).getTemplateHtml()).contains("LODOP.PRINT_INIT(\"物流对账单\")");
+        assertThat(templates.get(3).getTemplateHtml()).contains("LODOP.PRINT_INIT(\"客户对账单-A4\")");
+        assertThat(templates.get(4).getTemplateHtml()).contains("\"page\"");
+        verify(repository, org.mockito.Mockito.times(5)).save(any(PrintTemplate.class));
+    }
+
+    @Test
     void shouldSkipWhenChecksumAndContentAreCurrent() {
         PrintTemplate template = template(currentContent(), null);
         runner(repositoryWithSingle(template)).run(new DefaultApplicationArguments());
@@ -132,7 +218,9 @@ class PrintTemplateFileSyncRunnerTest {
     @Test
     void shouldSkipPdfFormValidationForNonPdfFormTemplate() {
         PrintTemplate template = template("old", null);
-        template.setTemplateType("HTML");
+        template.setTemplateType("COORD");
+        template.setEngine("LODOP");
+        template.setSourceRef("print-forms/sample-coord.lodop.txt");
         PrintTemplateRepository repository = repositoryWithSingle(template);
         PrintPdfFormTemplateValidator validator = mock(PrintPdfFormTemplateValidator.class);
 
@@ -194,6 +282,32 @@ class PrintTemplateFileSyncRunnerTest {
     void shouldRejectSourceRefWithInvalidSuffix() {
         PrintTemplate template = template("old", null);
         template.setSourceRef("print-forms/yingjie-a4-remark.json");
+        PrintTemplateRepository repository = repositoryWithSingle(template);
+
+        assertThatThrownBy(() -> runner(repository).run(new DefaultApplicationArguments()))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("源文件路径不合法");
+        verify(repository, never()).save(any(PrintTemplate.class));
+    }
+
+    @Test
+    void shouldRejectPdfFormSourceRefWithoutLayoutJsonSuffix() {
+        PrintTemplate template = template("old", null);
+        template.setSourceRef("print-forms/sample-coord.lodop.txt");
+        PrintTemplateRepository repository = repositoryWithSingle(template);
+
+        assertThatThrownBy(() -> runner(repository).run(new DefaultApplicationArguments()))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("源文件路径不合法");
+        verify(repository, never()).save(any(PrintTemplate.class));
+    }
+
+    @Test
+    void shouldRejectCoordSourceRefWithoutLodopSuffix() {
+        PrintTemplate template = template("old", null);
+        template.setTemplateType("COORD");
+        template.setEngine("LODOP");
+        template.setSourceRef("print-forms/yingjie-a4-remark.layout.json");
         PrintTemplateRepository repository = repositoryWithSingle(template);
 
         assertThatThrownBy(() -> runner(repository).run(new DefaultApplicationArguments()))
@@ -293,6 +407,28 @@ class PrintTemplateFileSyncRunnerTest {
         template.setSyncMode(PrintTemplateFileSyncRunner.SYNC_MODE_FILE);
         template.setSourceRef("print-forms/yingjie-a4-remark.layout.json");
         template.setSourceChecksum(checksum);
+        return template;
+    }
+
+    private PrintTemplate seedTemplate(long id,
+                                       String billType,
+                                       String templateCode,
+                                       String templateName,
+                                       String templateType,
+                                       String engine,
+                                       String sourceRef) {
+        PrintTemplate template = new PrintTemplate();
+        template.setId(id);
+        template.setBillType(billType);
+        template.setTemplateCode(templateCode);
+        template.setTemplateName(templateName);
+        template.setTemplateType(templateType);
+        template.setEngine(engine);
+        template.setTemplateHtml("LODOP.PRINT_INIT(\"文件托管模板待同步\");");
+        template.setVersionNo(1);
+        template.setStatus("ACTIVE");
+        template.setSyncMode(PrintTemplateFileSyncRunner.SYNC_MODE_FILE);
+        template.setSourceRef(sourceRef);
         return template;
     }
 

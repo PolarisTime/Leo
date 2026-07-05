@@ -68,7 +68,7 @@ public class SecurityConfig {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(authorize -> {
                     authorize.requestMatchers(publicAccessRequestMatcher).permitAll();
-                    authorize.requestMatchers("/auth/**", "/health", "/error").permitAll();
+                    authorize.requestMatchers("/auth/**", "/health", "/version", "/error").permitAll();
                     if (surfaceAccessProperties.getHealth().isPublicAccessEnabled()) {
                         authorize.requestMatchers("/system/health").permitAll();
                     } else {

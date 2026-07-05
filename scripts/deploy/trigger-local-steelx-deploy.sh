@@ -81,6 +81,17 @@ require_command() {
 require_command openssl
 require_command psql
 require_command redis-cli
+require_command mvn
+
+read_maven_version() {
+  local version
+  version="$(cd "$LEO_DIR" && mvn -q -DforceStdout help:evaluate -Dexpression=project.version)"
+  if [[ -z "$version" ]]; then
+    echo "无法读取 Maven 项目版本" >&2
+    exit 1
+  fi
+  printf '%s\n' "$version"
+}
 
 # shellcheck disable=SC1091
 source "$LEO_DIR/scripts/env/dev.sh"
@@ -93,6 +104,7 @@ REDIS_HOST="${REDIS_HOST:-${SPRING_DATA_REDIS_HOST:-127.0.0.1}}"
 REDIS_PORT="${REDIS_PORT:-${SPRING_DATA_REDIS_PORT:-16379}}"
 REDIS_DATABASE="${REDIS_DATABASE:-${SPRING_DATA_REDIS_DATABASE:-3}}"
 REDIS_PASSWORD="${REDIS_PASSWORD:-${SPRING_DATA_REDIS_PASSWORD:-}}"
+LEO_VERSION="$(read_maven_version)"
 
 if [[ "$CONFIRM" != "true" ]]; then
   cat >&2 <<EOF
@@ -177,7 +189,6 @@ SPRING_DATA_REDIS_DATABASE=$REDIS_DATABASE
 SPRING_DATA_REDIS_PASSWORD=$REDIS_PASSWORD
 LEO_JWT_SECRET=$JWT_SECRET
 TOTP_ENCRYPTION_KEY=$TOTP_ENCRYPTION_KEY
-LEO_VERSION=1.1.0
 LEO_MACHINE_ID=2
 LEO_ATTACHMENT_LOCAL_PATH=$STEELX_ROOT/shared/uploads
 LEO_AUTH_REFRESH_COOKIE_SECURE=true
@@ -191,7 +202,7 @@ chmod 600 "$STEELX_ROOT/shared/steelx.env"
 
 build_args=(
   --output-dir "$LEO_DIR/target/steelx-release"
-  --release-name "steelx-1.1.0"
+  --release-name "steelx-$LEO_VERSION"
 )
 if [[ "$SKIP_TESTS" == "true" ]]; then
   build_args+=(--skip-tests)
@@ -199,7 +210,7 @@ fi
 
 bash "$SCRIPT_DIR/build-local-release.sh" "${build_args[@]}"
 
-archive="$LEO_DIR/target/steelx-release/steelx-1.1.0.tar.gz"
+archive="$LEO_DIR/target/steelx-release/steelx-$LEO_VERSION.tar.gz"
 sha_file="$archive.sha256"
 
 cp "$SCRIPT_DIR/steelx-process.sh" "$STEELX_ROOT/shared/steelx-process.sh"

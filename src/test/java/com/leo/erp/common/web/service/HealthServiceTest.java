@@ -4,7 +4,6 @@ import com.leo.erp.common.web.dto.HealthCheckResponse;
 import com.leo.erp.common.web.dto.HealthResponse;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
-import org.slf4j.MDC;
 import org.springframework.dao.DataAccessException;
 import org.springframework.data.redis.connection.RedisConnection;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
@@ -27,33 +26,29 @@ class HealthServiceTest {
         RedisConnection redisConnection = mock(RedisConnection.class);
         when(redisFactory.getConnection()).thenReturn(redisConnection);
 
-        HealthService service = new HealthService(jdbcTemplate, redisFactory, "leo-test", "0.2.0");
+        HealthService service = new HealthService(jdbcTemplate, redisFactory);
 
         HealthResponse response = service.health();
 
         assertThat(response.status()).isEqualTo("UP");
-        assertThat(response.app()).isEqualTo("leo-test");
-        assertThat(response.version()).isEqualTo("0.2.0");
-        assertThat(response.db().isUp()).isTrue();
-        assertThat(response.redis().isUp()).isTrue();
+        assertThat(response.timestamp()).isNotBlank();
     }
 
     @Test
-    void healthShouldIncludeTraceIdFromMdc() {
+    void healthShouldNotExposeInternalCheckDetails() {
         JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
         when(jdbcTemplate.queryForObject("SELECT 1", Integer.class)).thenReturn(1);
         RedisConnectionFactory redisFactory = mock(RedisConnectionFactory.class);
         RedisConnection redisConnection = mock(RedisConnection.class);
         when(redisFactory.getConnection()).thenReturn(redisConnection);
-        HealthService service = new HealthService(jdbcTemplate, redisFactory, "leo-test", "0.2.0");
-        MDC.put("traceId", "trace-123");
-        try {
-            HealthResponse response = service.health();
+        HealthService service = new HealthService(jdbcTemplate, redisFactory);
 
-            assertThat(response.traceId()).isEqualTo("trace-123");
-        } finally {
-            MDC.remove("traceId");
-        }
+        HealthResponse response = service.health();
+
+        assertThat(response.status()).isEqualTo("UP");
+        assertThat(response.getClass().getRecordComponents())
+                .extracting(component -> component.getName())
+                .containsExactly("status", "timestamp");
     }
 
     @Test
@@ -63,7 +58,7 @@ class HealthServiceTest {
         RedisConnectionFactory redisFactory = mock(RedisConnectionFactory.class);
         RedisConnection redisConnection = mock(RedisConnection.class);
         when(redisFactory.getConnection()).thenReturn(redisConnection);
-        HealthService service = new HealthService(jdbcTemplate, redisFactory, "leo", "0.1.0");
+        HealthService service = new HealthService(jdbcTemplate, redisFactory);
 
         try (var files = Mockito.mockConstruction(File.class, (file, context) -> {
             when(file.getFreeSpace()).thenReturn(512L * 1024 * 1024);
@@ -72,7 +67,6 @@ class HealthServiceTest {
             HealthResponse response = service.health();
 
             assertThat(response.status()).isEqualTo("DEGRADED");
-            assertThat(response.disk().status()).isEqualTo("WARN");
         }
     }
 
@@ -86,13 +80,11 @@ class HealthServiceTest {
         RedisConnection redisConnection = mock(RedisConnection.class);
         when(redisFactory.getConnection()).thenReturn(redisConnection);
 
-        HealthService service = new HealthService(jdbcTemplate, redisFactory, "leo", "0.1.0");
+        HealthService service = new HealthService(jdbcTemplate, redisFactory);
 
         HealthResponse response = service.health();
 
         assertThat(response.status()).isEqualTo("DEGRADED");
-        assertThat(response.db().isUp()).isFalse();
-        assertThat(response.redis().isUp()).isTrue();
     }
 
     @Test
@@ -102,34 +94,32 @@ class HealthServiceTest {
         RedisConnectionFactory redisFactory = mock(RedisConnectionFactory.class);
         when(redisFactory.getConnection()).thenThrow(mock(DataAccessException.class));
 
-        HealthService service = new HealthService(jdbcTemplate, redisFactory, "leo", "0.1.0");
+        HealthService service = new HealthService(jdbcTemplate, redisFactory);
 
         HealthResponse response = service.health();
 
         assertThat(response.status()).isEqualTo("DEGRADED");
-        assertThat(response.db().isUp()).isTrue();
-        assertThat(response.redis().isUp()).isFalse();
     }
 
     @Test
     void isUpShouldReturnTrueWhenStatusUp() {
-        HealthService service = new HealthService(null, null, "leo", "0.1.0");
+        HealthService service = new HealthService(null, null);
 
-        HealthResponse upResponse = new HealthResponse("UP", "leo", "0.1.0", "", "", null, null, null);
+        HealthResponse upResponse = new HealthResponse("UP", "");
         assertThat(service.isUp(upResponse)).isTrue();
     }
 
     @Test
     void isUpShouldReturnFalseWhenStatusDegraded() {
-        HealthService service = new HealthService(null, null, "leo", "0.1.0");
+        HealthService service = new HealthService(null, null);
 
-        HealthResponse degradedResponse = new HealthResponse("DEGRADED", "leo", "0.1.0", "", "", null, null, null);
+        HealthResponse degradedResponse = new HealthResponse("DEGRADED", "");
         assertThat(service.isUp(degradedResponse)).isFalse();
     }
 
     @Test
     void isUpShouldReturnFalseWhenResponseNull() {
-        HealthService service = new HealthService(null, null, "leo", "0.1.0");
+        HealthService service = new HealthService(null, null);
 
         assertThat(service.isUp(null)).isFalse();
     }

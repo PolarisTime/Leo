@@ -199,6 +199,7 @@ class SecurityConfigTest {
                     assertThat(context).hasNotFailed();
                     MockMvc mockMvc = mockMvc(context);
 
+                    mockMvc.perform(get("/version")).andExpect(status().isOk());
                     mockMvc.perform(get("/system/health")).andExpect(status().isOk());
                     mockMvc.perform(get("/swagger-ui/index.html")).andExpect(status().isOk());
                     mockMvc.perform(options("/secure")).andExpect(status().isOk());
@@ -223,6 +224,7 @@ class SecurityConfigTest {
                     assertThat(context).hasNotFailed();
                     MockMvc mockMvc = mockMvc(context);
 
+                    mockMvc.perform(get("/version")).andExpect(status().isOk());
                     mockMvc.perform(get("/system/health")).andExpect(status().isForbidden());
                     mockMvc.perform(get("/system/health").with(user("operator")))
                             .andExpect(status().isOk());
@@ -353,6 +355,11 @@ class SecurityConfigTest {
         @GetMapping("/public")
         String publicEndpoint() {
             return "public";
+        }
+
+        @GetMapping("/version")
+        String version() {
+            return "version";
         }
 
         @RequestMapping(path = "/secure", method = {RequestMethod.GET, RequestMethod.OPTIONS})

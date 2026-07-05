@@ -31,7 +31,7 @@ public class SurfaceAccessProperties {
 
     public static class Health {
 
-        private boolean publicAccessEnabled = true;
+        private boolean publicAccessEnabled;
 
         public boolean isPublicAccessEnabled() {
             return publicAccessEnabled;

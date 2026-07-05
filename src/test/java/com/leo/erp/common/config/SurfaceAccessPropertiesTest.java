@@ -24,8 +24,8 @@ class SurfaceAccessPropertiesTest {
     }
 
     @Test
-    void shouldHaveHealthPublicAccessEnabledByDefault() {
-        assertThat(properties.getHealth().isPublicAccessEnabled()).isTrue();
+    void shouldHaveHealthPublicAccessDisabledByDefault() {
+        assertThat(properties.getHealth().isPublicAccessEnabled()).isFalse();
     }
 
     @Test

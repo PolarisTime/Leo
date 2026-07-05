@@ -4,8 +4,6 @@ import com.leo.erp.common.support.DateTimeFormatSupport;
 import com.leo.erp.common.web.dto.HealthCheckResponse;
 import com.leo.erp.common.web.dto.HealthResponse;
 import lombok.extern.slf4j.Slf4j;
-import org.slf4j.MDC;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.connection.RedisConnection;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.dao.DataAccessException;
@@ -18,21 +16,13 @@ import java.io.File;
 @Service
 public class HealthService {
 
-    private static final String TRACE_ID_MDC_KEY = "traceId";
-
     private final JdbcTemplate jdbcTemplate;
     private final RedisConnectionFactory redisConnectionFactory;
-    private final String appName;
-    private final String appVersion;
 
     public HealthService(JdbcTemplate jdbcTemplate,
-                         RedisConnectionFactory redisConnectionFactory,
-                         @Value("${spring.application.name:leo}") String appName,
-                         @Value("${leo.version:1.1.0}") String appVersion) {
+                         RedisConnectionFactory redisConnectionFactory) {
         this.jdbcTemplate = jdbcTemplate;
         this.redisConnectionFactory = redisConnectionFactory;
-        this.appName = appName;
-        this.appVersion = appVersion;
     }
 
     public HealthResponse health() {
@@ -42,13 +32,7 @@ public class HealthService {
         boolean allUp = db.isUp() && redis.isUp() && disk.isUp();
         return new HealthResponse(
                 allUp ? "UP" : "DEGRADED",
-                appName,
-                appVersion,
-                safeTraceId(),
-                DateTimeFormatSupport.now(),
-                db,
-                redis,
-                disk
+                DateTimeFormatSupport.now()
         );
     }
 
@@ -82,10 +66,5 @@ public class HealthService {
         long freeGb = freeBytes / (1024 * 1024 * 1024);
         long totalGb = totalBytes / (1024 * 1024 * 1024);
         return HealthCheckResponse.disk(freeGb < 1 ? "WARN" : "UP", freeGb, totalGb);
-    }
-
-    private String safeTraceId() {
-        String traceId = MDC.get(TRACE_ID_MDC_KEY);
-        return traceId == null ? "" : traceId;
     }
 }
