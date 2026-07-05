@@ -1,15 +1,11 @@
 package com.leo.erp.common.web.service;
 
-import com.leo.erp.common.web.dto.HealthCheckResponse;
 import com.leo.erp.common.web.dto.HealthResponse;
 import org.junit.jupiter.api.Test;
-import org.mockito.Mockito;
 import org.springframework.dao.DataAccessException;
 import org.springframework.data.redis.connection.RedisConnection;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
-
-import java.io.File;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
@@ -52,7 +48,7 @@ class HealthServiceTest {
     }
 
     @Test
-    void healthShouldReturnDegradedWhenDiskFreeSpaceWarns() {
+    void healthShouldStayUpWhenDiskFreeSpaceLow() {
         JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
         when(jdbcTemplate.queryForObject("SELECT 1", Integer.class)).thenReturn(1);
         RedisConnectionFactory redisFactory = mock(RedisConnectionFactory.class);
@@ -60,14 +56,10 @@ class HealthServiceTest {
         when(redisFactory.getConnection()).thenReturn(redisConnection);
         HealthService service = new HealthService(jdbcTemplate, redisFactory);
 
-        try (var files = Mockito.mockConstruction(File.class, (file, context) -> {
-            when(file.getFreeSpace()).thenReturn(512L * 1024 * 1024);
-            when(file.getTotalSpace()).thenReturn(10L * 1024 * 1024 * 1024);
-        })) {
-            HealthResponse response = service.health();
+        // 磁盘不再参与 readiness：即使磁盘吃紧，只要 db/redis 正常，健康状态仍为 UP
+        HealthResponse response = service.health();
 
-            assertThat(response.status()).isEqualTo("DEGRADED");
-        }
+        assertThat(response.status()).isEqualTo("UP");
     }
 
     @Test

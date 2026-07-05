@@ -30,6 +30,7 @@ class ControllerRequiresPermissionCoverageTest {
             "com.leo.erp.system.menu.web.MenuController", Set.of("tree"),
             "com.leo.erp.system.web.HealthPageController", Set.of("health"),
             "com.leo.erp.common.web.HealthController", Set.of("health"),
+            "com.leo.erp.common.web.VersionController", Set.of("version"),
             "com.leo.erp.common.web.MetaController", Set.of("codes")
     );
 

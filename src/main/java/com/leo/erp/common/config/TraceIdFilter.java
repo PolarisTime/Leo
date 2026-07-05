@@ -26,6 +26,7 @@ public class TraceIdFilter extends OncePerRequestFilter {
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
             throws ServletException, IOException {
+        // 主路径：优先回显 Micrometer/OTel 写入 MDC 的 trace id，保证响应头与日志、链路系统一致
         String existingTraceId = normalizeTraceId(MDC.get(MDC_KEY));
         if (existingTraceId != null) {
             response.setHeader(TRACE_ID_HEADER, existingTraceId);
@@ -33,6 +34,8 @@ public class TraceIdFilter extends OncePerRequestFilter {
             return;
         }
 
+        // legacy 兜底：仅当 MDC 无 trace id（如未采样/filter 早于 span 创建）时，回显调用方自带的
+        // X-Trace-Id，作为兼容用的 correlation id，不视为主 trace 来源，也不写入 MDC / 创建 span
         String traceId = normalizeTraceId(request.getHeader(TRACE_ID_HEADER));
         if (traceId != null) {
             response.setHeader(TRACE_ID_HEADER, traceId);

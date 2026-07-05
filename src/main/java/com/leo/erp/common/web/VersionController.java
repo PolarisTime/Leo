@@ -27,7 +27,6 @@ public class VersionController {
         this.appName = appName;
     }
 
-    @PublicAccess
     @GetMapping("/version")
     public ApiResponse<VersionResponse> version() {
         BuildProperties build = buildProperties.getIfAvailable();
