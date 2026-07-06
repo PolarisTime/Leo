@@ -26,6 +26,10 @@
 
 在 `PolarisTime/Leo` 仓库配置 Environment：`production`。
 
+后端自动发版使用 `.github/workflows/release.yml`。`main` 分支推送后，`semantic-release` 会根据 Conventional Commits 计算版本，更新 `pom.xml` 和 `CHANGELOG.md`，创建 `vX.Y.Z` tag 与 GitHub Release。该 tag 会继续触发 `.github/workflows/deploy-production.yml`，完成后端生产部署。
+
+仓库必须配置 `SEMANTIC_RELEASE_TOKEN` secret。该 token 需要具备向 `PolarisTime/Leo` 推送 release commit/tag 并创建 GitHub Release 的权限；不要只依赖默认 `GITHUB_TOKEN`，否则由 workflow 创建的 tag 不会继续触发部署 workflow。
+
 默认生产目标是 `local`，要求本机已注册 GitHub self-hosted runner，并带有以下标签：
 
 - `self-hosted`

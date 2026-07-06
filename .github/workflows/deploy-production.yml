@@ -152,7 +152,11 @@ jobs:
         run: |
           set -euo pipefail
           leo_sha="$(git rev-parse HEAD)"
-          release_id="leo-${GITHUB_RUN_NUMBER}-${leo_sha::12}"
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            release_id="leo-backend-${GITHUB_REF_NAME}"
+          else
+            release_id="leo-${GITHUB_RUN_NUMBER}-${leo_sha::12}"
+          fi
           mkdir -p release/backend release/deploy
           backend_jar="$(find release-input/backend -maxdepth 1 -type f -name '*.jar' | head -1)"
           if [[ -z "$backend_jar" ]]; then
@@ -161,6 +165,7 @@ jobs:
           fi
           cp "$backend_jar" release/backend/leo.jar
           cp scripts/deploy/install-production-release.sh release/deploy/
+          cp scripts/deploy/steelx-process.sh release/deploy/
           jq -n \
             --arg releaseId "$release_id" \
             --arg leoRef "${{ inputs.leo_ref || github.ref_name }}" \
@@ -180,7 +185,10 @@ jobs:
               dryRun: $dryRun,
               releaseNote: $releaseNote
             }' > release/manifest.json
-          tar -C release -czf leo-production-release.tar.gz .
+          archive_name="${release_id}.tar.gz"
+          tar -C release -czf "$archive_name" .
+          sha256sum "$archive_name" > "${archive_name}.sha256"
+          cp "$archive_name" leo-production-release.tar.gz
           sha256sum leo-production-release.tar.gz > leo-production-release.tar.gz.sha256
 
       - name: Upload release archive
@@ -188,6 +196,8 @@ jobs:
         with:
           name: leo-production-release
           path: |
+            leo-*.tar.gz
+            leo-*.tar.gz.sha256
             leo-production-release.tar.gz
             leo-production-release.tar.gz.sha256
           if-no-files-found: error
@@ -223,17 +233,25 @@ jobs:
       PROD_KEEP_RELEASES: ${{ vars.PROD_KEEP_RELEASES || '5' }}
       PROD_START_COMMAND: ${{ vars.PROD_START_COMMAND || 'STEELX_ROOT=/instance/steelx bash /instance/steelx/shared/steelx-process.sh start' }}
       PROD_STOP_COMMAND: ${{ vars.PROD_STOP_COMMAND || 'STEELX_ROOT=/instance/steelx bash /instance/steelx/shared/steelx-process.sh stop' }}
+      HTTP_PROXY: ""
+      HTTPS_PROXY: ""
+      ALL_PROXY: ""
+      NO_PROXY: "127.0.0.1,localhost"
     steps:
-      - name: Checkout Leo deploy scripts
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ inputs.leo_ref || github.ref_name }}
-
       - name: Download release archive
         uses: actions/download-artifact@v4
         with:
           name: leo-production-release
           path: production-release
+
+      - name: Extract deploy scripts
+        run: |
+          set -euo pipefail
+          mkdir -p production-release/extracted
+          (cd production-release && sha256sum -c leo-production-release.tar.gz.sha256)
+          tar -xzf production-release/leo-production-release.tar.gz -C production-release/extracted
+          chmod 0755 production-release/extracted/deploy/install-production-release.sh
+          chmod 0755 production-release/extracted/deploy/steelx-process.sh
 
       - name: Verify local production target
         run: |
@@ -247,12 +265,12 @@ jobs:
             echo "Missing production env file: $PROD_RELEASE_ROOT/shared/steelx.env" >&2
             exit 1
           fi
-          install -m 0755 scripts/deploy/steelx-process.sh "$PROD_RELEASE_ROOT/shared/steelx-process.sh"
+          install -m 0755 production-release/extracted/deploy/steelx-process.sh "$PROD_RELEASE_ROOT/shared/steelx-process.sh"
 
       - name: Install release on local production
         run: |
           set -euo pipefail
-          bash scripts/deploy/install-production-release.sh \
+          bash production-release/extracted/deploy/install-production-release.sh \
             --archive production-release/leo-production-release.tar.gz \
             --sha256-file production-release/leo-production-release.tar.gz.sha256 \
             --release-root "$PROD_RELEASE_ROOT" \
@@ -286,17 +304,24 @@ jobs:
       PROD_KEEP_RELEASES: ${{ vars.PROD_KEEP_RELEASES || '5' }}
       PROD_START_COMMAND: ${{ vars.PROD_START_COMMAND || 'STEELX_ROOT=/instance/steelx bash /instance/steelx/shared/steelx-process.sh start' }}
       PROD_STOP_COMMAND: ${{ vars.PROD_STOP_COMMAND || 'STEELX_ROOT=/instance/steelx bash /instance/steelx/shared/steelx-process.sh stop' }}
+      HTTP_PROXY: ""
+      HTTPS_PROXY: ""
+      ALL_PROXY: ""
+      NO_PROXY: "127.0.0.1,localhost"
     steps:
-      - name: Checkout Leo deploy scripts
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ inputs.leo_ref || github.ref_name }}
-
       - name: Download release archive
         uses: actions/download-artifact@v4
         with:
           name: leo-production-release
           path: production-release
+
+      - name: Extract deploy scripts
+        run: |
+          set -euo pipefail
+          mkdir -p production-release/extracted
+          (cd production-release && sha256sum -c leo-production-release.tar.gz.sha256)
+          tar -xzf production-release/leo-production-release.tar.gz -C production-release/extracted
+          chmod 0755 production-release/extracted/deploy/install-production-release.sh
 
       - name: Configure SSH
         run: |
@@ -351,4 +376,4 @@ jobs:
           ssh -i "$HOME/.ssh/leo-production" \
             -p "$PROD_SSH_PORT" \
             "${PROD_SSH_USER}@${PROD_SSH_HOST}" \
-            "$remote_command" < scripts/deploy/install-production-release.sh
+            "$remote_command" < production-release/extracted/deploy/install-production-release.sh

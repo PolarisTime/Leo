@@ -100,6 +100,13 @@ bash leo/scripts/deploy/trigger-production-rollback.sh --confirm-production --de
 
 CI/CD 详细配置、生产机 systemd/Nginx 模板和回滚策略见 `docs/deployment/production-cicd.md`。
 
+## 自动版本发布
+
+- `main` 分支推送会运行 `.github/workflows/release.yml`，由 `semantic-release` 根据 Conventional Commits 自动计算下一个版本。
+- 发布流程会更新 `pom.xml` 版本和 `CHANGELOG.md`，创建 `vX.Y.Z` tag 与 GitHub Release；该流程只发布 GitHub Release，不向 Maven 仓库发布构件。
+- 仓库必须配置 `SEMANTIC_RELEASE_TOKEN` secret。该 token 需要能向 `PolarisTime/Leo` 推送 commit/tag 并创建 release；不能只依赖默认 `GITHUB_TOKEN`，否则 workflow 创建的 tag 不会继续触发现有生产部署 workflow。
+- `vX.Y.Z` tag 会触发 `.github/workflows/deploy-production.yml`，构建后端 JAR 并部署到生产目标。
+
 ## 关键配置
 
 常见环境变量：

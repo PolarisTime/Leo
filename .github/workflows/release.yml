@@ -1,0 +1,141 @@
+name: backend-release
+
+on:
+  push:
+    branches:
+      - "main"
+    paths-ignore:
+      - "**/*.md"
+      - "docs/**"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Run semantic-release without creating a tag, GitHub Release, or version commit"
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Release
+    if: ${{ github.event_name == 'workflow_dispatch' || !startsWith(github.event.head_commit.message, 'chore(release):') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: leo
+          POSTGRES_USER: leo
+          POSTGRES_PASSWORD: leo_ci_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U leo -d leo"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    defaults:
+      run:
+        shell: bash
+    env:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/leo
+      SPRING_DATASOURCE_USERNAME: leo
+      SPRING_DATASOURCE_PASSWORD: leo_ci_password
+      SPRING_DATA_REDIS_HOST: localhost
+      SPRING_DATA_REDIS_PORT: 6379
+      SPRING_DATA_REDIS_DATABASE: 3
+      SPRING_DATA_REDIS_PASSWORD: ""
+      LEO_JWT_SECRET: ci-jwt-secret-ci-jwt-secret-ci-jwt-secret
+      TOTP_ENCRYPTION_KEY: ci-totp-secret-ci-totp-secret-ci-totp
+      LEO_MACHINE_ID: 1
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.SEMANTIC_RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
+
+      - name: Validate release token
+        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.dry_run) }}
+        env:
+          SEMANTIC_RELEASE_TOKEN: ${{ secrets.SEMANTIC_RELEASE_TOKEN }}
+        run: |
+          if [[ -z "$SEMANTIC_RELEASE_TOKEN" ]]; then
+            echo "::error::Missing SEMANTIC_RELEASE_TOKEN. A token other than GITHUB_TOKEN is required so release tags can trigger deploy-production.yml."
+            exit 1
+          fi
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+          cache-dependency-path: pom.xml
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24.16.0"
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install release tooling
+        run: npm ci
+
+      - name: Static analysis
+        run: mvn -B -ntp -DskipTests checkstyle:check spotbugs:spotbugs
+
+      - name: Test
+        run: mvn -B -ntp test
+
+      - name: Verify Flyway migrations
+        run: |
+          mvn -B -ntp flyway:migrate \
+            -Dflyway.url="$SPRING_DATASOURCE_URL" \
+            -Dflyway.user="$SPRING_DATASOURCE_USERNAME" \
+            -Dflyway.password="$SPRING_DATASOURCE_PASSWORD" \
+            -Dflyway.locations="filesystem:src/main/resources/db/migration" \
+            -Dflyway.cleanDisabled=true \
+            -Dflyway.placeholderReplacement=false \
+            -Dflyway.validateMigrationNaming=true
+          mvn -B -ntp flyway:validate \
+            -Dflyway.url="$SPRING_DATASOURCE_URL" \
+            -Dflyway.user="$SPRING_DATASOURCE_USERNAME" \
+            -Dflyway.password="$SPRING_DATASOURCE_PASSWORD" \
+            -Dflyway.locations="filesystem:src/main/resources/db/migration" \
+            -Dflyway.cleanDisabled=true \
+            -Dflyway.placeholderReplacement=false \
+            -Dflyway.validateMigrationNaming=true
+
+      - name: Package
+        run: mvn -B -ntp -DskipTests package
+
+      - name: Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.SEMANTIC_RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" && "${{ inputs.dry_run }}" == "true" ]]; then
+            npm run release:dry-run
+          else
+            npm run release
+          fi
