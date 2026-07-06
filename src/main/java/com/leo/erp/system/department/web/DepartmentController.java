@@ -45,7 +45,7 @@ public class DepartmentController {
         return ApiResponse.success(PageResponse.from(departmentService.page(query, keyword, status)));
     }
 
-    @GetMapping("/option")
+    @GetMapping("/options")
     @RequiresPermission(resource = "department", action = "read")
     public ApiResponse<List<DepartmentOptionResponse>> options() {
         return ApiResponse.success(departmentService.options());

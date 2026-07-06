@@ -83,7 +83,7 @@ public class RoleSettingController {
         return ApiResponse.success(roleSettingService.getRolePermissions(id));
     }
 
-    @GetMapping("/permission-option")
+    @GetMapping("/permission-options")
     @RequiresPermission(resource = "role", action = "manage_permissions")
     public ApiResponse<List<MenuTreeResponse>> listPermissionOptions() {
         return ApiResponse.success(roleSettingService.listPermissionOptions());

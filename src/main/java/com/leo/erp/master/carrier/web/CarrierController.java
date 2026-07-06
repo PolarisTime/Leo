@@ -34,7 +34,7 @@ public class CarrierController {
         this.carrierService = carrierService;
     }
 
-    @GetMapping("/option")
+    @GetMapping("/options")
     @RequiresPermission(resource = "carrier", action = "read")
     public ApiResponse<List<CarrierOptionResponse>> options() {
         return ApiResponse.success(carrierService.listActiveOptions());

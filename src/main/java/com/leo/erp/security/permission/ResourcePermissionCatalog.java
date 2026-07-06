@@ -88,42 +88,42 @@ public final class ResourcePermissionCatalog {
 
     public static final List<Entry> ENTRIES = List.of(
             entry("dashboard", "工作台", "工作台", false, List.of("/dashboard"), READ_ONLY_ACTIONS),
-            entry("material", "商品资料", "主数据", true, List.of("/material", "/material-categories", "/material-category"), BUSINESS_ACTIONS),
-            entry("supplier", "供应商资料", "主数据", true, List.of("/supplier"), BUSINESS_ACTIONS),
-            entry("customer", "客户资料", "主数据", true, List.of("/customer"), BUSINESS_ACTIONS),
+            entry("material", "商品资料", "主数据", true, List.of("/material", "/materials", "/material-categories", "/material-category"), BUSINESS_ACTIONS),
+            entry("supplier", "供应商资料", "主数据", true, List.of("/supplier", "/suppliers"), BUSINESS_ACTIONS),
+            entry("customer", "客户资料", "主数据", true, List.of("/customer", "/customers"), BUSINESS_ACTIONS),
             entry("project", "项目", "主数据", true, List.of("/project", "/projects"), CRUD_ACTIONS),
-            entry("carrier", "物流方资料", "主数据", true, List.of("/carrier"), BUSINESS_ACTIONS),
-            entry("warehouse", "仓库资料", "主数据", true, List.of("/warehouse"), BUSINESS_ACTIONS),
-            entry("purchase-order", "采购订单", "采购", true, List.of("/purchase-order"), BUSINESS_ACTIONS),
-            entry("purchase-inbound", "采购入库", "采购", true, List.of("/purchase-inbound"), BUSINESS_ACTIONS),
-            entry("sales-order", "销售订单", "销售", true, List.of("/sales-order"), BUSINESS_ACTIONS),
-            entry("sales-outbound", "销售出库", "销售", true, List.of("/sales-outbound"), BUSINESS_ACTIONS),
-            entry("freight-bill", "物流单", "物流", true, List.of("/freight-bill"), BUSINESS_ACTIONS),
-            entry("purchase-contract", "采购合同", "合同", true, List.of("/purchase-contract"), BUSINESS_ACTIONS),
-            entry("sales-contract", "销售合同", "合同", true, List.of("/sales-contract"), BUSINESS_ACTIONS),
+            entry("carrier", "物流方资料", "主数据", true, List.of("/carrier", "/carriers"), BUSINESS_ACTIONS),
+            entry("warehouse", "仓库资料", "主数据", true, List.of("/warehouse", "/warehouses"), BUSINESS_ACTIONS),
+            entry("purchase-order", "采购订单", "采购", true, List.of("/purchase-order", "/purchase-orders"), BUSINESS_ACTIONS),
+            entry("purchase-inbound", "采购入库", "采购", true, List.of("/purchase-inbound", "/purchase-inbounds"), BUSINESS_ACTIONS),
+            entry("sales-order", "销售订单", "销售", true, List.of("/sales-order", "/sales-orders"), BUSINESS_ACTIONS),
+            entry("sales-outbound", "销售出库", "销售", true, List.of("/sales-outbound", "/sales-outbounds"), BUSINESS_ACTIONS),
+            entry("freight-bill", "物流单", "物流", true, List.of("/freight-bill", "/freight-bills"), BUSINESS_ACTIONS),
+            entry("purchase-contract", "采购合同", "合同", true, List.of("/purchase-contract", "/purchase-contracts"), BUSINESS_ACTIONS),
+            entry("sales-contract", "销售合同", "合同", true, List.of("/sales-contract", "/sales-contracts"), BUSINESS_ACTIONS),
             entry("inventory-report", "商品库存报表", "报表", true, List.of("/inventory-report"), REPORT_ACTIONS),
             entry("io-report", "出入库报表", "报表", true, List.of("/io-report"), REPORT_ACTIONS),
             entry("pending-invoice-receipt-report", "未收票报表", "报表", true,
                     List.of("/pending-invoice-receipt-report"), REPORT_ACTIONS),
-            entry("supplier-statement", "供应商对账单", "对账", true, List.of("/supplier-statement"), BUSINESS_ACTIONS),
-            entry("customer-statement", "客户对账单", "对账", true, List.of("/customer-statement"), BUSINESS_ACTIONS),
-            entry("freight-statement", "物流对账单", "对账", true, List.of("/freight-statement"), BUSINESS_ACTIONS),
-            entry("receipt", "收款单", "财务", true, List.of("/receipt"), BUSINESS_ACTIONS),
-            entry("payment", "付款单", "财务", true, List.of("/payment"), BUSINESS_ACTIONS),
-            entry("invoice-receipt", "收票单", "财务", true, List.of("/invoice-receipt"), BUSINESS_ACTIONS),
-            entry("invoice-issue", "开票单", "财务", true, List.of("/invoice-issue"), BUSINESS_ACTIONS),
+            entry("supplier-statement", "供应商对账单", "对账", true, List.of("/supplier-statement", "/supplier-statements"), BUSINESS_ACTIONS),
+            entry("customer-statement", "客户对账单", "对账", true, List.of("/customer-statement", "/customer-statements"), BUSINESS_ACTIONS),
+            entry("freight-statement", "物流对账单", "对账", true, List.of("/freight-statement", "/freight-statements"), BUSINESS_ACTIONS),
+            entry("receipt", "收款单", "财务", true, List.of("/receipt", "/receipts"), BUSINESS_ACTIONS),
+            entry("payment", "付款单", "财务", true, List.of("/payment", "/payments"), BUSINESS_ACTIONS),
+            entry("invoice-receipt", "收票单", "财务", true, List.of("/invoice-receipt", "/invoice-receipts"), BUSINESS_ACTIONS),
+            entry("invoice-issue", "开票单", "财务", true, List.of("/invoice-issue", "/invoice-issues"), BUSINESS_ACTIONS),
             entry("ledger-adjustment", "台账调整单", "财务", true,
                     List.of("/ledger-adjustment", "/ledger-adjustments"), BUSINESS_ACTIONS),
-            entry("receivable-payable", "应收应付", "财务", true, List.of("/receivable-payable"), REPORT_ACTIONS),
+            entry("receivable-payable", "应收应付", "财务", true, List.of("/receivable-payable", "/receivable-payables"), REPORT_ACTIONS),
             entry("general-setting", "通用设置", "系统", false,
-                    List.of("/general-setting", "/general-setting/upload-rule"), List.of(action(READ, "查看"), action(UPDATE, "编辑"))),
+                    List.of("/general-setting", "/general-settings", "/general-setting/upload-rule", "/general-settings/upload-rule"), List.of(action(READ, "查看"), action(UPDATE, "编辑"))),
             entry("company-setting", "结算主体管理", "主数据", false, List.of("/company-setting", "/company-settings"), CRUD_ACTIONS),
-            entry("operation-log", "操作日志", "系统", false, List.of("/operation-log"), READ_ONLY_ACTIONS),
-            entry("department", "部门", "主数据", false, List.of("/department"), CRUD_ACTIONS),
-            entry("user-account", "用户账户", "系统", false, List.of("/user-account"), CRUD_ACTIONS),
-            entry("permission", "权限管理", "系统", false, List.of("/permission"), READ_ONLY_ACTIONS),
+            entry("operation-log", "操作日志", "系统", false, List.of("/operation-log", "/operation-logs"), READ_ONLY_ACTIONS),
+            entry("department", "部门", "主数据", false, List.of("/department", "/departments"), CRUD_ACTIONS),
+            entry("user-account", "用户账户", "系统", false, List.of("/user-account", "/user-accounts"), CRUD_ACTIONS),
+            entry("permission", "权限管理", "系统", false, List.of("/permission", "/permissions"), READ_ONLY_ACTIONS),
             entry("role", "角色", "系统", false,
-                    List.of("/role-setting", "/role-action-editor"), List.of(
+                    List.of("/role-setting", "/role-settings", "/role-action-editor"), List.of(
                             action(READ, "查看"),
                             action(CREATE, "新增"),
                             action(UPDATE, "编辑"),
@@ -133,11 +133,11 @@ public final class ResourcePermissionCatalog {
             entry("access-control", "访问控制", "系统", false,
                     List.of("/access-control"), READ_ONLY_ACTIONS),
             entry("database", "数据库管理", "系统", false,
-                    List.of("/database", "/system/database"), List.of(action(READ, "查看"), action(UPDATE, "编辑"), action(EXPORT, "导出"))),
-            entry("session", "会话管理", "系统", false, List.of("/auth/refresh-token"), List.of(action(READ, "查看"), action(UPDATE, "编辑"))),
-            entry("api-key", "API Key 管理", "系统", false, List.of("/auth/api-key"), List.of(action(READ, "查看"), action(CREATE, "新增"), action(UPDATE, "编辑"))),
-            entry("security-key", "安全密钥管理", "系统", false, List.of("/system/security-key"), List.of(action(READ, "查看"), action(UPDATE, "编辑"))),
-            entry("print-template", "打印模板", "系统", false, List.of("/print-template"), CRUD_ACTIONS)
+                    List.of("/database", "/system/database", "/system/databases"), List.of(action(READ, "查看"), action(UPDATE, "编辑"), action(EXPORT, "导出"))),
+            entry("session", "会话管理", "系统", false, List.of("/auth/refresh-token", "/auth/refresh-tokens"), List.of(action(READ, "查看"), action(UPDATE, "编辑"))),
+            entry("api-key", "API Key 管理", "系统", false, List.of("/auth/api-key", "/auth/api-keys"), List.of(action(READ, "查看"), action(CREATE, "新增"), action(UPDATE, "编辑"))),
+            entry("security-key", "安全密钥管理", "系统", false, List.of("/system/security-key", "/system/security-keys"), List.of(action(READ, "查看"), action(UPDATE, "编辑"))),
+            entry("print-template", "打印模板", "系统", false, List.of("/print-template", "/print-templates"), CRUD_ACTIONS)
     );
 
     private static final Map<String, Entry> ENTRIES_BY_CODE = entriesByCode();
@@ -236,8 +236,8 @@ public final class ResourcePermissionCatalog {
             return Optional.empty();
         }
         String path = rawPath.trim();
-        if (path.matches("^/role-setting/[^/]+/permission(?:/.*)?$")
-                || path.matches("^/role-setting/[^/]+/action(?:/.*)?$")) {
+        if (path.matches("^/role-settings?/[^/]+/permission(?:/.*)?$")
+                || path.matches("^/role-settings?/[^/]+/action(?:/.*)?$")) {
             return Optional.of("role");
         }
         Entry matched = null;

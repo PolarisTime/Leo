@@ -73,7 +73,7 @@ public class FreightStatementController {
     }
 
     @Operation(summary = "分页查询物流对账单候选物流单")
-    @GetMapping("/candidate")
+    @GetMapping("/candidates")
     @RequiresPermission(resource = "freight-statement", action = "read")
     public ApiResponse<PageResponse<FreightStatementCandidateResponse>> candidates(
             @BindPageQuery(sortFieldKey = "freight-bill") PageQuery query,

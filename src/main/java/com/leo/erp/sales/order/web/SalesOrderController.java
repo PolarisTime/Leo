@@ -82,7 +82,7 @@ public class SalesOrderController {
     }
 
     @Operation(summary = "分页查询销售订单出库导入候选")
-    @GetMapping("/outbound-import-candidate")
+    @GetMapping("/outbound-import-candidates")
     @RequiresPermission(resource = "sales-order", action = "read")
     public ApiResponse<PageResponse<SalesOrderResponse>> outboundImportCandidates(
             @BindPageQuery(sortFieldKey = "sales-order") PageQuery query,

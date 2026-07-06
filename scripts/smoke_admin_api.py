@@ -443,16 +443,16 @@ class SmokeRunner:
         if not operator_login_ok:
             return
         self.bootstrap_operator_token = operator_login_payload["data"]["accessToken"]
-        menu_options_response, menu_options_payload = self.request(
+        resource_options_response, resource_options_payload = self.request(
             "GET",
-            "/auth/api-keys/menu-options",
+            "/auth/api-keys/resource-options",
             token=self.bootstrap_operator_token,
         )
-        menu_codes = []
-        if menu_options_response.status_code == 200 and menu_options_payload.get("code") == 0:
-            menu_codes = [
+        resource_codes = []
+        if resource_options_response.status_code == 200 and resource_options_payload.get("code") == 0:
+            resource_codes = [
                 item.get("code")
-                for item in menu_options_payload.get("data", [])
+                for item in resource_options_payload.get("data", [])
                 if isinstance(item, dict) and item.get("code")
             ]
         action_options_response, action_options_payload = self.request(
@@ -475,7 +475,7 @@ class SmokeRunner:
             body={
                 "keyName": f"bootstrap-key-{SUFFIX}",
                 "usageScope": "全部接口",
-                "allowedMenus": menu_codes,
+                "allowedResources": resource_codes,
                 "allowedActions": action_codes,
                 "expireDays": 1,
             },
@@ -524,11 +524,11 @@ class SmokeRunner:
             self.add(path, "GET", path, ok, category="read" if ok else "fail", status=response.status_code, code=payload.get("code") if payload else None, message=payload.get("message") if payload else None)
 
         for path, params in [
-            ("/system/menus/tree", None),
-            ("/system/database/status", None),
+            ("/system/menu/tree", None),
+            ("/system/databases/status", None),
             ("/system/security-keys", None),
             ("/auth/api-keys/user-options", None),
-            ("/auth/api-keys/menu-options", None),
+            ("/auth/api-keys/resource-options", None),
             ("/auth/api-keys/action-options", None),
             ("/general-settings/upload-rule", {"moduleKey": "general-settings"}),
             ("/upload-rules/page", {"moduleKey": "general-settings"}),
@@ -665,12 +665,12 @@ class SmokeRunner:
         if not target_user_id:
             self.add("/auth/api-keys", "POST", "/auth/api-keys", False, category="fail", message="missing user source")
             return
-        menu_options, menu_options_payload = self.request("GET", "/auth/api-keys/menu-options", **self.protected_auth())
-        allowed_menus = []
-        if menu_options.status_code == 200 and menu_options_payload.get("code") == 0:
-            allowed_menus = [
+        resource_options, resource_options_payload = self.request("GET", "/auth/api-keys/resource-options", **self.protected_auth())
+        allowed_resources = []
+        if resource_options.status_code == 200 and resource_options_payload.get("code") == 0:
+            allowed_resources = [
                 item.get("code")
-                for item in menu_options_payload.get("data", [])
+                for item in resource_options_payload.get("data", [])
                 if isinstance(item, dict) and item.get("code")
             ]
         action_options, action_options_payload = self.request("GET", "/auth/api-keys/action-options", **self.protected_auth())
@@ -689,7 +689,7 @@ class SmokeRunner:
             body={
                 "keyName": f"smoke-key-{SUFFIX}",
                 "usageScope": "全部接口",
-                "allowedMenus": allowed_menus,
+                "allowedResources": allowed_resources,
                 "allowedActions": allowed_actions,
                 "expireDays": 7,
             },

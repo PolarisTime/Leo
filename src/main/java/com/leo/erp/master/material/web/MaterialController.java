@@ -86,7 +86,7 @@ public class MaterialController {
         return toDownloadResponse(materialService.downloadTemplateFile());
     }
 
-    @GetMapping("/grade")
+    @GetMapping("/grades")
     @RequiresPermission(resource = "material", action = "read")
     public ApiResponse<java.util.List<String>> materialGrades() {
         return ApiResponse.success(materialService.materialGrades());

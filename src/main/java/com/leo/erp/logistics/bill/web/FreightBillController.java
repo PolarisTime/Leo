@@ -63,7 +63,7 @@ public class FreightBillController {
         ));
     }
 
-    @GetMapping("/import-candidate")
+    @GetMapping("/import-candidates")
     @RequiresPermission(resource = "sales-outbound", action = "read")
     public ApiResponse<PageResponse<FreightBillImportCandidateResponse>> importCandidates(
             @BindPageQuery(sortFieldKey = "sales-outbound") PageQuery query,

@@ -101,6 +101,32 @@ class ResourcePermissionCatalogTest {
     }
 
     @Test
+    void shouldResolvePluralApiRoutesByPath() {
+        assertThat(ResourcePermissionCatalog.resolveResourceByPath("/departments/options"))
+                .contains("department");
+        assertThat(ResourcePermissionCatalog.resolveResourceByPath("/warehouses/options"))
+                .contains("warehouse");
+        assertThat(ResourcePermissionCatalog.resolveResourceByPath("/customers/options"))
+                .contains("customer");
+        assertThat(ResourcePermissionCatalog.resolveResourceByPath("/suppliers/options"))
+                .contains("supplier");
+        assertThat(ResourcePermissionCatalog.resolveResourceByPath("/carriers/options"))
+                .contains("carrier");
+        assertThat(ResourcePermissionCatalog.resolveResourceByPath("/material-categories/options"))
+                .contains("material");
+        assertThat(ResourcePermissionCatalog.resolveResourceByPath("/materials/grades"))
+                .contains("material");
+        assertThat(ResourcePermissionCatalog.resolveResourceByPath("/auth/api-keys/resource-options"))
+                .contains("api-key");
+        assertThat(ResourcePermissionCatalog.resolveResourceByPath("/role-settings/permission-options"))
+                .contains("role");
+        assertThat(ResourcePermissionCatalog.resolveResourceByPath("/purchase-orders/import-candidates"))
+                .contains("purchase-order");
+        assertThat(ResourcePermissionCatalog.resolveResourceByPath("/supplier-statements/candidates"))
+                .contains("supplier-statement");
+    }
+
+    @Test
     void shouldReturnEmptyForBlankPath() {
         assertThat(ResourcePermissionCatalog.resolveResourceByPath(null)).isEmpty();
         assertThat(ResourcePermissionCatalog.resolveResourceByPath("")).isEmpty();

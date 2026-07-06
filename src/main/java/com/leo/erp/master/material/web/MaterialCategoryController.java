@@ -70,7 +70,7 @@ public class MaterialCategoryController {
         return ApiResponse.success("删除成功");
     }
 
-    @GetMapping("/option")
+    @GetMapping("/options")
     @RequiresPermission(resource = "material", action = "read")
     public ApiResponse<List<MaterialCategoryOptionResponse>> options() {
         return ApiResponse.success(service.options());

@@ -70,7 +70,7 @@ public class CustomerStatementController {
     }
 
     @Operation(summary = "分页查询客户对账单候选销售订单")
-    @GetMapping("/candidate")
+    @GetMapping("/candidates")
     @RequiresPermission(resource = "customer-statement", action = "read")
     public ApiResponse<PageResponse<CustomerStatementCandidateResponse>> candidates(
             @BindPageQuery(sortFieldKey = "sales-order") PageQuery query,

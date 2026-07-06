@@ -34,7 +34,7 @@ public class WarehouseController {
         this.warehouseService = warehouseService;
     }
 
-    @GetMapping("/option")
+    @GetMapping("/options")
     @RequiresPermission(resource = "warehouse", action = "read")
     public ApiResponse<List<OptionResponse>> options() {
         return ApiResponse.success(warehouseService.listActiveOptions());

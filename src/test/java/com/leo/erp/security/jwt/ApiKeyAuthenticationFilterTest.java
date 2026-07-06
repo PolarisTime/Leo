@@ -124,7 +124,7 @@ class ApiKeyAuthenticationFilterTest {
                 mock(ApiKeyUsageService.class)
         );
 
-        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/system/database/status");
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/system/databases/status");
         request.addHeader("X-API-Key", "business-key");
         MockHttpServletResponse response = new MockHttpServletResponse();
         AtomicBoolean chainInvoked = new AtomicBoolean(false);

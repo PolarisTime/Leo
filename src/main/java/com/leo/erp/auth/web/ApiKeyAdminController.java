@@ -55,19 +55,19 @@ public class ApiKeyAdminController {
         return ApiResponse.success(service.detail(id));
     }
 
-    @GetMapping("/user-option")
+    @GetMapping("/user-options")
     @RequiresPermission(resource = "api-key", action = "read")
     public ApiResponse<List<ApiKeyUserOptionResponse>> userOptions(@RequestParam(required = false) @Size(max = 100) String keyword) {
         return ApiResponse.success(service.listAvailableUsers(keyword));
     }
 
-    @GetMapping("/resource-option")
+    @GetMapping("/resource-options")
     @RequiresPermission(resource = "api-key", action = "read")
     public ApiResponse<List<ApiKeyResourceOptionResponse>> resourceOptions() {
         return ApiResponse.success(service.listResourceOptions());
     }
 
-    @GetMapping("/action-option")
+    @GetMapping("/action-options")
     @RequiresPermission(resource = "api-key", action = "read")
     public ApiResponse<List<ApiKeyActionOptionResponse>> actionOptions() {
         return ApiResponse.success(service.listActionOptions());
