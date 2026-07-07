@@ -10,17 +10,29 @@ import java.util.Map;
 public class ModuleCatalog {
 
     private static final Map<String, String> MODULE_NAME_MAP = buildModuleNameMap();
+    private static final Map<String, String> MODULE_ALIAS_MAP = Map.of(
+            "material-categories", "material-category"
+    );
 
     public List<String> orderedModuleKeys() {
         return List.copyOf(MODULE_NAME_MAP.keySet());
     }
 
     public String resolveModuleName(String moduleKey) {
-        return MODULE_NAME_MAP.getOrDefault(moduleKey, moduleKey);
+        String normalizedModuleKey = normalizeModuleKey(moduleKey);
+        return MODULE_NAME_MAP.getOrDefault(normalizedModuleKey, moduleKey);
     }
 
     public boolean containsModule(String moduleKey) {
-        return moduleKey != null && MODULE_NAME_MAP.containsKey(moduleKey);
+        return moduleKey != null && MODULE_NAME_MAP.containsKey(normalizeModuleKey(moduleKey));
+    }
+
+    public String normalizeModuleKey(String moduleKey) {
+        if (moduleKey == null) {
+            return null;
+        }
+        String normalized = moduleKey.trim();
+        return MODULE_ALIAS_MAP.getOrDefault(normalized, normalized);
     }
 
     private static Map<String, String> buildModuleNameMap() {

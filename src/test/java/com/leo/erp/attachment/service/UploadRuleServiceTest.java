@@ -92,6 +92,35 @@ class UploadRuleServiceTest {
     }
 
     @Test
+    void shouldResolveMaterialCategoriesAliasToCanonicalUploadRule() {
+        Map<Long, UploadRule> store = new LinkedHashMap<>();
+        UploadRule materialCategoryRule = new UploadRule();
+        materialCategoryRule.setId(10L);
+        materialCategoryRule.setModuleKey("material-category");
+        materialCategoryRule.setRuleCode("PAGE_UPLOAD_MATERIAL_CATEGORY");
+        materialCategoryRule.setRuleName("商品类别上传命名规则");
+        materialCategoryRule.setRenamePattern("CATEGORY_{originName}");
+        materialCategoryRule.setStatus("正常");
+        store.put(materialCategoryRule.getId(), materialCategoryRule);
+
+        UploadRuleService service = new UploadRuleService(
+                uploadRuleRepository(store),
+                new FixedIdGenerator(200L),
+                new AttachmentFilenameResolver(),
+                new ModuleCatalog(),
+                Mockito.mock(UploadRuleWebMapper.class)
+        );
+
+        PageUploadRuleDetail detail = service.getPageUploadRule("material-categories");
+        String fileName = service.buildPageUploadFileName("material-categories", "category.pdf", "application/pdf");
+
+        assertThat(detail.moduleKey()).isEqualTo("material-category");
+        assertThat(detail.moduleName()).isEqualTo("商品类别");
+        assertThat(detail.renamePattern()).isEqualTo("CATEGORY_{originName}");
+        assertThat(fileName).isEqualTo("CATEGORY_category.pdf");
+    }
+
+    @Test
     void shouldListSupportedModuleRules() {
         Map<Long, UploadRule> store = new LinkedHashMap<>();
         UploadRule legacy = new UploadRule();

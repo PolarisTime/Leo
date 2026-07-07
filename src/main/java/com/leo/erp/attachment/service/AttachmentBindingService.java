@@ -163,7 +163,7 @@ public class AttachmentBindingService {
         if (moduleKey == null || moduleKey.isBlank()) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "缺少模块标识");
         }
-        String normalized = moduleKey.trim();
+        String normalized = moduleCatalog.normalizeModuleKey(moduleKey);
         if (!moduleCatalog.containsModule(normalized)) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "模块标识不合法");
         }

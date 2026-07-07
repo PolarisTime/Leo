@@ -30,8 +30,14 @@ class ModuleCatalogTest {
     @Test
     void shouldContainKnownModule() {
         assertThat(catalog.containsModule("material")).isTrue();
+        assertThat(catalog.containsModule("material-categories")).isTrue();
         assertThat(catalog.containsModule("purchase-order")).isTrue();
         assertThat(catalog.containsModule("ledger-adjustment")).isTrue();
+    }
+
+    @Test
+    void shouldResolveAliasModuleName() {
+        assertThat(catalog.resolveModuleName("material-categories")).isEqualTo("商品类别");
     }
 
     @Test

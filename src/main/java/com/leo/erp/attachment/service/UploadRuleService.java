@@ -168,7 +168,7 @@ public class UploadRuleService implements PageUploadRuleQueryService {
         if (moduleKey == null || moduleKey.isBlank()) {
             return "general-setting";
         }
-        String normalized = moduleKey.trim();
+        String normalized = moduleCatalog.normalizeModuleKey(moduleKey);
         if (!moduleCatalog.containsModule(normalized)) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "页面模块不合法");
         }

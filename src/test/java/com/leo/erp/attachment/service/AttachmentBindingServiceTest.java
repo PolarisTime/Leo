@@ -73,6 +73,28 @@ class AttachmentBindingServiceTest {
     }
 
     @Test
+    void shouldNormalizeMaterialCategoriesAliasForBindings() {
+        AtomicReference<List<AttachmentBinding>> savedBindings = new AtomicReference<>(List.of());
+        Map<Long, AttachmentView> attachments = Map.of(10L, attachment(10L, "category.pdf"));
+
+        AttachmentBindingService service = new AttachmentBindingService(
+                bindingRepository(List.of(), savedBindings, new AtomicReference<>(List.of()), new AtomicReference<>(false)),
+                attachmentService(attachments),
+                enabledUploadRuleService(),
+                new FixedIdGenerator(101L),
+                new ModuleCatalog(),
+                attachmentFileRepository()
+        );
+
+        List<AttachmentView> result = service.replace("material-categories", 9L, List.of(10L));
+
+        assertThat(savedBindings.get())
+                .extracting(AttachmentBinding::getModuleKey)
+                .containsExactly("material-category");
+        assertThat(result).extracting(AttachmentView::id).containsExactly(10L);
+    }
+
+    @Test
     void shouldRejectDuplicateAttachmentIds() {
         AttachmentBindingService service = new AttachmentBindingService(
                 bindingRepository(List.of(), new AtomicReference<>(List.of()), new AtomicReference<>(List.of()), new AtomicReference<>(false)),
