@@ -2,6 +2,7 @@ package com.leo.erp.purchase.inbound.service;
 
 import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.api.PageQuery;
+import com.leo.erp.common.charge.service.DocumentChargeItemService;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
@@ -38,6 +39,20 @@ public class PurchaseInboundService extends AbstractCrudService<
     private final PurchaseInboundResponseAssembler responseAssembler;
     private final PurchaseInboundPieceWeightService pieceWeightService;
     private final WorkflowTransitionGuard workflowTransitionGuard;
+    private final DocumentChargeItemService chargeItemService;
+
+    public PurchaseInboundService(PurchaseInboundRepository repository,
+                                  SnowflakeIdGenerator idGenerator,
+                                  PurchaseInboundMapper purchaseInboundMapper,
+                                  PurchaseInboundApplyService applyService,
+                                  PurchaseInboundDeleteService deleteService,
+                                  PurchaseInboundCompletionSyncService completionSyncService,
+                                  PurchaseInboundResponseAssembler responseAssembler,
+                                  PurchaseInboundPieceWeightService pieceWeightService,
+                                  WorkflowTransitionGuard workflowTransitionGuard) {
+        this(repository, idGenerator, purchaseInboundMapper, applyService, deleteService, completionSyncService,
+                responseAssembler, pieceWeightService, workflowTransitionGuard, null);
+    }
 
     @Autowired
     public PurchaseInboundService(PurchaseInboundRepository repository,
@@ -48,7 +63,8 @@ public class PurchaseInboundService extends AbstractCrudService<
                                   PurchaseInboundCompletionSyncService completionSyncService,
                                   PurchaseInboundResponseAssembler responseAssembler,
                                   PurchaseInboundPieceWeightService pieceWeightService,
-                                  WorkflowTransitionGuard workflowTransitionGuard) {
+                                  WorkflowTransitionGuard workflowTransitionGuard,
+                                  DocumentChargeItemService chargeItemService) {
         super(idGenerator);
         this.repository = repository;
         this.purchaseInboundMapper = purchaseInboundMapper;
@@ -58,6 +74,7 @@ public class PurchaseInboundService extends AbstractCrudService<
         this.responseAssembler = responseAssembler;
         this.pieceWeightService = pieceWeightService;
         this.workflowTransitionGuard = workflowTransitionGuard;
+        this.chargeItemService = chargeItemService;
     }
 
     @Transactional(readOnly = true)
@@ -132,7 +149,8 @@ public class PurchaseInboundService extends AbstractCrudService<
                 request.settlementMode(),
                 request.status(),
                 request.remark(),
-                request.items()
+                request.items(),
+                request.chargeItems()
         );
     }
 
@@ -147,7 +165,8 @@ public class PurchaseInboundService extends AbstractCrudService<
                 request.settlementMode(),
                 request.status(),
                 request.remark(),
-                request.items()
+                request.items(),
+                request.chargeItems()
         );
     }
 
@@ -208,6 +227,29 @@ public class PurchaseInboundService extends AbstractCrudService<
         inbound.setStatus(nextStatus);
         inbound.setRemark(request.remark());
         applyService.applyItems(inbound, request, this::nextId);
+        syncChargeItems(inbound, request);
+        copyChargeItemsFromSource(inbound, request);
+    }
+
+    private void syncChargeItems(PurchaseInbound inbound, PurchaseInboundRequest request) {
+        if (request.chargeItems() == null || chargeItemService == null) {
+            return;
+        }
+        chargeItemService.sync("purchase-inbound", inbound.getId(), request.chargeItems());
+    }
+
+    private void copyChargeItemsFromSource(PurchaseInbound inbound, PurchaseInboundRequest request) {
+        if (request.chargeItems() != null || chargeItemService == null || inbound.getId() == null) {
+            return;
+        }
+        applyService.sourcePurchaseOrderIds(inbound).forEach(sourcePurchaseOrderId ->
+                chargeItemService.copyFromSource(
+                        "purchase-order",
+                        sourcePurchaseOrderId,
+                        "purchase-inbound",
+                        inbound.getId()
+                )
+        );
     }
 
     @Override

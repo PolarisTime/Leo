@@ -111,4 +111,46 @@ class PrintOutputTest {
                 .containsExactlyEntriesOf(Map.of("customerName", "客户甲"));
         assertThat(output.items()).containsExactly(Map.of("brand", "中杭"));
     }
+
+    @Test
+    void shouldCopyChargeItemsAndSectionsFromPayload() {
+        Map<String, Object> payload = Map.of(
+                "templateName", "坐标模板",
+                "templateType", "COORD",
+                "chargeItems", List.of(Map.of("chargeName", "卸货费", "amount", "12.50")),
+                "sections", Map.of(
+                        "items", List.of(Map.of("brand", "中杭")),
+                        "chargeItems", List.of(Map.of("chargeName", "卸货费", "amount", "12.50")),
+                        "invalid", "ignored"
+                )
+        );
+
+        PrintOutput output = PrintOutput.fromPayload(payload);
+
+        assertThat(output.chargeItems()).containsExactly(Map.of("chargeName", "卸货费", "amount", "12.50"));
+        assertThat(output.sections())
+                .containsEntry("items", List.of(Map.of("brand", "中杭")))
+                .containsEntry("chargeItems", output.chargeItems())
+                .doesNotContainKey("invalid");
+    }
+
+    @Test
+    void shouldPreservePayloadDataForPdfOutput() {
+        PrintOutput output = PrintOutput.pdf(
+                Map.of(
+                        "templateName", "PDF 模板",
+                        "businessNo", "SO-001",
+                        "data", Map.of("totalChargeAmount", "12.50"),
+                        "items", List.of(Map.of("brand", "中杭")),
+                        "chargeItems", List.of(Map.of("chargeName", "卸货费"))
+                ),
+                "cGRmLWNvbnRlbnQ=",
+                "application/pdf",
+                "print.pdf"
+        );
+
+        assertThat(output.data()).containsEntry("totalChargeAmount", "12.50");
+        assertThat(output.items()).containsExactly(Map.of("brand", "中杭"));
+        assertThat(output.chargeItems()).containsExactly(Map.of("chargeName", "卸货费"));
+    }
 }

@@ -1,5 +1,7 @@
 package com.leo.erp.sales.outbound.service;
 
+import com.leo.erp.common.charge.service.DocumentChargeItemService;
+import com.leo.erp.common.charge.web.dto.DocumentChargeItemRequest;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
@@ -180,6 +182,103 @@ class SalesOutboundServiceTest {
     }
 
     @Test
+    void shouldSyncChargeItemsOnlyWhenExplicitlyProvided() {
+        SalesOutboundRepository repository = mock(SalesOutboundRepository.class);
+        SnowflakeIdGenerator idGenerator = mock(SnowflakeIdGenerator.class);
+        SalesOutboundMapper mapper = mock(SalesOutboundMapper.class);
+        TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
+        WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
+        SalesOrderItemQueryService salesOrderItemQueryService = mock(SalesOrderItemQueryService.class);
+        DocumentChargeItemService chargeItemService = mock(DocumentChargeItemService.class);
+        SalesOutboundService service = createService(
+                repository, idGenerator, mapper,
+                materialSupport, warehouseSelectionSupport,
+                mock(WorkflowTransitionGuard.class), mock(SalesOrderCompletionSyncService.class),
+                salesOrderItemQueryService,
+                mock(PurchaseOrderItemPieceWeightService.class), mock(JdbcTemplate.class),
+                chargeItemService
+        );
+        SalesOutboundRequest baseRequest = new SalesOutboundRequest(
+                "SOO-CHARGE-001", "SO-CHARGE", "客户A", "项目A", null,
+                LocalDate.of(2026, 4, 30), "草稿", null,
+                List.of(new SalesOutboundItemRequest(
+                        "SO-CHARGE", 9015L, "M1", "宝钢", "盘螺", "HRB400", "10", null, "吨",
+                        "一号码头", "B1", 1, "件",
+                        new BigDecimal("2.000"), 1, new BigDecimal("2.000"),
+                        new BigDecimal("3000.00"), null
+                ))
+        );
+        List<DocumentChargeItemRequest> chargeItems = List.of(new DocumentChargeItemRequest(
+                null,
+                "装车费",
+                "RECEIVABLE",
+                "CUSTOMER",
+                7L,
+                "客户A",
+                new BigDecimal("42.50"),
+                true,
+                null
+        ));
+        SalesOrderItem sourceSalesOrderItem = buildSalesOrderItem(9015L, "SO-CHARGE");
+
+        when(repository.existsByOutboundNoAndDeletedFlagFalse("SOO-CHARGE-001")).thenReturn(false);
+        when(idGenerator.nextId()).thenReturn(1L, 11L);
+        when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(materialMap("M1"));
+        when(materialSupport.normalizeBatchNo(any(), eq("B1"), eq(1), eq(true))).thenReturn("B1");
+        when(warehouseSelectionSupport.normalizeWarehouseName("一号码头", 1, true)).thenReturn("一号码头");
+        when(salesOrderItemQueryService.findActiveByIdIn(anyCollection())).thenReturn(List.of(sourceSalesOrderItem));
+        when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        stubMapper(mapper);
+
+        service.create(requestWithChargeItems(baseRequest, chargeItems));
+
+        verify(chargeItemService).sync("sales-outbound", 1L, chargeItems);
+    }
+
+    @Test
+    void shouldNotSyncChargeItemsWhenRequestOmitsThem() {
+        SalesOutboundRepository repository = mock(SalesOutboundRepository.class);
+        SnowflakeIdGenerator idGenerator = mock(SnowflakeIdGenerator.class);
+        SalesOutboundMapper mapper = mock(SalesOutboundMapper.class);
+        TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
+        WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
+        SalesOrderItemQueryService salesOrderItemQueryService = mock(SalesOrderItemQueryService.class);
+        DocumentChargeItemService chargeItemService = mock(DocumentChargeItemService.class);
+        SalesOutboundService service = createService(
+                repository, idGenerator, mapper,
+                materialSupport, warehouseSelectionSupport,
+                mock(WorkflowTransitionGuard.class), mock(SalesOrderCompletionSyncService.class),
+                salesOrderItemQueryService,
+                mock(PurchaseOrderItemPieceWeightService.class), mock(JdbcTemplate.class),
+                chargeItemService
+        );
+        SalesOutboundRequest request = new SalesOutboundRequest(
+                "SOO-NO-CHARGE-001", "SO-NO-CHARGE", "客户A", "项目A", null,
+                LocalDate.of(2026, 4, 30), "草稿", null,
+                List.of(new SalesOutboundItemRequest(
+                        "SO-NO-CHARGE", 9016L, "M1", "宝钢", "盘螺", "HRB400", "10", null, "吨",
+                        "一号码头", "B1", 1, "件",
+                        new BigDecimal("2.000"), 1, new BigDecimal("2.000"),
+                        new BigDecimal("3000.00"), null
+                ))
+        );
+        SalesOrderItem sourceSalesOrderItem = buildSalesOrderItem(9016L, "SO-NO-CHARGE");
+
+        when(repository.existsByOutboundNoAndDeletedFlagFalse("SOO-NO-CHARGE-001")).thenReturn(false);
+        when(idGenerator.nextId()).thenReturn(1L, 11L);
+        when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(materialMap("M1"));
+        when(materialSupport.normalizeBatchNo(any(), eq("B1"), eq(1), eq(true))).thenReturn("B1");
+        when(warehouseSelectionSupport.normalizeWarehouseName("一号码头", 1, true)).thenReturn("一号码头");
+        when(salesOrderItemQueryService.findActiveByIdIn(anyCollection())).thenReturn(List.of(sourceSalesOrderItem));
+        when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        stubMapper(mapper);
+
+        service.create(request);
+
+        verify(chargeItemService, never()).sync(any(), any(), any());
+    }
+
+    @Test
     void shouldPreservePersistedSourceSalesOrderItemOnUpdateWhenClientOmitsIt() {
         SalesOutboundRepository repository = mock(SalesOutboundRepository.class);
         SalesOutboundMapper mapper = mock(SalesOutboundMapper.class);
@@ -353,6 +452,74 @@ class SalesOutboundServiceTest {
 
         assertThat(existing.getStatus()).isEqualTo("已审核");
         verify(syncService).syncBySalesOrderReference("SO-001");
+    }
+
+    @Test
+    void shouldUpdateStatusFromDraftToPreOutbound() {
+        SalesOutboundRepository repository = mock(SalesOutboundRepository.class);
+        SalesOutboundMapper mapper = mock(SalesOutboundMapper.class);
+        SalesOutboundService service = createService(
+                repository, mock(SnowflakeIdGenerator.class), mapper,
+                mock(TradeItemMaterialSupport.class), mock(WarehouseSelectionSupport.class),
+                mock(WorkflowTransitionGuard.class), mock(SalesOrderCompletionSyncService.class),
+                mock(SalesOrderItemQueryService.class),
+                mock(PurchaseOrderItemPieceWeightService.class), mock(JdbcTemplate.class)
+        );
+
+        SalesOutbound existing = new SalesOutbound();
+        existing.setId(1L);
+        existing.setOutboundNo("SOO-PRE-001");
+        existing.setStatus(StatusConstants.DRAFT);
+        existing.setCustomerName("C");
+        existing.setProjectName("P");
+        existing.setWarehouseName("W");
+        existing.setOutboundDate(LocalDate.now());
+        existing.setSalesOrderNo("SO-PRE");
+        existing.setTotalWeight(BigDecimal.ZERO);
+        existing.setTotalAmount(BigDecimal.ZERO);
+        existing.setItems(new ArrayList<>());
+
+        when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(existing));
+        when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        stubMapper(mapper);
+
+        service.updateStatus(1L, StatusConstants.PRE_OUTBOUND);
+
+        assertThat(existing.getStatus()).isEqualTo(StatusConstants.PRE_OUTBOUND);
+    }
+
+    @Test
+    void shouldUpdateStatusFromPreOutboundToAudited() {
+        SalesOutboundRepository repository = mock(SalesOutboundRepository.class);
+        SalesOutboundMapper mapper = mock(SalesOutboundMapper.class);
+        SalesOutboundService service = createService(
+                repository, mock(SnowflakeIdGenerator.class), mapper,
+                mock(TradeItemMaterialSupport.class), mock(WarehouseSelectionSupport.class),
+                mock(WorkflowTransitionGuard.class), mock(SalesOrderCompletionSyncService.class),
+                mock(SalesOrderItemQueryService.class),
+                mock(PurchaseOrderItemPieceWeightService.class), mock(JdbcTemplate.class)
+        );
+
+        SalesOutbound existing = new SalesOutbound();
+        existing.setId(1L);
+        existing.setOutboundNo("SOO-PRE-002");
+        existing.setStatus(StatusConstants.PRE_OUTBOUND);
+        existing.setCustomerName("C");
+        existing.setProjectName("P");
+        existing.setWarehouseName("W");
+        existing.setOutboundDate(LocalDate.now());
+        existing.setSalesOrderNo("SO-PRE");
+        existing.setTotalWeight(BigDecimal.ZERO);
+        existing.setTotalAmount(BigDecimal.ZERO);
+        existing.setItems(new ArrayList<>());
+
+        when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(existing));
+        when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        stubMapper(mapper);
+
+        service.updateStatus(1L, StatusConstants.AUDITED);
+
+        assertThat(existing.getStatus()).isEqualTo(StatusConstants.AUDITED);
     }
 
     @Test
@@ -1419,6 +1586,32 @@ class SalesOutboundServiceTest {
                                                SalesOrderItemQueryService salesOrderItemQueryService,
                                                PurchaseOrderItemPieceWeightService purchaseOrderItemPieceWeightService,
                                                JdbcTemplate jdbc) {
+        return createService(
+                repository,
+                idGenerator,
+                mapper,
+                materialSupport,
+                warehouseSelectionSupport,
+                workflowTransitionGuard,
+                syncService,
+                salesOrderItemQueryService,
+                purchaseOrderItemPieceWeightService,
+                jdbc,
+                null
+        );
+    }
+
+    private SalesOutboundService createService(SalesOutboundRepository repository,
+                                               SnowflakeIdGenerator idGenerator,
+                                               SalesOutboundMapper mapper,
+                                               TradeItemMaterialSupport materialSupport,
+                                               WarehouseSelectionSupport warehouseSelectionSupport,
+                                               WorkflowTransitionGuard workflowTransitionGuard,
+                                               SalesOrderCompletionSyncService syncService,
+                                               SalesOrderItemQueryService salesOrderItemQueryService,
+                                               PurchaseOrderItemPieceWeightService purchaseOrderItemPieceWeightService,
+                                               JdbcTemplate jdbc,
+                                               DocumentChargeItemService chargeItemService) {
         TradeItemMaterialSupportTestDoubles.stubMaterialCodeNormalization(materialSupport);
         SalesOutboundSourceService sourceService = new SalesOutboundSourceService(salesOrderItemQueryService, repository);
         return new SalesOutboundService(
@@ -1431,8 +1624,9 @@ class SalesOutboundServiceTest {
                         sourceService,
                         new SalesOutboundWeightService(jdbc)
                 ),
-                new SalesOutboundResponseAssembler(mapper, sourceService),
-                new SalesOutboundSaveService(repository, syncService)
+                new SalesOutboundResponseAssembler(mapper, sourceService, chargeItemService),
+                new SalesOutboundSaveService(repository, syncService),
+                chargeItemService
         );
     }
 
@@ -1516,6 +1710,24 @@ class SalesOutboundServiceTest {
                     List.of()
             );
         }).when(mapper).toResponse(any());
+    }
+
+    private SalesOutboundRequest requestWithChargeItems(
+            SalesOutboundRequest request,
+            List<DocumentChargeItemRequest> chargeItems
+    ) {
+        return new SalesOutboundRequest(
+                request.outboundNo(),
+                request.salesOrderNo(),
+                request.customerName(),
+                request.projectName(),
+                request.warehouseName(),
+                request.outboundDate(),
+                request.status(),
+                request.remark(),
+                request.items(),
+                chargeItems
+        );
     }
 
     private Map<String, TradeMaterialSnapshot> materialMap(String materialCode) {

@@ -1,5 +1,7 @@
 package com.leo.erp.sales.outbound.service;
 
+import com.leo.erp.common.charge.service.DocumentChargeItemService;
+import com.leo.erp.common.charge.web.dto.DocumentChargeItemResponse;
 import com.leo.erp.sales.order.domain.entity.SalesOrder;
 import com.leo.erp.sales.order.domain.entity.SalesOrderItem;
 import com.leo.erp.sales.order.service.SalesOrderItemQueryService;
@@ -41,6 +43,62 @@ class SalesOutboundResponseAssemblerTest {
         assertThat(response.items()).hasSize(1);
         assertThat(response.items().get(0).sourceNo()).isEqualTo("SO-001");
         assertThat(response.items().get(0).sourceSalesOrderItemId()).isEqualTo(201L);
+    }
+
+    @Test
+    void shouldAppendChargeItemsAndReceivableTotalsToDetailResponse() {
+        SalesOutbound outbound = outbound();
+        SalesOutboundMapper mapper = mock(SalesOutboundMapper.class);
+        when(mapper.toResponse(outbound)).thenReturn(summary(outbound));
+        SalesOrderItemQueryService queryService = mock(SalesOrderItemQueryService.class);
+        when(queryService.findActiveByIdIn(anyCollection())).thenReturn(List.of(sourceSalesOrderItem()));
+        SalesOutboundSourceService sourceService = new SalesOutboundSourceService(
+                queryService,
+                mock(SalesOutboundRepository.class)
+        );
+        DocumentChargeItemService chargeItemService = mock(DocumentChargeItemService.class);
+        List<DocumentChargeItemResponse> chargeItems = List.of(
+                new DocumentChargeItemResponse(
+                        101L,
+                        1,
+                        "装车费",
+                        "RECEIVABLE",
+                        "CUSTOMER",
+                        7L,
+                        "客户A",
+                        new BigDecimal("42.50"),
+                        true,
+                        null,
+                        null,
+                        null,
+                        "现场"
+                ),
+                new DocumentChargeItemResponse(
+                        102L,
+                        2,
+                        "内部调整",
+                        "INTERNAL",
+                        null,
+                        null,
+                        null,
+                        new BigDecimal("12.00"),
+                        true,
+                        null,
+                        null,
+                        null,
+                        null
+                )
+        );
+        when(chargeItemService.listResponses("sales-outbound", 1L)).thenReturn(chargeItems);
+
+        SalesOutboundResponse response = new SalesOutboundResponseAssembler(mapper, sourceService, chargeItemService)
+                .toDetailResponse(outbound);
+
+        assertThat(response.totalAmount()).isEqualByComparingTo("6000.00");
+        assertThat(response.totalChargeAmount()).isEqualByComparingTo("42.50");
+        assertThat(response.receivableAmount()).isEqualByComparingTo("6042.50");
+        assertThat(response.chargeItems()).extracting(DocumentChargeItemResponse::chargeName)
+                .containsExactly("装车费", "内部调整");
     }
 
     @Test

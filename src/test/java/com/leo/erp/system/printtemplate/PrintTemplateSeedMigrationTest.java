@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -87,7 +88,54 @@ class PrintTemplateSeedMigrationTest {
         );
     }
 
+    @Test
+    void defaultChargeEnabledPdfLayoutsDeclareChargeItemsTable() throws IOException {
+        for (String resource : List.of(
+                "/print-forms/default-purchase-order.layout.json",
+                "/print-forms/default-purchase-inbound.layout.json",
+                "/print-forms/default-sales-order.layout.json",
+                "/print-forms/default-sales-outbound.layout.json",
+                "/print-forms/default-logistics.layout.json"
+        )) {
+            String layout = readResource(resource);
+
+            assertThat(layout)
+                    .contains("\"tables\"")
+                    .contains("\"source\": \"items\"")
+                    .contains("\"source\": \"chargeItems\"")
+                    .contains("其他费用")
+                    .doesNotContain("\"table\":");
+        }
+    }
+
+    @Test
+    void chargeTableChecksumSeedUpdatesOnlyFiveDefaultPdfMetadataRows() throws IOException {
+        String sql = readSql("/db/seed/S4__update_charge_pdf_print_template_checksums.sql");
+
+        assertThat(sql)
+                .contains(
+                        "DEFAULT_PURCHASE_ORDER_PDF_FORM",
+                        "DEFAULT_PURCHASE_INBOUND_PDF_FORM",
+                        "DEFAULT_SALES_ORDER_PDF_FORM",
+                        "DEFAULT_SALES_OUTBOUND_PDF_FORM",
+                        "DEFAULT_LOGISTICS_PDF_FORM",
+                        "source_checksum"
+                )
+                .doesNotContain(
+                        "DEFAULT_PURCHASE_CONTRACT_PDF_FORM",
+                        "DEFAULT_SALES_CONTRACT_PDF_FORM",
+                        "DEFAULT_CUSTOMER_STATEMENT_PDF_FORM",
+                        "DEFAULT_SUPPLIER_STATEMENT_PDF_FORM",
+                        "DEFAULT_FREIGHT_STATEMENT_PDF_FORM",
+                        "template_html = EXCLUDED.template_html"
+                );
+    }
+
     private String readSql(String resourcePath) throws IOException {
+        return readResource(resourcePath);
+    }
+
+    private String readResource(String resourcePath) throws IOException {
         try (InputStream stream = getClass().getResourceAsStream(resourcePath)) {
             assertThat(stream).as(resourcePath + " should exist").isNotNull();
             return new String(stream.readAllBytes(), StandardCharsets.UTF_8);

@@ -31,6 +31,36 @@ public class PrintPdfTableRenderer {
         Color borderColor = drawing.color(tableConfig, "borderColor", ColorConstants.BLACK);
         Color textColor = drawing.color(tableConfig, "headerTextColor", drawing.color(tableConfig, "textColor", ColorConstants.BLACK));
         float lineWidth = drawing.number(tableConfig, "lineWidth", 1f);
+        String title = text(tableConfig, "title", "");
+        if (!title.isBlank()) {
+            float titleHeight = drawing.number(tableConfig, "titleHeight", 22f);
+            float width = drawing.tableWidth(tableConfig);
+            drawing.drawRect(
+                    canvas,
+                    left,
+                    top,
+                    width,
+                    titleHeight,
+                    drawing.color(tableConfig, "titleFillColor", headerFillColor),
+                    borderColor,
+                    lineWidth,
+                    pageMetrics
+            );
+            drawing.drawCanvasText(
+                    canvas,
+                    font,
+                    title,
+                    left + 4,
+                    top + 6,
+                    width - 8,
+                    14,
+                    drawing.number(tableConfig, "titleFontSize", 9f),
+                    drawing.alignment(text(tableConfig, "titleAlign", "left")),
+                    drawing.color(tableConfig, "titleTextColor", textColor),
+                    pageMetrics
+            );
+            top += titleHeight;
+        }
         for (JsonNode column : columns) {
             float width = drawing.number(column, "width", 60f);
             drawing.drawRect(

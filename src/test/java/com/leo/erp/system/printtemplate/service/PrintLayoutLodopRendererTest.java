@@ -31,6 +31,7 @@ class PrintLayoutLodopRendererTest {
         assertThat(renderer.supports("{\"table\":null}")).isFalse();
         assertThat(renderer.supports("{\"table\":[]}")).isFalse();
         assertThat(renderer.supports("{\"table\":{\"columns\":[]}}")).isTrue();
+        assertThat(renderer.supports("{\"tables\":[{\"columns\":[]}]}")).isTrue();
     }
 
     @Test
@@ -115,6 +116,97 @@ class PrintLayoutLodopRendererTest {
     }
 
     @Test
+    void shouldRenderTablesFromNamedSections() {
+        String script = renderer.render(
+                "模板",
+                """
+                        {
+                          "tables": [
+                            {
+                              "source": "items",
+                              "left": 10,
+                              "top": 20,
+                              "headerHeight": 8,
+                              "rowHeight": 10,
+                              "columns": [{"label": "材质", "source": "material", "width": 60}]
+                            },
+                            {
+                              "source": "chargeItems",
+                              "left": 10,
+                              "top": 60,
+                              "headerHeight": 8,
+                              "rowHeight": 10,
+                              "columns": [
+                                {"label": "费用", "source": "chargeName", "width": 60},
+                                {"label": "金额", "source": "amount", "width": 60}
+                              ]
+                            }
+                          ],
+                          "summary": {"template": "费用 ${totalChargeAmount} 应付 ${payableAmount}"}
+                        }
+                        """,
+                Map.of("totalAmount", "100.00"),
+                Map.of(
+                        "items", List.of(Map.of("material", "HRB400E", "quantity", "2", "weightTon", "2.000", "amount", "100.00")),
+                        "chargeItems", List.of(Map.of("chargeName", "卸货费", "chargeDirection", "PAYABLE", "amount", "12.34", "billable", "true"))
+                )
+        );
+
+        assertThat(script)
+                .contains("HRB400E")
+                .contains("卸货费")
+                .contains("12.34")
+                .contains("费用 12.34 应付 112.34");
+    }
+
+    @Test
+    void shouldStartNewPageAndRepeatTableHeaderWhenRowsExceedRemainingPageHeight() {
+        String script = renderer.render(
+                "模板",
+                """
+                        {
+                          "page": {"height": 100, "bottomMargin": 10},
+                          "fields": {
+                            "businessNo": {
+                              "source": "businessNo",
+                              "left": 1,
+                              "top": 2,
+                              "width": 80,
+                              "height": 12
+                            }
+                          },
+                          "tables": [
+                            {
+                              "source": "items",
+                              "left": 10,
+                              "top": 50,
+                              "pageResetTop": 20,
+                              "headerHeight": 10,
+                              "rowHeight": 20,
+                              "columns": [{"label": "名称", "source": "name", "width": 60}]
+                            }
+                          ]
+                        }
+                        """,
+                Map.of("businessNo", "PO-001"),
+                Map.of("items", List.of(
+                        Map.of("name", "第一行"),
+                        Map.of("name", "第二行"),
+                        Map.of("name", "第三行")
+                ))
+        );
+
+        assertThat(script)
+                .contains("LODOP.NewPage();")
+                .contains("PO-001")
+                .contains("第一行")
+                .contains("第二行")
+                .contains("第三行");
+        assertThat(script.split("LODOP.NewPage\\(\\);", -1)).hasSize(3);
+        assertThat(script.split("\"名称\"", -1)).hasSize(4);
+    }
+
+    @Test
     void shouldUseExplicitSummaryWidthAndKeepExistingPlaceholderValues() {
         String script = renderer.render(
                 "模板",
@@ -165,7 +257,7 @@ class PrintLayoutLodopRendererTest {
                 List.of()
         );
 
-        assertThat(script).contains("LODOP.ADD_PRINT_TEXT(35,16,48,12,\"\")");
+        assertThat(script).contains("LODOP.ADD_PRINT_TEXT(45,16,48,12,\"\")");
     }
 
     @Test

@@ -2,6 +2,8 @@ package com.leo.erp.logistics.bill.service;
 
 import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.api.PageQuery;
+import com.leo.erp.common.charge.service.DocumentChargeItemService;
+import com.leo.erp.common.charge.web.dto.DocumentChargeItemResponse;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.service.AbstractCrudService;
@@ -29,10 +31,23 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 public class FreightBillService extends AbstractCrudService<FreightBill, FreightBillRequest, FreightBillResponse> {
+
+    private static final Set<String> IMPORTABLE_OUTBOUND_STATUSES =
+            Set.of(StatusConstants.PRE_OUTBOUND, StatusConstants.AUDITED);
+    private static final String MODULE_KEY = "freight-bill";
+    private static final String PAYABLE = "PAYABLE";
+    private static final BigDecimal ZERO_AMOUNT = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
 
     private final FreightBillRepository repository;
     private final SalesOutboundRepository salesOutboundRepository;
@@ -42,6 +57,7 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
     private final WorkflowTransitionGuard workflowTransitionGuard;
     private final CarrierRepository carrierRepository;
     private final CompanySettingService companySettingService;
+    private final DocumentChargeItemService chargeItemService;
 
     public FreightBillService(FreightBillRepository repository,
                               SalesOutboundRepository salesOutboundRepository,
@@ -51,7 +67,7 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
                               FreightBillApplyService freightBillApplyService,
                               WorkflowTransitionGuard workflowTransitionGuard) {
         this(repository, salesOutboundRepository, idGenerator, freightBillMapper, freightBillSourceService,
-                freightBillApplyService, workflowTransitionGuard, null);
+                freightBillApplyService, workflowTransitionGuard, null, null, null);
     }
 
     public FreightBillService(FreightBillRepository repository,
@@ -63,7 +79,20 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
                               WorkflowTransitionGuard workflowTransitionGuard,
                               CarrierRepository carrierRepository) {
         this(repository, salesOutboundRepository, idGenerator, freightBillMapper, freightBillSourceService,
-                freightBillApplyService, workflowTransitionGuard, carrierRepository, null);
+                freightBillApplyService, workflowTransitionGuard, carrierRepository, null, null);
+    }
+
+    public FreightBillService(FreightBillRepository repository,
+                              SalesOutboundRepository salesOutboundRepository,
+                              SnowflakeIdGenerator idGenerator,
+                              FreightBillMapper freightBillMapper,
+                              FreightBillSourceService freightBillSourceService,
+                              FreightBillApplyService freightBillApplyService,
+                              WorkflowTransitionGuard workflowTransitionGuard,
+                              CarrierRepository carrierRepository,
+                              CompanySettingService companySettingService) {
+        this(repository, salesOutboundRepository, idGenerator, freightBillMapper, freightBillSourceService,
+                freightBillApplyService, workflowTransitionGuard, carrierRepository, companySettingService, null);
     }
 
     @Autowired
@@ -75,7 +104,8 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
                               FreightBillApplyService freightBillApplyService,
                               WorkflowTransitionGuard workflowTransitionGuard,
                               CarrierRepository carrierRepository,
-                              CompanySettingService companySettingService) {
+                              CompanySettingService companySettingService,
+                              DocumentChargeItemService chargeItemService) {
         super(idGenerator);
         this.repository = repository;
         this.salesOutboundRepository = salesOutboundRepository;
@@ -85,6 +115,7 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
         this.workflowTransitionGuard = workflowTransitionGuard;
         this.carrierRepository = carrierRepository;
         this.companySettingService = companySettingService;
+        this.chargeItemService = chargeItemService;
     }
 
     public Page<FreightBillResponse> page(PageQuery query, PageFilter filter) {
@@ -123,6 +154,9 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
     @Override
     protected FreightBillResponse toDetailResponse(FreightBill entity) {
         FreightBillResponse response = freightBillMapper.toResponse(entity);
+        List<DocumentChargeItemResponse> chargeItems = loadChargeItems(entity);
+        BigDecimal totalChargeAmount = totalChargeAmount(chargeItems);
+        Map<Long, String> sourceStatusByItemId = resolveSourceOutboundStatusByItemId(entity.getItems());
         return new FreightBillResponse(
                 response.id(), response.billNo(),
                 response.carrierName(), response.settlementCompanyId(), response.settlementCompanyName(), response.vehiclePlate(),
@@ -133,14 +167,69 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
                 entity.getItems().stream().map(item -> new FreightBillItemResponse(
                         item.getId(), item.getLineNo(), item.getSourceNo(),
                         item.getSourceSalesOutboundItemId(),
+                        resolveSourceStatus(item, sourceStatusByItemId),
                         item.getSettlementCompanyId(), item.getSettlementCompanyName(),
                         item.getCustomerName(), item.getProjectName(), item.getMaterialCode(),
                         resolveMaterialName(item), item.getBrand(), item.getCategory(),
                         item.getMaterial(), item.getSpec(), item.getLength(),
                         item.getQuantity(), item.getQuantityUnit(), item.getPieceWeightTon(), item.getPiecesPerBundle(),
                         item.getBatchNo(), item.getWeightTon(), item.getWarehouseName()
-                )).toList()
+                )).toList(),
+                chargeItems,
+                totalChargeAmount,
+                payableAmount(response.totalFreight(), totalChargeAmount)
         );
+    }
+
+    private List<DocumentChargeItemResponse> loadChargeItems(FreightBill entity) {
+        if (chargeItemService == null || entity.getId() == null) {
+            return List.of();
+        }
+        List<DocumentChargeItemResponse> chargeItems = chargeItemService.listResponses(MODULE_KEY, entity.getId());
+        return chargeItems == null ? List.of() : chargeItems;
+    }
+
+    private BigDecimal totalChargeAmount(List<DocumentChargeItemResponse> chargeItems) {
+        return chargeItems.stream()
+                .filter(item -> Boolean.TRUE.equals(item.billable()))
+                .filter(item -> PAYABLE.equals(item.chargeDirection()))
+                .map(DocumentChargeItemResponse::amount)
+                .filter(amount -> amount != null)
+                .map(this::scaleAmount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add)
+                .setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private BigDecimal payableAmount(BigDecimal totalFreight, BigDecimal totalChargeAmount) {
+        return scaleAmount(totalFreight == null ? BigDecimal.ZERO : totalFreight).add(totalChargeAmount);
+    }
+
+    private BigDecimal scaleAmount(BigDecimal amount) {
+        if (amount == null) {
+            return ZERO_AMOUNT;
+        }
+        return amount.setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private String resolveSourceStatus(FreightBillItem item, Map<Long, String> sourceStatusByItemId) {
+        Long sourceItemId = item.getSourceSalesOutboundItemId();
+        return sourceItemId == null ? null : sourceStatusByItemId.get(sourceItemId);
+    }
+
+    private Map<Long, String> resolveSourceOutboundStatusByItemId(List<FreightBillItem> items) {
+        Set<Long> sourceItemIds = items.stream()
+                .map(FreightBillItem::getSourceSalesOutboundItemId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        if (sourceItemIds.isEmpty()) {
+            return Map.of();
+        }
+        return salesOutboundRepository.findSourceOutboundStatusesByItemIds(sourceItemIds).stream()
+                .collect(Collectors.toMap(
+                        SalesOutboundRepository.SourceOutboundStatusProjection::getItemId,
+                        SalesOutboundRepository.SourceOutboundStatusProjection::getStatus,
+                        (left, ignored) -> left
+                ));
     }
 
     @Override
@@ -171,7 +260,8 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
                 request.unitPrice(),
                 request.status(),
                 request.remark(),
-                request.items()
+                request.items(),
+                request.chargeItems()
         );
     }
 
@@ -189,7 +279,8 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
                 request.unitPrice(),
                 request.status(),
                 request.remark(),
-                request.items()
+                request.items(),
+                request.chargeItems()
         );
     }
 
@@ -253,7 +344,30 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
 
         FreightBillSourceService.SourceValidationContext sourceContext =
                 freightBillSourceService.validateSources(request, entity.getId());
+        if (StatusConstants.AUDITED.equals(nextStatus)) {
+            freightBillSourceService.assertSourcesAuditable(sourceContext);
+        }
         freightBillApplyService.applyItems(entity, request, sourceContext, this::nextId);
+        syncChargeItems(entity, request);
+    }
+
+    private void syncChargeItems(FreightBill entity, FreightBillRequest request) {
+        if (request.chargeItems() == null || chargeItemService == null) {
+            return;
+        }
+        chargeItemService.sync(MODULE_KEY, entity.getId(), request.chargeItems());
+    }
+
+    @Override
+    protected void beforeStatusUpdate(FreightBill entity, String currentStatus, String nextStatus) {
+        if (!StatusConstants.AUDITED.equals(nextStatus)) {
+            return;
+        }
+        freightBillSourceService.assertSourceNosAuditable(
+                entity.getItems().stream()
+                        .map(FreightBillItem::getSourceNo)
+                        .toList()
+        );
     }
 
     private void applySettlementCompany(FreightBill entity, FreightBillRequest request) {
@@ -317,10 +431,13 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
     private Specification<SalesOutbound> importableSalesOutboundStatus(String status) {
         return (root, query, cb) -> {
             String requestedStatus = BusinessDocumentValidator.trimToNull(status);
-            if (requestedStatus != null && !StatusConstants.AUDITED.equals(requestedStatus)) {
-                return cb.disjunction();
+            if (requestedStatus != null) {
+                if (!IMPORTABLE_OUTBOUND_STATUSES.contains(requestedStatus)) {
+                    return cb.disjunction();
+                }
+                return cb.equal(root.get("status"), requestedStatus);
             }
-            return cb.equal(root.get("status"), StatusConstants.AUDITED);
+            return root.get("status").in(IMPORTABLE_OUTBOUND_STATUSES);
         };
     }
 

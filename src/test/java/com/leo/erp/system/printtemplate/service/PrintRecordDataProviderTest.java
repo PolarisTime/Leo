@@ -11,6 +11,7 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -27,13 +28,58 @@ class PrintRecordDataProviderTest {
     @Test
     void shouldLoadRecordAndItems() {
         when(jdbc.queryForMap(anyString(), eq(7L))).thenReturn(Map.of("order_no", "SO-001"));
-        when(jdbc.queryForList(anyString(), eq(7L))).thenReturn(List.of(Map.of("brand", " 沙钢 ", "weight_ton", "1.2345")));
+        when(jdbc.queryForList(contains("so_sales_order_item"), eq(7L)))
+                .thenReturn(List.of(Map.of("brand", " 沙钢 ", "weight_ton", "1.2345")));
+        when(jdbc.queryForList(contains("bd_document_charge_item"), eq("sales-order"), eq(7L)))
+                .thenReturn(List.of());
 
         PrintRecordData record = provider.loadRecord("sales-order", 7L);
 
         assertThat(record.data()).containsEntry("orderNo", "SO-001");
         assertThat(record.items()).hasSize(1);
         assertThat(record.items().getFirst()).containsEntry("brand", " 沙钢 ");
+    }
+
+    @Test
+    void shouldLoadRecordItemsChargeItemsAndSections() {
+        when(jdbc.queryForMap(anyString(), eq(7L))).thenReturn(Map.of("order_no", "PO-001"));
+        when(jdbc.queryForList(contains("po_purchase_order_item"), eq(7L))).thenReturn(List.of(
+                Map.of("brand", " 沙钢 ", "weight_ton", "1.2345")
+        ));
+        when(jdbc.queryForList(contains("bd_document_charge_item"), eq("purchase-order"), eq(7L))).thenReturn(List.of(
+                Map.of(
+                        "id", 21L,
+                        "line_no", 2,
+                        "charge_name", "卸货费",
+                        "charge_direction", "PAYABLE",
+                        "amount", "12.50",
+                        "billable", true
+                )
+        ));
+
+        PrintRecordData record = provider.loadRecord("purchase-order", 7L);
+
+        assertThat(record.items()).hasSize(1);
+        assertThat(record.chargeItems()).containsExactly(Map.of(
+                "id", "21",
+                "lineNo", "2",
+                "chargeName", "卸货费",
+                "chargeDirection", "PAYABLE",
+                "amount", "12.50",
+                "billable", "true"
+        ));
+        assertThat(record.sections())
+                .containsEntry("items", record.items())
+                .containsEntry("chargeItems", record.chargeItems());
+
+        ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
+        verify(jdbc).queryForList(sql.capture(), eq("purchase-order"), eq(7L));
+        assertThat(sql.getValue())
+                .contains("bd_document_charge_item")
+                .contains("module_key = ?")
+                .contains("document_id = ?")
+                .contains("deleted_flag = FALSE")
+                .contains("ORDER BY line_no ASC, id ASC");
     }
 
     @Test

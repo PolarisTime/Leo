@@ -5,6 +5,7 @@ import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -29,7 +30,10 @@ class PrintRecordDataProvider {
         PrintRecordSource source = source(moduleKey);
         Map<String, Object> row = jdbc.queryForMap(
                 "SELECT * FROM " + source.tableName() + " WHERE id = ? AND deleted_flag = FALSE", recordId);
-        return new PrintRecordData(formatter.toCamelStringMap(row), loadItems(source, recordId));
+        Map<String, List<Map<String, String>>> sections = new LinkedHashMap<>();
+        sections.put(PrintRecordData.ITEMS_SECTION, loadItems(source, recordId));
+        sections.put(PrintRecordData.CHARGE_ITEMS_SECTION, loadChargeItems(moduleKey, recordId));
+        return new PrintRecordData(formatter.toCamelStringMap(row), sections);
     }
 
     List<String> listBrands(String moduleKey, List<Long> recordIds) {
@@ -69,8 +73,33 @@ class PrintRecordDataProvider {
         String sql = "SELECT * FROM " + source.itemTableName()
                 + " WHERE " + source.itemFkColumn() + " = ? ORDER BY line_no ASC, id ASC";
         var items = jdbc.queryForList(sql, recordId);
+        if (items == null) {
+            return List.of();
+        }
         for (var item : items) {
             result.add(formatter.toCamelStringMap(item));
+        }
+        return result;
+    }
+
+    private List<Map<String, String>> loadChargeItems(String moduleKey, Long recordId) {
+        String sql = """
+                SELECT *
+                FROM bd_document_charge_item
+                WHERE module_key = ?
+                  AND document_id = ?
+                  AND deleted_flag = FALSE
+                ORDER BY line_no ASC, id ASC
+                """;
+        List<Map<String, Object>> rows = jdbc.queryForList(sql, moduleKey, recordId);
+        if (rows == null || rows.isEmpty()) {
+            return List.of();
+        }
+        List<Map<String, String>> result = new ArrayList<>();
+        for (Map<String, Object> row : rows) {
+            Map<String, String> item = formatter.toCamelStringMap(row);
+            formatter.formatDecimalField(item, "amount", PrintRecordFieldFormatter.PRICE_SCALE);
+            result.add(item);
         }
         return result;
     }

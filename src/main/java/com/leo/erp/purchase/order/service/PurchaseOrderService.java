@@ -2,6 +2,7 @@ package com.leo.erp.purchase.order.service;
 
 import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.api.PageQuery;
+import com.leo.erp.common.charge.service.DocumentChargeItemService;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
@@ -18,7 +19,7 @@ import com.leo.erp.purchase.order.web.dto.PurchaseOrderResponse;
 import com.leo.erp.security.permission.WorkflowTransitionGuard;
 import com.leo.erp.system.company.domain.entity.CompanySetting;
 import com.leo.erp.system.company.service.CompanySettingService;
-import java.util.function.Function;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.jpa.domain.Specification;
@@ -28,7 +29,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.stream.Collectors;
 
 @Service
 public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, PurchaseOrderRequest, PurchaseOrderResponse> {
@@ -41,6 +41,7 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
     private final PurchaseOrderPieceWeightQueryService pieceWeightQueryService;
     private final WorkflowTransitionGuard workflowTransitionGuard;
     private final CompanySettingService companySettingService;
+    private final DocumentChargeItemService chargeItemService;
 
     public PurchaseOrderService(PurchaseOrderRepository purchaseOrderRepository,
                                 SnowflakeIdGenerator snowflakeIdGenerator,
@@ -51,6 +52,31 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
                                 PurchaseOrderPieceWeightQueryService pieceWeightQueryService,
                                 WorkflowTransitionGuard workflowTransitionGuard,
                                 CompanySettingService companySettingService) {
+        this(
+                purchaseOrderRepository,
+                snowflakeIdGenerator,
+                availabilityService,
+                responseAssembler,
+                supplierResolver,
+                purchaseOrderApplyService,
+                pieceWeightQueryService,
+                workflowTransitionGuard,
+                companySettingService,
+                null
+        );
+    }
+
+    @Autowired
+    public PurchaseOrderService(PurchaseOrderRepository purchaseOrderRepository,
+                                SnowflakeIdGenerator snowflakeIdGenerator,
+                                PurchaseOrderAvailabilityService availabilityService,
+                                PurchaseOrderResponseAssembler responseAssembler,
+                                PurchaseOrderSupplierResolver supplierResolver,
+                                PurchaseOrderApplyService purchaseOrderApplyService,
+                                PurchaseOrderPieceWeightQueryService pieceWeightQueryService,
+                                WorkflowTransitionGuard workflowTransitionGuard,
+                                CompanySettingService companySettingService,
+                                DocumentChargeItemService chargeItemService) {
         super(snowflakeIdGenerator);
         this.purchaseOrderRepository = purchaseOrderRepository;
         this.availabilityService = availabilityService;
@@ -60,6 +86,7 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
         this.pieceWeightQueryService = pieceWeightQueryService;
         this.workflowTransitionGuard = workflowTransitionGuard;
         this.companySettingService = companySettingService;
+        this.chargeItemService = chargeItemService;
     }
 
     private static final String[] PURCHASE_ORDER_SEARCH_FIELDS = {"orderNo", "supplierName"};
@@ -180,7 +207,8 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
                 request.settlementCompanyId(),
                 request.status(),
                 request.remark(),
-                request.items()
+                request.items(),
+                request.chargeItems()
         );
     }
 
@@ -194,7 +222,8 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
                 request.settlementCompanyId(),
                 request.status(),
                 request.remark(),
-                request.items()
+                request.items(),
+                request.chargeItems()
         );
     }
 
@@ -259,6 +288,14 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
         purchaseOrder.setStatus(nextStatus);
         purchaseOrder.setRemark(request.remark());
         purchaseOrderApplyService.applyItems(purchaseOrder, request, this::nextId);
+        syncChargeItems(purchaseOrder, request);
+    }
+
+    private void syncChargeItems(PurchaseOrder purchaseOrder, PurchaseOrderRequest request) {
+        if (request.chargeItems() == null || chargeItemService == null) {
+            return;
+        }
+        chargeItemService.sync("purchase-order", purchaseOrder.getId(), request.chargeItems());
     }
 
     @Override

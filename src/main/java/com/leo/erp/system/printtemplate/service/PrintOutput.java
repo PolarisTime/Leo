@@ -19,7 +19,9 @@ public record PrintOutput(
         String moduleKey,
         String templateHtml,
         Map<String, String> data,
-        List<Map<String, String>> items
+        List<Map<String, String>> items,
+        List<Map<String, String>> chargeItems,
+        Map<String, List<Map<String, String>>> sections
 ) {
 
     public enum Kind {
@@ -27,7 +29,29 @@ public record PrintOutput(
         LODOP_SCRIPT
     }
 
+    public PrintOutput(
+            Kind kind,
+            String templateName,
+            String templateType,
+            String contentType,
+            String fileName,
+            String pdfBase64,
+            String businessNo,
+            Long recordId,
+            String moduleKey,
+            String templateHtml,
+            Map<String, String> data,
+            List<Map<String, String>> items
+    ) {
+        this(kind, templateName, templateType, contentType, fileName, pdfBase64, businessNo, recordId, moduleKey,
+                templateHtml, data, items, null, null);
+    }
+
     public static PrintOutput fromPayload(Map<String, Object> payload) {
+        List<Map<String, String>> items = stringMapList(payload.get("items"));
+        List<Map<String, String>> chargeItems = stringMapList(payload.get("chargeItems"));
+        Map<String, List<Map<String, String>>> sections = sections(payload.get("sections"));
+        sections = mergeSections(sections, items, chargeItems);
         return new PrintOutput(
                 Kind.LODOP_SCRIPT,
                 stringValue(payload.get("templateName")),
@@ -40,11 +64,20 @@ public record PrintOutput(
                 stringValue(payload.get("moduleKey")),
                 stringValue(payload.get("templateHtml")),
                 stringMap(payload.get("data")),
-                stringMapList(payload.get("items"))
+                items,
+                chargeItems,
+                sections
         );
     }
 
     public static PrintOutput pdf(Map<String, Object> payload, String pdfBase64, String contentType, String fileName) {
+        List<Map<String, String>> items = stringMapList(payload.get("items"));
+        List<Map<String, String>> chargeItems = stringMapList(payload.get("chargeItems"));
+        Map<String, List<Map<String, String>>> sections = mergeSections(
+                sections(payload.get("sections")),
+                items,
+                chargeItems
+        );
         return new PrintOutput(
                 Kind.PDF,
                 stringValue(payload.get("templateName")),
@@ -56,8 +89,10 @@ public record PrintOutput(
                 longValue(payload.get("recordId")),
                 stringValue(payload.get("moduleKey")),
                 null,
-                null,
-                null
+                stringMap(payload.get("data")),
+                items,
+                chargeItems,
+                sections
         );
     }
 
@@ -101,5 +136,36 @@ public record PrintOutput(
                 .filter(Map.class::isInstance)
                 .map(PrintOutput::stringMap)
                 .toList();
+    }
+
+    private static Map<String, List<Map<String, String>>> sections(Object value) {
+        if (!(value instanceof Map<?, ?> map)) {
+            return null;
+        }
+        Map<String, List<Map<String, String>>> result = new LinkedHashMap<>();
+        for (Map.Entry<?, ?> entry : map.entrySet()) {
+            if (entry.getKey() instanceof String key) {
+                List<Map<String, String>> rows = stringMapList(entry.getValue());
+                if (rows != null) {
+                    result.put(key, rows);
+                }
+            }
+        }
+        return result;
+    }
+
+    private static Map<String, List<Map<String, String>>> mergeSections(
+            Map<String, List<Map<String, String>>> sections,
+            List<Map<String, String>> items,
+            List<Map<String, String>> chargeItems
+    ) {
+        Map<String, List<Map<String, String>>> result = sections == null ? new LinkedHashMap<>() : new LinkedHashMap<>(sections);
+        if (items != null) {
+            result.put(PrintRecordData.ITEMS_SECTION, items);
+        }
+        if (chargeItems != null) {
+            result.put(PrintRecordData.CHARGE_ITEMS_SECTION, chargeItems);
+        }
+        return result.isEmpty() ? null : result;
     }
 }

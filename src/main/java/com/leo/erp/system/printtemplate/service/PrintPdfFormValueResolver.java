@@ -37,6 +37,15 @@ public class PrintPdfFormValueResolver {
     }
 
     Map<String, String> summaryVariables(Map<String, String> data, List<Map<String, String>> items) {
+        return summaryVariables(data, items, Map.of(PrintRecordData.ITEMS_SECTION, items == null ? List.of() : items));
+    }
+
+    Map<String, String> summaryVariables(
+            Map<String, String> data,
+            List<Map<String, String>> items,
+            Map<String, List<Map<String, String>>> sections
+    ) {
+        items = items == null ? List.of() : items;
         Totals totals = totals(items);
         Map<String, String> variables = new HashMap<>(data);
         variables.put("totalQuantity", formatQuantity(totals.quantity()));
@@ -44,6 +53,7 @@ public class PrintPdfFormValueResolver {
                 "totalWeight",
                 formatDecimal(totals.weight(), PrecisionConstants.DISPLAY_WEIGHT_SCALE)
         );
+        PrintChargeSummary.applyTo(variables, sections);
         return variables;
     }
 

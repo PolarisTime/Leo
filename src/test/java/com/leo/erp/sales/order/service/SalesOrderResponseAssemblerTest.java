@@ -1,5 +1,7 @@
 package com.leo.erp.sales.order.service;
 
+import com.leo.erp.common.charge.service.DocumentChargeItemService;
+import com.leo.erp.common.charge.web.dto.DocumentChargeItemResponse;
 import com.leo.erp.sales.order.domain.entity.SalesOrder;
 import com.leo.erp.sales.order.domain.entity.SalesOrderItem;
 import com.leo.erp.sales.order.mapper.SalesOrderMapper;
@@ -9,8 +11,11 @@ import org.mapstruct.factory.Mappers;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 class SalesOrderResponseAssemblerTest {
 
@@ -31,6 +36,75 @@ class SalesOrderResponseAssemblerTest {
         assertThat(response.items().get(0).sourceInboundItemId()).isEqualTo(101L);
         assertThat(response.items().get(0).sourcePurchaseOrderItemId()).isEqualTo(201L);
         assertThat(response.items().get(0).originalWeightTon()).isEqualByComparingTo("0.900");
+    }
+
+    @Test
+    void shouldAppendChargeItemsAndReceivableTotalsToDetailResponse() {
+        SalesOrder order = order();
+        order.getItems().add(item(order));
+        SalesOrderMapper mapper = mock(SalesOrderMapper.class);
+        DocumentChargeItemService chargeItemService = mock(DocumentChargeItemService.class);
+        List<DocumentChargeItemResponse> chargeItems = List.of(
+                new DocumentChargeItemResponse(
+                        101L,
+                        1,
+                        "服务费",
+                        "RECEIVABLE",
+                        "CUSTOMER",
+                        7L,
+                        "客户甲",
+                        new BigDecimal("66.60"),
+                        true,
+                        null,
+                        null,
+                        null,
+                        "现场"
+                ),
+                new DocumentChargeItemResponse(
+                        102L,
+                        2,
+                        "内部调整",
+                        "INTERNAL",
+                        null,
+                        null,
+                        null,
+                        new BigDecimal("12.00"),
+                        true,
+                        null,
+                        null,
+                        null,
+                        null
+                )
+        );
+        when(mapper.toResponse(order)).thenReturn(new SalesOrderResponse(
+                order.getId(),
+                order.getOrderNo(),
+                order.getPurchaseInboundNo(),
+                order.getPurchaseOrderNo(),
+                order.getCustomerCode(),
+                order.getCustomerName(),
+                order.getProjectId(),
+                order.getProjectName(),
+                order.getSettlementCompanyId(),
+                order.getSettlementCompanyName(),
+                order.getDeliveryDate(),
+                order.getSalesName(),
+                order.getTotalWeight(),
+                order.getTotalAmount(),
+                order.getStatus(),
+                order.getRemark(),
+                List.of()
+        ));
+        when(chargeItemService.listResponses("sales-order", 1L)).thenReturn(chargeItems);
+
+        SalesOrderResponse response = new SalesOrderResponseAssembler(mapper, chargeItemService)
+                .toDetailResponse(order);
+
+        assertThat(response.totalAmount()).isEqualByComparingTo("1000.00");
+        assertThat(response.totalChargeAmount()).isEqualByComparingTo("66.60");
+        assertThat(response.receivableAmount()).isEqualByComparingTo("1066.60");
+        assertThat(response.chargeItems()).extracting(DocumentChargeItemResponse::chargeName)
+                .containsExactly("服务费", "内部调整");
     }
 
     private SalesOrder order() {
