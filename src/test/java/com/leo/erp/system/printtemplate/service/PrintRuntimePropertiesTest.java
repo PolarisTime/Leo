@@ -38,12 +38,18 @@ class PrintRuntimePropertiesTest {
     @Test
     void shouldResolveDefaultPdfLayoutsByPrefixExactSuffixAndDefaultRule() {
         assertThat(properties.defaultPdfFormLayout("purchase-order"))
-                .isEqualTo("print-forms/default-purchase.layout.json");
+                .isEqualTo("print-forms/default-purchase-order.layout.json");
         assertThat(properties.defaultPdfFormLayout("sales-outbound"))
-                .isEqualTo("print-forms/default-sales.layout.json");
+                .isEqualTo("print-forms/default-sales-outbound.layout.json");
         assertThat(properties.defaultPdfFormLayout("freight-bill"))
                 .isEqualTo("print-forms/default-logistics.layout.json");
         assertThat(properties.defaultPdfFormLayout("customer-statement"))
+                .isEqualTo("print-forms/default-customer-statement.layout.json");
+        assertThat(properties.defaultPdfFormLayout("purchase-custom"))
+                .isEqualTo("print-forms/default-purchase.layout.json");
+        assertThat(properties.defaultPdfFormLayout("sales-custom"))
+                .isEqualTo("print-forms/default-sales.layout.json");
+        assertThat(properties.defaultPdfFormLayout("custom-statement"))
                 .isEqualTo("print-forms/default-statement.layout.json");
         assertThat(properties.defaultPdfFormLayout("unknown"))
                 .isEqualTo("print-forms/yingjie-a4-remark.layout.json");

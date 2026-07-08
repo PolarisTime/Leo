@@ -236,8 +236,8 @@ class PrintTemplateServiceTest {
         var logistics = service.create(pdfRequest("freight-bill"));
         var statement = service.create(pdfRequest("customer-statement"));
 
-        assertThat(purchase.templateHtml()).contains("采购单");
-        assertThat(sales.templateHtml()).contains("销售单");
+        assertThat(purchase.templateHtml()).contains("采购订单");
+        assertThat(sales.templateHtml()).contains("销售订单");
         assertThat(logistics.templateHtml()).contains("物流配送单");
         assertThat(statement.templateHtml()).contains("对账单");
     }
@@ -993,7 +993,7 @@ class PrintTemplateServiceTest {
                 "   "
         ));
 
-        assertThat(response.templateHtml()).contains("采购单");
+        assertThat(response.templateHtml()).contains("采购订单");
         assertThat(response.engine()).isEqualTo("PDF_FORM");
         assertThat(response.assetRef()).isNull();
         assertThat(response.status()).isEqualTo("ACTIVE");

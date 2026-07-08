@@ -122,7 +122,7 @@ class PrintTemplateFileSyncRunnerTest {
                         700540000000000030L,
                         "freight-bill",
                         "DEFAULT_LOGISTICS_PDF_FORM",
-                        "默认物流 PDF",
+                        "默认物流单 PDF",
                         "PDF_FORM",
                         "PDF_FORM",
                         "print-forms/default-logistics.layout.json"
@@ -130,11 +130,11 @@ class PrintTemplateFileSyncRunnerTest {
                 seedTemplate(
                         700540000000000031L,
                         "purchase-order",
-                        "DEFAULT_PURCHASE_PDF_FORM",
-                        "默认采购 PDF",
+                        "DEFAULT_PURCHASE_ORDER_PDF_FORM",
+                        "默认采购订单 PDF",
                         "PDF_FORM",
                         "PDF_FORM",
-                        "print-forms/default-purchase.layout.json"
+                        "print-forms/default-purchase-order.layout.json"
                 ),
                 seedTemplate(
                         700540000000000032L,
@@ -148,20 +148,74 @@ class PrintTemplateFileSyncRunnerTest {
                 seedTemplate(
                         700540000000000033L,
                         "sales-order",
-                        "DEFAULT_SALES_PDF_FORM",
-                        "默认销售 PDF",
+                        "DEFAULT_SALES_ORDER_PDF_FORM",
+                        "默认销售订单 PDF",
                         "PDF_FORM",
                         "PDF_FORM",
-                        "print-forms/default-sales.layout.json"
+                        "print-forms/default-sales-order.layout.json"
                 ),
                 seedTemplate(
                         700540000000000034L,
                         "customer-statement",
-                        "DEFAULT_STATEMENT_PDF_FORM",
-                        "默认对账 PDF",
+                        "DEFAULT_CUSTOMER_STATEMENT_PDF_FORM",
+                        "默认客户对账 PDF",
                         "PDF_FORM",
                         "PDF_FORM",
-                        "print-forms/default-statement.layout.json"
+                        "print-forms/default-customer-statement.layout.json"
+                ),
+                seedTemplate(
+                        700540000000000035L,
+                        "purchase-inbound",
+                        "DEFAULT_PURCHASE_INBOUND_PDF_FORM",
+                        "默认采购入库 PDF",
+                        "PDF_FORM",
+                        "PDF_FORM",
+                        "print-forms/default-purchase-inbound.layout.json"
+                ),
+                seedTemplate(
+                        700540000000000036L,
+                        "purchase-contract",
+                        "DEFAULT_PURCHASE_CONTRACT_PDF_FORM",
+                        "默认采购合同 PDF",
+                        "PDF_FORM",
+                        "PDF_FORM",
+                        "print-forms/default-purchase-contract.layout.json"
+                ),
+                seedTemplate(
+                        700540000000000037L,
+                        "sales-outbound",
+                        "DEFAULT_SALES_OUTBOUND_PDF_FORM",
+                        "默认销售出库 PDF",
+                        "PDF_FORM",
+                        "PDF_FORM",
+                        "print-forms/default-sales-outbound.layout.json"
+                ),
+                seedTemplate(
+                        700540000000000038L,
+                        "sales-contract",
+                        "DEFAULT_SALES_CONTRACT_PDF_FORM",
+                        "默认销售合同 PDF",
+                        "PDF_FORM",
+                        "PDF_FORM",
+                        "print-forms/default-sales-contract.layout.json"
+                ),
+                seedTemplate(
+                        700540000000000039L,
+                        "supplier-statement",
+                        "DEFAULT_SUPPLIER_STATEMENT_PDF_FORM",
+                        "默认供应商对账 PDF",
+                        "PDF_FORM",
+                        "PDF_FORM",
+                        "print-forms/default-supplier-statement.layout.json"
+                ),
+                seedTemplate(
+                        700540000000000040L,
+                        "freight-statement",
+                        "DEFAULT_FREIGHT_STATEMENT_PDF_FORM",
+                        "默认物流对账 PDF",
+                        "PDF_FORM",
+                        "PDF_FORM",
+                        "print-forms/default-freight-statement.layout.json"
                 )
         );
         PrintTemplateRepository repository = mock(PrintTemplateRepository.class);
@@ -183,11 +237,17 @@ class PrintTemplateFileSyncRunnerTest {
         assertThat(templates.get(3).getTemplateHtml()).contains("LODOP.PRINT_INIT(\"客户对账单-A4\")");
         assertThat(templates.get(4).getTemplateHtml()).contains("\"page\"");
         assertThat(templates.get(5).getTemplateHtml()).contains("\"物流配送单\"");
-        assertThat(templates.get(6).getTemplateHtml()).contains("\"采购单\"");
+        assertThat(templates.get(6).getTemplateHtml()).contains("\"采购订单\"");
         assertThat(templates.get(7).getTemplateHtml()).contains("\"业务报表\"");
-        assertThat(templates.get(8).getTemplateHtml()).contains("\"销售单\"");
-        assertThat(templates.get(9).getTemplateHtml()).contains("\"对账单\"");
-        verify(repository, org.mockito.Mockito.times(10)).save(any(PrintTemplate.class));
+        assertThat(templates.get(8).getTemplateHtml()).contains("\"销售订单\"");
+        assertThat(templates.get(9).getTemplateHtml()).contains("\"客户对账单\"");
+        assertThat(templates.get(10).getTemplateHtml()).contains("\"采购入库单\"");
+        assertThat(templates.get(11).getTemplateHtml()).contains("\"采购合同\"");
+        assertThat(templates.get(12).getTemplateHtml()).contains("\"销售出库单\"");
+        assertThat(templates.get(13).getTemplateHtml()).contains("\"销售合同\"");
+        assertThat(templates.get(14).getTemplateHtml()).contains("\"供应商对账单\"");
+        assertThat(templates.get(15).getTemplateHtml()).contains("\"物流对账单\"");
+        verify(repository, org.mockito.Mockito.times(16)).save(any(PrintTemplate.class));
     }
 
     @Test

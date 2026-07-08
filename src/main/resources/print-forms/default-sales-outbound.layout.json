@@ -1,0 +1,75 @@
+{
+  "page": {"width": 595, "height": 842},
+  "static": [
+    {"type": "text", "text": "销售出库单", "left": 28, "top": 18, "width": 539, "height": 26, "fontSize": 18, "align": "center", "color": "#1677ff"},
+    {"type": "rect", "left": 28, "top": 58, "width": 539, "height": 92, "fillColor": "#fafafa", "strokeColor": "#d9d9d9", "lineWidth": 1},
+    {"type": "line", "x1": 387, "y1": 58, "x2": 387, "y2": 150, "strokeColor": "#d9d9d9", "lineWidth": 1},
+    {"type": "line", "x1": 28, "y1": 89, "x2": 567, "y2": 89, "strokeColor": "#d9d9d9", "lineWidth": 1},
+    {"type": "line", "x1": 28, "y1": 120, "x2": 567, "y2": 120, "strokeColor": "#d9d9d9", "lineWidth": 1},
+    {"type": "text", "text": "客户名称：", "left": 42, "top": 68, "width": 64, "height": 14, "fontSize": 11, "color": "#1677ff"},
+    {"type": "text", "text": "出库单号：", "left": 400, "top": 68, "width": 70, "height": 14, "fontSize": 11, "color": "#1677ff"},
+    {"type": "text", "text": "项目名称：", "left": 42, "top": 99, "width": 64, "height": 14, "fontSize": 11, "color": "#1677ff"},
+    {"type": "text", "text": "单据日期：", "left": 400, "top": 99, "width": 70, "height": 14, "fontSize": 11, "color": "#1677ff"},
+    {"type": "text", "text": "项目地址：", "left": 42, "top": 130, "width": 64, "height": 14, "fontSize": 11, "color": "#1677ff"},
+    {"type": "text", "text": "车号：", "left": 400, "top": 130, "width": 70, "height": 14, "fontSize": 11, "color": "#1677ff"}
+  ],
+  "fields": {
+    "customerName": {"source": "customerName", "left": 108, "top": 64, "width": 266, "height": 22, "fontSize": 12, "color": "#1f1f1f"},
+    "orderNo": {"source": ["outboundNo", "orderNo", "billNo", "salesNo"], "left": 472, "top": 64, "width": 82, "height": 22, "fontSize": 12, "minimumFontSize": 9, "color": "#1f1f1f"},
+    "projectName": {"source": "projectName", "left": 108, "top": 95, "width": 266, "height": 22, "fontSize": 12, "minimumFontSize": 10, "color": "#1f1f1f"},
+    "billDate": {"source": ["billDate", "orderDate", "salesDate"], "format": "chineseDate", "left": 472, "top": 95, "width": 82, "height": 22, "fontSize": 12, "color": "#1f1f1f"},
+    "projectAddress": {"source": "projectAddress", "left": 108, "top": 126, "width": 266, "height": 22, "fontSize": 12, "minimumFontSize": 9, "multiline": true, "color": "#1f1f1f"},
+    "vehiclePlate": {"source": "vehiclePlate", "left": 472, "top": 126, "width": 82, "height": 22, "fontSize": 12, "minimumFontSize": 10, "color": "#1f1f1f"}
+  },
+  "table": {
+    "source": "items",
+    "left": 28,
+    "top": 170,
+    "width": 539,
+    "headerHeight": 30,
+    "rowHeight": 28,
+    "maxRowsPerPage": 15,
+    "headerFillColor": "#f5f7fa",
+    "borderColor": "#d9d9d9",
+    "headerTextColor": "#1677ff",
+    "textColor": "#1f1f1f",
+    "emptyFillColor": "#fafafa",
+    "emptyTextColor": "#8c8c8c",
+    "lineWidth": 1,
+    "columns": [
+      {"key": "index", "label": "序号", "width": 28, "headerFontSize": 9, "fontSize": 9},
+      {"key": "materialCode", "label": "商品编码", "width": 70, "headerFontSize": 9, "fontSize": 9},
+      {"key": "brand", "label": "品牌", "width": 38, "headerFontSize": 9, "fontSize": 9},
+      {"key": "category", "label": "品名", "width": 40, "headerFontSize": 9, "fontSize": 9},
+      {"key": "material", "label": "材质", "width": 54, "headerFontSize": 9, "fontSize": 9, "normalize": "compactAscii", "font": "latinIfAscii"},
+      {"key": "spec", "label": "规格", "width": 42, "headerFontSize": 9, "fontSize": 9},
+      {"key": "length", "label": "长度", "width": 32, "headerFontSize": 9, "fontSize": 9},
+      {"key": "quantity", "label": "件数", "width": 38, "headerFontSize": 9, "fontSize": 9},
+      {"key": "pieceWeightTon", "label": "件重", "width": 52, "headerFontSize": 9, "fontSize": 9},
+      {"key": "weightTon", "label": "重量", "width": 52, "headerFontSize": 9, "fontSize": 9},
+      {"key": "unitPrice", "label": "单价", "width": 44, "headerFontSize": 9, "fontSize": 9},
+      {"key": "amount", "label": "金额", "width": 49, "headerFontSize": 9, "fontSize": 9}
+    ]
+  },
+  "summary": {
+    "height": 32,
+    "template": "销售合计：${totalAmount}    |    数量合计：${totalQuantity}    |    备注：${remark}",
+    "fontSize": 12,
+    "border": true,
+    "fillColor": "#e6f4ff",
+    "borderColor": "#d9d9d9",
+    "textColor": "#1677ff",
+    "lineWidth": 1
+  },
+  "clauses": {
+    "height": 84,
+    "fontSize": 11,
+    "lineHeight": 1.35,
+    "textColor": "#595959",
+    "lines": [
+      "1.客户收货时应核对品名、规格、数量及外观状态，签收后作为交付确认依据。",
+      "2.价格、优惠及税费以双方确认的销售合同、订单或结算单为准。",
+      "3.质量异议应在约定期限内书面提出，并保留原包装、实物及相关凭证。"
+    ]
+  }
+}

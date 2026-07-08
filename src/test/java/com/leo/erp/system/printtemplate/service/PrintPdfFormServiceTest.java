@@ -156,9 +156,18 @@ class PrintPdfFormServiceTest {
         PrintPdfFormService service = service(printScriptService);
 
         for (String resource : List.of(
+                "print-forms/default-purchase-order.layout.json",
+                "print-forms/default-purchase-inbound.layout.json",
+                "print-forms/default-purchase-contract.layout.json",
                 "print-forms/default-purchase.layout.json",
+                "print-forms/default-sales-order.layout.json",
+                "print-forms/default-sales-outbound.layout.json",
+                "print-forms/default-sales-contract.layout.json",
                 "print-forms/default-sales.layout.json",
                 "print-forms/default-logistics.layout.json",
+                "print-forms/default-customer-statement.layout.json",
+                "print-forms/default-supplier-statement.layout.json",
+                "print-forms/default-freight-statement.layout.json",
                 "print-forms/default-statement.layout.json",
                 "print-forms/default-report.layout.json"
         )) {
