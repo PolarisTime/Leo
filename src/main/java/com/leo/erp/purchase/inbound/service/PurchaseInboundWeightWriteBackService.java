@@ -6,6 +6,8 @@ import com.leo.erp.purchase.order.domain.entity.PurchaseOrder;
 import com.leo.erp.purchase.order.domain.entity.PurchaseOrderItem;
 import com.leo.erp.purchase.order.repository.PurchaseOrderRepository;
 import com.leo.erp.purchase.order.service.PurchaseOrderItemPieceWeightService;
+import com.leo.erp.purchase.order.service.PurchaseOrderPlanWeightSyncService;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -20,13 +22,23 @@ public class PurchaseInboundWeightWriteBackService {
     private final PurchaseInboundItemRepository purchaseInboundItemRepository;
     private final PurchaseOrderRepository purchaseOrderRepository;
     private final PurchaseOrderItemPieceWeightService purchaseOrderItemPieceWeightService;
+    private final PurchaseOrderPlanWeightSyncService purchaseOrderPlanWeightSyncService;
 
     public PurchaseInboundWeightWriteBackService(PurchaseInboundItemRepository purchaseInboundItemRepository,
                                                  PurchaseOrderRepository purchaseOrderRepository,
                                                  PurchaseOrderItemPieceWeightService purchaseOrderItemPieceWeightService) {
+        this(purchaseInboundItemRepository, purchaseOrderRepository, purchaseOrderItemPieceWeightService, null);
+    }
+
+    @Autowired
+    public PurchaseInboundWeightWriteBackService(PurchaseInboundItemRepository purchaseInboundItemRepository,
+                                                 PurchaseOrderRepository purchaseOrderRepository,
+                                                 PurchaseOrderItemPieceWeightService purchaseOrderItemPieceWeightService,
+                                                 PurchaseOrderPlanWeightSyncService purchaseOrderPlanWeightSyncService) {
         this.purchaseInboundItemRepository = purchaseInboundItemRepository;
         this.purchaseOrderRepository = purchaseOrderRepository;
         this.purchaseOrderItemPieceWeightService = purchaseOrderItemPieceWeightService;
+        this.purchaseOrderPlanWeightSyncService = purchaseOrderPlanWeightSyncService;
     }
 
     void writeBackPurchaseOrderWeights(
@@ -70,13 +82,20 @@ public class PurchaseInboundWeightWriteBackService {
         affectedOrderMap.values().forEach(this::refreshPurchaseOrderTotals);
         if (!affectedOrderMap.isEmpty()) {
             purchaseOrderRepository.saveAll(affectedOrderMap.values());
-            purchaseOrderItemPieceWeightService.regenerateForPurchaseOrderItems(
-                    sourcePurchaseOrderItemIds.stream()
-                            .map(writeBackItemMap::get)
-                            .filter(item -> item != null)
-                            .toList()
-            );
+            List<PurchaseOrderItem> writeBackItems = sourcePurchaseOrderItemIds.stream()
+                    .map(writeBackItemMap::get)
+                    .filter(item -> item != null)
+                    .toList();
+            syncPlanWeights(writeBackItems);
         }
+    }
+
+    private void syncPlanWeights(List<PurchaseOrderItem> writeBackItems) {
+        if (purchaseOrderPlanWeightSyncService != null) {
+            purchaseOrderPlanWeightSyncService.syncAfterPurchaseOrderWeightWriteBack(writeBackItems);
+            return;
+        }
+        purchaseOrderItemPieceWeightService.regenerateForPurchaseOrderItems(writeBackItems);
     }
 
     SourceWeighAccumulator mergeWeighAccumulator(SourceWeighAccumulator left, SourceWeighAccumulator right) {

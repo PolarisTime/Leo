@@ -26,6 +26,9 @@ import java.util.stream.Collectors;
 @Service
 public class FreightBillSourceService {
 
+    private static final Set<String> IMPORTABLE_OUTBOUND_STATUSES =
+            Set.of(StatusConstants.PRE_OUTBOUND, StatusConstants.AUDITED);
+
     private final FreightBillRepository freightBillRepository;
     private final SalesOutboundRepository salesOutboundRepository;
 
@@ -49,6 +52,29 @@ public class FreightBillSourceService {
             sourceItemMap.put(i + 1, sourceItem);
         }
         return new SourceValidationContext(outboundMap, sourceItemMap);
+    }
+
+    void assertSourcesAuditable(SourceValidationContext sourceContext) {
+        sourceContext.outboundMap().values().forEach(this::assertOutboundAudited);
+    }
+
+    void assertSourceNosAuditable(Collection<String> sourceNos) {
+        Set<String> normalizedSourceNos = sourceNos.stream()
+                .map(BusinessDocumentValidator::trimToNull)
+                .filter(value -> value != null)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        if (normalizedSourceNos.isEmpty()) {
+            return;
+        }
+
+        Map<String, SalesOutbound> outboundMap = loadOutboundMap(normalizedSourceNos);
+        for (String sourceNo : normalizedSourceNos) {
+            SalesOutbound outbound = outboundMap.get(sourceNo);
+            if (outbound == null) {
+                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "来源销售出库单" + sourceNo + "不存在");
+            }
+            assertOutboundAudited(outbound);
+        }
     }
 
     private Set<String> collectSourceNos(List<FreightBillItemRequest> items) {
@@ -100,8 +126,8 @@ public class FreightBillSourceService {
         }
         BusinessDocumentValidator.requireStatusIn(
                 outbound.getStatus(),
-                Set.of(StatusConstants.AUDITED),
-                "第" + lineNo + "行来源销售出库单未审核，不能作为物流单来源"
+                IMPORTABLE_OUTBOUND_STATUSES,
+                "第" + lineNo + "行来源销售出库状态不允许导入物流单"
         );
         BusinessDocumentValidator.requireSameSourceText(
                 request.customerName(),
@@ -145,6 +171,15 @@ public class FreightBillSourceService {
         BusinessDocumentValidator.requireSameSourceDecimal(requestedWeightTon, outboundItem.getWeightTon(), lineNo, "来源销售出库明细", "重量");
         BusinessDocumentValidator.requireSameSourceText(request.warehouseName(), outboundItem.getWarehouseName(), lineNo, "来源销售出库明细", "仓库");
         return outboundItem;
+    }
+
+    private void assertOutboundAudited(SalesOutbound outbound) {
+        if (StatusConstants.AUDITED.equals(BusinessDocumentValidator.normalizeText(outbound.getStatus()))) {
+            return;
+        }
+        String sourceNo = BusinessDocumentValidator.trimToNull(outbound.getOutboundNo());
+        String suffix = sourceNo == null ? "" : "：" + sourceNo;
+        throw new BusinessException(ErrorCode.BUSINESS_ERROR, "来源销售出库尚未审核" + suffix);
     }
 
     private SalesOutboundItem findMatchingItem(FreightBillItemRequest request, SalesOutbound outbound) {

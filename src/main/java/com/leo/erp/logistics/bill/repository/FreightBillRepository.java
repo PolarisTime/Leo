@@ -33,4 +33,22 @@ public interface FreightBillRepository extends JpaRepository<FreightBill, Long>,
             @Param("sourceNos") Collection<String> sourceNos,
             @Param("currentBillId") Long currentBillId
     );
+
+    @EntityGraph(attributePaths = "items")
+    @Query("""
+            select distinct bill
+            from FreightBill bill
+            where bill.deletedFlag = false
+              and bill.status = :status
+              and exists (
+                    select 1
+                    from FreightBillItem item
+                    where item.freightBill = bill
+                      and item.sourceSalesOutboundItemId in :sourceSalesOutboundItemIds
+              )
+            """)
+    List<FreightBill> findAllByStatusAndSourceSalesOutboundItemIds(
+            @Param("status") String status,
+            @Param("sourceSalesOutboundItemIds") Collection<Long> sourceSalesOutboundItemIds
+    );
 }

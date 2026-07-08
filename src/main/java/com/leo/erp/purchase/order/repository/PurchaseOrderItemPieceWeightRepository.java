@@ -39,6 +39,17 @@ public interface PurchaseOrderItemPieceWeightRepository extends JpaRepository<Pu
             @Param("purchaseOrderItemIds") Collection<Long> purchaseOrderItemIds
     );
 
+    @Query("""
+            select piece.salesOrderItemId as salesOrderItemId,
+                   coalesce(sum(piece.weightTon), 0) as totalWeightTon
+            from PurchaseOrderItemPieceWeight piece
+            where piece.salesOrderItemId in :salesOrderItemIds
+            group by piece.salesOrderItemId
+            """)
+    List<SalesOrderItemWeightSummary> summarizeBySalesOrderItemIds(
+            @Param("salesOrderItemIds") Collection<Long> salesOrderItemIds
+    );
+
     @Modifying
     @Query("""
             delete from PurchaseOrderItemPieceWeight piece
@@ -58,6 +69,13 @@ public interface PurchaseOrderItemPieceWeightRepository extends JpaRepository<Pu
     interface RemainingWeightSummary {
 
         Long getPurchaseOrderItemId();
+
+        java.math.BigDecimal getTotalWeightTon();
+    }
+
+    interface SalesOrderItemWeightSummary {
+
+        Long getSalesOrderItemId();
 
         java.math.BigDecimal getTotalWeightTon();
     }

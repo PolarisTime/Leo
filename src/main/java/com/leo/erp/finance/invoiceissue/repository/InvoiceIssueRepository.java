@@ -38,6 +38,19 @@ public interface InvoiceIssueRepository extends JpaRepository<InvoiceIssue, Long
             @Param("currentIssueId") Long currentIssueId
     );
 
+    @Query("""
+            select distinct item.sourceSalesOrderItemId
+            from InvoiceIssue issue
+            join issue.items item
+            where issue.deletedFlag = false
+              and issue.status = :status
+              and item.sourceSalesOrderItemId in :sourceSalesOrderItemIds
+            """)
+    List<Long> findSourceSalesOrderItemIdsByStatus(
+            @Param("sourceSalesOrderItemIds") Collection<Long> sourceSalesOrderItemIds,
+            @Param("status") String status
+    );
+
     interface SourceAllocationSummary {
 
         Long getSourceSalesOrderItemId();

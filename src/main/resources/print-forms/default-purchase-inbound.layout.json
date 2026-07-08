@@ -23,6 +23,7 @@
   },
   "tables": [
     {
+    "key": "items",
     "source": "items",
     "left": 28,
     "top": 170,
@@ -53,6 +54,7 @@
     ]
     },
     {
+      "key": "chargeItems",
       "source": "chargeItems",
       "title": "其他费用",
       "left": 28,

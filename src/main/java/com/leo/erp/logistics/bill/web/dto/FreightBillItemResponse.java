@@ -7,6 +7,7 @@ public record FreightBillItemResponse(
         Integer lineNo,
         String sourceNo,
         Long sourceSalesOutboundItemId,
+        String sourceSalesOutboundStatus,
         Long settlementCompanyId,
         String settlementCompanyName,
         String customerName,
@@ -45,7 +46,7 @@ public record FreightBillItemResponse(
                                    String batchNo,
                                    BigDecimal weightTon,
                                    String warehouseName) {
-        this(id, lineNo, sourceNo, null, null, null, customerName, projectName, materialCode,
+        this(id, lineNo, sourceNo, null, null, null, null, customerName, projectName, materialCode,
                 materialName, brand, category, material, spec, length, quantity, quantityUnit,
                 pieceWeightTon, piecesPerBundle, batchNo, weightTon, warehouseName);
     }

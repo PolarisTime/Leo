@@ -72,7 +72,7 @@ public class FreightBillApplyService {
             item.setPieceWeightTon(source.pieceWeightTon());
             item.setPiecesPerBundle(source.piecesPerBundle());
             item.setBatchNo(source.batchNo());
-            BigDecimal weightTon = TradeItemCalculator.calculateWeightTon(source.quantity(), source.pieceWeightTon());
+            BigDecimal weightTon = resolveWeightTon(source, sourceOutboundItem);
             item.setWeightTon(weightTon);
             item.setWarehouseName(source.warehouseName());
             totalWeight = totalWeight.add(weightTon);
@@ -100,6 +100,13 @@ public class FreightBillApplyService {
             return explicitName;
         }
         return BusinessDocumentValidator.trimToNull(source.brand());
+    }
+
+    private BigDecimal resolveWeightTon(FreightBillItemRequest source, SalesOutboundItem sourceOutboundItem) {
+        if (sourceOutboundItem != null && sourceOutboundItem.getWeightTon() != null) {
+            return TradeItemCalculator.scaleWeightTon(sourceOutboundItem.getWeightTon());
+        }
+        return TradeItemCalculator.calculateWeightTon(source.quantity(), source.pieceWeightTon());
     }
 
     private void applySourceSnapshot(FreightBillItem item, SalesOutboundItem sourceOutboundItem) {

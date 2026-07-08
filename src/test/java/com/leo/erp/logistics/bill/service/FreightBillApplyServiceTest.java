@@ -92,6 +92,7 @@ class FreightBillApplyServiceTest {
         FreightBill bill = new FreightBill();
         bill.setItems(new ArrayList<>());
         SalesOutboundItem sourceOutboundItem = sourceOutboundItem(61L, 71L, "结算主体甲");
+        sourceOutboundItem.setWeightTon(new BigDecimal("2.500"));
         FreightBillSourceService.SourceValidationContext sourceContext =
                 new FreightBillSourceService.SourceValidationContext(Map.of(), Map.of(1, sourceOutboundItem));
 
@@ -110,6 +111,31 @@ class FreightBillApplyServiceTest {
             assertThat(item.getSettlementCompanyId()).isEqualTo(71L);
             assertThat(item.getSettlementCompanyName()).isEqualTo("结算主体甲");
         });
+    }
+
+    @Test
+    void shouldUseSourceOutboundItemWeightTonWhenSourceExists() {
+        FreightBill bill = new FreightBill();
+        bill.setItems(new ArrayList<>());
+        SalesOutboundItem sourceOutboundItem = sourceOutboundItem(62L, 72L, "结算主体乙");
+        sourceOutboundItem.setWeightTon(new BigDecimal("2.499"));
+        FreightBillSourceService.SourceValidationContext sourceContext =
+                new FreightBillSourceService.SourceValidationContext(Map.of(), Map.of(1, sourceOutboundItem));
+
+        service.applyItems(
+                bill,
+                request(
+                        new BigDecimal("20.00"),
+                        item(null, "OB-001", "客户甲", "项目甲", null, "宝钢", 2, new BigDecimal("1.250"))
+                ),
+                sourceContext,
+                new AtomicLong(91L)::getAndIncrement
+        );
+
+        assertThat(bill.getTotalWeight()).isEqualByComparingTo("2.499");
+        assertThat(bill.getTotalFreight()).isEqualByComparingTo("49.98");
+        assertThat(bill.getItems()).singleElement()
+                .satisfies(item -> assertThat(item.getWeightTon()).isEqualByComparingTo("2.499"));
     }
 
     @Test

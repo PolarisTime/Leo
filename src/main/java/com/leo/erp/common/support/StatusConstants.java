@@ -17,6 +17,7 @@ public final class StatusConstants {
 
     // 单据状态
     public static final String DRAFT = "草稿";
+    public static final String PRE_OUTBOUND = "预出库";
     public static final String AUDITED = "已审核";
     public static final String COMPLETED = "已完成";
 
@@ -49,7 +50,7 @@ public final class StatusConstants {
     public static final Set<String> ALLOWED_PURCHASE_ORDER_STATUS = Set.of(DRAFT, AUDITED, PURCHASE_COMPLETED);
     public static final Set<String> ALLOWED_PURCHASE_INBOUND_STATUS = Set.of(DRAFT, AUDITED, INBOUND_COMPLETED);
     public static final Set<String> ALLOWED_SALES_ORDER_STATUS = Set.of(DRAFT, AUDITED, SALES_COMPLETED);
-    public static final Set<String> ALLOWED_SALES_OUTBOUND_STATUS = Set.of(DRAFT, AUDITED);
+    public static final Set<String> ALLOWED_SALES_OUTBOUND_STATUS = Set.of(DRAFT, PRE_OUTBOUND, AUDITED);
     public static final Set<String> ALLOWED_CONTRACT_STATUS = Set.of(DRAFT, EXECUTING, SIGNED, ARCHIVED);
     public static final Set<String> ALLOWED_STATEMENT_STATUS = Set.of(PENDING_CONFIRM, CONFIRMED);
     public static final Set<String> ALLOWED_FREIGHT_STATEMENT_STATUS = Set.of(PENDING_AUDIT, AUDITED);
@@ -81,6 +82,13 @@ public final class StatusConstants {
     public static final Set<String> SETTLEABLE_FREIGHT_STATEMENT_STATUS = Set.of(AUDITED);
 
     public static final Set<String> DRAFT_AUDIT_TRANSITIONS = Set.of(
+            DRAFT + "->" + AUDITED,
+            AUDITED + "->" + DRAFT
+    );
+    public static final Set<String> SALES_OUTBOUND_TRANSITIONS = Set.of(
+            DRAFT + "->" + PRE_OUTBOUND,
+            PRE_OUTBOUND + "->" + DRAFT,
+            PRE_OUTBOUND + "->" + AUDITED,
             DRAFT + "->" + AUDITED,
             AUDITED + "->" + DRAFT
     );

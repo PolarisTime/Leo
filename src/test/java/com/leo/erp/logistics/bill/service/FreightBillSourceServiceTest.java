@@ -47,6 +47,24 @@ class FreightBillSourceServiceTest {
     }
 
     @Test
+    void shouldValidatePreOutboundSalesOutboundSource() {
+        FreightBillRepository freightBillRepository = mock(FreightBillRepository.class);
+        SalesOutboundRepository salesOutboundRepository = mock(SalesOutboundRepository.class);
+        FreightBillSourceService service = new FreightBillSourceService(freightBillRepository, salesOutboundRepository);
+
+        when(freightBillRepository.findAllBySourceNosExcludingCurrentBill(anyCollection(), any()))
+                .thenReturn(List.of());
+        SalesOutbound outbound = outbound(StatusConstants.PRE_OUTBOUND);
+        when(salesOutboundRepository.findByOutboundNoInAndDeletedFlagFalse(Set.of("OB-001")))
+                .thenReturn(List.of(outbound));
+
+        FreightBillSourceService.SourceValidationContext context =
+                service.validateSources(request(item("OB-001")), 1L);
+
+        assertThat(context.outboundMap()).containsEntry("OB-001", outbound);
+    }
+
+    @Test
     void shouldRejectMissingSalesOutboundSource() {
         FreightBillRepository freightBillRepository = mock(FreightBillRepository.class);
         SalesOutboundRepository salesOutboundRepository = mock(SalesOutboundRepository.class);
@@ -75,7 +93,7 @@ class FreightBillSourceServiceTest {
 
         assertThatThrownBy(() -> service.validateSources(request(item("OB-001")), null))
                 .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("来源销售出库单未审核");
+                .hasMessageContaining("来源销售出库状态不允许导入物流单");
     }
 
     @Test

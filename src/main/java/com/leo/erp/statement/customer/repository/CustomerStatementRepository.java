@@ -30,4 +30,15 @@ public interface CustomerStatementRepository extends JpaRepository<CustomerState
             @Param("sourceNos") Collection<String> sourceNos,
             @Param("currentStatementId") Long currentStatementId
     );
+
+    @Query("""
+            select distinct item.sourceSalesOrderItemId
+            from CustomerStatement statement
+            join statement.items item
+            where statement.deletedFlag = false
+              and item.sourceSalesOrderItemId in :sourceSalesOrderItemIds
+            """)
+    List<Long> findSourceSalesOrderItemIds(
+            @Param("sourceSalesOrderItemIds") Collection<Long> sourceSalesOrderItemIds
+    );
 }

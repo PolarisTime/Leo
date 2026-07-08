@@ -6,6 +6,8 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.math.BigDecimal;
+import java.util.Collection;
+import java.util.List;
 
 public interface ReceiptAllocationRepository extends JpaRepository<ReceiptAllocation, Long> {
 
@@ -32,4 +34,18 @@ public interface ReceiptAllocationRepository extends JpaRepository<ReceiptAlloca
     BigDecimal sumAllocatedAmountBySourceStatementIdAndReceiptStatusExcludingReceiptId(@Param("statementId") Long statementId,
                                                                                         @Param("status") String status,
                                                                                         @Param("currentReceiptId") Long currentReceiptId);
+
+    @Query("""
+            select distinct item.sourceSalesOrderItemId
+            from ReceiptAllocation allocation
+            join allocation.receipt receipt
+            join CustomerStatement statement on statement.id = allocation.sourceStatementId
+            join statement.items item
+            where receipt.deletedFlag = false
+              and receipt.status = :status
+              and statement.deletedFlag = false
+              and item.sourceSalesOrderItemId in :sourceSalesOrderItemIds
+            """)
+    List<Long> findReceivedSourceSalesOrderItemIds(@Param("sourceSalesOrderItemIds") Collection<Long> sourceSalesOrderItemIds,
+                                                   @Param("status") String status);
 }

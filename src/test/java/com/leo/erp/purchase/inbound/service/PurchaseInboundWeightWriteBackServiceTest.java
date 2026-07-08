@@ -5,6 +5,7 @@ import com.leo.erp.purchase.order.domain.entity.PurchaseOrder;
 import com.leo.erp.purchase.order.domain.entity.PurchaseOrderItem;
 import com.leo.erp.purchase.order.repository.PurchaseOrderRepository;
 import com.leo.erp.purchase.order.service.PurchaseOrderItemPieceWeightService;
+import com.leo.erp.purchase.order.service.PurchaseOrderPlanWeightSyncService;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -101,6 +102,39 @@ class PurchaseInboundWeightWriteBackServiceTest {
         assertThat(item.getActualPieceWeightTon()).isNull();
         verify(purchaseOrderRepository).saveAll(any());
         verify(pieceWeightService).regenerateForPurchaseOrderItems(List.of(item));
+    }
+
+    @Test
+    void shouldTriggerPlanWeightSyncAfterPurchaseOrderWeightWriteBack() {
+        PurchaseInboundItemRepository inboundItemRepository = mock(PurchaseInboundItemRepository.class);
+        PurchaseOrderRepository purchaseOrderRepository = mock(PurchaseOrderRepository.class);
+        PurchaseOrderItemPieceWeightService pieceWeightService = mock(PurchaseOrderItemPieceWeightService.class);
+        PurchaseOrderPlanWeightSyncService planWeightSyncService = mock(PurchaseOrderPlanWeightSyncService.class);
+        PurchaseInboundWeightWriteBackService service = new PurchaseInboundWeightWriteBackService(
+                inboundItemRepository,
+                purchaseOrderRepository,
+                pieceWeightService,
+                planWeightSyncService
+        );
+
+        PurchaseOrder order = purchaseOrder();
+        PurchaseOrderItem item = purchaseOrderItem(order, 201L, 10);
+        order.getItems().add(item);
+        when(inboundItemRepository.summarizeWeighWeightBySourcePurchaseOrderItemIdsExcludingInbound(
+                eq(List.of(201L)),
+                eq(1L)
+        )).thenReturn(List.of());
+        when(purchaseOrderRepository.findByIdInAndDeletedFlagFalse(List.of(301L))).thenReturn(List.of(order));
+
+        service.writeBackPurchaseOrderWeights(
+                List.of(201L),
+                1L,
+                Map.of(),
+                Map.of(201L, item)
+        );
+
+        verify(planWeightSyncService).syncAfterPurchaseOrderWeightWriteBack(List.of(item));
+        verify(pieceWeightService, org.mockito.Mockito.never()).regenerateForPurchaseOrderItems(any());
     }
 
     @Test

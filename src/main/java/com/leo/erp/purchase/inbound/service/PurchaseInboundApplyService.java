@@ -18,6 +18,7 @@ import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.function.LongSupplier;
 
 @Service
@@ -119,6 +120,24 @@ public class PurchaseInboundApplyService {
                 currentWeighAccumulatorMap,
                 sourcePurchaseOrderItemMap
         );
+    }
+
+    List<Long> sourcePurchaseOrderIds(PurchaseInbound inbound) {
+        List<Long> sourceItemIds = inbound.getItems().stream()
+                .map(PurchaseInboundItem::getSourcePurchaseOrderItemId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        if (sourceItemIds.isEmpty()) {
+            return List.of();
+        }
+        return sourceValidator.loadSourcePurchaseOrderItemMap(sourceItemIds).values().stream()
+                .map(PurchaseOrderItem::getPurchaseOrder)
+                .filter(Objects::nonNull)
+                .map(com.leo.erp.purchase.order.domain.entity.PurchaseOrder::getId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
     }
 
     private void collectCurrentWeighAccumulator(

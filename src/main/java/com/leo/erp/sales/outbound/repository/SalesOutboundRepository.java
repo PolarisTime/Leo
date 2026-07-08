@@ -51,4 +51,53 @@ public interface SalesOutboundRepository extends JpaRepository<SalesOutbound, Lo
             @Param("status") String status,
             @Param("sourceSalesOrderItemIds") Collection<Long> sourceSalesOrderItemIds
     );
+
+    @EntityGraph(attributePaths = "items")
+    @Query("""
+            select distinct outbound
+            from SalesOutbound outbound
+            where outbound.deletedFlag = false
+              and outbound.status = :status
+              and exists (
+                    select 1
+                    from SalesOutboundItem item
+                    where item.salesOutbound = outbound
+                      and item.sourceSalesOrderItemId in :sourceSalesOrderItemIds
+              )
+            """)
+    List<SalesOutbound> findAllWithItemsByStatusAndSourceSalesOrderItemIds(
+            @Param("status") String status,
+            @Param("sourceSalesOrderItemIds") Collection<Long> sourceSalesOrderItemIds
+    );
+
+    @Query("""
+            select distinct item.sourceSalesOrderItemId
+            from SalesOutbound outbound
+            join outbound.items item
+            where outbound.deletedFlag = false
+              and outbound.status = :status
+              and item.sourceSalesOrderItemId in :sourceSalesOrderItemIds
+            """)
+    List<Long> findSourceSalesOrderItemIdsByStatus(
+            @Param("sourceSalesOrderItemIds") Collection<Long> sourceSalesOrderItemIds,
+            @Param("status") String status
+    );
+
+    @Query("""
+            select item.id as itemId,
+                   outbound.status as status
+            from SalesOutbound outbound
+            join outbound.items item
+            where outbound.deletedFlag = false
+              and item.id in :itemIds
+            """)
+    List<SourceOutboundStatusProjection> findSourceOutboundStatusesByItemIds(
+            @Param("itemIds") Collection<Long> itemIds
+    );
+
+    interface SourceOutboundStatusProjection {
+        Long getItemId();
+
+        String getStatus();
+    }
 }

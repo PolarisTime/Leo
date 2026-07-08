@@ -99,6 +99,54 @@ public class PurchaseOrderItemPieceWeightService {
         }
     }
 
+    @Transactional
+    public void rebalanceForPurchaseOrderItems(Collection<PurchaseOrderItem> items,
+                                               Collection<Long> lockedSalesOrderItemIds) {
+        if (items == null || items.isEmpty()) {
+            return;
+        }
+        Set<Long> lockedIds = lockedSalesOrderItemIds == null
+                ? Set.of()
+                : lockedSalesOrderItemIds.stream()
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        List<PurchaseOrderItemPieceWeight> nextPieces = new ArrayList<>();
+        for (PurchaseOrderItem item : items) {
+            if (item.getId() == null || item.getQuantity() == null || item.getQuantity() <= 0) {
+                continue;
+            }
+            List<PurchaseOrderItemPieceWeight> existingPieces =
+                    repository.findByPurchaseOrderItemIdOrderByPieceNoAsc(item.getId());
+            List<PurchaseOrderItemPieceWeight> lockedPieces = existingPieces.stream()
+                    .filter(piece -> piece.getSalesOrderItemId() != null)
+                    .filter(piece -> lockedIds.contains(piece.getSalesOrderItemId()))
+                    .toList();
+            BigDecimal lockedWeightTon = lockedPieces.stream()
+                    .map(piece -> TradeItemCalculator.safeBigDecimal(piece.getWeightTon()))
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+            BigDecimal targetWeightTon = resolveItemTotalWeight(item);
+            if (targetWeightTon.compareTo(lockedWeightTon) < 0) {
+                throw new BusinessException(
+                        ErrorCode.BUSINESS_ERROR,
+                        "采购明细" + item.getId() + "锁定重量大于采购明细目标重量，不能自动重平衡"
+                );
+            }
+
+            List<PieceSlot> rebalanceSlots = rebalanceSlots(item, existingPieces, lockedIds);
+            if (rebalanceSlots.isEmpty()) {
+                continue;
+            }
+            BigDecimal rebalanceWeightTon = TradeItemCalculator.scaleWeightTon(
+                    targetWeightTon.subtract(lockedWeightTon)
+            );
+            repository.deleteUnallocatedByPurchaseOrderItemIdIn(List.of(item.getId()));
+            nextPieces.addAll(buildPieceWeightsForSlots(item.getId(), rebalanceSlots, rebalanceWeightTon));
+        }
+        if (!nextPieces.isEmpty()) {
+            repository.saveAll(nextPieces);
+        }
+    }
+
     /**
      * 汇总采购入库的过磅实际重量作为逐件分配的总重量基准。
      * 盘螺/线材等需要过磅结算的品类，实际入库重量与理论重量存在磅差，
@@ -198,7 +246,20 @@ public class PurchaseOrderItemPieceWeightService {
     private List<PurchaseOrderItemPieceWeight> buildPieceWeights(Long purchaseOrderItemId,
                                                                  List<Integer> pieceNos,
                                                                  BigDecimal sourceWeightTon) {
-        int quantity = pieceNos == null ? 0 : pieceNos.size();
+        if (pieceNos == null) {
+            return List.of();
+        }
+        return buildPieceWeightsForSlots(
+                purchaseOrderItemId,
+                pieceNos.stream().map(pieceNo -> new PieceSlot(null, pieceNo, null)).toList(),
+                sourceWeightTon
+        );
+    }
+
+    private List<PurchaseOrderItemPieceWeight> buildPieceWeightsForSlots(Long purchaseOrderItemId,
+                                                                         List<PieceSlot> slots,
+                                                                         BigDecimal sourceWeightTon) {
+        int quantity = slots == null ? 0 : slots.size();
         if (quantity <= 0) {
             return List.of();
         }
@@ -213,18 +274,49 @@ public class PurchaseOrderItemPieceWeightService {
 
         List<PurchaseOrderItemPieceWeight> pieces = new ArrayList<>(quantity);
         for (int i = 0; i < quantity; i++) {
-            int pieceNo = pieceNos.get(i);
+            PieceSlot slot = slots.get(i);
             BigDecimal pieceWeightTon = averageWeightTon;
             if (residualUnits != 0 && i >= quantity - residualCount) {
                 pieceWeightTon = pieceWeightTon.add(adjustment);
             }
             PurchaseOrderItemPieceWeight piece = new PurchaseOrderItemPieceWeight();
-            piece.setId(snowflakeIdGenerator.nextId());
+            piece.setId(slot.id() == null ? snowflakeIdGenerator.nextId() : slot.id());
             piece.setPurchaseOrderItemId(purchaseOrderItemId);
-            piece.setPieceNo(pieceNo);
+            piece.setPieceNo(slot.pieceNo());
+            piece.setSalesOrderItemId(slot.salesOrderItemId());
             piece.setWeightTon(TradeItemCalculator.scaleWeightTon(pieceWeightTon));
             pieces.add(piece);
         }
         return pieces;
+    }
+
+    private List<PieceSlot> rebalanceSlots(PurchaseOrderItem item,
+                                           List<PurchaseOrderItemPieceWeight> existingPieces,
+                                           Set<Long> lockedIds) {
+        Map<Integer, PurchaseOrderItemPieceWeight> existingByPieceNo = existingPieces.stream()
+                .filter(piece -> piece.getPieceNo() != null)
+                .collect(Collectors.toMap(
+                        PurchaseOrderItemPieceWeight::getPieceNo,
+                        piece -> piece,
+                        (left, ignored) -> left
+                ));
+        List<PieceSlot> slots = new ArrayList<>();
+        for (int pieceNo = 1; pieceNo <= item.getQuantity(); pieceNo++) {
+            PurchaseOrderItemPieceWeight existing = existingByPieceNo.get(pieceNo);
+            if (existing != null
+                    && existing.getSalesOrderItemId() != null
+                    && lockedIds.contains(existing.getSalesOrderItemId())) {
+                continue;
+            }
+            slots.add(new PieceSlot(
+                    existing == null ? null : existing.getId(),
+                    pieceNo,
+                    existing == null ? null : existing.getSalesOrderItemId()
+            ));
+        }
+        return slots;
+    }
+
+    private record PieceSlot(Long id, Integer pieceNo, Long salesOrderItemId) {
     }
 }

@@ -59,7 +59,7 @@ class SalesOrderCompletionSyncServiceTest {
     }
 
     @Test
-    void shouldRecalculateHeaderTotalsFromAuditedOutboundWeightAndPricing() {
+    void shouldNotOverwriteOrderWeightAndAmountFromAuditedOutbound() {
         SalesOrderRepository salesOrderRepository = mock(SalesOrderRepository.class);
         SalesOrderOutboundQueryService outboundQueryService = mock(SalesOrderOutboundQueryService.class);
         SalesOrderCompletionSyncService service = new SalesOrderCompletionSyncService(
@@ -81,16 +81,16 @@ class SalesOrderCompletionSyncServiceTest {
 
         service.syncBySalesOrderReference("SO-TOTAL-001");
 
-        assertThat(orderItem.getOriginalWeightTon()).isEqualByComparingTo("5.000");
-        assertThat(orderItem.getWeightTon()).isEqualByComparingTo("4.500");
-        assertThat(orderItem.getAmount()).isEqualByComparingTo("13500.00");
-        assertThat(order.getTotalWeight()).isEqualByComparingTo("4.500");
-        assertThat(order.getTotalAmount()).isEqualByComparingTo("13500.00");
+        assertThat(orderItem.getOriginalWeightTon()).isNull();
+        assertThat(orderItem.getWeightTon()).isEqualByComparingTo("5.000");
+        assertThat(orderItem.getAmount()).isEqualByComparingTo("15000.00");
+        assertThat(order.getTotalWeight()).isEqualByComparingTo("5.000");
+        assertThat(order.getTotalAmount()).isEqualByComparingTo("15000.00");
         assertThat(order.getStatus()).isEqualTo("完成销售");
     }
 
     @Test
-    void shouldNotOverwriteExistingOriginalWeightWhenSyncingOutboundWeight() {
+    void shouldPreserveExistingOriginalWeightWhenOutboundWeightDiffers() {
         SalesOrderRepository salesOrderRepository = mock(SalesOrderRepository.class);
         SalesOrderOutboundQueryService outboundQueryService = mock(SalesOrderOutboundQueryService.class);
         SalesOrderCompletionSyncService service = new SalesOrderCompletionSyncService(
@@ -110,8 +110,8 @@ class SalesOrderCompletionSyncServiceTest {
         service.syncBySalesOrderReference("SO-ORIGINAL-001");
 
         assertThat(orderItem.getOriginalWeightTon()).isEqualByComparingTo("6.000");
-        assertThat(orderItem.getWeightTon()).isEqualByComparingTo("4.500");
-        assertThat(orderItem.getAmount()).isEqualByComparingTo("13500.00");
+        assertThat(orderItem.getWeightTon()).isEqualByComparingTo("5.000");
+        assertThat(orderItem.getAmount()).isEqualByComparingTo("15000.00");
     }
 
     @Test
@@ -139,12 +139,13 @@ class SalesOrderCompletionSyncServiceTest {
     }
 
     @Test
-    void shouldSyncWeightWithoutAmountWhenOrderItemHasNoUnitPrice() {
+    void shouldNotSyncWeightWhenOrderItemHasNoUnitPrice() {
         SalesOrderRepository salesOrderRepository = mock(SalesOrderRepository.class);
         SalesOrderOutboundQueryService outboundQueryService = mock(SalesOrderOutboundQueryService.class);
         SalesOrderCompletionSyncService service = new SalesOrderCompletionSyncService(
                 salesOrderRepository, outboundQueryService);
         SalesOrder order = buildOrder("SO-NO-PRICE-001", "已审核", 2);
+        order.setTotalAmount(new BigDecimal("15000.00"));
         SalesOrderItem orderItem = order.getItems().get(0);
         orderItem.setWeightTon(new BigDecimal("5.000"));
         orderItem.setUnitPrice(null);
@@ -157,8 +158,8 @@ class SalesOrderCompletionSyncServiceTest {
 
         service.syncBySalesOrderReference("SO-NO-PRICE-001");
 
-        assertThat(orderItem.getOriginalWeightTon()).isEqualByComparingTo("5.000");
-        assertThat(orderItem.getWeightTon()).isEqualByComparingTo("4.500");
+        assertThat(orderItem.getOriginalWeightTon()).isNull();
+        assertThat(orderItem.getWeightTon()).isEqualByComparingTo("5.000");
         assertThat(orderItem.getAmount()).isEqualByComparingTo("15000.00");
         assertThat(order.getTotalAmount()).isEqualByComparingTo("15000.00");
     }
@@ -200,7 +201,7 @@ class SalesOrderCompletionSyncServiceTest {
         service.syncBySalesOrderReference("SO-003");
 
         assertThat(order.getStatus()).isEqualTo("完成销售");
-        verify(salesOrderRepository).saveAll(any());
+        verify(salesOrderRepository, never()).saveAll(any());
     }
 
     @Test
@@ -220,7 +221,7 @@ class SalesOrderCompletionSyncServiceTest {
         service.syncBySalesOrderReference("SO-003B");
 
         assertThat(order.getStatus()).isEqualTo("完成销售");
-        verify(salesOrderRepository).saveAll(any());
+        verify(salesOrderRepository, never()).saveAll(any());
     }
 
     @Test
@@ -461,6 +462,7 @@ class SalesOrderCompletionSyncServiceTest {
         service.syncBySalesOrderReference("SO-NC-001");
 
         assertThat(order.getStatus()).isEqualTo("草稿");
+        verify(salesOrderRepository, never()).saveAll(any());
     }
 
     @Test

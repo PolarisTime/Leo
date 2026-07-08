@@ -33,6 +33,7 @@ class FreightBillItemResponseTest {
         );
 
         assertThat(response.sourceSalesOutboundItemId()).isNull();
+        assertThat(response.sourceSalesOutboundStatus()).isNull();
         assertThat(response.settlementCompanyId()).isNull();
         assertThat(response.settlementCompanyName()).isNull();
         assertThat(response.customerName()).isEqualTo("客户A");

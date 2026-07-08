@@ -260,6 +260,64 @@ class PurchaseOrderItemPieceWeightServiceTest {
     }
 
     @Test
+    void shouldRebalanceUnlockedAllocatedAndUnallocatedPieces() {
+        PurchaseOrderItemPieceWeightRepository repository = mock(PurchaseOrderItemPieceWeightRepository.class);
+        PurchaseOrderItemPieceWeightService service = new PurchaseOrderItemPieceWeightService(repository, mock(JdbcTemplate.class));
+
+        PurchaseOrderItem item = new PurchaseOrderItem();
+        item.setId(201L);
+        item.setQuantity(4);
+        item.setWeightTon(new BigDecimal("8.000"));
+
+        PurchaseOrderItemPieceWeight lockedAllocated = piece(201L, 1, "2.000");
+        lockedAllocated.setSalesOrderItemId(301L);
+        PurchaseOrderItemPieceWeight unlockedAllocated = piece(201L, 2, "1.000");
+        unlockedAllocated.setSalesOrderItemId(302L);
+        PurchaseOrderItemPieceWeight unallocated = piece(201L, 3, "1.000");
+
+        when(repository.findByPurchaseOrderItemIdOrderByPieceNoAsc(201L))
+                .thenReturn(List.of(lockedAllocated, unlockedAllocated, unallocated));
+
+        service.rebalanceForPurchaseOrderItems(List.of(item), List.of(301L));
+
+        @SuppressWarnings({"rawtypes", "unchecked"})
+        ArgumentCaptor<Iterable<PurchaseOrderItemPieceWeight>> captor = ArgumentCaptor.forClass(Iterable.class);
+        verify(repository).deleteUnallocatedByPurchaseOrderItemIdIn(List.of(201L));
+        verify(repository).saveAll(captor.capture());
+        assertThat(lockedAllocated.getWeightTon()).isEqualByComparingTo("2.000");
+        assertThat(captor.getValue())
+                .extracting(PurchaseOrderItemPieceWeight::getPieceNo,
+                        PurchaseOrderItemPieceWeight::getSalesOrderItemId,
+                        PurchaseOrderItemPieceWeight::getWeightTon)
+                .containsExactly(
+                        org.assertj.core.groups.Tuple.tuple(2, 302L, new BigDecimal("2.00000000")),
+                        org.assertj.core.groups.Tuple.tuple(3, null, new BigDecimal("2.00000000")),
+                        org.assertj.core.groups.Tuple.tuple(4, null, new BigDecimal("2.00000000"))
+                );
+    }
+
+    @Test
+    void shouldRejectRebalanceWhenLockedWeightExceedsTargetWeight() {
+        PurchaseOrderItemPieceWeightRepository repository = mock(PurchaseOrderItemPieceWeightRepository.class);
+        PurchaseOrderItemPieceWeightService service = new PurchaseOrderItemPieceWeightService(repository, mock(JdbcTemplate.class));
+
+        PurchaseOrderItem item = new PurchaseOrderItem();
+        item.setId(201L);
+        item.setQuantity(2);
+        item.setWeightTon(new BigDecimal("1.000"));
+
+        PurchaseOrderItemPieceWeight lockedAllocated = piece(201L, 1, "2.000");
+        lockedAllocated.setSalesOrderItemId(301L);
+        when(repository.findByPurchaseOrderItemIdOrderByPieceNoAsc(201L))
+                .thenReturn(List.of(lockedAllocated));
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() ->
+                service.rebalanceForPurchaseOrderItems(List.of(item), List.of(301L))
+        ).isInstanceOf(com.leo.erp.common.error.BusinessException.class)
+                .hasMessageContaining("锁定重量大于采购明细目标重量");
+    }
+
+    @Test
     void shouldClampNegativeUnallocatedWeightToZeroWhenRegenerating() {
         PurchaseOrderItemPieceWeightRepository repository = mock(PurchaseOrderItemPieceWeightRepository.class);
         PurchaseOrderItemPieceWeightService service = new PurchaseOrderItemPieceWeightService(repository, mock(JdbcTemplate.class));

@@ -18,6 +18,7 @@ import java.math.BigDecimal;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.function.LongSupplier;
 
 @Service
@@ -103,6 +104,16 @@ public class SalesOutboundApplyService {
         entity.setWarehouseName(firstLineWarehouseName == null ? trimToNull(request.warehouseName()) : firstLineWarehouseName);
         entity.setTotalWeight(totalWeight);
         entity.setTotalAmount(totalAmount);
+    }
+
+    List<Long> sourceSalesOrderIds(SalesOutbound entity) {
+        return sourceService.loadSourceSalesOrderItemMap(entity.getItems()).values().stream()
+                .map(SalesOrderItem::getSalesOrder)
+                .filter(Objects::nonNull)
+                .map(com.leo.erp.sales.order.domain.entity.SalesOrder::getId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
     }
 
     private LineApplyResult applyItem(SalesOutbound entity,
