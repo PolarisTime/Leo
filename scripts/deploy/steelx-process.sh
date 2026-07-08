@@ -4,6 +4,7 @@ set -euo pipefail
 
 ACTION="${1:-}"
 STEELX_ROOT="${STEELX_ROOT:-/instance/steelx}"
+STEELX_BACKEND_ROOT="${STEELX_BACKEND_ROOT:-$STEELX_ROOT/backend}"
 ENV_FILE="$STEELX_ROOT/shared/steelx.env"
 BACKEND_PID_FILE="$STEELX_ROOT/run/backend.pid"
 BACKEND_LOG_FILE="$STEELX_ROOT/logs/backend.log"
@@ -26,7 +27,15 @@ fi
 
 SERVER_PORT="${SERVER_PORT:-57217}"
 export SPRING_AI_MCP_SERVER_ENABLED="${SPRING_AI_MCP_SERVER_ENABLED:-false}"
-JAR_FILE="$STEELX_ROOT/current/backend/leo.jar"
+if [[ -n "${STEELX_BACKEND_JAR:-}" ]]; then
+  JAR_FILE="$STEELX_BACKEND_JAR"
+elif [[ -f "$STEELX_BACKEND_ROOT/current/leo.jar" ]]; then
+  JAR_FILE="$STEELX_BACKEND_ROOT/current/leo.jar"
+elif [[ -f "$STEELX_BACKEND_ROOT/current/backend/leo.jar" ]]; then
+  JAR_FILE="$STEELX_BACKEND_ROOT/current/backend/leo.jar"
+else
+  JAR_FILE="$STEELX_ROOT/current/backend/leo.jar"
+fi
 
 find_pid_by_port() {
   ss -ltnpH "( sport = :$SERVER_PORT )" 2>/dev/null | sed -n 's/.*pid=\([0-9]\+\).*/\1/p' | head -1

@@ -53,7 +53,7 @@ read_maven_version() {
 }
 
 rm -rf "$OUTPUT_DIR"
-mkdir -p "$OUTPUT_DIR/input/backend" "$OUTPUT_DIR/release/backend" "$OUTPUT_DIR/release/deploy"
+mkdir -p "$OUTPUT_DIR/release/deploy"
 
 echo "[build] Leo backend"
 if [[ "$SKIP_TESTS" == "true" ]]; then
@@ -67,7 +67,7 @@ if [[ -z "$backend_jar" ]]; then
   echo "未找到后端 JAR" >&2
   exit 1
 fi
-cp "$backend_jar" "$OUTPUT_DIR/release/backend/leo.jar"
+cp "$backend_jar" "$OUTPUT_DIR/release/leo.jar"
 
 cp "$LEO_DIR/scripts/deploy/install-production-release.sh" "$OUTPUT_DIR/release/deploy/"
 

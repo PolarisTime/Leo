@@ -11,7 +11,7 @@
   -> 打包 release archive
   -> 校验 SHA256
   -> 本机 self-hosted runner 下载 release archive
-  -> 获取 /instance/steelx 生产发布锁
+  -> 获取 /instance/steelx/backend 生产发布锁
   -> 执行本机 pre-deploy hook
   -> 重启 steelx 后端进程
   -> 健康检查
@@ -65,7 +65,8 @@ SSH 可选 Secrets：
 
 可选 Environment Variables：
 
-- `PROD_RELEASE_ROOT`：后端发布根目录，默认 `/instance/steelx`
+- `PROD_RELEASE_ROOT`：后端发布根目录，默认 `/instance/steelx/backend`
+- `PROD_SHARED_DIR`：后端共享配置与 hook 目录，默认 `/instance/steelx/shared`
 - `PROD_FRONTEND_ROOT`：前端发布根目录，默认 `/instance/steelx/frontend`
 - `PROD_BACKEND_SERVICE`：systemd 服务名，默认 `steelx-local`
 - `PROD_HEALTHCHECK_URL`：健康检查地址，默认 `http://127.0.0.1:57217/api/health`
@@ -76,7 +77,8 @@ SSH 可选 Secrets：
 当前 steelx 生产实例部署在 `/instance/steelx`。若后续迁移到其他生产实例，可用 GitHub Variables 覆盖默认值：
 
 ```text
-PROD_RELEASE_ROOT=/instance/steelx
+PROD_RELEASE_ROOT=/instance/steelx/backend
+PROD_SHARED_DIR=/instance/steelx/shared
 PROD_FRONTEND_ROOT=/instance/steelx/frontend
 PROD_BACKEND_SERVICE=steelx-local
 PROD_HEALTHCHECK_URL=http://127.0.0.1:57217/api/health
@@ -212,6 +214,7 @@ bash leo/scripts/deploy/trigger-production-deploy.sh \
 本机 steelx 部署用于把当前开发环境构建为本地生产实例，流程仍保持 release 包、SHA256 校验、发布锁、软链切换、健康检查和可回滚。默认配置：
 
 - 部署目录：`/instance/steelx`
+- 后端发布目录：`/instance/steelx/backend`
 - 服务域名：`in1ove.com`
 - 前端入口：Nginx `443` HTTPS
 - HTTP 跳转：Nginx `80` 301 跳转到 HTTPS
@@ -230,7 +233,9 @@ PGPASSWORD="<postgres-admin-password>" \
 
 脚本会安装 `/etc/nginx/conf.d/steelx.conf`，执行 `nginx -t` 后 reload Nginx。执行用户需要 root 权限，或具备免密 sudo 执行 `install`、`nginx -t`、`nginx -s reload` 的权限。生产实例对外地址为 `https://in1ove.com`，`http://in1ove.com` 会跳转到 HTTPS。
 
-完成首次初始化后，后续自动化发布走 GitHub Actions `deploy_target=local`。本机 runner 直接下载 release archive 并调用 `scripts/deploy/install-production-release.sh` 发布到 `/instance/steelx`，不会重新写数据库。
+完成首次初始化后，后续自动化发布走 GitHub Actions `deploy_target=local`。本机 runner 直接下载 release archive 并调用 `scripts/deploy/install-production-release.sh` 发布到 `/instance/steelx/backend`，不会重新写数据库。
+
+从旧后端根目录切换到独立后端目录时，首次自动化发布会创建 `/instance/steelx/backend/releases`、`/instance/steelx/backend/current` 和 `/instance/steelx/backend/previous`。如果新目录还没有 `current`，脚本会识别旧的 `/instance/steelx/current` 软链，并把它作为 `/instance/steelx/backend/previous`，用于首次发布失败回滚或手动回滚。脚本不会移动、重命名或删除旧的 `/instance/steelx/current` 与 `/instance/steelx/releases` 内容；旧目录清理必须在新目录稳定运行并确认不再需要回滚后手动执行。
 
 本机 runner 会在 release 安装成功后调用 `scripts/deploy/install-steelx-nginx-config.sh` 安装 SteelX Nginx 配置。该脚本会生成 `/instance/steelx/shared/nginx-steelx.conf`，备份并覆盖 `/etc/nginx/conf.d/steelx.conf`，执行 `nginx -t` 后 reload Nginx；如校验或 reload 失败，会尝试恢复上一版配置。SteelX 上传请求体临时目录固定在 `/instance/steelx/frontend/nginx-client-body`，不放入 `/instance/steelx/frontend/current`。
 
@@ -243,7 +248,7 @@ PGPASSWORD="<postgres-admin-password>" \
 1. 读取当前生产 release manifest：
 
 ```bash
-jq . /instance/steelx/current/manifest.json
+jq . /instance/steelx/backend/current/manifest.json
 ```
 
 重点字段：
@@ -258,7 +263,7 @@ jq . /instance/steelx/current/manifest.json
 2. 使用 manifest 中的 `runId` 查询 GitHub Actions：
 
 ```bash
-gh run view "$(jq -r '.runId' /instance/steelx/current/manifest.json)" \
+gh run view "$(jq -r '.runId' /instance/steelx/backend/current/manifest.json)" \
   --repo PolarisTime/Leo \
   --json databaseId,displayTitle,status,conclusion,headBranch,headSha,jobs,url
 ```
@@ -273,7 +278,7 @@ gh run view "$(jq -r '.runId' /instance/steelx/current/manifest.json)" \
 3. 对比当前仓库代码与已部署 commit：
 
 ```bash
-deployed_sha="$(jq -r '.leoSha' /instance/steelx/current/manifest.json)"
+deployed_sha="$(jq -r '.leoSha' /instance/steelx/backend/current/manifest.json)"
 git rev-parse HEAD
 git merge-base --is-ancestor "$deployed_sha" HEAD
 git rev-list --count "$deployed_sha"..HEAD
@@ -311,8 +316,8 @@ bash leo/scripts/deploy/trigger-production-rollback.sh \
 
 远端脚本 `scripts/deploy/install-production-release.sh` 使用 release 目录和软链发布：
 
-- 后端当前版本：`/instance/steelx/current`
-- 后端上个版本：`/instance/steelx/previous`
+- 后端当前版本：`/instance/steelx/backend/current`
+- 后端上个版本：`/instance/steelx/backend/previous`
 - 前端当前版本：`/instance/steelx/frontend/current`
 
 如果后端重启后健康检查失败，脚本会恢复旧的后端软链、重启 systemd 服务，并恢复旧的前端软链。

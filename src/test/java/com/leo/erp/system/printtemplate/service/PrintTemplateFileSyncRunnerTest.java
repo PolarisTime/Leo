@@ -117,6 +117,51 @@ class PrintTemplateFileSyncRunnerTest {
                         "PDF_FORM",
                         "PDF_FORM",
                         "print-forms/yingjie-a4-remark.layout.json"
+                ),
+                seedTemplate(
+                        700540000000000030L,
+                        "freight-bill",
+                        "DEFAULT_LOGISTICS_PDF_FORM",
+                        "默认物流 PDF",
+                        "PDF_FORM",
+                        "PDF_FORM",
+                        "print-forms/default-logistics.layout.json"
+                ),
+                seedTemplate(
+                        700540000000000031L,
+                        "purchase-order",
+                        "DEFAULT_PURCHASE_PDF_FORM",
+                        "默认采购 PDF",
+                        "PDF_FORM",
+                        "PDF_FORM",
+                        "print-forms/default-purchase.layout.json"
+                ),
+                seedTemplate(
+                        700540000000000032L,
+                        "inventory-report",
+                        "DEFAULT_REPORT_PDF_FORM",
+                        "默认报表 PDF",
+                        "PDF_FORM",
+                        "PDF_FORM",
+                        "print-forms/default-report.layout.json"
+                ),
+                seedTemplate(
+                        700540000000000033L,
+                        "sales-order",
+                        "DEFAULT_SALES_PDF_FORM",
+                        "默认销售 PDF",
+                        "PDF_FORM",
+                        "PDF_FORM",
+                        "print-forms/default-sales.layout.json"
+                ),
+                seedTemplate(
+                        700540000000000034L,
+                        "customer-statement",
+                        "DEFAULT_STATEMENT_PDF_FORM",
+                        "默认对账 PDF",
+                        "PDF_FORM",
+                        "PDF_FORM",
+                        "print-forms/default-statement.layout.json"
                 )
         );
         PrintTemplateRepository repository = mock(PrintTemplateRepository.class);
@@ -137,7 +182,12 @@ class PrintTemplateFileSyncRunnerTest {
         assertThat(templates.get(2).getTemplateHtml()).contains("LODOP.PRINT_INIT(\"物流对账单\")");
         assertThat(templates.get(3).getTemplateHtml()).contains("LODOP.PRINT_INIT(\"客户对账单-A4\")");
         assertThat(templates.get(4).getTemplateHtml()).contains("\"page\"");
-        verify(repository, org.mockito.Mockito.times(5)).save(any(PrintTemplate.class));
+        assertThat(templates.get(5).getTemplateHtml()).contains("\"物流配送单\"");
+        assertThat(templates.get(6).getTemplateHtml()).contains("\"采购单\"");
+        assertThat(templates.get(7).getTemplateHtml()).contains("\"业务报表\"");
+        assertThat(templates.get(8).getTemplateHtml()).contains("\"销售单\"");
+        assertThat(templates.get(9).getTemplateHtml()).contains("\"对账单\"");
+        verify(repository, org.mockito.Mockito.times(10)).save(any(PrintTemplate.class));
     }
 
     @Test

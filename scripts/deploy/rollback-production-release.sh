@@ -8,6 +8,7 @@ BACKEND_SERVICE="leo-backend"
 HEALTHCHECK_URL="http://127.0.0.1:57217/api/health"
 START_COMMAND=""
 STOP_COMMAND=""
+SHARED_DIR=""
 
 usage() {
   cat <<'EOF'
@@ -18,7 +19,8 @@ usage() {
     [--backend-service leo-backend] \
     [--healthcheck-url http://127.0.0.1:57217/api/health] \
     [--start-command <command>] \
-    [--stop-command <command>]
+    [--stop-command <command>] \
+    [--shared-dir /opt/leo/shared]
 EOF
 }
 
@@ -30,6 +32,7 @@ while [[ $# -gt 0 ]]; do
     --healthcheck-url) HEALTHCHECK_URL="$2"; shift 2 ;;
     --start-command) START_COMMAND="$2"; shift 2 ;;
     --stop-command) STOP_COMMAND="$2"; shift 2 ;;
+    --shared-dir) SHARED_DIR="$2"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "未知参数: $1" >&2; usage; exit 1 ;;
   esac
@@ -52,7 +55,12 @@ fi
 releases_dir="$RELEASE_ROOT/releases"
 current_link="$RELEASE_ROOT/current"
 previous_link="$RELEASE_ROOT/previous"
-shared_dir="$RELEASE_ROOT/shared"
+shared_dir="${SHARED_DIR:-$RELEASE_ROOT/shared}"
+
+release_has_backend_jar() {
+  local candidate_dir="$1"
+  [[ -f "$candidate_dir/leo.jar" || -f "$candidate_dir/backend/leo.jar" ]]
+}
 
 lock_file="$RELEASE_ROOT/deploy.lock"
 exec 9>"$lock_file"
@@ -77,7 +85,7 @@ else
   target_backend="$releases_dir/$TARGET_RELEASE"
 fi
 
-if [[ ! -d "$target_backend" || ! -f "$target_backend/backend/leo.jar" ]]; then
+if [[ ! -d "$target_backend" ]] || ! release_has_backend_jar "$target_backend"; then
   echo "目标后端 release 不存在或不完整: $target_backend" >&2
   exit 1
 fi

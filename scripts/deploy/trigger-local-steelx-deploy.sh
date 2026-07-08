@@ -127,7 +127,7 @@ if [[ -z "$DB_ADMIN_PASSWORD" ]]; then
   exit 1
 fi
 
-mkdir -p "$STEELX_ROOT/shared" "$STEELX_ROOT/logs" "$STEELX_ROOT/run"
+mkdir -p "$STEELX_ROOT/shared" "$STEELX_ROOT/logs" "$STEELX_ROOT/run" "$STEELX_ROOT/backend"
 chmod 700 "$STEELX_ROOT/shared"
 
 APP_DB_PASSWORD_FILE="$STEELX_ROOT/shared/.db-password"
@@ -222,7 +222,8 @@ stop_command="STEELX_ROOT=$STEELX_ROOT bash $STEELX_ROOT/shared/steelx-process.s
 bash "$SCRIPT_DIR/install-production-release.sh" \
   --archive "$archive" \
   --sha256-file "$sha_file" \
-  --release-root "$STEELX_ROOT" \
+  --release-root "$STEELX_ROOT/backend" \
+  --shared-dir "$STEELX_ROOT/shared" \
   --backend-service "steelx-local" \
   --healthcheck-url "http://127.0.0.1:$BACKEND_PORT/api/health" \
   --keep-releases 5 \

@@ -255,7 +255,9 @@ public class MaterialService extends AbstractCrudService<Material, MaterialReque
         int createdCount = 0;
         int updatedCount = 0;
         List<Material> successRows = new ArrayList<>();
-        for (MaterialImportDTO dto : dtoList) {
+        for (int index = 0; index < dtoList.size(); index++) {
+            MaterialImportDTO dto = dtoList.get(index);
+            int rowNumber = index + 2;
             String materialCode = resolveImportMaterialCode(dto.materialCode());
             Material material = materialRepository.findByMaterialCode(materialCode)
                     .orElseGet(() -> {
@@ -265,7 +267,7 @@ public class MaterialService extends AbstractCrudService<Material, MaterialReque
                     });
             boolean exists = material.getId() != null && materialRepository.existsById(material.getId());
             material.setDeletedFlag(false);
-            applyImportDTO(material, dto, materialCode);
+            applyImportDTO(material, dto, materialCode, rowNumber);
             materialRepository.save(material);
             successRows.add(material);
             if (exists) {
@@ -283,7 +285,7 @@ public class MaterialService extends AbstractCrudService<Material, MaterialReque
         );
     }
 
-    private void applyImportDTO(Material entity, MaterialImportDTO dto, String materialCode) {
+    private void applyImportDTO(Material entity, MaterialImportDTO dto, String materialCode, int rowNumber) {
         entity.setMaterialCode(materialCode);
         entity.setBrand(dto.brand());
         entity.setMaterial(dto.material());
@@ -292,12 +294,9 @@ public class MaterialService extends AbstractCrudService<Material, MaterialReque
         entity.setLength(dto.length());
         entity.setUnit(dto.unit());
         entity.setQuantityUnit(TradeItemCalculator.normalizeQuantityUnit(dto.quantityUnit()));
-        entity.setPieceWeightTon(dto.pieceWeightTon() != null && !dto.pieceWeightTon().isBlank()
-                ? new BigDecimal(dto.pieceWeightTon()) : BigDecimal.ZERO);
-        entity.setPiecesPerBundle(dto.piecesPerBundle() != null && !dto.piecesPerBundle().isBlank()
-                ? Integer.parseInt(dto.piecesPerBundle()) : 0);
-        entity.setUnitPrice(dto.unitPrice() != null && !dto.unitPrice().isBlank()
-                ? new BigDecimal(dto.unitPrice()) : BigDecimal.ZERO);
+        entity.setPieceWeightTon(parseBigDecimalOrZero(dto.pieceWeightTon(), rowNumber, "件重(吨)"));
+        entity.setPiecesPerBundle(parseIntegerOrZero(dto.piecesPerBundle(), rowNumber, "每件支数"));
+        entity.setUnitPrice(parseBigDecimalOrZero(dto.unitPrice(), rowNumber, "单价"));
         entity.setBatchNoEnabled(tradeItemMaterialSupport.normalizeBatchNoEnabled(
                 dto.batchNoEnabled() != null && !dto.batchNoEnabled().isBlank()
                         ? ("是".equals(dto.batchNoEnabled()) || "true".equalsIgnoreCase(dto.batchNoEnabled()))
@@ -519,6 +518,24 @@ public class MaterialService extends AbstractCrudService<Material, MaterialReque
     private BigDecimal parseBigDecimal(String value, int rowNumber, String label) {
         try {
             return new BigDecimal(value.trim());
+        } catch (NumberFormatException ex) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "第" + rowNumber + "行【" + label + "】格式不正确");
+        }
+    }
+
+    private BigDecimal parseBigDecimalOrZero(String value, int rowNumber, String label) {
+        if (value == null || value.isBlank()) {
+            return BigDecimal.ZERO;
+        }
+        return parseBigDecimal(value, rowNumber, label);
+    }
+
+    private int parseIntegerOrZero(String value, int rowNumber, String label) {
+        if (value == null || value.isBlank()) {
+            return 0;
+        }
+        try {
+            return Integer.parseInt(value.trim());
         } catch (NumberFormatException ex) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "第" + rowNumber + "行【" + label + "】格式不正确");
         }

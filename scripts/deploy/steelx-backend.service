@@ -39,7 +39,7 @@ ExecStart=/usr/bin/java \
   -XX:HeapDumpPath=/instance/steelx/shared/heapdump.hprof \
   -Dserver.port=57217 \
   -Dspring.profiles.active=prod \
-  -jar /instance/steelx/current/backend/leo.jar
+  -jar /instance/steelx/backend/current/leo.jar
 SuccessExitStatus=143
 Restart=on-failure
 RestartSec=5

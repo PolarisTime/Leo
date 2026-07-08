@@ -1232,6 +1232,27 @@ class MaterialServiceTest {
     }
 
     @Test
+    void shouldRejectImportExcelWithInvalidPieceWeightAsBusinessError() throws Exception {
+        MaterialRepository materialRepository = mock(MaterialRepository.class);
+        TradeItemMaterialSupport tradeItemMaterialSupport = mock(TradeItemMaterialSupport.class);
+        ExcelImportService excelImportService = mock(ExcelImportService.class);
+        List<MaterialImportDTO> dtos = List.of(new MaterialImportDTO(
+                "MAT-SLASH", "宝钢", "Q235B", "板材", "10mm", "6m", "吨", "支",
+                "/", "10", "500.00", "否", "备注"
+        ));
+        when(excelImportService.parseAndValidate(any(MultipartFile.class), eq(MaterialImportDTO.class))).thenReturn(dtos);
+
+        var service = new MaterialService(materialRepository, new SnowflakeIdGenerator(1), null,
+                tradeItemMaterialSupport, null, excelImportService, null, null);
+
+        MockMultipartFile file = new MockMultipartFile("file", "test.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", new byte[0]);
+
+        assertThatThrownBy(() -> service.importExcel(file))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("第2行【件重(吨)】格式不正确");
+    }
+
+    @Test
     void shouldImportExcelWithNullOptionalNumericAndBatchFields() throws Exception {
         MaterialRepository materialRepository = mock(MaterialRepository.class);
         TradeItemMaterialSupport tradeItemMaterialSupport = mock(TradeItemMaterialSupport.class);

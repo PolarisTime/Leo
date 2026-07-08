@@ -157,13 +157,13 @@ jobs:
           else
             release_id="leo-${GITHUB_RUN_NUMBER}-${leo_sha::12}"
           fi
-          mkdir -p release/backend release/deploy
+          mkdir -p release/deploy
           backend_jar="$(find release-input/backend -maxdepth 1 -type f -name '*.jar' | head -1)"
           if [[ -z "$backend_jar" ]]; then
             echo "Backend jar artifact not found" >&2
             exit 1
           fi
-          cp "$backend_jar" release/backend/leo.jar
+          cp "$backend_jar" release/leo.jar
           cp scripts/deploy/install-production-release.sh release/deploy/
           cp scripts/deploy/steelx-process.sh release/deploy/
           jq -n \
@@ -227,7 +227,8 @@ jobs:
       run:
         shell: bash
     env:
-      PROD_RELEASE_ROOT: ${{ vars.PROD_RELEASE_ROOT || '/instance/steelx' }}
+      PROD_RELEASE_ROOT: ${{ vars.PROD_RELEASE_ROOT || '/instance/steelx/backend' }}
+      PROD_SHARED_DIR: ${{ vars.PROD_SHARED_DIR || '/instance/steelx/shared' }}
       PROD_BACKEND_SERVICE: ${{ vars.PROD_BACKEND_SERVICE || 'steelx-local' }}
       PROD_HEALTHCHECK_URL: ${{ vars.PROD_HEALTHCHECK_URL || 'http://127.0.0.1:57217/api/health' }}
       PROD_KEEP_RELEASES: ${{ vars.PROD_KEEP_RELEASES || '5' }}
@@ -256,16 +257,17 @@ jobs:
       - name: Verify local production target
         run: |
           set -euo pipefail
-          if [[ ! -d "$PROD_RELEASE_ROOT/shared" ]]; then
-            echo "Local production root is not initialized: $PROD_RELEASE_ROOT" >&2
+          if [[ ! -d "$PROD_SHARED_DIR" ]]; then
+            echo "Local production shared directory is not initialized: $PROD_SHARED_DIR" >&2
             echo "Run scripts/deploy/trigger-local-steelx-deploy.sh once on the host before enabling automated deployment." >&2
             exit 1
           fi
-          if [[ ! -f "$PROD_RELEASE_ROOT/shared/steelx.env" ]]; then
-            echo "Missing production env file: $PROD_RELEASE_ROOT/shared/steelx.env" >&2
+          if [[ ! -f "$PROD_SHARED_DIR/steelx.env" ]]; then
+            echo "Missing production env file: $PROD_SHARED_DIR/steelx.env" >&2
             exit 1
           fi
-          install -m 0755 production-release/extracted/deploy/steelx-process.sh "$PROD_RELEASE_ROOT/shared/steelx-process.sh"
+          mkdir -p "$PROD_RELEASE_ROOT"
+          install -m 0755 production-release/extracted/deploy/steelx-process.sh "$PROD_SHARED_DIR/steelx-process.sh"
 
       - name: Install release on local production
         run: |
@@ -274,6 +276,7 @@ jobs:
             --archive production-release/leo-production-release.tar.gz \
             --sha256-file production-release/leo-production-release.tar.gz.sha256 \
             --release-root "$PROD_RELEASE_ROOT" \
+            --shared-dir "$PROD_SHARED_DIR" \
             --backend-service "$PROD_BACKEND_SERVICE" \
             --healthcheck-url "$PROD_HEALTHCHECK_URL" \
             --keep-releases "$PROD_KEEP_RELEASES" \
@@ -298,7 +301,8 @@ jobs:
       PROD_SSH_USER: ${{ secrets.PROD_SSH_USER }}
       PROD_SSH_PRIVATE_KEY: ${{ secrets.PROD_SSH_PRIVATE_KEY }}
       PROD_SSH_KNOWN_HOSTS: ${{ secrets.PROD_SSH_KNOWN_HOSTS }}
-      PROD_RELEASE_ROOT: ${{ vars.PROD_RELEASE_ROOT || '/instance/steelx' }}
+      PROD_RELEASE_ROOT: ${{ vars.PROD_RELEASE_ROOT || '/instance/steelx/backend' }}
+      PROD_SHARED_DIR: ${{ vars.PROD_SHARED_DIR || '/instance/steelx/shared' }}
       PROD_BACKEND_SERVICE: ${{ vars.PROD_BACKEND_SERVICE || 'steelx-local' }}
       PROD_HEALTHCHECK_URL: ${{ vars.PROD_HEALTHCHECK_URL || 'http://127.0.0.1:57217/api/health' }}
       PROD_KEEP_RELEASES: ${{ vars.PROD_KEEP_RELEASES || '5' }}
@@ -352,7 +356,9 @@ jobs:
             -P "$PROD_SSH_PORT" \
             production-release/leo-production-release.tar.gz \
             production-release/leo-production-release.tar.gz.sha256 \
+            production-release/extracted/deploy/steelx-process.sh \
             "${PROD_SSH_USER}@${PROD_SSH_HOST}:${remote_dir}/"
+          echo "REMOTE_DEPLOY_DIR=${remote_dir}" >> "$GITHUB_ENV"
           echo "REMOTE_ARCHIVE=${remote_dir}/leo-production-release.tar.gz" >> "$GITHUB_ENV"
           echo "REMOTE_SHA256=${remote_dir}/leo-production-release.tar.gz.sha256" >> "$GITHUB_ENV"
 
@@ -360,10 +366,16 @@ jobs:
         run: |
           set -euo pipefail
           quote() { printf '%q' "$1"; }
+          remote_process_install="sudo mkdir -p $(quote "$PROD_SHARED_DIR") && sudo install -m 0755 $(quote "$REMOTE_DEPLOY_DIR/steelx-process.sh") $(quote "$PROD_SHARED_DIR/steelx-process.sh")"
+          ssh -i "$HOME/.ssh/leo-production" \
+            -p "$PROD_SSH_PORT" \
+            "${PROD_SSH_USER}@${PROD_SSH_HOST}" \
+            "$remote_process_install"
           remote_command="sudo bash -s --"
           remote_command+=" --archive $(quote "$REMOTE_ARCHIVE")"
           remote_command+=" --sha256-file $(quote "$REMOTE_SHA256")"
           remote_command+=" --release-root $(quote "$PROD_RELEASE_ROOT")"
+          remote_command+=" --shared-dir $(quote "$PROD_SHARED_DIR")"
           remote_command+=" --backend-service $(quote "$PROD_BACKEND_SERVICE")"
           remote_command+=" --healthcheck-url $(quote "$PROD_HEALTHCHECK_URL")"
           remote_command+=" --keep-releases $(quote "$PROD_KEEP_RELEASES")"

@@ -57,6 +57,33 @@ PAGE_PATHS = [
     "/receivables-payables",
 ]
 
+MASTER_OPTION_PATHS = [
+    "/suppliers/options",
+    "/customers/options",
+    "/carriers/options",
+    "/warehouses/options",
+    "/material-categories/options",
+    "/company-settings/options",
+]
+
+ROUTE_NAMING_READ_PATHS = [
+    ("/role-settings/permission-options", None),
+    ("/materials/grades", None),
+    (
+        "/purchase-orders/import-candidates",
+        {"usage": "purchase-inbound", "page": 0, "size": 3},
+    ),
+    (
+        "/purchase-orders/import-candidates",
+        {"usage": "sales-order", "page": 0, "size": 3},
+    ),
+    ("/freight-bills/import-candidates", {"page": 0, "size": 3}),
+    ("/sales-orders/outbound-import-candidates", {"page": 0, "size": 3}),
+    ("/supplier-statements/candidates", {"page": 0, "size": 3}),
+    ("/customer-statements/candidates", {"page": 0, "size": 3}),
+    ("/freight-statements/candidates", {"page": 0, "size": 3}),
+]
+
 DETAIL_SKIP = {
     "/operation-logs",
     "/inventory-report",
@@ -530,6 +557,8 @@ class SmokeRunner:
             ("/auth/api-keys/user-options", None),
             ("/auth/api-keys/resource-options", None),
             ("/auth/api-keys/action-options", None),
+            *[(path, None) for path in MASTER_OPTION_PATHS],
+            *ROUTE_NAMING_READ_PATHS,
             ("/general-settings/upload-rule", {"moduleKey": "general-settings"}),
             ("/upload-rules/page", {"moduleKey": "general-settings"}),
             ("/print-templates", {"billType": "purchase-orders"}),

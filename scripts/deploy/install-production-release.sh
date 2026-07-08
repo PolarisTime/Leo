@@ -10,6 +10,7 @@ HEALTHCHECK_URL="http://127.0.0.1:57217/api/health"
 KEEP_RELEASES=5
 START_COMMAND=""
 STOP_COMMAND=""
+SHARED_DIR=""
 
 usage() {
   cat <<'EOF'
@@ -22,7 +23,8 @@ usage() {
     [--healthcheck-url http://127.0.0.1:57217/api/health] \
     [--keep-releases 5] \
     [--start-command <command>] \
-    [--stop-command <command>]
+    [--stop-command <command>] \
+    [--shared-dir /opt/leo/shared]
 EOF
 }
 
@@ -36,6 +38,7 @@ while [[ $# -gt 0 ]]; do
     --keep-releases) KEEP_RELEASES="$2"; shift 2 ;;
     --start-command) START_COMMAND="$2"; shift 2 ;;
     --stop-command) STOP_COMMAND="$2"; shift 2 ;;
+    --shared-dir) SHARED_DIR="$2"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "未知参数: $1" >&2; usage; exit 1 ;;
   esac
@@ -78,8 +81,39 @@ release_id="${timestamp}-${archive_name%.tar.gz}"
 releases_dir="$RELEASE_ROOT/releases"
 current_link="$RELEASE_ROOT/current"
 previous_link="$RELEASE_ROOT/previous"
-shared_dir="$RELEASE_ROOT/shared"
+shared_dir="${SHARED_DIR:-$RELEASE_ROOT/shared}"
 release_dir="$releases_dir/$release_id"
+
+release_has_backend_jar() {
+  local candidate_dir="$1"
+  [[ -f "$candidate_dir/leo.jar" || -f "$candidate_dir/backend/leo.jar" ]]
+}
+
+detect_legacy_current_target() {
+  local release_root_basename
+  release_root_basename="$(basename "$RELEASE_ROOT")"
+  if [[ "$release_root_basename" != "backend" ]]; then
+    return 0
+  fi
+
+  local legacy_current_link
+  legacy_current_link="$(dirname "$RELEASE_ROOT")/current"
+  if [[ ! -L "$legacy_current_link" ]]; then
+    return 0
+  fi
+
+  local legacy_target
+  if ! legacy_target="$(readlink -f "$legacy_current_link")"; then
+    echo "检测到旧后端 current 但无法解析，忽略: $legacy_current_link" >&2
+    return 0
+  fi
+  if release_has_backend_jar "$legacy_target"; then
+    old_backend_target="$legacy_target"
+    echo "检测到旧后端 current，作为首次迁移 previous: $legacy_current_link -> $legacy_target"
+  else
+    echo "检测到旧后端 current 但缺少 JAR，忽略: $legacy_current_link -> $legacy_target" >&2
+  fi
+}
 
 mkdir -p "$RELEASE_ROOT" "$releases_dir" "$shared_dir"
 lock_file="$RELEASE_ROOT/deploy.lock"
@@ -104,6 +138,10 @@ fi
 if [[ -e "$current_link" && ! -L "$current_link" ]]; then
   echo "$current_link 已存在但不是软链，拒绝发布" >&2
   exit 1
+fi
+
+if [[ -z "$old_backend_target" ]]; then
+  detect_legacy_current_target
 fi
 
 rollback() {
@@ -176,8 +214,8 @@ echo "准备发布: $release_id"
 mkdir -p "$release_dir"
 tar -xzf "$ARCHIVE" -C "$release_dir"
 
-if [[ ! -f "$release_dir/backend/leo.jar" ]]; then
-  echo "发布包缺少 backend/leo.jar" >&2
+if [[ ! -f "$release_dir/leo.jar" ]]; then
+  echo "发布包缺少 leo.jar" >&2
   exit 1
 fi
 
