@@ -1,6 +1,8 @@
 package com.leo.erp.common.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.module.SimpleModule;
+import com.leo.erp.common.json.ScaledBigDecimalSerializer;
 import com.leo.erp.master.supplier.web.dto.SupplierOptionResponse;
 import com.leo.erp.system.company.web.dto.CompanySettingResponse;
 import org.junit.jupiter.api.Test;
@@ -39,7 +41,7 @@ class CacheConfigTest {
 
     @Test
     void cacheKeyPrefix_constantValue() {
-        assertThat(CacheConfig.CACHE_KEY_PREFIX).isEqualTo("leo:cache:v3:");
+        assertThat(CacheConfig.CACHE_KEY_PREFIX).isEqualTo("leo:cache:v4:");
     }
 
     @Test
@@ -49,12 +51,12 @@ class CacheConfigTest {
         RedisCacheConfiguration configuration = CacheConfig.cacheConfiguration(Duration.ofMinutes(1), serializer);
 
         assertThat(configuration.getKeyPrefixFor(CacheConfig.CACHE_STATIC))
-                .isEqualTo("leo:cache:v3:static::");
+                .isEqualTo("leo:cache:v4:static::");
     }
 
     @Test
     void redisValueSerializer_restoresConcreteRecordType() {
-        GenericJackson2JsonRedisSerializer serializer = CacheConfig.redisValueSerializer(new ObjectMapper().findAndRegisterModules());
+        GenericJackson2JsonRedisSerializer serializer = CacheConfig.redisValueSerializer(objectMapperWithScaledBigDecimal());
         CompanySettingResponse expected = new CompanySettingResponse(
                 1L,
                 "公司A",
@@ -70,7 +72,19 @@ class CacheConfigTest {
         Object decoded = serializer.deserialize(serializer.serialize(expected));
 
         assertThat(decoded).isInstanceOf(CompanySettingResponse.class);
-        assertThat(((CompanySettingResponse) decoded).companyName()).isEqualTo("公司A");
+        CompanySettingResponse actual = (CompanySettingResponse) decoded;
+        assertThat(actual.companyName()).isEqualTo("公司A");
+        assertThat(actual.taxRate()).isEqualByComparingTo("0.1300");
+    }
+
+    @Test
+    void redisValueSerializer_restoresRootBigDecimal() {
+        GenericJackson2JsonRedisSerializer serializer = CacheConfig.redisValueSerializer(objectMapperWithScaledBigDecimal());
+
+        Object decoded = serializer.deserialize(serializer.serialize(new BigDecimal("0.1300")));
+
+        assertThat(decoded).isInstanceOf(BigDecimal.class);
+        assertThat((BigDecimal) decoded).isEqualByComparingTo("0.1300");
     }
 
     @Test
@@ -118,6 +132,12 @@ class CacheConfigTest {
         new ApplicationContextRunner()
                 .withUserConfiguration(CacheConfig.class, CacheConfigTestDependencies.class)
                 .run(context -> assertThat(context).hasSingleBean(RedisCacheManager.class));
+    }
+
+    private static ObjectMapper objectMapperWithScaledBigDecimal() {
+        SimpleModule module = new SimpleModule();
+        module.addSerializer(BigDecimal.class, new ScaledBigDecimalSerializer());
+        return new ObjectMapper().findAndRegisterModules().registerModule(module);
     }
 
     @Configuration(proxyBeanMethods = false)

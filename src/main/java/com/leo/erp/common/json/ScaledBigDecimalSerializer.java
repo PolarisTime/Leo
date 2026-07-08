@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.JsonMappingException;
 import com.fasterxml.jackson.databind.JsonSerializer;
 import com.fasterxml.jackson.databind.SerializerProvider;
 import com.fasterxml.jackson.databind.ser.ContextualSerializer;
+import com.fasterxml.jackson.databind.ser.std.StdScalarSerializer;
 
 import com.leo.erp.common.support.PrecisionConstants;
 
@@ -14,7 +15,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.Locale;
 
-public class ScaledBigDecimalSerializer extends JsonSerializer<BigDecimal> implements ContextualSerializer {
+public class ScaledBigDecimalSerializer extends StdScalarSerializer<BigDecimal> implements ContextualSerializer {
 
     private final Integer scale;
 
@@ -23,6 +24,7 @@ public class ScaledBigDecimalSerializer extends JsonSerializer<BigDecimal> imple
     }
 
     private ScaledBigDecimalSerializer(Integer scale) {
+        super(BigDecimal.class);
         this.scale = scale;
     }
 

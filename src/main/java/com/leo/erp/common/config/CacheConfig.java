@@ -23,7 +23,7 @@ public class CacheConfig {
     public static final String CACHE_STATIC = "static";
     public static final String CACHE_HOT = "hot";
     public static final String CACHE_OPTIONS = "options";
-    public static final String CACHE_KEY_PREFIX = "leo:cache:v3:";
+    public static final String CACHE_KEY_PREFIX = "leo:cache:v4:";
     private static final String TYPE_HINT_PROPERTY = "@class";
 
     @Bean
