@@ -6,6 +6,7 @@ import com.leo.erp.common.support.TradeMaterialSnapshot;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import java.util.Collection;
 import java.util.List;
@@ -20,6 +21,36 @@ public interface MaterialRepository extends JpaRepository<Material, Long>, JpaSp
     List<Material> findByMaterialCodeInAndDeletedFlagFalse(Collection<String> materialCodes);
 
     List<Material> findByDeletedFlagFalseOrderByMaterialCodeAsc();
+
+    @Query("""
+            SELECT m
+            FROM Material m
+            WHERE m.deletedFlag = false
+              AND TRIM(m.brand) = :brand
+              AND TRIM(m.material) = :material
+              AND TRIM(m.spec) = :spec
+              AND TRIM(COALESCE(m.length, '')) = :length
+              AND (:excludedId IS NULL OR m.id <> :excludedId)
+            ORDER BY m.materialCode ASC
+            """)
+    List<Material> findActiveIdentityConflicts(@Param("brand") String brand,
+                                               @Param("material") String material,
+                                               @Param("spec") String spec,
+                                               @Param("length") String length,
+                                               @Param("excludedId") Long excludedId);
+
+    @Query("""
+            SELECT m
+            FROM Material m
+            WHERE m.deletedFlag = false
+              AND TRIM(m.brand) IN :brands
+              AND TRIM(m.material) IN :materials
+              AND TRIM(m.spec) IN :specs
+            ORDER BY m.materialCode ASC
+            """)
+    List<Material> findActiveIdentityCandidates(@Param("brands") Collection<String> brands,
+                                                @Param("materials") Collection<String> materials,
+                                                @Param("specs") Collection<String> specs);
 
     @Override
     default List<TradeMaterialSnapshot> listActiveMaterials() {

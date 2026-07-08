@@ -45,6 +45,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.mockConstruction;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -92,6 +93,7 @@ class MaterialServiceTest {
                 new Class[]{MaterialRepository.class},
                 (proxy, method, args) -> switch (method.getName()) {
                     case "existsByMaterialCodeAndDeletedFlagFalse" -> true;
+                    case "findActiveIdentityConflicts" -> List.of();
                     case "toString" -> "MaterialRepositoryStub";
                     case "hashCode" -> System.identityHashCode(proxy);
                     case "equals" -> proxy == args[0];
@@ -115,6 +117,7 @@ class MaterialServiceTest {
                 (proxy, method, args) -> switch (method.getName()) {
                     case "findByIdAndDeletedFlagFalse" -> Optional.of(createMaterial(1L, "MAT-001"));
                     case "existsByMaterialCodeAndDeletedFlagFalse" -> true;
+                    case "findActiveIdentityConflicts" -> List.of();
                     case "toString" -> "MaterialRepositoryStub";
                     case "hashCode" -> System.identityHashCode(proxy);
                     case "equals" -> proxy == args[0];
@@ -128,6 +131,58 @@ class MaterialServiceTest {
         assertThatThrownBy(() -> service.update(1L, request))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("商品编码已存在");
+    }
+
+    @Test
+    void shouldRejectCreateWhenBrandMaterialSpecAndLengthDuplicated() {
+        MaterialRepository materialRepository = mock(MaterialRepository.class);
+        Material duplicate = createMaterial(2L, "MAT-EXISTING");
+        duplicate.setLength("6m");
+        when(materialRepository.existsByMaterialCodeAndDeletedFlagFalse("MAT-NEW")).thenReturn(false);
+        when(materialRepository.findActiveIdentityConflicts("宝钢", "Q235B", "10mm", "6m", null))
+                .thenReturn(List.of(duplicate));
+        var tradeItemMaterialSupport = mock(TradeItemMaterialSupport.class);
+        MaterialService service = new MaterialService(
+                materialRepository, new SnowflakeIdGenerator(1), null,
+                tradeItemMaterialSupport, null, null, null, null
+        );
+        MaterialRequest request = new MaterialRequest(
+                "MAT-NEW", " 宝钢 ", "Q235B", "板材", "10mm", "6m",
+                "吨", null, BigDecimal.ONE, 1, BigDecimal.TEN, false, null
+        );
+
+        assertThatThrownBy(() -> service.create(request))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("品牌、材质、规格、长度")
+                .hasMessageContaining("MAT-EXISTING");
+        verify(materialRepository, never()).save(any(Material.class));
+    }
+
+    @Test
+    void shouldRejectUpdateWhenBrandMaterialSpecAndLengthDuplicated() {
+        MaterialRepository materialRepository = mock(MaterialRepository.class);
+        Material existing = createMaterial(1L, "MAT-001");
+        existing.setLength("6m");
+        Material duplicate = createMaterial(2L, "MAT-EXISTING");
+        duplicate.setLength("12m");
+        when(materialRepository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(existing));
+        when(materialRepository.findActiveIdentityConflicts("宝钢", "Q235B", "10mm", "12m", 1L))
+                .thenReturn(List.of(duplicate));
+        var tradeItemMaterialSupport = mock(TradeItemMaterialSupport.class);
+        MaterialService service = new MaterialService(
+                materialRepository, new SnowflakeIdGenerator(1), null,
+                tradeItemMaterialSupport, null, null, null, null
+        );
+        MaterialRequest request = new MaterialRequest(
+                "MAT-001", "宝钢", "Q235B", "板材", "10mm", "12m",
+                "吨", null, BigDecimal.ONE, 1, BigDecimal.TEN, false, null
+        );
+
+        assertThatThrownBy(() -> service.update(1L, request))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("品牌、材质、规格、长度")
+                .hasMessageContaining("MAT-EXISTING");
+        verify(materialRepository, never()).save(any(Material.class));
     }
 
     @Test
@@ -230,6 +285,33 @@ class MaterialServiceTest {
         assertThat(result.totalRows()).isEqualTo(1);
         assertThat(result.updatedCount()).isEqualTo(1);
         assertThat(result.createdCount()).isZero();
+    }
+
+    @Test
+    void shouldRejectCsvImportWhenBrandMaterialSpecAndLengthDuplicatedInSameFile() throws Exception {
+        MaterialRepository materialRepository = mock(MaterialRepository.class);
+        TradeItemMaterialSupport tradeItemMaterialSupport = mock(TradeItemMaterialSupport.class);
+        when(materialRepository.findByMaterialCode(anyString())).thenReturn(Optional.empty());
+        when(materialRepository.save(any(Material.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(tradeItemMaterialSupport.normalizeBatchNoEnabled(false)).thenReturn(false);
+
+        MaterialService service = new MaterialService(
+                materialRepository, new SnowflakeIdGenerator(1L), null,
+                tradeItemMaterialSupport, null, null, null, null
+        );
+
+        String csv = "\uFEFF商品编码,品牌,材质,类别,规格,长度,单位,数量单位,件重(吨),每件支数,单价,批号管理,备注\r\n"
+                + "MAT-001,宝钢,Q235B,板材,10mm,6m,吨,支,1.000,10,500.00,否,\r\n"
+                + "MAT-002,宝钢,Q235B,板材,10mm,6m,吨,支,1.000,10,500.00,否,\r\n";
+        MockMultipartFile file = new MockMultipartFile("file", "materials.csv", "text/csv", csv.getBytes(StandardCharsets.UTF_8));
+
+        MaterialImportResultResponse result = service.importCsv(file);
+
+        assertThat(result.totalRows()).isEqualTo(2);
+        assertThat(result.successCount()).isEqualTo(1);
+        assertThat(result.failedCount()).isEqualTo(1);
+        assertThat(result.failures().get(0).materialCode()).isEqualTo("MAT-002");
+        assertThat(result.failures().get(0).reason()).contains("品牌、材质、规格、长度");
     }
 
     @Test
@@ -715,15 +797,15 @@ class MaterialServiceTest {
 
         String csv = "商品编码,品牌,材质,类别,规格,长度,单位,数量单位,件重(吨),每件支数,单价,批号管理,备注\r\n"
                 + "MAT-001,宝钢,Q235B,板材,10mm,6m,吨,支,1.000,10,500.00,启用,\r\n"
-                + "MAT-002,宝钢,Q235B,板材,10mm,6m,吨,支,1.000,10,500.00,关闭,\r\n"
-                + "MAT-003,宝钢,Q235B,板材,10mm,6m,吨,支,1.000,10,500.00,1,\r\n"
-                + "MAT-004,宝钢,Q235B,板材,10mm,6m,吨,支,1.000,10,500.00,0,\r\n"
-                + "MAT-005,宝钢,Q235B,板材,10mm,6m,吨,支,1.000,10,500.00,true,\r\n"
-                + "MAT-006,宝钢,Q235B,板材,10mm,6m,吨,支,1.000,10,500.00,false,\r\n"
-                + "MAT-007,宝钢,Q235B,板材,10mm,6m,吨,支,1.000,10,500.00,y,\r\n"
-                + "MAT-008,宝钢,Q235B,板材,10mm,6m,吨,支,1.000,10,500.00,n,\r\n"
-                + "MAT-009,宝钢,Q235B,板材,10mm,6m,吨,支,1.000,10,500.00,,\r\n"
-                + "MAT-010,宝钢,Q235B,线材,10mm,6m,吨,件,1.000,-,500.00,否,\r\n";
+                + "MAT-002,宝钢,Q235B,板材,11mm,6m,吨,支,1.000,10,500.00,关闭,\r\n"
+                + "MAT-003,宝钢,Q235B,板材,12mm,6m,吨,支,1.000,10,500.00,1,\r\n"
+                + "MAT-004,宝钢,Q235B,板材,13mm,6m,吨,支,1.000,10,500.00,0,\r\n"
+                + "MAT-005,宝钢,Q235B,板材,14mm,6m,吨,支,1.000,10,500.00,true,\r\n"
+                + "MAT-006,宝钢,Q235B,板材,15mm,6m,吨,支,1.000,10,500.00,false,\r\n"
+                + "MAT-007,宝钢,Q235B,板材,16mm,6m,吨,支,1.000,10,500.00,y,\r\n"
+                + "MAT-008,宝钢,Q235B,板材,17mm,6m,吨,支,1.000,10,500.00,n,\r\n"
+                + "MAT-009,宝钢,Q235B,板材,18mm,6m,吨,支,1.000,10,500.00,,\r\n"
+                + "MAT-010,宝钢,Q235B,线材,19mm,6m,吨,件,1.000,-,500.00,否,\r\n";
         MockMultipartFile file = new MockMultipartFile("file", "materials.csv", "text/csv", csv.getBytes(StandardCharsets.UTF_8));
 
         MaterialImportResultResponse result = service.importCsv(file);
@@ -1075,6 +1157,35 @@ class MaterialServiceTest {
     }
 
     @Test
+    void shouldRejectImportExcelWhenBrandMaterialSpecAndLengthDuplicatedWithExistingMaterial() throws Exception {
+        MaterialRepository materialRepository = mock(MaterialRepository.class);
+        TradeItemMaterialSupport tradeItemMaterialSupport = mock(TradeItemMaterialSupport.class);
+        Material existing = createMaterial(1L, "MAT-EXISTING");
+        existing.setLength("6m");
+        when(materialRepository.findActiveIdentityCandidates(any(), any(), any())).thenReturn(List.of(existing));
+        when(materialRepository.findByMaterialCode("MAT-NEW")).thenReturn(Optional.empty());
+
+        ExcelImportService excelImportService = mock(ExcelImportService.class);
+        List<MaterialImportDTO> dtos = List.of(new MaterialImportDTO(
+                "MAT-NEW", "宝钢", "Q235B", "板材", "10mm", "6m", "吨", "支",
+                "1.000", "10", "500.00", "否", "备注"
+        ));
+        when(excelImportService.parseAndValidate(any(MultipartFile.class), eq(MaterialImportDTO.class))).thenReturn(dtos);
+
+        var service = new MaterialService(materialRepository, new SnowflakeIdGenerator(1), null,
+                tradeItemMaterialSupport, null, excelImportService, null, null);
+
+        MockMultipartFile file = new MockMultipartFile("file", "test.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", new byte[0]);
+
+        assertThatThrownBy(() -> service.importExcel(file))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("第2行")
+                .hasMessageContaining("品牌、材质、规格、长度");
+        verify(materialRepository, never()).findByDeletedFlagFalseOrderByMaterialCodeAsc();
+        verify(materialRepository, never()).save(any(Material.class));
+    }
+
+    @Test
     void shouldImportExcelWithEmptyRows() throws Exception {
         MaterialRepository materialRepository = mock(MaterialRepository.class);
         TradeItemMaterialSupport tradeItemMaterialSupport = mock(TradeItemMaterialSupport.class);
@@ -1390,6 +1501,7 @@ class MaterialServiceTest {
                 new Class[]{MaterialRepository.class},
                 (proxy, method, args) -> switch (method.getName()) {
                     case "existsByMaterialCodeAndDeletedFlagFalse" -> false;
+                    case "findActiveIdentityConflicts" -> List.of();
                     case "save" -> args[0];
                     case "toString" -> "MaterialRepositoryStub";
                     case "hashCode" -> System.identityHashCode(proxy);
@@ -1426,6 +1538,7 @@ class MaterialServiceTest {
                 new Class[]{MaterialRepository.class},
                 (proxy, method, args) -> switch (method.getName()) {
                     case "findByIdAndDeletedFlagFalse" -> Optional.of(createMaterial(1L, "MAT-001"));
+                    case "findActiveIdentityConflicts" -> List.of();
                     case "save" -> args[0];
                     case "toString" -> "MaterialRepositoryStub";
                     case "hashCode" -> System.identityHashCode(proxy);
@@ -1462,6 +1575,7 @@ class MaterialServiceTest {
                 new Class[]{MaterialRepository.class},
                 (proxy, method, args) -> switch (method.getName()) {
                     case "existsByMaterialCodeAndDeletedFlagFalse" -> false;
+                    case "findActiveIdentityConflicts" -> List.of();
                     case "save" -> args[0];
                     case "toString" -> "MaterialRepositoryStub";
                     case "hashCode" -> System.identityHashCode(proxy);

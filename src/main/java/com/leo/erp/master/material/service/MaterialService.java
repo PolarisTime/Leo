@@ -28,6 +28,7 @@ import org.apache.commons.csv.CSVParser;
 import org.apache.commons.csv.CSVPrinter;
 import org.apache.commons.csv.CSVRecord;
 import org.springframework.dao.DataAccessException;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.domain.Page;
@@ -46,11 +47,14 @@ import java.math.RoundingMode;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.Function;
 
 @Service
 public class MaterialService extends AbstractCrudService<Material, MaterialRequest, MaterialResponse> {
@@ -61,6 +65,7 @@ public class MaterialService extends AbstractCrudService<Material, MaterialReque
     private static final CSVFormat MATERIAL_CSV_FORMAT = CSVFormat.DEFAULT.builder()
             .setRecordSeparator("\r\n")
             .build();
+    private static final String MATERIAL_IDENTITY_UNIQUE_INDEX = "uk_md_material_identity_active";
 
     private final MaterialRepository materialRepository;
     private final MaterialMapper materialMapper;
@@ -133,6 +138,7 @@ public class MaterialService extends AbstractCrudService<Material, MaterialReque
     @Override
     protected void validateCreate(MaterialRequest request) {
         ensureMaterialCodeUnique(request.materialCode());
+        ensureMaterialIdentityUnique(null, importIdentity(request));
     }
 
     @Override
@@ -140,6 +146,7 @@ public class MaterialService extends AbstractCrudService<Material, MaterialReque
         if (!entity.getMaterialCode().equals(request.materialCode())) {
             ensureMaterialCodeUnique(request.materialCode());
         }
+        ensureMaterialIdentityUnique(entity.getId(), importIdentity(request));
     }
 
     @Override
@@ -255,6 +262,9 @@ public class MaterialService extends AbstractCrudService<Material, MaterialReque
         int createdCount = 0;
         int updatedCount = 0;
         List<Material> successRows = new ArrayList<>();
+        Map<MaterialImportIdentityKey, Material> importIdentityIndex = activeImportIdentityIndex(
+                dtoList.stream().map(this::importIdentity).toList()
+        );
         for (int index = 0; index < dtoList.size(); index++) {
             MaterialImportDTO dto = dtoList.get(index);
             int rowNumber = index + 2;
@@ -266,9 +276,17 @@ public class MaterialService extends AbstractCrudService<Material, MaterialReque
                         return entity;
                     });
             boolean exists = material.getId() != null && materialRepository.existsById(material.getId());
+            MaterialImportIdentityKey previousIdentity = importIdentity(material);
+            MaterialImportIdentityKey importIdentity = importIdentity(dto);
+            validateImportIdentity(material, importIdentity, importIdentityIndex, rowNumber);
             material.setDeletedFlag(false);
             applyImportDTO(material, dto, materialCode, rowNumber);
-            materialRepository.save(material);
+            try {
+                materialRepository.save(material);
+            } catch (DataIntegrityViolationException ex) {
+                throw mapMaterialIdentityViolation(ex, ErrorCode.VALIDATION_ERROR, rowNumber);
+            }
+            registerImportIdentity(importIdentityIndex, previousIdentity, importIdentity, material);
             successRows.add(material);
             if (exists) {
                 updatedCount++;
@@ -339,6 +357,9 @@ public class MaterialService extends AbstractCrudService<Material, MaterialReque
         int updatedCount = 0;
         int totalRows = 0;
         List<MaterialImportFailureResponse> failures = new ArrayList<>();
+        Map<MaterialImportIdentityKey, Material> importIdentityIndex = activeImportIdentityIndex(
+                collectCsvImportIdentities(rows, headerIndexes)
+        );
         for (int i = 1; i < rows.size(); i++) {
             List<String> row = rows.get(i);
             if (isBlankRow(row)) {
@@ -356,9 +377,13 @@ public class MaterialService extends AbstractCrudService<Material, MaterialReque
                             return entity;
                         });
                 boolean exists = material.getId() != null && materialRepository.existsById(material.getId());
+                MaterialImportIdentityKey previousIdentity = importIdentity(material);
+                MaterialImportIdentityKey importIdentity = importIdentity(request);
+                validateImportIdentity(material, importIdentity, importIdentityIndex, rowNumber);
                 material.setDeletedFlag(false);
                 apply(material, request);
                 materialRepository.save(material);
+                registerImportIdentity(importIdentityIndex, previousIdentity, importIdentity, material);
                 if (exists) {
                     updatedCount++;
                 } else {
@@ -366,6 +391,10 @@ public class MaterialService extends AbstractCrudService<Material, MaterialReque
                 }
             } catch (BusinessException ex) {
                 failures.add(new MaterialImportFailureResponse(rowNumber, safe(materialCode), ex.getMessage()));
+            } catch (DataIntegrityViolationException ex) {
+                String reason = materialIdentityViolationMessage(ex, rowNumber)
+                        .orElse("保存失败，请检查该行数据");
+                failures.add(new MaterialImportFailureResponse(rowNumber, safe(materialCode), reason));
             } catch (DataAccessException ex) {
                 failures.add(new MaterialImportFailureResponse(rowNumber, safe(materialCode), "保存失败，请检查该行数据"));
             }
@@ -413,9 +442,13 @@ public class MaterialService extends AbstractCrudService<Material, MaterialReque
 
     @Override
     protected Material saveEntity(Material entity) {
-        Material saved = materialRepository.save(entity);
-        tradeItemMaterialSupport.evictCache();
-        return saved;
+        try {
+            Material saved = materialRepository.save(entity);
+            tradeItemMaterialSupport.evictCache();
+            return saved;
+        } catch (DataIntegrityViolationException ex) {
+            throw mapMaterialIdentityViolation(ex, ErrorCode.BUSINESS_ERROR, null);
+        }
     }
 
     @Override
@@ -429,9 +462,160 @@ public class MaterialService extends AbstractCrudService<Material, MaterialReque
         }
     }
 
+    private void ensureMaterialIdentityUnique(Long excludedId, MaterialImportIdentityKey identity) {
+        List<Material> conflicts = materialRepository.findActiveIdentityConflicts(
+                identity.brand(), identity.material(), identity.spec(), identity.length(), excludedId
+        );
+        if (conflicts != null && !conflicts.isEmpty()) {
+            throw duplicateMaterialIdentityException(ErrorCode.BUSINESS_ERROR, conflicts.getFirst(), null);
+        }
+    }
+
     private String resolveImportMaterialCode(String rawMaterialCode) {
         String materialCode = rawMaterialCode == null ? "" : rawMaterialCode.trim();
         return materialCode.isBlank() ? String.valueOf(nextId()) : materialCode;
+    }
+
+    private Map<MaterialImportIdentityKey, Material> activeImportIdentityIndex(
+            Collection<MaterialImportIdentityKey> identities
+    ) {
+        Map<MaterialImportIdentityKey, Material> index = new LinkedHashMap<>();
+        if (identities == null || identities.isEmpty()) {
+            return index;
+        }
+        List<String> brands = identityValues(identities, MaterialImportIdentityKey::brand);
+        List<String> materials = identityValues(identities, MaterialImportIdentityKey::material);
+        List<String> specs = identityValues(identities, MaterialImportIdentityKey::spec);
+        if (brands.isEmpty() || materials.isEmpty() || specs.isEmpty()) {
+            return index;
+        }
+        List<Material> activeMaterials = materialRepository.findActiveIdentityCandidates(brands, materials, specs);
+        if (activeMaterials == null) {
+            return index;
+        }
+        for (Material material : activeMaterials) {
+            index.putIfAbsent(importIdentity(material), material);
+        }
+        return index;
+    }
+
+    private List<String> identityValues(Collection<MaterialImportIdentityKey> identities,
+                                        Function<MaterialImportIdentityKey, String> mapper) {
+        LinkedHashSet<String> values = new LinkedHashSet<>();
+        for (MaterialImportIdentityKey identity : identities) {
+            String value = mapper.apply(identity);
+            if (!value.isBlank()) {
+                values.add(value);
+            }
+        }
+        return List.copyOf(values);
+    }
+
+    private List<MaterialImportIdentityKey> collectCsvImportIdentities(List<List<String>> rows,
+                                                                       Map<String, Integer> headerIndexes) {
+        List<MaterialImportIdentityKey> identities = new ArrayList<>();
+        for (int i = 1; i < rows.size(); i++) {
+            List<String> row = rows.get(i);
+            if (isBlankRow(row)) {
+                continue;
+            }
+            int rowNumber = i + 1;
+            try {
+                identities.add(new MaterialImportIdentityKey(
+                        requiredValue(row, headerIndexes, "brand", "品牌", rowNumber),
+                        requiredValue(row, headerIndexes, "material", "材质", rowNumber),
+                        requiredValue(row, headerIndexes, "spec", "规格", rowNumber),
+                        optionalValue(row, headerIndexes, "length")
+                ));
+            } catch (BusinessException ignored) {
+                // 无效行由正式导入循环生成行级失败记录。
+            }
+        }
+        return identities;
+    }
+
+    private void validateImportIdentity(Material importingMaterial,
+                                        MaterialImportIdentityKey importIdentity,
+                                        Map<MaterialImportIdentityKey, Material> importIdentityIndex,
+                                        int rowNumber) {
+        Material duplicate = importIdentityIndex.get(importIdentity);
+        if (duplicate != null && !sameMaterial(duplicate, importingMaterial)) {
+            throw duplicateMaterialIdentityException(ErrorCode.VALIDATION_ERROR, duplicate, rowNumber);
+        }
+    }
+
+    private void registerImportIdentity(Map<MaterialImportIdentityKey, Material> importIdentityIndex,
+                                        MaterialImportIdentityKey previousIdentity,
+                                        MaterialImportIdentityKey importIdentity,
+                                        Material material) {
+        if (!previousIdentity.equals(importIdentity) && sameMaterial(importIdentityIndex.get(previousIdentity), material)) {
+            importIdentityIndex.remove(previousIdentity);
+        }
+        importIdentityIndex.put(importIdentity, material);
+    }
+
+    private boolean sameMaterial(Material first, Material second) {
+        if (first == null || second == null) {
+            return false;
+        }
+        Long firstId = first.getId();
+        Long secondId = second.getId();
+        return firstId != null && firstId.equals(secondId);
+    }
+
+    private MaterialImportIdentityKey importIdentity(MaterialImportDTO dto) {
+        return new MaterialImportIdentityKey(dto.brand(), dto.material(), dto.spec(), dto.length());
+    }
+
+    private MaterialImportIdentityKey importIdentity(MaterialRequest request) {
+        return new MaterialImportIdentityKey(request.brand(), request.material(), request.spec(), request.length());
+    }
+
+    private MaterialImportIdentityKey importIdentity(Material material) {
+        return new MaterialImportIdentityKey(
+                material.getBrand(), material.getMaterial(), material.getSpec(), material.getLength()
+        );
+    }
+
+    private BusinessException duplicateMaterialIdentityException(ErrorCode errorCode,
+                                                                Material duplicate,
+                                                                Integer rowNumber) {
+        String subject = rowNumber == null ? "商品资料重复" : "第" + rowNumber + "行商品资料重复";
+        String duplicateName = duplicate == null
+                ? "已有商品"
+                : "商品【" + safe(duplicate.getMaterialCode()) + "】";
+        return new BusinessException(
+                errorCode,
+                subject + "：品牌、材质、规格、长度与" + duplicateName + "一致"
+        );
+    }
+
+    private BusinessException mapMaterialIdentityViolation(DataIntegrityViolationException ex,
+                                                           ErrorCode errorCode,
+                                                           Integer rowNumber) {
+        if (isMaterialIdentityViolation(ex)) {
+            return duplicateMaterialIdentityException(errorCode, null, rowNumber);
+        }
+        throw ex;
+    }
+
+    private Optional<String> materialIdentityViolationMessage(DataIntegrityViolationException ex, int rowNumber) {
+        if (!isMaterialIdentityViolation(ex)) {
+            return Optional.empty();
+        }
+        return Optional.of(duplicateMaterialIdentityException(ErrorCode.VALIDATION_ERROR, null, rowNumber).getMessage());
+    }
+
+    private boolean isMaterialIdentityViolation(DataIntegrityViolationException ex) {
+        Throwable cause = ex;
+        while (cause != null) {
+            String message = cause.getMessage();
+            if (message != null && message.contains(MATERIAL_IDENTITY_UNIQUE_INDEX)) {
+                return true;
+            }
+            cause = cause.getCause();
+        }
+        return false;
     }
 
     private MaterialRequest toMaterialRequest(List<String> row,
@@ -654,5 +838,19 @@ public class MaterialService extends AbstractCrudService<Material, MaterialReque
 
     private String safe(String value) {
         return value == null ? "" : value;
+    }
+
+    private record MaterialImportIdentityKey(String brand, String material, String spec, String length) {
+
+        MaterialImportIdentityKey {
+            brand = normalize(brand);
+            material = normalize(material);
+            spec = normalize(spec);
+            length = normalize(length);
+        }
+
+        private static String normalize(String value) {
+            return value == null ? "" : value.trim();
+        }
     }
 }
