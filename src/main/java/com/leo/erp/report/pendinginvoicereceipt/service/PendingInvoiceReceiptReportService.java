@@ -141,13 +141,13 @@ public class PendingInvoiceReceiptReportService {
     private Specification<PurchaseOrder> startDateSpec(LocalDate startDate) {
         return (root, query, criteriaBuilder) -> startDate == null
                 ? criteriaBuilder.conjunction()
-                : criteriaBuilder.greaterThanOrEqualTo(root.get("orderDate"), startDate);
+                : criteriaBuilder.greaterThanOrEqualTo(root.get("orderDate"), startDate.atStartOfDay());
     }
 
     private Specification<PurchaseOrder> endDateSpec(LocalDate endDate) {
         return (root, query, criteriaBuilder) -> endDate == null
                 ? criteriaBuilder.conjunction()
-                : criteriaBuilder.lessThanOrEqualTo(root.get("orderDate"), endDate);
+                : criteriaBuilder.lessThan(root.get("orderDate"), endDate.plusDays(1).atStartOfDay());
     }
 
     private boolean matchesKeyword(PendingInvoiceReceiptReportResponse row, String keyword) {

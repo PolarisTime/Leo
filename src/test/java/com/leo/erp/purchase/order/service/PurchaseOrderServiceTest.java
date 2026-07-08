@@ -21,6 +21,12 @@ import com.leo.erp.allocation.repository.ItemAllocationNativeRepository;
 import com.leo.erp.security.permission.WorkflowTransitionGuard;
 import com.leo.erp.system.company.domain.entity.CompanySetting;
 import com.leo.erp.system.company.service.CompanySettingService;
+import jakarta.persistence.criteria.CriteriaBuilder;
+import jakarta.persistence.criteria.CriteriaQuery;
+import jakarta.persistence.criteria.Expression;
+import jakarta.persistence.criteria.Path;
+import jakarta.persistence.criteria.Predicate;
+import jakarta.persistence.criteria.Root;
 import org.springframework.jdbc.core.JdbcTemplate;
 import com.leo.erp.system.norule.service.SystemSwitchService;
 import org.junit.jupiter.api.AfterEach;
@@ -35,6 +41,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
@@ -46,6 +53,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.nullable;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
@@ -623,6 +631,36 @@ class PurchaseOrderServiceTest {
     }
 
     @Test
+    void pageShouldIncludeWholeEndDateWhenFilteringOrderDateTime() {
+        PurchaseOrderRepository repository = mock(PurchaseOrderRepository.class);
+        PurchaseOrderService service = service(
+                repository,
+                mock(SnowflakeIdGenerator.class),
+                mock(PurchaseOrderMapper.class),
+                mock(TradeItemMaterialSupport.class),
+                mock(WarehouseSelectionSupport.class),
+                mock(SupplierRepository.class),
+                mock(PurchaseInboundItemQueryService.class),
+                mock(ItemAllocationNativeRepository.class),
+                mock(PurchaseOrderItemPieceWeightService.class),
+                mock(WorkflowTransitionGuard.class),
+                mock(JdbcTemplate.class)
+        );
+        when(repository.findAll(any(Specification.class), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of()));
+
+        service.page(
+                PageQuery.of(0, 20, null, null),
+                PageFilter.of(null, null, null, null,
+                        LocalDate.of(2026, 7, 8), LocalDate.of(2026, 7, 8))
+        );
+
+        ArgumentCaptor<Specification<PurchaseOrder>> captor = ArgumentCaptor.forClass(Specification.class);
+        verify(repository).findAll(captor.capture(), any(Pageable.class));
+        assertOrderDateHalfOpenBoundary(captor.getValue());
+    }
+
+    @Test
     void shouldSearchNormallyWhenAdminViewsDeletedRecordsAndBaseSpecIsNull() {
         PurchaseOrderRepository repository = mock(PurchaseOrderRepository.class);
         SnowflakeIdGenerator idGenerator = mock(SnowflakeIdGenerator.class);
@@ -668,6 +706,30 @@ class PurchaseOrderServiceTest {
                 assertThat(item.orderNo()).isEqualTo("PO-001")
         );
         verify(repository).findAll(any(Specification.class), any(Pageable.class));
+    }
+
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private void assertOrderDateHalfOpenBoundary(Specification<PurchaseOrder> specification) {
+        Root<PurchaseOrder> root = mock(Root.class);
+        CriteriaQuery<?> query = mock(CriteriaQuery.class);
+        CriteriaBuilder criteriaBuilder = mock(CriteriaBuilder.class);
+        Path path = mock(Path.class);
+        Predicate predicate = mock(Predicate.class);
+        when(root.get(anyString())).thenReturn(path);
+        when(criteriaBuilder.conjunction()).thenReturn(predicate);
+        when(criteriaBuilder.equal(any(Expression.class), any())).thenReturn(predicate);
+        when(criteriaBuilder.greaterThanOrEqualTo(any(Expression.class), any(LocalDateTime.class))).thenReturn(predicate);
+        when(criteriaBuilder.lessThan(any(Expression.class), any(LocalDateTime.class))).thenReturn(predicate);
+        when(criteriaBuilder.lessThanOrEqualTo(any(Expression.class), any(LocalDate.class))).thenReturn(predicate);
+        when(criteriaBuilder.isFalse(any(Expression.class))).thenReturn(predicate);
+        when(criteriaBuilder.and(nullable(Predicate.class), nullable(Predicate.class))).thenReturn(predicate);
+        when(criteriaBuilder.and(any(Predicate[].class))).thenReturn(predicate);
+        when(criteriaBuilder.or(any(Predicate[].class))).thenReturn(predicate);
+
+        assertThat(specification.toPredicate(root, query, criteriaBuilder)).isNotNull();
+
+        verify(criteriaBuilder).greaterThanOrEqualTo(path, LocalDateTime.of(2026, 7, 8, 0, 0));
+        verify(criteriaBuilder).lessThan(path, LocalDateTime.of(2026, 7, 9, 0, 0));
     }
 
     private PurchaseOrder buildOrder() {

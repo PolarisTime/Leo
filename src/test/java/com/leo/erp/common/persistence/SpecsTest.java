@@ -7,6 +7,9 @@ import jakarta.persistence.criteria.Root;
 import org.junit.jupiter.api.Test;
 import org.springframework.data.jpa.domain.Specification;
 
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -203,5 +206,24 @@ class SpecsTest {
         spec.toPredicate(root, query, cb);
 
         verify(cb).conjunction();
+    }
+
+    @Test
+    void dateTimeBetweenDatesIfPresent_usesHalfOpenEndDateBoundary() {
+        var path = mock(jakarta.persistence.criteria.Path.class);
+        when(root.get("orderDate")).thenReturn(path);
+        LocalDate startDate = LocalDate.of(2026, 7, 8);
+        LocalDate endDate = LocalDate.of(2026, 7, 8);
+        LocalDateTime startInclusive = LocalDateTime.of(2026, 7, 8, 0, 0);
+        LocalDateTime endExclusive = LocalDateTime.of(2026, 7, 9, 0, 0);
+        when(cb.greaterThanOrEqualTo(path, startInclusive)).thenReturn(mock(Predicate.class));
+        when(cb.lessThan(path, endExclusive)).thenReturn(mock(Predicate.class));
+        when(cb.and(any(Predicate[].class))).thenReturn(mock(Predicate.class));
+
+        Specification<Object> spec = Specs.dateTimeBetweenDatesIfPresent("orderDate", startDate, endDate);
+        spec.toPredicate(root, query, cb);
+
+        verify(cb).greaterThanOrEqualTo(path, startInclusive);
+        verify(cb).lessThan(path, endExclusive);
     }
 }

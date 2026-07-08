@@ -1,6 +1,9 @@
 package com.leo.erp.common.persistence;
 
+import jakarta.persistence.criteria.Predicate;
 import org.springframework.data.jpa.domain.Specification;
+
+import java.time.LocalDate;
 
 public final class Specs {
 
@@ -53,6 +56,22 @@ public final class Specs {
                 return cb.conjunction();
             }
             return cb.and(predicates.toArray(jakarta.persistence.criteria.Predicate[]::new));
+        };
+    }
+
+    public static <T> Specification<T> dateTimeBetweenDatesIfPresent(String field, LocalDate start, LocalDate end) {
+        return (root, q, cb) -> {
+            var predicates = new java.util.ArrayList<Predicate>(2);
+            if (start != null) {
+                predicates.add(cb.greaterThanOrEqualTo(root.get(field), start.atStartOfDay()));
+            }
+            if (end != null) {
+                predicates.add(cb.lessThan(root.get(field), end.plusDays(1).atStartOfDay()));
+            }
+            if (predicates.isEmpty()) {
+                return cb.conjunction();
+            }
+            return cb.and(predicates.toArray(Predicate[]::new));
         };
     }
 }

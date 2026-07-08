@@ -71,7 +71,7 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
                 .and(Specs.equalIfPresent("supplierName", filter.name()))
                 .and(Specs.equalValueIfPresent("settlementCompanyId", filter.settlementCompanyId()))
                 .and(Specs.equalIfPresent("status", filter.status()))
-                .and(Specs.betweenIfPresent("orderDate", filter.startDate(), filter.endDate()));
+                .and(Specs.dateTimeBetweenDatesIfPresent("orderDate", filter.startDate(), filter.endDate()));
         return page(query, spec, purchaseOrderRepository);
     }
 
@@ -90,7 +90,7 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
                 .and(Specs.equalIfPresent("supplierName", filter.name()))
                 .and(Specs.equalValueIfPresent("settlementCompanyId", filter.settlementCompanyId()))
                 .and(Specs.equalIfPresent("status", filter.status()))
-                .and(Specs.betweenIfPresent("orderDate", filter.startDate(), filter.endDate()));
+                .and(Specs.dateTimeBetweenDatesIfPresent("orderDate", filter.startDate(), filter.endDate()));
         return importableCandidates(query, spec, candidateUsage);
     }
 

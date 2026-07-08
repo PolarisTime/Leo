@@ -715,39 +715,41 @@ class PendingInvoiceReceiptReportServiceTest {
     }
 
     @Test
-    void startDateSpecUsesGreaterThanOrEqualTo() {
+    void startDateSpecUsesStartOfDayBoundary() {
         Root<PurchaseOrder> root = mockRoot();
         CriteriaBuilder criteriaBuilder = mock(CriteriaBuilder.class);
         CriteriaQuery<?> criteriaQuery = mock(CriteriaQuery.class);
         var orderDatePath = mock(jakarta.persistence.criteria.Path.class);
         Predicate predicate = mock(Predicate.class);
         LocalDate startDate = LocalDate.of(2026, 1, 1);
+        LocalDateTime startInclusive = LocalDateTime.of(2026, 1, 1, 0, 0);
         when(root.get("orderDate")).thenReturn(orderDatePath);
-        when(criteriaBuilder.greaterThanOrEqualTo(orderDatePath, startDate)).thenReturn(predicate);
+        when(criteriaBuilder.greaterThanOrEqualTo(orderDatePath, startInclusive)).thenReturn(predicate);
 
         Predicate result = startDateSpec(startDate).toPredicate(root, criteriaQuery, criteriaBuilder);
 
         assertThat(result).isSameAs(predicate);
         verify(root).get("orderDate");
-        verify(criteriaBuilder).greaterThanOrEqualTo(orderDatePath, startDate);
+        verify(criteriaBuilder).greaterThanOrEqualTo(orderDatePath, startInclusive);
     }
 
     @Test
-    void endDateSpecUsesLessThanOrEqualTo() {
+    void endDateSpecUsesExclusiveNextDayBoundary() {
         Root<PurchaseOrder> root = mockRoot();
         CriteriaBuilder criteriaBuilder = mock(CriteriaBuilder.class);
         CriteriaQuery<?> criteriaQuery = mock(CriteriaQuery.class);
         var orderDatePath = mock(jakarta.persistence.criteria.Path.class);
         Predicate predicate = mock(Predicate.class);
         LocalDate endDate = LocalDate.of(2026, 6, 30);
+        LocalDateTime endExclusive = LocalDateTime.of(2026, 7, 1, 0, 0);
         when(root.get("orderDate")).thenReturn(orderDatePath);
-        when(criteriaBuilder.lessThanOrEqualTo(orderDatePath, endDate)).thenReturn(predicate);
+        when(criteriaBuilder.lessThan(orderDatePath, endExclusive)).thenReturn(predicate);
 
         Predicate result = endDateSpec(endDate).toPredicate(root, criteriaQuery, criteriaBuilder);
 
         assertThat(result).isSameAs(predicate);
         verify(root).get("orderDate");
-        verify(criteriaBuilder).lessThanOrEqualTo(orderDatePath, endDate);
+        verify(criteriaBuilder).lessThan(orderDatePath, endExclusive);
     }
 
     @SuppressWarnings("unchecked")
