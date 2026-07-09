@@ -1,5 +1,6 @@
 package com.leo.erp.system.printtemplate.service;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.itextpdf.forms.PdfAcroForm;
 import com.itextpdf.kernel.pdf.PdfDocument;
@@ -288,7 +289,10 @@ class PrintScriptServiceTest {
             assertThat(PdfAcroForm.getAcroForm(document, false)).isNull();
             String text = PdfTextExtractor.getTextFromPage(document.getFirstPage());
             assertThat(text).contains("客户A", "SO-001", "2026年05月31日", "抚顺新钢", "螺纹钢");
-            assertThat(text).contains("海宁市高新区启辉路西侧之江北路北侧地块项...");
+            assertThat(text)
+                    .contains("海宁市高新区启辉路西侧之江北路北侧地块项目1")
+                    .contains("号楼2号楼配电房地下室工程")
+                    .doesNotContain("海宁市高新区启辉路西侧之江北路北侧地块项...");
             assertThat(text).contains("单据备注：6月4日报单", "合计件数：2件", "合计重量：2.345吨");
             assertThat(text).contains("同时承担供方", "实现债权支出的一切费用");
         }
@@ -701,15 +705,34 @@ class PrintScriptServiceTest {
 
     @Test
     void shouldUseProjectNameLabelAndFixedProjectNameFontSizeInYingjieLayout() {
-        String layout = yingjieA4RemarkLayout();
+        JsonNode layout;
+        try {
+            layout = new ObjectMapper().readTree(yingjieA4RemarkLayout());
+        } catch (IOException ex) {
+            throw new AssertionError("读取 PDF JSON 模板资源失败", ex);
+        }
+        JsonNode staticConfig = layout.path("static");
+        JsonNode fields = layout.path("fields");
+        JsonNode projectName = fields.path("projectName");
 
-        assertThat(layout)
-                .contains("\"text\": \"项目名称：\"")
-                .doesNotContain("\"text\": \"工程名称：\"");
-        assertThat(layout)
-                .contains("\"projectName\"")
-                .contains("\"vertical\": \"middle\"")
-                .doesNotContain("minimumFontSize");
+        assertThat(staticConfig.get(0).path("top").asInt()).isEqualTo(28);
+        assertThat(staticConfig.get(8).path("text").asText()).isEqualTo("销售单号：");
+        assertThat(staticConfig.get(8).path("width").asInt()).isEqualTo(68);
+        assertThat(staticConfig.get(9).path("text").asText()).isEqualTo("项目名称：");
+        assertThat(staticConfig.get(10).path("text").asText()).isEqualTo("单据日期：");
+        assertThat(staticConfig.get(10).path("width").asInt()).isEqualTo(68);
+        assertThat(staticConfig.get(12).path("text").asText()).isEqualTo("物流车号：");
+        assertThat(staticConfig.get(12).path("width").asInt()).isEqualTo(68);
+        assertThat(fields.path("billNo").path("left").asInt()).isEqualTo(456);
+        assertThat(fields.path("billDate").path("left").asInt()).isEqualTo(456);
+        assertThat(fields.path("vehiclePlate").path("left").asInt()).isEqualTo(456);
+        assertThat(projectName.path("fontSize").asInt()).isEqualTo(12);
+        assertThat(projectName.path("height").asInt()).isEqualTo(28);
+        assertThat(projectName.path("multiline").asBoolean()).isTrue();
+        assertThat(projectName.path("vertical").asText()).isEqualTo("middle");
+        assertThat(projectName.path("lineHeight").asDouble()).isEqualTo(1.0);
+        assertThat(projectName.path("verticalPadding").asInt()).isEqualTo(1);
+        assertThat(projectName.has("minimumFontSize")).isFalse();
     }
 
     @Test

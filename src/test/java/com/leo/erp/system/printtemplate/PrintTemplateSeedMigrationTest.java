@@ -87,6 +87,30 @@ class PrintTemplateSeedMigrationTest {
         );
     }
 
+    @Test
+    void a4LayoutSeedMigrationUpdatesManualAndFileManagedTemplatesOnly() throws IOException {
+        String sql = readSql("/db/seed/S8__update_a4_pdf_project_name_layout.sql");
+
+        assertThat(sql).contains(
+                "SALES_ORDER_YINGJIE_A4_REMARK_PDF",
+                "TPL_333661633949728768",
+                "sync_mode = 'FILE'",
+                "sync_mode = 'MANUAL'",
+                "template_type = 'PDF_FORM'",
+                "销售单号：",
+                "单据日期：",
+                "物流车号：",
+                "{\"left\": 456, \"width\": 102}",
+                "{\"height\": 28, \"fontSize\": 12, \"multiline\": true, \"vertical\": \"middle\", \"lineHeight\": 1.0, \"verticalPadding\": 1}",
+                "minimumFontSize"
+        );
+        assertThat(sql).doesNotContain(
+                "DELETE FROM",
+                "TRUNCATE",
+                "DROP TABLE"
+        );
+    }
+
     private String readSql(String resourcePath) throws IOException {
         try (InputStream stream = getClass().getResourceAsStream(resourcePath)) {
             assertThat(stream).as(resourcePath + " should exist").isNotNull();

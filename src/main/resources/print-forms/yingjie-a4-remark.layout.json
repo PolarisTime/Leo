@@ -1,7 +1,7 @@
 {
   "page": {"width": 595, "height": 842},
   "static": [
-    {"type": "text", "text": "${settlementCompanyName}（供货单）", "left": 28, "top": 14, "width": 539, "height": 24, "fontSize": 16, "align": "center"},
+    {"type": "text", "text": "${settlementCompanyName}（供货单）", "left": 28, "top": 28, "width": 539, "height": 24, "fontSize": 16, "align": "center"},
     {"type": "rect", "left": 28, "top": 62, "width": 539, "height": 32},
     {"type": "line", "x1": 378, "y1": 62, "x2": 378, "y2": 94},
     {"type": "rect", "left": 28, "top": 94, "width": 539, "height": 32},
@@ -9,19 +9,19 @@
     {"type": "rect", "left": 28, "top": 126, "width": 539, "height": 32},
     {"type": "line", "x1": 378, "y1": 126, "x2": 378, "y2": 158},
     {"type": "text", "text": "需方公司：", "left": 37, "top": 71, "width": 70, "height": 14, "fontSize": 12},
-    {"type": "text", "text": "单号：", "left": 387, "top": 71, "width": 45, "height": 14, "fontSize": 12},
+    {"type": "text", "text": "销售单号：", "left": 387, "top": 71, "width": 68, "height": 14, "fontSize": 12},
     {"type": "text", "text": "项目名称：", "left": 37, "top": 103, "width": 70, "height": 14, "fontSize": 12},
-    {"type": "text", "text": "日期：", "left": 387, "top": 103, "width": 45, "height": 14, "fontSize": 12},
+    {"type": "text", "text": "单据日期：", "left": 387, "top": 103, "width": 68, "height": 14, "fontSize": 12},
     {"type": "text", "text": "项目地址：", "left": 37, "top": 135, "width": 70, "height": 14, "fontSize": 12},
-    {"type": "text", "text": "车号：", "left": 387, "top": 135, "width": 45, "height": 14, "fontSize": 12}
+    {"type": "text", "text": "物流车号：", "left": 387, "top": 135, "width": 68, "height": 14, "fontSize": 12}
   ],
   "fields": {
     "customerName": {"source": "customerName", "left": 106, "top": 68, "width": 264, "height": 20, "fontSize": 12},
-    "billNo": {"source": ["outboundNo", "orderNo", "billNo"], "left": 430, "top": 68, "width": 130, "height": 20, "fontSize": 12},
-    "projectName": {"source": "projectName", "left": 106, "top": 96, "width": 264, "height": 32, "fontSize": 12, "multiline": true, "vertical": "middle"},
-    "billDate": {"source": ["deliveryDate", "outboundDate", "orderDate"], "format": "chineseDate", "left": 434, "top": 100, "width": 123, "height": 20, "fontSize": 12},
+    "billNo": {"source": ["outboundNo", "orderNo", "billNo"], "left": 456, "top": 68, "width": 102, "height": 20, "fontSize": 12},
+    "projectName": {"source": "projectName", "left": 106, "top": 96, "width": 264, "height": 28, "fontSize": 12, "multiline": true, "vertical": "middle", "lineHeight": 1.0, "verticalPadding": 1},
+    "billDate": {"source": ["deliveryDate", "outboundDate", "orderDate"], "format": "chineseDate", "left": 456, "top": 100, "width": 102, "height": 20, "fontSize": 12},
     "projectAddress": {"source": "projectAddress", "left": 106, "top": 132, "width": 264, "height": 20, "fontSize": 12, "multiline": true},
-    "vehiclePlate": {"source": "vehiclePlate", "left": 434, "top": 132, "width": 123, "height": 20, "fontSize": 12}
+    "vehiclePlate": {"source": "vehiclePlate", "left": 456, "top": 132, "width": 102, "height": 20, "fontSize": 12}
   },
   "table": {
     "left": 28,
