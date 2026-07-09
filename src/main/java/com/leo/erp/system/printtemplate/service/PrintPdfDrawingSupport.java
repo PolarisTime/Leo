@@ -44,7 +44,7 @@ public class PrintPdfDrawingSupport {
             drawWrappedText(canvas, textRectangle, text, font, style);
             return;
         }
-        float fontSize = fitFontSize(font, text, textRectangle.getWidth(), style.fontSize(), style.minimumFontSize());
+        float fontSize = style.fontSize();
         float baselineY = baselineY(textRectangle, fontSize, style.verticalPosition());
         float textX = textX(font, text, fontSize, textRectangle, style.alignment());
 
@@ -59,11 +59,10 @@ public class PrintPdfDrawingSupport {
     }
 
     private void drawWrappedText(PdfCanvas canvas, Rectangle rectangle, String text, PdfFont font, TextStyle style) {
-        float fontSize = fitMultilineFontSize(font, text, rectangle, style);
+        float fontSize = style.fontSize();
         float lineHeight = fontSize * style.lineHeightMultiplier();
-        float singleLineFontSize = fitFontSize(font, text, rectangle.getWidth(), style.fontSize(), style.minimumFontSize());
-        if (font.getWidth(text, singleLineFontSize) <= rectangle.getWidth()) {
-            drawTextLine(canvas, rectangle, text, font, style, singleLineFontSize);
+        if (font.getWidth(text, fontSize) <= rectangle.getWidth()) {
+            drawTextLine(canvas, rectangle, text, font, style, fontSize);
             return;
         }
         List<String> lines = limitLines(
@@ -147,29 +146,6 @@ public class PrintPdfDrawingSupport {
         return rectangle.getX() + (rectangle.getWidth() - width) / 2;
     }
 
-    float fitFontSize(PdfFont font, String text, float maxWidth, float fontSize, float minimumFontSize) {
-        if (text.isBlank() || maxWidth <= 0) {
-            return fontSize;
-        }
-        float actualWidth = font.getWidth(text, fontSize);
-        if (actualWidth <= maxWidth) {
-            return fontSize;
-        }
-        return Math.max(minimumFontSize, fontSize * maxWidth / actualWidth);
-    }
-
-    private float fitMultilineFontSize(PdfFont font, String text, Rectangle rectangle, TextStyle style) {
-        float fontSize = style.fontSize();
-        while (fontSize > style.minimumFontSize()) {
-            List<String> lines = wrapLines(font, text, fontSize, rectangle.getWidth());
-            if (lines.size() <= maxLineCount(rectangle, fontSize, style.lineHeightMultiplier())) {
-                return fontSize;
-            }
-            fontSize -= 0.5f;
-        }
-        return style.minimumFontSize();
-    }
-
     private int maxLineCount(Rectangle rectangle, float fontSize, float lineHeightMultiplier) {
         return Math.max(1, (int) Math.floor(rectangle.getHeight() / (fontSize * lineHeightMultiplier)));
     }
@@ -236,7 +212,6 @@ public class PrintPdfDrawingSupport {
         boolean multiline = bool(fieldConfig, "multiline", false);
         return new TextStyle(
                 number(fieldConfig, "fontSize", 9f),
-                number(fieldConfig, "minimumFontSize", 7f),
                 number(fieldConfig, "horizontalPadding", 2f),
                 number(fieldConfig, "verticalPadding", multiline ? 3f : 2f),
                 alignment(text(fieldConfig, "align", "left")),
@@ -308,8 +283,7 @@ public class PrintPdfDrawingSupport {
             PageMetrics pageMetrics
     ) {
         String value = text == null ? "" : text;
-        float maxWidth = Math.max(1, width - 2);
-        float effectiveFontSize = fitFontSize(font, value, maxWidth, fontSize, 6.5f);
+        float effectiveFontSize = fontSize;
         float textWidth = font.getWidth(value, effectiveFontSize);
         float x = switch (alignment) {
             case CENTER -> left + Math.max(0, (width - textWidth) / 2);
@@ -336,12 +310,11 @@ public class PrintPdfDrawingSupport {
             float width,
             float height,
             float fontSize,
-            float minimumFontSize,
             float lineHeightMultiplier,
             Color textColor,
             PageMetrics pageMetrics
     ) {
-        float effectiveFontSize = fitParagraphFontSize(font, paragraphs, width, height, fontSize, minimumFontSize, lineHeightMultiplier);
+        float effectiveFontSize = fontSize;
         float lineHeight = effectiveFontSize * lineHeightMultiplier;
         List<String> lines = wrapParagraphs(font, paragraphs, effectiveFontSize, width);
         int maxLineCount = maxLineCount(new Rectangle(0, 0, width, height), effectiveFontSize, lineHeightMultiplier);
@@ -358,26 +331,6 @@ public class PrintPdfDrawingSupport {
             y -= lineHeight;
         }
         canvas.endText().restoreState();
-    }
-
-    private float fitParagraphFontSize(
-            PdfFont font,
-            List<String> paragraphs,
-            float width,
-            float height,
-            float fontSize,
-            float minimumFontSize,
-            float lineHeightMultiplier
-    ) {
-        float effectiveFontSize = fontSize;
-        while (effectiveFontSize > minimumFontSize) {
-            int lineCount = wrapParagraphs(font, paragraphs, effectiveFontSize, width).size();
-            if (lineCount <= maxLineCount(new Rectangle(0, 0, width, height), effectiveFontSize, lineHeightMultiplier)) {
-                return effectiveFontSize;
-            }
-            effectiveFontSize -= 0.5f;
-        }
-        return minimumFontSize;
     }
 
     private List<String> wrapParagraphs(PdfFont font, List<String> paragraphs, float fontSize, float width) {
@@ -503,7 +456,6 @@ public class PrintPdfDrawingSupport {
 
     private record TextStyle(
             float fontSize,
-            float minimumFontSize,
             float horizontalPadding,
             float verticalPadding,
             TextAlignment alignment,

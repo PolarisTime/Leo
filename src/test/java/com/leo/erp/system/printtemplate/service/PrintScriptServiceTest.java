@@ -250,7 +250,7 @@ class PrintScriptServiceTest {
             assertThat(PdfAcroForm.getAcroForm(document, false)).isNull();
             String text = PdfTextExtractor.getTextFromPage(document.getFirstPage());
             assertThat(text).contains("客户A", "SO-001", "2026年05月31日", "抚顺新钢", "螺纹钢");
-            assertThat(text).contains("地下室工程");
+            assertThat(text).contains("海宁市高新区启辉路西侧之江北路北侧地块项...");
             assertThat(text).contains("单据备注：6月4日报单", "合计件数：2件", "合计重量：2.345吨");
             assertThat(text).contains("同时承担供方", "实现债权支出的一切费用");
         }
@@ -662,7 +662,7 @@ class PrintScriptServiceTest {
     }
 
     @Test
-    void shouldUseProjectNameLabelAndCenteredAdaptiveProjectNameInYingjieLayout() {
+    void shouldUseProjectNameLabelAndFixedProjectNameFontSizeInYingjieLayout() {
         String layout = yingjieA4RemarkLayout();
 
         assertThat(layout)
@@ -670,8 +670,8 @@ class PrintScriptServiceTest {
                 .doesNotContain("\"text\": \"工程名称：\"");
         assertThat(layout)
                 .contains("\"projectName\"")
-                .contains("\"minimumFontSize\": 7")
-                .contains("\"vertical\": \"middle\"");
+                .contains("\"vertical\": \"middle\"")
+                .doesNotContain("minimumFontSize");
     }
 
     @Test

@@ -17,8 +17,8 @@
   ],
   "fields": {
     "customerName": {"source": "customerName", "left": 106, "top": 68, "width": 264, "height": 20, "fontSize": 12},
-    "billNo": {"source": ["outboundNo", "orderNo", "billNo"], "left": 430, "top": 68, "width": 130, "height": 20, "fontSize": 12, "minimumFontSize": 10},
-    "projectName": {"source": "projectName", "left": 106, "top": 96, "width": 264, "height": 32, "fontSize": 12, "minimumFontSize": 7, "multiline": true, "vertical": "middle"},
+    "billNo": {"source": ["outboundNo", "orderNo", "billNo"], "left": 430, "top": 68, "width": 130, "height": 20, "fontSize": 12},
+    "projectName": {"source": "projectName", "left": 106, "top": 96, "width": 264, "height": 32, "fontSize": 12, "multiline": true, "vertical": "middle"},
     "billDate": {"source": ["deliveryDate", "outboundDate", "orderDate"], "format": "chineseDate", "left": 434, "top": 100, "width": 123, "height": 20, "fontSize": 12},
     "projectAddress": {"source": "projectAddress", "left": 106, "top": 132, "width": 264, "height": 20, "fontSize": 12, "multiline": true},
     "vehiclePlate": {"source": "vehiclePlate", "left": 434, "top": 132, "width": 123, "height": 20, "fontSize": 12}
@@ -51,7 +51,6 @@
   "clauses": {
     "height": 160,
     "fontSize": 12,
-    "minimumFontSize": 9,
     "lineHeight": 1.18,
     "lines": [
       "1.货物规格、材质、数量及价格在收货时当即点清，并签字生效。",

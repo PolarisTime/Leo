@@ -189,7 +189,7 @@ class PrintPdfTableRendererTest {
         renderer.drawClauses(canvas, font, clauses, table, 120f, pageMetrics);
 
         verify(drawing).drawParagraphs(same(canvas), same(font), eq(List.of("第一条", "第二条")),
-                eq(12f), eq(128f), eq(150f), anyFloat(), anyFloat(), anyFloat(), anyFloat(),
+                eq(12f), eq(128f), eq(150f), anyFloat(), anyFloat(), anyFloat(),
                 nullable(Color.class), same(pageMetrics));
     }
 }

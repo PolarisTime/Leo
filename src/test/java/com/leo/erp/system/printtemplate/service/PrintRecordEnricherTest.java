@@ -55,6 +55,38 @@ class PrintRecordEnricherTest {
     }
 
     @Test
+    void shouldApplyDataLookupWithMultipleSourceFields() throws Exception {
+        PrintRuntimeProperties properties = runtimePropertiesFrom("""
+                {
+                  "enrichers": {
+                    "sales-order": [
+                      {
+                        "type": "dataLookup",
+                        "sourceFields": ["customerName", "projectName"],
+                        "targetField": "projectAddress",
+                        "sql": "SELECT project_address FROM md_customer WHERE customer_name = ? AND btrim(project_name) = btrim(?) AND deleted_flag = FALSE AND project_address IS NOT NULL ORDER BY id LIMIT 1"
+                      }
+                    ]
+                  }
+                }
+                """);
+        JdbcTemplate jdbc = mock(JdbcTemplate.class);
+        when(jdbc.queryForList(
+                eq("SELECT project_address FROM md_customer WHERE customer_name = ? AND btrim(project_name) = btrim(?) AND deleted_flag = FALSE AND project_address IS NOT NULL ORDER BY id LIMIT 1"),
+                eq(String.class),
+                eq("客户A"),
+                eq("项目A")
+        )).thenReturn(List.of("客户资料地址A"));
+        Map<String, String> data = new HashMap<>();
+        data.put("customerName", "客户A");
+        data.put("projectName", "项目A");
+
+        new PrintRecordEnricher(jdbc, formatter, properties).enrich("sales-order", data, List.of());
+
+        assertThat(data).containsEntry("projectAddress", "客户资料地址A");
+    }
+
+    @Test
     void shouldSkipDataLookupWhenTargetAlreadyPresentOrArgumentInvalid() {
         JdbcTemplate jdbc = mock(JdbcTemplate.class);
         Map<String, String> data = new HashMap<>();

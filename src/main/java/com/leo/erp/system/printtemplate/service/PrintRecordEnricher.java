@@ -76,24 +76,41 @@ class PrintRecordEnricher {
         if (runtimeProperties.bool(rule, "stopWhenPresent", false) && !formatter.value(data, targetField).isBlank()) {
             return;
         }
-        Object argument = argument(data, rule);
-        if (argument == null) {
+        Object[] arguments = arguments(data, rule);
+        if (arguments.length == 0) {
             return;
         }
 
         String sql = runtimeProperties.text(rule, "sql", "");
         if (RESULT_LIST.equals(runtimeProperties.text(rule, "result", ""))) {
-            List<String> values = jdbc.queryForList(sql, String.class, argument);
+            List<String> values = jdbc.queryForList(sql, String.class, arguments);
             if (!values.isEmpty()) {
                 data.put(targetField, String.join(runtimeProperties.text(rule, "join", ""), values));
             }
             return;
         }
 
-        List<String> values = jdbc.queryForList(sql, String.class, argument);
+        List<String> values = jdbc.queryForList(sql, String.class, arguments);
         if (!values.isEmpty() && !values.get(0).isBlank()) {
             data.put(targetField, values.get(0));
         }
+    }
+
+    private Object[] arguments(Map<String, String> data, JsonNode rule) {
+        JsonNode sourceFields = rule.path("sourceFields");
+        if (sourceFields.isArray()) {
+            List<Object> values = new ArrayList<>();
+            for (JsonNode sourceField : sourceFields) {
+                String rawValue = formatter.value(data, sourceField.asText("")).trim();
+                if (rawValue.isEmpty()) {
+                    return new Object[0];
+                }
+                values.add(rawValue);
+            }
+            return values.toArray();
+        }
+        Object argument = argument(data, rule);
+        return argument == null ? new Object[0] : new Object[]{argument};
     }
 
     private Object argument(Map<String, String> data, JsonNode rule) {

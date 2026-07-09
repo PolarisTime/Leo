@@ -18,6 +18,7 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
@@ -66,15 +67,12 @@ class PrintPdfDrawingSupportTest {
     }
 
     @Test
-    void shouldFitAndWrapTextByFontWidth() throws Exception {
+    void shouldWrapAndTruncateTextByFontWidth() throws Exception {
         var font = PdfFontFactory.createFont(StandardFonts.HELVETICA);
 
-        float fitted = drawing.fitFontSize(font, "ABCDEFGHIJ", 20f, 12f, 6f);
         List<String> lines = drawing.wrapLines(font, "ABCDE", 12f, 20f);
         String truncated = drawing.truncateToWidth(font, "ABCDEFGHIJ", 12f, 28f);
 
-        assertThat(fitted).isBetween(6f, 12f);
-        assertThat(drawing.fitFontSize(font, "ABCDEFGHIJ", 0f, 12f, 6f)).isEqualTo(12f);
         assertThat(drawing.wrapLines(font, "\nA", 12f, 20f)).containsExactly("A");
         assertThat(drawing.truncateToWidth(font, "ABC", 12f, 200f)).isEqualTo("ABC");
         assertThat(lines).hasSizeGreaterThan(1);
@@ -155,6 +153,30 @@ class PrintPdfDrawingSupportTest {
     }
 
     @Test
+    void shouldDrawCanvasTextWithConfiguredFontSizeWithoutScaling() {
+        PdfCanvas canvas = mock(PdfCanvas.class, org.mockito.Mockito.RETURNS_SELF);
+        var font = mock(com.itextpdf.kernel.font.PdfFont.class);
+        var metrics = new PrintPdfDrawingSupport.PageMetrics(595f, 842f);
+        when(font.getWidth("ABCDEFGHIJ", 12f)).thenReturn(500f);
+
+        drawing.drawCanvasText(
+                canvas,
+                font,
+                "ABCDEFGHIJ",
+                10f,
+                100f,
+                20f,
+                20f,
+                12f,
+                TextAlignment.LEFT,
+                ColorConstants.BLACK,
+                metrics
+        );
+
+        verify(canvas).setFontAndSize(font, 12f);
+    }
+
+    @Test
     void shouldDrawSingleLineAndWrappedText() throws Exception {
         byte[] bytes = writePdf(canvas -> {
             var font = PdfFontFactory.createFont(StandardFonts.HELVETICA);
@@ -170,7 +192,7 @@ class PrintPdfDrawingSupportTest {
                     canvas,
                     new Rectangle(20f, 620f, 40f, 40f),
                     "wrapped",
-                    objectMapper.readTree("{\"multiline\":true,\"align\":\"center\",\"vertical\":\"middle\",\"lineHeight\":1.1,\"minimumFontSize\":6}"),
+                    objectMapper.readTree("{\"multiline\":true,\"align\":\"center\",\"vertical\":\"middle\",\"lineHeight\":1.1}"),
                     "ABCDEFGHIJKLMNOPQRSTUVWXYZ",
                     font
             );
@@ -178,7 +200,7 @@ class PrintPdfDrawingSupportTest {
                     canvas,
                     new Rectangle(20f, 600f, 40f, 10f),
                     "emptyWrapped",
-                    objectMapper.readTree("{\"multiline\":true,\"minimumFontSize\":6}"),
+                    objectMapper.readTree("{\"multiline\":true}"),
                     "",
                     font
             );
@@ -203,7 +225,7 @@ class PrintPdfDrawingSupportTest {
                     canvas,
                     new Rectangle(20f, 600f, 40f, 20f),
                     "blankWrapped",
-                    objectMapper.readTree("{\"multiline\":true,\"minimumFontSize\":6}"),
+                    objectMapper.readTree("{\"multiline\":true}"),
                     "\n",
                     font
             );
@@ -241,14 +263,14 @@ class PrintPdfDrawingSupportTest {
     }
 
     @Test
-    void shouldUseMinimumFontSizeWhenMultilineTextStillExceedsMaxLines() throws Exception {
+    void shouldKeepConfiguredFontSizeWhenMultilineTextExceedsMaxLines() throws Exception {
         byte[] bytes = writePdf(canvas -> {
             var font = PdfFontFactory.createFont(StandardFonts.HELVETICA);
             drawing.drawText(
                     canvas,
                     new Rectangle(20f, 600f, 8f, 8f),
                     "tinyWrapped",
-                    objectMapper.readTree("{\"multiline\":true,\"fontSize\":12,\"minimumFontSize\":11,\"lineHeight\":1.2}"),
+                    objectMapper.readTree("{\"multiline\":true,\"fontSize\":12,\"lineHeight\":1.2}"),
                     "ABCDEFGHIJKLMNOPQRSTUVWXYZ",
                     font
             );
@@ -271,7 +293,6 @@ class PrintPdfDrawingSupportTest {
                     32f,
                     18f,
                     12f,
-                    6f,
                     1.2f,
                     ColorConstants.BLACK,
                     metrics
@@ -285,7 +306,6 @@ class PrintPdfDrawingSupportTest {
                     120f,
                     24f,
                     10f,
-                    6f,
                     1.2f,
                     ColorConstants.BLACK,
                     metrics

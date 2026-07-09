@@ -327,6 +327,13 @@
       },
       {
         "type": "dataLookup",
+        "sourceFields": ["customerName", "projectName"],
+        "targetField": "projectAddress",
+        "sql": "SELECT project_address FROM md_customer WHERE customer_name = ? AND btrim(project_name) = btrim(?) AND deleted_flag = FALSE AND project_address IS NOT NULL ORDER BY id LIMIT 1",
+        "stopWhenPresent": true
+      },
+      {
+        "type": "dataLookup",
         "sourceField": "orderNo",
         "targetField": "vehiclePlate",
         "result": "list",
@@ -348,6 +355,13 @@
         "sourceField": "projectName",
         "targetField": "projectAddress",
         "sql": "SELECT project_address FROM md_project WHERE project_name = ? AND deleted_flag = FALSE AND project_address IS NOT NULL ORDER BY id LIMIT 1",
+        "stopWhenPresent": true
+      },
+      {
+        "type": "dataLookup",
+        "sourceFields": ["customerName", "projectName"],
+        "targetField": "projectAddress",
+        "sql": "SELECT project_address FROM md_customer WHERE customer_name = ? AND btrim(project_name) = btrim(?) AND deleted_flag = FALSE AND project_address IS NOT NULL ORDER BY id LIMIT 1",
         "stopWhenPresent": true
       },
       {

@@ -201,7 +201,6 @@ public class PrintPdfTableRenderer {
                 width,
                 drawing.number(clausesConfig, "height", 96f),
                 drawing.number(clausesConfig, "fontSize", 7.8f),
-                drawing.number(clausesConfig, "minimumFontSize", 6.5f),
                 drawing.number(clausesConfig, "lineHeight", 1.28f),
                 drawing.color(clausesConfig, "color", drawing.color(clausesConfig, "textColor", ColorConstants.BLACK)),
                 pageMetrics
