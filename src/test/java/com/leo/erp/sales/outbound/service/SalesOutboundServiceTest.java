@@ -356,6 +356,91 @@ class SalesOutboundServiceTest {
     }
 
     @Test
+    void shouldRejectAuditedSaveWhenSourcePurchaseInboundIsNotCompleted() {
+        SalesOutboundRepository repository = mock(SalesOutboundRepository.class);
+        SalesOutboundMapper mapper = mock(SalesOutboundMapper.class);
+        TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
+        WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
+        SalesOrderItemQueryService salesOrderItemQueryService = mock(SalesOrderItemQueryService.class);
+        JdbcTemplate jdbc = mock(JdbcTemplate.class);
+        SalesOutboundService service = createService(
+                repository, mock(SnowflakeIdGenerator.class), mapper,
+                materialSupport, warehouseSelectionSupport,
+                mock(WorkflowTransitionGuard.class), mock(SalesOrderCompletionSyncService.class),
+                salesOrderItemQueryService, mock(PurchaseOrderItemPieceWeightService.class), jdbc
+        );
+        SalesOutboundRequest request = new SalesOutboundRequest(
+                "SOO-PO-PENDING", null, "客户A", "项目A", null,
+                LocalDate.of(2026, 4, 30), StatusConstants.AUDITED, null,
+                List.of(new SalesOutboundItemRequest(
+                        null, 9020L, "M1", "宝钢", "盘螺", "HRB400", "10", null, "吨",
+                        "一号码头", "B1", 1, "件",
+                        new BigDecimal("2.000"), 1, new BigDecimal("2.000"),
+                        new BigDecimal("3000.00"), null
+                ))
+        );
+        SalesOrderItem sourceSalesOrderItem = buildSalesOrderItem(9020L, "SO-PO-PENDING");
+        sourceSalesOrderItem.setSourcePurchaseOrderItemId(3020L);
+
+        when(repository.existsByOutboundNoAndDeletedFlagFalse("SOO-PO-PENDING")).thenReturn(false);
+        when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(materialMap("M1"));
+        when(materialSupport.normalizeBatchNo(any(), eq("B1"), eq(1), eq(true))).thenReturn("B1");
+        when(warehouseSelectionSupport.normalizeWarehouseName("一号码头", 1, true)).thenReturn("一号码头");
+        when(salesOrderItemQueryService.findActiveByIdIn(anyCollection())).thenReturn(List.of(sourceSalesOrderItem));
+        when(jdbc.queryForObject(any(String.class), eq(Long.class), eq(3020L))).thenReturn(0L);
+        when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        assertThatThrownBy(() -> service.create(request))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("来源采购明细尚未完成采购入库")
+                .hasMessageContaining("请先将销售出库保存为预出库");
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    void shouldRejectStatusAuditWhenSourcePurchaseInboundIsNotCompleted() {
+        SalesOutboundRepository repository = mock(SalesOutboundRepository.class);
+        SalesOutboundMapper mapper = mock(SalesOutboundMapper.class);
+        SalesOrderItemQueryService salesOrderItemQueryService = mock(SalesOrderItemQueryService.class);
+        JdbcTemplate jdbc = mock(JdbcTemplate.class);
+        SalesOutboundService service = createService(
+                repository, mock(SnowflakeIdGenerator.class), mapper,
+                mock(TradeItemMaterialSupport.class), mock(WarehouseSelectionSupport.class),
+                mock(WorkflowTransitionGuard.class), mock(SalesOrderCompletionSyncService.class),
+                salesOrderItemQueryService,
+                mock(PurchaseOrderItemPieceWeightService.class), jdbc
+        );
+        SalesOutbound existing = new SalesOutbound();
+        existing.setId(1L);
+        existing.setOutboundNo("SOO-PO-PRE");
+        existing.setStatus(StatusConstants.DRAFT);
+        existing.setCustomerName("C");
+        existing.setProjectName("P");
+        existing.setWarehouseName("W");
+        existing.setOutboundDate(LocalDate.now());
+        existing.setSalesOrderNo("SO-PO-PRE");
+        existing.setTotalWeight(BigDecimal.ZERO);
+        existing.setTotalAmount(BigDecimal.ZERO);
+        existing.setItems(new ArrayList<>());
+        buildExistingOutboundItem(8020L, existing, 9021L);
+        SalesOrderItem sourceSalesOrderItem = buildSalesOrderItem(9021L, "SO-PO-PRE");
+        sourceSalesOrderItem.setSourcePurchaseOrderItemId(3021L);
+
+        when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(existing));
+        when(salesOrderItemQueryService.findActiveByIdIn(anyCollection())).thenReturn(List.of(sourceSalesOrderItem));
+        when(jdbc.queryForObject(any(String.class), eq(Long.class), eq(3021L))).thenReturn(0L);
+        when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        stubMapper(mapper);
+
+        assertThatThrownBy(() -> service.updateStatus(1L, StatusConstants.AUDITED))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("来源采购明细尚未完成采购入库")
+                .hasMessageContaining("采购入库过磅同步重量后再审核");
+        assertThat(existing.getStatus()).isEqualTo(StatusConstants.DRAFT);
+        verify(repository, never()).save(any());
+    }
+
+    @Test
     void shouldLoadDetailWithSourceNo() {
         SalesOutboundRepository repository = mock(SalesOutboundRepository.class);
         SalesOutboundMapper mapper = mock(SalesOutboundMapper.class);
@@ -1432,7 +1517,8 @@ class SalesOutboundServiceTest {
                         new SalesOutboundWeightService(jdbc)
                 ),
                 new SalesOutboundResponseAssembler(mapper, sourceService),
-                new SalesOutboundSaveService(repository, syncService)
+                new SalesOutboundSaveService(repository, syncService),
+                new SalesOutboundPurchaseInboundGuard(sourceService, jdbc)
         );
     }
 

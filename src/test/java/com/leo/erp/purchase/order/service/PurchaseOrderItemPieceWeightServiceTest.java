@@ -314,7 +314,9 @@ class PurchaseOrderItemPieceWeightServiceTest {
         org.assertj.core.api.Assertions.assertThatThrownBy(() ->
                 service.rebalanceForPurchaseOrderItems(List.of(item), List.of(301L))
         ).isInstanceOf(com.leo.erp.common.error.BusinessException.class)
-                .hasMessageContaining("锁定重量大于采购明细目标重量");
+                .hasMessageContaining("锁定重量 2.00000000")
+                .hasMessageContaining("目标重量 1.00000000")
+                .hasMessageContaining("请先反审核销售出库/销售订单，或保持销售出库为预出库后再做采购入库");
     }
 
     @Test
@@ -556,6 +558,28 @@ class PurchaseOrderItemPieceWeightServiceTest {
         assertThat(result).hasSize(2);
         assertThat(result.get(1L)).isEqualByComparingTo("4.074");
         assertThat(result.get(2L)).isEqualByComparingTo("6.110");
+    }
+
+    @Test
+    void shouldSummarizeLockedSalesWeightCorrectly() {
+        PurchaseOrderItemPieceWeightRepository repository = mock(PurchaseOrderItemPieceWeightRepository.class);
+        PurchaseOrderItemPieceWeightService service = new PurchaseOrderItemPieceWeightService(repository, mock(JdbcTemplate.class));
+
+        var summary = mock(PurchaseOrderItemPieceWeightRepository.PurchaseOrderItemWeightSummary.class);
+        when(summary.getPurchaseOrderItemId()).thenReturn(1L);
+        when(summary.getTotalWeightTon()).thenReturn(new BigDecimal("2.345"));
+        when(repository.summarizeLockedSalesWeightByPurchaseOrderItemIds(
+                eq(List.of(1L)),
+                eq(com.leo.erp.common.support.StatusConstants.SALES_COMPLETED),
+                eq(com.leo.erp.common.support.StatusConstants.AUDITED),
+                eq(com.leo.erp.common.support.StatusConstants.ISSUED),
+                eq(com.leo.erp.common.support.StatusConstants.RECEIVED)
+        )).thenReturn(List.of(summary));
+
+        Map<Long, BigDecimal> result = service.summarizeLockedSalesWeightByPurchaseOrderItemIds(List.of(1L));
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(1L)).isEqualByComparingTo("2.345");
     }
 
     @Test

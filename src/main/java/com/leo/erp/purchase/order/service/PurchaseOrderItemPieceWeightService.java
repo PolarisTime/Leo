@@ -4,6 +4,7 @@ import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.support.PrecisionConstants;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
+import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.support.TradeItemCalculator;
 import com.leo.erp.purchase.order.domain.entity.PurchaseOrderItem;
 import com.leo.erp.purchase.order.domain.entity.PurchaseOrderItemPieceWeight;
@@ -126,9 +127,18 @@ public class PurchaseOrderItemPieceWeightService {
                     .reduce(BigDecimal.ZERO, BigDecimal::add);
             BigDecimal targetWeightTon = resolveItemTotalWeight(item);
             if (targetWeightTon.compareTo(lockedWeightTon) < 0) {
+                BigDecimal scaledLockedWeightTon = TradeItemCalculator.scaleWeightTon(lockedWeightTon);
+                BigDecimal scaledTargetWeightTon = TradeItemCalculator.scaleWeightTon(targetWeightTon);
+                BigDecimal overWeightTon = TradeItemCalculator.scaleWeightTon(
+                        scaledLockedWeightTon.subtract(scaledTargetWeightTon)
+                );
                 throw new BusinessException(
                         ErrorCode.BUSINESS_ERROR,
-                        "采购明细" + item.getId() + "锁定重量大于采购明细目标重量，不能自动重平衡"
+                        "采购明细" + item.getId()
+                                + "锁定重量 " + scaledLockedWeightTon
+                                + " 大于采购明细目标重量 " + scaledTargetWeightTon
+                                + "，差额 " + overWeightTon
+                                + "，不能自动重平衡。请先反审核销售出库/销售订单，或保持销售出库为预出库后再做采购入库"
                 );
             }
 
@@ -223,6 +233,25 @@ public class PurchaseOrderItemPieceWeightService {
                 .stream()
                 .collect(Collectors.toMap(
                         PurchaseOrderItemPieceWeightRepository.RemainingWeightSummary::getPurchaseOrderItemId,
+                        summary -> TradeItemCalculator.scaleWeightTon(summary.getTotalWeightTon())
+                ));
+    }
+
+    @Transactional(readOnly = true)
+    public Map<Long, BigDecimal> summarizeLockedSalesWeightByPurchaseOrderItemIds(Collection<Long> purchaseOrderItemIds) {
+        if (purchaseOrderItemIds == null || purchaseOrderItemIds.isEmpty()) {
+            return Map.of();
+        }
+        return repository.summarizeLockedSalesWeightByPurchaseOrderItemIds(
+                        purchaseOrderItemIds,
+                        StatusConstants.SALES_COMPLETED,
+                        StatusConstants.AUDITED,
+                        StatusConstants.ISSUED,
+                        StatusConstants.RECEIVED
+                )
+                .stream()
+                .collect(Collectors.toMap(
+                        PurchaseOrderItemPieceWeightRepository.PurchaseOrderItemWeightSummary::getPurchaseOrderItemId,
                         summary -> TradeItemCalculator.scaleWeightTon(summary.getTotalWeightTon())
                 ));
     }

@@ -26,6 +26,7 @@ public class PurchaseOrderResponseAssembler {
         Map<Long, Integer> allocatedQuantityMap = availabilityService.loadInboundAllocatedQuantityMap(order);
         Map<Long, Integer> salesAllocatedQuantityMap = availabilityService.loadSalesAllocatedQuantityMap(order);
         Map<Long, BigDecimal> salesRemainingWeightMap = availabilityService.loadSalesRemainingWeightMap(order);
+        Map<Long, BigDecimal> lockedSalesWeightMap = availabilityService.loadLockedSalesWeightMap(order);
         PurchaseOrderResponse response = mapper.toResponse(order);
         return new PurchaseOrderResponse(
                 response.id(),
@@ -40,7 +41,13 @@ public class PurchaseOrderResponseAssembler {
                 response.status(),
                 response.remark(),
                 order.getItems().stream()
-                        .map(item -> toItemResponse(item, allocatedQuantityMap, salesAllocatedQuantityMap, salesRemainingWeightMap))
+                        .map(item -> toItemResponse(
+                                item,
+                                allocatedQuantityMap,
+                                salesAllocatedQuantityMap,
+                                salesRemainingWeightMap,
+                                lockedSalesWeightMap
+                        ))
                         .toList()
         );
     }
@@ -52,7 +59,8 @@ public class PurchaseOrderResponseAssembler {
     private PurchaseOrderItemResponse toItemResponse(PurchaseOrderItem item,
                                                     Map<Long, Integer> allocatedQuantityMap,
                                                     Map<Long, Integer> salesAllocatedQuantityMap,
-                                                    Map<Long, BigDecimal> salesRemainingWeightMap) {
+                                                    Map<Long, BigDecimal> salesRemainingWeightMap,
+                                                    Map<Long, BigDecimal> lockedSalesWeightMap) {
         return new PurchaseOrderItemResponse(
                 item.getId(),
                 item.getLineNo(),
@@ -77,6 +85,7 @@ public class PurchaseOrderResponseAssembler {
                 item.getWeightTon(),
                 item.getActualWeightTon(),
                 item.getActualPieceWeightTon(),
+                availabilityService.lockedSalesWeightTon(item, lockedSalesWeightMap),
                 item.getUnitPrice(),
                 item.getAmount()
         );

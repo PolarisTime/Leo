@@ -26,6 +26,7 @@ public record PurchaseOrderItemResponse(
         BigDecimal weightTon,
         BigDecimal actualWeightTon,
         BigDecimal actualPieceWeightTon,
+        BigDecimal lockedSalesWeightTon,
         BigDecimal unitPrice,
         BigDecimal amount
 ) {
@@ -55,6 +56,6 @@ public record PurchaseOrderItemResponse(
         this(id, lineNo, materialCode, brand, category, material, spec, length, unit,
                 null, null, warehouseName, batchNo, remainingQuantity, salesRemainingQuantity,
                 salesRemainingWeightTon, quantity, quantityUnit, pieceWeightTon, piecesPerBundle,
-                weightTon, actualWeightTon, actualPieceWeightTon, unitPrice, amount);
+                weightTon, actualWeightTon, actualPieceWeightTon, BigDecimal.ZERO, unitPrice, amount);
     }
 }

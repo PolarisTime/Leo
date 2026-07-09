@@ -39,6 +39,8 @@ class PurchaseOrderResponseAssemblerTest {
                 .thenReturn(List.of(allocationProjection(11L, 3L)));
         when(pieceWeightService.summarizeRemainingWeightByPurchaseOrderItemIds(List.of(11L)))
                 .thenReturn(Map.of(11L, new BigDecimal("0.700")));
+        when(pieceWeightService.summarizeLockedSalesWeightByPurchaseOrderItemIds(List.of(11L)))
+                .thenReturn(Map.of(11L, new BigDecimal("0.300")));
 
         PurchaseOrderResponse response = new PurchaseOrderResponseAssembler(mapper, availabilityService)
                 .toDetailResponse(order);
@@ -47,6 +49,7 @@ class PurchaseOrderResponseAssemblerTest {
             assertThat(item.remainingQuantity()).isEqualTo(6);
             assertThat(item.salesRemainingQuantity()).isEqualTo(7);
             assertThat(item.salesRemainingWeightTon()).isEqualByComparingTo("0.700");
+            assertThat(item.lockedSalesWeightTon()).isEqualByComparingTo("0.300");
         });
     }
 

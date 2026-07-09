@@ -34,6 +34,7 @@ public class SalesOutboundService extends AbstractCrudService<SalesOutbound, Sal
     private final SalesOutboundApplyService salesOutboundApplyService;
     private final SalesOutboundResponseAssembler responseAssembler;
     private final SalesOutboundSaveService saveService;
+    private final SalesOutboundPurchaseInboundGuard purchaseInboundGuard;
 
     @Autowired
     public SalesOutboundService(SalesOutboundRepository repository,
@@ -41,13 +42,15 @@ public class SalesOutboundService extends AbstractCrudService<SalesOutbound, Sal
                                 WorkflowTransitionGuard workflowTransitionGuard,
                                 SalesOutboundApplyService salesOutboundApplyService,
                                 SalesOutboundResponseAssembler responseAssembler,
-                                SalesOutboundSaveService saveService) {
+                                SalesOutboundSaveService saveService,
+                                SalesOutboundPurchaseInboundGuard purchaseInboundGuard) {
         super(idGenerator);
         this.repository = repository;
         this.workflowTransitionGuard = workflowTransitionGuard;
         this.salesOutboundApplyService = salesOutboundApplyService;
         this.responseAssembler = responseAssembler;
         this.saveService = saveService;
+        this.purchaseInboundGuard = purchaseInboundGuard;
     }
 
     @Transactional(readOnly = true)
@@ -238,6 +241,16 @@ public class SalesOutboundService extends AbstractCrudService<SalesOutbound, Sal
         entity.setStatus(nextStatus);
         entity.setRemark(request.remark());
         salesOutboundApplyService.applyItems(entity, request, this::nextId);
+        if (StatusConstants.AUDITED.equals(nextStatus)) {
+            purchaseInboundGuard.assertPurchaseInboundCompletedBeforeAudit(entity);
+        }
+    }
+
+    @Override
+    protected void beforeStatusUpdate(SalesOutbound entity, String currentStatus, String nextStatus) {
+        if (StatusConstants.AUDITED.equals(nextStatus)) {
+            purchaseInboundGuard.assertPurchaseInboundCompletedBeforeAudit(entity);
+        }
     }
 
     @Override

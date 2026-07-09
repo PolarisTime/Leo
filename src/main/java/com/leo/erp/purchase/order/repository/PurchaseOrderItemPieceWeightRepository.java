@@ -39,6 +39,61 @@ public interface PurchaseOrderItemPieceWeightRepository extends JpaRepository<Pu
             @Param("purchaseOrderItemIds") Collection<Long> purchaseOrderItemIds
     );
 
+    @Query(value = """
+            SELECT piece.purchase_order_item_id AS purchase_order_item_id,
+                   COALESCE(SUM(piece.weight_ton), 0) AS total_weight_ton
+              FROM po_purchase_order_item_piece_weight piece
+              JOIN so_sales_order_item sales_item ON sales_item.id = piece.sales_order_item_id
+              JOIN so_sales_order sales_order ON sales_order.id = sales_item.order_id
+             WHERE piece.purchase_order_item_id IN (:purchaseOrderItemIds)
+               AND piece.sales_order_item_id IS NOT NULL
+               AND (
+                    sales_order.status = :salesCompletedStatus
+                    OR EXISTS (
+                        SELECT 1
+                          FROM so_sales_outbound_item outbound_item
+                          JOIN so_sales_outbound outbound ON outbound.id = outbound_item.outbound_id
+                         WHERE outbound.deleted_flag = FALSE
+                           AND outbound.status = :auditedStatus
+                           AND outbound_item.source_sales_order_item_id = sales_item.id
+                    )
+                    OR EXISTS (
+                        SELECT 1
+                          FROM st_customer_statement_item statement_item
+                          JOIN st_customer_statement statement ON statement.id = statement_item.statement_id
+                         WHERE statement.deleted_flag = FALSE
+                           AND statement_item.source_sales_order_item_id = sales_item.id
+                    )
+                    OR EXISTS (
+                        SELECT 1
+                          FROM fm_invoice_issue_item issue_item
+                          JOIN fm_invoice_issue issue ON issue.id = issue_item.issue_id
+                         WHERE issue.deleted_flag = FALSE
+                           AND issue.status = :issuedStatus
+                           AND issue_item.source_sales_order_item_id = sales_item.id
+                    )
+                    OR EXISTS (
+                        SELECT 1
+                          FROM fm_receipt_allocation allocation
+                          JOIN fm_receipt receipt ON receipt.id = allocation.receipt_id
+                          JOIN st_customer_statement statement ON statement.id = allocation.source_statement_id
+                          JOIN st_customer_statement_item statement_item ON statement_item.statement_id = statement.id
+                         WHERE receipt.deleted_flag = FALSE
+                           AND receipt.status = :receivedStatus
+                           AND statement.deleted_flag = FALSE
+                           AND statement_item.source_sales_order_item_id = sales_item.id
+                    )
+               )
+             GROUP BY piece.purchase_order_item_id
+            """, nativeQuery = true)
+    List<PurchaseOrderItemWeightSummary> summarizeLockedSalesWeightByPurchaseOrderItemIds(
+            @Param("purchaseOrderItemIds") Collection<Long> purchaseOrderItemIds,
+            @Param("salesCompletedStatus") String salesCompletedStatus,
+            @Param("auditedStatus") String auditedStatus,
+            @Param("issuedStatus") String issuedStatus,
+            @Param("receivedStatus") String receivedStatus
+    );
+
     @Query("""
             select piece.salesOrderItemId as salesOrderItemId,
                    coalesce(sum(piece.weightTon), 0) as totalWeightTon
@@ -76,6 +131,13 @@ public interface PurchaseOrderItemPieceWeightRepository extends JpaRepository<Pu
     interface SalesOrderItemWeightSummary {
 
         Long getSalesOrderItemId();
+
+        java.math.BigDecimal getTotalWeightTon();
+    }
+
+    interface PurchaseOrderItemWeightSummary {
+
+        Long getPurchaseOrderItemId();
 
         java.math.BigDecimal getTotalWeightTon();
     }

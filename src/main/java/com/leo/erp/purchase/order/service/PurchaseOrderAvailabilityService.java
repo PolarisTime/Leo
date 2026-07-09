@@ -60,6 +60,14 @@ public class PurchaseOrderAvailabilityService {
         return purchaseOrderItemPieceWeightService.summarizeRemainingWeightByPurchaseOrderItemIds(orderItemIds);
     }
 
+    Map<Long, BigDecimal> loadLockedSalesWeightMap(PurchaseOrder order) {
+        List<Long> orderItemIds = orderItemIds(order);
+        if (orderItemIds.isEmpty()) {
+            return Map.of();
+        }
+        return purchaseOrderItemPieceWeightService.summarizeLockedSalesWeightByPurchaseOrderItemIds(orderItemIds);
+    }
+
     Integer remainingQuantity(PurchaseOrderItem item, Map<Long, Integer> allocatedQuantityMap) {
         int allocatedQuantity = allocatedQuantityMap.getOrDefault(item.getId(), 0);
         return Math.max(0, item.getQuantity() - allocatedQuantity);
@@ -77,6 +85,12 @@ public class PurchaseOrderAvailabilityService {
             return TradeItemCalculator.scaleWeightTon(item.getWeightTon());
         }
         return TradeItemCalculator.calculateWeightTon(remainingQuantity, item.getPieceWeightTon());
+    }
+
+    BigDecimal lockedSalesWeightTon(PurchaseOrderItem item, Map<Long, BigDecimal> lockedSalesWeightMap) {
+        return TradeItemCalculator.scaleWeightTon(
+                lockedSalesWeightMap.getOrDefault(item.getId(), BigDecimal.ZERO)
+        );
     }
 
     Map<Long, Integer> buildImportableQuantityMap(List<PurchaseOrder> orders, ImportCandidateUsage usage) {
