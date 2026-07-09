@@ -125,7 +125,7 @@ spring:
       # Redis 密码
       password: ${SPRING_DATA_REDIS_PASSWORD:}
       # 使用的逻辑库编号
-      database: ${SPRING_DATA_REDIS_DATABASE:3}
+      database: ${SPRING_DATA_REDIS_DATABASE:4}
       # 连接超时
       timeout: ${SPRING_DATA_REDIS_TIMEOUT:2000ms}
       # 建连超时，避免 Redis 异常时拖慢业务请求
