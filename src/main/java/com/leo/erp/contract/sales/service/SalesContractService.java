@@ -69,7 +69,7 @@ public class SalesContractService extends AbstractCrudService<SalesContract, Sal
                 response.id(), response.contractNo(), response.customerName(),
                 response.projectName(), response.signDate(), response.effectiveDate(),
                 response.expireDate(), response.salesName(), response.totalWeight(),
-                response.totalAmount(), response.status(), response.remark(),
+                response.totalAmount(), response.status(), response.deletedFlag(), response.remark(),
                 entity.getItems().stream().map(item -> new SalesContractItemResponse(
                         item.getId(), item.getLineNo(), item.getMaterialCode(),
                         item.getBrand(), item.getCategory(), item.getMaterial(),

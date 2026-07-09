@@ -793,8 +793,8 @@ class ReceiptServiceTest {
         when(receiptRepository.findById(1L)).thenReturn(Optional.of(deleted));
         when(receiptMapper.toResponse(deleted)).thenReturn(
                 new ReceiptResponse(1L, "SK-DELETED", null, "客户A", null, "项目A", null,
-                        LocalDate.of(2026, 4, 26), "银行转账", new BigDecimal("100.00"),
-                        "已删除", "财务A", null, null)
+                        null, null, LocalDate.of(2026, 4, 26), "银行转账", new BigDecimal("100.00"),
+                        StatusConstants.DRAFT, true, "财务A", null, null)
         );
 
         ReceiptService service = service(
@@ -817,6 +817,8 @@ class ReceiptServiceTest {
             ReceiptResponse result = service.detail(1L);
 
             assertThat(result.receiptNo()).isEqualTo("SK-DELETED");
+            assertThat(result.status()).isEqualTo(StatusConstants.DRAFT);
+            assertThat(result.deletedFlag()).isTrue();
             verify(receiptRepository).findById(1L);
         } finally {
             SecurityContextHolder.clearContext();

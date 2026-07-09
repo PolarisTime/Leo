@@ -15,7 +15,23 @@ public record PurchaseContractResponse(
         BigDecimal totalWeight,
         BigDecimal totalAmount,
         String status,
+        boolean deletedFlag,
         String remark,
         List<PurchaseContractItemResponse> items
 ) {
+    public PurchaseContractResponse(Long id,
+                                    String contractNo,
+                                    String supplierName,
+                                    LocalDate signDate,
+                                    LocalDate effectiveDate,
+                                    LocalDate expireDate,
+                                    String buyerName,
+                                    BigDecimal totalWeight,
+                                    BigDecimal totalAmount,
+                                    String status,
+                                    String remark,
+                                    List<PurchaseContractItemResponse> items) {
+        this(id, contractNo, supplierName, signDate, effectiveDate, expireDate, buyerName,
+                totalWeight, totalAmount, status, false, remark, items);
+    }
 }

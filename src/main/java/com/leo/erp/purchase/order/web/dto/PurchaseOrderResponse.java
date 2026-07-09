@@ -15,9 +15,39 @@ public record PurchaseOrderResponse(
         BigDecimal totalWeight,
         BigDecimal totalAmount,
         String status,
+        boolean deletedFlag,
         String remark,
         List<PurchaseOrderItemResponse> items
 ) {
+    public PurchaseOrderResponse(Long id,
+                                 String orderNo,
+                                 String supplierName,
+                                 LocalDateTime orderDate,
+                                 String buyerName,
+                                 Long settlementCompanyId,
+                                 String settlementCompanyName,
+                                 BigDecimal totalWeight,
+                                 BigDecimal totalAmount,
+                                 String status,
+                                 String remark,
+                                 List<PurchaseOrderItemResponse> items) {
+        this(
+                id,
+                orderNo,
+                supplierName,
+                orderDate,
+                buyerName,
+                settlementCompanyId,
+                settlementCompanyName,
+                totalWeight,
+                totalAmount,
+                status,
+                false,
+                remark,
+                items
+        );
+    }
+
     public PurchaseOrderResponse(Long id,
                                  String orderNo,
                                  String supplierName,
@@ -39,6 +69,7 @@ public record PurchaseOrderResponse(
                 totalWeight,
                 totalAmount,
                 status,
+                false,
                 remark,
                 items
         );

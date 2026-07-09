@@ -20,6 +20,7 @@ public record FreightStatementView(
         BigDecimal paidAmount,
         BigDecimal unpaidAmount,
         String status,
+        boolean deletedFlag,
         String signStatus,
         String attachment,
         List<AttachmentView> attachments,
@@ -42,6 +43,6 @@ public record FreightStatementView(
                                 String remark,
                                 List<FreightStatementItemView> items) {
         this(id, statementNo, null, carrierName, null, null, startDate, endDate, totalWeight, totalFreight,
-                paidAmount, unpaidAmount, status, signStatus, attachment, attachments, remark, items);
+                paidAmount, unpaidAmount, status, false, signStatus, attachment, attachments, remark, items);
     }
 }

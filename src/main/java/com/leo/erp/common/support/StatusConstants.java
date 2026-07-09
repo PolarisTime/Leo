@@ -13,7 +13,6 @@ public final class StatusConstants {
     // 通用状态
     public static final String NORMAL = "正常";
     public static final String DISABLED = "禁用";
-    public static final String DELETED = "已删除";
 
     // 单据状态
     public static final String DRAFT = "草稿";

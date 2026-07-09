@@ -31,6 +31,7 @@ public class InvoiceIssueResponseAssembler {
                 response.amount(),
                 response.taxAmount(),
                 response.status(),
+                response.deletedFlag(),
                 response.operatorName(),
                 response.remark(),
                 entity.getItems().stream().map(this::toItemResponse).toList()

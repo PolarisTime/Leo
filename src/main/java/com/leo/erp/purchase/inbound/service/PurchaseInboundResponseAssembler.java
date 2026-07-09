@@ -72,7 +72,7 @@ public class PurchaseInboundResponseAssembler {
                 response.supplierName(), response.settlementCompanyId(), response.settlementCompanyName(),
                 response.warehouseName(), response.inboundDate(),
                 response.settlementMode(), response.totalWeight(), response.totalAmount(),
-                response.status(), response.remark(),
+                response.status(), response.deletedFlag(), response.remark(),
                 TradeItemCalculator.scaleWeightTon(totalWeighWeightTon),
                 TradeItemCalculator.scaleWeightTon(totalWeightAdjustmentTon),
                 response.items()
@@ -94,7 +94,7 @@ public class PurchaseInboundResponseAssembler {
                 response.supplierName(), response.settlementCompanyId(), response.settlementCompanyName(),
                 response.warehouseName(), response.inboundDate(),
                 response.settlementMode(), response.totalWeight(), response.totalAmount(),
-                response.status(), response.remark(),
+                response.status(), response.deletedFlag(), response.remark(),
                 TradeItemCalculator.scaleWeightTon(totalWeighWeightTon),
                 TradeItemCalculator.scaleWeightTon(totalWeightAdjustmentTon),
                 items.stream().map(item -> new PurchaseInboundItemResponse(

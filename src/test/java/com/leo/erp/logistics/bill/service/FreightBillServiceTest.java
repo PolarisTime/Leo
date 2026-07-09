@@ -1048,7 +1048,7 @@ class FreightBillServiceTest {
         deleted.setUnitPrice(new BigDecimal("20.00"));
         deleted.setTotalWeight(BigDecimal.ZERO);
         deleted.setTotalFreight(BigDecimal.ZERO);
-        deleted.setStatus(StatusConstants.DELETED);
+        deleted.setStatus(StatusConstants.AUDITED);
         deleted.setDeletedFlag(true);
         deleted.setItems(new ArrayList<>());
         when(repository.findById(1L)).thenReturn(Optional.of(deleted));
@@ -1061,6 +1061,8 @@ class FreightBillServiceTest {
         FreightBillResponse response = service.detail(1L);
 
         assertThat(response.billNo()).isEqualTo("FB-DELETED");
+        assertThat(response.status()).isEqualTo(StatusConstants.AUDITED);
+        assertThat(response.deletedFlag()).isTrue();
         verify(repository).findById(1L);
         verify(repository, never()).findByIdAndDeletedFlagFalse(1L);
     }

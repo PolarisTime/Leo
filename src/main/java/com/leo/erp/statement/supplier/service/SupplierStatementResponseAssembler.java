@@ -35,6 +35,7 @@ public class SupplierStatementResponseAssembler {
                 response.paymentAmount(),
                 response.closingAmount(),
                 response.status(),
+                response.deletedFlag(),
                 response.remark(),
                 entity.getItems().stream().map(this::toItemResponse).toList()
         );

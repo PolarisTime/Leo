@@ -37,6 +37,7 @@ public class CustomerStatementResponseAssembler {
                 response.receiptAmount(),
                 response.closingAmount(),
                 response.status(),
+                response.deletedFlag(),
                 response.remark(),
                 entity.getItems().stream().map(this::toItemResponse).toList()
         );

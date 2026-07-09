@@ -13,7 +13,6 @@ class StatusConstantsTest {
     void shouldHaveCommonStatuses() {
         assertThat(StatusConstants.NORMAL).isEqualTo("正常");
         assertThat(StatusConstants.DISABLED).isEqualTo("禁用");
-        assertThat(StatusConstants.DELETED).isEqualTo("已删除");
     }
 
     @Test

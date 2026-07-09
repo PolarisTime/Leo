@@ -17,11 +17,33 @@ public record PurchaseInboundResponse(
         BigDecimal totalWeight,
         BigDecimal totalAmount,
         String status,
+        boolean deletedFlag,
         String remark,
         BigDecimal totalWeighWeightTon,
         BigDecimal totalWeightAdjustmentTon,
         List<PurchaseInboundItemResponse> items
 ) {
+    public PurchaseInboundResponse(Long id,
+                                   String inboundNo,
+                                   String purchaseOrderNo,
+                                   String supplierName,
+                                   Long settlementCompanyId,
+                                   String settlementCompanyName,
+                                   String warehouseName,
+                                   LocalDate inboundDate,
+                                   String settlementMode,
+                                   BigDecimal totalWeight,
+                                   BigDecimal totalAmount,
+                                   String status,
+                                   String remark,
+                                   BigDecimal totalWeighWeightTon,
+                                   BigDecimal totalWeightAdjustmentTon,
+                                   List<PurchaseInboundItemResponse> items) {
+        this(id, inboundNo, purchaseOrderNo, supplierName, settlementCompanyId, settlementCompanyName,
+                warehouseName, inboundDate, settlementMode, totalWeight, totalAmount, status, false, remark,
+                totalWeighWeightTon, totalWeightAdjustmentTon, items);
+    }
+
     public PurchaseInboundResponse(Long id,
                                    String inboundNo,
                                    String purchaseOrderNo,
@@ -37,7 +59,7 @@ public record PurchaseInboundResponse(
                                    BigDecimal totalWeightAdjustmentTon,
                                    List<PurchaseInboundItemResponse> items) {
         this(id, inboundNo, purchaseOrderNo, supplierName, null, null, warehouseName, inboundDate,
-                settlementMode, totalWeight, totalAmount, status, remark, totalWeighWeightTon,
+                settlementMode, totalWeight, totalAmount, status, false, remark, totalWeighWeightTon,
                 totalWeightAdjustmentTon, items);
     }
 }

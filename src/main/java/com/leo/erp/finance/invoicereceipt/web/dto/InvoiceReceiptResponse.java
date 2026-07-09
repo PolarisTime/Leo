@@ -15,8 +15,25 @@ public record InvoiceReceiptResponse(
         BigDecimal amount,
         BigDecimal taxAmount,
         String status,
+        boolean deletedFlag,
         String operatorName,
         String remark,
         List<InvoiceReceiptItemResponse> items
 ) {
+    public InvoiceReceiptResponse(Long id,
+                                  String receiveNo,
+                                  String invoiceNo,
+                                  String supplierName,
+                                  String invoiceTitle,
+                                  LocalDate invoiceDate,
+                                  String invoiceType,
+                                  BigDecimal amount,
+                                  BigDecimal taxAmount,
+                                  String status,
+                                  String operatorName,
+                                  String remark,
+                                  List<InvoiceReceiptItemResponse> items) {
+        this(id, receiveNo, invoiceNo, supplierName, invoiceTitle, invoiceDate, invoiceType,
+                amount, taxAmount, status, false, operatorName, remark, items);
+    }
 }

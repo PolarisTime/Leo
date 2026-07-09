@@ -138,6 +138,7 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
                 response.customerName(), response.projectName(),
                 response.billTime(), response.unitPrice(), response.totalWeight(),
                 response.totalFreight(), response.status(),
+                response.deletedFlag(),
                 response.remark(),
                 entity.getItems().stream().map(item -> new FreightBillItemResponse(
                         item.getId(), item.getLineNo(), item.getSourceNo(),

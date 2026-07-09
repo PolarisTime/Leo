@@ -807,15 +807,22 @@ class PurchaseOrderServiceTest {
     }
 
     private PurchaseOrderResponse summaryResponse(String status) {
+        return summaryResponse(status, false);
+    }
+
+    private PurchaseOrderResponse summaryResponse(String status, boolean deletedFlag) {
         return new PurchaseOrderResponse(
                 1L,
                 "PO-001",
                 "供应商A",
                 LocalDateTime.of(2026, 4, 26, 0, 0),
                 "李四",
+                null,
+                null,
                 new BigDecimal("1.000"),
                 new BigDecimal("4000.00"),
                 status,
+                deletedFlag,
                 null,
                 List.of()
         );
@@ -1452,12 +1459,12 @@ class PurchaseOrderServiceTest {
         );
         PurchaseOrder deleted = buildOrder();
         deleted.setDeletedFlag(true);
-        deleted.setStatus("已删除");
+        deleted.setStatus("草稿");
 
         when(systemSwitchService.shouldAdminSeeDeletedRecords()).thenReturn(true);
         when(repository.findById(1L)).thenReturn(Optional.of(deleted));
         when(repository.findById(404L)).thenReturn(Optional.empty());
-        when(mapper.toResponse(deleted)).thenReturn(summaryResponse("已删除"));
+        when(mapper.toResponse(deleted)).thenReturn(summaryResponse("草稿", true));
         ReflectionTestUtils.setField(service, "crudRuntimeSettings", systemSwitchService);
         SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
                 "admin",
@@ -1467,7 +1474,8 @@ class PurchaseOrderServiceTest {
 
         PurchaseOrderResponse response = service.detail(1L);
 
-        assertThat(response.status()).isEqualTo("已删除");
+        assertThat(response.status()).isEqualTo("草稿");
+        assertThat(response.deletedFlag()).isTrue();
         assertThatThrownBy(() -> service.detail(404L))
                 .hasMessageContaining("采购订单不存在");
         verify(repository).findById(1L);

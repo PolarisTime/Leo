@@ -70,7 +70,7 @@ public class PurchaseContractService extends AbstractCrudService<PurchaseContrac
                 response.id(), response.contractNo(), response.supplierName(),
                 response.signDate(), response.effectiveDate(), response.expireDate(),
                 response.buyerName(), response.totalWeight(), response.totalAmount(),
-                response.status(), response.remark(),
+                response.status(), response.deletedFlag(), response.remark(),
                 entity.getItems().stream().map(item -> new PurchaseContractItemResponse(
                         item.getId(), item.getLineNo(), item.getMaterialCode(),
                         item.getBrand(), item.getCategory(), item.getMaterial(),

@@ -18,10 +18,32 @@ public record ReceiptResponse(
         String payType,
         BigDecimal amount,
         String status,
+        boolean deletedFlag,
         String operatorName,
         String remark,
         List<ReceiptAllocationResponse> items
 ) {
+    public ReceiptResponse(Long id,
+                           String receiptNo,
+                           String customerCode,
+                           String customerName,
+                           Long projectId,
+                           String projectName,
+                           Long settlementCompanyId,
+                           String settlementCompanyName,
+                           Long sourceStatementId,
+                           LocalDate receiptDate,
+                           String payType,
+                           BigDecimal amount,
+                           String status,
+                           String operatorName,
+                           String remark,
+                           List<ReceiptAllocationResponse> items) {
+        this(id, receiptNo, customerCode, customerName, projectId, projectName, settlementCompanyId,
+                settlementCompanyName, sourceStatementId, receiptDate, payType, amount, status, false,
+                operatorName, remark, items);
+    }
+
     public ReceiptResponse(Long id,
                            String receiptNo,
                            String customerName,
@@ -34,7 +56,7 @@ public record ReceiptResponse(
                            String operatorName,
                            String remark,
                            List<ReceiptAllocationResponse> items) {
-        this(id, receiptNo, null, customerName, null, projectName, null, null, sourceStatementId, receiptDate, payType, amount, status, operatorName, remark, items);
+        this(id, receiptNo, null, customerName, null, projectName, null, null, sourceStatementId, receiptDate, payType, amount, status, false, operatorName, remark, items);
     }
 
     public ReceiptResponse(Long id,
@@ -51,6 +73,6 @@ public record ReceiptResponse(
                            String operatorName,
                            String remark,
                            List<ReceiptAllocationResponse> items) {
-        this(id, receiptNo, customerCode, customerName, projectId, projectName, null, null, sourceStatementId, receiptDate, payType, amount, status, operatorName, remark, items);
+        this(id, receiptNo, customerCode, customerName, projectId, projectName, null, null, sourceStatementId, receiptDate, payType, amount, status, false, operatorName, remark, items);
     }
 }

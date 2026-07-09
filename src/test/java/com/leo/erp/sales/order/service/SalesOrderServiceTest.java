@@ -524,7 +524,7 @@ class SalesOrderServiceTest {
         SecurityContextHolder.getContext().setAuthentication(
                 new UsernamePasswordAuthenticationToken(principal, null, principal.getAuthorities())
         );
-        var deletedOrder = auditedSalesOrder("SO-DELETED-001", StatusConstants.DELETED, new BigDecimal("3000.00"));
+        var deletedOrder = auditedSalesOrder("SO-DELETED-001", StatusConstants.AUDITED, new BigDecimal("3000.00"));
         deletedOrder.setDeletedFlag(true);
         when(repository.findById(1L)).thenReturn(Optional.of(deletedOrder), Optional.empty());
         when(mapper.toResponse(deletedOrder)).thenReturn(new SalesOrderResponse(
@@ -532,13 +532,18 @@ class SalesOrderServiceTest {
                 "SO-DELETED-001",
                 null,
                 null,
+                null,
                 "客户A",
+                null,
                 "项目A",
+                null,
+                null,
                 LocalDate.of(2026, 4, 26),
                 "张三",
                 new BigDecimal("4.500"),
                 new BigDecimal("13500.00"),
-                StatusConstants.DELETED,
+                StatusConstants.AUDITED,
+                true,
                 "备注",
                 List.of()
         ));
@@ -546,6 +551,8 @@ class SalesOrderServiceTest {
         SalesOrderResponse response = service.detail(1L);
 
         assertThat(response.orderNo()).isEqualTo("SO-DELETED-001");
+        assertThat(response.status()).isEqualTo(StatusConstants.AUDITED);
+        assertThat(response.deletedFlag()).isTrue();
         assertThatThrownBy(() -> service.detail(1L))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("销售订单不存在");

@@ -25,6 +25,8 @@ class SalesOutboundResponseAssemblerTest {
     @Test
     void shouldAppendItemResponsesWithResolvedSourceNo() {
         SalesOutbound outbound = outbound();
+        outbound.setDeletedFlag(true);
+        outbound.setStatus("已审核");
         SalesOutboundMapper mapper = mock(SalesOutboundMapper.class);
         when(mapper.toResponse(outbound)).thenReturn(summary(outbound));
 
@@ -41,6 +43,8 @@ class SalesOutboundResponseAssemblerTest {
         assertThat(response.items()).hasSize(1);
         assertThat(response.items().get(0).sourceNo()).isEqualTo("SO-001");
         assertThat(response.items().get(0).sourceSalesOrderItemId()).isEqualTo(201L);
+        assertThat(response.status()).isEqualTo("已审核");
+        assertThat(response.deletedFlag()).isTrue();
     }
 
     @Test
@@ -114,10 +118,13 @@ class SalesOutboundResponseAssemblerTest {
                 outbound.getCustomerName(),
                 outbound.getProjectName(),
                 outbound.getWarehouseName(),
+                outbound.getSettlementCompanyId(),
+                outbound.getSettlementCompanyName(),
                 outbound.getOutboundDate(),
                 outbound.getTotalWeight(),
                 outbound.getTotalAmount(),
                 outbound.getStatus(),
+                outbound.isDeletedFlag(),
                 outbound.getRemark(),
                 List.of()
         );

@@ -17,9 +17,28 @@ public record SalesOutboundResponse(
         BigDecimal totalWeight,
         BigDecimal totalAmount,
         String status,
+        boolean deletedFlag,
         String remark,
         List<SalesOutboundItemResponse> items
 ) {
+    public SalesOutboundResponse(Long id,
+                                 String outboundNo,
+                                 String salesOrderNo,
+                                 String customerName,
+                                 String projectName,
+                                 String warehouseName,
+                                 Long settlementCompanyId,
+                                 String settlementCompanyName,
+                                 LocalDate outboundDate,
+                                 BigDecimal totalWeight,
+                                 BigDecimal totalAmount,
+                                 String status,
+                                 String remark,
+                                 List<SalesOutboundItemResponse> items) {
+        this(id, outboundNo, salesOrderNo, customerName, projectName, warehouseName, settlementCompanyId, settlementCompanyName,
+                outboundDate, totalWeight, totalAmount, status, false, remark, items);
+    }
+
     public SalesOutboundResponse(Long id,
                                  String outboundNo,
                                  String salesOrderNo,
@@ -33,6 +52,6 @@ public record SalesOutboundResponse(
                                  String remark,
                                  List<SalesOutboundItemResponse> items) {
         this(id, outboundNo, salesOrderNo, customerName, projectName, warehouseName, null, null,
-                outboundDate, totalWeight, totalAmount, status, remark, items);
+                outboundDate, totalWeight, totalAmount, status, false, remark, items);
     }
 }

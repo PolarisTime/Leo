@@ -15,10 +15,28 @@ public record PaymentResponse(
         String payType,
         BigDecimal amount,
         String status,
+        boolean deletedFlag,
         String operatorName,
         String remark,
         List<PaymentAllocationResponse> items
 ) {
+    public PaymentResponse(Long id,
+                           String paymentNo,
+                           String businessType,
+                           String counterpartyCode,
+                           String counterpartyName,
+                           Long sourceStatementId,
+                           LocalDate paymentDate,
+                           String payType,
+                           BigDecimal amount,
+                           String status,
+                           String operatorName,
+                           String remark,
+                           List<PaymentAllocationResponse> items) {
+        this(id, paymentNo, businessType, counterpartyCode, counterpartyName, sourceStatementId,
+                paymentDate, payType, amount, status, false, operatorName, remark, items);
+    }
+
     public PaymentResponse(Long id,
                            String paymentNo,
                            String businessType,
@@ -31,6 +49,6 @@ public record PaymentResponse(
                            String operatorName,
                            String remark,
                            List<PaymentAllocationResponse> items) {
-        this(id, paymentNo, businessType, null, counterpartyName, sourceStatementId, paymentDate, payType, amount, status, operatorName, remark, items);
+        this(id, paymentNo, businessType, null, counterpartyName, sourceStatementId, paymentDate, payType, amount, status, false, operatorName, remark, items);
     }
 }

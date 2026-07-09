@@ -39,6 +39,7 @@ public class SalesOutboundResponseAssembler {
                 response.totalWeight(),
                 response.totalAmount(),
                 response.status(),
+                response.deletedFlag(),
                 response.remark(),
                 entity.getItems().stream()
                         .map(item -> toItemResponse(item, sourceSalesOrderItemMap))

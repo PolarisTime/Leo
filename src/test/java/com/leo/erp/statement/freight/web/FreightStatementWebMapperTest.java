@@ -186,6 +186,7 @@ class FreightStatementWebMapperTest {
                 BigDecimal.ZERO,
                 BigDecimal.ZERO,
                 "草稿",
+                false,
                 "未签署",
                 null,
                 List.of(),

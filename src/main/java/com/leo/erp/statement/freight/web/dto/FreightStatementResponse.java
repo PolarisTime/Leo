@@ -21,6 +21,7 @@ public record FreightStatementResponse(
         BigDecimal paidAmount,
         BigDecimal unpaidAmount,
         String status,
+        boolean deletedFlag,
         String signStatus,
         String attachment,
         List<AttachmentResponse> attachments,
@@ -44,7 +45,7 @@ public record FreightStatementResponse(
                                     String remark,
                                     List<FreightBillItemResponse> items) {
         this(id, statementNo, carrierCode, carrierName, null, null, startDate, endDate, totalWeight,
-                totalFreight, paidAmount, unpaidAmount, status, signStatus, attachment, attachments, remark, items);
+                totalFreight, paidAmount, unpaidAmount, status, false, signStatus, attachment, attachments, remark, items);
     }
 
     public FreightStatementResponse(Long id,
@@ -63,6 +64,6 @@ public record FreightStatementResponse(
                                     String remark,
                                     List<FreightBillItemResponse> items) {
         this(id, statementNo, null, carrierName, null, null, startDate, endDate, totalWeight, totalFreight,
-                paidAmount, unpaidAmount, status, signStatus, attachment, attachments, remark, items);
+                paidAmount, unpaidAmount, status, false, signStatus, attachment, attachments, remark, items);
     }
 }

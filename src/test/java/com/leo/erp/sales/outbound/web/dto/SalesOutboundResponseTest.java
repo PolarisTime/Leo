@@ -29,6 +29,7 @@ class SalesOutboundResponseTest {
         assertThat(response.totalWeight()).isEqualByComparingTo("10.500");
         assertThat(response.totalAmount()).isEqualByComparingTo("31500.00");
         assertThat(response.status()).isEqualTo("草稿");
+        assertThat(response.deletedFlag()).isFalse();
         assertThat(response.remark()).isEqualTo("备注");
         assertThat(response.items()).isEmpty();
     }

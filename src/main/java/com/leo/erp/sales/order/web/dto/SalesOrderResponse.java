@@ -20,9 +20,32 @@ public record SalesOrderResponse(
         BigDecimal totalWeight,
         BigDecimal totalAmount,
         String status,
+        boolean deletedFlag,
         String remark,
         List<SalesOrderItemResponse> items
 ) {
+    public SalesOrderResponse(Long id,
+                              String orderNo,
+                              String purchaseInboundNo,
+                              String purchaseOrderNo,
+                              String customerCode,
+                              String customerName,
+                              Long projectId,
+                              String projectName,
+                              Long settlementCompanyId,
+                              String settlementCompanyName,
+                              LocalDate deliveryDate,
+                              String salesName,
+                              BigDecimal totalWeight,
+                              BigDecimal totalAmount,
+                              String status,
+                              String remark,
+                              List<SalesOrderItemResponse> items) {
+        this(id, orderNo, purchaseInboundNo, purchaseOrderNo, customerCode, customerName, projectId, projectName,
+                settlementCompanyId, settlementCompanyName, deliveryDate, salesName, totalWeight, totalAmount,
+                status, false, remark, items);
+    }
+
     public SalesOrderResponse(Long id,
                               String orderNo,
                               String purchaseInboundNo,
@@ -37,8 +60,8 @@ public record SalesOrderResponse(
                               String status,
                               String remark,
                               List<SalesOrderItemResponse> items) {
-        this(id, orderNo, purchaseInboundNo, null, customerCode, customerName, projectId, projectName, deliveryDate, salesName,
-                totalWeight, totalAmount, status, remark, items);
+        this(id, orderNo, purchaseInboundNo, null, customerCode, customerName, projectId, projectName, null, null,
+                deliveryDate, salesName, totalWeight, totalAmount, status, false, remark, items);
     }
 
     public SalesOrderResponse(Long id,
@@ -54,7 +77,7 @@ public record SalesOrderResponse(
                               String remark,
                               List<SalesOrderItemResponse> items) {
         this(id, orderNo, purchaseInboundNo, null, null, customerName, null, projectName, null, null, deliveryDate,
-                salesName, totalWeight, totalAmount, status, remark, items);
+                salesName, totalWeight, totalAmount, status, false, remark, items);
     }
 
     public SalesOrderResponse(Long id,
@@ -71,7 +94,7 @@ public record SalesOrderResponse(
                               String remark,
                               List<SalesOrderItemResponse> items) {
         this(id, orderNo, purchaseInboundNo, purchaseOrderNo, null, customerName, null, projectName, null, null,
-                deliveryDate, salesName, totalWeight, totalAmount, status, remark, items);
+                deliveryDate, salesName, totalWeight, totalAmount, status, false, remark, items);
     }
 
     public SalesOrderResponse(Long id,
@@ -90,6 +113,6 @@ public record SalesOrderResponse(
                               String remark,
                               List<SalesOrderItemResponse> items) {
         this(id, orderNo, purchaseInboundNo, purchaseOrderNo, customerCode, customerName, projectId,
-                projectName, null, null, deliveryDate, salesName, totalWeight, totalAmount, status, remark, items);
+                projectName, null, null, deliveryDate, salesName, totalWeight, totalAmount, status, false, remark, items);
     }
 }

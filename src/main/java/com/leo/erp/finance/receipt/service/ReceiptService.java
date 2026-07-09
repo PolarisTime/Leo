@@ -180,6 +180,7 @@ public class ReceiptService extends AbstractCrudService<Receipt, ReceiptRequest,
                 response.payType(),
                 response.amount(),
                 response.status(),
+                response.deletedFlag(),
                 response.operatorName(),
                 response.remark(),
                 allocationResponseAssembler.toResponses(entity)

@@ -28,6 +28,7 @@ class SalesOutboundMapperTest {
         entity.setTotalAmount(new BigDecimal("30000.00"));
         entity.setStatus("已审核");
         entity.setRemark("测试备注");
+        entity.setDeletedFlag(true);
 
         SalesOutboundResponse response = mapper.toResponse(entity);
 
@@ -41,6 +42,7 @@ class SalesOutboundMapperTest {
         assertThat(response.totalWeight()).isEqualByComparingTo("10.000");
         assertThat(response.totalAmount()).isEqualByComparingTo("30000.00");
         assertThat(response.status()).isEqualTo("已审核");
+        assertThat(response.deletedFlag()).isTrue();
         assertThat(response.remark()).isEqualTo("测试备注");
         assertThat(response.items()).isNull();
     }

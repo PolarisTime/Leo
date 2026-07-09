@@ -39,6 +39,7 @@ public class PurchaseOrderResponseAssembler {
                 response.totalWeight(),
                 response.totalAmount(),
                 response.status(),
+                response.deletedFlag(),
                 response.remark(),
                 order.getItems().stream()
                         .map(item -> toItemResponse(

@@ -18,9 +18,29 @@ public record FreightBillResponse(
         BigDecimal totalWeight,
         BigDecimal totalFreight,
         String status,
+        boolean deletedFlag,
         String remark,
         List<FreightBillItemResponse> items
 ) {
+    public FreightBillResponse(Long id,
+                               String billNo,
+                               String carrierName,
+                               Long settlementCompanyId,
+                               String settlementCompanyName,
+                               String vehiclePlate,
+                               String customerName,
+                               String projectName,
+                               LocalDate billTime,
+                               BigDecimal unitPrice,
+                               BigDecimal totalWeight,
+                               BigDecimal totalFreight,
+                               String status,
+                               String remark,
+                               List<FreightBillItemResponse> items) {
+        this(id, billNo, carrierName, settlementCompanyId, settlementCompanyName, vehiclePlate, customerName,
+                projectName, billTime, unitPrice, totalWeight, totalFreight, status, false, remark, items);
+    }
+
     public FreightBillResponse(Long id,
                                String billNo,
                                String carrierName,
@@ -35,6 +55,6 @@ public record FreightBillResponse(
                                String remark,
                                List<FreightBillItemResponse> items) {
         this(id, billNo, carrierName, null, null, vehiclePlate, customerName, projectName, billTime,
-                unitPrice, totalWeight, totalFreight, status, remark, items);
+                unitPrice, totalWeight, totalFreight, status, false, remark, items);
     }
 }

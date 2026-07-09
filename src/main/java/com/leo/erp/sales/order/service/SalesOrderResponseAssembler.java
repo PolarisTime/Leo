@@ -43,6 +43,7 @@ public class SalesOrderResponseAssembler {
                 response.totalWeight(),
                 response.totalAmount(),
                 response.status(),
+                response.deletedFlag(),
                 response.remark(),
                 entity.getItems().stream().filter(itemFilter).map(this::toItemResponse).toList()
         );

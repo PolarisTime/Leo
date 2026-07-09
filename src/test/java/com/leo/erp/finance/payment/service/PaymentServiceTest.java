@@ -999,9 +999,9 @@ class PaymentServiceTest {
         deleted.setDeletedFlag(true);
         when(paymentRepository.findById(1L)).thenReturn(Optional.of(deleted));
         when(paymentMapper.toResponse(deleted)).thenReturn(
-                new PaymentResponse(1L, "FK-DELETED", "供应商", "供应商A", null,
+                new PaymentResponse(1L, "FK-DELETED", "供应商", null, "供应商A", null,
                         LocalDate.of(2026, 4, 26), "银行转账", new BigDecimal("100.00"),
-                        "已删除", "财务A", null, null)
+                        StatusConstants.DRAFT, true, "财务A", null, null)
         );
 
         PaymentService service = service(
@@ -1025,6 +1025,8 @@ class PaymentServiceTest {
             PaymentResponse result = service.detail(1L);
 
             assertThat(result.paymentNo()).isEqualTo("FK-DELETED");
+            assertThat(result.status()).isEqualTo(StatusConstants.DRAFT);
+            assertThat(result.deletedFlag()).isTrue();
             verify(paymentRepository).findById(1L);
         } finally {
             SecurityContextHolder.clearContext();
