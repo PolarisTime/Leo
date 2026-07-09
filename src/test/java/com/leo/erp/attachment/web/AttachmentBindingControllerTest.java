@@ -6,6 +6,8 @@ import com.leo.erp.attachment.web.dto.AttachmentBindingRequest;
 import com.leo.erp.attachment.web.dto.AttachmentBindingResponse;
 import com.leo.erp.attachment.web.dto.AttachmentBindingCountResponse;
 import com.leo.erp.common.api.ApiResponse;
+import com.leo.erp.common.error.BusinessException;
+import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.security.permission.ModulePermissionGuard;
 import com.leo.erp.security.support.SecurityPrincipal;
 import org.junit.jupiter.api.Test;
@@ -15,6 +17,7 @@ import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -90,5 +93,25 @@ class AttachmentBindingControllerTest {
         assertThat(response.data()).isEqualTo(counts);
         verify(attachmentRecordAccessService).assertRecordAccessible(principal, "sales-order", "read", 7L);
         verify(attachmentWebService).counts("sales-order", List.of(7L));
+    }
+
+    @Test
+    void countsSkipsMissingRecordsDuringDeleteRace() {
+        SecurityPrincipal principal = mock(SecurityPrincipal.class);
+        AttachmentBindingCountResponse counts = new AttachmentBindingCountResponse("sales-order", Map.of(1L, 2));
+
+        when(modulePermissionGuard.requirePermission(principal, "sales-order", "read")).thenReturn("sales-order");
+        doThrow(new BusinessException(ErrorCode.NOT_FOUND, "业务记录不存在"))
+                .when(attachmentRecordAccessService)
+                .assertRecordAccessible(principal, "sales-order", "read", 2L);
+        when(attachmentWebService.counts(eq("sales-order"), eq(List.of(1L)))).thenReturn(counts);
+
+        ApiResponse<AttachmentBindingCountResponse> response = controller.counts(principal, "sales-order", "1,2");
+
+        assertThat(response.code()).isEqualTo(0);
+        assertThat(response.data()).isEqualTo(counts);
+        verify(attachmentRecordAccessService).assertRecordAccessible(principal, "sales-order", "read", 1L);
+        verify(attachmentRecordAccessService).assertRecordAccessible(principal, "sales-order", "read", 2L);
+        verify(attachmentWebService).counts("sales-order", List.of(1L));
     }
 }

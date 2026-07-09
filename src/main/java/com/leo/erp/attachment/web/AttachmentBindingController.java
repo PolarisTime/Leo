@@ -6,6 +6,8 @@ import com.leo.erp.attachment.web.dto.AttachmentBindingRequest;
 import com.leo.erp.attachment.web.dto.AttachmentBindingCountResponse;
 import com.leo.erp.attachment.web.dto.AttachmentBindingResponse;
 import com.leo.erp.common.api.ApiResponse;
+import com.leo.erp.common.error.BusinessException;
+import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.security.permission.ModulePermissionGuard;
 import com.leo.erp.security.permission.RequiresPermission;
 import com.leo.erp.security.support.SecurityPrincipal;
@@ -22,6 +24,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
@@ -59,10 +62,13 @@ public class AttachmentBindingController {
                                                               @RequestParam @NotBlank String recordIds) {
         String normalizedModuleKey = modulePermissionGuard.requirePermission(principal, moduleKey, "read");
         List<Long> normalizedRecordIds = parseRecordIds(recordIds);
+        List<Long> accessibleRecordIds = new ArrayList<>(normalizedRecordIds.size());
         for (Long recordId : normalizedRecordIds) {
-            attachmentRecordAccessService.assertRecordAccessible(principal, normalizedModuleKey, "read", recordId);
+            if (canCountRecordAttachments(principal, normalizedModuleKey, recordId)) {
+                accessibleRecordIds.add(recordId);
+            }
         }
-        return ApiResponse.success(attachmentWebService.counts(normalizedModuleKey, normalizedRecordIds));
+        return ApiResponse.success(attachmentWebService.counts(normalizedModuleKey, accessibleRecordIds));
     }
 
     @PutMapping
@@ -85,5 +91,17 @@ public class AttachmentBindingController {
                 .filter(id -> id > 0)
                 .distinct()
                 .toList();
+    }
+
+    private boolean canCountRecordAttachments(SecurityPrincipal principal, String moduleKey, Long recordId) {
+        try {
+            attachmentRecordAccessService.assertRecordAccessible(principal, moduleKey, "read", recordId);
+            return true;
+        } catch (BusinessException ex) {
+            if (ex.getErrorCode() == ErrorCode.NOT_FOUND) {
+                return false;
+            }
+            throw ex;
+        }
     }
 }
