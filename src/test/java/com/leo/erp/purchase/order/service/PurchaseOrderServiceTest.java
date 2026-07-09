@@ -2,8 +2,6 @@ package com.leo.erp.purchase.order.service;
 
 import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.api.PageQuery;
-import com.leo.erp.common.charge.service.DocumentChargeItemService;
-import com.leo.erp.common.charge.web.dto.DocumentChargeItemRequest;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.TradeItemMaterialSupport;
 import com.leo.erp.common.support.TradeItemMaterialSupportTestDoubles;
@@ -772,12 +770,6 @@ class PurchaseOrderServiceTest {
     }
 
     private PurchaseOrderRequest buildRequest(Long itemId, String status) {
-        return buildRequest(itemId, status, null);
-    }
-
-    private PurchaseOrderRequest buildRequest(Long itemId,
-                                              String status,
-                                              List<DocumentChargeItemRequest> chargeItems) {
         return new PurchaseOrderRequest(
                 "PO-001",
                 "供应商A",
@@ -804,8 +796,7 @@ class PurchaseOrderServiceTest {
                         new BigDecimal("1.000"),
                         new BigDecimal("4000.00"),
                         new BigDecimal("4000.00")
-                )),
-                chargeItems
+                ))
         );
     }
 
@@ -888,61 +879,6 @@ class PurchaseOrderServiceTest {
 
         assertThat(response.status()).isEqualTo("草稿");
         verify(repository).save(any());
-    }
-
-    @Test
-    void shouldSyncChargeItemsWhenCreatingOrder() {
-        PurchaseOrderRepository repository = mock(PurchaseOrderRepository.class);
-        SnowflakeIdGenerator idGenerator = mock(SnowflakeIdGenerator.class);
-        PurchaseOrderMapper mapper = mock(PurchaseOrderMapper.class);
-        TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
-        WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
-        SupplierRepository supplierRepository = mock(SupplierRepository.class);
-        PurchaseInboundItemQueryService purchaseInboundItemQueryService = mock(PurchaseInboundItemQueryService.class);
-        DocumentChargeItemService chargeItemService = mock(DocumentChargeItemService.class);
-        PurchaseOrderService service = service(
-                repository,
-                idGenerator,
-                mapper,
-                materialSupport,
-                warehouseSelectionSupport,
-                supplierRepository,
-                purchaseInboundItemQueryService,
-                mock(ItemAllocationNativeRepository.class),
-                mock(PurchaseOrderItemPieceWeightService.class),
-                mock(WorkflowTransitionGuard.class),
-                mock(JdbcTemplate.class),
-                null,
-                chargeItemService
-        );
-        List<DocumentChargeItemRequest> chargeItems = List.of(new DocumentChargeItemRequest(
-                null,
-                "卸货费",
-                "PAYABLE",
-                "SUPPLIER",
-                7L,
-                "供应商A",
-                new BigDecimal("120.00"),
-                true,
-                "现场"
-        ));
-
-        when(repository.existsByOrderNoAndDeletedFlagFalse("PO-001")).thenReturn(false);
-        when(supplierRepository.findFirstBySupplierNameAndDeletedFlagFalseOrderBySupplierCodeAsc("供应商A"))
-                .thenReturn(Optional.of(supplier("供应商A")));
-        when(idGenerator.nextId()).thenReturn(1L, 11L);
-        when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(materialMap("M1"));
-        when(materialSupport.normalizeBatchNo(any(), anyString(), anyInt(), eq(false))).thenReturn("B1");
-        when(warehouseSelectionSupport.normalizeWarehouseName("一号库", 1, true)).thenReturn("一号库");
-        when(purchaseInboundItemQueryService.summarizeWeightAdjustmentBySourcePurchaseOrderItemIds(any()))
-                .thenReturn(Map.of());
-        when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
-        when(mapper.toResponse(any())).thenReturn(summaryResponse("草稿"));
-        when(chargeItemService.listResponses("purchase-order", 1L)).thenReturn(List.of());
-
-        service.create(buildRequest(null, "草稿", chargeItems));
-
-        verify(chargeItemService).sync("purchase-order", 1L, chargeItems);
     }
 
     @Test
@@ -1679,36 +1615,6 @@ class PurchaseOrderServiceTest {
                                          WorkflowTransitionGuard workflowTransitionGuard,
                                          JdbcTemplate jdbc,
                                          CompanySettingService companySettingService) {
-        return service(
-                purchaseOrderRepository,
-                snowflakeIdGenerator,
-                purchaseOrderMapper,
-                tradeItemMaterialSupport,
-                warehouseSelectionSupport,
-                supplierRepository,
-                purchaseInboundItemQueryService,
-                itemAllocationRepo,
-                purchaseOrderItemPieceWeightService,
-                workflowTransitionGuard,
-                jdbc,
-                companySettingService,
-                null
-        );
-    }
-
-    private PurchaseOrderService service(PurchaseOrderRepository purchaseOrderRepository,
-                                         SnowflakeIdGenerator snowflakeIdGenerator,
-                                         PurchaseOrderMapper purchaseOrderMapper,
-                                         TradeItemMaterialSupport tradeItemMaterialSupport,
-                                         WarehouseSelectionSupport warehouseSelectionSupport,
-                                         SupplierRepository supplierRepository,
-                                         PurchaseInboundItemQueryService purchaseInboundItemQueryService,
-                                         ItemAllocationNativeRepository itemAllocationRepo,
-                                         PurchaseOrderItemPieceWeightService purchaseOrderItemPieceWeightService,
-                                         WorkflowTransitionGuard workflowTransitionGuard,
-                                         JdbcTemplate jdbc,
-                                         CompanySettingService companySettingService,
-                                         DocumentChargeItemService chargeItemService) {
         TradeItemMaterialSupportTestDoubles.stubMaterialCodeNormalization(tradeItemMaterialSupport);
         PurchaseOrderAvailabilityService availabilityService = new PurchaseOrderAvailabilityService(
                 purchaseInboundItemQueryService,
@@ -1728,8 +1634,7 @@ class PurchaseOrderServiceTest {
                 ),
                 new PurchaseOrderPieceWeightQueryService(jdbc),
                 workflowTransitionGuard,
-                companySettingService,
-                chargeItemService
+                companySettingService
         );
     }
 

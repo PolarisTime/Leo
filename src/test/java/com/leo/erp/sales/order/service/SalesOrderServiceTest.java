@@ -3,8 +3,6 @@ package com.leo.erp.sales.order.service;
 import com.leo.erp.allocation.appservice.PurchaseItemQueryAppService;
 import com.leo.erp.allocation.appservice.PurchaseItemPieceWeightAppService;
 import com.leo.erp.common.api.PageQuery;
-import com.leo.erp.common.charge.service.DocumentChargeItemService;
-import com.leo.erp.common.charge.web.dto.DocumentChargeItemRequest;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.service.CrudRuntimeSettings;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
@@ -227,117 +225,6 @@ class SalesOrderServiceTest {
         assertThatThrownBy(() -> service.create(request))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("销售订单号已存在");
-    }
-
-    @Test
-    void shouldSyncChargeItemsOnlyWhenExplicitlyProvided() {
-        SalesOrderRepository repository = mock(SalesOrderRepository.class);
-        SnowflakeIdGenerator idGenerator = mock(SnowflakeIdGenerator.class);
-        SalesOrderMapper mapper = mock(SalesOrderMapper.class);
-        TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
-        WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
-        DocumentChargeItemService chargeItemService = mock(DocumentChargeItemService.class);
-        SalesOrderService service = service(
-                repository,
-                idGenerator,
-                mapper,
-                materialSupport,
-                mock(PurchaseItemQueryAppService.class),
-                mock(PurchaseItemPieceWeightAppService.class),
-                mock(SalesOrderItemRepository.class),
-                warehouseSelectionSupport,
-                stubbedSalesOrderItemMapper(),
-                mock(WorkflowTransitionGuard.class),
-                null,
-                null,
-                chargeItemService
-        );
-        SalesOrderRequest baseRequest = new SalesOrderRequest(
-                "SO-CHARGE-001", null, null, "客户A", "项目A",
-                LocalDate.of(2026, 4, 26), "张三", "草稿", null,
-                List.of(new SalesOrderItemRequest(
-                        "M1", "宝钢", "盘螺", "HRB400", "8", null, "吨",
-                        null, null, "一号库", null, 1, "件",
-                        new BigDecimal("2.000"), 1, new BigDecimal("2.000"),
-                        new BigDecimal("3000.00"), new BigDecimal("6000.00")
-                ))
-        );
-        List<DocumentChargeItemRequest> chargeItems = List.of(new DocumentChargeItemRequest(
-                null,
-                "服务费",
-                "RECEIVABLE",
-                "CUSTOMER",
-                7L,
-                "客户A",
-                new BigDecimal("66.60"),
-                true,
-                null
-        ));
-
-        when(repository.existsByOrderNoAndDeletedFlagFalse("SO-CHARGE-001")).thenReturn(false);
-        when(idGenerator.nextId()).thenReturn(1L, 11L);
-        when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(materialMap("M1"));
-        when(materialSupport.normalizeBatchNo(any(), eq(null), eq(1), eq(true))).thenReturn("AUTO");
-        when(warehouseSelectionSupport.normalizeWarehouseName("一号库", 1, true)).thenReturn("一号库");
-        when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
-        when(mapper.toResponse(any())).thenReturn(new SalesOrderResponse(
-                1L, "SO-CHARGE-001", null, null, "客户A", "项目A",
-                LocalDate.of(2026, 4, 26), "张三", new BigDecimal("2.000"),
-                new BigDecimal("6000.00"), "草稿", null, List.of()));
-
-        service.create(requestWithChargeItems(baseRequest, chargeItems));
-
-        verify(chargeItemService).sync("sales-order", 1L, chargeItems);
-    }
-
-    @Test
-    void shouldNotSyncChargeItemsWhenRequestOmitsThem() {
-        SalesOrderRepository repository = mock(SalesOrderRepository.class);
-        SnowflakeIdGenerator idGenerator = mock(SnowflakeIdGenerator.class);
-        SalesOrderMapper mapper = mock(SalesOrderMapper.class);
-        TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
-        WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
-        DocumentChargeItemService chargeItemService = mock(DocumentChargeItemService.class);
-        SalesOrderService service = service(
-                repository,
-                idGenerator,
-                mapper,
-                materialSupport,
-                mock(PurchaseItemQueryAppService.class),
-                mock(PurchaseItemPieceWeightAppService.class),
-                mock(SalesOrderItemRepository.class),
-                warehouseSelectionSupport,
-                stubbedSalesOrderItemMapper(),
-                mock(WorkflowTransitionGuard.class),
-                null,
-                null,
-                chargeItemService
-        );
-        SalesOrderRequest request = new SalesOrderRequest(
-                "SO-NO-CHARGE-001", null, null, "客户A", "项目A",
-                LocalDate.of(2026, 4, 26), "张三", "草稿", null,
-                List.of(new SalesOrderItemRequest(
-                        "M1", "宝钢", "盘螺", "HRB400", "8", null, "吨",
-                        null, null, "一号库", null, 1, "件",
-                        new BigDecimal("2.000"), 1, new BigDecimal("2.000"),
-                        new BigDecimal("3000.00"), new BigDecimal("6000.00")
-                ))
-        );
-
-        when(repository.existsByOrderNoAndDeletedFlagFalse("SO-NO-CHARGE-001")).thenReturn(false);
-        when(idGenerator.nextId()).thenReturn(1L, 11L);
-        when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(materialMap("M1"));
-        when(materialSupport.normalizeBatchNo(any(), eq(null), eq(1), eq(true))).thenReturn("AUTO");
-        when(warehouseSelectionSupport.normalizeWarehouseName("一号库", 1, true)).thenReturn("一号库");
-        when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
-        when(mapper.toResponse(any())).thenReturn(new SalesOrderResponse(
-                1L, "SO-NO-CHARGE-001", null, null, "客户A", "项目A",
-                LocalDate.of(2026, 4, 26), "张三", new BigDecimal("2.000"),
-                new BigDecimal("6000.00"), "草稿", null, List.of()));
-
-        service.create(request);
-
-        verify(chargeItemService, never()).sync(any(), any(), any());
     }
 
     @Test
@@ -1983,7 +1870,6 @@ class SalesOrderServiceTest {
                 salesOrderItemMapper,
                 workflowTransitionGuard,
                 null,
-                null,
                 null
         );
     }
@@ -2000,36 +1886,6 @@ class SalesOrderServiceTest {
                                       WorkflowTransitionGuard workflowTransitionGuard,
                                       SalesOrderOutboundPricingSyncService outboundPricingSyncService,
                                       SalesOrderCompletionSyncService completionSyncService) {
-        return service(
-                repository,
-                idGenerator,
-                salesOrderMapper,
-                tradeItemMaterialSupport,
-                purchaseItemQueryAppService,
-                purchaseItemPieceWeightAppService,
-                salesOrderItemRepository,
-                warehouseSelectionSupport,
-                salesOrderItemMapper,
-                workflowTransitionGuard,
-                outboundPricingSyncService,
-                completionSyncService,
-                null
-        );
-    }
-
-    private SalesOrderService service(SalesOrderRepository repository,
-                                      SnowflakeIdGenerator idGenerator,
-                                      SalesOrderMapper salesOrderMapper,
-                                      TradeItemMaterialSupport tradeItemMaterialSupport,
-                                      PurchaseItemQueryAppService purchaseItemQueryAppService,
-                                      PurchaseItemPieceWeightAppService purchaseItemPieceWeightAppService,
-                                      SalesOrderItemRepository salesOrderItemRepository,
-                                      WarehouseSelectionSupport warehouseSelectionSupport,
-                                      SalesOrderItemMapper salesOrderItemMapper,
-                                      WorkflowTransitionGuard workflowTransitionGuard,
-                                      SalesOrderOutboundPricingSyncService outboundPricingSyncService,
-                                      SalesOrderCompletionSyncService completionSyncService,
-                                      DocumentChargeItemService chargeItemService) {
         TradeItemMaterialSupportTestDoubles.stubMaterialCodeNormalization(tradeItemMaterialSupport);
         SalesOrderPurchaseAllocationService purchaseAllocationService =
                 new SalesOrderPurchaseAllocationService(purchaseItemQueryAppService, purchaseItemPieceWeightAppService);
@@ -2046,7 +1902,7 @@ class SalesOrderServiceTest {
         return new SalesOrderService(
                 repository,
                 idGenerator,
-                new SalesOrderResponseAssembler(salesOrderMapper, chargeItemService),
+                new SalesOrderResponseAssembler(salesOrderMapper),
                 applyService,
                 purchaseAllocationService,
                 auditedPricingService,
@@ -2057,8 +1913,7 @@ class SalesOrderServiceTest {
                         completionSyncService,
                         new SalesOrderCompletionPolicy()
                 ),
-                salesOrderItemRepository,
-                chargeItemService
+                salesOrderItemRepository
         );
     }
 
@@ -2121,29 +1976,6 @@ class SalesOrderServiceTest {
                         item.getQuantityUnit(), item.getPieceWeightTon(), item.getPiecesPerBundle(),
                         item.getWeightTon(), unitPrice, null
                 ))
-        );
-    }
-
-    private SalesOrderRequest requestWithChargeItems(
-            SalesOrderRequest request,
-            List<DocumentChargeItemRequest> chargeItems
-    ) {
-        return new SalesOrderRequest(
-                request.orderNo(),
-                request.purchaseInboundNo(),
-                request.purchaseOrderNo(),
-                request.customerCode(),
-                request.customerName(),
-                request.projectId(),
-                request.projectName(),
-                request.settlementCompanyId(),
-                request.settlementCompanyName(),
-                request.deliveryDate(),
-                request.salesName(),
-                request.status(),
-                request.remark(),
-                request.items(),
-                chargeItems
         );
     }
 

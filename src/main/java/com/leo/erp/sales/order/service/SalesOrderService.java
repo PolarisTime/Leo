@@ -2,7 +2,6 @@ package com.leo.erp.sales.order.service;
 
 import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.api.PageQuery;
-import com.leo.erp.common.charge.service.DocumentChargeItemService;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
@@ -36,20 +35,6 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
     private final SalesOrderProtectedUpdatePolicy protectedUpdatePolicy;
     private final SalesOrderSaveService saveService;
     private final SalesOrderItemRepository salesOrderItemRepository;
-    private final DocumentChargeItemService chargeItemService;
-
-    public SalesOrderService(SalesOrderRepository repository,
-                             SnowflakeIdGenerator idGenerator,
-                             SalesOrderResponseAssembler responseAssembler,
-                             SalesOrderApplyService salesOrderApplyService,
-                             SalesOrderPurchaseAllocationService salesOrderPurchaseAllocationService,
-                             SalesOrderAuditedPricingService salesOrderAuditedPricingService,
-                             SalesOrderProtectedUpdatePolicy protectedUpdatePolicy,
-                             SalesOrderSaveService saveService,
-                             SalesOrderItemRepository salesOrderItemRepository) {
-        this(repository, idGenerator, responseAssembler, salesOrderApplyService, salesOrderPurchaseAllocationService,
-                salesOrderAuditedPricingService, protectedUpdatePolicy, saveService, salesOrderItemRepository, null);
-    }
 
     @Autowired
     public SalesOrderService(SalesOrderRepository repository,
@@ -60,8 +45,7 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
                              SalesOrderAuditedPricingService salesOrderAuditedPricingService,
                              SalesOrderProtectedUpdatePolicy protectedUpdatePolicy,
                              SalesOrderSaveService saveService,
-                             SalesOrderItemRepository salesOrderItemRepository,
-                             DocumentChargeItemService chargeItemService) {
+                             SalesOrderItemRepository salesOrderItemRepository) {
         super(idGenerator);
         this.repository = repository;
         this.responseAssembler = responseAssembler;
@@ -71,7 +55,6 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
         this.protectedUpdatePolicy = protectedUpdatePolicy;
         this.saveService = saveService;
         this.salesOrderItemRepository = salesOrderItemRepository;
-        this.chargeItemService = chargeItemService;
     }
 
     @Transactional(readOnly = true)
@@ -181,8 +164,7 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
                 request.salesName(),
                 request.status(),
                 request.remark(),
-                request.items(),
-                request.chargeItems()
+                request.items()
         );
     }
 
@@ -202,8 +184,7 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
                 request.salesName(),
                 request.status(),
                 request.remark(),
-                request.items(),
-                request.chargeItems()
+                request.items()
         );
     }
 
@@ -256,18 +237,9 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
     protected void apply(SalesOrder entity, SalesOrderRequest request) {
         if (salesOrderAuditedPricingService.isAuditedPricingUpdate(entity, request)) {
             salesOrderAuditedPricingService.applyAuditedPricingUpdate(entity, request);
-            syncChargeItems(entity, request);
             return;
         }
         salesOrderApplyService.apply(entity, request, this::nextId);
-        syncChargeItems(entity, request);
-    }
-
-    private void syncChargeItems(SalesOrder entity, SalesOrderRequest request) {
-        if (request.chargeItems() == null || chargeItemService == null) {
-            return;
-        }
-        chargeItemService.sync("sales-order", entity.getId(), request.chargeItems());
     }
 
     @Override

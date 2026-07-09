@@ -67,30 +67,22 @@ public class PrintScriptService {
         PrintRecordData recordData = dataProvider.loadRecord(moduleKey, recordId);
         Map<String, String> data = recordData.data();
         List<Map<String, String>> items = recordData.items();
-        List<Map<String, String>> chargeItems = recordData.chargeItems();
-        data.putIfAbsent("moduleKey", moduleKey);
 
         recordEnricher.enrich(moduleKey, data, items);
         assertTemplateMatchesSettlementCompany(template, data);
         items = applyItemOrder(items, options);
         items = layoutPreparer.prepare(moduleKey, template.getTemplateName(), template.getTemplateHtml(), data, items);
         applyPrintOptions(data, items, options);
-        Map<String, List<Map<String, String>>> sections = new LinkedHashMap<>(recordData.sections());
-        sections.put(PrintRecordData.ITEMS_SECTION, items);
-        sections.put(PrintRecordData.CHARGE_ITEMS_SECTION, chargeItems);
-        PrintChargeSummary.applyTo(data, sections);
 
         Map<String, Object> result = new HashMap<>();
         result.put("templateName", template.getTemplateName());
-        result.put("templateHtml", renderTemplateHtml(template, data, sections));
+        result.put("templateHtml", renderTemplateHtml(template, data, items));
         result.put("templateType", template.getTemplateType() != null ? template.getTemplateType() : "COORD");
         result.put("businessNo", resolvePrintBusinessNo(data));
         result.put("recordId", recordId);
         result.put("moduleKey", moduleKey);
         result.put("data", data);
         result.put("items", items);
-        result.put("chargeItems", chargeItems);
-        result.put("sections", sections);
         return result;
     }
 
@@ -233,19 +225,10 @@ public class PrintScriptService {
         throw new BusinessException(ErrorCode.UNAUTHORIZED, "未登录");
     }
 
-    private String renderTemplateHtml(
-            PrintTemplate template,
-            Map<String, String> data,
-            Map<String, List<Map<String, String>>> sections
-    ) {
+    private String renderTemplateHtml(PrintTemplate template, Map<String, String> data, List<Map<String, String>> items) {
         String templateHtml = template.getTemplateHtml();
         if ("COORD".equals(template.getTemplateType()) && layoutLodopRenderer.supports(templateHtml)) {
-            return layoutLodopRenderer.render(
-                    template.getTemplateName(),
-                    templateHtml,
-                    data,
-                    sections
-            );
+            return layoutLodopRenderer.render(template.getTemplateName(), templateHtml, data, items);
         }
         return templateHtml;
     }

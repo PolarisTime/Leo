@@ -12,8 +12,5 @@ public interface PurchaseInboundMapper {
     @Mapping(target = "items", ignore = true)
     @Mapping(target = "totalWeighWeightTon", ignore = true)
     @Mapping(target = "totalWeightAdjustmentTon", ignore = true)
-    @Mapping(target = "chargeItems", ignore = true)
-    @Mapping(target = "totalChargeAmount", ignore = true)
-    @Mapping(target = "payableAmount", ignore = true)
     PurchaseInboundResponse toResponse(PurchaseInbound inbound);
 }

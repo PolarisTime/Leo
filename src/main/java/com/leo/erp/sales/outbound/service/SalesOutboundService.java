@@ -2,7 +2,6 @@ package com.leo.erp.sales.outbound.service;
 
 import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.api.PageQuery;
-import com.leo.erp.common.charge.service.DocumentChargeItemService;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
@@ -35,17 +34,6 @@ public class SalesOutboundService extends AbstractCrudService<SalesOutbound, Sal
     private final SalesOutboundApplyService salesOutboundApplyService;
     private final SalesOutboundResponseAssembler responseAssembler;
     private final SalesOutboundSaveService saveService;
-    private final DocumentChargeItemService chargeItemService;
-
-    public SalesOutboundService(SalesOutboundRepository repository,
-                                SnowflakeIdGenerator idGenerator,
-                                WorkflowTransitionGuard workflowTransitionGuard,
-                                SalesOutboundApplyService salesOutboundApplyService,
-                                SalesOutboundResponseAssembler responseAssembler,
-                                SalesOutboundSaveService saveService) {
-        this(repository, idGenerator, workflowTransitionGuard, salesOutboundApplyService,
-                responseAssembler, saveService, null);
-    }
 
     @Autowired
     public SalesOutboundService(SalesOutboundRepository repository,
@@ -53,15 +41,13 @@ public class SalesOutboundService extends AbstractCrudService<SalesOutbound, Sal
                                 WorkflowTransitionGuard workflowTransitionGuard,
                                 SalesOutboundApplyService salesOutboundApplyService,
                                 SalesOutboundResponseAssembler responseAssembler,
-                                SalesOutboundSaveService saveService,
-                                DocumentChargeItemService chargeItemService) {
+                                SalesOutboundSaveService saveService) {
         super(idGenerator);
         this.repository = repository;
         this.workflowTransitionGuard = workflowTransitionGuard;
         this.salesOutboundApplyService = salesOutboundApplyService;
         this.responseAssembler = responseAssembler;
         this.saveService = saveService;
-        this.chargeItemService = chargeItemService;
     }
 
     @Transactional(readOnly = true)
@@ -112,8 +98,7 @@ public class SalesOutboundService extends AbstractCrudService<SalesOutbound, Sal
                 request.outboundDate(),
                 request.status(),
                 request.remark(),
-                request.items(),
-                request.chargeItems()
+                request.items()
         );
     }
 
@@ -131,8 +116,7 @@ public class SalesOutboundService extends AbstractCrudService<SalesOutbound, Sal
                 request.outboundDate(),
                 request.status(),
                 request.remark(),
-                request.items(),
-                request.chargeItems()
+                request.items()
         );
     }
 
@@ -165,8 +149,7 @@ public class SalesOutboundService extends AbstractCrudService<SalesOutbound, Sal
                 request.outboundDate(),
                 request.status(),
                 request.remark(),
-                restrictedItems,
-                request.chargeItems()
+                restrictedItems
         );
     }
 
@@ -230,7 +213,7 @@ public class SalesOutboundService extends AbstractCrudService<SalesOutbound, Sal
 
     @Override
     protected java.util.Set<String> allowedStatusTransitions() {
-        return StatusConstants.SALES_OUTBOUND_TRANSITIONS;
+        return StatusConstants.DRAFT_AUDIT_TRANSITIONS;
     }
 
     @Override
@@ -255,29 +238,6 @@ public class SalesOutboundService extends AbstractCrudService<SalesOutbound, Sal
         entity.setStatus(nextStatus);
         entity.setRemark(request.remark());
         salesOutboundApplyService.applyItems(entity, request, this::nextId);
-        syncChargeItems(entity, request);
-        copyChargeItemsFromSource(entity, request);
-    }
-
-    private void syncChargeItems(SalesOutbound entity, SalesOutboundRequest request) {
-        if (request.chargeItems() == null || chargeItemService == null) {
-            return;
-        }
-        chargeItemService.sync("sales-outbound", entity.getId(), request.chargeItems());
-    }
-
-    private void copyChargeItemsFromSource(SalesOutbound entity, SalesOutboundRequest request) {
-        if (request.chargeItems() != null || chargeItemService == null || entity.getId() == null) {
-            return;
-        }
-        salesOutboundApplyService.sourceSalesOrderIds(entity).forEach(sourceSalesOrderId ->
-                chargeItemService.copyFromSource(
-                        "sales-order",
-                        sourceSalesOrderId,
-                        "sales-outbound",
-                        entity.getId()
-                )
-        );
     }
 
     @Override

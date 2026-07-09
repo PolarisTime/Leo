@@ -1,8 +1,6 @@
 package com.leo.erp.purchase.inbound.service;
 
 import com.leo.erp.allocation.repository.ItemAllocationNativeRepository;
-import com.leo.erp.common.charge.service.DocumentChargeItemService;
-import com.leo.erp.common.charge.web.dto.DocumentChargeItemResponse;
 import com.leo.erp.purchase.inbound.domain.entity.PurchaseInbound;
 import com.leo.erp.purchase.inbound.domain.entity.PurchaseInboundItem;
 import com.leo.erp.purchase.inbound.mapper.PurchaseInboundMapper;
@@ -84,62 +82,6 @@ class PurchaseInboundResponseAssemblerTest {
             assertThat(i.weighWeightTon()).isNull();
             assertThat(i.weightTon()).isEqualByComparingTo("1.200");
         });
-    }
-
-    @Test
-    void shouldAppendChargeItemsAndPayableTotalsToDetailResponse() {
-        PurchaseInbound inbound = inbound();
-        inbound.setTotalAmount(new BigDecimal("4800.00"));
-        PurchaseInboundMapper mapper = mock(PurchaseInboundMapper.class);
-        when(mapper.toResponse(inbound)).thenReturn(summary(inbound));
-        DocumentChargeItemService chargeItemService = mock(DocumentChargeItemService.class);
-        List<DocumentChargeItemResponse> chargeItems = List.of(
-                new DocumentChargeItemResponse(
-                        101L,
-                        1,
-                        "卸货费",
-                        "PAYABLE",
-                        "SUPPLIER",
-                        7L,
-                        "供应商A",
-                        new BigDecimal("80.50"),
-                        true,
-                        null,
-                        null,
-                        null,
-                        "现场"
-                ),
-                new DocumentChargeItemResponse(
-                        102L,
-                        2,
-                        "代收款",
-                        "RECEIVABLE",
-                        "CUSTOMER",
-                        8L,
-                        "客户A",
-                        new BigDecimal("30.00"),
-                        true,
-                        null,
-                        null,
-                        null,
-                        null
-                )
-        );
-        when(chargeItemService.listResponses("purchase-inbound", 1L)).thenReturn(chargeItems);
-        PurchaseInboundResponseAssembler assembler = new PurchaseInboundResponseAssembler(
-                mapper,
-                mock(PurchaseInboundItemRepository.class),
-                mock(ItemAllocationNativeRepository.class),
-                chargeItemService
-        );
-
-        PurchaseInboundResponse response = assembler.toDetailResponse(inbound);
-
-        assertThat(response.totalAmount()).isEqualByComparingTo("4800.00");
-        assertThat(response.totalChargeAmount()).isEqualByComparingTo("80.50");
-        assertThat(response.payableAmount()).isEqualByComparingTo("4880.50");
-        assertThat(response.chargeItems()).extracting(DocumentChargeItemResponse::chargeName)
-                .containsExactly("卸货费", "代收款");
     }
 
     private PurchaseInbound inbound() {

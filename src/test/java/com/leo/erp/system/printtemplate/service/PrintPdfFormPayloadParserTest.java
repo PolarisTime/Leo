@@ -40,28 +40,6 @@ class PrintPdfFormPayloadParserTest {
     }
 
     @Test
-    void shouldParseTopLevelChargeItemsAndSections() {
-        PrintPdfFormPayload payload = parser.parse(Map.of(
-                "templateType", "PDF_FORM",
-                "templateHtml", "{\"tables\":[{\"key\":\"items\",\"source\":\"items\",\"columns\":[{\"key\":\"material\"}]},{\"key\":\"chargeItems\",\"source\":\"chargeItems\",\"columns\":[{\"key\":\"chargeName\"}]}]}",
-                "items", List.of(Map.of("material", "HRB400E")),
-                "chargeItems", List.of(Map.of("chargeName", "卸货费", "amount", "12.50")),
-                "sections", Map.of(
-                        "items", List.of(Map.of("material", "HRB400E")),
-                        "chargeItems", List.of(Map.of("chargeName", "卸货费", "amount", "12.50")),
-                        "invalid", "ignored"
-                )
-        ));
-
-        assertThat(payload.items()).containsExactly(Map.of("material", "HRB400E"));
-        assertThat(payload.chargeItems()).containsExactly(Map.of("chargeName", "卸货费", "amount", "12.50"));
-        assertThat(payload.sections())
-                .containsEntry("items", payload.items())
-                .containsEntry("chargeItems", payload.chargeItems())
-                .doesNotContainKey("invalid");
-    }
-
-    @Test
     void shouldIgnoreNonStringPayloadFields() {
         Map<String, Object> data = new HashMap<>();
         data.put("billNo", "SO-001");

@@ -2,8 +2,6 @@ package com.leo.erp.logistics.bill.service;
 
 import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.api.PageQuery;
-import com.leo.erp.common.charge.service.DocumentChargeItemService;
-import com.leo.erp.common.charge.web.dto.DocumentChargeItemResponse;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.service.AbstractCrudService;
@@ -31,8 +29,6 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -45,9 +41,6 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
 
     private static final Set<String> IMPORTABLE_OUTBOUND_STATUSES =
             Set.of(StatusConstants.PRE_OUTBOUND, StatusConstants.AUDITED);
-    private static final String MODULE_KEY = "freight-bill";
-    private static final String PAYABLE = "PAYABLE";
-    private static final BigDecimal ZERO_AMOUNT = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
 
     private final FreightBillRepository repository;
     private final SalesOutboundRepository salesOutboundRepository;
@@ -57,7 +50,6 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
     private final WorkflowTransitionGuard workflowTransitionGuard;
     private final CarrierRepository carrierRepository;
     private final CompanySettingService companySettingService;
-    private final DocumentChargeItemService chargeItemService;
 
     public FreightBillService(FreightBillRepository repository,
                               SalesOutboundRepository salesOutboundRepository,
@@ -67,7 +59,7 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
                               FreightBillApplyService freightBillApplyService,
                               WorkflowTransitionGuard workflowTransitionGuard) {
         this(repository, salesOutboundRepository, idGenerator, freightBillMapper, freightBillSourceService,
-                freightBillApplyService, workflowTransitionGuard, null, null, null);
+                freightBillApplyService, workflowTransitionGuard, null);
     }
 
     public FreightBillService(FreightBillRepository repository,
@@ -79,20 +71,7 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
                               WorkflowTransitionGuard workflowTransitionGuard,
                               CarrierRepository carrierRepository) {
         this(repository, salesOutboundRepository, idGenerator, freightBillMapper, freightBillSourceService,
-                freightBillApplyService, workflowTransitionGuard, carrierRepository, null, null);
-    }
-
-    public FreightBillService(FreightBillRepository repository,
-                              SalesOutboundRepository salesOutboundRepository,
-                              SnowflakeIdGenerator idGenerator,
-                              FreightBillMapper freightBillMapper,
-                              FreightBillSourceService freightBillSourceService,
-                              FreightBillApplyService freightBillApplyService,
-                              WorkflowTransitionGuard workflowTransitionGuard,
-                              CarrierRepository carrierRepository,
-                              CompanySettingService companySettingService) {
-        this(repository, salesOutboundRepository, idGenerator, freightBillMapper, freightBillSourceService,
-                freightBillApplyService, workflowTransitionGuard, carrierRepository, companySettingService, null);
+                freightBillApplyService, workflowTransitionGuard, carrierRepository, null);
     }
 
     @Autowired
@@ -104,8 +83,7 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
                               FreightBillApplyService freightBillApplyService,
                               WorkflowTransitionGuard workflowTransitionGuard,
                               CarrierRepository carrierRepository,
-                              CompanySettingService companySettingService,
-                              DocumentChargeItemService chargeItemService) {
+                              CompanySettingService companySettingService) {
         super(idGenerator);
         this.repository = repository;
         this.salesOutboundRepository = salesOutboundRepository;
@@ -115,7 +93,6 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
         this.workflowTransitionGuard = workflowTransitionGuard;
         this.carrierRepository = carrierRepository;
         this.companySettingService = companySettingService;
-        this.chargeItemService = chargeItemService;
     }
 
     public Page<FreightBillResponse> page(PageQuery query, PageFilter filter) {
@@ -154,8 +131,6 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
     @Override
     protected FreightBillResponse toDetailResponse(FreightBill entity) {
         FreightBillResponse response = freightBillMapper.toResponse(entity);
-        List<DocumentChargeItemResponse> chargeItems = loadChargeItems(entity);
-        BigDecimal totalChargeAmount = totalChargeAmount(chargeItems);
         Map<Long, String> sourceStatusByItemId = resolveSourceOutboundStatusByItemId(entity.getItems());
         return new FreightBillResponse(
                 response.id(), response.billNo(),
@@ -174,41 +149,8 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
                         item.getMaterial(), item.getSpec(), item.getLength(),
                         item.getQuantity(), item.getQuantityUnit(), item.getPieceWeightTon(), item.getPiecesPerBundle(),
                         item.getBatchNo(), item.getWeightTon(), item.getWarehouseName()
-                )).toList(),
-                chargeItems,
-                totalChargeAmount,
-                payableAmount(response.totalFreight(), totalChargeAmount)
+                )).toList()
         );
-    }
-
-    private List<DocumentChargeItemResponse> loadChargeItems(FreightBill entity) {
-        if (chargeItemService == null || entity.getId() == null) {
-            return List.of();
-        }
-        List<DocumentChargeItemResponse> chargeItems = chargeItemService.listResponses(MODULE_KEY, entity.getId());
-        return chargeItems == null ? List.of() : chargeItems;
-    }
-
-    private BigDecimal totalChargeAmount(List<DocumentChargeItemResponse> chargeItems) {
-        return chargeItems.stream()
-                .filter(item -> Boolean.TRUE.equals(item.billable()))
-                .filter(item -> PAYABLE.equals(item.chargeDirection()))
-                .map(DocumentChargeItemResponse::amount)
-                .filter(amount -> amount != null)
-                .map(this::scaleAmount)
-                .reduce(BigDecimal.ZERO, BigDecimal::add)
-                .setScale(2, RoundingMode.HALF_UP);
-    }
-
-    private BigDecimal payableAmount(BigDecimal totalFreight, BigDecimal totalChargeAmount) {
-        return scaleAmount(totalFreight == null ? BigDecimal.ZERO : totalFreight).add(totalChargeAmount);
-    }
-
-    private BigDecimal scaleAmount(BigDecimal amount) {
-        if (amount == null) {
-            return ZERO_AMOUNT;
-        }
-        return amount.setScale(2, RoundingMode.HALF_UP);
     }
 
     private String resolveSourceStatus(FreightBillItem item, Map<Long, String> sourceStatusByItemId) {
@@ -260,8 +202,7 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
                 request.unitPrice(),
                 request.status(),
                 request.remark(),
-                request.items(),
-                request.chargeItems()
+                request.items()
         );
     }
 
@@ -279,8 +220,7 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
                 request.unitPrice(),
                 request.status(),
                 request.remark(),
-                request.items(),
-                request.chargeItems()
+                request.items()
         );
     }
 
@@ -348,14 +288,6 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
             freightBillSourceService.assertSourcesAuditable(sourceContext);
         }
         freightBillApplyService.applyItems(entity, request, sourceContext, this::nextId);
-        syncChargeItems(entity, request);
-    }
-
-    private void syncChargeItems(FreightBill entity, FreightBillRequest request) {
-        if (request.chargeItems() == null || chargeItemService == null) {
-            return;
-        }
-        chargeItemService.sync(MODULE_KEY, entity.getId(), request.chargeItems());
     }
 
     @Override

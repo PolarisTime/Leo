@@ -10,8 +10,5 @@ import org.mapstruct.Mapping;
 public interface SalesOrderMapper {
 
     @Mapping(target = "items", ignore = true)
-    @Mapping(target = "chargeItems", ignore = true)
-    @Mapping(target = "totalChargeAmount", ignore = true)
-    @Mapping(target = "receivableAmount", ignore = true)
     SalesOrderResponse toResponse(SalesOrder order);
 }

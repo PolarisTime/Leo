@@ -3,8 +3,6 @@ package com.leo.erp.purchase.inbound.service;
 import com.leo.erp.allocation.repository.ItemAllocationNativeRepository;
 import com.leo.erp.purchase.inbound.service.InboundItemMapper;
 
-import com.leo.erp.common.charge.service.DocumentChargeItemService;
-import com.leo.erp.common.charge.web.dto.DocumentChargeItemRequest;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.service.CrudRuntimeSettings;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
@@ -50,7 +48,6 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentCaptor.forClass;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -152,106 +149,6 @@ class PurchaseInboundServiceTest {
                 eq(List.of(201L)),
                 any()
         );
-    }
-
-    @Test
-    void shouldSyncChargeItemsOnlyWhenExplicitlyProvided() {
-        PurchaseInboundRepository repository = mock(PurchaseInboundRepository.class);
-        SnowflakeIdGenerator idGenerator = mock(SnowflakeIdGenerator.class);
-        PurchaseInboundMapper mapper = mock(PurchaseInboundMapper.class);
-        TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
-        WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
-        MaterialCategoryRepository materialCategoryRepository = mock(MaterialCategoryRepository.class);
-        PurchaseInboundItemRepository purchaseInboundItemRepository = mock(PurchaseInboundItemRepository.class);
-        PurchaseOrderRepository purchaseOrderRepository = mock(PurchaseOrderRepository.class);
-        PurchaseOrderItemQueryService purchaseOrderItemQueryService = mock(PurchaseOrderItemQueryService.class);
-        DocumentChargeItemService chargeItemService = mock(DocumentChargeItemService.class);
-        PurchaseInboundService service = service(
-                repository,
-                idGenerator,
-                mapper,
-                materialSupport,
-                warehouseSelectionSupport,
-                new PurchaseInboundWeightSettlementService(materialCategoryRepository),
-                weightWriteBackService(purchaseInboundItemRepository, purchaseOrderRepository, mock(PurchaseOrderItemPieceWeightService.class)),
-                completionSyncService(repository, sourceValidator(purchaseOrderItemQueryService, purchaseInboundItemRepository)),
-                purchaseInboundItemRepository,
-                sourceValidator(purchaseOrderItemQueryService, purchaseInboundItemRepository),
-                mock(ItemAllocationNativeRepository.class),
-                stubbedInboundItemMapper(), mock(WorkflowTransitionGuard.class),
-                chargeItemService
-        );
-        List<DocumentChargeItemRequest> chargeItems = List.of(new DocumentChargeItemRequest(
-                null,
-                "卸货费",
-                "PAYABLE",
-                "SUPPLIER",
-                7L,
-                "供应商A",
-                new BigDecimal("80.00"),
-                true,
-                null
-        ));
-        PurchaseOrderItem sourceItem = sourcePurchaseOrderItem();
-
-        when(repository.existsByInboundNoAndDeletedFlagFalse("PI-001")).thenReturn(false);
-        when(idGenerator.nextId()).thenReturn(1L, 11L);
-        when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(materialMap("M1"));
-        when(materialSupport.normalizeBatchNo(any(), eq("B1"), eq(1), eq(true))).thenReturn("B1");
-        when(warehouseSelectionSupport.normalizeWarehouseName("一号库", 1, true)).thenReturn("一号库");
-        when(materialCategoryRepository.findByCategoryNameInAndDeletedFlagFalse(List.of("螺纹钢"))).thenReturn(List.of());
-        when(purchaseOrderItemQueryService.findActiveByIdIn(List.of(201L))).thenReturn(List.of(sourceItem));
-        when(purchaseInboundItemRepository.summarizeAllocatedQuantityBySourcePurchaseOrderItemIdsExcludingInbound(
-                eq(List.of(201L)),
-                any()
-        )).thenReturn(List.of());
-        when(purchaseInboundItemRepository.summarizeWeightAdjustmentBySourcePurchaseOrderItemIdsExcludingInbound(
-                eq(List.of(201L)),
-                any()
-        )).thenReturn(List.of());
-        when(purchaseInboundItemRepository.summarizeWeighWeightBySourcePurchaseOrderItemIdsExcludingInbound(
-                eq(List.of(201L)),
-                any()
-        )).thenReturn(List.of());
-        when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
-        when(mapper.toResponse(any())).thenReturn(response());
-
-        service.create(requestWithChargeItems(request(), chargeItems));
-
-        verify(chargeItemService).sync("purchase-inbound", 1L, chargeItems);
-    }
-
-    @Test
-    void shouldNotSyncChargeItemsWhenRequestOmitsThem() {
-        PurchaseInboundRepository repository = mock(PurchaseInboundRepository.class);
-        PurchaseInboundMapper mapper = mock(PurchaseInboundMapper.class);
-        DocumentChargeItemService chargeItemService = mock(DocumentChargeItemService.class);
-        PurchaseOrderItemQueryService purchaseOrderItemQueryService = mock(PurchaseOrderItemQueryService.class);
-        PurchaseInboundService service = service(
-                repository,
-                mock(SnowflakeIdGenerator.class),
-                mapper,
-                mock(TradeItemMaterialSupport.class),
-                mock(WarehouseSelectionSupport.class),
-                new PurchaseInboundWeightSettlementService(mock(MaterialCategoryRepository.class)),
-                weightWriteBackService(mock(PurchaseInboundItemRepository.class), mock(PurchaseOrderRepository.class), mock(PurchaseOrderItemPieceWeightService.class)),
-                completionSyncService(repository, sourceValidator(purchaseOrderItemQueryService)),
-                mock(PurchaseInboundItemRepository.class),
-                sourceValidator(purchaseOrderItemQueryService),
-                mock(ItemAllocationNativeRepository.class),
-                stubbedInboundItemMapper(), mock(WorkflowTransitionGuard.class),
-                chargeItemService
-        );
-        PurchaseInbound inbound = inbound();
-        inbound.setId(1L);
-        when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(inbound));
-        when(purchaseOrderItemQueryService.findActiveByIdIn(List.of(201L))).thenReturn(List.of(sourcePurchaseOrderItem()));
-        when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
-        when(mapper.toResponse(any())).thenReturn(response());
-
-        service.update(1L, request());
-
-        verify(chargeItemService, never()).sync(any(), any(), any());
     }
 
     @Test
@@ -945,38 +842,6 @@ class PurchaseInboundServiceTest {
                                            ItemAllocationNativeRepository itemAllocationRepo,
                                            InboundItemMapper inboundItemMapper,
                                            WorkflowTransitionGuard workflowTransitionGuard) {
-        return service(
-                repository,
-                idGenerator,
-                purchaseInboundMapper,
-                tradeItemMaterialSupport,
-                warehouseSelectionSupport,
-                weightSettlementService,
-                weightWriteBackService,
-                completionSyncService,
-                purchaseInboundItemRepository,
-                sourceValidator,
-                itemAllocationRepo,
-                inboundItemMapper,
-                workflowTransitionGuard,
-                null
-        );
-    }
-
-    private PurchaseInboundService service(PurchaseInboundRepository repository,
-                                           SnowflakeIdGenerator idGenerator,
-                                           PurchaseInboundMapper purchaseInboundMapper,
-                                           TradeItemMaterialSupport tradeItemMaterialSupport,
-                                           WarehouseSelectionSupport warehouseSelectionSupport,
-                                           PurchaseInboundWeightSettlementService weightSettlementService,
-                                           PurchaseInboundWeightWriteBackService weightWriteBackService,
-                                           PurchaseInboundCompletionSyncService completionSyncService,
-                                           PurchaseInboundItemRepository purchaseInboundItemRepository,
-                                           PurchaseInboundSourceValidator sourceValidator,
-                                           ItemAllocationNativeRepository itemAllocationRepo,
-                                           InboundItemMapper inboundItemMapper,
-                                           WorkflowTransitionGuard workflowTransitionGuard,
-                                           DocumentChargeItemService chargeItemService) {
         TradeItemMaterialSupportTestDoubles.stubMaterialCodeNormalization(tradeItemMaterialSupport);
         return new PurchaseInboundService(
                 repository,
@@ -997,8 +862,7 @@ class PurchaseInboundServiceTest {
                         itemAllocationRepo
                 ),
                 new PurchaseInboundPieceWeightService(new PurchaseInboundItemQueryService(purchaseInboundItemRepository, null)),
-                workflowTransitionGuard,
-                chargeItemService
+                workflowTransitionGuard
         );
     }
 
@@ -1181,24 +1045,6 @@ class PurchaseInboundServiceTest {
                 request.status(),
                 request.remark(),
                 request.items()
-        );
-    }
-
-    private PurchaseInboundRequest requestWithChargeItems(
-            PurchaseInboundRequest request,
-            List<DocumentChargeItemRequest> chargeItems
-    ) {
-        return new PurchaseInboundRequest(
-                request.inboundNo(),
-                request.purchaseOrderNo(),
-                request.supplierName(),
-                request.warehouseName(),
-                request.inboundDate(),
-                request.settlementMode(),
-                request.status(),
-                request.remark(),
-                request.items(),
-                chargeItems
         );
     }
 

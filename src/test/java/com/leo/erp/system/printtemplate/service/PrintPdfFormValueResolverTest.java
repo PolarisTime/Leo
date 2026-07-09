@@ -91,51 +91,6 @@ class PrintPdfFormValueResolverTest {
     }
 
     @Test
-    void shouldBuildPurchaseChargeSummaryWithPayableDirectionOnly() {
-        Map<String, String> variables = resolver.summaryVariables(
-                Map.of("moduleKey", "purchase-order", "totalAmount", "100.00"),
-                List.of(
-                        Map.of("quantity", "2", "weightTon", "2.000", "amount", "100.00"),
-                        Map.of("quantity", "0", "weightTon", "0", "amount", "0")
-                ),
-                Map.of("chargeItems", List.of(
-                        Map.of("chargeDirection", "PAYABLE", "amount", "12.34", "billable", "true"),
-                        Map.of("chargeDirection", "RECEIVABLE", "amount", "1.11", "billable", "true"),
-                        Map.of("chargeDirection", "PAYABLE", "amount", "9.99", "billable", "false"),
-                        Map.of("chargeDirection", "INTERNAL", "amount", "50.00", "billable", "true")
-                ))
-        );
-
-        assertThat(variables)
-                .containsEntry("totalAmount", "100.00")
-                .containsEntry("totalWeight", "2.000")
-                .containsEntry("totalChargeAmount", "12.34")
-                .containsEntry("payableAmount", "112.34")
-                .containsEntry("receivableAmount", "100.00");
-    }
-
-    @Test
-    void shouldBuildSalesChargeSummaryWithReceivableDirectionOnly() {
-        Map<String, String> variables = resolver.summaryVariables(
-                Map.of("moduleKey", "sales-order", "totalAmount", "100.00"),
-                List.of(Map.of("quantity", "2", "weightTon", "2.000", "amount", "100.00")),
-                Map.of("chargeItems", List.of(
-                        Map.of("chargeDirection", "PAYABLE", "amount", "12.34", "billable", "true"),
-                        Map.of("chargeDirection", "RECEIVABLE", "amount", "1.11", "billable", "true"),
-                        Map.of("chargeDirection", "RECEIVABLE", "amount", "9.99", "billable", "false"),
-                        Map.of("chargeDirection", "INTERNAL", "amount", "50.00", "billable", "true")
-                ))
-        );
-
-        assertThat(variables)
-                .containsEntry("totalAmount", "100.00")
-                .containsEntry("totalWeight", "2.000")
-                .containsEntry("totalChargeAmount", "1.11")
-                .containsEntry("payableAmount", "100.00")
-                .containsEntry("receivableAmount", "101.11");
-    }
-
-    @Test
     void shouldTreatNullNumericValuesAsZeroInSummary() {
         Map<String, String> item = new HashMap<>();
         item.put("quantity", null);

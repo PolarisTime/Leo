@@ -1,8 +1,6 @@
 package com.leo.erp.purchase.order.service;
 
 import com.leo.erp.allocation.repository.ItemAllocationNativeRepository;
-import com.leo.erp.common.charge.service.DocumentChargeItemService;
-import com.leo.erp.common.charge.web.dto.DocumentChargeItemResponse;
 import com.leo.erp.purchase.inbound.service.PurchaseInboundItemQueryService;
 import com.leo.erp.purchase.order.domain.entity.PurchaseOrder;
 import com.leo.erp.purchase.order.domain.entity.PurchaseOrderItem;
@@ -50,71 +48,6 @@ class PurchaseOrderResponseAssemblerTest {
             assertThat(item.salesRemainingQuantity()).isEqualTo(7);
             assertThat(item.salesRemainingWeightTon()).isEqualByComparingTo("0.700");
         });
-    }
-
-    @Test
-    void shouldAppendChargeItemsAndPayableTotalsToDetailResponse() {
-        PurchaseOrder order = order();
-        PurchaseInboundItemQueryService inboundQueryService = mock(PurchaseInboundItemQueryService.class);
-        ItemAllocationNativeRepository allocationRepo = mock(ItemAllocationNativeRepository.class);
-        PurchaseOrderItemPieceWeightService pieceWeightService = mock(PurchaseOrderItemPieceWeightService.class);
-        PurchaseOrderAvailabilityService availabilityService = new PurchaseOrderAvailabilityService(
-                inboundQueryService,
-                allocationRepo,
-                pieceWeightService
-        );
-        PurchaseOrderMapper mapper = mock(PurchaseOrderMapper.class);
-        DocumentChargeItemService chargeItemService = mock(DocumentChargeItemService.class);
-        List<DocumentChargeItemResponse> chargeItems = List.of(
-                new DocumentChargeItemResponse(
-                        101L,
-                        1,
-                        "卸货费",
-                        "PAYABLE",
-                        "SUPPLIER",
-                        7L,
-                        "供应商A",
-                        new BigDecimal("120.50"),
-                        true,
-                        null,
-                        null,
-                        null,
-                        "现场"
-                ),
-                new DocumentChargeItemResponse(
-                        102L,
-                        2,
-                        "内部转运",
-                        "INTERNAL",
-                        null,
-                        null,
-                        null,
-                        new BigDecimal("30.00"),
-                        true,
-                        null,
-                        null,
-                        null,
-                        null
-                )
-        );
-
-        when(mapper.toResponse(order)).thenReturn(summary(order));
-        when(inboundQueryService.summarizeAllocatedQuantityBySourcePurchaseOrderItemIds(List.of(11L)))
-                .thenReturn(Map.of());
-        when(allocationRepo.summarizeSalesByPurchaseOrderItems(List.of(11L), null))
-                .thenReturn(List.of());
-        when(pieceWeightService.summarizeRemainingWeightByPurchaseOrderItemIds(List.of(11L)))
-                .thenReturn(Map.of());
-        when(chargeItemService.listResponses("purchase-order", 1L)).thenReturn(chargeItems);
-
-        PurchaseOrderResponse response = new PurchaseOrderResponseAssembler(mapper, availabilityService, chargeItemService)
-                .toDetailResponse(order);
-
-        assertThat(response.totalAmount()).isEqualByComparingTo("4000.00");
-        assertThat(response.totalChargeAmount()).isEqualByComparingTo("120.50");
-        assertThat(response.payableAmount()).isEqualByComparingTo("4120.50");
-        assertThat(response.chargeItems()).extracting(DocumentChargeItemResponse::chargeName)
-                .containsExactly("卸货费", "内部转运");
     }
 
     @Test

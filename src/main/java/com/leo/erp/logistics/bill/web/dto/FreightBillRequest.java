@@ -1,6 +1,5 @@
 package com.leo.erp.logistics.bill.web.dto;
 
-import com.leo.erp.common.charge.web.dto.DocumentChargeItemRequest;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotEmpty;
@@ -22,25 +21,8 @@ public record FreightBillRequest(
         @NotNull @DecimalMin("0.00") BigDecimal unitPrice,
         String status,
         String remark,
-        @Valid @NotEmpty List<FreightBillItemRequest> items,
-        @Valid List<DocumentChargeItemRequest> chargeItems
+        @Valid @NotEmpty List<FreightBillItemRequest> items
 ) {
-    public FreightBillRequest(String billNo,
-                              String carrierName,
-                              Long settlementCompanyId,
-                              String settlementCompanyName,
-                              String vehiclePlate,
-                              String customerName,
-                              String projectName,
-                              LocalDate billTime,
-                              BigDecimal unitPrice,
-                              String status,
-                              String remark,
-                              List<FreightBillItemRequest> items) {
-        this(billNo, carrierName, settlementCompanyId, settlementCompanyName, vehiclePlate, customerName,
-                projectName, billTime, unitPrice, status, remark, items, null);
-    }
-
     public FreightBillRequest(String billNo,
                               String carrierName,
                               String vehiclePlate,
@@ -52,6 +34,6 @@ public record FreightBillRequest(
                               String remark,
                               List<FreightBillItemRequest> items) {
         this(billNo, carrierName, null, null, vehiclePlate, customerName, projectName, billTime,
-                unitPrice, status, remark, items, null);
+                unitPrice, status, remark, items);
     }
 }

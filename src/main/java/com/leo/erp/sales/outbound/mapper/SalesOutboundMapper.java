@@ -10,8 +10,5 @@ import org.mapstruct.Mapping;
 public interface SalesOutboundMapper {
 
     @Mapping(target = "items", ignore = true)
-    @Mapping(target = "chargeItems", ignore = true)
-    @Mapping(target = "totalChargeAmount", ignore = true)
-    @Mapping(target = "receivableAmount", ignore = true)
     SalesOutboundResponse toResponse(SalesOutbound outbound);
 }

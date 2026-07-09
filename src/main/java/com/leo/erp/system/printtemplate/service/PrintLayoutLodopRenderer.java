@@ -2,7 +2,6 @@ package com.leo.erp.system.printtemplate.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.support.PrecisionConstants;
@@ -14,7 +13,6 @@ import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.regex.Matcher;
@@ -24,9 +22,6 @@ import java.util.regex.Pattern;
 public class PrintLayoutLodopRenderer {
 
     private static final Pattern TEMPLATE_PLACEHOLDER = Pattern.compile("\\$\\{([A-Za-z0-9_]+)}");
-    private static final float DEFAULT_TABLE_TOP = 176f;
-    private static final float DEFAULT_PAGE_HEIGHT = 842f;
-    private static final float DEFAULT_BOTTOM_MARGIN = 36f;
 
     private final ObjectMapper objectMapper;
     private final PrintRuntimeProperties runtimeProperties;
@@ -42,61 +37,34 @@ public class PrintLayoutLodopRenderer {
         }
         try {
             JsonNode root = objectMapper.readTree(templateHtml);
-            return root != null && (root.path("table").isObject() || hasTables(root.path("tables")));
+            return root != null && root.path("table").isObject();
         } catch (IOException ignored) {
             return false;
         }
     }
 
     public String render(String templateName, String templateHtml, Map<String, String> data, List<Map<String, String>> items) {
-        Map<String, List<Map<String, String>>> sections = new LinkedHashMap<>();
-        sections.put(PrintRecordData.ITEMS_SECTION, items == null ? List.of() : items);
-        return render(templateName, templateHtml, data, sections);
-    }
-
-    public String render(
-            String templateName,
-            String templateHtml,
-            Map<String, String> data,
-            Map<String, List<Map<String, String>>> sections
-    ) {
         try {
             JsonNode root = objectMapper.readTree(templateHtml);
-            Map<String, String> variables = summaryVariables(data, sections);
+            Map<String, String> variables = new HashMap<>(data);
+            Totals totals = totals(items);
+            variables.put("totalQuantity", formatQuantity(totals.quantity()));
+            variables.put(
+                    "totalWeight",
+                    formatDecimal(totals.weight(), PrecisionConstants.DISPLAY_WEIGHT_SCALE)
+            );
 
             StringBuilder script = new StringBuilder();
             script.append("LODOP.PRINT_INIT(").append(jsString(templateName)).append(");\n");
             renderFields(script, root.path("fields"), data);
-            TableRenderResult tableResult = renderTables(script, root, data, sections);
-            if (tableResult.table() != null) {
-                float nextTop = tableResult.nextTop();
-                float trailingHeight = summaryHeight(root.path("summary"), tableResult.table()) + clausesHeight(root.path("clauses"));
-                if (trailingHeight > 0f && !fits(nextTop, trailingHeight, contentBottom(root))) {
-                    addNewPage(script, root, data);
-                    nextTop = number(root.path("summary"), "top", resetTop(tableResult.table()));
-                }
-                nextTop = renderSummary(script, root.path("summary"), tableResult.table(), variables, nextTop);
-                renderClauses(script, root.path("clauses"), tableResult.table(), nextTop);
-            }
+            renderTable(script, root.path("table"), items);
+            float nextTop = nextTop(root.path("table"), items.size());
+            nextTop = renderSummary(script, root.path("summary"), root.path("table"), variables, nextTop);
+            renderClauses(script, root.path("clauses"), root.path("table"), nextTop);
             return script.toString();
         } catch (IOException ex) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "套打布局配置不是合法 JSON");
         }
-    }
-
-    private Map<String, String> summaryVariables(Map<String, String> data, Map<String, List<Map<String, String>>> sections) {
-        List<Map<String, String>> items = sections == null
-                ? List.of()
-                : sections.getOrDefault(PrintRecordData.ITEMS_SECTION, List.of());
-        Map<String, String> variables = new HashMap<>(data);
-        Totals totals = totals(items);
-        variables.put("totalQuantity", formatQuantity(totals.quantity()));
-        variables.put(
-                "totalWeight",
-                formatDecimal(totals.weight(), PrecisionConstants.DISPLAY_WEIGHT_SCALE)
-        );
-        PrintChargeSummary.applyTo(variables, sections);
-        return variables;
     }
 
     private void renderFields(StringBuilder script, JsonNode fields, Map<String, String> data) {
@@ -120,113 +88,31 @@ public class PrintLayoutLodopRenderer {
         }
     }
 
-    private float renderTablePage(StringBuilder script, JsonNode table, List<Map<String, String>> items, boolean drawHeader) {
+    private void renderTable(StringBuilder script, JsonNode table, List<Map<String, String>> items) {
         List<JsonNode> columns = childObjects(table.path("columns"));
         float left = number(table, "left", 28);
         float top = number(table, "top", 176);
         float headerHeight = number(table, "headerHeight", 28);
         float rowHeight = number(table, "rowHeight", 26);
-        float rowTop = top;
-        if (drawHeader) {
-            String title = text(table, "title", "");
-            if (!title.isBlank()) {
-                float titleHeight = number(table, "titleHeight", 22);
-                addRect(script, rowTop, left, tableWidth(table), titleHeight);
-                addText(script, rowTop + 6, left + 4, tableWidth(table) - 8, 14, title, integer(table, "titleFontSize", 9));
-                rowTop += titleHeight;
-            }
 
-            float x = left;
-            for (JsonNode column : columns) {
-                float width = number(column, "width", 60);
-                addRect(script, rowTop, x, width, headerHeight);
-                addText(script, rowTop + 8, x + 2, width - 4, 12, text(column, "label", ""), integer(column, "headerFontSize", 9));
-                x += width;
-            }
-            rowTop += headerHeight;
-        }
-
-        if (items.isEmpty()) {
-            addRect(script, rowTop, left, tableWidth(table), rowHeight);
-            String emptyText = text(table, "emptyText", "");
-            if (!emptyText.isBlank()) {
-                addText(script, rowTop + 7, left, tableWidth(table), 12, emptyText, integer(table, "emptyFontSize", 8));
-            }
-            return rowTop + rowHeight;
+        float x = left;
+        for (JsonNode column : columns) {
+            float width = number(column, "width", 60);
+            addRect(script, top, x, width, headerHeight);
+            addText(script, top + 8, x + 2, width - 4, 12, text(column, "label", ""), integer(column, "headerFontSize", 9));
+            x += width;
         }
 
         for (int row = 0; row < items.size(); row++) {
-            float x = left;
-            float currentTop = rowTop + row * rowHeight;
+            x = left;
+            float rowTop = top + headerHeight + row * rowHeight;
             for (JsonNode column : columns) {
                 float width = number(column, "width", 60);
-                addRect(script, currentTop, x, width, rowHeight);
-                addText(script, currentTop + 7, x + 2, width - 4, 12, itemValue(items.get(row), column), integer(column, "fontSize", 8));
+                addRect(script, rowTop, x, width, rowHeight);
+                addText(script, rowTop + 7, x + 2, width - 4, 12, itemValue(items.get(row), column), integer(column, "fontSize", 8));
                 x += width;
             }
         }
-        return rowTop + items.size() * rowHeight;
-    }
-
-    private TableRenderResult renderTables(
-            StringBuilder script,
-            JsonNode root,
-            Map<String, String> data,
-            Map<String, List<Map<String, String>>> sections
-    ) {
-        JsonNode lastTable = null;
-        float nextTop = 0f;
-        float contentBottom = contentBottom(root);
-        for (JsonNode table : tableConfigs(root)) {
-            List<Map<String, String>> rows = rows(table, sections);
-            if (rows.isEmpty() && !bool(table, "emptyVisible", true)) {
-                continue;
-            }
-            float tableTop = table.has("top")
-                    ? number(table, "top", 176)
-                    : (nextTop <= 0f ? 176 : nextTop + number(table, "marginTop", 8));
-            JsonNode activeTable = tableAtTop(table, tableTop);
-            float rowHeight = number(activeTable, "rowHeight", 26);
-            int maxRowsPerPage = Math.max(1, integer(activeTable, "maxRowsPerPage", 16));
-
-            if (rows.isEmpty()) {
-                if (!fits(tableTop, titleHeight(activeTable) + number(activeTable, "headerHeight", 28) + rowHeight, contentBottom)) {
-                    addNewPage(script, root, data);
-                    activeTable = tableAtTop(table, resetTop(table));
-                }
-                nextTop = renderTablePage(script, activeTable, rows, true);
-                lastTable = activeTable;
-                continue;
-            }
-
-            int rowIndex = 0;
-            while (rowIndex < rows.size()) {
-                boolean drawHeader = rowIndex == 0 || bool(activeTable, "repeatHeader", true);
-                float headerBlockHeight = drawHeader ? titleHeight(activeTable) + number(activeTable, "headerHeight", 28) : 0f;
-                if (!fits(number(activeTable, "top", DEFAULT_TABLE_TOP), headerBlockHeight + rowHeight, contentBottom)) {
-                    addNewPage(script, root, data);
-                    activeTable = tableAtTop(table, resetTop(table));
-                    drawHeader = true;
-                    headerBlockHeight = titleHeight(activeTable) + number(activeTable, "headerHeight", 28);
-                }
-                int rowsOnPage = rowsOnPage(
-                        rows.size() - rowIndex,
-                        maxRowsPerPage,
-                        rowHeight,
-                        number(activeTable, "top", DEFAULT_TABLE_TOP),
-                        headerBlockHeight,
-                        contentBottom
-                );
-                nextTop = renderTablePage(script, activeTable, rows.subList(rowIndex, rowIndex + rowsOnPage), drawHeader);
-                rowIndex += rowsOnPage;
-                lastTable = activeTable;
-                if (rowIndex < rows.size()) {
-                    addNewPage(script, root, data);
-                    activeTable = tableAtTop(table, resetTop(table));
-                }
-            }
-        }
-        return new TableRenderResult(lastTable, nextTop);
     }
 
     private float renderSummary(
@@ -273,80 +159,8 @@ public class PrintLayoutLodopRenderer {
 
     private float nextTop(JsonNode table, int itemCount) {
         return number(table, "top", 176)
-                + titleHeight(table)
                 + number(table, "headerHeight", 28)
                 + itemCount * number(table, "rowHeight", 26);
-    }
-
-    private float titleHeight(JsonNode table) {
-        return text(table, "title", "").isBlank() ? 0 : number(table, "titleHeight", 22);
-    }
-
-    private int rowsOnPage(int remainingRows, int maxRowsPerPage, float rowHeight, float tableTop, float headerBlockHeight, float contentBottom) {
-        float availableHeight = Math.max(rowHeight, contentBottom - tableTop - headerBlockHeight);
-        int rowsByHeight = Math.max(1, (int) Math.floor(availableHeight / rowHeight));
-        return Math.min(remainingRows, Math.min(maxRowsPerPage, rowsByHeight));
-    }
-
-    private boolean fits(float top, float height, float contentBottom) {
-        return top + height <= contentBottom;
-    }
-
-    private float contentBottom(JsonNode root) {
-        JsonNode page = root.path("page");
-        return number(page, "height", DEFAULT_PAGE_HEIGHT) - number(page, "bottomMargin", DEFAULT_BOTTOM_MARGIN);
-    }
-
-    private float resetTop(JsonNode table) {
-        return number(table, "pageResetTop", number(table, "top", DEFAULT_TABLE_TOP));
-    }
-
-    private float summaryHeight(JsonNode summary, JsonNode table) {
-        if (!summary.isObject()) {
-            return 0f;
-        }
-        return number(summary, "height", number(table, "rowHeight", 26));
-    }
-
-    private float clausesHeight(JsonNode clauses) {
-        if (!clauses.isObject() || childTextValues(clauses.path("lines")).isEmpty()) {
-            return 0f;
-        }
-        return number(clauses, "paddingTop", 8) + number(clauses, "height", 96);
-    }
-
-    private void addNewPage(StringBuilder script, JsonNode root, Map<String, String> data) {
-        script.append("LODOP.NewPage();\n");
-        renderFields(script, root.path("fields"), data);
-    }
-
-    private List<JsonNode> tableConfigs(JsonNode root) {
-        List<JsonNode> tables = childObjects(root.path("tables"));
-        if (!tables.isEmpty()) {
-            return tables;
-        }
-        JsonNode table = root.path("table");
-        return table.isObject() ? List.of(table) : List.of();
-    }
-
-    private List<Map<String, String>> rows(JsonNode table, Map<String, List<Map<String, String>>> sections) {
-        if (sections == null) {
-            return List.of();
-        }
-        return sections.getOrDefault(text(table, "source", PrintRecordData.ITEMS_SECTION), List.of());
-    }
-
-    private JsonNode tableAtTop(JsonNode table, float top) {
-        if (!table.isObject() || table.has("top")) {
-            return table;
-        }
-        ObjectNode copy = table.deepCopy();
-        copy.put("top", top);
-        return copy;
-    }
-
-    private boolean hasTables(JsonNode tables) {
-        return !childObjects(tables).isEmpty();
     }
 
     private void addRect(StringBuilder script, float top, float left, float width, float height) {
@@ -527,9 +341,6 @@ public class PrintLayoutLodopRenderer {
         } catch (IOException ex) {
             return "\"\"";
         }
-    }
-
-    private record TableRenderResult(JsonNode table, float nextTop) {
     }
 
     private record Totals(BigDecimal quantity, BigDecimal weight) {

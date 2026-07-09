@@ -3,9 +3,6 @@ package com.leo.erp.logistics.bill.service;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.api.PageQuery;
-import com.leo.erp.common.charge.service.DocumentChargeItemService;
-import com.leo.erp.common.charge.web.dto.DocumentChargeItemRequest;
-import com.leo.erp.common.charge.web.dto.DocumentChargeItemResponse;
 import com.leo.erp.common.service.CrudRuntimeSettings;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
@@ -55,7 +52,6 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -98,22 +94,6 @@ class FreightBillServiceTest {
                                              FreightBillSourceService sourceService,
                                              CarrierRepository carrierRepository,
                                              CompanySettingService companySettingService) {
-        return createService(
-                repository,
-                salesOutboundRepository,
-                sourceService,
-                carrierRepository,
-                companySettingService,
-                null
-        );
-    }
-
-    private FreightBillService createService(FreightBillRepository repository,
-                                             SalesOutboundRepository salesOutboundRepository,
-                                             FreightBillSourceService sourceService,
-                                             CarrierRepository carrierRepository,
-                                             CompanySettingService companySettingService,
-                                             DocumentChargeItemService chargeItemService) {
         return new FreightBillService(
                 repository,
                 salesOutboundRepository,
@@ -123,8 +103,7 @@ class FreightBillServiceTest {
                 new FreightBillApplyService(),
                 mock(WorkflowTransitionGuard.class),
                 carrierRepository,
-                companySettingService,
-                chargeItemService
+                companySettingService
         );
     }
 
@@ -162,27 +141,6 @@ class FreightBillServiceTest {
                 null,
                 null,
                 List.of(items)
-        );
-    }
-
-    private FreightBillRequest requestWithChargeItems(
-            FreightBillRequest request,
-            List<DocumentChargeItemRequest> chargeItems
-    ) {
-        return new FreightBillRequest(
-                request.billNo(),
-                request.carrierName(),
-                request.settlementCompanyId(),
-                request.settlementCompanyName(),
-                request.vehiclePlate(),
-                request.customerName(),
-                request.projectName(),
-                request.billTime(),
-                request.unitPrice(),
-                request.status(),
-                request.remark(),
-                request.items(),
-                chargeItems
         );
     }
 
@@ -652,99 +610,6 @@ class FreightBillServiceTest {
     }
 
     @Test
-    void shouldSyncChargeItemsOnlyWhenExplicitlyProvided() {
-        FreightBillRepository repository = mock(FreightBillRepository.class);
-        DocumentChargeItemService chargeItemService = mock(DocumentChargeItemService.class);
-        FreightBillSourceService sourceService = mock(FreightBillSourceService.class);
-        when(sourceService.validateSources(any(FreightBillRequest.class), any()))
-                .thenReturn(new FreightBillSourceService.SourceValidationContext(Map.of(), Map.of()));
-        when(repository.existsByBillNoAndDeletedFlagFalse("FB-CHARGE")).thenReturn(false);
-        when(repository.save(any(FreightBill.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        FreightBillService service = createService(
-                repository,
-                mock(SalesOutboundRepository.class),
-                sourceService,
-                null,
-                null,
-                chargeItemService
-        );
-        List<DocumentChargeItemRequest> chargeItems = List.of(new DocumentChargeItemRequest(
-                null,
-                "卸货费",
-                "PAYABLE",
-                "CARRIER",
-                7L,
-                "物流甲",
-                new BigDecimal("75.00"),
-                true,
-                null
-        ));
-        FreightBillRequest request = requestWithChargeItems(
-                buildRequest("FB-CHARGE", buildItemRequest("OB-001")),
-                chargeItems
-        );
-
-        service.create(request);
-
-        verify(chargeItemService).sync(eq("freight-bill"), anyLong(), eq(chargeItems));
-    }
-
-    @Test
-    void shouldNotSyncChargeItemsWhenRequestOmitsThem() {
-        FreightBillRepository repository = mock(FreightBillRepository.class);
-        DocumentChargeItemService chargeItemService = mock(DocumentChargeItemService.class);
-        FreightBillSourceService sourceService = mock(FreightBillSourceService.class);
-        when(sourceService.validateSources(any(FreightBillRequest.class), any()))
-                .thenReturn(new FreightBillSourceService.SourceValidationContext(Map.of(), Map.of()));
-        when(repository.existsByBillNoAndDeletedFlagFalse("FB-NO-CHARGE")).thenReturn(false);
-        when(repository.save(any(FreightBill.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        FreightBillService service = createService(
-                repository,
-                mock(SalesOutboundRepository.class),
-                sourceService,
-                null,
-                null,
-                chargeItemService
-        );
-
-        service.create(buildRequest("FB-NO-CHARGE", buildItemRequest("OB-001")));
-
-        verify(chargeItemService, never()).sync(any(), any(), any());
-    }
-
-    @Test
-    void shouldRejectAuditedFreightBillFromPreOutboundSource() {
-        FreightBillRepository repository = mock(FreightBillRepository.class);
-        SalesOutboundRepository salesOutboundRepository = mock(SalesOutboundRepository.class);
-        FreightBillSourceService sourceService = new FreightBillSourceService(repository, salesOutboundRepository);
-        SalesOutbound preOutbound = sourceOutboundWithItem("OB-001", StatusConstants.PRE_OUTBOUND);
-        when(repository.existsByBillNoAndDeletedFlagFalse("FB-PRE-AUDIT")).thenReturn(false);
-        when(repository.findAllBySourceNosExcludingCurrentBill(anyCollection(), any()))
-                .thenReturn(List.of());
-        when(salesOutboundRepository.findByOutboundNoInAndDeletedFlagFalse(Set.of("OB-001")))
-                .thenReturn(List.of(preOutbound));
-        FreightBillService service = createService(repository, salesOutboundRepository, sourceService);
-
-        FreightBillRequest request = new FreightBillRequest(
-                "FB-PRE-AUDIT",
-                "物流甲",
-                null,
-                "客户甲",
-                "项目甲",
-                LocalDate.of(2026, 5, 4),
-                new BigDecimal("20.00"),
-                StatusConstants.AUDITED,
-                null,
-                List.of(buildItemRequest("OB-001"))
-        );
-
-        assertThatThrownBy(() -> service.create(request))
-                .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("来源销售出库尚未审核");
-        verify(repository, never()).save(any());
-    }
-
-    @Test
     void shouldNormalizeQuantityUnitToPieceWhenBlank() {
         FreightBillRepository repository = mock(FreightBillRepository.class);
         when(repository.existsByBillNoAndDeletedFlagFalse("FB-008")).thenReturn(false);
@@ -1092,132 +957,6 @@ class FreightBillServiceTest {
     }
 
     @Test
-    void shouldReturnDetailWithChargeItemsAndPayableTotals() {
-        FreightBillRepository repository = mock(FreightBillRepository.class);
-        DocumentChargeItemService chargeItemService = mock(DocumentChargeItemService.class);
-        FreightBill entity = new FreightBill();
-        entity.setId(1L);
-        entity.setBillNo("FB-CHARGE-DETAIL");
-        entity.setCarrierName("物流甲");
-        entity.setCustomerName("客户甲");
-        entity.setProjectName("项目甲");
-        entity.setBillTime(LocalDate.of(2026, 5, 4));
-        entity.setUnitPrice(new BigDecimal("20.00"));
-        entity.setTotalWeight(new BigDecimal("2.500"));
-        entity.setTotalFreight(new BigDecimal("50.00"));
-        entity.setStatus(StatusConstants.UNAUDITED);
-        entity.setItems(List.of());
-        List<DocumentChargeItemResponse> chargeItems = List.of(
-                new DocumentChargeItemResponse(
-                        101L,
-                        1,
-                        "卸货费",
-                        "PAYABLE",
-                        "CARRIER",
-                        7L,
-                        "物流甲",
-                        new BigDecimal("75.00"),
-                        true,
-                        null,
-                        null,
-                        null,
-                        "现场"
-                ),
-                new DocumentChargeItemResponse(
-                        102L,
-                        2,
-                        "客户代付",
-                        "RECEIVABLE",
-                        "CUSTOMER",
-                        8L,
-                        "客户甲",
-                        new BigDecimal("30.00"),
-                        true,
-                        null,
-                        null,
-                        null,
-                        null
-                )
-        );
-
-        when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(entity));
-        when(chargeItemService.listResponses("freight-bill", 1L)).thenReturn(chargeItems);
-        FreightBillService service = createService(
-                repository,
-                mock(SalesOutboundRepository.class),
-                mock(FreightBillSourceService.class),
-                null,
-                null,
-                chargeItemService
-        );
-
-        FreightBillResponse response = service.detail(1L);
-
-        assertThat(response.totalFreight()).isEqualByComparingTo("50.00");
-        assertThat(response.totalChargeAmount()).isEqualByComparingTo("75.00");
-        assertThat(response.payableAmount()).isEqualByComparingTo("125.00");
-        assertThat(response.chargeItems()).extracting(DocumentChargeItemResponse::chargeName)
-                .containsExactly("卸货费", "客户代付");
-    }
-
-    @Test
-    void shouldReturnSourceSalesOutboundStatusOnDetailItems() {
-        FreightBillRepository repository = mock(FreightBillRepository.class);
-        SalesOutboundRepository salesOutboundRepository = mock(SalesOutboundRepository.class);
-        FreightBill entity = new FreightBill();
-        entity.setId(1L);
-        entity.setBillNo("FB-PICKUP");
-        entity.setCarrierName("物流甲");
-        entity.setCustomerName("客户甲");
-        entity.setProjectName("项目甲");
-        entity.setBillTime(LocalDate.of(2026, 5, 4));
-        entity.setUnitPrice(new BigDecimal("20.00"));
-        entity.setTotalWeight(new BigDecimal("2.500"));
-        entity.setTotalFreight(new BigDecimal("50.00"));
-        entity.setStatus(StatusConstants.UNAUDITED);
-
-        FreightBillItem item = new FreightBillItem();
-        item.setId(100L);
-        item.setLineNo(1);
-        item.setSourceNo("OB-PRE");
-        item.setSourceSalesOutboundItemId(1001L);
-        item.setCustomerName("客户甲");
-        item.setProjectName("项目甲");
-        item.setMaterialCode("M001");
-        item.setMaterialName("宝钢");
-        item.setBrand("宝钢");
-        item.setCategory("钢材");
-        item.setMaterial("HRB400");
-        item.setSpec("18");
-        item.setLength("12m");
-        item.setQuantity(2);
-        item.setQuantityUnit("件");
-        item.setPieceWeightTon(new BigDecimal("1.250"));
-        item.setPiecesPerBundle(0);
-        item.setBatchNo("B001");
-        item.setWeightTon(new BigDecimal("2.500"));
-        item.setWarehouseName("一号库");
-        entity.setItems(List.of(item));
-
-        SalesOutboundRepository.SourceOutboundStatusProjection projection =
-                sourceOutboundStatus(1001L, StatusConstants.PRE_OUTBOUND);
-        when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(entity));
-        when(salesOutboundRepository.findSourceOutboundStatusesByItemIds(Set.of(1001L)))
-                .thenReturn(List.of(projection));
-
-        FreightBillService service = createService(
-                repository,
-                salesOutboundRepository,
-                mock(FreightBillSourceService.class)
-        );
-
-        FreightBillResponse response = service.detail(1L);
-
-        assertThat(response.items().get(0).sourceSalesOutboundStatus())
-                .isEqualTo(StatusConstants.PRE_OUTBOUND);
-    }
-
-    @Test
     void shouldReturnMapperResponseWhenSavedEntityHasNoItems() {
         FreightBillRepository repository = mock(FreightBillRepository.class);
         FreightBill entity = new FreightBill();
@@ -1379,30 +1118,6 @@ class FreightBillServiceTest {
         ArgumentCaptor<FreightBill> billCaptor = ArgumentCaptor.forClass(FreightBill.class);
         verify(repository).save(billCaptor.capture());
         assertThat(billCaptor.getValue().getStatus()).isEqualTo(StatusConstants.AUDITED);
-    }
-
-    @Test
-    void shouldRejectAuditStatusUpdateWhenSourceOutboundIsPreOutbound() {
-        FreightBillRepository repository = mock(FreightBillRepository.class);
-        SalesOutboundRepository salesOutboundRepository = mock(SalesOutboundRepository.class);
-        FreightBillSourceService sourceService = new FreightBillSourceService(repository, salesOutboundRepository);
-        FreightBill existing = new FreightBill();
-        existing.setId(1L);
-        existing.setBillNo("FB-PRE-STATUS");
-        existing.setStatus(StatusConstants.UNAUDITED);
-        FreightBillItem item = new FreightBillItem();
-        item.setSourceNo("OB-001");
-        existing.setItems(new ArrayList<>(List.of(item)));
-
-        when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(existing));
-        when(salesOutboundRepository.findByOutboundNoInAndDeletedFlagFalse(Set.of("OB-001")))
-                .thenReturn(List.of(sourceOutbound("OB-001", StatusConstants.PRE_OUTBOUND)));
-        FreightBillService service = createService(repository, salesOutboundRepository, sourceService);
-
-        assertThatThrownBy(() -> service.updateStatus(1L, StatusConstants.AUDITED))
-                .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("来源销售出库尚未审核");
-        verify(repository, never()).save(any());
     }
 
     @Test
@@ -1890,45 +1605,6 @@ class FreightBillServiceTest {
         SecurityContextHolder.getContext().setAuthentication(
                 new UsernamePasswordAuthenticationToken(principal, null, principal.getAuthorities())
         );
-    }
-
-    private SalesOutbound sourceOutbound(String outboundNo, String status) {
-        SalesOutbound outbound = new SalesOutbound();
-        outbound.setOutboundNo(outboundNo);
-        outbound.setStatus(status);
-        return outbound;
-    }
-
-    private SalesOutbound sourceOutboundWithItem(String outboundNo, String status) {
-        SalesOutbound outbound = sourceOutbound(outboundNo, status);
-        outbound.setCustomerName("客户甲");
-        outbound.setProjectName("项目甲");
-        com.leo.erp.sales.outbound.domain.entity.SalesOutboundItem item =
-                new com.leo.erp.sales.outbound.domain.entity.SalesOutboundItem();
-        item.setId(1001L);
-        item.setMaterialCode("M001");
-        item.setBrand("宝钢");
-        item.setCategory("钢材");
-        item.setMaterial("HRB400");
-        item.setSpec("18");
-        item.setLength("12m");
-        item.setQuantity(2);
-        item.setQuantityUnit("件");
-        item.setPieceWeightTon(new BigDecimal("1.250"));
-        item.setPiecesPerBundle(0);
-        item.setBatchNo("B001");
-        item.setWeightTon(new BigDecimal("2.500"));
-        item.setWarehouseName("一号库");
-        outbound.setItems(List.of(item));
-        return outbound;
-    }
-
-    private SalesOutboundRepository.SourceOutboundStatusProjection sourceOutboundStatus(Long itemId, String status) {
-        SalesOutboundRepository.SourceOutboundStatusProjection projection =
-                mock(SalesOutboundRepository.SourceOutboundStatusProjection.class);
-        when(projection.getItemId()).thenReturn(itemId);
-        when(projection.getStatus()).thenReturn(status);
-        return projection;
     }
 
     @SuppressWarnings("unchecked")
