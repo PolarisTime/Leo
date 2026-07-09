@@ -128,7 +128,6 @@ public abstract class AbstractCrudService<E extends AbstractAuditableEntity, Req
         assertDeleteAllowedByStatus(entity);
         beforeDelete(entity);
         entity.setDeletedFlag(true);
-        statusGuard.markDeletedStatus(entity, allowAdminViewDeletedRecords());
         saveEntity(entity);
         logger().info("{} deleted: id={}", entity.getClass().getSimpleName(), id);
     }

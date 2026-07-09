@@ -26,85 +26,55 @@ public class MaterialReferenceGuard {
     private List<ReferenceCheck> materialReferences(Material entity) {
         String materialCode = entity.getMaterialCode();
         return List.of(
-                ReferenceCheck.when(
+                ReferenceCheck.any(
                         "po_purchase_order_item",
                         "material_code",
-                        materialCode,
-                        "EXISTS (SELECT 1 FROM po_purchase_order parent "
-                                + "WHERE parent.id = po_purchase_order_item.order_id "
-                                + "AND parent.deleted_flag = false)"
+                        materialCode
                 ),
-                ReferenceCheck.when(
+                ReferenceCheck.any(
                         "po_purchase_inbound_item",
                         "material_code",
-                        materialCode,
-                        "EXISTS (SELECT 1 FROM po_purchase_inbound parent "
-                                + "WHERE parent.id = po_purchase_inbound_item.inbound_id "
-                                + "AND parent.deleted_flag = false)"
+                        materialCode
                 ),
-                ReferenceCheck.when(
+                ReferenceCheck.any(
                         "so_sales_order_item",
                         "material_code",
-                        materialCode,
-                        "EXISTS (SELECT 1 FROM so_sales_order parent "
-                                + "WHERE parent.id = so_sales_order_item.order_id "
-                                + "AND parent.deleted_flag = false)"
+                        materialCode
                 ),
-                ReferenceCheck.when(
+                ReferenceCheck.any(
                         "so_sales_outbound_item",
                         "material_code",
-                        materialCode,
-                        "EXISTS (SELECT 1 FROM so_sales_outbound parent "
-                                + "WHERE parent.id = so_sales_outbound_item.outbound_id "
-                                + "AND parent.deleted_flag = false)"
+                        materialCode
                 ),
-                ReferenceCheck.when(
+                ReferenceCheck.any(
                         "lg_freight_bill_item",
                         "material_code",
-                        materialCode,
-                        "EXISTS (SELECT 1 FROM lg_freight_bill parent "
-                                + "WHERE parent.id = lg_freight_bill_item.bill_id "
-                                + "AND parent.deleted_flag = false)"
+                        materialCode
                 ),
-                ReferenceCheck.when(
+                ReferenceCheck.any(
                         "ct_purchase_contract_item",
                         "material_code",
-                        materialCode,
-                        "EXISTS (SELECT 1 FROM ct_purchase_contract parent "
-                                + "WHERE parent.id = ct_purchase_contract_item.contract_id "
-                                + "AND parent.deleted_flag = false)"
+                        materialCode
                 ),
-                ReferenceCheck.when(
+                ReferenceCheck.any(
                         "ct_sales_contract_item",
                         "material_code",
-                        materialCode,
-                        "EXISTS (SELECT 1 FROM ct_sales_contract parent "
-                                + "WHERE parent.id = ct_sales_contract_item.contract_id "
-                                + "AND parent.deleted_flag = false)"
+                        materialCode
                 ),
-                ReferenceCheck.when(
+                ReferenceCheck.any(
                         "st_customer_statement_item",
                         "material_code",
-                        materialCode,
-                        "EXISTS (SELECT 1 FROM st_customer_statement parent "
-                                + "WHERE parent.id = st_customer_statement_item.statement_id "
-                                + "AND parent.deleted_flag = false)"
+                        materialCode
                 ),
-                ReferenceCheck.when(
+                ReferenceCheck.any(
                         "st_supplier_statement_item",
                         "material_code",
-                        materialCode,
-                        "EXISTS (SELECT 1 FROM st_supplier_statement parent "
-                                + "WHERE parent.id = st_supplier_statement_item.statement_id "
-                                + "AND parent.deleted_flag = false)"
+                        materialCode
                 ),
-                ReferenceCheck.when(
+                ReferenceCheck.any(
                         "st_freight_statement_item",
                         "material_code",
-                        materialCode,
-                        "EXISTS (SELECT 1 FROM st_freight_statement parent "
-                                + "WHERE parent.id = st_freight_statement_item.statement_id "
-                                + "AND parent.deleted_flag = false)"
+                        materialCode
                 )
         );
     }

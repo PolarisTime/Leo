@@ -1227,6 +1227,7 @@ class PurchaseInboundServiceTest {
         service.delete(1L);
 
         assertThat(existingInbound.isDeletedFlag()).isTrue();
+        assertThat(existingInbound.getStatus()).isEqualTo("草稿");
         verify(repository).save(existingInbound);
         verify(purchaseOrderRepository).saveAll(any());
     }

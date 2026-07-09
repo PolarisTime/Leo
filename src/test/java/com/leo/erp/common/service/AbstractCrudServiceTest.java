@@ -412,7 +412,7 @@ class AbstractCrudServiceTest {
     }
 
     @Test
-    void markDeletedShouldSetDeletedStatusWhenAdminViewEnabled() {
+    void deleteShouldKeepBusinessStatusWhenAdminViewEnabled() {
         TestCrudService service = new TestCrudService();
         service.addEntity(1L, "ACTIVE");
         service.enableAdminViewDeleted();
@@ -420,7 +420,7 @@ class AbstractCrudServiceTest {
         service.delete(1L);
 
         assertThat(service.getEntity(1L).isDeletedFlag()).isTrue();
-        assertThat(service.getEntity(1L).getStatus()).isEqualTo(StatusConstants.DELETED);
+        assertThat(service.getEntity(1L).getStatus()).isEqualTo("ACTIVE");
     }
 
     @Test

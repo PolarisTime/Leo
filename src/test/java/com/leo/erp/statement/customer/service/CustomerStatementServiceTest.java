@@ -196,9 +196,9 @@ class CustomerStatementServiceTest {
         service.delete(1L);
 
         assertThat(statement.isDeletedFlag()).isTrue();
-        assertThat(statement.getStatus()).isEqualTo("已删除");
+        assertThat(statement.getStatus()).isEqualTo("待确认");
         verify(repository).save(argThat(saved ->
-                saved.isDeletedFlag() && "已删除".equals(saved.getStatus())
+                saved.isDeletedFlag() && "待确认".equals(saved.getStatus())
         ));
     }
 

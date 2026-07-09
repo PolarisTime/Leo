@@ -353,7 +353,7 @@ class SupplierStatementServiceTest {
         service.delete(1L);
 
         assertThat(statement.isDeletedFlag()).isTrue();
-        assertThat(statement.getStatus()).isEqualTo("已删除");
+        assertThat(statement.getStatus()).isEqualTo("待确认");
     }
 
     @Test

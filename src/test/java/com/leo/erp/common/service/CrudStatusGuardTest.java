@@ -172,34 +172,6 @@ class CrudStatusGuardTest {
                 .hasMessageContaining("写入单据状态失败");
     }
 
-    @Test
-    void shouldMarkDeletedStatusWhenEnabled() {
-        TestStatusEntity entity = new TestStatusEntity();
-        entity.setStatus("草稿");
-
-        guard.markDeletedStatus(entity, true);
-
-        assertThat(entity.getStatus()).isEqualTo(StatusConstants.DELETED);
-    }
-
-    @Test
-    void shouldSkipDeletedStatusWhenDisabledOrSetterMissing() {
-        TestStatusEntity entity = new TestStatusEntity();
-        entity.setStatus("草稿");
-
-        guard.markDeletedStatus(entity, false);
-        guard.markDeletedStatus(new Object(), true);
-
-        assertThat(entity.getStatus()).isEqualTo("草稿");
-    }
-
-    @Test
-    void shouldWrapDeletedStatusSetterFailure() {
-        assertThatThrownBy(() -> guard.markDeletedStatus(new ThrowingSetterEntity(), true))
-                .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("写入单据删除状态失败");
-    }
-
     private static class TestStatusEntity {
         private String status;
 

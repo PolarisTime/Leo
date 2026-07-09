@@ -45,6 +45,9 @@ class MaterialReferenceGuardTest {
                 .allSatisfy(check -> {
                     assertThat(check.columnName()).isEqualTo("material_code");
                     assertThat(check.value()).isEqualTo("MAT-001");
+                    assertThat(check.activeOnly()).isFalse();
+                    assertThat(check.extraCondition()).isNull();
+                    assertThat(check.extraArguments()).isEmpty();
                 });
     }
 

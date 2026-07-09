@@ -102,18 +102,4 @@ public class CrudStatusGuard {
             throw new IllegalStateException("写入单据状态失败", ex);
         }
     }
-
-    public void markDeletedStatus(Object entity, boolean shouldMarkDeletedStatus) {
-        if (!shouldMarkDeletedStatus) {
-            return;
-        }
-        try {
-            Method setter = entity.getClass().getMethod("setStatus", String.class);
-            setter.invoke(entity, StatusConstants.DELETED);
-        } catch (NoSuchMethodException ignored) {
-            // Entities without a main status field do not need deleted status tagging.
-        } catch (ReflectiveOperationException ex) {
-            throw new IllegalStateException("写入单据删除状态失败", ex);
-        }
-    }
 }
