@@ -15,6 +15,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.math.BigInteger;
+import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
@@ -28,7 +30,7 @@ import java.util.stream.IntStream;
 @Service
 public class PurchaseOrderItemPieceWeightService {
 
-    private static final BigDecimal WEIGHT_UNIT = BigDecimal.ONE.movePointLeft(PrecisionConstants.WEIGHT_SCALE);
+    private static final BigDecimal DISPLAY_WEIGHT_UNIT = BigDecimal.ONE.movePointLeft(PrecisionConstants.DISPLAY_WEIGHT_SCALE);
 
     private final PurchaseOrderItemPieceWeightRepository repository;
     private final JdbcTemplate jdbc;
@@ -73,20 +75,19 @@ public class PurchaseOrderItemPieceWeightService {
                     .map(PurchaseOrderItemPieceWeight::getPieceNo)
                     .collect(Collectors.toCollection(HashSet::new));
             int unallocatedQuantity = item.getQuantity() - allocatedPieceNos.size();
-            if (unallocatedQuantity <= 0) {
-                continue;
-            }
             BigDecimal allocatedWeightTon = existingPieces.stream()
                     .filter(piece -> piece.getSalesOrderItemId() != null)
                     .map(piece -> TradeItemCalculator.safeBigDecimal(piece.getWeightTon()))
                     .reduce(BigDecimal.ZERO, BigDecimal::add);
             BigDecimal totalWeightTon = resolveItemTotalWeight(item);
+            rejectRegenerateWhenAllocatedWeightExceedsTarget(item.getId(), allocatedWeightTon, totalWeightTon);
+            if (unallocatedQuantity <= 0) {
+                rejectRegenerateWhenAllocatedWeightDiffersFromTarget(item.getId(), allocatedWeightTon, totalWeightTon);
+                continue;
+            }
             BigDecimal unallocatedWeightTon = TradeItemCalculator.scaleWeightTon(
                     totalWeightTon.subtract(allocatedWeightTon)
             );
-            if (unallocatedWeightTon.compareTo(BigDecimal.ZERO) < 0) {
-                unallocatedWeightTon = BigDecimal.ZERO.setScale(PrecisionConstants.WEIGHT_SCALE);
-            }
             List<Integer> unallocatedPieceNos = IntStream.rangeClosed(1, item.getQuantity())
                     .filter(pieceNo -> !allocatedPieceNos.contains(pieceNo))
                     .limit(unallocatedQuantity)
@@ -98,6 +99,48 @@ public class PurchaseOrderItemPieceWeightService {
         if (!nextPieces.isEmpty()) {
             repository.saveAll(nextPieces);
         }
+    }
+
+    private void rejectRegenerateWhenAllocatedWeightExceedsTarget(Long purchaseOrderItemId,
+                                                                  BigDecimal allocatedWeightTon,
+                                                                  BigDecimal targetWeightTon) {
+        BigDecimal scaledAllocatedWeightTon = TradeItemCalculator.scaleWeightTon(allocatedWeightTon);
+        BigDecimal scaledTargetWeightTon = TradeItemCalculator.scaleWeightTon(targetWeightTon);
+        if (scaledAllocatedWeightTon.compareTo(scaledTargetWeightTon) <= 0) {
+            return;
+        }
+        BigDecimal overWeightTon = TradeItemCalculator.scaleWeightTon(
+                scaledAllocatedWeightTon.subtract(scaledTargetWeightTon)
+        );
+        throw new BusinessException(
+                ErrorCode.BUSINESS_ERROR,
+                "采购明细" + purchaseOrderItemId
+                        + "已分配重量 " + scaledAllocatedWeightTon
+                        + " 大于目标重量 " + scaledTargetWeightTon
+                        + "，差额 " + overWeightTon
+                        + "，不能自动重建逐件重量。请先反审核销售出库/销售订单后再重新入库"
+        );
+    }
+
+    private void rejectRegenerateWhenAllocatedWeightDiffersFromTarget(Long purchaseOrderItemId,
+                                                                      BigDecimal allocatedWeightTon,
+                                                                      BigDecimal targetWeightTon) {
+        BigDecimal scaledAllocatedWeightTon = TradeItemCalculator.scaleWeightTon(allocatedWeightTon);
+        BigDecimal scaledTargetWeightTon = TradeItemCalculator.scaleWeightTon(targetWeightTon);
+        if (scaledAllocatedWeightTon.compareTo(scaledTargetWeightTon) == 0) {
+            return;
+        }
+        BigDecimal differenceWeightTon = TradeItemCalculator.scaleWeightTon(
+                scaledTargetWeightTon.subtract(scaledAllocatedWeightTon)
+        );
+        throw new BusinessException(
+                ErrorCode.BUSINESS_ERROR,
+                "采购明细" + purchaseOrderItemId
+                        + "已全部分配，已分配重量 " + scaledAllocatedWeightTon
+                        + " 与目标重量 " + scaledTargetWeightTon
+                        + " 不一致，差额 " + differenceWeightTon
+                        + "，不能自动重建逐件重量。请先反审核销售出库/销售订单后再重新入库"
+        );
     }
 
     @Transactional
@@ -292,31 +335,62 @@ public class PurchaseOrderItemPieceWeightService {
         if (quantity <= 0) {
             return List.of();
         }
-        BigDecimal totalWeightTon = TradeItemCalculator.scaleWeightTon(sourceWeightTon);
-        BigDecimal averageWeightTon = TradeItemCalculator.calculateAveragePieceWeightTon(quantity, totalWeightTon);
-        BigDecimal averageTotalWeightTon = averageWeightTon.multiply(BigDecimal.valueOf(quantity));
-        int residualUnits = totalWeightTon.subtract(averageTotalWeightTon)
-                .divide(WEIGHT_UNIT)
-                .intValue();
-        int residualCount = Math.min(Math.abs(residualUnits), quantity);
-        BigDecimal adjustment = residualUnits > 0 ? WEIGHT_UNIT : WEIGHT_UNIT.negate();
+        List<BigDecimal> pieceWeights = splitWeightByDisplayUnit(sourceWeightTon, quantity);
 
         List<PurchaseOrderItemPieceWeight> pieces = new ArrayList<>(quantity);
         for (int i = 0; i < quantity; i++) {
             PieceSlot slot = slots.get(i);
-            BigDecimal pieceWeightTon = averageWeightTon;
-            if (residualUnits != 0 && i >= quantity - residualCount) {
-                pieceWeightTon = pieceWeightTon.add(adjustment);
-            }
             PurchaseOrderItemPieceWeight piece = new PurchaseOrderItemPieceWeight();
             piece.setId(slot.id() == null ? snowflakeIdGenerator.nextId() : slot.id());
             piece.setPurchaseOrderItemId(purchaseOrderItemId);
             piece.setPieceNo(slot.pieceNo());
             piece.setSalesOrderItemId(slot.salesOrderItemId());
-            piece.setWeightTon(TradeItemCalculator.scaleWeightTon(pieceWeightTon));
+            piece.setWeightTon(TradeItemCalculator.scaleWeightTon(pieceWeights.get(i)));
             pieces.add(piece);
         }
         return pieces;
+    }
+
+    private List<BigDecimal> splitWeightByDisplayUnit(BigDecimal sourceWeightTon, int quantity) {
+        if (quantity <= 0) {
+            return List.of();
+        }
+        BigDecimal totalWeightTon = requireDisplayScaleWeight(sourceWeightTon);
+        BigInteger totalUnits = totalWeightTon
+                .movePointRight(PrecisionConstants.DISPLAY_WEIGHT_SCALE)
+                .toBigIntegerExact();
+        BigInteger[] quotientAndRemainder = totalUnits.divideAndRemainder(BigInteger.valueOf(quantity));
+        BigInteger baseUnits = quotientAndRemainder[0];
+        int residualCount = quotientAndRemainder[1].intValueExact();
+
+        List<BigDecimal> weights = new ArrayList<>(quantity);
+        for (int i = 0; i < quantity; i++) {
+            BigInteger pieceUnits = i < residualCount ? baseUnits.add(BigInteger.ONE) : baseUnits;
+            weights.add(new BigDecimal(pieceUnits).multiply(DISPLAY_WEIGHT_UNIT));
+        }
+        assertSplitTotal(totalWeightTon, weights);
+        return weights;
+    }
+
+    private BigDecimal requireDisplayScaleWeight(BigDecimal sourceWeightTon) {
+        BigDecimal safeWeightTon = TradeItemCalculator.safeBigDecimal(sourceWeightTon);
+        try {
+            return safeWeightTon.setScale(PrecisionConstants.DISPLAY_WEIGHT_SCALE, RoundingMode.UNNECESSARY);
+        } catch (ArithmeticException ex) {
+            throw new BusinessException(
+                    ErrorCode.BUSINESS_ERROR,
+                    "采购逐件重量分配要求明细重量最多保留" + PrecisionConstants.DISPLAY_WEIGHT_SCALE + "位小数"
+            );
+        }
+    }
+
+    private void assertSplitTotal(BigDecimal totalWeightTon, List<BigDecimal> weights) {
+        BigDecimal splitTotalWeightTon = weights.stream()
+                .reduce(BigDecimal.ZERO, BigDecimal::add)
+                .setScale(PrecisionConstants.DISPLAY_WEIGHT_SCALE, RoundingMode.UNNECESSARY);
+        if (splitTotalWeightTon.compareTo(totalWeightTon) != 0) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "采购逐件重量分配合计不等于明细重量");
+        }
     }
 
     private List<PieceSlot> rebalanceSlots(PurchaseOrderItem item,

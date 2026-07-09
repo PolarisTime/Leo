@@ -129,6 +129,40 @@ class SalesOrderPurchaseAllocationServiceTest {
     }
 
     @Test
+    void shouldFinalizeMultiplePurchaseOrderBackedItemsFromSameSourceUsingAllocatedWeights() {
+        PurchaseItemQueryAppService queryAppService = mock(PurchaseItemQueryAppService.class);
+        PurchaseItemPieceWeightAppService pieceWeightAppService = mock(PurchaseItemPieceWeightAppService.class);
+        SalesOrderPurchaseAllocationService service = new SalesOrderPurchaseAllocationService(
+                queryAppService,
+                pieceWeightAppService
+        );
+        SalesOrderItem firstItem = salesOrderItem(11L, 1, 201L, 3, "999.000", "4000.00");
+        SalesOrderItem secondItem = salesOrderItem(12L, 2, 201L, 4, "999.000", "4000.00");
+        SalesOrderItem thirdItem = salesOrderItem(13L, 3, 201L, 4, "999.000", "4000.00");
+        SalesOrder order = salesOrder(List.of(firstItem, secondItem, thirdItem));
+        when(queryAppService.findSourcePurchaseOrderItemsByIds(List.of(201L))).thenReturn(List.of(
+                sourcePurchaseOrderRecord(201L)
+        ));
+        when(pieceWeightAppService.allocateForSalesOrderItem(201L, 3, 11L, 1))
+                .thenReturn(new BigDecimal("5.874"));
+        when(pieceWeightAppService.allocateForSalesOrderItem(201L, 4, 12L, 2))
+                .thenReturn(new BigDecimal("7.832"));
+        when(pieceWeightAppService.allocateForSalesOrderItem(201L, 4, 13L, 3))
+                .thenReturn(new BigDecimal("7.830"));
+
+        service.finalizePurchaseOrderAllocations(order);
+
+        assertThat(firstItem.getWeightTon()).isEqualByComparingTo("5.874");
+        assertThat(secondItem.getWeightTon()).isEqualByComparingTo("7.832");
+        assertThat(thirdItem.getWeightTon()).isEqualByComparingTo("7.830");
+        assertThat(order.getTotalWeight()).isEqualByComparingTo("21.536");
+        assertThat(order.getTotalAmount()).isEqualByComparingTo("86144.00");
+        verify(pieceWeightAppService).allocateForSalesOrderItem(201L, 3, 11L, 1);
+        verify(pieceWeightAppService).allocateForSalesOrderItem(201L, 4, 12L, 2);
+        verify(pieceWeightAppService).allocateForSalesOrderItem(201L, 4, 13L, 3);
+    }
+
+    @Test
     void shouldRejectMissingSourcePurchaseOrderItem() {
         PurchaseItemQueryAppService queryAppService = mock(PurchaseItemQueryAppService.class);
         PurchaseItemPieceWeightAppService pieceWeightAppService = mock(PurchaseItemPieceWeightAppService.class);

@@ -11,10 +11,12 @@ import org.mockito.ArgumentCaptor;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -53,21 +55,85 @@ class PurchaseOrderItemPieceWeightServiceTest {
         @SuppressWarnings({"rawtypes", "unchecked"})
         ArgumentCaptor<Iterable<PurchaseOrderItemPieceWeight>> captor = ArgumentCaptor.forClass(Iterable.class);
         verify(repository).saveAll(captor.capture());
-        assertThat(captor.getValue())
-                .extracting(PurchaseOrderItemPieceWeight::getWeightTon)
-                .containsExactly(
-                        new BigDecimal("2.03685714"),
-                        new BigDecimal("2.03685714"),
-                        new BigDecimal("2.03685714"),
-                        new BigDecimal("2.03685714"),
-                        new BigDecimal("2.03685714"),
-                        new BigDecimal("2.03685715"),
-                        new BigDecimal("2.03685715")
-                );
+        assertPieceWeights(captor.getValue(),
+                "2.037",
+                "2.037",
+                "2.037",
+                "2.037",
+                "2.037",
+                "2.037",
+                "2.036"
+        );
     }
 
     @Test
-    void shouldKeepMinimumRepresentableTotalWhenRegeneratingPieces() {
+    void shouldGenerateThreeDecimalPieceWeightsWithoutLosingTotalWeight() {
+        PurchaseOrderItemPieceWeightRepository repository = mock(PurchaseOrderItemPieceWeightRepository.class);
+        PurchaseOrderItemPieceWeightService service = new PurchaseOrderItemPieceWeightService(repository, mock(JdbcTemplate.class));
+        PurchaseOrderItem item = new PurchaseOrderItem();
+        item.setId(201L);
+        item.setQuantity(11);
+        item.setWeightTon(new BigDecimal("21.536"));
+
+        when(repository.findByPurchaseOrderItemIdOrderByPieceNoAsc(201L)).thenReturn(List.of());
+
+        service.regenerateForPurchaseOrderItems(List.of(item));
+
+        @SuppressWarnings({"rawtypes", "unchecked"})
+        ArgumentCaptor<Iterable<PurchaseOrderItemPieceWeight>> captor = ArgumentCaptor.forClass(Iterable.class);
+        verify(repository).saveAll(captor.capture());
+        List<BigDecimal> weights = actualWeights(captor.getValue());
+        assertPieceWeights(captor.getValue(),
+                "1.958",
+                "1.958",
+                "1.958",
+                "1.958",
+                "1.958",
+                "1.958",
+                "1.958",
+                "1.958",
+                "1.958",
+                "1.957",
+                "1.957"
+        );
+        assertThat(weights)
+                .allSatisfy(weight -> assertThat(weight).isEqualByComparingTo(weight.setScale(3)));
+        assertThat(weights.stream().reduce(BigDecimal.ZERO, BigDecimal::add))
+                .isEqualByComparingTo("21.536");
+    }
+
+    @Test
+    void shouldDistributeSevenPiecesAtThreeDecimalScaleWithoutLosingTotalWeight() {
+        PurchaseOrderItemPieceWeightRepository repository = mock(PurchaseOrderItemPieceWeightRepository.class);
+        PurchaseOrderItemPieceWeightService service = new PurchaseOrderItemPieceWeightService(repository, mock(JdbcTemplate.class));
+        PurchaseOrderItem item = new PurchaseOrderItem();
+        item.setId(202L);
+        item.setQuantity(7);
+        item.setWeightTon(new BigDecimal("13.702"));
+
+        when(repository.findByPurchaseOrderItemIdOrderByPieceNoAsc(202L)).thenReturn(List.of());
+
+        service.regenerateForPurchaseOrderItems(List.of(item));
+
+        @SuppressWarnings({"rawtypes", "unchecked"})
+        ArgumentCaptor<Iterable<PurchaseOrderItemPieceWeight>> captor = ArgumentCaptor.forClass(Iterable.class);
+        verify(repository).saveAll(captor.capture());
+        assertPieceWeights(captor.getValue(),
+                "1.958",
+                "1.958",
+                "1.958",
+                "1.957",
+                "1.957",
+                "1.957",
+                "1.957"
+        );
+        BigDecimal totalWeightTon = actualWeights(captor.getValue()).stream()
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        assertThat(totalWeightTon).isEqualByComparingTo("13.702");
+    }
+
+    @Test
+    void shouldRejectNonThreeDecimalTotalWeightWhenRegeneratingPieces() {
         PurchaseOrderItemPieceWeightRepository repository = mock(PurchaseOrderItemPieceWeightRepository.class);
         PurchaseOrderItemPieceWeightService service = new PurchaseOrderItemPieceWeightService(repository, mock(JdbcTemplate.class));
         PurchaseOrderItem item = new PurchaseOrderItem();
@@ -77,18 +143,11 @@ class PurchaseOrderItemPieceWeightServiceTest {
 
         when(repository.findByPurchaseOrderItemIdOrderByPieceNoAsc(201L)).thenReturn(List.of());
 
-        service.regenerateForPurchaseOrderItems(List.of(item));
+        assertThatThrownBy(() -> service.regenerateForPurchaseOrderItems(List.of(item)))
+                .isInstanceOf(com.leo.erp.common.error.BusinessException.class)
+                .hasMessageContaining("最多保留3位小数");
 
-        @SuppressWarnings({"rawtypes", "unchecked"})
-        ArgumentCaptor<Iterable<PurchaseOrderItemPieceWeight>> captor = ArgumentCaptor.forClass(Iterable.class);
-        verify(repository).saveAll(captor.capture());
-        assertThat(captor.getValue())
-                .extracting(PurchaseOrderItemPieceWeight::getWeightTon)
-                .containsExactly(
-                        new BigDecimal("0.00000000"),
-                        new BigDecimal("0.00000000"),
-                        new BigDecimal("0.00000001")
-                );
+        verify(repository, org.mockito.Mockito.never()).saveAll(any());
     }
 
     @Test
@@ -113,6 +172,47 @@ class PurchaseOrderItemPieceWeightServiceTest {
 
         assertThat(weightTon).isEqualByComparingTo("6.110");
         assertThat(pieces).allSatisfy(piece -> assertThat(piece.getSalesOrderItemId()).isEqualTo(301L));
+    }
+
+    @Test
+    void shouldKeepTotalWeightWhenAllocatingOnePurchaseItemToMultipleSalesItems() {
+        PurchaseOrderItemPieceWeightRepository repository = mock(PurchaseOrderItemPieceWeightRepository.class);
+        PurchaseOrderItemPieceWeightService service = new PurchaseOrderItemPieceWeightService(repository, mock(JdbcTemplate.class));
+        PurchaseOrderItem item = new PurchaseOrderItem();
+        item.setId(201L);
+        item.setQuantity(11);
+        item.setWeightTon(new BigDecimal("21.536"));
+        List<PurchaseOrderItemPieceWeight> pieces = List.of(
+                piece(201L, 1, "1.958"),
+                piece(201L, 2, "1.958"),
+                piece(201L, 3, "1.958"),
+                piece(201L, 4, "1.958"),
+                piece(201L, 5, "1.958"),
+                piece(201L, 6, "1.958"),
+                piece(201L, 7, "1.958"),
+                piece(201L, 8, "1.958"),
+                piece(201L, 9, "1.958"),
+                piece(201L, 10, "1.957"),
+                piece(201L, 11, "1.957")
+        );
+
+        when(repository.findByPurchaseOrderItemIdOrderByPieceNoAsc(201L)).thenReturn(pieces);
+        when(repository.findAvailableByPurchaseOrderItemIdForUpdate(201L)).thenAnswer(invocation ->
+                pieces.stream()
+                        .filter(piece -> piece.getSalesOrderItemId() == null)
+                        .toList()
+        );
+        when(repository.saveAll(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        BigDecimal firstWeight = service.allocateForSalesOrderItem(item, 3, 301L, 1);
+        BigDecimal secondWeight = service.allocateForSalesOrderItem(item, 4, 302L, 1);
+        BigDecimal thirdWeight = service.allocateForSalesOrderItem(item, 4, 303L, 1);
+
+        assertThat(firstWeight).isEqualByComparingTo("5.874");
+        assertThat(secondWeight).isEqualByComparingTo("7.832");
+        assertThat(thirdWeight).isEqualByComparingTo("7.830");
+        assertThat(firstWeight.add(secondWeight).add(thirdWeight)).isEqualByComparingTo("21.536");
+        assertThat(pieces).allSatisfy(piece -> assertThat(piece.getSalesOrderItemId()).isNotNull());
     }
 
     @Test
@@ -320,7 +420,7 @@ class PurchaseOrderItemPieceWeightServiceTest {
     }
 
     @Test
-    void shouldClampNegativeUnallocatedWeightToZeroWhenRegenerating() {
+    void shouldRejectRegenerateWhenAllocatedWeightExceedsTargetWeight() {
         PurchaseOrderItemPieceWeightRepository repository = mock(PurchaseOrderItemPieceWeightRepository.class);
         PurchaseOrderItemPieceWeightService service = new PurchaseOrderItemPieceWeightService(repository, mock(JdbcTemplate.class));
 
@@ -334,17 +434,14 @@ class PurchaseOrderItemPieceWeightServiceTest {
         PurchaseOrderItemPieceWeight unallocated = piece(201L, 2, "1.000");
         when(repository.findByPurchaseOrderItemIdOrderByPieceNoAsc(201L)).thenReturn(List.of(allocated, unallocated));
 
-        service.regenerateForPurchaseOrderItems(List.of(item));
+        assertThatThrownBy(() -> service.regenerateForPurchaseOrderItems(List.of(item)))
+                .isInstanceOf(com.leo.erp.common.error.BusinessException.class)
+                .hasMessageContaining("已分配重量 5.00000000")
+                .hasMessageContaining("目标重量 3.00000000")
+                .hasMessageContaining("不能自动重建逐件重量");
 
-        @SuppressWarnings({"rawtypes", "unchecked"})
-        ArgumentCaptor<Iterable<PurchaseOrderItemPieceWeight>> captor = ArgumentCaptor.forClass(Iterable.class);
-        verify(repository).saveAll(captor.capture());
-        assertThat(captor.getValue())
-                .extracting(PurchaseOrderItemPieceWeight::getPieceNo, PurchaseOrderItemPieceWeight::getWeightTon)
-                .containsExactly(
-                        org.assertj.core.groups.Tuple.tuple(2, new BigDecimal("0.00000000")),
-                        org.assertj.core.groups.Tuple.tuple(3, new BigDecimal("0.00000000"))
-                );
+        verify(repository, org.mockito.Mockito.never()).deleteUnallocatedByPurchaseOrderItemIdIn(any());
+        verify(repository, org.mockito.Mockito.never()).saveAll(any());
     }
 
     @Test
@@ -643,5 +740,19 @@ class PurchaseOrderItemPieceWeightServiceTest {
         piece.setPieceNo(pieceNo);
         piece.setWeightTon(new BigDecimal(weightTon));
         return piece;
+    }
+
+    private void assertPieceWeights(Iterable<PurchaseOrderItemPieceWeight> pieces, String... expectedWeights) {
+        List<BigDecimal> actualWeights = actualWeights(pieces);
+        assertThat(actualWeights).hasSize(expectedWeights.length);
+        for (int i = 0; i < expectedWeights.length; i++) {
+            assertThat(actualWeights.get(i)).isEqualByComparingTo(expectedWeights[i]);
+        }
+    }
+
+    private List<BigDecimal> actualWeights(Iterable<PurchaseOrderItemPieceWeight> pieces) {
+        List<BigDecimal> weights = new ArrayList<>();
+        pieces.forEach(piece -> weights.add(piece.getWeightTon()));
+        return weights;
     }
 }
