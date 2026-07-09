@@ -329,7 +329,7 @@
         "type": "dataLookup",
         "sourceFields": ["customerName", "projectName"],
         "targetField": "projectAddress",
-        "sql": "SELECT project_address FROM md_customer WHERE customer_name = ? AND btrim(project_name) = btrim(?) AND deleted_flag = FALSE AND project_address IS NOT NULL ORDER BY id LIMIT 1",
+        "sql": "SELECT project_address FROM md_customer WHERE customer_name = ? AND regexp_replace(project_name, '^[[:space:]]+|[[:space:]]+$', '', 'g') = regexp_replace(?, '^[[:space:]]+|[[:space:]]+$', '', 'g') AND deleted_flag = FALSE AND project_address IS NOT NULL ORDER BY id LIMIT 1",
         "stopWhenPresent": true
       },
       {
@@ -361,7 +361,7 @@
         "type": "dataLookup",
         "sourceFields": ["customerName", "projectName"],
         "targetField": "projectAddress",
-        "sql": "SELECT project_address FROM md_customer WHERE customer_name = ? AND btrim(project_name) = btrim(?) AND deleted_flag = FALSE AND project_address IS NOT NULL ORDER BY id LIMIT 1",
+        "sql": "SELECT project_address FROM md_customer WHERE customer_name = ? AND regexp_replace(project_name, '^[[:space:]]+|[[:space:]]+$', '', 'g') = regexp_replace(?, '^[[:space:]]+|[[:space:]]+$', '', 'g') AND deleted_flag = FALSE AND project_address IS NOT NULL ORDER BY id LIMIT 1",
         "stopWhenPresent": true
       },
       {

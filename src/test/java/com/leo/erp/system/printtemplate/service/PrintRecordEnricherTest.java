@@ -87,6 +87,29 @@ class PrintRecordEnricherTest {
     }
 
     @Test
+    void shouldTrimControlWhitespaceWhenLookingUpCustomerProjectAddress() {
+        JdbcTemplate jdbc = mock(JdbcTemplate.class);
+        when(jdbc.queryForList(
+                eq("SELECT project_address FROM md_project WHERE project_name = ? AND deleted_flag = FALSE AND project_address IS NOT NULL ORDER BY id LIMIT 1"),
+                eq(String.class),
+                eq("项目A")
+        )).thenReturn(List.of());
+        when(jdbc.queryForList(
+                eq("SELECT project_address FROM md_customer WHERE customer_name = ? AND regexp_replace(project_name, '^[[:space:]]+|[[:space:]]+$', '', 'g') = regexp_replace(?, '^[[:space:]]+|[[:space:]]+$', '', 'g') AND deleted_flag = FALSE AND project_address IS NOT NULL ORDER BY id LIMIT 1"),
+                eq(String.class),
+                eq("客户A"),
+                eq("项目A")
+        )).thenReturn(List.of("客户资料地址A"));
+        Map<String, String> data = new HashMap<>();
+        data.put("customerName", "客户A");
+        data.put("projectName", "项目A");
+
+        new PrintRecordEnricher(jdbc, formatter, runtimeProperties).enrich("sales-order", data, List.of());
+
+        assertThat(data).containsEntry("projectAddress", "客户资料地址A");
+    }
+
+    @Test
     void shouldSkipDataLookupWhenTargetAlreadyPresentOrArgumentInvalid() {
         JdbcTemplate jdbc = mock(JdbcTemplate.class);
         Map<String, String> data = new HashMap<>();

@@ -103,6 +103,44 @@ class PrintScriptServiceTest {
     }
 
     @Test
+    void shouldEnrichSalesOrderProjectAddressFromCustomerWhenProjectNameHasControlWhitespace() {
+        JdbcTemplate jdbc = mock(JdbcTemplate.class);
+        PrintScriptService service = printScriptService(repository("sales-order"), jdbc);
+        String projectName = "苏州欧帝半导体科技有限公司半导体专用设备研发及生产项目";
+
+        when(jdbc.queryForMap(anyString(), eq(333668086718660608L))).thenReturn(Map.of(
+                "id", 333668086718660608L,
+                "order_no", "SO2026000007",
+                "customer_name", "浙江大东吴杭萧绿建科技有限公司",
+                "project_name", projectName,
+                "delivery_date", Date.valueOf("2026-07-09"),
+                "deleted_flag", false
+        ));
+        when(jdbc.queryForList(anyString(), eq(333668086718660608L))).thenReturn(List.of());
+        when(jdbc.queryForList(
+                eq("SELECT project_address FROM md_project WHERE project_name = ? AND deleted_flag = FALSE AND project_address IS NOT NULL ORDER BY id LIMIT 1"),
+                eq(String.class),
+                eq(projectName)
+        )).thenReturn(List.of());
+        when(jdbc.queryForList(
+                eq("SELECT project_address FROM md_customer WHERE customer_name = ? AND regexp_replace(project_name, '^[[:space:]]+|[[:space:]]+$', '', 'g') = regexp_replace(?, '^[[:space:]]+|[[:space:]]+$', '', 'g') AND deleted_flag = FALSE AND project_address IS NOT NULL ORDER BY id LIMIT 1"),
+                eq(String.class),
+                eq("浙江大东吴杭萧绿建科技有限公司"),
+                eq(projectName)
+        )).thenReturn(List.of("苏州市吴中区"));
+        when(jdbc.queryForList(anyString(), eq(String.class), eq("SO2026000007"))).thenReturn(List.of());
+
+        Map<String, Object> result = service.generateFromRecord(
+                "1",
+                "sales-order",
+                333668086718660608L
+        );
+
+        Map<?, ?> data = (Map<?, ?>) result.get("data");
+        assertThat(data.get("projectAddress")).isEqualTo("苏州市吴中区");
+    }
+
+    @Test
     void shouldKeepSettlementCompanySnapshotWhenCurrentCompanySettingMissing() {
         JdbcTemplate jdbc = mock(JdbcTemplate.class);
         PrintScriptService service = printScriptService(repository("sales-order", 7L, "历史主体"), jdbc);
