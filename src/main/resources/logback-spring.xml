@@ -43,10 +43,12 @@
         </encoder>
     </appender>
 
-    <!-- 开发环境：仅控制台 -->
+    <!-- 开发环境：控制台 + 文件，便于本地排障时追溯请求日志 -->
     <springProfile name="default,dev">
         <root level="INFO">
             <appender-ref ref="CONSOLE"/>
+            <appender-ref ref="FILE"/>
+            <appender-ref ref="ERROR_FILE"/>
         </root>
     </springProfile>
 
