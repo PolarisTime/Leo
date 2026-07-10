@@ -28,10 +28,60 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class SessionManagementServiceTest {
+
+    @Test
+    void createSessionShouldLockUserBeforeSessionsAndCaptureCredentialVersion() {
+        UserAccount user = new UserAccount();
+        user.setId(1L);
+        user.setCredentialVersion(5L);
+        UserAccountRepository userRepo = mock(UserAccountRepository.class);
+        when(userRepo.findByIdAndDeletedFlagFalseForUpdate(1L)).thenReturn(Optional.of(user));
+        RefreshTokenSessionRepository sessionRepo = mock(RefreshTokenSessionRepository.class);
+        when(sessionRepo.findByUserIdAndDeletedFlagFalseAndRevokedAtIsNullAndExpiresAtAfterOrderByCreatedAtAsc(
+                anyLong(), any())).thenReturn(List.of());
+        when(sessionRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        SessionManagementService service = createService(sessionRepo, userRepo);
+
+        RefreshTokenSession session = service.createSession(
+                1L, "session-id", "raw-token", "127.0.0.1", "JUnit"
+        );
+
+        assertThat(session.getCredentialVersion()).isEqualTo(5L);
+        var ordered = inOrder(userRepo, sessionRepo);
+        ordered.verify(userRepo).findByIdAndDeletedFlagFalseForUpdate(1L);
+        ordered.verify(sessionRepo)
+                .findByUserIdAndDeletedFlagFalseAndRevokedAtIsNullAndExpiresAtAfterOrderByCreatedAtAsc(anyLong(), any());
+    }
+
+    @Test
+    void revokeActiveSessionsForPasswordChangeShouldOnlyRevokeTargetUsersSessions() {
+        RefreshTokenSession first = activeSession("first");
+        first.setUserId(1L);
+        RefreshTokenSession second = activeSession("second");
+        second.setUserId(1L);
+        RefreshTokenSession otherUser = activeSession("other-user");
+        otherUser.setUserId(2L);
+        RefreshTokenSessionRepository sessionRepo = mock(RefreshTokenSessionRepository.class);
+        when(sessionRepo.findByUserIdAndDeletedFlagFalseAndRevokedAtIsNullAndExpiresAtAfterOrderByCreatedAtAsc(
+                org.mockito.ArgumentMatchers.eq(1L), any())).thenReturn(List.of(first, second));
+        when(sessionRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        SessionManagementService service = createService(sessionRepo);
+
+        service.revokeActiveSessionsForPasswordChange(1L);
+
+        assertThat(first.getRevokeReason()).isEqualTo(RevokeReason.PASSWORD_CHANGED);
+        assertThat(second.getRevokeReason()).isEqualTo(RevokeReason.PASSWORD_CHANGED);
+        assertThat(first.getRevokedAt()).isNotNull();
+        assertThat(second.getRevokedAt()).isNotNull();
+        assertThat(otherUser.getRevokedAt()).isNull();
+        verify(sessionRepo).save(first);
+        verify(sessionRepo).save(second);
+    }
 
     @Test
     void createSessionShouldSaveAndReturnSession() {
@@ -383,9 +433,18 @@ class SessionManagementServiceTest {
         AccessTokenBlacklistService blacklistService = mock(AccessTokenBlacklistService.class);
         SessionActivityService activityService = mock(SessionActivityService.class);
         AfterCommitExecutor afterCommitExecutor = new AfterCommitExecutor();
+        UserAccountRepository effectiveUserRepo = userRepo;
+        if (effectiveUserRepo == null) {
+            effectiveUserRepo = mock(UserAccountRepository.class);
+            UserAccount user = new UserAccount();
+            user.setId(1L);
+            user.setCredentialVersion(0L);
+            when(effectiveUserRepo.findByIdAndDeletedFlagFalseForUpdate(anyLong()))
+                    .thenReturn(Optional.of(user));
+        }
 
         return new SessionManagementService(
-                userRepo != null ? userRepo : mock(UserAccountRepository.class),
+                effectiveUserRepo,
                 sessionRepo != null ? sessionRepo : mock(RefreshTokenSessionRepository.class),
                 jwtService,
                 new SnowflakeIdGenerator(0L),

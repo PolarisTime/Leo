@@ -71,6 +71,7 @@ class AuthenticatedUserCacheServiceTest {
         user.setId(2L);
         user.setLoginName("ops");
         user.setStatus(UserStatus.NORMAL);
+        user.setCredentialVersion(4L);
         user.setTotpEnabled(Boolean.FALSE);
         user.setRequireTotpSetup(Boolean.TRUE);
 
@@ -92,11 +93,13 @@ class AuthenticatedUserCacheServiceTest {
 
         assertThat(principal).isPresent();
         assertThat(principal.orElseThrow().getPassword()).isEmpty();
+        assertThat(principal.orElseThrow().credentialVersion()).isEqualTo(4L);
         assertThat(principal.orElseThrow().totpEnabled()).isFalse();
         assertThat(principal.orElseThrow().forceTotpSetup()).isTrue();
         assertThat(redisTemplate.lastSetKey).isEqualTo("auth:user:snapshot:2");
         assertThat(redisTemplate.lastSetTtl).isGreaterThanOrEqualTo(Duration.ofMinutes(2));
         assertThat(redisTemplate.values.get("auth:user:snapshot:2")).contains("\"forceTotpSetup\":true");
+        assertThat(redisTemplate.values.get("auth:user:snapshot:2")).contains("\"credentialVersion\":4");
     }
 
     @Test

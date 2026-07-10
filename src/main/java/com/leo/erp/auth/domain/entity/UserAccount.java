@@ -32,6 +32,9 @@ public class UserAccount extends AbstractAuditableEntity {
     @Column(name = "password_hash", nullable = false, length = 128)
     private String passwordHash;
 
+    @Column(name = "credential_version", nullable = false)
+    private Long credentialVersion = 0L;
+
     @Column(name = "user_name", nullable = false, length = 64)
     private String userName;
 

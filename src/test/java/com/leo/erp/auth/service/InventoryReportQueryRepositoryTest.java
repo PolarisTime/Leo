@@ -1,5 +1,7 @@
 package com.leo.erp.report.inventory.repository;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.report.inventory.web.dto.InventoryReportResponse;
 import com.leo.erp.security.permission.DataScopeContext;
@@ -26,6 +28,8 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class InventoryReportQueryRepositoryTest {
+
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     private final NamedParameterJdbcTemplate jdbcTemplate = mock(NamedParameterJdbcTemplate.class);
     private final InventoryReportQueryRepository repository = new InventoryReportQueryRepository(jdbcTemplate);
@@ -125,6 +129,47 @@ class InventoryReportQueryRepositoryTest {
     }
 
     @Test
+    void pageUsesEffectiveInventoryStatusesAndSeparatesPreOutboundReservations() {
+        when(jdbcTemplate.queryForObject(anyString(), any(MapSqlParameterSource.class), eq(Number.class)))
+                .thenReturn(0);
+
+        repository.page(new PageQuery(0, 10, null, null), null, null, null, false);
+
+        var sql = forClass(String.class);
+        var params = forClass(MapSqlParameterSource.class);
+        verify(jdbcTemplate).queryForObject(sql.capture(), params.capture(), eq(Number.class));
+
+        assertThat(sql.getValue())
+                .contains("inbound.status IN (:effectiveInboundStatuses)")
+                .contains("outbound.status IN (:effectiveOutboundStatuses)")
+                .contains("outbound.status IN (:reservedOutboundStatuses)")
+                .contains("SUM(movement.on_hand_quantity_delta) AS on_hand_quantity")
+                .contains("SUM(movement.reserved_quantity_delta) AS reserved_quantity")
+                .contains("SUM(stock.on_hand_quantity) - SUM(stock.reserved_quantity) AS available_quantity");
+        assertThat(params.getValue().getValue("effectiveInboundStatuses"))
+                .isEqualTo(Set.of("已审核", "完成入库"));
+        assertThat(params.getValue().getValue("effectiveOutboundStatuses"))
+                .isEqualTo(Set.of("已审核"));
+        assertThat(params.getValue().getValue("reservedOutboundStatuses"))
+                .isEqualTo(Set.of("预出库"));
+    }
+
+    @Test
+    void pageUsesLineWarehouseForOutboundMovements() {
+        when(jdbcTemplate.queryForObject(anyString(), any(MapSqlParameterSource.class), eq(Number.class)))
+                .thenReturn(0);
+
+        repository.page(new PageQuery(0, 10, null, null), null, null, null, false);
+
+        var sql = forClass(String.class);
+        verify(jdbcTemplate).queryForObject(sql.capture(), any(MapSqlParameterSource.class), eq(Number.class));
+
+        assertThat(sql.getValue())
+                .contains("COALESCE(NULLIF(item.warehouse_name, ''), outbound.warehouse_name) AS warehouse_name")
+                .doesNotContain("outbound.warehouse_name AS warehouse_name");
+    }
+
+    @Test
     void pageAppliesWarehouseFilterBeforeMergedGrouping() {
         when(jdbcTemplate.queryForObject(anyString(), any(MapSqlParameterSource.class), eq(Number.class)))
                 .thenReturn(0);
@@ -149,7 +194,17 @@ class InventoryReportQueryRepositoryTest {
         var sql = forClass(String.class);
         verify(jdbcTemplate).queryForObject(sql.capture(), any(MapSqlParameterSource.class), eq(Number.class));
 
-        assertThat(sql.getValue()).contains("(stock.quantity > 0 OR stock.weight_ton > 0)");
+        String value = sql.getValue();
+        int inventoryReportEnd = value.indexOf("SELECT COUNT(1) FROM inventory_report report");
+        assertThat(inventoryReportEnd).isPositive();
+        assertThat(value.substring(0, inventoryReportEnd))
+                .doesNotContain("on_hand_quantity <> 0")
+                .doesNotContain("reserved_quantity <> 0");
+        assertThat(value.substring(inventoryReportEnd))
+                .contains("report.on_hand_quantity <> 0")
+                .contains("report.on_hand_weight_ton <> 0")
+                .contains("report.reserved_quantity <> 0")
+                .contains("report.reserved_weight_ton <> 0");
     }
 
     @Test
@@ -162,7 +217,8 @@ class InventoryReportQueryRepositoryTest {
         var sql = forClass(String.class);
         verify(jdbcTemplate).queryForObject(sql.capture(), any(MapSqlParameterSource.class), eq(Number.class));
 
-        assertThat(sql.getValue()).doesNotContain("(stock.quantity > 0 OR stock.weight_ton > 0)");
+        assertThat(sql.getValue()).doesNotContain("on_hand_quantity <> 0");
+        assertThat(sql.getValue()).doesNotContain("reserved_quantity <> 0");
         assertThat(sql.getValue()).doesNotContain("\nWHERE \n");
     }
 
@@ -185,8 +241,14 @@ class InventoryReportQueryRepositoryTest {
                     when(rs.getString("warehouse_name")).thenReturn("一号仓、二号码头");
                     when(rs.getString("batch_no")).thenReturn("B-001、B-002");
                     when(rs.getInt("quantity")).thenReturn(18);
+                    when(rs.getInt("on_hand_quantity")).thenReturn(18);
+                    when(rs.getInt("reserved_quantity")).thenReturn(5);
+                    when(rs.getInt("available_quantity")).thenReturn(13);
                     when(rs.getString("quantity_unit")).thenReturn("件");
                     when(rs.getBigDecimal("weight_ton")).thenReturn(new BigDecimal("9.450"));
+                    when(rs.getBigDecimal("on_hand_weight_ton")).thenReturn(new BigDecimal("9.450"));
+                    when(rs.getBigDecimal("reserved_weight_ton")).thenReturn(new BigDecimal("2.625"));
+                    when(rs.getBigDecimal("available_weight_ton")).thenReturn(new BigDecimal("6.825"));
                     when(rs.getString("unit")).thenReturn("吨");
                     when(rs.getBigDecimal("piece_weight_ton")).thenReturn(new BigDecimal("0.525"));
                     when(rs.getObject("items_json")).thenReturn("""
@@ -228,6 +290,15 @@ class InventoryReportQueryRepositoryTest {
         assertThat(result.getContent().getFirst().items().getFirst().batchNo()).isEqualTo("B-001");
         assertThat(result.getContent().getFirst().items().getFirst().outboundNo()).isEqualTo("SOO-001");
         assertThat(result.getContent().getFirst().items().getFirst().outboundDate()).isEqualTo("2026-06-01");
+        JsonNode json = OBJECT_MAPPER.valueToTree(result.getContent().getFirst());
+        assertThat(json.path("quantity").asInt()).isEqualTo(18);
+        assertThat(json.path("onHandQuantity").asInt()).isEqualTo(18);
+        assertThat(json.path("reservedQuantity").asInt()).isEqualTo(5);
+        assertThat(json.path("availableQuantity").asInt()).isEqualTo(13);
+        assertThat(json.path("weightTon").decimalValue()).isEqualByComparingTo("9.450");
+        assertThat(json.path("onHandWeightTon").decimalValue()).isEqualByComparingTo("9.450");
+        assertThat(json.path("reservedWeightTon").decimalValue()).isEqualByComparingTo("2.625");
+        assertThat(json.path("availableWeightTon").decimalValue()).isEqualByComparingTo("6.825");
     }
 
     @Test
@@ -429,7 +500,8 @@ class InventoryReportQueryRepositoryTest {
         CapturedQuery query = captureListQuery(
                 new PageQuery(0, 10, null, null), "  AbC  ", "二号码头", "盘螺", false);
 
-        assertThat(query.sql()).contains("(stock.quantity > 0 OR stock.weight_ton > 0)");
+        assertThat(query.sql()).contains("report.on_hand_quantity <> 0");
+        assertThat(query.sql()).contains("report.reserved_quantity <> 0");
         assertThat(query.sql()).contains("LOWER(COALESCE(stock.material_code, '')) LIKE :keyword");
         assertThat(query.sql()).contains("LOWER(COALESCE(stock.brand, '')) LIKE :keyword");
         assertThat(query.sql()).contains("LOWER(COALESCE(stock.spec, '')) LIKE :keyword");
@@ -451,10 +523,10 @@ class InventoryReportQueryRepositoryTest {
                 .contains("ROW_NUMBER() OVER (ORDER BY LOWER(COALESCE(report.warehouse_name, '')) DESC");
         assertThat(captureListQuery(
                 new PageQuery(0, 10, "quantity", "asc"), null, null, null, false).sql())
-                .contains("ROW_NUMBER() OVER (ORDER BY report.quantity ASC");
+                .contains("ROW_NUMBER() OVER (ORDER BY report.on_hand_quantity ASC");
         assertThat(captureListQuery(
                 new PageQuery(0, 10, "weightTon", "desc"), null, null, null, false).sql())
-                .contains("ROW_NUMBER() OVER (ORDER BY report.weight_ton DESC");
+                .contains("ROW_NUMBER() OVER (ORDER BY report.on_hand_weight_ton DESC");
     }
 
     @Test

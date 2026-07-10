@@ -2,6 +2,7 @@ package com.leo.erp.finance.receipt.service;
 
 import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.api.PageQuery;
+import com.leo.erp.common.concurrency.SourceAllocationLockService;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
@@ -9,8 +10,10 @@ import com.leo.erp.common.service.AbstractCrudService;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.finance.receipt.domain.entity.Receipt;
+import com.leo.erp.finance.receipt.domain.entity.ReceiptAllocation;
 import com.leo.erp.finance.receipt.mapper.ReceiptMapper;
 import com.leo.erp.finance.receipt.repository.ReceiptRepository;
+import com.leo.erp.finance.receipt.web.dto.ReceiptAllocationRequest;
 import com.leo.erp.finance.receipt.web.dto.ReceiptRequest;
 import com.leo.erp.finance.receipt.web.dto.ReceiptResponse;
 import org.springframework.data.domain.Page;
@@ -20,6 +23,7 @@ import org.springframework.stereotype.Service;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.TreeSet;
 
 @Service
 public class ReceiptService extends AbstractCrudService<Receipt, ReceiptRequest, ReceiptResponse> {
@@ -32,6 +36,7 @@ public class ReceiptService extends AbstractCrudService<Receipt, ReceiptRequest,
     private final ReceiptAllocationService receiptAllocationService;
     private final ReceiptAllocationResponseAssembler allocationResponseAssembler;
     private final ReceiptSettlementSyncService settlementSyncService;
+    private final SourceAllocationLockService sourceAllocationLockService;
 
     @Autowired
     public ReceiptService(ReceiptRepository receiptRepository,
@@ -40,7 +45,8 @@ public class ReceiptService extends AbstractCrudService<Receipt, ReceiptRequest,
                           ReceiptApplyService applyService,
                           ReceiptAllocationService receiptAllocationService,
                           ReceiptAllocationResponseAssembler allocationResponseAssembler,
-                          ReceiptSettlementSyncService settlementSyncService) {
+                          ReceiptSettlementSyncService settlementSyncService,
+                          SourceAllocationLockService sourceAllocationLockService) {
         super(snowflakeIdGenerator);
         this.receiptRepository = receiptRepository;
         this.receiptMapper = receiptMapper;
@@ -48,6 +54,7 @@ public class ReceiptService extends AbstractCrudService<Receipt, ReceiptRequest,
         this.receiptAllocationService = receiptAllocationService;
         this.allocationResponseAssembler = allocationResponseAssembler;
         this.settlementSyncService = settlementSyncService;
+        this.sourceAllocationLockService = sourceAllocationLockService;
     }
 
     public Page<ReceiptResponse> page(PageQuery query, PageFilter filter) {
@@ -159,8 +166,14 @@ public class ReceiptService extends AbstractCrudService<Receipt, ReceiptRequest,
 
     @Override
     protected void beforeStatusUpdate(Receipt entity, String currentStatus, String nextStatus) {
+        lockAllocationStatements(entity, null);
         settlementSyncService.captureOriginalAllocationStatementIds(entity);
         receiptAllocationService.validateExistingAllocationsForSettlement(entity, nextStatus);
+    }
+
+    @Override
+    protected void beforeDelete(Receipt entity) {
+        lockAllocationStatements(entity, null);
     }
 
     @Override
@@ -194,7 +207,47 @@ public class ReceiptService extends AbstractCrudService<Receipt, ReceiptRequest,
 
     @Override
     protected void apply(Receipt entity, ReceiptRequest request) {
+        lockAllocationStatements(entity, request);
         applyService.apply(entity, request, this::nextId);
+    }
+
+    private void lockAllocationStatements(Receipt entity, ReceiptRequest request) {
+        TreeSet<Long> customerStatementIds = new TreeSet<>();
+        if (entity != null) {
+            customerStatementIds.addAll(existingAllocationStatementIds(entity));
+        }
+        if (request != null) {
+            customerStatementIds.addAll(requestedAllocationStatementIds(request));
+        }
+        sourceAllocationLockService.lockStatementSources(
+                List.copyOf(customerStatementIds),
+                List.of(),
+                List.of()
+        );
+    }
+
+    private List<Long> existingAllocationStatementIds(Receipt entity) {
+        if (entity.getItems() != null && !entity.getItems().isEmpty()) {
+            return entity.getItems().stream()
+                    .map(ReceiptAllocation::getSourceStatementId)
+                    .filter(java.util.Objects::nonNull)
+                    .toList();
+        }
+        return entity.getSourceStatementId() == null
+                ? List.of()
+                : List.of(entity.getSourceStatementId());
+    }
+
+    private List<Long> requestedAllocationStatementIds(ReceiptRequest request) {
+        if (request.items() != null && !request.items().isEmpty()) {
+            return request.items().stream()
+                    .map(ReceiptAllocationRequest::sourceStatementId)
+                    .filter(java.util.Objects::nonNull)
+                    .toList();
+        }
+        return request.sourceStatementId() == null
+                ? List.of()
+                : List.of(request.sourceStatementId());
     }
 
     @Override

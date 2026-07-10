@@ -2,6 +2,7 @@ package com.leo.erp.finance.invoiceissue.service;
 
 import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.api.PageQuery;
+import com.leo.erp.common.concurrency.SourceAllocationLockService;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
@@ -19,22 +20,26 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.TreeSet;
 
 @Service
 public class InvoiceIssueService extends AbstractCrudService<InvoiceIssue, InvoiceIssueRequest, InvoiceIssueResponse> {
 
     private final InvoiceIssueRepository repository;
+    private final SourceAllocationLockService sourceAllocationLockService;
     private final InvoiceIssueApplyService applyService;
     private final InvoiceIssueSourceService invoiceIssueSourceService;
     private final InvoiceIssueResponseAssembler responseAssembler;
 
     public InvoiceIssueService(InvoiceIssueRepository repository,
                                SnowflakeIdGenerator idGenerator,
+                               SourceAllocationLockService sourceAllocationLockService,
                                InvoiceIssueApplyService applyService,
                                InvoiceIssueSourceService invoiceIssueSourceService,
                                InvoiceIssueResponseAssembler responseAssembler) {
         super(idGenerator);
         this.repository = repository;
+        this.sourceAllocationLockService = sourceAllocationLockService;
         this.applyService = applyService;
         this.invoiceIssueSourceService = invoiceIssueSourceService;
         this.responseAssembler = responseAssembler;
@@ -163,6 +168,7 @@ public class InvoiceIssueService extends AbstractCrudService<InvoiceIssue, Invoi
 
     @Override
     protected void beforeStatusUpdate(InvoiceIssue entity, String currentStatus, String nextStatus) {
+        lockSourceItems(entity, null);
         if (!StatusConstants.ISSUED.equals(nextStatus)) {
             return;
         }
@@ -171,7 +177,13 @@ public class InvoiceIssueService extends AbstractCrudService<InvoiceIssue, Invoi
 
     @Override
     protected void apply(InvoiceIssue entity, InvoiceIssueRequest request) {
+        lockSourceItems(entity, request);
         applyService.apply(entity, request, this::nextId);
+    }
+
+    @Override
+    protected void beforeDelete(InvoiceIssue entity) {
+        lockSourceItems(entity, null);
     }
 
     @Override
@@ -182,6 +194,23 @@ public class InvoiceIssueService extends AbstractCrudService<InvoiceIssue, Invoi
     @Override
     protected InvoiceIssueResponse toResponse(InvoiceIssue entity) {
         return responseAssembler.toSummaryResponse(entity);
+    }
+
+    private void lockSourceItems(InvoiceIssue entity, InvoiceIssueRequest request) {
+        TreeSet<Long> sourceItemIds = new TreeSet<>();
+        if (entity.getItems() != null) {
+            entity.getItems().stream()
+                    .map(item -> item.getSourceSalesOrderItemId())
+                    .filter(id -> id != null)
+                    .forEach(sourceItemIds::add);
+        }
+        if (request != null && request.items() != null) {
+            request.items().stream()
+                    .map(item -> item.sourceSalesOrderItemId())
+                    .filter(id -> id != null)
+                    .forEach(sourceItemIds::add);
+        }
+        sourceAllocationLockService.lockTradeItemSources(List.of(), List.of(), List.copyOf(sourceItemIds));
     }
 
 }

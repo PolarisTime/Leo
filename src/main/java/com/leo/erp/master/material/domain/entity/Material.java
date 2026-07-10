@@ -19,7 +19,7 @@ public class Material extends AbstractAuditableEntity {
     @Id
     private Long id;
 
-    @Column(name = "material_code", nullable = false, unique = true, length = 64)
+    @Column(name = "material_code", nullable = false, length = 64)
     private String materialCode;
 
     @Column(name = "brand", nullable = false, length = 64)

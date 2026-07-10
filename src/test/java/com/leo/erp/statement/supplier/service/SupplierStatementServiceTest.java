@@ -2,6 +2,7 @@ package com.leo.erp.statement.supplier.service;
 
 import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.api.PageQuery;
+import com.leo.erp.common.concurrency.SourceAllocationLockService;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.service.CrudRuntimeSettings;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
@@ -12,6 +13,7 @@ import com.leo.erp.purchase.inbound.service.PurchaseInboundItemQueryService;
 import com.leo.erp.purchase.inbound.repository.PurchaseInboundRepository;
 import com.leo.erp.security.permission.WorkflowTransitionGuard;
 import com.leo.erp.statement.supplier.domain.entity.SupplierStatement;
+import com.leo.erp.statement.supplier.domain.entity.SupplierStatementItem;
 import com.leo.erp.statement.supplier.mapper.SupplierStatementMapper;
 import com.leo.erp.statement.supplier.repository.SupplierStatementRepository;
 import com.leo.erp.statement.supplier.web.dto.SupplierStatementCandidateResponse;
@@ -19,6 +21,7 @@ import com.leo.erp.statement.supplier.web.dto.SupplierStatementItemRequest;
 import com.leo.erp.statement.supplier.web.dto.SupplierStatementRequest;
 import com.leo.erp.statement.supplier.web.dto.SupplierStatementResponse;
 import org.junit.jupiter.api.Test;
+import org.mockito.InOrder;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
@@ -37,6 +40,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -189,7 +193,7 @@ class SupplierStatementServiceTest {
         inbound.setSettlementMode("月结");
         inbound.setTotalWeight(new BigDecimal("1.000"));
         inbound.setTotalAmount(new BigDecimal("1000.00"));
-        inbound.setStatus("完成采购");
+        inbound.setStatus(StatusConstants.INBOUND_COMPLETED);
         when(repository.findAll(any(Specification.class))).thenReturn(List.of());
         when(purchaseInboundRepository.findAll(any(Specification.class), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(inbound)));
@@ -402,6 +406,141 @@ class SupplierStatementServiceTest {
         verify(repository).save(argThat(saved -> StatusConstants.CONFIRMED.equals(saved.getStatus())));
     }
 
+    @Test
+    void shouldLockActualPurchaseInboundsBeforeCreateApply() {
+        SupplierStatementRepository repository = mock(SupplierStatementRepository.class);
+        PurchaseInboundItemQueryService itemQueryService = mock(PurchaseInboundItemQueryService.class);
+        SupplierStatementApplyService applyService = mock(SupplierStatementApplyService.class);
+        SourceAllocationLockService lockService = mock(SourceAllocationLockService.class);
+        when(itemQueryService.findAllActiveByIdIn(List.of(101L)))
+                .thenReturn(List.of(sourceInboundItem(101L, 30L)));
+        when(repository.save(any(SupplierStatement.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        SupplierStatementService service = lockingService(
+                repository,
+                itemQueryService,
+                mock(WorkflowTransitionGuard.class),
+                applyService,
+                lockService
+        );
+
+        service.create(buildRequest(BigDecimal.ZERO));
+
+        InOrder inOrder = inOrder(lockService, applyService);
+        inOrder.verify(lockService).lockDocumentSources(List.of(30L), List.of(), List.of(), List.of());
+        inOrder.verify(applyService).apply(any(SupplierStatement.class), any(SupplierStatementRequest.class), any());
+    }
+
+    @Test
+    void shouldLockOldAndNewActualPurchaseInboundsBeforeUpdateApply() {
+        SupplierStatementRepository repository = mock(SupplierStatementRepository.class);
+        PurchaseInboundItemQueryService itemQueryService = mock(PurchaseInboundItemQueryService.class);
+        SupplierStatementApplyService applyService = mock(SupplierStatementApplyService.class);
+        SourceAllocationLockService lockService = mock(SourceAllocationLockService.class);
+        SupplierStatement statement = createSupplierStatement(1L, "GYDZ-001");
+        SupplierStatementItem existingItem = new SupplierStatementItem();
+        existingItem.setSourceInboundItemId(301L);
+        statement.setItems(new java.util.ArrayList<>(List.of(existingItem)));
+        when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(statement));
+        when(repository.save(any(SupplierStatement.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(itemQueryService.findAllActiveByIdIn(List.of(101L, 301L))).thenReturn(List.of(
+                sourceInboundItem(301L, 40L),
+                sourceInboundItem(101L, 20L),
+                sourceInboundItem(101L, 20L)
+        ));
+        SupplierStatementService service = lockingService(
+                repository,
+                itemQueryService,
+                mock(WorkflowTransitionGuard.class),
+                applyService,
+                lockService
+        );
+
+        service.update(1L, buildRequest(BigDecimal.ZERO));
+
+        InOrder inOrder = inOrder(lockService, applyService);
+        inOrder.verify(lockService).lockDocumentSources(List.of(20L, 40L), List.of(), List.of(), List.of());
+        inOrder.verify(applyService).apply(any(SupplierStatement.class), any(SupplierStatementRequest.class), any());
+    }
+
+    @Test
+    void shouldLockExistingActualPurchaseInboundsBeforeStatusMutation() {
+        SupplierStatementRepository repository = mock(SupplierStatementRepository.class);
+        PurchaseInboundItemQueryService itemQueryService = mock(PurchaseInboundItemQueryService.class);
+        WorkflowTransitionGuard workflowTransitionGuard = mock(WorkflowTransitionGuard.class);
+        SourceAllocationLockService lockService = mock(SourceAllocationLockService.class);
+        SupplierStatement statement = createSupplierStatement(1L, "GYDZ-STATUS");
+        SupplierStatementItem existingItem = new SupplierStatementItem();
+        existingItem.setSourceInboundItemId(301L);
+        statement.setItems(new java.util.ArrayList<>(List.of(existingItem)));
+        when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(statement));
+        when(repository.save(any(SupplierStatement.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(itemQueryService.findAllActiveByIdIn(List.of(301L)))
+                .thenReturn(List.of(sourceInboundItem(301L, 40L)));
+        SupplierStatementService service = lockingService(
+                repository,
+                itemQueryService,
+                workflowTransitionGuard,
+                mock(SupplierStatementApplyService.class),
+                lockService
+        );
+
+        service.updateStatus(1L, StatusConstants.CONFIRMED);
+
+        InOrder inOrder = inOrder(lockService, workflowTransitionGuard);
+        inOrder.verify(lockService).lockDocumentSources(List.of(40L), List.of(), List.of(), List.of());
+        inOrder.verify(workflowTransitionGuard).assertAuditPermissionForProtectedValue(
+                "supplier-statement",
+                StatusConstants.PENDING_CONFIRM,
+                StatusConstants.CONFIRMED,
+                StatusConstants.CONFIRMED
+        );
+    }
+
+    @Test
+    void shouldLockExistingActualPurchaseInboundsBeforeDeleteMutation() {
+        SupplierStatementRepository repository = mock(SupplierStatementRepository.class);
+        PurchaseInboundItemQueryService itemQueryService = mock(PurchaseInboundItemQueryService.class);
+        SourceAllocationLockService lockService = mock(SourceAllocationLockService.class);
+        SupplierStatement statement = createSupplierStatement(1L, "GYDZ-DELETE");
+        SupplierStatementItem existingItem = new SupplierStatementItem();
+        existingItem.setSourceInboundItemId(301L);
+        statement.setItems(new java.util.ArrayList<>(List.of(existingItem)));
+        when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(statement));
+        when(repository.save(any(SupplierStatement.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(itemQueryService.findAllActiveByIdIn(List.of(301L)))
+                .thenReturn(List.of(sourceInboundItem(301L, 40L)));
+        SupplierStatementService service = lockingService(
+                repository,
+                itemQueryService,
+                mock(WorkflowTransitionGuard.class),
+                mock(SupplierStatementApplyService.class),
+                lockService
+        );
+
+        service.delete(1L);
+
+        InOrder inOrder = inOrder(lockService, repository);
+        inOrder.verify(lockService).lockDocumentSources(List.of(40L), List.of(), List.of(), List.of());
+        inOrder.verify(repository).save(statement);
+    }
+
+    private SupplierStatementService lockingService(SupplierStatementRepository repository,
+                                                     PurchaseInboundItemQueryService itemQueryService,
+                                                     WorkflowTransitionGuard workflowTransitionGuard,
+                                                     SupplierStatementApplyService applyService,
+                                                     SourceAllocationLockService lockService) {
+        return new SupplierStatementService(
+                repository,
+                new SnowflakeIdGenerator(0L),
+                mock(SupplierStatementResponseAssembler.class),
+                workflowTransitionGuard,
+                mock(SupplierStatementSourceService.class),
+                applyService,
+                itemQueryService,
+                lockService
+        );
+    }
+
     private SupplierStatementService service(SupplierStatementRepository repository,
                                              SupplierStatementMapper mapper,
                                              PurchaseInboundRepository purchaseInboundRepository,
@@ -415,7 +554,9 @@ class SupplierStatementServiceTest {
                 new SupplierStatementResponseAssembler(mapper),
                 workflowTransitionGuard,
                 sourceService,
-                new SupplierStatementApplyService(workflowTransitionGuard, sourceService)
+                new SupplierStatementApplyService(workflowTransitionGuard, sourceService),
+                purchaseInboundItemQueryService,
+                mock(SourceAllocationLockService.class)
         );
     }
 
@@ -472,7 +613,7 @@ class SupplierStatementServiceTest {
         PurchaseInbound inbound = new PurchaseInbound();
         inbound.setInboundNo("IN-001");
         inbound.setSupplierName("供应商甲");
-        inbound.setStatus("完成采购");
+        inbound.setStatus(StatusConstants.INBOUND_COMPLETED);
 
         PurchaseInboundItem item = new PurchaseInboundItem();
         item.setId(101L);
@@ -494,6 +635,13 @@ class SupplierStatementServiceTest {
         item.setWeightAdjustmentAmount(BigDecimal.ZERO);
         item.setUnitPrice(new BigDecimal("1000.00"));
         item.setAmount(new BigDecimal("1000.00"));
+        return item;
+    }
+
+    private PurchaseInboundItem sourceInboundItem(Long itemId, Long inboundId) {
+        PurchaseInboundItem item = buildInboundItem();
+        item.setId(itemId);
+        item.getPurchaseInbound().setId(inboundId);
         return item;
     }
 }

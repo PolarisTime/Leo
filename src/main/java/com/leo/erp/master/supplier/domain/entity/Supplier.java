@@ -17,7 +17,7 @@ public class Supplier extends AbstractAuditableEntity {
     @Id
     private Long id;
 
-    @Column(name = "supplier_code", nullable = false, unique = true, length = 64)
+    @Column(name = "supplier_code", nullable = false, length = 64)
     private String supplierCode;
 
     @Column(name = "supplier_name", nullable = false, length = 128)

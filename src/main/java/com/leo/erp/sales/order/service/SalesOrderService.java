@@ -2,6 +2,7 @@ package com.leo.erp.sales.order.service;
 
 import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.api.PageQuery;
+import com.leo.erp.common.concurrency.SourceAllocationLockService;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
@@ -12,6 +13,7 @@ import com.leo.erp.sales.order.domain.entity.SalesOrder;
 import com.leo.erp.sales.order.domain.entity.SalesOrderItem;
 import com.leo.erp.sales.order.repository.SalesOrderItemRepository;
 import com.leo.erp.sales.order.repository.SalesOrderRepository;
+import com.leo.erp.sales.order.web.dto.SalesOrderItemRequest;
 import com.leo.erp.sales.order.web.dto.SalesOrderRequest;
 import com.leo.erp.sales.order.web.dto.SalesOrderResponse;
 import org.springframework.data.domain.PageImpl;
@@ -22,7 +24,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
+import java.util.stream.Stream;
 
 @Service
 public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrderRequest, SalesOrderResponse> {
@@ -35,6 +39,7 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
     private final SalesOrderProtectedUpdatePolicy protectedUpdatePolicy;
     private final SalesOrderSaveService saveService;
     private final SalesOrderItemRepository salesOrderItemRepository;
+    private final SourceAllocationLockService sourceAllocationLockService;
 
     @Autowired
     public SalesOrderService(SalesOrderRepository repository,
@@ -45,7 +50,8 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
                              SalesOrderAuditedPricingService salesOrderAuditedPricingService,
                              SalesOrderProtectedUpdatePolicy protectedUpdatePolicy,
                              SalesOrderSaveService saveService,
-                             SalesOrderItemRepository salesOrderItemRepository) {
+                             SalesOrderItemRepository salesOrderItemRepository,
+                             SourceAllocationLockService sourceAllocationLockService) {
         super(idGenerator);
         this.repository = repository;
         this.responseAssembler = responseAssembler;
@@ -55,6 +61,7 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
         this.protectedUpdatePolicy = protectedUpdatePolicy;
         this.saveService = saveService;
         this.salesOrderItemRepository = salesOrderItemRepository;
+        this.sourceAllocationLockService = sourceAllocationLockService;
     }
 
     @Transactional(readOnly = true)
@@ -190,7 +197,45 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
 
     @Override
     protected void beforeDelete(SalesOrder entity) {
+        lockPurchaseSources(entity, null);
         salesOrderPurchaseAllocationService.releaseSalesOrderItems(entity);
+    }
+
+    @Override
+    protected void beforeStatusUpdate(SalesOrder entity, String currentStatus, String nextStatus) {
+        lockPurchaseSources(entity, null);
+    }
+
+    private void lockPurchaseSources(SalesOrder entity, SalesOrderRequest request) {
+        Stream<SalesOrderItem> existingItems = entity == null
+                ? Stream.empty()
+                : entity.getItems().stream();
+        List<SalesOrderItem> currentItems = existingItems.toList();
+        Stream<SalesOrderItemRequest> requestedItems = request == null
+                ? Stream.empty()
+                : request.items().stream();
+        List<SalesOrderItemRequest> nextItems = requestedItems.toList();
+        List<Long> purchaseOrderItemIds = Stream.concat(
+                        currentItems.stream().map(SalesOrderItem::getSourcePurchaseOrderItemId),
+                        nextItems.stream().map(SalesOrderItemRequest::sourcePurchaseOrderItemId)
+                )
+                .filter(Objects::nonNull)
+                .distinct()
+                .sorted()
+                .toList();
+        List<Long> purchaseInboundItemIds = Stream.concat(
+                        currentItems.stream().map(SalesOrderItem::getSourceInboundItemId),
+                        nextItems.stream().map(SalesOrderItemRequest::sourceInboundItemId)
+                )
+                .filter(Objects::nonNull)
+                .distinct()
+                .sorted()
+                .toList();
+        sourceAllocationLockService.lockTradeItemSources(
+                purchaseOrderItemIds,
+                purchaseInboundItemIds,
+                List.of()
+        );
     }
 
     @Override
@@ -235,6 +280,7 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
 
     @Override
     protected void apply(SalesOrder entity, SalesOrderRequest request) {
+        lockPurchaseSources(entity, request);
         if (salesOrderAuditedPricingService.isAuditedPricingUpdate(entity, request)) {
             salesOrderAuditedPricingService.applyAuditedPricingUpdate(entity, request);
             return;

@@ -155,6 +155,49 @@ class ReceiptAllocationServiceTest {
     }
 
     @Test
+    void shouldNotExposeIncompleteNewAllocationsToValidatorQueries() {
+        Receipt receipt = receipt();
+        ReceiptStatementAllocationValidator validator = mock(ReceiptStatementAllocationValidator.class);
+        when(validator.validate(
+                any(ReceiptRequest.class),
+                eq(StatusConstants.RECEIVED),
+                eq(1L),
+                anyLong(),
+                any(BigDecimal.class),
+                any(),
+                anyInt()
+        )).thenAnswer(invocation -> {
+            assertThat(receipt.getItems())
+                    .as("validator 查询触发 flush 时不应暴露未完整赋值的新核销行")
+                    .noneMatch(item -> item.getReceipt() == null
+                            || item.getLineNo() == null
+                            || item.getSourceStatementId() == null
+                            || item.getAllocatedAmount() == null);
+            Long statementId = invocation.getArgument(3);
+            return customerStatement(statementId, "CUST-001", 1001L, "结算主体A");
+        });
+        ReceiptAllocationService service = new ReceiptAllocationService(validator);
+
+        ReceiptAllocationService.AllocationApplyResult result = service.applyAllocations(
+                receipt,
+                receiptRequest(null, new BigDecimal("100.00"), List.of(
+                        new ReceiptAllocationRequest(null, 21L, new BigDecimal("40.00")),
+                        new ReceiptAllocationRequest(null, 22L, new BigDecimal("60.00"))
+                )),
+                StatusConstants.RECEIVED,
+                new AtomicLong(100)::incrementAndGet
+        );
+
+        assertThat(result.totalAllocatedAmount()).isEqualByComparingTo("100.00");
+        assertThat(receipt.getItems()).hasSize(2).allSatisfy(item -> {
+            assertThat(item.getReceipt()).isSameAs(receipt);
+            assertThat(item.getLineNo()).isNotNull();
+            assertThat(item.getSourceStatementId()).isNotNull();
+            assertThat(item.getAllocatedAmount()).isNotNull();
+        });
+    }
+
+    @Test
     void shouldRejectDifferentSettlementCompanies() {
         ReceiptStatementAllocationValidator validator = mock(ReceiptStatementAllocationValidator.class);
         when(validator.validate(

@@ -80,6 +80,42 @@ class IoReportQueryRepositoryTest {
     }
 
     @Test
+    void pageIncludesOnlyEffectiveInboundAndOutboundMovements() {
+        when(jdbcTemplate.queryForObject(anyString(), any(MapSqlParameterSource.class), eq(Number.class)))
+                .thenReturn(0);
+
+        repository.page(new PageQuery(0, 10, null, null), null, null, null, null);
+
+        var sql = org.mockito.ArgumentCaptor.forClass(String.class);
+        var params = org.mockito.ArgumentCaptor.forClass(MapSqlParameterSource.class);
+        verify(jdbcTemplate).queryForObject(sql.capture(), params.capture(), eq(Number.class));
+
+        assertThat(sql.getValue())
+                .contains("inbound.status IN (:effectiveInboundStatuses)")
+                .contains("outbound.status IN (:effectiveOutboundStatuses)")
+                .doesNotContain("预出库");
+        assertThat(params.getValue().getValue("effectiveInboundStatuses"))
+                .isEqualTo(Set.of("已审核", "完成入库"));
+        assertThat(params.getValue().getValue("effectiveOutboundStatuses"))
+                .isEqualTo(Set.of("已审核"));
+    }
+
+    @Test
+    void pageUsesLineWarehouseForOutboundMovements() {
+        when(jdbcTemplate.queryForObject(anyString(), any(MapSqlParameterSource.class), eq(Number.class)))
+                .thenReturn(0);
+
+        repository.page(new PageQuery(0, 10, null, null), null, null, null, null);
+
+        var sql = org.mockito.ArgumentCaptor.forClass(String.class);
+        verify(jdbcTemplate).queryForObject(sql.capture(), any(MapSqlParameterSource.class), eq(Number.class));
+
+        assertThat(sql.getValue())
+                .contains("COALESCE(NULLIF(item.warehouse_name, ''), outbound.warehouse_name) AS warehouse_name")
+                .doesNotContain("outbound.warehouse_name AS warehouse_name");
+    }
+
+    @Test
     void pageWithKeywordAppliesLikeFilter() {
         when(jdbcTemplate.queryForObject(anyString(), any(MapSqlParameterSource.class), eq(Number.class)))
                 .thenReturn(0);

@@ -118,6 +118,7 @@ SPRING_DATA_REDIS_DATABASE=3
 SPRING_DATA_REDIS_PASSWORD=change-me
 LEO_JWT_SECRET=change-me-at-least-32-chars
 TOTP_ENCRYPTION_KEY=change-me-at-least-16-chars
+LEO_SETUP_BOOTSTRAP_TOKEN=<32-byte-base64url-token>
 LEO_MACHINE_ID=1
 LEO_ATTACHMENT_LOCAL_PATH=/var/lib/leo/uploads
 LEO_AUTH_REFRESH_COOKIE_SECURE=true
@@ -140,6 +141,10 @@ sudo cp deploy/nginx/leo.conf /etc/nginx/conf.d/leo.conf
 sudo nginx -t
 sudo systemctl reload nginx
 ```
+
+两份 Nginx 模板都允许公网读取 `GET /api/setup/status`，以便前端判断是否需要首次初始化；`POST`、`PUT`、`PATCH`、`DELETE` 等写请求默认只允许从 `127.0.0.1` 或 `::1` 发起。因而公网前端可以展示初始化状态，但不能直接提交初始化数据。需要从远程管理终端完成网页初始化时，只在 `location ^~ /api/setup` 的 `deny all` 前临时增加精确的管理源 IP/CIDR `allow`，先执行 `nginx -t` 再 reload，初始化完成后立即移除。该 location 故意不带末尾 `/`，并使用不带 URI 的 `proxy_pass`，以同时覆盖并原样转发 `/api/setup`、其子路径以及 `/api/setup;...` 路径参数，避免请求落入通用 `/api/` 代理。`X-Setup-Token` 仍必须同时校验，不能用扩大 Nginx 来源范围代替应用凭证。
+
+`LEO_SETUP_BOOTSTRAP_TOKEN` 必须是 32 字节随机值的 Base64URL 编码，并按生产密码管理，不得写入 Git、命令行参数或部署日志。初始化完成前保持该值稳定；完成后可从运行环境移除。
 
 部署 SSH 用户需要能执行发布脚本中的 `sudo bash`、`systemctl restart leo-backend`、`systemctl daemon-reload`。建议限制 sudo 权限到部署命令范围，不要给通用 root shell。
 
@@ -232,6 +237,8 @@ PGPASSWORD="<postgres-admin-password>" \
 ```
 
 脚本会安装 `/etc/nginx/conf.d/steelx.conf`，执行 `nginx -t` 后 reload Nginx。执行用户需要 root 权限，或具备免密 sudo 执行 `install`、`nginx -t`、`nginx -s reload` 的权限。生产实例对外地址为 `https://in1ove.com`，`http://in1ove.com` 会跳转到 HTTPS。
+
+脚本重写 `/instance/steelx/shared/steelx.env` 时会保留已有的 `LEO_SETUP_BOOTSTRAP_TOKEN`；变量缺失或为空时，使用 OpenSSL 生成 32 字节随机值并转换为无填充 Base64URL。token 只写入权限为 `600` 的 env 文件，不在脚本输出中回显。若已有值不符合 32 字节 Base64URL 格式，脚本会停止并保留原文件，避免静默轮换导致初始化客户端失效。
 
 完成首次初始化后，后续自动化发布走 GitHub Actions `deploy_target=local`。本机 runner 直接下载 release archive 并调用 `scripts/deploy/install-production-release.sh` 发布到 `/instance/steelx/backend`，不会重新写数据库。
 

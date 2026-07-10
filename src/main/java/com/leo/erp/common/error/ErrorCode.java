@@ -8,6 +8,7 @@ public enum ErrorCode {
     NOT_FOUND(4040, "资源不存在"),
     BUSINESS_ERROR(4220, "业务处理失败"),
     SESSION_EVICTED(4011, "您的账号已在其他设备登录，当前会话已被登出"),
+    CONCURRENT_MODIFICATION(4090, "数据已被其他请求修改，请刷新后重试"),
     REFRESH_TOKEN_REUSE_CONFLICT(4091, "登录状态正在刷新，请稍后重试"),
     RATE_LIMITED(4290, "请求过于频繁，请稍后再试"),
     INTERNAL_ERROR(5000, "系统内部错误");

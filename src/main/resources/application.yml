@@ -153,10 +153,18 @@ spring:
 
 # 业务自定义配置
 leo:
+  setup:
+    # 首次初始化写接口凭证，必须是 32 字节 Base64URL；初始化完成后可从运行环境移除
+    bootstrap-token: ${LEO_SETUP_BOOTSTRAP_TOKEN:}
   # 受信代理 IP/CIDR 列表（逗号分隔）。只有来自这些地址的请求才会信任 X-Forwarded-For 头。
   # 部署在 nginx / CDN 后面时，填入代理的内网地址。
-  # 示例: "127.0.0.1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
-  trusted-proxies: ${LEO_TRUSTED_PROXIES:127.0.0.1}
+  # 示例: "127.0.0.1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"；默认不信任任何代理。
+  trusted-proxies: ${LEO_TRUSTED_PROXIES:}
+  rate-limit:
+    local-cache:
+      # 单实例限流桶使用有界空闲过期缓存，避免攻击者构造维度导致常驻内存持续增长。
+      maximum-size: ${LEO_RATE_LIMIT_LOCAL_CACHE_MAXIMUM_SIZE:10000}
+      expire-after-access-ms: ${LEO_RATE_LIMIT_LOCAL_CACHE_EXPIRE_AFTER_ACCESS_MS:600000}
   feature-flags:
     unleash:
       # 默认关闭；启用后 runtime-config 的 feature 字段通过 OpenFeature/Unleash 读取。

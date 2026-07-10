@@ -75,7 +75,17 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                     return;
                 }
 
-                authenticatedUserCacheService.getActivePrincipal(userId)
+                long tokenCredentialVersion = extractCredentialVersion(claims);
+                var currentCredentialVersion =
+                        authenticatedUserCacheService.getAuthoritativeCredentialVersion(userId);
+                if (currentCredentialVersion.isPresent()
+                        && currentCredentialVersion.get() != tokenCredentialVersion) {
+                    sendUnauthorized(request, response, "凭据已变更，请重新登录");
+                    return;
+                }
+
+                currentCredentialVersion
+                        .flatMap(version -> authenticatedUserCacheService.getActivePrincipal(userId, version))
                         .ifPresent(principal -> {
                             authenticate(request, principal);
                             sessionActivityService.touchSession(sessionId);
@@ -104,6 +114,11 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private String extractSessionId(Claims claims) {
         Object sid = claims.get("sid");
         return sid == null ? null : String.valueOf(sid);
+    }
+
+    private long extractCredentialVersion(Claims claims) {
+        Object credentialVersion = claims.get("cv");
+        return credentialVersion == null ? 0L : Long.parseLong(String.valueOf(credentialVersion));
     }
 
     private boolean isTokenBlacklisted(Claims claims, Long userId, String sessionId) {

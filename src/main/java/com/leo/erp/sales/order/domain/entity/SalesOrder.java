@@ -19,6 +19,10 @@ public class SalesOrder extends AbstractAuditableEntity {
     @Id
     private Long id;
 
+    @Version
+    @Column(name = "version", nullable = false)
+    private Long version;
+
     @Column(name = "order_no", nullable = false, unique = true, length = 64)
     private String orderNo;
 

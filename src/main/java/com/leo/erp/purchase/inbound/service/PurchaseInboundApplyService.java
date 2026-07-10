@@ -13,6 +13,7 @@ import com.leo.erp.purchase.order.domain.entity.PurchaseOrderItem;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
@@ -62,8 +63,9 @@ public class PurchaseInboundApplyService {
                 new HashMap<>();
         LinkedHashSet<String> sourcePurchaseOrderNos = new LinkedHashSet<>();
         String firstLineWarehouseName = null;
+        List<PurchaseInboundItem> managedItems = inbound.getItems();
         List<PurchaseInboundItem> items = ManagedEntityItemSupport.syncById(
-                inbound.getItems(),
+                new ArrayList<>(managedItems),
                 request.items(),
                 PurchaseInboundItem::getId,
                 PurchaseInboundItemRequest::id,
@@ -105,7 +107,9 @@ public class PurchaseInboundApplyService {
 
             collectCurrentWeighAccumulator(currentWeighAccumulatorMap, result);
         }
-        inbound.getItems().sort(Comparator.comparing(PurchaseInboundItem::getLineNo));
+        managedItems.clear();
+        managedItems.addAll(items);
+        managedItems.sort(Comparator.comparing(PurchaseInboundItem::getLineNo));
         inbound.setPurchaseOrderNo(sourcePurchaseOrderNos.isEmpty()
                 ? request.purchaseOrderNo()
                 : String.join(", ", sourcePurchaseOrderNos));

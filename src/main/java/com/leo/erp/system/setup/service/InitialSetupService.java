@@ -128,9 +128,7 @@ public class InitialSetupService {
                     .orElse(null);
         }
 
-        if (isAdminConfigured() && companySettingRepository.existsByDeletedFlagFalse()) {
-            ensureOobeCompletedSwitch();
-        }
+        ensureOobeCompletedIfReady();
 
         return new InitialSetupSubmitResponse(adminLoginName, companyName);
     }
@@ -398,5 +396,11 @@ public class InitialSetupService {
         setting.setStatus(StatusConstants.NORMAL);
         setting.setRemark("首次初始化完成后自动创建，禁止重复执行 OOBE 流程");
         noRuleRepository.save(setting);
+    }
+
+    void ensureOobeCompletedIfReady() {
+        if (isAdminConfigured() && companySettingRepository.existsByDeletedFlagFalse()) {
+            ensureOobeCompletedSwitch();
+        }
     }
 }

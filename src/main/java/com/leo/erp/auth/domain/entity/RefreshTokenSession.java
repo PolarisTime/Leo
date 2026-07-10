@@ -31,6 +31,9 @@ public class RefreshTokenSession extends AbstractAuditableEntity {
     @Column(name = "token_hash", nullable = false, unique = true, length = 128)
     private String tokenHash;
 
+    @Column(name = "credential_version", nullable = false)
+    private Long credentialVersion = 0L;
+
     @Column(name = "previous_token_hash", length = 128)
     private String previousTokenHash;
 

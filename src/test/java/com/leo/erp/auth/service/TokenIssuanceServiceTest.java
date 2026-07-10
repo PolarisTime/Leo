@@ -27,6 +27,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -60,6 +61,10 @@ class TokenIssuanceServiceTest {
         SessionManagementService sessionMgmt = mock(SessionManagementService.class);
         when(sessionMgmt.newSessionTokenId()).thenReturn("session-id");
         when(sessionMgmt.generateRefreshToken()).thenReturn("refresh-token");
+        RefreshTokenSession createdSession = session(1L, "session-id");
+        createdSession.setCredentialVersion(6L);
+        when(sessionMgmt.createSession(1L, "session-id", "refresh-token", "127.0.0.1", "JUnit"))
+                .thenReturn(createdSession);
 
         TokenIssuanceService service = new TokenIssuanceService(
                 userRepo, jwtService, permissionService,
@@ -73,6 +78,10 @@ class TokenIssuanceServiceTest {
         assertThat(response.tokenType()).isEqualTo("Bearer");
         assertThat(response.user()).isNotNull();
         assertThat(response.user().loginName()).isEqualTo("admin");
+        org.mockito.ArgumentCaptor<SecurityPrincipal> principalCaptor =
+                org.mockito.ArgumentCaptor.forClass(SecurityPrincipal.class);
+        verify(jwtService).generateAccessToken(principalCaptor.capture(), org.mockito.ArgumentMatchers.eq("session-id"));
+        assertThat(principalCaptor.getValue().credentialVersion()).isEqualTo(6L);
     }
 
     @Test
@@ -128,17 +137,38 @@ class TokenIssuanceServiceTest {
     }
 
     @Test
+    void refreshShouldLockUserBeforeSessionAndRejectStaleCredentialVersion() {
+        RefreshTokenSession session = session(1L, "session-id");
+        session.setCredentialVersion(2L);
+        UserAccount user = normalUser();
+        user.setCredentialVersion(3L);
+        SessionManagementService sessionMgmt = mock(SessionManagementService.class);
+        when(sessionMgmt.findRefreshTokenUserId("refresh-token")).thenReturn(Optional.of(1L));
+        when(sessionMgmt.findUserByIdForUpdate(1L)).thenReturn(user);
+        when(sessionMgmt.findActiveSession("refresh-token")).thenReturn(Optional.of(session));
+        TokenIssuanceService service = createService(sessionMgmt);
+
+        assertThatThrownBy(() -> service.refresh("refresh-token", "127.0.0.1", "JUnit"))
+                .isInstanceOf(BadCredentialsException.class)
+                .hasMessageContaining("凭据已变更");
+
+        var ordered = inOrder(sessionMgmt);
+        ordered.verify(sessionMgmt).findRefreshTokenUserId("refresh-token");
+        ordered.verify(sessionMgmt).findUserByIdForUpdate(1L);
+        ordered.verify(sessionMgmt).findActiveSession("refresh-token");
+        verify(sessionMgmt, never()).refreshSession(any(), anyString(), anyString(), anyString());
+    }
+
+    @Test
     void refreshShouldRejectUnknownTokenWhenNoSessionExists() {
         SessionManagementService sessionMgmt = mock(SessionManagementService.class);
-        when(sessionMgmt.findActiveSession("missing-token")).thenReturn(Optional.empty());
-        when(sessionMgmt.findPreviousTokenSession("missing-token")).thenReturn(Optional.empty());
-        when(sessionMgmt.findSessionByHash("missing-token")).thenReturn(Optional.empty());
         TokenIssuanceService service = createService(sessionMgmt);
 
         assertThatThrownBy(() -> service.refresh("missing-token", "127.0.0.1", "JUnit"))
                 .isInstanceOf(BadCredentialsException.class);
 
-        verify(sessionMgmt).findSessionByHash("missing-token");
+        verify(sessionMgmt).findRefreshTokenUserId("missing-token");
+        verify(sessionMgmt, never()).findActiveSession("missing-token");
     }
 
     @Test
@@ -147,6 +177,7 @@ class TokenIssuanceServiceTest {
         evicted.setRevokeReason(RevokeReason.CONCURRENT_LIMIT);
 
         SessionManagementService sessionMgmt = mock(SessionManagementService.class);
+        stubRefreshOwner(sessionMgmt, "evicted-token", normalUser());
         when(sessionMgmt.findActiveSession("evicted-token")).thenReturn(Optional.empty());
         when(sessionMgmt.findPreviousTokenSession("evicted-token")).thenReturn(Optional.empty());
         when(sessionMgmt.findSessionByHash("evicted-token")).thenReturn(Optional.of(evicted));
@@ -164,6 +195,7 @@ class TokenIssuanceServiceTest {
         reused.setRevokeReason(RevokeReason.REUSE_DETECTED);
 
         SessionManagementService sessionMgmt = mock(SessionManagementService.class);
+        stubRefreshOwner(sessionMgmt, "reused-hash-token", normalUser());
         when(sessionMgmt.findActiveSession("reused-hash-token")).thenReturn(Optional.empty());
         when(sessionMgmt.findPreviousTokenSession("reused-hash-token")).thenReturn(Optional.empty());
         when(sessionMgmt.findSessionByHash("reused-hash-token")).thenReturn(Optional.of(reused));
@@ -178,6 +210,7 @@ class TokenIssuanceServiceTest {
         RefreshTokenSession previous = session(1L, "session-id");
 
         SessionManagementService sessionMgmt = mock(SessionManagementService.class);
+        stubRefreshOwner(sessionMgmt, "old-token", normalUser());
         when(sessionMgmt.findActiveSession("old-token")).thenReturn(Optional.empty());
         when(sessionMgmt.findPreviousTokenSession("old-token")).thenReturn(Optional.of(previous));
         when(sessionMgmt.isPreviousTokenInGraceWindow(previous)).thenReturn(true);
@@ -199,6 +232,7 @@ class TokenIssuanceServiceTest {
         ApplicationEventPublisher eventPublisher = mock(ApplicationEventPublisher.class);
 
         SessionManagementService sessionMgmt = mock(SessionManagementService.class);
+        stubRefreshOwner(sessionMgmt, "reused-token", normalUser());
         when(sessionMgmt.findActiveSession("reused-token")).thenReturn(Optional.empty());
         when(sessionMgmt.findPreviousTokenSession("reused-token")).thenReturn(Optional.of(previous));
         when(sessionMgmt.isPreviousTokenInGraceWindow(previous)).thenReturn(false);
@@ -217,13 +251,14 @@ class TokenIssuanceServiceTest {
         expired.setExpiresAt(LocalDateTime.now().minusSeconds(1));
 
         SessionManagementService sessionMgmt = mock(SessionManagementService.class);
+        stubRefreshOwner(sessionMgmt, "expired-token", normalUser());
         when(sessionMgmt.findActiveSession("expired-token")).thenReturn(Optional.of(expired));
         TokenIssuanceService service = createService(sessionMgmt);
 
         assertThatThrownBy(() -> service.refresh("expired-token", "127.0.0.1", "JUnit"))
                 .isInstanceOf(BadCredentialsException.class);
 
-        verify(sessionMgmt, never()).findUserById(anyLong());
+        verify(sessionMgmt).findUserByIdForUpdate(1L);
     }
 
     @Test
@@ -232,13 +267,14 @@ class TokenIssuanceServiceTest {
         revoked.setRevokedAt(LocalDateTime.now());
 
         SessionManagementService sessionMgmt = mock(SessionManagementService.class);
+        stubRefreshOwner(sessionMgmt, "revoked-token", normalUser());
         when(sessionMgmt.findActiveSession("revoked-token")).thenReturn(Optional.of(revoked));
         TokenIssuanceService service = createService(sessionMgmt);
 
         assertThatThrownBy(() -> service.refresh("revoked-token", "127.0.0.1", "JUnit"))
                 .isInstanceOf(BadCredentialsException.class);
 
-        verify(sessionMgmt, never()).findUserById(anyLong());
+        verify(sessionMgmt).findUserByIdForUpdate(1L);
     }
 
     @Test
@@ -248,8 +284,8 @@ class TokenIssuanceServiceTest {
         disabledUser.setStatus(UserStatus.DISABLED);
 
         SessionManagementService sessionMgmt = mock(SessionManagementService.class);
+        stubRefreshOwner(sessionMgmt, "refresh-token", disabledUser);
         when(sessionMgmt.findActiveSession("refresh-token")).thenReturn(Optional.of(session));
-        when(sessionMgmt.findUserById(1L)).thenReturn(disabledUser);
         TokenIssuanceService service = createService(sessionMgmt);
 
         assertThatThrownBy(() -> service.refresh("refresh-token", "127.0.0.1", "JUnit"))
@@ -280,8 +316,8 @@ class TokenIssuanceServiceTest {
         when(roleBinding.joinRoleNames(List.of())).thenReturn("");
 
         SessionManagementService sessionMgmt = mock(SessionManagementService.class);
+        stubRefreshOwner(sessionMgmt, "refresh-token", user);
         when(sessionMgmt.findActiveSession("refresh-token")).thenReturn(Optional.of(session));
-        when(sessionMgmt.findUserById(1L)).thenReturn(user);
         when(sessionMgmt.refreshSession(session, "refresh-token", "127.0.0.1", "JUnit"))
                 .thenReturn(new SessionManagementService.RefreshTokenRotationResult(session, "rotated-refresh-token"));
 
@@ -313,6 +349,14 @@ class TokenIssuanceServiceTest {
         user.setTotpEnabled(false);
         user.setRequireTotpSetup(false);
         return user;
+    }
+
+    private void stubRefreshOwner(SessionManagementService sessionManagementService,
+                                  String refreshToken,
+                                  UserAccount user) {
+        when(sessionManagementService.findRefreshTokenUserId(refreshToken))
+                .thenReturn(Optional.of(user.getId()));
+        when(sessionManagementService.findUserByIdForUpdate(user.getId())).thenReturn(user);
     }
 
     private RefreshTokenSession session(Long userId, String tokenId) {

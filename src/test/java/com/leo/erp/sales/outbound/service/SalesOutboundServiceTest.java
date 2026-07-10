@@ -1,5 +1,6 @@
 package com.leo.erp.sales.outbound.service;
 
+import com.leo.erp.common.concurrency.SourceAllocationLockService;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
@@ -22,6 +23,7 @@ import com.leo.erp.purchase.order.service.PurchaseOrderItemPieceWeightService;
 import com.leo.erp.security.permission.WorkflowTransitionGuard;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.junit.jupiter.api.Test;
+import org.mockito.InOrder;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -43,6 +45,19 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class SalesOutboundServiceTest {
+
+    @Test
+    void shouldUsePreOutboundWorkflowTransitions() {
+        SalesOutboundService service = createService(
+                mock(SalesOutboundRepository.class),
+                mock(SalesOutboundMapper.class),
+                mock(TradeItemMaterialSupport.class),
+                mock(WarehouseSelectionSupport.class),
+                mock(SalesOrderItemQueryService.class)
+        );
+
+        assertThat(service.allowedStatusTransitions()).isEqualTo(StatusConstants.SALES_OUTBOUND_TRANSITIONS);
+    }
 
     @Test
     void shouldResolveHeaderWarehouseFromFirstLineWarehouseWhenHeaderWarehouseMissing() {
@@ -292,6 +307,99 @@ class SalesOutboundServiceTest {
     }
 
     @Test
+    void shouldLockSourceBeforeCheckingOccupationOnCreate() {
+        SalesOutboundRepository repository = mock(SalesOutboundRepository.class);
+        SalesOutboundMapper mapper = mock(SalesOutboundMapper.class);
+        TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
+        WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
+        SalesOrderItemQueryService salesOrderItemQueryService = mock(SalesOrderItemQueryService.class);
+        SourceAllocationLockService sourceAllocationLockService = mock(SourceAllocationLockService.class);
+        SalesOutboundService service = createService(
+                repository, mock(SnowflakeIdGenerator.class), mapper,
+                materialSupport, warehouseSelectionSupport,
+                mock(WorkflowTransitionGuard.class), mock(SalesOrderCompletionSyncService.class),
+                salesOrderItemQueryService, mock(PurchaseOrderItemPieceWeightService.class),
+                mock(JdbcTemplate.class), sourceAllocationLockService
+        );
+        SalesOutboundRequest request = new SalesOutboundRequest(
+                "SOO-LOCK-CREATE", null, "客户A", "项目A", "一号码头",
+                LocalDate.of(2026, 7, 10), StatusConstants.DRAFT, null,
+                List.of(new SalesOutboundItemRequest(
+                        null, 9101L, "M1", "宝钢", "盘螺", "HRB400", "10", null, "吨",
+                        "一号码头", "B1", 1, "件",
+                        new BigDecimal("2.000"), 1, new BigDecimal("2.000"),
+                        new BigDecimal("3000.00"), null
+                ))
+        );
+        SalesOrderItem sourceItem = buildSalesOrderItem(9101L, "SO-LOCK-CREATE");
+
+        when(repository.existsByOutboundNoAndDeletedFlagFalse("SOO-LOCK-CREATE")).thenReturn(false);
+        when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(materialMap("M1"));
+        when(materialSupport.normalizeBatchNo(any(), eq("B1"), eq(1), eq(true))).thenReturn("B1");
+        when(warehouseSelectionSupport.normalizeWarehouseName("一号码头", 1, true)).thenReturn("一号码头");
+        when(salesOrderItemQueryService.findActiveByIdIn(anyCollection())).thenReturn(List.of(sourceItem));
+        when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        stubMapper(mapper);
+
+        service.create(request);
+
+        InOrder inOrder = org.mockito.Mockito.inOrder(sourceAllocationLockService, repository);
+        inOrder.verify(sourceAllocationLockService)
+                .lockTradeItemSources(List.of(), List.of(), List.of(9101L));
+        inOrder.verify(repository)
+                .findAllBySourceSalesOrderItemIdsExcludingCurrentOutbound(anyCollection(), any());
+    }
+
+    @Test
+    void shouldLockOldAndNewSourcesBeforeUpdatingEntityAndCheckingOccupation() {
+        SalesOutboundRepository repository = mock(SalesOutboundRepository.class);
+        TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
+        WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
+        SalesOrderItemQueryService salesOrderItemQueryService = mock(SalesOrderItemQueryService.class);
+        SourceAllocationLockService sourceAllocationLockService = mock(SourceAllocationLockService.class);
+        SalesOutboundService service = createService(
+                repository, mock(SnowflakeIdGenerator.class), mock(SalesOutboundMapper.class),
+                materialSupport, warehouseSelectionSupport,
+                mock(WorkflowTransitionGuard.class), mock(SalesOrderCompletionSyncService.class),
+                salesOrderItemQueryService, mock(PurchaseOrderItemPieceWeightService.class),
+                mock(JdbcTemplate.class), sourceAllocationLockService
+        );
+        SalesOutbound existing = buildExistingOutbound(7101L, "SOO-LOCK-UPDATE", "SO-OLD");
+        SalesOutboundItem existingItem = buildExistingOutboundItem(8101L, existing, 9102L);
+        SalesOutboundRequest request = new SalesOutboundRequest(
+                "SOO-LOCK-UPDATE", "SO-NEW", "客户A", "项目A", "一号码头",
+                LocalDate.of(2026, 7, 10), StatusConstants.DRAFT, null,
+                List.of(new SalesOutboundItemRequest(
+                        8101L, "SO-NEW", 9103L, "M1", "宝钢", "盘螺", "HRB400", "10", null, "吨",
+                        "一号码头", "B1", 1, "件",
+                        new BigDecimal("2.000"), 1, new BigDecimal("2.000"),
+                        new BigDecimal("3000.00"), null
+                ))
+        );
+        SalesOrderItem oldSourceItem = buildSalesOrderItem(9102L, "SO-OLD");
+        SalesOrderItem newSourceItem = buildSalesOrderItem(9103L, "SO-NEW");
+
+        when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(materialMap("M1"));
+        when(materialSupport.normalizeBatchNo(any(), eq("B1"), eq(1), eq(true))).thenReturn("B1");
+        when(warehouseSelectionSupport.normalizeWarehouseName("一号码头", 1, true)).thenReturn("一号码头");
+        when(salesOrderItemQueryService.findActiveByIdIn(anyCollection()))
+                .thenReturn(List.of(oldSourceItem, newSourceItem));
+        doAnswer(invocation -> {
+            assertThat(existing.getOutboundNo()).isEqualTo("SOO-LOCK-UPDATE");
+            assertThat(existingItem.getSourceSalesOrderItemId()).isEqualTo(9102L);
+            return null;
+        }).when(sourceAllocationLockService).lockTradeItemSources(anyCollection(), anyCollection(), anyCollection());
+
+        service.apply(existing, request);
+
+        InOrder inOrder = org.mockito.Mockito.inOrder(sourceAllocationLockService, repository);
+        inOrder.verify(sourceAllocationLockService)
+                .lockTradeItemSources(List.of(), List.of(), List.of(9102L, 9103L));
+        inOrder.verify(repository)
+                .findAllBySourceSalesOrderItemIdsExcludingCurrentOutbound(anyCollection(), eq(7101L));
+    }
+
+    @Test
     void shouldDeleteOutbound() {
         SalesOutboundRepository repository = mock(SalesOutboundRepository.class);
         SalesOutboundService service = createService(repository, mock(SalesOutboundMapper.class),
@@ -317,6 +425,34 @@ class SalesOutboundServiceTest {
 
         assertThat(existing.isDeletedFlag()).isTrue();
         verify(repository).save(existing);
+    }
+
+    @Test
+    void shouldLockExistingSourcesBeforeMarkingOutboundDeleted() {
+        SalesOutboundRepository repository = mock(SalesOutboundRepository.class);
+        SourceAllocationLockService sourceAllocationLockService = mock(SourceAllocationLockService.class);
+        SalesOutboundService service = createService(
+                repository, mock(SnowflakeIdGenerator.class), mock(SalesOutboundMapper.class),
+                mock(TradeItemMaterialSupport.class), mock(WarehouseSelectionSupport.class),
+                mock(WorkflowTransitionGuard.class), mock(SalesOrderCompletionSyncService.class),
+                mock(SalesOrderItemQueryService.class), mock(PurchaseOrderItemPieceWeightService.class),
+                mock(JdbcTemplate.class), sourceAllocationLockService
+        );
+        SalesOutbound existing = buildExistingOutbound(7102L, "SOO-LOCK-DELETE", "SO-LOCK-DELETE");
+        buildExistingOutboundItem(8102L, existing, 9104L);
+        when(repository.findByIdAndDeletedFlagFalse(7102L)).thenReturn(Optional.of(existing));
+        when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        doAnswer(invocation -> {
+            assertThat(existing.isDeletedFlag()).isFalse();
+            return null;
+        }).when(sourceAllocationLockService).lockTradeItemSources(anyCollection(), anyCollection(), anyCollection());
+
+        service.delete(7102L);
+
+        InOrder inOrder = org.mockito.Mockito.inOrder(sourceAllocationLockService, repository);
+        inOrder.verify(sourceAllocationLockService)
+                .lockTradeItemSources(List.of(), List.of(), List.of(9104L));
+        inOrder.verify(repository).save(existing);
     }
 
     @Test
@@ -353,6 +489,36 @@ class SalesOutboundServiceTest {
 
         assertThat(existing.getStatus()).isEqualTo("已审核");
         verify(syncService).syncBySalesOrderReference("SO-001");
+    }
+
+    @Test
+    void shouldLockExistingSourcesBeforeUpdatingOutboundStatus() {
+        SalesOutboundRepository repository = mock(SalesOutboundRepository.class);
+        SalesOutboundMapper mapper = mock(SalesOutboundMapper.class);
+        SourceAllocationLockService sourceAllocationLockService = mock(SourceAllocationLockService.class);
+        SalesOutboundService service = createService(
+                repository, mock(SnowflakeIdGenerator.class), mapper,
+                mock(TradeItemMaterialSupport.class), mock(WarehouseSelectionSupport.class),
+                mock(WorkflowTransitionGuard.class), mock(SalesOrderCompletionSyncService.class),
+                mock(SalesOrderItemQueryService.class), mock(PurchaseOrderItemPieceWeightService.class),
+                mock(JdbcTemplate.class), sourceAllocationLockService
+        );
+        SalesOutbound existing = buildExistingOutbound(7103L, "SOO-LOCK-STATUS", "SO-LOCK-STATUS");
+        buildExistingOutboundItem(8103L, existing, 9105L);
+        when(repository.findByIdAndDeletedFlagFalse(7103L)).thenReturn(Optional.of(existing));
+        when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        stubMapper(mapper);
+        doAnswer(invocation -> {
+            assertThat(existing.getStatus()).isEqualTo(StatusConstants.DRAFT);
+            return null;
+        }).when(sourceAllocationLockService).lockTradeItemSources(anyCollection(), anyCollection(), anyCollection());
+
+        service.updateStatus(7103L, StatusConstants.PRE_OUTBOUND);
+
+        InOrder inOrder = org.mockito.Mockito.inOrder(sourceAllocationLockService, repository);
+        inOrder.verify(sourceAllocationLockService)
+                .lockTradeItemSources(List.of(), List.of(), List.of(9105L));
+        inOrder.verify(repository).save(existing);
     }
 
     @Test
@@ -1504,6 +1670,32 @@ class SalesOutboundServiceTest {
                                                SalesOrderItemQueryService salesOrderItemQueryService,
                                                PurchaseOrderItemPieceWeightService purchaseOrderItemPieceWeightService,
                                                JdbcTemplate jdbc) {
+        return createService(
+                repository,
+                idGenerator,
+                mapper,
+                materialSupport,
+                warehouseSelectionSupport,
+                workflowTransitionGuard,
+                syncService,
+                salesOrderItemQueryService,
+                purchaseOrderItemPieceWeightService,
+                jdbc,
+                mock(SourceAllocationLockService.class)
+        );
+    }
+
+    private SalesOutboundService createService(SalesOutboundRepository repository,
+                                               SnowflakeIdGenerator idGenerator,
+                                               SalesOutboundMapper mapper,
+                                               TradeItemMaterialSupport materialSupport,
+                                               WarehouseSelectionSupport warehouseSelectionSupport,
+                                               WorkflowTransitionGuard workflowTransitionGuard,
+                                               SalesOrderCompletionSyncService syncService,
+                                               SalesOrderItemQueryService salesOrderItemQueryService,
+                                               PurchaseOrderItemPieceWeightService purchaseOrderItemPieceWeightService,
+                                               JdbcTemplate jdbc,
+                                               SourceAllocationLockService sourceAllocationLockService) {
         TradeItemMaterialSupportTestDoubles.stubMaterialCodeNormalization(materialSupport);
         SalesOutboundSourceService sourceService = new SalesOutboundSourceService(salesOrderItemQueryService, repository);
         return new SalesOutboundService(
@@ -1518,7 +1710,8 @@ class SalesOutboundServiceTest {
                 ),
                 new SalesOutboundResponseAssembler(mapper, sourceService),
                 new SalesOutboundSaveService(repository, syncService),
-                new SalesOutboundPurchaseInboundGuard(sourceService, jdbc)
+                new SalesOutboundPurchaseInboundGuard(sourceService, jdbc),
+                sourceAllocationLockService
         );
     }
 

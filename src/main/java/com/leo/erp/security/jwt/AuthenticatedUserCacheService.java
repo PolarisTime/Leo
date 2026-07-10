@@ -51,6 +51,23 @@ public class AuthenticatedUserCacheService {
     }
 
     public Optional<SecurityPrincipal> getActivePrincipal(Long userId) {
+        return getActivePrincipal(userId, null);
+    }
+
+    public Optional<SecurityPrincipal> getActivePrincipal(Long userId, long credentialVersion) {
+        return getActivePrincipal(userId, Long.valueOf(credentialVersion));
+    }
+
+    public Optional<Long> getAuthoritativeCredentialVersion(Long userId) {
+        if (userId == null) {
+            return Optional.empty();
+        }
+        return userAccountRepository.findCredentialVersion(userId, UserStatus.NORMAL)
+                .map(UserAccountRepository.CredentialVersionProjection::getCredentialVersion)
+                .map(this::normalizeCredentialVersion);
+    }
+
+    private Optional<SecurityPrincipal> getActivePrincipal(Long userId, Long expectedCredentialVersion) {
         if (userId == null) {
             return Optional.empty();
         }
@@ -59,12 +76,15 @@ public class AuthenticatedUserCacheService {
         String cached = redisTemplate.opsForValue().get(cacheKey);
         if (cached != null && !cached.isBlank()) {
             Optional<SecurityPrincipal> principal = parseCachedPrincipal(cacheKey, cached);
-            if (principal.isPresent()) {
+            if (principal.isPresent() && credentialVersionMatches(principal.get(), expectedCredentialVersion)) {
                 return principal;
+            }
+            if (principal.isPresent()) {
+                redisTemplate.delete(cacheKey);
             }
         }
 
-        return loadAndCachePrincipal(userId, cacheKey);
+        return loadAndCachePrincipal(userId, cacheKey, expectedCredentialVersion);
     }
 
     public void evict(Long userId) {
@@ -148,10 +168,16 @@ public class AuthenticatedUserCacheService {
         }
     }
 
-    private Optional<SecurityPrincipal> loadAndCachePrincipal(Long userId, String cacheKey) {
+    private Optional<SecurityPrincipal> loadAndCachePrincipal(
+            Long userId,
+            String cacheKey,
+            Long expectedCredentialVersion
+    ) {
         return userAccountRepository.findByIdAndDeletedFlagFalse(userId)
                 .filter(user -> user.getStatus() == UserStatus.NORMAL)
                 .map(this::toSnapshot)
+                .filter(snapshot -> expectedCredentialVersion == null
+                        || snapshot.credentialVersion() == expectedCredentialVersion)
                 .map(snapshot -> {
                     writeSnapshot(cacheKey, snapshot);
                     return snapshot.toPrincipal();
@@ -171,8 +197,17 @@ public class AuthenticatedUserCacheService {
                 user.getLoginName(),
                 authorityValues,
                 Boolean.TRUE.equals(user.getTotpEnabled()),
-                Boolean.TRUE.equals(user.getRequireTotpSetup())
+                Boolean.TRUE.equals(user.getRequireTotpSetup()),
+                normalizeCredentialVersion(user.getCredentialVersion())
         );
+    }
+
+    private boolean credentialVersionMatches(SecurityPrincipal principal, Long expectedCredentialVersion) {
+        return expectedCredentialVersion == null || principal.credentialVersion() == expectedCredentialVersion;
+    }
+
+    private long normalizeCredentialVersion(Long credentialVersion) {
+        return credentialVersion == null ? 0L : credentialVersion;
     }
 
     private void writeSnapshot(String cacheKey, CachedAuthenticatedUser snapshot) {
@@ -206,7 +241,8 @@ public class AuthenticatedUserCacheService {
             String loginName,
             List<String> authorities,
             boolean totpEnabled,
-            boolean forceTotpSetup
+            boolean forceTotpSetup,
+            long credentialVersion
     ) {
 
         private SecurityPrincipal toPrincipal() {
@@ -217,7 +253,8 @@ public class AuthenticatedUserCacheService {
                             .map(org.springframework.security.core.authority.SimpleGrantedAuthority::new)
                             .toList(),
                     totpEnabled,
-                    forceTotpSetup
+                    forceTotpSetup,
+                    credentialVersion
             );
         }
     }

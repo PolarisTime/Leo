@@ -3,6 +3,7 @@ package com.leo.erp.purchase.inbound.service;
 import com.leo.erp.allocation.repository.ItemAllocationNativeRepository;
 import com.leo.erp.purchase.inbound.service.InboundItemMapper;
 
+import com.leo.erp.common.concurrency.SourceAllocationLockService;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.service.CrudRuntimeSettings;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
@@ -30,6 +31,7 @@ import com.leo.erp.security.support.SecurityPrincipal;
 import com.leo.erp.sales.order.service.SalesOrderItemQueryService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.InOrder;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -48,7 +50,9 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentCaptor.forClass;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.when;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -57,6 +61,121 @@ class PurchaseInboundServiceTest {
     @AfterEach
     void tearDownSecurityContext() {
         SecurityContextHolder.clearContext();
+    }
+
+    @Test
+    void shouldRequireSourceAllocationLockServiceAsConstructorDependency() {
+        boolean hasRequiredDependency = java.util.Arrays.stream(PurchaseInboundService.class.getConstructors())
+                .anyMatch(constructor -> java.util.Arrays.asList(constructor.getParameterTypes())
+                        .contains(SourceAllocationLockService.class));
+
+        assertThat(hasRequiredDependency).isTrue();
+    }
+
+    @Test
+    void shouldLockPurchaseOrderSourcesBeforeCreatingInboundItems() {
+        PurchaseInboundRepository repository = mock(PurchaseInboundRepository.class);
+        SnowflakeIdGenerator idGenerator = mock(SnowflakeIdGenerator.class);
+        PurchaseInboundApplyService applyService = mock(PurchaseInboundApplyService.class);
+        SourceAllocationLockService lockService = mock(SourceAllocationLockService.class);
+        PurchaseInboundService service = lockAwareService(
+                repository,
+                idGenerator,
+                applyService,
+                mock(PurchaseInboundDeleteService.class),
+                mock(PurchaseInboundCompletionSyncService.class),
+                lockService
+        );
+        PurchaseInboundRequest request = request();
+
+        when(idGenerator.nextId()).thenReturn(1L);
+        when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        service.create(request);
+
+        InOrder flow = inOrder(lockService, applyService);
+        flow.verify(lockService).lockTradeItemSources(List.of(201L), List.of(), List.of());
+        flow.verify(applyService).applyItems(any(PurchaseInbound.class), eq(request), any());
+    }
+
+    @Test
+    void shouldLockOldAndNewPurchaseOrderSourcesBeforeUpdatingInboundItems() {
+        PurchaseInboundRepository repository = mock(PurchaseInboundRepository.class);
+        PurchaseInboundApplyService applyService = mock(PurchaseInboundApplyService.class);
+        SourceAllocationLockService lockService = mock(SourceAllocationLockService.class);
+        PurchaseInboundService service = lockAwareService(
+                repository,
+                mock(SnowflakeIdGenerator.class),
+                applyService,
+                mock(PurchaseInboundDeleteService.class),
+                mock(PurchaseInboundCompletionSyncService.class),
+                lockService
+        );
+        PurchaseInbound existing = inbound();
+        PurchaseInboundItem oldItem = inboundItem(101L, existing, 4);
+        oldItem.setSourcePurchaseOrderItemId(101L);
+        existing.getItems().add(oldItem);
+        PurchaseInboundRequest request = request();
+
+        when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(existing));
+        when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        service.update(1L, request);
+
+        InOrder flow = inOrder(lockService, applyService);
+        flow.verify(lockService).lockTradeItemSources(List.of(101L, 201L), List.of(), List.of());
+        flow.verify(applyService).applyItems(eq(existing), eq(request), any());
+    }
+
+    @Test
+    void shouldLockExistingPurchaseOrderSourcesBeforeDeletingInboundItems() {
+        PurchaseInboundRepository repository = mock(PurchaseInboundRepository.class);
+        PurchaseInboundDeleteService deleteService = mock(PurchaseInboundDeleteService.class);
+        SourceAllocationLockService lockService = mock(SourceAllocationLockService.class);
+        PurchaseInboundService service = lockAwareService(
+                repository,
+                mock(SnowflakeIdGenerator.class),
+                mock(PurchaseInboundApplyService.class),
+                deleteService,
+                mock(PurchaseInboundCompletionSyncService.class),
+                lockService
+        );
+        PurchaseInbound existing = inbound();
+        existing.getItems().add(inboundItem(101L, existing, 4));
+
+        when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(existing));
+        when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        service.delete(1L);
+
+        InOrder flow = inOrder(lockService, deleteService, repository);
+        flow.verify(lockService).lockTradeItemSources(List.of(201L), List.of(), List.of());
+        flow.verify(deleteService).beforeDelete(existing);
+        flow.verify(repository).save(existing);
+    }
+
+    @Test
+    void shouldLockExistingPurchaseOrderSourcesBeforeUpdatingInboundStatus() {
+        PurchaseInboundRepository repository = mock(PurchaseInboundRepository.class);
+        SourceAllocationLockService lockService = mock(SourceAllocationLockService.class);
+        PurchaseInboundService service = lockAwareService(
+                repository,
+                mock(SnowflakeIdGenerator.class),
+                mock(PurchaseInboundApplyService.class),
+                mock(PurchaseInboundDeleteService.class),
+                mock(PurchaseInboundCompletionSyncService.class),
+                lockService
+        );
+        PurchaseInbound existing = spy(inbound());
+        existing.getItems().add(inboundItem(101L, existing, 4));
+
+        when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(existing));
+
+        service.updateStatus(1L, "已审核");
+
+        InOrder flow = inOrder(lockService, existing);
+        flow.verify(lockService).lockTradeItemSources(List.of(201L), List.of(), List.of());
+        flow.verify(existing).setStatus("已审核");
     }
 
     @Test
@@ -829,6 +948,28 @@ class PurchaseInboundServiceTest {
         );
     }
 
+    private PurchaseInboundService lockAwareService(
+            PurchaseInboundRepository repository,
+            SnowflakeIdGenerator idGenerator,
+            PurchaseInboundApplyService applyService,
+            PurchaseInboundDeleteService deleteService,
+            PurchaseInboundCompletionSyncService completionSyncService,
+            SourceAllocationLockService lockService
+    ) {
+        return new PurchaseInboundService(
+                repository,
+                idGenerator,
+                mock(PurchaseInboundMapper.class),
+                applyService,
+                deleteService,
+                completionSyncService,
+                mock(PurchaseInboundResponseAssembler.class),
+                mock(PurchaseInboundPieceWeightService.class),
+                mock(WorkflowTransitionGuard.class),
+                lockService
+        );
+    }
+
     private PurchaseInboundService service(PurchaseInboundRepository repository,
                                            SnowflakeIdGenerator idGenerator,
                                            PurchaseInboundMapper purchaseInboundMapper,
@@ -862,7 +1003,8 @@ class PurchaseInboundServiceTest {
                         itemAllocationRepo
                 ),
                 new PurchaseInboundPieceWeightService(new PurchaseInboundItemQueryService(purchaseInboundItemRepository, null)),
-                workflowTransitionGuard
+                workflowTransitionGuard,
+                mock(SourceAllocationLockService.class)
         );
     }
 

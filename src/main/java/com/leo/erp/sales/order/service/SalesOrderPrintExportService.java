@@ -4,6 +4,7 @@ import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.support.PrecisionConstants;
 import com.leo.erp.common.web.dto.FileDownloadResponse;
+import com.leo.erp.security.permission.ResourceRecordAccessGuard;
 import com.leo.erp.sales.order.domain.entity.SalesOrder;
 import com.leo.erp.sales.order.repository.SalesOrderRepository;
 import com.leo.erp.sales.order.service.print.SalesOrderPrintDocument;
@@ -37,6 +38,7 @@ import java.util.List;
 public class SalesOrderPrintExportService {
 
     private static final String MODULE_KEY = "sales-order";
+    private static final String PRINT_ACTION = "print";
     private static final String CELL_TYPE_NUMBER = "number";
     private static final String CELL_TYPE_PIECE_WEIGHT = "pieceWeight";
     private static final String FIELD_DELIVERY_DATE = "deliveryDate";
@@ -47,15 +49,18 @@ public class SalesOrderPrintExportService {
     private final SalesOrderRepository salesOrderRepository;
     private final SalesOrderPrintDocumentFactory printDocumentFactory;
     private final PrintXlsxExportLayoutProvider layoutProvider;
+    private final ResourceRecordAccessGuard accessGuard;
 
     public SalesOrderPrintExportService(
             SalesOrderRepository salesOrderRepository,
             SalesOrderPrintDocumentFactory printDocumentFactory,
-            PrintXlsxExportLayoutProvider layoutProvider
+            PrintXlsxExportLayoutProvider layoutProvider,
+            ResourceRecordAccessGuard accessGuard
     ) {
         this.salesOrderRepository = salesOrderRepository;
         this.printDocumentFactory = printDocumentFactory;
         this.layoutProvider = layoutProvider;
+        this.accessGuard = accessGuard;
     }
 
     @Transactional(readOnly = true)
@@ -67,6 +72,7 @@ public class SalesOrderPrintExportService {
     public FileDownloadResponse exportSalesOrderPrint(Long orderId, SalesOrderPrintXlsxOptions options) {
         SalesOrder order = salesOrderRepository.findByIdAndDeletedFlagFalse(orderId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "销售订单不存在"));
+        accessGuard.assertCurrentUserCanAccess(MODULE_KEY, PRINT_ACTION, order);
         PrintXlsxExportLayout layout = layoutProvider.layout(MODULE_KEY);
         SalesOrderPrintDocument document = printDocumentFactory.create(order, options, layout.rowsPerPage());
 

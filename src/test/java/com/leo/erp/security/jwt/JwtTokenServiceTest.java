@@ -63,6 +63,48 @@ class JwtTokenServiceTest {
     }
 
     @Test
+    void shouldIncludeCredentialVersionInAccessToken() {
+        JwtProperties properties = jwtProperties();
+        SecurityKeyService.ResolvedSecretMaterial active = jwtMaterial(1, properties.getSecret(), null);
+        SecurityKeyService securityKeyService = mock(SecurityKeyService.class);
+        when(securityKeyService.getActiveJwtMaterial()).thenReturn(active);
+        when(securityKeyService.getJwtVerificationMaterials()).thenReturn(List.of(active));
+        JwtTokenService jwtTokenService = new JwtTokenService(properties, securityKeyService);
+        SecurityPrincipal principal = SecurityPrincipal.authenticated(
+                1001L,
+                "admin",
+                List.of(new SimpleGrantedAuthority("ROLE_ADMIN")),
+                true,
+                false,
+                7L
+        );
+
+        String token = jwtTokenService.generateAccessToken(principal, "session-1001");
+
+        assertEquals(7L, jwtTokenService.extractCredentialVersion(token));
+        assertEquals(7L, jwtTokenService.parseAccessToken(token).get("cv", Long.class));
+    }
+
+    @Test
+    void shouldTreatAccessTokenWithoutCredentialVersionAsVersionZero() {
+        JwtProperties properties = jwtProperties();
+        SecurityKeyService.ResolvedSecretMaterial active = jwtMaterial(1, properties.getSecret(), null);
+        SecurityKeyService securityKeyService = mock(SecurityKeyService.class);
+        when(securityKeyService.getJwtVerificationMaterials()).thenReturn(List.of(active));
+        JwtTokenService jwtTokenService = new JwtTokenService(properties, securityKeyService);
+        String legacyToken = Jwts.builder()
+                .issuer(properties.getIssuer())
+                .subject("legacy")
+                .claim("uid", 1002L)
+                .issuedAt(Date.from(Instant.now()))
+                .expiration(Date.from(Instant.now().plusSeconds(600)))
+                .signWith(Keys.hmacShaKeyFor(properties.getSecret().getBytes(StandardCharsets.UTF_8)))
+                .compact();
+
+        assertEquals(0L, jwtTokenService.extractCredentialVersion(legacyToken));
+    }
+
+    @Test
     void shouldVerifyTokenUsingRetiredKeyAfterRotation() {
         JwtProperties properties = new JwtProperties(
                 "leo-erp",

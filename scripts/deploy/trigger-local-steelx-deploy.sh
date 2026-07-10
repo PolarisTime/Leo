@@ -82,6 +82,49 @@ require_command openssl
 require_command psql
 require_command redis-cli
 require_command mvn
+require_command tr
+
+read_env_value() {
+  local env_file="$1"
+  local key="$2"
+  local line
+  local value=""
+
+  [[ -f "$env_file" ]] || return 1
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    if [[ "$line" == "$key="* ]]; then
+      value="${line#*=}"
+    fi
+  done < "$env_file"
+
+  [[ -n "$value" ]] || return 1
+  printf '%s' "$value"
+}
+
+is_valid_setup_bootstrap_token() {
+  local token="$1"
+  [[ "$token" =~ ^[A-Za-z0-9_-]{43}=?$ ]]
+}
+
+resolve_setup_bootstrap_token() {
+  local env_file="$1"
+  local token
+
+  if token="$(read_env_value "$env_file" "LEO_SETUP_BOOTSTRAP_TOKEN")"; then
+    if ! is_valid_setup_bootstrap_token "$token"; then
+      echo "既有 LEO_SETUP_BOOTSTRAP_TOKEN 格式无效，拒绝覆盖。" >&2
+      return 1
+    fi
+  else
+    token="$(openssl rand -base64 32 | tr '+/' '-_' | tr -d '=\n')"
+    if ! is_valid_setup_bootstrap_token "$token"; then
+      echo "无法生成有效的 LEO_SETUP_BOOTSTRAP_TOKEN。" >&2
+      return 1
+    fi
+  fi
+
+  printf '%s' "$token"
+}
 
 read_maven_version() {
   local version
@@ -151,6 +194,9 @@ if [[ ! -f "$TOTP_ENCRYPTION_KEY_FILE" ]]; then
 fi
 TOTP_ENCRYPTION_KEY="$(cat "$TOTP_ENCRYPTION_KEY_FILE")"
 
+STEELX_ENV_FILE="$STEELX_ROOT/shared/steelx.env"
+SETUP_BOOTSTRAP_TOKEN="$(resolve_setup_bootstrap_token "$STEELX_ENV_FILE")"
+
 echo "[db] 创建数据库和专用用户"
 PGPASSWORD="$DB_ADMIN_PASSWORD" psql -h "$DB_ADMIN_HOST" -p "$DB_ADMIN_PORT" -U "$DB_ADMIN_USER" -d "postgres" -v ON_ERROR_STOP=1 \
   -v db_name="$DB_NAME" \
@@ -174,7 +220,7 @@ ALTER SCHEMA public OWNER TO :"app_user";
 GRANT USAGE, CREATE ON SCHEMA public TO :"app_user";
 SQL
 
-cat > "$STEELX_ROOT/shared/steelx.env" <<EOF
+cat > "$STEELX_ENV_FILE" <<EOF
 SERVER_PORT=$BACKEND_PORT
 SPRING_PROFILES_ACTIVE=prod
 LEO_CORS_ALLOWED_ORIGINS=$CORS_ALLOWED_ORIGINS
@@ -189,6 +235,7 @@ SPRING_DATA_REDIS_DATABASE=$REDIS_DATABASE
 SPRING_DATA_REDIS_PASSWORD=$REDIS_PASSWORD
 LEO_JWT_SECRET=$JWT_SECRET
 TOTP_ENCRYPTION_KEY=$TOTP_ENCRYPTION_KEY
+LEO_SETUP_BOOTSTRAP_TOKEN=$SETUP_BOOTSTRAP_TOKEN
 LEO_MACHINE_ID=2
 LEO_ATTACHMENT_LOCAL_PATH=$STEELX_ROOT/shared/uploads
 LEO_AUTH_REFRESH_COOKIE_SECURE=true
@@ -198,7 +245,7 @@ LEO_HEALTH_PAGE_PUBLIC_ACCESS_ENABLED=false
 LEO_DOCS_PUBLIC_ACCESS_ENABLED=false
 SPRING_AI_MCP_SERVER_ENABLED=false
 EOF
-chmod 600 "$STEELX_ROOT/shared/steelx.env"
+chmod 600 "$STEELX_ENV_FILE"
 
 build_args=(
   --output-dir "$LEO_DIR/target/steelx-release"

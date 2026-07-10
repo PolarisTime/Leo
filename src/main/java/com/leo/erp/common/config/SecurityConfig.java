@@ -3,6 +3,7 @@ package com.leo.erp.common.config;
 import com.leo.erp.security.jwt.ApiKeyAuthenticationFilter;
 import com.leo.erp.security.jwt.ForceTotpSetupFilter;
 import com.leo.erp.security.jwt.JwtAuthenticationFilter;
+import com.leo.erp.system.setup.web.InitialSetupTokenFilter;
 import com.leo.erp.common.idempotent.HttpIdempotencyFilter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -21,6 +22,7 @@ import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+import org.springframework.web.filter.CorsFilter;
 
 import java.util.List;
 
@@ -46,6 +48,7 @@ public class SecurityConfig {
                                                    JwtAuthenticationFilter jwtAuthenticationFilter,
                                                    ApiKeyAuthenticationFilter apiKeyAuthenticationFilter,
                                                    ForceTotpSetupFilter forceTotpSetupFilter,
+                                                   InitialSetupTokenFilter initialSetupTokenFilter,
                                                    HttpIdempotencyFilter httpIdempotencyFilter) throws Exception {
         http
                 .csrf(AbstractHttpConfigurer::disable)
@@ -82,6 +85,7 @@ public class SecurityConfig {
                     authorize.requestMatchers(HttpMethod.OPTIONS, "/**").permitAll();
                     authorize.anyRequest().authenticated();
                 })
+                .addFilterAfter(initialSetupTokenFilter, CorsFilter.class)
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
                 .addFilterAfter(apiKeyAuthenticationFilter, JwtAuthenticationFilter.class)
                 .addFilterAfter(forceTotpSetupFilter, ApiKeyAuthenticationFilter.class)
@@ -126,6 +130,15 @@ public class SecurityConfig {
     public FilterRegistrationBean<ForceTotpSetupFilter> forceTotpSetupFilterRegistration(
             ForceTotpSetupFilter forceTotpSetupFilter) {
         FilterRegistrationBean<ForceTotpSetupFilter> registration = new FilterRegistrationBean<>(forceTotpSetupFilter);
+        registration.setEnabled(false);
+        return registration;
+    }
+
+    @Bean
+    public FilterRegistrationBean<InitialSetupTokenFilter> initialSetupTokenFilterRegistration(
+            InitialSetupTokenFilter initialSetupTokenFilter) {
+        FilterRegistrationBean<InitialSetupTokenFilter> registration =
+                new FilterRegistrationBean<>(initialSetupTokenFilter);
         registration.setEnabled(false);
         return registration;
     }

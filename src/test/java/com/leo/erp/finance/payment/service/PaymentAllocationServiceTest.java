@@ -117,6 +117,48 @@ class PaymentAllocationServiceTest {
     }
 
     @Test
+    void shouldNotExposeIncompleteNewAllocationsToValidatorQueries() {
+        Payment payment = payment(PaymentAllocationService.SUPPLIER_PAYMENT_TYPE, new BigDecimal("100.00"));
+        PaymentStatementAllocationValidator validator = mock(PaymentStatementAllocationValidator.class);
+        when(validator.validate(
+                any(PaymentRequest.class),
+                eq(StatusConstants.PAID),
+                eq(1L),
+                anyLong(),
+                any(BigDecimal.class),
+                any(),
+                anyInt()
+        )).thenAnswer(invocation -> {
+            assertThat(payment.getItems())
+                    .as("validator 查询触发 flush 时不应暴露未完整赋值的新核销行")
+                    .noneMatch(item -> item.getPayment() == null
+                            || item.getLineNo() == null
+                            || item.getSourceStatementId() == null
+                            || item.getAllocatedAmount() == null);
+            return "SUP-001";
+        });
+        PaymentAllocationService service = new PaymentAllocationService(validator);
+
+        PaymentAllocationService.AllocationApplyResult result = service.applyAllocations(
+                payment,
+                paymentRequest(PaymentAllocationService.SUPPLIER_PAYMENT_TYPE, null, new BigDecimal("100.00"), List.of(
+                        new PaymentAllocationRequest(null, 21L, new BigDecimal("40.00")),
+                        new PaymentAllocationRequest(null, 22L, new BigDecimal("60.00"))
+                )),
+                StatusConstants.PAID,
+                new AtomicLong(100)::incrementAndGet
+        );
+
+        assertThat(result.totalAllocatedAmount()).isEqualByComparingTo("100.00");
+        assertThat(payment.getItems()).hasSize(2).allSatisfy(item -> {
+            assertThat(item.getPayment()).isSameAs(payment);
+            assertThat(item.getLineNo()).isNotNull();
+            assertThat(item.getSourceStatementId()).isNotNull();
+            assertThat(item.getAllocatedAmount()).isNotNull();
+        });
+    }
+
+    @Test
     void shouldRejectAllocationTotalGreaterThanPaymentAmount() {
         PaymentStatementAllocationValidator validator = mock(PaymentStatementAllocationValidator.class);
         when(validator.validate(

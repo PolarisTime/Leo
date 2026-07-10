@@ -72,6 +72,7 @@ public class SessionManagementService {
     @Transactional
     public RefreshTokenSession createSession(Long userId, String sessionTokenId, String rawRefreshToken,
                                               String loginIp, String userAgent) {
+        UserAccount user = findUserByIdForUpdate(userId);
         trimActiveSessionsBeforeIssuing(userId);
 
         RefreshTokenSession session = new RefreshTokenSession();
@@ -79,6 +80,7 @@ public class SessionManagementService {
         session.setUserId(userId);
         session.setTokenId(sessionTokenId);
         session.setTokenHash(hashToken(rawRefreshToken));
+        session.setCredentialVersion(normalizeCredentialVersion(user.getCredentialVersion()));
         session.setExpiresAt(LocalDateTime.now().plusSeconds(jwtTokenService.getRefreshExpirationMs() / 1000));
         session.setLoginIp(loginIp);
         session.setDeviceInfo(userAgent);
@@ -130,6 +132,12 @@ public class SessionManagementService {
                 .filter(session -> !session.isRevoked());
     }
 
+    public Optional<Long> findRefreshTokenUserId(String refreshToken) {
+        String tokenHash = hashToken(refreshToken);
+        return refreshTokenSessionRepository.findUserIdByTokenHash(tokenHash)
+                .or(() -> refreshTokenSessionRepository.findUserIdByPreviousTokenHash(tokenHash));
+    }
+
     public Optional<RefreshTokenSession> findPreviousTokenSession(String refreshToken) {
         return refreshTokenSessionRepository.findByPreviousTokenHashAndDeletedFlagFalse(hashToken(refreshToken))
                 .filter(session -> !session.isRevoked());
@@ -145,6 +153,24 @@ public class SessionManagementService {
                 .orElseThrow(() -> new BadCredentialsException("用户不存在"));
     }
 
+    public UserAccount findUserByIdForUpdate(Long userId) {
+        return userAccountRepository.findByIdAndDeletedFlagFalseForUpdate(userId)
+                .orElseThrow(() -> new BadCredentialsException("用户不存在"));
+    }
+
+    @Transactional
+    public void revokeActiveSessionsForPasswordChange(Long userId) {
+        findUserByIdForUpdate(userId);
+        var activeSessions = refreshTokenSessionRepository
+                .findByUserIdAndDeletedFlagFalseAndRevokedAtIsNullAndExpiresAtAfterOrderByCreatedAtAsc(
+                        userId,
+                        LocalDateTime.now()
+                );
+        for (RefreshTokenSession session : activeSessions) {
+            revokeSession(session, RevokeReason.PASSWORD_CHANGED);
+        }
+    }
+
     public String generateRefreshToken() {
         byte[] randomBytes = new byte[64];
         SECURE_RANDOM.nextBytes(randomBytes);
@@ -157,6 +183,10 @@ public class SessionManagementService {
 
     private long refreshTokenReuseGraceSeconds() {
         return Math.max(0L, authProperties.getRefreshToken().getReuseGraceSeconds());
+    }
+
+    private long normalizeCredentialVersion(Long credentialVersion) {
+        return credentialVersion == null ? 0L : credentialVersion;
     }
 
     static String hashToken(String rawToken) {

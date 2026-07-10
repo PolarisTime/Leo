@@ -17,7 +17,7 @@ public class Customer extends AbstractAuditableEntity {
     @Id
     private Long id;
 
-    @Column(name = "customer_code", nullable = false, unique = true, length = 64)
+    @Column(name = "customer_code", nullable = false, length = 64)
     private String customerCode;
 
     @Column(name = "customer_name", nullable = false, length = 128)

@@ -2,7 +2,7 @@ package com.leo.erp.system.setup.web;
 
 import com.leo.erp.auth.web.dto.TotpSetupResponse;
 import com.leo.erp.common.api.ApiResponse;
-import com.leo.erp.system.setup.service.InitialSetupService;
+import com.leo.erp.system.setup.service.InitialSetupCoordinator;
 import com.leo.erp.system.setup.web.dto.InitialSetupAdminSubmitRequest;
 import com.leo.erp.system.setup.web.dto.InitialSetupCompanyRequest;
 import com.leo.erp.system.setup.web.dto.InitialSetupStatusResponse;
@@ -18,13 +18,13 @@ import static org.mockito.Mockito.when;
 
 class InitialSetupControllerTest {
 
-    private final InitialSetupService initialSetupService = mock(InitialSetupService.class);
-    private final InitialSetupController controller = new InitialSetupController(initialSetupService);
+    private final InitialSetupCoordinator initialSetupCoordinator = mock(InitialSetupCoordinator.class);
+    private final InitialSetupController controller = new InitialSetupController(initialSetupCoordinator);
 
     @Test
     void statusReturnsSetupStatus() {
         InitialSetupStatusResponse status = mock(InitialSetupStatusResponse.class);
-        when(initialSetupService.status()).thenReturn(status);
+        when(initialSetupCoordinator.status()).thenReturn(status);
 
         ApiResponse<InitialSetupStatusResponse> response = controller.status();
 
@@ -37,51 +37,51 @@ class InitialSetupControllerTest {
     void initializeReturnsSubmitResponse() {
         InitialSetupSubmitRequest request = mock(InitialSetupSubmitRequest.class);
         InitialSetupSubmitResponse submitResponse = mock(InitialSetupSubmitResponse.class);
-        when(initialSetupService.initialize(request)).thenReturn(submitResponse);
+        when(initialSetupCoordinator.initialize(request)).thenReturn(submitResponse);
 
         ApiResponse<InitialSetupSubmitResponse> response = controller.initialize(request);
 
         assertThat(response.code()).isEqualTo(0);
         assertThat(response.message()).isEqualTo("系统首次初始化完成");
-        verify(initialSetupService).initialize(request);
+        verify(initialSetupCoordinator).initialize(request);
     }
 
     @Test
     void setupAdminTotpReturnsTotpSetupResponse() {
         InitialSetupTotpSetupRequest request = mock(InitialSetupTotpSetupRequest.class);
         TotpSetupResponse totpResponse = mock(TotpSetupResponse.class);
-        when(initialSetupService.setupAdminTotp(request)).thenReturn(totpResponse);
+        when(initialSetupCoordinator.setupAdminTotp(request)).thenReturn(totpResponse);
 
         ApiResponse<TotpSetupResponse> response = controller.setupAdminTotp(request);
 
         assertThat(response.code()).isEqualTo(0);
         assertThat(response.message()).isEqualTo("管理员 2FA 已生成");
-        verify(initialSetupService).setupAdminTotp(request);
+        verify(initialSetupCoordinator).setupAdminTotp(request);
     }
 
     @Test
     void configureAdminReturnsSubmitResponse() {
         InitialSetupAdminSubmitRequest request = mock(InitialSetupAdminSubmitRequest.class);
         InitialSetupSubmitResponse submitResponse = mock(InitialSetupSubmitResponse.class);
-        when(initialSetupService.configureAdmin(request)).thenReturn(submitResponse);
+        when(initialSetupCoordinator.configureAdmin(request)).thenReturn(submitResponse);
 
         ApiResponse<InitialSetupSubmitResponse> response = controller.configureAdmin(request);
 
         assertThat(response.code()).isEqualTo(0);
         assertThat(response.message()).isEqualTo("管理员账号初始化完成");
-        verify(initialSetupService).configureAdmin(request);
+        verify(initialSetupCoordinator).configureAdmin(request);
     }
 
     @Test
     void configureCompanyReturnsSubmitResponse() {
         InitialSetupCompanyRequest request = mock(InitialSetupCompanyRequest.class);
         InitialSetupSubmitResponse submitResponse = mock(InitialSetupSubmitResponse.class);
-        when(initialSetupService.configureCompany(request)).thenReturn(submitResponse);
+        when(initialSetupCoordinator.configureCompany(request)).thenReturn(submitResponse);
 
         ApiResponse<InitialSetupSubmitResponse> response = controller.configureCompany(request);
 
         assertThat(response.code()).isEqualTo(0);
         assertThat(response.message()).isEqualTo("公司主体初始化完成");
-        verify(initialSetupService).configureCompany(request);
+        verify(initialSetupCoordinator).configureCompany(request);
     }
 }

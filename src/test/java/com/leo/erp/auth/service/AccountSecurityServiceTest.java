@@ -24,6 +24,31 @@ import static org.mockito.Mockito.when;
 class AccountSecurityServiceTest {
 
     @Test
+    void shouldIncrementCredentialVersionAndRevokeChangedUsersSessions() {
+        UserAccount account = user(1L, "leo", "encoded:Old@123");
+        account.setCredentialVersion(3L);
+        UserAccountRepository repository = mock(UserAccountRepository.class);
+        when(repository.findByIdAndDeletedFlagFalseForUpdate(1L)).thenReturn(Optional.of(account));
+        when(repository.save(account)).thenReturn(account);
+        SessionManagementService sessionManagementService = mock(SessionManagementService.class);
+        AccountSecurityService service = new AccountSecurityService(
+                repository,
+                new StubPasswordEncoder(),
+                null,
+                authenticatedUserCacheService(),
+                null,
+                null,
+                sessionManagementService
+        );
+
+        service.changePassword(1L, new ChangeOwnPasswordRequest("Old@123", "New@123"));
+
+        assertThat(account.getCredentialVersion()).isEqualTo(4L);
+        verify(repository).findByIdAndDeletedFlagFalseForUpdate(1L);
+        verify(sessionManagementService).revokeActiveSessionsForPasswordChange(1L);
+    }
+
+    @Test
     void shouldChangePasswordWhenCurrentPasswordMatches() {
         UserAccount account = user(1L, "leo", "encoded:Old@123");
         AtomicReference<UserAccount> savedAccount = new AtomicReference<>();
@@ -33,7 +58,8 @@ class AccountSecurityServiceTest {
                 null,
                 authenticatedUserCacheService(),
                 null,
-                null
+                null,
+                mock(SessionManagementService.class)
         );
 
         service.changePassword(1L, new ChangeOwnPasswordRequest("Old@123", "New@123"));
@@ -51,7 +77,8 @@ class AccountSecurityServiceTest {
                 null,
                 authenticatedUserCacheService(),
                 null,
-                null
+                null,
+                mock(SessionManagementService.class)
         );
 
         assertThatThrownBy(() -> service.changePassword(1L, new ChangeOwnPasswordRequest("Wrong@123", "New@123")))
@@ -68,7 +95,8 @@ class AccountSecurityServiceTest {
                 null,
                 authenticatedUserCacheService(),
                 null,
-                null
+                null,
+                mock(SessionManagementService.class)
         );
 
         assertThatThrownBy(() -> service.changePassword(1L, new ChangeOwnPasswordRequest("Same@123", "Same@123")))
@@ -88,7 +116,8 @@ class AccountSecurityServiceTest {
                 null,
                 authenticatedUserCacheService(),
                 null,
-                null
+                null,
+                mock(SessionManagementService.class)
         );
 
         CurrentUserSecurityResponse response = service.disable2fa(1L);
@@ -116,7 +145,8 @@ class AccountSecurityServiceTest {
                 null,
                 authenticatedUserCacheService(),
                 dashboardSummaryService,
-                switchService
+                switchService,
+                mock(SessionManagementService.class)
         );
 
         CurrentUserSecurityResponse response = service.disable2fa(1L);
@@ -138,7 +168,8 @@ class AccountSecurityServiceTest {
                 null,
                 authenticatedUserCacheService(),
                 null,
-                switchService
+                switchService,
+                mock(SessionManagementService.class)
         );
 
         assertThatThrownBy(() -> service.disable2fa(1L))
@@ -158,7 +189,8 @@ class AccountSecurityServiceTest {
                 totpService,
                 authenticatedUserCacheService(),
                 null,
-                null
+                null,
+                mock(SessionManagementService.class)
         );
 
         TotpSetupResponse response = service.setup2fa(1L);
@@ -181,7 +213,8 @@ class AccountSecurityServiceTest {
                 new StubTotpService(),
                 authenticatedUserCacheService(),
                 null,
-                null
+                null,
+                mock(SessionManagementService.class)
         );
 
         assertThatThrownBy(() -> service.setup2fa(1L))
@@ -203,7 +236,8 @@ class AccountSecurityServiceTest {
                 totpService,
                 authenticatedUserCacheService(),
                 null,
-                null
+                null,
+                mock(SessionManagementService.class)
         );
 
         CurrentUserSecurityResponse response = service.enable2fa(1L,
@@ -226,7 +260,8 @@ class AccountSecurityServiceTest {
                 new StubTotpService(),
                 authenticatedUserCacheService(),
                 null,
-                null
+                null,
+                mock(SessionManagementService.class)
         );
 
         assertThatThrownBy(() -> service.enable2fa(1L,
@@ -248,7 +283,8 @@ class AccountSecurityServiceTest {
                 totpService,
                 authenticatedUserCacheService(),
                 null,
-                null
+                null,
+                mock(SessionManagementService.class)
         );
 
         assertThatThrownBy(() -> service.enable2fa(1L,
@@ -269,7 +305,8 @@ class AccountSecurityServiceTest {
                 null,
                 authenticatedUserCacheService(),
                 null,
-                null
+                null,
+                mock(SessionManagementService.class)
         );
 
         CurrentUserSecurityResponse response = service.getStatus(1L);
@@ -293,7 +330,8 @@ class AccountSecurityServiceTest {
                 null,
                 authenticatedUserCacheService(),
                 null,
-                switchService
+                switchService,
+                mock(SessionManagementService.class)
         );
 
         CurrentUserSecurityResponse response = service.getStatus(1L);
@@ -309,7 +347,8 @@ class AccountSecurityServiceTest {
                 null,
                 authenticatedUserCacheService(),
                 null,
-                null
+                null,
+                mock(SessionManagementService.class)
         );
 
         assertThatThrownBy(() -> service.changePassword(999L, new ChangeOwnPasswordRequest("Old@123", "New@123")))
@@ -322,7 +361,7 @@ class AccountSecurityServiceTest {
                 UserAccountRepository.class.getClassLoader(),
                 new Class[]{UserAccountRepository.class},
                 (proxy, method, args) -> switch (method.getName()) {
-                    case "findByIdAndDeletedFlagFalse" -> Optional.of(account);
+                    case "findByIdAndDeletedFlagFalse", "findByIdAndDeletedFlagFalseForUpdate" -> Optional.of(account);
                     case "save" -> {
                         savedAccount.set((UserAccount) args[0]);
                         yield args[0];
@@ -358,7 +397,7 @@ class AccountSecurityServiceTest {
                 UserAccountRepository.class.getClassLoader(),
                 new Class[]{UserAccountRepository.class},
                 (proxy, method, args) -> switch (method.getName()) {
-                    case "findByIdAndDeletedFlagFalse" -> Optional.empty();
+                    case "findByIdAndDeletedFlagFalse", "findByIdAndDeletedFlagFalseForUpdate" -> Optional.empty();
                     case "toString" -> "UserAccountRepositoryNotFoundStub";
                     case "hashCode" -> System.identityHashCode(proxy);
                     case "equals" -> proxy == args[0];

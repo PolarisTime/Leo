@@ -2,6 +2,7 @@ package com.leo.erp.statement.customer.service;
 
 import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.api.PageQuery;
+import com.leo.erp.common.concurrency.SourceAllocationLockService;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
@@ -9,9 +10,14 @@ import com.leo.erp.common.service.AbstractCrudService;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.security.permission.WorkflowTransitionGuard;
+import com.leo.erp.sales.order.domain.entity.SalesOrder;
+import com.leo.erp.sales.order.domain.entity.SalesOrderItem;
+import com.leo.erp.sales.order.service.SalesOrderItemQueryService;
 import com.leo.erp.statement.customer.domain.entity.CustomerStatement;
+import com.leo.erp.statement.customer.domain.entity.CustomerStatementItem;
 import com.leo.erp.statement.customer.repository.CustomerStatementRepository;
 import com.leo.erp.statement.customer.web.dto.CustomerStatementCandidateResponse;
+import com.leo.erp.statement.customer.web.dto.CustomerStatementItemRequest;
 import com.leo.erp.statement.customer.web.dto.CustomerStatementRequest;
 import com.leo.erp.statement.customer.web.dto.CustomerStatementResponse;
 import org.springframework.data.domain.Page;
@@ -21,8 +27,10 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.beans.factory.annotation.Autowired;
 
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.TreeSet;
 
 @Service
 public class CustomerStatementService extends AbstractCrudService<CustomerStatement, CustomerStatementRequest, CustomerStatementResponse> {
@@ -32,6 +40,8 @@ public class CustomerStatementService extends AbstractCrudService<CustomerStatem
     private final WorkflowTransitionGuard workflowTransitionGuard;
     private final CustomerStatementSourceService customerStatementSourceService;
     private final CustomerStatementApplyService applyService;
+    private final SalesOrderItemQueryService salesOrderItemQueryService;
+    private final SourceAllocationLockService sourceAllocationLockService;
 
     @Autowired
     public CustomerStatementService(CustomerStatementRepository repository,
@@ -39,13 +49,17 @@ public class CustomerStatementService extends AbstractCrudService<CustomerStatem
                                     CustomerStatementResponseAssembler responseAssembler,
                                     WorkflowTransitionGuard workflowTransitionGuard,
                                     CustomerStatementSourceService customerStatementSourceService,
-                                    CustomerStatementApplyService applyService) {
+                                    CustomerStatementApplyService applyService,
+                                    SalesOrderItemQueryService salesOrderItemQueryService,
+                                    SourceAllocationLockService sourceAllocationLockService) {
         super(idGenerator);
         this.repository = repository;
         this.responseAssembler = responseAssembler;
         this.workflowTransitionGuard = workflowTransitionGuard;
         this.customerStatementSourceService = customerStatementSourceService;
         this.applyService = applyService;
+        this.salesOrderItemQueryService = salesOrderItemQueryService;
+        this.sourceAllocationLockService = sourceAllocationLockService;
     }
 
     @Transactional(readOnly = true)
@@ -178,6 +192,7 @@ public class CustomerStatementService extends AbstractCrudService<CustomerStatem
 
     @Override
     protected void beforeStatusUpdate(CustomerStatement entity, String currentStatus, String nextStatus) {
+        lockSourceSalesOrders(entity, null);
         workflowTransitionGuard.assertAuditPermissionForProtectedValue(
                 "customer-statement",
                 currentStatus,
@@ -188,7 +203,43 @@ public class CustomerStatementService extends AbstractCrudService<CustomerStatem
 
     @Override
     protected void apply(CustomerStatement entity, CustomerStatementRequest request) {
+        lockSourceSalesOrders(entity, request);
         applyService.apply(entity, request, this::nextId);
+    }
+
+    @Override
+    protected void beforeDelete(CustomerStatement entity) {
+        lockSourceSalesOrders(entity, null);
+    }
+
+    private void lockSourceSalesOrders(CustomerStatement entity, CustomerStatementRequest request) {
+        TreeSet<Long> sourceItemIds = new TreeSet<>();
+        entity.getItems().stream()
+                .map(CustomerStatementItem::getSourceSalesOrderItemId)
+                .filter(Objects::nonNull)
+                .forEach(sourceItemIds::add);
+        if (request != null) {
+            request.items().stream()
+                    .map(CustomerStatementItemRequest::sourceSalesOrderItemId)
+                    .filter(Objects::nonNull)
+                    .forEach(sourceItemIds::add);
+        }
+
+        TreeSet<Long> sourceOrderIds = new TreeSet<>();
+        if (!sourceItemIds.isEmpty()) {
+            salesOrderItemQueryService.findActiveByIdIn(List.copyOf(sourceItemIds)).stream()
+                    .map(SalesOrderItem::getSalesOrder)
+                    .filter(Objects::nonNull)
+                    .map(SalesOrder::getId)
+                    .filter(Objects::nonNull)
+                    .forEach(sourceOrderIds::add);
+        }
+        sourceAllocationLockService.lockDocumentSources(
+                List.of(),
+                List.copyOf(sourceOrderIds),
+                List.of(),
+                List.of()
+        );
     }
 
     @Override

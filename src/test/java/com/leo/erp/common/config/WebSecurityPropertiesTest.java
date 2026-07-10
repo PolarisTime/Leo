@@ -35,7 +35,7 @@ class WebSecurityPropertiesTest {
     @Test
     void shouldHaveDefaultAllowedHeaders() {
         assertThat(properties.getCors().getAllowedHeaders())
-                .contains("Authorization", "Content-Type", "X-API-Key");
+                .contains("Authorization", "Content-Type", "X-API-Key", "X-Setup-Token");
     }
 
     @Test

@@ -2,6 +2,7 @@ package com.leo.erp.purchase.inbound.service;
 
 import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.api.PageQuery;
+import com.leo.erp.common.concurrency.SourceAllocationLockService;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
@@ -10,6 +11,7 @@ import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.BusinessStatusValidator;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.purchase.inbound.domain.entity.PurchaseInbound;
+import com.leo.erp.purchase.inbound.domain.entity.PurchaseInboundItem;
 import com.leo.erp.purchase.inbound.repository.PurchaseInboundItemRepository;
 import com.leo.erp.purchase.inbound.repository.PurchaseInboundRepository;
 import com.leo.erp.purchase.order.web.dto.PieceWeightResponse;
@@ -24,7 +26,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
+import java.util.stream.Stream;
 
 @Service
 public class PurchaseInboundService extends AbstractCrudService<
@@ -38,6 +42,7 @@ public class PurchaseInboundService extends AbstractCrudService<
     private final PurchaseInboundResponseAssembler responseAssembler;
     private final PurchaseInboundPieceWeightService pieceWeightService;
     private final WorkflowTransitionGuard workflowTransitionGuard;
+    private final SourceAllocationLockService sourceAllocationLockService;
 
     @Autowired
     public PurchaseInboundService(PurchaseInboundRepository repository,
@@ -48,7 +53,8 @@ public class PurchaseInboundService extends AbstractCrudService<
                                   PurchaseInboundCompletionSyncService completionSyncService,
                                   PurchaseInboundResponseAssembler responseAssembler,
                                   PurchaseInboundPieceWeightService pieceWeightService,
-                                  WorkflowTransitionGuard workflowTransitionGuard) {
+                                  WorkflowTransitionGuard workflowTransitionGuard,
+                                  SourceAllocationLockService sourceAllocationLockService) {
         super(idGenerator);
         this.repository = repository;
         this.purchaseInboundMapper = purchaseInboundMapper;
@@ -58,6 +64,7 @@ public class PurchaseInboundService extends AbstractCrudService<
         this.responseAssembler = responseAssembler;
         this.pieceWeightService = pieceWeightService;
         this.workflowTransitionGuard = workflowTransitionGuard;
+        this.sourceAllocationLockService = sourceAllocationLockService;
     }
 
     @Transactional(readOnly = true)
@@ -188,6 +195,7 @@ public class PurchaseInboundService extends AbstractCrudService<
 
     @Override
     protected void apply(PurchaseInbound inbound, PurchaseInboundRequest request) {
+        lockSourcePurchaseOrderItems(inbound, request);
         String nextStatus = BusinessStatusValidator.normalizeWithDefault(
                 request.status(),
                 StatusConstants.DRAFT,
@@ -212,7 +220,28 @@ public class PurchaseInboundService extends AbstractCrudService<
 
     @Override
     protected void beforeDelete(PurchaseInbound inbound) {
+        lockSourcePurchaseOrderItems(inbound, null);
         deleteService.beforeDelete(inbound);
+    }
+
+    @Override
+    protected void beforeStatusUpdate(PurchaseInbound inbound, String currentStatus, String nextStatus) {
+        lockSourcePurchaseOrderItems(inbound, null);
+    }
+
+    private void lockSourcePurchaseOrderItems(PurchaseInbound inbound, PurchaseInboundRequest request) {
+        Stream<Long> existingSourceIds = inbound == null
+                ? Stream.empty()
+                : inbound.getItems().stream().map(PurchaseInboundItem::getSourcePurchaseOrderItemId);
+        Stream<Long> requestedSourceIds = request == null
+                ? Stream.empty()
+                : request.items().stream().map(PurchaseInboundItemRequest::sourcePurchaseOrderItemId);
+        List<Long> sourceIds = Stream.concat(existingSourceIds, requestedSourceIds)
+                .filter(Objects::nonNull)
+                .distinct()
+                .sorted()
+                .toList();
+        sourceAllocationLockService.lockTradeItemSources(sourceIds, List.of(), List.of());
     }
 
     @Override

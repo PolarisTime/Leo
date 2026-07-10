@@ -2,6 +2,7 @@ package com.leo.erp.logistics.bill.service;
 
 import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.api.PageQuery;
+import com.leo.erp.common.concurrency.SourceAllocationLockService;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.service.AbstractCrudService;
@@ -34,6 +35,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.stream.Collectors;
 
 @Service
@@ -50,6 +52,7 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
     private final WorkflowTransitionGuard workflowTransitionGuard;
     private final CarrierRepository carrierRepository;
     private final CompanySettingService companySettingService;
+    private final SourceAllocationLockService sourceAllocationLockService;
 
     public FreightBillService(FreightBillRepository repository,
                               SalesOutboundRepository salesOutboundRepository,
@@ -57,9 +60,10 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
                               FreightBillMapper freightBillMapper,
                               FreightBillSourceService freightBillSourceService,
                               FreightBillApplyService freightBillApplyService,
-                              WorkflowTransitionGuard workflowTransitionGuard) {
+                              WorkflowTransitionGuard workflowTransitionGuard,
+                              SourceAllocationLockService sourceAllocationLockService) {
         this(repository, salesOutboundRepository, idGenerator, freightBillMapper, freightBillSourceService,
-                freightBillApplyService, workflowTransitionGuard, null);
+                freightBillApplyService, workflowTransitionGuard, null, sourceAllocationLockService);
     }
 
     public FreightBillService(FreightBillRepository repository,
@@ -69,9 +73,10 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
                               FreightBillSourceService freightBillSourceService,
                               FreightBillApplyService freightBillApplyService,
                               WorkflowTransitionGuard workflowTransitionGuard,
-                              CarrierRepository carrierRepository) {
+                              CarrierRepository carrierRepository,
+                              SourceAllocationLockService sourceAllocationLockService) {
         this(repository, salesOutboundRepository, idGenerator, freightBillMapper, freightBillSourceService,
-                freightBillApplyService, workflowTransitionGuard, carrierRepository, null);
+                freightBillApplyService, workflowTransitionGuard, carrierRepository, null, sourceAllocationLockService);
     }
 
     @Autowired
@@ -83,7 +88,8 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
                               FreightBillApplyService freightBillApplyService,
                               WorkflowTransitionGuard workflowTransitionGuard,
                               CarrierRepository carrierRepository,
-                              CompanySettingService companySettingService) {
+                              CompanySettingService companySettingService,
+                              SourceAllocationLockService sourceAllocationLockService) {
         super(idGenerator);
         this.repository = repository;
         this.salesOutboundRepository = salesOutboundRepository;
@@ -93,6 +99,7 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
         this.workflowTransitionGuard = workflowTransitionGuard;
         this.carrierRepository = carrierRepository;
         this.companySettingService = companySettingService;
+        this.sourceAllocationLockService = sourceAllocationLockService;
     }
 
     public Page<FreightBillResponse> page(PageQuery query, PageFilter filter) {
@@ -262,6 +269,7 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
 
     @Override
     protected void apply(FreightBill entity, FreightBillRequest request) {
+        lockSourceSalesOutbounds(entity, request);
         String nextStatus = BusinessStatusValidator.normalizeWithDefault(
                 request.status(),
                 StatusConstants.UNAUDITED,
@@ -293,6 +301,7 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
 
     @Override
     protected void beforeStatusUpdate(FreightBill entity, String currentStatus, String nextStatus) {
+        lockSourceSalesOutbounds(entity, null);
         if (!StatusConstants.AUDITED.equals(nextStatus)) {
             return;
         }
@@ -300,6 +309,41 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
                 entity.getItems().stream()
                         .map(FreightBillItem::getSourceNo)
                         .toList()
+        );
+    }
+
+    @Override
+    protected void beforeDelete(FreightBill entity) {
+        lockSourceSalesOutbounds(entity, null);
+    }
+
+    private void lockSourceSalesOutbounds(FreightBill entity, FreightBillRequest request) {
+        TreeSet<String> sourceNos = new TreeSet<>();
+        entity.getItems().stream()
+                .map(FreightBillItem::getSourceNo)
+                .map(BusinessDocumentValidator::trimToNull)
+                .filter(Objects::nonNull)
+                .forEach(sourceNos::add);
+        if (request != null) {
+            request.items().stream()
+                    .map(FreightBillItemRequest::sourceNo)
+                    .map(BusinessDocumentValidator::trimToNull)
+                    .filter(Objects::nonNull)
+                    .forEach(sourceNos::add);
+        }
+
+        TreeSet<Long> sourceIds = new TreeSet<>();
+        if (!sourceNos.isEmpty()) {
+            salesOutboundRepository.findByOutboundNoInAndDeletedFlagFalse(sourceNos).stream()
+                    .map(SalesOutbound::getId)
+                    .filter(Objects::nonNull)
+                    .forEach(sourceIds::add);
+        }
+        sourceAllocationLockService.lockDocumentSources(
+                List.of(),
+                List.of(),
+                List.copyOf(sourceIds),
+                List.of()
         );
     }
 

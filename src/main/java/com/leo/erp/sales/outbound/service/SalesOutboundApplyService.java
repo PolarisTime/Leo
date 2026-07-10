@@ -15,6 +15,7 @@ import com.leo.erp.common.error.ErrorCode;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -48,8 +49,9 @@ public class SalesOutboundApplyService {
         var materialMap = tradeItemMaterialSupport.loadMaterialMap(
                 request.items().stream().map(SalesOutboundItemRequest::materialCode).toList()
         );
+        List<SalesOutboundItem> managedItems = entity.getItems();
         List<SalesOutboundItem> items = ManagedEntityItemSupport.syncById(
-                entity.getItems(),
+                new ArrayList<>(managedItems),
                 request.items(),
                 SalesOutboundItem::getId,
                 SalesOutboundItemRequest::id,
@@ -96,7 +98,9 @@ public class SalesOutboundApplyService {
         }
 
         sourceService.assertSourceSalesOrderItemsNotOccupied(sourceSalesOrderItemIds, entity.getId());
-        entity.getItems().sort(java.util.Comparator.comparing(SalesOutboundItem::getLineNo));
+        managedItems.clear();
+        managedItems.addAll(items);
+        managedItems.sort(java.util.Comparator.comparing(SalesOutboundItem::getLineNo));
         entity.setSalesOrderNo(sourceSalesOrderNos.isEmpty()
                 ? trimToNull(request.salesOrderNo())
                 : String.join(", ", sourceSalesOrderNos));

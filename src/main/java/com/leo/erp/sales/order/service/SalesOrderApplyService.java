@@ -19,6 +19,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -118,8 +119,9 @@ public class SalesOrderApplyService {
         SalesOrderSourceContext sourceContext = sourceAllocationService.prepareContext(request, entity.getId());
         purchaseAllocationService.releaseSalesOrderItems(entity);
         sourceContext = weightResolver.withPurchaseOrderRemainingWeights(sourceContext);
+        List<SalesOrderItem> managedItems = entity.getItems();
         List<SalesOrderItem> items = ManagedEntityItemSupport.syncById(
-                entity.getItems(),
+                new ArrayList<>(managedItems),
                 request.items(),
                 SalesOrderItem::getId,
                 SalesOrderItemRequest::id,
@@ -139,7 +141,9 @@ public class SalesOrderApplyService {
             totalWeight = totalWeight.add(itemTotals.weightTon());
             totalAmount = totalAmount.add(itemTotals.amount());
         }
-        entity.getItems().sort(Comparator.comparing(SalesOrderItem::getLineNo));
+        managedItems.clear();
+        managedItems.addAll(items);
+        managedItems.sort(Comparator.comparing(SalesOrderItem::getLineNo));
         entity.setPurchaseInboundNo(sourceContext.resolvePurchaseInboundNo(request.purchaseInboundNo()));
         entity.setPurchaseOrderNo(sourceContext.resolvePurchaseOrderNo(request.purchaseOrderNo()));
         entity.setTotalWeight(totalWeight);

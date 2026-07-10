@@ -7,6 +7,7 @@ import com.leo.erp.auth.web.dto.LoginResponseBody;
 import com.leo.erp.auth.web.dto.TokenResponse;
 import com.leo.erp.system.norule.service.SystemSwitchService;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class AuthService {
@@ -41,6 +42,7 @@ public class AuthService {
         return tokenIssuanceService.refresh(refreshToken, loginIp, userAgent);
     }
 
+    @Transactional
     public void logout(String refreshToken, LoginService.AuthRequestContext ctx) {
         if (refreshToken == null || refreshToken.isBlank()) {
             return;

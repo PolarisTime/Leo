@@ -13,8 +13,21 @@ public record SecurityPrincipal(
         boolean enabled,
         Collection<? extends GrantedAuthority> authorities,
         boolean totpEnabled,
-        boolean forceTotpSetup
+        boolean forceTotpSetup,
+        long credentialVersion
 ) implements UserDetails {
+
+    public SecurityPrincipal(
+            Long id,
+            String username,
+            String password,
+            boolean enabled,
+            Collection<? extends GrantedAuthority> authorities,
+            boolean totpEnabled,
+            boolean forceTotpSetup
+    ) {
+        this(id, username, password, enabled, authorities, totpEnabled, forceTotpSetup, 0L);
+    }
 
     public SecurityPrincipal(
             Long id,
@@ -23,11 +36,11 @@ public record SecurityPrincipal(
             boolean enabled,
             Collection<? extends GrantedAuthority> authorities
     ) {
-        this(id, username, password, enabled, authorities, false, false);
+        this(id, username, password, enabled, authorities, false, false, 0L);
     }
 
     public static SecurityPrincipal system() {
-        return new SecurityPrincipal(0L, "system", "", true, List.of(), false, false);
+        return new SecurityPrincipal(0L, "system", "", true, List.of(), false, false, 0L);
     }
 
     public static SecurityPrincipal authenticated(
@@ -45,7 +58,27 @@ public record SecurityPrincipal(
             boolean totpEnabled,
             boolean forceTotpSetup
     ) {
-        return new SecurityPrincipal(id, username, "", true, authorities, totpEnabled, forceTotpSetup);
+        return authenticated(id, username, authorities, totpEnabled, forceTotpSetup, 0L);
+    }
+
+    public static SecurityPrincipal authenticated(
+            Long id,
+            String username,
+            Collection<? extends GrantedAuthority> authorities,
+            boolean totpEnabled,
+            boolean forceTotpSetup,
+            long credentialVersion
+    ) {
+        return new SecurityPrincipal(
+                id,
+                username,
+                "",
+                true,
+                authorities,
+                totpEnabled,
+                forceTotpSetup,
+                credentialVersion
+        );
     }
 
     @Override

@@ -14,6 +14,9 @@ import com.leo.erp.security.jwt.ForceTotpSetupFilter;
 import com.leo.erp.security.jwt.JwtAuthenticationFilter;
 import com.leo.erp.security.jwt.JwtTokenService;
 import com.leo.erp.security.jwt.SessionActivityService;
+import com.leo.erp.system.setup.config.InitialSetupProperties;
+import com.leo.erp.system.setup.service.SetupTokenVerifier;
+import com.leo.erp.system.setup.web.InitialSetupTokenFilter;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfiguration;
@@ -25,12 +28,14 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
 import org.springframework.core.env.Environment;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RestController;
@@ -38,6 +43,7 @@ import org.springframework.web.context.WebApplicationContext;
 import org.springframework.web.cors.CorsConfigurationSource;
 
 import java.util.Arrays;
+import java.util.Base64;
 import java.util.List;
 
 import static org.hamcrest.Matchers.containsString;
@@ -49,10 +55,14 @@ import static org.springframework.security.test.web.servlet.request.SecurityMock
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 class SecurityConfigTest {
+
+    private static final String VALID_SETUP_TOKEN = Base64.getUrlEncoder().withoutPadding()
+            .encodeToString(new byte[32]);
 
     private final SecurityConfig config = new SecurityConfig();
 
@@ -150,6 +160,19 @@ class SecurityConfigTest {
     }
 
     @Test
+    void shouldDisableServletRegistrationForInitialSetupTokenFilter() {
+        securityContextRunner()
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    assertThat(context.getBeansOfType(FilterRegistrationBean.class).values())
+                            .filteredOn(registration ->
+                                    registration.getFilter() instanceof InitialSetupTokenFilter)
+                            .singleElement()
+                            .satisfies(registration -> assertThat(registration.isEnabled()).isFalse());
+                });
+    }
+
+    @Test
     void shouldNormalizeAllowedMethods() {
         WebSecurityProperties webSecurityProperties = new WebSecurityProperties();
         webSecurityProperties.getCors().setAllowedMethods(Arrays.asList("GET", null, "POST", "  "));
@@ -234,6 +257,36 @@ class SecurityConfigTest {
                             .andExpect(status().isOk());
                     mockMvc.perform(get("/secure").secure(true).with(user("operator")))
                             .andExpect(header().doesNotExist("Strict-Transport-Security"));
+                });
+    }
+
+    @Test
+    void shouldApplyCorsBeforeRejectingSetupWriteWithoutToken() {
+        securityContextRunner()
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    String origin = "http://localhost:3100";
+
+                    mockMvc(context).perform(post("/setup/admin")
+                                    .header(HttpHeaders.ORIGIN, origin)
+                                    .with(user("operator")))
+                            .andExpect(status().isForbidden())
+                            .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN, origin));
+                });
+    }
+
+    @Test
+    void shouldAllowSetupCorsPreflightWithoutToken() {
+        securityContextRunner()
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    String origin = "http://localhost:3100";
+
+                    mockMvc(context).perform(options("/setup/admin")
+                                    .header(HttpHeaders.ORIGIN, origin)
+                                    .header(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, HttpMethod.POST.name()))
+                            .andExpect(status().isOk())
+                            .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN, origin));
                 });
     }
 
@@ -337,6 +390,13 @@ class SecurityConfigTest {
         HttpIdempotencyFilter httpIdempotencyFilter(ObjectMapper objectMapper) {
             return new HttpIdempotencyFilter(mock(HttpIdempotencyService.class), objectMapper);
         }
+
+        @Bean
+        InitialSetupTokenFilter initialSetupTokenFilter(ObjectMapper objectMapper) {
+            InitialSetupProperties properties = new InitialSetupProperties();
+            properties.setBootstrapToken(VALID_SETUP_TOKEN);
+            return new InitialSetupTokenFilter(new SetupTokenVerifier(properties), objectMapper);
+        }
     }
 
     @RestController
@@ -365,6 +425,11 @@ class SecurityConfigTest {
         @RequestMapping(path = "/secure", method = {RequestMethod.GET, RequestMethod.OPTIONS})
         String secure() {
             return "secure";
+        }
+
+        @PostMapping("/setup/admin")
+        String setupAdmin() {
+            return "setup";
         }
     }
 }

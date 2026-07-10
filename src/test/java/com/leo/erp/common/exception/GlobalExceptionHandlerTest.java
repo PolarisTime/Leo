@@ -10,6 +10,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.validation.BindException;
@@ -182,6 +183,25 @@ class GlobalExceptionHandlerTest {
                 .getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
         assertThat(handler.handleBusinessException(new BusinessException(ErrorCode.BUSINESS_ERROR, ""), request)
                 .getStatusCode()).isEqualTo(HttpStatus.UNPROCESSABLE_ENTITY);
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void shouldMapOptimisticLockingFailureToConflict() {
+        ObjectOptimisticLockingFailureException exception =
+                new ObjectOptimisticLockingFailureException(String.class, 1L);
+
+        ResponseEntity<ApiResponse<Void>> response = ReflectionTestUtils.invokeMethod(
+                handler,
+                "handleOptimisticLockingFailure",
+                exception,
+                request
+        );
+
+        assertThat(response).isNotNull();
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+        assertThat(response.getBody().code()).isEqualTo(4090);
+        assertThat(response.getBody().message()).isEqualTo("数据已被其他请求修改，请刷新后重试");
     }
 
     @Test

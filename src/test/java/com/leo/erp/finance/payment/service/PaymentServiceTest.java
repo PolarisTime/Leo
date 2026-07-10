@@ -1,5 +1,6 @@
 package com.leo.erp.finance.payment.service;
 
+import com.leo.erp.common.concurrency.SourceAllocationLockService;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.service.CrudRuntimeSettings;
@@ -21,6 +22,7 @@ import com.leo.erp.statement.freight.service.FreightStatementQueryService;
 import com.leo.erp.statement.supplier.domain.entity.SupplierStatement;
 import com.leo.erp.statement.supplier.service.SupplierStatementQueryService;
 import org.junit.jupiter.api.Test;
+import org.mockito.InOrder;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -42,11 +44,170 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class PaymentServiceTest {
+
+    @Test
+    void shouldRequireSourceAllocationLockServiceAsConstructorDependency() {
+        boolean hasRequiredDependency = java.util.Arrays.stream(PaymentService.class.getConstructors())
+                .anyMatch(constructor -> java.util.Arrays.asList(constructor.getParameterTypes())
+                        .contains(SourceAllocationLockService.class));
+
+        assertThat(hasRequiredDependency).isTrue();
+    }
+
+    @Test
+    void shouldLockSupplierStatementsBeforeCreatingPaymentAllocations() {
+        PaymentRepository paymentRepository = mock(PaymentRepository.class);
+        SnowflakeIdGenerator idGenerator = mock(SnowflakeIdGenerator.class);
+        PaymentApplyService applyService = mock(PaymentApplyService.class);
+        PaymentAllocationService allocationService = mock(PaymentAllocationService.class);
+        PaymentSettlementSyncService settlementSyncService = mock(PaymentSettlementSyncService.class);
+        SourceAllocationLockService lockService = mock(SourceAllocationLockService.class);
+        PaymentService service = lockAwareService(
+                paymentRepository,
+                idGenerator,
+                applyService,
+                allocationService,
+                settlementSyncService,
+                lockService
+        );
+        PaymentRequest request = buildRequest(
+                "供应商",
+                null,
+                "供应商A",
+                new BigDecimal("100.00"),
+                StatusConstants.DRAFT,
+                List.of(
+                        new PaymentAllocationRequest(null, 13L, new BigDecimal("30.00")),
+                        new PaymentAllocationRequest(null, 11L, new BigDecimal("40.00")),
+                        new PaymentAllocationRequest(null, 13L, new BigDecimal("30.00"))
+                )
+        );
+
+        when(idGenerator.nextId()).thenReturn(1L);
+
+        service.create(request);
+
+        InOrder flow = inOrder(lockService, applyService);
+        flow.verify(lockService).lockStatementSources(List.of(), List.of(11L, 13L), List.of());
+        flow.verify(applyService).apply(any(Payment.class), eq(request), any());
+    }
+
+    @Test
+    void shouldLockOldSupplierAndNewFreightStatementsBeforeUpdatingPaymentAllocations() {
+        PaymentRepository paymentRepository = mock(PaymentRepository.class);
+        PaymentApplyService applyService = mock(PaymentApplyService.class);
+        PaymentAllocationService allocationService = mock(PaymentAllocationService.class);
+        PaymentSettlementSyncService settlementSyncService = mock(PaymentSettlementSyncService.class);
+        SourceAllocationLockService lockService = mock(SourceAllocationLockService.class);
+        PaymentService service = lockAwareService(
+                paymentRepository,
+                mock(SnowflakeIdGenerator.class),
+                applyService,
+                allocationService,
+                settlementSyncService,
+                lockService
+        );
+        Payment existing = buildPaymentEntity(1L, "FK-001");
+        existing.setBusinessType("供应商");
+        existing.setItems(new ArrayList<>(List.of(
+                paymentAllocation(existing, 101L, 15L),
+                paymentAllocation(existing, 102L, 11L)
+        )));
+        PaymentRequest request = buildRequest(
+                "物流商",
+                null,
+                "物流商A",
+                new BigDecimal("100.00"),
+                StatusConstants.DRAFT,
+                List.of(
+                        new PaymentAllocationRequest(null, 22L, new BigDecimal("30.00")),
+                        new PaymentAllocationRequest(null, 21L, new BigDecimal("40.00")),
+                        new PaymentAllocationRequest(null, 22L, new BigDecimal("30.00"))
+                )
+        );
+
+        when(paymentRepository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(existing));
+
+        service.update(1L, request);
+
+        InOrder flow = inOrder(lockService, applyService);
+        flow.verify(lockService).lockStatementSources(
+                List.of(),
+                List.of(11L, 15L),
+                List.of(21L, 22L)
+        );
+        flow.verify(applyService).apply(eq(existing), eq(request), any());
+    }
+
+    @Test
+    void shouldLockExistingSupplierStatementsBeforeUpdatingPaymentStatus() {
+        PaymentRepository paymentRepository = mock(PaymentRepository.class);
+        PaymentAllocationService allocationService = mock(PaymentAllocationService.class);
+        PaymentSettlementSyncService settlementSyncService = mock(PaymentSettlementSyncService.class);
+        SourceAllocationLockService lockService = mock(SourceAllocationLockService.class);
+        PaymentService service = lockAwareService(
+                paymentRepository,
+                mock(SnowflakeIdGenerator.class),
+                mock(PaymentApplyService.class),
+                allocationService,
+                settlementSyncService,
+                lockService
+        );
+        Payment source = buildPaymentEntity(1L, "FK-001");
+        source.setBusinessType("供应商");
+        source.setStatus(StatusConstants.PAID);
+        source.setItems(new ArrayList<>(List.of(
+                paymentAllocation(source, 101L, 13L),
+                paymentAllocation(source, 102L, 11L)
+        )));
+        Payment existing = spy(source);
+
+        when(paymentRepository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(existing));
+
+        service.updateStatus(1L, StatusConstants.DRAFT);
+
+        InOrder flow = inOrder(lockService, settlementSyncService, allocationService, existing);
+        flow.verify(lockService).lockStatementSources(List.of(), List.of(11L, 13L), List.of());
+        flow.verify(settlementSyncService).captureOriginalAllocationState(existing);
+        flow.verify(allocationService).validateExistingAllocationsForSettlement(existing, StatusConstants.DRAFT);
+        flow.verify(existing).setStatus(StatusConstants.DRAFT);
+    }
+
+    @Test
+    void shouldLockExistingFreightStatementsBeforeDeletingPayment() {
+        PaymentRepository paymentRepository = mock(PaymentRepository.class);
+        SourceAllocationLockService lockService = mock(SourceAllocationLockService.class);
+        PaymentService service = lockAwareService(
+                paymentRepository,
+                mock(SnowflakeIdGenerator.class),
+                mock(PaymentApplyService.class),
+                mock(PaymentAllocationService.class),
+                mock(PaymentSettlementSyncService.class),
+                lockService
+        );
+        Payment source = buildPaymentEntity(1L, "FK-001");
+        source.setBusinessType("物流商");
+        source.setItems(new ArrayList<>(List.of(
+                paymentAllocation(source, 101L, 31L),
+                paymentAllocation(source, 102L, 29L)
+        )));
+        Payment existing = spy(source);
+
+        when(paymentRepository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(existing));
+
+        service.delete(1L);
+
+        InOrder flow = inOrder(lockService, existing);
+        flow.verify(lockService).lockStatementSources(List.of(), List.of(), List.of(29L, 31L));
+        flow.verify(existing).setDeletedFlag(true);
+    }
 
     @Test
     void shouldRejectDuplicatePaymentNo() {
@@ -1471,8 +1632,41 @@ class PaymentServiceTest {
                         supplierStatementQueryService,
                         freightStatementQueryService
                 ),
-                settlementSyncService
+                settlementSyncService,
+                mock(SourceAllocationLockService.class)
         );
+    }
+
+    private PaymentService lockAwareService(
+            PaymentRepository paymentRepository,
+            SnowflakeIdGenerator idGenerator,
+            PaymentApplyService applyService,
+            PaymentAllocationService allocationService,
+            PaymentSettlementSyncService settlementSyncService,
+            SourceAllocationLockService lockService
+    ) {
+        PaymentMapper mapper = mock(PaymentMapper.class);
+        when(paymentRepository.save(any(Payment.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(mapper.toResponse(any(Payment.class))).thenReturn(mock(PaymentResponse.class));
+        return new PaymentService(
+                paymentRepository,
+                idGenerator,
+                mapper,
+                applyService,
+                allocationService,
+                mock(PaymentAllocationResponseAssembler.class),
+                settlementSyncService,
+                lockService
+        );
+    }
+
+    private PaymentAllocation paymentAllocation(Payment payment, Long id, Long sourceStatementId) {
+        PaymentAllocation allocation = new PaymentAllocation();
+        allocation.setId(id);
+        allocation.setPayment(payment);
+        allocation.setSourceStatementId(sourceStatementId);
+        allocation.setAllocatedAmount(new BigDecimal("50.00"));
+        return allocation;
     }
 
     private Payment buildPaymentEntity(Long id, String paymentNo) {

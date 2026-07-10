@@ -13,6 +13,8 @@ import com.leo.erp.system.norule.service.SystemSwitchService;
 import com.leo.erp.system.operationlog.service.OperationLogCommand;
 import com.leo.erp.system.operationlog.service.OperationLogService;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.security.authentication.BadCredentialsException;
@@ -68,6 +70,7 @@ class LoginServiceTest {
         UserAccount user = normalUser();
         user.setTotpEnabled(true);
         user.setTotpSecret("encrypted-secret");
+        user.setCredentialVersion(7L);
 
         UserAccountRepository userRepo = mock(UserAccountRepository.class);
         when(userRepo.findByLoginNameAndDeletedFlagFalse("admin")).thenReturn(java.util.Optional.of(user));
@@ -91,6 +94,12 @@ class LoginServiceTest {
 
         assertThat(response).isInstanceOf(LoginStep1Response.class);
         assertThat(((LoginStep1Response) response).requires2fa()).isTrue();
+        LoginStep1Response step1Response = (LoginStep1Response) response;
+        verify(valueOps).set(
+                "auth:2fa:temp:" + step1Response.tempToken(),
+                "v1:1:7",
+                Duration.ofMinutes(5)
+        );
     }
 
     @Test
@@ -184,7 +193,7 @@ class LoginServiceTest {
         user.setTotpSecret("encrypted-secret");
 
         UserAccountRepository userRepo = mock(UserAccountRepository.class);
-        when(userRepo.findByIdAndDeletedFlagFalse(1L)).thenReturn(java.util.Optional.of(user));
+        when(userRepo.findByIdAndDeletedFlagFalseForUpdate(1L)).thenReturn(java.util.Optional.of(user));
 
         TotpService totpService = mock(TotpService.class);
         when(totpService.decryptSecret("encrypted-secret")).thenReturn("secret");
@@ -197,7 +206,7 @@ class LoginServiceTest {
 
         @SuppressWarnings("unchecked")
         ValueOperations<String, String> valueOps = mock(ValueOperations.class);
-        when(valueOps.get("auth:2fa:temp:valid-token")).thenReturn("1");
+        when(valueOps.get("auth:2fa:temp:valid-token")).thenReturn("v1:1:0");
         StringRedisTemplate redis = mock(StringRedisTemplate.class);
         when(redis.opsForValue()).thenReturn(valueOps);
 
@@ -218,11 +227,11 @@ class LoginServiceTest {
     @Test
     void verifyTotpShouldThrowWhenUserNotFound() {
         UserAccountRepository userRepo = mock(UserAccountRepository.class);
-        when(userRepo.findByIdAndDeletedFlagFalse(99L)).thenReturn(java.util.Optional.empty());
+        when(userRepo.findByIdAndDeletedFlagFalseForUpdate(99L)).thenReturn(java.util.Optional.empty());
 
         @SuppressWarnings("unchecked")
         ValueOperations<String, String> valueOps = mock(ValueOperations.class);
-        when(valueOps.get("auth:2fa:temp:valid-token")).thenReturn("99");
+        when(valueOps.get("auth:2fa:temp:valid-token")).thenReturn("v1:99:0");
         StringRedisTemplate redis = mock(StringRedisTemplate.class);
         when(redis.opsForValue()).thenReturn(valueOps);
 
@@ -246,11 +255,11 @@ class LoginServiceTest {
         user.setTotpSecret("encrypted-secret");
 
         UserAccountRepository userRepo = mock(UserAccountRepository.class);
-        when(userRepo.findByIdAndDeletedFlagFalse(1L)).thenReturn(java.util.Optional.of(user));
+        when(userRepo.findByIdAndDeletedFlagFalseForUpdate(1L)).thenReturn(java.util.Optional.of(user));
 
         @SuppressWarnings("unchecked")
         ValueOperations<String, String> valueOps = mock(ValueOperations.class);
-        when(valueOps.get("auth:2fa:temp:valid-token")).thenReturn("1");
+        when(valueOps.get("auth:2fa:temp:valid-token")).thenReturn("v1:1:0");
         StringRedisTemplate redis = mock(StringRedisTemplate.class);
         when(redis.opsForValue()).thenReturn(valueOps);
 
@@ -274,7 +283,7 @@ class LoginServiceTest {
         user.setTotpSecret("encrypted-secret");
 
         UserAccountRepository userRepo = mock(UserAccountRepository.class);
-        when(userRepo.findByIdAndDeletedFlagFalse(1L)).thenReturn(java.util.Optional.of(user));
+        when(userRepo.findByIdAndDeletedFlagFalseForUpdate(1L)).thenReturn(java.util.Optional.of(user));
 
         TotpService totpService = mock(TotpService.class);
         when(totpService.decryptSecret("encrypted-secret")).thenReturn("secret");
@@ -284,7 +293,7 @@ class LoginServiceTest {
 
         @SuppressWarnings("unchecked")
         ValueOperations<String, String> valueOps = mock(ValueOperations.class);
-        when(valueOps.get("auth:2fa:temp:valid-token")).thenReturn("1");
+        when(valueOps.get("auth:2fa:temp:valid-token")).thenReturn("v1:1:0");
         StringRedisTemplate redis = mock(StringRedisTemplate.class);
         when(redis.opsForValue()).thenReturn(valueOps);
 
@@ -448,6 +457,7 @@ class LoginServiceTest {
         UserAccount user = normalUser();
         user.setTotpEnabled(true);
         user.setTotpSecret("encrypted-secret");
+        user.setCredentialVersion(3L);
 
         UserAccountRepository userRepo = mock(UserAccountRepository.class);
         when(userRepo.findByLoginNameAndDeletedFlagFalse("admin")).thenReturn(java.util.Optional.of(user));
@@ -473,7 +483,65 @@ class LoginServiceTest {
 
         assertThat(response.tempToken()).startsWith("1.");
         verify(redis).delete("auth:2fa:temp:old-token");
-        verify(valueOps).set("auth:2fa:temp:" + response.tempToken(), "1", Duration.ofMinutes(5));
+        verify(valueOps).set("auth:2fa:temp:" + response.tempToken(), "v1:1:3", Duration.ofMinutes(5));
+    }
+
+    @Test
+    void verifyTotpShouldRejectChallengeAfterCredentialVersionChanges() {
+        UserAccount user = normalUser();
+        user.setTotpEnabled(true);
+        user.setTotpSecret("encrypted-secret");
+        user.setCredentialVersion(5L);
+
+        UserAccountRepository userRepo = mock(UserAccountRepository.class);
+        when(userRepo.findByIdAndDeletedFlagFalseForUpdate(1L)).thenReturn(java.util.Optional.of(user));
+
+        @SuppressWarnings("unchecked")
+        ValueOperations<String, String> valueOps = mock(ValueOperations.class);
+        when(valueOps.get("auth:2fa:temp:stale-token")).thenReturn("v1:1:4");
+        StringRedisTemplate redis = mock(StringRedisTemplate.class);
+        when(redis.opsForValue()).thenReturn(valueOps);
+
+        TotpService totpService = mock(TotpService.class);
+        TokenIssuanceService tokenIssuance = mock(TokenIssuanceService.class);
+        LoginService service = new LoginService(
+                userRepo, mock(PasswordEncoder.class), totpService, mock(LoginAttemptService.class),
+                redis, tokenIssuance,
+                mock(OperationLogService.class), mock(SystemSwitchService.class),
+                mock(CaptchaService.class)
+        );
+
+        assertThatThrownBy(() -> service.verifyTotpAndIssueTokens("stale-token", "123456", CTX))
+                .isInstanceOf(BadCredentialsException.class)
+                .hasMessageContaining("2FA验证已过期");
+
+        verify(totpService, never()).verifyCode(anyString(), anyString());
+        verify(tokenIssuance, never()).issueTokens(any(), anyString(), anyString());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"1", "v2:1:0", "v1:not-a-user:0"})
+    void verifyTotpShouldRejectUnsupportedChallengeValue(String storedValue) {
+        @SuppressWarnings("unchecked")
+        ValueOperations<String, String> valueOps = mock(ValueOperations.class);
+        when(valueOps.get("auth:2fa:temp:invalid-token")).thenReturn(storedValue);
+        StringRedisTemplate redis = mock(StringRedisTemplate.class);
+        when(redis.opsForValue()).thenReturn(valueOps);
+
+        UserAccountRepository userRepo = mock(UserAccountRepository.class);
+        LoginService service = new LoginService(
+                userRepo, mock(PasswordEncoder.class), mock(TotpService.class), mock(LoginAttemptService.class),
+                redis, mock(TokenIssuanceService.class),
+                mock(OperationLogService.class), mock(SystemSwitchService.class),
+                mock(CaptchaService.class)
+        );
+
+        assertThatThrownBy(() -> service.verifyTotpAndIssueTokens("invalid-token", "123456", CTX))
+                .isInstanceOf(BadCredentialsException.class)
+                .hasMessageContaining("2FA验证已过期");
+
+        verify(userRepo, never()).findByIdAndDeletedFlagFalseForUpdate(any());
+        verify(redis).delete("auth:2fa:temp:invalid-token");
     }
 
     @Test

@@ -2,6 +2,7 @@ package com.leo.erp.finance.invoicereceipt.service;
 
 import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.api.PageQuery;
+import com.leo.erp.common.concurrency.SourceAllocationLockService;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
@@ -19,22 +20,26 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.TreeSet;
 
 @Service
 public class InvoiceReceiptService extends AbstractCrudService<InvoiceReceipt, InvoiceReceiptRequest, InvoiceReceiptResponse> {
 
     private final InvoiceReceiptRepository repository;
+    private final SourceAllocationLockService sourceAllocationLockService;
     private final InvoiceReceiptApplyService applyService;
     private final InvoiceReceiptSourceService invoiceReceiptSourceService;
     private final InvoiceReceiptResponseAssembler responseAssembler;
 
     public InvoiceReceiptService(InvoiceReceiptRepository repository,
                                  SnowflakeIdGenerator idGenerator,
+                                 SourceAllocationLockService sourceAllocationLockService,
                                  InvoiceReceiptApplyService applyService,
                                  InvoiceReceiptSourceService invoiceReceiptSourceService,
                                  InvoiceReceiptResponseAssembler responseAssembler) {
         super(idGenerator);
         this.repository = repository;
+        this.sourceAllocationLockService = sourceAllocationLockService;
         this.applyService = applyService;
         this.invoiceReceiptSourceService = invoiceReceiptSourceService;
         this.responseAssembler = responseAssembler;
@@ -161,6 +166,7 @@ public class InvoiceReceiptService extends AbstractCrudService<InvoiceReceipt, I
 
     @Override
     protected void beforeStatusUpdate(InvoiceReceipt entity, String currentStatus, String nextStatus) {
+        lockSourceItems(entity, null);
         if (!StatusConstants.INVOICE_RECEIVED.equals(nextStatus)) {
             return;
         }
@@ -169,7 +175,13 @@ public class InvoiceReceiptService extends AbstractCrudService<InvoiceReceipt, I
 
     @Override
     protected void apply(InvoiceReceipt entity, InvoiceReceiptRequest request) {
+        lockSourceItems(entity, request);
         applyService.apply(entity, request, this::nextId);
+    }
+
+    @Override
+    protected void beforeDelete(InvoiceReceipt entity) {
+        lockSourceItems(entity, null);
     }
 
     @Override
@@ -180,6 +192,23 @@ public class InvoiceReceiptService extends AbstractCrudService<InvoiceReceipt, I
     @Override
     protected InvoiceReceiptResponse toResponse(InvoiceReceipt entity) {
         return responseAssembler.toSummaryResponse(entity);
+    }
+
+    private void lockSourceItems(InvoiceReceipt entity, InvoiceReceiptRequest request) {
+        TreeSet<Long> sourceItemIds = new TreeSet<>();
+        if (entity.getItems() != null) {
+            entity.getItems().stream()
+                    .map(item -> item.getSourcePurchaseOrderItemId())
+                    .filter(id -> id != null)
+                    .forEach(sourceItemIds::add);
+        }
+        if (request != null && request.items() != null) {
+            request.items().stream()
+                    .map(item -> item.sourcePurchaseOrderItemId())
+                    .filter(id -> id != null)
+                    .forEach(sourceItemIds::add);
+        }
+        sourceAllocationLockService.lockTradeItemSources(List.copyOf(sourceItemIds), List.of(), List.of());
     }
 
 }

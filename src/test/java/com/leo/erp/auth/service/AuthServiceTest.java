@@ -28,6 +28,7 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.lang.reflect.Proxy;
 import java.time.LocalDateTime;
@@ -143,7 +144,7 @@ class AuthServiceTest {
         session.setPreviousTokenValidUntil(LocalDateTime.now().plusSeconds(30));
         RefreshTokenSessionRepository repository = previousTokenRefreshSessionRepository(session, new ArrayList<>());
         TokenIssuanceService tokenService = tokenIssuanceServiceStub(
-                logoutUserAccountRepository(null),
+                logoutUserAccountRepository(refreshUser()),
                 repository,
                 blacklistService(new ArrayList<>(), new AtomicBoolean(false)),
                 null
@@ -167,7 +168,7 @@ class AuthServiceTest {
         List<String> blacklistedSessionIds = new ArrayList<>();
         RefreshTokenSessionRepository repository = previousTokenRefreshSessionRepository(session, savedTokens);
         TokenIssuanceService tokenService = tokenIssuanceServiceStub(
-                logoutUserAccountRepository(null),
+                logoutUserAccountRepository(refreshUser()),
                 repository,
                 blacklistService(blacklistedSessionIds, new AtomicBoolean(false)),
                 null
@@ -280,6 +281,16 @@ class AuthServiceTest {
         assertThat(command.resultStatus()).isEqualTo("成功");
         assertThat(command.operatorId()).isEqualTo(42L);
         assertThat(command.operatorName()).isEqualTo("测试用户");
+    }
+
+    @Test
+    void logoutShouldDeclareTransactionBoundaryForPessimisticSessionLookup() throws NoSuchMethodException {
+        Transactional transactional = AuthService.class
+                .getMethod("logout", String.class, LoginService.AuthRequestContext.class)
+                .getAnnotation(Transactional.class);
+
+        assertThat(transactional).isNotNull();
+        assertThat(transactional.readOnly()).isFalse();
     }
 
     @Test
@@ -424,6 +435,8 @@ class AuthServiceTest {
                 RefreshTokenSessionRepository.class.getClassLoader(),
                 new Class[]{RefreshTokenSessionRepository.class},
                 (proxy, method, args) -> switch (method.getName()) {
+                    case "findUserIdByTokenHash" -> Optional.of(session.getUserId());
+                    case "findUserIdByPreviousTokenHash" -> Optional.empty();
                     case "findByTokenHashAndDeletedFlagFalse" -> Optional.of(session);
                     case "findByPreviousTokenHashAndDeletedFlagFalse" -> Optional.empty();
                     case "save" -> {
@@ -445,6 +458,8 @@ class AuthServiceTest {
                 RefreshTokenSessionRepository.class.getClassLoader(),
                 new Class[]{RefreshTokenSessionRepository.class},
                 (proxy, method, args) -> switch (method.getName()) {
+                    case "findUserIdByTokenHash" -> Optional.empty();
+                    case "findUserIdByPreviousTokenHash" -> Optional.of(session.getUserId());
                     case "findByTokenHashAndDeletedFlagFalse" -> Optional.empty();
                     case "findByPreviousTokenHashAndDeletedFlagFalse" -> Optional.of(session);
                     case "save" -> {
@@ -467,6 +482,7 @@ class AuthServiceTest {
                 (proxy, method, args) -> switch (method.getName()) {
                     case "findByLoginNameAndDeletedFlagFalse" -> Optional.ofNullable(user);
                     case "findByIdAndDeletedFlagFalse" -> Optional.ofNullable(user);
+                    case "findByIdAndDeletedFlagFalseForUpdate" -> Optional.ofNullable(user);
                     case "save" -> args[0];
                     case "toString" -> "UserAccountRepositoryLoginStub";
                     case "hashCode" -> System.identityHashCode(proxy);
@@ -482,6 +498,7 @@ class AuthServiceTest {
                 new Class[]{UserAccountRepository.class},
                 (proxy, method, args) -> switch (method.getName()) {
                     case "findByIdAndDeletedFlagFalse" -> Optional.ofNullable(user);
+                    case "findByIdAndDeletedFlagFalseForUpdate" -> Optional.ofNullable(user);
                     case "toString" -> "UserAccountRepositoryLogoutUserStub";
                     case "hashCode" -> System.identityHashCode(proxy);
                     case "equals" -> proxy == args[0];
@@ -731,7 +748,7 @@ class AuthServiceTest {
         StringRedisTemplate redis = redisStub();
         // Pre-populate temp token in Redis so verifyTotpAndIssueTokens can find it
         if (redis != null) {
-            redis.opsForValue().set("auth:2fa:temp:test-temp-token", "99");
+            redis.opsForValue().set("auth:2fa:temp:test-temp-token", "v1:99:0");
         }
 
         LoginService loginService = new LoginService(
@@ -761,5 +778,15 @@ class AuthServiceTest {
         session.setTokenHash("hash-" + id);
         session.setExpiresAt(LocalDateTime.now().plusDays(1));
         return session;
+    }
+
+    private static UserAccount refreshUser() {
+        UserAccount user = new UserAccount();
+        user.setId(42L);
+        user.setLoginName("tester");
+        user.setUserName("测试用户");
+        user.setStatus(com.leo.erp.auth.domain.enums.UserStatus.NORMAL);
+        user.setCredentialVersion(0L);
+        return user;
     }
 }

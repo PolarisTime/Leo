@@ -1,5 +1,6 @@
 package com.leo.erp.finance.invoicereceipt.service;
 
+import com.leo.erp.common.concurrency.SourceAllocationLockService;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
@@ -19,6 +20,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Page;
@@ -41,7 +43,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.nullable;
-import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -65,6 +67,9 @@ class InvoiceReceiptServiceTest {
     @Mock
     private WorkflowTransitionGuard workflowTransitionGuard;
 
+    @Mock
+    private SourceAllocationLockService sourceAllocationLockService;
+
     private InvoiceReceiptService service;
 
     @BeforeEach
@@ -75,8 +80,18 @@ class InvoiceReceiptServiceTest {
                 mapper,
                 companySettingService,
                 workflowTransitionGuard,
-                purchaseOrderItemQueryService
+                purchaseOrderItemQueryService,
+                sourceAllocationLockService
         );
+    }
+
+    @Test
+    void shouldRequireSourceAllocationLockServiceAsConstructorDependency() {
+        boolean hasRequiredDependency = java.util.Arrays.stream(InvoiceReceiptService.class.getConstructors())
+                .anyMatch(constructor -> java.util.Arrays.asList(constructor.getParameterTypes())
+                        .contains(SourceAllocationLockService.class));
+
+        assertThat(hasRequiredDependency).isTrue();
     }
 
     @Test
@@ -97,6 +112,11 @@ class InvoiceReceiptServiceTest {
         )));
 
         assertEquals("第1行来源采购订单明细可收票吨位不足", exception.getMessage());
+        InOrder lockBeforeSummary = inOrder(sourceAllocationLockService, repository);
+        lockBeforeSummary.verify(sourceAllocationLockService)
+                .lockTradeItemSources(List.of(201L), List.of(), List.of());
+        lockBeforeSummary.verify(repository)
+                .summarizeAllocatedBySourcePurchaseOrderItemIds(anyCollection(), nullable(Long.class));
     }
 
     @Test
@@ -442,7 +462,10 @@ class InvoiceReceiptServiceTest {
         existing.setStatus("草稿");
         existing.setOperatorName("财务A");
         existing.setDeletedFlag(false);
-        existing.setItems(new ArrayList<>());
+        InvoiceReceiptItem existingItem = new InvoiceReceiptItem();
+        existingItem.setId(200L);
+        existingItem.setSourcePurchaseOrderItemId(200L);
+        existing.setItems(new ArrayList<>(List.of(existingItem)));
 
         PurchaseOrderItem sourceItem = buildPurchaseOrderItem(201L, "M-1", new BigDecimal("0.300"), new BigDecimal("1000.00"));
 
@@ -471,6 +494,11 @@ class InvoiceReceiptServiceTest {
 
         assertThat(result).isNotNull();
         assertThat(result.receiveNo()).isEqualTo("SP-SAME");
+        InOrder lockBeforeSummary = inOrder(sourceAllocationLockService, repository);
+        lockBeforeSummary.verify(sourceAllocationLockService)
+                .lockTradeItemSources(List.of(200L, 201L), List.of(), List.of());
+        lockBeforeSummary.verify(repository)
+                .summarizeAllocatedBySourcePurchaseOrderItemIds(anyCollection(), anyLong());
     }
 
     @Test
@@ -691,6 +719,11 @@ class InvoiceReceiptServiceTest {
 
         assertThat(result).isNotNull();
         assertThat(result.status()).isEqualTo("已收票");
+        InOrder lockBeforeSummary = inOrder(sourceAllocationLockService, repository);
+        lockBeforeSummary.verify(sourceAllocationLockService)
+                .lockTradeItemSources(List.of(201L), List.of(), List.of());
+        lockBeforeSummary.verify(repository)
+                .summarizeAllocatedBySourcePurchaseOrderItemIds(anyCollection(), anyLong());
     }
 
     @Test
@@ -740,13 +773,19 @@ class InvoiceReceiptServiceTest {
         existing.setId(1L);
         existing.setStatus("草稿");
         existing.setDeletedFlag(false);
-        existing.setItems(new ArrayList<>());
+        InvoiceReceiptItem item = new InvoiceReceiptItem();
+        item.setSourcePurchaseOrderItemId(201L);
+        existing.setItems(new ArrayList<>(List.of(item)));
         when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(existing));
         when(repository.save(any(InvoiceReceipt.class))).thenAnswer(inv -> inv.getArgument(0));
 
         service.delete(1L);
 
-        verify(repository).save(any(InvoiceReceipt.class));
+        InOrder lockBeforeMutation = inOrder(sourceAllocationLockService, repository);
+        lockBeforeMutation.verify(sourceAllocationLockService)
+                .lockTradeItemSources(List.of(201L), List.of(), List.of());
+        lockBeforeMutation.verify(repository).save(any(InvoiceReceipt.class));
+        assertThat(existing.isDeletedFlag()).isTrue();
     }
 
     @Test
@@ -797,7 +836,8 @@ class InvoiceReceiptServiceTest {
                                           InvoiceReceiptMapper mapper,
                                           CompanySettingService companySettingService,
                                           WorkflowTransitionGuard workflowTransitionGuard,
-                                          PurchaseOrderItemQueryService purchaseOrderItemQueryService) {
+                                          PurchaseOrderItemQueryService purchaseOrderItemQueryService,
+                                          SourceAllocationLockService sourceAllocationLockService) {
         InvoiceReceiptSourceService sourceService = new InvoiceReceiptSourceService(repository, purchaseOrderItemQueryService);
         com.leo.erp.finance.common.service.InvoiceAmountCalculator amountCalculator =
                 new com.leo.erp.finance.common.service.InvoiceAmountCalculator(
@@ -806,6 +846,7 @@ class InvoiceReceiptServiceTest {
         return new InvoiceReceiptService(
                 repository,
                 idGenerator,
+                sourceAllocationLockService,
                 new InvoiceReceiptApplyService(workflowTransitionGuard, sourceService, amountCalculator),
                 sourceService,
                 new InvoiceReceiptResponseAssembler(mapper)

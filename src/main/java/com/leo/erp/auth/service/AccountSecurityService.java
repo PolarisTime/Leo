@@ -24,30 +24,35 @@ public class AccountSecurityService {
     private final AuthenticatedUserCacheService authenticatedUserCacheService;
     private final DashboardSummaryService dashboardSummaryService;
     private final SystemSwitchService systemSwitchService;
+    private final SessionManagementService sessionManagementService;
 
     public AccountSecurityService(UserAccountRepository userAccountRepository,
                                   PasswordEncoder passwordEncoder,
                                   TotpService totpService,
                                   AuthenticatedUserCacheService authenticatedUserCacheService,
                                   DashboardSummaryService dashboardSummaryService,
-                                  SystemSwitchService systemSwitchService) {
+                                  SystemSwitchService systemSwitchService,
+                                  SessionManagementService sessionManagementService) {
         this.userAccountRepository = userAccountRepository;
         this.passwordEncoder = passwordEncoder;
         this.totpService = totpService;
         this.authenticatedUserCacheService = authenticatedUserCacheService;
         this.dashboardSummaryService = dashboardSummaryService;
         this.systemSwitchService = systemSwitchService;
+        this.sessionManagementService = sessionManagementService;
     }
 
     @Transactional
     public void changePassword(Long userId, ChangeOwnPasswordRequest request) {
-        UserAccount account = getAccount(userId);
+        UserAccount account = getAccountForUpdate(userId);
         verifyCurrentPassword(account, request.currentPassword());
         if (passwordEncoder.matches(request.newPassword(), account.getPasswordHash())) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "新密码不能与当前密码相同");
         }
         account.setPasswordHash(passwordEncoder.encode(request.newPassword()));
+        account.setCredentialVersion(Math.incrementExact(normalizeCredentialVersion(account.getCredentialVersion())));
         userAccountRepository.save(account);
+        sessionManagementService.revokeActiveSessionsForPasswordChange(account.getId());
         evictCaches(account.getId());
     }
 
@@ -105,6 +110,15 @@ public class AccountSecurityService {
     private UserAccount getAccount(Long userId) {
         return userAccountRepository.findByIdAndDeletedFlagFalse(userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "用户不存在"));
+    }
+
+    private UserAccount getAccountForUpdate(Long userId) {
+        return userAccountRepository.findByIdAndDeletedFlagFalseForUpdate(userId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "用户不存在"));
+    }
+
+    private long normalizeCredentialVersion(Long credentialVersion) {
+        return credentialVersion == null ? 0L : credentialVersion;
     }
 
     private void verifyCurrentPassword(UserAccount account, String currentPassword) {

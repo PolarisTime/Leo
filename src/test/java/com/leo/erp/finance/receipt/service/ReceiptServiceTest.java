@@ -1,5 +1,6 @@
 package com.leo.erp.finance.receipt.service;
 
+import com.leo.erp.common.concurrency.SourceAllocationLockService;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.service.CrudRuntimeSettings;
@@ -20,6 +21,7 @@ import com.leo.erp.statement.customer.domain.entity.CustomerStatement;
 import com.leo.erp.statement.customer.service.CustomerStatementQueryService;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
@@ -42,11 +44,167 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class ReceiptServiceTest {
+
+    @Test
+    void shouldRequireSourceAllocationLockServiceAsConstructorDependency() {
+        boolean hasRequiredDependency = java.util.Arrays.stream(ReceiptService.class.getConstructors())
+                .anyMatch(constructor -> java.util.Arrays.asList(constructor.getParameterTypes())
+                        .contains(SourceAllocationLockService.class));
+
+        assertThat(hasRequiredDependency).isTrue();
+    }
+
+    @Test
+    void shouldLockCustomerStatementsBeforeCreatingReceiptAllocations() {
+        ReceiptRepository receiptRepository = mock(ReceiptRepository.class);
+        SnowflakeIdGenerator idGenerator = mock(SnowflakeIdGenerator.class);
+        ReceiptApplyService applyService = mock(ReceiptApplyService.class);
+        ReceiptAllocationService allocationService = mock(ReceiptAllocationService.class);
+        ReceiptSettlementSyncService settlementSyncService = mock(ReceiptSettlementSyncService.class);
+        SourceAllocationLockService lockService = mock(SourceAllocationLockService.class);
+        ReceiptService service = lockAwareService(
+                receiptRepository,
+                idGenerator,
+                applyService,
+                allocationService,
+                settlementSyncService,
+                lockService
+        );
+        ReceiptRequest request = buildRequest(
+                null,
+                "客户A",
+                "项目A",
+                new BigDecimal("100.00"),
+                StatusConstants.DRAFT,
+                List.of(
+                        new ReceiptAllocationRequest(null, 23L, new BigDecimal("30.00")),
+                        new ReceiptAllocationRequest(null, 21L, new BigDecimal("40.00")),
+                        new ReceiptAllocationRequest(null, 23L, new BigDecimal("30.00"))
+                )
+        );
+
+        when(idGenerator.nextId()).thenReturn(1L);
+
+        service.create(request);
+
+        InOrder flow = inOrder(lockService, applyService);
+        flow.verify(lockService).lockStatementSources(List.of(21L, 23L), List.of(), List.of());
+        flow.verify(applyService).apply(any(Receipt.class), eq(request), any());
+    }
+
+    @Test
+    void shouldLockOldAndNewCustomerStatementsBeforeUpdatingReceiptAllocations() {
+        ReceiptRepository receiptRepository = mock(ReceiptRepository.class);
+        ReceiptApplyService applyService = mock(ReceiptApplyService.class);
+        ReceiptAllocationService allocationService = mock(ReceiptAllocationService.class);
+        ReceiptSettlementSyncService settlementSyncService = mock(ReceiptSettlementSyncService.class);
+        SourceAllocationLockService lockService = mock(SourceAllocationLockService.class);
+        ReceiptService service = lockAwareService(
+                receiptRepository,
+                mock(SnowflakeIdGenerator.class),
+                applyService,
+                allocationService,
+                settlementSyncService,
+                lockService
+        );
+        Receipt existing = buildReceiptEntity(1L, "SK-001");
+        existing.setItems(new ArrayList<>(List.of(
+                receiptAllocation(existing, 101L, 15L),
+                receiptAllocation(existing, 102L, 11L)
+        )));
+        ReceiptRequest request = buildRequest(
+                null,
+                "客户A",
+                "项目A",
+                new BigDecimal("100.00"),
+                StatusConstants.DRAFT,
+                List.of(
+                        new ReceiptAllocationRequest(null, 16L, new BigDecimal("30.00")),
+                        new ReceiptAllocationRequest(null, 12L, new BigDecimal("40.00")),
+                        new ReceiptAllocationRequest(null, 16L, new BigDecimal("30.00"))
+                )
+        );
+
+        when(receiptRepository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(existing));
+
+        service.update(1L, request);
+
+        InOrder flow = inOrder(lockService, applyService);
+        flow.verify(lockService).lockStatementSources(
+                List.of(11L, 12L, 15L, 16L),
+                List.of(),
+                List.of()
+        );
+        flow.verify(applyService).apply(eq(existing), eq(request), any());
+    }
+
+    @Test
+    void shouldLockExistingCustomerStatementsBeforeUpdatingReceiptStatus() {
+        ReceiptRepository receiptRepository = mock(ReceiptRepository.class);
+        ReceiptAllocationService allocationService = mock(ReceiptAllocationService.class);
+        ReceiptSettlementSyncService settlementSyncService = mock(ReceiptSettlementSyncService.class);
+        SourceAllocationLockService lockService = mock(SourceAllocationLockService.class);
+        ReceiptService service = lockAwareService(
+                receiptRepository,
+                mock(SnowflakeIdGenerator.class),
+                mock(ReceiptApplyService.class),
+                allocationService,
+                settlementSyncService,
+                lockService
+        );
+        Receipt source = buildReceiptEntity(1L, "SK-001");
+        source.setStatus(StatusConstants.RECEIVED);
+        source.setItems(new ArrayList<>(List.of(
+                receiptAllocation(source, 101L, 23L),
+                receiptAllocation(source, 102L, 21L)
+        )));
+        Receipt existing = spy(source);
+
+        when(receiptRepository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(existing));
+
+        service.updateStatus(1L, StatusConstants.DRAFT);
+
+        InOrder flow = inOrder(lockService, settlementSyncService, allocationService, existing);
+        flow.verify(lockService).lockStatementSources(List.of(21L, 23L), List.of(), List.of());
+        flow.verify(settlementSyncService).captureOriginalAllocationStatementIds(existing);
+        flow.verify(allocationService).validateExistingAllocationsForSettlement(existing, StatusConstants.DRAFT);
+        flow.verify(existing).setStatus(StatusConstants.DRAFT);
+    }
+
+    @Test
+    void shouldLockExistingCustomerStatementsBeforeDeletingReceipt() {
+        ReceiptRepository receiptRepository = mock(ReceiptRepository.class);
+        SourceAllocationLockService lockService = mock(SourceAllocationLockService.class);
+        ReceiptService service = lockAwareService(
+                receiptRepository,
+                mock(SnowflakeIdGenerator.class),
+                mock(ReceiptApplyService.class),
+                mock(ReceiptAllocationService.class),
+                mock(ReceiptSettlementSyncService.class),
+                lockService
+        );
+        Receipt source = buildReceiptEntity(1L, "SK-001");
+        source.setItems(new ArrayList<>(List.of(
+                receiptAllocation(source, 101L, 31L),
+                receiptAllocation(source, 102L, 29L)
+        )));
+        Receipt existing = spy(source);
+
+        when(receiptRepository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(existing));
+
+        service.delete(1L);
+
+        InOrder flow = inOrder(lockService, existing);
+        flow.verify(lockService).lockStatementSources(List.of(29L, 31L), List.of(), List.of());
+        flow.verify(existing).setDeletedFlag(true);
+    }
 
     @Test
     void shouldRejectDuplicateReceiptNo() {
@@ -1361,8 +1519,41 @@ class ReceiptServiceTest {
                 new ReceiptApplyService(workflowTransitionGuard, allocationService, settlementSyncService),
                 allocationService,
                 new ReceiptAllocationResponseAssembler(customerStatementQueryService),
-                settlementSyncService
+                settlementSyncService,
+                mock(SourceAllocationLockService.class)
         );
+    }
+
+    private ReceiptService lockAwareService(
+            ReceiptRepository receiptRepository,
+            SnowflakeIdGenerator idGenerator,
+            ReceiptApplyService applyService,
+            ReceiptAllocationService allocationService,
+            ReceiptSettlementSyncService settlementSyncService,
+            SourceAllocationLockService lockService
+    ) {
+        ReceiptMapper mapper = mock(ReceiptMapper.class);
+        when(receiptRepository.save(any(Receipt.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(mapper.toResponse(any(Receipt.class))).thenReturn(mock(ReceiptResponse.class));
+        return new ReceiptService(
+                receiptRepository,
+                idGenerator,
+                mapper,
+                applyService,
+                allocationService,
+                mock(ReceiptAllocationResponseAssembler.class),
+                settlementSyncService,
+                lockService
+        );
+    }
+
+    private ReceiptAllocation receiptAllocation(Receipt receipt, Long id, Long sourceStatementId) {
+        ReceiptAllocation allocation = new ReceiptAllocation();
+        allocation.setId(id);
+        allocation.setReceipt(receipt);
+        allocation.setSourceStatementId(sourceStatementId);
+        allocation.setAllocatedAmount(new BigDecimal("50.00"));
+        return allocation;
     }
 
     private Receipt buildReceiptEntity(Long id, String receiptNo) {

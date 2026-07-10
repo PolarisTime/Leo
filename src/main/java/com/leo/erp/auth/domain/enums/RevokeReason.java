@@ -4,5 +4,6 @@ public enum RevokeReason {
     MANUAL,
     CONCURRENT_LIMIT,
     EXPIRED,
-    REUSE_DETECTED
+    REUSE_DETECTED,
+    PASSWORD_CHANGED
 }

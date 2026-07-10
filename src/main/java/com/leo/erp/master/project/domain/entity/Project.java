@@ -17,7 +17,7 @@ public class Project extends AbstractAuditableEntity {
     @Id
     private Long id;
 
-    @Column(name = "project_code", nullable = false, unique = true, length = 64)
+    @Column(name = "project_code", nullable = false, length = 64)
     private String projectCode;
 
     @Column(name = "project_name", nullable = false, length = 200)

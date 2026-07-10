@@ -64,7 +64,7 @@ public class SupplierStatementSourceService {
                 .and(Specs.keywordLike(filter.keyword(), PURCHASE_INBOUND_CANDIDATE_SEARCH_FIELDS))
                 .and(Specs.equalIfPresent("supplierName", filter.name()))
                 .and(Specs.equalValueIfPresent("settlementCompanyId", filter.settlementCompanyId()))
-                .and(Specs.equalIfPresent("status", StatusConstants.PURCHASE_COMPLETED))
+                .and(Specs.equalIfPresent("status", StatusConstants.INBOUND_COMPLETED))
                 .and(Specs.betweenIfPresent("inboundDate", filter.startDate(), filter.endDate()))
                 .and(StatementCandidateSupport.excludeFieldValues("inboundNo", occupiedInboundNos));
         return purchaseInboundRepository.findAll(DataScopeContext.apply(spec), query.toPageable("id"))
@@ -170,8 +170,8 @@ public class SupplierStatementSourceService {
             );
             BusinessDocumentValidator.requireStatusIn(
                     inbound.getStatus(),
-                    Set.of(StatusConstants.PURCHASE_COMPLETED),
-                    "来源采购入库单" + inbound.getInboundNo() + "未完成采购，不能生成供应商对账单"
+                    Set.of(StatusConstants.INBOUND_COMPLETED),
+                    "来源采购入库单" + inbound.getInboundNo() + "未完成入库，不能生成供应商对账单"
             );
             if (request.settlementCompanyId() != null
                     && inbound.getSettlementCompanyId() != null

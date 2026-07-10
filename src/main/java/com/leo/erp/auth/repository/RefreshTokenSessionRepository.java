@@ -5,6 +5,8 @@ import com.leo.erp.auth.domain.enums.RevokeReason;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import jakarta.persistence.LockModeType;
 import java.time.LocalDateTime;
@@ -12,6 +14,22 @@ import java.util.List;
 import java.util.Optional;
 
 public interface RefreshTokenSessionRepository extends JpaRepository<RefreshTokenSession, Long>, JpaSpecificationExecutor<RefreshTokenSession> {
+
+    @Query("""
+            SELECT session.userId
+              FROM RefreshTokenSession session
+             WHERE session.tokenHash = :tokenHash
+               AND session.deletedFlag = false
+            """)
+    Optional<Long> findUserIdByTokenHash(@Param("tokenHash") String tokenHash);
+
+    @Query("""
+            SELECT session.userId
+              FROM RefreshTokenSession session
+             WHERE session.previousTokenHash = :previousTokenHash
+               AND session.deletedFlag = false
+            """)
+    Optional<Long> findUserIdByPreviousTokenHash(@Param("previousTokenHash") String previousTokenHash);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     Optional<RefreshTokenSession> findByTokenHashAndDeletedFlagFalse(String tokenHash);

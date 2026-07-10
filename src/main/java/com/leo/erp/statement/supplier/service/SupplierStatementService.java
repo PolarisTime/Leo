@@ -2,6 +2,7 @@ package com.leo.erp.statement.supplier.service;
 
 import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.api.PageQuery;
+import com.leo.erp.common.concurrency.SourceAllocationLockService;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
@@ -9,9 +10,14 @@ import com.leo.erp.common.service.AbstractCrudService;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.security.permission.WorkflowTransitionGuard;
+import com.leo.erp.purchase.inbound.domain.entity.PurchaseInbound;
+import com.leo.erp.purchase.inbound.domain.entity.PurchaseInboundItem;
+import com.leo.erp.purchase.inbound.service.PurchaseInboundItemQueryService;
 import com.leo.erp.statement.supplier.domain.entity.SupplierStatement;
+import com.leo.erp.statement.supplier.domain.entity.SupplierStatementItem;
 import com.leo.erp.statement.supplier.repository.SupplierStatementRepository;
 import com.leo.erp.statement.supplier.web.dto.SupplierStatementCandidateResponse;
+import com.leo.erp.statement.supplier.web.dto.SupplierStatementItemRequest;
 import com.leo.erp.statement.supplier.web.dto.SupplierStatementRequest;
 import com.leo.erp.statement.supplier.web.dto.SupplierStatementResponse;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -21,8 +27,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.TreeSet;
 
 @Service
 public class SupplierStatementService extends AbstractCrudService<SupplierStatement, SupplierStatementRequest, SupplierStatementResponse> {
@@ -32,6 +40,8 @@ public class SupplierStatementService extends AbstractCrudService<SupplierStatem
     private final WorkflowTransitionGuard workflowTransitionGuard;
     private final SupplierStatementSourceService supplierStatementSourceService;
     private final SupplierStatementApplyService applyService;
+    private final PurchaseInboundItemQueryService purchaseInboundItemQueryService;
+    private final SourceAllocationLockService sourceAllocationLockService;
 
     @Autowired
     public SupplierStatementService(SupplierStatementRepository repository,
@@ -39,13 +49,17 @@ public class SupplierStatementService extends AbstractCrudService<SupplierStatem
                                     SupplierStatementResponseAssembler responseAssembler,
                                     WorkflowTransitionGuard workflowTransitionGuard,
                                     SupplierStatementSourceService supplierStatementSourceService,
-                                    SupplierStatementApplyService applyService) {
+                                    SupplierStatementApplyService applyService,
+                                    PurchaseInboundItemQueryService purchaseInboundItemQueryService,
+                                    SourceAllocationLockService sourceAllocationLockService) {
         super(idGenerator);
         this.repository = repository;
         this.responseAssembler = responseAssembler;
         this.workflowTransitionGuard = workflowTransitionGuard;
         this.supplierStatementSourceService = supplierStatementSourceService;
         this.applyService = applyService;
+        this.purchaseInboundItemQueryService = purchaseInboundItemQueryService;
+        this.sourceAllocationLockService = sourceAllocationLockService;
     }
 
     @Transactional(readOnly = true)
@@ -173,6 +187,7 @@ public class SupplierStatementService extends AbstractCrudService<SupplierStatem
 
     @Override
     protected void beforeStatusUpdate(SupplierStatement entity, String currentStatus, String nextStatus) {
+        lockSourcePurchaseInbounds(entity, null);
         workflowTransitionGuard.assertAuditPermissionForProtectedValue(
                 "supplier-statement",
                 currentStatus,
@@ -183,7 +198,43 @@ public class SupplierStatementService extends AbstractCrudService<SupplierStatem
 
     @Override
     protected void apply(SupplierStatement entity, SupplierStatementRequest request) {
+        lockSourcePurchaseInbounds(entity, request);
         applyService.apply(entity, request, this::nextId);
+    }
+
+    @Override
+    protected void beforeDelete(SupplierStatement entity) {
+        lockSourcePurchaseInbounds(entity, null);
+    }
+
+    private void lockSourcePurchaseInbounds(SupplierStatement entity, SupplierStatementRequest request) {
+        TreeSet<Long> sourceItemIds = new TreeSet<>();
+        entity.getItems().stream()
+                .map(SupplierStatementItem::getSourceInboundItemId)
+                .filter(Objects::nonNull)
+                .forEach(sourceItemIds::add);
+        if (request != null) {
+            request.items().stream()
+                    .map(SupplierStatementItemRequest::sourceInboundItemId)
+                    .filter(Objects::nonNull)
+                    .forEach(sourceItemIds::add);
+        }
+
+        TreeSet<Long> sourceInboundIds = new TreeSet<>();
+        if (!sourceItemIds.isEmpty()) {
+            purchaseInboundItemQueryService.findAllActiveByIdIn(List.copyOf(sourceItemIds)).stream()
+                    .map(PurchaseInboundItem::getPurchaseInbound)
+                    .filter(Objects::nonNull)
+                    .map(PurchaseInbound::getId)
+                    .filter(Objects::nonNull)
+                    .forEach(sourceInboundIds::add);
+        }
+        sourceAllocationLockService.lockDocumentSources(
+                List.copyOf(sourceInboundIds),
+                List.of(),
+                List.of(),
+                List.of()
+        );
     }
 
     @Override

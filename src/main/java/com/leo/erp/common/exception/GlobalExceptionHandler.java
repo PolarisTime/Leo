@@ -4,12 +4,14 @@ import com.leo.erp.common.api.ApiResponse;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.persistence.OptimisticLockException;
 import io.jsonwebtoken.JwtException;
 import jakarta.validation.ConstraintViolationException;
 import lombok.extern.slf4j.Slf4j;
 import java.util.stream.Collectors;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.validation.BindException;
@@ -114,6 +116,17 @@ public class GlobalExceptionHandler {
                 .body(ApiResponse.failure(ex.getErrorCode(), ex.getMessage()));
     }
 
+    @ExceptionHandler({ObjectOptimisticLockingFailureException.class, OptimisticLockException.class})
+    public ResponseEntity<ApiResponse<Void>> handleOptimisticLockingFailure(
+            Exception ex,
+            HttpServletRequest request
+    ) {
+        String message = ErrorCode.CONCURRENT_MODIFICATION.getMessage();
+        logClientException(request, ErrorCode.CONCURRENT_MODIFICATION, message);
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(ApiResponse.failure(ErrorCode.CONCURRENT_MODIFICATION, message));
+    }
+
     @ExceptionHandler({BadCredentialsException.class, JwtException.class})
     public ResponseEntity<ApiResponse<Void>> handleUnauthorized(Exception ex, HttpServletRequest request) {
         String message = ex.getMessage() != null && !ex.getMessage().isBlank()
@@ -157,6 +170,7 @@ public class GlobalExceptionHandler {
             case INTERNAL_ERROR -> HttpStatus.INTERNAL_SERVER_ERROR;
             case SUCCESS -> HttpStatus.OK;
             case SESSION_EVICTED -> HttpStatus.UNAUTHORIZED;
+            case CONCURRENT_MODIFICATION -> HttpStatus.CONFLICT;
             case REFRESH_TOKEN_REUSE_CONFLICT -> HttpStatus.CONFLICT;
             case RATE_LIMITED -> HttpStatus.TOO_MANY_REQUESTS;
             case BUSINESS_ERROR -> HttpStatus.UNPROCESSABLE_ENTITY;

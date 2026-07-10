@@ -20,6 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.Optional;
 import java.util.UUID;
 
 @Service
@@ -27,10 +28,14 @@ public class LoginService {
 
     private static final String TEMP_TOKEN_PREFIX = "auth:2fa:temp:";
     private static final String TEMP_TOKEN_USER_INDEX_PREFIX = "auth:2fa:user-temp:";
+    private static final String TEMP_TOKEN_VALUE_VERSION = "v1";
     private static final Duration TEMP_TOKEN_TTL = Duration.ofMinutes(5);
 
     /** 认证请求上下文，封装重复出现的请求元数据 */
     public record AuthRequestContext(String loginIp, String userAgent, String requestPath, String requestMethod) {
+    }
+
+    private record TempTokenChallenge(long userId, long credentialVersion) {
     }
 
     private final UserAccountRepository userAccountRepository;
@@ -85,7 +90,7 @@ public class LoginService {
         }
 
         if (Boolean.TRUE.equals(user.getTotpEnabled()) && user.getTotpSecret() != null) {
-            String tempToken = generateTempToken(user.getId());
+            String tempToken = generateTempToken(user.getId(), user.getCredentialVersion());
             return new LoginStep1Response(true, tempToken);
         }
 
@@ -109,18 +114,21 @@ public class LoginService {
     @Transactional
     public TokenResponse verifyTotpAndIssueTokens(String tempToken, String totpCode, AuthRequestContext ctx) {
         String redisKey = TEMP_TOKEN_PREFIX + tempToken;
-        String userIdStr = redisTemplate.opsForValue().get(redisKey);
-        if (userIdStr == null) {
-            recordAuthenticationLog("登录失败", null, null, ctx, "失败", "2FA验证已过期，请重新登录");
-            throw new BadCredentialsException("2FA验证已过期，请重新登录");
+        String storedChallenge = redisTemplate.opsForValue().get(redisKey);
+        if (storedChallenge == null) {
+            throw expiredTempToken(null, ctx);
         }
 
         redisTemplate.delete(redisKey);
-        redisTemplate.delete(TEMP_TOKEN_USER_INDEX_PREFIX + userIdStr);
+        TempTokenChallenge challenge = parseTempTokenChallenge(storedChallenge)
+                .orElseThrow(() -> expiredTempToken(null, ctx));
+        redisTemplate.delete(TEMP_TOKEN_USER_INDEX_PREFIX + challenge.userId());
 
-        Long userId = Long.parseLong(userIdStr);
-        UserAccount user = userAccountRepository.findByIdAndDeletedFlagFalse(userId)
+        UserAccount user = userAccountRepository.findByIdAndDeletedFlagFalseForUpdate(challenge.userId())
                 .orElseThrow(() -> new BadCredentialsException("用户不存在"));
+        if (normalizeCredentialVersion(user.getCredentialVersion()) != challenge.credentialVersion()) {
+            throw expiredTempToken(user, ctx);
+        }
 
         if (user.getStatus() != UserStatus.NORMAL) {
             recordAuthenticationLog("登录失败", user, user.getLoginName(), ctx, "失败", "账户已禁用");
@@ -141,16 +149,45 @@ public class LoginService {
         return response;
     }
 
-    private String generateTempToken(Long userId) {
+    private String generateTempToken(Long userId, Long credentialVersion) {
         String tempToken = userId + "." + UUID.randomUUID();
         String userIndexKey = TEMP_TOKEN_USER_INDEX_PREFIX + userId;
         String previousToken = redisTemplate.opsForValue().get(userIndexKey);
         if (previousToken != null && !previousToken.isBlank()) {
             redisTemplate.delete(TEMP_TOKEN_PREFIX + previousToken);
         }
-        redisTemplate.opsForValue().set(TEMP_TOKEN_PREFIX + tempToken, userId.toString(), TEMP_TOKEN_TTL);
+        String challengeValue = TEMP_TOKEN_VALUE_VERSION + ":" + userId + ":"
+                + normalizeCredentialVersion(credentialVersion);
+        redisTemplate.opsForValue().set(TEMP_TOKEN_PREFIX + tempToken, challengeValue, TEMP_TOKEN_TTL);
         redisTemplate.opsForValue().set(userIndexKey, tempToken, TEMP_TOKEN_TTL);
         return tempToken;
+    }
+
+    private Optional<TempTokenChallenge> parseTempTokenChallenge(String storedChallenge) {
+        String[] parts = storedChallenge.split(":", -1);
+        if (parts.length != 3 || !TEMP_TOKEN_VALUE_VERSION.equals(parts[0])) {
+            return Optional.empty();
+        }
+        try {
+            long userId = Long.parseLong(parts[1]);
+            long credentialVersion = Long.parseLong(parts[2]);
+            if (userId <= 0 || credentialVersion < 0) {
+                return Optional.empty();
+            }
+            return Optional.of(new TempTokenChallenge(userId, credentialVersion));
+        } catch (NumberFormatException ex) {
+            return Optional.empty();
+        }
+    }
+
+    private BadCredentialsException expiredTempToken(UserAccount user, AuthRequestContext ctx) {
+        String loginName = user == null ? null : user.getLoginName();
+        recordAuthenticationLog("登录失败", user, loginName, ctx, "失败", "2FA验证已过期，请重新登录");
+        return new BadCredentialsException("2FA验证已过期，请重新登录");
+    }
+
+    private long normalizeCredentialVersion(Long credentialVersion) {
+        return credentialVersion == null ? 0L : credentialVersion;
     }
 
     private BadCredentialsException invalidCredentials(String loginName, AuthRequestContext ctx) {

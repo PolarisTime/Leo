@@ -3,13 +3,17 @@ package com.leo.erp.security.permission;
 import io.github.bucket4j.Bucket;
 import io.github.bucket4j.ConsumptionProbe;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
+import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.Locale;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Function;
+import java.util.function.LongSupplier;
 
 @Slf4j
 @Service
@@ -18,8 +22,26 @@ public class TokenBucketService {
     private static final String KEY_PREFIX = "rate-limit:bucket:";
     private static final double DEFAULT_RATE = 100.0;
     private static final int DEFAULT_CAPACITY = 150;
+    private static final int DEFAULT_MAXIMUM_SIZE = 10_000;
+    private static final Duration DEFAULT_EXPIRE_AFTER_ACCESS = Duration.ofMinutes(10);
 
-    private final ConcurrentMap<BucketKey, Bucket> buckets = new ConcurrentHashMap<>();
+    private final LocalBucketStore buckets;
+
+    @Autowired
+    public TokenBucketService(
+            @Value("${leo.rate-limit.local-cache.maximum-size:10000}") int maximumSize,
+            @Value("${leo.rate-limit.local-cache.expire-after-access-ms:600000}") long expireAfterAccessMs
+    ) {
+        this(maximumSize, Duration.ofMillis(expireAfterAccessMs), System::nanoTime);
+    }
+
+    TokenBucketService() {
+        this(DEFAULT_MAXIMUM_SIZE, DEFAULT_EXPIRE_AFTER_ACCESS, System::nanoTime);
+    }
+
+    TokenBucketService(int maximumSize, Duration expireAfterAccess, LongSupplier ticker) {
+        this.buckets = new LocalBucketStore(maximumSize, expireAfterAccess, ticker);
+    }
 
     public TokenBucketResult tryConsume(String dimensionKey, int requested) {
         return tryConsume(dimensionKey, DEFAULT_RATE, DEFAULT_CAPACITY, requested);
@@ -34,7 +56,7 @@ public class TokenBucketService {
                 return TokenBucketResult.ALLOW_FALLBACK;
             }
 
-            Bucket bucket = buckets.computeIfAbsent(bucketKey, this::createBucket);
+            Bucket bucket = buckets.getOrCreate(bucketKey, this::createBucket);
             ConsumptionProbe probe = bucket.tryConsumeAndReturnRemaining(requested);
             if (probe.isConsumed()) {
                 return new TokenBucketResult(true, probe.getRemainingTokens(), 0);
@@ -84,6 +106,76 @@ public class TokenBucketService {
             }
             long periodMillis = Math.max(1, Math.round(1000.0 / rate));
             return new RefillPlan(1, Duration.ofMillis(periodMillis));
+        }
+    }
+
+    private static final class LocalBucketStore {
+
+        private final int maximumSize;
+        private final long expireAfterAccessNanos;
+        private final LongSupplier ticker;
+        private final LinkedHashMap<BucketKey, BucketEntry> entries = new LinkedHashMap<>(16, 0.75f, true);
+
+        private LocalBucketStore(int maximumSize, Duration expireAfterAccess, LongSupplier ticker) {
+            if (maximumSize <= 0) {
+                throw new IllegalArgumentException("Local token bucket cache maximum size must be positive");
+            }
+            if (expireAfterAccess == null || expireAfterAccess.isZero() || expireAfterAccess.isNegative()) {
+                throw new IllegalArgumentException("Local token bucket cache expiration must be positive");
+            }
+            if (ticker == null) {
+                throw new IllegalArgumentException("Local token bucket cache ticker is required");
+            }
+            this.maximumSize = maximumSize;
+            this.expireAfterAccessNanos = expireAfterAccess.toNanos();
+            this.ticker = ticker;
+        }
+
+        private synchronized Bucket getOrCreate(BucketKey key, Function<BucketKey, Bucket> creator) {
+            long now = ticker.getAsLong();
+            removeExpired(now);
+
+            BucketEntry existing = entries.get(key);
+            if (existing != null) {
+                existing.lastAccessNanos = now;
+                return existing.bucket;
+            }
+
+            while (entries.size() >= maximumSize) {
+                Iterator<BucketKey> iterator = entries.keySet().iterator();
+                if (!iterator.hasNext()) {
+                    break;
+                }
+                iterator.next();
+                iterator.remove();
+            }
+
+            Bucket created = creator.apply(key);
+            entries.put(key, new BucketEntry(created, now));
+            return created;
+        }
+
+        private void removeExpired(long now) {
+            Iterator<BucketEntry> iterator = entries.values().iterator();
+            while (iterator.hasNext()) {
+                BucketEntry entry = iterator.next();
+                long idleNanos = now - entry.lastAccessNanos;
+                if (idleNanos < 0 || idleNanos < expireAfterAccessNanos) {
+                    break;
+                }
+                iterator.remove();
+            }
+        }
+
+        private static final class BucketEntry {
+
+            private final Bucket bucket;
+            private long lastAccessNanos;
+
+            private BucketEntry(Bucket bucket, long lastAccessNanos) {
+                this.bucket = bucket;
+                this.lastAccessNanos = lastAccessNanos;
+            }
         }
     }
 }

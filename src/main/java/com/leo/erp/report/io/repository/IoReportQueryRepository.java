@@ -1,6 +1,7 @@
 package com.leo.erp.report.io.repository;
 
 import com.leo.erp.common.api.PageQuery;
+import com.leo.erp.report.inventory.domain.InventoryStatusPolicy;
 import com.leo.erp.report.io.web.dto.IoReportResponse;
 import com.leo.erp.security.permission.DataScopeContext;
 import org.springframework.data.domain.Page;
@@ -46,6 +47,7 @@ public class IoReportQueryRepository {
                 FROM po_purchase_inbound inbound
                 JOIN po_purchase_inbound_item item ON item.inbound_id = inbound.id
                 WHERE inbound.deleted_flag = FALSE
+                  AND inbound.status IN (:effectiveInboundStatuses)
                 UNION ALL
                 SELECT
                     outbound.outbound_date AS business_date,
@@ -57,7 +59,7 @@ public class IoReportQueryRepository {
                     item.category,
                     item.spec,
                     item.length,
-                    outbound.warehouse_name AS warehouse_name,
+                    COALESCE(NULLIF(item.warehouse_name, ''), outbound.warehouse_name) AS warehouse_name,
                     item.batch_no,
                     0 AS in_quantity,
                     item.quantity AS out_quantity,
@@ -70,6 +72,7 @@ public class IoReportQueryRepository {
                 FROM so_sales_outbound outbound
                 JOIN so_sales_outbound_item item ON item.outbound_id = outbound.id
                 WHERE outbound.deleted_flag = FALSE
+                  AND outbound.status IN (:effectiveOutboundStatuses)
             ) report
             """;
 
@@ -104,7 +107,9 @@ public class IoReportQueryRepository {
     public Page<IoReportResponse> page(PageQuery query, String keyword, String businessType, LocalDate startDate, LocalDate endDate) {
         MapSqlParameterSource params = new MapSqlParameterSource()
                 .addValue("limit", query.size())
-                .addValue("offset", (long) query.page() * query.size());
+                .addValue("offset", (long) query.page() * query.size())
+                .addValue("effectiveInboundStatuses", InventoryStatusPolicy.effectiveInboundStatuses())
+                .addValue("effectiveOutboundStatuses", InventoryStatusPolicy.effectiveOutboundStatuses());
         String whereClause = buildWhereClause(params, keyword, businessType, startDate, endDate);
 
         Number totalNumber = jdbcTemplate.queryForObject(

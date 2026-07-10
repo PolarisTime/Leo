@@ -23,6 +23,7 @@ class ClientIpResolverTest {
         ClientIpResolver resolver = new ClientIpResolver("");
         MockHttpServletRequest request = new MockHttpServletRequest();
         request.setRemoteAddr("192.168.1.100");
+        request.addHeader("X-Forwarded-For", "198.51.100.10");
 
         String ip = resolver.resolveClientIp(request);
 
@@ -42,7 +43,7 @@ class ClientIpResolverTest {
 
     @Test
     void shouldReturnForwardedClientIp_whenTrusted() {
-        ClientIpResolver resolver = new ClientIpResolver("127.0.0.1");
+        ClientIpResolver resolver = new ClientIpResolver("127.0.0.1,192.168.1.1");
         MockHttpServletRequest request = new MockHttpServletRequest();
         request.setRemoteAddr("127.0.0.1");
         request.addHeader("X-Forwarded-For", "10.0.0.1, 192.168.1.1");
@@ -50,6 +51,54 @@ class ClientIpResolverTest {
         String ip = resolver.resolveClientIp(request);
 
         assertThat(ip).isEqualTo("10.0.0.1");
+    }
+
+    @Test
+    void shouldStopAtNearestUntrustedProxyWhenWalkingForwardedChainFromRight() {
+        ClientIpResolver resolver = new ClientIpResolver("127.0.0.1");
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.setRemoteAddr("127.0.0.1");
+        request.addHeader("X-Forwarded-For", "198.51.100.10, 203.0.113.20");
+
+        String ip = resolver.resolveClientIp(request);
+
+        assertThat(ip).isEqualTo("203.0.113.20");
+    }
+
+    @Test
+    void shouldFallbackToRemoteAddrWhenForwardedChainContainsHostname() {
+        ClientIpResolver resolver = new ClientIpResolver("127.0.0.1");
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.setRemoteAddr("127.0.0.1");
+        request.addHeader("X-Forwarded-For", "client.example.com");
+
+        String ip = resolver.resolveClientIp(request);
+
+        assertThat(ip).isEqualTo("127.0.0.1");
+    }
+
+    @Test
+    void shouldFallbackToRemoteAddrWhenForwardedChainExceedsEightHops() {
+        ClientIpResolver resolver = new ClientIpResolver("127.0.0.1");
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.setRemoteAddr("127.0.0.1");
+        request.addHeader("X-Forwarded-For", String.join(",", java.util.Collections.nCopies(9, "198.51.100.10")));
+
+        String ip = resolver.resolveClientIp(request);
+
+        assertThat(ip).isEqualTo("127.0.0.1");
+    }
+
+    @Test
+    void shouldFallbackToRemoteAddrWhenForwardedHeaderIsTooLong() {
+        ClientIpResolver resolver = new ClientIpResolver("127.0.0.1");
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.setRemoteAddr("127.0.0.1");
+        request.addHeader("X-Forwarded-For", "1".repeat(1025));
+
+        String ip = resolver.resolveClientIp(request);
+
+        assertThat(ip).isEqualTo("127.0.0.1");
     }
 
     @Test
@@ -216,21 +265,24 @@ class ClientIpResolverTest {
     }
 
     @Test
-    void shouldHandleInvalidCidrSpec() {
-        ClientIpResolver resolver = new ClientIpResolver("invalid-cidr");
-        MockHttpServletRequest request = new MockHttpServletRequest();
-        request.setRemoteAddr("10.0.0.1");
-
-        String ip = resolver.resolveClientIp(request);
-
-        assertThat(ip).isEqualTo("10.0.0.1");
+    void shouldRejectTrustedProxyThatIsNotAnIpLiteral() {
+        assertThatThrownBy(() -> new ClientIpResolver("invalid-cidr"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Invalid trusted proxy");
     }
 
     @Test
     void shouldRejectInvalidCidrAddressSpec() {
         assertThatThrownBy(() -> new ClientIpResolver("bad-host/24"))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("Invalid CIDR address");
+                .hasMessageContaining("Invalid trusted proxy");
+    }
+
+    @Test
+    void shouldRejectCidrPrefixOutsideAddressSize() {
+        assertThatThrownBy(() -> new ClientIpResolver("10.0.0.0/33"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Invalid trusted proxy");
     }
 
     @Test

@@ -3,6 +3,7 @@ package com.leo.erp.statement.customer.service;
 import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.api.PageQuery;
+import com.leo.erp.common.concurrency.SourceAllocationLockService;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.master.customer.domain.entity.Customer;
@@ -12,6 +13,7 @@ import com.leo.erp.sales.order.domain.entity.SalesOrderItem;
 import com.leo.erp.sales.order.service.SalesOrderItemQueryService;
 import com.leo.erp.sales.order.repository.SalesOrderRepository;
 import com.leo.erp.statement.customer.domain.entity.CustomerStatement;
+import com.leo.erp.statement.customer.domain.entity.CustomerStatementItem;
 import com.leo.erp.statement.customer.mapper.CustomerStatementMapper;
 import com.leo.erp.statement.customer.repository.CustomerStatementRepository;
 import com.leo.erp.statement.customer.web.dto.CustomerStatementItemRequest;
@@ -20,6 +22,7 @@ import com.leo.erp.statement.customer.web.dto.CustomerStatementRequest;
 import com.leo.erp.statement.customer.web.dto.CustomerStatementResponse;
 import com.leo.erp.security.permission.WorkflowTransitionGuard;
 import org.junit.jupiter.api.Test;
+import org.mockito.InOrder;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
@@ -34,6 +37,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -495,6 +499,141 @@ class CustomerStatementServiceTest {
         verify(repository).save(argThat(saved -> StatusConstants.CONFIRMED.equals(saved.getStatus())));
     }
 
+    @Test
+    void shouldLockActualSalesOrdersBeforeCreateApply() {
+        CustomerStatementRepository repository = mock(CustomerStatementRepository.class);
+        SalesOrderItemQueryService itemQueryService = mock(SalesOrderItemQueryService.class);
+        CustomerStatementApplyService applyService = mock(CustomerStatementApplyService.class);
+        SourceAllocationLockService lockService = mock(SourceAllocationLockService.class);
+        when(itemQueryService.findActiveByIdIn(List.of(201L)))
+                .thenReturn(List.of(sourceSalesOrderItem(201L, 30L)));
+        when(repository.save(any(CustomerStatement.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        CustomerStatementService service = lockingService(
+                repository,
+                itemQueryService,
+                mock(WorkflowTransitionGuard.class),
+                applyService,
+                lockService
+        );
+
+        service.create(buildRequest(BigDecimal.ZERO));
+
+        InOrder inOrder = inOrder(lockService, applyService);
+        inOrder.verify(lockService).lockDocumentSources(List.of(), List.of(30L), List.of(), List.of());
+        inOrder.verify(applyService).apply(any(CustomerStatement.class), any(CustomerStatementRequest.class), any());
+    }
+
+    @Test
+    void shouldLockOldAndNewActualSalesOrdersBeforeUpdateApply() {
+        CustomerStatementRepository repository = mock(CustomerStatementRepository.class);
+        SalesOrderItemQueryService itemQueryService = mock(SalesOrderItemQueryService.class);
+        CustomerStatementApplyService applyService = mock(CustomerStatementApplyService.class);
+        SourceAllocationLockService lockService = mock(SourceAllocationLockService.class);
+        CustomerStatement statement = createCustomerStatement(1L, "KHDZ-001");
+        CustomerStatementItem existingItem = new CustomerStatementItem();
+        existingItem.setSourceSalesOrderItemId(301L);
+        statement.setItems(new java.util.ArrayList<>(List.of(existingItem)));
+        when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(statement));
+        when(repository.save(any(CustomerStatement.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(itemQueryService.findActiveByIdIn(List.of(201L, 301L))).thenReturn(List.of(
+                sourceSalesOrderItem(301L, 40L),
+                sourceSalesOrderItem(201L, 20L),
+                sourceSalesOrderItem(201L, 20L)
+        ));
+        CustomerStatementService service = lockingService(
+                repository,
+                itemQueryService,
+                mock(WorkflowTransitionGuard.class),
+                applyService,
+                lockService
+        );
+
+        service.update(1L, buildRequest(BigDecimal.ZERO));
+
+        InOrder inOrder = inOrder(lockService, applyService);
+        inOrder.verify(lockService).lockDocumentSources(List.of(), List.of(20L, 40L), List.of(), List.of());
+        inOrder.verify(applyService).apply(any(CustomerStatement.class), any(CustomerStatementRequest.class), any());
+    }
+
+    @Test
+    void shouldLockExistingActualSalesOrdersBeforeStatusMutation() {
+        CustomerStatementRepository repository = mock(CustomerStatementRepository.class);
+        SalesOrderItemQueryService itemQueryService = mock(SalesOrderItemQueryService.class);
+        WorkflowTransitionGuard workflowTransitionGuard = mock(WorkflowTransitionGuard.class);
+        SourceAllocationLockService lockService = mock(SourceAllocationLockService.class);
+        CustomerStatement statement = createCustomerStatement(1L, "KHDZ-STATUS");
+        CustomerStatementItem existingItem = new CustomerStatementItem();
+        existingItem.setSourceSalesOrderItemId(301L);
+        statement.setItems(new java.util.ArrayList<>(List.of(existingItem)));
+        when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(statement));
+        when(repository.save(any(CustomerStatement.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(itemQueryService.findActiveByIdIn(List.of(301L)))
+                .thenReturn(List.of(sourceSalesOrderItem(301L, 40L)));
+        CustomerStatementService service = lockingService(
+                repository,
+                itemQueryService,
+                workflowTransitionGuard,
+                mock(CustomerStatementApplyService.class),
+                lockService
+        );
+
+        service.updateStatus(1L, StatusConstants.CONFIRMED);
+
+        InOrder inOrder = inOrder(lockService, workflowTransitionGuard);
+        inOrder.verify(lockService).lockDocumentSources(List.of(), List.of(40L), List.of(), List.of());
+        inOrder.verify(workflowTransitionGuard).assertAuditPermissionForProtectedValue(
+                "customer-statement",
+                StatusConstants.PENDING_CONFIRM,
+                StatusConstants.CONFIRMED,
+                StatusConstants.CONFIRMED
+        );
+    }
+
+    @Test
+    void shouldLockExistingActualSalesOrdersBeforeDeleteMutation() {
+        CustomerStatementRepository repository = mock(CustomerStatementRepository.class);
+        SalesOrderItemQueryService itemQueryService = mock(SalesOrderItemQueryService.class);
+        SourceAllocationLockService lockService = mock(SourceAllocationLockService.class);
+        CustomerStatement statement = createCustomerStatement(1L, "KHDZ-DELETE");
+        CustomerStatementItem existingItem = new CustomerStatementItem();
+        existingItem.setSourceSalesOrderItemId(301L);
+        statement.setItems(new java.util.ArrayList<>(List.of(existingItem)));
+        when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(statement));
+        when(repository.save(any(CustomerStatement.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(itemQueryService.findActiveByIdIn(List.of(301L)))
+                .thenReturn(List.of(sourceSalesOrderItem(301L, 40L)));
+        CustomerStatementService service = lockingService(
+                repository,
+                itemQueryService,
+                mock(WorkflowTransitionGuard.class),
+                mock(CustomerStatementApplyService.class),
+                lockService
+        );
+
+        service.delete(1L);
+
+        InOrder inOrder = inOrder(lockService, repository);
+        inOrder.verify(lockService).lockDocumentSources(List.of(), List.of(40L), List.of(), List.of());
+        inOrder.verify(repository).save(statement);
+    }
+
+    private CustomerStatementService lockingService(CustomerStatementRepository repository,
+                                                     SalesOrderItemQueryService itemQueryService,
+                                                     WorkflowTransitionGuard workflowTransitionGuard,
+                                                     CustomerStatementApplyService applyService,
+                                                     SourceAllocationLockService lockService) {
+        return new CustomerStatementService(
+                repository,
+                new SnowflakeIdGenerator(0L),
+                mock(CustomerStatementResponseAssembler.class),
+                workflowTransitionGuard,
+                mock(CustomerStatementSourceService.class),
+                applyService,
+                itemQueryService,
+                lockService
+        );
+    }
+
     private CustomerStatementService service(CustomerStatementRepository repository,
                                              CustomerStatementMapper mapper,
                                              SalesOrderRepository salesOrderRepository,
@@ -523,7 +662,9 @@ class CustomerStatementServiceTest {
                 new CustomerStatementResponseAssembler(mapper),
                 workflowTransitionGuard,
                 sourceService,
-                new CustomerStatementApplyService(workflowTransitionGuard, sourceService)
+                new CustomerStatementApplyService(workflowTransitionGuard, sourceService),
+                salesOrderItemQueryService,
+                mock(SourceAllocationLockService.class)
         );
     }
 
@@ -541,7 +682,9 @@ class CustomerStatementServiceTest {
                 new CustomerStatementResponseAssembler(mapper),
                 workflowTransitionGuard,
                 sourceService,
-                new CustomerStatementApplyService(workflowTransitionGuard, sourceService)
+                new CustomerStatementApplyService(workflowTransitionGuard, sourceService),
+                salesOrderItemQueryService,
+                mock(SourceAllocationLockService.class)
         );
     }
 
@@ -631,6 +774,13 @@ class CustomerStatementServiceTest {
         return item;
     }
 
+    private SalesOrderItem sourceSalesOrderItem(Long itemId, Long orderId) {
+        SalesOrderItem item = buildSalesOrderItem();
+        item.setId(itemId);
+        item.getSalesOrder().setId(orderId);
+        return item;
+    }
+
     private static class TestableCustomerStatementService extends CustomerStatementService {
 
         TestableCustomerStatementService(CustomerStatementRepository repository,
@@ -638,8 +788,19 @@ class CustomerStatementServiceTest {
                                          CustomerStatementResponseAssembler responseAssembler,
                                          WorkflowTransitionGuard workflowTransitionGuard,
                                          CustomerStatementSourceService customerStatementSourceService,
-                                         CustomerStatementApplyService applyService) {
-            super(repository, idGenerator, responseAssembler, workflowTransitionGuard, customerStatementSourceService, applyService);
+                                         CustomerStatementApplyService applyService,
+                                         SalesOrderItemQueryService salesOrderItemQueryService,
+                                         SourceAllocationLockService sourceAllocationLockService) {
+            super(
+                    repository,
+                    idGenerator,
+                    responseAssembler,
+                    workflowTransitionGuard,
+                    customerStatementSourceService,
+                    applyService,
+                    salesOrderItemQueryService,
+                    sourceAllocationLockService
+            );
         }
 
         @Override

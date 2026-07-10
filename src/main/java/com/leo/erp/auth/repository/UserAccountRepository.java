@@ -4,8 +4,11 @@ import com.leo.erp.auth.domain.entity.UserAccount;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+
+import jakarta.persistence.LockModeType;
 
 import java.util.Optional;
 import java.util.List;
@@ -17,6 +20,22 @@ public interface UserAccountRepository extends JpaRepository<UserAccount, Long>,
     Optional<UserAccount> findByLoginNameAndDeletedFlagFalse(String loginName);
 
     Optional<UserAccount> findByIdAndDeletedFlagFalse(Long id);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT u FROM UserAccount u WHERE u.id = :id AND u.deletedFlag = false")
+    Optional<UserAccount> findByIdAndDeletedFlagFalseForUpdate(@Param("id") Long id);
+
+    @Query("""
+            SELECT u.credentialVersion AS credentialVersion
+              FROM UserAccount u
+             WHERE u.id = :id
+               AND u.deletedFlag = false
+               AND u.status = :status
+            """)
+    Optional<CredentialVersionProjection> findCredentialVersion(
+            @Param("id") Long id,
+            @Param("status") com.leo.erp.auth.domain.enums.UserStatus status
+    );
 
     boolean existsByLoginName(String loginName);
 
@@ -38,4 +57,8 @@ public interface UserAccountRepository extends JpaRepository<UserAccount, Long>,
                AND deleted_flag = false
             """, nativeQuery = true)
     int updatePreferencesJson(@Param("id") Long id, @Param("preferencesJson") String preferencesJson);
+
+    interface CredentialVersionProjection {
+        Long getCredentialVersion();
+    }
 }

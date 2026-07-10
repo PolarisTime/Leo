@@ -22,7 +22,7 @@ public class Carrier extends AbstractAuditableEntity {
     @Id
     private Long id;
 
-    @Column(name = "carrier_code", nullable = false, unique = true, length = 64)
+    @Column(name = "carrier_code", nullable = false, length = 64)
     private String carrierCode;
 
     @Column(name = "carrier_name", nullable = false, length = 128)

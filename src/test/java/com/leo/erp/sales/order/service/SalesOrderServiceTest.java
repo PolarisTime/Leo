@@ -3,6 +3,7 @@ package com.leo.erp.sales.order.service;
 import com.leo.erp.allocation.appservice.PurchaseItemQueryAppService;
 import com.leo.erp.allocation.appservice.PurchaseItemPieceWeightAppService;
 import com.leo.erp.common.api.PageQuery;
+import com.leo.erp.common.concurrency.SourceAllocationLockService;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.service.CrudRuntimeSettings;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
@@ -56,6 +57,7 @@ import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -64,6 +66,113 @@ class SalesOrderServiceTest {
     @AfterEach
     void clearSecurityContext() {
         SecurityContextHolder.clearContext();
+    }
+
+    @Test
+    void shouldRequireSourceAllocationLockServiceAsConstructorDependency() {
+        boolean hasRequiredDependency = java.util.Arrays.stream(SalesOrderService.class.getConstructors())
+                .anyMatch(constructor -> java.util.Arrays.asList(constructor.getParameterTypes())
+                        .contains(SourceAllocationLockService.class));
+
+        assertThat(hasRequiredDependency).isTrue();
+    }
+
+    @Test
+    void shouldLockPurchaseSourcesBeforeCreatingSalesOrderItems() {
+        SalesOrderRepository repository = mock(SalesOrderRepository.class);
+        SnowflakeIdGenerator idGenerator = mock(SnowflakeIdGenerator.class);
+        SalesOrderApplyService applyService = mock(SalesOrderApplyService.class);
+        SourceAllocationLockService lockService = mock(SourceAllocationLockService.class);
+        SalesOrderService service = lockAwareService(
+                repository,
+                idGenerator,
+                applyService,
+                mock(SalesOrderPurchaseAllocationService.class),
+                lockService
+        );
+        SalesOrderRequest request = sourceBackedSalesOrderRequest(102L, 202L);
+
+        when(idGenerator.nextId()).thenReturn(1L);
+
+        service.create(request);
+
+        InOrder flow = inOrder(lockService, applyService);
+        flow.verify(lockService).lockTradeItemSources(List.of(202L), List.of(102L), List.of());
+        flow.verify(applyService).apply(any(), eq(request), any());
+    }
+
+    @Test
+    void shouldLockOldAndNewPurchaseSourcesBeforeUpdatingSalesOrderItems() {
+        SalesOrderRepository repository = mock(SalesOrderRepository.class);
+        SalesOrderApplyService applyService = mock(SalesOrderApplyService.class);
+        SourceAllocationLockService lockService = mock(SourceAllocationLockService.class);
+        SalesOrderService service = lockAwareService(
+                repository,
+                mock(SnowflakeIdGenerator.class),
+                applyService,
+                mock(SalesOrderPurchaseAllocationService.class),
+                lockService
+        );
+        com.leo.erp.sales.order.domain.entity.SalesOrder existing = salesOrderWithSources(101L, 201L);
+        SalesOrderRequest request = sourceBackedSalesOrderRequest(102L, 202L);
+
+        when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(existing));
+
+        service.update(1L, request);
+
+        InOrder flow = inOrder(lockService, applyService);
+        flow.verify(lockService).lockTradeItemSources(
+                List.of(201L, 202L),
+                List.of(101L, 102L),
+                List.of()
+        );
+        flow.verify(applyService).apply(eq(existing), eq(request), any());
+    }
+
+    @Test
+    void shouldLockExistingPurchaseSourcesBeforeDeletingSalesOrderItems() {
+        SalesOrderRepository repository = mock(SalesOrderRepository.class);
+        SalesOrderPurchaseAllocationService purchaseAllocationService =
+                mock(SalesOrderPurchaseAllocationService.class);
+        SourceAllocationLockService lockService = mock(SourceAllocationLockService.class);
+        SalesOrderService service = lockAwareService(
+                repository,
+                mock(SnowflakeIdGenerator.class),
+                mock(SalesOrderApplyService.class),
+                purchaseAllocationService,
+                lockService
+        );
+        com.leo.erp.sales.order.domain.entity.SalesOrder existing = salesOrderWithSources(101L, 201L);
+
+        when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(existing));
+
+        service.delete(1L);
+
+        InOrder flow = inOrder(lockService, purchaseAllocationService);
+        flow.verify(lockService).lockTradeItemSources(List.of(201L), List.of(101L), List.of());
+        flow.verify(purchaseAllocationService).releaseSalesOrderItems(existing);
+    }
+
+    @Test
+    void shouldLockExistingPurchaseSourcesBeforeUpdatingSalesOrderStatus() {
+        SalesOrderRepository repository = mock(SalesOrderRepository.class);
+        SourceAllocationLockService lockService = mock(SourceAllocationLockService.class);
+        SalesOrderService service = lockAwareService(
+                repository,
+                mock(SnowflakeIdGenerator.class),
+                mock(SalesOrderApplyService.class),
+                mock(SalesOrderPurchaseAllocationService.class),
+                lockService
+        );
+        com.leo.erp.sales.order.domain.entity.SalesOrder existing = spy(salesOrderWithSources(101L, 201L));
+
+        when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(existing));
+
+        service.updateStatus(1L, "已审核");
+
+        InOrder flow = inOrder(lockService, existing);
+        flow.verify(lockService).lockTradeItemSources(List.of(201L), List.of(101L), List.of());
+        flow.verify(existing).setStatus("已审核");
     }
 
     @Test
@@ -1881,6 +1990,71 @@ class SalesOrderServiceTest {
         );
     }
 
+    private SalesOrderService lockAwareService(
+            SalesOrderRepository repository,
+            SnowflakeIdGenerator idGenerator,
+            SalesOrderApplyService applyService,
+            SalesOrderPurchaseAllocationService purchaseAllocationService,
+            SourceAllocationLockService lockService
+    ) {
+        SalesOrderAuditedPricingService auditedPricingService = mock(SalesOrderAuditedPricingService.class);
+        return new SalesOrderService(
+                repository,
+                idGenerator,
+                mock(SalesOrderResponseAssembler.class),
+                applyService,
+                purchaseAllocationService,
+                auditedPricingService,
+                mock(SalesOrderProtectedUpdatePolicy.class),
+                mock(SalesOrderSaveService.class),
+                mock(SalesOrderItemRepository.class),
+                lockService
+        );
+    }
+
+    private SalesOrderRequest sourceBackedSalesOrderRequest(Long sourceInboundItemId,
+                                                            Long sourcePurchaseOrderItemId) {
+        return new SalesOrderRequest(
+                "SO-LOCK-001", null, null, "客户A", "项目A",
+                LocalDate.of(2026, 4, 26), "张三", "草稿", null,
+                List.of(
+                        sourceBackedSalesOrderItemRequest(sourceInboundItemId, null),
+                        sourceBackedSalesOrderItemRequest(null, sourcePurchaseOrderItemId)
+                )
+        );
+    }
+
+    private SalesOrderItemRequest sourceBackedSalesOrderItemRequest(Long sourceInboundItemId,
+                                                                    Long sourcePurchaseOrderItemId) {
+        return new SalesOrderItemRequest(
+                "M1", "宝钢", "螺纹钢", "HRB400", "18", "12m", "吨",
+                sourceInboundItemId, sourcePurchaseOrderItemId, "一号库", "B1", 1, "支",
+                new BigDecimal("0.100"), 1, new BigDecimal("0.100"),
+                new BigDecimal("4000.00"), new BigDecimal("400.00")
+        );
+    }
+
+    private com.leo.erp.sales.order.domain.entity.SalesOrder salesOrderWithSources(
+            Long sourceInboundItemId,
+            Long sourcePurchaseOrderItemId
+    ) {
+        com.leo.erp.sales.order.domain.entity.SalesOrder order =
+                new com.leo.erp.sales.order.domain.entity.SalesOrder();
+        order.setId(1L);
+        order.setOrderNo("SO-LOCK-001");
+        order.setStatus("草稿");
+        SalesOrderItem inboundItem = new SalesOrderItem();
+        inboundItem.setId(11L);
+        inboundItem.setSalesOrder(order);
+        inboundItem.setSourceInboundItemId(sourceInboundItemId);
+        SalesOrderItem purchaseOrderItem = new SalesOrderItem();
+        purchaseOrderItem.setId(12L);
+        purchaseOrderItem.setSalesOrder(order);
+        purchaseOrderItem.setSourcePurchaseOrderItemId(sourcePurchaseOrderItemId);
+        order.setItems(new ArrayList<>(List.of(inboundItem, purchaseOrderItem)));
+        return order;
+    }
+
     private SalesOrderService service(SalesOrderRepository repository,
                                       SnowflakeIdGenerator idGenerator,
                                       SalesOrderMapper salesOrderMapper,
@@ -1920,7 +2094,8 @@ class SalesOrderServiceTest {
                         completionSyncService,
                         new SalesOrderCompletionPolicy()
                 ),
-                salesOrderItemRepository
+                salesOrderItemRepository,
+                mock(SourceAllocationLockService.class)
         );
     }
 

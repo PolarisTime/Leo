@@ -4,6 +4,7 @@ import com.leo.erp.attachment.service.AttachmentBindingService;
 import com.leo.erp.attachment.service.AttachmentView;
 import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.api.PageQuery;
+import com.leo.erp.common.concurrency.SourceAllocationLockService;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.service.CrudRuntimeSettings;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
@@ -24,6 +25,7 @@ import com.leo.erp.statement.freight.web.dto.FreightStatementResponse;
 import com.leo.erp.statement.service.StatementSettlementSyncService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.InOrder;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.jpa.domain.Specification;
@@ -41,7 +43,10 @@ import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -54,6 +59,7 @@ class FreightStatementServiceTest {
     private WorkflowTransitionGuard workflowTransitionGuard;
     private FreightStatementWebMapper freightStatementWebMapper;
     private CarrierRepository carrierRepository;
+    private SourceAllocationLockService sourceAllocationLockService;
     private FreightStatementService service;
 
     @BeforeEach
@@ -67,6 +73,7 @@ class FreightStatementServiceTest {
         workflowTransitionGuard = mock(WorkflowTransitionGuard.class);
         freightStatementWebMapper = mock(FreightStatementWebMapper.class);
         carrierRepository = carrierRepository(Optional.empty());
+        sourceAllocationLockService = mock(SourceAllocationLockService.class);
         service = service(repository, freightBillRepository, carrierRepository);
     }
 
@@ -332,6 +339,123 @@ class FreightStatementServiceTest {
         SecurityContextHolder.clearContext();
     }
 
+    @Test
+    void shouldLockActualFreightBillsBeforeCreateApply() {
+        FreightStatementRepository statementRepository = mock(FreightStatementRepository.class);
+        FreightBillRepository billRepository = mock(FreightBillRepository.class);
+        FreightStatementApplyService applyService = mock(FreightStatementApplyService.class);
+        SourceAllocationLockService lockService = mock(SourceAllocationLockService.class);
+        when(statementRepository.save(any(FreightStatement.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(billRepository.findByBillNoInAndDeletedFlagFalse(anyCollection()))
+                .thenReturn(List.of(sourceFreightBill(30L, "FB-002"), sourceFreightBill(10L, "FB-001")));
+        FreightStatementService service = lockingService(statementRepository, billRepository, applyService, lockService);
+
+        service.create(command(
+                "FS-LOCK-CREATE",
+                "物流甲",
+                BigDecimal.ZERO,
+                item(null, "FB-002"),
+                item(null, " FB-001 "),
+                item(null, "FB-002")
+        ));
+
+        InOrder inOrder = inOrder(lockService, applyService);
+        inOrder.verify(lockService).lockDocumentSources(List.of(), List.of(), List.of(), List.of(10L, 30L));
+        inOrder.verify(applyService).apply(any(FreightStatement.class), any(FreightStatementCommand.class), any());
+    }
+
+    @Test
+    void shouldLockOldAndNewActualFreightBillsBeforeUpdateApply() {
+        FreightStatementRepository statementRepository = mock(FreightStatementRepository.class);
+        FreightBillRepository billRepository = mock(FreightBillRepository.class);
+        FreightStatementApplyService applyService = mock(FreightStatementApplyService.class);
+        SourceAllocationLockService lockService = mock(SourceAllocationLockService.class);
+        FreightStatement statement = createEntity(1L, "FS-LOCK-UPDATE");
+        statement.setItems(new java.util.ArrayList<>(List.of(entityItem("FB-OLD"))));
+        when(statementRepository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(statement));
+        when(statementRepository.save(any(FreightStatement.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(billRepository.findByBillNoInAndDeletedFlagFalse(anyCollection())).thenReturn(List.of(
+                sourceFreightBill(40L, "FB-OLD"),
+                sourceFreightBill(20L, "FB-NEW"),
+                sourceFreightBill(20L, "FB-NEW")
+        ));
+        FreightStatementService service = lockingService(statementRepository, billRepository, applyService, lockService);
+
+        service.update(1L, command("IGNORED", "物流甲", BigDecimal.ZERO, item(null, "FB-NEW")));
+
+        InOrder inOrder = inOrder(lockService, applyService);
+        inOrder.verify(lockService).lockDocumentSources(List.of(), List.of(), List.of(), List.of(20L, 40L));
+        inOrder.verify(applyService).apply(any(FreightStatement.class), any(FreightStatementCommand.class), any());
+    }
+
+    @Test
+    void shouldLockExistingActualFreightBillsBeforeStatusMutation() {
+        FreightStatementRepository statementRepository = mock(FreightStatementRepository.class);
+        FreightBillRepository billRepository = mock(FreightBillRepository.class);
+        SourceAllocationLockService lockService = mock(SourceAllocationLockService.class);
+        FreightStatement statement = createEntity(1L, "FS-LOCK-STATUS");
+        statement.setItems(new java.util.ArrayList<>(List.of(entityItem("FB-STATUS"))));
+        when(statementRepository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(statement));
+        when(statementRepository.save(any(FreightStatement.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(billRepository.findByBillNoInAndDeletedFlagFalse(anyCollection()))
+                .thenReturn(List.of(sourceFreightBill(50L, "FB-STATUS")));
+        FreightStatementService service = lockingService(
+                statementRepository,
+                billRepository,
+                mock(FreightStatementApplyService.class),
+                lockService
+        );
+
+        service.updateStatus(1L, StatusConstants.AUDITED);
+
+        InOrder inOrder = inOrder(lockService, statementRepository);
+        inOrder.verify(lockService).lockDocumentSources(List.of(), List.of(), List.of(), List.of(50L));
+        inOrder.verify(statementRepository).save(statement);
+    }
+
+    @Test
+    void shouldLockExistingActualFreightBillsBeforeDeleteMutation() {
+        FreightStatementRepository statementRepository = mock(FreightStatementRepository.class);
+        FreightBillRepository billRepository = mock(FreightBillRepository.class);
+        SourceAllocationLockService lockService = mock(SourceAllocationLockService.class);
+        FreightStatement statement = createEntity(1L, "FS-LOCK-DELETE");
+        statement.setItems(new java.util.ArrayList<>(List.of(entityItem("FB-DELETE"))));
+        when(statementRepository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(statement));
+        when(statementRepository.save(any(FreightStatement.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(billRepository.findByBillNoInAndDeletedFlagFalse(anyCollection()))
+                .thenReturn(List.of(sourceFreightBill(60L, "FB-DELETE")));
+        FreightStatementService service = lockingService(
+                statementRepository,
+                billRepository,
+                mock(FreightStatementApplyService.class),
+                lockService
+        );
+
+        service.delete(1L);
+
+        InOrder inOrder = inOrder(lockService, statementRepository);
+        inOrder.verify(lockService).lockDocumentSources(List.of(), List.of(), List.of(), List.of(60L));
+        inOrder.verify(statementRepository).save(statement);
+    }
+
+    private FreightStatementService lockingService(FreightStatementRepository statementRepository,
+                                                    FreightBillRepository billRepository,
+                                                    FreightStatementApplyService applyService,
+                                                    SourceAllocationLockService lockService) {
+        return new FreightStatementService(
+                statementRepository,
+                new SnowflakeIdGenerator(1L),
+                statementSettlementSyncService,
+                freightStatementWebMapper,
+                mock(FreightStatementSourceService.class),
+                mock(FreightStatementViewAssembler.class),
+                mock(FreightStatementPageAssembler.class),
+                applyService,
+                billRepository,
+                lockService
+        );
+    }
+
     private FreightStatementService service(FreightStatementRepository repo,
                                             FreightBillRepository billRepo,
                                             CarrierRepository carrierRepo) {
@@ -349,7 +473,9 @@ class FreightStatementServiceTest {
                         workflowTransitionGuard,
                         new FreightStatementCarrierResolver(carrierRepo),
                         sourceService
-                )
+                ),
+                billRepo,
+                sourceAllocationLockService
         );
     }
 
@@ -494,6 +620,12 @@ class FreightStatementServiceTest {
         bill.setStatus(StatusConstants.AUDITED);
         bill.setTotalFreight(new BigDecimal("100"));
         bill.setItems(new java.util.ArrayList<>(List.of(freightBillItem(bill))));
+        return bill;
+    }
+
+    private static FreightBill sourceFreightBill(Long id, String billNo) {
+        FreightBill bill = createFreightBill(billNo);
+        bill.setId(id);
         return bill;
     }
 

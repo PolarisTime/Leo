@@ -17,7 +17,7 @@ public class Warehouse extends AbstractAuditableEntity {
     @Id
     private Long id;
 
-    @Column(name = "warehouse_code", nullable = false, unique = true, length = 64)
+    @Column(name = "warehouse_code", nullable = false, length = 64)
     private String warehouseCode;
 
     @Column(name = "warehouse_name", nullable = false, length = 128)

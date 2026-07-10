@@ -184,6 +184,67 @@ class JwtAuthenticationFilterTest {
     }
 
     @Test
+    void shouldRejectAccessTokenWhenCredentialVersionIsStale() throws ServletException, IOException {
+        SecurityContextHolder.clearContext();
+        SecurityPrincipal principal = SecurityPrincipal.authenticated(
+                42L, "testuser", List.of(new SimpleGrantedAuthority("ROLE_USER")), true, false, 2L
+        );
+        Claims claims = Jwts.claims()
+                .add("uid", 42L)
+                .add("sid", "sess-stale")
+                .add("cv", 1L)
+                .build();
+        AtomicBoolean principalLoaded = new AtomicBoolean(false);
+        JwtAuthenticationFilter filter = new JwtAuthenticationFilter(
+                new StubJwtTokenService(claims),
+                authenticatedUserCacheService(Optional.of(principal), principalLoaded, Optional.of(2L)),
+                new NoOpBlacklistService(),
+                new NoOpSessionActivityService(),
+                new ObjectMapper()
+        );
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.addHeader("Authorization", "Bearer stale-token");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        AtomicBoolean chainInvoked = new AtomicBoolean(false);
+
+        filter.doFilter(request, response, (req, res) -> chainInvoked.set(true));
+
+        assertThat(chainInvoked.get()).isFalse();
+        assertThat(response.getStatus()).isEqualTo(401);
+        assertThat(response.getContentAsString()).contains("凭据已变更，请重新登录");
+        assertThat(principalLoaded.get()).isFalse();
+        assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
+        SecurityContextHolder.clearContext();
+    }
+
+    @Test
+    void shouldAcceptLegacyAccessTokenWithoutCredentialVersionForVersionZeroUser()
+            throws ServletException, IOException {
+        SecurityContextHolder.clearContext();
+        SecurityPrincipal principal = SecurityPrincipal.authenticated(
+                43L, "legacy", List.of(new SimpleGrantedAuthority("ROLE_USER")), false, false, 0L
+        );
+        Claims claims = Jwts.claims().add("uid", 43L).add("sid", "sess-legacy").build();
+        JwtAuthenticationFilter filter = new JwtAuthenticationFilter(
+                new StubJwtTokenService(claims),
+                authenticatedUserCacheService(Optional.of(principal), new AtomicBoolean(), Optional.of(0L)),
+                new NoOpBlacklistService(),
+                new NoOpSessionActivityService(),
+                new ObjectMapper()
+        );
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.addHeader("Authorization", "Bearer legacy-token");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        filter.doFilter(request, response, (req, res) -> {
+        });
+
+        assertThat(response.getStatus()).isEqualTo(200);
+        assertThat(SecurityContextHolder.getContext().getAuthentication()).isNotNull();
+        SecurityContextHolder.clearContext();
+    }
+
+    @Test
     void shouldNotAuthenticateWhenPrincipalNotFoundInCache() throws ServletException, IOException {
         SecurityContextHolder.clearContext();
         Claims claims = Jwts.claims().add("uid", 99L).add("sid", "sess-xyz").build();
@@ -390,11 +451,34 @@ class JwtAuthenticationFilterTest {
             Optional<SecurityPrincipal> principal,
             AtomicBoolean touched
     ) {
+        return authenticatedUserCacheService(
+                principal,
+                touched,
+                principal.map(SecurityPrincipal::credentialVersion)
+        );
+    }
+
+    private AuthenticatedUserCacheService authenticatedUserCacheService(
+            Optional<SecurityPrincipal> principal,
+            AtomicBoolean touched,
+            Optional<Long> authoritativeCredentialVersion
+    ) {
         return new AuthenticatedUserCacheService(null, null, null, null, new RedisTuningProperties()) {
             @Override
             public Optional<SecurityPrincipal> getActivePrincipal(Long userId) {
                 touched.set(true);
                 return principal;
+            }
+
+            @Override
+            public Optional<SecurityPrincipal> getActivePrincipal(Long userId, long credentialVersion) {
+                touched.set(true);
+                return principal.filter(value -> value.credentialVersion() == credentialVersion);
+            }
+
+            @Override
+            public Optional<Long> getAuthoritativeCredentialVersion(Long userId) {
+                return authoritativeCredentialVersion;
             }
         };
     }

@@ -40,6 +40,7 @@ public class JwtTokenService {
                 .subject(principal.username())
                 .claim("uid", principal.id())
                 .claim("sid", sessionId)
+                .claim("cv", principal.credentialVersion())
                 .issuedAt(Date.from(now))
                 .expiration(Date.from(now.plusMillis(jwtProperties.getAccessExpirationMs())))
                 .signWith(secretKey)
@@ -78,6 +79,11 @@ public class JwtTokenService {
     public String extractSessionId(String token) {
         Object sid = parseAccessToken(token).get("sid");
         return sid == null ? null : String.valueOf(sid);
+    }
+
+    public long extractCredentialVersion(String token) {
+        Object credentialVersion = parseAccessToken(token).get("cv");
+        return credentialVersion == null ? 0L : Long.parseLong(String.valueOf(credentialVersion));
     }
 
     public long getAccessExpirationMs() {

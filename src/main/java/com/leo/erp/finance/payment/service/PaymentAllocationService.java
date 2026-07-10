@@ -14,6 +14,7 @@ import com.leo.erp.finance.payment.web.dto.PaymentRequest;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -54,7 +55,7 @@ public class PaymentAllocationService {
         BigDecimal totalAllocatedAmount = BigDecimal.ZERO;
         Map<Long, BigDecimal> requestAllocatedAmountMap = new HashMap<>();
         List<PaymentAllocation> items = ManagedEntityItemSupport.syncById(
-                entity.getItems(),
+                new ArrayList<>(entity.getItems()),
                 allocationRequests,
                 PaymentAllocation::getId,
                 PaymentAllocationRequest::id,
@@ -88,6 +89,8 @@ public class PaymentAllocationService {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "核销金额合计不能超过付款金额");
         }
         assertSettlementAllocationsComplete(nextStatus, allocationRequests.isEmpty(), totalAllocatedAmount, entity.getAmount());
+        entity.getItems().clear();
+        entity.getItems().addAll(items);
         entity.getItems().sort(java.util.Comparator.comparing(PaymentAllocation::getLineNo));
         return new AllocationApplyResult(resolvedCounterpartyCode, totalAllocatedAmount, allocationRequests.isEmpty());
     }

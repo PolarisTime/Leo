@@ -2,14 +2,19 @@ package com.leo.erp.statement.freight.service;
 
 import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.api.PageQuery;
+import com.leo.erp.common.concurrency.SourceAllocationLockService;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.service.AbstractCrudService;
+import com.leo.erp.common.support.BusinessDocumentValidator;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.security.permission.DataScopeContext;
+import com.leo.erp.logistics.bill.domain.entity.FreightBill;
+import com.leo.erp.logistics.bill.repository.FreightBillRepository;
 import com.leo.erp.statement.freight.domain.entity.FreightStatement;
+import com.leo.erp.statement.freight.domain.entity.FreightStatementItem;
 import com.leo.erp.statement.freight.mapper.FreightStatementWebMapper;
 import com.leo.erp.statement.freight.repository.FreightStatementRepository;
 import com.leo.erp.statement.freight.web.dto.FreightStatementCandidateResponse;
@@ -23,7 +28,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
+import java.util.TreeSet;
 
 @Service
 public class FreightStatementService extends AbstractCrudService<FreightStatement, FreightStatementCommand, FreightStatementView> {
@@ -35,6 +42,8 @@ public class FreightStatementService extends AbstractCrudService<FreightStatemen
     private final FreightStatementViewAssembler viewAssembler;
     private final FreightStatementPageAssembler pageAssembler;
     private final FreightStatementApplyService freightStatementApplyService;
+    private final FreightBillRepository freightBillRepository;
+    private final SourceAllocationLockService sourceAllocationLockService;
 
     @Autowired
     public FreightStatementService(FreightStatementRepository repository,
@@ -44,7 +53,9 @@ public class FreightStatementService extends AbstractCrudService<FreightStatemen
                                    FreightStatementSourceService freightStatementSourceService,
                                    FreightStatementViewAssembler viewAssembler,
                                    FreightStatementPageAssembler pageAssembler,
-                                   FreightStatementApplyService freightStatementApplyService) {
+                                   FreightStatementApplyService freightStatementApplyService,
+                                   FreightBillRepository freightBillRepository,
+                                   SourceAllocationLockService sourceAllocationLockService) {
         super(idGenerator);
         this.repository = repository;
         this.statementSettlementSyncService = statementSettlementSyncService;
@@ -53,6 +64,8 @@ public class FreightStatementService extends AbstractCrudService<FreightStatemen
         this.viewAssembler = viewAssembler;
         this.pageAssembler = pageAssembler;
         this.freightStatementApplyService = freightStatementApplyService;
+        this.freightBillRepository = freightBillRepository;
+        this.sourceAllocationLockService = sourceAllocationLockService;
     }
 
     @Transactional(readOnly = true)
@@ -225,7 +238,48 @@ public class FreightStatementService extends AbstractCrudService<FreightStatemen
 
     @Override
     protected void apply(FreightStatement entity, FreightStatementCommand command) {
+        lockSourceFreightBills(entity, command);
         freightStatementApplyService.apply(entity, command, this::nextId);
+    }
+
+    @Override
+    protected void beforeStatusUpdate(FreightStatement entity, String currentStatus, String nextStatus) {
+        lockSourceFreightBills(entity, null);
+    }
+
+    @Override
+    protected void beforeDelete(FreightStatement entity) {
+        lockSourceFreightBills(entity, null);
+    }
+
+    private void lockSourceFreightBills(FreightStatement entity, FreightStatementCommand command) {
+        TreeSet<String> sourceNos = new TreeSet<>();
+        entity.getItems().stream()
+                .map(FreightStatementItem::getSourceNo)
+                .map(BusinessDocumentValidator::trimToNull)
+                .filter(Objects::nonNull)
+                .forEach(sourceNos::add);
+        if (command != null) {
+            command.items().stream()
+                    .map(FreightStatementItemCommand::sourceNo)
+                    .map(BusinessDocumentValidator::trimToNull)
+                    .filter(Objects::nonNull)
+                    .forEach(sourceNos::add);
+        }
+
+        TreeSet<Long> sourceIds = new TreeSet<>();
+        if (!sourceNos.isEmpty()) {
+            freightBillRepository.findByBillNoInAndDeletedFlagFalse(sourceNos).stream()
+                    .map(FreightBill::getId)
+                    .filter(Objects::nonNull)
+                    .forEach(sourceIds::add);
+        }
+        sourceAllocationLockService.lockDocumentSources(
+                List.of(),
+                List.of(),
+                List.of(),
+                List.copyOf(sourceIds)
+        );
     }
 
     @Override

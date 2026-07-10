@@ -3,6 +3,7 @@ package com.leo.erp.logistics.bill.service;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.api.PageQuery;
+import com.leo.erp.common.concurrency.SourceAllocationLockService;
 import com.leo.erp.common.service.CrudRuntimeSettings;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
@@ -35,6 +36,7 @@ import org.junit.jupiter.api.Test;
 import org.mapstruct.factory.Mappers;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Answers;
+import org.mockito.InOrder;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -61,6 +63,7 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -94,6 +97,22 @@ class FreightBillServiceTest {
                                              FreightBillSourceService sourceService,
                                              CarrierRepository carrierRepository,
                                              CompanySettingService companySettingService) {
+        return createService(
+                repository,
+                salesOutboundRepository,
+                sourceService,
+                carrierRepository,
+                companySettingService,
+                mock(SourceAllocationLockService.class)
+        );
+    }
+
+    private FreightBillService createService(FreightBillRepository repository,
+                                             SalesOutboundRepository salesOutboundRepository,
+                                             FreightBillSourceService sourceService,
+                                             CarrierRepository carrierRepository,
+                                             CompanySettingService companySettingService,
+                                             SourceAllocationLockService sourceAllocationLockService) {
         return new FreightBillService(
                 repository,
                 salesOutboundRepository,
@@ -103,7 +122,8 @@ class FreightBillServiceTest {
                 new FreightBillApplyService(),
                 mock(WorkflowTransitionGuard.class),
                 carrierRepository,
-                companySettingService
+                companySettingService,
+                sourceAllocationLockService
         );
     }
 
@@ -256,7 +276,8 @@ class FreightBillServiceTest {
                 Mappers.getMapper(FreightBillMapper.class),
                 sourceService,
                 new FreightBillApplyService(),
-                mock(WorkflowTransitionGuard.class)
+                mock(WorkflowTransitionGuard.class),
+                mock(SourceAllocationLockService.class)
         );
         FreightBillService withoutCompanySettingService = new FreightBillService(
                 repository,
@@ -266,7 +287,8 @@ class FreightBillServiceTest {
                 sourceService,
                 new FreightBillApplyService(),
                 mock(WorkflowTransitionGuard.class),
-                mock(CarrierRepository.class)
+                mock(CarrierRepository.class),
+                mock(SourceAllocationLockService.class)
         );
 
         assertThat(withoutCarrierRepository.create(buildRequest("FB-CTOR1", buildItemRequest("OB-001"))).billNo())
@@ -850,7 +872,8 @@ class FreightBillServiceTest {
                 new FreightBillApplyService(),
                 mock(WorkflowTransitionGuard.class),
                 null,
-                null
+                null,
+                mock(SourceAllocationLockService.class)
         ) {
             @Override
             protected FreightBillRequest normalizeUpdateRequest(FreightBill entity, FreightBillRequest request) {
@@ -889,7 +912,8 @@ class FreightBillServiceTest {
                 new FreightBillApplyService(),
                 mock(WorkflowTransitionGuard.class),
                 null,
-                null
+                null,
+                mock(SourceAllocationLockService.class)
         ) {
             @Override
             protected FreightBillRequest normalizeUpdateRequest(FreightBill entity, FreightBillRequest request) {
@@ -1587,6 +1611,144 @@ class FreightBillServiceTest {
         service.update(1L, request);
 
         verify(repository, never()).existsByBillNoAndDeletedFlagFalse("FB-KEEP");
+    }
+
+    @Test
+    void shouldLockActualSalesOutboundsBeforeCreateSourceValidation() {
+        FreightBillRepository repository = mock(FreightBillRepository.class);
+        SalesOutboundRepository salesOutboundRepository = mock(SalesOutboundRepository.class);
+        FreightBillSourceService sourceService = mock(FreightBillSourceService.class);
+        SourceAllocationLockService lockService = mock(SourceAllocationLockService.class);
+        when(repository.save(any(FreightBill.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(salesOutboundRepository.findByOutboundNoInAndDeletedFlagFalse(anyCollection()))
+                .thenReturn(List.of(salesOutbound(30L, "OB-002"), salesOutbound(10L, "OB-001")));
+        when(sourceService.validateSources(any(FreightBillRequest.class), any()))
+                .thenReturn(new FreightBillSourceService.SourceValidationContext(Map.of(), Map.of()));
+        FreightBillService service = createService(
+                repository,
+                salesOutboundRepository,
+                sourceService,
+                null,
+                null,
+                lockService
+        );
+
+        service.create(buildRequest(
+                "FB-LOCK-CREATE",
+                buildItemRequest("OB-002"),
+                buildItemRequest(" OB-001 "),
+                buildItemRequest("OB-002")
+        ));
+
+        InOrder inOrder = inOrder(lockService, sourceService);
+        inOrder.verify(lockService).lockDocumentSources(List.of(), List.of(), List.of(10L, 30L), List.of());
+        inOrder.verify(sourceService).validateSources(any(FreightBillRequest.class), any());
+    }
+
+    @Test
+    void shouldLockOldAndNewSalesOutboundsBeforeUpdateSourceValidation() {
+        FreightBillRepository repository = mock(FreightBillRepository.class);
+        SalesOutboundRepository salesOutboundRepository = mock(SalesOutboundRepository.class);
+        FreightBillSourceService sourceService = mock(FreightBillSourceService.class);
+        SourceAllocationLockService lockService = mock(SourceAllocationLockService.class);
+        FreightBill existing = new FreightBill();
+        existing.setId(1L);
+        existing.setBillNo("FB-LOCK-UPDATE");
+        existing.setStatus(StatusConstants.UNAUDITED);
+        FreightBillItem existingItem = new FreightBillItem();
+        existingItem.setSourceNo("OB-OLD");
+        existing.setItems(new ArrayList<>(List.of(existingItem)));
+        when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(existing));
+        when(repository.save(any(FreightBill.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(salesOutboundRepository.findByOutboundNoInAndDeletedFlagFalse(anyCollection()))
+                .thenReturn(List.of(salesOutbound(40L, "OB-OLD"), salesOutbound(20L, "OB-NEW")));
+        when(sourceService.validateSources(any(FreightBillRequest.class), any()))
+                .thenReturn(new FreightBillSourceService.SourceValidationContext(Map.of(), Map.of()));
+        FreightBillService service = createService(
+                repository,
+                salesOutboundRepository,
+                sourceService,
+                null,
+                null,
+                lockService
+        );
+
+        service.update(1L, buildRequest("IGNORED", buildItemRequest("OB-NEW")));
+
+        InOrder inOrder = inOrder(lockService, sourceService);
+        inOrder.verify(lockService).lockDocumentSources(List.of(), List.of(), List.of(20L, 40L), List.of());
+        inOrder.verify(sourceService).validateSources(any(FreightBillRequest.class), eq(1L));
+    }
+
+    @Test
+    void shouldLockExistingSalesOutboundsBeforeStatusValidation() {
+        FreightBillRepository repository = mock(FreightBillRepository.class);
+        SalesOutboundRepository salesOutboundRepository = mock(SalesOutboundRepository.class);
+        FreightBillSourceService sourceService = mock(FreightBillSourceService.class);
+        SourceAllocationLockService lockService = mock(SourceAllocationLockService.class);
+        FreightBill existing = new FreightBill();
+        existing.setId(1L);
+        existing.setBillNo("FB-LOCK-STATUS");
+        existing.setStatus(StatusConstants.UNAUDITED);
+        FreightBillItem existingItem = new FreightBillItem();
+        existingItem.setSourceNo("OB-STATUS");
+        existing.setItems(new ArrayList<>(List.of(existingItem)));
+        when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(existing));
+        when(repository.save(any(FreightBill.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(salesOutboundRepository.findByOutboundNoInAndDeletedFlagFalse(anyCollection()))
+                .thenReturn(List.of(salesOutbound(50L, "OB-STATUS")));
+        FreightBillService service = createService(
+                repository,
+                salesOutboundRepository,
+                sourceService,
+                null,
+                null,
+                lockService
+        );
+
+        service.updateStatus(1L, StatusConstants.AUDITED);
+
+        InOrder inOrder = inOrder(lockService, sourceService);
+        inOrder.verify(lockService).lockDocumentSources(List.of(), List.of(), List.of(50L), List.of());
+        inOrder.verify(sourceService).assertSourceNosAuditable(List.of("OB-STATUS"));
+    }
+
+    @Test
+    void shouldLockExistingSalesOutboundsBeforeDeleteMutation() {
+        FreightBillRepository repository = mock(FreightBillRepository.class);
+        SalesOutboundRepository salesOutboundRepository = mock(SalesOutboundRepository.class);
+        SourceAllocationLockService lockService = mock(SourceAllocationLockService.class);
+        FreightBill existing = new FreightBill();
+        existing.setId(1L);
+        existing.setStatus(StatusConstants.UNAUDITED);
+        FreightBillItem existingItem = new FreightBillItem();
+        existingItem.setSourceNo("OB-DELETE");
+        existing.setItems(new ArrayList<>(List.of(existingItem)));
+        when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(existing));
+        when(repository.save(any(FreightBill.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(salesOutboundRepository.findByOutboundNoInAndDeletedFlagFalse(anyCollection()))
+                .thenReturn(List.of(salesOutbound(60L, "OB-DELETE")));
+        FreightBillService service = createService(
+                repository,
+                salesOutboundRepository,
+                mock(FreightBillSourceService.class),
+                null,
+                null,
+                lockService
+        );
+
+        service.delete(1L);
+
+        InOrder inOrder = inOrder(lockService, repository);
+        inOrder.verify(lockService).lockDocumentSources(List.of(), List.of(), List.of(60L), List.of());
+        inOrder.verify(repository).save(existing);
+    }
+
+    private SalesOutbound salesOutbound(Long id, String outboundNo) {
+        SalesOutbound outbound = new SalesOutbound();
+        outbound.setId(id);
+        outbound.setOutboundNo(outboundNo);
+        return outbound;
     }
 
     private CompanySetting companySetting(Long id, String companyName) {

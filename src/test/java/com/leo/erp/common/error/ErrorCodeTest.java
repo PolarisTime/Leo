@@ -65,7 +65,15 @@ class ErrorCodeTest {
     }
 
     @Test
+    void shouldHaveConcurrentModificationConflict() {
+        ErrorCode errorCode = ErrorCode.valueOf("CONCURRENT_MODIFICATION");
+
+        assertThat(errorCode.getCode()).isEqualTo(4090);
+        assertThat(errorCode.getMessage()).isEqualTo("数据已被其他请求修改，请刷新后重试");
+    }
+
+    @Test
     void shouldHaveAllErrorCodes() {
-        assertThat(ErrorCode.values()).hasSize(10);
+        assertThat(ErrorCode.values()).hasSize(11);
     }
 }

@@ -55,6 +55,12 @@ public class TokenIssuanceService {
         if (refreshToken == null || refreshToken.isBlank()) {
             throw new BadCredentialsException("refreshToken无效或已过期");
         }
+        Optional<Long> userId = sessionManagementService.findRefreshTokenUserId(refreshToken);
+        if (userId.isEmpty()) {
+            throw new BadCredentialsException("refreshToken无效或已过期");
+        }
+
+        UserAccount user = sessionManagementService.findUserByIdForUpdate(userId.get());
         Optional<RefreshTokenSession> activeOpt = sessionManagementService.findActiveSession(refreshToken);
 
         if (activeOpt.isEmpty()) {
@@ -75,9 +81,12 @@ public class TokenIssuanceService {
             throw new BadCredentialsException("refreshToken无效或已过期");
         }
 
-        UserAccount user = sessionManagementService.findUserById(session.getUserId());
         if (user.getStatus() != UserStatus.NORMAL) {
             throw new BusinessException(ErrorCode.FORBIDDEN, "账户已禁用");
+        }
+        if (normalizeCredentialVersion(session.getCredentialVersion())
+                != normalizeCredentialVersion(user.getCredentialVersion())) {
+            throw new BadCredentialsException("凭据已变更，请重新登录");
         }
 
         SessionManagementService.RefreshTokenRotationResult refreshResult =
@@ -111,19 +120,25 @@ public class TokenIssuanceService {
     }
 
     TokenResponse issueTokens(UserAccount user, String loginIp, String userAgent) {
+        String sessionTokenId = sessionManagementService.newSessionTokenId();
+        String rawRefreshToken = sessionManagementService.generateRefreshToken();
+        RefreshTokenSession session = sessionManagementService.createSession(
+                user.getId(),
+                sessionTokenId,
+                rawRefreshToken,
+                loginIp,
+                userAgent
+        );
         var boundRoles = userRoleBindingService.resolveRolesForUser(user.getId());
         SecurityPrincipal principal = SecurityPrincipal.authenticated(
                 user.getId(),
                 user.getLoginName(),
                 userRoleBindingService.toGrantedAuthorities(boundRoles),
                 Boolean.TRUE.equals(user.getTotpEnabled()),
-                Boolean.TRUE.equals(user.getRequireTotpSetup())
+                Boolean.TRUE.equals(user.getRequireTotpSetup()),
+                normalizeCredentialVersion(session.getCredentialVersion())
         );
-
-        String sessionTokenId = sessionManagementService.newSessionTokenId();
         String accessToken = jwtTokenService.generateAccessToken(principal, sessionTokenId);
-        String rawRefreshToken = sessionManagementService.generateRefreshToken();
-        sessionManagementService.createSession(user.getId(), sessionTokenId, rawRefreshToken, loginIp, userAgent);
 
         userAccountRepository.save(user);
 
@@ -164,7 +179,8 @@ public class TokenIssuanceService {
                 user.getLoginName(),
                 userRoleBindingService.toGrantedAuthorities(boundRoles),
                 Boolean.TRUE.equals(user.getTotpEnabled()),
-                Boolean.TRUE.equals(user.getRequireTotpSetup())
+                Boolean.TRUE.equals(user.getRequireTotpSetup()),
+                normalizeCredentialVersion(user.getCredentialVersion())
         );
         String accessToken = jwtTokenService.generateAccessToken(principal, session.getTokenId());
 
@@ -191,5 +207,9 @@ public class TokenIssuanceService {
                         dataScopes
                 )
         );
+    }
+
+    private long normalizeCredentialVersion(Long credentialVersion) {
+        return credentialVersion == null ? 0L : credentialVersion;
     }
 }

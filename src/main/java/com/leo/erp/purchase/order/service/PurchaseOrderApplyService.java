@@ -13,6 +13,7 @@ import com.leo.erp.purchase.order.web.dto.PurchaseOrderRequest;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.function.LongSupplier;
@@ -40,8 +41,9 @@ public class PurchaseOrderApplyService {
         var materialMap = tradeItemMaterialSupport.loadMaterialMap(
                 request.items().stream().map(PurchaseOrderItemRequest::materialCode).toList()
         );
+        // Keep newly created items detached until every required field is initialized.
         List<PurchaseOrderItem> items = ManagedEntityItemSupport.syncById(
-                purchaseOrder.getItems(),
+                new ArrayList<>(purchaseOrder.getItems()),
                 request.items(),
                 PurchaseOrderItem::getId,
                 PurchaseOrderItemRequest::id,
@@ -73,6 +75,8 @@ public class PurchaseOrderApplyService {
             totalAmount = totalAmount.add(amount);
         }
 
+        purchaseOrder.getItems().clear();
+        purchaseOrder.getItems().addAll(items);
         purchaseOrder.getItems().sort(java.util.Comparator.comparing(PurchaseOrderItem::getLineNo));
         purchaseOrder.setTotalWeight(totalWeight);
         purchaseOrder.setTotalAmount(totalAmount);

@@ -27,7 +27,8 @@ public class WebSecurityProperties {
         ));
         private List<String> allowedMethods = new ArrayList<>(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         private List<String> allowedHeaders = new ArrayList<>(List.of(
-                "Authorization", "Content-Type", "X-API-Key", "X-TOTP-Code", "X-Preallocated-Id",
+                "Authorization", "Content-Type", "X-API-Key", "X-TOTP-Code", "X-Setup-Token",
+                "X-Preallocated-Id",
                 "X-Business-Module-Key", "X-Idempotency-Key", "Idempotency-Key",
                 "X-Requested-With", "Accept", "Origin"
         ));

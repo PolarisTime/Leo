@@ -1,5 +1,6 @@
 package com.leo.erp.finance.invoiceissue.service;
 
+import com.leo.erp.common.concurrency.SourceAllocationLockService;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
@@ -19,11 +20,9 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-
-import static org.mockito.ArgumentMatchers.anyCollection;
-import static org.mockito.ArgumentMatchers.nullable;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
@@ -42,7 +41,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.nullable;
-import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -66,6 +65,9 @@ class InvoiceIssueServiceTest {
     @Mock
     private WorkflowTransitionGuard workflowTransitionGuard;
 
+    @Mock
+    private SourceAllocationLockService sourceAllocationLockService;
+
     private InvoiceIssueService service;
 
     @BeforeEach
@@ -76,8 +78,18 @@ class InvoiceIssueServiceTest {
                 mapper,
                 companySettingService,
                 workflowTransitionGuard,
-                salesOrderItemQueryService
+                salesOrderItemQueryService,
+                sourceAllocationLockService
         );
+    }
+
+    @Test
+    void shouldRequireSourceAllocationLockServiceAsConstructorDependency() {
+        boolean hasRequiredDependency = java.util.Arrays.stream(InvoiceIssueService.class.getConstructors())
+                .anyMatch(constructor -> java.util.Arrays.asList(constructor.getParameterTypes())
+                        .contains(SourceAllocationLockService.class));
+
+        assertThat(hasRequiredDependency).isTrue();
     }
 
     @Test
@@ -98,6 +110,11 @@ class InvoiceIssueServiceTest {
         )));
 
         assertEquals("第1行来源销售订单明细可开票吨位不足", exception.getMessage());
+        InOrder lockBeforeSummary = inOrder(sourceAllocationLockService, repository);
+        lockBeforeSummary.verify(sourceAllocationLockService)
+                .lockTradeItemSources(List.of(), List.of(), List.of(101L));
+        lockBeforeSummary.verify(repository)
+                .summarizeAllocatedBySourceSalesOrderItemIds(anyCollection(), nullable(Long.class));
     }
 
     @Test
@@ -404,7 +421,10 @@ class InvoiceIssueServiceTest {
         existing.setStatus("草稿");
         existing.setOperatorName("财务A");
         existing.setDeletedFlag(false);
-        existing.setItems(new ArrayList<>());
+        InvoiceIssueItem existingItem = new InvoiceIssueItem();
+        existingItem.setId(100L);
+        existingItem.setSourceSalesOrderItemId(100L);
+        existing.setItems(new ArrayList<>(List.of(existingItem)));
 
         SalesOrderItem sourceItem = buildSalesOrderItem(101L, "M-1", new BigDecimal("0.300"), new BigDecimal("1000.00"));
 
@@ -433,6 +453,11 @@ class InvoiceIssueServiceTest {
 
         assertThat(result).isNotNull();
         assertThat(result.issueNo()).isEqualTo("KP-SAME");
+        InOrder lockBeforeSummary = inOrder(sourceAllocationLockService, repository);
+        lockBeforeSummary.verify(sourceAllocationLockService)
+                .lockTradeItemSources(List.of(), List.of(), List.of(100L, 101L));
+        lockBeforeSummary.verify(repository)
+                .summarizeAllocatedBySourceSalesOrderItemIds(anyCollection(), anyLong());
     }
 
     @Test
@@ -573,6 +598,11 @@ class InvoiceIssueServiceTest {
 
         assertThat(result).isNotNull();
         assertThat(result.status()).isEqualTo("已开票");
+        InOrder lockBeforeSummary = inOrder(sourceAllocationLockService, repository);
+        lockBeforeSummary.verify(sourceAllocationLockService)
+                .lockTradeItemSources(List.of(), List.of(), List.of(101L));
+        lockBeforeSummary.verify(repository)
+                .summarizeAllocatedBySourceSalesOrderItemIds(anyCollection(), anyLong());
     }
 
     @Test
@@ -623,13 +653,19 @@ class InvoiceIssueServiceTest {
         existing.setId(1L);
         existing.setStatus("草稿");
         existing.setDeletedFlag(false);
-        existing.setItems(new ArrayList<>());
+        InvoiceIssueItem item = new InvoiceIssueItem();
+        item.setSourceSalesOrderItemId(101L);
+        existing.setItems(new ArrayList<>(List.of(item)));
         when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(existing));
         when(repository.save(any(InvoiceIssue.class))).thenAnswer(inv -> inv.getArgument(0));
 
         service.delete(1L);
 
-        verify(repository).save(any(InvoiceIssue.class));
+        InOrder lockBeforeMutation = inOrder(sourceAllocationLockService, repository);
+        lockBeforeMutation.verify(sourceAllocationLockService)
+                .lockTradeItemSources(List.of(), List.of(), List.of(101L));
+        lockBeforeMutation.verify(repository).save(any(InvoiceIssue.class));
+        assertThat(existing.isDeletedFlag()).isTrue();
     }
 
     @Test
@@ -748,7 +784,8 @@ class InvoiceIssueServiceTest {
                                         InvoiceIssueMapper mapper,
                                         CompanySettingService companySettingService,
                                         WorkflowTransitionGuard workflowTransitionGuard,
-                                        SalesOrderItemQueryService salesOrderItemQueryService) {
+                                        SalesOrderItemQueryService salesOrderItemQueryService,
+                                        SourceAllocationLockService sourceAllocationLockService) {
         InvoiceIssueSourceService sourceService = new InvoiceIssueSourceService(repository, salesOrderItemQueryService);
         com.leo.erp.finance.common.service.InvoiceAmountCalculator amountCalculator =
                 new com.leo.erp.finance.common.service.InvoiceAmountCalculator(
@@ -757,6 +794,7 @@ class InvoiceIssueServiceTest {
         return new InvoiceIssueService(
                 repository,
                 idGenerator,
+                sourceAllocationLockService,
                 new InvoiceIssueApplyService(workflowTransitionGuard, sourceService, amountCalculator),
                 sourceService,
                 new InvoiceIssueResponseAssembler(mapper)

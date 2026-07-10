@@ -66,7 +66,47 @@ class SupplierStatementSourceServiceTest {
         assertThat(candidates.get(0).inboundNo()).isEqualTo("RK-001");
         assertThat(candidates.get(0).supplierName()).isEqualTo("供应商甲");
         assertThat(candidates.get(0).warehouseName()).isEqualTo("一号仓");
-        assertThat(candidates.get(0).status()).isEqualTo(StatusConstants.PURCHASE_COMPLETED);
+        assertThat(candidates.get(0).status()).isEqualTo(StatusConstants.INBOUND_COMPLETED);
+    }
+
+    @Test
+    void candidatePageShouldRequireCompletedInboundStatus() {
+        SupplierStatementRepository repository = mock(SupplierStatementRepository.class);
+        PurchaseInboundRepository purchaseInboundRepository = mock(PurchaseInboundRepository.class);
+        when(repository.findAll(any(Specification.class))).thenReturn(List.of());
+        when(purchaseInboundRepository.findAll(any(Specification.class), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of()));
+        SupplierStatementSourceService service = new SupplierStatementSourceService(
+                repository,
+                purchaseInboundRepository,
+                mock(PurchaseInboundItemQueryService.class),
+                null
+        );
+
+        service.candidatePage(PageQuery.of(0, 20, null, null), PageFilter.of(null, null, null, null));
+
+        @SuppressWarnings("unchecked")
+        org.mockito.ArgumentCaptor<Specification<PurchaseInbound>> captor =
+                org.mockito.ArgumentCaptor.forClass(Specification.class);
+        verify(purchaseInboundRepository).findAll(captor.capture(), any(Pageable.class));
+        Root<PurchaseInbound> root = mock(Root.class);
+        CriteriaQuery<?> query = mock(CriteriaQuery.class);
+        CriteriaBuilder criteriaBuilder = mock(CriteriaBuilder.class);
+        @SuppressWarnings("unchecked")
+        Path<Boolean> deletedFlagPath = mock(Path.class);
+        @SuppressWarnings("unchecked")
+        Path<String> statusPath = mock(Path.class);
+        Predicate predicate = mock(Predicate.class);
+        when(root.<Boolean>get("deletedFlag")).thenReturn(deletedFlagPath);
+        when(root.<String>get("status")).thenReturn(statusPath);
+        when(criteriaBuilder.isFalse(deletedFlagPath)).thenReturn(predicate);
+        when(criteriaBuilder.conjunction()).thenReturn(predicate);
+        when(criteriaBuilder.equal(statusPath, StatusConstants.INBOUND_COMPLETED)).thenReturn(predicate);
+        when(criteriaBuilder.and(any(Predicate.class), any(Predicate.class))).thenReturn(predicate);
+
+        captor.getValue().toPredicate(root, query, criteriaBuilder);
+
+        verify(criteriaBuilder).equal(statusPath, StatusConstants.INBOUND_COMPLETED);
     }
 
     @Test
@@ -130,6 +170,30 @@ class SupplierStatementSourceServiceTest {
         assertThatThrownBy(() -> service.applyItems(entity, supplierRequest("SUP", "供应商甲", 1L, "结算主体A", 10L), () -> 1000L))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("来源采购入库单RK-001已生成供应商对账单");
+    }
+
+    @Test
+    void shouldRejectInboundThatHasNotCompletedInbound() {
+        SupplierStatementRepository repository = mock(SupplierStatementRepository.class);
+        PurchaseInboundItemQueryService itemQueryService = mock(PurchaseInboundItemQueryService.class);
+        PurchaseInbound inbound = sourceInbound();
+        inbound.setStatus(StatusConstants.AUDITED);
+        when(itemQueryService.findAllActiveByIdIn(List.of(10L)))
+                .thenReturn(List.of(sourceInboundItem(10L, inbound)));
+        SupplierStatementSourceService service = new SupplierStatementSourceService(
+                repository,
+                mock(PurchaseInboundRepository.class),
+                itemQueryService,
+                null
+        );
+
+        assertThatThrownBy(() -> service.applyItems(
+                new SupplierStatement(),
+                supplierRequest("SUP", "供应商甲", 1L, "结算主体A", 10L),
+                () -> 1000L
+        ))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("来源采购入库单RK-001未完成入库");
     }
 
     @Test
@@ -496,7 +560,7 @@ class SupplierStatementSourceServiceTest {
         inbound.setSettlementMode("按重量");
         inbound.setTotalWeight(new BigDecimal("1.000"));
         inbound.setTotalAmount(new BigDecimal("1000.00"));
-        inbound.setStatus(StatusConstants.PURCHASE_COMPLETED);
+        inbound.setStatus(StatusConstants.INBOUND_COMPLETED);
         return inbound;
     }
 

@@ -2,6 +2,7 @@ package com.leo.erp.sales.outbound.service;
 
 import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.api.PageQuery;
+import com.leo.erp.common.concurrency.SourceAllocationLockService;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
@@ -23,6 +24,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.TreeSet;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -35,6 +37,7 @@ public class SalesOutboundService extends AbstractCrudService<SalesOutbound, Sal
     private final SalesOutboundResponseAssembler responseAssembler;
     private final SalesOutboundSaveService saveService;
     private final SalesOutboundPurchaseInboundGuard purchaseInboundGuard;
+    private final SourceAllocationLockService sourceAllocationLockService;
 
     @Autowired
     public SalesOutboundService(SalesOutboundRepository repository,
@@ -43,7 +46,8 @@ public class SalesOutboundService extends AbstractCrudService<SalesOutbound, Sal
                                 SalesOutboundApplyService salesOutboundApplyService,
                                 SalesOutboundResponseAssembler responseAssembler,
                                 SalesOutboundSaveService saveService,
-                                SalesOutboundPurchaseInboundGuard purchaseInboundGuard) {
+                                SalesOutboundPurchaseInboundGuard purchaseInboundGuard,
+                                SourceAllocationLockService sourceAllocationLockService) {
         super(idGenerator);
         this.repository = repository;
         this.workflowTransitionGuard = workflowTransitionGuard;
@@ -51,6 +55,7 @@ public class SalesOutboundService extends AbstractCrudService<SalesOutbound, Sal
         this.responseAssembler = responseAssembler;
         this.saveService = saveService;
         this.purchaseInboundGuard = purchaseInboundGuard;
+        this.sourceAllocationLockService = sourceAllocationLockService;
     }
 
     @Transactional(readOnly = true)
@@ -216,11 +221,12 @@ public class SalesOutboundService extends AbstractCrudService<SalesOutbound, Sal
 
     @Override
     protected java.util.Set<String> allowedStatusTransitions() {
-        return StatusConstants.DRAFT_AUDIT_TRANSITIONS;
+        return StatusConstants.SALES_OUTBOUND_TRANSITIONS;
     }
 
     @Override
     protected void apply(SalesOutbound entity, SalesOutboundRequest request) {
+        lockSourceSalesOrderItems(entity.getItems(), request.items());
         String nextStatus = BusinessStatusValidator.normalizeWithDefault(
                 request.status(),
                 StatusConstants.DRAFT,
@@ -248,9 +254,29 @@ public class SalesOutboundService extends AbstractCrudService<SalesOutbound, Sal
 
     @Override
     protected void beforeStatusUpdate(SalesOutbound entity, String currentStatus, String nextStatus) {
+        lockSourceSalesOrderItems(entity.getItems(), List.of());
         if (StatusConstants.AUDITED.equals(nextStatus)) {
             purchaseInboundGuard.assertPurchaseInboundCompletedBeforeAudit(entity);
         }
+    }
+
+    @Override
+    protected void beforeDelete(SalesOutbound entity) {
+        lockSourceSalesOrderItems(entity.getItems(), List.of());
+    }
+
+    private void lockSourceSalesOrderItems(List<SalesOutboundItem> existingItems,
+                                           List<SalesOutboundItemRequest> requestedItems) {
+        TreeSet<Long> sourceIds = new TreeSet<>();
+        existingItems.stream()
+                .map(SalesOutboundItem::getSourceSalesOrderItemId)
+                .filter(java.util.Objects::nonNull)
+                .forEach(sourceIds::add);
+        requestedItems.stream()
+                .map(SalesOutboundItemRequest::sourceSalesOrderItemId)
+                .filter(java.util.Objects::nonNull)
+                .forEach(sourceIds::add);
+        sourceAllocationLockService.lockTradeItemSources(List.of(), List.of(), List.copyOf(sourceIds));
     }
 
     @Override

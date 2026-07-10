@@ -2,6 +2,8 @@ package com.leo.erp.sales.order.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leo.erp.common.error.BusinessException;
+import com.leo.erp.common.error.ErrorCode;
+import com.leo.erp.security.permission.ResourceRecordAccessGuard;
 import com.leo.erp.sales.order.domain.entity.SalesOrder;
 import com.leo.erp.sales.order.domain.entity.SalesOrderItem;
 import com.leo.erp.sales.order.repository.SalesOrderRepository;
@@ -29,7 +31,10 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 class SalesOrderPrintExportServiceTest {
@@ -141,7 +146,8 @@ class SalesOrderPrintExportServiceTest {
         SalesOrderPrintExportService service = new SalesOrderPrintExportService(
                 repository,
                 new SalesOrderPrintDocumentFactory(),
-                layoutProvider
+                layoutProvider,
+                mock(ResourceRecordAccessGuard.class)
         );
 
         var file = service.exportSalesOrderPrint(1L);
@@ -177,7 +183,8 @@ class SalesOrderPrintExportServiceTest {
         SalesOrderPrintExportService service = new SalesOrderPrintExportService(
                 repository,
                 new SalesOrderPrintDocumentFactory(),
-                layoutProvider
+                layoutProvider,
+                mock(ResourceRecordAccessGuard.class)
         );
 
         var file = service.exportSalesOrderPrint(1L);
@@ -283,6 +290,28 @@ class SalesOrderPrintExportServiceTest {
     }
 
     @Test
+    void shouldCheckRecordAccessBeforeResolvingPrintLayout() {
+        SalesOrderRepository repository = mock(SalesOrderRepository.class);
+        SalesOrder order = salesOrder(1);
+        when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(order));
+        PrintXlsxExportLayoutProvider layoutProvider = mock(PrintXlsxExportLayoutProvider.class);
+        ResourceRecordAccessGuard accessGuard = mock(ResourceRecordAccessGuard.class);
+        BusinessException denied = new BusinessException(ErrorCode.FORBIDDEN, "无权打印该销售订单");
+        doThrow(denied).when(accessGuard).assertCurrentUserCanAccess("sales-order", "print", order);
+        SalesOrderPrintExportService service = new SalesOrderPrintExportService(
+                repository,
+                new SalesOrderPrintDocumentFactory(),
+                layoutProvider,
+                accessGuard
+        );
+
+        assertThatThrownBy(() -> service.exportSalesOrderPrint(1L))
+                .isSameAs(denied);
+        verify(accessGuard).assertCurrentUserCanAccess("sales-order", "print", order);
+        verifyNoInteractions(layoutProvider);
+    }
+
+    @Test
     void shouldWrapTemplateLoadFailureAsBusinessException() {
         SalesOrderRepository repository = mock(SalesOrderRepository.class);
         when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(salesOrder(1)));
@@ -303,7 +332,8 @@ class SalesOrderPrintExportServiceTest {
         SalesOrderPrintExportService service = new SalesOrderPrintExportService(
                 repository,
                 new SalesOrderPrintDocumentFactory(),
-                layoutProvider
+                layoutProvider,
+                mock(ResourceRecordAccessGuard.class)
         );
 
         assertThatThrownBy(() -> service.exportSalesOrderPrint(1L))
@@ -354,7 +384,8 @@ class SalesOrderPrintExportServiceTest {
         return new SalesOrderPrintExportService(
                 repository,
                 new SalesOrderPrintDocumentFactory(),
-                new PrintXlsxExportLayoutProvider(new PrintRuntimeProperties(new ObjectMapper()))
+                new PrintXlsxExportLayoutProvider(new PrintRuntimeProperties(new ObjectMapper())),
+                mock(ResourceRecordAccessGuard.class)
         );
     }
 
