@@ -179,6 +179,31 @@ class PurchaseInboundServiceTest {
     }
 
     @Test
+    void shouldCompleteInboundAndSourcePurchaseOrderWhenAuditingByStatusEndpoint() {
+        PurchaseInboundRepository repository = mock(PurchaseInboundRepository.class);
+        PurchaseInboundCompletionSyncService completionSyncService =
+                mock(PurchaseInboundCompletionSyncService.class);
+        PurchaseInboundService service = lockAwareService(
+                repository,
+                mock(SnowflakeIdGenerator.class),
+                mock(PurchaseInboundApplyService.class),
+                mock(PurchaseInboundDeleteService.class),
+                completionSyncService,
+                mock(SourceAllocationLockService.class)
+        );
+        PurchaseInbound existing = inbound();
+
+        when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(existing));
+        when(repository.save(existing)).thenReturn(existing);
+        when(completionSyncService.shouldCompleteInbound(existing)).thenReturn(true);
+
+        service.updateStatus(1L, "已审核");
+
+        assertThat(existing.getStatus()).isEqualTo("完成入库");
+        verify(completionSyncService).completeSourcePurchaseOrders(existing);
+    }
+
+    @Test
     void shouldLoadAllocatedQuantitiesOnlyForCurrentInboundItemsWhenShowingDetail() {
         PurchaseInboundRepository repository = mock(PurchaseInboundRepository.class);
         PurchaseInboundMapper mapper = mock(PurchaseInboundMapper.class);

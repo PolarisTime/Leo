@@ -251,6 +251,15 @@ public class PurchaseInboundService extends AbstractCrudService<
 
     @Override
     protected PurchaseInbound saveUpdatedEntity(PurchaseInbound entity, PurchaseInboundRequest request) {
+        return saveWithCompletionSync(entity);
+    }
+
+    @Override
+    protected PurchaseInbound saveStatusEntity(PurchaseInbound entity) {
+        return saveWithCompletionSync(entity);
+    }
+
+    private PurchaseInbound saveWithCompletionSync(PurchaseInbound entity) {
         boolean completedByServer = completionSyncService.shouldCompleteInbound(entity);
         if (completedByServer) {
             entity.setStatus(StatusConstants.INBOUND_COMPLETED);
