@@ -117,7 +117,14 @@ public class CarrierService extends AbstractCrudService<Carrier, CarrierRequest,
             unless = "#result == null || #result.isEmpty()")
     public List<CarrierOptionResponse> listActiveOptions() {
         return carrierRepository.findByDeletedFlagFalseAndStatusOrderByCarrierCodeAsc(StatusConstants.NORMAL).stream()
-                .map(c -> new CarrierOptionResponse(c.getId(), c.getCarrierName(), c.getCarrierName(), resolveVehiclePlates(c)))
+                .map(c -> new CarrierOptionResponse(
+                        c.getId(),
+                        c.getCarrierName(),
+                        c.getCarrierName(),
+                        resolveVehiclePlates(c),
+                        c.getDefaultSettlementCompanyId(),
+                        c.getDefaultSettlementCompanyName()
+                ))
                 .toList();
     }
 

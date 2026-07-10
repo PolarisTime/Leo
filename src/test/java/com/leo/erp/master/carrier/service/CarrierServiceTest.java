@@ -51,6 +51,8 @@ class CarrierServiceTest {
         carrier.setId(1L);
         carrier.setCarrierCode("WL-001");
         carrier.setCarrierName("物流甲");
+        carrier.setDefaultSettlementCompanyId(9L);
+        carrier.setDefaultSettlementCompanyName("上海结算主体");
 
         Vehicle v1 = new Vehicle();
         v1.setPlate("苏A12345");
@@ -74,6 +76,8 @@ class CarrierServiceTest {
             assertThat(option.label()).isEqualTo("物流甲");
             assertThat(option.value()).isEqualTo("物流甲");
             assertThat(option.vehiclePlates()).containsExactly("苏A12345", "苏A67890", "苏A99999");
+            assertThat(option.defaultSettlementCompanyId()).isEqualTo(9L);
+            assertThat(option.defaultSettlementCompanyName()).isEqualTo("上海结算主体");
         });
     }
 
