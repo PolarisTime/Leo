@@ -20,6 +20,7 @@ import com.leo.erp.system.company.service.CompanySettingService;
 import org.junit.jupiter.api.Test;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
+import org.springframework.cache.concurrent.ConcurrentMapCacheManager;
 
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
@@ -140,6 +141,28 @@ class CustomerServiceTest {
         assertThat(result.refreshedSize()).isEqualTo(1);
         assertThat(result.refreshed()).isTrue();
         verify(redisJsonCacheSupport).write(eq("leo:customer:all"), any(), any(Duration.class));
+    }
+
+    @Test
+    void shouldRefreshActualSpringCustomerCacheDuringHealthCheck() {
+        CustomerRepository repository = mock(CustomerRepository.class);
+        when(repository.findByDeletedFlagFalseAndStatusOrderByCustomerCodeAsc(StatusConstants.NORMAL))
+                .thenReturn(List.of(createCustomer(1L, "C001")));
+        RedisJsonCacheSupport legacyCache = mock(RedisJsonCacheSupport.class);
+        CustomerService service = new CustomerService(repository, new SnowflakeIdGenerator(1),
+                mock(CustomerMapper.class), legacyCache);
+        var cacheManager = new ConcurrentMapCacheManager(CacheConfig.CACHE_OPTIONS);
+        cacheManager.getCache(CacheConfig.CACHE_OPTIONS).put("leo:customer:all", List.of("stale"));
+        service.setCacheManager(cacheManager);
+
+        var result = service.verifyAndRefreshCache();
+
+        assertThat(result.cacheName()).isEqualTo("options::leo:customer:all");
+        assertThat(result.refreshed()).isTrue();
+        assertThat(cacheManager.getCache(CacheConfig.CACHE_OPTIONS).get("leo:customer:all", List.class))
+                .singleElement()
+                .isInstanceOf(CustomerOptionResponse.class);
+        verify(legacyCache, never()).write(anyString(), any(), any());
     }
 
     @Test

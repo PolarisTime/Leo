@@ -7,9 +7,11 @@ import com.leo.erp.auth.repository.UserRoleRepository;
 import com.leo.erp.auth.service.TotpService;
 import com.leo.erp.auth.service.UserRoleBindingService;
 import com.leo.erp.common.error.BusinessException;
+import com.leo.erp.common.config.CacheConfig;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.system.company.domain.entity.CompanySetting;
 import com.leo.erp.system.company.repository.CompanySettingRepository;
+import com.leo.erp.system.company.service.CompanySettingService;
 import com.leo.erp.system.department.domain.entity.Department;
 import com.leo.erp.system.department.repository.DepartmentRepository;
 import com.leo.erp.system.norule.domain.entity.NoRule;
@@ -26,11 +28,13 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.cache.annotation.Caching;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.lang.reflect.Proxy;
+import java.lang.reflect.Method;
 import java.math.BigDecimal;
 import java.util.HashMap;
 import java.util.Map;
@@ -45,6 +49,20 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class InitialSetupServiceTest {
+
+    @Test
+    void shouldEvictCurrentCompanyCachesAfterInitialization() throws Exception {
+        Method initialize = InitialSetupService.class.getDeclaredMethod("initialize", InitialSetupSubmitRequest.class);
+        Caching caching = initialize.getAnnotation(Caching.class);
+
+        assertThat(caching).isNotNull();
+        assertThat(caching.evict())
+                .extracting(evict -> evict.value()[0] + "::" + evict.key())
+                .containsExactlyInAnyOrder(
+                        CacheConfig.CACHE_STATIC + "::'" + CompanySettingService.CURRENT_COMPANY_CACHE_KEY + "'",
+                        CacheConfig.CACHE_STATIC + "::'" + CompanySettingService.CURRENT_TAX_RATE_CACHE_KEY + "'"
+                );
+    }
 
     private UserAccountRepository userAccountRepository;
     private UserRoleRepository userRoleRepository;

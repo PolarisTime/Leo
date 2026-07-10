@@ -18,6 +18,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
+import org.springframework.cache.concurrent.ConcurrentMapCacheManager;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
@@ -574,6 +575,33 @@ class DepartmentServiceTest {
         assertThat(result.refreshedSize()).isEqualTo(1);
         assertThat(result.refreshed()).isTrue();
         verify(cacheSupport).write(eq("leo:department:options"), any(), any(Duration.class));
+    }
+
+    @Test
+    void shouldRefreshActualSpringDepartmentCacheDuringHealthCheck() {
+        DepartmentRepository departmentRepository = mock(DepartmentRepository.class);
+        Department dept = department();
+        when(departmentRepository.findByStatusAndDeletedFlagFalseOrderBySortOrderAscIdAsc("正常"))
+                .thenReturn(List.of(dept));
+        RedisJsonCacheSupport legacyCache = mock(RedisJsonCacheSupport.class);
+        DepartmentService service = new DepartmentService(
+                departmentRepository,
+                mock(UserAccountRepository.class),
+                mock(PermissionService.class),
+                new SnowflakeIdGenerator(1),
+                legacyCache
+        );
+        var cacheManager = new ConcurrentMapCacheManager(CacheConfig.CACHE_OPTIONS);
+        cacheManager.getCache(CacheConfig.CACHE_OPTIONS).put("leo:department:options", List.of("stale"));
+        service.setCacheManager(cacheManager);
+
+        var result = service.verifyAndRefreshCache();
+
+        assertThat(result.cacheName()).isEqualTo("options::leo:department:options");
+        assertThat(result.refreshed()).isTrue();
+        assertThat(cacheManager.getCache(CacheConfig.CACHE_OPTIONS).get("leo:department:options", List.class))
+                .containsExactly(new DepartmentOptionResponse(10L, "HQ", "总部"));
+        verify(legacyCache, never()).write(anyString(), any(), any());
     }
 
     @Test

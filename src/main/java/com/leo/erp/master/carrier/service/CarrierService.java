@@ -8,6 +8,7 @@ import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.service.AbstractCrudService;
 import com.leo.erp.common.support.MasterDataReferenceGuard;
 import com.leo.erp.common.support.MasterDataReferenceGuard.ReferenceCheck;
+import com.leo.erp.common.support.RedisCacheHealthCheck;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.master.carrier.domain.entity.Carrier;
@@ -26,6 +27,7 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
+import org.springframework.cache.CacheManager;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -33,7 +35,7 @@ import java.util.List;
 import java.util.Optional;
 
 @Service
-public class CarrierService extends AbstractCrudService<Carrier, CarrierRequest, CarrierResponse> {
+public class CarrierService extends AbstractCrudService<Carrier, CarrierRequest, CarrierResponse> implements RedisCacheHealthCheck {
 
     private static final String CARRIER_CACHE_KEY = "leo:carrier:all";
 
@@ -42,6 +44,7 @@ public class CarrierService extends AbstractCrudService<Carrier, CarrierRequest,
     private final CarrierMapper carrierMapper;
     private final MasterDataReferenceGuard referenceGuard;
     private final CompanySettingService companySettingService;
+    private CacheManager cacheManager;
 
     @Autowired
     public CarrierService(CarrierRepository carrierRepository,
@@ -116,6 +119,10 @@ public class CarrierService extends AbstractCrudService<Carrier, CarrierRequest,
     @Cacheable(value = CacheConfig.CACHE_OPTIONS, key = "'" + CARRIER_CACHE_KEY + "'",
             unless = "#result == null || #result.isEmpty()")
     public List<CarrierOptionResponse> listActiveOptions() {
+        return loadActiveOptions();
+    }
+
+    private List<CarrierOptionResponse> loadActiveOptions() {
         return carrierRepository.findByDeletedFlagFalseAndStatusOrderByCarrierCodeAsc(StatusConstants.NORMAL).stream()
                 .map(c -> new CarrierOptionResponse(
                         c.getId(),
@@ -126,6 +133,28 @@ public class CarrierService extends AbstractCrudService<Carrier, CarrierRequest,
                         c.getDefaultSettlementCompanyName()
                 ))
                 .toList();
+    }
+
+    @Override
+    public String cacheName() {
+        return CARRIER_CACHE_KEY;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public CacheHealthCheckResult verifyAndRefreshCache() {
+        List<CarrierOptionResponse> expected = loadActiveOptions();
+        return verifyAndRefreshSpringCache(
+                cacheManager,
+                CacheConfig.CACHE_OPTIONS,
+                CARRIER_CACHE_KEY,
+                expected.isEmpty() ? null : expected
+        );
+    }
+
+    @Autowired
+    void setCacheManager(CacheManager cacheManager) {
+        this.cacheManager = cacheManager;
     }
 
     @Transactional(readOnly = true)

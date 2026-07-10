@@ -75,6 +75,33 @@ class RuntimeConfigServiceTest {
     }
 
     @Test
+    void refreshesRuntimeConfigCacheDuringHealthCheck() {
+        RedisJsonCacheSupport cache = mock(RedisJsonCacheSupport.class);
+        RuntimeConfigService cachedService = new RuntimeConfigService(repository, featureFlagService, cache);
+        RuntimeConfigResponse stale = new RuntimeConfigResponse(
+                new RuntimeUiConfig(
+                        99,
+                        true,
+                        new RuntimeWatermarkConfig(true, "stale", 30, "red", 0, 100)
+                ),
+                runtimeConfig().business(),
+                runtimeConfig().features()
+        );
+        when(cache.read(RuntimeConfigService.RUNTIME_CONFIG_CACHE_KEY, RuntimeConfigResponse.class))
+                .thenReturn(Optional.of(stale));
+        when(repository.findBySettingCodeInAndDeletedFlagFalse(anyCollection())).thenReturn(List.of());
+
+        var result = cachedService.verifyAndRefreshCache();
+
+        verify(cache).write(
+                eq(RuntimeConfigService.RUNTIME_CONFIG_CACHE_KEY),
+                eq(runtimeConfig()),
+                eq(Duration.ofMinutes(10))
+        );
+        assertThat(result.refreshed()).isTrue();
+    }
+
+    @Test
     void avoidsUntypedSpringCacheForRuntimeConfig() throws Exception {
         Method getRuntimeConfig = RuntimeConfigService.class.getDeclaredMethod("getRuntimeConfig");
         assertThat(getRuntimeConfig.getAnnotations()).noneMatch(annotation ->

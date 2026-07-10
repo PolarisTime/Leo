@@ -18,6 +18,7 @@ import com.leo.erp.master.supplier.web.dto.SupplierResponse;
 import org.junit.jupiter.api.Test;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
+import org.springframework.cache.concurrent.ConcurrentMapCacheManager;
 
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
@@ -192,6 +193,31 @@ class SupplierServiceTest {
         assertThat(result.refreshedSize()).isEqualTo(1);
         assertThat(result.refreshed()).isTrue();
         verify(cache).write(eq("leo:supplier:all"), any(), any());
+    }
+
+    @Test
+    void shouldRefreshActualSpringCacheDuringHealthCheck() {
+        SupplierRepository repository = mock(SupplierRepository.class);
+        Supplier supplier = createSupplier(1L, "S001");
+        supplier.setSupplierName("供应商新名称");
+        when(repository.findByDeletedFlagFalseAndStatusOrderBySupplierCodeAsc(StatusConstants.NORMAL))
+                .thenReturn(List.of(supplier));
+        RedisJsonCacheSupport legacyCache = mock(RedisJsonCacheSupport.class);
+        SupplierService service = new SupplierService(repository, new SnowflakeIdGenerator(1), null, legacyCache);
+        var cacheManager = new ConcurrentMapCacheManager(CacheConfig.CACHE_OPTIONS);
+        cacheManager.getCache(CacheConfig.CACHE_OPTIONS).put(
+                "leo:supplier:all",
+                List.of(new SupplierOptionResponse(1L, "供应商旧名称", "供应商旧名称"))
+        );
+        service.setCacheManager(cacheManager);
+
+        var result = service.verifyAndRefreshCache();
+
+        assertThat(cacheManager.getCache(CacheConfig.CACHE_OPTIONS).get("leo:supplier:all", List.class))
+                .containsExactly(new SupplierOptionResponse(1L, "供应商新名称", "供应商新名称"));
+        assertThat(result.cacheName()).isEqualTo("options::leo:supplier:all");
+        assertThat(result.refreshed()).isTrue();
+        verify(legacyCache, never()).write(anyString(), any(), any());
     }
 
     @Test

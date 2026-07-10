@@ -22,6 +22,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.cache.annotation.Caching;
+import org.springframework.cache.concurrent.ConcurrentMapCacheManager;
 
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
@@ -424,6 +425,54 @@ class CompanySettingServiceTest {
                         "'" + CompanySettingService.CURRENT_COMPANY_CACHE_KEY + "'",
                         "'" + CompanySettingService.CURRENT_TAX_RATE_CACHE_KEY + "'"
                 );
+    }
+
+    @Test
+    void shouldRefreshCurrentCompanyAndTaxRateSpringCaches() {
+        var repository = mock(CompanySettingRepository.class);
+        var mapper = mock(CompanySettingMapper.class);
+        var noRuleRepository = mock(NoRuleRepository.class);
+        var entity = createCompanySetting(1L);
+        var expectedCompany = new CompanySettingResponse(
+                1L,
+                entity.getCompanyName(),
+                entity.getTaxNo(),
+                entity.getBankName(),
+                entity.getBankAccount(),
+                new BigDecimal("0.1300"),
+                List.of(),
+                StatusConstants.NORMAL,
+                entity.getRemark()
+        );
+        when(repository.findFirstByStatusAndDeletedFlagFalseOrderByIdAsc(StatusConstants.NORMAL))
+                .thenReturn(Optional.of(entity));
+        when(mapper.toResponse(eq(entity), any(BigDecimal.class), any())).thenReturn(expectedCompany);
+        when(noRuleRepository.findBySettingCodeAndDeletedFlagFalse(CompanySettingService.DEFAULT_TAX_RATE_SETTING_CODE))
+                .thenReturn(Optional.empty());
+        var service = new CompanySettingService(
+                repository,
+                new SnowflakeIdGenerator(1),
+                mapper,
+                mock(DashboardSummaryService.class),
+                noRuleRepository,
+                new ObjectMapper(),
+                mock(RedisJsonCacheSupport.class)
+        );
+        var cacheManager = new ConcurrentMapCacheManager(CacheConfig.CACHE_STATIC);
+        var cache = cacheManager.getCache(CacheConfig.CACHE_STATIC);
+        cache.put(CompanySettingService.CURRENT_COMPANY_CACHE_KEY, "stale");
+        cache.put(CompanySettingService.CURRENT_TAX_RATE_CACHE_KEY, new BigDecimal("0.0500"));
+        service.setCacheManager(cacheManager);
+
+        var result = service.verifyAndRefreshCache();
+
+        assertThat(cache.get(CompanySettingService.CURRENT_COMPANY_CACHE_KEY, CompanySettingResponse.class))
+                .isEqualTo(expectedCompany);
+        assertThat(cache.get(CompanySettingService.CURRENT_TAX_RATE_CACHE_KEY, BigDecimal.class))
+                .isEqualByComparingTo("0.1300");
+        assertThat(result.currentSize()).isEqualTo(2);
+        assertThat(result.refreshedSize()).isEqualTo(2);
+        assertThat(result.refreshed()).isTrue();
     }
 
     @Test

@@ -8,6 +8,7 @@ import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.service.AbstractCrudService;
 import com.leo.erp.common.support.MasterDataReferenceGuard;
 import com.leo.erp.common.support.MasterDataReferenceGuard.ReferenceCheck;
+import com.leo.erp.common.support.RedisCacheHealthCheck;
 import com.leo.erp.common.support.RedisJsonCacheSupport;
 import com.leo.erp.common.support.PrecisionConstants;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
@@ -34,6 +35,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.cache.annotation.Caching;
+import org.springframework.cache.Cache;
+import org.springframework.cache.CacheManager;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -45,7 +48,7 @@ import java.util.Optional;
 import java.util.Set;
 
 @Service
-public class CompanySettingService extends AbstractCrudService<CompanySetting, CompanySettingRequest, CompanySettingResponse> implements TaxRateProvider {
+public class CompanySettingService extends AbstractCrudService<CompanySetting, CompanySettingRequest, CompanySettingResponse> implements TaxRateProvider, RedisCacheHealthCheck {
 
     public static final String DEFAULT_TAX_RATE_SETTING_CODE = "SYS_DEFAULT_TAX_RATE";
     public static final String CURRENT_COMPANY_CACHE_KEY = "leo:company:current";
@@ -60,6 +63,7 @@ public class CompanySettingService extends AbstractCrudService<CompanySetting, C
     private final ObjectMapper objectMapper;
     private final RedisJsonCacheSupport redisJsonCacheSupport;
     private final MasterDataReferenceGuard referenceGuard;
+    private CacheManager cacheManager;
 
     @Autowired
     public CompanySettingService(CompanySettingRepository companySettingRepository,
@@ -133,6 +137,39 @@ public class CompanySettingService extends AbstractCrudService<CompanySetting, C
         }
         return companySettingRepository.findByIdAndStatusAndDeletedFlagFalse(id, StatusConstants.NORMAL)
                 .orElseThrow(() -> new BusinessException(ErrorCode.VALIDATION_ERROR, "结算主体不存在或已禁用"));
+    }
+
+    @Override
+    public String cacheName() {
+        return "leo:company";
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public CacheHealthCheckResult verifyAndRefreshCache() {
+        CacheHealthCheckResult companyResult = verifyAndRefreshSpringCache(
+                cacheManager,
+                CacheConfig.CACHE_STATIC,
+                CURRENT_COMPANY_CACHE_KEY,
+                loadCurrent()
+        );
+        CacheHealthCheckResult taxRateResult = verifyAndRefreshSpringCache(
+                cacheManager,
+                CacheConfig.CACHE_STATIC,
+                CURRENT_TAX_RATE_CACHE_KEY,
+                loadCurrentTaxRate()
+        );
+        return new CacheHealthCheckResult(
+                CacheConfig.CACHE_STATIC + "::leo:company",
+                companyResult.currentSize() + taxRateResult.currentSize(),
+                companyResult.refreshedSize() + taxRateResult.refreshedSize(),
+                companyResult.refreshed() || taxRateResult.refreshed()
+        );
+    }
+
+    @Autowired
+    void setCacheManager(CacheManager cacheManager) {
+        this.cacheManager = cacheManager;
     }
 
     private CompanySettingResponse loadCurrent() {
@@ -424,6 +461,13 @@ public class CompanySettingService extends AbstractCrudService<CompanySetting, C
     }
 
     public void evictCache() {
+        if (cacheManager != null) {
+            Cache staticCache = cacheManager.getCache(CacheConfig.CACHE_STATIC);
+            if (staticCache != null) {
+                staticCache.evict(CURRENT_COMPANY_CACHE_KEY);
+                staticCache.evict(CURRENT_TAX_RATE_CACHE_KEY);
+            }
+        }
         if (redisJsonCacheSupport != null) {
             redisJsonCacheSupport.delete(List.of(
                     CURRENT_COMPANY_CACHE_KEY,

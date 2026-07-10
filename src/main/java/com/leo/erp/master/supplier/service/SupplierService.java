@@ -24,6 +24,7 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
+import org.springframework.cache.CacheManager;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -42,6 +43,7 @@ public class SupplierService extends AbstractCrudService<Supplier, SupplierReque
     private final SupplierMapper supplierMapper;
     private final RedisJsonCacheSupport redisJsonCacheSupport;
     private final MasterDataReferenceGuard referenceGuard;
+    private CacheManager cacheManager;
 
     @Autowired
     public SupplierService(SupplierRepository supplierRepository,
@@ -119,6 +121,14 @@ public class SupplierService extends AbstractCrudService<Supplier, SupplierReque
     @Transactional(readOnly = true)
     public CacheHealthCheckResult verifyAndRefreshCache() {
         List<SupplierOptionResponse> expected = loadActiveOptions();
+        if (cacheManager != null) {
+            return verifyAndRefreshSpringCache(
+                    cacheManager,
+                    CacheConfig.CACHE_OPTIONS,
+                    SUPPLIER_CACHE_KEY,
+                    expected.isEmpty() ? null : expected
+            );
+        }
         return verifyAndRefreshListCache(
                 redisJsonCacheSupport,
                 SUPPLIER_CACHE_KEY,
@@ -126,6 +136,11 @@ public class SupplierService extends AbstractCrudService<Supplier, SupplierReque
                 SUPPLIER_OPTION_LIST_TYPE,
                 expected
         );
+    }
+
+    @Autowired
+    void setCacheManager(CacheManager cacheManager) {
+        this.cacheManager = cacheManager;
     }
 
     @Transactional(readOnly = true)

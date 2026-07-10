@@ -23,6 +23,7 @@ import com.leo.erp.system.company.service.CompanySettingService;
 import org.junit.jupiter.api.Test;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
+import org.springframework.cache.concurrent.ConcurrentMapCacheManager;
 
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
@@ -33,6 +34,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
@@ -557,6 +559,34 @@ class CarrierServiceTest {
         assertThat(updateMethod.getAnnotation(CacheEvict.class).key()).isEqualTo("'leo:carrier:all'");
         assertThat(updateStatusMethod.getAnnotation(CacheEvict.class).key()).isEqualTo("'leo:carrier:all'");
         assertThat(deleteMethod.getAnnotation(CacheEvict.class).key()).isEqualTo("'leo:carrier:all'");
+    }
+
+    @Test
+    void shouldRefreshActualSpringCarrierCacheDuringHealthCheck() {
+        CarrierRepository repository = mock(CarrierRepository.class);
+        Carrier carrier = createCarrier(1L, "CR001");
+        when(repository.findByDeletedFlagFalseAndStatusOrderByCarrierCodeAsc(StatusConstants.NORMAL))
+                .thenReturn(List.of(carrier));
+        RedisJsonCacheSupport legacyCache = mock(RedisJsonCacheSupport.class);
+        CarrierService service = new CarrierService(
+                repository,
+                mock(VehicleRepository.class),
+                new SnowflakeIdGenerator(1),
+                mock(CarrierMapper.class),
+                legacyCache
+        );
+        var cacheManager = new ConcurrentMapCacheManager(CacheConfig.CACHE_OPTIONS);
+        cacheManager.getCache(CacheConfig.CACHE_OPTIONS).put("leo:carrier:all", List.of("stale"));
+        service.setCacheManager(cacheManager);
+
+        var result = service.verifyAndRefreshCache();
+
+        assertThat(result.cacheName()).isEqualTo("options::leo:carrier:all");
+        assertThat(result.refreshed()).isTrue();
+        assertThat(cacheManager.getCache(CacheConfig.CACHE_OPTIONS).get("leo:carrier:all", List.class))
+                .singleElement()
+                .isInstanceOf(CarrierOptionResponse.class);
+        verify(legacyCache, never()).write(anyString(), any(), any());
     }
 
     private static Carrier createCarrier(Long id, String code) {

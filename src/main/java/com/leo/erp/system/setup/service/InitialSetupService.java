@@ -9,6 +9,7 @@ import com.leo.erp.auth.service.UserRoleBindingService;
 import com.leo.erp.auth.web.dto.TotpSetupResponse;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
+import com.leo.erp.common.config.CacheConfig;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.support.PrecisionConstants;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
@@ -36,6 +37,8 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Caching;
 
 import java.math.BigDecimal;
 import java.time.Duration;
@@ -100,6 +103,10 @@ public class InitialSetupService {
     }
 
     @Transactional
+    @Caching(evict = {
+            @CacheEvict(value = CacheConfig.CACHE_STATIC, key = "'" + CompanySettingService.CURRENT_COMPANY_CACHE_KEY + "'"),
+            @CacheEvict(value = CacheConfig.CACHE_STATIC, key = "'" + CompanySettingService.CURRENT_TAX_RATE_CACHE_KEY + "'")
+    })
     public synchronized InitialSetupSubmitResponse initialize(InitialSetupSubmitRequest request) {
         assertOobeNotCompleted();
         boolean adminConfigured = isAdminConfigured();

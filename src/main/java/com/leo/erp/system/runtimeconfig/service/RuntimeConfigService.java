@@ -1,6 +1,7 @@
 package com.leo.erp.system.runtimeconfig.service;
 
 import com.leo.erp.common.support.RedisJsonCacheSupport;
+import com.leo.erp.common.support.RedisCacheHealthCheck;
 import com.leo.erp.system.company.service.CompanySettingService;
 import com.leo.erp.system.norule.domain.entity.NoRule;
 import com.leo.erp.system.norule.repository.NoRuleRepository;
@@ -27,7 +28,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 @Service
-public class RuntimeConfigService {
+public class RuntimeConfigService implements RedisCacheHealthCheck {
 
     public static final String WEIGHT_ONLY_PURCHASE_INBOUNDS_SETTING = "UI_WEIGHT_ONLY_PURCHASE_INBOUNDS";
     public static final String WEIGHT_ONLY_SALES_OUTBOUNDS_SETTING = "UI_WEIGHT_ONLY_SALES_OUTBOUNDS";
@@ -95,16 +96,37 @@ public class RuntimeConfigService {
                 return cached.get();
             }
         }
-        Map<String, NoRule> settings = loadRuntimeSettings();
-        RuntimeConfigResponse response = new RuntimeConfigResponse(
-                uiConfig(settings),
-                businessConfig(settings),
-                featureConfig(settings)
-        );
+        RuntimeConfigResponse response = loadRuntimeConfig();
         if (redisJsonCacheSupport != null) {
             redisJsonCacheSupport.write(RUNTIME_CONFIG_CACHE_KEY, response, RUNTIME_CONFIG_CACHE_TTL);
         }
         return response;
+    }
+
+    private RuntimeConfigResponse loadRuntimeConfig() {
+        Map<String, NoRule> settings = loadRuntimeSettings();
+        return new RuntimeConfigResponse(
+                uiConfig(settings),
+                businessConfig(settings),
+                featureConfig(settings)
+        );
+    }
+
+    @Override
+    public String cacheName() {
+        return RUNTIME_CONFIG_CACHE_KEY;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public CacheHealthCheckResult verifyAndRefreshCache() {
+        return verifyAndRefreshValueCache(
+                redisJsonCacheSupport,
+                RUNTIME_CONFIG_CACHE_KEY,
+                RUNTIME_CONFIG_CACHE_TTL,
+                RuntimeConfigResponse.class,
+                loadRuntimeConfig()
+        );
     }
 
     public void evictCache() {

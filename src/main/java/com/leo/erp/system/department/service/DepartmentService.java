@@ -26,6 +26,7 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
+import org.springframework.cache.CacheManager;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -49,6 +50,7 @@ public class DepartmentService extends AbstractCrudService<Department, Departmen
     private final UserAccountRepository userAccountRepository;
     private final PermissionService permissionService;
     private final RedisJsonCacheSupport redisJsonCacheSupport;
+    private CacheManager cacheManager;
 
     @Autowired
     public DepartmentService(DepartmentRepository departmentRepository,
@@ -138,6 +140,14 @@ public class DepartmentService extends AbstractCrudService<Department, Departmen
     @Transactional(readOnly = true)
     public CacheHealthCheckResult verifyAndRefreshCache() {
         List<DepartmentOptionResponse> expected = loadOptions();
+        if (cacheManager != null) {
+            return verifyAndRefreshSpringCache(
+                    cacheManager,
+                    CacheConfig.CACHE_OPTIONS,
+                    DEPARTMENT_OPTIONS_CACHE_KEY,
+                    expected.isEmpty() ? null : expected
+            );
+        }
         return verifyAndRefreshListCache(
                 redisJsonCacheSupport,
                 DEPARTMENT_OPTIONS_CACHE_KEY,
@@ -145,6 +155,11 @@ public class DepartmentService extends AbstractCrudService<Department, Departmen
                 DEPARTMENT_OPTION_LIST_TYPE,
                 expected
         );
+    }
+
+    @Autowired
+    void setCacheManager(CacheManager cacheManager) {
+        this.cacheManager = cacheManager;
     }
 
     @Override
