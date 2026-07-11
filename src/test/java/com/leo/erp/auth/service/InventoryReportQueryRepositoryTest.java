@@ -155,6 +155,20 @@ class InventoryReportQueryRepositoryTest {
     }
 
     @Test
+    void pageUsesActualWeighWeightForPurchaseInboundInventory() {
+        when(jdbcTemplate.queryForObject(anyString(), any(MapSqlParameterSource.class), eq(Number.class)))
+                .thenReturn(0);
+
+        repository.page(new PageQuery(0, 10, null, null), null, null, null, false);
+
+        var sql = forClass(String.class);
+        verify(jdbcTemplate).queryForObject(sql.capture(), any(MapSqlParameterSource.class), eq(Number.class));
+
+        assertThat(sql.getValue())
+                .contains("COALESCE(item.weigh_weight_ton, item.weight_ton) AS on_hand_weight_delta");
+    }
+
+    @Test
     void pageUsesLineWarehouseForOutboundMovements() {
         when(jdbcTemplate.queryForObject(anyString(), any(MapSqlParameterSource.class), eq(Number.class)))
                 .thenReturn(0);

@@ -79,7 +79,7 @@ public abstract class AbstractCrudService<E extends AbstractAuditableEntity, Req
         validateCreate(request);
         apply(entity, request);
         statusGuard.assertRequestDidNotWriteFinalStatus(entity);
-        Res response = toSavedResponse(saveEntity(entity));
+        Res response = toSavedResponse(saveCreatedEntity(entity, request));
         createIdResolver.consumeAfterCommit(createEntityId);
         logger().info("{} created: id={}", entity.getClass().getSimpleName(), createEntityId.id());
         return response;
@@ -209,6 +209,10 @@ public abstract class AbstractCrudService<E extends AbstractAuditableEntity, Req
     }
 
     protected E saveStatusEntity(E entity) {
+        return saveEntity(entity);
+    }
+
+    protected E saveCreatedEntity(E entity, Req request) {
         return saveEntity(entity);
     }
 

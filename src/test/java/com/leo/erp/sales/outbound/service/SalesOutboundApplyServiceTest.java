@@ -80,6 +80,42 @@ class SalesOutboundApplyServiceTest {
     }
 
     @Test
+    void shouldUseSourceSalesOrderUnitPriceInsteadOfRequestedPrice() {
+        SalesOutboundRepository repository = mock(SalesOutboundRepository.class);
+        SalesOrderItemQueryService queryService = mock(SalesOrderItemQueryService.class);
+        TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
+        WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
+        SalesOutboundApplyService service = new SalesOutboundApplyService(
+                materialSupport,
+                warehouseSelectionSupport,
+                new SalesOutboundSourceService(queryService, repository),
+                new SalesOutboundWeightService(mock(JdbcTemplate.class))
+        );
+        SalesOutbound entity = entity();
+        SalesOutboundItemRequest forgedItem = new SalesOutboundItemRequest(
+                "SO-001", 201L, "M1", "宝钢", "盘螺", "HRB400", "10", null,
+                "吨", "仓库A", "B1", 1, "件", new BigDecimal("2.000"), 1,
+                new BigDecimal("2.000"), new BigDecimal("9999.00"), null
+        );
+        SalesOutboundRequest request = request("SOO-SOURCE-PRICE", "SO-001", "仓库A", List.of(forgedItem));
+        when(materialSupport.loadMaterialMap(List.of("M1")))
+                .thenReturn(Map.of("M1", new TradeMaterialSnapshot("M1", false)));
+        when(materialSupport.normalizeMaterialCode(any(), anyInt())).thenReturn("M1");
+        when(materialSupport.normalizeBatchNo(any(), eq("B1"), eq(1), eq(true))).thenReturn("B1");
+        when(warehouseSelectionSupport.normalizeWarehouseName("仓库A", 1, true)).thenReturn("仓库A");
+        when(queryService.findActiveByIdIn(anyCollection())).thenReturn(List.of(sourceSalesOrderItem()));
+        when(repository.findAllBySourceSalesOrderItemIdsExcludingCurrentOutbound(anyCollection(), eq(1L)))
+                .thenReturn(List.of());
+
+        service.applyItems(entity, request, new java.util.concurrent.atomic.AtomicLong(10)::incrementAndGet);
+
+        assertThat(entity.getItems()).singleElement().satisfies(item -> {
+            assertThat(item.getUnitPrice()).isEqualByComparingTo("3000.00");
+            assertThat(item.getAmount()).isEqualByComparingTo("6000.00");
+        });
+    }
+
+    @Test
     void shouldFallbackToRequestSalesOrderNoAndHeaderWarehouseWhenSourceNosEmpty() {
         TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
         WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
@@ -482,6 +518,7 @@ class SalesOutboundApplyServiceTest {
         item.setBatchNo("B1");
         item.setQuantity(10);
         item.setWeightTon(new BigDecimal("20.000"));
+        item.setUnitPrice(new BigDecimal("3000.00"));
         return item;
     }
 

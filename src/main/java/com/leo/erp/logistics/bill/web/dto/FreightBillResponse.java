@@ -7,6 +7,7 @@ import java.util.List;
 public record FreightBillResponse(
         Long id,
         String billNo,
+        String carrierCode,
         String carrierName,
         Long settlementCompanyId,
         String settlementCompanyName,
@@ -35,9 +36,30 @@ public record FreightBillResponse(
                                BigDecimal totalWeight,
                                BigDecimal totalFreight,
                                String status,
+                               boolean deletedFlag,
                                String remark,
                                List<FreightBillItemResponse> items) {
-        this(id, billNo, carrierName, settlementCompanyId, settlementCompanyName, vehiclePlate, customerName,
+        this(id, billNo, null, carrierName, settlementCompanyId, settlementCompanyName, vehiclePlate,
+                customerName, projectName, billTime, unitPrice, totalWeight, totalFreight, status,
+                deletedFlag, remark, items);
+    }
+
+    public FreightBillResponse(Long id,
+                               String billNo,
+                               String carrierName,
+                               Long settlementCompanyId,
+                               String settlementCompanyName,
+                               String vehiclePlate,
+                               String customerName,
+                               String projectName,
+                               LocalDate billTime,
+                               BigDecimal unitPrice,
+                               BigDecimal totalWeight,
+                               BigDecimal totalFreight,
+                               String status,
+                               String remark,
+                               List<FreightBillItemResponse> items) {
+        this(id, billNo, null, carrierName, settlementCompanyId, settlementCompanyName, vehiclePlate, customerName,
                 projectName, billTime, unitPrice, totalWeight, totalFreight, status, false, remark, items);
     }
 
@@ -54,7 +76,7 @@ public record FreightBillResponse(
                                String status,
                                String remark,
                                List<FreightBillItemResponse> items) {
-        this(id, billNo, carrierName, null, null, vehiclePlate, customerName, projectName, billTime,
+        this(id, billNo, null, carrierName, null, null, vehiclePlate, customerName, projectName, billTime,
                 unitPrice, totalWeight, totalFreight, status, false, remark, items);
     }
 }

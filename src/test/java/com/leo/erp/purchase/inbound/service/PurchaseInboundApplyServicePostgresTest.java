@@ -36,6 +36,7 @@ class PurchaseInboundApplyServicePostgresTest {
     private static final long EXISTING_ITEM_ID = INBOUND_ID + 1;
     private static final long NEW_ITEM_ID = INBOUND_ID + 2;
     private static final long SOURCE_ITEM_ID = INBOUND_ID + 3;
+    private static final String SUPPLIER_CODE = "TEST-INBOUND-SUPPLIER";
     private static final int LINE_NO_ARGUMENT_INDEX = 3;
     private static final LocalDate INBOUND_DATE = LocalDate.of(2026, 7, 10);
     private static final LocalDateTime CREATED_AT = INBOUND_DATE.atTime(9, 0);
@@ -133,6 +134,7 @@ class PurchaseInboundApplyServicePostgresTest {
         PurchaseInbound inbound = new PurchaseInbound();
         inbound.setId(INBOUND_ID);
         inbound.setInboundNo("TEST-INBOUND-AUTO-FLUSH");
+        inbound.setSupplierCode(SUPPLIER_CODE);
         inbound.setSupplierName("测试供应商");
         inbound.setWarehouseName("测试仓库");
         inbound.setInboundDate(INBOUND_DATE);

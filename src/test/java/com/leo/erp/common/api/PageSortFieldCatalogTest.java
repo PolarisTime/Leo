@@ -32,6 +32,39 @@ class PageSortFieldCatalogTest {
     }
 
     @Test
+    void shouldReturnFieldsForPurchaseRefund() {
+        var fields = PageSortFieldCatalog.fields("purchase-refund");
+        assertThat(fields).contains(
+                "id",
+                "refundNo",
+                "purchaseOrderNo",
+                "supplierCode",
+                "supplierName",
+                "refundDate",
+                "totalQuantity",
+                "totalWeight",
+                "totalAmount",
+                "status",
+                "operatorName"
+        );
+    }
+
+    @Test
+    void shouldReturnFieldsForSupplierRefundReceipt() {
+        var fields = PageSortFieldCatalog.fields("supplier-refund-receipt");
+        assertThat(fields).contains(
+                "id",
+                "refundReceiptNo",
+                "purchaseRefundId",
+                "supplierCode",
+                "supplierName",
+                "receiptDate",
+                "amount",
+                "status"
+        );
+    }
+
+    @Test
     void shouldReturnFieldsForSalesOrder() {
         var fields = PageSortFieldCatalog.fields("sales-order");
         assertThat(fields).contains("id", "orderNo", "customerName");
@@ -80,5 +113,6 @@ class PageSortFieldCatalogTest {
         assertThat(PageSortFieldCatalog.fields("user-account")).isNotEmpty();
         assertThat(PageSortFieldCatalog.fields("role-setting")).isNotEmpty();
         assertThat(PageSortFieldCatalog.fields("ledger-adjustment")).isNotEmpty();
+        assertThat(PageSortFieldCatalog.fields("supplier-refund-receipt")).isNotEmpty();
     }
 }

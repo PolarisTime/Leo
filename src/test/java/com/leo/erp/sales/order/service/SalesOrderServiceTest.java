@@ -1245,7 +1245,7 @@ class SalesOrderServiceTest {
     }
 
     @Test
-    void shouldCompleteDeliveryVerificationAfterDateRemarkAndPricingUpdate() {
+    void shouldCompleteDeliveryVerificationAfterPricingUpdateWithoutRedundantCompletionSync() {
         SalesOrderRepository repository = mock(SalesOrderRepository.class);
         SalesOrderMapper mapper = mock(SalesOrderMapper.class);
         SalesOrderOutboundPricingSyncService outboundPricingSyncService = mock(SalesOrderOutboundPricingSyncService.class);
@@ -1287,7 +1287,7 @@ class SalesOrderServiceTest {
                 eq(List.of(order.getItems().get(0).getId())),
                 eq(Map.of(order.getItems().get(0).getId(), new BigDecimal("3888.00")))
         );
-        verify(completionSyncService).syncBySalesOrderReference("SO-PRICE-004");
+        verify(completionSyncService, never()).syncBySalesOrderReference("SO-PRICE-004");
     }
 
     @Test

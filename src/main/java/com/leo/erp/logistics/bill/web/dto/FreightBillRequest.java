@@ -11,6 +11,7 @@ import java.util.List;
 
 public record FreightBillRequest(
         String billNo,
+        String carrierCode,
         @jakarta.validation.constraints.NotBlank String carrierName,
         Long settlementCompanyId,
         String settlementCompanyName,
@@ -24,6 +25,7 @@ public record FreightBillRequest(
         @Valid @NotEmpty List<FreightBillItemRequest> items
 ) {
     public FreightBillRequest(String billNo,
+                              String carrierCode,
                               String carrierName,
                               String vehiclePlate,
                               String customerName,
@@ -33,7 +35,37 @@ public record FreightBillRequest(
                               String status,
                               String remark,
                               List<FreightBillItemRequest> items) {
-        this(billNo, carrierName, null, null, vehiclePlate, customerName, projectName, billTime,
+        this(billNo, carrierCode, carrierName, null, null, vehiclePlate, customerName, projectName,
+                billTime, unitPrice, status, remark, items);
+    }
+
+    public FreightBillRequest(String billNo,
+                              String carrierName,
+                              Long settlementCompanyId,
+                              String settlementCompanyName,
+                              String vehiclePlate,
+                              String customerName,
+                              String projectName,
+                              LocalDate billTime,
+                              BigDecimal unitPrice,
+                              String status,
+                              String remark,
+                              List<FreightBillItemRequest> items) {
+        this(billNo, null, carrierName, settlementCompanyId, settlementCompanyName, vehiclePlate,
+                customerName, projectName, billTime, unitPrice, status, remark, items);
+    }
+
+    public FreightBillRequest(String billNo,
+                              String carrierName,
+                              String vehiclePlate,
+                              String customerName,
+                              String projectName,
+                              LocalDate billTime,
+                              BigDecimal unitPrice,
+                              String status,
+                              String remark,
+                              List<FreightBillItemRequest> items) {
+        this(billNo, null, carrierName, null, null, vehiclePlate, customerName, projectName, billTime,
                 unitPrice, status, remark, items);
     }
 }

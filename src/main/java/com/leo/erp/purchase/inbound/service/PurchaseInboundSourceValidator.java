@@ -89,6 +89,7 @@ public class PurchaseInboundSourceValidator {
         validateSourcePurchaseOrderItemFields(
                 source,
                 sourcePurchaseOrderItem,
+                request.supplierCode(),
                 request.supplierName(),
                 request.warehouseName(),
                 lineNo
@@ -98,6 +99,7 @@ public class PurchaseInboundSourceValidator {
 
     private void validateSourcePurchaseOrderItemFields(PurchaseInboundItemRequest request,
                                                        PurchaseOrderItem sourceItem,
+                                                       String headerSupplierCode,
                                                        String headerSupplierName,
                                                        String headerWarehouseName,
                                                        int lineNo) {
@@ -108,6 +110,10 @@ public class PurchaseInboundSourceValidator {
                 Set.of(StatusConstants.AUDITED),
                 "第" + lineNo + "行来源采购订单未审核，不能作为来源单据"
         );
+        String requestedSupplierCode = BusinessDocumentValidator.trimToNull(headerSupplierCode);
+        if (requestedSupplierCode != null) {
+            assertSourceOrderText(requestedSupplierCode, sourceOrder.getSupplierCode(), lineNo, "供应商编码");
+        }
         assertSourceOrderText(headerSupplierName, sourceOrder.getSupplierName(), lineNo, "供应商");
         assertSourceItemText(request.materialCode(), sourceItem.getMaterialCode(), lineNo, "物料编码");
         assertSourceItemText(request.brand(), sourceItem.getBrand(), lineNo, "品牌");

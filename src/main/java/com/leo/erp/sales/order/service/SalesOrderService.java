@@ -240,6 +240,10 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
     @Override
     protected void beforeStatusUpdate(SalesOrder entity, String currentStatus, String nextStatus) {
         lockPurchaseSources(entity, null);
+        if (StatusConstants.AUDITED.equals(nextStatus)
+                || StatusConstants.SALES_COMPLETED.equals(nextStatus)) {
+            salesOrderApplyService.validateCustomerSnapshot(entity);
+        }
         if (deliveryVerificationGuard != null
                 && StatusConstants.SALES_COMPLETED.equals(currentStatus)
                 && StatusConstants.DELIVERY_VERIFICATION.equals(nextStatus)) {
@@ -344,6 +348,7 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
             invoiceSourceMutationGuard.assertSalesOrderMutable(entity, "修改");
         }
         if (salesOrderAuditedPricingService.isAuditedPricingUpdate(entity, request)) {
+            salesOrderApplyService.validateCustomerSnapshot(request);
             salesOrderAuditedPricingService.applyAuditedPricingUpdate(entity, request);
             return;
         }

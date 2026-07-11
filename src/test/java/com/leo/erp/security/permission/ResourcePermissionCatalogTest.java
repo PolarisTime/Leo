@@ -29,6 +29,8 @@ class ResourcePermissionCatalogTest {
     void shouldIdentifyKnownResource() {
         assertThat(ResourcePermissionCatalog.isKnownResource("material")).isTrue();
         assertThat(ResourcePermissionCatalog.isKnownResource("purchase-order")).isTrue();
+        assertThat(ResourcePermissionCatalog.isKnownResource("purchase-refund")).isTrue();
+        assertThat(ResourcePermissionCatalog.isKnownResource("supplier-refund-receipt")).isTrue();
         assertThat(ResourcePermissionCatalog.isKnownResource("ledger-adjustment")).isTrue();
     }
 
@@ -122,6 +124,10 @@ class ResourcePermissionCatalogTest {
                 .contains("role");
         assertThat(ResourcePermissionCatalog.resolveResourceByPath("/purchase-orders/import-candidates"))
                 .contains("purchase-order");
+        assertThat(ResourcePermissionCatalog.resolveResourceByPath("/purchase-refunds/123"))
+                .contains("purchase-refund");
+        assertThat(ResourcePermissionCatalog.resolveResourceByPath("/supplier-refund-receipts/123"))
+                .contains("supplier-refund-receipt");
         assertThat(ResourcePermissionCatalog.resolveResourceByPath("/supplier-statements/candidates"))
                 .contains("supplier-statement");
     }
@@ -225,10 +231,25 @@ class ResourcePermissionCatalogTest {
     }
 
     @Test
+    void shouldExposeAllPurchaseRefundActions() {
+        assertThat(ResourcePermissionCatalog.actionsForResource("purchase-refund"))
+                .containsExactly("read", "create", "update", "delete", "audit", "export", "print");
+        assertThat(ResourcePermissionCatalog.isBusinessResource("purchase-refund")).isTrue();
+    }
+
+    @Test
+    void shouldExposeAllSupplierRefundReceiptActions() {
+        assertThat(ResourcePermissionCatalog.actionsForResource("supplier-refund-receipt"))
+                .containsExactly("read", "create", "update", "delete", "audit", "export", "print");
+        assertThat(ResourcePermissionCatalog.isBusinessResource("supplier-refund-receipt")).isTrue();
+    }
+
+    @Test
     void shouldKeepReceivablePayableReadOnlyReportActions() {
         var actions = ResourcePermissionCatalog.actionsForResource("receivable-payable");
 
         assertThat(actions).containsExactly("read", "export", "print");
+        assertThat(ResourcePermissionCatalog.isBusinessResource("receivable-payable")).isFalse();
         assertThat(actions).doesNotContain("create", "update", "delete", "audit");
         assertThat(ResourcePermissionCatalog.isAllowed("receivable-payable", "read")).isTrue();
         assertThat(ResourcePermissionCatalog.isAllowed("receivable-payable", "export")).isTrue();

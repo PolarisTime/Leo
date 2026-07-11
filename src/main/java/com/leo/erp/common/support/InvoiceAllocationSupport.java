@@ -31,11 +31,19 @@ public final class InvoiceAllocationSupport {
         }
     }
 
-    public record AllocationProgress(BigDecimal weightTon, BigDecimal amount) {
-        public static final AllocationProgress EMPTY = new AllocationProgress(BigDecimal.ZERO, BigDecimal.ZERO);
+    public record AllocationProgress(long quantity, BigDecimal weightTon, BigDecimal amount) {
+        public static final AllocationProgress EMPTY = new AllocationProgress(0L, BigDecimal.ZERO, BigDecimal.ZERO);
+
+        public AllocationProgress(BigDecimal weightTon, BigDecimal amount) {
+            this(0L, weightTon, amount);
+        }
 
         public AllocationProgress merge(AllocationProgress other) {
-            return new AllocationProgress(weightTon.add(other.weightTon), amount.add(other.amount));
+            return new AllocationProgress(
+                    Math.addExact(quantity, other.quantity),
+                    weightTon.add(other.weightTon),
+                    amount.add(other.amount)
+            );
         }
     }
 }

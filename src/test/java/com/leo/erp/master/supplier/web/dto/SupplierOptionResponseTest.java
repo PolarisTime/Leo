@@ -7,6 +7,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 class SupplierOptionResponseTest {
 
     @Test
+    void shouldExposeStableSupplierCode() {
+        assertThat(java.util.Arrays.stream(SupplierOptionResponse.class.getRecordComponents())
+                .map(java.lang.reflect.RecordComponent::getName))
+                .contains("supplierCode");
+    }
+
+    @Test
     void shouldCreateRecord() {
         SupplierOptionResponse response = new SupplierOptionResponse(
                 1L, "供应商甲", "供应商甲"

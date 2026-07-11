@@ -18,4 +18,14 @@ public interface PurchaseOrderItemRepository extends JpaRepository<PurchaseOrder
               and item.id in :itemIds
             """)
     List<PurchaseOrderItem> findActiveByIdIn(@Param("itemIds") Collection<Long> itemIds);
+
+    @Query("""
+            select item.id
+            from PurchaseOrderItem item
+            join item.purchaseOrder purchaseOrder
+            where purchaseOrder.id = :purchaseOrderId
+              and purchaseOrder.deletedFlag = false
+            order by item.id
+            """)
+    List<Long> findActiveIdsByPurchaseOrderId(@Param("purchaseOrderId") Long purchaseOrderId);
 }

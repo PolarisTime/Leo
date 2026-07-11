@@ -6,6 +6,7 @@ import java.time.LocalDate;
 public record FreightStatementCandidateResponse(
         Long id,
         String billNo,
+        String carrierCode,
         String carrierName,
         Long settlementCompanyId,
         String settlementCompanyName,
@@ -25,7 +26,7 @@ public record FreightStatementCandidateResponse(
                                              BigDecimal totalWeight,
                                              BigDecimal totalFreight,
                                              String status) {
-        this(id, billNo, carrierName, null, null, customerName, projectName, billTime,
+        this(id, billNo, null, carrierName, null, null, customerName, projectName, billTime,
                 totalWeight, totalFreight, status);
     }
 }

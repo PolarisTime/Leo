@@ -68,21 +68,26 @@ class FreightBillControllerTest {
         FreightBillResponse item = mock(FreightBillResponse.class);
         Page<FreightBillResponse> page = new PageImpl<>(List.of(item));
         PageQuery query = new PageQuery(0, 20, null, null);
-        when(service.page(any(), any())).thenReturn(page);
+        when(service.page(any(), any(), any())).thenReturn(page);
 
-        ApiResponse<PageResponse<FreightBillResponse>> response = controller.page(query, "test", "carrier", 7L, "active", null, null);
+        ApiResponse<PageResponse<FreightBillResponse>> response = controller.page(
+                query, "test", "CR-001", "carrier", 7L, "active", null, null
+        );
 
         assertThat(response.code()).isEqualTo(0);
         assertThat(response.data().content()).hasSize(1);
+        verify(service).page(eq(query), any(PageFilter.class), eq("CR-001"));
     }
 
     @Test
     void pageWithNullFilters() {
         Page<FreightBillResponse> page = new PageImpl<>(List.of());
         PageQuery query = new PageQuery(0, 20, null, null);
-        when(service.page(any(), any())).thenReturn(page);
+        when(service.page(any(), any(), any())).thenReturn(page);
 
-        ApiResponse<PageResponse<FreightBillResponse>> response = controller.page(query, null, null, null, null, null, null);
+        ApiResponse<PageResponse<FreightBillResponse>> response = controller.page(
+                query, null, null, null, null, null, null, null
+        );
 
         assertThat(response.code()).isEqualTo(0);
         assertThat(response.data().content()).isEmpty();

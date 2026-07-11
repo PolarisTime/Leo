@@ -31,6 +31,8 @@ class ReceivablePayableDetailResponseTest {
 
         assertThat(response.counterpartyCode()).isNull();
         assertThat(response.counterpartyName()).isEqualTo("客户A");
+        assertThat(response.settlementCompanyId()).isNull();
+        assertThat(response.settlementCompanyName()).isNull();
         assertThat(response.reconciliationStatus()).isEqualTo("未对账");
         assertThat(response.items()).isEmpty();
     }

@@ -20,6 +20,8 @@ class ModuleCatalogTest {
         assertThat(catalog.resolveModuleName("material")).isEqualTo("商品资料");
         assertThat(catalog.resolveModuleName("supplier")).isEqualTo("供应商");
         assertThat(catalog.resolveModuleName("customer")).isEqualTo("客户");
+        assertThat(catalog.resolveModuleName("purchase-refund")).isEqualTo("采购退款单");
+        assertThat(catalog.resolveModuleName("supplier-refund-receipt")).isEqualTo("供应商退款到账单");
     }
 
     @Test
@@ -32,6 +34,8 @@ class ModuleCatalogTest {
         assertThat(catalog.containsModule("material")).isTrue();
         assertThat(catalog.containsModule("material-categories")).isTrue();
         assertThat(catalog.containsModule("purchase-order")).isTrue();
+        assertThat(catalog.containsModule("purchase-refund")).isTrue();
+        assertThat(catalog.containsModule("supplier-refund-receipt")).isTrue();
         assertThat(catalog.containsModule("ledger-adjustment")).isTrue();
     }
 
@@ -55,7 +59,7 @@ class ModuleCatalogTest {
         var keys = catalog.orderedModuleKeys();
         assertThat(keys).contains(
                 "material", "supplier", "customer", "project",
-                "purchase-order", "sales-order", "warehouse",
+                "purchase-order", "purchase-refund", "supplier-refund-receipt", "sales-order", "warehouse",
                 "permission", "user-account", "role-setting",
                 "ledger-adjustment"
         );

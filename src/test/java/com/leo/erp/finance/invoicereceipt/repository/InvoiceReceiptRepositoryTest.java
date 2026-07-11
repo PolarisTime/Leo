@@ -112,6 +112,11 @@ class InvoiceReceiptRepositoryTest {
             }
 
             @Override
+            public Long getTotalQuantity() {
+                return 5L;
+            }
+
+            @Override
             public BigDecimal getTotalWeightTon() {
                 return new BigDecimal("5.000");
             }

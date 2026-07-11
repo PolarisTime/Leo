@@ -69,6 +69,7 @@ public class PurchaseInboundResponseAssembler {
                 : weightSummary.getTotalWeightAdjustmentTon();
         return new PurchaseInboundResponse(
                 response.id(), response.inboundNo(), response.purchaseOrderNo(),
+                response.supplierCode(),
                 response.supplierName(), response.settlementCompanyId(), response.settlementCompanyName(),
                 response.warehouseName(), response.inboundDate(),
                 response.settlementMode(), response.totalWeight(), response.totalAmount(),
@@ -91,6 +92,7 @@ public class PurchaseInboundResponseAssembler {
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         return new PurchaseInboundResponse(
                 response.id(), response.inboundNo(), response.purchaseOrderNo(),
+                response.supplierCode(),
                 response.supplierName(), response.settlementCompanyId(), response.settlementCompanyName(),
                 response.warehouseName(), response.inboundDate(),
                 response.settlementMode(), response.totalWeight(), response.totalAmount(),

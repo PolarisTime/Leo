@@ -21,6 +21,7 @@ import com.leo.erp.statement.freight.web.dto.FreightStatementCandidateResponse;
 import com.leo.erp.statement.freight.web.dto.FreightStatementRequest;
 import com.leo.erp.statement.freight.web.dto.FreightStatementResponse;
 import com.leo.erp.statement.service.StatementSettlementSyncService;
+import com.leo.erp.statement.service.StatementSettlementMutationGuard;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.jpa.domain.Specification;
@@ -30,6 +31,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.TreeSet;
 
 @Service
@@ -44,6 +46,7 @@ public class FreightStatementService extends AbstractCrudService<FreightStatemen
     private final FreightStatementApplyService freightStatementApplyService;
     private final FreightBillRepository freightBillRepository;
     private final SourceAllocationLockService sourceAllocationLockService;
+    private final StatementSettlementMutationGuard settlementMutationGuard;
 
     @Autowired
     public FreightStatementService(FreightStatementRepository repository,
@@ -55,7 +58,8 @@ public class FreightStatementService extends AbstractCrudService<FreightStatemen
                                    FreightStatementPageAssembler pageAssembler,
                                    FreightStatementApplyService freightStatementApplyService,
                                    FreightBillRepository freightBillRepository,
-                                   SourceAllocationLockService sourceAllocationLockService) {
+                                   SourceAllocationLockService sourceAllocationLockService,
+                                   StatementSettlementMutationGuard settlementMutationGuard) {
         super(idGenerator);
         this.repository = repository;
         this.statementSettlementSyncService = statementSettlementSyncService;
@@ -66,12 +70,19 @@ public class FreightStatementService extends AbstractCrudService<FreightStatemen
         this.freightStatementApplyService = freightStatementApplyService;
         this.freightBillRepository = freightBillRepository;
         this.sourceAllocationLockService = sourceAllocationLockService;
+        this.settlementMutationGuard = settlementMutationGuard;
     }
 
     @Transactional(readOnly = true)
     public Page<FreightStatementView> page(PageQuery query, PageFilter filter) {
+        return page(query, filter, null);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<FreightStatementView> page(PageQuery query, PageFilter filter, String carrierCode) {
         Specification<FreightStatement> spec = applyDeletedVisibilityPolicy(
-                Specs.<FreightStatement>keywordLike(filter.keyword(), "statementNo", "carrierName")
+                Specs.<FreightStatement>keywordLike(filter.keyword(), "statementNo", "carrierCode", "carrierName")
+                .and(Specs.equalIfPresent("carrierCode", carrierCode))
                 .and(Specs.equalIfPresent("carrierName", filter.name()))
                 .and(Specs.equalValueIfPresent("settlementCompanyId", filter.settlementCompanyId()))
                 .and(Specs.equalIfPresent("status", filter.status()))
@@ -87,8 +98,14 @@ public class FreightStatementService extends AbstractCrudService<FreightStatemen
         return page(query, filter).map(freightStatementWebMapper::toResponse);
     }
 
+    @Transactional(readOnly = true)
+    public Page<FreightStatementResponse> responsePage(PageQuery query, PageFilter filter, String carrierCode) {
+        return page(query, filter, carrierCode).map(freightStatementWebMapper::toResponse);
+    }
+
     private static final String[] FREIGHT_STATEMENT_SEARCH_FIELDS = {
             "statementNo",
+            "carrierCode",
             "carrierName"
     };
 
@@ -127,6 +144,13 @@ public class FreightStatementService extends AbstractCrudService<FreightStatemen
     @Transactional(readOnly = true)
     public Page<FreightStatementCandidateResponse> candidatePage(PageQuery query, PageFilter filter) {
         return freightStatementSourceService.candidatePage(query, filter);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<FreightStatementCandidateResponse> candidatePage(PageQuery query,
+                                                                 PageFilter filter,
+                                                                 String carrierCode) {
+        return freightStatementSourceService.candidatePage(query, filter, carrierCode);
     }
 
     @Override
@@ -239,17 +263,65 @@ public class FreightStatementService extends AbstractCrudService<FreightStatemen
     @Override
     protected void apply(FreightStatement entity, FreightStatementCommand command) {
         lockSourceFreightBills(entity, command);
+        if (entity.getId() != null) {
+            settlementMutationGuard.assertFinancialLinkageMutationAllowed(
+                    StatementSettlementMutationGuard.StatementType.FREIGHT,
+                    entity.getId(),
+                    freightFinancialLinkageChanged(entity, command)
+            );
+        }
         freightStatementApplyService.apply(entity, command, this::nextId);
     }
 
     @Override
     protected void beforeStatusUpdate(FreightStatement entity, String currentStatus, String nextStatus) {
         lockSourceFreightBills(entity, null);
+        if (StatusConstants.AUDITED.equals(currentStatus)
+                && StatusConstants.PENDING_AUDIT.equals(nextStatus)) {
+            settlementMutationGuard.assertNoSettledAllocations(
+                    StatementSettlementMutationGuard.StatementType.FREIGHT,
+                    entity.getId(),
+                    "反审核"
+            );
+        }
     }
 
     @Override
     protected void beforeDelete(FreightStatement entity) {
         lockSourceFreightBills(entity, null);
+        settlementMutationGuard.assertNoSettledAllocations(
+                StatementSettlementMutationGuard.StatementType.FREIGHT,
+                entity.getId(),
+                "删除"
+        );
+    }
+
+    private boolean freightFinancialLinkageChanged(FreightStatement entity, FreightStatementCommand command) {
+        boolean identityChanged = explicitTextChanged(entity.getCarrierCode(), command.carrierCode())
+                || !Objects.equals(normalizeText(entity.getCarrierName()), normalizeText(command.carrierName()))
+                || (command.settlementCompanyId() != null
+                && !Objects.equals(entity.getSettlementCompanyId(), command.settlementCompanyId()));
+        Set<String> existingSources = entity.getItems().stream()
+                .map(FreightStatementItem::getSourceNo)
+                .map(this::normalizeText)
+                .filter(Objects::nonNull)
+                .collect(java.util.stream.Collectors.toSet());
+        Set<String> requestedSources = command.items().stream()
+                .map(FreightStatementItemCommand::sourceNo)
+                .map(this::normalizeText)
+                .filter(Objects::nonNull)
+                .collect(java.util.stream.Collectors.toSet());
+        return identityChanged || !existingSources.equals(requestedSources);
+    }
+
+    private boolean explicitTextChanged(String currentValue, String requestedValue) {
+        String normalizedRequested = normalizeText(requestedValue);
+        return normalizedRequested != null
+                && !Objects.equals(normalizeText(currentValue), normalizedRequested);
+    }
+
+    private String normalizeText(String value) {
+        return value == null || value.isBlank() ? null : value.trim();
     }
 
     private void lockSourceFreightBills(FreightStatement entity, FreightStatementCommand command) {

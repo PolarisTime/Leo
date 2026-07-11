@@ -113,6 +113,7 @@ public class PurchaseInboundApplyService {
         inbound.setPurchaseOrderNo(sourcePurchaseOrderNos.isEmpty()
                 ? request.purchaseOrderNo()
                 : String.join(", ", sourcePurchaseOrderNos));
+        applyHeaderSupplier(inbound, request, sourcePurchaseOrderItemMap);
         inbound.setWarehouseName(resolveHeaderWarehouseName(request.warehouseName(), firstLineWarehouseName));
         inbound.setSettlementMode(resolveHeaderSettlementMode(request.settlementMode(), items));
         applyHeaderSettlementCompany(inbound, items);
@@ -124,6 +125,48 @@ public class PurchaseInboundApplyService {
                 currentWeighAccumulatorMap,
                 sourcePurchaseOrderItemMap
         );
+    }
+
+    private void applyHeaderSupplier(PurchaseInbound inbound,
+                                     PurchaseInboundRequest request,
+                                     Map<Long, PurchaseOrderItem> sourcePurchaseOrderItemMap) {
+        LinkedHashSet<String> supplierCodes = new LinkedHashSet<>();
+        LinkedHashSet<String> supplierNames = new LinkedHashSet<>();
+        request.items().stream()
+                .map(PurchaseInboundItemRequest::sourcePurchaseOrderItemId)
+                .filter(Objects::nonNull)
+                .map(sourcePurchaseOrderItemMap::get)
+                .filter(Objects::nonNull)
+                .map(PurchaseOrderItem::getPurchaseOrder)
+                .filter(Objects::nonNull)
+                .forEach(order -> {
+                    String supplierCode = trimToNull(order.getSupplierCode());
+                    String supplierName = trimToNull(order.getSupplierName());
+                    if (supplierCode != null) {
+                        supplierCodes.add(supplierCode);
+                    }
+                    if (supplierName != null) {
+                        supplierNames.add(supplierName);
+                    }
+                });
+        if (supplierCodes.size() > 1 || supplierNames.size() > 1) {
+            throw new com.leo.erp.common.error.BusinessException(
+                    com.leo.erp.common.error.ErrorCode.BUSINESS_ERROR,
+                    "来源采购订单存在不同供应商，不能合并生成采购入库单"
+            );
+        }
+        String supplierCode = supplierCodes.isEmpty()
+                ? trimToNull(request.supplierCode())
+                : supplierCodes.iterator().next();
+        String supplierName = supplierNames.isEmpty()
+                ? trimToNull(request.supplierName())
+                : supplierNames.iterator().next();
+        if (supplierCode != null) {
+            inbound.setSupplierCode(supplierCode);
+        }
+        if (supplierName != null) {
+            inbound.setSupplierName(supplierName);
+        }
     }
 
     List<Long> sourcePurchaseOrderIds(PurchaseInbound inbound) {

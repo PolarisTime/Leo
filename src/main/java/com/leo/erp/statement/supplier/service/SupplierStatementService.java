@@ -20,6 +20,7 @@ import com.leo.erp.statement.supplier.web.dto.SupplierStatementCandidateResponse
 import com.leo.erp.statement.supplier.web.dto.SupplierStatementItemRequest;
 import com.leo.erp.statement.supplier.web.dto.SupplierStatementRequest;
 import com.leo.erp.statement.supplier.web.dto.SupplierStatementResponse;
+import com.leo.erp.statement.service.StatementSettlementMutationGuard;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.jpa.domain.Specification;
@@ -42,6 +43,7 @@ public class SupplierStatementService extends AbstractCrudService<SupplierStatem
     private final SupplierStatementApplyService applyService;
     private final PurchaseInboundItemQueryService purchaseInboundItemQueryService;
     private final SourceAllocationLockService sourceAllocationLockService;
+    private final StatementSettlementMutationGuard settlementMutationGuard;
 
     @Autowired
     public SupplierStatementService(SupplierStatementRepository repository,
@@ -51,7 +53,8 @@ public class SupplierStatementService extends AbstractCrudService<SupplierStatem
                                     SupplierStatementSourceService supplierStatementSourceService,
                                     SupplierStatementApplyService applyService,
                                     PurchaseInboundItemQueryService purchaseInboundItemQueryService,
-                                    SourceAllocationLockService sourceAllocationLockService) {
+                                    SourceAllocationLockService sourceAllocationLockService,
+                                    StatementSettlementMutationGuard settlementMutationGuard) {
         super(idGenerator);
         this.repository = repository;
         this.responseAssembler = responseAssembler;
@@ -60,6 +63,7 @@ public class SupplierStatementService extends AbstractCrudService<SupplierStatem
         this.applyService = applyService;
         this.purchaseInboundItemQueryService = purchaseInboundItemQueryService;
         this.sourceAllocationLockService = sourceAllocationLockService;
+        this.settlementMutationGuard = settlementMutationGuard;
     }
 
     @Transactional(readOnly = true)
@@ -188,6 +192,14 @@ public class SupplierStatementService extends AbstractCrudService<SupplierStatem
     @Override
     protected void beforeStatusUpdate(SupplierStatement entity, String currentStatus, String nextStatus) {
         lockSourcePurchaseInbounds(entity, null);
+        if (StatusConstants.CONFIRMED.equals(currentStatus)
+                && StatusConstants.PENDING_CONFIRM.equals(nextStatus)) {
+            settlementMutationGuard.assertNoSettledAllocations(
+                    StatementSettlementMutationGuard.StatementType.SUPPLIER,
+                    entity.getId(),
+                    "反确认"
+            );
+        }
         workflowTransitionGuard.assertAuditPermissionForProtectedValue(
                 "supplier-statement",
                 currentStatus,
@@ -199,12 +211,50 @@ public class SupplierStatementService extends AbstractCrudService<SupplierStatem
     @Override
     protected void apply(SupplierStatement entity, SupplierStatementRequest request) {
         lockSourcePurchaseInbounds(entity, request);
+        if (entity.getId() != null) {
+            settlementMutationGuard.assertFinancialLinkageMutationAllowed(
+                    StatementSettlementMutationGuard.StatementType.SUPPLIER,
+                    entity.getId(),
+                    supplierFinancialLinkageChanged(entity, request)
+            );
+        }
         applyService.apply(entity, request, this::nextId);
     }
 
     @Override
     protected void beforeDelete(SupplierStatement entity) {
         lockSourcePurchaseInbounds(entity, null);
+        settlementMutationGuard.assertNoSettledAllocations(
+                StatementSettlementMutationGuard.StatementType.SUPPLIER,
+                entity.getId(),
+                "删除"
+        );
+    }
+
+    private boolean supplierFinancialLinkageChanged(SupplierStatement entity, SupplierStatementRequest request) {
+        boolean identityChanged = explicitTextChanged(entity.getSupplierCode(), request.supplierCode())
+                || !Objects.equals(normalizeText(entity.getSupplierName()), normalizeText(request.supplierName()))
+                || (request.settlementCompanyId() != null
+                && !Objects.equals(entity.getSettlementCompanyId(), request.settlementCompanyId()));
+        Set<Long> existingSourceIds = entity.getItems().stream()
+                .map(SupplierStatementItem::getSourceInboundItemId)
+                .filter(Objects::nonNull)
+                .collect(java.util.stream.Collectors.toSet());
+        Set<Long> requestedSourceIds = request.items().stream()
+                .map(SupplierStatementItemRequest::sourceInboundItemId)
+                .filter(Objects::nonNull)
+                .collect(java.util.stream.Collectors.toSet());
+        return identityChanged || !existingSourceIds.equals(requestedSourceIds);
+    }
+
+    private boolean explicitTextChanged(String currentValue, String requestedValue) {
+        String normalizedRequested = normalizeText(requestedValue);
+        return normalizedRequested != null
+                && !Objects.equals(normalizeText(currentValue), normalizedRequested);
+    }
+
+    private String normalizeText(String value) {
+        return value == null || value.isBlank() ? null : value.trim();
     }
 
     private void lockSourcePurchaseInbounds(SupplierStatement entity, SupplierStatementRequest request) {

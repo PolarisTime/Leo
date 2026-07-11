@@ -39,6 +39,7 @@ class PurchaseOrderApplyServicePostgresTest {
     private static final long EXISTING_ITEM_ID = 8_810_000_000_000_000_101L;
     private static final long NEW_ITEM_ID = 8_810_000_000_000_000_102L;
     private static final long REMOVED_ITEM_ID = 8_810_000_000_000_000_103L;
+    private static final String SUPPLIER_CODE = "TEST-ORDER-SUPPLIER";
 
     @Autowired
     private TestEntityManager entityManager;
@@ -170,6 +171,7 @@ class PurchaseOrderApplyServicePostgresTest {
         PurchaseOrder order = new PurchaseOrder();
         order.setId(ORDER_ID);
         order.setOrderNo("TEST-PO-AUTO-FLUSH");
+        order.setSupplierCode(SUPPLIER_CODE);
         order.setSupplierName("测试供应商");
         order.setOrderDate(LocalDateTime.of(2026, 7, 10, 14, 0));
         order.setSettlementCompanyId(1L);

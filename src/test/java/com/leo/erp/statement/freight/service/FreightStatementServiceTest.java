@@ -72,7 +72,9 @@ class FreightStatementServiceTest {
                 .thenAnswer(invocation -> invocation.getArgument(0));
         workflowTransitionGuard = mock(WorkflowTransitionGuard.class);
         freightStatementWebMapper = mock(FreightStatementWebMapper.class);
-        carrierRepository = carrierRepository(Optional.empty());
+        Carrier carrier = new Carrier();
+        carrier.setCarrierCode("C-001");
+        carrierRepository = carrierRepository(Optional.of(carrier));
         sourceAllocationLockService = mock(SourceAllocationLockService.class);
         service = service(repository, freightBillRepository, carrierRepository);
     }
@@ -239,12 +241,13 @@ class FreightStatementServiceTest {
     @Test
     void shouldRejectCreate_whenSourceBillCarrierDiffers() {
         var bill = createFreightBill("FB-001");
+        bill.setCarrierCode("C-002");
         bill.setCarrierName("物流乙");
         var svc = service(repository(List.of(), false, List.of()), freightBillRepository(List.of(bill)), carrierRepository);
 
         assertThatThrownBy(() -> svc.create(command("FS-NEW", "物流甲", BigDecimal.ZERO, item(null, "FB-001"))))
                 .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("来源物流单存在不同物流商");
+                .hasMessageContaining("物流商编码不存在");
     }
 
     @Test
@@ -438,6 +441,94 @@ class FreightStatementServiceTest {
         inOrder.verify(statementRepository).save(statement);
     }
 
+    @Test
+    void shouldBlockReverseAuditWhenSettledAllocationExists() {
+        FreightStatementRepository statementRepository = mock(FreightStatementRepository.class);
+        FreightStatement statement = createEntity(1L, "FS-SETTLED-STATUS");
+        statement.setStatus(StatusConstants.AUDITED);
+        when(statementRepository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(statement));
+        com.leo.erp.statement.service.StatementSettlementMutationGuard guard =
+                mock(com.leo.erp.statement.service.StatementSettlementMutationGuard.class);
+        org.mockito.Mockito.doThrow(new BusinessException(
+                com.leo.erp.common.error.ErrorCode.BUSINESS_ERROR,
+                "存在已付款核销"
+        )).when(guard).assertNoSettledAllocations(
+                com.leo.erp.statement.service.StatementSettlementMutationGuard.StatementType.FREIGHT,
+                1L,
+                "反审核"
+        );
+
+        assertThatThrownBy(() -> mutationGuardService(statementRepository, guard).updateStatus(
+                1L,
+                StatusConstants.PENDING_AUDIT
+        ))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("存在已付款核销");
+    }
+
+    @Test
+    void shouldBlockDeleteWhenSettledAllocationExists() {
+        FreightStatementRepository statementRepository = mock(FreightStatementRepository.class);
+        FreightStatement statement = createEntity(1L, "FS-SETTLED-DELETE");
+        when(statementRepository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(statement));
+        com.leo.erp.statement.service.StatementSettlementMutationGuard guard =
+                mock(com.leo.erp.statement.service.StatementSettlementMutationGuard.class);
+        org.mockito.Mockito.doThrow(new BusinessException(
+                com.leo.erp.common.error.ErrorCode.BUSINESS_ERROR,
+                "存在已付款核销"
+        )).when(guard).assertNoSettledAllocations(
+                com.leo.erp.statement.service.StatementSettlementMutationGuard.StatementType.FREIGHT,
+                1L,
+                "删除"
+        );
+
+        assertThatThrownBy(() -> mutationGuardService(statementRepository, guard).delete(1L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("存在已付款核销");
+    }
+
+    @Test
+    void shouldBlockFinancialLinkageUpdateWhenSettledAllocationExists() {
+        FreightStatementRepository statementRepository = mock(FreightStatementRepository.class);
+        FreightStatement statement = createEntity(1L, "FS-001");
+        when(statementRepository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(statement));
+        com.leo.erp.statement.service.StatementSettlementMutationGuard guard =
+                mock(com.leo.erp.statement.service.StatementSettlementMutationGuard.class);
+        org.mockito.Mockito.doThrow(new BusinessException(
+                com.leo.erp.common.error.ErrorCode.BUSINESS_ERROR,
+                "存在已付款核销"
+        )).when(guard).assertFinancialLinkageMutationAllowed(
+                com.leo.erp.statement.service.StatementSettlementMutationGuard.StatementType.FREIGHT,
+                1L,
+                true
+        );
+
+        assertThatThrownBy(() -> mutationGuardService(statementRepository, guard).update(
+                1L,
+                command("FS-001", "物流乙", BigDecimal.ZERO, item(null, "FB-001"))
+        ))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("存在已付款核销");
+    }
+
+    private FreightStatementService mutationGuardService(
+            FreightStatementRepository statementRepository,
+            com.leo.erp.statement.service.StatementSettlementMutationGuard guard) {
+        return new FreightStatementService(
+                statementRepository,
+                new SnowflakeIdGenerator(1L),
+                statementSettlementSyncService,
+                freightStatementWebMapper,
+                mock(FreightStatementSourceService.class),
+                mock(FreightStatementViewAssembler.class),
+                mock(FreightStatementPageAssembler.class),
+                mock(FreightStatementApplyService.class),
+                mock(FreightBillRepository.class),
+                mock(SourceAllocationLockService.class),
+                guard
+        );
+    }
+
     private FreightStatementService lockingService(FreightStatementRepository statementRepository,
                                                     FreightBillRepository billRepository,
                                                     FreightStatementApplyService applyService,
@@ -452,7 +543,8 @@ class FreightStatementServiceTest {
                 mock(FreightStatementPageAssembler.class),
                 applyService,
                 billRepository,
-                lockService
+                lockService,
+                mock(com.leo.erp.statement.service.StatementSettlementMutationGuard.class)
         );
     }
 
@@ -475,7 +567,8 @@ class FreightStatementServiceTest {
                         sourceService
                 ),
                 billRepo,
-                sourceAllocationLockService
+                sourceAllocationLockService,
+                mock(com.leo.erp.statement.service.StatementSettlementMutationGuard.class)
         );
     }
 
@@ -532,7 +625,8 @@ class FreightStatementServiceTest {
                 CarrierRepository.class.getClassLoader(),
                 new Class[]{CarrierRepository.class},
                 (proxy, method, args) -> switch (method.getName()) {
-                    case "findFirstByCarrierNameAndDeletedFlagFalseOrderByCarrierCodeAsc" -> carrier;
+                    case "findByCarrierCodeAndDeletedFlagFalse" -> carrier
+                            .filter(value -> value.getCarrierCode().equals(args[0]));
                     case "toString" -> "CarrierRepositoryStub";
                     case "hashCode" -> System.identityHashCode(proxy);
                     case "equals" -> proxy == args[0];
@@ -597,6 +691,7 @@ class FreightStatementServiceTest {
         FreightStatement entity = new FreightStatement();
         entity.setId(id);
         entity.setStatementNo(statementNo);
+        entity.setCarrierCode("C-001");
         entity.setCarrierName("物流甲");
         entity.setStartDate(LocalDate.of(2026, 1, 1));
         entity.setEndDate(LocalDate.of(2026, 1, 31));
@@ -614,6 +709,7 @@ class FreightStatementServiceTest {
         FreightBill bill = new FreightBill();
         bill.setId(1L);
         bill.setBillNo(billNo);
+        bill.setCarrierCode("C-001");
         bill.setCarrierName("物流甲");
         bill.setSettlementCompanyId(70L);
         bill.setSettlementCompanyName("物流主体");

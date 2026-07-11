@@ -35,6 +35,7 @@ public class FreightStatementSourceService {
     private static final String[] FREIGHT_BILL_CANDIDATE_SEARCH_FIELDS = {
             "billNo",
             "outboundNo",
+            "carrierCode",
             "carrierName",
             "vehiclePlate",
             "customerName",
@@ -51,9 +52,16 @@ public class FreightStatementSourceService {
     }
 
     Page<FreightStatementCandidateResponse> candidatePage(PageQuery query, PageFilter filter) {
+        return candidatePage(query, filter, null);
+    }
+
+    Page<FreightStatementCandidateResponse> candidatePage(PageQuery query,
+                                                           PageFilter filter,
+                                                           String carrierCode) {
         Set<String> occupiedBillNos = collectOccupiedBillNos(null);
         Specification<FreightBill> spec = Specs.<FreightBill>notDeleted()
                 .and(Specs.keywordLike(filter.keyword(), FREIGHT_BILL_CANDIDATE_SEARCH_FIELDS))
+                .and(Specs.equalIfPresent("carrierCode", carrierCode))
                 .and(Specs.equalIfPresent("carrierName", filter.name()))
                 .and(Specs.equalValueIfPresent("settlementCompanyId", filter.settlementCompanyId()))
                 .and(Specs.equalIfPresent("status", StatusConstants.AUDITED))
@@ -67,6 +75,9 @@ public class FreightStatementSourceService {
                                  FreightStatementCommand command,
                                  LongSupplier nextIdSupplier) {
         List<FreightBill> sourceBills = loadSourceBills(command, entity.getId());
+        CarrierSnapshot carrier = resolveStatementCarrier(sourceBills, command.carrierCode());
+        entity.setCarrierCode(carrier.code());
+        entity.setCarrierName(carrier.name());
         SettlementCompanySnapshot settlementCompany = resolveStatementSettlementCompany(sourceBills);
         entity.setSettlementCompanyId(settlementCompany.id());
         entity.setSettlementCompanyName(settlementCompany.name());
@@ -152,9 +163,6 @@ public class FreightStatementSourceService {
         }
         for (FreightBill bill : bills) {
             DataScopeContext.assertCanAccess(bill);
-            if (!command.carrierName().trim().equals(bill.getCarrierName())) {
-                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "来源物流单存在不同物流商，不能合并生成物流对账单");
-            }
             if (command.settlementCompanyId() != null
                     && bill.getSettlementCompanyId() != null
                     && !command.settlementCompanyId().equals(bill.getSettlementCompanyId())) {
@@ -230,10 +238,42 @@ public class FreightStatementSourceService {
         return snapshots.get(0);
     }
 
+    private CarrierSnapshot resolveStatementCarrier(List<FreightBill> sourceBills, String requestedCarrierCode) {
+        List<CarrierSnapshot> snapshots = sourceBills.stream()
+                .map(bill -> new CarrierSnapshot(trimToNull(bill.getCarrierCode()), trimToNull(bill.getCarrierName())))
+                .toList();
+        if (snapshots.stream().anyMatch(snapshot -> snapshot.code() == null)) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "来源物流单物流商编码缺失，不能生成物流对账单");
+        }
+        Set<String> carrierCodes = snapshots.stream()
+                .map(CarrierSnapshot::code)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        if (carrierCodes.size() != 1) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "来源物流单存在不同物流商编码，不能合并生成物流对账单");
+        }
+        String sourceCarrierCode = carrierCodes.iterator().next();
+        String normalizedRequestedCode = trimToNull(requestedCarrierCode);
+        if (normalizedRequestedCode != null && !normalizedRequestedCode.equals(sourceCarrierCode)) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "物流商编码与来源物流单不一致");
+        }
+        String sourceCarrierName = sourceBills.stream()
+                .sorted(java.util.Comparator.comparing(FreightBill::getBillNo))
+                .map(FreightBill::getCarrierName)
+                .map(this::trimToNull)
+                .filter(java.util.Objects::nonNull)
+                .findFirst()
+                .orElseThrow(() -> new BusinessException(
+                        ErrorCode.BUSINESS_ERROR,
+                        "来源物流单物流商名称缺失，不能生成物流对账单"
+                ));
+        return new CarrierSnapshot(sourceCarrierCode, sourceCarrierName);
+    }
+
     private FreightStatementCandidateResponse toCandidateResponse(FreightBill bill) {
         return new FreightStatementCandidateResponse(
                 bill.getId(),
                 bill.getBillNo(),
+                bill.getCarrierCode(),
                 bill.getCarrierName(),
                 bill.getSettlementCompanyId(),
                 bill.getSettlementCompanyName(),
@@ -260,5 +300,8 @@ public class FreightStatementSourceService {
     }
 
     private record SettlementCompanySnapshot(Long id, String name) {
+    }
+
+    private record CarrierSnapshot(String code, String name) {
     }
 }

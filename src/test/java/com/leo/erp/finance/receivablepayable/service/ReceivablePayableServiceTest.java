@@ -26,12 +26,13 @@ import static org.mockito.Mockito.when;
 
 class ReceivablePayableServiceTest {
 
-    private static final String VALID_COMPOSITE_KEY = "应收:客户:已对账:abcdefabcdefabcdefabcdef12345678";
+    private static final String VALID_COMPOSITE_KEY = "应收:客户:已对账:1001:abcdefabcdefabcdefabcdef12345678";
 
     @Test
     void shouldReturnPage_whenCallingPage() {
         var queryRepository = mock(ReceivablePayableQueryRepository.class);
-        when(queryRepository.page(new PageQuery(0, 10, "id", "desc"), null, null, null, null, null)).thenReturn(org.springframework.data.domain.Page.empty());
+        when(queryRepository.page(new PageQuery(0, 10, "id", "desc"), null, null, null, null, null, null))
+                .thenReturn(org.springframework.data.domain.Page.empty());
         var excelExportService = mock(ExcelExportService.class);
         var service = new ReceivablePayableService(queryRepository, excelExportService);
 
@@ -43,7 +44,15 @@ class ReceivablePayableServiceTest {
     @Test
     void shouldReturnPage_whenFiltersProvided() {
         var queryRepository = mock(ReceivablePayableQueryRepository.class);
-        when(queryRepository.page(new PageQuery(0, 10, "id", "desc"), "应收", "客户", "已对账", "未结清", "test"))
+        when(queryRepository.page(
+                new PageQuery(0, 10, "id", "desc"),
+                "应收",
+                "客户",
+                null,
+                "已对账",
+                "未结清",
+                "test"
+        ))
                 .thenReturn(org.springframework.data.domain.Page.empty());
         var excelExportService = mock(ExcelExportService.class);
         var service = new ReceivablePayableService(queryRepository, excelExportService);
@@ -54,9 +63,21 @@ class ReceivablePayableServiceTest {
     }
 
     @Test
+    void shouldPassSettlementCompanyFilterToRepository() {
+        var queryRepository = mock(ReceivablePayableQueryRepository.class);
+        when(queryRepository.page(any(), eq("应付"), eq("供应商"), eq(1001L), eq("未对账"), eq("未结清"), eq("SUP001")))
+                .thenReturn(org.springframework.data.domain.Page.empty());
+        var service = new ReceivablePayableService(queryRepository, mock(ExcelExportService.class));
+
+        service.page(new PageQuery(0, 10, "id", "desc"), "应付", "供应商", 1001L, "未对账", "未结清", "SUP001");
+
+        verify(queryRepository).page(any(), eq("应付"), eq("供应商"), eq(1001L), eq("未对账"), eq("未结清"), eq("SUP001"));
+    }
+
+    @Test
     void shouldTrimBlankFiltersToNull() {
         var queryRepository = mock(ReceivablePayableQueryRepository.class);
-        when(queryRepository.page(any(), eq(null), eq(null), eq(null), eq(null), eq("keyword")))
+        when(queryRepository.page(any(), eq(null), eq(null), eq(null), eq(null), eq(null), eq("keyword")))
                 .thenReturn(org.springframework.data.domain.Page.empty());
         var excelExportService = mock(ExcelExportService.class);
         var service = new ReceivablePayableService(queryRepository, excelExportService);
@@ -64,7 +85,7 @@ class ReceivablePayableServiceTest {
         var result = service.page(new PageQuery(0, 10, "id", "desc"), " ", " ", " ", " ", "keyword");
 
         assertThat(result).isNotNull();
-        verify(queryRepository).page(any(), eq(null), eq(null), eq(null), eq(null), eq("keyword"));
+        verify(queryRepository).page(any(), eq(null), eq(null), eq(null), eq(null), eq(null), eq("keyword"));
     }
 
     @Test
@@ -115,8 +136,8 @@ class ReceivablePayableServiceTest {
     void shouldReturnDetail_whenValidCompositeKey() {
         var summary = buildResponse(VALID_COMPOSITE_KEY, "应收", "客户", "客户A");
         var queryRepository = mock(ReceivablePayableQueryRepository.class);
-        when(queryRepository.findSummary(anyString(), anyString(), anyString(), anyString())).thenReturn(summary);
-        when(queryRepository.detailItems(anyString(), anyString(), anyString(), anyString())).thenReturn(List.of());
+        when(queryRepository.findSummary(anyString(), anyString(), anyString(), anyString(), anyString())).thenReturn(summary);
+        when(queryRepository.detailItems(anyString(), anyString(), anyString(), anyString(), anyString())).thenReturn(List.of());
         var excelExportService = mock(ExcelExportService.class);
         var service = new ReceivablePayableService(queryRepository, excelExportService);
 
@@ -124,14 +145,16 @@ class ReceivablePayableServiceTest {
 
         assertThat(result).isNotNull();
         assertThat(result.id()).isEqualTo(VALID_COMPOSITE_KEY);
+        assertThat(result.settlementCompanyId()).isEqualTo(1001L);
+        assertThat(result.settlementCompanyName()).isEqualTo("结算主体甲");
     }
 
     @Test
     void shouldReturnDetailWithSafeAmounts_whenSummaryAmountsArePresent() {
         var summary = buildResponse(VALID_COMPOSITE_KEY, "应收", "客户", "客户A");
         var queryRepository = mock(ReceivablePayableQueryRepository.class);
-        when(queryRepository.findSummary(anyString(), anyString(), anyString(), anyString())).thenReturn(summary);
-        when(queryRepository.detailItems(anyString(), anyString(), anyString(), anyString())).thenReturn(List.of());
+        when(queryRepository.findSummary(anyString(), anyString(), anyString(), anyString(), anyString())).thenReturn(summary);
+        when(queryRepository.detailItems(anyString(), anyString(), anyString(), anyString(), anyString())).thenReturn(List.of());
         var excelExportService = mock(ExcelExportService.class);
         var service = new ReceivablePayableService(queryRepository, excelExportService);
 
@@ -164,9 +187,9 @@ class ReceivablePayableServiceTest {
                 null
         );
         var queryRepository = mock(ReceivablePayableQueryRepository.class);
-        when(queryRepository.findSummary(eq("应收"), eq("客户"), eq("abcdefabcdefabcdefabcdef12345678"), eq("已对账")))
+        when(queryRepository.findSummary(eq("应收"), eq("客户"), eq("abcdefabcdefabcdefabcdef12345678"), eq("1001"), eq("已对账")))
                 .thenReturn(summary);
-        when(queryRepository.detailItems(eq("应收"), eq("客户"), eq("abcdefabcdefabcdefabcdef12345678"), eq("已对账")))
+        when(queryRepository.detailItems(eq("应收"), eq("客户"), eq("abcdefabcdefabcdefabcdef12345678"), eq("1001"), eq("已对账")))
                 .thenReturn(List.of(item));
         var excelExportService = mock(ExcelExportService.class);
         var service = new ReceivablePayableService(queryRepository, excelExportService);
@@ -177,9 +200,9 @@ class ReceivablePayableServiceTest {
         assertThat(second).isEqualTo(first);
         assertThat(second.items()).containsExactly(item);
         verify(queryRepository, times(2))
-                .findSummary("应收", "客户", "abcdefabcdefabcdefabcdef12345678", "已对账");
+                .findSummary("应收", "客户", "abcdefabcdefabcdefabcdef12345678", "1001", "已对账");
         verify(queryRepository, times(2))
-                .detailItems("应收", "客户", "abcdefabcdefabcdefabcdef12345678", "已对账");
+                .detailItems("应收", "客户", "abcdefabcdefabcdefabcdef12345678", "1001", "已对账");
     }
 
     @Test
@@ -232,16 +255,19 @@ class ReceivablePayableServiceTest {
         var excelExportService = mock(ExcelExportService.class);
         var service = new ReceivablePayableService(queryRepository, excelExportService);
 
-        assertThatThrownBy(() -> service.detail("应收:客户:已对账: "))
+        assertThatThrownBy(() -> service.detail("应收:客户:已对账:none: "))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("应收应付汇总ID不合法");
-        assertThatThrownBy(() -> service.detail(" :客户:已对账:CUS001"))
+        assertThatThrownBy(() -> service.detail("应收:客户:已对账: :CUS001"))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("应收应付汇总ID不合法");
-        assertThatThrownBy(() -> service.detail("应收: :已对账:CUS001"))
+        assertThatThrownBy(() -> service.detail(" :客户:已对账:none:CUS001"))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("应收应付汇总ID不合法");
-        assertThatThrownBy(() -> service.detail("应收:客户: :CUS001"))
+        assertThatThrownBy(() -> service.detail("应收: :已对账:none:CUS001"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("应收应付汇总ID不合法");
+        assertThatThrownBy(() -> service.detail("应收:客户: :none:CUS001"))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("应收应付汇总ID不合法");
     }
@@ -262,7 +288,7 @@ class ReceivablePayableServiceTest {
         var excelExportService = mock(ExcelExportService.class);
         var service = new ReceivablePayableService(queryRepository, excelExportService);
 
-        assertThatThrownBy(() -> service.detail("应付:客户:已对账:abcdefabcdefabcdefabcdef12345678"))
+        assertThatThrownBy(() -> service.detail("应付:客户:已对账:none:abcdefabcdefabcdefabcdef12345678"))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("应收应付汇总ID方向不合法");
     }
@@ -270,7 +296,7 @@ class ReceivablePayableServiceTest {
     @Test
     void shouldThrowException_whenDetailSummaryNotFound() {
         var queryRepository = mock(ReceivablePayableQueryRepository.class);
-        when(queryRepository.findSummary(anyString(), anyString(), anyString(), anyString())).thenReturn(null);
+        when(queryRepository.findSummary(anyString(), anyString(), anyString(), anyString(), anyString())).thenReturn(null);
         var excelExportService = mock(ExcelExportService.class);
         var service = new ReceivablePayableService(queryRepository, excelExportService);
 
@@ -282,14 +308,14 @@ class ReceivablePayableServiceTest {
     @Test
     void shouldExportExcel_whenValidParams() {
         var queryRepository = mock(ReceivablePayableQueryRepository.class);
-        when(queryRepository.listForExport(any(), any(), any(), any(), any())).thenReturn(List.of(
+        when(queryRepository.listForExport(any(), any(), any(), any(), any(), any())).thenReturn(List.of(
                 buildResponse("id1", "应收", "客户", "客户A")
         ));
         var excelExportService = mock(ExcelExportService.class);
         when(excelExportService.export(anyList(), ArgumentMatchers.any(Class.class))).thenReturn(new byte[0]);
         var service = new ReceivablePayableService(queryRepository, excelExportService);
 
-        var result = service.exportExcel(null, null, null, null, null);
+        var result = service.exportExcel(null, null, null, null, null, null);
 
         assertThat(result).isNotNull();
         assertThat(result.filename()).contains("应收应付汇总");
@@ -301,7 +327,7 @@ class ReceivablePayableServiceTest {
         var excelExportService = mock(ExcelExportService.class);
         var service = new ReceivablePayableService(queryRepository, excelExportService);
 
-        assertThatThrownBy(() -> service.exportExcel("invalid", null, null, null, null))
+        assertThatThrownBy(() -> service.exportExcel("invalid", null, null, null, null, null))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("direction 不合法");
     }
@@ -312,7 +338,7 @@ class ReceivablePayableServiceTest {
         var excelExportService = mock(ExcelExportService.class);
         var service = new ReceivablePayableService(queryRepository, excelExportService);
 
-        assertThatThrownBy(() -> service.exportExcel(null, "invalid", null, null, null))
+        assertThatThrownBy(() -> service.exportExcel(null, "invalid", null, null, null, null))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("counterpartyType 不合法");
     }
@@ -323,7 +349,7 @@ class ReceivablePayableServiceTest {
         var excelExportService = mock(ExcelExportService.class);
         var service = new ReceivablePayableService(queryRepository, excelExportService);
 
-        assertThatThrownBy(() -> service.exportExcel(null, null, "invalid", null, null))
+        assertThatThrownBy(() -> service.exportExcel(null, null, null, "invalid", null, null))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("reconciliationStatus 不合法");
     }
@@ -334,7 +360,7 @@ class ReceivablePayableServiceTest {
         var excelExportService = mock(ExcelExportService.class);
         var service = new ReceivablePayableService(queryRepository, excelExportService);
 
-        assertThatThrownBy(() -> service.exportExcel(null, null, null, "invalid", null))
+        assertThatThrownBy(() -> service.exportExcel(null, null, null, null, "invalid", null))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("status 不合法");
     }
@@ -345,18 +371,30 @@ class ReceivablePayableServiceTest {
         var excelExportService = mock(ExcelExportService.class);
         var service = new ReceivablePayableService(queryRepository, excelExportService);
 
-        assertThatThrownBy(() -> service.detail("应收:客户:已对账:bad key!"))
+        assertThatThrownBy(() -> service.detail("应收:客户:已对账:none:bad key!"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("应收应付汇总ID不合法");
+    }
+
+    @Test
+    void shouldThrowException_whenSettlementCompanyKeyInvalid() {
+        var service = new ReceivablePayableService(
+                mock(ReceivablePayableQueryRepository.class),
+                mock(ExcelExportService.class)
+        );
+
+        assertThatThrownBy(() -> service.detail("应付:供应商:未对账:company-x:SUP001"))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("应收应付汇总ID不合法");
     }
 
     @Test
     void shouldReturnDetail_whenCounterpartyCodeKeyValid() {
-        var codeKey = "应收:客户:未对账:CUS001";
+        var codeKey = "应收:客户:未对账:none:CUS001";
         var summary = buildResponse(codeKey, "应收", "客户", "客户A");
         var queryRepository = mock(ReceivablePayableQueryRepository.class);
-        when(queryRepository.findSummary(anyString(), anyString(), anyString(), anyString())).thenReturn(summary);
-        when(queryRepository.detailItems(anyString(), anyString(), anyString(), anyString())).thenReturn(List.of());
+        when(queryRepository.findSummary(anyString(), anyString(), anyString(), anyString(), anyString())).thenReturn(summary);
+        when(queryRepository.detailItems(anyString(), anyString(), anyString(), anyString(), anyString())).thenReturn(List.of());
         var excelExportService = mock(ExcelExportService.class);
         var service = new ReceivablePayableService(queryRepository, excelExportService);
 
@@ -368,11 +406,11 @@ class ReceivablePayableServiceTest {
 
     @Test
     void shouldReturnDetail_whenLegacyNameHashKeyValid() {
-        var nameHashKey = "应收:客户:未对账:name:abcdefabcdefabcdefabcdef12345678";
+        var nameHashKey = "应收:客户:未对账:none:name:abcdefabcdefabcdefabcdef12345678";
         var summary = buildResponse(nameHashKey, "应收", "客户", "客户A");
         var queryRepository = mock(ReceivablePayableQueryRepository.class);
-        when(queryRepository.findSummary(anyString(), anyString(), anyString(), anyString())).thenReturn(summary);
-        when(queryRepository.detailItems(anyString(), anyString(), anyString(), anyString())).thenReturn(List.of());
+        when(queryRepository.findSummary(anyString(), anyString(), anyString(), anyString(), anyString())).thenReturn(summary);
+        when(queryRepository.detailItems(anyString(), anyString(), anyString(), anyString(), anyString())).thenReturn(List.of());
         var excelExportService = mock(ExcelExportService.class);
         var service = new ReceivablePayableService(queryRepository, excelExportService);
 
@@ -384,17 +422,17 @@ class ReceivablePayableServiceTest {
 
     @Test
     void shouldNormalizeNameHashKeyToLowerCase() {
-        var nameHashKey = "应收:客户:未对账:name:ABCDEFABCDEFABCDEFABCDEF12345678";
+        var nameHashKey = "应收:客户:未对账:none:name:ABCDEFABCDEFABCDEFABCDEF12345678";
         var summary = buildResponse(nameHashKey, "应收", "客户", "客户A");
         var queryRepository = mock(ReceivablePayableQueryRepository.class);
-        when(queryRepository.findSummary(anyString(), anyString(), anyString(), anyString())).thenReturn(summary);
-        when(queryRepository.detailItems(anyString(), anyString(), anyString(), anyString())).thenReturn(List.of());
+        when(queryRepository.findSummary(anyString(), anyString(), anyString(), anyString(), anyString())).thenReturn(summary);
+        when(queryRepository.detailItems(anyString(), anyString(), anyString(), anyString(), anyString())).thenReturn(List.of());
         var excelExportService = mock(ExcelExportService.class);
         var service = new ReceivablePayableService(queryRepository, excelExportService);
 
         service.detail(nameHashKey);
 
-        verify(queryRepository).findSummary("应收", "客户", "name:abcdefabcdefabcdefabcdef12345678", "未对账");
+        verify(queryRepository).findSummary("应收", "客户", "name:abcdefabcdefabcdefabcdef12345678", "none", "未对账");
     }
 
     @Test
@@ -413,7 +451,7 @@ class ReceivablePayableServiceTest {
         var excelExportService = mock(ExcelExportService.class);
         var service = new ReceivablePayableService(queryRepository, excelExportService);
 
-        assertThatThrownBy(() -> service.detail("应收:供应商:已对账:abcdefabcdefabcdefabcdef12345678"))
+        assertThatThrownBy(() -> service.detail("应收:供应商:已对账:none:abcdefabcdefabcdefabcdef12345678"))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("应收应付汇总ID方向不合法");
     }
@@ -424,18 +462,18 @@ class ReceivablePayableServiceTest {
         var excelExportService = mock(ExcelExportService.class);
         var service = new ReceivablePayableService(queryRepository, excelExportService);
 
-        assertThatThrownBy(() -> service.detail("应收:物流商:已对账:abcdefabcdefabcdefabcdef12345678"))
+        assertThatThrownBy(() -> service.detail("应收:物流商:已对账:none:abcdefabcdefabcdefabcdef12345678"))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("应收应付汇总ID方向不合法");
     }
 
     @Test
     void shouldReturnDetail_whenSupplierCompositeKeyValid() {
-        var supplierKey = "应付:供应商:已对账:abcdefabcdefabcdefabcdef12345678";
+        var supplierKey = "应付:供应商:已对账:1001:abcdefabcdefabcdefabcdef12345678";
         var summary = buildResponse(supplierKey, "应付", "供应商", "供应商A");
         var queryRepository = mock(ReceivablePayableQueryRepository.class);
-        when(queryRepository.findSummary(anyString(), anyString(), anyString(), anyString())).thenReturn(summary);
-        when(queryRepository.detailItems(anyString(), anyString(), anyString(), anyString())).thenReturn(List.of());
+        when(queryRepository.findSummary(anyString(), anyString(), anyString(), anyString(), anyString())).thenReturn(summary);
+        when(queryRepository.detailItems(anyString(), anyString(), anyString(), anyString(), anyString())).thenReturn(List.of());
         var excelExportService = mock(ExcelExportService.class);
         var service = new ReceivablePayableService(queryRepository, excelExportService);
 
@@ -447,11 +485,11 @@ class ReceivablePayableServiceTest {
 
     @Test
     void shouldReturnDetail_whenFreightCompositeKeyValid() {
-        var freightKey = "应付:物流商:已对账:abcdefabcdefabcdefabcdef12345678";
+        var freightKey = "应付:物流商:已对账:none:abcdefabcdefabcdefabcdef12345678";
         var summary = buildResponse(freightKey, "应付", "物流商", "物流商A");
         var queryRepository = mock(ReceivablePayableQueryRepository.class);
-        when(queryRepository.findSummary(anyString(), anyString(), anyString(), anyString())).thenReturn(summary);
-        when(queryRepository.detailItems(anyString(), anyString(), anyString(), anyString())).thenReturn(List.of());
+        when(queryRepository.findSummary(anyString(), anyString(), anyString(), anyString(), anyString())).thenReturn(summary);
+        when(queryRepository.detailItems(anyString(), anyString(), anyString(), anyString(), anyString())).thenReturn(List.of());
         var excelExportService = mock(ExcelExportService.class);
         var service = new ReceivablePayableService(queryRepository, excelExportService);
 
@@ -464,14 +502,14 @@ class ReceivablePayableServiceTest {
     @Test
     void shouldExportExcel_whenFiltersProvided() {
         var queryRepository = mock(ReceivablePayableQueryRepository.class);
-        when(queryRepository.listForExport(any(), any(), any(), any(), any())).thenReturn(List.of(
+        when(queryRepository.listForExport(any(), any(), any(), any(), any(), any())).thenReturn(List.of(
                 buildResponse("id1", "应收", "客户", "客户A")
         ));
         var excelExportService = mock(ExcelExportService.class);
         when(excelExportService.export(anyList(), ArgumentMatchers.any(Class.class))).thenReturn(new byte[0]);
         var service = new ReceivablePayableService(queryRepository, excelExportService);
 
-        var result = service.exportExcel("应收", "客户", "已对账", "未结清", "test");
+        var result = service.exportExcel("应收", "客户", 1001L, "已对账", "未结清", "test");
 
         assertThat(result).isNotNull();
         assertThat(result.filename()).contains("应收应付汇总");
@@ -487,6 +525,8 @@ class ReceivablePayableServiceTest {
                 counterpartyType,
                 "CP-001",
                 counterpartyName,
+                1001L,
+                "结算主体甲",
                 "已对账",
                 BigDecimal.TEN,
                 BigDecimal.ZERO,

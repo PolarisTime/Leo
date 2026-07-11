@@ -17,6 +17,8 @@ import com.leo.erp.master.project.repository.ProjectRepository;
 import com.leo.erp.master.supplier.domain.entity.Supplier;
 import com.leo.erp.master.supplier.repository.SupplierRepository;
 import com.leo.erp.security.permission.WorkflowTransitionGuard;
+import com.leo.erp.system.company.domain.entity.CompanySetting;
+import com.leo.erp.system.company.service.CompanySettingService;
 import org.junit.jupiter.api.Test;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
@@ -38,7 +40,7 @@ import static org.mockito.Mockito.when;
 class LedgerAdjustmentServiceTest {
 
     @Test
-    void shouldPageWithDirectionAndCounterpartyTypeFilters() {
+    void shouldPageWithDirectionCounterpartyTypeAndSettlementCompanyFilters() {
         LedgerAdjustmentRepository repository = mock(LedgerAdjustmentRepository.class);
         LedgerAdjustmentMapper mapper = mock(LedgerAdjustmentMapper.class);
         LedgerAdjustment adjustment = adjustment("LA-PAGE", StatusConstants.DRAFT);
@@ -58,6 +60,8 @@ class LedgerAdjustmentServiceTest {
                 new com.leo.erp.common.api.PageQuery(0, 10, "adjustmentDate", "desc"),
                 com.leo.erp.common.api.PageFilter.of(
                         "客户",
+                        null,
+                        31L,
                         StatusConstants.DRAFT,
                         LocalDate.of(2026, 1, 1),
                         LocalDate.of(2026, 12, 31)
@@ -120,6 +124,8 @@ class LedgerAdjustmentServiceTest {
                 "客户",
                 "C-001",
                 "请求中的客户名",
+                31L,
+                "结算主体A",
                 null,
                 "项目A",
                 LocalDate.of(2026, 6, 1),
@@ -156,6 +162,8 @@ class LedgerAdjustmentServiceTest {
                 "客户",
                 "C-001",
                 "客户A",
+                31L,
+                "结算主体A",
                 null,
                 null,
                 LocalDate.of(2026, 6, 1),
@@ -192,6 +200,8 @@ class LedgerAdjustmentServiceTest {
                 "供应商",
                 "S-404",
                 "供应商A",
+                31L,
+                "结算主体A",
                 null,
                 null,
                 LocalDate.of(2026, 6, 1),
@@ -235,6 +245,8 @@ class LedgerAdjustmentServiceTest {
                 "供应商",
                 "S-001",
                 "请求中的供应商名",
+                31L,
+                "结算主体A",
                 null,
                 null,
                 LocalDate.of(2026, 6, 1),
@@ -284,6 +296,8 @@ class LedgerAdjustmentServiceTest {
                 "物流商",
                 "L-001",
                 "请求中的物流商",
+                31L,
+                "结算主体A",
                 11L,
                 "请求中的项目名",
                 LocalDate.of(2026, 6, 1),
@@ -348,6 +362,8 @@ class LedgerAdjustmentServiceTest {
                 "客户",
                 "C-002",
                 "请求客户名",
+                31L,
+                "结算主体A",
                 null,
                 "  项目B  ",
                 LocalDate.of(2026, 6, 2),
@@ -468,6 +484,8 @@ class LedgerAdjustmentServiceTest {
                 "客户",
                 "C-001",
                 "客户A",
+                31L,
+                "结算主体A",
                 null,
                 null,
                 LocalDate.of(2026, 6, 1),
@@ -487,6 +505,8 @@ class LedgerAdjustmentServiceTest {
                 "客户",
                 "C-001",
                 "客户A",
+                31L,
+                "结算主体A",
                 null,
                 null,
                 LocalDate.of(2026, 6, 1),
@@ -520,6 +540,8 @@ class LedgerAdjustmentServiceTest {
                 "客户",
                 "C-001",
                 "客户A",
+                31L,
+                "结算主体A",
                 null,
                 null,
                 LocalDate.of(2026, 6, 1),
@@ -551,6 +573,8 @@ class LedgerAdjustmentServiceTest {
                 "供应商",
                 "S-001",
                 "供应商A",
+                31L,
+                "结算主体A",
                 null,
                 null,
                 LocalDate.of(2026, 6, 1),
@@ -632,6 +656,8 @@ class LedgerAdjustmentServiceTest {
                 "客户",
                 "C-001",
                 "客户A",
+                31L,
+                "结算主体A",
                 null,
                 null,
                 LocalDate.of(2026, 6, 1),
@@ -651,6 +677,8 @@ class LedgerAdjustmentServiceTest {
                 "客户",
                 "C-001",
                 "客户A",
+                31L,
+                "结算主体A",
                 null,
                 null,
                 LocalDate.of(2026, 6, 1),
@@ -671,6 +699,11 @@ class LedgerAdjustmentServiceTest {
                                                SupplierRepository supplierRepository,
                                                CarrierRepository carrierRepository,
                                                ProjectRepository projectRepository) {
+        CompanySetting settlementCompany = new CompanySetting();
+        settlementCompany.setId(31L);
+        settlementCompany.setCompanyName("结算主体A");
+        CompanySettingService companySettingService = mock(CompanySettingService.class);
+        when(companySettingService.requireActiveSettlementCompany(31L)).thenReturn(settlementCompany);
         return new LedgerAdjustmentService(
                 repository,
                 mapper,
@@ -679,7 +712,8 @@ class LedgerAdjustmentServiceTest {
                 supplierRepository == null ? mock(SupplierRepository.class) : supplierRepository,
                 carrierRepository == null ? mock(CarrierRepository.class) : carrierRepository,
                 projectRepository == null ? mock(ProjectRepository.class) : projectRepository,
-                mock(WorkflowTransitionGuard.class)
+                mock(WorkflowTransitionGuard.class),
+                companySettingService
         );
     }
 
@@ -698,6 +732,8 @@ class LedgerAdjustmentServiceTest {
                 counterpartyType,
                 counterpartyCode,
                 "客户A",
+                31L,
+                "结算主体A",
                 projectId,
                 null,
                 LocalDate.of(2026, 6, 1),
@@ -718,6 +754,8 @@ class LedgerAdjustmentServiceTest {
         adjustment.setCounterpartyType("客户");
         adjustment.setCounterpartyCode("C-001");
         adjustment.setCounterpartyName("客户A");
+        adjustment.setSettlementCompanyId(31L);
+        adjustment.setSettlementCompanyName("结算主体A");
         adjustment.setAdjustmentDate(LocalDate.of(2026, 6, 1));
         adjustment.setAmount(new BigDecimal("100.00"));
         adjustment.setAdjustmentType("其他调整");
@@ -735,6 +773,8 @@ class LedgerAdjustmentServiceTest {
                 adjustment.getCounterpartyType(),
                 adjustment.getCounterpartyCode(),
                 adjustment.getCounterpartyName(),
+                adjustment.getSettlementCompanyId(),
+                adjustment.getSettlementCompanyName(),
                 adjustment.getProjectId(),
                 adjustment.getProjectName(),
                 adjustment.getAdjustmentDate(),

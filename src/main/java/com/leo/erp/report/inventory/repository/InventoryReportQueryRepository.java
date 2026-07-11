@@ -45,7 +45,7 @@ public class InventoryReportQueryRepository {
                     item.unit,
                     item.quantity AS on_hand_quantity_delta,
                     0 AS reserved_quantity_delta,
-                    item.weight_ton AS on_hand_weight_delta,
+                    COALESCE(item.weigh_weight_ton, item.weight_ton) AS on_hand_weight_delta,
                     CAST(0 AS NUMERIC(18, 8)) AS reserved_weight_delta
                 FROM po_purchase_inbound inbound
                 JOIN po_purchase_inbound_item item ON item.inbound_id = inbound.id

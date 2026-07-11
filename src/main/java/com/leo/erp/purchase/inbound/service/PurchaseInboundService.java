@@ -43,6 +43,7 @@ public class PurchaseInboundService extends AbstractCrudService<
     private final PurchaseInboundPieceWeightService pieceWeightService;
     private final WorkflowTransitionGuard workflowTransitionGuard;
     private final SourceAllocationLockService sourceAllocationLockService;
+    private final PurchaseInboundRefundGuard purchaseInboundRefundGuard;
 
     @Autowired
     public PurchaseInboundService(PurchaseInboundRepository repository,
@@ -54,7 +55,8 @@ public class PurchaseInboundService extends AbstractCrudService<
                                   PurchaseInboundResponseAssembler responseAssembler,
                                   PurchaseInboundPieceWeightService pieceWeightService,
                                   WorkflowTransitionGuard workflowTransitionGuard,
-                                  SourceAllocationLockService sourceAllocationLockService) {
+                                  SourceAllocationLockService sourceAllocationLockService,
+                                  PurchaseInboundRefundGuard purchaseInboundRefundGuard) {
         super(idGenerator);
         this.repository = repository;
         this.purchaseInboundMapper = purchaseInboundMapper;
@@ -65,6 +67,7 @@ public class PurchaseInboundService extends AbstractCrudService<
         this.pieceWeightService = pieceWeightService;
         this.workflowTransitionGuard = workflowTransitionGuard;
         this.sourceAllocationLockService = sourceAllocationLockService;
+        this.purchaseInboundRefundGuard = purchaseInboundRefundGuard;
     }
 
     @Transactional(readOnly = true)
@@ -133,6 +136,7 @@ public class PurchaseInboundService extends AbstractCrudService<
         return new PurchaseInboundRequest(
                 resolveCreateBusinessNo("purchase-inbound", request.inboundNo(), entityId),
                 request.purchaseOrderNo(),
+                request.supplierCode(),
                 request.supplierName(),
                 request.warehouseName(),
                 request.inboundDate(),
@@ -148,6 +152,9 @@ public class PurchaseInboundService extends AbstractCrudService<
         return new PurchaseInboundRequest(
                 entity.getInboundNo(),
                 request.purchaseOrderNo(),
+                request.supplierCode() == null || request.supplierCode().isBlank()
+                        ? entity.getSupplierCode()
+                        : request.supplierCode(),
                 request.supplierName(),
                 request.warehouseName(),
                 request.inboundDate(),
@@ -211,6 +218,7 @@ public class PurchaseInboundService extends AbstractCrudService<
         );
         inbound.setInboundNo(request.inboundNo());
         inbound.setPurchaseOrderNo(request.purchaseOrderNo());
+        inbound.setSupplierCode(request.supplierCode());
         inbound.setSupplierName(request.supplierName());
         inbound.setInboundDate(request.inboundDate());
         inbound.setStatus(nextStatus);
@@ -227,6 +235,7 @@ public class PurchaseInboundService extends AbstractCrudService<
     @Override
     protected void beforeStatusUpdate(PurchaseInbound inbound, String currentStatus, String nextStatus) {
         lockSourcePurchaseOrderItems(inbound, null);
+        purchaseInboundRefundGuard.assertStatusTransitionAllowed(inbound, currentStatus, nextStatus);
     }
 
     private void lockSourcePurchaseOrderItems(PurchaseInbound inbound, PurchaseInboundRequest request) {
@@ -247,6 +256,11 @@ public class PurchaseInboundService extends AbstractCrudService<
     @Override
     protected PurchaseInbound saveEntity(PurchaseInbound entity) {
         return repository.save(entity);
+    }
+
+    @Override
+    protected PurchaseInbound saveCreatedEntity(PurchaseInbound entity, PurchaseInboundRequest request) {
+        return saveWithCompletionSync(entity);
     }
 
     @Override

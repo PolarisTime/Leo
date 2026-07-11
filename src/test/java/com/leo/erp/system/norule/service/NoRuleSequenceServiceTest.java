@@ -284,6 +284,8 @@ class NoRuleSequenceServiceTest {
             "warehouse,RULE_WH,WH{seq},NONE,NEVER,4,WH0001",
             "purchase-order,RULE_PO,PO{yyyy}{seq},yyyy,YEARLY,6,PO2026000001",
             "purchase-inbound,RULE_PI,PI{yyyy}{seq},yyyy,YEARLY,6,PI2026000001",
+            "purchase-refund,RULE_PR,PR{yyyy}{seq},yyyy,YEARLY,6,PR2026000001",
+            "supplier-refund-receipt,RULE_SRR,SRR{yyyy}{seq},yyyy,YEARLY,6,SRR2026000001",
             "sales-order,RULE_SO,SO{yyyy}{seq},yyyy,YEARLY,6,SO2026000001",
             "sales-outbound,RULE_OB,OB{yyyy}{seq},yyyy,YEARLY,6,OB2026000001",
             "freight-bill,RULE_FB,FB{yyyy}{seq},yyyy,YEARLY,6,FB2026000001",

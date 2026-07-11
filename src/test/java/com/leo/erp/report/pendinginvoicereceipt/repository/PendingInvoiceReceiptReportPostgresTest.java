@@ -12,6 +12,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.TestPropertySource;
 
 import java.math.BigDecimal;
 import java.util.HashSet;
@@ -21,10 +22,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 @DataJpaTest
 @ActiveProfiles("test")
+@TestPropertySource(properties = "spring.flyway.enabled=false")
 class PendingInvoiceReceiptReportPostgresTest {
 
     private static final long BASE_ID = 8_600_000_000_000_000_000L;
     private static final String MATRIX_CODE = "TEST-PENDING-MATRIX";
+    private static final String SUPPLIER_CODE = "TEST-PENDING-SUPPLIER";
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
@@ -62,6 +65,7 @@ class PendingInvoiceReceiptReportPostgresTest {
         assertThat(result).filteredOn(row -> row.materialCode().endsWith("AUDITED"))
                 .singleElement()
                 .satisfies(row -> {
+                    assertThat(row.invoiceTitle()).isEqualTo("测试结算主体");
                     assertThat(row.receivedInvoiceWeightTon()).isEqualByComparingTo("3.00000000");
                     assertThat(row.pendingInvoiceWeightTon()).isEqualByComparingTo("7.00000000");
                     assertThat(row.receivedInvoiceAmount()).isEqualByComparingTo("30.00");
@@ -78,15 +82,91 @@ class PendingInvoiceReceiptReportPostgresTest {
     }
 
     @Test
+    void shouldSubtractOnlyAuditedPurchaseRefundsFromPendingInvoiceBalance() {
+        insertPurchaseOrder(5, "已审核", 10, "100.00", 11L, MATRIX_CODE + "-AUDITED-REFUND");
+        insertPurchaseOrder(6, "已审核", 10, "100.00", 11L, MATRIX_CODE + "-DRAFT-REFUND");
+        insertPurchaseOrder(7, "已审核", 10, "100.00", 11L, MATRIX_CODE + "-DELETED-REFUND");
+        insertInvoiceReceipt(25, "已收票", false, 5, 3, "30.00");
+        insertInvoiceReceipt(26, "已收票", false, 6, 3, "30.00");
+        insertInvoiceReceipt(27, "已收票", false, 7, 3, "30.00");
+        insertPurchaseRefund(35, "已审核", false, 5, 4, "40.00");
+        insertPurchaseRefund(36, "草稿", false, 6, 4, "40.00");
+        insertPurchaseRefund(37, "已审核", true, 7, 4, "40.00");
+
+        DataScopeContext.set(11L, "pending-invoice-receipt-report", "self");
+        Page<PendingInvoiceReceiptReportResponse> result = repository.page(
+                PageQuery.of(0, 20, "orderNo", "asc"), MATRIX_CODE, null, null, null);
+
+        assertThat(result).filteredOn(row -> row.materialCode().endsWith("AUDITED-REFUND"))
+                .singleElement()
+                .satisfies(row -> {
+                    assertThat(row.receivedInvoiceQuantity()).isEqualTo(3);
+                    assertThat(row.refundedQuantity()).isEqualTo(4);
+                    assertThat(row.pendingInvoiceQuantity()).isEqualTo(3);
+                    assertThat(row.refundedWeightTon()).isEqualByComparingTo("4.00000000");
+                    assertThat(row.pendingInvoiceWeightTon()).isEqualByComparingTo("3.00000000");
+                    assertThat(row.refundedAmount()).isEqualByComparingTo("40.00");
+                    assertThat(row.pendingInvoiceAmount()).isEqualByComparingTo("30.00");
+                });
+        assertThat(result).filteredOn(row -> row.materialCode().endsWith("DRAFT-REFUND"))
+                .singleElement()
+                .satisfies(row -> {
+                    assertThat(row.refundedQuantity()).isZero();
+                    assertThat(row.pendingInvoiceQuantity()).isEqualTo(7);
+                    assertThat(row.refundedWeightTon()).isEqualByComparingTo("0");
+                    assertThat(row.pendingInvoiceWeightTon()).isEqualByComparingTo("7.00000000");
+                    assertThat(row.refundedAmount()).isEqualByComparingTo("0");
+                    assertThat(row.pendingInvoiceAmount()).isEqualByComparingTo("70.00");
+                });
+        assertThat(result).filteredOn(row -> row.materialCode().endsWith("DELETED-REFUND"))
+                .singleElement()
+                .satisfies(row -> {
+                    assertThat(row.refundedQuantity()).isZero();
+                    assertThat(row.pendingInvoiceQuantity()).isEqualTo(7);
+                    assertThat(row.refundedWeightTon()).isEqualByComparingTo("0");
+                    assertThat(row.pendingInvoiceWeightTon()).isEqualByComparingTo("7.00000000");
+                    assertThat(row.refundedAmount()).isEqualByComparingTo("0");
+                    assertThat(row.pendingInvoiceAmount()).isEqualByComparingTo("70.00");
+                });
+    }
+
+    @Test
+    void shouldRebuildOriginalOrderCapacityWhenStoredTotalsWereWrittenBack() {
+        insertPurchaseOrder(8, "已审核", 10, "100.00", 11L, MATRIX_CODE + "-ORIGINAL-BASIS");
+        jdbcTemplate.update("""
+                UPDATE po_purchase_order_item
+                SET weight_ton = 7,
+                    amount = 70
+                WHERE id = ?
+                """, BASE_ID + 108);
+
+        DataScopeContext.set(11L, "pending-invoice-receipt-report", "self");
+        Page<PendingInvoiceReceiptReportResponse> result = repository.page(
+                PageQuery.of(0, 20, "orderNo", "asc"),
+                MATRIX_CODE + "-ORIGINAL-BASIS",
+                null,
+                null,
+                null
+        );
+
+        assertThat(result).singleElement().satisfies(row -> {
+            assertThat(row.orderWeightTon()).isEqualByComparingTo("10.00000000");
+            assertThat(row.pendingInvoiceWeightTon()).isEqualByComparingTo("10.00000000");
+            assertThat(row.orderAmount()).isEqualByComparingTo("100.00");
+            assertThat(row.pendingInvoiceAmount()).isEqualByComparingTo("100.00");
+        });
+    }
+
+    @Test
     void shouldPageAllRowsBeyondFormerCandidateLimitWithoutDuplicates() {
         jdbcTemplate.update("""
                 INSERT INTO po_purchase_order (
-                    id, order_no, supplier_name, order_date, total_weight, total_amount,
+                    id, order_no, supplier_code, supplier_name, order_date, total_weight, total_amount,
                     status, deleted_flag, created_by
                 )
                 SELECT ? + value,
                        'TEST-PENDING-PAGE-' || LPAD(value::text, 4, '0'),
-                       '批量供应商', TIMESTAMP '2026-01-01 00:00:00', 1, 1,
+                       'TEST-PENDING-SUPPLIER', '批量供应商', TIMESTAMP '2026-01-01 00:00:00', 1, 1,
                        '已审核', FALSE, 77
                 FROM generate_series(1, 1005) AS value
                 """, BASE_ID + 10_000);
@@ -122,10 +202,12 @@ class PendingInvoiceReceiptReportPostgresTest {
         long orderId = BASE_ID + offset;
         jdbcTemplate.update("""
                 INSERT INTO po_purchase_order (
-                    id, order_no, supplier_name, order_date, total_weight, total_amount,
-                    status, deleted_flag, created_by
-                ) VALUES (?, ?, '测试供应商', TIMESTAMP '2026-03-01 10:00:00', ?, ?, ?, FALSE, ?)
-                """, orderId, "TEST-PENDING-ORDER-" + offset, quantity, new BigDecimal(amount), status, createdBy);
+                    id, order_no, supplier_code, supplier_name, order_date, total_weight, total_amount,
+                    status, settlement_company_id, settlement_company_name, deleted_flag, created_by
+                ) VALUES (?, ?, ?, '测试供应商', TIMESTAMP '2026-03-01 10:00:00', ?, ?, ?,
+                          700510000000000001, '测试结算主体', FALSE, ?)
+                """, orderId, "TEST-PENDING-ORDER-" + offset, SUPPLIER_CODE,
+                quantity, new BigDecimal(amount), status, createdBy);
         jdbcTemplate.update("""
                 INSERT INTO po_purchase_order_item (
                     id, order_id, line_no, material_code, brand, category, material, spec, unit,
@@ -140,11 +222,11 @@ class PendingInvoiceReceiptReportPostgresTest {
         long receiptId = BASE_ID + 1_000 + offset;
         jdbcTemplate.update("""
                 INSERT INTO fm_invoice_receipt (
-                    id, receive_no, invoice_no, supplier_name, invoice_date, invoice_type,
+                    id, receive_no, invoice_no, supplier_code, supplier_name, invoice_date, invoice_type,
                     amount, tax_amount, status, operator_name, deleted_flag
-                ) VALUES (?, ?, ?, '测试供应商', CURRENT_DATE, '增值税专票', ?, 0, ?, '测试员', ?)
+                ) VALUES (?, ?, ?, ?, '测试供应商', CURRENT_DATE, '增值税专票', ?, 0, ?, '测试员', ?)
                 """, receiptId, "TEST-RECEIVE-" + offset, "TEST-INVOICE-" + offset,
-                new BigDecimal(amount), status, deleted);
+                SUPPLIER_CODE, new BigDecimal(amount), status, deleted);
         jdbcTemplate.update("""
                 INSERT INTO fm_invoice_receipt_item (
                     id, receipt_id, line_no, source_no, source_purchase_order_item_id,
@@ -154,5 +236,29 @@ class PendingInvoiceReceiptReportPostgresTest {
                           ?, '件', 1, 1, ?, 10, ?)
                 """, BASE_ID + 2_000 + offset, receiptId, "TEST-PENDING-ORDER-" + sourceOrderOffset,
                 BASE_ID + 100 + sourceOrderOffset, MATRIX_CODE, weight, weight, new BigDecimal(amount));
+    }
+
+    private void insertPurchaseRefund(long offset, String status, boolean deleted, long sourceOrderOffset,
+                                      int weight, String amount) {
+        long refundId = BASE_ID + 3_000 + offset;
+        jdbcTemplate.update("""
+                INSERT INTO po_purchase_refund (
+                    id, refund_no, source_purchase_order_id, purchase_order_no,
+                    supplier_code, supplier_name, refund_date, total_quantity,
+                    total_weight, total_amount, status, operator_name, deleted_flag
+                ) VALUES (?, ?, ?, ?, 'TEST-SUPPLIER', '测试供应商', CURRENT_DATE,
+                          ?, ?, ?, ?, '测试员', ?)
+                """, refundId, "TEST-REFUND-" + offset, BASE_ID + sourceOrderOffset,
+                "TEST-PENDING-ORDER-" + sourceOrderOffset, weight, weight, new BigDecimal(amount), status, deleted);
+        jdbcTemplate.update("""
+                INSERT INTO po_purchase_refund_item (
+                    id, refund_id, source_purchase_order_item_id, line_no,
+                    material_code, brand, category, material, spec, unit,
+                    quantity, quantity_unit, piece_weight_ton, pieces_per_bundle,
+                    weight_ton, unit_price, amount
+                ) VALUES (?, ?, ?, 1, ?, '测试品牌', '测试类别', '测试材质', 'TEST-SPEC', '吨',
+                          ?, '件', 1, 1, ?, 10, ?)
+                """, BASE_ID + 4_000 + offset, refundId, BASE_ID + 100 + sourceOrderOffset,
+                MATRIX_CODE, weight, weight, new BigDecimal(amount));
     }
 }

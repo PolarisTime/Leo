@@ -171,6 +171,18 @@ class ReceivablePayableQueryRepositoryTest {
     }
 
     @Test
+    void shouldAddSettlementCompanyFilterWhenProvided() {
+        RecordingNamedParameterJdbcTemplate jdbcTemplate = new RecordingNamedParameterJdbcTemplate();
+        jdbcTemplate.total = 0L;
+        ReceivablePayableQueryRepository repository = new ReceivablePayableQueryRepository(jdbcTemplate);
+
+        repository.page(new PageQuery(0, 10, "id", "desc"), null, null, 1001L, null, null, null);
+
+        assertThat(jdbcTemplate.lastParams.getValue("settlementCompanyId")).isEqualTo(1001L);
+        assertThat(jdbcTemplate.countSql).contains("rp.settlement_company_id = :settlementCompanyId");
+    }
+
+    @Test
     void shouldUseCorrectSortColumns() {
         RecordingNamedParameterJdbcTemplate jdbcTemplate = new RecordingNamedParameterJdbcTemplate();
         jdbcTemplate.total = 1L;
@@ -304,13 +316,15 @@ class ReceivablePayableQueryRepositoryTest {
         jdbcTemplate.rows = List.of(buildResponse());
         ReceivablePayableQueryRepository repository = new ReceivablePayableQueryRepository(jdbcTemplate);
 
-        var result = repository.listForExport("应收", "客户", "已对账", null, "test");
+        var result = repository.listForExport("应收", "客户", 1001L, "已对账", null, "test");
 
         assertThat(result).hasSize(1);
         assertThat(jdbcTemplate.dataSql)
-                .contains("ORDER BY rp.direction ASC, rp.counterparty_type ASC, rp.counterparty_name ASC");
+                .contains("ORDER BY rp.direction ASC, rp.counterparty_type ASC,")
+                .contains("rp.settlement_company_name ASC NULLS FIRST, rp.counterparty_name ASC");
         assertThat(jdbcTemplate.lastParams.getValue("direction")).isEqualTo("应收");
         assertThat(jdbcTemplate.lastParams.getValue("counterpartyType")).isEqualTo("客户");
+        assertThat(jdbcTemplate.lastParams.getValue("settlementCompanyId")).isEqualTo(1001L);
         assertThat(jdbcTemplate.lastParams.getValue("reconciliationStatus")).isEqualTo("已对账");
         assertThat(jdbcTemplate.lastParams.getValue("keyword")).isEqualTo("%test%");
     }
@@ -321,12 +335,13 @@ class ReceivablePayableQueryRepositoryTest {
         jdbcTemplate.rows = List.of();
         ReceivablePayableQueryRepository repository = new ReceivablePayableQueryRepository(jdbcTemplate);
 
-        var result = repository.findSummary("应收", "客户", "abc123", "未对账");
+        var result = repository.findSummary("应收", "客户", "abc123", "none", "未对账");
 
         assertThat(result).isNull();
         assertThat(jdbcTemplate.lastParams.getValue("direction")).isEqualTo("应收");
         assertThat(jdbcTemplate.lastParams.getValue("counterpartyType")).isEqualTo("客户");
         assertThat(jdbcTemplate.lastParams.getValue("counterpartyKey")).isEqualTo("abc123");
+        assertThat(jdbcTemplate.lastParams.getValue("settlementCompanyKey")).isEqualTo("none");
         assertThat(jdbcTemplate.lastParams.getValue("reconciliationStatus")).isEqualTo("未对账");
     }
 
@@ -336,7 +351,7 @@ class ReceivablePayableQueryRepositoryTest {
         jdbcTemplate.rows = List.of(buildResponse());
         ReceivablePayableQueryRepository repository = new ReceivablePayableQueryRepository(jdbcTemplate);
 
-        var result = repository.findSummary("应收", "客户", "abc123", "已对账");
+        var result = repository.findSummary("应收", "客户", "abc123", "1001", "已对账");
 
         assertThat(result).isNotNull();
         assertThat(result.counterpartyName()).isEqualTo("Acme Corp");
@@ -348,7 +363,7 @@ class ReceivablePayableQueryRepositoryTest {
         jdbcTemplate.detailItems = List.of(buildDetailItem());
         ReceivablePayableQueryRepository repository = new ReceivablePayableQueryRepository(jdbcTemplate);
 
-        var result = repository.detailItems("应收", "客户", "abc123", "已对账");
+        var result = repository.detailItems("应收", "客户", "abc123", "1001", "已对账");
 
         assertThat(result).hasSize(1);
         assertThat(jdbcTemplate.dataSql).contains("so_sales_order");
@@ -356,6 +371,7 @@ class ReceivablePayableQueryRepositoryTest {
         assertThat(jdbcTemplate.dataSql).contains("fm_receipt_allocation");
         assertThat(jdbcTemplate.dataSql).doesNotContain("fm_invoice_issue");
         assertThat(jdbcTemplate.lastParams.getValue("counterpartyKey")).isEqualTo("abc123");
+        assertThat(jdbcTemplate.lastParams.getValue("settlementCompanyKey")).isEqualTo("1001");
         assertThat(jdbcTemplate.lastParams.getValue("reconciliationStatus")).isEqualTo("已对账");
     }
 
@@ -365,7 +381,7 @@ class ReceivablePayableQueryRepositoryTest {
         jdbcTemplate.detailItems = List.of(buildDetailItem());
         ReceivablePayableQueryRepository repository = new ReceivablePayableQueryRepository(jdbcTemplate);
 
-        var result = repository.detailItems("应付", "供应商", "def456", "未对账");
+        var result = repository.detailItems("应付", "供应商", "def456", "1002", "未对账");
 
         assertThat(result).hasSize(1);
         assertThat(jdbcTemplate.dataSql).contains("po_purchase_inbound");
@@ -373,6 +389,7 @@ class ReceivablePayableQueryRepositoryTest {
         assertThat(jdbcTemplate.dataSql).contains("fm_payment_allocation");
         assertThat(jdbcTemplate.dataSql).doesNotContain("fm_invoice_receipt");
         assertThat(jdbcTemplate.lastParams.getValue("counterpartyKey")).isEqualTo("def456");
+        assertThat(jdbcTemplate.lastParams.getValue("settlementCompanyKey")).isEqualTo("1002");
         assertThat(jdbcTemplate.lastParams.getValue("reconciliationStatus")).isEqualTo("未对账");
     }
 
@@ -382,7 +399,7 @@ class ReceivablePayableQueryRepositoryTest {
         jdbcTemplate.detailItems = List.of(buildDetailItem());
         ReceivablePayableQueryRepository repository = new ReceivablePayableQueryRepository(jdbcTemplate);
 
-        var result = repository.detailItems("应付", "物流商", "ghi789", "已对账");
+        var result = repository.detailItems("应付", "物流商", "ghi789", "1003", "已对账");
 
         assertThat(result).hasSize(1);
         assertThat(jdbcTemplate.dataSql).contains("lg_freight_bill");
@@ -396,7 +413,7 @@ class ReceivablePayableQueryRepositoryTest {
         jdbcTemplate.detailItems = List.of(buildDetailItem());
         ReceivablePayableQueryRepository repository = new ReceivablePayableQueryRepository(jdbcTemplate);
 
-        repository.detailItems("应收", "客户", "abc123", "已对账");
+        repository.detailItems("应收", "客户", "abc123", "none", "已对账");
 
         assertThat(jdbcTemplate.dataSql).contains("fm_ledger_adjustment");
         assertThat(jdbcTemplate.dataSql).contains("adjustment.status = '已审核'");
@@ -411,15 +428,113 @@ class ReceivablePayableQueryRepositoryTest {
         jdbcTemplate.detailItems = List.of(buildDetailItem());
         ReceivablePayableQueryRepository repository = new ReceivablePayableQueryRepository(jdbcTemplate);
 
-        repository.detailItems("应收", "客户", "abc123", "未对账");
+        repository.detailItems("应收", "客户", "abc123", "none", "未对账");
 
-        assertThat(jdbcTemplate.dataSql).contains("'销售订单' AS source_type");
+        assertThat(jdbcTemplate.dataSql).contains("'销售出库单' AS source_type");
         assertThat(jdbcTemplate.dataSql).contains("'采购入库单' AS source_type");
+        assertThat(jdbcTemplate.dataSql).doesNotContain("'采购订单' AS source_type");
+        assertThat(jdbcTemplate.dataSql).doesNotContain("'采购退款单' AS source_type");
+        assertThat(jdbcTemplate.dataSql).contains("'采购预付款' AS source_type");
+        assertThat(jdbcTemplate.dataSql).contains("'供应商退款到账单' AS source_type");
         assertThat(jdbcTemplate.dataSql).contains("'物流单' AS source_type");
         assertThat(jdbcTemplate.dataSql).contains("reconciliation_status");
-        assertThat(jdbcTemplate.dataSql).contains("sales_order.status = '完成销售'");
-        assertThat(jdbcTemplate.dataSql).contains("inbound.status IN ('完成入库', '完成采购')");
+        assertThat(jdbcTemplate.dataSql)
+                .contains("audited_sales_outbound_receivable AS (")
+                .contains("JOIN so_sales_outbound_item outbound_item")
+                .contains("FROM so_sales_outbound outbound")
+                .contains("JOIN so_sales_order_item source_order_item")
+                .contains("outbound.deleted_flag = FALSE")
+                .contains("outbound.status = '已审核'")
+                .contains("GROUP BY outbound.id")
+                .contains("SUM(outbound_item.amount) AS total_amount")
+                .contains("outbound_receivable.outbound_no AS document_no")
+                .contains("outbound_receivable.outbound_date::date AS accounting_date")
+                .contains("outbound_receivable.outbound_date::date AS due_date")
+                .contains("outbound_receivable.total_amount AS debit_amount")
+                .doesNotContain("sales_order.status = '完成销售'")
+                .doesNotContain("COALESCE(sales_order.total_amount, 0) AS debit_amount");
+        assertThat(jdbcTemplate.dataSql)
+                .contains("inbound.status IN ('已审核', '完成入库', '完成采购')");
+        assertThat(jdbcTemplate.dataSql)
+                .contains("SUM(item.amount + item.weight_adjustment_amount) AS total_amount")
+                .contains("inbound_payable.total_amount AS credit_amount");
+        assertThat(jdbcTemplate.dataSql)
+                .doesNotContain("purchase_order_original_amounts AS (")
+                .doesNotContain("refund.source_purchase_order_id = source_order_item.order_id")
+                .contains("payment.payment_purpose = 'PURCHASE_PREPAYMENT'")
+                .contains("purchase_prepayment_allocation_totals AS (")
+                .contains("SUM(allocation.allocated_amount) AS allocated_amount")
+                .contains("purchase_prepayment_events AS (")
+                .contains("'已对账' AS reconciliation_status")
+                .contains("allocation.allocated_amount AS event_amount")
+                .contains("'未对账' AS reconciliation_status")
+                .contains("payment.amount - COALESCE(allocation_total.allocated_amount, 0) AS event_amount")
+                .contains("payment.amount > COALESCE(allocation_total.allocated_amount, 0)")
+                .contains("prepayment_event.event_amount AS debit_amount")
+                .contains("refund_receipt.status = '已收款'")
+                .contains("'SETTLEMENT_REVERSAL' AS entry_role")
+                .contains("COALESCE(refund_receipt.amount, 0) AS credit_amount");
         assertThat(jdbcTemplate.dataSql).contains("bill.status = '已审核'");
+    }
+
+    @Test
+    void shouldAggregateSummaryByStableCounterpartyKeyAndUseLatestBusinessSnapshot() {
+        RecordingNamedParameterJdbcTemplate jdbcTemplate = new RecordingNamedParameterJdbcTemplate();
+        ReceivablePayableQueryRepository repository = new ReceivablePayableQueryRepository(jdbcTemplate);
+
+        repository.listForExport("应付", "供应商", null, null, null, null);
+
+        assertThat(jdbcTemplate.dataSql)
+                .containsSubsequence(
+                        "latest_party_snapshots AS (",
+                        "SELECT DISTINCT ON (",
+                        "ledger.direction",
+                        "ledger.counterparty_type",
+                        "ledger.counterparty_key",
+                        "ledger.settlement_company_key",
+                        "ledger.reconciliation_status",
+                        "ledger.accounting_date DESC NULLS LAST",
+                        "latest_snapshot.counterparty_name"
+                );
+        String partyTotalsSql = jdbcTemplate.dataSql.substring(
+                jdbcTemplate.dataSql.indexOf("party_totals AS ("),
+                jdbcTemplate.dataSql.indexOf("recognition_entries AS (")
+        );
+        assertThat(partyTotalsSql)
+                .contains("ledger.counterparty_key")
+                .contains("ledger.settlement_company_key")
+                .doesNotContain("ledger.counterparty_code", "ledger.counterparty_name");
+    }
+
+    @Test
+    void shouldPartitionSummaryAndAgingBySettlementCompany() {
+        RecordingNamedParameterJdbcTemplate jdbcTemplate = new RecordingNamedParameterJdbcTemplate();
+        ReceivablePayableQueryRepository repository = new ReceivablePayableQueryRepository(jdbcTemplate);
+
+        repository.listForExport("应付", "供应商", null, null, null, null);
+
+        assertThat(jdbcTemplate.dataSql)
+                .contains("COALESCE(source.settlement_company_id::TEXT, 'none') AS settlement_company_key")
+                .contains("latest_snapshot.settlement_company_id")
+                .contains("latest_snapshot.settlement_company_name")
+                .contains("ledger.settlement_company_key")
+                .contains("pt.settlement_company_key")
+                .contains("ag.settlement_company_key = pt.settlement_company_key")
+                .contains("PARTITION BY ledger.direction, ledger.counterparty_type, ledger.counterparty_key, ledger.settlement_company_key, ledger.reconciliation_status")
+                .contains("CONCAT(")
+                .contains("pt.settlement_company_key");
+    }
+
+    @Test
+    void shouldSubtractSupplierRefundReceiptFromNetSettledAmount() {
+        RecordingNamedParameterJdbcTemplate jdbcTemplate = new RecordingNamedParameterJdbcTemplate();
+        ReceivablePayableQueryRepository repository = new ReceivablePayableQueryRepository(jdbcTemplate);
+
+        repository.listForExport("应付", "供应商", null, null, null, null);
+
+        assertThat(jdbcTemplate.dataSql)
+                .contains("ledger.entry_role = 'SETTLEMENT_REVERSAL' AND ledger.direction = '应付'")
+                .contains("THEN -ledger.credit_amount");
     }
 
     @Test
@@ -428,12 +543,12 @@ class ReceivablePayableQueryRepositoryTest {
         jdbcTemplate.detailItems = List.of(buildDetailItem());
         ReceivablePayableQueryRepository repository = new ReceivablePayableQueryRepository(jdbcTemplate);
 
-        var firstItems = repository.detailItems("应收", "客户", "abc123", "未对账");
+        var firstItems = repository.detailItems("应收", "客户", "abc123", "none", "未对账");
         String firstDataSql = jdbcTemplate.dataSql;
         Object firstCounterpartyKey = jdbcTemplate.lastParams.getValue("counterpartyKey");
         Object firstReconciliationStatus = jdbcTemplate.lastParams.getValue("reconciliationStatus");
 
-        var secondItems = repository.detailItems("应收", "客户", "abc123", "未对账");
+        var secondItems = repository.detailItems("应收", "客户", "abc123", "none", "未对账");
 
         assertThat(secondItems).isEqualTo(firstItems);
         assertThat(jdbcTemplate.dataSql).isEqualTo(firstDataSql);
@@ -441,108 +556,72 @@ class ReceivablePayableQueryRepositoryTest {
         assertThat(jdbcTemplate.dataSql).contains("COALESCE(ledger.source_line_id::TEXT, '')");
         assertThat(jdbcTemplate.dataSql).contains("ledger.source_no");
         assertThat(jdbcTemplate.dataSql).containsOnlyOnce("ledger.reconciliation_status = :reconciliationStatus");
+        assertThat(jdbcTemplate.dataSql).containsOnlyOnce("ledger.settlement_company_key = :settlementCompanyKey");
         assertThat(jdbcTemplate.lastParams.getValue("counterpartyKey")).isEqualTo(firstCounterpartyKey);
         assertThat(jdbcTemplate.lastParams.getValue("reconciliationStatus")).isEqualTo(firstReconciliationStatus);
     }
 
     @Test
-    void shouldApplyDataScopeEmptyInPage() {
+    void shouldIgnoreEventOwnerDataScopeInPage() {
         try {
-            DataScopeContext.set(1L, "receipt", "self", Set.of());
+            DataScopeContext.set(1L, "receivable-payable", "self", Set.of(1L, 2L));
             RecordingNamedParameterJdbcTemplate jdbcTemplate = new RecordingNamedParameterJdbcTemplate();
             jdbcTemplate.total = 0L;
             ReceivablePayableQueryRepository repository = new ReceivablePayableQueryRepository(jdbcTemplate);
 
             repository.page(new PageQuery(0, 10, "id", "desc"), null, null, null, null, null);
 
-            assertThat(jdbcTemplate.countSql).contains("1 = 0");
+            assertNoEventOwnerFilter(jdbcTemplate.countSql, jdbcTemplate.lastParams);
         } finally {
             DataScopeContext.clear();
         }
     }
 
     @Test
-    void shouldApplyDataScopeWithUsersInPage() {
+    void shouldIgnoreEventOwnerDataScopeInSummaryDetail() {
         try {
-            DataScopeContext.set(1L, "receipt", "self", Set.of(1L, 2L));
+            DataScopeContext.set(1L, "receivable-payable", "self", Set.of(1L, 2L));
             RecordingNamedParameterJdbcTemplate jdbcTemplate = new RecordingNamedParameterJdbcTemplate();
-            jdbcTemplate.total = 0L;
             ReceivablePayableQueryRepository repository = new ReceivablePayableQueryRepository(jdbcTemplate);
 
-            repository.page(new PageQuery(0, 10, "id", "desc"), null, null, null, null, null);
+            repository.findSummary("应收", "客户", "CUS-001", "1001", "未对账");
 
-            assertThat(jdbcTemplate.lastParams.getValue("dataScopeOwnerUserIds")).isEqualTo(Set.of(1L, 2L));
-            assertThat(jdbcTemplate.countSql).contains("source.created_by IN (:dataScopeOwnerUserIds)");
+            assertNoEventOwnerFilter(jdbcTemplate.dataSql, jdbcTemplate.lastParams);
         } finally {
             DataScopeContext.clear();
         }
     }
 
     @Test
-    void shouldApplyDataScopeEmptyInDetailItems() {
+    void shouldIgnoreEmptyEventOwnerDataScopeInDetailItems() {
         try {
-            DataScopeContext.set(1L, "receipt", "self", Set.of());
+            DataScopeContext.set(1L, "receivable-payable", "self", Set.of());
             RecordingNamedParameterJdbcTemplate jdbcTemplate = new RecordingNamedParameterJdbcTemplate();
             jdbcTemplate.detailItems = List.of();
             ReceivablePayableQueryRepository repository = new ReceivablePayableQueryRepository(jdbcTemplate);
 
-            repository.detailItems("应收", "客户", "key", "未对账");
+            repository.detailItems("应收", "客户", "key", "none", "未对账");
 
-            assertThat(jdbcTemplate.dataSql).contains("1 = 0");
+            assertNoEventOwnerFilter(jdbcTemplate.dataSql, jdbcTemplate.lastParams);
         } finally {
             DataScopeContext.clear();
         }
     }
 
     @Test
-    void shouldApplyDataScopeWithUsersInDetailItems() {
+    void shouldIgnoreEmptyEventOwnerDataScopeInExport() {
         try {
-            DataScopeContext.set(1L, "receipt", "self", Set.of(1L, 2L));
-            RecordingNamedParameterJdbcTemplate jdbcTemplate = new RecordingNamedParameterJdbcTemplate();
-            jdbcTemplate.detailItems = List.of();
-            ReceivablePayableQueryRepository repository = new ReceivablePayableQueryRepository(jdbcTemplate);
-
-            repository.detailItems("应收", "客户", "key", "未对账");
-
-            assertThat(jdbcTemplate.lastParams.getValue("dataScopeOwnerUserIds")).isEqualTo(Set.of(1L, 2L));
-            assertThat(jdbcTemplate.dataSql).contains("source.created_by IN (:dataScopeOwnerUserIds)");
-        } finally {
-            DataScopeContext.clear();
-        }
-    }
-
-    @Test
-    void shouldApplyDataScopeEmptyInExport() {
-        try {
-            DataScopeContext.set(1L, "receipt", "self", Set.of());
+            DataScopeContext.set(1L, "receivable-payable", "self", Set.of());
             RecordingNamedParameterJdbcTemplate jdbcTemplate = new RecordingNamedParameterJdbcTemplate();
             jdbcTemplate.rows = List.of();
             ReceivablePayableQueryRepository repository = new ReceivablePayableQueryRepository(jdbcTemplate);
 
-            repository.listForExport(null, null, null, null, null);
+            repository.listForExport(null, null, null, null, null, null);
 
-            assertThat(jdbcTemplate.dataSql).contains("1 = 0");
+            assertNoEventOwnerFilter(jdbcTemplate.dataSql, jdbcTemplate.lastParams);
         } finally {
             DataScopeContext.clear();
         }
-    }
-
-    @Test
-    void shouldNotApplyDataScopeWhenOwnerUserIdsIsNull() {
-        try {
-            DataScopeContext.clear();
-            RecordingNamedParameterJdbcTemplate jdbcTemplate = new RecordingNamedParameterJdbcTemplate();
-            jdbcTemplate.total = 0L;
-            ReceivablePayableQueryRepository repository = new ReceivablePayableQueryRepository(jdbcTemplate);
-
-            repository.page(new PageQuery(0, 10, "id", "desc"), null, null, null, null, null);
-
-            assertThat(jdbcTemplate.countSql).doesNotContain("source.created_by IN (:dataScopeOwnerUserIds)");
-        assertThat(jdbcTemplate.countSql).doesNotContain("WHERE 1 = 0");
-        assertThat(jdbcTemplate.lastParams.getValues()).doesNotContainKey("dataScopeOwnerUserIds");
-    } finally {
-        DataScopeContext.clear();
-    }
     }
 
     @Test
@@ -550,11 +629,13 @@ class ReceivablePayableQueryRepositoryTest {
         RecordingNamedParameterJdbcTemplate jdbcTemplate = new RecordingNamedParameterJdbcTemplate();
         jdbcTemplate.total = 1L;
         jdbcTemplate.resultSetRows = List.of(Map.ofEntries(
-                Map.entry("id", "应收:客户:未对账:CUS001"),
+                Map.entry("id", "应收:客户:未对账:1001:CUS001"),
                 Map.entry("direction", "应收"),
                 Map.entry("counterparty_type", "客户"),
                 Map.entry("counterparty_code", "CUS001"),
                 Map.entry("counterparty_name", "客户甲"),
+                Map.entry("settlement_company_id", 1001L),
+                Map.entry("settlement_company_name", "结算主体甲"),
                 Map.entry("reconciliation_status", "未对账"),
                 Map.entry("recognized_amount", new BigDecimal("800.00")),
                 Map.entry("settled_amount", new BigDecimal("300.00")),
@@ -572,11 +653,13 @@ class ReceivablePayableQueryRepositoryTest {
         var result = repository.page(new PageQuery(0, 10, null, null), null, null, null, null, null);
 
         assertThat(result.getContent()).singleElement().satisfies(row -> {
-            assertThat(row.id()).isEqualTo("应收:客户:未对账:CUS001");
+            assertThat(row.id()).isEqualTo("应收:客户:未对账:1001:CUS001");
             assertThat(row.direction()).isEqualTo("应收");
             assertThat(row.counterpartyType()).isEqualTo("客户");
             assertThat(row.counterpartyCode()).isEqualTo("CUS001");
             assertThat(row.counterpartyName()).isEqualTo("客户甲");
+            assertThat(row.settlementCompanyId()).isEqualTo(1001L);
+            assertThat(row.settlementCompanyName()).isEqualTo("结算主体甲");
             assertThat(row.reconciliationStatus()).isEqualTo("未对账");
             assertThat(row.recognizedAmount()).isEqualByComparingTo("800.00");
             assertThat(row.settledAmount()).isEqualByComparingTo("300.00");
@@ -602,6 +685,8 @@ class ReceivablePayableQueryRepositoryTest {
                 Map.entry("document_no", "SO-001"),
                 Map.entry("source_no", "ST-001"),
                 Map.entry("project_name", "项目甲"),
+                Map.entry("settlement_company_id", 1001L),
+                Map.entry("settlement_company_name", "结算主体甲"),
                 Map.entry("reconciliation_status", "已对账"),
                 Map.entry("accounting_date", Date.valueOf(LocalDate.of(2026, 5, 1))),
                 Map.entry("debit_amount", new BigDecimal("100.00")),
@@ -613,7 +698,7 @@ class ReceivablePayableQueryRepositoryTest {
         ));
         ReceivablePayableQueryRepository repository = new ReceivablePayableQueryRepository(jdbcTemplate);
 
-        var result = repository.detailItems("应收", "客户", "CUS001", "已对账");
+        var result = repository.detailItems("应收", "客户", "CUS001", "1001", "已对账");
 
         assertThat(result).singleElement().satisfies(row -> {
             assertThat(row.id()).isEqualTo("detail-1");
@@ -623,6 +708,8 @@ class ReceivablePayableQueryRepositoryTest {
             assertThat(row.documentNo()).isEqualTo("SO-001");
             assertThat(row.sourceNo()).isEqualTo("ST-001");
             assertThat(row.projectName()).isEqualTo("项目甲");
+            assertThat(row.settlementCompanyId()).isEqualTo(1001L);
+            assertThat(row.settlementCompanyName()).isEqualTo("结算主体甲");
             assertThat(row.reconciliationStatus()).isEqualTo("已对账");
             assertThat(row.accountingDate()).isEqualTo(LocalDate.of(2026, 5, 1));
             assertThat(row.dueDate()).isNull();
@@ -646,6 +733,8 @@ class ReceivablePayableQueryRepositoryTest {
                 Map.entry("document_no", "SK-001"),
                 Map.entry("source_no", "ST-001"),
                 Map.entry("project_name", "项目甲"),
+                Map.entry("settlement_company_id", 1001L),
+                Map.entry("settlement_company_name", "结算主体甲"),
                 Map.entry("reconciliation_status", "已对账"),
                 Map.entry("due_date", Date.valueOf(LocalDate.of(2026, 5, 2))),
                 Map.entry("debit_amount", BigDecimal.ZERO),
@@ -657,12 +746,20 @@ class ReceivablePayableQueryRepositoryTest {
         ));
         ReceivablePayableQueryRepository repository = new ReceivablePayableQueryRepository(jdbcTemplate);
 
-        var result = repository.detailItems("应收", "客户", "CUS001", "已对账");
+        var result = repository.detailItems("应收", "客户", "CUS001", "1001", "已对账");
 
         assertThat(result).singleElement().satisfies(row -> {
             assertThat(row.accountingDate()).isNull();
             assertThat(row.dueDate()).isEqualTo(LocalDate.of(2026, 5, 2));
         });
+    }
+
+    private static void assertNoEventOwnerFilter(String sql, MapSqlParameterSource params) {
+        assertThat(sql)
+                .doesNotContain("source.created_by")
+                .doesNotContain("dataScopeOwnerUserIds")
+                .doesNotContain("WHERE 1 = 0");
+        assertThat(params.getValues()).doesNotContainKey("dataScopeOwnerUserIds");
     }
 
     private ReceivablePayableResponse buildResponse() {
@@ -759,6 +856,7 @@ class ReceivablePayableQueryRepositoryTest {
                     new Class[]{ResultSet.class},
                     (proxy, method, args) -> switch (method.getName()) {
                         case "getString" -> (String) values.get((String) args[0]);
+                        case "getObject" -> values.get((String) args[0]);
                         case "getBigDecimal" -> (BigDecimal) values.get((String) args[0]);
                         case "getLong" -> ((Number) values.get((String) args[0])).longValue();
                         case "getInt" -> ((Number) values.get((String) args[0])).intValue();

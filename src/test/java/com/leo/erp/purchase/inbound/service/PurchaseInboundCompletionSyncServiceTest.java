@@ -11,15 +11,65 @@ import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 class PurchaseInboundCompletionSyncServiceTest {
+
+    @Test
+    void shouldCompleteAuditedInboundAfterRefundConsumesRemainingQuantity() {
+        PurchaseInboundRepository repository = mock(PurchaseInboundRepository.class);
+        PurchaseInboundSourceValidator sourceValidator = mock(PurchaseInboundSourceValidator.class);
+        PurchaseInboundAllocationService allocationService = mock(PurchaseInboundAllocationService.class);
+        PurchaseInboundCompletionSyncService service = new PurchaseInboundCompletionSyncService(
+                repository,
+                sourceValidator,
+                allocationService
+        );
+        PurchaseInbound inbound = inbound("已审核", 4);
+        PurchaseOrderItem sourceItem = sourcePurchaseOrderItem(201L, 10);
+        when(repository.findByPurchaseOrderNoAndDeletedFlagFalse("PO-001")).thenReturn(List.of(inbound));
+        when(sourceValidator.loadSourcePurchaseOrderItemMap(List.of(201L)))
+                .thenReturn(Map.of(201L, sourceItem));
+        when(allocationService.loadAllocatedQuantityMap(List.of(201L), 1L))
+                .thenReturn(Map.of(201L, 6));
+
+        service.synchronizeAfterPurchaseRefundStatusChange("PO-001");
+
+        assertThat(inbound.getStatus()).isEqualTo("完成入库");
+        verify(repository).saveAll(List.of(inbound));
+    }
+
+    @Test
+    void shouldRestoreRefundCompletedInboundToAuditedAfterRefundIsUnaudited() {
+        PurchaseInboundRepository repository = mock(PurchaseInboundRepository.class);
+        PurchaseInboundSourceValidator sourceValidator = mock(PurchaseInboundSourceValidator.class);
+        PurchaseInboundAllocationService allocationService = mock(PurchaseInboundAllocationService.class);
+        PurchaseInboundCompletionSyncService service = new PurchaseInboundCompletionSyncService(
+                repository,
+                sourceValidator,
+                allocationService
+        );
+        PurchaseInbound inbound = inbound("完成入库", 4);
+        PurchaseOrderItem sourceItem = sourcePurchaseOrderItem(201L, 10);
+        when(repository.findByPurchaseOrderNoAndDeletedFlagFalse("PO-001")).thenReturn(List.of(inbound));
+        when(sourceValidator.loadSourcePurchaseOrderItemMap(List.of(201L)))
+                .thenReturn(Map.of(201L, sourceItem));
+        when(allocationService.loadAllocatedQuantityMap(List.of(201L), 1L))
+                .thenReturn(Map.of());
+
+        service.synchronizeAfterPurchaseRefundStatusChange("PO-001");
+
+        assertThat(inbound.getStatus()).isEqualTo("已审核");
+        verify(repository).saveAll(List.of(inbound));
+    }
 
     @Test
     void shouldCompleteInboundWhenReceivedQuantityIsWithinTolerance() {

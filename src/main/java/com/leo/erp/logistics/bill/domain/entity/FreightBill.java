@@ -22,6 +22,9 @@ public class FreightBill extends AbstractAuditableEntity {
     @Column(name = "bill_no", nullable = false, unique = true, length = 64)
     private String billNo;
 
+    @Column(name = "carrier_code", nullable = false, length = 64)
+    private String carrierCode;
+
     @Column(name = "carrier_name", nullable = false, length = 128)
     private String carrierName;
 

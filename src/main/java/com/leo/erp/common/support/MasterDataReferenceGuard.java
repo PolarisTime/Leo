@@ -22,6 +22,12 @@ public class MasterDataReferenceGuard {
     }
 
     public void assertNoReferences(String masterDataLabel, List<ReferenceCheck> references) {
+        assertNoReferences(masterDataLabel, "删除", references);
+    }
+
+    public void assertNoReferences(String masterDataLabel,
+                                   String action,
+                                   List<ReferenceCheck> references) {
         for (ReferenceCheck reference : references) {
             if (reference.hasBlankValue()) {
                 continue;
@@ -29,7 +35,7 @@ public class MasterDataReferenceGuard {
             Long count = jdbc.queryForObject(reference.sql(), Long.class, reference.arguments());
             if (count != null && count > 0) {
                 throw new BusinessException(ErrorCode.BUSINESS_ERROR,
-                        masterDataLabel + "已被业务或主数据引用，不能删除（"
+                        masterDataLabel + "已被业务或主数据引用，不能" + action + "（"
                                 + reference.tableName() + "." + reference.columnName()
                                 + " 中有 " + count + " 条记录）");
             }

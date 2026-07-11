@@ -11,6 +11,7 @@ import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.finance.payment.domain.entity.Payment;
 import com.leo.erp.finance.payment.domain.entity.PaymentAllocation;
+import com.leo.erp.finance.payment.domain.entity.PaymentPurposes;
 import com.leo.erp.finance.payment.mapper.PaymentMapper;
 import com.leo.erp.finance.payment.repository.PaymentRepository;
 import com.leo.erp.finance.payment.web.dto.PaymentAllocationRequest;
@@ -20,6 +21,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Optional;
@@ -37,6 +39,7 @@ public class PaymentService extends AbstractCrudService<Payment, PaymentRequest,
     private final PaymentAllocationResponseAssembler allocationResponseAssembler;
     private final PaymentSettlementSyncService settlementSyncService;
     private final SourceAllocationLockService sourceAllocationLockService;
+    private final PaymentPurchasePrepaymentService purchasePrepaymentService;
 
     @Autowired
     public PaymentService(PaymentRepository paymentRepository,
@@ -46,7 +49,8 @@ public class PaymentService extends AbstractCrudService<Payment, PaymentRequest,
                           PaymentAllocationService paymentAllocationService,
                           PaymentAllocationResponseAssembler allocationResponseAssembler,
                           PaymentSettlementSyncService settlementSyncService,
-                          SourceAllocationLockService sourceAllocationLockService) {
+                          SourceAllocationLockService sourceAllocationLockService,
+                          PaymentPurchasePrepaymentService purchasePrepaymentService) {
         super(snowflakeIdGenerator);
         this.paymentRepository = paymentRepository;
         this.paymentMapper = paymentMapper;
@@ -55,6 +59,7 @@ public class PaymentService extends AbstractCrudService<Payment, PaymentRequest,
         this.allocationResponseAssembler = allocationResponseAssembler;
         this.settlementSyncService = settlementSyncService;
         this.sourceAllocationLockService = sourceAllocationLockService;
+        this.purchasePrepaymentService = purchasePrepaymentService;
     }
 
     public Page<PaymentResponse> page(PageQuery query, PageFilter filter) {
@@ -76,6 +81,20 @@ public class PaymentService extends AbstractCrudService<Payment, PaymentRequest,
     }
 
     @Override
+    @Transactional
+    public PaymentResponse updateStatus(Long id, String status) {
+        lockPaymentRoot(id);
+        return super.updateStatus(id, status);
+    }
+
+    @Override
+    @Transactional
+    public void delete(Long id) {
+        lockPaymentRoot(id);
+        super.delete(id);
+    }
+
+    @Override
     protected void validateCreate(PaymentRequest request) {
         ensurePaymentNoUnique(request.paymentNo());
     }
@@ -92,9 +111,16 @@ public class PaymentService extends AbstractCrudService<Payment, PaymentRequest,
         return new PaymentRequest(
                 resolveCreateBusinessNo("payment", request.paymentNo(), entityId),
                 request.businessType(),
+                request.paymentPurpose(),
                 request.counterpartyCode(),
                 request.counterpartyName(),
                 request.sourceStatementId(),
+                request.sourcePurchaseOrderId(),
+                request.purchaseOrderNo(),
+                request.supplierCode(),
+                request.supplierName(),
+                request.settlementCompanyId(),
+                request.settlementCompanyName(),
                 request.paymentDate(),
                 request.payType(),
                 request.amount(),
@@ -110,9 +136,16 @@ public class PaymentService extends AbstractCrudService<Payment, PaymentRequest,
         return new PaymentRequest(
                 entity.getPaymentNo(),
                 request.businessType(),
+                request.paymentPurpose(),
                 request.counterpartyCode(),
                 request.counterpartyName(),
                 request.sourceStatementId(),
+                request.sourcePurchaseOrderId(),
+                request.purchaseOrderNo(),
+                request.supplierCode(),
+                request.supplierName(),
+                request.settlementCompanyId(),
+                request.settlementCompanyName(),
                 request.paymentDate(),
                 request.payType(),
                 request.amount(),
@@ -163,6 +196,20 @@ public class PaymentService extends AbstractCrudService<Payment, PaymentRequest,
 
     @Override
     protected void beforeStatusUpdate(Payment entity, String currentStatus, String nextStatus) {
+        if (PaymentPurposes.isPurchasePrepayment(entity.getPaymentPurpose())) {
+            if (StatusConstants.PAID.equals(nextStatus)) {
+                purchasePrepaymentService.applySourceSnapshot(
+                        entity,
+                        entity.getSourcePurchaseOrderId(),
+                        entity.getAmount(),
+                        nextStatus
+                );
+            } else {
+                purchasePrepaymentService.assertRefundLifecycleMutable(entity, "反审核");
+                purchasePrepaymentService.validateNoStatementAllocations(entity);
+            }
+            return;
+        }
         lockAllocationStatements(entity, null);
         settlementSyncService.captureOriginalAllocationState(entity);
         paymentAllocationService.validateExistingAllocationsForSettlement(entity, nextStatus);
@@ -170,6 +217,11 @@ public class PaymentService extends AbstractCrudService<Payment, PaymentRequest,
 
     @Override
     protected void beforeDelete(Payment entity) {
+        if (PaymentPurposes.isPurchasePrepayment(entity.getPaymentPurpose())) {
+            purchasePrepaymentService.assertRefundLifecycleMutable(entity, "删除");
+            purchasePrepaymentService.validateNoStatementAllocations(entity);
+            return;
+        }
         lockAllocationStatements(entity, null);
     }
 
@@ -180,9 +232,16 @@ public class PaymentService extends AbstractCrudService<Payment, PaymentRequest,
                 response.id(),
                 response.paymentNo(),
                 response.businessType(),
+                response.paymentPurpose(),
                 response.counterpartyCode(),
                 response.counterpartyName(),
                 response.sourceStatementId(),
+                response.sourcePurchaseOrderId(),
+                response.purchaseOrderNo(),
+                response.supplierCode(),
+                response.supplierName(),
+                response.settlementCompanyId(),
+                response.settlementCompanyName(),
                 response.paymentDate(),
                 response.payType(),
                 response.amount(),
@@ -208,7 +267,7 @@ public class PaymentService extends AbstractCrudService<Payment, PaymentRequest,
     private void lockAllocationStatements(Payment entity, PaymentRequest request) {
         TreeSet<Long> supplierStatementIds = new TreeSet<>();
         TreeSet<Long> freightStatementIds = new TreeSet<>();
-        if (entity != null) {
+        if (entity != null && !PaymentPurposes.isPurchasePrepayment(entity.getPaymentPurpose())) {
             addStatementIds(
                     entity.getBusinessType(),
                     existingAllocationStatementIds(entity),
@@ -216,7 +275,7 @@ public class PaymentService extends AbstractCrudService<Payment, PaymentRequest,
                     freightStatementIds
             );
         }
-        if (request != null) {
+        if (request != null && !PaymentPurposes.isPurchasePrepayment(request.paymentPurpose())) {
             addStatementIds(
                     request.businessType(),
                     requestedAllocationStatementIds(request),
@@ -282,5 +341,9 @@ public class PaymentService extends AbstractCrudService<Payment, PaymentRequest,
         if (paymentRepository.existsByPaymentNoAndDeletedFlagFalse(paymentNo)) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "付款单号已存在");
         }
+    }
+
+    private void lockPaymentRoot(Long id) {
+        paymentRepository.findByIdAndDeletedFlagFalseForUpdate(id);
     }
 }

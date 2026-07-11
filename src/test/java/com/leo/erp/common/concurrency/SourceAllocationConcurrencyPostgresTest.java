@@ -350,9 +350,9 @@ class SourceAllocationConcurrencyPostgresTest {
         JdbcTemplate transactionJdbc = transactionJdbc(connection);
         transactionJdbc.update("""
                 INSERT INTO fm_invoice_receipt (
-                    id, receive_no, invoice_no, supplier_name, invoice_date, invoice_type,
+                    id, receive_no, invoice_no, supplier_code, supplier_name, invoice_date, invoice_type,
                     amount, tax_amount, status, operator_name, deleted_flag
-                ) VALUES (?, ?, ?, '并发测试供应商', CURRENT_TIMESTAMP, '增值税专票',
+                ) VALUES (?, ?, ?, 'TEST-CONC-SUPPLIER', '并发测试供应商', CURRENT_TIMESTAMP, '增值税专票',
                           ?, 0, '已收票', '并发测试', FALSE)
                 """, receiptId, "TEST-CONC-RECEIPT-" + attempt, "TEST-CONC-INVOICE-" + attempt,
                 ALLOCATION_REQUEST);
@@ -417,9 +417,9 @@ class SourceAllocationConcurrencyPostgresTest {
         insertPurchaseOrder(PURCHASE_ORDER_TWO_ID, PURCHASE_ORDER_ITEM_TWO_ID, 2);
         jdbcTemplate.update("""
                 INSERT INTO po_purchase_inbound (
-                    id, inbound_no, supplier_name, warehouse_name, inbound_date, settlement_mode,
+                    id, inbound_no, supplier_code, supplier_name, warehouse_name, inbound_date, settlement_mode,
                     total_weight, total_amount, status, deleted_flag
-                ) VALUES (?, ?, '并发测试供应商', '并发测试仓', CURRENT_TIMESTAMP,
+                ) VALUES (?, ?, 'TEST-CONC-SUPPLIER', '并发测试供应商', '并发测试仓', CURRENT_TIMESTAMP,
                           '按重量', 10, 10, '完成入库', FALSE)
                 """, PURCHASE_INBOUND_ID, PURCHASE_INBOUND_NO);
         jdbcTemplate.update("""
@@ -435,9 +435,9 @@ class SourceAllocationConcurrencyPostgresTest {
     private void insertPurchaseOrder(long orderId, long itemId, int sequence) {
         jdbcTemplate.update("""
                 INSERT INTO po_purchase_order (
-                    id, order_no, supplier_name, order_date, total_weight, total_amount,
+                    id, order_no, supplier_code, supplier_name, order_date, total_weight, total_amount,
                     status, deleted_flag
-                ) VALUES (?, ?, '并发测试供应商', CURRENT_TIMESTAMP, 10, 10, '已审核', FALSE)
+                ) VALUES (?, ?, 'TEST-CONC-SUPPLIER', '并发测试供应商', CURRENT_TIMESTAMP, 10, 10, '已审核', FALSE)
                 """, orderId, "TEST-CONC-PO-" + sequence);
         jdbcTemplate.update("""
                 INSERT INTO po_purchase_order_item (

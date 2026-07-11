@@ -95,6 +95,7 @@ public class InvoiceReceiptService extends AbstractCrudService<InvoiceReceipt, I
         return new InvoiceReceiptRequest(
                 resolveCreateBusinessNo("invoice-receipt", request.receiveNo(), entityId),
                 request.invoiceNo(),
+                request.supplierCode(),
                 request.supplierName(),
                 request.invoiceTitle(),
                 request.invoiceDate(),
@@ -113,6 +114,9 @@ public class InvoiceReceiptService extends AbstractCrudService<InvoiceReceipt, I
         return new InvoiceReceiptRequest(
                 entity.getReceiveNo(),
                 request.invoiceNo(),
+                request.supplierCode() == null || request.supplierCode().isBlank()
+                        ? entity.getSupplierCode()
+                        : request.supplierCode(),
                 request.supplierName(),
                 request.invoiceTitle(),
                 request.invoiceDate(),

@@ -10,6 +10,7 @@ import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -35,6 +36,33 @@ public class PurchaseInboundCompletionSyncService {
         if (!StatusConstants.AUDITED.equals(inbound.getStatus())) {
             return false;
         }
+        return isFullyAllocated(inbound);
+    }
+
+    public void synchronizeAfterPurchaseRefundStatusChange(String purchaseOrderNo) {
+        if (purchaseOrderNo == null || purchaseOrderNo.isBlank()) {
+            return;
+        }
+        List<PurchaseInbound> changedInbounds = new ArrayList<>();
+        for (PurchaseInbound inbound : repository.findByPurchaseOrderNoAndDeletedFlagFalse(purchaseOrderNo)) {
+            if (!StatusConstants.AUDITED.equals(inbound.getStatus())
+                    && !StatusConstants.INBOUND_COMPLETED.equals(inbound.getStatus())) {
+                continue;
+            }
+            String nextStatus = isFullyAllocated(inbound)
+                    ? StatusConstants.INBOUND_COMPLETED
+                    : StatusConstants.AUDITED;
+            if (!nextStatus.equals(inbound.getStatus())) {
+                inbound.setStatus(nextStatus);
+                changedInbounds.add(inbound);
+            }
+        }
+        if (!changedInbounds.isEmpty()) {
+            repository.saveAll(changedInbounds);
+        }
+    }
+
+    private boolean isFullyAllocated(PurchaseInbound inbound) {
         List<Long> sourcePurchaseOrderItemIds = sourcePurchaseOrderItemIds(inbound);
         if (sourcePurchaseOrderItemIds.isEmpty()) {
             return false;

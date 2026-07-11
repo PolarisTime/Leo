@@ -17,6 +17,9 @@ public record LedgerAdjustmentRequest(
         String counterpartyCode,
         @NotBlank(message = "往来单位不能为空")
         String counterpartyName,
+        @NotNull(message = "结算主体不能为空")
+        Long settlementCompanyId,
+        String settlementCompanyName,
         Long projectId,
         String projectName,
         @NotNull(message = "调整日期不能为空")

@@ -37,6 +37,9 @@ public class Payment extends AbstractAuditableEntity {
     @Column(name = "business_type", nullable = false, length = 32)
     private String businessType;
 
+    @Column(name = "payment_purpose", nullable = false, length = 32)
+    private String paymentPurpose;
+
     @Column(name = "counterparty_name", nullable = false, length = 128)
     private String counterpartyName;
 
@@ -45,6 +48,24 @@ public class Payment extends AbstractAuditableEntity {
 
     @Column(name = "source_statement_id")
     private Long sourceStatementId;
+
+    @Column(name = "source_purchase_order_id")
+    private Long sourcePurchaseOrderId;
+
+    @Column(name = "purchase_order_no", length = 64)
+    private String purchaseOrderNo;
+
+    @Column(name = "supplier_code", length = 64)
+    private String supplierCode;
+
+    @Column(name = "supplier_name", length = 128)
+    private String supplierName;
+
+    @Column(name = "settlement_company_id")
+    private Long settlementCompanyId;
+
+    @Column(name = "settlement_company_name", length = 128)
+    private String settlementCompanyName;
 
     @Column(name = "payment_date", nullable = false)
     private LocalDate paymentDate;

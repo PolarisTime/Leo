@@ -11,10 +11,11 @@ class CarrierOptionResponseTest {
     @Test
     void shouldCreateRecord() {
         CarrierOptionResponse response = new CarrierOptionResponse(
-                1L, "承运商A", "承运商A", List.of("沪A12345", "京B67890")
+                1L, "CR-001", "承运商A", "承运商A", List.of("沪A12345", "京B67890"), null, null
         );
 
         assertThat(response.id()).isEqualTo(1L);
+        assertThat(response.carrierCode()).isEqualTo("CR-001");
         assertThat(response.label()).isEqualTo("承运商A");
         assertThat(response.value()).isEqualTo("承运商A");
         assertThat(response.vehiclePlates()).containsExactly("沪A12345", "京B67890");

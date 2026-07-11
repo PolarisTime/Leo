@@ -24,6 +24,7 @@ public interface InvoiceIssueRepository extends JpaRepository<InvoiceIssue, Long
 
     @Query("""
             select item.sourceSalesOrderItemId as sourceSalesOrderItemId,
+                   coalesce(sum(item.quantity), 0) as totalQuantity,
                    coalesce(sum(item.weightTon), 0) as totalWeightTon,
                    coalesce(sum(item.amount), 0) as totalAmount
             from InvoiceIssue issue
@@ -54,6 +55,8 @@ public interface InvoiceIssueRepository extends JpaRepository<InvoiceIssue, Long
     interface SourceAllocationSummary {
 
         Long getSourceSalesOrderItemId();
+
+        Long getTotalQuantity();
 
         BigDecimal getTotalWeightTon();
 

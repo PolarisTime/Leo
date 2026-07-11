@@ -387,6 +387,276 @@ class InvoiceReceiptServiceTest {
     }
 
     @Test
+    void applyItemsUsesAuditedRefundNetCapacityWhenOrderTotalsWereWrittenBack() {
+        PurchaseOrderItem sourceItem = buildPurchaseOrderItem(
+                209L,
+                "M-1",
+                new BigDecimal("2.00000000"),
+                new BigDecimal("6500.00")
+        );
+        sourceItem.setQuantity(18);
+        sourceItem.setPieceWeightTon(new BigDecimal("2.00000000"));
+        sourceItem.setWeightTon(new BigDecimal("35.23800000"));
+        sourceItem.setUnitPrice(new BigDecimal("3250.00"));
+        sourceItem.setAmount(new BigDecimal("114523.50"));
+        InvoiceReceiptItemRequest requestItem = new InvoiceReceiptItemRequest(
+                "PO-001",
+                209L,
+                "M-1",
+                "品牌A",
+                "品类A",
+                "材质A",
+                "规格A",
+                null,
+                "吨",
+                "仓库A",
+                null,
+                18,
+                "件",
+                new BigDecimal("2.00000000"),
+                1,
+                new BigDecimal("36.00000000"),
+                new BigDecimal("3250.00"),
+                new BigDecimal("117000.00")
+        );
+        InvoiceReceipt entity = new InvoiceReceipt();
+        entity.setId(1L);
+
+        when(purchaseOrderItemQueryService.findActiveByIdIn(List.of(209L)))
+                .thenReturn(List.of(sourceItem));
+        when(repository.summarizeAllocatedBySourcePurchaseOrderItemIds(List.of(209L), 1L))
+                .thenReturn(List.of());
+        when(repository.summarizeAuditedRefundBySourcePurchaseOrderItemIds(List.of(209L)))
+                .thenReturn(List.of(summary(209L, "0.76200000", "2476.50")));
+
+        InvoiceReceiptSourceService sourceService = new InvoiceReceiptSourceService(
+                repository,
+                purchaseOrderItemQueryService
+        );
+        InvoiceReceiptSourceService.SourceApplyResult result = sourceService.applyItems(
+                entity,
+                List.of(requestItem),
+                "SUP-001",
+                "供应商A",
+                new java.util.concurrent.atomic.AtomicLong(10L)::getAndIncrement
+        );
+
+        assertThat(result.amount()).isEqualByComparingTo("114523.50");
+        assertThat(entity.getItems()).singleElement().satisfies(item -> {
+            assertThat(item.getQuantity()).isEqualTo(18);
+            assertThat(item.getWeightTon()).isEqualByComparingTo("35.23800000");
+            assertThat(item.getAmount()).isEqualByComparingTo("114523.50");
+        });
+    }
+
+    @Test
+    void createPersistsRefundNetHeaderAndItemsWhenRequestCarriesOrderGross() {
+        PurchaseOrderItem sourceItem = buildPurchaseOrderItem(
+                210L,
+                "M-1",
+                new BigDecimal("2.00000000"),
+                new BigDecimal("6500.00")
+        );
+        sourceItem.setQuantity(18);
+        sourceItem.setPieceWeightTon(new BigDecimal("2.00000000"));
+        sourceItem.setWeightTon(new BigDecimal("35.23800000"));
+        sourceItem.setUnitPrice(new BigDecimal("3250.00"));
+        sourceItem.setAmount(new BigDecimal("114523.50"));
+        InvoiceReceiptItemRequest requestItem = new InvoiceReceiptItemRequest(
+                "PO-001",
+                210L,
+                "M-1",
+                "品牌A",
+                "品类A",
+                "材质A",
+                "规格A",
+                null,
+                "吨",
+                "仓库A",
+                null,
+                18,
+                "件",
+                new BigDecimal("2.00000000"),
+                1,
+                new BigDecimal("36.00000000"),
+                new BigDecimal("3250.00"),
+                new BigDecimal("117000.00")
+        );
+        InvoiceReceiptRequest request = new InvoiceReceiptRequest(
+                "SP-NET-REFUND",
+                "INV-NET-REFUND",
+                "SUP-001",
+                "供应商A",
+                "采购结算主体A",
+                LocalDate.of(2026, 7, 11),
+                "增值税专票",
+                new BigDecimal("117000.00"),
+                BigDecimal.ZERO,
+                StatusConstants.DRAFT,
+                "财务A",
+                null,
+                List.of(requestItem)
+        );
+
+        when(repository.existsByReceiveNoAndDeletedFlagFalse("SP-NET-REFUND")).thenReturn(false);
+        when(purchaseOrderItemQueryService.findActiveByIdIn(List.of(210L)))
+                .thenReturn(List.of(sourceItem));
+        when(repository.summarizeAllocatedBySourcePurchaseOrderItemIds(List.of(210L), 1L))
+                .thenReturn(List.of());
+        when(repository.summarizeAuditedRefundBySourcePurchaseOrderItemIds(List.of(210L)))
+                .thenReturn(List.of(summary(210L, "0.76200000", "2476.50")));
+        when(companySettingService.resolveCurrentTaxRate()).thenReturn(new BigDecimal("0.13"));
+        when(idGenerator.nextId()).thenReturn(1L, 2L);
+        ArgumentCaptor<InvoiceReceipt> saved = ArgumentCaptor.forClass(InvoiceReceipt.class);
+        when(repository.save(saved.capture())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(mapper.toResponse(any(InvoiceReceipt.class))).thenAnswer(invocation -> {
+            InvoiceReceipt entity = invocation.getArgument(0);
+            return new InvoiceReceiptResponse(
+                    entity.getId(),
+                    entity.getReceiveNo(),
+                    entity.getInvoiceNo(),
+                    entity.getSupplierCode(),
+                    entity.getSupplierName(),
+                    entity.getSettlementCompanyId(),
+                    entity.getSettlementCompanyName(),
+                    entity.getInvoiceTitle(),
+                    entity.getInvoiceDate(),
+                    entity.getInvoiceType(),
+                    entity.getAmount(),
+                    entity.getTaxAmount(),
+                    entity.getStatus(),
+                    entity.isDeletedFlag(),
+                    entity.getOperatorName(),
+                    entity.getRemark(),
+                    List.of()
+            );
+        });
+
+        service.create(request);
+
+        assertThat(saved.getValue().getAmount()).isEqualByComparingTo("114523.50");
+        assertThat(saved.getValue().getTaxAmount()).isEqualByComparingTo("14888.06");
+        assertThat(saved.getValue().getItems()).singleElement().satisfies(item -> {
+            assertThat(item.getWeightTon()).isEqualByComparingTo("35.23800000");
+            assertThat(item.getAmount()).isEqualByComparingTo("114523.50");
+        });
+    }
+
+    @Test
+    void applyItemsConsumesExactResidualAfterPriorReceiptAndAuditedRefund() {
+        PurchaseOrderItem sourceItem = buildPurchaseOrderItem(
+                211L,
+                "M-1",
+                new BigDecimal("0.00500000"),
+                new BigDecimal("0.01")
+        );
+        sourceItem.setQuantity(3);
+        sourceItem.setPieceWeightTon(new BigDecimal("0.00500000"));
+        sourceItem.setWeightTon(new BigDecimal("0.01500000"));
+        sourceItem.setUnitPrice(new BigDecimal("1.00"));
+        sourceItem.setAmount(new BigDecimal("0.02"));
+        InvoiceReceiptItemRequest requestItem = new InvoiceReceiptItemRequest(
+                "PO-001",
+                211L,
+                "M-1",
+                "品牌A",
+                "品类A",
+                "材质A",
+                "规格A",
+                null,
+                "吨",
+                "仓库A",
+                null,
+                1,
+                "件",
+                new BigDecimal("0.00500000"),
+                1,
+                new BigDecimal("0.00400000"),
+                new BigDecimal("1.00"),
+                BigDecimal.ZERO
+        );
+        InvoiceReceipt entity = new InvoiceReceipt();
+        entity.setId(1L);
+
+        when(purchaseOrderItemQueryService.findActiveByIdIn(List.of(211L)))
+                .thenReturn(List.of(sourceItem));
+        when(repository.summarizeAllocatedBySourcePurchaseOrderItemIds(List.of(211L), 1L))
+                .thenReturn(List.of(summary(211L, 2L, "0.00800000", "0.02")));
+        when(repository.summarizeAuditedRefundBySourcePurchaseOrderItemIds(List.of(211L)))
+                .thenReturn(List.of(summary(211L, 0L, "0.00300000", "0.00")));
+
+        InvoiceReceiptSourceService sourceService = new InvoiceReceiptSourceService(
+                repository,
+                purchaseOrderItemQueryService
+        );
+        InvoiceReceiptSourceService.SourceApplyResult result = sourceService.applyItems(
+                entity,
+                List.of(requestItem),
+                "SUP-001",
+                "供应商A",
+                new java.util.concurrent.atomic.AtomicLong(10L)::getAndIncrement
+        );
+
+        assertThat(result.amount()).isEqualByComparingTo("0.00");
+        assertThat(entity.getItems()).singleElement().satisfies(item -> {
+            assertThat(item.getWeightTon()).isEqualByComparingTo("0.00400000");
+            assertThat(item.getAmount()).isEqualByComparingTo("0.00");
+        });
+    }
+
+    @Test
+    void createRejectsSourcePurchaseOrdersFromDifferentSettlementCompanies() {
+        PurchaseOrderItem firstSource = buildPurchaseOrderItem(
+                207L,
+                "M-1",
+                new BigDecimal("0.300"),
+                new BigDecimal("1000.00")
+        );
+        PurchaseOrderItem secondSource = buildPurchaseOrderItem(
+                208L,
+                "M-2",
+                new BigDecimal("0.300"),
+                new BigDecimal("1000.00")
+        );
+        secondSource.getPurchaseOrder().setSettlementCompanyId(302L);
+        secondSource.getPurchaseOrder().setSettlementCompanyName("采购结算主体B");
+        InvoiceReceiptRequest firstRequest = buildRequest(
+                "SP-MIXED-COMPANY",
+                207L,
+                new BigDecimal("0.300"),
+                new BigDecimal("3333.33"),
+                new BigDecimal("1000.00")
+        );
+        InvoiceReceiptRequest secondRequest = buildRequest(
+                "SP-MIXED-COMPANY",
+                208L,
+                new BigDecimal("0.300"),
+                new BigDecimal("3333.33"),
+                new BigDecimal("1000.00")
+        );
+        InvoiceReceipt entity = new InvoiceReceipt();
+        entity.setId(1L);
+
+        when(purchaseOrderItemQueryService.findActiveByIdIn(anyCollection()))
+                .thenReturn(List.of(firstSource, secondSource));
+        when(repository.summarizeAllocatedBySourcePurchaseOrderItemIds(anyCollection(), anyLong()))
+                .thenReturn(List.of());
+
+        InvoiceReceiptSourceService sourceService = new InvoiceReceiptSourceService(
+                repository,
+                purchaseOrderItemQueryService
+        );
+        BusinessException exception = assertThrows(BusinessException.class, () -> sourceService.applyItems(
+                entity,
+                List.of(firstRequest.items().get(0), secondRequest.items().get(0)),
+                "供应商A",
+                new java.util.concurrent.atomic.AtomicLong(10L)::getAndIncrement
+        ));
+
+        assertEquals("第2行来源采购订单结算主体与收票单不一致", exception.getMessage());
+    }
+
+    @Test
     void updateRejectsDuplicateReceiveNoWhenChanged() {
         InvoiceReceipt existing = new InvoiceReceipt();
         existing.setId(1L);
@@ -502,7 +772,7 @@ class InvoiceReceiptServiceTest {
     }
 
     @Test
-    void shouldSetInvoiceTitleToSupplierNameWhenNull() {
+    void shouldDeriveInvoiceTitleFromSettlementCompanyWhenRequestTitleIsNull() {
         PurchaseOrderItem sourceItem = buildPurchaseOrderItem(201L, "M-1", new BigDecimal("0.300"), new BigDecimal("1000.00"));
 
         when(repository.existsByReceiveNoAndDeletedFlagFalse("SP-TITLE")).thenReturn(false);
@@ -539,11 +809,11 @@ class InvoiceReceiptServiceTest {
 
         service.create(request);
 
-        assertEquals("供应商A", captor.getValue().getInvoiceTitle());
+        assertEquals("采购结算主体A", captor.getValue().getInvoiceTitle());
     }
 
     @Test
-    void shouldSetInvoiceTitleToSupplierNameWhenBlank() {
+    void shouldIgnoreRequestedInvoiceTitleAndUseSettlementCompanyName() {
         PurchaseOrderItem sourceItem = buildPurchaseOrderItem(201L, "M-1", new BigDecimal("0.300"), new BigDecimal("1000.00"));
 
         when(repository.existsByReceiveNoAndDeletedFlagFalse("SP-BLANK-TITLE")).thenReturn(false);
@@ -566,7 +836,7 @@ class InvoiceReceiptServiceTest {
         });
 
         InvoiceReceiptRequest request = new InvoiceReceiptRequest(
-                "SP-BLANK-TITLE", "INV-001", "供应商A", "  ",
+                "SP-BLANK-TITLE", "INV-001", "供应商A", "  伪造抬头  ",
                 LocalDate.of(2026, 4, 26), "增值税专票",
                 new BigDecimal("1000.00"), BigDecimal.ZERO,
                 "草稿", "财务A", null,
@@ -580,7 +850,7 @@ class InvoiceReceiptServiceTest {
 
         service.create(request);
 
-        assertEquals("供应商A", captor.getValue().getInvoiceTitle());
+        assertEquals("采购结算主体A", captor.getValue().getInvoiceTitle());
     }
 
     @Test
@@ -813,7 +1083,10 @@ class InvoiceReceiptServiceTest {
         order.setId(2000L + id);
         order.setOrderNo("PO-001");
         order.setStatus(StatusConstants.AUDITED);
+        order.setSupplierCode("SUP-001");
         order.setSupplierName("供应商A");
+        order.setSettlementCompanyId(301L);
+        order.setSettlementCompanyName("采购结算主体A");
         item.setPurchaseOrder(order);
         item.setMaterialCode(materialCode);
         item.setBrand("品牌A");
@@ -854,10 +1127,22 @@ class InvoiceReceiptServiceTest {
     }
 
     private InvoiceReceiptRepository.SourceAllocationSummary summary(Long itemId, String weightTon, String amount) {
+        return summary(itemId, 0L, weightTon, amount);
+    }
+
+    private InvoiceReceiptRepository.SourceAllocationSummary summary(Long itemId,
+                                                                      Long quantity,
+                                                                      String weightTon,
+                                                                      String amount) {
         return new InvoiceReceiptRepository.SourceAllocationSummary() {
             @Override
             public Long getSourcePurchaseOrderItemId() {
                 return itemId;
+            }
+
+            @Override
+            public Long getTotalQuantity() {
+                return quantity;
             }
 
             @Override

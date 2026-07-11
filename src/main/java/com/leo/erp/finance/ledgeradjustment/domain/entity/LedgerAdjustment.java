@@ -39,6 +39,12 @@ public class LedgerAdjustment extends AbstractAuditableEntity {
     @Column(name = "counterparty_name", nullable = false, length = 128)
     private String counterpartyName;
 
+    @Column(name = "settlement_company_id")
+    private Long settlementCompanyId;
+
+    @Column(name = "settlement_company_name", length = 128)
+    private String settlementCompanyName;
+
     @Column(name = "project_id")
     private Long projectId;
 

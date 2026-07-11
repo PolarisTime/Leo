@@ -31,6 +31,7 @@ public class PurchaseOrderResponseAssembler {
         return new PurchaseOrderResponse(
                 response.id(),
                 response.orderNo(),
+                response.supplierCode(),
                 response.supplierName(),
                 response.orderDate(),
                 response.buyerName(),

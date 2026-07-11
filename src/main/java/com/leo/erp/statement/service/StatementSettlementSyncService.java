@@ -1,6 +1,7 @@
 package com.leo.erp.statement.service;
 
 import com.leo.erp.common.support.StatusConstants;
+import com.leo.erp.common.support.TradeItemCalculator;
 import com.leo.erp.finance.payment.repository.PaymentAllocationRepository;
 import com.leo.erp.finance.receipt.repository.ReceiptAllocationRepository;
 import com.leo.erp.statement.customer.domain.entity.CustomerStatement;
@@ -42,11 +43,7 @@ public class StatementSettlementSyncService {
 
     @Transactional
     public SupplierStatement syncSupplierStatement(SupplierStatement statement) {
-        BigDecimal paymentAmount = paymentAllocationRepository.sumAllocatedAmountBySourceStatementIdAndBusinessTypeAndStatus(
-                statement.getId(),
-                SUPPLIER_PAYMENT_TYPE,
-                PAYMENT_STATUS_SETTLED
-        );
+        BigDecimal paymentAmount = resolveSupplierPaymentAmount(statement.getId());
         statement.setPaymentAmount(paymentAmount);
         statement.setClosingAmount(statement.getPurchaseAmount().subtract(paymentAmount).max(BigDecimal.ZERO));
         return supplierStatementRepository.save(statement);
@@ -54,10 +51,7 @@ public class StatementSettlementSyncService {
 
     @Transactional
     public CustomerStatement syncCustomerStatement(CustomerStatement statement) {
-        BigDecimal receiptAmount = receiptAllocationRepository.sumAllocatedAmountBySourceStatementIdAndReceiptStatus(
-                statement.getId(),
-                RECEIPT_STATUS_SETTLED
-        );
+        BigDecimal receiptAmount = resolveCustomerReceiptAmount(statement.getId());
         statement.setReceiptAmount(receiptAmount);
         statement.setClosingAmount(statement.getSalesAmount().subtract(receiptAmount).max(BigDecimal.ZERO));
         return customerStatementRepository.save(statement);
@@ -73,5 +67,30 @@ public class StatementSettlementSyncService {
         statement.setPaidAmount(paidAmount);
         statement.setUnpaidAmount(statement.getTotalFreight().subtract(paidAmount).max(BigDecimal.ZERO));
         return freightStatementRepository.save(statement);
+    }
+
+    public BigDecimal resolveSupplierPaymentAmount(Long statementId) {
+        if (statementId == null) {
+            return TradeItemCalculator.scaleAmount(BigDecimal.ZERO);
+        }
+        return TradeItemCalculator.scaleAmount(TradeItemCalculator.safeBigDecimal(
+                paymentAllocationRepository.sumAllocatedAmountBySourceStatementIdAndBusinessTypeAndStatus(
+                        statementId,
+                        SUPPLIER_PAYMENT_TYPE,
+                        PAYMENT_STATUS_SETTLED
+                )
+        ));
+    }
+
+    public BigDecimal resolveCustomerReceiptAmount(Long statementId) {
+        if (statementId == null) {
+            return TradeItemCalculator.scaleAmount(BigDecimal.ZERO);
+        }
+        return TradeItemCalculator.scaleAmount(TradeItemCalculator.safeBigDecimal(
+                receiptAllocationRepository.sumAllocatedAmountBySourceStatementIdAndReceiptStatus(
+                        statementId,
+                        RECEIPT_STATUS_SETTLED
+                )
+        ));
     }
 }

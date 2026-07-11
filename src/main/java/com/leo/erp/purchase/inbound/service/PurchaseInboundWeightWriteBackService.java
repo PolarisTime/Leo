@@ -67,11 +67,6 @@ public class PurchaseInboundWeightWriteBackService {
                     currentWeighAccumulatorMap.get(sourcePurchaseOrderItemId)
             );
             if (weighAccumulator != null && weighAccumulator.hasQuantity()) {
-                BigDecimal actualWeightTon = weighAccumulator.isFullyAllocated(sourceItem.getQuantity())
-                        ? TradeItemCalculator.scaleWeightTon(weighAccumulator.weightTon())
-                        : TradeItemCalculator.scaleWeightTon(sourceItem.getWeightTon());
-                sourceItem.setWeightTon(actualWeightTon);
-                sourceItem.setAmount(TradeItemCalculator.calculateAmount(actualWeightTon, sourceItem.getUnitPrice()));
                 sourceItem.setActualWeightTon(TradeItemCalculator.scaleWeightTon(weighAccumulator.weightTon()));
                 sourceItem.setActualPieceWeightTon(null);
             } else {
@@ -164,10 +159,6 @@ public class PurchaseInboundWeightWriteBackService {
     record SourceWeighAccumulator(Integer quantity, BigDecimal weightTon) {
         boolean hasQuantity() {
             return quantity != null && quantity > 0;
-        }
-
-        boolean isFullyAllocated(Integer sourceQuantity) {
-            return sourceQuantity != null && quantity != null && quantity >= sourceQuantity;
         }
     }
 }

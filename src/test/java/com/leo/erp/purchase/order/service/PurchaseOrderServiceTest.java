@@ -513,6 +513,47 @@ class PurchaseOrderServiceTest {
     }
 
     @Test
+    void shouldPageEligiblePurchasePrepaymentCandidatesWithoutAvailabilityAggregation() {
+        PurchaseOrderRepository repository = mock(PurchaseOrderRepository.class);
+        PurchaseInboundItemQueryService inboundItemQueryService = mock(PurchaseInboundItemQueryService.class);
+        ItemAllocationNativeRepository itemAllocationRepository = mock(ItemAllocationNativeRepository.class);
+        PurchaseOrderService service = service(
+                repository,
+                mock(SnowflakeIdGenerator.class),
+                mock(PurchaseOrderMapper.class),
+                mock(TradeItemMaterialSupport.class),
+                mock(WarehouseSelectionSupport.class),
+                mock(SupplierRepository.class),
+                inboundItemQueryService,
+                itemAllocationRepository,
+                mock(PurchaseOrderItemPieceWeightService.class),
+                mock(WorkflowTransitionGuard.class),
+                mock(JdbcTemplate.class)
+        );
+        PurchaseOrder completedOrder = buildOrder();
+        completedOrder.setStatus("完成采购");
+        completedOrder.setTotalAmount(new BigDecimal("67890.12"));
+        when(repository.findAll(any(Specification.class), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(completedOrder)));
+
+        var page = service.prepaymentCandidates(
+                PageQuery.of(0, 15, null, null),
+                PageFilter.of(" PO-001 ", "供应商A", 7L, null, null, null)
+        );
+
+        assertThat(page.getContent()).singleElement().satisfies(candidate -> {
+            assertThat(candidate.id()).isEqualTo(completedOrder.getId());
+            assertThat(candidate.status()).isEqualTo("完成采购");
+            assertThat(candidate.totalAmount()).isEqualByComparingTo("67890.12");
+            assertThat(candidate.importableQuantity()).isNull();
+        });
+        verify(repository, times(1)).findAll(any(Specification.class), any(Pageable.class));
+        verify(inboundItemQueryService, never())
+                .summarizeAllocatedQuantityBySourcePurchaseOrderItemIds(any());
+        verify(itemAllocationRepository, never()).summarizeSalesByPurchaseOrderItems(any(), nullable(Long.class));
+    }
+
+    @Test
     void shouldExposeOnlyAuditedPurchaseInboundCandidatesWithRemainingQuantity() {
         PurchaseOrderRepository repository = mock(PurchaseOrderRepository.class);
         PurchaseInboundItemQueryService purchaseInboundItemQueryService = mock(PurchaseInboundItemQueryService.class);

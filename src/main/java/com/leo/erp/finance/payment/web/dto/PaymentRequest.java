@@ -12,10 +12,17 @@ public record PaymentRequest(
         String paymentNo,
         @jakarta.validation.constraints.NotBlank(message = "业务类型不能为空")
         String businessType,
+        String paymentPurpose,
         String counterpartyCode,
         @jakarta.validation.constraints.NotBlank(message = "往来单位不能为空")
         String counterpartyName,
         Long sourceStatementId,
+        Long sourcePurchaseOrderId,
+        String purchaseOrderNo,
+        String supplierCode,
+        String supplierName,
+        Long settlementCompanyId,
+        String settlementCompanyName,
         @NotNull(message = "付款日期不能为空")
         LocalDate paymentDate,
         @jakarta.validation.constraints.NotBlank(message = "付款方式不能为空")
@@ -33,6 +40,7 @@ public record PaymentRequest(
 ) {
     public PaymentRequest(String paymentNo,
                           String businessType,
+                          String counterpartyCode,
                           String counterpartyName,
                           Long sourceStatementId,
                           LocalDate paymentDate,
@@ -42,6 +50,60 @@ public record PaymentRequest(
                           String operatorName,
                           String remark,
                           List<PaymentAllocationRequest> items) {
-        this(paymentNo, businessType, null, counterpartyName, sourceStatementId, paymentDate, payType, amount, status, operatorName, remark, items);
+        this(
+                paymentNo,
+                businessType,
+                null,
+                counterpartyCode,
+                counterpartyName,
+                sourceStatementId,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                paymentDate,
+                payType,
+                amount,
+                status,
+                operatorName,
+                remark,
+                items
+        );
+    }
+
+    public PaymentRequest(String paymentNo,
+                          String businessType,
+                          String counterpartyName,
+                          Long sourceStatementId,
+                          LocalDate paymentDate,
+                          String payType,
+                          BigDecimal amount,
+                          String status,
+                          String operatorName,
+                          String remark,
+                          List<PaymentAllocationRequest> items) {
+        this(
+                paymentNo,
+                businessType,
+                null,
+                null,
+                counterpartyName,
+                sourceStatementId,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                paymentDate,
+                payType,
+                amount,
+                status,
+                operatorName,
+                remark,
+                items
+        );
     }
 }

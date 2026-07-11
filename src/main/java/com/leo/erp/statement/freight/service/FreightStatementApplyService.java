@@ -52,8 +52,6 @@ public class FreightStatementApplyService {
                 StatusConstants.SIGNED
         );
         entity.setStatementNo(command.statementNo());
-        entity.setCarrierName(command.carrierName());
-        entity.setCarrierCode(carrierResolver.resolveCarrierCode(command.carrierCode(), command.carrierName()));
         entity.setStartDate(command.startDate());
         entity.setEndDate(command.endDate());
         entity.setStatus(nextStatus);
@@ -65,6 +63,14 @@ public class FreightStatementApplyService {
 
         FreightStatementSourceService.SourceApplyResult sourceResult =
                 freightStatementSourceService.applyItems(entity, command, nextIdSupplier);
+        String carrierName = trimToNull(entity.getCarrierName()) == null
+                ? command.carrierName()
+                : entity.getCarrierName();
+        String carrierCode = trimToNull(entity.getCarrierCode()) == null
+                ? command.carrierCode()
+                : entity.getCarrierCode();
+        entity.setCarrierName(carrierName);
+        entity.setCarrierCode(carrierResolver.resolveCarrierCode(carrierCode, carrierName));
         BigDecimal totalFreight = sourceResult.totalFreight();
         entity.setTotalWeight(sourceResult.totalWeight());
         entity.setTotalFreight(totalFreight);
@@ -74,5 +80,12 @@ public class FreightStatementApplyService {
         }
         entity.setPaidAmount(paidAmount);
         entity.setUnpaidAmount(totalFreight.subtract(paidAmount).max(BigDecimal.ZERO));
+    }
+
+    private String trimToNull(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        return value.trim();
     }
 }

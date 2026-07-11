@@ -53,7 +53,14 @@ class LedgerAdjustmentControllerTest {
         LedgerAdjustmentResponse response = response(2L);
         when(service.page(
                 query,
-                PageFilter.of("LA", StatusConstants.DRAFT, LocalDate.of(2026, 6, 1), LocalDate.of(2026, 6, 30)),
+                PageFilter.of(
+                        "LA",
+                        null,
+                        31L,
+                        StatusConstants.DRAFT,
+                        LocalDate.of(2026, 6, 1),
+                        LocalDate.of(2026, 6, 30)
+                ),
                 "应收",
                 "客户"
         )).thenReturn(new PageImpl<>(List.of(response), PageRequest.of(1, 20), 30));
@@ -64,6 +71,7 @@ class LedgerAdjustmentControllerTest {
                 "LA",
                 "应收",
                 "客户",
+                31L,
                 StatusConstants.DRAFT,
                 LocalDate.of(2026, 6, 1),
                 LocalDate.of(2026, 6, 30)
@@ -102,6 +110,8 @@ class LedgerAdjustmentControllerTest {
                 "客户",
                 "C-001",
                 "客户A",
+                31L,
+                "结算主体A",
                 null,
                 null,
                 LocalDate.of(2026, 6, 1),
@@ -122,6 +132,8 @@ class LedgerAdjustmentControllerTest {
                 "客户",
                 "C-001",
                 "客户A",
+                31L,
+                "结算主体A",
                 null,
                 null,
                 LocalDate.of(2026, 6, 1),

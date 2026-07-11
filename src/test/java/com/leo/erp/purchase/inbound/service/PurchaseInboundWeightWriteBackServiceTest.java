@@ -171,11 +171,11 @@ class PurchaseInboundWeightWriteBackServiceTest {
                 Map.of(201L, item)
         );
 
-        assertThat(item.getWeightTon()).isEqualByComparingTo("1.250");
+        assertThat(item.getWeightTon()).isEqualByComparingTo("1.000");
         assertThat(item.getActualWeightTon()).isEqualByComparingTo("1.250");
-        assertThat(item.getAmount()).isEqualByComparingTo("5000.00");
-        assertThat(order.getTotalWeight()).isEqualByComparingTo("2.250");
-        assertThat(order.getTotalAmount()).isEqualByComparingTo("9000.00");
+        assertThat(item.getAmount()).isEqualByComparingTo("4000.00");
+        assertThat(order.getTotalWeight()).isEqualByComparingTo("2.000");
+        assertThat(order.getTotalAmount()).isEqualByComparingTo("8000.00");
         verify(purchaseOrderRepository).saveAll(any());
         verify(pieceWeightService).regenerateForPurchaseOrderItems(List.of(item));
     }
@@ -284,9 +284,6 @@ class PurchaseInboundWeightWriteBackServiceTest {
         assertThat(nullQuantity.hasQuantity()).isFalse();
         assertThat(zeroQuantity.hasQuantity()).isFalse();
         assertThat(enoughQuantity.hasQuantity()).isTrue();
-        assertThat(enoughQuantity.isFullyAllocated(null)).isFalse();
-        assertThat(nullQuantity.isFullyAllocated(1)).isFalse();
-        assertThat(enoughQuantity.isFullyAllocated(3)).isTrue();
     }
 
     private PurchaseOrder purchaseOrder() {

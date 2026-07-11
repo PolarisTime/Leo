@@ -4,6 +4,7 @@ import com.leo.erp.common.support.BusinessStatusValidator;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.security.permission.WorkflowTransitionGuard;
 import com.leo.erp.statement.service.StatementBalanceRule;
+import com.leo.erp.statement.service.StatementSettlementSyncService;
 import com.leo.erp.statement.supplier.domain.entity.SupplierStatement;
 import com.leo.erp.statement.supplier.web.dto.SupplierStatementRequest;
 import org.springframework.stereotype.Service;
@@ -16,11 +17,14 @@ public class SupplierStatementApplyService {
 
     private final WorkflowTransitionGuard workflowTransitionGuard;
     private final SupplierStatementSourceService sourceService;
+    private final StatementSettlementSyncService settlementSyncService;
 
     public SupplierStatementApplyService(WorkflowTransitionGuard workflowTransitionGuard,
-                                         SupplierStatementSourceService sourceService) {
+                                         SupplierStatementSourceService sourceService,
+                                         StatementSettlementSyncService settlementSyncService) {
         this.workflowTransitionGuard = workflowTransitionGuard;
         this.sourceService = sourceService;
+        this.settlementSyncService = settlementSyncService;
     }
 
     void apply(SupplierStatement entity, SupplierStatementRequest request, LongSupplier nextIdSupplier) {
@@ -37,9 +41,11 @@ public class SupplierStatementApplyService {
                 StatusConstants.CONFIRMED
         );
         entity.setStatementNo(request.statementNo());
-        entity.setSupplierName(request.supplierName());
         SupplierStatementSourceService.SourceApplyResult sourceResult =
                 sourceService.applyItems(entity, request, nextIdSupplier);
+        entity.setSupplierName(sourceResult.supplierName() == null
+                ? request.supplierName()
+                : sourceResult.supplierName());
         entity.setSettlementCompanyId(sourceResult.settlementCompanyId());
         entity.setSettlementCompanyName(sourceResult.settlementCompanyName());
         entity.setStartDate(request.startDate());
@@ -49,7 +55,7 @@ public class SupplierStatementApplyService {
 
         StatementBalanceRule.Balance balance = StatementBalanceRule.resolve(
                 sourceResult.purchaseAmount(),
-                request.paymentAmount(),
+                settlementSyncService.resolveSupplierPaymentAmount(entity.getId()),
                 "供应商对账单付款金额",
                 "供应商对账单采购金额不能低于已付款金额"
         );

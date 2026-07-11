@@ -23,6 +23,7 @@ class InventoryAndIoReportPostgresTest {
 
     private static final long BASE_ID = 8_700_000_000_000_000_000L;
     private static final String MATERIAL_CODE = "TEST-INV-STATUS-MATRIX";
+    private static final String SUPPLIER_CODE = "TEST-INV-SUPPLIER";
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
@@ -73,15 +74,39 @@ class InventoryAndIoReportPostgresTest {
                 .satisfies(row -> assertThat(row.warehouseName()).isEqualTo("二号仓"));
     }
 
+    @Test
+    void shouldUseWeighWeightForInboundInventoryAndMovement() {
+        insertInboundWithWeigh(
+                21,
+                "已审核",
+                10,
+                new BigDecimal("20.000"),
+                new BigDecimal("19.238"),
+                "过磅仓"
+        );
+
+        Page<InventoryReportResponse> inventory = inventoryRepository.page(
+                new PageQuery(0, 20, null, null), MATERIAL_CODE, null, null, false);
+        Page<IoReportResponse> movements = ioRepository.page(
+                new PageQuery(0, 20, null, null), MATERIAL_CODE, "采购入库", null, null);
+
+        assertThat(inventory).singleElement().satisfies(row ->
+                assertThat(row.onHandWeightTon()).isEqualByComparingTo("19.238")
+        );
+        assertThat(movements).singleElement().satisfies(row ->
+                assertThat(row.inWeightTon()).isEqualByComparingTo("19.238")
+        );
+    }
+
     private void insertInbound(long offset, String status, boolean deleted, int quantity,
                                BigDecimal weight, String warehouseName) {
         long inboundId = BASE_ID + offset;
         jdbcTemplate.update("""
                 INSERT INTO po_purchase_inbound (
-                    id, inbound_no, supplier_name, warehouse_name, inbound_date, settlement_mode,
+                    id, inbound_no, supplier_code, supplier_name, warehouse_name, inbound_date, settlement_mode,
                     total_weight, total_amount, status, deleted_flag
-                ) VALUES (?, ?, '测试供应商', ?, CURRENT_DATE, '按重量', ?, 0, ?, ?)
-                """, inboundId, "TEST-IN-" + offset, warehouseName, weight, status, deleted);
+                ) VALUES (?, ?, ?, '测试供应商', ?, CURRENT_DATE, '按重量', ?, 0, ?, ?)
+                """, inboundId, "TEST-IN-" + offset, SUPPLIER_CODE, warehouseName, weight, status, deleted);
         jdbcTemplate.update("""
                 INSERT INTO po_purchase_inbound_item (
                     id, inbound_id, line_no, material_code, brand, category, material, spec, unit,
@@ -109,5 +134,35 @@ class InventoryAndIoReportPostgresTest {
                 ) VALUES (?, ?, 1, ?, '测试品牌', '测试类别', '测试材质', 'TEST-SPEC', '吨',
                           ?, 1, 1, ?, 0, 0, ?)
                 """, BASE_ID + 100 + offset, outboundId, MATERIAL_CODE, quantity, weight, itemWarehouse);
+    }
+
+    private void insertInboundWithWeigh(long offset, String status, int quantity,
+                                        BigDecimal theoreticalWeight, BigDecimal weighWeight,
+                                        String warehouseName) {
+        long inboundId = BASE_ID + offset;
+        jdbcTemplate.update("""
+                INSERT INTO po_purchase_inbound (
+                    id, inbound_no, supplier_code, supplier_name, warehouse_name, inbound_date, settlement_mode,
+                    total_weight, total_amount, status, deleted_flag
+                ) VALUES (?, ?, ?, '测试供应商', ?, CURRENT_DATE, '过磅', ?, 0, ?, FALSE)
+                """, inboundId, "TEST-IN-" + offset, SUPPLIER_CODE, warehouseName, theoreticalWeight, status);
+        jdbcTemplate.update("""
+                INSERT INTO po_purchase_inbound_item (
+                    id, inbound_id, line_no, material_code, brand, category, material, spec, unit,
+                    quantity, piece_weight_ton, pieces_per_bundle, weight_ton, weigh_weight_ton,
+                    weight_adjustment_ton, weight_adjustment_amount, unit_price, amount,
+                    warehouse_name, settlement_mode
+                ) VALUES (?, ?, 1, ?, '测试品牌', '测试类别', '测试材质', 'TEST-SPEC', '吨',
+                          ?, 2, 1, ?, ?, ?, 0, 0, 0, ?, '过磅')
+                """,
+                BASE_ID + 100 + offset,
+                inboundId,
+                MATERIAL_CODE,
+                quantity,
+                theoreticalWeight,
+                weighWeight,
+                weighWeight.subtract(theoreticalWeight),
+                warehouseName
+        );
     }
 }

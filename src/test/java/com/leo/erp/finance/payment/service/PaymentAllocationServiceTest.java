@@ -4,8 +4,14 @@ import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.finance.payment.domain.entity.Payment;
 import com.leo.erp.finance.payment.domain.entity.PaymentAllocation;
+import com.leo.erp.finance.payment.repository.PaymentAllocationRepository;
 import com.leo.erp.finance.payment.web.dto.PaymentAllocationRequest;
 import com.leo.erp.finance.payment.web.dto.PaymentRequest;
+import com.leo.erp.security.permission.ResourceRecordAccessGuard;
+import com.leo.erp.statement.freight.domain.entity.FreightStatement;
+import com.leo.erp.statement.freight.service.FreightStatementQueryService;
+import com.leo.erp.statement.supplier.domain.entity.SupplierStatement;
+import com.leo.erp.statement.supplier.service.SupplierStatementQueryService;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
@@ -92,7 +98,7 @@ class PaymentAllocationServiceTest {
                 eq(new BigDecimal("100.00")),
                 any(),
                 eq(1)
-        )).thenReturn(" SUP-001 ");
+        )).thenReturn(validatedStatement(" SUP-001 "));
         PaymentAllocationService service = new PaymentAllocationService(validator);
         Payment payment = payment(PaymentAllocationService.SUPPLIER_PAYMENT_TYPE, new BigDecimal("100.00"));
 
@@ -104,6 +110,8 @@ class PaymentAllocationServiceTest {
         );
 
         assertThat(result.counterpartyCode()).isEqualTo("SUP-001");
+        assertThat(result.settlementCompanyId()).isEqualTo(1001L);
+        assertThat(result.settlementCompanyName()).isEqualTo("结算主体A");
         assertThat(result.totalAllocatedAmount()).isEqualByComparingTo("100.00");
         assertThat(result.allocationEmpty()).isFalse();
         assertThat(payment.getItems()).singleElement()
@@ -135,7 +143,7 @@ class PaymentAllocationServiceTest {
                             || item.getLineNo() == null
                             || item.getSourceStatementId() == null
                             || item.getAllocatedAmount() == null);
-            return "SUP-001";
+            return validatedStatement("SUP-001");
         });
         PaymentAllocationService service = new PaymentAllocationService(validator);
 
@@ -169,7 +177,7 @@ class PaymentAllocationServiceTest {
                 any(BigDecimal.class),
                 any(),
                 anyInt()
-        )).thenReturn("SUP-001");
+        )).thenReturn(validatedStatement("SUP-001"));
         PaymentAllocationService service = new PaymentAllocationService(validator);
         Payment payment = payment(PaymentAllocationService.SUPPLIER_PAYMENT_TYPE, new BigDecimal("100.00"));
 
@@ -212,7 +220,7 @@ class PaymentAllocationServiceTest {
                 eq(new BigDecimal("80.00")),
                 any(),
                 eq(1)
-        )).thenReturn("CAR-001");
+        )).thenReturn(validatedStatement("CAR-001"));
         PaymentAllocationService service = new PaymentAllocationService(validator);
         Payment payment = payment(PaymentAllocationService.FREIGHT_PAYMENT_TYPE, new BigDecimal("100.00"));
 
@@ -231,6 +239,15 @@ class PaymentAllocationServiceTest {
     @Test
     void shouldValidateExistingAllocationsOnlyWhenSettled() {
         PaymentStatementAllocationValidator validator = mock(PaymentStatementAllocationValidator.class);
+        when(validator.validate(
+                any(PaymentRequest.class),
+                eq(StatusConstants.PAID),
+                eq(1L),
+                eq(21L),
+                eq(new BigDecimal("100.00")),
+                any(),
+                eq(1)
+        )).thenReturn(validatedStatement("SUP-001"));
         PaymentAllocationService service = new PaymentAllocationService(validator);
         Payment draftPayment = payment(PaymentAllocationService.SUPPLIER_PAYMENT_TYPE, new BigDecimal("100.00"));
 
@@ -252,6 +269,150 @@ class PaymentAllocationServiceTest {
                 any(),
                 eq(1)
         );
+    }
+
+    @Test
+    void shouldRejectSupplierStatementsFromDifferentSettlementCompanies() {
+        SupplierStatementQueryService supplierQueryService = mock(SupplierStatementQueryService.class);
+        when(supplierQueryService.requireActiveById(21L))
+                .thenReturn(supplierStatement(21L, 1001L, "结算主体A"));
+        when(supplierQueryService.requireActiveById(22L))
+                .thenReturn(supplierStatement(22L, 1002L, "结算主体B"));
+        PaymentAllocationService service = realAllocationService(
+                supplierQueryService,
+                mock(FreightStatementQueryService.class)
+        );
+
+        assertThatThrownBy(() -> service.applyAllocations(
+                payment(PaymentAllocationService.SUPPLIER_PAYMENT_TYPE, new BigDecimal("100.00")),
+                paymentRequest(
+                        PaymentAllocationService.SUPPLIER_PAYMENT_TYPE,
+                        "SUP-001",
+                        "供应商A",
+                        null,
+                        new BigDecimal("100.00"),
+                        List.of(
+                                new PaymentAllocationRequest(null, 21L, new BigDecimal("40.00")),
+                                new PaymentAllocationRequest(null, 22L, new BigDecimal("60.00"))
+                        )
+                ),
+                StatusConstants.DRAFT,
+                new AtomicLong(100)::incrementAndGet
+        ))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("同一付款单不能核销不同结算主体的对账单");
+    }
+
+    @Test
+    void shouldRejectFreightStatementsFromDifferentSettlementCompanies() {
+        FreightStatementQueryService freightQueryService = mock(FreightStatementQueryService.class);
+        when(freightQueryService.requireActiveById(31L))
+                .thenReturn(freightStatement(31L, 1001L, "结算主体A"));
+        when(freightQueryService.requireActiveById(32L))
+                .thenReturn(freightStatement(32L, 1002L, "结算主体B"));
+        PaymentAllocationService service = realAllocationService(
+                mock(SupplierStatementQueryService.class),
+                freightQueryService
+        );
+        Payment payment = payment(PaymentAllocationService.FREIGHT_PAYMENT_TYPE, new BigDecimal("100.00"));
+        payment.setCounterpartyCode("CAR-001");
+        payment.setCounterpartyName("物流商A");
+
+        assertThatThrownBy(() -> service.applyAllocations(
+                payment,
+                paymentRequest(
+                        PaymentAllocationService.FREIGHT_PAYMENT_TYPE,
+                        "CAR-001",
+                        "物流商A",
+                        null,
+                        new BigDecimal("100.00"),
+                        List.of(
+                                new PaymentAllocationRequest(null, 31L, new BigDecimal("40.00")),
+                                new PaymentAllocationRequest(null, 32L, new BigDecimal("60.00"))
+                        )
+                ),
+                StatusConstants.DRAFT,
+                new AtomicLong(100)::incrementAndGet
+        ))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("同一付款单不能核销不同结算主体的对账单");
+    }
+
+    @Test
+    void shouldAllowStatementsWithSameSettlementCompanyIdAndHistoricalNames() {
+        SupplierStatementQueryService supplierQueryService = mock(SupplierStatementQueryService.class);
+        when(supplierQueryService.requireActiveById(21L))
+                .thenReturn(supplierStatement(21L, 1001L, "结算主体旧称"));
+        when(supplierQueryService.requireActiveById(22L))
+                .thenReturn(supplierStatement(22L, 1001L, "结算主体新称"));
+        PaymentAllocationService service = realAllocationService(
+                supplierQueryService,
+                mock(FreightStatementQueryService.class)
+        );
+
+        PaymentAllocationService.AllocationApplyResult result = service.applyAllocations(
+                payment(PaymentAllocationService.SUPPLIER_PAYMENT_TYPE, new BigDecimal("100.00")),
+                paymentRequest(
+                        PaymentAllocationService.SUPPLIER_PAYMENT_TYPE,
+                        "SUP-001",
+                        "供应商A",
+                        null,
+                        new BigDecimal("100.00"),
+                        List.of(
+                                new PaymentAllocationRequest(null, 21L, new BigDecimal("40.00")),
+                                new PaymentAllocationRequest(null, 22L, new BigDecimal("60.00"))
+                        )
+                ),
+                StatusConstants.DRAFT,
+                new AtomicLong(100)::incrementAndGet
+        );
+
+        assertThat(result.totalAllocatedAmount()).isEqualByComparingTo("100.00");
+        assertThat(result.settlementCompanyId()).isEqualTo(1001L);
+        assertThat(result.settlementCompanyName()).isEqualTo("结算主体旧称");
+    }
+
+    @Test
+    void shouldRevalidateSettlementCompanyWhenChangingDraftToPaid() {
+        SupplierStatementQueryService supplierQueryService = mock(SupplierStatementQueryService.class);
+        when(supplierQueryService.requireActiveById(21L))
+                .thenReturn(supplierStatement(21L, 1001L, "结算主体A"));
+        when(supplierQueryService.requireActiveById(22L))
+                .thenReturn(supplierStatement(22L, 1002L, "结算主体B"));
+        PaymentAllocationService service = realAllocationService(
+                supplierQueryService,
+                mock(FreightStatementQueryService.class)
+        );
+        Payment payment = payment(PaymentAllocationService.SUPPLIER_PAYMENT_TYPE, new BigDecimal("100.00"));
+        payment.getItems().add(allocation(11L, 21L, new BigDecimal("40.00")));
+        payment.getItems().add(allocation(12L, 22L, new BigDecimal("60.00")));
+
+        assertThatThrownBy(() -> service.validateExistingAllocationsForSettlement(
+                payment,
+                StatusConstants.PAID
+        ))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("同一付款单不能核销不同结算主体的对账单");
+    }
+
+    @Test
+    void shouldRefreshSettlementCompanySnapshotDuringPaidStatusValidation() {
+        SupplierStatementQueryService supplierQueryService = mock(SupplierStatementQueryService.class);
+        when(supplierQueryService.requireActiveById(21L))
+                .thenReturn(supplierStatement(21L, 1001L, "来源结算主体"));
+        PaymentAllocationService service = realAllocationService(
+                supplierQueryService,
+                mock(FreightStatementQueryService.class)
+        );
+        Payment payment = payment(PaymentAllocationService.SUPPLIER_PAYMENT_TYPE, new BigDecimal("100.00"));
+        payment.setSettlementCompanyId(999L);
+        payment.setSettlementCompanyName("伪造或过期主体");
+        payment.getItems().add(allocation(11L, 21L, new BigDecimal("100.00")));
+
+        service.validateExistingAllocationsForSettlement(payment, StatusConstants.PAID);
+
+        assertThat(payment.getSettlementCompanyId()).isEqualTo(1001L);
+        assertThat(payment.getSettlementCompanyName()).isEqualTo("来源结算主体");
     }
 
     @Test
@@ -320,11 +481,27 @@ class PaymentAllocationServiceTest {
                                           Long sourceStatementId,
                                           BigDecimal amount,
                                           List<PaymentAllocationRequest> items) {
-        return new PaymentRequest(
-                "FK-001",
+        return paymentRequest(
                 businessType,
                 "SUP-001",
                 "供应商A",
+                sourceStatementId,
+                amount,
+                items
+        );
+    }
+
+    private PaymentRequest paymentRequest(String businessType,
+                                          String counterpartyCode,
+                                          String counterpartyName,
+                                          Long sourceStatementId,
+                                          BigDecimal amount,
+                                          List<PaymentAllocationRequest> items) {
+        return new PaymentRequest(
+                "FK-001",
+                businessType,
+                counterpartyCode,
+                counterpartyName,
                 sourceStatementId,
                 LocalDate.of(2026, 4, 26),
                 "银行转账",
@@ -334,6 +511,55 @@ class PaymentAllocationServiceTest {
                 null,
                 items
         );
+    }
+
+    private PaymentAllocationService realAllocationService(
+            SupplierStatementQueryService supplierQueryService,
+            FreightStatementQueryService freightQueryService
+    ) {
+        PaymentStatementAllocationValidator validator = new PaymentStatementAllocationValidator(
+                mock(PaymentAllocationRepository.class),
+                supplierQueryService,
+                freightQueryService,
+                mock(ResourceRecordAccessGuard.class)
+        );
+        return new PaymentAllocationService(validator);
+    }
+
+    private PaymentStatementAllocationValidator.ValidatedStatement validatedStatement(String counterpartyCode) {
+        return new PaymentStatementAllocationValidator.ValidatedStatement(
+                counterpartyCode,
+                1001L,
+                "结算主体A"
+        );
+    }
+
+    private SupplierStatement supplierStatement(Long id,
+                                                Long settlementCompanyId,
+                                                String settlementCompanyName) {
+        SupplierStatement statement = new SupplierStatement();
+        statement.setId(id);
+        statement.setSupplierCode("SUP-001");
+        statement.setSupplierName("供应商A");
+        statement.setSettlementCompanyId(settlementCompanyId);
+        statement.setSettlementCompanyName(settlementCompanyName);
+        statement.setStatus(StatusConstants.CONFIRMED);
+        statement.setPurchaseAmount(new BigDecimal("1000.00"));
+        return statement;
+    }
+
+    private FreightStatement freightStatement(Long id,
+                                              Long settlementCompanyId,
+                                              String settlementCompanyName) {
+        FreightStatement statement = new FreightStatement();
+        statement.setId(id);
+        statement.setCarrierCode("CAR-001");
+        statement.setCarrierName("物流商A");
+        statement.setSettlementCompanyId(settlementCompanyId);
+        statement.setSettlementCompanyName(settlementCompanyName);
+        statement.setStatus(StatusConstants.AUDITED);
+        statement.setTotalFreight(new BigDecimal("1000.00"));
+        return statement;
     }
 
     private PaymentAllocation allocation(Long id, Long sourceStatementId, BigDecimal allocatedAmount) {

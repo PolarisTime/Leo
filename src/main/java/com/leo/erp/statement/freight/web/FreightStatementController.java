@@ -58,6 +58,7 @@ public class FreightStatementController {
     public ApiResponse<PageResponse<FreightStatementResponse>> page(
             @BindPageQuery(sortFieldKey = "freight-statement") PageQuery query,
             @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) String carrierCode,
             @RequestParam(required = false) String carrierName,
             @RequestParam(required = false) Long settlementCompanyId,
             @RequestParam(required = false) String status,
@@ -66,9 +67,13 @@ public class FreightStatementController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate periodEnd
     ) {
         return ApiResponse.success(PageResponse.from(
-                freightStatementService.responsePage(query, new PageFilter(keyword, status, periodStart, periodEnd,
-                        carrierName, null, null, null, null, null, signStatus, null, null, null, null,
-                        settlementCompanyId))
+                freightStatementService.responsePage(
+                        query,
+                        new PageFilter(keyword, status, periodStart, periodEnd,
+                                carrierName, null, null, null, null, null, signStatus, null, null, null, null,
+                                settlementCompanyId),
+                        carrierCode
+                )
         ));
     }
 
@@ -78,13 +83,18 @@ public class FreightStatementController {
     public ApiResponse<PageResponse<FreightStatementCandidateResponse>> candidates(
             @BindPageQuery(sortFieldKey = "freight-bill") PageQuery query,
             @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) String carrierCode,
             @RequestParam(required = false) String carrierName,
             @RequestParam(required = false) Long settlementCompanyId,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate
     ) {
         return ApiResponse.success(PageResponse.from(
-                freightStatementService.candidatePage(query, PageFilter.of(keyword, carrierName, settlementCompanyId, null, startDate, endDate))
+                freightStatementService.candidatePage(
+                        query,
+                        PageFilter.of(keyword, carrierName, settlementCompanyId, null, startDate, endDate),
+                        carrierCode
+                )
         ));
     }
 

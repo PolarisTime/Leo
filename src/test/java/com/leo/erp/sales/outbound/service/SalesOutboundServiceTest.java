@@ -47,6 +47,14 @@ import static org.mockito.Mockito.when;
 class SalesOutboundServiceTest {
 
     @Test
+    void shouldRequireDownstreamMutationGuard() {
+        assertThat(java.util.Arrays.stream(SalesOutboundService.class.getDeclaredFields())
+                .map(java.lang.reflect.Field::getType)
+                .map(Class::getSimpleName))
+                .contains("SalesOutboundDownstreamMutationGuard");
+    }
+
+    @Test
     void shouldUsePreOutboundWorkflowTransitions() {
         SalesOutboundService service = createService(
                 mock(SalesOutboundRepository.class),
@@ -80,6 +88,7 @@ class SalesOutboundServiceTest {
                 ))
         );
         SalesOrderItem sourceSalesOrderItem = buildSalesOrderItem(9001L, "SO-001");
+        sourceSalesOrderItem.setUnitPrice(new BigDecimal("3000.00"));
 
         when(repository.existsByOutboundNoAndDeletedFlagFalse("SOO-001")).thenReturn(false);
         when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(materialMap("M1"));
@@ -127,6 +136,7 @@ class SalesOutboundServiceTest {
                 ))
         );
         SalesOrderItem sourceSalesOrderItem = buildSalesOrderItem(9002L, "SO-002");
+        sourceSalesOrderItem.setUnitPrice(new BigDecimal("3111.00"));
 
         when(repository.existsByOutboundNoAndDeletedFlagFalse("SOO-002")).thenReturn(false);
         when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(materialMap("M1"));
@@ -519,6 +529,38 @@ class SalesOutboundServiceTest {
         inOrder.verify(sourceAllocationLockService)
                 .lockTradeItemSources(List.of(), List.of(), List.of(9105L));
         inOrder.verify(repository).save(existing);
+    }
+
+    @Test
+    void shouldLockSourcesAndOutboundBeforeCheckingDownstreamOnReverseAudit() {
+        SalesOutboundRepository repository = mock(SalesOutboundRepository.class);
+        SalesOutboundMapper mapper = mock(SalesOutboundMapper.class);
+        SourceAllocationLockService sourceAllocationLockService = mock(SourceAllocationLockService.class);
+        SalesOutboundDownstreamMutationGuard downstreamMutationGuard =
+                mock(SalesOutboundDownstreamMutationGuard.class);
+        SalesOutboundService service = createService(
+                repository, mock(SnowflakeIdGenerator.class), mapper,
+                mock(TradeItemMaterialSupport.class), mock(WarehouseSelectionSupport.class),
+                mock(WorkflowTransitionGuard.class), mock(SalesOrderCompletionSyncService.class),
+                mock(SalesOrderItemQueryService.class), mock(PurchaseOrderItemPieceWeightService.class),
+                mock(JdbcTemplate.class), sourceAllocationLockService, downstreamMutationGuard
+        );
+        SalesOutbound existing = buildExistingOutbound(7104L, "SOO-DOWNSTREAM-STATUS", "SO-DOWNSTREAM-STATUS");
+        existing.setStatus(StatusConstants.AUDITED);
+        buildExistingOutboundItem(8104L, existing, 9106L);
+        when(repository.findByIdAndDeletedFlagFalse(7104L)).thenReturn(Optional.of(existing));
+        when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        stubMapper(mapper);
+
+        service.updateStatus(7104L, StatusConstants.DRAFT);
+
+        InOrder flow = org.mockito.Mockito.inOrder(sourceAllocationLockService, downstreamMutationGuard, repository);
+        flow.verify(sourceAllocationLockService)
+                .lockTradeItemSources(List.of(), List.of(), List.of(9106L));
+        flow.verify(sourceAllocationLockService)
+                .lockDocumentSources(List.of(), List.of(), List.of(7104L), List.of());
+        flow.verify(downstreamMutationGuard).assertReverseAuditAllowed(existing);
+        flow.verify(repository).save(existing);
     }
 
     @Test
@@ -1352,6 +1394,7 @@ class SalesOutboundServiceTest {
                 ))
         );
         SalesOrderItem sourceSalesOrderItem = buildSalesOrderItem(9010L, "SO-LOCK");
+        sourceSalesOrderItem.setUnitPrice(new BigDecimal("3111.00"));
 
         when(repository.findByIdAndDeletedFlagFalse(7004L)).thenReturn(Optional.of(existing));
         when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(materialMap("M1"));
@@ -1454,6 +1497,7 @@ class SalesOutboundServiceTest {
                 ))
         );
         SalesOrderItem sourceSalesOrderItem = buildSalesOrderItem(9011L, "SO-PLAIN-SRC");
+        sourceSalesOrderItem.setUnitPrice(new BigDecimal("3000.00"));
         sourceSalesOrderItem.getSalesOrder().setCustomerName("客户B");
         sourceSalesOrderItem.getSalesOrder().setProjectName("项目B");
         sourceSalesOrderItem.setWarehouseName("二号码头");
@@ -1696,6 +1740,34 @@ class SalesOutboundServiceTest {
                                                PurchaseOrderItemPieceWeightService purchaseOrderItemPieceWeightService,
                                                JdbcTemplate jdbc,
                                                SourceAllocationLockService sourceAllocationLockService) {
+        return createService(
+                repository,
+                idGenerator,
+                mapper,
+                materialSupport,
+                warehouseSelectionSupport,
+                workflowTransitionGuard,
+                syncService,
+                salesOrderItemQueryService,
+                purchaseOrderItemPieceWeightService,
+                jdbc,
+                sourceAllocationLockService,
+                mock(SalesOutboundDownstreamMutationGuard.class)
+        );
+    }
+
+    private SalesOutboundService createService(SalesOutboundRepository repository,
+                                               SnowflakeIdGenerator idGenerator,
+                                               SalesOutboundMapper mapper,
+                                               TradeItemMaterialSupport materialSupport,
+                                               WarehouseSelectionSupport warehouseSelectionSupport,
+                                               WorkflowTransitionGuard workflowTransitionGuard,
+                                               SalesOrderCompletionSyncService syncService,
+                                               SalesOrderItemQueryService salesOrderItemQueryService,
+                                               PurchaseOrderItemPieceWeightService purchaseOrderItemPieceWeightService,
+                                               JdbcTemplate jdbc,
+                                               SourceAllocationLockService sourceAllocationLockService,
+                                               SalesOutboundDownstreamMutationGuard downstreamMutationGuard) {
         TradeItemMaterialSupportTestDoubles.stubMaterialCodeNormalization(materialSupport);
         SalesOutboundSourceService sourceService = new SalesOutboundSourceService(salesOrderItemQueryService, repository);
         return new SalesOutboundService(
@@ -1711,7 +1783,8 @@ class SalesOutboundServiceTest {
                 new SalesOutboundResponseAssembler(mapper, sourceService),
                 new SalesOutboundSaveService(repository, syncService),
                 new SalesOutboundPurchaseInboundGuard(sourceService, jdbc),
-                sourceAllocationLockService
+                sourceAllocationLockService,
+                downstreamMutationGuard
         );
     }
 

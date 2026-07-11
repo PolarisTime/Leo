@@ -175,6 +175,40 @@ class PurchaseInboundSourceValidatorTest {
     }
 
     @Test
+    void shouldRejectSameNameFromDifferentSupplierCode() {
+        PurchaseOrderItemQueryService itemQueryService = mock(PurchaseOrderItemQueryService.class);
+        PurchaseInboundItemRepository inboundItemRepository = mock(PurchaseInboundItemRepository.class);
+        PurchaseInboundSourceValidator validator = new PurchaseInboundSourceValidator(
+                itemQueryService,
+                new PurchaseInboundAllocationService(inboundItemRepository)
+        );
+        PurchaseOrderItem sourceItem = sourcePurchaseOrderItem(201L, 10);
+        PurchaseInboundRequest request = new PurchaseInboundRequest(
+                "PI-001",
+                "PO-001",
+                "SUP-002",
+                "供应商A",
+                "一号库",
+                LocalDate.of(2026, 4, 26),
+                "理算",
+                "草稿",
+                null,
+                List.of(itemRequest(201L, 4))
+        );
+        when(itemQueryService.findActiveByIdIn(List.of(201L))).thenReturn(List.of(sourceItem));
+        when(inboundItemRepository.summarizeAllocatedQuantityBySourcePurchaseOrderItemIdsExcludingInbound(
+                eq(List.of(201L)),
+                any()
+        )).thenReturn(List.of());
+        PurchaseInboundSourceValidator.SourceValidationContext context =
+                validator.prepareContext(request, null, List.of());
+
+        assertThatThrownBy(() -> validator.validateLine(request.items().get(0), 1, request, context))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("供应商编码");
+    }
+
+    @Test
     void shouldExposeAllocatedQuantityMapFromSourceValidationContext() {
         PurchaseInboundAllocationService.AllocationContext allocationContext =
                 new PurchaseInboundAllocationService.AllocationContext(
@@ -197,6 +231,7 @@ class PurchaseInboundSourceValidatorTest {
         sourceOrder.setId(301L);
         sourceOrder.setOrderNo("PO-001");
         sourceOrder.setStatus("已审核");
+        sourceOrder.setSupplierCode("SUP-001");
         sourceOrder.setSupplierName("供应商A");
 
         PurchaseOrderItem item = new PurchaseOrderItem();

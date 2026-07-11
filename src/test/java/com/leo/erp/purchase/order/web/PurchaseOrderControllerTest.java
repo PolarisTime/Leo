@@ -79,6 +79,27 @@ class PurchaseOrderControllerTest {
     }
 
     @Test
+    void prepaymentCandidatesReturnsDedicatedPaginatedCandidates() {
+        PurchaseOrderImportCandidateResponse candidate = mock(PurchaseOrderImportCandidateResponse.class);
+        Page<PurchaseOrderImportCandidateResponse> page = new PageImpl<>(List.of(candidate));
+        PageQuery query = new PageQuery(1, 20, null, null);
+        when(purchaseOrderService.prepaymentCandidates(any(), any())).thenReturn(page);
+
+        ApiResponse<PageResponse<PurchaseOrderImportCandidateResponse>> response = controller.prepaymentCandidates(
+                query, "PO-001", "供应商甲", 7L, "完成采购", null, null
+        );
+
+        assertThat(response.code()).isEqualTo(0);
+        assertThat(response.data().content()).containsExactly(candidate);
+        ArgumentCaptor<PageFilter> filterCaptor = ArgumentCaptor.forClass(PageFilter.class);
+        verify(purchaseOrderService).prepaymentCandidates(eq(query), filterCaptor.capture());
+        assertThat(filterCaptor.getValue().keyword()).isEqualTo("PO-001");
+        assertThat(filterCaptor.getValue().name()).isEqualTo("供应商甲");
+        assertThat(filterCaptor.getValue().settlementCompanyId()).isEqualTo(7L);
+        assertThat(filterCaptor.getValue().status()).isEqualTo("完成采购");
+    }
+
+    @Test
     void pageReturnsPaginatedPurchaseOrders() {
         PurchaseOrderResponse order = mock(PurchaseOrderResponse.class);
         Page<PurchaseOrderResponse> page = new PageImpl<>(List.of(order));

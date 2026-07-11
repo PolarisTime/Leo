@@ -1,5 +1,7 @@
 package com.leo.erp.sales.order.service;
 
+import com.leo.erp.common.error.BusinessException;
+import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.support.BusinessStatusValidator;
 import com.leo.erp.common.support.ManagedEntityItemSupport;
 import com.leo.erp.common.support.StatusConstants;
@@ -78,6 +80,11 @@ public class SalesOrderApplyService {
     }
 
     void apply(SalesOrder entity, SalesOrderRequest request, LongSupplier nextIdSupplier) {
+        Customer customer = requireCustomerSnapshot(
+                request.customerCode(),
+                request.customerName(),
+                request.projectName()
+        );
         String nextStatus = BusinessStatusValidator.normalizeWithDefault(
                 request.status(),
                 entity.getStatus() != null ? entity.getStatus() : StatusConstants.DRAFT,
@@ -91,21 +98,32 @@ public class SalesOrderApplyService {
                 StatusConstants.AUDITED,
                 StatusConstants.SALES_COMPLETED
         );
-        applyHeader(entity, request, nextStatus);
+        applyHeader(entity, request, nextStatus, customer);
         applyItems(entity, request, nextIdSupplier);
     }
 
-    private void applyHeader(SalesOrder entity, SalesOrderRequest request, String nextStatus) {
+    void validateCustomerSnapshot(SalesOrderRequest request) {
+        requireCustomerSnapshot(request.customerCode(), request.customerName(), request.projectName());
+    }
+
+    void validateCustomerSnapshot(SalesOrder entity) {
+        requireCustomerSnapshot(entity.getCustomerCode(), entity.getCustomerName(), entity.getProjectName());
+    }
+
+    private void applyHeader(SalesOrder entity,
+                             SalesOrderRequest request,
+                             String nextStatus,
+                             Customer customer) {
         entity.setOrderNo(request.orderNo());
         entity.setPurchaseInboundNo(request.purchaseInboundNo());
         entity.setPurchaseOrderNo(request.purchaseOrderNo());
-        entity.setCustomerName(request.customerName());
-        entity.setProjectName(request.projectName());
-        entity.setCustomerCode(request.customerCode());
-        entity.setProjectId(request.projectId());
+        entity.setCustomerName(customer == null ? request.customerName() : trimToNull(customer.getCustomerName()));
+        entity.setProjectName(customer == null ? request.projectName() : trimToNull(customer.getProjectName()));
+        entity.setCustomerCode(customer == null ? request.customerCode() : trimToNull(customer.getCustomerCode()));
+        entity.setProjectId(customer == null || customer.getId() == null ? request.projectId() : customer.getId());
         entity.setDeliveryDate(request.deliveryDate());
         entity.setSalesName(request.salesName());
-        applyCustomerSettlementCompany(entity, request);
+        applyCustomerSettlementCompany(entity, request, customer);
         entity.setStatus(nextStatus);
         entity.setRemark(request.remark());
     }
@@ -171,7 +189,9 @@ public class SalesOrderApplyService {
         return new ItemTotals(weightTon, amount);
     }
 
-    private void applyCustomerSettlementCompany(SalesOrder entity, SalesOrderRequest request) {
+    private void applyCustomerSettlementCompany(SalesOrder entity,
+                                                SalesOrderRequest request,
+                                                Customer customer) {
         if (shouldPreserveExistingSettlementCompany(entity)) {
             return;
         }
@@ -181,7 +201,6 @@ public class SalesOrderApplyService {
             entity.setSettlementCompanyName(requestedSettlementCompany.name());
             return;
         }
-        Customer customer = resolveCustomer(request);
         if (customer == null) {
             entity.setSettlementCompanyId(null);
             entity.setSettlementCompanyName(null);
@@ -199,23 +218,28 @@ public class SalesOrderApplyService {
                 || StatusConstants.SALES_COMPLETED.equals(entity.getStatus());
     }
 
-    private Customer resolveCustomer(SalesOrderRequest request) {
+    private Customer requireCustomerSnapshot(String requestedCode,
+                                             String requestedName,
+                                             String requestedProjectName) {
         if (customerRepository == null) {
             return null;
         }
-        if (request.customerCode() != null && !request.customerCode().isBlank()) {
-            return customerRepository.findByCustomerCodeAndDeletedFlagFalse(request.customerCode().trim())
-                    .orElse(null);
+        String customerCode = trimToNull(requestedCode);
+        if (customerCode == null) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "客户编码不能为空");
         }
-        if (request.customerName() == null || request.customerName().isBlank()
-                || request.projectName() == null || request.projectName().isBlank()) {
-            return null;
+        Customer customer = customerRepository.findByCustomerCodeAndDeletedFlagFalse(customerCode)
+                .orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_ERROR, "客户编码不存在"));
+        if (!java.util.Objects.equals(trimToNull(requestedName), trimToNull(customer.getCustomerName()))) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "客户名称与客户主数据不一致");
         }
-        return customerRepository.findFirstByCustomerNameAndProjectNameAndDeletedFlagFalseOrderByCustomerCodeAsc(
-                        request.customerName().trim(),
-                        request.projectName().trim()
-                )
-                .orElse(null);
+        if (!java.util.Objects.equals(
+                trimToNull(requestedProjectName),
+                trimToNull(customer.getProjectName())
+        )) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "项目名称与客户主数据不一致");
+        }
+        return customer;
     }
 
     private SettlementCompanySnapshot resolveRequestedSettlementCompany(SalesOrderRequest request) {

@@ -22,11 +22,13 @@ import com.leo.erp.statement.supplier.web.dto.SupplierStatementCandidateResponse
 import com.leo.erp.statement.supplier.web.dto.SupplierStatementItemRequest;
 import com.leo.erp.statement.supplier.web.dto.SupplierStatementRequest;
 import com.leo.erp.statement.service.StatementCandidateSupport;
+import com.leo.erp.statement.service.StatementSourceCoverageValidator;
 import org.springframework.data.domain.Page;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.util.Collection;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -75,9 +77,16 @@ public class SupplierStatementSourceService {
                                  SupplierStatementRequest request,
                                  LongSupplier nextIdSupplier) {
         BigDecimal purchaseAmount = BigDecimal.ZERO;
-        entity.setSupplierCode(resolveSupplierCode(request.supplierCode(), request.supplierName()));
         Map<Long, PurchaseInboundItem> sourceInboundItemMap = loadSourceInboundItemMap(request.items());
         validateSourceInbounds(request, sourceInboundItemMap, entity.getId());
+        SupplierIdentity supplierIdentity = resolveSupplierIdentity(
+                sourceInboundItemMap.values().stream()
+                        .map(PurchaseInboundItem::getPurchaseInbound)
+                        .distinct()
+                        .toList(),
+                request
+        );
+        entity.setSupplierCode(supplierIdentity.code());
         SettlementCompanySnapshot settlementCompany = resolveStatementSettlementCompany(sourceInboundItemMap.values().stream()
                 .map(PurchaseInboundItem::getPurchaseInbound)
                 .distinct()
@@ -116,14 +125,22 @@ public class SupplierStatementSourceService {
                     ? null
                     : TradeItemCalculator.scaleWeightTon(sourceInboundItem.getWeighWeightTon()));
             item.setWeightAdjustmentTon(TradeItemCalculator.scaleWeightTon(sourceInboundItem.getWeightAdjustmentTon()));
-            item.setWeightAdjustmentAmount(TradeItemCalculator.scaleAmount(sourceInboundItem.getWeightAdjustmentAmount()));
+            BigDecimal weightAdjustmentAmount =
+                    TradeItemCalculator.scaleAmount(sourceInboundItem.getWeightAdjustmentAmount());
+            item.setWeightAdjustmentAmount(weightAdjustmentAmount);
             item.setUnitPrice(TradeItemCalculator.scaleAmount(sourceInboundItem.getUnitPrice()));
             BigDecimal amount = TradeItemCalculator.scaleAmount(sourceInboundItem.getAmount());
             item.setAmount(amount);
-            purchaseAmount = purchaseAmount.add(amount);
+            purchaseAmount = purchaseAmount.add(amount).add(weightAdjustmentAmount);
         }
         entity.getItems().sort(java.util.Comparator.comparing(SupplierStatementItem::getLineNo));
-        return new SourceApplyResult(purchaseAmount, settlementCompany.id(), settlementCompany.name());
+        return new SourceApplyResult(
+                purchaseAmount,
+                supplierIdentity.code(),
+                supplierIdentity.name(),
+                settlementCompany.id(),
+                settlementCompany.name()
+        );
     }
 
     Set<String> collectOccupiedInboundNos(Long currentStatementId) {
@@ -168,6 +185,14 @@ public class SupplierStatementSourceService {
                     inbound.getSupplierName(),
                     "来源采购入库单存在不同供应商，不能合并生成供应商对账单"
             );
+            String requestedSupplierCode = trimToNull(request.supplierCode());
+            if (requestedSupplierCode != null) {
+                BusinessDocumentValidator.requireSameText(
+                        requestedSupplierCode,
+                        inbound.getSupplierCode(),
+                        "来源采购入库单供应商编码与对账单不一致"
+                );
+            }
             BusinessDocumentValidator.requireStatusIn(
                     inbound.getStatus(),
                     Set.of(StatusConstants.INBOUND_COMPLETED),
@@ -182,7 +207,33 @@ public class SupplierStatementSourceService {
         if (requestedInboundNos.isEmpty()) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "供应商对账单来源采购入库单不能为空");
         }
+        assertCompleteSourceItemCoverage(sourceInboundItemMap.values());
         assertSourceInboundsNotOccupied(requestedInboundNos, currentStatementId);
+    }
+
+    private void assertCompleteSourceItemCoverage(Collection<PurchaseInboundItem> requestedItems) {
+        requestedItems.stream()
+                .map(PurchaseInboundItem::getPurchaseInbound)
+                .filter(java.util.Objects::nonNull)
+                .distinct()
+                .forEach(inbound -> StatementSourceCoverageValidator.requireAllEffectiveItems(
+                        "来源采购入库单" + inbound.getInboundNo(),
+                        inbound.getItems().stream().map(PurchaseInboundItem::getId).toList(),
+                        requestedItems.stream()
+                                .filter(item -> samePurchaseInbound(item.getPurchaseInbound(), inbound))
+                                .map(PurchaseInboundItem::getId)
+                                .toList()
+                ));
+    }
+
+    private boolean samePurchaseInbound(PurchaseInbound left, PurchaseInbound right) {
+        if (left == right) {
+            return true;
+        }
+        return left != null
+                && right != null
+                && left.getId() != null
+                && left.getId().equals(right.getId());
     }
 
     private void assertSourceInboundsNotOccupied(Set<String> requestedInboundNos, Long currentStatementId) {
@@ -229,6 +280,36 @@ public class SupplierStatementSourceService {
                 .orElse(null);
     }
 
+    private SupplierIdentity resolveSupplierIdentity(List<PurchaseInbound> inbounds,
+                                                     SupplierStatementRequest request) {
+        List<String> supplierCodes = inbounds.stream()
+                .map(PurchaseInbound::getSupplierCode)
+                .map(this::trimToNull)
+                .filter(java.util.Objects::nonNull)
+                .distinct()
+                .toList();
+        if (supplierCodes.size() > 1) {
+            throw new BusinessException(
+                    ErrorCode.BUSINESS_ERROR,
+                    "来源采购入库单存在不同供应商编码，不能合并生成供应商对账单"
+            );
+        }
+        String supplierCode = supplierCodes.isEmpty()
+                ? resolveSupplierCode(request.supplierCode(), request.supplierName())
+                : supplierCodes.get(0);
+        if (supplierCode == null) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "供应商编码不能为空");
+        }
+        List<String> supplierNames = inbounds.stream()
+                .map(PurchaseInbound::getSupplierName)
+                .map(this::trimToNull)
+                .filter(java.util.Objects::nonNull)
+                .distinct()
+                .toList();
+        String supplierName = supplierNames.isEmpty() ? trimToNull(request.supplierName()) : supplierNames.get(0);
+        return new SupplierIdentity(supplierCode, supplierName);
+    }
+
     private String trimToNull(String value) {
         return BusinessDocumentValidator.trimToNull(value);
     }
@@ -266,9 +347,19 @@ public class SupplierStatementSourceService {
 
     record SourceApplyResult(
             BigDecimal purchaseAmount,
+            String supplierCode,
+            String supplierName,
             Long settlementCompanyId,
             String settlementCompanyName
     ) {
+        SourceApplyResult(BigDecimal purchaseAmount,
+                          Long settlementCompanyId,
+                          String settlementCompanyName) {
+            this(purchaseAmount, null, null, settlementCompanyId, settlementCompanyName);
+        }
+    }
+
+    private record SupplierIdentity(String code, String name) {
     }
 
     private record SettlementCompanySnapshot(Long id, String name) {

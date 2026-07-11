@@ -52,11 +52,15 @@ class PendingInvoiceReceiptReportQueryRepositoryTest {
 
         assertThat(sql.getValue())
                 .contains("receipt.status = :receivedStatus")
+                .contains("refund.status = :auditedRefundStatus")
+                .contains("refund.deleted_flag = FALSE")
                 .contains("purchase_order.status IN (:purchaseOrderStatuses)")
                 .contains("POSITION(:keyword IN LOWER(COALESCE(purchase_order.order_no, ''))) > 0")
+                .contains("report.pending_invoice_quantity > 0")
                 .contains("report.pending_invoice_weight_ton > 0")
                 .contains("report.pending_invoice_amount > 0");
         assertThat(params.getValue().getValue("receivedStatus")).isEqualTo("已收票");
+        assertThat(params.getValue().getValue("auditedRefundStatus")).isEqualTo("已审核");
         assertThat(params.getValue().getValue("purchaseOrderStatuses"))
                 .isEqualTo(Set.of("已审核", "完成采购"));
         assertThat(params.getValue().getValue("keyword")).isEqualTo("50%_\\钢");

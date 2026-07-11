@@ -52,6 +52,7 @@ public class FreightBillController {
     public ApiResponse<PageResponse<FreightBillResponse>> page(
             @BindPageQuery(sortFieldKey = "freight-bill") PageQuery query,
             @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) String carrierCode,
             @RequestParam(required = false) String carrierName,
             @RequestParam(required = false) Long settlementCompanyId,
             @RequestParam(required = false) String status,
@@ -59,7 +60,11 @@ public class FreightBillController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate
     ) {
         return ApiResponse.success(PageResponse.from(
-                service.page(query, PageFilter.of(keyword, carrierName, settlementCompanyId, status, startDate, endDate))
+                service.page(
+                        query,
+                        PageFilter.of(keyword, carrierName, settlementCompanyId, status, startDate, endDate),
+                        carrierCode
+                )
         ));
     }
 

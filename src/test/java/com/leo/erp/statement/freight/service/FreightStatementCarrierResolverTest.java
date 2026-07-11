@@ -8,28 +8,33 @@ import java.lang.reflect.Proxy;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class FreightStatementCarrierResolverTest {
 
     @Test
-    void shouldUseExplicitCarrierCodeFirst() {
+    void shouldResolveExplicitCarrierCodeAgainstActiveMasterData() {
         FreightStatementCarrierResolver resolver = new FreightStatementCarrierResolver(repository("C-LOOKUP"));
 
-        assertThat(resolver.resolveCarrierCode(" C-REQ ", "物流甲")).isEqualTo("C-REQ");
+        assertThat(resolver.resolveCarrierCode(" C-LOOKUP ", "物流甲")).isEqualTo("C-LOOKUP");
     }
 
     @Test
-    void shouldLookupCarrierCodeByCarrierNameWhenRequestCodeBlank() {
+    void shouldRejectBlankCodeInsteadOfGuessingByCarrierName() {
         FreightStatementCarrierResolver resolver = new FreightStatementCarrierResolver(repository("C-LOOKUP"));
 
-        assertThat(resolver.resolveCarrierCode(" ", " 物流甲 ")).isEqualTo("C-LOOKUP");
+        assertThatThrownBy(() -> resolver.resolveCarrierCode(" ", " 物流甲 "))
+                .isInstanceOf(com.leo.erp.common.error.BusinessException.class)
+                .hasMessageContaining("物流商编码不能为空");
     }
 
     @Test
-    void shouldReturnNullWhenCarrierNameBlank() {
+    void shouldRejectUnknownCarrierCode() {
         FreightStatementCarrierResolver resolver = new FreightStatementCarrierResolver(repository("C-LOOKUP"));
 
-        assertThat(resolver.resolveCarrierCode(null, " ")).isNull();
+        assertThatThrownBy(() -> resolver.resolveCarrierCode("C-404", "物流甲"))
+                .isInstanceOf(com.leo.erp.common.error.BusinessException.class)
+                .hasMessageContaining("物流商编码不存在");
     }
 
     @Test
@@ -45,7 +50,9 @@ class FreightStatementCarrierResolverTest {
                 CarrierRepository.class.getClassLoader(),
                 new Class[]{CarrierRepository.class},
                 (proxy, method, args) -> switch (method.getName()) {
-                    case "findFirstByCarrierNameAndDeletedFlagFalseOrderByCarrierCodeAsc" -> Optional.of(carrier(carrierCode));
+                    case "findByCarrierCodeAndDeletedFlagFalse" -> carrierCode.equals(args[0])
+                            ? Optional.of(carrier(carrierCode))
+                            : Optional.empty();
                     case "toString" -> "CarrierRepositoryStub";
                     case "hashCode" -> System.identityHashCode(proxy);
                     case "equals" -> proxy == args[0];

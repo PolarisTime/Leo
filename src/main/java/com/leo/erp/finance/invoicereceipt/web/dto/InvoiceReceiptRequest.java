@@ -13,6 +13,7 @@ public record InvoiceReceiptRequest(
         String receiveNo,
         @jakarta.validation.constraints.NotBlank(message = "发票号码不能为空")
         String invoiceNo,
+        String supplierCode,
         @jakarta.validation.constraints.NotBlank(message = "供应商不能为空")
         String supplierName,
         String invoiceTitle,
@@ -34,4 +35,19 @@ public record InvoiceReceiptRequest(
         @Valid @NotEmpty(message = "请至少填写一条收票明细")
         List<InvoiceReceiptItemRequest> items
 ) {
+    public InvoiceReceiptRequest(String receiveNo,
+                                 String invoiceNo,
+                                 String supplierName,
+                                 String invoiceTitle,
+                                 LocalDate invoiceDate,
+                                 String invoiceType,
+                                 BigDecimal amount,
+                                 BigDecimal taxAmount,
+                                 String status,
+                                 String operatorName,
+                                 String remark,
+                                 List<InvoiceReceiptItemRequest> items) {
+        this(receiveNo, invoiceNo, null, supplierName, invoiceTitle, invoiceDate, invoiceType,
+                amount, taxAmount, status, operatorName, remark, items);
+    }
 }

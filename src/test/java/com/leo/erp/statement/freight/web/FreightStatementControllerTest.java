@@ -1,6 +1,7 @@
 package com.leo.erp.statement.freight.web;
 
 import com.leo.erp.common.api.ApiResponse;
+import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.api.PageResponse;
 import com.leo.erp.common.web.dto.StatusUpdateRequest;
@@ -54,12 +55,15 @@ class FreightStatementControllerTest {
         FreightStatementResponse item = mock(FreightStatementResponse.class);
         Page<FreightStatementResponse> page = new PageImpl<>(List.of(item));
         PageQuery query = new PageQuery(0, 20, null, null);
-        when(freightStatementService.responsePage(any(), any())).thenReturn(page);
+        when(freightStatementService.responsePage(any(), any(), any())).thenReturn(page);
 
-        ApiResponse<PageResponse<FreightStatementResponse>> response = controller.page(query, "test", "carrier", 7L, "active", null, null, null);
+        ApiResponse<PageResponse<FreightStatementResponse>> response = controller.page(
+                query, "test", "CR-001", "carrier", 7L, "active", null, null, null
+        );
 
         assertThat(response.code()).isEqualTo(0);
         assertThat(response.data().content()).hasSize(1);
+        verify(freightStatementService).responsePage(eq(query), any(PageFilter.class), eq("CR-001"));
     }
 
     @Test
@@ -67,12 +71,15 @@ class FreightStatementControllerTest {
         FreightStatementCandidateResponse item = mock(FreightStatementCandidateResponse.class);
         Page<FreightStatementCandidateResponse> page = new PageImpl<>(List.of(item));
         PageQuery query = new PageQuery(0, 20, null, null);
-        when(freightStatementService.candidatePage(any(), any())).thenReturn(page);
+        when(freightStatementService.candidatePage(any(), any(), any())).thenReturn(page);
 
-        ApiResponse<PageResponse<FreightStatementCandidateResponse>> response = controller.candidates(query, "test", "carrier", 7L, null, null);
+        ApiResponse<PageResponse<FreightStatementCandidateResponse>> response = controller.candidates(
+                query, "test", "CR-001", "carrier", 7L, null, null
+        );
 
         assertThat(response.code()).isEqualTo(0);
         assertThat(response.data().content()).hasSize(1);
+        verify(freightStatementService).candidatePage(eq(query), any(PageFilter.class), eq("CR-001"));
     }
 
     @Test

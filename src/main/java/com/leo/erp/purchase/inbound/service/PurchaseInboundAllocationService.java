@@ -6,6 +6,8 @@ import com.leo.erp.purchase.inbound.repository.PurchaseInboundItemRepository;
 import com.leo.erp.purchase.inbound.web.dto.PurchaseInboundItemRequest;
 import com.leo.erp.purchase.inbound.web.dto.PurchaseInboundRequest;
 import com.leo.erp.purchase.order.domain.entity.PurchaseOrderItem;
+import com.leo.erp.purchase.refund.repository.PurchaseRefundRepository;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.HashMap;
@@ -16,9 +18,18 @@ import java.util.Map;
 public class PurchaseInboundAllocationService {
 
     private final PurchaseInboundItemRepository purchaseInboundItemRepository;
+    private final PurchaseRefundRepository purchaseRefundRepository;
 
-    public PurchaseInboundAllocationService(PurchaseInboundItemRepository purchaseInboundItemRepository) {
+    @Autowired
+    public PurchaseInboundAllocationService(PurchaseInboundItemRepository purchaseInboundItemRepository,
+                                            PurchaseRefundRepository purchaseRefundRepository) {
         this.purchaseInboundItemRepository = purchaseInboundItemRepository;
+        this.purchaseRefundRepository = purchaseRefundRepository;
+    }
+
+    PurchaseInboundAllocationService(PurchaseInboundItemRepository purchaseInboundItemRepository) {
+        this.purchaseInboundItemRepository = purchaseInboundItemRepository;
+        this.purchaseRefundRepository = null;
     }
 
     List<Long> extractSourcePurchaseOrderItemIds(PurchaseInboundRequest request) {
@@ -49,6 +60,16 @@ public class PurchaseInboundAllocationService {
                         summary.getSourcePurchaseOrderItemId(),
                         Math.toIntExact(summary.getTotalQuantity())
                 ));
+        if (purchaseRefundRepository != null) {
+            purchaseRefundRepository.summarizeAuditedQuantityBySourcePurchaseOrderItemIds(
+                            sourcePurchaseOrderItemIds
+                    )
+                    .forEach(summary -> allocatedQuantityMap.merge(
+                            summary.getSourcePurchaseOrderItemId(),
+                            Math.toIntExact(summary.getTotalQuantity()),
+                            Math::addExact
+                    ));
+        }
         return allocatedQuantityMap;
     }
 

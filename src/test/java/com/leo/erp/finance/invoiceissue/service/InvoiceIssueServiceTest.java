@@ -742,6 +742,11 @@ class InvoiceIssueServiceTest {
             }
 
             @Override
+            public Long getTotalQuantity() {
+                return 0L;
+            }
+
+            @Override
             public BigDecimal getTotalWeightTon() {
                 return new BigDecimal(weightTon);
             }

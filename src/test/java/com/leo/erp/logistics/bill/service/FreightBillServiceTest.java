@@ -152,6 +152,7 @@ class FreightBillServiceTest {
     private FreightBillRequest buildRequest(String billNo, FreightBillItemRequest... items) {
         return new FreightBillRequest(
                 billNo,
+                "CR-001",
                 "物流甲",
                 null,
                 "客户甲",
@@ -279,6 +280,12 @@ class FreightBillServiceTest {
                 mock(WorkflowTransitionGuard.class),
                 mock(SourceAllocationLockService.class)
         );
+        CarrierRepository carrierRepository = mock(CarrierRepository.class);
+        Carrier carrier = new Carrier();
+        carrier.setCarrierCode("CR-001");
+        carrier.setCarrierName("物流甲");
+        when(carrierRepository.findByCarrierCodeAndDeletedFlagFalse("CR-001"))
+                .thenReturn(Optional.of(carrier));
         FreightBillService withoutCompanySettingService = new FreightBillService(
                 repository,
                 mock(SalesOutboundRepository.class),
@@ -287,7 +294,7 @@ class FreightBillServiceTest {
                 sourceService,
                 new FreightBillApplyService(),
                 mock(WorkflowTransitionGuard.class),
-                mock(CarrierRepository.class),
+                carrierRepository,
                 mock(SourceAllocationLockService.class)
         );
 
@@ -458,9 +465,11 @@ class FreightBillServiceTest {
         when(repository.existsByBillNoAndDeletedFlagFalse("FB-SETTLEMENT")).thenReturn(false);
         when(repository.save(any(FreightBill.class))).thenAnswer(invocation -> invocation.getArgument(0));
         Carrier carrier = new Carrier();
+        carrier.setCarrierCode("CR-001");
+        carrier.setCarrierName("物流甲");
         carrier.setDefaultSettlementCompanyId(7L);
         carrier.setDefaultSettlementCompanyName("嘉兴颖捷建材有限公司");
-        when(carrierRepository.findFirstByCarrierNameAndDeletedFlagFalseOrderByCarrierCodeAsc("物流甲"))
+        when(carrierRepository.findByCarrierCodeAndDeletedFlagFalse("CR-001"))
                 .thenReturn(Optional.of(carrier));
         when(companySettingService.requireActiveSettlementCompany(9L))
                 .thenReturn(companySetting(9L, "TEST9"));
@@ -474,6 +483,7 @@ class FreightBillServiceTest {
 
         FreightBillResponse response = service.create(new FreightBillRequest(
                 "FB-SETTLEMENT",
+                "CR-001",
                 "物流甲",
                 9L,
                 null,
@@ -489,6 +499,8 @@ class FreightBillServiceTest {
 
         assertThat(response.settlementCompanyId()).isEqualTo(9L);
         assertThat(response.settlementCompanyName()).isEqualTo("TEST9");
+        assertThat(response.carrierCode()).isEqualTo("CR-001");
+        verify(carrierRepository).findByCarrierCodeAndDeletedFlagFalse("CR-001");
     }
 
     @Test
@@ -499,16 +511,23 @@ class FreightBillServiceTest {
                 .thenReturn(new FreightBillSourceService.SourceValidationContext(Map.of(), Map.of()));
         when(repository.existsByBillNoAndDeletedFlagFalse("FB-REQ-SETTLEMENT")).thenReturn(false);
         when(repository.save(any(FreightBill.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        CarrierRepository carrierRepository = mock(CarrierRepository.class);
+        Carrier carrier = new Carrier();
+        carrier.setCarrierCode("CR-001");
+        carrier.setCarrierName("物流甲");
+        when(carrierRepository.findByCarrierCodeAndDeletedFlagFalse("CR-001"))
+                .thenReturn(Optional.of(carrier));
         FreightBillService service = createService(
                 repository,
                 mock(SalesOutboundRepository.class),
                 sourceService,
-                mock(CarrierRepository.class),
+                carrierRepository,
                 null
         );
 
         FreightBillResponse response = service.create(new FreightBillRequest(
                 "FB-REQ-SETTLEMENT",
+                "CR-001",
                 "物流甲",
                 12L,
                 "  结算主体B  ",
@@ -527,23 +546,30 @@ class FreightBillServiceTest {
     }
 
     @Test
-    void shouldClearSettlementCompanyWhenCarrierNameIsBlank() {
+    void shouldRejectBlankCarrierNameEvenWhenSettlementCompanyIsBlank() {
         FreightBillRepository repository = mock(FreightBillRepository.class);
         FreightBillSourceService sourceService = mock(FreightBillSourceService.class);
         when(sourceService.validateSources(any(FreightBillRequest.class), any()))
                 .thenReturn(new FreightBillSourceService.SourceValidationContext(Map.of(), Map.of()));
         when(repository.existsByBillNoAndDeletedFlagFalse("FB-BLANK-CARRIER")).thenReturn(false);
         when(repository.save(any(FreightBill.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        CarrierRepository carrierRepository = mock(CarrierRepository.class);
+        Carrier carrier = new Carrier();
+        carrier.setCarrierCode("CR-001");
+        carrier.setCarrierName("物流甲");
+        when(carrierRepository.findByCarrierCodeAndDeletedFlagFalse("CR-001"))
+                .thenReturn(Optional.of(carrier));
         FreightBillService service = createService(
                 repository,
                 mock(SalesOutboundRepository.class),
                 sourceService,
-                mock(CarrierRepository.class),
+                carrierRepository,
                 null
         );
 
-        FreightBillResponse response = service.create(new FreightBillRequest(
+        FreightBillRequest request = new FreightBillRequest(
                 "FB-BLANK-CARRIER",
+                "CR-001",
                 "   ",
                 null,
                 null,
@@ -555,14 +581,15 @@ class FreightBillServiceTest {
                 null,
                 null,
                 List.of(buildItemRequest("OB-001"))
-        ));
+        );
 
-        assertThat(response.settlementCompanyId()).isNull();
-        assertThat(response.settlementCompanyName()).isNull();
+        assertThatThrownBy(() -> service.create(request))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("物流商名称与物流商主数据不一致");
     }
 
     @Test
-    void shouldClearSettlementCompanyWhenCarrierHasNoDefault() {
+    void shouldRejectUnknownCarrierCode() {
         FreightBillRepository repository = mock(FreightBillRepository.class);
         FreightBillSourceService sourceService = mock(FreightBillSourceService.class);
         CarrierRepository carrierRepository = mock(CarrierRepository.class);
@@ -570,7 +597,7 @@ class FreightBillServiceTest {
                 .thenReturn(new FreightBillSourceService.SourceValidationContext(Map.of(), Map.of()));
         when(repository.existsByBillNoAndDeletedFlagFalse("FB-NO-CARRIER")).thenReturn(false);
         when(repository.save(any(FreightBill.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(carrierRepository.findFirstByCarrierNameAndDeletedFlagFalseOrderByCarrierCodeAsc("物流甲"))
+        when(carrierRepository.findByCarrierCodeAndDeletedFlagFalse("CR-001"))
                 .thenReturn(Optional.empty());
         FreightBillService service = createService(
                 repository,
@@ -580,10 +607,9 @@ class FreightBillServiceTest {
                 null
         );
 
-        FreightBillResponse response = service.create(buildRequest("FB-NO-CARRIER", buildItemRequest("OB-001")));
-
-        assertThat(response.settlementCompanyId()).isNull();
-        assertThat(response.settlementCompanyName()).isNull();
+        assertThatThrownBy(() -> service.create(buildRequest("FB-NO-CARRIER", buildItemRequest("OB-001"))))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("物流商编码不存在");
     }
 
     @Test
@@ -592,13 +618,15 @@ class FreightBillServiceTest {
         FreightBillSourceService sourceService = mock(FreightBillSourceService.class);
         CarrierRepository carrierRepository = mock(CarrierRepository.class);
         Carrier carrier = new Carrier();
+        carrier.setCarrierCode("CR-001");
+        carrier.setCarrierName("物流甲");
         carrier.setDefaultSettlementCompanyId(7L);
         carrier.setDefaultSettlementCompanyName("默认结算主体");
         when(sourceService.validateSources(any(FreightBillRequest.class), any()))
                 .thenReturn(new FreightBillSourceService.SourceValidationContext(Map.of(), Map.of()));
         when(repository.existsByBillNoAndDeletedFlagFalse("FB-CARRIER-DEFAULT")).thenReturn(false);
         when(repository.save(any(FreightBill.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(carrierRepository.findFirstByCarrierNameAndDeletedFlagFalseOrderByCarrierCodeAsc("物流甲"))
+        when(carrierRepository.findByCarrierCodeAndDeletedFlagFalse("CR-001"))
                 .thenReturn(Optional.of(carrier));
         FreightBillService service = createService(
                 repository,
@@ -1742,6 +1770,96 @@ class FreightBillServiceTest {
         InOrder inOrder = inOrder(lockService, repository);
         inOrder.verify(lockService).lockDocumentSources(List.of(), List.of(), List.of(60L), List.of());
         inOrder.verify(repository).save(existing);
+    }
+
+    @Test
+    void shouldLockSourceOutboundThenCurrentBillBeforeReverseAuditDownstreamValidation() {
+        FreightBillRepository repository = mock(FreightBillRepository.class);
+        SalesOutboundRepository salesOutboundRepository = mock(SalesOutboundRepository.class);
+        SourceAllocationLockService lockService = mock(SourceAllocationLockService.class);
+        FreightBillDownstreamMutationGuard downstreamMutationGuard =
+                mock(FreightBillDownstreamMutationGuard.class);
+        FreightBill existing = new FreightBill();
+        existing.setId(1L);
+        existing.setBillNo("FB-LOCK-REVERSE");
+        existing.setStatus(StatusConstants.AUDITED);
+        FreightBillItem existingItem = new FreightBillItem();
+        existingItem.setSourceNo("OB-REVERSE");
+        existing.setItems(new ArrayList<>(List.of(existingItem)));
+        when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(existing));
+        when(repository.save(any(FreightBill.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(salesOutboundRepository.findByOutboundNoInAndDeletedFlagFalse(anyCollection()))
+                .thenReturn(List.of(salesOutbound(70L, "OB-REVERSE")));
+        FreightBillService service = createServiceWithDownstreamGuard(
+                repository,
+                salesOutboundRepository,
+                mock(FreightBillSourceService.class),
+                lockService,
+                downstreamMutationGuard
+        );
+
+        service.updateStatus(1L, StatusConstants.UNAUDITED);
+
+        InOrder flow = inOrder(lockService, downstreamMutationGuard);
+        flow.verify(lockService).lockDocumentSources(List.of(), List.of(), List.of(70L), List.of());
+        flow.verify(lockService).lockDocumentSources(List.of(), List.of(), List.of(), List.of(1L));
+        flow.verify(downstreamMutationGuard).assertReverseAuditAllowed(existing);
+    }
+
+    @Test
+    void shouldLockSourceOutboundThenCurrentBillBeforeDeleteDownstreamValidation() {
+        FreightBillRepository repository = mock(FreightBillRepository.class);
+        SalesOutboundRepository salesOutboundRepository = mock(SalesOutboundRepository.class);
+        SourceAllocationLockService lockService = mock(SourceAllocationLockService.class);
+        FreightBillDownstreamMutationGuard downstreamMutationGuard =
+                mock(FreightBillDownstreamMutationGuard.class);
+        FreightBill existing = new FreightBill();
+        existing.setId(1L);
+        existing.setBillNo("FB-LOCK-DELETE");
+        existing.setStatus(StatusConstants.UNAUDITED);
+        FreightBillItem existingItem = new FreightBillItem();
+        existingItem.setSourceNo("OB-DELETE-GUARD");
+        existing.setItems(new ArrayList<>(List.of(existingItem)));
+        when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(existing));
+        when(repository.save(any(FreightBill.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(salesOutboundRepository.findByOutboundNoInAndDeletedFlagFalse(anyCollection()))
+                .thenReturn(List.of(salesOutbound(80L, "OB-DELETE-GUARD")));
+        FreightBillService service = createServiceWithDownstreamGuard(
+                repository,
+                salesOutboundRepository,
+                mock(FreightBillSourceService.class),
+                lockService,
+                downstreamMutationGuard
+        );
+
+        service.delete(1L);
+
+        InOrder flow = inOrder(lockService, downstreamMutationGuard);
+        flow.verify(lockService).lockDocumentSources(List.of(), List.of(), List.of(80L), List.of());
+        flow.verify(lockService).lockDocumentSources(List.of(), List.of(), List.of(), List.of(1L));
+        flow.verify(downstreamMutationGuard).assertDeleteAllowed(existing);
+    }
+
+    private FreightBillService createServiceWithDownstreamGuard(
+            FreightBillRepository repository,
+            SalesOutboundRepository salesOutboundRepository,
+            FreightBillSourceService sourceService,
+            SourceAllocationLockService sourceAllocationLockService,
+            FreightBillDownstreamMutationGuard downstreamMutationGuard
+    ) {
+        return new FreightBillService(
+                repository,
+                salesOutboundRepository,
+                new SnowflakeIdGenerator(),
+                Mappers.getMapper(FreightBillMapper.class),
+                sourceService,
+                new FreightBillApplyService(),
+                mock(WorkflowTransitionGuard.class),
+                null,
+                null,
+                sourceAllocationLockService,
+                downstreamMutationGuard
+        );
     }
 
     private SalesOutbound salesOutbound(Long id, String outboundNo) {

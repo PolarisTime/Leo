@@ -10,6 +10,8 @@ public record LedgerAdjustmentResponse(
         String counterpartyType,
         String counterpartyCode,
         String counterpartyName,
+        Long settlementCompanyId,
+        String settlementCompanyName,
         Long projectId,
         String projectName,
         LocalDate adjustmentDate,

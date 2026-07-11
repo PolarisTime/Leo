@@ -172,6 +172,32 @@ class GeneralSettingQueryServiceTest {
         assertThat(records).extracting(GeneralSettingResponse::billName).containsOnlyNulls();
     }
 
+    @Test
+    void shouldOrderPurchaseRefundRulesBetweenInboundAndSalesOrderRules() {
+        NoRule purchaseInbound = noRule(1L, "RULE_PI", "采购入库编号规则", "采购入库", "PI2026000001", "正常");
+        NoRule purchaseRefund = noRule(2L, "RULE_PR", "采购退款单编号规则", "采购退款单", "PR2026000001", "正常");
+        NoRule supplierRefundReceipt = noRule(
+                3L,
+                "RULE_SRR",
+                "供应商退款到账单编号规则",
+                "供应商退款到账单",
+                "SRR2026000001",
+                "正常"
+        );
+        NoRule salesOrder = noRule(4L, "RULE_SO", "销售订单编号规则", "销售订单", "SO2026000001", "正常");
+        GeneralSettingQueryService service = new GeneralSettingQueryService(
+                noRuleRepository(List.of(salesOrder, supplierRefundReceipt, purchaseRefund, purchaseInbound)),
+                mapper(),
+                () -> List.of()
+        );
+
+        List<GeneralSettingResponse> records = service
+                .page(PageQuery.of(0, 20, null, null), null, null)
+                .getContent();
+
+        assertThat(settingCodes(records)).containsExactly("RULE_PI", "RULE_PR", "RULE_SRR", "RULE_SO");
+    }
+
     private NoRuleRepository noRuleRepository(List<NoRule> rules) {
         return (NoRuleRepository) Proxy.newProxyInstance(
                 NoRuleRepository.class.getClassLoader(),

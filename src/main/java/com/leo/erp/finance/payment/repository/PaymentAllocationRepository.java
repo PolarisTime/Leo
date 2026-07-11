@@ -33,7 +33,20 @@ public interface PaymentAllocationRepository extends JpaRepository<PaymentAlloca
               and (:currentPaymentId is null or payment.id <> :currentPaymentId)
             """)
     BigDecimal sumAllocatedAmountBySourceStatementIdAndBusinessTypeAndStatusExcludingPaymentId(@Param("statementId") Long statementId,
-                                                                                                @Param("businessType") String businessType,
-                                                                                                @Param("status") String status,
-                                                                                                @Param("currentPaymentId") Long currentPaymentId);
+                                                                                                 @Param("businessType") String businessType,
+                                                                                                 @Param("status") String status,
+                                                                                                 @Param("currentPaymentId") Long currentPaymentId);
+
+    @Query("""
+            select count(allocation.id)
+            from PaymentAllocation allocation
+            join allocation.payment payment
+            where payment.deletedFlag = false
+              and payment.businessType = :businessType
+              and payment.status = :status
+              and allocation.sourceStatementId = :statementId
+            """)
+    long countSettledAllocationsByStatementIdAndBusinessTypeAndStatus(@Param("statementId") Long statementId,
+                                                                       @Param("businessType") String businessType,
+                                                                       @Param("status") String status);
 }

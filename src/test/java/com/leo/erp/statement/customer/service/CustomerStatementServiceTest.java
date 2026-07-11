@@ -44,7 +44,7 @@ import static org.mockito.Mockito.when;
 class CustomerStatementServiceTest {
 
     @Test
-    void shouldPersistRequestedReceiptAmount() {
+    void shouldIgnoreRequestedReceiptAmountWhenNoSettledAllocationExists() {
         CustomerStatementRepository repository = mock(CustomerStatementRepository.class);
         CustomerStatementMapper mapper = mock(CustomerStatementMapper.class);
         SalesOrderItemQueryService salesOrderItemQueryService = mock(SalesOrderItemQueryService.class);
@@ -82,8 +82,8 @@ class CustomerStatementServiceTest {
         CustomerStatementResponse response = service.create(buildRequest(new BigDecimal("1000.00")));
 
         assertThat(response.salesAmount()).isEqualByComparingTo("1000.00");
-        assertThat(response.receiptAmount()).isEqualByComparingTo("1000.00");
-        assertThat(response.closingAmount()).isEqualByComparingTo("0.00");
+        assertThat(response.receiptAmount()).isEqualByComparingTo("0.00");
+        assertThat(response.closingAmount()).isEqualByComparingTo("1000.00");
         assertThat(response.customerCode()).isEqualTo("C-001");
     }
 
@@ -159,21 +159,29 @@ class CustomerStatementServiceTest {
     }
 
     @Test
-    void shouldRejectOverReceiptAmount() {
-        CustomerStatementRepository repository = mock(CustomerStatementRepository.class);
-        SalesOrderItemQueryService salesOrderItemQueryService = mock(SalesOrderItemQueryService.class);
-        when(repository.existsByStatementNoAndDeletedFlagFalse("KHDZ-001")).thenReturn(false);
-        when(salesOrderItemQueryService.findActiveByIdIn(List.of(201L))).thenReturn(List.of(buildSalesOrderItem()));
-
-        CustomerStatementService service = service(
-                repository,
-                mock(CustomerStatementMapper.class),
-                mock(SalesOrderRepository.class),
-                salesOrderItemQueryService,
-                mock(WorkflowTransitionGuard.class)
+    void shouldRejectSettledReceiptAmountThatExceedsSourceAmount() {
+        CustomerStatementSourceService sourceService = mock(CustomerStatementSourceService.class);
+        com.leo.erp.statement.service.StatementSettlementSyncService settlementSyncService =
+                mock(com.leo.erp.statement.service.StatementSettlementSyncService.class);
+        when(sourceService.applyItems(
+                any(CustomerStatement.class),
+                any(CustomerStatementRequest.class),
+                any(java.util.function.LongSupplier.class)
+        )).thenReturn(new CustomerStatementSourceService.SourceApplyResult(
+                new BigDecimal("1000.00"),
+                null,
+                null
+        ));
+        when(settlementSyncService.resolveCustomerReceiptAmount(1L)).thenReturn(new BigDecimal("1200.00"));
+        CustomerStatementApplyService applyService = new CustomerStatementApplyService(
+                mock(WorkflowTransitionGuard.class),
+                sourceService,
+                settlementSyncService
         );
+        CustomerStatement entity = new CustomerStatement();
+        entity.setId(1L);
 
-        assertThatThrownBy(() -> service.create(buildRequest(new BigDecimal("1200.00"))))
+        assertThatThrownBy(() -> applyService.apply(entity, buildRequest(BigDecimal.ZERO), () -> 10L))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("销售金额不能低于已收款金额");
     }
@@ -432,21 +440,29 @@ class CustomerStatementServiceTest {
     }
 
     @Test
-    void shouldRejectNegativeReceiptAmount() {
-        CustomerStatementRepository repository = mock(CustomerStatementRepository.class);
-        SalesOrderItemQueryService salesOrderItemQueryService = mock(SalesOrderItemQueryService.class);
-        when(repository.existsByStatementNoAndDeletedFlagFalse("KHDZ-001")).thenReturn(false);
-        when(salesOrderItemQueryService.findActiveByIdIn(List.of(201L))).thenReturn(List.of(buildSalesOrderItem()));
-
-        CustomerStatementService service = service(
-                repository,
-                mock(CustomerStatementMapper.class),
-                mock(SalesOrderRepository.class),
-                salesOrderItemQueryService,
-                mock(WorkflowTransitionGuard.class)
+    void shouldRejectNegativeSettledReceiptAmount() {
+        CustomerStatementSourceService sourceService = mock(CustomerStatementSourceService.class);
+        com.leo.erp.statement.service.StatementSettlementSyncService settlementSyncService =
+                mock(com.leo.erp.statement.service.StatementSettlementSyncService.class);
+        when(sourceService.applyItems(
+                any(CustomerStatement.class),
+                any(CustomerStatementRequest.class),
+                any(java.util.function.LongSupplier.class)
+        )).thenReturn(new CustomerStatementSourceService.SourceApplyResult(
+                new BigDecimal("1000.00"),
+                null,
+                null
+        ));
+        when(settlementSyncService.resolveCustomerReceiptAmount(1L)).thenReturn(new BigDecimal("-100.00"));
+        CustomerStatementApplyService applyService = new CustomerStatementApplyService(
+                mock(WorkflowTransitionGuard.class),
+                sourceService,
+                settlementSyncService
         );
+        CustomerStatement entity = new CustomerStatement();
+        entity.setId(1L);
 
-        assertThatThrownBy(() -> service.create(buildRequest(new BigDecimal("-100.00"))))
+        assertThatThrownBy(() -> applyService.apply(entity, buildRequest(BigDecimal.ZERO), () -> 10L))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("客户对账单收款金额不能为负数");
     }
@@ -574,7 +590,8 @@ class CustomerStatementServiceTest {
                 itemQueryService,
                 workflowTransitionGuard,
                 mock(CustomerStatementApplyService.class),
-                lockService
+                lockService,
+                mock(com.leo.erp.statement.service.StatementSettlementMutationGuard.class)
         );
 
         service.updateStatus(1L, StatusConstants.CONFIRMED);
@@ -617,11 +634,113 @@ class CustomerStatementServiceTest {
         inOrder.verify(repository).save(statement);
     }
 
+    @Test
+    void shouldBlockReverseConfirmationWhenSettledAllocationExists() {
+        CustomerStatementRepository repository = mock(CustomerStatementRepository.class);
+        CustomerStatement statement = createCustomerStatement(1L, "KHDZ-SETTLED-STATUS");
+        statement.setStatus(StatusConstants.CONFIRMED);
+        when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(statement));
+        com.leo.erp.statement.service.StatementSettlementMutationGuard guard =
+                mock(com.leo.erp.statement.service.StatementSettlementMutationGuard.class);
+        org.mockito.Mockito.doThrow(new BusinessException(
+                com.leo.erp.common.error.ErrorCode.BUSINESS_ERROR,
+                "存在已收款核销"
+        )).when(guard).assertNoSettledAllocations(
+                com.leo.erp.statement.service.StatementSettlementMutationGuard.StatementType.CUSTOMER,
+                1L,
+                "反确认"
+        );
+
+        assertThatThrownBy(() -> mutationGuardService(repository, guard).updateStatus(
+                1L,
+                StatusConstants.PENDING_CONFIRM
+        ))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("存在已收款核销");
+    }
+
+    @Test
+    void shouldBlockDeleteWhenSettledAllocationExists() {
+        CustomerStatementRepository repository = mock(CustomerStatementRepository.class);
+        CustomerStatement statement = createCustomerStatement(1L, "KHDZ-SETTLED-DELETE");
+        when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(statement));
+        com.leo.erp.statement.service.StatementSettlementMutationGuard guard =
+                mock(com.leo.erp.statement.service.StatementSettlementMutationGuard.class);
+        org.mockito.Mockito.doThrow(new BusinessException(
+                com.leo.erp.common.error.ErrorCode.BUSINESS_ERROR,
+                "存在已收款核销"
+        )).when(guard).assertNoSettledAllocations(
+                com.leo.erp.statement.service.StatementSettlementMutationGuard.StatementType.CUSTOMER,
+                1L,
+                "删除"
+        );
+
+        assertThatThrownBy(() -> mutationGuardService(repository, guard).delete(1L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("存在已收款核销");
+    }
+
+    @Test
+    void shouldBlockFinancialLinkageUpdateWhenSettledAllocationExists() {
+        CustomerStatementRepository repository = mock(CustomerStatementRepository.class);
+        CustomerStatement statement = createCustomerStatement(1L, "KHDZ-001");
+        when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(statement));
+        com.leo.erp.statement.service.StatementSettlementMutationGuard guard =
+                mock(com.leo.erp.statement.service.StatementSettlementMutationGuard.class);
+        org.mockito.Mockito.doThrow(new BusinessException(
+                com.leo.erp.common.error.ErrorCode.BUSINESS_ERROR,
+                "存在已收款核销"
+        )).when(guard).assertFinancialLinkageMutationAllowed(
+                com.leo.erp.statement.service.StatementSettlementMutationGuard.StatementType.CUSTOMER,
+                1L,
+                true
+        );
+
+        assertThatThrownBy(() -> mutationGuardService(repository, guard).update(
+                1L,
+                buildRequest(BigDecimal.ZERO)
+        ))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("存在已收款核销");
+    }
+
+    private CustomerStatementService mutationGuardService(
+            CustomerStatementRepository repository,
+            com.leo.erp.statement.service.StatementSettlementMutationGuard guard) {
+        return new CustomerStatementService(
+                repository,
+                new SnowflakeIdGenerator(0L),
+                mock(CustomerStatementResponseAssembler.class),
+                mock(WorkflowTransitionGuard.class),
+                mock(CustomerStatementSourceService.class),
+                mock(CustomerStatementApplyService.class),
+                mock(SalesOrderItemQueryService.class),
+                mock(SourceAllocationLockService.class),
+                guard
+        );
+    }
+
     private CustomerStatementService lockingService(CustomerStatementRepository repository,
                                                      SalesOrderItemQueryService itemQueryService,
                                                      WorkflowTransitionGuard workflowTransitionGuard,
                                                      CustomerStatementApplyService applyService,
                                                      SourceAllocationLockService lockService) {
+        return lockingService(
+                repository,
+                itemQueryService,
+                workflowTransitionGuard,
+                applyService,
+                lockService,
+                mock(com.leo.erp.statement.service.StatementSettlementMutationGuard.class)
+        );
+    }
+
+    private CustomerStatementService lockingService(CustomerStatementRepository repository,
+                                                     SalesOrderItemQueryService itemQueryService,
+                                                     WorkflowTransitionGuard workflowTransitionGuard,
+                                                     CustomerStatementApplyService applyService,
+                                                     SourceAllocationLockService lockService,
+                                                     com.leo.erp.statement.service.StatementSettlementMutationGuard guard) {
         return new CustomerStatementService(
                 repository,
                 new SnowflakeIdGenerator(0L),
@@ -630,7 +749,8 @@ class CustomerStatementServiceTest {
                 mock(CustomerStatementSourceService.class),
                 applyService,
                 itemQueryService,
-                lockService
+                lockService,
+                guard
         );
     }
 
@@ -662,9 +782,14 @@ class CustomerStatementServiceTest {
                 new CustomerStatementResponseAssembler(mapper),
                 workflowTransitionGuard,
                 sourceService,
-                new CustomerStatementApplyService(workflowTransitionGuard, sourceService),
+                new CustomerStatementApplyService(
+                        workflowTransitionGuard,
+                        sourceService,
+                        mock(com.leo.erp.statement.service.StatementSettlementSyncService.class)
+                ),
                 salesOrderItemQueryService,
-                mock(SourceAllocationLockService.class)
+                mock(SourceAllocationLockService.class),
+                mock(com.leo.erp.statement.service.StatementSettlementMutationGuard.class)
         );
     }
 
@@ -682,9 +807,14 @@ class CustomerStatementServiceTest {
                 new CustomerStatementResponseAssembler(mapper),
                 workflowTransitionGuard,
                 sourceService,
-                new CustomerStatementApplyService(workflowTransitionGuard, sourceService),
+                new CustomerStatementApplyService(
+                        workflowTransitionGuard,
+                        sourceService,
+                        mock(com.leo.erp.statement.service.StatementSettlementSyncService.class)
+                ),
                 salesOrderItemQueryService,
-                mock(SourceAllocationLockService.class)
+                mock(SourceAllocationLockService.class),
+                mock(com.leo.erp.statement.service.StatementSettlementMutationGuard.class)
         );
     }
 
@@ -790,7 +920,8 @@ class CustomerStatementServiceTest {
                                          CustomerStatementSourceService customerStatementSourceService,
                                          CustomerStatementApplyService applyService,
                                          SalesOrderItemQueryService salesOrderItemQueryService,
-                                         SourceAllocationLockService sourceAllocationLockService) {
+                                         SourceAllocationLockService sourceAllocationLockService,
+                                         com.leo.erp.statement.service.StatementSettlementMutationGuard settlementMutationGuard) {
             super(
                     repository,
                     idGenerator,
@@ -799,7 +930,8 @@ class CustomerStatementServiceTest {
                     customerStatementSourceService,
                     applyService,
                     salesOrderItemQueryService,
-                    sourceAllocationLockService
+                    sourceAllocationLockService,
+                    settlementMutationGuard
             );
         }
 

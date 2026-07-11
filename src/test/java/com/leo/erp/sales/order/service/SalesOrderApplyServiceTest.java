@@ -2,6 +2,7 @@ package com.leo.erp.sales.order.service;
 
 import com.leo.erp.allocation.appservice.PurchaseItemPieceWeightAppService;
 import com.leo.erp.allocation.appservice.PurchaseItemQueryAppService;
+import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.support.TradeItemMaterialSupport;
 import com.leo.erp.common.support.TradeMaterialSnapshot;
@@ -26,6 +27,7 @@ import java.util.Optional;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
@@ -166,7 +168,7 @@ class SalesOrderApplyServiceTest {
                 "备注",
                 List.of(itemRequest(null, null, 2))
         );
-        Customer customer = new Customer();
+        Customer customer = customer("C001", "客户A", "项目A");
         customer.setDefaultSettlementCompanyId(7L);
         customer.setDefaultSettlementCompanyName("嘉兴颖捷建材有限公司");
         when(customerRepository.findByCustomerCodeAndDeletedFlagFalse("C001"))
@@ -202,7 +204,7 @@ class SalesOrderApplyServiceTest {
         );
         SalesOrder order = new SalesOrder();
         SalesOrderRequest request = request(List.of(itemRequest(null, null, 2)));
-        Customer customer = new Customer();
+        Customer customer = customer("C001", "客户A", "项目A");
         customer.setDefaultSettlementCompanyId(7L);
         customer.setDefaultSettlementCompanyName("客户默认结算主体");
         when(customerRepository.findByCustomerCodeAndDeletedFlagFalse("C001"))
@@ -220,7 +222,7 @@ class SalesOrderApplyServiceTest {
     }
 
     @Test
-    void shouldLookupCustomerDefaultByCustomerAndProjectWhenCustomerCodeMissing() {
+    void shouldRejectMissingCustomerCodeEvenWithExplicitSettlementCompany() {
         TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
         WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
         CustomerRepository customerRepository = mock(CustomerRepository.class);
@@ -243,33 +245,24 @@ class SalesOrderApplyServiceTest {
                 " 客户A ",
                 1001L,
                 " 项目A ",
-                null,
-                null,
+                8L,
+                "显式结算主体",
                 LocalDate.of(2026, 4, 26),
                 "张三",
                 StatusConstants.AUDITED,
                 "备注",
                 List.of(itemRequest(null, null, 1))
         );
-        Customer customer = new Customer();
-        customer.setDefaultSettlementCompanyId(8L);
-        customer.setDefaultSettlementCompanyName("按客户项目匹配主体");
-        when(customerRepository.findFirstByCustomerNameAndProjectNameAndDeletedFlagFalseOrderByCustomerCodeAsc("客户A", "项目A"))
-                .thenReturn(Optional.of(customer));
-        when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(Map.of("M1", material()));
-        when(materialSupport.normalizeMaterialCode(any(), anyInt())).thenAnswer(invocation ->
-                ((String) invocation.getArgument(0)).trim());
-        when(materialSupport.normalizeBatchNo(any(), eq("B1"), eq(1), eq(true))).thenReturn("B1");
-        when(warehouseSelectionSupport.normalizeWarehouseName("一号库", 1, true)).thenReturn("一号库");
-
-        service.apply(order, request, new AtomicLong(51L)::getAndIncrement);
-
-        assertThat(order.getSettlementCompanyId()).isEqualTo(8L);
-        assertThat(order.getSettlementCompanyName()).isEqualTo("按客户项目匹配主体");
+        assertThatThrownBy(
+                        () -> service.apply(order, request, new AtomicLong(51L)::getAndIncrement)
+                )
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("客户编码不能为空");
+        org.mockito.Mockito.verifyNoInteractions(customerRepository);
     }
 
     @Test
-    void shouldLookupCustomerDefaultByNameWhenCustomerCodeIsBlank() {
+    void shouldRejectBlankCustomerCodeInsteadOfFallingBackToName() {
         TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
         WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
         CustomerRepository customerRepository = mock(CustomerRepository.class);
@@ -285,18 +278,12 @@ class SalesOrderApplyServiceTest {
         );
         SalesOrder order = new SalesOrder();
         SalesOrderRequest request = request("   ", " 客户A ", " 项目A ", null, null, List.of(itemRequest(null, null, 1)));
-        Customer customer = new Customer();
-        customer.setDefaultSettlementCompanyId(18L);
-        customer.setDefaultSettlementCompanyName("空编码匹配主体");
-        when(customerRepository.findFirstByCustomerNameAndProjectNameAndDeletedFlagFalseOrderByCustomerCodeAsc("客户A", "项目A"))
-                .thenReturn(Optional.of(customer));
-        stubSingleItemApply(materialSupport, warehouseSelectionSupport);
-
-        service.apply(order, request, new AtomicLong(131L)::getAndIncrement);
-
-        assertThat(order.getSettlementCompanyId()).isEqualTo(18L);
-        assertThat(order.getSettlementCompanyName()).isEqualTo("空编码匹配主体");
-        verify(customerRepository, org.mockito.Mockito.never()).findByCustomerCodeAndDeletedFlagFalse(any());
+        assertThatThrownBy(
+                        () -> service.apply(order, request, new AtomicLong(131L)::getAndIncrement)
+                )
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("客户编码不能为空");
+        org.mockito.Mockito.verifyNoInteractions(customerRepository);
     }
 
     @Test
@@ -318,6 +305,8 @@ class SalesOrderApplyServiceTest {
         order.setStatus(StatusConstants.AUDITED);
         order.setSettlementCompanyId(3L);
         order.setSettlementCompanyName("原结算主体");
+        when(customerRepository.findByCustomerCodeAndDeletedFlagFalse("C001"))
+                .thenReturn(Optional.of(customer("C001", "客户A", "项目A")));
         when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(Map.of("M1", material()));
         when(materialSupport.normalizeMaterialCode(any(), anyInt())).thenAnswer(invocation ->
                 ((String) invocation.getArgument(0)).trim());
@@ -328,7 +317,7 @@ class SalesOrderApplyServiceTest {
 
         assertThat(order.getSettlementCompanyId()).isEqualTo(3L);
         assertThat(order.getSettlementCompanyName()).isEqualTo("原结算主体");
-        verify(customerRepository, org.mockito.Mockito.never()).findByCustomerCodeAndDeletedFlagFalse(any());
+        verify(customerRepository).findByCustomerCodeAndDeletedFlagFalse("C001");
     }
 
     @Test
@@ -393,13 +382,15 @@ class SalesOrderApplyServiceTest {
         order.setStatus(StatusConstants.SALES_COMPLETED);
         order.setSettlementCompanyId(13L);
         order.setSettlementCompanyName("已完成结算主体");
+        when(customerRepository.findByCustomerCodeAndDeletedFlagFalse("C001"))
+                .thenReturn(Optional.of(customer("C001", "客户A", "项目A")));
         stubSingleItemApply(materialSupport, warehouseSelectionSupport);
 
         service.apply(order, request(List.of(itemRequest(null, null, 1))), new AtomicLong(81L)::getAndIncrement);
 
         assertThat(order.getSettlementCompanyId()).isEqualTo(13L);
         assertThat(order.getSettlementCompanyName()).isEqualTo("已完成结算主体");
-        org.mockito.Mockito.verifyNoInteractions(customerRepository);
+        verify(customerRepository).findByCustomerCodeAndDeletedFlagFalse("C001");
     }
 
     @Test
@@ -429,7 +420,7 @@ class SalesOrderApplyServiceTest {
     }
 
     @Test
-    void shouldSkipCustomerLookupWhenCustomerNameBlank() {
+    void shouldRejectBlankCustomerNameWhenCustomerCodeExists() {
         TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
         WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
         CustomerRepository customerRepository = mock(CustomerRepository.class);
@@ -447,18 +438,22 @@ class SalesOrderApplyServiceTest {
         order.setStatus(StatusConstants.DRAFT);
         order.setSettlementCompanyId(15L);
         order.setSettlementCompanyName("旧结算主体");
-        SalesOrderRequest request = request(null, " ", "项目A", null, null, List.of(itemRequest(null, null, 1)));
-        stubSingleItemApply(materialSupport, warehouseSelectionSupport);
+        SalesOrderRequest request = request(
+                "C001", " ", "项目A", 15L, "显式结算主体", List.of(itemRequest(null, null, 1))
+        );
+        when(customerRepository.findByCustomerCodeAndDeletedFlagFalse("C001"))
+                .thenReturn(Optional.of(customer("C001", "客户A", "项目A")));
 
-        service.apply(order, request, new AtomicLong(101L)::getAndIncrement);
-
-        assertThat(order.getSettlementCompanyId()).isNull();
-        assertThat(order.getSettlementCompanyName()).isNull();
-        org.mockito.Mockito.verifyNoInteractions(customerRepository);
+        assertThatThrownBy(
+                        () -> service.apply(order, request, new AtomicLong(101L)::getAndIncrement)
+                )
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("客户名称与客户主数据不一致");
+        verify(customerRepository).findByCustomerCodeAndDeletedFlagFalse("C001");
     }
 
     @Test
-    void shouldSkipCustomerLookupWhenCustomerNameMissing() {
+    void shouldRejectMissingCustomerNameWhenCustomerCodeExists() {
         TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
         WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
         CustomerRepository customerRepository = mock(CustomerRepository.class);
@@ -476,18 +471,20 @@ class SalesOrderApplyServiceTest {
         order.setStatus(StatusConstants.DRAFT);
         order.setSettlementCompanyId(20L);
         order.setSettlementCompanyName("旧结算主体");
-        SalesOrderRequest request = request(null, null, "项目A", null, null, List.of(itemRequest(null, null, 1)));
-        stubSingleItemApply(materialSupport, warehouseSelectionSupport);
+        SalesOrderRequest request = request("C001", null, "项目A", null, null, List.of(itemRequest(null, null, 1)));
+        when(customerRepository.findByCustomerCodeAndDeletedFlagFalse("C001"))
+                .thenReturn(Optional.of(customer("C001", "客户A", "项目A")));
 
-        service.apply(order, request, new AtomicLong(151L)::getAndIncrement);
-
-        assertThat(order.getSettlementCompanyId()).isNull();
-        assertThat(order.getSettlementCompanyName()).isNull();
-        org.mockito.Mockito.verifyNoInteractions(customerRepository);
+        assertThatThrownBy(
+                        () -> service.apply(order, request, new AtomicLong(151L)::getAndIncrement)
+                )
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("客户名称与客户主数据不一致");
+        verify(customerRepository).findByCustomerCodeAndDeletedFlagFalse("C001");
     }
 
     @Test
-    void shouldSkipCustomerLookupWhenProjectNameMissing() {
+    void shouldRejectMissingProjectNameWhenCustomerCodeExists() {
         TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
         WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
         CustomerRepository customerRepository = mock(CustomerRepository.class);
@@ -505,18 +502,20 @@ class SalesOrderApplyServiceTest {
         order.setStatus(StatusConstants.DRAFT);
         order.setSettlementCompanyId(16L);
         order.setSettlementCompanyName("旧结算主体");
-        SalesOrderRequest request = request(null, "客户A", null, null, null, List.of(itemRequest(null, null, 1)));
-        stubSingleItemApply(materialSupport, warehouseSelectionSupport);
+        SalesOrderRequest request = request("C001", "客户A", null, null, null, List.of(itemRequest(null, null, 1)));
+        when(customerRepository.findByCustomerCodeAndDeletedFlagFalse("C001"))
+                .thenReturn(Optional.of(customer("C001", "客户A", "项目A")));
 
-        service.apply(order, request, new AtomicLong(111L)::getAndIncrement);
-
-        assertThat(order.getSettlementCompanyId()).isNull();
-        assertThat(order.getSettlementCompanyName()).isNull();
-        org.mockito.Mockito.verifyNoInteractions(customerRepository);
+        assertThatThrownBy(
+                        () -> service.apply(order, request, new AtomicLong(111L)::getAndIncrement)
+                )
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("项目名称与客户主数据不一致");
+        verify(customerRepository).findByCustomerCodeAndDeletedFlagFalse("C001");
     }
 
     @Test
-    void shouldSkipCustomerLookupWhenProjectNameBlank() {
+    void shouldRejectBlankProjectNameWhenCustomerCodeExists() {
         TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
         WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
         CustomerRepository customerRepository = mock(CustomerRepository.class);
@@ -534,14 +533,16 @@ class SalesOrderApplyServiceTest {
         order.setStatus(StatusConstants.DRAFT);
         order.setSettlementCompanyId(21L);
         order.setSettlementCompanyName("旧结算主体");
-        SalesOrderRequest request = request(null, "客户A", " ", null, null, List.of(itemRequest(null, null, 1)));
-        stubSingleItemApply(materialSupport, warehouseSelectionSupport);
+        SalesOrderRequest request = request("C001", "客户A", " ", null, null, List.of(itemRequest(null, null, 1)));
+        when(customerRepository.findByCustomerCodeAndDeletedFlagFalse("C001"))
+                .thenReturn(Optional.of(customer("C001", "客户A", "项目A")));
 
-        service.apply(order, request, new AtomicLong(161L)::getAndIncrement);
-
-        assertThat(order.getSettlementCompanyId()).isNull();
-        assertThat(order.getSettlementCompanyName()).isNull();
-        org.mockito.Mockito.verifyNoInteractions(customerRepository);
+        assertThatThrownBy(
+                        () -> service.apply(order, request, new AtomicLong(161L)::getAndIncrement)
+                )
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("项目名称与客户主数据不一致");
+        verify(customerRepository).findByCustomerCodeAndDeletedFlagFalse("C001");
     }
 
     @Test
@@ -717,6 +718,15 @@ class SalesOrderApplyServiceTest {
 
     private TradeMaterialSnapshot material() {
         return new TradeMaterialSnapshot("M1", Boolean.TRUE);
+    }
+
+    private Customer customer(String customerCode, String customerName, String projectName) {
+        Customer customer = new Customer();
+        customer.setId(1001L);
+        customer.setCustomerCode(customerCode);
+        customer.setCustomerName(customerName);
+        customer.setProjectName(projectName);
+        return customer;
     }
 
     private CompanySetting companySetting(Long id, String companyName) {

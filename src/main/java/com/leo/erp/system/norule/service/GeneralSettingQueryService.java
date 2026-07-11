@@ -34,6 +34,8 @@ public class GeneralSettingQueryService {
             Map.entry("RULE_WH", 60),
             Map.entry("RULE_PO", 70),
             Map.entry("RULE_PI", 80),
+            Map.entry("RULE_PR", 85),
+            Map.entry("RULE_SRR", 87),
             Map.entry("RULE_SO", 90),
             Map.entry("RULE_OB", 100),
             Map.entry("RULE_FB", 110),

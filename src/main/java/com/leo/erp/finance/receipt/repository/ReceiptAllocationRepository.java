@@ -48,4 +48,15 @@ public interface ReceiptAllocationRepository extends JpaRepository<ReceiptAlloca
             """)
     List<Long> findReceivedSourceSalesOrderItemIds(@Param("sourceSalesOrderItemIds") Collection<Long> sourceSalesOrderItemIds,
                                                    @Param("status") String status);
+
+    @Query("""
+            select count(allocation.id)
+            from ReceiptAllocation allocation
+            join allocation.receipt receipt
+            where receipt.deletedFlag = false
+              and receipt.status = :status
+              and allocation.sourceStatementId = :statementId
+            """)
+    long countSettledAllocationsByStatementIdAndStatus(@Param("statementId") Long statementId,
+                                                        @Param("status") String status);
 }

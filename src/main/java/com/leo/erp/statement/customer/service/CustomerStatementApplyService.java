@@ -6,6 +6,7 @@ import com.leo.erp.security.permission.WorkflowTransitionGuard;
 import com.leo.erp.statement.customer.domain.entity.CustomerStatement;
 import com.leo.erp.statement.customer.web.dto.CustomerStatementRequest;
 import com.leo.erp.statement.service.StatementBalanceRule;
+import com.leo.erp.statement.service.StatementSettlementSyncService;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -16,11 +17,14 @@ public class CustomerStatementApplyService {
 
     private final WorkflowTransitionGuard workflowTransitionGuard;
     private final CustomerStatementSourceService sourceService;
+    private final StatementSettlementSyncService settlementSyncService;
 
     public CustomerStatementApplyService(WorkflowTransitionGuard workflowTransitionGuard,
-                                         CustomerStatementSourceService sourceService) {
+                                         CustomerStatementSourceService sourceService,
+                                         StatementSettlementSyncService settlementSyncService) {
         this.workflowTransitionGuard = workflowTransitionGuard;
         this.sourceService = sourceService;
+        this.settlementSyncService = settlementSyncService;
     }
 
     void apply(CustomerStatement entity, CustomerStatementRequest request, LongSupplier nextIdSupplier) {
@@ -51,7 +55,7 @@ public class CustomerStatementApplyService {
         entity.setSettlementCompanyName(sourceResult.settlementCompanyName());
         StatementBalanceRule.Balance balance = StatementBalanceRule.resolve(
                 sourceResult.salesAmount(),
-                request.receiptAmount(),
+                settlementSyncService.resolveCustomerReceiptAmount(entity.getId()),
                 "客户对账单收款金额",
                 "客户对账单销售金额不能低于已收款金额"
         );

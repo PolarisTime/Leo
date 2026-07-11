@@ -41,29 +41,35 @@ public class InvoiceReceiptApplyService {
         );
         entity.setReceiveNo(request.receiveNo());
         entity.setInvoiceNo(request.invoiceNo());
-        entity.setSupplierName(request.supplierName());
-        entity.setInvoiceTitle(request.invoiceTitle() == null || request.invoiceTitle().isBlank()
-                ? request.supplierName()
-                : request.invoiceTitle().trim());
         entity.setInvoiceDate(request.invoiceDate());
         entity.setInvoiceType(request.invoiceType());
         entity.setStatus(nextStatus);
         entity.setOperatorName(request.operatorName());
         entity.setRemark(request.remark());
 
-        BigDecimal amount = invoiceReceiptSourceService.applyItems(
+        InvoiceReceiptSourceService.SourceApplyResult sourceResult = invoiceReceiptSourceService.applyItems(
                 entity,
                 request.items(),
+                request.supplierCode(),
                 request.supplierName(),
                 nextIdSupplier
         );
         InvoiceAmountCalculator.InvoiceAmounts amounts = amountCalculator.resolve(
                 "收票",
-                amount,
-                request.amount(),
+                sourceResult.amount(),
+                sourceResult.refundAdjusted() ? null : request.amount(),
                 request.taxAmount()
         );
         entity.setAmount(amounts.amount());
         entity.setTaxAmount(amounts.taxAmount());
+        entity.setSupplierCode(sourceResult.supplierCode() == null
+                ? request.supplierCode()
+                : sourceResult.supplierCode());
+        entity.setSupplierName(sourceResult.supplierName() == null
+                ? request.supplierName()
+                : sourceResult.supplierName());
+        entity.setSettlementCompanyId(sourceResult.settlementCompanyId());
+        entity.setSettlementCompanyName(sourceResult.settlementCompanyName());
+        entity.setInvoiceTitle(sourceResult.settlementCompanyName());
     }
 }

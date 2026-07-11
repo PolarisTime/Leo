@@ -5,6 +5,7 @@ import com.leo.erp.purchase.inbound.repository.PurchaseInboundItemRepository;
 import com.leo.erp.purchase.inbound.web.dto.PurchaseInboundItemRequest;
 import com.leo.erp.purchase.inbound.web.dto.PurchaseInboundRequest;
 import com.leo.erp.purchase.order.domain.entity.PurchaseOrderItem;
+import com.leo.erp.purchase.refund.repository.PurchaseRefundRepository;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
@@ -47,6 +48,30 @@ class PurchaseInboundAllocationServiceTest {
         Map<Long, Integer> result = service.loadAllocatedQuantityMap(List.of(201L), 1L);
 
         assertThat(result).containsEntry(201L, 6);
+    }
+
+    @Test
+    void shouldTreatAuditedRefundQuantityAsAllocatedInboundCapacity() {
+        PurchaseInboundItemRepository inboundRepository = mock(PurchaseInboundItemRepository.class);
+        PurchaseRefundRepository refundRepository = mock(PurchaseRefundRepository.class);
+        PurchaseInboundAllocationService service = new PurchaseInboundAllocationService(
+                inboundRepository,
+                refundRepository
+        );
+        PurchaseRefundRepository.PurchaseOrderRefundQuantitySummary refundSummary =
+                mock(PurchaseRefundRepository.PurchaseOrderRefundQuantitySummary.class);
+        when(refundSummary.getSourcePurchaseOrderItemId()).thenReturn(201L);
+        when(refundSummary.getTotalQuantity()).thenReturn(2L);
+        when(inboundRepository.summarizeAllocatedQuantityBySourcePurchaseOrderItemIdsExcludingInbound(
+                List.of(201L),
+                1L
+        )).thenReturn(List.of());
+        when(refundRepository.summarizeAuditedQuantityBySourcePurchaseOrderItemIds(List.of(201L)))
+                .thenReturn(List.of(refundSummary));
+
+        Map<Long, Integer> result = service.loadAllocatedQuantityMap(List.of(201L), 1L);
+
+        assertThat(result).containsEntry(201L, 2);
     }
 
     @Test

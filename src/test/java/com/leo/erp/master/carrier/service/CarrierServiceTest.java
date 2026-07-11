@@ -75,6 +75,7 @@ class CarrierServiceTest {
 
         assertThat(options).singleElement().satisfies(option -> {
             assertThat(option.id()).isEqualTo(1L);
+            assertThat(option.carrierCode()).isEqualTo("WL-001");
             assertThat(option.label()).isEqualTo("物流甲");
             assertThat(option.value()).isEqualTo("物流甲");
             assertThat(option.vehiclePlates()).containsExactly("苏A12345", "苏A67890", "苏A99999");

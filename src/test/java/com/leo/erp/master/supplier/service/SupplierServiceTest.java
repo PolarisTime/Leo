@@ -214,7 +214,7 @@ class SupplierServiceTest {
         var result = service.verifyAndRefreshCache();
 
         assertThat(cacheManager.getCache(CacheConfig.CACHE_OPTIONS).get("leo:supplier:all", List.class))
-                .containsExactly(new SupplierOptionResponse(1L, "供应商新名称", "供应商新名称"));
+                .containsExactly(new SupplierOptionResponse(1L, "S001", "供应商新名称", "供应商新名称"));
         assertThat(result.cacheName()).isEqualTo("options::leo:supplier:all");
         assertThat(result.refreshed()).isTrue();
         verify(legacyCache, never()).write(anyString(), any(), any());
@@ -239,7 +239,7 @@ class SupplierServiceTest {
         assertThat(result.refreshed()).isTrue();
         verify(cache).write(
                 eq("leo:supplier:all"),
-                eq(List.of(new SupplierOptionResponse(1L, "供应商新名称", "供应商新名称"))),
+                eq(List.of(new SupplierOptionResponse(1L, "S001", "供应商新名称", "供应商新名称"))),
                 any()
         );
     }

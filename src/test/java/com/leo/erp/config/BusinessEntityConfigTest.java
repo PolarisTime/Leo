@@ -8,6 +8,7 @@ import com.leo.erp.finance.invoiceissue.domain.entity.InvoiceIssue;
 import com.leo.erp.finance.invoicereceipt.domain.entity.InvoiceReceipt;
 import com.leo.erp.finance.payment.domain.entity.Payment;
 import com.leo.erp.finance.receipt.domain.entity.Receipt;
+import com.leo.erp.finance.supplierrefundreceipt.domain.entity.SupplierRefundReceipt;
 import com.leo.erp.logistics.bill.domain.entity.FreightBill;
 import com.leo.erp.master.carrier.domain.entity.Carrier;
 import com.leo.erp.master.customer.domain.entity.Customer;
@@ -16,6 +17,7 @@ import com.leo.erp.master.supplier.domain.entity.Supplier;
 import com.leo.erp.master.warehouse.domain.entity.Warehouse;
 import com.leo.erp.purchase.inbound.domain.entity.PurchaseInbound;
 import com.leo.erp.purchase.order.domain.entity.PurchaseOrder;
+import com.leo.erp.purchase.refund.domain.entity.PurchaseRefund;
 import com.leo.erp.sales.order.domain.entity.SalesOrder;
 import com.leo.erp.sales.outbound.domain.entity.SalesOutbound;
 import com.leo.erp.statement.customer.domain.entity.CustomerStatement;
@@ -43,7 +45,7 @@ class BusinessEntityConfigTest {
         
         // 验证所有实体都已注册
         Map<String, ?> snapshot = registrar.snapshot();
-        assertThat(snapshot).hasSize(19);
+        assertThat(snapshot).hasSize(21);
         
         // 验证每个实体的注册键和类型
         assertThat(snapshot).containsKey("material");
@@ -53,6 +55,7 @@ class BusinessEntityConfigTest {
         assertThat(snapshot).containsKey("warehouse");
         assertThat(snapshot).containsKey("purchase-order");
         assertThat(snapshot).containsKey("purchase-inbound");
+        assertThat(snapshot).containsKey("purchase-refund");
         assertThat(snapshot).containsKey("sales-order");
         assertThat(snapshot).containsKey("sales-outbound");
         assertThat(snapshot).containsKey("freight-bill");
@@ -63,6 +66,7 @@ class BusinessEntityConfigTest {
         assertThat(snapshot).containsKey("freight-statement");
         assertThat(snapshot).containsKey("receipt");
         assertThat(snapshot).containsKey("payment");
+        assertThat(snapshot).containsKey("supplier-refund-receipt");
         assertThat(snapshot).containsKey("invoice-receipt");
         assertThat(snapshot).containsKey("invoice-issue");
     }
@@ -78,10 +82,10 @@ class BusinessEntityConfigTest {
         // then
         assertThat(BusinessRecordEntityCatalog.moduleKeys()).containsExactlyInAnyOrder(
                 "material", "supplier", "customer", "carrier", "warehouse",
-                "purchase-order", "purchase-inbound", "sales-order", "sales-outbound",
+                "purchase-order", "purchase-inbound", "purchase-refund", "sales-order", "sales-outbound",
                 "freight-bill", "purchase-contract", "sales-contract",
                 "supplier-statement", "customer-statement", "freight-statement",
-                "receipt", "payment", "invoice-receipt", "invoice-issue"
+                "receipt", "payment", "supplier-refund-receipt", "invoice-receipt", "invoice-issue"
         );
     }
 
@@ -99,6 +103,7 @@ class BusinessEntityConfigTest {
         assertThat(registrar.findEntityType("warehouse")).contains(Warehouse.class);
         assertThat(registrar.findEntityType("purchase-order")).contains(PurchaseOrder.class);
         assertThat(registrar.findEntityType("purchase-inbound")).contains(PurchaseInbound.class);
+        assertThat(registrar.findEntityType("purchase-refund")).contains(PurchaseRefund.class);
         assertThat(registrar.findEntityType("sales-order")).contains(SalesOrder.class);
         assertThat(registrar.findEntityType("sales-outbound")).contains(SalesOutbound.class);
         assertThat(registrar.findEntityType("freight-bill")).contains(FreightBill.class);
@@ -109,6 +114,8 @@ class BusinessEntityConfigTest {
         assertThat(registrar.findEntityType("freight-statement")).contains(FreightStatement.class);
         assertThat(registrar.findEntityType("receipt")).contains(Receipt.class);
         assertThat(registrar.findEntityType("payment")).contains(Payment.class);
+        assertThat(registrar.findEntityType("supplier-refund-receipt"))
+                .contains(SupplierRefundReceipt.class);
         assertThat(registrar.findEntityType("invoice-receipt")).contains(InvoiceReceipt.class);
         assertThat(registrar.findEntityType("invoice-issue")).contains(InvoiceIssue.class);
     }

@@ -8,6 +8,7 @@ public record PurchaseInboundResponse(
         Long id,
         String inboundNo,
         String purchaseOrderNo,
+        String supplierCode,
         String supplierName,
         Long settlementCompanyId,
         String settlementCompanyName,
@@ -35,11 +36,34 @@ public record PurchaseInboundResponse(
                                    BigDecimal totalWeight,
                                    BigDecimal totalAmount,
                                    String status,
+                                   boolean deletedFlag,
                                    String remark,
                                    BigDecimal totalWeighWeightTon,
                                    BigDecimal totalWeightAdjustmentTon,
                                    List<PurchaseInboundItemResponse> items) {
-        this(id, inboundNo, purchaseOrderNo, supplierName, settlementCompanyId, settlementCompanyName,
+        this(id, inboundNo, purchaseOrderNo, null, supplierName, settlementCompanyId,
+                settlementCompanyName, warehouseName, inboundDate, settlementMode, totalWeight,
+                totalAmount, status, deletedFlag, remark, totalWeighWeightTon,
+                totalWeightAdjustmentTon, items);
+    }
+
+    public PurchaseInboundResponse(Long id,
+                                   String inboundNo,
+                                   String purchaseOrderNo,
+                                   String supplierName,
+                                   Long settlementCompanyId,
+                                   String settlementCompanyName,
+                                   String warehouseName,
+                                   LocalDate inboundDate,
+                                   String settlementMode,
+                                   BigDecimal totalWeight,
+                                   BigDecimal totalAmount,
+                                   String status,
+                                   String remark,
+                                   BigDecimal totalWeighWeightTon,
+                                   BigDecimal totalWeightAdjustmentTon,
+                                   List<PurchaseInboundItemResponse> items) {
+        this(id, inboundNo, purchaseOrderNo, null, supplierName, settlementCompanyId, settlementCompanyName,
                 warehouseName, inboundDate, settlementMode, totalWeight, totalAmount, status, false, remark,
                 totalWeighWeightTon, totalWeightAdjustmentTon, items);
     }
@@ -58,7 +82,7 @@ public record PurchaseInboundResponse(
                                    BigDecimal totalWeighWeightTon,
                                    BigDecimal totalWeightAdjustmentTon,
                                    List<PurchaseInboundItemResponse> items) {
-        this(id, inboundNo, purchaseOrderNo, supplierName, null, null, warehouseName, inboundDate,
+        this(id, inboundNo, purchaseOrderNo, null, supplierName, null, null, warehouseName, inboundDate,
                 settlementMode, totalWeight, totalAmount, status, false, remark, totalWeighWeightTon,
                 totalWeightAdjustmentTon, items);
     }

@@ -58,6 +58,7 @@ public class LedgerAdjustmentController {
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) String direction,
             @RequestParam(required = false) String counterpartyType,
+            @RequestParam(required = false) Long settlementCompanyId,
             @RequestParam(required = false) String status,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate
@@ -65,7 +66,7 @@ public class LedgerAdjustmentController {
         return ApiResponse.success(PageResponse.from(
                 ledgerAdjustmentService.page(
                         query,
-                        PageFilter.of(keyword, status, startDate, endDate),
+                        PageFilter.of(keyword, null, settlementCompanyId, status, startDate, endDate),
                         direction,
                         counterpartyType
                 )

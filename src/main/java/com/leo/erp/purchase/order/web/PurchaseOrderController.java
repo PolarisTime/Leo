@@ -74,6 +74,26 @@ public class PurchaseOrderController {
         ));
     }
 
+    @Operation(summary = "分页查询采购预付款来源候选")
+    @GetMapping("/prepayment-candidates")
+    @RequiresPermission(resource = "purchase-order", action = "read")
+    public ApiResponse<PageResponse<PurchaseOrderImportCandidateResponse>> prepaymentCandidates(
+            @BindPageQuery(sortFieldKey = "purchase-order") PageQuery query,
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) String supplierName,
+            @RequestParam(required = false) Long settlementCompanyId,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate
+    ) {
+        return ApiResponse.success(PageResponse.from(
+                purchaseOrderService.prepaymentCandidates(
+                        query,
+                        PageFilter.of(keyword, supplierName, settlementCompanyId, status, startDate, endDate)
+                )
+        ));
+    }
+
     @Operation(summary = "分页查询采购订单")
     @GetMapping
     @RequiresPermission(resource = "purchase-order", action = "read")

@@ -47,7 +47,7 @@ import static org.mockito.Mockito.when;
 class SupplierStatementServiceTest {
 
     @Test
-    void shouldPersistRequestedPaymentAmount() {
+    void shouldIgnoreRequestedPaymentAmountWhenNoSettledAllocationExists() {
         SupplierStatementRepository repository = mock(SupplierStatementRepository.class);
         SupplierStatementMapper mapper = mock(SupplierStatementMapper.class);
         PurchaseInboundItemQueryService purchaseInboundItemQueryService = mock(PurchaseInboundItemQueryService.class);
@@ -82,26 +82,34 @@ class SupplierStatementServiceTest {
         SupplierStatementResponse response = service.create(buildRequest(new BigDecimal("1000.00")));
 
         assertThat(response.purchaseAmount()).isEqualByComparingTo("1000.00");
-        assertThat(response.paymentAmount()).isEqualByComparingTo("1000.00");
-        assertThat(response.closingAmount()).isEqualByComparingTo("0.00");
+        assertThat(response.paymentAmount()).isEqualByComparingTo("0.00");
+        assertThat(response.closingAmount()).isEqualByComparingTo("1000.00");
     }
 
     @Test
-    void shouldRejectOverPaymentAmount() {
-        SupplierStatementRepository repository = mock(SupplierStatementRepository.class);
-        PurchaseInboundItemQueryService purchaseInboundItemQueryService = mock(PurchaseInboundItemQueryService.class);
-        when(repository.existsByStatementNoAndDeletedFlagFalse("GYDZ-001")).thenReturn(false);
-        when(purchaseInboundItemQueryService.findAllActiveByIdIn(List.of(101L))).thenReturn(List.of(buildInboundItem()));
-
-        SupplierStatementService service = service(
-                repository,
-                mock(SupplierStatementMapper.class),
-                mock(PurchaseInboundRepository.class),
-                purchaseInboundItemQueryService,
-                mock(WorkflowTransitionGuard.class)
+    void shouldRejectSettledPaymentAmountThatExceedsSourceAmount() {
+        SupplierStatementSourceService sourceService = mock(SupplierStatementSourceService.class);
+        com.leo.erp.statement.service.StatementSettlementSyncService settlementSyncService =
+                mock(com.leo.erp.statement.service.StatementSettlementSyncService.class);
+        when(sourceService.applyItems(
+                any(SupplierStatement.class),
+                any(SupplierStatementRequest.class),
+                any(java.util.function.LongSupplier.class)
+        )).thenReturn(new SupplierStatementSourceService.SourceApplyResult(
+                new BigDecimal("1000.00"),
+                null,
+                null
+        ));
+        when(settlementSyncService.resolveSupplierPaymentAmount(1L)).thenReturn(new BigDecimal("1200.00"));
+        SupplierStatementApplyService applyService = new SupplierStatementApplyService(
+                mock(WorkflowTransitionGuard.class),
+                sourceService,
+                settlementSyncService
         );
+        SupplierStatement entity = new SupplierStatement();
+        entity.setId(1L);
 
-        assertThatThrownBy(() -> service.create(buildRequest(new BigDecimal("1200.00"))))
+        assertThatThrownBy(() -> applyService.apply(entity, buildRequest(BigDecimal.ZERO), () -> 10L))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("采购金额不能低于已付款金额");
     }
@@ -316,21 +324,29 @@ class SupplierStatementServiceTest {
     }
 
     @Test
-    void shouldRejectNegativePaymentAmount() {
-        SupplierStatementRepository repository = mock(SupplierStatementRepository.class);
-        PurchaseInboundItemQueryService purchaseInboundItemQueryService = mock(PurchaseInboundItemQueryService.class);
-        when(repository.existsByStatementNoAndDeletedFlagFalse("GYDZ-001")).thenReturn(false);
-        when(purchaseInboundItemQueryService.findAllActiveByIdIn(List.of(101L))).thenReturn(List.of(buildInboundItem()));
-
-        SupplierStatementService service = service(
-                repository,
-                mock(SupplierStatementMapper.class),
-                mock(PurchaseInboundRepository.class),
-                purchaseInboundItemQueryService,
-                mock(WorkflowTransitionGuard.class)
+    void shouldRejectNegativeSettledPaymentAmount() {
+        SupplierStatementSourceService sourceService = mock(SupplierStatementSourceService.class);
+        com.leo.erp.statement.service.StatementSettlementSyncService settlementSyncService =
+                mock(com.leo.erp.statement.service.StatementSettlementSyncService.class);
+        when(sourceService.applyItems(
+                any(SupplierStatement.class),
+                any(SupplierStatementRequest.class),
+                any(java.util.function.LongSupplier.class)
+        )).thenReturn(new SupplierStatementSourceService.SourceApplyResult(
+                new BigDecimal("1000.00"),
+                null,
+                null
+        ));
+        when(settlementSyncService.resolveSupplierPaymentAmount(1L)).thenReturn(new BigDecimal("-100.00"));
+        SupplierStatementApplyService applyService = new SupplierStatementApplyService(
+                mock(WorkflowTransitionGuard.class),
+                sourceService,
+                settlementSyncService
         );
+        SupplierStatement entity = new SupplierStatement();
+        entity.setId(1L);
 
-        assertThatThrownBy(() -> service.create(buildRequest(new BigDecimal("-100.00"))))
+        assertThatThrownBy(() -> applyService.apply(entity, buildRequest(BigDecimal.ZERO), () -> 10L))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("供应商对账单付款金额不能为负数");
     }
@@ -481,7 +497,8 @@ class SupplierStatementServiceTest {
                 itemQueryService,
                 workflowTransitionGuard,
                 mock(SupplierStatementApplyService.class),
-                lockService
+                lockService,
+                mock(com.leo.erp.statement.service.StatementSettlementMutationGuard.class)
         );
 
         service.updateStatus(1L, StatusConstants.CONFIRMED);
@@ -524,11 +541,113 @@ class SupplierStatementServiceTest {
         inOrder.verify(repository).save(statement);
     }
 
+    @Test
+    void shouldBlockReverseConfirmationWhenSettledAllocationExists() {
+        SupplierStatementRepository repository = mock(SupplierStatementRepository.class);
+        SupplierStatement statement = createSupplierStatement(1L, "GYDZ-SETTLED-STATUS");
+        statement.setStatus(StatusConstants.CONFIRMED);
+        when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(statement));
+        com.leo.erp.statement.service.StatementSettlementMutationGuard guard =
+                mock(com.leo.erp.statement.service.StatementSettlementMutationGuard.class);
+        org.mockito.Mockito.doThrow(new BusinessException(
+                com.leo.erp.common.error.ErrorCode.BUSINESS_ERROR,
+                "存在已付款核销"
+        )).when(guard).assertNoSettledAllocations(
+                com.leo.erp.statement.service.StatementSettlementMutationGuard.StatementType.SUPPLIER,
+                1L,
+                "反确认"
+        );
+
+        assertThatThrownBy(() -> mutationGuardService(repository, guard).updateStatus(
+                1L,
+                StatusConstants.PENDING_CONFIRM
+        ))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("存在已付款核销");
+    }
+
+    @Test
+    void shouldBlockDeleteWhenSettledAllocationExists() {
+        SupplierStatementRepository repository = mock(SupplierStatementRepository.class);
+        SupplierStatement statement = createSupplierStatement(1L, "GYDZ-SETTLED-DELETE");
+        when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(statement));
+        com.leo.erp.statement.service.StatementSettlementMutationGuard guard =
+                mock(com.leo.erp.statement.service.StatementSettlementMutationGuard.class);
+        org.mockito.Mockito.doThrow(new BusinessException(
+                com.leo.erp.common.error.ErrorCode.BUSINESS_ERROR,
+                "存在已付款核销"
+        )).when(guard).assertNoSettledAllocations(
+                com.leo.erp.statement.service.StatementSettlementMutationGuard.StatementType.SUPPLIER,
+                1L,
+                "删除"
+        );
+
+        assertThatThrownBy(() -> mutationGuardService(repository, guard).delete(1L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("存在已付款核销");
+    }
+
+    @Test
+    void shouldBlockFinancialLinkageUpdateWhenSettledAllocationExists() {
+        SupplierStatementRepository repository = mock(SupplierStatementRepository.class);
+        SupplierStatement statement = createSupplierStatement(1L, "GYDZ-001");
+        when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(statement));
+        com.leo.erp.statement.service.StatementSettlementMutationGuard guard =
+                mock(com.leo.erp.statement.service.StatementSettlementMutationGuard.class);
+        org.mockito.Mockito.doThrow(new BusinessException(
+                com.leo.erp.common.error.ErrorCode.BUSINESS_ERROR,
+                "存在已付款核销"
+        )).when(guard).assertFinancialLinkageMutationAllowed(
+                com.leo.erp.statement.service.StatementSettlementMutationGuard.StatementType.SUPPLIER,
+                1L,
+                true
+        );
+
+        assertThatThrownBy(() -> mutationGuardService(repository, guard).update(
+                1L,
+                buildRequest(BigDecimal.ZERO)
+        ))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("存在已付款核销");
+    }
+
+    private SupplierStatementService mutationGuardService(
+            SupplierStatementRepository repository,
+            com.leo.erp.statement.service.StatementSettlementMutationGuard guard) {
+        return new SupplierStatementService(
+                repository,
+                new SnowflakeIdGenerator(0L),
+                mock(SupplierStatementResponseAssembler.class),
+                mock(WorkflowTransitionGuard.class),
+                mock(SupplierStatementSourceService.class),
+                mock(SupplierStatementApplyService.class),
+                mock(PurchaseInboundItemQueryService.class),
+                mock(SourceAllocationLockService.class),
+                guard
+        );
+    }
+
     private SupplierStatementService lockingService(SupplierStatementRepository repository,
                                                      PurchaseInboundItemQueryService itemQueryService,
                                                      WorkflowTransitionGuard workflowTransitionGuard,
                                                      SupplierStatementApplyService applyService,
                                                      SourceAllocationLockService lockService) {
+        return lockingService(
+                repository,
+                itemQueryService,
+                workflowTransitionGuard,
+                applyService,
+                lockService,
+                mock(com.leo.erp.statement.service.StatementSettlementMutationGuard.class)
+        );
+    }
+
+    private SupplierStatementService lockingService(SupplierStatementRepository repository,
+                                                     PurchaseInboundItemQueryService itemQueryService,
+                                                     WorkflowTransitionGuard workflowTransitionGuard,
+                                                     SupplierStatementApplyService applyService,
+                                                     SourceAllocationLockService lockService,
+                                                     com.leo.erp.statement.service.StatementSettlementMutationGuard guard) {
         return new SupplierStatementService(
                 repository,
                 new SnowflakeIdGenerator(0L),
@@ -537,7 +656,8 @@ class SupplierStatementServiceTest {
                 mock(SupplierStatementSourceService.class),
                 applyService,
                 itemQueryService,
-                lockService
+                lockService,
+                guard
         );
     }
 
@@ -554,9 +674,14 @@ class SupplierStatementServiceTest {
                 new SupplierStatementResponseAssembler(mapper),
                 workflowTransitionGuard,
                 sourceService,
-                new SupplierStatementApplyService(workflowTransitionGuard, sourceService),
+                new SupplierStatementApplyService(
+                        workflowTransitionGuard,
+                        sourceService,
+                        mock(com.leo.erp.statement.service.StatementSettlementSyncService.class)
+                ),
                 purchaseInboundItemQueryService,
-                mock(SourceAllocationLockService.class)
+                mock(SourceAllocationLockService.class),
+                mock(com.leo.erp.statement.service.StatementSettlementMutationGuard.class)
         );
     }
 
@@ -612,6 +737,7 @@ class SupplierStatementServiceTest {
     private PurchaseInboundItem buildInboundItem() {
         PurchaseInbound inbound = new PurchaseInbound();
         inbound.setInboundNo("IN-001");
+        inbound.setSupplierCode("SUP-001");
         inbound.setSupplierName("供应商甲");
         inbound.setStatus(StatusConstants.INBOUND_COMPLETED);
 

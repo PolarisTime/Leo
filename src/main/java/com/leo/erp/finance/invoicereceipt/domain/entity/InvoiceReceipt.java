@@ -35,8 +35,17 @@ public class InvoiceReceipt extends AbstractAuditableEntity {
     @Column(name = "invoice_no", nullable = false, unique = true, length = 64)
     private String invoiceNo;
 
+    @Column(name = "supplier_code", nullable = false, length = 64)
+    private String supplierCode;
+
     @Column(name = "supplier_name", nullable = false, length = 128)
     private String supplierName;
+
+    @Column(name = "settlement_company_id")
+    private Long settlementCompanyId;
+
+    @Column(name = "settlement_company_name", length = 128)
+    private String settlementCompanyName;
 
     @Column(name = "invoice_title", length = 128)
     private String invoiceTitle;

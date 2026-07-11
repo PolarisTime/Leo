@@ -101,6 +101,20 @@ class IoReportQueryRepositoryTest {
     }
 
     @Test
+    void pageUsesActualWeighWeightForPurchaseInboundMovements() {
+        when(jdbcTemplate.queryForObject(anyString(), any(MapSqlParameterSource.class), eq(Number.class)))
+                .thenReturn(0);
+
+        repository.page(new PageQuery(0, 10, null, null), null, null, null, null);
+
+        var sql = org.mockito.ArgumentCaptor.forClass(String.class);
+        verify(jdbcTemplate).queryForObject(sql.capture(), any(MapSqlParameterSource.class), eq(Number.class));
+
+        assertThat(sql.getValue())
+                .contains("COALESCE(item.weigh_weight_ton, item.weight_ton) AS in_weight_ton");
+    }
+
+    @Test
     void pageUsesLineWarehouseForOutboundMovements() {
         when(jdbcTemplate.queryForObject(anyString(), any(MapSqlParameterSource.class), eq(Number.class)))
                 .thenReturn(0);

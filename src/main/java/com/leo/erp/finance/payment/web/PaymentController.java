@@ -6,7 +6,10 @@ import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.api.PageResponse;
 import com.leo.erp.common.web.BindPageQuery;
 import com.leo.erp.common.web.dto.StatusUpdateRequest;
+import com.leo.erp.finance.payment.service.PaymentPrepaymentAllocationService;
 import com.leo.erp.finance.payment.service.PaymentService;
+import com.leo.erp.finance.payment.web.dto.PaymentAllocationResponse;
+import com.leo.erp.finance.payment.web.dto.PaymentPrepaymentAllocationUpdateRequest;
 import com.leo.erp.finance.payment.web.dto.PaymentRequest;
 import com.leo.erp.finance.payment.web.dto.PaymentResponse;
 import com.leo.erp.security.permission.RequiresPermission;
@@ -27,6 +30,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDate;
+import java.util.List;
 
 @Tag(name = "付款管理")
 @RestController
@@ -35,9 +39,12 @@ import java.time.LocalDate;
 public class PaymentController {
 
     private final PaymentService paymentService;
+    private final PaymentPrepaymentAllocationService prepaymentAllocationService;
 
-    public PaymentController(PaymentService paymentService) {
+    public PaymentController(PaymentService paymentService,
+                             PaymentPrepaymentAllocationService prepaymentAllocationService) {
         this.paymentService = paymentService;
+        this.prepaymentAllocationService = prepaymentAllocationService;
     }
 
     @Operation(summary = "搜索付款单")
@@ -85,6 +92,19 @@ public class PaymentController {
     @RequiresPermission(resource = "payment", action = "update")
     public ApiResponse<PaymentResponse> update(@PathVariable Long id, @Valid @RequestBody PaymentRequest request) {
         return ApiResponse.success("更新成功", paymentService.update(id, request));
+    }
+
+    @Operation(summary = "更新采购预付款核销明细")
+    @PutMapping("/{id}/prepayment-allocations")
+    @RequiresPermission(resource = "payment", action = "update")
+    public ApiResponse<List<PaymentAllocationResponse>> updatePrepaymentAllocations(
+            @PathVariable Long id,
+            @Valid @RequestBody PaymentPrepaymentAllocationUpdateRequest request
+    ) {
+        return ApiResponse.success(
+                "采购预付款核销明细更新成功",
+                prepaymentAllocationService.replaceAllocations(id, request)
+        );
     }
 
     @Operation(summary = "更新付款单状态")

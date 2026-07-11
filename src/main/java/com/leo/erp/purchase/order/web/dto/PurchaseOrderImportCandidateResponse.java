@@ -6,6 +6,7 @@ import java.time.LocalDateTime;
 public record PurchaseOrderImportCandidateResponse(
         Long id,
         String orderNo,
+        String supplierCode,
         String supplierName,
         Long settlementCompanyId,
         String settlementCompanyName,
@@ -20,11 +21,29 @@ public record PurchaseOrderImportCandidateResponse(
             Long id,
             String orderNo,
             String supplierName,
+            Long settlementCompanyId,
+            String settlementCompanyName,
+            String buyerName,
+            LocalDateTime orderDate,
+            BigDecimal totalWeight,
+            BigDecimal totalAmount,
+            String status,
+            Integer importableQuantity
+    ) {
+        this(id, orderNo, null, supplierName, settlementCompanyId, settlementCompanyName,
+                buyerName, orderDate, totalWeight, totalAmount, status, importableQuantity);
+    }
+
+    public PurchaseOrderImportCandidateResponse(
+            Long id,
+            String orderNo,
+            String supplierName,
             String buyerName,
             LocalDateTime orderDate,
             String status,
             Integer importableQuantity
     ) {
-        this(id, orderNo, supplierName, null, null, buyerName, orderDate, null, null, status, importableQuantity);
+        this(id, orderNo, null, supplierName, null, null, buyerName, orderDate,
+                null, null, status, importableQuantity);
     }
 }

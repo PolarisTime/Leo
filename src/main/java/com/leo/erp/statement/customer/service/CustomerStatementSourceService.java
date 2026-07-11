@@ -14,6 +14,8 @@ import com.leo.erp.sales.order.domain.entity.SalesOrder;
 import com.leo.erp.sales.order.domain.entity.SalesOrderItem;
 import com.leo.erp.sales.order.repository.SalesOrderRepository;
 import com.leo.erp.sales.order.service.SalesOrderItemQueryService;
+import com.leo.erp.sales.outbound.domain.entity.SalesOutboundItem;
+import com.leo.erp.sales.outbound.repository.SalesOutboundRepository;
 import com.leo.erp.security.permission.DataScopeContext;
 import com.leo.erp.statement.customer.domain.entity.CustomerStatement;
 import com.leo.erp.statement.customer.domain.entity.CustomerStatementItem;
@@ -22,11 +24,14 @@ import com.leo.erp.statement.customer.web.dto.CustomerStatementCandidateResponse
 import com.leo.erp.statement.customer.web.dto.CustomerStatementItemRequest;
 import com.leo.erp.statement.customer.web.dto.CustomerStatementRequest;
 import com.leo.erp.statement.service.StatementCandidateSupport;
+import com.leo.erp.statement.service.StatementSourceCoverageValidator;
 import org.springframework.data.domain.Page;
 import org.springframework.data.jpa.domain.Specification;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.util.Collection;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -49,15 +54,26 @@ public class CustomerStatementSourceService {
     private final SalesOrderRepository salesOrderRepository;
     private final SalesOrderItemQueryService salesOrderItemQueryService;
     private final CustomerRepository customerRepository;
+    private final SalesOutboundRepository salesOutboundRepository;
 
     public CustomerStatementSourceService(CustomerStatementRepository repository,
                                           SalesOrderRepository salesOrderRepository,
                                           SalesOrderItemQueryService salesOrderItemQueryService,
                                           CustomerRepository customerRepository) {
+        this(repository, salesOrderRepository, salesOrderItemQueryService, customerRepository, null);
+    }
+
+    @Autowired
+    public CustomerStatementSourceService(CustomerStatementRepository repository,
+                                          SalesOrderRepository salesOrderRepository,
+                                          SalesOrderItemQueryService salesOrderItemQueryService,
+                                          CustomerRepository customerRepository,
+                                          SalesOutboundRepository salesOutboundRepository) {
         this.repository = repository;
         this.salesOrderRepository = salesOrderRepository;
         this.salesOrderItemQueryService = salesOrderItemQueryService;
         this.customerRepository = customerRepository;
+        this.salesOutboundRepository = salesOutboundRepository;
     }
 
     Page<CustomerStatementCandidateResponse> candidatePage(PageQuery query, PageFilter filter) {
@@ -80,6 +96,9 @@ public class CustomerStatementSourceService {
         BigDecimal salesAmount = BigDecimal.ZERO;
         Map<Long, SalesOrderItem> sourceSalesOrderItemMap = loadSourceSalesOrderItemMap(request.items());
         validateSourceSalesOrders(request, sourceSalesOrderItemMap, entity.getId());
+        Map<Long, AuditedOutboundActual> outboundActualMap = loadAuditedOutboundActualMap(
+                sourceSalesOrderItemMap.keySet()
+        );
         SettlementCompanySnapshot settlementCompany = resolveStatementSettlementCompany(sourceSalesOrderItemMap.values().stream()
                 .map(SalesOrderItem::getSalesOrder)
                 .distinct()
@@ -102,6 +121,11 @@ public class CustomerStatementSourceService {
         for (int i = 0; i < request.items().size(); i++) {
             CustomerStatementItemRequest source = request.items().get(i);
             SalesOrderItem sourceSalesOrderItem = resolveSourceSalesOrderItem(source, sourceSalesOrderItemMap, i + 1);
+            AuditedOutboundActual outboundActual = resolveAuditedOutboundActual(
+                    sourceSalesOrderItem,
+                    outboundActualMap,
+                    i + 1
+            );
             CustomerStatementItem item = items.get(i);
             item.setCustomerStatement(entity);
             item.setLineNo(i + 1);
@@ -115,13 +139,19 @@ public class CustomerStatementSourceService {
             item.setLength(sourceSalesOrderItem.getLength());
             item.setUnit(sourceSalesOrderItem.getUnit());
             item.setBatchNo(sourceSalesOrderItem.getBatchNo());
-            item.setQuantity(sourceSalesOrderItem.getQuantity());
+            item.setQuantity(outboundActual == null
+                    ? sourceSalesOrderItem.getQuantity()
+                    : Math.toIntExact(outboundActual.quantity()));
             item.setQuantityUnit(TradeItemCalculator.normalizeQuantityUnit(sourceSalesOrderItem.getQuantityUnit()));
             item.setPieceWeightTon(TradeItemCalculator.scaleWeightTon(sourceSalesOrderItem.getPieceWeightTon()));
             item.setPiecesPerBundle(sourceSalesOrderItem.getPiecesPerBundle());
-            item.setWeightTon(TradeItemCalculator.scaleWeightTon(sourceSalesOrderItem.getWeightTon()));
+            item.setWeightTon(outboundActual == null
+                    ? TradeItemCalculator.scaleWeightTon(sourceSalesOrderItem.getWeightTon())
+                    : outboundActual.weightTon());
             item.setUnitPrice(TradeItemCalculator.scaleAmount(sourceSalesOrderItem.getUnitPrice()));
-            BigDecimal amount = TradeItemCalculator.scaleAmount(sourceSalesOrderItem.getAmount());
+            BigDecimal amount = outboundActual == null
+                    ? TradeItemCalculator.scaleAmount(sourceSalesOrderItem.getAmount())
+                    : outboundActual.amount();
             item.setAmount(amount);
             salesAmount = salesAmount.add(amount);
         }
@@ -158,6 +188,40 @@ public class CustomerStatementSourceService {
                 .collect(java.util.stream.Collectors.toMap(SalesOrderItem::getId, item -> item));
     }
 
+    private Map<Long, AuditedOutboundActual> loadAuditedOutboundActualMap(Set<Long> sourceSalesOrderItemIds) {
+        if (salesOutboundRepository == null || sourceSalesOrderItemIds.isEmpty()) {
+            return Map.of();
+        }
+        List<Long> sortedSourceItemIds = sourceSalesOrderItemIds.stream().sorted().toList();
+        Map<Long, AuditedOutboundActual> result = new java.util.HashMap<>();
+        salesOutboundRepository.findAllWithItemsByStatusAndSourceSalesOrderItemIds(
+                        StatusConstants.AUDITED,
+                        sortedSourceItemIds
+                ).stream()
+                .flatMap(outbound -> outbound.getItems().stream())
+                .filter(item -> item.getSourceSalesOrderItemId() != null)
+                .filter(item -> sourceSalesOrderItemIds.contains(item.getSourceSalesOrderItemId()))
+                .forEach(item -> result.merge(
+                        item.getSourceSalesOrderItemId(),
+                        AuditedOutboundActual.from(item),
+                        AuditedOutboundActual::merge
+                ));
+        return Map.copyOf(result);
+    }
+
+    private AuditedOutboundActual resolveAuditedOutboundActual(SalesOrderItem sourceItem,
+                                                               Map<Long, AuditedOutboundActual> actualMap,
+                                                               int lineNo) {
+        AuditedOutboundActual actual = actualMap.get(sourceItem.getId());
+        if (actual == null && salesOutboundRepository != null) {
+            throw new BusinessException(
+                    ErrorCode.BUSINESS_ERROR,
+                    "第" + lineNo + "行来源销售订单明细没有已审核销售出库，不能生成客户对账单"
+            );
+        }
+        return actual;
+    }
+
     private void validateSourceSalesOrders(CustomerStatementRequest request,
                                            Map<Long, SalesOrderItem> sourceSalesOrderItemMap,
                                            Long currentStatementId) {
@@ -190,7 +254,33 @@ public class CustomerStatementSourceService {
         if (requestedOrderNos.isEmpty()) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "客户对账单来源销售订单不能为空");
         }
+        assertCompleteSourceItemCoverage(sourceSalesOrderItemMap.values());
         assertSourceOrdersNotOccupied(requestedOrderNos, currentStatementId);
+    }
+
+    private void assertCompleteSourceItemCoverage(Collection<SalesOrderItem> requestedItems) {
+        requestedItems.stream()
+                .map(SalesOrderItem::getSalesOrder)
+                .filter(java.util.Objects::nonNull)
+                .distinct()
+                .forEach(order -> StatementSourceCoverageValidator.requireAllEffectiveItems(
+                        "来源销售订单" + order.getOrderNo(),
+                        order.getItems().stream().map(SalesOrderItem::getId).toList(),
+                        requestedItems.stream()
+                                .filter(item -> sameSalesOrder(item.getSalesOrder(), order))
+                                .map(SalesOrderItem::getId)
+                                .toList()
+                ));
+    }
+
+    private boolean sameSalesOrder(SalesOrder left, SalesOrder right) {
+        if (left == right) {
+            return true;
+        }
+        return left != null
+                && right != null
+                && left.getId() != null
+                && left.getId().equals(right.getId());
     }
 
     private void assertSourceOrdersNotOccupied(Set<String> requestedOrderNos, Long currentStatementId) {
@@ -300,5 +390,24 @@ public class CustomerStatementSourceService {
     }
 
     private record SettlementCompanySnapshot(Long id, String name) {
+    }
+
+    private record AuditedOutboundActual(long quantity, BigDecimal weightTon, BigDecimal amount) {
+
+        private static AuditedOutboundActual from(SalesOutboundItem item) {
+            return new AuditedOutboundActual(
+                    item.getQuantity() == null ? 0L : item.getQuantity().longValue(),
+                    TradeItemCalculator.scaleWeightTon(item.getWeightTon()),
+                    TradeItemCalculator.scaleAmount(item.getAmount())
+            );
+        }
+
+        private AuditedOutboundActual merge(AuditedOutboundActual other) {
+            return new AuditedOutboundActual(
+                    Math.addExact(quantity, other.quantity),
+                    TradeItemCalculator.scaleWeightTon(weightTon.add(other.weightTon)),
+                    TradeItemCalculator.scaleAmount(amount.add(other.amount))
+            );
+        }
     }
 }

@@ -236,14 +236,14 @@ class PaymentServiceTest {
     }
 
     @Test
-    void shouldRejectSupplierNameMismatchBetweenPaymentAndStatement() {
+    void shouldRejectSupplierCodeMismatchBetweenPaymentAndStatement() {
         PaymentRepository paymentRepository = mock(PaymentRepository.class);
         SupplierStatementQueryService supplierStatementQueryService = mock(SupplierStatementQueryService.class);
         ResourceRecordAccessGuard resourceRecordAccessGuard = mock(ResourceRecordAccessGuard.class);
-        SupplierStatement statement = new SupplierStatement();
+        SupplierStatement statement = validSupplierStatement();
         statement.setStatus(StatusConstants.CONFIRMED);
         statement.setId(11L);
-        statement.setSupplierName("供应商B");
+        statement.setSupplierName("供应商A");
         statement.setPurchaseAmount(new BigDecimal("1000.00"));
         when(supplierStatementQueryService.requireActiveById(11L)).thenReturn(statement);
         when(paymentRepository.existsByPaymentNoAndDeletedFlagFalse("FK-001")).thenReturn(false);
@@ -260,16 +260,14 @@ class PaymentServiceTest {
                 mock(WorkflowTransitionGuard.class)
         );
 
-        assertThatThrownBy(() -> service.create(buildRequest(
-                "供应商",
-                11L,
-                "供应商A",
-                new BigDecimal("100.00"),
-                "草稿",
+        assertThatThrownBy(() -> service.create(new PaymentRequest(
+                "FK-001", "供应商", "SUP-OTHER", "供应商A", 11L,
+                LocalDate.of(2026, 4, 26), "银行转账", new BigDecimal("100.00"),
+                "草稿", "财务A", null,
                 List.of(new PaymentAllocationRequest(null, 11L, new BigDecimal("100.00")))
         )))
                 .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("对账单供应商与付款单往来单位不一致");
+                .hasMessageContaining("供应商编码与付款单往来单位编码不一致");
     }
 
     @Test
@@ -277,7 +275,7 @@ class PaymentServiceTest {
         PaymentRepository paymentRepository = mock(PaymentRepository.class);
         FreightStatementQueryService freightStatementQueryService = mock(FreightStatementQueryService.class);
         ResourceRecordAccessGuard resourceRecordAccessGuard = mock(ResourceRecordAccessGuard.class);
-        FreightStatement statement = new FreightStatement();
+        FreightStatement statement = validFreightStatement();
         statement.setStatus(StatusConstants.AUDITED);
         statement.setId(31L);
         statement.setCarrierName("物流商B");
@@ -313,7 +311,7 @@ class PaymentServiceTest {
     void shouldRejectDuplicateSupplierAllocationToSameStatement() {
         PaymentRepository paymentRepository = mock(PaymentRepository.class);
         SupplierStatementQueryService supplierStatementQueryService = mock(SupplierStatementQueryService.class);
-        SupplierStatement statement = new SupplierStatement();
+        SupplierStatement statement = validSupplierStatement();
         statement.setStatus(StatusConstants.CONFIRMED);
         statement.setId(11L);
         statement.setSupplierName("供应商A");
@@ -352,7 +350,7 @@ class PaymentServiceTest {
     void shouldRejectDuplicateFreightAllocationToSameStatement() {
         PaymentRepository paymentRepository = mock(PaymentRepository.class);
         FreightStatementQueryService freightStatementQueryService = mock(FreightStatementQueryService.class);
-        FreightStatement statement = new FreightStatement();
+        FreightStatement statement = validFreightStatement();
         statement.setStatus(StatusConstants.AUDITED);
         statement.setId(31L);
         statement.setCarrierName("物流商A");
@@ -420,7 +418,7 @@ class PaymentServiceTest {
     void shouldRejectZeroSupplierAllocationAmount() {
         PaymentRepository paymentRepository = mock(PaymentRepository.class);
         SupplierStatementQueryService supplierStatementQueryService = mock(SupplierStatementQueryService.class);
-        SupplierStatement statement = new SupplierStatement();
+        SupplierStatement statement = validSupplierStatement();
         statement.setStatus(StatusConstants.CONFIRMED);
         statement.setId(11L);
         statement.setSupplierName("供应商A");
@@ -456,7 +454,7 @@ class PaymentServiceTest {
     void shouldRejectSupplierPaymentAmountNotMatchingAllocations() {
         PaymentRepository paymentRepository = mock(PaymentRepository.class);
         SupplierStatementQueryService supplierStatementQueryService = mock(SupplierStatementQueryService.class);
-        SupplierStatement statement = new SupplierStatement();
+        SupplierStatement statement = validSupplierStatement();
         statement.setStatus(StatusConstants.CONFIRMED);
         statement.setId(11L);
         statement.setSupplierName("供应商A");
@@ -550,7 +548,7 @@ class PaymentServiceTest {
     void shouldRejectPaidSupplierPaymentWithUnconfirmedStatement() {
         PaymentRepository paymentRepository = mock(PaymentRepository.class);
         SupplierStatementQueryService supplierStatementQueryService = mock(SupplierStatementQueryService.class);
-        SupplierStatement statement = new SupplierStatement();
+        SupplierStatement statement = validSupplierStatement();
         statement.setStatus(StatusConstants.PENDING_CONFIRM);
         statement.setId(11L);
         statement.setSupplierName("供应商A");
@@ -586,7 +584,7 @@ class PaymentServiceTest {
     void shouldRejectPaidFreightPaymentWithUnauditedStatement() {
         PaymentRepository paymentRepository = mock(PaymentRepository.class);
         FreightStatementQueryService freightStatementQueryService = mock(FreightStatementQueryService.class);
-        FreightStatement statement = new FreightStatement();
+        FreightStatement statement = validFreightStatement();
         statement.setStatus(StatusConstants.PENDING_AUDIT);
         statement.setId(31L);
         statement.setCarrierName("物流商A");
@@ -623,7 +621,7 @@ class PaymentServiceTest {
         PaymentRepository paymentRepository = mock(PaymentRepository.class);
         PaymentMapper paymentMapper = mock(PaymentMapper.class);
         SupplierStatementQueryService supplierStatementQueryService = mock(SupplierStatementQueryService.class);
-        SupplierStatement statement = new SupplierStatement();
+        SupplierStatement statement = validSupplierStatement();
         statement.setStatus(StatusConstants.CONFIRMED);
         statement.setId(11L);
         statement.setSupplierName("供应商A");
@@ -675,7 +673,7 @@ class PaymentServiceTest {
         PaymentRepository paymentRepository = mock(PaymentRepository.class);
         PaymentAllocationRepository allocationRepository = mock(PaymentAllocationRepository.class);
         SupplierStatementQueryService supplierStatementQueryService = mock(SupplierStatementQueryService.class);
-        SupplierStatement statement = new SupplierStatement();
+        SupplierStatement statement = validSupplierStatement();
         statement.setStatus(StatusConstants.CONFIRMED);
         statement.setId(11L);
         statement.setSupplierName("供应商A");
@@ -718,7 +716,7 @@ class PaymentServiceTest {
         PaymentRepository paymentRepository = mock(PaymentRepository.class);
         PaymentAllocationRepository allocationRepository = mock(PaymentAllocationRepository.class);
         SupplierStatementQueryService supplierStatementQueryService = mock(SupplierStatementQueryService.class);
-        SupplierStatement statement = new SupplierStatement();
+        SupplierStatement statement = validSupplierStatement();
         statement.setStatus(StatusConstants.CONFIRMED);
         statement.setId(11L);
         statement.setSupplierName("供应商A");
@@ -761,7 +759,7 @@ class PaymentServiceTest {
         PaymentRepository paymentRepository = mock(PaymentRepository.class);
         PaymentAllocationRepository allocationRepository = mock(PaymentAllocationRepository.class);
         FreightStatementQueryService freightStatementQueryService = mock(FreightStatementQueryService.class);
-        FreightStatement statement = new FreightStatement();
+        FreightStatement statement = validFreightStatement();
         statement.setStatus(StatusConstants.AUDITED);
         statement.setId(31L);
         statement.setCarrierName("物流商A");
@@ -803,7 +801,7 @@ class PaymentServiceTest {
     void shouldRejectAllocationAmountExceedingPaymentAmount() {
         PaymentRepository paymentRepository = mock(PaymentRepository.class);
         SupplierStatementQueryService supplierStatementQueryService = mock(SupplierStatementQueryService.class);
-        SupplierStatement statement = new SupplierStatement();
+        SupplierStatement statement = validSupplierStatement();
         statement.setStatus(StatusConstants.CONFIRMED);
         statement.setId(11L);
         statement.setSupplierName("供应商A");
@@ -840,7 +838,7 @@ class PaymentServiceTest {
         PaymentRepository paymentRepository = mock(PaymentRepository.class);
         SupplierStatementQueryService supplierStatementQueryService = mock(SupplierStatementQueryService.class);
         ResourceRecordAccessGuard resourceRecordAccessGuard = mock(ResourceRecordAccessGuard.class);
-        SupplierStatement statement = new SupplierStatement();
+        SupplierStatement statement = validSupplierStatement();
         statement.setStatus(StatusConstants.CONFIRMED);
         statement.setId(11L);
         statement.setSupplierName("供应商A");
@@ -880,7 +878,7 @@ class PaymentServiceTest {
         PaymentRepository paymentRepository = mock(PaymentRepository.class);
         FreightStatementQueryService freightStatementQueryService = mock(FreightStatementQueryService.class);
         ResourceRecordAccessGuard resourceRecordAccessGuard = mock(ResourceRecordAccessGuard.class);
-        FreightStatement statement = new FreightStatement();
+        FreightStatement statement = validFreightStatement();
         statement.setStatus(StatusConstants.AUDITED);
         statement.setId(31L);
         statement.setCarrierName("物流商A");
@@ -924,7 +922,7 @@ class PaymentServiceTest {
         ApplicationEventPublisher eventPublisher = mock(ApplicationEventPublisher.class);
         ResourceRecordAccessGuard resourceRecordAccessGuard = mock(ResourceRecordAccessGuard.class);
 
-        SupplierStatement statement = new SupplierStatement();
+        SupplierStatement statement = validSupplierStatement();
         statement.setStatus(StatusConstants.CONFIRMED);
         statement.setId(11L);
         statement.setSupplierName("供应商A");
@@ -969,7 +967,7 @@ class PaymentServiceTest {
         ApplicationEventPublisher eventPublisher = mock(ApplicationEventPublisher.class);
         ResourceRecordAccessGuard resourceRecordAccessGuard = mock(ResourceRecordAccessGuard.class);
 
-        FreightStatement statement = new FreightStatement();
+        FreightStatement statement = validFreightStatement();
         statement.setStatus(StatusConstants.AUDITED);
         statement.setId(31L);
         statement.setCarrierName("物流商A");
@@ -1267,7 +1265,7 @@ class PaymentServiceTest {
         existing.setCounterpartyName("供应商A");
         existing.setAmount(new BigDecimal("100.00"));
 
-        SupplierStatement statement = new SupplierStatement();
+        SupplierStatement statement = validSupplierStatement();
         statement.setStatus(StatusConstants.CONFIRMED);
         statement.setId(11L);
         statement.setSupplierName("供应商A");
@@ -1345,7 +1343,7 @@ class PaymentServiceTest {
         existing.setCounterpartyName("物流商A");
         existing.setAmount(new BigDecimal("100.00"));
 
-        FreightStatement statement = new FreightStatement();
+        FreightStatement statement = validFreightStatement();
         statement.setStatus(StatusConstants.AUDITED);
         statement.setId(31L);
         statement.setCarrierName("物流商A");
@@ -1507,7 +1505,7 @@ class PaymentServiceTest {
     void shouldRejectSupplierOverPaymentAmount() {
         PaymentRepository paymentRepository = mock(PaymentRepository.class);
         SupplierStatementQueryService supplierStatementQueryService = mock(SupplierStatementQueryService.class);
-        SupplierStatement statement = new SupplierStatement();
+        SupplierStatement statement = validSupplierStatement();
         statement.setStatus(StatusConstants.CONFIRMED);
         statement.setId(11L);
         statement.setSupplierName("供应商A");
@@ -1535,7 +1533,7 @@ class PaymentServiceTest {
     void shouldRejectFreightOverPaymentAmount() {
         PaymentRepository paymentRepository = mock(PaymentRepository.class);
         FreightStatementQueryService freightStatementQueryService = mock(FreightStatementQueryService.class);
-        FreightStatement statement = new FreightStatement();
+        FreightStatement statement = validFreightStatement();
         statement.setStatus(StatusConstants.AUDITED);
         statement.setId(31L);
         statement.setCarrierName("物流商A");
@@ -1563,7 +1561,7 @@ class PaymentServiceTest {
     void shouldRejectFreightPaymentAmountNotMatchingAllocations() {
         PaymentRepository paymentRepository = mock(PaymentRepository.class);
         FreightStatementQueryService freightStatementQueryService = mock(FreightStatementQueryService.class);
-        FreightStatement statement = new FreightStatement();
+        FreightStatement statement = validFreightStatement();
         statement.setStatus(StatusConstants.AUDITED);
         statement.setId(31L);
         statement.setCarrierName("物流商A");
@@ -1622,18 +1620,25 @@ class PaymentServiceTest {
         );
         PaymentAllocationService allocationService = new PaymentAllocationService(statementAllocationValidator);
         PaymentSettlementSyncService settlementSyncService = new PaymentSettlementSyncService(eventPublisher);
+        PaymentPurchasePrepaymentService prepaymentService = mock(PaymentPurchasePrepaymentService.class);
         return new PaymentService(
                 paymentRepository,
                 snowflakeIdGenerator,
                 paymentMapper,
-                new PaymentApplyService(workflowTransitionGuard, allocationService, settlementSyncService),
+                new PaymentApplyService(
+                        workflowTransitionGuard,
+                        allocationService,
+                        settlementSyncService,
+                        prepaymentService
+                ),
                 allocationService,
                 new PaymentAllocationResponseAssembler(
                         supplierStatementQueryService,
                         freightStatementQueryService
                 ),
                 settlementSyncService,
-                mock(SourceAllocationLockService.class)
+                mock(SourceAllocationLockService.class),
+                prepaymentService
         );
     }
 
@@ -1656,7 +1661,8 @@ class PaymentServiceTest {
                 allocationService,
                 mock(PaymentAllocationResponseAssembler.class),
                 settlementSyncService,
-                lockService
+                lockService,
+                mock(PaymentPurchasePrepaymentService.class)
         );
     }
 
@@ -1667,6 +1673,22 @@ class PaymentServiceTest {
         allocation.setSourceStatementId(sourceStatementId);
         allocation.setAllocatedAmount(new BigDecimal("50.00"));
         return allocation;
+    }
+
+    private SupplierStatement validSupplierStatement() {
+        SupplierStatement statement = new SupplierStatement();
+        statement.setSupplierCode("SUP-001");
+        statement.setSettlementCompanyId(9L);
+        statement.setSettlementCompanyName("结算主体A");
+        return statement;
+    }
+
+    private FreightStatement validFreightStatement() {
+        FreightStatement statement = new FreightStatement();
+        statement.setCarrierCode("CAR-001");
+        statement.setSettlementCompanyId(9L);
+        statement.setSettlementCompanyName("结算主体A");
+        return statement;
     }
 
     private Payment buildPaymentEntity(Long id, String paymentNo) {

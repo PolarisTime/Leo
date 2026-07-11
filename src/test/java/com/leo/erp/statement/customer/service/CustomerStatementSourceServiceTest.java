@@ -10,6 +10,9 @@ import com.leo.erp.sales.order.domain.entity.SalesOrder;
 import com.leo.erp.sales.order.domain.entity.SalesOrderItem;
 import com.leo.erp.sales.order.repository.SalesOrderRepository;
 import com.leo.erp.sales.order.service.SalesOrderItemQueryService;
+import com.leo.erp.sales.outbound.domain.entity.SalesOutbound;
+import com.leo.erp.sales.outbound.domain.entity.SalesOutboundItem;
+import com.leo.erp.sales.outbound.repository.SalesOutboundRepository;
 import com.leo.erp.statement.customer.domain.entity.CustomerStatement;
 import com.leo.erp.statement.customer.domain.entity.CustomerStatementItem;
 import com.leo.erp.statement.customer.repository.CustomerStatementRepository;
@@ -104,6 +107,64 @@ class CustomerStatementSourceServiceTest {
         assertThat(entity.getItems().get(0).getId()).isEqualTo(1000L);
         assertThat(entity.getItems().get(0).getSourceNo()).isEqualTo("SO-001");
         assertThat(entity.getItems().get(0).getAmount()).isEqualByComparingTo("123.45");
+    }
+
+    @Test
+    void shouldUseAuditedOutboundActualTotalsForUnderFulfilledCompletedOrder() {
+        CustomerStatementRepository repository = mock(CustomerStatementRepository.class);
+        SalesOrderItemQueryService itemQueryService = mock(SalesOrderItemQueryService.class);
+        SalesOutboundRepository outboundRepository = mock(SalesOutboundRepository.class);
+        SalesOrder sourceOrder = sourceOrder();
+        SalesOrderItem sourceItem = sourceOrderItem(10L, sourceOrder);
+        sourceItem.setQuantity(100);
+        sourceItem.setPieceWeightTon(new BigDecimal("1.00000000"));
+        sourceItem.setWeightTon(new BigDecimal("100.00000000"));
+        sourceItem.setUnitPrice(new BigDecimal("10.00"));
+        sourceItem.setAmount(new BigDecimal("1000.00"));
+        SalesOutbound outbound = new SalesOutbound();
+        outbound.setId(20L);
+        outbound.setStatus(StatusConstants.AUDITED);
+        SalesOutboundItem outboundItem = new SalesOutboundItem();
+        outboundItem.setId(21L);
+        outboundItem.setSalesOutbound(outbound);
+        outboundItem.setSourceSalesOrderItemId(10L);
+        outboundItem.setQuantity(96);
+        outboundItem.setQuantityUnit("件");
+        outboundItem.setPieceWeightTon(new BigDecimal("1.00000000"));
+        outboundItem.setPiecesPerBundle(1);
+        outboundItem.setWeightTon(new BigDecimal("96.00000000"));
+        outboundItem.setUnitPrice(new BigDecimal("10.00"));
+        outboundItem.setAmount(new BigDecimal("960.00"));
+        outbound.setItems(new java.util.ArrayList<>(List.of(outboundItem)));
+        when(itemQueryService.findActiveByIdIn(List.of(10L))).thenReturn(List.of(sourceItem));
+        when(repository.findAllBySourceNosExcludingCurrentStatement(Set.of("SO-001"), 99L))
+                .thenReturn(List.of());
+        when(outboundRepository.findAllWithItemsByStatusAndSourceSalesOrderItemIds(
+                StatusConstants.AUDITED,
+                List.of(10L)
+        )).thenReturn(List.of(outbound));
+        CustomerStatement entity = new CustomerStatement();
+        entity.setId(99L);
+        CustomerStatementSourceService service = new CustomerStatementSourceService(
+                repository,
+                mock(SalesOrderRepository.class),
+                itemQueryService,
+                null,
+                outboundRepository
+        );
+
+        CustomerStatementSourceService.SourceApplyResult result = service.applyItems(
+                entity,
+                customerRequest(null, "客户甲", "项目A", 1L, "结算主体A", 10L),
+                () -> 1000L
+        );
+
+        assertThat(result.salesAmount()).isEqualByComparingTo("960.00");
+        assertThat(entity.getItems()).singleElement().satisfies(item -> {
+            assertThat(item.getQuantity()).isEqualTo(96);
+            assertThat(item.getWeightTon()).isEqualByComparingTo("96.00000000");
+            assertThat(item.getAmount()).isEqualByComparingTo("960.00");
+        });
     }
 
     @Test
@@ -474,6 +535,30 @@ class CustomerStatementSourceServiceTest {
                 .hasMessageContaining("来源销售订单存在不同客户结算主体");
     }
 
+    @Test
+    void shouldRejectPartialSalesOrderItemCoverage() {
+        CustomerStatementRepository repository = mock(CustomerStatementRepository.class);
+        SalesOrderItemQueryService itemQueryService = mock(SalesOrderItemQueryService.class);
+        SalesOrder order = sourceOrder();
+        SalesOrderItem requestedItem = sourceOrderItem(10L, order);
+        sourceOrderItem(20L, order);
+        when(itemQueryService.findActiveByIdIn(List.of(10L))).thenReturn(List.of(requestedItem));
+        CustomerStatementSourceService service = new CustomerStatementSourceService(
+                repository,
+                mock(SalesOrderRepository.class),
+                itemQueryService,
+                null
+        );
+
+        assertThatThrownBy(() -> service.applyItems(
+                new CustomerStatement(),
+                customerRequest(null, "客户甲", "项目A", 1L, "结算主体A", 10L),
+                () -> 1000L
+        ))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("来源销售订单SO-001必须导入全部有效明细");
+    }
+
     private SalesOrder sourceOrder() {
         SalesOrder order = new SalesOrder();
         order.setId(1L);
@@ -601,6 +686,7 @@ class CustomerStatementSourceServiceTest {
         item.setWeightTon(new BigDecimal("1.234"));
         item.setUnitPrice(new BigDecimal("100.00"));
         item.setAmount(new BigDecimal("123.45"));
+        order.getItems().add(item);
         return item;
     }
 }

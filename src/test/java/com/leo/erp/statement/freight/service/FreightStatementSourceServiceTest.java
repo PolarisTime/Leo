@@ -54,6 +54,7 @@ class FreightStatementSourceServiceTest {
 
         assertThat(candidates).hasSize(1);
         assertThat(candidates.get(0).billNo()).isEqualTo("FB-001");
+        assertThat(candidates.get(0).carrierCode()).isEqualTo("C-001");
         assertThat(candidates.get(0).carrierName()).isEqualTo("物流甲");
         assertThat(candidates.get(0).customerName()).isEqualTo("客户甲");
         assertThat(candidates.get(0).status()).isEqualTo(StatusConstants.AUDITED);
@@ -303,6 +304,7 @@ class FreightStatementSourceServiceTest {
         FreightBill bill = new FreightBill();
         bill.setId(1L);
         bill.setBillNo("FB-001");
+        bill.setCarrierCode("C-001");
         bill.setCarrierName("物流甲");
         bill.setCustomerName("客户甲");
         bill.setProjectName("项目A");

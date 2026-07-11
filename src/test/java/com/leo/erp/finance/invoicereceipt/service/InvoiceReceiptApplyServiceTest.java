@@ -19,7 +19,7 @@ import static org.mockito.Mockito.when;
 class InvoiceReceiptApplyServiceTest {
 
     @Test
-    void shouldTrimExplicitInvoiceTitle() {
+    void shouldDeriveInvoiceTitleAndSettlementCompanyFromSources() {
         WorkflowTransitionGuard workflowTransitionGuard = mock(WorkflowTransitionGuard.class);
         InvoiceReceiptSourceService sourceService = mock(InvoiceReceiptSourceService.class);
         InvoiceAmountCalculator amountCalculator = mock(InvoiceAmountCalculator.class);
@@ -43,14 +43,25 @@ class InvoiceReceiptApplyServiceTest {
                 "备注",
                 List.of()
         );
-        when(sourceService.applyItems(eq(entity), eq(request.items()), eq("供应商A"), any()))
-                .thenReturn(new BigDecimal("100.00"));
+        when(sourceService.applyItems(
+                eq(entity),
+                eq(request.items()),
+                eq(request.supplierCode()),
+                eq("供应商A"),
+                any()
+        ))
+                .thenReturn(new InvoiceReceiptSourceService.SourceApplyResult(
+                        new BigDecimal("100.00"), "SUP-001", "供应商A", 301L, "采购结算主体A"));
         when(amountCalculator.resolve("收票", new BigDecimal("100.00"), request.amount(), request.taxAmount()))
                 .thenReturn(new InvoiceAmountCalculator.InvoiceAmounts(new BigDecimal("100.00"), new BigDecimal("13.00")));
 
         service.apply(entity, request, () -> 1L);
 
-        assertThat(entity.getInvoiceTitle()).isEqualTo("发票抬头");
+        assertThat(entity.getSupplierCode()).isEqualTo("SUP-001");
+        assertThat(entity.getSupplierName()).isEqualTo("供应商A");
+        assertThat(entity.getSettlementCompanyId()).isEqualTo(301L);
+        assertThat(entity.getSettlementCompanyName()).isEqualTo("采购结算主体A");
+        assertThat(entity.getInvoiceTitle()).isEqualTo("采购结算主体A");
         assertThat(entity.getAmount()).isEqualByComparingTo("100.00");
         assertThat(entity.getTaxAmount()).isEqualByComparingTo("13.00");
     }

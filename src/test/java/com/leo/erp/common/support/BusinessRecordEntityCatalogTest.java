@@ -22,6 +22,7 @@ class BusinessRecordEntityCatalogTest {
             "warehouse",
             "purchase-order",
             "purchase-inbound",
+            "purchase-refund",
             "sales-order",
             "sales-outbound",
             "freight-bill",
@@ -32,6 +33,7 @@ class BusinessRecordEntityCatalogTest {
             "freight-statement",
             "receipt",
             "payment",
+            "supplier-refund-receipt",
             "invoice-receipt",
             "invoice-issue"
     );

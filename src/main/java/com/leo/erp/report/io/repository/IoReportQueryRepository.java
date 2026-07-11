@@ -39,7 +39,7 @@ public class IoReportQueryRepository {
                     item.quantity AS in_quantity,
                     0 AS out_quantity,
                     item.quantity_unit,
-                    item.weight_ton AS in_weight_ton,
+                    COALESCE(item.weigh_weight_ton, item.weight_ton) AS in_weight_ton,
                     CAST(0 AS NUMERIC(18, 8)) AS out_weight_ton,
                     item.unit,
                     inbound.remark,

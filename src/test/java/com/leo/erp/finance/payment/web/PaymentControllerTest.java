@@ -4,6 +4,7 @@ import com.leo.erp.common.api.ApiResponse;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.api.PageResponse;
 import com.leo.erp.common.web.dto.StatusUpdateRequest;
+import com.leo.erp.finance.payment.service.PaymentPrepaymentAllocationService;
 import com.leo.erp.finance.payment.service.PaymentService;
 import com.leo.erp.finance.payment.web.dto.PaymentRequest;
 import com.leo.erp.finance.payment.web.dto.PaymentResponse;
@@ -23,7 +24,10 @@ import static org.mockito.Mockito.when;
 class PaymentControllerTest {
 
     private final PaymentService paymentService = mock(PaymentService.class);
-    private final PaymentController controller = new PaymentController(paymentService);
+    private final PaymentController controller = new PaymentController(
+            paymentService,
+            mock(PaymentPrepaymentAllocationService.class)
+    );
 
     @Test
     void searchReturnsPaymentList() {

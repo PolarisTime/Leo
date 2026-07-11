@@ -20,6 +20,7 @@ import com.leo.erp.statement.customer.web.dto.CustomerStatementCandidateResponse
 import com.leo.erp.statement.customer.web.dto.CustomerStatementItemRequest;
 import com.leo.erp.statement.customer.web.dto.CustomerStatementRequest;
 import com.leo.erp.statement.customer.web.dto.CustomerStatementResponse;
+import com.leo.erp.statement.service.StatementSettlementMutationGuard;
 import org.springframework.data.domain.Page;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
@@ -42,6 +43,7 @@ public class CustomerStatementService extends AbstractCrudService<CustomerStatem
     private final CustomerStatementApplyService applyService;
     private final SalesOrderItemQueryService salesOrderItemQueryService;
     private final SourceAllocationLockService sourceAllocationLockService;
+    private final StatementSettlementMutationGuard settlementMutationGuard;
 
     @Autowired
     public CustomerStatementService(CustomerStatementRepository repository,
@@ -51,7 +53,8 @@ public class CustomerStatementService extends AbstractCrudService<CustomerStatem
                                     CustomerStatementSourceService customerStatementSourceService,
                                     CustomerStatementApplyService applyService,
                                     SalesOrderItemQueryService salesOrderItemQueryService,
-                                    SourceAllocationLockService sourceAllocationLockService) {
+                                    SourceAllocationLockService sourceAllocationLockService,
+                                    StatementSettlementMutationGuard settlementMutationGuard) {
         super(idGenerator);
         this.repository = repository;
         this.responseAssembler = responseAssembler;
@@ -60,6 +63,7 @@ public class CustomerStatementService extends AbstractCrudService<CustomerStatem
         this.applyService = applyService;
         this.salesOrderItemQueryService = salesOrderItemQueryService;
         this.sourceAllocationLockService = sourceAllocationLockService;
+        this.settlementMutationGuard = settlementMutationGuard;
     }
 
     @Transactional(readOnly = true)
@@ -193,6 +197,14 @@ public class CustomerStatementService extends AbstractCrudService<CustomerStatem
     @Override
     protected void beforeStatusUpdate(CustomerStatement entity, String currentStatus, String nextStatus) {
         lockSourceSalesOrders(entity, null);
+        if (StatusConstants.CONFIRMED.equals(currentStatus)
+                && StatusConstants.PENDING_CONFIRM.equals(nextStatus)) {
+            settlementMutationGuard.assertNoSettledAllocations(
+                    StatementSettlementMutationGuard.StatementType.CUSTOMER,
+                    entity.getId(),
+                    "反确认"
+            );
+        }
         workflowTransitionGuard.assertAuditPermissionForProtectedValue(
                 "customer-statement",
                 currentStatus,
@@ -204,12 +216,52 @@ public class CustomerStatementService extends AbstractCrudService<CustomerStatem
     @Override
     protected void apply(CustomerStatement entity, CustomerStatementRequest request) {
         lockSourceSalesOrders(entity, request);
+        if (entity.getId() != null) {
+            settlementMutationGuard.assertFinancialLinkageMutationAllowed(
+                    StatementSettlementMutationGuard.StatementType.CUSTOMER,
+                    entity.getId(),
+                    customerFinancialLinkageChanged(entity, request)
+            );
+        }
         applyService.apply(entity, request, this::nextId);
     }
 
     @Override
     protected void beforeDelete(CustomerStatement entity) {
         lockSourceSalesOrders(entity, null);
+        settlementMutationGuard.assertNoSettledAllocations(
+                StatementSettlementMutationGuard.StatementType.CUSTOMER,
+                entity.getId(),
+                "删除"
+        );
+    }
+
+    private boolean customerFinancialLinkageChanged(CustomerStatement entity, CustomerStatementRequest request) {
+        boolean identityChanged = explicitTextChanged(entity.getCustomerCode(), request.customerCode())
+                || !Objects.equals(normalizeText(entity.getCustomerName()), normalizeText(request.customerName()))
+                || (request.projectId() != null && !Objects.equals(entity.getProjectId(), request.projectId()))
+                || !Objects.equals(normalizeText(entity.getProjectName()), normalizeText(request.projectName()))
+                || (request.settlementCompanyId() != null
+                && !Objects.equals(entity.getSettlementCompanyId(), request.settlementCompanyId()));
+        Set<Long> existingSourceIds = entity.getItems().stream()
+                .map(CustomerStatementItem::getSourceSalesOrderItemId)
+                .filter(Objects::nonNull)
+                .collect(java.util.stream.Collectors.toSet());
+        Set<Long> requestedSourceIds = request.items().stream()
+                .map(CustomerStatementItemRequest::sourceSalesOrderItemId)
+                .filter(Objects::nonNull)
+                .collect(java.util.stream.Collectors.toSet());
+        return identityChanged || !existingSourceIds.equals(requestedSourceIds);
+    }
+
+    private boolean explicitTextChanged(String currentValue, String requestedValue) {
+        String normalizedRequested = normalizeText(requestedValue);
+        return normalizedRequested != null
+                && !Objects.equals(normalizeText(currentValue), normalizedRequested);
+    }
+
+    private String normalizeText(String value) {
+        return value == null || value.isBlank() ? null : value.trim();
     }
 
     private void lockSourceSalesOrders(CustomerStatement entity, CustomerStatementRequest request) {

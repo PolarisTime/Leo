@@ -31,6 +31,7 @@ import org.springframework.cache.CacheManager;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
@@ -126,6 +127,7 @@ public class CarrierService extends AbstractCrudService<Carrier, CarrierRequest,
         return carrierRepository.findByDeletedFlagFalseAndStatusOrderByCarrierCodeAsc(StatusConstants.NORMAL).stream()
                 .map(c -> new CarrierOptionResponse(
                         c.getId(),
+                        c.getCarrierCode(),
                         c.getCarrierName(),
                         c.getCarrierName(),
                         resolveVehiclePlates(c),
@@ -173,6 +175,7 @@ public class CarrierService extends AbstractCrudService<Carrier, CarrierRequest,
     @Override
     protected void validateUpdate(Carrier entity, CarrierRequest request) {
         if (!entity.getCarrierCode().equals(request.carrierCode())) {
+            assertCarrierCodeMutable(entity.getCarrierCode());
             ensureCarrierCodeUnique(request.carrierCode());
         }
     }
@@ -261,24 +264,8 @@ public class CarrierService extends AbstractCrudService<Carrier, CarrierRequest,
     private List<ReferenceCheck> carrierReferences(Carrier entity) {
         String carrierCode = entity.getCarrierCode();
         String carrierName = entity.getCarrierName();
-        return List.of(
-                ReferenceCheck.active("st_freight_statement", "carrier_code", carrierCode),
-                ReferenceCheck.activeWhen(
-                        "fm_payment",
-                        "counterparty_code",
-                        carrierCode,
-                        "business_type IN (?, ?)",
-                        "物流商",
-                        "物流付款"
-                ),
-                ReferenceCheck.activeWhen(
-                        "fm_ledger_adjustment",
-                        "counterparty_code",
-                        carrierCode,
-                        "counterparty_type = ?",
-                        "物流商"
-                ),
-                ReferenceCheck.active("lg_freight_bill", "carrier_name", carrierName),
+        List<ReferenceCheck> references = new ArrayList<>(carrierCodeReferences(carrierCode));
+        references.addAll(List.of(
                 ReferenceCheck.activeWhen(
                         "st_freight_statement",
                         "carrier_name",
@@ -298,6 +285,40 @@ public class CarrierService extends AbstractCrudService<Carrier, CarrierRequest,
                         "counterparty_name",
                         carrierName,
                         "counterparty_type = ? AND (counterparty_code IS NULL OR BTRIM(counterparty_code) = '')",
+                        "物流商"
+                )
+        ));
+        return List.copyOf(references);
+    }
+
+    private void assertCarrierCodeMutable(String carrierCode) {
+        if (referenceGuard == null) {
+            return;
+        }
+        referenceGuard.assertNoReferences(
+                "该物流商编码",
+                "修改",
+                carrierCodeReferences(carrierCode)
+        );
+    }
+
+    private List<ReferenceCheck> carrierCodeReferences(String carrierCode) {
+        return List.of(
+                ReferenceCheck.active("st_freight_statement", "carrier_code", carrierCode),
+                ReferenceCheck.active("lg_freight_bill", "carrier_code", carrierCode),
+                ReferenceCheck.activeWhen(
+                        "fm_payment",
+                        "counterparty_code",
+                        carrierCode,
+                        "business_type IN (?, ?)",
+                        "物流商",
+                        "物流付款"
+                ),
+                ReferenceCheck.activeWhen(
+                        "fm_ledger_adjustment",
+                        "counterparty_code",
+                        carrierCode,
+                        "counterparty_type = ?",
                         "物流商"
                 )
         );

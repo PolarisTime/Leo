@@ -29,6 +29,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
@@ -108,7 +109,12 @@ public class SupplierService extends AbstractCrudService<Supplier, SupplierReque
 
     private List<SupplierOptionResponse> loadActiveOptions() {
         return supplierRepository.findByDeletedFlagFalseAndStatusOrderBySupplierCodeAsc(StatusConstants.NORMAL).stream()
-                .map(s -> new SupplierOptionResponse(s.getId(), s.getSupplierName(), s.getSupplierName()))
+                .map(s -> new SupplierOptionResponse(
+                        s.getId(),
+                        s.getSupplierCode(),
+                        s.getSupplierName(),
+                        s.getSupplierName()
+                ))
                 .toList();
     }
 
@@ -159,6 +165,7 @@ public class SupplierService extends AbstractCrudService<Supplier, SupplierReque
     @Override
     protected void validateUpdate(Supplier entity, SupplierRequest request) {
         if (!entity.getSupplierCode().equals(request.supplierCode())) {
+            assertSupplierCodeMutable(entity.getSupplierCode());
             ensureSupplierCodeUnique(request.supplierCode());
         }
     }
@@ -218,11 +225,24 @@ public class SupplierService extends AbstractCrudService<Supplier, SupplierReque
         }
     }
 
-    private List<ReferenceCheck> supplierReferences(Supplier entity) {
-        String supplierCode = entity.getSupplierCode();
-        String supplierName = entity.getSupplierName();
+    private void assertSupplierCodeMutable(String supplierCode) {
+        if (referenceGuard == null) {
+            return;
+        }
+        referenceGuard.assertNoReferences(
+                "该供应商编码",
+                "修改",
+                supplierCodeReferences(supplierCode)
+        );
+    }
+
+    private List<ReferenceCheck> supplierCodeReferences(String supplierCode) {
         return List.of(
                 ReferenceCheck.active("st_supplier_statement", "supplier_code", supplierCode),
+                ReferenceCheck.active("po_purchase_order", "supplier_code", supplierCode),
+                ReferenceCheck.active("po_purchase_inbound", "supplier_code", supplierCode),
+                ReferenceCheck.active("po_purchase_refund", "supplier_code", supplierCode),
+                ReferenceCheck.active("fm_invoice_receipt", "supplier_code", supplierCode),
                 ReferenceCheck.activeWhen(
                         "fm_payment",
                         "counterparty_code",
@@ -237,9 +257,15 @@ public class SupplierService extends AbstractCrudService<Supplier, SupplierReque
                         supplierCode,
                         "counterparty_type = ?",
                         "供应商"
-                ),
-                ReferenceCheck.active("po_purchase_order", "supplier_name", supplierName),
-                ReferenceCheck.active("po_purchase_inbound", "supplier_name", supplierName),
+                )
+        );
+    }
+
+    private List<ReferenceCheck> supplierReferences(Supplier entity) {
+        String supplierCode = entity.getSupplierCode();
+        String supplierName = entity.getSupplierName();
+        List<ReferenceCheck> references = new ArrayList<>(supplierCodeReferences(supplierCode));
+        references.addAll(List.of(
                 ReferenceCheck.active("ct_purchase_contract", "supplier_name", supplierName),
                 ReferenceCheck.activeWhen(
                         "st_supplier_statement",
@@ -247,7 +273,6 @@ public class SupplierService extends AbstractCrudService<Supplier, SupplierReque
                         supplierName,
                         "(supplier_code IS NULL OR BTRIM(supplier_code) = '')"
                 ),
-                ReferenceCheck.active("fm_invoice_receipt", "supplier_name", supplierName),
                 ReferenceCheck.activeWhen(
                         "fm_payment",
                         "counterparty_name",
@@ -263,7 +288,8 @@ public class SupplierService extends AbstractCrudService<Supplier, SupplierReque
                         "counterparty_type = ? AND (counterparty_code IS NULL OR BTRIM(counterparty_code) = '')",
                         "供应商"
                 )
-        );
+        ));
+        return List.copyOf(references);
     }
 
 }

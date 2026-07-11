@@ -19,6 +19,8 @@ import com.leo.erp.master.customer.repository.CustomerRepository;
 import com.leo.erp.master.project.repository.ProjectRepository;
 import com.leo.erp.master.supplier.repository.SupplierRepository;
 import com.leo.erp.security.permission.WorkflowTransitionGuard;
+import com.leo.erp.system.company.domain.entity.CompanySetting;
+import com.leo.erp.system.company.service.CompanySettingService;
 import org.springframework.data.domain.Page;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
@@ -44,6 +46,7 @@ public class LedgerAdjustmentService extends AbstractCrudService<LedgerAdjustmen
     private final CarrierRepository carrierRepository;
     private final ProjectRepository projectRepository;
     private final WorkflowTransitionGuard workflowTransitionGuard;
+    private final CompanySettingService companySettingService;
 
     public LedgerAdjustmentService(LedgerAdjustmentRepository repository,
                                    LedgerAdjustmentMapper mapper,
@@ -52,7 +55,8 @@ public class LedgerAdjustmentService extends AbstractCrudService<LedgerAdjustmen
                                    SupplierRepository supplierRepository,
                                    CarrierRepository carrierRepository,
                                    ProjectRepository projectRepository,
-                                   WorkflowTransitionGuard workflowTransitionGuard) {
+                                   WorkflowTransitionGuard workflowTransitionGuard,
+                                   CompanySettingService companySettingService) {
         super(idGenerator);
         this.repository = repository;
         this.mapper = mapper;
@@ -61,6 +65,7 @@ public class LedgerAdjustmentService extends AbstractCrudService<LedgerAdjustmen
         this.carrierRepository = carrierRepository;
         this.projectRepository = projectRepository;
         this.workflowTransitionGuard = workflowTransitionGuard;
+        this.companySettingService = companySettingService;
     }
 
     @Transactional(readOnly = true)
@@ -79,6 +84,7 @@ public class LedgerAdjustmentService extends AbstractCrudService<LedgerAdjustmen
                 )
                 .and(Specs.equalIfPresent("direction", direction))
                 .and(Specs.equalIfPresent("counterpartyType", counterpartyType))
+                .and(Specs.equalValueIfPresent("settlementCompanyId", filter.settlementCompanyId()))
                 .and(Specs.equalIfPresent("status", filter.status()))
                 .and(Specs.betweenIfPresent("adjustmentDate", filter.startDate(), filter.endDate()));
         return page(query, spec, repository);
@@ -118,6 +124,8 @@ public class LedgerAdjustmentService extends AbstractCrudService<LedgerAdjustmen
                 request.counterpartyType(),
                 request.counterpartyCode(),
                 request.counterpartyName(),
+                request.settlementCompanyId(),
+                request.settlementCompanyName(),
                 request.projectId(),
                 request.projectName(),
                 request.adjustmentDate(),
@@ -138,6 +146,8 @@ public class LedgerAdjustmentService extends AbstractCrudService<LedgerAdjustmen
                 request.counterpartyType(),
                 request.counterpartyCode(),
                 request.counterpartyName(),
+                request.settlementCompanyId(),
+                request.settlementCompanyName(),
                 request.projectId(),
                 request.projectName(),
                 request.adjustmentDate(),
@@ -196,6 +206,9 @@ public class LedgerAdjustmentService extends AbstractCrudService<LedgerAdjustmen
         );
         BigDecimal amount = normalizeAmount(request.amount());
         ResolvedCounterparty counterparty = resolveCounterparty(counterpartyType, request.counterpartyCode());
+        CompanySetting settlementCompany = companySettingService.requireActiveSettlementCompany(
+                request.settlementCompanyId()
+        );
         ResolvedProject project = resolveProject(request.projectId(), request.projectName());
 
         entity.setAdjustmentNo(request.adjustmentNo());
@@ -203,6 +216,8 @@ public class LedgerAdjustmentService extends AbstractCrudService<LedgerAdjustmen
         entity.setCounterpartyType(counterpartyType);
         entity.setCounterpartyCode(counterparty.code());
         entity.setCounterpartyName(counterparty.name());
+        entity.setSettlementCompanyId(settlementCompany.getId());
+        entity.setSettlementCompanyName(settlementCompany.getCompanyName());
         entity.setProjectId(project.id());
         entity.setProjectName(project.name());
         entity.setAdjustmentDate(request.adjustmentDate());

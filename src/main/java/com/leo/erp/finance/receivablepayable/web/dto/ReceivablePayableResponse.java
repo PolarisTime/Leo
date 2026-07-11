@@ -8,6 +8,8 @@ public record ReceivablePayableResponse(
         String counterpartyType,
         String counterpartyCode,
         String counterpartyName,
+        Long settlementCompanyId,
+        String settlementCompanyName,
         String reconciliationStatus,
         BigDecimal recognizedAmount,
         BigDecimal settledAmount,
@@ -23,6 +25,28 @@ public record ReceivablePayableResponse(
     public ReceivablePayableResponse(String id,
                                      String direction,
                                      String counterpartyType,
+                                     String counterpartyCode,
+                                     String counterpartyName,
+                                     String reconciliationStatus,
+                                     BigDecimal recognizedAmount,
+                                     BigDecimal settledAmount,
+                                     BigDecimal balanceAmount,
+                                     BigDecimal days0To30Amount,
+                                     BigDecimal days31To60Amount,
+                                     BigDecimal days61To90Amount,
+                                     BigDecimal daysOver90Amount,
+                                     Long entryCount,
+                                     String status,
+                                     String remark) {
+        this(id, direction, counterpartyType, counterpartyCode, counterpartyName, null, null,
+                reconciliationStatus, recognizedAmount, settledAmount, balanceAmount,
+                days0To30Amount, days31To60Amount, days61To90Amount, daysOver90Amount,
+                entryCount, status, remark);
+    }
+
+    public ReceivablePayableResponse(String id,
+                                     String direction,
+                                     String counterpartyType,
                                      String counterpartyName,
                                      BigDecimal recognizedAmount,
                                      BigDecimal settledAmount,
@@ -34,7 +58,8 @@ public record ReceivablePayableResponse(
                                      Long entryCount,
                                      String status,
                                      String remark) {
-        this(id, direction, counterpartyType, null, counterpartyName, "未对账", recognizedAmount, settledAmount, balanceAmount,
-                days0To30Amount, days31To60Amount, days61To90Amount, daysOver90Amount, entryCount, status, remark);
+        this(id, direction, counterpartyType, null, counterpartyName, null, null, "未对账",
+                recognizedAmount, settledAmount, balanceAmount, days0To30Amount, days31To60Amount,
+                days61To90Amount, daysOver90Amount, entryCount, status, remark);
     }
 }

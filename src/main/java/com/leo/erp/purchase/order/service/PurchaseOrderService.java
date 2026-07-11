@@ -7,10 +7,14 @@ import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.service.AbstractCrudService;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
+import com.leo.erp.common.support.BusinessDocumentValidator;
 import com.leo.erp.common.support.BusinessStatusValidator;
 import com.leo.erp.common.support.StatusConstants;
+import com.leo.erp.finance.common.service.InvoiceSourceMutationGuard;
+import com.leo.erp.finance.payment.service.PaymentPurchasePrepaymentService;
 import com.leo.erp.purchase.order.domain.entity.PurchaseOrder;
 import com.leo.erp.purchase.order.repository.PurchaseOrderRepository;
+import com.leo.erp.purchase.refund.repository.PurchaseRefundRepository;
 import com.leo.erp.purchase.order.web.dto.PurchaseOrderImportCandidateResponse;
 import com.leo.erp.purchase.order.web.dto.PieceWeightResponse;
 import com.leo.erp.purchase.order.web.dto.PurchaseOrderRequest;
@@ -24,14 +28,21 @@ import org.springframework.data.domain.PageImpl;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.beans.factory.annotation.Autowired;
 
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
 public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, PurchaseOrderRequest, PurchaseOrderResponse> {
+
+    private static final Set<String> PREPAYMENT_SOURCE_STATUSES = Set.of(
+            StatusConstants.AUDITED,
+            StatusConstants.PURCHASE_COMPLETED
+    );
 
     private final PurchaseOrderRepository purchaseOrderRepository;
     private final PurchaseOrderAvailabilityService availabilityService;
@@ -41,6 +52,9 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
     private final PurchaseOrderPieceWeightQueryService pieceWeightQueryService;
     private final WorkflowTransitionGuard workflowTransitionGuard;
     private final CompanySettingService companySettingService;
+    private final InvoiceSourceMutationGuard invoiceSourceMutationGuard;
+    private final PurchaseRefundRepository purchaseRefundRepository;
+    private final PaymentPurchasePrepaymentService purchasePrepaymentService;
 
     public PurchaseOrderService(PurchaseOrderRepository purchaseOrderRepository,
                                 SnowflakeIdGenerator snowflakeIdGenerator,
@@ -51,6 +65,85 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
                                 PurchaseOrderPieceWeightQueryService pieceWeightQueryService,
                                 WorkflowTransitionGuard workflowTransitionGuard,
                                 CompanySettingService companySettingService) {
+        this(
+                purchaseOrderRepository,
+                snowflakeIdGenerator,
+                availabilityService,
+                responseAssembler,
+                supplierResolver,
+                purchaseOrderApplyService,
+                pieceWeightQueryService,
+                workflowTransitionGuard,
+                companySettingService,
+                null
+        );
+    }
+
+    public PurchaseOrderService(PurchaseOrderRepository purchaseOrderRepository,
+                                SnowflakeIdGenerator snowflakeIdGenerator,
+                                PurchaseOrderAvailabilityService availabilityService,
+                                PurchaseOrderResponseAssembler responseAssembler,
+                                PurchaseOrderSupplierResolver supplierResolver,
+                                PurchaseOrderApplyService purchaseOrderApplyService,
+                                PurchaseOrderPieceWeightQueryService pieceWeightQueryService,
+                                WorkflowTransitionGuard workflowTransitionGuard,
+                                CompanySettingService companySettingService,
+                                InvoiceSourceMutationGuard invoiceSourceMutationGuard) {
+        this(
+                purchaseOrderRepository,
+                snowflakeIdGenerator,
+                availabilityService,
+                responseAssembler,
+                supplierResolver,
+                purchaseOrderApplyService,
+                pieceWeightQueryService,
+                workflowTransitionGuard,
+                companySettingService,
+                invoiceSourceMutationGuard,
+                null
+        );
+    }
+
+    public PurchaseOrderService(PurchaseOrderRepository purchaseOrderRepository,
+                                SnowflakeIdGenerator snowflakeIdGenerator,
+                                PurchaseOrderAvailabilityService availabilityService,
+                                PurchaseOrderResponseAssembler responseAssembler,
+                                PurchaseOrderSupplierResolver supplierResolver,
+                                PurchaseOrderApplyService purchaseOrderApplyService,
+                                PurchaseOrderPieceWeightQueryService pieceWeightQueryService,
+                                WorkflowTransitionGuard workflowTransitionGuard,
+                                CompanySettingService companySettingService,
+                                InvoiceSourceMutationGuard invoiceSourceMutationGuard,
+                                PurchaseRefundRepository purchaseRefundRepository) {
+        this(
+                purchaseOrderRepository,
+                snowflakeIdGenerator,
+                availabilityService,
+                responseAssembler,
+                supplierResolver,
+                purchaseOrderApplyService,
+                pieceWeightQueryService,
+                workflowTransitionGuard,
+                companySettingService,
+                invoiceSourceMutationGuard,
+                purchaseRefundRepository,
+                null
+        );
+    }
+
+    @Autowired
+    public PurchaseOrderService(PurchaseOrderRepository purchaseOrderRepository,
+                                SnowflakeIdGenerator snowflakeIdGenerator,
+                                PurchaseOrderAvailabilityService availabilityService,
+                                PurchaseOrderResponseAssembler responseAssembler,
+                                PurchaseOrderSupplierResolver supplierResolver,
+                                PurchaseOrderApplyService purchaseOrderApplyService,
+                                PurchaseOrderPieceWeightQueryService pieceWeightQueryService,
+                                WorkflowTransitionGuard workflowTransitionGuard,
+                                CompanySettingService companySettingService,
+                                InvoiceSourceMutationGuard invoiceSourceMutationGuard,
+                                PurchaseRefundRepository purchaseRefundRepository,
+                                PaymentPurchasePrepaymentService purchasePrepaymentService) {
         super(snowflakeIdGenerator);
         this.purchaseOrderRepository = purchaseOrderRepository;
         this.availabilityService = availabilityService;
@@ -60,6 +153,9 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
         this.pieceWeightQueryService = pieceWeightQueryService;
         this.workflowTransitionGuard = workflowTransitionGuard;
         this.companySettingService = companySettingService;
+        this.invoiceSourceMutationGuard = invoiceSourceMutationGuard;
+        this.purchaseRefundRepository = purchaseRefundRepository;
+        this.purchasePrepaymentService = purchasePrepaymentService;
     }
 
     private static final String[] PURCHASE_ORDER_SEARCH_FIELDS = {"orderNo", "supplierName"};
@@ -92,6 +188,18 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
                 .and(Specs.equalIfPresent("status", filter.status()))
                 .and(Specs.dateTimeBetweenDatesIfPresent("orderDate", filter.startDate(), filter.endDate()));
         return importableCandidates(query, spec, candidateUsage);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<PurchaseOrderImportCandidateResponse> prepaymentCandidates(PageQuery query, PageFilter filter) {
+        Specification<PurchaseOrder> spec = Specs.<PurchaseOrder>notDeleted()
+                .and(Specs.keywordLike(filter.keyword(), PURCHASE_ORDER_SEARCH_FIELDS))
+                .and(Specs.equalIfPresent("supplierName", filter.name()))
+                .and(Specs.equalValueIfPresent("settlementCompanyId", filter.settlementCompanyId()))
+                .and(prepaymentSourceStatus(filter.status()))
+                .and(Specs.dateTimeBetweenDatesIfPresent("orderDate", filter.startDate(), filter.endDate()));
+        return pageEntities(query, spec, purchaseOrderRepository)
+                .map(order -> toImportCandidateResponse(order, null));
     }
 
     private Page<PurchaseOrderImportCandidateResponse> importableCandidates(
@@ -139,10 +247,11 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
         return responseAssembler.toDetailResponse(order);
     }
 
-    private PurchaseOrderImportCandidateResponse toImportCandidateResponse(PurchaseOrder order, int importableQuantity) {
+    private PurchaseOrderImportCandidateResponse toImportCandidateResponse(PurchaseOrder order, Integer importableQuantity) {
         return new PurchaseOrderImportCandidateResponse(
                 order.getId(),
                 order.getOrderNo(),
+                order.getSupplierCode(),
                 order.getSupplierName(),
                 order.getSettlementCompanyId(),
                 order.getSettlementCompanyName(),
@@ -153,6 +262,19 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
                 order.getStatus(),
                 importableQuantity
         );
+    }
+
+    private Specification<PurchaseOrder> prepaymentSourceStatus(String status) {
+        return (root, query, criteriaBuilder) -> {
+            String requestedStatus = BusinessDocumentValidator.trimToNull(status);
+            if (requestedStatus == null) {
+                return root.get("status").in(PREPAYMENT_SOURCE_STATUSES);
+            }
+            if (!PREPAYMENT_SOURCE_STATUSES.contains(requestedStatus)) {
+                return criteriaBuilder.disjunction();
+            }
+            return criteriaBuilder.equal(root.get("status"), requestedStatus);
+        };
     }
 
     @Override
@@ -174,6 +296,7 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
     protected PurchaseOrderRequest normalizeCreateRequest(PurchaseOrderRequest request, long entityId) {
         return new PurchaseOrderRequest(
                 resolveCreateBusinessNo("purchase-order", request.orderNo(), entityId),
+                request.supplierCode(),
                 request.supplierName(),
                 request.orderDate(),
                 request.buyerName(),
@@ -188,6 +311,9 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
     protected PurchaseOrderRequest normalizeUpdateRequest(PurchaseOrder entity, PurchaseOrderRequest request) {
         return new PurchaseOrderRequest(
                 entity.getOrderNo(),
+                request.supplierCode() == null || request.supplierCode().isBlank()
+                        ? entity.getSupplierCode()
+                        : request.supplierCode(),
                 request.supplierName(),
                 request.orderDate(),
                 request.buyerName(),
@@ -235,6 +361,13 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
 
     @Override
     protected void apply(PurchaseOrder purchaseOrder, PurchaseOrderRequest request) {
+        if (purchaseOrder.getId() != null) {
+            assertNoActivePurchaseRefund(purchaseOrder, "修改");
+            assertNoActivePurchasePrepayment(purchaseOrder, "修改");
+            if (invoiceSourceMutationGuard != null) {
+                invoiceSourceMutationGuard.assertPurchaseOrderMutable(purchaseOrder, "修改");
+            }
+        }
         assertSettlementCompanyMutable(purchaseOrder, request.settlementCompanyId());
         String nextStatus = BusinessStatusValidator.normalizeWithDefault(
                 request.status(),
@@ -250,7 +383,10 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
                 StatusConstants.PURCHASE_COMPLETED
         );
         purchaseOrder.setOrderNo(request.orderNo());
-        purchaseOrder.setSupplierName(supplierResolver.requireMasterSupplierName(request.supplierName()));
+        PurchaseOrderSupplierResolver.SupplierIdentity supplierIdentity =
+                supplierResolver.requireMasterSupplier(request.supplierCode(), request.supplierName());
+        purchaseOrder.setSupplierCode(supplierIdentity.supplierCode());
+        purchaseOrder.setSupplierName(supplierIdentity.supplierName());
         purchaseOrder.setOrderDate(request.orderDate());
         purchaseOrder.setBuyerName(request.buyerName());
         SettlementCompanySnapshot settlementCompany = resolveSettlementCompany(request.settlementCompanyId());
@@ -259,6 +395,27 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
         purchaseOrder.setStatus(nextStatus);
         purchaseOrder.setRemark(request.remark());
         purchaseOrderApplyService.applyItems(purchaseOrder, request, this::nextId);
+    }
+
+    @Override
+    protected void beforeStatusUpdate(PurchaseOrder entity, String currentStatus, String nextStatus) {
+        if (StatusConstants.DRAFT.equals(nextStatus)
+                && !StatusConstants.DRAFT.equals(currentStatus)) {
+            assertNoActivePurchaseRefund(entity, "反审核");
+            assertNoActivePurchasePrepayment(entity, "反审核");
+            if (invoiceSourceMutationGuard != null) {
+                invoiceSourceMutationGuard.assertPurchaseOrderMutable(entity, "反审核");
+            }
+        }
+    }
+
+    @Override
+    protected void beforeDelete(PurchaseOrder entity) {
+        assertNoActivePurchaseRefund(entity, "删除");
+        assertNoActivePurchasePrepayment(entity, "删除");
+        if (invoiceSourceMutationGuard != null) {
+            invoiceSourceMutationGuard.assertPurchaseOrderMutable(entity, "删除");
+        }
     }
 
     @Override
@@ -291,6 +448,22 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
         if (StatusConstants.AUDITED.equals(purchaseOrder.getStatus())
                 && !purchaseOrder.getSettlementCompanyId().equals(requestedSettlementCompanyId)) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "已审核采购订单不允许修改采购结算主体");
+        }
+    }
+
+    private void assertNoActivePurchaseRefund(PurchaseOrder purchaseOrder, String action) {
+        if (purchaseRefundRepository != null
+                && purchaseRefundRepository.existsBySourcePurchaseOrderIdAndDeletedFlagFalse(purchaseOrder.getId())) {
+            throw new BusinessException(
+                    ErrorCode.BUSINESS_ERROR,
+                    "采购订单已存在采购退款单，不能" + action
+            );
+        }
+    }
+
+    private void assertNoActivePurchasePrepayment(PurchaseOrder purchaseOrder, String action) {
+        if (purchasePrepaymentService != null) {
+            purchasePrepaymentService.assertNoActivePrepayment(purchaseOrder.getId(), action);
         }
     }
 

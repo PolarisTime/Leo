@@ -38,6 +38,7 @@ public class SalesOutboundService extends AbstractCrudService<SalesOutbound, Sal
     private final SalesOutboundSaveService saveService;
     private final SalesOutboundPurchaseInboundGuard purchaseInboundGuard;
     private final SourceAllocationLockService sourceAllocationLockService;
+    private final SalesOutboundDownstreamMutationGuard downstreamMutationGuard;
 
     @Autowired
     public SalesOutboundService(SalesOutboundRepository repository,
@@ -47,7 +48,8 @@ public class SalesOutboundService extends AbstractCrudService<SalesOutbound, Sal
                                 SalesOutboundResponseAssembler responseAssembler,
                                 SalesOutboundSaveService saveService,
                                 SalesOutboundPurchaseInboundGuard purchaseInboundGuard,
-                                SourceAllocationLockService sourceAllocationLockService) {
+                                SourceAllocationLockService sourceAllocationLockService,
+                                SalesOutboundDownstreamMutationGuard downstreamMutationGuard) {
         super(idGenerator);
         this.repository = repository;
         this.workflowTransitionGuard = workflowTransitionGuard;
@@ -56,6 +58,7 @@ public class SalesOutboundService extends AbstractCrudService<SalesOutbound, Sal
         this.saveService = saveService;
         this.purchaseInboundGuard = purchaseInboundGuard;
         this.sourceAllocationLockService = sourceAllocationLockService;
+        this.downstreamMutationGuard = downstreamMutationGuard;
     }
 
     @Transactional(readOnly = true)
@@ -255,6 +258,15 @@ public class SalesOutboundService extends AbstractCrudService<SalesOutbound, Sal
     @Override
     protected void beforeStatusUpdate(SalesOutbound entity, String currentStatus, String nextStatus) {
         lockSourceSalesOrderItems(entity.getItems(), List.of());
+        if (StatusConstants.AUDITED.equals(currentStatus) && StatusConstants.DRAFT.equals(nextStatus)) {
+            sourceAllocationLockService.lockDocumentSources(
+                    List.of(),
+                    List.of(),
+                    List.of(entity.getId()),
+                    List.of()
+            );
+            downstreamMutationGuard.assertReverseAuditAllowed(entity);
+        }
         if (StatusConstants.AUDITED.equals(nextStatus)) {
             purchaseInboundGuard.assertPurchaseInboundCompletedBeforeAudit(entity);
         }

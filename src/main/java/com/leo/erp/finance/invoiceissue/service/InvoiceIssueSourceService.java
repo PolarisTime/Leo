@@ -164,6 +164,7 @@ public class InvoiceIssueSourceService {
                 .collect(HashMap::new, (map, summary) -> map.put(
                         summary.getSourceSalesOrderItemId(),
                         new AllocationProgress(
+                                summary.getTotalQuantity() == null ? 0L : summary.getTotalQuantity(),
                                 TradeItemCalculator.safeBigDecimal(summary.getTotalWeightTon()),
                                 TradeItemCalculator.safeBigDecimal(summary.getTotalAmount())
                         )
@@ -225,6 +226,13 @@ public class InvoiceIssueSourceService {
                 sourceSalesOrderItemId,
                 AllocationProgress.EMPTY
         );
+        long nextQuantity = Math.addExact(
+                Math.addExact(allocatedProgress.quantity(), requestProgress.quantity()),
+                source.quantity().longValue()
+        );
+        if (nextQuantity > sourceSalesOrderItem.getQuantity().longValue()) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行来源销售订单明细可开票数量不足");
+        }
         BigDecimal nextWeightTon = allocatedProgress.weightTon()
                 .add(requestProgress.weightTon())
                 .add(resolvedItem.weightTon());
@@ -241,7 +249,7 @@ public class InvoiceIssueSourceService {
 
         requestProgressMap.merge(
                 sourceSalesOrderItemId,
-                new AllocationProgress(resolvedItem.weightTon(), resolvedItem.amount()),
+                new AllocationProgress(source.quantity().longValue(), resolvedItem.weightTon(), resolvedItem.amount()),
                 AllocationProgress::merge
         );
     }

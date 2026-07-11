@@ -173,8 +173,9 @@ public class SalesOutboundApplyService {
         item.setPieceWeightTon(TradeItemCalculator.scaleWeightTon(source.pieceWeightTon()));
         item.setPiecesPerBundle(source.piecesPerBundle());
         item.setWeightTon(weightTon);
-        item.setUnitPrice(source.unitPrice());
-        BigDecimal amount = TradeItemCalculator.calculateAmount(weightTon, source.unitPrice());
+        BigDecimal sourceUnitPrice = TradeItemCalculator.scaleAmount(sourceSalesOrderItem.getUnitPrice());
+        item.setUnitPrice(sourceUnitPrice);
+        BigDecimal amount = TradeItemCalculator.calculateAmount(weightTon, sourceUnitPrice);
         item.setAmount(amount);
         return new LineApplyResult(sourceSalesOrderItemId, warehouseName, weightTon, amount);
     }
