@@ -78,6 +78,15 @@ class SalesOrderServiceTest {
     }
 
     @Test
+    void shouldRequireDeliveryVerificationGuardAsConstructorDependency() {
+        boolean hasRequiredDependency = java.util.Arrays.stream(SalesOrderService.class.getConstructors())
+                .anyMatch(constructor -> java.util.Arrays.asList(constructor.getParameterTypes())
+                        .contains(SalesOrderDeliveryVerificationGuard.class));
+
+        assertThat(hasRequiredDependency).isTrue();
+    }
+
+    @Test
     void shouldLockPurchaseSourcesBeforeCreatingSalesOrderItems() {
         SalesOrderRepository repository = mock(SalesOrderRepository.class);
         SnowflakeIdGenerator idGenerator = mock(SnowflakeIdGenerator.class);
@@ -746,6 +755,33 @@ class SalesOrderServiceTest {
     }
 
     @Test
+    void shouldCompleteDeliveryVerificationWithoutPricingAdjustment() {
+        SalesOrderRepository repository = mock(SalesOrderRepository.class);
+        SalesOrderMapper mapper = mock(SalesOrderMapper.class);
+        SalesOrderService service = service(
+                repository, mock(SnowflakeIdGenerator.class), mapper,
+                mock(TradeItemMaterialSupport.class), mock(PurchaseItemQueryAppService.class),
+                mock(PurchaseItemPieceWeightAppService.class), mock(SalesOrderItemRepository.class),
+                mock(WarehouseSelectionSupport.class), stubbedSalesOrderItemMapper(),
+                mock(WorkflowTransitionGuard.class)
+        );
+        com.leo.erp.sales.order.domain.entity.SalesOrder order =
+                new com.leo.erp.sales.order.domain.entity.SalesOrder();
+        order.setId(1L);
+        order.setOrderNo("SO-DIRECT-COMPLETE");
+        order.setStatus(StatusConstants.DELIVERY_VERIFICATION);
+        order.setItems(new ArrayList<>());
+        when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(order));
+        when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(mapper.toResponse(any())).thenReturn(mock(SalesOrderResponse.class));
+
+        service.updateStatus(1L, StatusConstants.SALES_COMPLETED);
+
+        assertThat(order.getStatus()).isEqualTo(StatusConstants.SALES_COMPLETED);
+        verify(repository).save(order);
+    }
+
+    @Test
     void shouldRejectWhenSourcePurchaseOrderItemNotFound() {
         SalesOrderRepository repository = mock(SalesOrderRepository.class);
         PurchaseItemQueryAppService purchaseItemQueryAppService = mock(PurchaseItemQueryAppService.class);
@@ -1209,26 +1245,49 @@ class SalesOrderServiceTest {
     }
 
     @Test
-    void shouldRejectPricingUpdateWhenSalesOrderCompleted() {
+    void shouldCompleteDeliveryVerificationAfterDateRemarkAndPricingUpdate() {
         SalesOrderRepository repository = mock(SalesOrderRepository.class);
+        SalesOrderMapper mapper = mock(SalesOrderMapper.class);
+        SalesOrderOutboundPricingSyncService outboundPricingSyncService = mock(SalesOrderOutboundPricingSyncService.class);
+        SalesOrderCompletionSyncService completionSyncService = mock(SalesOrderCompletionSyncService.class);
         SalesOrderService service = service(
-                repository, mock(SnowflakeIdGenerator.class), mock(SalesOrderMapper.class),
+                repository, mock(SnowflakeIdGenerator.class), mapper,
                 mock(TradeItemMaterialSupport.class), mock(PurchaseItemQueryAppService.class),
                 mock(PurchaseItemPieceWeightAppService.class), mock(SalesOrderItemRepository.class),
                 mock(WarehouseSelectionSupport.class), stubbedSalesOrderItemMapper(),
-                mock(WorkflowTransitionGuard.class), mock(SalesOrderOutboundPricingSyncService.class),
-                mock(SalesOrderCompletionSyncService.class)
+                mock(WorkflowTransitionGuard.class), outboundPricingSyncService,
+                completionSyncService
         );
 
-        var order = auditedSalesOrder("SO-PRICE-004", StatusConstants.SALES_COMPLETED, new BigDecimal("3000.00"));
-        SalesOrderRequest request = pricingUpdateRequest(order, new BigDecimal("3888.00"), StatusConstants.SALES_COMPLETED);
+        var order = auditedSalesOrder("SO-PRICE-004", StatusConstants.DELIVERY_VERIFICATION, new BigDecimal("3000.00"));
+        SalesOrderRequest baseRequest = pricingUpdateRequest(
+                order,
+                new BigDecimal("3888.00"),
+                StatusConstants.DELIVERY_VERIFICATION
+        );
+        SalesOrderRequest request = new SalesOrderRequest(
+                baseRequest.orderNo(), baseRequest.purchaseInboundNo(), baseRequest.purchaseOrderNo(),
+                baseRequest.customerCode(), baseRequest.customerName(), baseRequest.projectId(),
+                baseRequest.projectName(), LocalDate.of(2026, 4, 28), baseRequest.salesName(),
+                baseRequest.status(), "完成销售后调整", baseRequest.items()
+        );
 
         when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(order));
+        when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(mapper.toResponse(any())).thenReturn(mock(SalesOrderResponse.class));
 
-        assertThatThrownBy(() -> service.update(1L, request))
-                .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("当前单据状态为「完成销售」，不能编辑");
-        verify(repository, never()).save(any());
+        service.update(1L, request);
+
+        assertThat(order.getStatus()).isEqualTo(StatusConstants.SALES_COMPLETED);
+        assertThat(order.getDeliveryDate()).isEqualTo(LocalDate.of(2026, 4, 28));
+        assertThat(order.getRemark()).isEqualTo("完成销售后调整");
+        assertThat(order.getItems().get(0).getUnitPrice()).isEqualByComparingTo("3888.00");
+        verify(repository).save(order);
+        verify(outboundPricingSyncService).syncAuditedOutboundPricing(
+                eq(List.of(order.getItems().get(0).getId())),
+                eq(Map.of(order.getItems().get(0).getId(), new BigDecimal("3888.00")))
+        );
+        verify(completionSyncService).syncBySalesOrderReference("SO-PRICE-004");
     }
 
     @Test

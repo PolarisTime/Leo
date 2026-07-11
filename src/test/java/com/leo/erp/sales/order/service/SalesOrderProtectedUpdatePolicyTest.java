@@ -71,6 +71,20 @@ class SalesOrderProtectedUpdatePolicyTest {
     }
 
     @Test
+    void shouldAllowDeliveryVerificationDateRemarkAndPricingUpdate() {
+        SalesOrder order = auditedSalesOrder();
+        order.setStatus(StatusConstants.DELIVERY_VERIFICATION);
+        SalesOrderRequest request = requestWith(order, StatusConstants.DELIVERY_VERIFICATION, builder -> {
+            builder.deliveryDate = order.getDeliveryDate().plusDays(1);
+            builder.remark = "完成销售后调整";
+            builder.items = List.of(itemRequestWith(order.getItems().get(0), itemBuilder ->
+                    itemBuilder.unitPrice = new BigDecimal("3200.00")));
+        });
+
+        assertThat(policy.allowsProtectedUpdate(order, request)).isTrue();
+    }
+
+    @Test
     void shouldRejectStatusOnlyUpdateWhenPrivateInputsAreNull() throws ReflectiveOperationException {
         SalesOrder order = auditedSalesOrder();
         SalesOrderRequest request = requestFrom(order, StatusConstants.DRAFT, order.getDeliveryDate(), 2, order.getItems().get(0).getUnitPrice());

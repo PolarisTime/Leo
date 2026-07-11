@@ -106,17 +106,18 @@ public class SalesOrderCompletionSyncService {
     private boolean applyCompletedStatus(SalesOrder order, boolean completed) {
         String currentStatus = normalize(order.getStatus());
         if (!StatusConstants.AUDITED.equals(currentStatus)
+                && !StatusConstants.DELIVERY_VERIFICATION.equals(currentStatus)
                 && !StatusConstants.SALES_COMPLETED.equals(currentStatus)) {
             return false;
         }
         if (completed) {
-            if (StatusConstants.SALES_COMPLETED.equals(currentStatus)) {
+            if (!StatusConstants.AUDITED.equals(currentStatus)) {
                 return false;
             }
-            order.setStatus(StatusConstants.SALES_COMPLETED);
+            order.setStatus(StatusConstants.DELIVERY_VERIFICATION);
             return true;
         }
-        if (!StatusConstants.SALES_COMPLETED.equals(currentStatus)) {
+        if (StatusConstants.AUDITED.equals(currentStatus)) {
             return false;
         }
         order.setStatus(StatusConstants.AUDITED);

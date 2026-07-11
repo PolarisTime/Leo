@@ -9,6 +9,7 @@ import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.service.AbstractCrudService;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
+import com.leo.erp.finance.common.service.InvoiceSourceMutationGuard;
 import com.leo.erp.sales.order.domain.entity.SalesOrder;
 import com.leo.erp.sales.order.domain.entity.SalesOrderItem;
 import com.leo.erp.sales.order.repository.SalesOrderItemRepository;
@@ -40,6 +41,34 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
     private final SalesOrderSaveService saveService;
     private final SalesOrderItemRepository salesOrderItemRepository;
     private final SourceAllocationLockService sourceAllocationLockService;
+    private final InvoiceSourceMutationGuard invoiceSourceMutationGuard;
+    private final SalesOrderDeliveryVerificationGuard deliveryVerificationGuard;
+
+    public SalesOrderService(SalesOrderRepository repository,
+                             SnowflakeIdGenerator idGenerator,
+                             SalesOrderResponseAssembler responseAssembler,
+                             SalesOrderApplyService salesOrderApplyService,
+                             SalesOrderPurchaseAllocationService salesOrderPurchaseAllocationService,
+                             SalesOrderAuditedPricingService salesOrderAuditedPricingService,
+                             SalesOrderProtectedUpdatePolicy protectedUpdatePolicy,
+                             SalesOrderSaveService saveService,
+                             SalesOrderItemRepository salesOrderItemRepository,
+                             SourceAllocationLockService sourceAllocationLockService) {
+        this(
+                repository,
+                idGenerator,
+                responseAssembler,
+                salesOrderApplyService,
+                salesOrderPurchaseAllocationService,
+                salesOrderAuditedPricingService,
+                protectedUpdatePolicy,
+                saveService,
+                salesOrderItemRepository,
+                sourceAllocationLockService,
+                null,
+                null
+        );
+    }
 
     @Autowired
     public SalesOrderService(SalesOrderRepository repository,
@@ -51,7 +80,9 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
                              SalesOrderProtectedUpdatePolicy protectedUpdatePolicy,
                              SalesOrderSaveService saveService,
                              SalesOrderItemRepository salesOrderItemRepository,
-                             SourceAllocationLockService sourceAllocationLockService) {
+                             SourceAllocationLockService sourceAllocationLockService,
+                             InvoiceSourceMutationGuard invoiceSourceMutationGuard,
+                             SalesOrderDeliveryVerificationGuard deliveryVerificationGuard) {
         super(idGenerator);
         this.repository = repository;
         this.responseAssembler = responseAssembler;
@@ -62,6 +93,8 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
         this.saveService = saveService;
         this.salesOrderItemRepository = salesOrderItemRepository;
         this.sourceAllocationLockService = sourceAllocationLockService;
+        this.invoiceSourceMutationGuard = invoiceSourceMutationGuard;
+        this.deliveryVerificationGuard = deliveryVerificationGuard;
     }
 
     @Transactional(readOnly = true)
@@ -198,12 +231,25 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
     @Override
     protected void beforeDelete(SalesOrder entity) {
         lockPurchaseSources(entity, null);
+        if (invoiceSourceMutationGuard != null) {
+            invoiceSourceMutationGuard.assertSalesOrderMutable(entity, "删除");
+        }
         salesOrderPurchaseAllocationService.releaseSalesOrderItems(entity);
     }
 
     @Override
     protected void beforeStatusUpdate(SalesOrder entity, String currentStatus, String nextStatus) {
         lockPurchaseSources(entity, null);
+        if (deliveryVerificationGuard != null
+                && StatusConstants.SALES_COMPLETED.equals(currentStatus)
+                && StatusConstants.DELIVERY_VERIFICATION.equals(nextStatus)) {
+            deliveryVerificationGuard.assertMutable(entity, "重新核定");
+        }
+        if (invoiceSourceMutationGuard != null
+                && StatusConstants.DRAFT.equals(nextStatus)
+                && !StatusConstants.DRAFT.equals(currentStatus)) {
+            invoiceSourceMutationGuard.assertSalesOrderMutable(entity, "反审核");
+        }
     }
 
     private void lockPurchaseSources(SalesOrder entity, SalesOrderRequest request) {
@@ -270,7 +316,16 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
 
     @Override
     protected java.util.Set<String> allowedStatusTransitions() {
-        return StatusConstants.DRAFT_AUDIT_TRANSITIONS;
+        return StatusConstants.SALES_ORDER_TRANSITIONS;
+    }
+
+    @Override
+    protected boolean allowRequestToWriteFinalStatus(SalesOrder entity,
+                                                     SalesOrderRequest request,
+                                                     Optional<String> currentStatus) {
+        return currentStatus.filter(StatusConstants.DELIVERY_VERIFICATION::equals).isPresent()
+                && StatusConstants.DELIVERY_VERIFICATION.equals(request.status())
+                && StatusConstants.SALES_COMPLETED.equals(entity.getStatus());
     }
 
     @Override
@@ -281,6 +336,13 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
     @Override
     protected void apply(SalesOrder entity, SalesOrderRequest request) {
         lockPurchaseSources(entity, request);
+        if (entity.getId() != null
+                && StatusConstants.DELIVERY_VERIFICATION.equals(entity.getStatus())
+                && deliveryVerificationGuard != null) {
+            deliveryVerificationGuard.assertMutable(entity, "交付核定");
+        } else if (entity.getId() != null && invoiceSourceMutationGuard != null) {
+            invoiceSourceMutationGuard.assertSalesOrderMutable(entity, "修改");
+        }
         if (salesOrderAuditedPricingService.isAuditedPricingUpdate(entity, request)) {
             salesOrderAuditedPricingService.applyAuditedPricingUpdate(entity, request);
             return;

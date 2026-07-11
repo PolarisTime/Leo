@@ -23,9 +23,15 @@ public class SalesOrderAuditedPricingService {
     }
 
     boolean isAuditedPricingUpdate(SalesOrder entity, SalesOrderRequest request) {
-        return StatusConstants.AUDITED.equals(normalize(entity.getStatus()))
-                && StatusConstants.AUDITED.equals(normalize(request.status()))
+        String currentStatus = normalize(entity.getStatus());
+        return isProtectedPricingStatus(currentStatus)
+                && currentStatus.equals(normalize(request.status()))
                 && matchesAuditedPricingUpdate(entity, request);
+    }
+
+    private boolean isProtectedPricingStatus(String status) {
+        return StatusConstants.AUDITED.equals(status)
+                || StatusConstants.DELIVERY_VERIFICATION.equals(status);
     }
 
     boolean matchesAuditedPricingUpdate(SalesOrder entity, SalesOrderRequest request) {
@@ -57,6 +63,9 @@ public class SalesOrderAuditedPricingService {
     }
 
     void applyAuditedPricingUpdate(SalesOrder entity, SalesOrderRequest request) {
+        boolean completesDeliveryVerification = StatusConstants.DELIVERY_VERIFICATION.equals(
+                normalize(entity.getStatus())
+        );
         Map<Long, SalesOrderItemRequest> requestItemMap = request.items().stream()
                 .collect(java.util.stream.Collectors.toMap(SalesOrderItemRequest::id, item -> item));
 
@@ -72,6 +81,9 @@ public class SalesOrderAuditedPricingService {
             totalAmount = totalAmount.add(amount);
         }
         entity.setTotalAmount(TradeItemCalculator.scaleAmount(totalAmount));
+        if (completesDeliveryVerification) {
+            entity.setStatus(StatusConstants.SALES_COMPLETED);
+        }
         syncAuditedSalesOutboundPricing(entity);
     }
 

@@ -122,6 +122,20 @@ class SalesOrderAuditedPricingServiceTest {
     }
 
     @Test
+    void shouldDetectDeliveryVerificationPricingUpdate() {
+        var service = new SalesOrderAuditedPricingService(null);
+        SalesOrder order = auditedSalesOrder(11L);
+        order.setStatus(StatusConstants.DELIVERY_VERIFICATION);
+        SalesOrderRequest request = requestFrom(
+                order,
+                StatusConstants.DELIVERY_VERIFICATION,
+                new BigDecimal("3200.00")
+        );
+
+        assertThat(service.isAuditedPricingUpdate(order, request)).isTrue();
+    }
+
+    @Test
     void shouldRejectChangedItemFields() {
         var service = new SalesOrderAuditedPricingService(null);
         SalesOrder order = auditedSalesOrder(11L);

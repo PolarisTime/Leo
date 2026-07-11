@@ -94,7 +94,9 @@ public abstract class AbstractCrudService<E extends AbstractAuditableEntity, Req
         Optional<String> currentStatus = statusGuard.resolveStatus(entity);
         apply(entity, request);
         statusGuard.assertRequestStatusTransitionAllowed(entity, currentStatus, allowedStatusTransitions());
-        statusGuard.assertRequestDidNotWriteFinalStatus(entity);
+        if (!allowRequestToWriteFinalStatus(entity, request, currentStatus)) {
+            statusGuard.assertRequestDidNotWriteFinalStatus(entity);
+        }
         Res response = toSavedResponse(saveUpdatedEntity(entity, request));
         logger().info("{} updated: id={}", entity.getClass().getSimpleName(), id);
         return response;
@@ -120,6 +122,12 @@ public abstract class AbstractCrudService<E extends AbstractAuditableEntity, Req
                 nextStatus
         );
         return response;
+    }
+
+    protected boolean allowRequestToWriteFinalStatus(E entity,
+                                                     Req request,
+                                                     Optional<String> currentStatus) {
+        return false;
     }
 
     @Transactional

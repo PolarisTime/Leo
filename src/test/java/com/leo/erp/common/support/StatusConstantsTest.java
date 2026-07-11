@@ -20,6 +20,7 @@ class StatusConstantsTest {
         assertThat(StatusConstants.DRAFT).isEqualTo("草稿");
         assertThat(StatusConstants.AUDITED).isEqualTo("已审核");
         assertThat(StatusConstants.COMPLETED).isEqualTo("已完成");
+        assertThat(StatusConstants.DELIVERY_VERIFICATION).isEqualTo("交付核定");
     }
 
     @Test
@@ -54,7 +55,14 @@ class StatusConstantsTest {
     @Test
     void shouldHaveAllowedSalesOrderStatus() {
         assertThat(StatusConstants.ALLOWED_SALES_ORDER_STATUS)
-                .containsExactlyInAnyOrder("草稿", "已审核", "完成销售");
+                .containsExactlyInAnyOrder("草稿", "已审核", "交付核定", "完成销售");
+        assertThat(StatusConstants.SALES_ORDER_TRANSITIONS)
+                .containsExactlyInAnyOrder(
+                        "草稿->已审核",
+                        "已审核->草稿",
+                        "完成销售->交付核定",
+                        "交付核定->完成销售"
+                );
     }
 
     @Test
@@ -83,6 +91,7 @@ class StatusConstantsTest {
                         "已完成",
                         "完成采购",
                         "完成入库",
+                        "交付核定",
                         "完成销售",
                         "已确认",
                         "已付款",

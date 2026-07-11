@@ -19,7 +19,7 @@ import static org.mockito.Mockito.when;
 class SalesOrderCompletionSyncServiceTest {
 
     @Test
-    void shouldMarkSalesOrderCompletedWhenAuditedOutboundExists() {
+    void shouldMarkSalesOrderForDeliveryVerificationWhenAuditedOutboundExists() {
         SalesOrderRepository salesOrderRepository = mock(SalesOrderRepository.class);
         SalesOrderOutboundQueryService outboundQueryService = mock(SalesOrderOutboundQueryService.class);
         SalesOrderCompletionSyncService service = new SalesOrderCompletionSyncService(
@@ -34,7 +34,7 @@ class SalesOrderCompletionSyncServiceTest {
 
         service.syncBySalesOrderReference("SO-001");
 
-        assertThat(order.getStatus()).isEqualTo("完成销售");
+        assertThat(order.getStatus()).isEqualTo("交付核定");
         verify(salesOrderRepository).saveAll(any());
     }
 
@@ -86,7 +86,7 @@ class SalesOrderCompletionSyncServiceTest {
         assertThat(orderItem.getAmount()).isEqualByComparingTo("15000.00");
         assertThat(order.getTotalWeight()).isEqualByComparingTo("5.000");
         assertThat(order.getTotalAmount()).isEqualByComparingTo("15000.00");
-        assertThat(order.getStatus()).isEqualTo("完成销售");
+        assertThat(order.getStatus()).isEqualTo("交付核定");
     }
 
     @Test
@@ -240,7 +240,7 @@ class SalesOrderCompletionSyncServiceTest {
 
         service.syncBySalesOrderReference("SO-004");
 
-        assertThat(order.getStatus()).isEqualTo("完成销售");
+        assertThat(order.getStatus()).isEqualTo("交付核定");
         verify(salesOrderRepository).saveAll(any());
     }
 
@@ -260,7 +260,7 @@ class SalesOrderCompletionSyncServiceTest {
 
         service.syncBySalesOrderReference("SO-004B");
 
-        assertThat(order.getStatus()).isEqualTo("完成销售");
+        assertThat(order.getStatus()).isEqualTo("交付核定");
     }
 
     @Test
@@ -279,7 +279,7 @@ class SalesOrderCompletionSyncServiceTest {
 
         service.syncBySalesOrderReference("SO-TOL-001");
 
-        assertThat(order.getStatus()).isEqualTo("完成销售");
+        assertThat(order.getStatus()).isEqualTo("交付核定");
     }
 
     @Test
@@ -298,7 +298,7 @@ class SalesOrderCompletionSyncServiceTest {
 
         service.syncBySalesOrderReference("SO-TOL-002");
 
-        assertThat(order.getStatus()).isEqualTo("完成销售");
+        assertThat(order.getStatus()).isEqualTo("交付核定");
     }
 
     @Test
@@ -355,7 +355,7 @@ class SalesOrderCompletionSyncServiceTest {
 
         service.syncBySalesOrderReference("SO-ZERO-001");
 
-        assertThat(order.getStatus()).isEqualTo("完成销售");
+        assertThat(order.getStatus()).isEqualTo("交付核定");
     }
 
     @Test
@@ -443,8 +443,8 @@ class SalesOrderCompletionSyncServiceTest {
 
         service.syncBySalesOrderReference("SO-M-001, SO-M-002");
 
-        assertThat(order1.getStatus()).isEqualTo("完成销售");
-        assertThat(order2.getStatus()).isEqualTo("完成销售");
+        assertThat(order1.getStatus()).isEqualTo("交付核定");
+        assertThat(order2.getStatus()).isEqualTo("交付核定");
     }
 
     @Test
@@ -503,7 +503,7 @@ class SalesOrderCompletionSyncServiceTest {
 
         service.syncBySalesOrderReference("SO-MULTI-001");
 
-        assertThat(order.getStatus()).isEqualTo("完成销售");
+        assertThat(order.getStatus()).isEqualTo("交付核定");
     }
 
     @Test
@@ -636,7 +636,7 @@ class SalesOrderCompletionSyncServiceTest {
 
         service.syncBySalesOrderReference("SO-NULL-ITEM-QTY");
 
-        assertThat(order.getStatus()).isEqualTo("完成销售");
+        assertThat(order.getStatus()).isEqualTo("交付核定");
     }
 
     @Test

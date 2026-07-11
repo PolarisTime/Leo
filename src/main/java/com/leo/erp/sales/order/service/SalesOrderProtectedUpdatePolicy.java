@@ -23,6 +23,10 @@ public class SalesOrderProtectedUpdatePolicy {
 
     boolean allowsProtectedUpdate(SalesOrder entity, SalesOrderRequest request) {
         String currentStatus = normalize(entity.getStatus());
+        if (StatusConstants.DELIVERY_VERIFICATION.equals(currentStatus)) {
+            return StatusConstants.DELIVERY_VERIFICATION.equals(normalize(request.status()))
+                    && salesOrderAuditedPricingService.matchesAuditedPricingUpdate(entity, request);
+        }
         if (!StatusConstants.AUDITED.equals(currentStatus)) {
             return false;
         }

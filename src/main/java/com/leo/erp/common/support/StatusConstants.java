@@ -28,6 +28,7 @@ public final class StatusConstants {
     public static final String PURCHASE_COMPLETED = "完成采购";
     public static final String SALES_COMPLETED = "完成销售";
     public static final String INBOUND_COMPLETED = "完成入库";
+    public static final String DELIVERY_VERIFICATION = "交付核定";
 
     // 签署状态
     public static final String SIGNED = "已签署";
@@ -48,7 +49,12 @@ public final class StatusConstants {
     public static final Set<String> ALLOWED_RECEIVABLE_STATUS = Set.of(PENDING_CONFIRM, CONFIRMED, PENDING_AUDIT, AUDITED);
     public static final Set<String> ALLOWED_PURCHASE_ORDER_STATUS = Set.of(DRAFT, AUDITED, PURCHASE_COMPLETED);
     public static final Set<String> ALLOWED_PURCHASE_INBOUND_STATUS = Set.of(DRAFT, AUDITED, INBOUND_COMPLETED);
-    public static final Set<String> ALLOWED_SALES_ORDER_STATUS = Set.of(DRAFT, AUDITED, SALES_COMPLETED);
+    public static final Set<String> ALLOWED_SALES_ORDER_STATUS = Set.of(
+            DRAFT,
+            AUDITED,
+            DELIVERY_VERIFICATION,
+            SALES_COMPLETED
+    );
     public static final Set<String> ALLOWED_SALES_OUTBOUND_STATUS = Set.of(DRAFT, PRE_OUTBOUND, AUDITED);
     public static final Set<String> ALLOWED_CONTRACT_STATUS = Set.of(DRAFT, EXECUTING, SIGNED, ARCHIVED);
     public static final Set<String> ALLOWED_STATEMENT_STATUS = Set.of(PENDING_CONFIRM, CONFIRMED);
@@ -65,6 +71,7 @@ public final class StatusConstants {
             COMPLETED,
             PURCHASE_COMPLETED,
             INBOUND_COMPLETED,
+            DELIVERY_VERIFICATION,
             SALES_COMPLETED,
             CONFIRMED,
             PAID,
@@ -90,6 +97,12 @@ public final class StatusConstants {
             PRE_OUTBOUND + "->" + AUDITED,
             DRAFT + "->" + AUDITED,
             AUDITED + "->" + DRAFT
+    );
+    public static final Set<String> SALES_ORDER_TRANSITIONS = Set.of(
+            DRAFT + "->" + AUDITED,
+            AUDITED + "->" + DRAFT,
+            SALES_COMPLETED + "->" + DELIVERY_VERIFICATION,
+            DELIVERY_VERIFICATION + "->" + SALES_COMPLETED
     );
     public static final Set<String> CONTRACT_TRANSITIONS = Set.of(
             DRAFT + "->" + EXECUTING,
