@@ -37,6 +37,7 @@ class LedgerAdjustmentSettlementCompanyServiceTest {
         CustomerRepository customerRepository = mock(CustomerRepository.class);
         CompanySettingService companySettingService = mock(CompanySettingService.class);
         Customer customer = new Customer();
+        customer.setId(71L);
         customer.setCustomerCode("C-001");
         customer.setCustomerName("客户A");
         CompanySetting settlementCompany = new CompanySetting();

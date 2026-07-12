@@ -9,6 +9,7 @@ import java.util.List;
 
 public record PurchaseOrderRequest(
         String orderNo,
+        Long supplierId,
         String supplierCode,
         @jakarta.validation.constraints.NotBlank(message = "供应商不能为空")
         String supplierName,
@@ -24,6 +25,7 @@ public record PurchaseOrderRequest(
         List<PurchaseOrderItemRequest> items
 ) {
     public PurchaseOrderRequest(String orderNo,
+                                String supplierCode,
                                 String supplierName,
                                 LocalDateTime orderDate,
                                 String buyerName,
@@ -31,6 +33,17 @@ public record PurchaseOrderRequest(
                                 String status,
                                 String remark,
                                 List<PurchaseOrderItemRequest> items) {
-        this(orderNo, null, supplierName, orderDate, buyerName, settlementCompanyId, status, remark, items);
+        this(orderNo, null, supplierCode, supplierName, orderDate, buyerName, settlementCompanyId, status, remark, items);
+    }
+
+    public PurchaseOrderRequest(String orderNo,
+                                String supplierName,
+                                LocalDateTime orderDate,
+                                String buyerName,
+                                Long settlementCompanyId,
+                                String status,
+                                String remark,
+                                List<PurchaseOrderItemRequest> items) {
+        this(orderNo, null, null, supplierName, orderDate, buyerName, settlementCompanyId, status, remark, items);
     }
 }

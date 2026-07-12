@@ -61,11 +61,37 @@ class SupplierRefundReceiptServiceTest {
         verify(fixture.repository).save(receiptCaptor.capture());
         SupplierRefundReceipt saved = receiptCaptor.getValue();
         assertThat(saved.getPurchaseRefundId()).isEqualTo(91L);
+        assertThat(saved.getSupplierId()).isEqualTo(81L);
         assertThat(saved.getSupplierCode()).isEqualTo("SUP-001");
         assertThat(saved.getSupplierName()).isEqualTo("供应商A");
         assertThat(saved.getSettlementCompanyId()).isEqualTo(21L);
         assertThat(saved.getSettlementCompanyName()).isEqualTo("结算主体A");
         assertThat(saved.getAmount()).isEqualByComparingTo("30.00");
+    }
+
+    @Test
+    void shouldRejectRequestedSupplierIdThatConflictsWithPurchaseRefund() {
+        Fixture fixture = fixture();
+        when(fixture.purchaseRefundRepository.findByIdAndDeletedFlagFalse(91L))
+                .thenReturn(Optional.of(auditedRefund("100.00")));
+        when(fixture.repository.existsByRefundReceiptNoAndDeletedFlagFalse("SRR-001")).thenReturn(false);
+        SupplierRefundReceiptRequest request = new SupplierRefundReceiptRequest(
+                "SRR-001",
+                91L,
+                82L,
+                LocalDate.of(2026, 7, 11),
+                "银行转账",
+                new BigDecimal("30.00"),
+                StatusConstants.DRAFT,
+                "财务A",
+                null
+        );
+
+        assertThatThrownBy(() -> fixture.service.create(request))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("供应商ID与采购退款单不一致");
+
+        verify(fixture.repository, never()).save(any());
     }
 
     @Test
@@ -101,6 +127,57 @@ class SupplierRefundReceiptServiceTest {
                 .hasMessageContaining("退款金额");
 
         assertThat(receipt.getStatus()).isEqualTo(StatusConstants.DRAFT);
+        verify(fixture.repository, never()).save(any());
+    }
+
+    @Test
+    void shouldRejectStatusUpdateWhenReceiptSupplierIdConflictsWithSourceRefund() {
+        Fixture fixture = fixture();
+        SupplierRefundReceipt receipt = draftReceipt("30.00");
+        receipt.setSupplierId(82L);
+        when(fixture.repository.findByIdAndDeletedFlagFalse(501L)).thenReturn(Optional.of(receipt));
+        when(fixture.purchaseRefundRepository.findByIdAndDeletedFlagFalse(91L))
+                .thenReturn(Optional.of(auditedRefund("100.00")));
+        when(fixture.repository.save(receipt)).thenReturn(receipt);
+
+        assertThatThrownBy(() -> fixture.service.updateStatus(501L, StatusConstants.RECEIVED))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("供应商ID与采购退款单不一致");
+
+        verify(fixture.repository, never()).save(any());
+    }
+
+    @Test
+    void shouldRejectStatusUpdateWhenReceiptSupplierIdIsMissing() {
+        Fixture fixture = fixture();
+        SupplierRefundReceipt receipt = draftReceipt("30.00");
+        receipt.setSupplierId(null);
+        when(fixture.repository.findByIdAndDeletedFlagFalse(501L)).thenReturn(Optional.of(receipt));
+        when(fixture.purchaseRefundRepository.findByIdAndDeletedFlagFalse(91L))
+                .thenReturn(Optional.of(auditedRefund("100.00")));
+        when(fixture.repository.save(receipt)).thenReturn(receipt);
+
+        assertThatThrownBy(() -> fixture.service.updateStatus(501L, StatusConstants.RECEIVED))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("退款到账单缺少供应商ID");
+
+        verify(fixture.repository, never()).save(any());
+    }
+
+    @Test
+    void shouldRejectDeleteWhenReceiptSupplierIdConflictsWithSourceRefund() {
+        Fixture fixture = fixture();
+        SupplierRefundReceipt receipt = draftReceipt("30.00");
+        receipt.setSupplierId(82L);
+        when(fixture.repository.findByIdAndDeletedFlagFalse(501L)).thenReturn(Optional.of(receipt));
+        when(fixture.purchaseRefundRepository.findByIdAndDeletedFlagFalse(91L))
+                .thenReturn(Optional.of(auditedRefund("100.00")));
+        when(fixture.repository.save(receipt)).thenReturn(receipt);
+
+        assertThatThrownBy(() -> fixture.service.delete(501L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("供应商ID与采购退款单不一致");
+
         verify(fixture.repository, never()).save(any());
     }
 
@@ -170,6 +247,7 @@ class SupplierRefundReceiptServiceTest {
         refund.setRefundNo("PR-001");
         refund.setSourcePurchaseOrderId(11L);
         refund.setPurchaseOrderNo("PO-001");
+        refund.setSupplierId(81L);
         refund.setSupplierCode("SUP-001");
         refund.setSupplierName("供应商A");
         refund.setSettlementCompanyId(21L);
@@ -184,6 +262,7 @@ class SupplierRefundReceiptServiceTest {
         receipt.setId(501L);
         receipt.setRefundReceiptNo("SRR-001");
         receipt.setPurchaseRefundId(91L);
+        receipt.setSupplierId(81L);
         receipt.setSupplierCode("SUP-001");
         receipt.setSupplierName("供应商A");
         receipt.setSettlementCompanyId(21L);

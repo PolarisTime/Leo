@@ -4,6 +4,7 @@ import com.leo.erp.common.support.TradeItemCalculator;
 import com.leo.erp.common.support.TradeItemMaterialSupport;
 import com.leo.erp.common.support.TradeMaterialSnapshot;
 import com.leo.erp.common.support.WarehouseSelectionSupport;
+import com.leo.erp.common.support.WarehouseSnapshot;
 import com.leo.erp.purchase.inbound.domain.entity.PurchaseInbound;
 import com.leo.erp.purchase.inbound.domain.entity.PurchaseInboundItem;
 import com.leo.erp.purchase.inbound.web.dto.PurchaseInboundItemRequest;
@@ -36,9 +37,16 @@ public class InboundItemMapper {
      */
     record ItemMappingContext(
             WeightSettlementResult weightSettlement,
+            Long headerWarehouseId,
             String headerWarehouseName,
             String headerSettlementMode
-    ) {}
+    ) {
+        ItemMappingContext(WeightSettlementResult weightSettlement,
+                           String headerWarehouseName,
+                           String headerSettlementMode) {
+            this(weightSettlement, null, headerWarehouseName, headerSettlementMode);
+        }
+    }
 
     ItemMappingResult applyItemFields(
             PurchaseInbound inbound,
@@ -52,7 +60,13 @@ public class InboundItemMapper {
 
         item.setPurchaseInbound(inbound);
         item.setLineNo(lineNo);
-        item.setMaterialCode(materialCode);
+        PurchaseOrderItem sourceItem = source.sourcePurchaseOrderItemId() == null
+                ? null
+                : sourcePurchaseOrderItemMap.get(source.sourcePurchaseOrderItemId());
+        item.setMaterialId(sourceItem != null && sourceItem.getMaterialId() != null
+                ? sourceItem.getMaterialId() : material.materialId());
+        item.setMaterialCode(sourceItem != null && sourceItem.getMaterialCode() != null
+                ? sourceItem.getMaterialCode() : materialCode);
         item.setBrand(source.brand());
         item.setCategory(source.category());
         item.setMaterial(source.material());
@@ -63,11 +77,23 @@ public class InboundItemMapper {
         applySettlementCompany(item, source.sourcePurchaseOrderItemId(), sourcePurchaseOrderItemMap);
 
         String sourceOrderNo = resolveSourceOrderNo(source, sourcePurchaseOrderItemMap);
-        String warehouseName = warehouseSelectionSupport.normalizeWarehouseName(
-                source.warehouseName() == null || source.warehouseName().isBlank()
-                        ? ctx.headerWarehouseName() : source.warehouseName(),
-                lineNo, true);
-        item.setWarehouseName(warehouseName);
+        Long requestedWarehouseId = source.warehouseId() == null ? ctx.headerWarehouseId() : source.warehouseId();
+        String requestedWarehouseName = source.warehouseName() == null || source.warehouseName().isBlank()
+                ? ctx.headerWarehouseName() : source.warehouseName();
+        WarehouseSnapshot warehouse = sourceItem != null && sourceItem.getWarehouseId() != null
+                ? new WarehouseSnapshot(
+                        sourceItem.getWarehouseId(),
+                        null,
+                        sourceItem.getWarehouseName()
+                )
+                : warehouseSelectionSupport.resolveWarehouse(
+                        requestedWarehouseId,
+                        requestedWarehouseName,
+                        lineNo,
+                        true
+                );
+        item.setWarehouseId(warehouse.warehouseId());
+        item.setWarehouseName(warehouse.warehouseName());
 
         String settlementMode = source.settlementMode() != null && !source.settlementMode().isBlank()
                 ? source.settlementMode()
@@ -89,7 +115,7 @@ public class InboundItemMapper {
 
         return new ItemMappingResult(
                 sourceOrderNo,
-                warehouseName,
+                warehouse.warehouseName(),
                 ctx.weightSettlement().weightTon(),
                 item.getAmount(),
                 source.sourcePurchaseOrderItemId(),

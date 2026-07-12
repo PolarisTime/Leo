@@ -37,6 +37,12 @@ public class Payment extends AbstractAuditableEntity {
     @Column(name = "business_type", nullable = false, length = 32)
     private String businessType;
 
+    @Column(name = "counterparty_type", length = 32)
+    private String counterpartyType;
+
+    @Column(name = "counterparty_id")
+    private Long counterpartyId;
+
     @Column(name = "payment_purpose", nullable = false, length = 32)
     private String paymentPurpose;
 
@@ -93,4 +99,8 @@ public class Payment extends AbstractAuditableEntity {
 
     @Transient
     private String originalBusinessType;
+
+    public String getCounterpartyType() {
+        return counterpartyType == null ? businessType : counterpartyType;
+    }
 }

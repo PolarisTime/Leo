@@ -21,6 +21,9 @@ public interface FreightBillRepository extends JpaRepository<FreightBill, Long>,
     @EntityGraph(attributePaths = "items")
     List<FreightBill> findByBillNoInAndDeletedFlagFalse(Collection<String> billNos);
 
+    @EntityGraph(attributePaths = "items")
+    List<FreightBill> findByIdInAndDeletedFlagFalse(Collection<Long> ids);
+
     @Query("""
             select distinct bill
             from FreightBill bill
@@ -31,6 +34,19 @@ public interface FreightBillRepository extends JpaRepository<FreightBill, Long>,
             """)
     List<FreightBill> findAllBySourceNosExcludingCurrentBill(
             @Param("sourceNos") Collection<String> sourceNos,
+            @Param("currentBillId") Long currentBillId
+    );
+
+    @Query("""
+            select distinct bill
+            from FreightBill bill
+            join fetch bill.items item
+            where bill.deletedFlag = false
+              and item.sourceSalesOutboundItemId in :sourceItemIds
+              and (:currentBillId is null or bill.id <> :currentBillId)
+            """)
+    List<FreightBill> findAllBySourceItemIdsExcludingCurrentBill(
+            @Param("sourceItemIds") Collection<Long> sourceItemIds,
             @Param("currentBillId") Long currentBillId
     );
 

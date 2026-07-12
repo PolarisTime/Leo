@@ -27,7 +27,7 @@ public final class StatementCandidateSupport {
         return result;
     }
 
-    public static <T> Specification<T> excludeFieldValues(String fieldName, Set<String> excludedValues) {
+    public static <T> Specification<T> excludeFieldValues(String fieldName, Set<?> excludedValues) {
         return (root, query, criteriaBuilder) -> {
             if (fieldName == null || fieldName.isBlank() || excludedValues == null || excludedValues.isEmpty()) {
                 return criteriaBuilder.conjunction();

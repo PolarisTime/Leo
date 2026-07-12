@@ -27,8 +27,30 @@ public record FreightStatementRequest(
         String signStatus,
         @Size(max = 500) String attachment,
         @Size(max = 255) String remark,
-        @Valid @NotEmpty List<FreightBillItemRequest> items
+        @Valid @NotEmpty List<FreightBillItemRequest> items,
+        Long carrierId
 ) {
+    public FreightStatementRequest(String statementNo,
+                                   String carrierCode,
+                                   String carrierName,
+                                   Long settlementCompanyId,
+                                   String settlementCompanyName,
+                                   LocalDate startDate,
+                                   LocalDate endDate,
+                                   BigDecimal totalWeight,
+                                   BigDecimal totalFreight,
+                                   BigDecimal paidAmount,
+                                   BigDecimal unpaidAmount,
+                                   String status,
+                                   String signStatus,
+                                   String attachment,
+                                   String remark,
+                                   List<FreightBillItemRequest> items) {
+        this(statementNo, carrierCode, carrierName, settlementCompanyId, settlementCompanyName, startDate, endDate,
+                totalWeight, totalFreight, paidAmount, unpaidAmount, status, signStatus, attachment, remark, items,
+                null);
+    }
+
     public FreightStatementRequest(String statementNo,
                                    String carrierName,
                                    LocalDate startDate,
@@ -43,7 +65,7 @@ public record FreightStatementRequest(
                                    String remark,
                                    List<FreightBillItemRequest> items) {
         this(statementNo, null, carrierName, null, null, startDate, endDate, totalWeight, totalFreight,
-                paidAmount, unpaidAmount, status, signStatus, attachment, remark, items);
+                paidAmount, unpaidAmount, status, signStatus, attachment, remark, items, null);
     }
 
     public FreightStatementRequest(String statementNo,
@@ -61,6 +83,6 @@ public record FreightStatementRequest(
                                    String remark,
                                    List<FreightBillItemRequest> items) {
         this(statementNo, carrierCode, carrierName, null, null, startDate, endDate, totalWeight,
-                totalFreight, paidAmount, unpaidAmount, status, signStatus, attachment, remark, items);
+                totalFreight, paidAmount, unpaidAmount, status, signStatus, attachment, remark, items, null);
     }
 }

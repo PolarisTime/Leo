@@ -79,6 +79,54 @@ class ReceiptStatementAllocationValidatorTest {
     }
 
     @Test
+    void shouldRejectCustomerIdMismatch() {
+        CustomerStatementQueryService statementQueryService = mock(CustomerStatementQueryService.class);
+        when(statementQueryService.requireActiveById(21L)).thenReturn(customerStatement());
+        ReceiptStatementAllocationValidator validator = new ReceiptStatementAllocationValidator(
+                mock(ReceiptAllocationRepository.class),
+                statementQueryService,
+                mock(ResourceRecordAccessGuard.class)
+        );
+        ReceiptRequest request = receiptRequest(999L, 1001L);
+
+        assertThatThrownBy(() -> validator.validate(
+                request,
+                StatusConstants.DRAFT,
+                1L,
+                21L,
+                new BigDecimal("100.00"),
+                new HashMap<>(),
+                1
+        ))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("客户ID与收款单不一致");
+    }
+
+    @Test
+    void shouldRejectProjectIdMismatch() {
+        CustomerStatementQueryService statementQueryService = mock(CustomerStatementQueryService.class);
+        when(statementQueryService.requireActiveById(21L)).thenReturn(customerStatement());
+        ReceiptStatementAllocationValidator validator = new ReceiptStatementAllocationValidator(
+                mock(ReceiptAllocationRepository.class),
+                statementQueryService,
+                mock(ResourceRecordAccessGuard.class)
+        );
+        ReceiptRequest request = receiptRequest(101L, 999L);
+
+        assertThatThrownBy(() -> validator.validate(
+                request,
+                StatusConstants.DRAFT,
+                1L,
+                21L,
+                new BigDecimal("100.00"),
+                new HashMap<>(),
+                1
+        ))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("项目ID与收款单不一致");
+    }
+
+    @Test
     void shouldRejectDuplicateCustomerStatement() {
         CustomerStatementQueryService statementQueryService = mock(CustomerStatementQueryService.class);
         when(statementQueryService.requireActiveById(21L)).thenReturn(customerStatement());
@@ -133,12 +181,19 @@ class ReceiptStatementAllocationValidatorTest {
     }
 
     private ReceiptRequest receiptRequest() {
+        return receiptRequest(101L, 1001L);
+    }
+
+    private ReceiptRequest receiptRequest(Long customerId, Long projectId) {
         return new ReceiptRequest(
                 "SK-001",
+                customerId,
                 "CUST-001",
                 "客户A",
-                1001L,
+                projectId,
                 "项目A",
+                null,
+                null,
                 null,
                 LocalDate.of(2026, 4, 26),
                 "银行转账",
@@ -154,8 +209,10 @@ class ReceiptStatementAllocationValidatorTest {
         CustomerStatement statement = new CustomerStatement();
         statement.setId(21L);
         statement.setCustomerName("客户A");
+        statement.setCustomerId(101L);
         statement.setCustomerCode("CUST-001");
         statement.setProjectName("项目A");
+        statement.setProjectId(1001L);
         statement.setStatus(StatusConstants.CONFIRMED);
         statement.setSalesAmount(new BigDecimal("1000.00"));
         return statement;

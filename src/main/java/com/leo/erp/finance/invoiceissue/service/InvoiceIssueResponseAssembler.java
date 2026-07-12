@@ -34,7 +34,9 @@ public class InvoiceIssueResponseAssembler {
                 response.deletedFlag(),
                 response.operatorName(),
                 response.remark(),
-                entity.getItems().stream().map(this::toItemResponse).toList()
+                entity.getItems().stream().map(this::toItemResponse).toList(),
+                entity.getCustomerId(),
+                entity.getProjectId()
         );
     }
 
@@ -63,7 +65,10 @@ public class InvoiceIssueResponseAssembler {
                 item.getPiecesPerBundle(),
                 item.getWeightTon(),
                 item.getUnitPrice(),
-                item.getAmount()
+                item.getAmount(),
+                item.getMaterialId(),
+                item.getWarehouseId(),
+                item.getBatchNoNormalized()
         );
     }
 }

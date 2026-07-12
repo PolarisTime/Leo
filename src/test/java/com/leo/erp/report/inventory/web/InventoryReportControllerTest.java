@@ -32,11 +32,11 @@ class InventoryReportControllerTest {
         InventoryReportResponse item = mock(InventoryReportResponse.class);
         Page<InventoryReportResponse> page = new PageImpl<>(List.of(item));
         PageQuery query = new PageQuery(0, 20, null, null);
-        when(inventoryReportService.page(any(), eq("test"), eq("warehouse"), eq("category"), eq(true)))
+        when(inventoryReportService.page(any(), eq("test"), eq(101L), eq("category"), eq(true)))
                 .thenReturn(page);
 
         ApiResponse<PageResponse<InventoryReportResponse>> response =
-                controller.page(query, "test", "warehouse", "category", true);
+                controller.page(query, "test", 101L, "category", true);
 
         assertThat(response.code()).isEqualTo(0);
         assertThat(response.data().content()).hasSize(1);
@@ -46,15 +46,15 @@ class InventoryReportControllerTest {
     void exportReturnsFileDownload() {
         byte[] content = "test".getBytes();
         FileDownloadResponse file = new FileDownloadResponse("test.xlsx", MediaType.APPLICATION_OCTET_STREAM, content);
-        when(inventoryReportService.exportExcel(eq("test"), eq("warehouse"), eq("category"), eq(true)))
+        when(inventoryReportService.exportExcel(eq("test"), eq(101L), eq("category"), eq(true)))
                 .thenReturn(file);
 
-        InventoryReportExportRequest request = new InventoryReportExportRequest("test", "warehouse", "category", true);
+        InventoryReportExportRequest request = new InventoryReportExportRequest("test", 101L, "category", true);
         ResponseEntity<byte[]> response = controller.export(request);
 
         assertThat(response.getStatusCode().is2xxSuccessful()).isTrue();
         assertThat(response.getBody()).isEqualTo(content);
-        verify(inventoryReportService).exportExcel("test", "warehouse", "category", true);
+        verify(inventoryReportService).exportExcel("test", 101L, "category", true);
     }
 
     @Test

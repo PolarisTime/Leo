@@ -21,6 +21,9 @@ import org.springframework.data.domain.PageImpl;
 import org.springframework.http.MediaType;
 import jakarta.servlet.http.HttpServletRequest;
 
+import java.lang.reflect.Method;
+import java.time.LocalDate;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
@@ -76,10 +79,30 @@ class SalesOrderControllerTest {
         PageQuery query = new PageQuery(0, 20, null, null);
         when(service.page(any(), any())).thenReturn(page);
 
-        ApiResponse<PageResponse<SalesOrderResponse>> response = controller.page(query, "test", "customer", "project", 7L, "active", null, null);
+        ApiResponse<PageResponse<SalesOrderResponse>> response = controller.page(
+                query, "test", null, "customer", null, "project", 7L, "active", null, null
+        );
 
         assertThat(response.code()).isEqualTo(0);
         assertThat(response.data().content()).hasSize(1);
+    }
+
+    @Test
+    void pagePassesStableCustomerAndProjectIds() throws Exception {
+        PageQuery query = new PageQuery(0, 20, null, null);
+        when(service.page(any(), any())).thenReturn(Page.empty());
+        Method method = identityAwarePageMethod("page");
+
+        assertThat(method).as("销售订单列表接口应接收 customerId/projectId").isNotNull();
+        method.invoke(
+                controller,
+                query, "test", 101L, "customer", 102L, "project", 7L, "active", null, null
+        );
+
+        ArgumentCaptor<PageFilter> filterCaptor = ArgumentCaptor.forClass(PageFilter.class);
+        verify(service).page(eq(query), filterCaptor.capture());
+        assertThat(filterCaptor.getValue().customerId()).isEqualTo(101L);
+        assertThat(filterCaptor.getValue().projectId()).isEqualTo(102L);
     }
 
     @Test
@@ -90,7 +113,7 @@ class SalesOrderControllerTest {
         when(service.outboundImportCandidates(any(), any())).thenReturn(page);
 
         ApiResponse<PageResponse<SalesOrderResponse>> response = controller.outboundImportCandidates(
-                query, "test", "customer", "project", 7L, "active", null, null);
+                query, "test", null, "customer", null, "project", 7L, "active", null, null);
 
         assertThat(response.code()).isEqualTo(0);
         assertThat(response.data().content()).hasSize(1);
@@ -99,6 +122,24 @@ class SalesOrderControllerTest {
         assertThat(filterCaptor.getValue().name()).isEqualTo("customer");
         assertThat(filterCaptor.getValue().projectName()).isEqualTo("project");
         assertThat(filterCaptor.getValue().settlementCompanyId()).isEqualTo(7L);
+    }
+
+    @Test
+    void outboundImportCandidatesPassStableCustomerAndProjectIds() throws Exception {
+        PageQuery query = new PageQuery(0, 20, null, null);
+        when(service.outboundImportCandidates(any(), any())).thenReturn(Page.empty());
+        Method method = identityAwarePageMethod("outboundImportCandidates");
+
+        assertThat(method).as("销售订单出库候选接口应接收 customerId/projectId").isNotNull();
+        method.invoke(
+                controller,
+                query, "test", 101L, "customer", 102L, "project", 7L, "active", null, null
+        );
+
+        ArgumentCaptor<PageFilter> filterCaptor = ArgumentCaptor.forClass(PageFilter.class);
+        verify(service).outboundImportCandidates(eq(query), filterCaptor.capture());
+        assertThat(filterCaptor.getValue().customerId()).isEqualTo(101L);
+        assertThat(filterCaptor.getValue().projectId()).isEqualTo(102L);
     }
 
     @Test
@@ -236,5 +277,25 @@ class SalesOrderControllerTest {
         assertThat(response.code()).isEqualTo(0);
         assertThat(response.message()).isEqualTo("删除成功");
         verify(service).delete(1L);
+    }
+
+    private Method identityAwarePageMethod(String name) {
+        Class<?>[] parameterTypes = {
+                PageQuery.class,
+                String.class,
+                Long.class,
+                String.class,
+                Long.class,
+                String.class,
+                Long.class,
+                String.class,
+                LocalDate.class,
+                LocalDate.class
+        };
+        return Arrays.stream(SalesOrderController.class.getMethods())
+                .filter(method -> method.getName().equals(name))
+                .filter(method -> Arrays.equals(method.getParameterTypes(), parameterTypes))
+                .findFirst()
+                .orElse(null);
     }
 }

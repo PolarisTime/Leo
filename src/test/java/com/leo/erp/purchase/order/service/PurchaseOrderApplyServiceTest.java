@@ -4,6 +4,7 @@ import com.leo.erp.common.support.TradeItemMaterialSupport;
 import com.leo.erp.common.support.TradeItemMaterialSupportTestDoubles;
 import com.leo.erp.common.support.TradeMaterialSnapshot;
 import com.leo.erp.common.support.WarehouseSelectionSupport;
+import com.leo.erp.common.support.WarehouseSnapshot;
 import com.leo.erp.purchase.inbound.service.PurchaseInboundItemQueryService;
 import com.leo.erp.purchase.order.domain.entity.PurchaseOrder;
 import com.leo.erp.purchase.order.domain.entity.PurchaseOrderItem;
@@ -21,9 +22,45 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class PurchaseOrderApplyServiceTest {
+
+    @Test
+    void shouldPersistResolvedMaterialAndWarehouseIdentity() {
+        TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
+        WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
+        PurchaseInboundItemQueryService inboundItemQueryService = mock(PurchaseInboundItemQueryService.class);
+        PurchaseOrderApplyService service = new PurchaseOrderApplyService(
+                materialSupport,
+                warehouseSelectionSupport,
+                inboundItemQueryService
+        );
+        PurchaseOrder order = new PurchaseOrder();
+        PurchaseOrderRequest request = request(List.of(
+                itemRequest(null, "M1", "一号库", "B1", 10,
+                        new BigDecimal("0.100"), new BigDecimal("4000.00"))
+        ));
+        TradeMaterialSnapshot material = new TradeMaterialSnapshot(101L, "M1", true);
+        WarehouseSnapshot warehouse = new WarehouseSnapshot(201L, "WH-001", "一号库");
+        when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(Map.of("M1", material));
+        TradeItemMaterialSupportTestDoubles.stubMaterialCodeNormalization(materialSupport);
+        when(materialSupport.resolveMaterial(null, "M1", 1)).thenReturn(material);
+        when(warehouseSelectionSupport.normalizeWarehouseName("一号库", 1, true)).thenReturn("一号库");
+        when(warehouseSelectionSupport.resolveWarehouse(null, "一号库", 1, true)).thenReturn(warehouse);
+        when(materialSupport.normalizeBatchNo(material, "B1", 1, false)).thenReturn("B1");
+        when(inboundItemQueryService.summarizeWeightAdjustmentBySourcePurchaseOrderItemIds(List.of(301L)))
+                .thenReturn(Map.of());
+
+        service.applyItems(order, request, new AtomicLong(301L)::getAndIncrement);
+
+        verify(materialSupport).resolveMaterial(null, "M1", 1);
+        verify(warehouseSelectionSupport).resolveWarehouse(null, "一号库", 1, true);
+        assertThat(PurchaseOrderItem.class.getDeclaredFields())
+                .extracting(java.lang.reflect.Field::getName)
+                .contains("materialId", "warehouseId", "batchNoNormalized");
+    }
 
     @Test
     void shouldApplyItemsAndCalculateTotals() {
@@ -51,6 +88,10 @@ class PurchaseOrderApplyServiceTest {
                 "M2", new TradeMaterialSnapshot("M2", true)
         ));
         TradeItemMaterialSupportTestDoubles.stubMaterialCodeNormalization(materialSupport);
+        when(warehouseSelectionSupport.resolveWarehouse(null, "一号库", 1, true))
+                .thenReturn(new WarehouseSnapshot(null, null, "一号库"));
+        when(warehouseSelectionSupport.resolveWarehouse(null, "二号库", 2, true))
+                .thenReturn(new WarehouseSnapshot(null, null, "二号库"));
         when(warehouseSelectionSupport.normalizeWarehouseName("一号库", 1, true)).thenReturn("一号库");
         when(warehouseSelectionSupport.normalizeWarehouseName("二号库", 2, true)).thenReturn("二号库");
         when(materialSupport.normalizeBatchNo(any(), eq("B1"), eq(1), eq(false))).thenReturn("B1");
@@ -114,6 +155,10 @@ class PurchaseOrderApplyServiceTest {
                 "M2", new TradeMaterialSnapshot("M2", true)
         ));
         TradeItemMaterialSupportTestDoubles.stubMaterialCodeNormalization(materialSupport);
+        when(warehouseSelectionSupport.resolveWarehouse(null, "一号库", 1, true))
+                .thenReturn(new WarehouseSnapshot(null, null, "一号库"));
+        when(warehouseSelectionSupport.resolveWarehouse(null, "二号库", 2, true))
+                .thenReturn(new WarehouseSnapshot(null, null, "二号库"));
         when(warehouseSelectionSupport.normalizeWarehouseName("一号库", 1, true)).thenReturn("一号库");
         when(warehouseSelectionSupport.normalizeWarehouseName("二号库", 2, true)).thenReturn("二号库");
         when(materialSupport.normalizeBatchNo(any(), eq("B1"), eq(1), eq(false))).thenReturn("B1");
@@ -170,6 +215,8 @@ class PurchaseOrderApplyServiceTest {
                 "M1", new TradeMaterialSnapshot("M1", true)
         ));
         TradeItemMaterialSupportTestDoubles.stubMaterialCodeNormalization(materialSupport);
+        when(warehouseSelectionSupport.resolveWarehouse(null, "一号库", 1, true))
+                .thenReturn(new WarehouseSnapshot(null, null, "一号库"));
         when(warehouseSelectionSupport.normalizeWarehouseName("一号库", 1, true)).thenReturn("一号库");
         when(materialSupport.normalizeBatchNo(any(), eq("B1"), eq(1), eq(false))).thenReturn("B1");
         when(inboundItemQueryService.summarizeWeightAdjustmentBySourcePurchaseOrderItemIds(List.of(101L)))

@@ -31,6 +31,12 @@ public class PaymentAllocation {
     @Column(name = "source_statement_id", nullable = false)
     private Long sourceStatementId;
 
+    @Column(name = "source_supplier_statement_id")
+    private Long sourceSupplierStatementId;
+
+    @Column(name = "source_freight_statement_id")
+    private Long sourceFreightStatementId;
+
     @Column(name = "allocated_amount", nullable = false, precision = 14, scale = 2)
     private BigDecimal allocatedAmount;
 }

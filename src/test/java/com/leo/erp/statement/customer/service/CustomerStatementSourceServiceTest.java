@@ -14,18 +14,11 @@ import com.leo.erp.sales.outbound.domain.entity.SalesOutbound;
 import com.leo.erp.sales.outbound.domain.entity.SalesOutboundItem;
 import com.leo.erp.sales.outbound.repository.SalesOutboundRepository;
 import com.leo.erp.statement.customer.domain.entity.CustomerStatement;
-import com.leo.erp.statement.customer.domain.entity.CustomerStatementItem;
 import com.leo.erp.statement.customer.repository.CustomerStatementRepository;
 import com.leo.erp.statement.customer.web.dto.CustomerStatementItemRequest;
 import com.leo.erp.statement.customer.web.dto.CustomerStatementRequest;
 import com.leo.erp.statement.customer.web.dto.CustomerStatementCandidateResponse;
-import jakarta.persistence.criteria.CriteriaBuilder;
-import jakarta.persistence.criteria.CriteriaQuery;
-import jakarta.persistence.criteria.Path;
-import jakarta.persistence.criteria.Predicate;
-import jakarta.persistence.criteria.Root;
 import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentCaptor;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
@@ -33,13 +26,13 @@ import org.springframework.data.jpa.domain.Specification;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
-import java.util.Set;
+import java.util.concurrent.atomic.AtomicLong;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.mockingDetails;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
@@ -50,7 +43,6 @@ class CustomerStatementSourceServiceTest {
         CustomerStatementRepository repository = mock(CustomerStatementRepository.class);
         SalesOrderRepository salesOrderRepository = mock(SalesOrderRepository.class);
         SalesOrder sourceOrder = sourceOrder();
-        when(repository.findAll(any(Specification.class))).thenReturn(List.of());
         when(salesOrderRepository.findAll(any(Specification.class), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(sourceOrder)));
 
@@ -70,6 +62,9 @@ class CustomerStatementSourceServiceTest {
         assertThat(candidates.get(0).customerName()).isEqualTo("客户甲");
         assertThat(candidates.get(0).projectName()).isEqualTo("项目A");
         assertThat(candidates.get(0).status()).isEqualTo(StatusConstants.SALES_COMPLETED);
+        assertThat(invokedMethodNames(repository))
+                .contains("findOccupiedSourceSalesOrderIdsExcludingCurrentStatement")
+                .doesNotContain("findAll");
     }
 
     @Test
@@ -81,7 +76,6 @@ class CustomerStatementSourceServiceTest {
         Customer customer = new Customer();
         customer.setCustomerCode("CUS-001");
         when(itemQueryService.findActiveByIdIn(List.of(10L))).thenReturn(List.of(sourceItem));
-        when(repository.findAllBySourceNosExcludingCurrentStatement(Set.of("SO-001"), 99L)).thenReturn(List.of());
         when(customerRepository.findFirstByCustomerNameAndProjectNameAndDeletedFlagFalseOrderByCustomerCodeAsc("客户甲", "项目A"))
                 .thenReturn(java.util.Optional.of(customer));
         CustomerStatement entity = new CustomerStatement();
@@ -137,8 +131,6 @@ class CustomerStatementSourceServiceTest {
         outboundItem.setAmount(new BigDecimal("960.00"));
         outbound.setItems(new java.util.ArrayList<>(List.of(outboundItem)));
         when(itemQueryService.findActiveByIdIn(List.of(10L))).thenReturn(List.of(sourceItem));
-        when(repository.findAllBySourceNosExcludingCurrentStatement(Set.of("SO-001"), 99L))
-                .thenReturn(List.of());
         when(outboundRepository.findAllWithItemsByStatusAndSourceSalesOrderItemIds(
                 StatusConstants.AUDITED,
                 List.of(10L)
@@ -169,15 +161,10 @@ class CustomerStatementSourceServiceTest {
 
     @Test
     void shouldRejectOccupiedSourceOrder() {
-        CustomerStatementRepository repository = mock(CustomerStatementRepository.class);
+        CustomerStatementRepository repository = repositoryWithOccupiedSalesOrderId(1L);
         SalesOrderItemQueryService itemQueryService = mock(SalesOrderItemQueryService.class);
         SalesOrderItem sourceItem = sourceOrderItem(10L, sourceOrder());
-        CustomerStatement occupied = new CustomerStatement();
-        CustomerStatementItem occupiedItem = new CustomerStatementItem();
-        occupiedItem.setSourceNo("SO-001");
-        occupied.getItems().add(occupiedItem);
         when(itemQueryService.findActiveByIdIn(List.of(10L))).thenReturn(List.of(sourceItem));
-        when(repository.findAllBySourceNosExcludingCurrentStatement(Set.of("SO-001"), 99L)).thenReturn(List.of(occupied));
         CustomerStatement entity = new CustomerStatement();
         entity.setId(99L);
         CustomerStatementSourceService service = new CustomerStatementSourceService(
@@ -193,18 +180,11 @@ class CustomerStatementSourceServiceTest {
     }
 
     @Test
-    void shouldIgnoreBlankOccupiedSourceNosWhenApplyingItems() {
+    void shouldAllowSameSourceNoWhenStableSalesOrderIdIsDifferent() {
         CustomerStatementRepository repository = mock(CustomerStatementRepository.class);
         SalesOrderItemQueryService itemQueryService = mock(SalesOrderItemQueryService.class);
         SalesOrderItem sourceItem = sourceOrderItem(10L, sourceOrder());
-        CustomerStatement occupied = new CustomerStatement();
-        CustomerStatementItem blankItem = new CustomerStatementItem();
-        blankItem.setSourceNo(" ");
-        CustomerStatementItem nullItem = new CustomerStatementItem();
-        nullItem.setSourceNo(null);
-        occupied.getItems().addAll(List.of(blankItem, nullItem));
         when(itemQueryService.findActiveByIdIn(List.of(10L))).thenReturn(List.of(sourceItem));
-        when(repository.findAllBySourceNosExcludingCurrentStatement(Set.of("SO-001"), 99L)).thenReturn(List.of(occupied));
         CustomerStatement entity = new CustomerStatement();
         entity.setId(99L);
         CustomerStatementSourceService service = new CustomerStatementSourceService(
@@ -232,7 +212,6 @@ class CustomerStatementSourceServiceTest {
         SalesOrderItemQueryService itemQueryService = mock(SalesOrderItemQueryService.class);
         when(itemQueryService.findActiveByIdIn(List.of(10L))).thenReturn(List.of(sourceItem));
         CustomerStatementRepository repository = mock(CustomerStatementRepository.class);
-        when(repository.findAllBySourceNosExcludingCurrentStatement(Set.of("SO-001"), 99L)).thenReturn(List.of());
         CustomerStatement entity = new CustomerStatement();
         entity.setId(99L);
         CustomerStatementSourceService service = new CustomerStatementSourceService(
@@ -255,7 +234,6 @@ class CustomerStatementSourceServiceTest {
         sourceOrder.setCustomerCode("CUS-001");
         SalesOrderItem sourceItem = sourceOrderItem(10L, sourceOrder);
         when(itemQueryService.findActiveByIdIn(List.of(10L))).thenReturn(List.of(sourceItem));
-        when(repository.findAllBySourceNosExcludingCurrentStatement(Set.of("SO-001"), null)).thenReturn(List.of());
         CustomerStatement entity = new CustomerStatement();
         CustomerStatementSourceService service = new CustomerStatementSourceService(
                 repository,
@@ -270,28 +248,27 @@ class CustomerStatementSourceServiceTest {
     }
 
     @Test
-    void shouldCollectOccupiedOrderNosWithCurrentStatementAndIgnoreBlankSources() {
-        CustomerStatementRepository repository = mock(CustomerStatementRepository.class);
-        CustomerStatement occupied = new CustomerStatement();
-        CustomerStatementItem blankItem = new CustomerStatementItem();
-        blankItem.setSourceNo(" ");
-        CustomerStatementItem nullItem = new CustomerStatementItem();
-        nullItem.setSourceNo(null);
-        CustomerStatementItem sourceItem = new CustomerStatementItem();
-        sourceItem.setSourceNo(" SO-001 ");
-        occupied.getItems().addAll(List.of(blankItem, nullItem, sourceItem));
-        when(repository.findAll(any(Specification.class))).thenReturn(List.of(occupied));
+    void shouldUseStableSalesOrderIdWhenSourceNumberSnapshotChanged() {
+        CustomerStatementRepository repository = repositoryWithOccupiedSalesOrderId(1L);
+        SalesOrderItemQueryService itemQueryService = mock(SalesOrderItemQueryService.class);
+        SalesOrder sourceOrder = sourceOrder();
+        sourceOrder.setOrderNo("SO-RENAMED");
+        SalesOrderItem sourceItem = sourceOrderItem(10L, sourceOrder);
+        when(itemQueryService.findActiveByIdIn(List.of(10L))).thenReturn(List.of(sourceItem));
         CustomerStatementSourceService service = new CustomerStatementSourceService(
                 repository,
                 mock(SalesOrderRepository.class),
-                mock(SalesOrderItemQueryService.class),
+                itemQueryService,
                 null
         );
 
-        Set<String> occupiedOrderNos = service.collectOccupiedOrderNos(99L);
-
-        assertThat(occupiedOrderNos).containsExactly("SO-001");
-        assertCurrentStatementExclusionPredicateWasBuilt(repository);
+        assertThatThrownBy(() -> service.applyItems(
+                new CustomerStatement(),
+                customerRequest("CUS", "客户甲", "项目A", 1L, "结算主体A", 10L),
+                () -> 1000L
+        ))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("来源销售订单SO-RENAMED已生成客户对账单");
     }
 
     @Test
@@ -313,6 +290,36 @@ class CustomerStatementSourceServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("客户对账单来源销售订单不能为空");
         verifyNoInteractions(itemQueryService);
+    }
+
+    @Test
+    void shouldRejectDuplicateSourceSalesOrderItemIds() {
+        CustomerStatementRepository repository = mock(CustomerStatementRepository.class);
+        SalesOrderItemQueryService itemQueryService = mock(SalesOrderItemQueryService.class);
+        SalesOrderItem sourceItem = sourceOrderItem(10L, sourceOrder());
+        when(itemQueryService.findActiveByIdIn(List.of(10L))).thenReturn(List.of(sourceItem));
+        CustomerStatementSourceService service = new CustomerStatementSourceService(
+                repository,
+                mock(SalesOrderRepository.class),
+                itemQueryService,
+                null
+        );
+        AtomicLong nextId = new AtomicLong(1000L);
+
+        assertThatThrownBy(() -> service.applyItems(
+                new CustomerStatement(),
+                customerRequest(
+                        "CUS",
+                        "客户甲",
+                        "项目A",
+                        1L,
+                        "结算主体A",
+                        List.of(customerItemRequest(10L), customerItemRequest(10L))
+                ),
+                nextId::getAndIncrement
+        ))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("来源销售订单明细ID重复");
     }
 
     @Test
@@ -347,7 +354,6 @@ class CustomerStatementSourceServiceTest {
         sourceOrder.setSettlementCompanyName(null);
         SalesOrderItem sourceItem = sourceOrderItem(10L, sourceOrder);
         when(itemQueryService.findActiveByIdIn(List.of(10L))).thenReturn(List.of(sourceItem));
-        when(repository.findAllBySourceNosExcludingCurrentStatement(Set.of("SO-001"), null)).thenReturn(List.of());
         CustomerStatementSourceService service = new CustomerStatementSourceService(
                 repository,
                 mock(SalesOrderRepository.class),
@@ -371,7 +377,6 @@ class CustomerStatementSourceServiceTest {
         SalesOrderItemQueryService itemQueryService = mock(SalesOrderItemQueryService.class);
         SalesOrderItem sourceItem = sourceOrderItem(10L, sourceOrder());
         when(itemQueryService.findActiveByIdIn(List.of(10L))).thenReturn(List.of(sourceItem));
-        when(repository.findAllBySourceNosExcludingCurrentStatement(Set.of("SO-001"), null)).thenReturn(List.of());
         CustomerStatementSourceService service = new CustomerStatementSourceService(
                 repository,
                 mock(SalesOrderRepository.class),
@@ -401,7 +406,6 @@ class CustomerStatementSourceServiceTest {
         SalesOrderItemQueryService itemQueryService = mock(SalesOrderItemQueryService.class);
         SalesOrderItem sourceItem = sourceOrderItem(10L, sourceOrder());
         when(itemQueryService.findActiveByIdIn(List.of(10L, 20L))).thenReturn(List.of(sourceItem));
-        when(repository.findAllBySourceNosExcludingCurrentStatement(Set.of("SO-001"), null)).thenReturn(List.of());
         CustomerStatementSourceService service = new CustomerStatementSourceService(
                 repository,
                 mock(SalesOrderRepository.class),
@@ -435,7 +439,6 @@ class CustomerStatementSourceServiceTest {
         sourceOrder.setProjectName(" ");
         SalesOrderItem sourceItem = sourceOrderItem(10L, sourceOrder);
         when(itemQueryService.findActiveByIdIn(List.of(10L))).thenReturn(List.of(sourceItem));
-        when(repository.findAllBySourceNosExcludingCurrentStatement(Set.of("SO-001"), null)).thenReturn(List.of());
         CustomerStatement entity = new CustomerStatement();
         CustomerStatementSourceService service = new CustomerStatementSourceService(
                 repository,
@@ -458,7 +461,6 @@ class CustomerStatementSourceServiceTest {
         sourceOrder.setCustomerCode(null);
         SalesOrderItem sourceItem = sourceOrderItem(10L, sourceOrder);
         when(itemQueryService.findActiveByIdIn(List.of(10L))).thenReturn(List.of(sourceItem));
-        when(repository.findAllBySourceNosExcludingCurrentStatement(Set.of("SO-001"), null)).thenReturn(List.of());
         CustomerStatement entity = new CustomerStatement();
         CustomerStatementSourceService service = new CustomerStatementSourceService(
                 repository,
@@ -482,7 +484,6 @@ class CustomerStatementSourceServiceTest {
         sourceOrder.setProjectName(" ");
         SalesOrderItem sourceItem = sourceOrderItem(10L, sourceOrder);
         when(itemQueryService.findActiveByIdIn(List.of(10L))).thenReturn(List.of(sourceItem));
-        when(repository.findAllBySourceNosExcludingCurrentStatement(Set.of("SO-001"), null)).thenReturn(List.of());
         CustomerStatement entity = new CustomerStatement();
         CustomerStatementSourceService service = new CustomerStatementSourceService(
                 repository,
@@ -511,7 +512,6 @@ class CustomerStatementSourceServiceTest {
         SalesOrderItem firstItem = sourceOrderItem(10L, firstOrder);
         SalesOrderItem secondItem = sourceOrderItem(20L, secondOrder);
         when(itemQueryService.findActiveByIdIn(List.of(10L, 20L))).thenReturn(List.of(firstItem, secondItem));
-        when(repository.findAllBySourceNosExcludingCurrentStatement(Set.of("SO-001", "SO-002"), null)).thenReturn(List.of());
         CustomerStatementSourceService service = new CustomerStatementSourceService(
                 repository,
                 mock(SalesOrderRepository.class),
@@ -559,6 +559,22 @@ class CustomerStatementSourceServiceTest {
                 .hasMessageContaining("来源销售订单SO-001必须导入全部有效明细");
     }
 
+    private CustomerStatementRepository repositoryWithOccupiedSalesOrderId(Long occupiedSalesOrderId) {
+        return mock(CustomerStatementRepository.class, invocation -> {
+            if ("findMatchingOccupiedSourceSalesOrderIdsExcludingCurrentStatement"
+                    .equals(invocation.getMethod().getName())) {
+                return List.of(occupiedSalesOrderId);
+            }
+            return org.mockito.Mockito.RETURNS_DEFAULTS.answer(invocation);
+        });
+    }
+
+    private List<String> invokedMethodNames(CustomerStatementRepository repository) {
+        return mockingDetails(repository).getInvocations().stream()
+                .map(invocation -> invocation.getMethod().getName())
+                .toList();
+    }
+
     private SalesOrder sourceOrder() {
         SalesOrder order = new SalesOrder();
         order.setId(1L);
@@ -573,26 +589,6 @@ class CustomerStatementSourceServiceTest {
         order.setTotalAmount(new BigDecimal("1000.00"));
         order.setStatus(StatusConstants.SALES_COMPLETED);
         return order;
-    }
-
-    @SuppressWarnings("unchecked")
-    private void assertCurrentStatementExclusionPredicateWasBuilt(CustomerStatementRepository repository) {
-        ArgumentCaptor<Specification<CustomerStatement>> captor = ArgumentCaptor.forClass(Specification.class);
-        verify(repository).findAll(captor.capture());
-        Root<CustomerStatement> root = mock(Root.class);
-        CriteriaQuery<?> query = mock(CriteriaQuery.class);
-        CriteriaBuilder criteriaBuilder = mock(CriteriaBuilder.class);
-        Predicate predicate = mock(Predicate.class);
-        Path<Object> deletedFlagPath = mock(Path.class);
-        Path<Object> idPath = mock(Path.class);
-        when(root.get("deletedFlag")).thenReturn(deletedFlagPath);
-        when(root.get("id")).thenReturn(idPath);
-        when(criteriaBuilder.isFalse(any())).thenReturn(predicate);
-        when(criteriaBuilder.notEqual(idPath, 99L)).thenReturn(predicate);
-        when(criteriaBuilder.and(any(Predicate.class), any(Predicate.class))).thenReturn(predicate);
-
-        assertThat(captor.getValue().toPredicate(root, query, criteriaBuilder)).isSameAs(predicate);
-        verify(criteriaBuilder).notEqual(idPath, 99L);
     }
 
     private CustomerStatementRequest customerRequest(String customerCode,

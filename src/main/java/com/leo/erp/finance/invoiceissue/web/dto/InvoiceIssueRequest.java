@@ -35,8 +35,28 @@ public record InvoiceIssueRequest(
         String operatorName,
         String remark,
         @Valid @NotEmpty(message = "请至少填写一条开票明细")
-        List<InvoiceIssueItemRequest> items
+        List<InvoiceIssueItemRequest> items,
+        Long customerId,
+        Long projectId
 ) {
+    public InvoiceIssueRequest(String issueNo,
+                               String invoiceNo,
+                               String customerName,
+                               String projectName,
+                               Long settlementCompanyId,
+                               String settlementCompanyName,
+                               LocalDate invoiceDate,
+                               String invoiceType,
+                               BigDecimal amount,
+                               BigDecimal taxAmount,
+                               String status,
+                               String operatorName,
+                               String remark,
+                               List<InvoiceIssueItemRequest> items) {
+        this(issueNo, invoiceNo, customerName, projectName, settlementCompanyId, settlementCompanyName,
+                invoiceDate, invoiceType, amount, taxAmount, status, operatorName, remark, items, null, null);
+    }
+
     public InvoiceIssueRequest(String issueNo,
                                String invoiceNo,
                                String customerName,
@@ -50,6 +70,6 @@ public record InvoiceIssueRequest(
                                String remark,
                                List<InvoiceIssueItemRequest> items) {
         this(issueNo, invoiceNo, customerName, projectName, null, null, invoiceDate, invoiceType,
-                amount, taxAmount, status, operatorName, remark, items);
+                amount, taxAmount, status, operatorName, remark, items, null, null);
     }
 }

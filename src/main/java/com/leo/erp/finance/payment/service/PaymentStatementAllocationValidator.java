@@ -93,6 +93,8 @@ public class PaymentStatementAllocationValidator {
                                                          Map<Long, BigDecimal> requestAllocatedAmountMap,
                                                          int lineNo) {
         String statementSupplierCode = BusinessDocumentValidator.trimToNull(statement.getSupplierCode());
+        Long supplierId = requireCounterpartyId(statement.getSupplierId(), lineNo, "供应商");
+        requireRequestedCounterpartyId(request.counterpartyId(), supplierId, lineNo, "供应商");
         if (statementSupplierCode == null) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行对账单供应商编码不能为空，不能付款核销");
         }
@@ -101,6 +103,8 @@ public class PaymentStatementAllocationValidator {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行对账单供应商编码与付款单往来单位编码不一致");
         }
         ValidatedStatement validatedStatement = validatedStatement(
+                PaymentAllocationService.SUPPLIER_PAYMENT_TYPE,
+                supplierId,
                 statementSupplierCode,
                 statement.getSettlementCompanyId(),
                 statement.getSettlementCompanyName(),
@@ -149,7 +153,11 @@ public class PaymentStatementAllocationValidator {
                 statement.getCarrierCode(),
                 "第" + lineNo + "行对账单物流商编码与付款单往来单位编码不一致"
         );
+        Long carrierId = requireCounterpartyId(statement.getCarrierId(), lineNo, "物流商");
+        requireRequestedCounterpartyId(request.counterpartyId(), carrierId, lineNo, "物流商");
         ValidatedStatement validatedStatement = validatedStatement(
+                PaymentAllocationService.FREIGHT_PAYMENT_TYPE,
+                carrierId,
                 statement.getCarrierCode(),
                 statement.getSettlementCompanyId(),
                 statement.getSettlementCompanyName(),
@@ -181,7 +189,9 @@ public class PaymentStatementAllocationValidator {
         return validatedStatement;
     }
 
-    private ValidatedStatement validatedStatement(String counterpartyCode,
+    private ValidatedStatement validatedStatement(String counterpartyType,
+                                                   Long counterpartyId,
+                                                   String counterpartyCode,
                                                    Long settlementCompanyId,
                                                    String settlementCompanyName,
                                                    int lineNo) {
@@ -199,16 +209,43 @@ public class PaymentStatementAllocationValidator {
             );
         }
         return new ValidatedStatement(
+                counterpartyType,
+                counterpartyId,
                 BusinessDocumentValidator.trimToNull(counterpartyCode),
                 settlementCompanyId,
                 normalizedCompanyName
         );
     }
 
+    private Long requireCounterpartyId(Long counterpartyId, int lineNo, String label) {
+        if (counterpartyId == null) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR,
+                    "第" + lineNo + "行对账单缺少" + label + "ID");
+        }
+        return counterpartyId;
+    }
+
+    private void requireRequestedCounterpartyId(Long requestedId,
+                                                Long sourceId,
+                                                int lineNo,
+                                                String label) {
+        if (requestedId != null && !requestedId.equals(sourceId)) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR,
+                    "第" + lineNo + "行对账单" + label + "ID与付款单往来方ID不一致");
+        }
+    }
+
     record ValidatedStatement(
+            String counterpartyType,
+            Long counterpartyId,
             String counterpartyCode,
             Long settlementCompanyId,
             String settlementCompanyName
     ) {
+        ValidatedStatement(String counterpartyCode,
+                           Long settlementCompanyId,
+                           String settlementCompanyName) {
+            this(null, null, counterpartyCode, settlementCompanyId, settlementCompanyName);
+        }
     }
 }

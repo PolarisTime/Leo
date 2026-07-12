@@ -33,8 +33,26 @@ public record InvoiceReceiptRequest(
         String operatorName,
         String remark,
         @Valid @NotEmpty(message = "请至少填写一条收票明细")
-        List<InvoiceReceiptItemRequest> items
+        List<InvoiceReceiptItemRequest> items,
+        Long supplierId
 ) {
+    public InvoiceReceiptRequest(String receiveNo,
+                                 String invoiceNo,
+                                 String supplierCode,
+                                 String supplierName,
+                                 String invoiceTitle,
+                                 LocalDate invoiceDate,
+                                 String invoiceType,
+                                 BigDecimal amount,
+                                 BigDecimal taxAmount,
+                                 String status,
+                                 String operatorName,
+                                 String remark,
+                                 List<InvoiceReceiptItemRequest> items) {
+        this(receiveNo, invoiceNo, supplierCode, supplierName, invoiceTitle, invoiceDate, invoiceType,
+                amount, taxAmount, status, operatorName, remark, items, null);
+    }
+
     public InvoiceReceiptRequest(String receiveNo,
                                  String invoiceNo,
                                  String supplierName,
@@ -48,6 +66,6 @@ public record InvoiceReceiptRequest(
                                  String remark,
                                  List<InvoiceReceiptItemRequest> items) {
         this(receiveNo, invoiceNo, null, supplierName, invoiceTitle, invoiceDate, invoiceType,
-                amount, taxAmount, status, operatorName, remark, items);
+                amount, taxAmount, status, operatorName, remark, items, null);
     }
 }

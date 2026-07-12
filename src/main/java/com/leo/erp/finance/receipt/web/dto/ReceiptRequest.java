@@ -10,6 +10,7 @@ import java.util.List;
 
 public record ReceiptRequest(
         String receiptNo,
+        Long customerId,
         String customerCode,
         @jakarta.validation.constraints.NotBlank(message = "客户不能为空")
         String customerName,
@@ -18,7 +19,7 @@ public record ReceiptRequest(
         String projectName,
         Long settlementCompanyId,
         String settlementCompanyName,
-        Long sourceStatementId,
+        Long sourceCustomerStatementId,
         @NotNull(message = "收款日期不能为空")
         LocalDate receiptDate,
         @jakarta.validation.constraints.NotBlank(message = "收款方式不能为空")
@@ -35,6 +36,26 @@ public record ReceiptRequest(
         List<ReceiptAllocationRequest> items
 ) {
     public ReceiptRequest(String receiptNo,
+                          String customerCode,
+                          String customerName,
+                          Long projectId,
+                          String projectName,
+                          Long settlementCompanyId,
+                          String settlementCompanyName,
+                          Long sourceCustomerStatementId,
+                          LocalDate receiptDate,
+                          String payType,
+                          BigDecimal amount,
+                          String status,
+                          String operatorName,
+                          String remark,
+                          List<ReceiptAllocationRequest> items) {
+        this(receiptNo, null, customerCode, customerName, projectId, projectName, settlementCompanyId,
+                settlementCompanyName, sourceCustomerStatementId, receiptDate, payType, amount, status,
+                operatorName, remark, items);
+    }
+
+    public ReceiptRequest(String receiptNo,
                           String customerName,
                           String projectName,
                           Long sourceStatementId,
@@ -45,7 +66,8 @@ public record ReceiptRequest(
                           String operatorName,
                           String remark,
                           List<ReceiptAllocationRequest> items) {
-        this(receiptNo, null, customerName, null, projectName, null, null, sourceStatementId, receiptDate, payType, amount, status, operatorName, remark, items);
+        this(receiptNo, null, null, customerName, null, projectName, null, null, sourceStatementId,
+                receiptDate, payType, amount, status, operatorName, remark, items);
     }
 
     public ReceiptRequest(String receiptNo,
@@ -61,6 +83,12 @@ public record ReceiptRequest(
                           String operatorName,
                           String remark,
                           List<ReceiptAllocationRequest> items) {
-        this(receiptNo, customerCode, customerName, projectId, projectName, null, null, sourceStatementId, receiptDate, payType, amount, status, operatorName, remark, items);
+        this(receiptNo, null, customerCode, customerName, projectId, projectName, null, null,
+                sourceStatementId, receiptDate, payType, amount, status, operatorName, remark, items);
+    }
+
+    @Deprecated(forRemoval = false)
+    public Long sourceStatementId() {
+        return sourceCustomerStatementId;
     }
 }

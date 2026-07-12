@@ -1,11 +1,13 @@
 package com.leo.erp.sales.outbound.service;
 
+import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.sales.order.service.SalesOrderOutboundQueryService;
 import com.leo.erp.sales.outbound.domain.entity.SalesOutbound;
 import com.leo.erp.sales.outbound.domain.entity.SalesOutboundItem;
 import com.leo.erp.sales.outbound.repository.SalesOutboundRepository;
 import org.springframework.stereotype.Service;
 
+import java.util.Collection;
 import java.util.List;
 
 @Service
@@ -18,8 +20,13 @@ public class SalesOutboundOrderQueryService implements SalesOrderOutboundQuerySe
     }
 
     @Override
-    public List<OutboundRecord> findActiveOutbounds() {
-        return salesOutboundRepository.findByDeletedFlagFalse().stream()
+    public List<OutboundRecord> findAuditedOutboundsBySourceSalesOrderItemIds(
+            Collection<Long> sourceSalesOrderItemIds
+    ) {
+        return salesOutboundRepository.findAllWithItemsByStatusAndSourceSalesOrderItemIds(
+                        StatusConstants.AUDITED,
+                        sourceSalesOrderItemIds
+                ).stream()
                 .map(this::toRecord)
                 .toList();
     }

@@ -5,6 +5,7 @@ import com.leo.erp.common.support.TradeItemMaterialSupport;
 import com.leo.erp.common.support.TradeItemMaterialSupportTestDoubles;
 import com.leo.erp.common.support.TradeMaterialSnapshot;
 import com.leo.erp.common.support.WarehouseSelectionSupport;
+import com.leo.erp.common.support.WarehouseSnapshot;
 import com.leo.erp.purchase.inbound.repository.PurchaseInboundItemRepository;
 import com.leo.erp.purchase.inbound.service.PurchaseInboundItemQueryService;
 import com.leo.erp.purchase.order.domain.entity.PurchaseOrder;
@@ -12,10 +13,13 @@ import com.leo.erp.purchase.order.domain.entity.PurchaseOrderItem;
 import com.leo.erp.purchase.order.repository.PurchaseOrderRepository;
 import com.leo.erp.purchase.order.web.dto.PurchaseOrderItemRequest;
 import com.leo.erp.purchase.order.web.dto.PurchaseOrderRequest;
+import com.leo.erp.testsupport.StableIdentityPostgresFixtures;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
 import org.springframework.boot.test.autoconfigure.orm.jpa.TestEntityManager;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 
 import java.math.BigDecimal;
@@ -39,6 +43,12 @@ class PurchaseOrderApplyServicePostgresTest {
     private static final long EXISTING_ITEM_ID = 8_810_000_000_000_000_101L;
     private static final long NEW_ITEM_ID = 8_810_000_000_000_000_102L;
     private static final long REMOVED_ITEM_ID = 8_810_000_000_000_000_103L;
+    private static final long SUPPLIER_ID = 8_810_000_000_000_000_201L;
+    private static final long MATERIAL_1_ID = 8_810_000_000_000_000_202L;
+    private static final long MATERIAL_2_ID = 8_810_000_000_000_000_203L;
+    private static final long MATERIAL_3_ID = 8_810_000_000_000_000_204L;
+    private static final long WAREHOUSE_ID = 8_810_000_000_000_000_205L;
+    private static final long SETTLEMENT_COMPANY_ID = 8_810_000_000_000_000_206L;
     private static final String SUPPLIER_CODE = "TEST-ORDER-SUPPLIER";
 
     @Autowired
@@ -52,6 +62,22 @@ class PurchaseOrderApplyServicePostgresTest {
 
     @Autowired
     private ItemAllocationNativeRepository itemAllocationNativeRepository;
+
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
+
+    @BeforeEach
+    void insertStableIdentityFixtures() {
+        StableIdentityPostgresFixtures.insertSupplier(
+                jdbcTemplate, SUPPLIER_ID, SUPPLIER_CODE, "测试供应商");
+        StableIdentityPostgresFixtures.insertMaterial(jdbcTemplate, MATERIAL_1_ID, "M1");
+        StableIdentityPostgresFixtures.insertMaterial(jdbcTemplate, MATERIAL_2_ID, "M2");
+        StableIdentityPostgresFixtures.insertMaterial(jdbcTemplate, MATERIAL_3_ID, "M3");
+        StableIdentityPostgresFixtures.insertWarehouse(
+                jdbcTemplate, WAREHOUSE_ID, "TEST-ORDER-WAREHOUSE", "测试仓库");
+        StableIdentityPostgresFixtures.insertSettlementCompany(
+                jdbcTemplate, SETTLEMENT_COMPANY_ID, "测试结算主体");
+    }
 
     @Test
     void shouldInitializeNewItemBeforeNativeQueryFlushesManagedOrder() {
@@ -146,19 +172,23 @@ class PurchaseOrderApplyServicePostgresTest {
         TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
         WarehouseSelectionSupport warehouseSupport = mock(WarehouseSelectionSupport.class);
         when(materialSupport.loadMaterialMap(List.of("M1", "M2"))).thenReturn(Map.of(
-                "M1", new TradeMaterialSnapshot("M1", true),
-                "M2", new TradeMaterialSnapshot("M2", true)
+                "M1", new TradeMaterialSnapshot(MATERIAL_1_ID, "M1", true),
+                "M2", new TradeMaterialSnapshot(MATERIAL_2_ID, "M2", true)
         ));
         when(materialSupport.loadMaterialMap(List.of("M1"))).thenReturn(Map.of(
-                "M1", new TradeMaterialSnapshot("M1", true)
+                "M1", new TradeMaterialSnapshot(MATERIAL_1_ID, "M1", true)
         ));
         TradeItemMaterialSupportTestDoubles.stubMaterialCodeNormalization(materialSupport);
         when(materialSupport.normalizeBatchNo(any(), any(), anyInt(), eq(false)))
                 .thenAnswer(invocation -> invocation.getArgument(1));
-        when(warehouseSupport.normalizeWarehouseName(any(), anyInt(), eq(true)))
+        when(warehouseSupport.resolveWarehouse(any(), any(), anyInt(), eq(true)))
                 .thenAnswer(invocation -> {
                     entityManager.flush();
-                    return invocation.getArgument(0);
+                    return new WarehouseSnapshot(
+                            WAREHOUSE_ID,
+                            "TEST-ORDER-WAREHOUSE",
+                            "测试仓库"
+                    );
                 });
         return new PurchaseOrderApplyService(
                 materialSupport,
@@ -171,10 +201,11 @@ class PurchaseOrderApplyServicePostgresTest {
         PurchaseOrder order = new PurchaseOrder();
         order.setId(ORDER_ID);
         order.setOrderNo("TEST-PO-AUTO-FLUSH");
+        order.setSupplierId(SUPPLIER_ID);
         order.setSupplierCode(SUPPLIER_CODE);
         order.setSupplierName("测试供应商");
         order.setOrderDate(LocalDateTime.of(2026, 7, 10, 14, 0));
-        order.setSettlementCompanyId(1L);
+        order.setSettlementCompanyId(SETTLEMENT_COMPANY_ID);
         order.setSettlementCompanyName("测试结算主体");
         order.setStatus("草稿");
         order.setTotalWeight(new BigDecimal("1.000"));
@@ -198,10 +229,12 @@ class PurchaseOrderApplyServicePostgresTest {
     private PurchaseOrderRequest request(List<PurchaseOrderItemRequest> items) {
         return new PurchaseOrderRequest(
                 "TEST-PO-AUTO-FLUSH",
+                SUPPLIER_ID,
+                SUPPLIER_CODE,
                 "测试供应商",
                 LocalDateTime.of(2026, 7, 10, 14, 0),
                 "测试采购员",
-                1L,
+                SETTLEMENT_COMPANY_ID,
                 "草稿",
                 null,
                 items
@@ -217,6 +250,7 @@ class PurchaseOrderApplyServicePostgresTest {
         BigDecimal price = new BigDecimal(unitPrice);
         return new PurchaseOrderItemRequest(
                 id,
+                materialId(materialCode),
                 materialCode,
                 "测试品牌",
                 "测试类别",
@@ -224,6 +258,7 @@ class PurchaseOrderApplyServicePostgresTest {
                 "TEST-SPEC",
                 "12m",
                 "吨",
+                WAREHOUSE_ID,
                 "测试仓库",
                 "TEST-BATCH",
                 quantity,
@@ -248,6 +283,7 @@ class PurchaseOrderApplyServicePostgresTest {
         item.setId(id);
         item.setPurchaseOrder(order);
         item.setLineNo(lineNo);
+        item.setMaterialId(materialId(materialCode));
         item.setMaterialCode(request.materialCode());
         item.setBrand(request.brand());
         item.setCategory(request.category());
@@ -255,6 +291,7 @@ class PurchaseOrderApplyServicePostgresTest {
         item.setSpec(request.spec());
         item.setLength(request.length());
         item.setUnit(request.unit());
+        item.setWarehouseId(WAREHOUSE_ID);
         item.setWarehouseName(request.warehouseName());
         item.setBatchNo(request.batchNo());
         item.setQuantity(request.quantity());
@@ -265,5 +302,14 @@ class PurchaseOrderApplyServicePostgresTest {
         item.setUnitPrice(request.unitPrice());
         item.setAmount(request.amount());
         return item;
+    }
+
+    private long materialId(String materialCode) {
+        return switch (materialCode) {
+            case "M1" -> MATERIAL_1_ID;
+            case "M2" -> MATERIAL_2_ID;
+            case "M3" -> MATERIAL_3_ID;
+            default -> throw new IllegalArgumentException("未知测试商品编码: " + materialCode);
+        };
     }
 }

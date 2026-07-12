@@ -52,6 +52,8 @@ public class PaymentApplyService {
         settlementSyncService.captureOriginalAllocationState(entity);
         entity.setPaymentNo(request.paymentNo());
         entity.setBusinessType(request.businessType());
+        entity.setCounterpartyType(request.businessType());
+        entity.setCounterpartyId(request.counterpartyId());
         entity.setPaymentPurpose(paymentPurpose);
         entity.setPaymentDate(request.paymentDate());
         entity.setPayType(request.payType());
@@ -100,6 +102,17 @@ public class PaymentApplyService {
         entity.setCounterpartyCode(BusinessDocumentValidator.trimToNull(request.counterpartyCode()));
         PaymentAllocationService.AllocationApplyResult allocationResult =
                 paymentAllocationService.applyAllocations(entity, request, nextStatus, nextIdSupplier);
+        if (request.counterpartyId() != null
+                && allocationResult.counterpartyId() != null
+                && !request.counterpartyId().equals(allocationResult.counterpartyId())) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "付款单往来方ID与来源对账单不一致");
+        }
+        entity.setCounterpartyType(allocationResult.counterpartyType() == null
+                ? request.businessType()
+                : allocationResult.counterpartyType());
+        entity.setCounterpartyId(allocationResult.counterpartyId() == null
+                ? request.counterpartyId()
+                : allocationResult.counterpartyId());
         entity.setCounterpartyCode(paymentAllocationService.mergeCounterpartyCode(
                 entity.getCounterpartyCode(),
                 allocationResult.counterpartyCode()

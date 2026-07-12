@@ -19,8 +19,28 @@ public record SupplierStatementResponse(
         String status,
         boolean deletedFlag,
         String remark,
-        List<SupplierStatementItemResponse> items
+        List<SupplierStatementItemResponse> items,
+        Long supplierId
 ) {
+    public SupplierStatementResponse(Long id,
+                                     String statementNo,
+                                     String supplierCode,
+                                     String supplierName,
+                                     Long settlementCompanyId,
+                                     String settlementCompanyName,
+                                     LocalDate startDate,
+                                     LocalDate endDate,
+                                     BigDecimal purchaseAmount,
+                                     BigDecimal paymentAmount,
+                                     BigDecimal closingAmount,
+                                     String status,
+                                     boolean deletedFlag,
+                                     String remark,
+                                     List<SupplierStatementItemResponse> items) {
+        this(id, statementNo, supplierCode, supplierName, settlementCompanyId, settlementCompanyName, startDate,
+                endDate, purchaseAmount, paymentAmount, closingAmount, status, deletedFlag, remark, items, null);
+    }
+
     public SupplierStatementResponse(Long id,
                                      String statementNo,
                                      String supplierCode,
@@ -36,7 +56,7 @@ public record SupplierStatementResponse(
                                      String remark,
                                      List<SupplierStatementItemResponse> items) {
         this(id, statementNo, supplierCode, supplierName, settlementCompanyId, settlementCompanyName,
-                startDate, endDate, purchaseAmount, paymentAmount, closingAmount, status, false, remark, items);
+                startDate, endDate, purchaseAmount, paymentAmount, closingAmount, status, false, remark, items, null);
     }
 
     public SupplierStatementResponse(Long id,
@@ -52,7 +72,7 @@ public record SupplierStatementResponse(
                                      String remark,
                                      List<SupplierStatementItemResponse> items) {
         this(id, statementNo, supplierCode, supplierName, null, null, startDate, endDate,
-                purchaseAmount, paymentAmount, closingAmount, status, false, remark, items);
+                purchaseAmount, paymentAmount, closingAmount, status, false, remark, items, null);
     }
 
     public SupplierStatementResponse(Long id,
@@ -67,6 +87,6 @@ public record SupplierStatementResponse(
                                      String remark,
                                      List<SupplierStatementItemResponse> items) {
         this(id, statementNo, null, supplierName, null, null, startDate, endDate,
-                purchaseAmount, paymentAmount, closingAmount, status, false, remark, items);
+                purchaseAmount, paymentAmount, closingAmount, status, false, remark, items, null);
     }
 }

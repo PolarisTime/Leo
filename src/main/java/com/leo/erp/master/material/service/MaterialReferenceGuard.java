@@ -24,57 +24,72 @@ public class MaterialReferenceGuard {
     }
 
     private List<ReferenceCheck> materialReferences(Material entity) {
-        String materialCode = entity.getMaterialCode();
+        Long materialId = entity.getId();
         return List.of(
                 ReferenceCheck.any(
-                        "po_purchase_order_item",
-                        "material_code",
-                        materialCode
-                ),
-                ReferenceCheck.any(
-                        "po_purchase_inbound_item",
-                        "material_code",
-                        materialCode
-                ),
-                ReferenceCheck.any(
-                        "so_sales_order_item",
-                        "material_code",
-                        materialCode
-                ),
-                ReferenceCheck.any(
-                        "so_sales_outbound_item",
-                        "material_code",
-                        materialCode
-                ),
-                ReferenceCheck.any(
-                        "lg_freight_bill_item",
-                        "material_code",
-                        materialCode
-                ),
-                ReferenceCheck.any(
                         "ct_purchase_contract_item",
-                        "material_code",
-                        materialCode
+                        "material_id",
+                        materialId
                 ),
                 ReferenceCheck.any(
                         "ct_sales_contract_item",
-                        "material_code",
-                        materialCode
+                        "material_id",
+                        materialId
+                ),
+                ReferenceCheck.any(
+                        "po_purchase_order_item",
+                        "material_id",
+                        materialId
+                ),
+                ReferenceCheck.any(
+                        "po_purchase_inbound_item",
+                        "material_id",
+                        materialId
+                ),
+                ReferenceCheck.any(
+                        "po_purchase_refund_item",
+                        "material_id",
+                        materialId
+                ),
+                ReferenceCheck.any(
+                        "so_sales_order_item",
+                        "material_id",
+                        materialId
+                ),
+                ReferenceCheck.any(
+                        "so_sales_outbound_item",
+                        "material_id",
+                        materialId
+                ),
+                ReferenceCheck.any(
+                        "lg_freight_bill_item",
+                        "material_id",
+                        materialId
+                ),
+                ReferenceCheck.any(
+                        "fm_invoice_issue_item",
+                        "material_id",
+                        materialId
+                ),
+                ReferenceCheck.any(
+                        "fm_invoice_receipt_item",
+                        "material_id",
+                        materialId
                 ),
                 ReferenceCheck.any(
                         "st_customer_statement_item",
-                        "material_code",
-                        materialCode
+                        "material_id",
+                        materialId
                 ),
                 ReferenceCheck.any(
                         "st_supplier_statement_item",
-                        "material_code",
-                        materialCode
+                        "material_id",
+                        materialId
                 ),
                 ReferenceCheck.any(
                         "st_freight_statement_item",
-                        "material_code",
-                        materialCode
+                        "material_id",
+                        materialId
                 )
         );
     }

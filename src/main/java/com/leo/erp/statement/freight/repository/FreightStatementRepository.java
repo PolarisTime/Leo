@@ -30,4 +30,47 @@ public interface FreightStatementRepository extends JpaRepository<FreightStateme
             @Param("sourceNos") Collection<String> sourceNos,
             @Param("currentStatementId") Long currentStatementId
     );
+
+    @Query("""
+            select distinct item.sourceFreightBillId
+            from FreightStatement fs
+            join fs.items item
+            where fs.deletedFlag = false
+              and item.sourceFreightBillId is not null
+              and (:currentStatementId is null or fs.id <> :currentStatementId)
+            """)
+    List<Long> findOccupiedSourceFreightBillIdsExcludingCurrentStatement(
+            @Param("currentStatementId") Long currentStatementId
+    );
+
+    @Query("""
+            select distinct item.sourceFreightBillId
+            from FreightStatement fs
+            join fs.items item
+            where fs.deletedFlag = false
+              and item.sourceFreightBillId in :sourceFreightBillIds
+              and (:currentStatementId is null or fs.id <> :currentStatementId)
+            """)
+    List<Long> findMatchingOccupiedSourceFreightBillIdsExcludingCurrentStatement(
+            @Param("sourceFreightBillIds") Collection<Long> sourceFreightBillIds,
+            @Param("currentStatementId") Long currentStatementId
+    );
+
+    @EntityGraph(attributePaths = "items")
+    @Query("""
+            select distinct fs
+            from FreightStatement fs
+            where fs.deletedFlag = false
+              and exists (
+                    select 1
+                    from FreightStatementItem item
+                    where item.freightStatement = fs
+                      and item.sourceFreightBillId in :sourceFreightBillIds
+              )
+              and (:currentStatementId is null or fs.id <> :currentStatementId)
+            """)
+    List<FreightStatement> findAllBySourceFreightBillIdsExcludingCurrentStatement(
+            @Param("sourceFreightBillIds") Collection<Long> sourceFreightBillIds,
+            @Param("currentStatementId") Long currentStatementId
+    );
 }

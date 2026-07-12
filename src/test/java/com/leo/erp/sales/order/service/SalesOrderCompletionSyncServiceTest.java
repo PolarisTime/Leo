@@ -4,9 +4,12 @@ import com.leo.erp.sales.order.domain.entity.SalesOrder;
 import com.leo.erp.sales.order.domain.entity.SalesOrderItem;
 import com.leo.erp.sales.order.repository.SalesOrderRepository;
 import org.junit.jupiter.api.Test;
+import org.mockito.Answers;
 
+import java.lang.reflect.Method;
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -19,6 +22,44 @@ import static org.mockito.Mockito.when;
 class SalesOrderCompletionSyncServiceTest {
 
     @Test
+    void shouldSynchronizeByStableSourceItemIdentityWhenBusinessNumbersDiffer() throws Exception {
+        SalesOrder order = buildOrder("SO-CURRENT-DISPLAY", "已审核", 10);
+        order.setId(900L);
+        Long sourceItemId = order.getItems().get(0).getId();
+        SalesOrderOutboundQueryService.OutboundRecord outbound =
+                buildOutbound("SO-STALE-SNAPSHOT", "已审核", sourceItemId, 10);
+        SalesOrderRepository salesOrderRepository = mock(SalesOrderRepository.class, invocation -> {
+            if ("findAllWithItemsBySourceItemIds".equals(invocation.getMethod().getName())) {
+                return List.of(order);
+            }
+            return Answers.RETURNS_DEFAULTS.answer(invocation);
+        });
+        SalesOrderOutboundQueryService outboundQueryService = mock(
+                SalesOrderOutboundQueryService.class,
+                invocation -> {
+                    if ("findAuditedOutboundsBySourceSalesOrderItemIds"
+                            .equals(invocation.getMethod().getName())) {
+                        return List.of(outbound);
+                    }
+                    return Answers.RETURNS_DEFAULTS.answer(invocation);
+                }
+        );
+        SalesOrderCompletionSyncService service = new SalesOrderCompletionSyncService(
+                salesOrderRepository, outboundQueryService);
+        Method stableSyncMethod = Arrays.stream(SalesOrderCompletionSyncService.class.getMethods())
+                .filter(method -> "syncBySourceSalesOrderItemIds".equals(method.getName()))
+                .findFirst()
+                .orElse(null);
+
+        assertThat(stableSyncMethod)
+                .as("completion synchronization must expose a source item ID boundary")
+                .isNotNull();
+        stableSyncMethod.invoke(service, List.of(sourceItemId));
+
+        assertThat(order.getStatus()).isEqualTo("交付核定");
+    }
+
+    @Test
     void shouldMarkSalesOrderForDeliveryVerificationWhenAuditedOutboundExists() {
         SalesOrderRepository salesOrderRepository = mock(SalesOrderRepository.class);
         SalesOrderOutboundQueryService outboundQueryService = mock(SalesOrderOutboundQueryService.class);
@@ -29,10 +70,10 @@ class SalesOrderCompletionSyncServiceTest {
         SalesOrderOutboundQueryService.OutboundRecord outbound =
                 buildOutbound("SO-001", "已审核", order.getItems().get(0).getId(), 10);
 
-        when(salesOrderRepository.findByOrderNoInAndDeletedFlagFalse(any())).thenReturn(List.of(order));
-        when(outboundQueryService.findActiveOutbounds()).thenReturn(List.of(outbound));
+        when(salesOrderRepository.findAllWithItemsBySourceItemIds(any())).thenReturn(List.of(order));
+        when(outboundQueryService.findAuditedOutboundsBySourceSalesOrderItemIds(any())).thenReturn(List.of(outbound));
 
-        service.syncBySalesOrderReference("SO-001");
+        service.syncBySourceSalesOrderItemIds(List.of(order.getItems().get(0).getId()));
 
         assertThat(order.getStatus()).isEqualTo("交付核定");
         verify(salesOrderRepository).saveAll(any());
@@ -50,10 +91,10 @@ class SalesOrderCompletionSyncServiceTest {
         SalesOrderOutboundQueryService.OutboundRecord outbound =
                 buildOutbound("SO-PRICE-001", "已审核", order.getItems().get(0).getId(), 10);
 
-        when(salesOrderRepository.findByOrderNoInAndDeletedFlagFalse(any())).thenReturn(List.of(order));
-        when(outboundQueryService.findActiveOutbounds()).thenReturn(List.of(outbound));
+        when(salesOrderRepository.findAllWithItemsBySourceItemIds(any())).thenReturn(List.of(order));
+        when(outboundQueryService.findAuditedOutboundsBySourceSalesOrderItemIds(any())).thenReturn(List.of(outbound));
 
-        service.syncBySalesOrderReference("SO-PRICE-001");
+        service.syncBySourceSalesOrderItemIds(List.of(order.getItems().get(0).getId()));
 
         assertThat(order.getStatus()).isEqualTo("已审核");
     }
@@ -76,10 +117,10 @@ class SalesOrderCompletionSyncServiceTest {
         SalesOrderOutboundQueryService.OutboundRecord outbound =
                 buildOutbound("SO-TOTAL-001", "已审核", orderItem.getId(), 2, new BigDecimal("4.500"));
 
-        when(salesOrderRepository.findByOrderNoInAndDeletedFlagFalse(any())).thenReturn(List.of(order));
-        when(outboundQueryService.findActiveOutbounds()).thenReturn(List.of(outbound));
+        when(salesOrderRepository.findAllWithItemsBySourceItemIds(any())).thenReturn(List.of(order));
+        when(outboundQueryService.findAuditedOutboundsBySourceSalesOrderItemIds(any())).thenReturn(List.of(outbound));
 
-        service.syncBySalesOrderReference("SO-TOTAL-001");
+        service.syncBySourceSalesOrderItemIds(List.of(order.getItems().get(0).getId()));
 
         assertThat(orderItem.getOriginalWeightTon()).isNull();
         assertThat(orderItem.getWeightTon()).isEqualByComparingTo("5.000");
@@ -104,10 +145,10 @@ class SalesOrderCompletionSyncServiceTest {
         SalesOrderOutboundQueryService.OutboundRecord outbound =
                 buildOutbound("SO-ORIGINAL-001", "已审核", orderItem.getId(), 2, new BigDecimal("4.500"));
 
-        when(salesOrderRepository.findByOrderNoInAndDeletedFlagFalse(any())).thenReturn(List.of(order));
-        when(outboundQueryService.findActiveOutbounds()).thenReturn(List.of(outbound));
+        when(salesOrderRepository.findAllWithItemsBySourceItemIds(any())).thenReturn(List.of(order));
+        when(outboundQueryService.findAuditedOutboundsBySourceSalesOrderItemIds(any())).thenReturn(List.of(outbound));
 
-        service.syncBySalesOrderReference("SO-ORIGINAL-001");
+        service.syncBySourceSalesOrderItemIds(List.of(order.getItems().get(0).getId()));
 
         assertThat(orderItem.getOriginalWeightTon()).isEqualByComparingTo("6.000");
         assertThat(orderItem.getWeightTon()).isEqualByComparingTo("5.000");
@@ -128,10 +169,10 @@ class SalesOrderCompletionSyncServiceTest {
         SalesOrderOutboundQueryService.OutboundRecord outbound =
                 buildOutbound("SO-SAME-WEIGHT-001", "已审核", orderItem.getId(), 2, new BigDecimal("4.500"));
 
-        when(salesOrderRepository.findByOrderNoInAndDeletedFlagFalse(any())).thenReturn(List.of(order));
-        when(outboundQueryService.findActiveOutbounds()).thenReturn(List.of(outbound));
+        when(salesOrderRepository.findAllWithItemsBySourceItemIds(any())).thenReturn(List.of(order));
+        when(outboundQueryService.findAuditedOutboundsBySourceSalesOrderItemIds(any())).thenReturn(List.of(outbound));
 
-        service.syncBySalesOrderReference("SO-SAME-WEIGHT-001");
+        service.syncBySourceSalesOrderItemIds(List.of(order.getItems().get(0).getId()));
 
         assertThat(orderItem.getOriginalWeightTon()).isNull();
         assertThat(orderItem.getWeightTon()).isEqualByComparingTo("4.500");
@@ -153,10 +194,10 @@ class SalesOrderCompletionSyncServiceTest {
         SalesOrderOutboundQueryService.OutboundRecord outbound =
                 buildOutbound("SO-NO-PRICE-001", "已审核", orderItem.getId(), 2, new BigDecimal("4.500"));
 
-        when(salesOrderRepository.findByOrderNoInAndDeletedFlagFalse(any())).thenReturn(List.of(order));
-        when(outboundQueryService.findActiveOutbounds()).thenReturn(List.of(outbound));
+        when(salesOrderRepository.findAllWithItemsBySourceItemIds(any())).thenReturn(List.of(order));
+        when(outboundQueryService.findAuditedOutboundsBySourceSalesOrderItemIds(any())).thenReturn(List.of(outbound));
 
-        service.syncBySalesOrderReference("SO-NO-PRICE-001");
+        service.syncBySourceSalesOrderItemIds(List.of(order.getItems().get(0).getId()));
 
         assertThat(orderItem.getOriginalWeightTon()).isNull();
         assertThat(orderItem.getWeightTon()).isEqualByComparingTo("5.000");
@@ -175,10 +216,10 @@ class SalesOrderCompletionSyncServiceTest {
         SalesOrderOutboundQueryService.OutboundRecord outbound =
                 buildOutbound("SO-002", "草稿", order.getItems().get(0).getId(), 5);
 
-        when(salesOrderRepository.findByOrderNoInAndDeletedFlagFalse(any())).thenReturn(List.of(order));
-        when(outboundQueryService.findActiveOutbounds()).thenReturn(List.of(outbound));
+        when(salesOrderRepository.findAllWithItemsBySourceItemIds(any())).thenReturn(List.of(order));
+        when(outboundQueryService.findAuditedOutboundsBySourceSalesOrderItemIds(any())).thenReturn(List.of(outbound));
 
-        service.syncBySalesOrderReference("SO-002");
+        service.syncBySourceSalesOrderItemIds(List.of(order.getItems().get(0).getId()));
 
         assertThat(order.getStatus()).isEqualTo("已审核");
         verify(salesOrderRepository).saveAll(any());
@@ -195,10 +236,10 @@ class SalesOrderCompletionSyncServiceTest {
         SalesOrderOutboundQueryService.OutboundRecord outbound =
                 buildOutbound("SO-003", "已审核", order.getItems().get(0).getId(), 10);
 
-        when(salesOrderRepository.findByOrderNoInAndDeletedFlagFalse(any())).thenReturn(List.of(order));
-        when(outboundQueryService.findActiveOutbounds()).thenReturn(List.of(outbound));
+        when(salesOrderRepository.findAllWithItemsBySourceItemIds(any())).thenReturn(List.of(order));
+        when(outboundQueryService.findAuditedOutboundsBySourceSalesOrderItemIds(any())).thenReturn(List.of(outbound));
 
-        service.syncBySalesOrderReference("SO-003");
+        service.syncBySourceSalesOrderItemIds(List.of(order.getItems().get(0).getId()));
 
         assertThat(order.getStatus()).isEqualTo("完成销售");
         verify(salesOrderRepository, never()).saveAll(any());
@@ -215,17 +256,17 @@ class SalesOrderCompletionSyncServiceTest {
         SalesOrderOutboundQueryService.OutboundRecord outbound =
                 buildOutbound("SO-003B", "已审核", order.getItems().get(0).getId(), 10);
 
-        when(salesOrderRepository.findByOrderNoInAndDeletedFlagFalse(any())).thenReturn(List.of(order));
-        when(outboundQueryService.findActiveOutbounds()).thenReturn(List.of(outbound));
+        when(salesOrderRepository.findAllWithItemsBySourceItemIds(any())).thenReturn(List.of(order));
+        when(outboundQueryService.findAuditedOutboundsBySourceSalesOrderItemIds(any())).thenReturn(List.of(outbound));
 
-        service.syncBySalesOrderReference("SO-003B");
+        service.syncBySourceSalesOrderItemIds(List.of(order.getItems().get(0).getId()));
 
         assertThat(order.getStatus()).isEqualTo("完成销售");
         verify(salesOrderRepository, never()).saveAll(any());
     }
 
     @Test
-    void shouldSupportCommaSeparatedSalesOrderReferences() {
+    void shouldIgnoreCompositeBusinessNumberSnapshotWhenSourceItemIdentityMatches() {
         SalesOrderRepository salesOrderRepository = mock(SalesOrderRepository.class);
         SalesOrderOutboundQueryService outboundQueryService = mock(SalesOrderOutboundQueryService.class);
         SalesOrderCompletionSyncService service = new SalesOrderCompletionSyncService(
@@ -235,17 +276,17 @@ class SalesOrderCompletionSyncServiceTest {
         SalesOrderOutboundQueryService.OutboundRecord outbound =
                 buildOutbound("SO-004, SO-005", "已审核", order.getItems().get(0).getId(), 10);
 
-        when(salesOrderRepository.findByOrderNoInAndDeletedFlagFalse(any())).thenReturn(List.of(order));
-        when(outboundQueryService.findActiveOutbounds()).thenReturn(List.of(outbound));
+        when(salesOrderRepository.findAllWithItemsBySourceItemIds(any())).thenReturn(List.of(order));
+        when(outboundQueryService.findAuditedOutboundsBySourceSalesOrderItemIds(any())).thenReturn(List.of(outbound));
 
-        service.syncBySalesOrderReference("SO-004");
+        service.syncBySourceSalesOrderItemIds(List.of(order.getItems().get(0).getId()));
 
         assertThat(order.getStatus()).isEqualTo("交付核定");
         verify(salesOrderRepository).saveAll(any());
     }
 
     @Test
-    void shouldIgnoreBlankSegmentsInCommaSeparatedSalesOrderReferences() {
+    void shouldIgnoreMalformedBusinessNumberSnapshotWhenSourceItemIdentityMatches() {
         SalesOrderRepository salesOrderRepository = mock(SalesOrderRepository.class);
         SalesOrderOutboundQueryService outboundQueryService = mock(SalesOrderOutboundQueryService.class);
         SalesOrderCompletionSyncService service = new SalesOrderCompletionSyncService(
@@ -255,10 +296,10 @@ class SalesOrderCompletionSyncServiceTest {
         SalesOrderOutboundQueryService.OutboundRecord outbound =
                 buildOutbound("SO-004B,  ,", "已审核", order.getItems().get(0).getId(), 10);
 
-        when(salesOrderRepository.findByOrderNoInAndDeletedFlagFalse(any())).thenReturn(List.of(order));
-        when(outboundQueryService.findActiveOutbounds()).thenReturn(List.of(outbound));
+        when(salesOrderRepository.findAllWithItemsBySourceItemIds(any())).thenReturn(List.of(order));
+        when(outboundQueryService.findAuditedOutboundsBySourceSalesOrderItemIds(any())).thenReturn(List.of(outbound));
 
-        service.syncBySalesOrderReference("SO-004B");
+        service.syncBySourceSalesOrderItemIds(List.of(order.getItems().get(0).getId()));
 
         assertThat(order.getStatus()).isEqualTo("交付核定");
     }
@@ -274,10 +315,10 @@ class SalesOrderCompletionSyncServiceTest {
         SalesOrderOutboundQueryService.OutboundRecord outbound =
                 buildOutbound("SO-TOL-001", "已审核", order.getItems().get(0).getId(), 100);
 
-        when(salesOrderRepository.findByOrderNoInAndDeletedFlagFalse(any())).thenReturn(List.of(order));
-        when(outboundQueryService.findActiveOutbounds()).thenReturn(List.of(outbound));
+        when(salesOrderRepository.findAllWithItemsBySourceItemIds(any())).thenReturn(List.of(order));
+        when(outboundQueryService.findAuditedOutboundsBySourceSalesOrderItemIds(any())).thenReturn(List.of(outbound));
 
-        service.syncBySalesOrderReference("SO-TOL-001");
+        service.syncBySourceSalesOrderItemIds(List.of(order.getItems().get(0).getId()));
 
         assertThat(order.getStatus()).isEqualTo("交付核定");
     }
@@ -293,10 +334,10 @@ class SalesOrderCompletionSyncServiceTest {
         SalesOrderOutboundQueryService.OutboundRecord outbound =
                 buildOutbound("SO-TOL-002", "已审核", order.getItems().get(0).getId(), 96);
 
-        when(salesOrderRepository.findByOrderNoInAndDeletedFlagFalse(any())).thenReturn(List.of(order));
-        when(outboundQueryService.findActiveOutbounds()).thenReturn(List.of(outbound));
+        when(salesOrderRepository.findAllWithItemsBySourceItemIds(any())).thenReturn(List.of(order));
+        when(outboundQueryService.findAuditedOutboundsBySourceSalesOrderItemIds(any())).thenReturn(List.of(outbound));
 
-        service.syncBySalesOrderReference("SO-TOL-002");
+        service.syncBySourceSalesOrderItemIds(List.of(order.getItems().get(0).getId()));
 
         assertThat(order.getStatus()).isEqualTo("交付核定");
     }
@@ -312,10 +353,10 @@ class SalesOrderCompletionSyncServiceTest {
         SalesOrderOutboundQueryService.OutboundRecord outbound =
                 buildOutbound("SO-TOL-003", "已审核", order.getItems().get(0).getId(), 106);
 
-        when(salesOrderRepository.findByOrderNoInAndDeletedFlagFalse(any())).thenReturn(List.of(order));
-        when(outboundQueryService.findActiveOutbounds()).thenReturn(List.of(outbound));
+        when(salesOrderRepository.findAllWithItemsBySourceItemIds(any())).thenReturn(List.of(order));
+        when(outboundQueryService.findAuditedOutboundsBySourceSalesOrderItemIds(any())).thenReturn(List.of(outbound));
 
-        service.syncBySalesOrderReference("SO-TOL-003");
+        service.syncBySourceSalesOrderItemIds(List.of(order.getItems().get(0).getId()));
 
         assertThat(order.getStatus()).isEqualTo("已审核");
     }
@@ -331,10 +372,10 @@ class SalesOrderCompletionSyncServiceTest {
         SalesOrderOutboundQueryService.OutboundRecord outbound =
                 buildOutbound("SO-TOL-004", "已审核", order.getItems().get(0).getId(), 94);
 
-        when(salesOrderRepository.findByOrderNoInAndDeletedFlagFalse(any())).thenReturn(List.of(order));
-        when(outboundQueryService.findActiveOutbounds()).thenReturn(List.of(outbound));
+        when(salesOrderRepository.findAllWithItemsBySourceItemIds(any())).thenReturn(List.of(order));
+        when(outboundQueryService.findAuditedOutboundsBySourceSalesOrderItemIds(any())).thenReturn(List.of(outbound));
 
-        service.syncBySalesOrderReference("SO-TOL-004");
+        service.syncBySourceSalesOrderItemIds(List.of(order.getItems().get(0).getId()));
 
         assertThat(order.getStatus()).isEqualTo("已审核");
     }
@@ -350,10 +391,10 @@ class SalesOrderCompletionSyncServiceTest {
         SalesOrderOutboundQueryService.OutboundRecord outbound =
                 buildOutbound("SO-ZERO-001", "已审核", order.getItems().get(0).getId(), 0);
 
-        when(salesOrderRepository.findByOrderNoInAndDeletedFlagFalse(any())).thenReturn(List.of(order));
-        when(outboundQueryService.findActiveOutbounds()).thenReturn(List.of(outbound));
+        when(salesOrderRepository.findAllWithItemsBySourceItemIds(any())).thenReturn(List.of(order));
+        when(outboundQueryService.findAuditedOutboundsBySourceSalesOrderItemIds(any())).thenReturn(List.of(outbound));
 
-        service.syncBySalesOrderReference("SO-ZERO-001");
+        service.syncBySourceSalesOrderItemIds(List.of(order.getItems().get(0).getId()));
 
         assertThat(order.getStatus()).isEqualTo("交付核定");
     }
@@ -369,26 +410,26 @@ class SalesOrderCompletionSyncServiceTest {
         SalesOrderOutboundQueryService.OutboundRecord outbound =
                 buildOutbound("SO-ZERO-002", "已审核", order.getItems().get(0).getId(), 1);
 
-        when(salesOrderRepository.findByOrderNoInAndDeletedFlagFalse(any())).thenReturn(List.of(order));
-        when(outboundQueryService.findActiveOutbounds()).thenReturn(List.of(outbound));
+        when(salesOrderRepository.findAllWithItemsBySourceItemIds(any())).thenReturn(List.of(order));
+        when(outboundQueryService.findAuditedOutboundsBySourceSalesOrderItemIds(any())).thenReturn(List.of(outbound));
 
-        service.syncBySalesOrderReference("SO-ZERO-002");
+        service.syncBySourceSalesOrderItemIds(List.of(order.getItems().get(0).getId()));
 
         assertThat(order.getStatus()).isEqualTo("已审核");
     }
 
     @Test
-    void shouldReturnEarlyWhenReferenceIsBlank() {
+    void shouldReturnEarlyWhenSourceItemIdsAreInvalid() {
         SalesOrderRepository salesOrderRepository = mock(SalesOrderRepository.class);
         SalesOrderOutboundQueryService outboundQueryService = mock(SalesOrderOutboundQueryService.class);
         SalesOrderCompletionSyncService service = new SalesOrderCompletionSyncService(
                 salesOrderRepository, outboundQueryService);
 
-        service.syncBySalesOrderReference("");
-        service.syncBySalesOrderReference(null);
-        service.syncBySalesOrderReference("   ");
+        service.syncBySourceSalesOrderItemIds(null);
+        service.syncBySourceSalesOrderItemIds(List.of());
+        service.syncBySourceSalesOrderItemIds(Arrays.asList(null, 0L, -1L));
 
-        verify(salesOrderRepository, never()).findByOrderNoInAndDeletedFlagFalse(any());
+        verify(salesOrderRepository, never()).findAllWithItemsBySourceItemIds(any());
     }
 
     @Test
@@ -398,11 +439,11 @@ class SalesOrderCompletionSyncServiceTest {
         SalesOrderCompletionSyncService service = new SalesOrderCompletionSyncService(
                 salesOrderRepository, outboundQueryService);
 
-        when(salesOrderRepository.findByOrderNoInAndDeletedFlagFalse(any())).thenReturn(List.of());
+        when(salesOrderRepository.findAllWithItemsBySourceItemIds(any())).thenReturn(List.of());
 
-        service.syncBySalesOrderReference("SO-NONEXIST");
+        service.syncBySourceSalesOrderItemIds(List.of(100L));
 
-        verify(outboundQueryService, never()).findActiveOutbounds();
+        verify(outboundQueryService, never()).findAuditedOutboundsBySourceSalesOrderItemIds(any());
     }
 
     @Test
@@ -416,10 +457,10 @@ class SalesOrderCompletionSyncServiceTest {
         SalesOrderOutboundQueryService.OutboundRecord outbound =
                 buildOutbound("SO-DRAFT-001", "已审核", order.getItems().get(0).getId(), 10);
 
-        when(salesOrderRepository.findByOrderNoInAndDeletedFlagFalse(any())).thenReturn(List.of(order));
-        when(outboundQueryService.findActiveOutbounds()).thenReturn(List.of(outbound));
+        when(salesOrderRepository.findAllWithItemsBySourceItemIds(any())).thenReturn(List.of(order));
+        when(outboundQueryService.findAuditedOutboundsBySourceSalesOrderItemIds(any())).thenReturn(List.of(outbound));
 
-        service.syncBySalesOrderReference("SO-DRAFT-001");
+        service.syncBySourceSalesOrderItemIds(List.of(order.getItems().get(0).getId()));
 
         assertThat(order.getStatus()).isEqualTo("草稿");
     }
@@ -433,15 +474,19 @@ class SalesOrderCompletionSyncServiceTest {
 
         SalesOrder order1 = buildOrder("SO-M-001", "已审核", 10);
         SalesOrder order2 = buildOrder("SO-M-002", "已审核", 5);
+        order2.getItems().get(0).setId(101L);
         SalesOrderOutboundQueryService.OutboundRecord outbound1 =
                 buildOutbound("SO-M-001", "已审核", order1.getItems().get(0).getId(), 10);
         SalesOrderOutboundQueryService.OutboundRecord outbound2 =
                 buildOutbound("SO-M-002", "已审核", order2.getItems().get(0).getId(), 5);
 
-        when(salesOrderRepository.findByOrderNoInAndDeletedFlagFalse(any())).thenReturn(List.of(order1, order2));
-        when(outboundQueryService.findActiveOutbounds()).thenReturn(List.of(outbound1, outbound2));
+        when(salesOrderRepository.findAllWithItemsBySourceItemIds(any())).thenReturn(List.of(order1, order2));
+        when(outboundQueryService.findAuditedOutboundsBySourceSalesOrderItemIds(any())).thenReturn(List.of(outbound1, outbound2));
 
-        service.syncBySalesOrderReference("SO-M-001, SO-M-002");
+        service.syncBySourceSalesOrderItemIds(List.of(
+                order1.getItems().get(0).getId(),
+                order2.getItems().get(0).getId()
+        ));
 
         assertThat(order1.getStatus()).isEqualTo("交付核定");
         assertThat(order2.getStatus()).isEqualTo("交付核定");
@@ -456,10 +501,10 @@ class SalesOrderCompletionSyncServiceTest {
 
         SalesOrder order = buildOrder("SO-NC-001", "草稿", 10);
 
-        when(salesOrderRepository.findByOrderNoInAndDeletedFlagFalse(any())).thenReturn(List.of(order));
-        when(outboundQueryService.findActiveOutbounds()).thenReturn(List.of());
+        when(salesOrderRepository.findAllWithItemsBySourceItemIds(any())).thenReturn(List.of(order));
+        when(outboundQueryService.findAuditedOutboundsBySourceSalesOrderItemIds(any())).thenReturn(List.of());
 
-        service.syncBySalesOrderReference("SO-NC-001");
+        service.syncBySourceSalesOrderItemIds(List.of(order.getItems().get(0).getId()));
 
         assertThat(order.getStatus()).isEqualTo("草稿");
         verify(salesOrderRepository, never()).saveAll(any());
@@ -498,10 +543,10 @@ class SalesOrderCompletionSyncServiceTest {
                 outboundItem(201L, 5)
         );
 
-        when(salesOrderRepository.findByOrderNoInAndDeletedFlagFalse(any())).thenReturn(List.of(order));
-        when(outboundQueryService.findActiveOutbounds()).thenReturn(List.of(outbound));
+        when(salesOrderRepository.findAllWithItemsBySourceItemIds(any())).thenReturn(List.of(order));
+        when(outboundQueryService.findAuditedOutboundsBySourceSalesOrderItemIds(any())).thenReturn(List.of(outbound));
 
-        service.syncBySalesOrderReference("SO-MULTI-001");
+        service.syncBySourceSalesOrderItemIds(List.of(order.getItems().get(0).getId()));
 
         assertThat(order.getStatus()).isEqualTo("交付核定");
     }
@@ -538,10 +583,10 @@ class SalesOrderCompletionSyncServiceTest {
                 outboundItem(300L, 10)
         );
 
-        when(salesOrderRepository.findByOrderNoInAndDeletedFlagFalse(any())).thenReturn(List.of(order));
-        when(outboundQueryService.findActiveOutbounds()).thenReturn(List.of(outbound));
+        when(salesOrderRepository.findAllWithItemsBySourceItemIds(any())).thenReturn(List.of(order));
+        when(outboundQueryService.findAuditedOutboundsBySourceSalesOrderItemIds(any())).thenReturn(List.of(outbound));
 
-        service.syncBySalesOrderReference("SO-PARTIAL-001");
+        service.syncBySourceSalesOrderItemIds(List.of(order.getItems().get(0).getId()));
 
         assertThat(order.getStatus()).isEqualTo("已审核");
     }
@@ -557,10 +602,10 @@ class SalesOrderCompletionSyncServiceTest {
         SalesOrderOutboundQueryService.OutboundRecord outbound =
                 buildOutbound("SO-NULL-QTY", "已审核", order.getItems().get(0).getId(), null);
 
-        when(salesOrderRepository.findByOrderNoInAndDeletedFlagFalse(any())).thenReturn(List.of(order));
-        when(outboundQueryService.findActiveOutbounds()).thenReturn(List.of(outbound));
+        when(salesOrderRepository.findAllWithItemsBySourceItemIds(any())).thenReturn(List.of(order));
+        when(outboundQueryService.findAuditedOutboundsBySourceSalesOrderItemIds(any())).thenReturn(List.of(outbound));
 
-        service.syncBySalesOrderReference("SO-NULL-QTY");
+        service.syncBySourceSalesOrderItemIds(List.of(order.getItems().get(0).getId()));
 
         assertThat(order.getStatus()).isEqualTo("已审核");
     }
@@ -579,16 +624,16 @@ class SalesOrderCompletionSyncServiceTest {
                 outboundItem(null, 10)
         );
 
-        when(salesOrderRepository.findByOrderNoInAndDeletedFlagFalse(any())).thenReturn(List.of(order));
-        when(outboundQueryService.findActiveOutbounds()).thenReturn(List.of(outbound));
+        when(salesOrderRepository.findAllWithItemsBySourceItemIds(any())).thenReturn(List.of(order));
+        when(outboundQueryService.findAuditedOutboundsBySourceSalesOrderItemIds(any())).thenReturn(List.of(outbound));
 
-        service.syncBySalesOrderReference("SO-NULL-SRC");
+        service.syncBySourceSalesOrderItemIds(List.of(order.getItems().get(0).getId()));
 
         assertThat(order.getStatus()).isEqualTo("已审核");
     }
 
     @Test
-    void shouldHandleOutboundWithNullOrderNo() {
+    void shouldIgnoreMissingOutboundBusinessNumberSnapshot() {
         SalesOrderRepository salesOrderRepository = mock(SalesOrderRepository.class);
         SalesOrderOutboundQueryService outboundQueryService = mock(SalesOrderOutboundQueryService.class);
         SalesOrderCompletionSyncService service = new SalesOrderCompletionSyncService(
@@ -601,12 +646,12 @@ class SalesOrderCompletionSyncServiceTest {
                 outboundItem(order.getItems().get(0).getId(), 10)
         );
 
-        when(salesOrderRepository.findByOrderNoInAndDeletedFlagFalse(any())).thenReturn(List.of(order));
-        when(outboundQueryService.findActiveOutbounds()).thenReturn(List.of(outbound));
+        when(salesOrderRepository.findAllWithItemsBySourceItemIds(any())).thenReturn(List.of(order));
+        when(outboundQueryService.findAuditedOutboundsBySourceSalesOrderItemIds(any())).thenReturn(List.of(outbound));
 
-        service.syncBySalesOrderReference("SO-NULL-ONO");
+        service.syncBySourceSalesOrderItemIds(List.of(order.getItems().get(0).getId()));
 
-        assertThat(order.getStatus()).isEqualTo("已审核");
+        assertThat(order.getStatus()).isEqualTo("交付核定");
     }
 
     @Test
@@ -631,10 +676,10 @@ class SalesOrderCompletionSyncServiceTest {
         SalesOrderOutboundQueryService.OutboundRecord outbound =
                 buildOutbound("SO-NULL-ITEM-QTY", "已审核", 400L, 0);
 
-        when(salesOrderRepository.findByOrderNoInAndDeletedFlagFalse(any())).thenReturn(List.of(order));
-        when(outboundQueryService.findActiveOutbounds()).thenReturn(List.of(outbound));
+        when(salesOrderRepository.findAllWithItemsBySourceItemIds(any())).thenReturn(List.of(order));
+        when(outboundQueryService.findAuditedOutboundsBySourceSalesOrderItemIds(any())).thenReturn(List.of(outbound));
 
-        service.syncBySalesOrderReference("SO-NULL-ITEM-QTY");
+        service.syncBySourceSalesOrderItemIds(List.of(order.getItems().get(0).getId()));
 
         assertThat(order.getStatus()).isEqualTo("交付核定");
     }
@@ -661,10 +706,10 @@ class SalesOrderCompletionSyncServiceTest {
         SalesOrderOutboundQueryService.OutboundRecord outbound =
                 buildOutbound("SO-NULL-STATUS", "已审核", 500L, 10);
 
-        when(salesOrderRepository.findByOrderNoInAndDeletedFlagFalse(any())).thenReturn(List.of(order));
-        when(outboundQueryService.findActiveOutbounds()).thenReturn(List.of(outbound));
+        when(salesOrderRepository.findAllWithItemsBySourceItemIds(any())).thenReturn(List.of(order));
+        when(outboundQueryService.findAuditedOutboundsBySourceSalesOrderItemIds(any())).thenReturn(List.of(outbound));
 
-        service.syncBySalesOrderReference("SO-NULL-STATUS");
+        service.syncBySourceSalesOrderItemIds(List.of(order.getItems().get(0).getId()));
 
         assertThat(order.getStatus()).isNull();
         verify(salesOrderRepository, never()).saveAll(any());

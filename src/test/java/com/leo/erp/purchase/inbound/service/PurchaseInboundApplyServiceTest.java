@@ -1,8 +1,10 @@
 package com.leo.erp.purchase.inbound.service;
 
 import com.leo.erp.common.support.TradeItemMaterialSupport;
+import com.leo.erp.common.support.TradeItemMaterialSupportTestDoubles;
 import com.leo.erp.common.support.TradeMaterialSnapshot;
 import com.leo.erp.common.support.WarehouseSelectionSupport;
+import com.leo.erp.common.support.WarehouseSelectionSupportTestDoubles;
 import com.leo.erp.master.material.repository.MaterialCategoryRepository;
 import com.leo.erp.purchase.inbound.domain.entity.PurchaseInbound;
 import com.leo.erp.purchase.inbound.domain.entity.PurchaseInboundItem;
@@ -330,6 +332,7 @@ class PurchaseInboundApplyServiceTest {
     @Test
     void shouldUseDefaultSettlementModeAndSkipAccumulatorWhenMapperReturnsNoSourceLine() {
         TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
+        TradeItemMaterialSupportTestDoubles.stubMaterialCodeNormalization(materialSupport);
         PurchaseInboundSourceValidator sourceValidator = mock(PurchaseInboundSourceValidator.class);
         PurchaseInboundWeightSettlementService weightSettlementService = mock(PurchaseInboundWeightSettlementService.class);
         PurchaseInboundWeightWriteBackService weightWriteBackService = mock(PurchaseInboundWeightWriteBackService.class);
@@ -497,7 +500,9 @@ class PurchaseInboundApplyServiceTest {
 
     private TestFixture fixture() {
         TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
+        TradeItemMaterialSupportTestDoubles.stubMaterialCodeNormalization(materialSupport);
         WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
+        WarehouseSelectionSupportTestDoubles.stubWarehouseResolution(warehouseSelectionSupport);
         PurchaseInboundItemRepository inboundItemRepository = mock(PurchaseInboundItemRepository.class);
         PurchaseOrderItemQueryService purchaseOrderItemQueryService = mock(PurchaseOrderItemQueryService.class);
         PurchaseOrderRepository purchaseOrderRepository = mock(PurchaseOrderRepository.class);

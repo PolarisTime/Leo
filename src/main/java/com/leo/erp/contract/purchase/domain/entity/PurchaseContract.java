@@ -27,6 +27,12 @@ public class PurchaseContract extends AbstractAuditableEntity {
     @Column(name = "contract_no", nullable = false, unique = true, length = 64)
     private String contractNo;
 
+    @Column(name = "supplier_id")
+    private Long supplierId;
+
+    @Column(name = "supplier_code", length = 64)
+    private String supplierCode;
+
     @Column(name = "supplier_name", nullable = false, length = 128)
     private String supplierName;
 

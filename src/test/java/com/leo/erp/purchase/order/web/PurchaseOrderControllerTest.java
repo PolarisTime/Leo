@@ -16,6 +16,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 
 import java.util.List;
+import java.util.Arrays;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -25,6 +26,19 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class PurchaseOrderControllerTest {
+
+    @Test
+    void candidateEndpointsShouldExposeSupplierIdFilter() {
+        for (String methodName : List.of("importCandidates", "prepaymentCandidates", "page")) {
+            var method = Arrays.stream(PurchaseOrderController.class.getDeclaredMethods())
+                    .filter(candidate -> candidate.getName().equals(methodName))
+                    .findFirst()
+                    .orElseThrow();
+            assertThat(Arrays.stream(method.getParameters()).map(java.lang.reflect.Parameter::getName))
+                    .as(methodName)
+                    .contains("supplierId");
+        }
+    }
 
     private final PurchaseOrderService purchaseOrderService = mock(PurchaseOrderService.class);
     private final PurchaseOrderController controller = new PurchaseOrderController(purchaseOrderService);
@@ -68,7 +82,7 @@ class PurchaseOrderControllerTest {
         when(purchaseOrderService.importCandidates(any(), any(), eq("usage"))).thenReturn(page);
 
         ApiResponse<PageResponse<PurchaseOrderImportCandidateResponse>> response = controller.importCandidates(
-                query, "test", "supplier", 7L, "active", null, null, "usage"
+                query, "test", 101L, "supplier", 7L, "active", null, null, "usage"
         );
 
         assertThat(response.code()).isEqualTo(0);
@@ -76,6 +90,7 @@ class PurchaseOrderControllerTest {
         ArgumentCaptor<PageFilter> filterCaptor = ArgumentCaptor.forClass(PageFilter.class);
         verify(purchaseOrderService).importCandidates(eq(query), filterCaptor.capture(), eq("usage"));
         assertThat(filterCaptor.getValue().settlementCompanyId()).isEqualTo(7L);
+        assertThat(filterCaptor.getValue().supplierId()).isEqualTo(101L);
     }
 
     @Test
@@ -86,7 +101,7 @@ class PurchaseOrderControllerTest {
         when(purchaseOrderService.prepaymentCandidates(any(), any())).thenReturn(page);
 
         ApiResponse<PageResponse<PurchaseOrderImportCandidateResponse>> response = controller.prepaymentCandidates(
-                query, "PO-001", "供应商甲", 7L, "完成采购", null, null
+                query, "PO-001", 101L, "供应商甲", 7L, "完成采购", null, null
         );
 
         assertThat(response.code()).isEqualTo(0);
@@ -96,6 +111,7 @@ class PurchaseOrderControllerTest {
         assertThat(filterCaptor.getValue().keyword()).isEqualTo("PO-001");
         assertThat(filterCaptor.getValue().name()).isEqualTo("供应商甲");
         assertThat(filterCaptor.getValue().settlementCompanyId()).isEqualTo(7L);
+        assertThat(filterCaptor.getValue().supplierId()).isEqualTo(101L);
         assertThat(filterCaptor.getValue().status()).isEqualTo("完成采购");
     }
 
@@ -106,10 +122,15 @@ class PurchaseOrderControllerTest {
         PageQuery query = new PageQuery(0, 20, null, null);
         when(purchaseOrderService.page(any(), any())).thenReturn(page);
 
-        ApiResponse<PageResponse<PurchaseOrderResponse>> response = controller.page(query, "test", "supplier", 7L, "active", null, null);
+        ApiResponse<PageResponse<PurchaseOrderResponse>> response = controller.page(
+                query, "test", 101L, "supplier", 7L, "active", null, null
+        );
 
         assertThat(response.code()).isEqualTo(0);
         assertThat(response.data().content()).hasSize(1);
+        ArgumentCaptor<PageFilter> filterCaptor = ArgumentCaptor.forClass(PageFilter.class);
+        verify(purchaseOrderService).page(eq(query), filterCaptor.capture());
+        assertThat(filterCaptor.getValue().supplierId()).isEqualTo(101L);
     }
 
     @Test

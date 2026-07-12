@@ -47,6 +47,9 @@ spring:
       hibernate:
         # 生产环境不需要 SQL 格式化输出
         format_sql: false
+  flyway:
+    # 生产迁移必须显式选择阶段上限，禁止随着制品中的脚本自动迁移到 latest
+    target: ${SPRING_FLYWAY_TARGET:}
 
 management:
   tracing:

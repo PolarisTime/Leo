@@ -31,6 +31,7 @@ public class PurchaseOrderResponseAssembler {
         return new PurchaseOrderResponse(
                 response.id(),
                 response.orderNo(),
+                order.getSupplierId(),
                 response.supplierCode(),
                 response.supplierName(),
                 response.orderDate(),
@@ -66,6 +67,7 @@ public class PurchaseOrderResponseAssembler {
         return new PurchaseOrderItemResponse(
                 item.getId(),
                 item.getLineNo(),
+                item.getMaterialId(),
                 item.getMaterialCode(),
                 item.getBrand(),
                 item.getCategory(),
@@ -75,8 +77,10 @@ public class PurchaseOrderResponseAssembler {
                 item.getUnit(),
                 item.getPurchaseOrder() == null ? null : item.getPurchaseOrder().getSettlementCompanyId(),
                 item.getPurchaseOrder() == null ? null : item.getPurchaseOrder().getSettlementCompanyName(),
+                item.getWarehouseId(),
                 item.getWarehouseName(),
                 item.getBatchNo(),
+                item.getBatchNoNormalized(),
                 availabilityService.remainingQuantity(item, allocatedQuantityMap),
                 availabilityService.remainingQuantity(item, salesAllocatedQuantityMap),
                 availabilityService.salesRemainingWeightTon(item, salesAllocatedQuantityMap, salesRemainingWeightMap),

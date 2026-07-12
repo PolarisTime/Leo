@@ -36,6 +36,25 @@ class SalesOrderDeliveryVerificationGuardTest {
     }
 
     @Test
+    void shouldRejectItemMutationWhenInvoiceOccupiesOrderItem() {
+        InvoiceIssueRepository invoiceRepository = mock(InvoiceIssueRepository.class);
+        CustomerStatementRepository statementRepository = mock(CustomerStatementRepository.class);
+        SourceAllocationLockService lockService = mock(SourceAllocationLockService.class);
+        SalesOrderDeliveryVerificationGuard guard =
+                new SalesOrderDeliveryVerificationGuard(invoiceRepository, statementRepository, lockService);
+        InvoiceIssueRepository.SourceAllocationSummary allocation =
+                mock(InvoiceIssueRepository.SourceAllocationSummary.class);
+        when(invoiceRepository.summarizeAllocatedBySourceSalesOrderItemIds(List.of(11L), null))
+                .thenReturn(List.of(allocation));
+
+        assertThatThrownBy(() -> guard.assertMutableByItemIds(List.of(11L), "反审核"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("开票")
+                .hasMessageContaining("不能反审核");
+        verify(lockService).lockTradeItemSources(List.of(), List.of(), List.of(11L));
+    }
+
+    @Test
     void shouldAllowVerificationWhenNoFinancialDocumentOccupiesOrderItem() {
         InvoiceIssueRepository invoiceRepository = mock(InvoiceIssueRepository.class);
         CustomerStatementRepository statementRepository = mock(CustomerStatementRepository.class);

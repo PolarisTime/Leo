@@ -10,6 +10,7 @@ import com.leo.erp.statement.freight.web.dto.FreightStatementCandidateResponse;
 import com.leo.erp.statement.freight.web.dto.FreightStatementRequest;
 import com.leo.erp.statement.freight.web.dto.FreightStatementResponse;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 
@@ -58,7 +59,7 @@ class FreightStatementControllerTest {
         when(freightStatementService.responsePage(any(), any(), any())).thenReturn(page);
 
         ApiResponse<PageResponse<FreightStatementResponse>> response = controller.page(
-                query, "test", "CR-001", "carrier", 7L, "active", null, null, null
+                query, "test", 101L, "CR-001", "carrier", 7L, "active", null, null, null
         );
 
         assertThat(response.code()).isEqualTo(0);
@@ -74,12 +75,15 @@ class FreightStatementControllerTest {
         when(freightStatementService.candidatePage(any(), any(), any())).thenReturn(page);
 
         ApiResponse<PageResponse<FreightStatementCandidateResponse>> response = controller.candidates(
-                query, "test", "CR-001", "carrier", 7L, null, null
+                query, "test", 101L, "CR-001", "carrier", 7L, null, null, 201L
         );
 
         assertThat(response.code()).isEqualTo(0);
         assertThat(response.data().content()).hasSize(1);
-        verify(freightStatementService).candidatePage(eq(query), any(PageFilter.class), eq("CR-001"));
+        ArgumentCaptor<PageFilter> filterCaptor = ArgumentCaptor.forClass(PageFilter.class);
+        verify(freightStatementService).candidatePage(eq(query), filterCaptor.capture(), eq("CR-001"));
+        assertThat(filterCaptor.getValue().carrierId()).isEqualTo(101L);
+        assertThat(filterCaptor.getValue().currentRecordId()).isEqualTo(201L);
     }
 
     @Test

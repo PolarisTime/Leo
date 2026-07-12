@@ -1908,7 +1908,8 @@ class PurchaseInboundServiceTest {
                 .thenReturn(List.of());
         when(purchaseInboundItemRepository.summarizeWeighWeightBySourcePurchaseOrderItemIdsExcludingInbound(eq(List.of(201L)), any()))
                 .thenReturn(List.of());
-        when(repository.findByPurchaseOrderNoAndDeletedFlagFalse("PO-001")).thenReturn(List.of(completedInbound));
+        when(repository.findAllActiveBySourcePurchaseOrderItemIds(List.of(201L)))
+                .thenReturn(List.of(completedInbound));
         when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
         when(mapper.toResponse(any())).thenReturn(response());
 

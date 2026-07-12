@@ -9,6 +9,7 @@ import com.leo.erp.logistics.bill.domain.entity.FreightBillItem;
 import com.leo.erp.logistics.bill.web.dto.FreightBillItemRequest;
 import com.leo.erp.logistics.bill.web.dto.FreightBillRequest;
 import com.leo.erp.sales.outbound.domain.entity.SalesOutboundItem;
+import com.leo.erp.sales.outbound.domain.entity.SalesOutbound;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -52,15 +53,23 @@ public class FreightBillApplyService {
             FreightBillItem item = items.get(i);
             int lineNo = i + 1;
             SalesOutboundItem sourceOutboundItem = sourceContext.sourceItemAt(lineNo);
+            SalesOutbound sourceOutbound = sourceContext.sourceOutboundAt(lineNo);
+            if (sourceOutbound == null && sourceOutboundItem != null) {
+                sourceOutbound = sourceOutboundItem.getSalesOutbound();
+            }
             item.setFreightBill(entity);
             item.setLineNo(lineNo);
             item.setSourceNo(source.sourceNo());
-            applySourceSnapshot(item, sourceOutboundItem);
-            item.setCustomerName(source.customerName());
-            customerNames.add(source.customerName());
-            item.setProjectName(source.projectName());
-            projectNames.add(source.projectName());
-            item.setMaterialCode(source.materialCode());
+            applySourceSnapshot(item, sourceOutbound, sourceOutboundItem);
+            String customerName = sourceOutbound == null ? source.customerName() : sourceOutbound.getCustomerName();
+            String projectName = sourceOutbound == null ? source.projectName() : sourceOutbound.getProjectName();
+            item.setCustomerName(customerName);
+            customerNames.add(customerName);
+            item.setProjectName(projectName);
+            projectNames.add(projectName);
+            item.setMaterialCode(sourceOutboundItem == null
+                    ? source.materialCode()
+                    : sourceOutboundItem.getMaterialCode());
             item.setMaterialName(resolveMaterialName(source));
             item.setBrand(source.brand());
             item.setCategory(source.category());
@@ -71,10 +80,12 @@ public class FreightBillApplyService {
             item.setQuantityUnit(TradeItemCalculator.normalizeQuantityUnit(source.quantityUnit()));
             item.setPieceWeightTon(source.pieceWeightTon());
             item.setPiecesPerBundle(source.piecesPerBundle());
-            item.setBatchNo(source.batchNo());
+            item.setBatchNo(sourceOutboundItem == null ? source.batchNo() : sourceOutboundItem.getBatchNo());
             BigDecimal weightTon = resolveWeightTon(source, sourceOutboundItem);
             item.setWeightTon(weightTon);
-            item.setWarehouseName(source.warehouseName());
+            item.setWarehouseName(sourceOutboundItem == null
+                    ? source.warehouseName()
+                    : sourceOutboundItem.getWarehouseName());
             totalWeight = totalWeight.add(weightTon);
         }
         entity.getItems().sort(java.util.Comparator.comparing(FreightBillItem::getLineNo));
@@ -109,15 +120,25 @@ public class FreightBillApplyService {
         return TradeItemCalculator.calculateWeightTon(source.quantity(), source.pieceWeightTon());
     }
 
-    private void applySourceSnapshot(FreightBillItem item, SalesOutboundItem sourceOutboundItem) {
+    private void applySourceSnapshot(FreightBillItem item,
+                                     SalesOutbound sourceOutbound,
+                                     SalesOutboundItem sourceOutboundItem) {
         if (sourceOutboundItem == null) {
             item.setSourceSalesOutboundItemId(null);
             item.setSettlementCompanyId(null);
             item.setSettlementCompanyName(null);
+            item.setCustomerId(null);
+            item.setProjectId(null);
+            item.setMaterialId(null);
+            item.setWarehouseId(null);
             return;
         }
         item.setSourceSalesOutboundItemId(sourceOutboundItem.getId());
         item.setSettlementCompanyId(sourceOutboundItem.getSettlementCompanyId());
         item.setSettlementCompanyName(sourceOutboundItem.getSettlementCompanyName());
+        item.setCustomerId(sourceOutbound == null ? null : sourceOutbound.getCustomerId());
+        item.setProjectId(sourceOutbound == null ? null : sourceOutbound.getProjectId());
+        item.setMaterialId(sourceOutboundItem.getMaterialId());
+        item.setWarehouseId(sourceOutboundItem.getWarehouseId());
     }
 }

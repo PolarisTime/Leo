@@ -3,10 +3,28 @@ package com.leo.erp.common.api;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDate;
+import java.util.Arrays;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 class PageFilterTest {
+
+    @Test
+    void shouldExposeStableIdentityFiltersForServerSideCandidates() {
+        Set<String> componentNames = Arrays.stream(PageFilter.class.getRecordComponents())
+                .map(java.lang.reflect.RecordComponent::getName)
+                .collect(Collectors.toSet());
+
+        assertThat(componentNames).contains(
+                "customerId",
+                "projectId",
+                "supplierId",
+                "carrierId",
+                "currentRecordId"
+        );
+    }
 
     @Test
     void shouldCreateWithFourFields() {

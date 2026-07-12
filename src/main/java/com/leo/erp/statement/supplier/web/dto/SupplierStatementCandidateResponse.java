@@ -14,8 +14,25 @@ public record SupplierStatementCandidateResponse(
         String settlementMode,
         BigDecimal totalWeight,
         BigDecimal totalAmount,
-        String status
+        String status,
+        Long supplierId,
+        Long warehouseId
 ) {
+    public SupplierStatementCandidateResponse(Long id,
+                                              String inboundNo,
+                                              String supplierName,
+                                              Long settlementCompanyId,
+                                              String settlementCompanyName,
+                                              String warehouseName,
+                                              LocalDate inboundDate,
+                                              String settlementMode,
+                                              BigDecimal totalWeight,
+                                              BigDecimal totalAmount,
+                                              String status) {
+        this(id, inboundNo, supplierName, settlementCompanyId, settlementCompanyName, warehouseName, inboundDate,
+                settlementMode, totalWeight, totalAmount, status, null, null);
+    }
+
     public SupplierStatementCandidateResponse(Long id,
                                               String inboundNo,
                                               String supplierName,
@@ -26,6 +43,6 @@ public record SupplierStatementCandidateResponse(
                                               BigDecimal totalAmount,
                                               String status) {
         this(id, inboundNo, supplierName, null, null, warehouseName, inboundDate, settlementMode,
-                totalWeight, totalAmount, status);
+                totalWeight, totalAmount, status, null, null);
     }
 }

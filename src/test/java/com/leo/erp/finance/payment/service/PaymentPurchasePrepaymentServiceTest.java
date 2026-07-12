@@ -74,6 +74,8 @@ class PaymentPurchasePrepaymentServiceTest {
         assertThat(payment.getSettlementCompanyName()).isEqualTo("结算主体A");
         assertThat(payment.getCounterpartyCode()).isEqualTo("SUP-009");
         assertThat(payment.getCounterpartyName()).isEqualTo("来源供应商");
+        assertThat(payment.getCounterpartyType()).isEqualTo(PaymentAllocationService.SUPPLIER_PAYMENT_TYPE);
+        assertThat(payment.getCounterpartyId()).isEqualTo(209L);
     }
 
     @Test
@@ -515,6 +517,7 @@ class PaymentPurchasePrepaymentServiceTest {
         PurchaseOrder order = new PurchaseOrder();
         order.setId(9L);
         order.setOrderNo("PO-009");
+        order.setSupplierId(209L);
         order.setSupplierCode("SUP-009");
         order.setSupplierName("来源供应商");
         order.setSettlementCompanyId(19L);

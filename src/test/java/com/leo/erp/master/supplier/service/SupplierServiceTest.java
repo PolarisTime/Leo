@@ -6,6 +6,7 @@ import com.leo.erp.common.config.CacheConfig;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.support.MasterDataReferenceGuard;
+import com.leo.erp.common.support.MasterDataReferenceGuard.ReferenceCheck;
 import com.leo.erp.common.support.RedisJsonCacheSupport;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
@@ -16,6 +17,7 @@ import com.leo.erp.master.supplier.web.dto.SupplierOptionResponse;
 import com.leo.erp.master.supplier.web.dto.SupplierRequest;
 import com.leo.erp.master.supplier.web.dto.SupplierResponse;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.cache.concurrent.ConcurrentMapCacheManager;
@@ -27,6 +29,7 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.groups.Tuple.tuple;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -101,6 +104,40 @@ class SupplierServiceTest {
     }
 
     @Test
+    void shouldKeepSameNameSuppliersAsDistinctStableOptions() {
+        Supplier first = createSupplier(101L, "S001");
+        Supplier second = createSupplier(102L, "S002");
+        first.setSupplierName("同名供应商");
+        second.setSupplierName("同名供应商");
+        SupplierRepository repository = mock(SupplierRepository.class);
+        when(repository.findByDeletedFlagFalseAndStatusOrderBySupplierCodeAsc(StatusConstants.NORMAL))
+                .thenReturn(List.of(first, second));
+        SupplierService service = new SupplierService(repository, new SnowflakeIdGenerator(1), null);
+
+        List<SupplierOptionResponse> options = service.listActiveOptions();
+
+        assertThat(options).extracting(SupplierOptionResponse::id).containsExactly(101L, 102L);
+        assertThat(options).extracting(SupplierOptionResponse::value).containsExactly(101L, 102L);
+        assertThat(options).extracting(SupplierOptionResponse::supplierName)
+                .containsExactly("同名供应商", "同名供应商");
+        assertThat(options).extracting(SupplierOptionResponse::label)
+                .containsExactly("S001 / 同名供应商", "S002 / 同名供应商");
+    }
+
+    @Test
+    void shouldFailClosedWhenSupplierOptionHasNoStableId() {
+        Supplier supplier = createSupplier(null, "S001");
+        SupplierRepository repository = mock(SupplierRepository.class);
+        when(repository.findByDeletedFlagFalseAndStatusOrderBySupplierCodeAsc(StatusConstants.NORMAL))
+                .thenReturn(List.of(supplier));
+        SupplierService service = new SupplierService(repository, new SnowflakeIdGenerator(1), null);
+
+        assertThatThrownBy(service::listActiveOptions)
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("稳定ID");
+    }
+
+    @Test
     void shouldRefreshCache_whenCachedOptionsAreEmptyButActiveSuppliersExist() {
         SupplierRepository repository = mock(SupplierRepository.class);
         Supplier supplier = createSupplier(1L, "S001");
@@ -114,7 +151,7 @@ class SupplierServiceTest {
 
         assertThat(result).singleElement().satisfies(option -> {
             assertThat(option.id()).isEqualTo(1L);
-            assertThat(option.label()).isEqualTo("供应商甲");
+            assertThat(option.label()).isEqualTo("S001 / 供应商甲");
         });
         verify(cache, never()).delete(anyString());
         verify(cache, never()).write(eq("leo:supplier:all"), eq(result), any());
@@ -207,14 +244,14 @@ class SupplierServiceTest {
         var cacheManager = new ConcurrentMapCacheManager(CacheConfig.CACHE_OPTIONS);
         cacheManager.getCache(CacheConfig.CACHE_OPTIONS).put(
                 "leo:supplier:all",
-                List.of(new SupplierOptionResponse(1L, "供应商旧名称", "供应商旧名称"))
+                List.of(new SupplierOptionResponse(1L, "S001", "供应商旧名称"))
         );
         service.setCacheManager(cacheManager);
 
         var result = service.verifyAndRefreshCache();
 
         assertThat(cacheManager.getCache(CacheConfig.CACHE_OPTIONS).get("leo:supplier:all", List.class))
-                .containsExactly(new SupplierOptionResponse(1L, "S001", "供应商新名称", "供应商新名称"));
+                .containsExactly(new SupplierOptionResponse(1L, "S001", "供应商新名称"));
         assertThat(result.cacheName()).isEqualTo("options::leo:supplier:all");
         assertThat(result.refreshed()).isTrue();
         verify(legacyCache, never()).write(anyString(), any(), any());
@@ -229,7 +266,7 @@ class SupplierServiceTest {
                 .thenReturn(List.of(supplier));
         RedisJsonCacheSupport cache = mock(RedisJsonCacheSupport.class);
         when(cache.read(anyString(), any(TypeReference.class)))
-                .thenReturn(Optional.of(List.of(new SupplierOptionResponse(1L, "供应商旧名称", "供应商旧名称"))));
+                .thenReturn(Optional.of(List.of(new SupplierOptionResponse(1L, "S001", "供应商旧名称"))));
         SupplierService service = new SupplierService(repository, new SnowflakeIdGenerator(1), null, cache);
 
         var result = service.verifyAndRefreshCache();
@@ -239,7 +276,7 @@ class SupplierServiceTest {
         assertThat(result.refreshed()).isTrue();
         verify(cache).write(
                 eq("leo:supplier:all"),
-                eq(List.of(new SupplierOptionResponse(1L, "S001", "供应商新名称", "供应商新名称"))),
+                eq(List.of(new SupplierOptionResponse(1L, "S001", "供应商新名称"))),
                 any()
         );
     }
@@ -283,7 +320,7 @@ class SupplierServiceTest {
                 .thenReturn(List.of());
         RedisJsonCacheSupport cache = mock(RedisJsonCacheSupport.class);
         when(cache.read(anyString(), any(TypeReference.class)))
-                .thenReturn(Optional.of(List.of(new SupplierOptionResponse(1L, "旧供应商", "旧供应商"))));
+                .thenReturn(Optional.of(List.of(new SupplierOptionResponse(1L, "S001", "旧供应商"))));
         SupplierService service = new SupplierService(repository, new SnowflakeIdGenerator(1), null, cache);
 
         var result = service.verifyAndRefreshCache();
@@ -496,7 +533,7 @@ class SupplierServiceTest {
     }
 
     @Test
-    void shouldDelete_success() {
+    void shouldCheckStableSupplierIdentityBeforeDelete() {
         var repository = (SupplierRepository) Proxy.newProxyInstance(
                 SupplierRepository.class.getClassLoader(),
                 new Class[]{SupplierRepository.class},
@@ -515,7 +552,25 @@ class SupplierServiceTest {
 
         service.delete(1L);
 
-        verify(referenceGuard).assertNoReferences(eq("该供应商"), any(List.class));
+        ArgumentCaptor<List<ReferenceCheck>> captor = ArgumentCaptor.forClass(List.class);
+        verify(referenceGuard).assertNoReferences(eq("该供应商"), captor.capture());
+        assertThat(captor.getValue())
+                .extracting(ReferenceCheck::tableName, ReferenceCheck::columnName, ReferenceCheck::value)
+                .containsExactly(
+                        tuple("ct_purchase_contract", "supplier_id", 1L),
+                        tuple("po_purchase_order", "supplier_id", 1L),
+                        tuple("po_purchase_inbound", "supplier_id", 1L),
+                        tuple("po_purchase_refund", "supplier_id", 1L),
+                        tuple("fm_invoice_receipt", "supplier_id", 1L),
+                        tuple("st_supplier_statement", "supplier_id", 1L),
+                        tuple("fm_supplier_refund_receipt", "supplier_id", 1L),
+                        tuple("fm_payment", "counterparty_id", 1L),
+                        tuple("fm_ledger_adjustment", "counterparty_id", 1L)
+                );
+        assertThat(captor.getValue().subList(7, 9)).allSatisfy(check -> {
+            assertThat(check.extraCondition()).isEqualTo("counterparty_type = ?");
+            assertThat(check.extraArguments()).containsExactly("供应商");
+        });
     }
 
     @Test

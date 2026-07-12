@@ -31,6 +31,9 @@ public class InventoryReportQueryRepository {
     private static final String INVENTORY_CTE = """
             WITH stock_movement AS (
                 SELECT
+                    item.id,
+                    item.material_id,
+                    COALESCE(item.warehouse_id, inbound.warehouse_id) AS warehouse_id,
                     item.material_code,
                     item.brand,
                     item.material,
@@ -39,6 +42,7 @@ public class InventoryReportQueryRepository {
                     item.length,
                     COALESCE(NULLIF(item.warehouse_name, ''), inbound.warehouse_name) AS warehouse_name,
                     item.batch_no,
+                    item.batch_no_normalized,
                     NULL AS outbound_no,
                     NULL AS outbound_date,
                     item.quantity_unit,
@@ -54,6 +58,9 @@ public class InventoryReportQueryRepository {
                 %s
                 UNION ALL
                 SELECT
+                    item.id,
+                    item.material_id,
+                    COALESCE(item.warehouse_id, outbound.warehouse_id) AS warehouse_id,
                     item.material_code,
                     item.brand,
                     item.material,
@@ -62,6 +69,7 @@ public class InventoryReportQueryRepository {
                     item.length,
                     COALESCE(NULLIF(item.warehouse_name, ''), outbound.warehouse_name) AS warehouse_name,
                     item.batch_no,
+                    item.batch_no_normalized,
                     outbound.outbound_no AS outbound_no,
                     TO_CHAR(outbound.outbound_date, 'YYYY-MM-DD') AS outbound_date,
                     item.quantity_unit,
@@ -77,6 +85,9 @@ public class InventoryReportQueryRepository {
                 %s
                 UNION ALL
                 SELECT
+                    item.id,
+                    item.material_id,
+                    COALESCE(item.warehouse_id, outbound.warehouse_id) AS warehouse_id,
                     item.material_code,
                     item.brand,
                     item.material,
@@ -85,6 +96,7 @@ public class InventoryReportQueryRepository {
                     item.length,
                     COALESCE(NULLIF(item.warehouse_name, ''), outbound.warehouse_name) AS warehouse_name,
                     item.batch_no,
+                    item.batch_no_normalized,
                     NULL AS outbound_no,
                     NULL AS outbound_date,
                     item.quantity_unit,
@@ -99,105 +111,103 @@ public class InventoryReportQueryRepository {
                   AND outbound.status IN (:reservedOutboundStatuses)
                 %s
             ),
-            stock_line AS (
+            stock_filtered AS (
+                SELECT movement.*
+                FROM stock_movement movement
+                JOIN md_material material ON material.id = movement.material_id
+                JOIN md_warehouse warehouse ON warehouse.id = movement.warehouse_id
+                %s
+            ),
+            stock_dimension AS (
                 SELECT
-                    movement.material_code,
-                    movement.brand,
-                    movement.material,
-                    movement.category,
-                    movement.spec,
-                    movement.length,
-                    movement.warehouse_name,
-                    movement.batch_no,
-                    STRING_AGG(DISTINCT NULLIF(movement.outbound_no, ''), '、') AS outbound_no,
-                    STRING_AGG(DISTINCT NULLIF(movement.outbound_date, ''), '、') AS outbound_date,
-                    movement.quantity_unit,
-                    movement.unit,
+                    movement.material_id,
+                    movement.warehouse_id,
+                    movement.batch_no_normalized,
+                    MIN(movement.batch_no) AS batch_no,
                     SUM(movement.on_hand_quantity_delta) AS on_hand_quantity,
                     SUM(movement.reserved_quantity_delta) AS reserved_quantity,
                     SUM(movement.on_hand_weight_delta) AS on_hand_weight_ton,
                     SUM(movement.reserved_weight_delta) AS reserved_weight_ton
-                FROM stock_movement movement
+                FROM stock_filtered movement
                 GROUP BY
-                    movement.material_code,
-                    movement.brand,
-                    movement.material,
-                    movement.category,
-                    movement.spec,
-                    movement.length,
-                    movement.warehouse_name,
-                    movement.batch_no,
-                    movement.quantity_unit,
-                    movement.unit
+                    movement.material_id,
+                    movement.warehouse_id,
+                    movement.batch_no_normalized
+            ),
+            inventory_items AS (
+                SELECT
+                    stock.material_id,
+                    JSONB_AGG(
+                        JSONB_BUILD_OBJECT(
+                            'id', stock.id,
+                            'materialId', stock.material_id,
+                            'warehouseId', stock.warehouse_id,
+                            'materialCode', material.material_code,
+                            'brand', material.brand,
+                            'material', material.material,
+                            'category', material.category,
+                            'spec', material.spec,
+                            'length', material.length,
+                            'warehouseName', warehouse.warehouse_name,
+                            'batchNo', stock.batch_no,
+                            'outboundNo', stock.outbound_no,
+                            'outboundDate', stock.outbound_date,
+                            'quantity', stock.on_hand_quantity_delta,
+                            'quantityUnit', material.quantity_unit,
+                            'weightTon', stock.on_hand_weight_delta,
+                            'unit', material.unit,
+                            'pieceWeightTon', material.piece_weight_ton
+                        )
+                        ORDER BY stock.id
+                    ) AS items_json
+                FROM stock_filtered stock
+                JOIN md_material material ON material.id = stock.material_id
+                JOIN md_warehouse warehouse ON warehouse.id = stock.warehouse_id
+                GROUP BY stock.material_id
             ),
             inventory_report AS (
                 SELECT
-                    stock.material_code,
-                    stock.brand,
-                    stock.material,
-                    stock.category,
-                    stock.spec,
-                    stock.length,
-                    STRING_AGG(DISTINCT NULLIF(stock.warehouse_name, ''), '、') AS warehouse_name,
+                    stock.material_id,
+                    material.material_code,
+                    material.brand,
+                    material.material,
+                    material.category,
+                    material.spec,
+                    material.length,
+                    STRING_AGG(DISTINCT NULLIF(warehouse.warehouse_name, ''), '、') AS warehouse_name,
                     STRING_AGG(DISTINCT NULLIF(stock.batch_no, ''), '、') AS batch_no,
                     SUM(stock.on_hand_quantity) AS on_hand_quantity,
                     SUM(stock.reserved_quantity) AS reserved_quantity,
                     SUM(stock.on_hand_quantity) - SUM(stock.reserved_quantity) AS available_quantity,
-                    stock.quantity_unit,
+                    material.quantity_unit,
                     SUM(stock.on_hand_weight_ton) AS on_hand_weight_ton,
                     SUM(stock.reserved_weight_ton) AS reserved_weight_ton,
                     SUM(stock.on_hand_weight_ton) - SUM(stock.reserved_weight_ton) AS available_weight_ton,
-                    stock.unit,
+                    material.unit,
                     material.piece_weight_ton,
-                    JSONB_AGG(
-                        JSONB_BUILD_OBJECT(
-                            'id', CONCAT_WS('|',
-                                stock.material_code,
-                                stock.brand,
-                                stock.material,
-                                stock.category,
-                                stock.spec,
-                                stock.length,
-                                stock.warehouse_name,
-                                stock.batch_no
-                            ),
-                            'materialCode', stock.material_code,
-                            'brand', stock.brand,
-                            'material', stock.material,
-                            'category', stock.category,
-                            'spec', stock.spec,
-                            'length', stock.length,
-                            'warehouseName', stock.warehouse_name,
-                            'batchNo', stock.batch_no,
-                            'outboundNo', stock.outbound_no,
-                            'outboundDate', stock.outbound_date,
-                            'quantity', stock.on_hand_quantity,
-                            'quantityUnit', stock.quantity_unit,
-                            'weightTon', stock.on_hand_weight_ton,
-                            'unit', stock.unit,
-                            'pieceWeightTon', material.piece_weight_ton
-                        )
-                        ORDER BY stock.warehouse_name, stock.batch_no
-                    ) AS items_json
-                FROM stock_line stock
-                LEFT JOIN md_material material ON material.material_code = stock.material_code
-                    AND material.deleted_flag = FALSE
-                %s
+                    items.items_json
+                FROM stock_dimension stock
+                JOIN md_material material ON material.id = stock.material_id
+                JOIN md_warehouse warehouse ON warehouse.id = stock.warehouse_id
+                JOIN inventory_items items ON items.material_id = stock.material_id
                 GROUP BY
-                    stock.material_code,
-                    stock.brand,
-                    stock.material,
-                    stock.category,
-                    stock.spec,
-                    stock.length,
-                    stock.quantity_unit,
-                    stock.unit,
-                    material.piece_weight_ton
+                    stock.material_id,
+                    material.material_code,
+                    material.brand,
+                    material.material,
+                    material.category,
+                    material.spec,
+                    material.length,
+                    material.quantity_unit,
+                    material.unit,
+                    material.piece_weight_ton,
+                    items.items_json
             )
             """;
 
     private static final RowMapper<InventoryReportResponse> ROW_MAPPER = (rs, rowNum) -> new InventoryReportResponse(
             rs.getLong("id"),
+            rs.getLong("material_id"),
             rs.getString("material_code"),
             rs.getString("brand"),
             rs.getString("material"),
@@ -224,7 +234,7 @@ public class InventoryReportQueryRepository {
         this.jdbcTemplate = jdbcTemplate;
     }
 
-    public Page<InventoryReportResponse> page(PageQuery query, String keyword, String warehouseName, String category,
+    public Page<InventoryReportResponse> page(PageQuery query, String keyword, Long warehouseId, String category,
                                               boolean includeOutbound) {
         MapSqlParameterSource params = new MapSqlParameterSource()
                 .addValue("limit", query.size())
@@ -234,7 +244,7 @@ public class InventoryReportQueryRepository {
                 dataScopeClause(params, "inbound"),
                 dataScopeClause(params, "outbound"),
                 dataScopeClause(params, "outbound"),
-                buildStockWhereClause(params, keyword, warehouseName, category)
+                buildStockWhereClause(params, keyword, warehouseId, category)
         );
         String reportWhereClause = buildReportWhereClause(includeOutbound);
 
@@ -250,46 +260,43 @@ public class InventoryReportQueryRepository {
 
         String orderExpression = sortExpression("report", query.sortBy(), query.direction());
         String dataSql = (inventoryCte + """
-                SELECT *
-                FROM (
-                    SELECT
-                        ROW_NUMBER() OVER (ORDER BY %s) AS id,
-                        report.material_code,
-                        report.brand,
-                        report.material,
-                        report.category,
-                        report.spec,
-                        report.length,
-                        report.warehouse_name,
-                        report.batch_no,
-                        report.on_hand_quantity AS quantity,
-                        report.on_hand_quantity,
-                        report.reserved_quantity,
-                        report.available_quantity,
-                        report.quantity_unit,
-                        report.on_hand_weight_ton AS weight_ton,
-                        report.on_hand_weight_ton,
-                        report.reserved_weight_ton,
-                        report.available_weight_ton,
-                        report.unit,
-                        report.piece_weight_ton,
-                        report.items_json
-                    FROM inventory_report report
-                    %s
-                ) paged
+                SELECT
+                    report.material_id AS id,
+                    report.material_id,
+                    report.material_code,
+                    report.brand,
+                    report.material,
+                    report.category,
+                    report.spec,
+                    report.length,
+                    report.warehouse_name,
+                    report.batch_no,
+                    report.on_hand_quantity AS quantity,
+                    report.on_hand_quantity,
+                    report.reserved_quantity,
+                    report.available_quantity,
+                    report.quantity_unit,
+                    report.on_hand_weight_ton AS weight_ton,
+                    report.on_hand_weight_ton,
+                    report.reserved_weight_ton,
+                    report.available_weight_ton,
+                    report.unit,
+                    report.piece_weight_ton,
+                    report.items_json
+                FROM inventory_report report
+                %s
                 ORDER BY %s
                 LIMIT :limit OFFSET :offset
                 """).formatted(
-                orderExpression,
                 reportWhereClause,
-                sortExpression("paged", query.sortBy(), query.direction())
+                orderExpression
         );
 
         List<InventoryReportResponse> rows = jdbcTemplate.query(dataSql, params, ROW_MAPPER);
         return new PageImpl<>(rows, PageRequest.of(query.page(), query.size()), total);
     }
 
-    public List<InventoryReportResponse> list(PageQuery query, String keyword, String warehouseName, String category,
+    public List<InventoryReportResponse> list(PageQuery query, String keyword, Long warehouseId, String category,
                                               boolean includeOutbound) {
         MapSqlParameterSource params = new MapSqlParameterSource();
         addStatusParameters(params);
@@ -297,13 +304,14 @@ public class InventoryReportQueryRepository {
                 dataScopeClause(params, "inbound"),
                 dataScopeClause(params, "outbound"),
                 dataScopeClause(params, "outbound"),
-                buildStockWhereClause(params, keyword, warehouseName, category)
+                buildStockWhereClause(params, keyword, warehouseId, category)
         );
         String reportWhereClause = buildReportWhereClause(includeOutbound);
         String orderExpression = sortExpression("report", query.sortBy(), query.direction());
         String dataSql = (inventoryCte + """
                 SELECT
-                    ROW_NUMBER() OVER (ORDER BY %s) AS id,
+                    report.material_id AS id,
+                    report.material_id,
                     report.material_code,
                     report.brand,
                     report.material,
@@ -328,7 +336,6 @@ public class InventoryReportQueryRepository {
                 %s
                 ORDER BY %s
                 """).formatted(
-                orderExpression,
                 reportWhereClause,
                 orderExpression
         );
@@ -348,26 +355,26 @@ public class InventoryReportQueryRepository {
         return "                    AND " + alias + ".created_by IN (:dataScopeOwnerUserIds)";
     }
 
-    private String buildStockWhereClause(MapSqlParameterSource params, String keyword, String warehouseName, String category) {
+    private String buildStockWhereClause(MapSqlParameterSource params, String keyword, Long warehouseId, String category) {
         List<String> clauses = new ArrayList<>();
         if (keyword != null) {
             params.addValue("keyword", "%" + keyword.trim().toLowerCase(Locale.ROOT) + "%");
             clauses.add("""
                     (
-                        LOWER(COALESCE(stock.material_code, '')) LIKE :keyword
-                        OR LOWER(COALESCE(stock.brand, '')) LIKE :keyword
-                        OR LOWER(COALESCE(stock.spec, '')) LIKE :keyword
-                        OR LOWER(COALESCE(stock.material, '')) LIKE :keyword
+                        LOWER(COALESCE(material.material_code, '')) LIKE :keyword
+                        OR LOWER(COALESCE(material.brand, '')) LIKE :keyword
+                        OR LOWER(COALESCE(material.spec, '')) LIKE :keyword
+                        OR LOWER(COALESCE(material.material, '')) LIKE :keyword
                     )
                     """.stripIndent().trim());
         }
-        if (warehouseName != null) {
-            params.addValue("warehouseName", warehouseName);
-            clauses.add("stock.warehouse_name = :warehouseName");
+        if (warehouseId != null) {
+            params.addValue("warehouseId", warehouseId);
+            clauses.add("movement.warehouse_id = :warehouseId");
         }
         if (category != null) {
             params.addValue("category", category);
-            clauses.add("stock.category = :category");
+            clauses.add("material.category = :category");
         }
         if (clauses.isEmpty()) {
             return "";
@@ -411,17 +418,17 @@ public class InventoryReportQueryRepository {
         String sortDirection = "asc".equalsIgnoreCase(direction) ? "ASC" : "DESC";
         return switch (sortBy == null ? "" : sortBy.trim()) {
             case "brand" -> "LOWER(COALESCE(" + alias + ".brand, '')) " + sortDirection
-                    + ", LOWER(COALESCE(" + alias + ".material_code, '')) ASC";
+                    + ", " + alias + ".material_id ASC";
             case "category" -> "LOWER(COALESCE(" + alias + ".category, '')) " + sortDirection
-                    + ", LOWER(COALESCE(" + alias + ".material_code, '')) ASC";
+                    + ", " + alias + ".material_id ASC";
             case "warehouseName" -> "LOWER(COALESCE(" + alias + ".warehouse_name, '')) " + sortDirection
-                    + ", LOWER(COALESCE(" + alias + ".material_code, '')) ASC";
+                    + ", " + alias + ".material_id ASC";
             case "quantity" -> alias + ".on_hand_quantity " + sortDirection
-                    + ", LOWER(COALESCE(" + alias + ".material_code, '')) ASC";
+                    + ", " + alias + ".material_id ASC";
             case "weightTon" -> alias + ".on_hand_weight_ton " + sortDirection
-                    + ", LOWER(COALESCE(" + alias + ".material_code, '')) ASC";
+                    + ", " + alias + ".material_id ASC";
             default -> "LOWER(COALESCE(" + alias + ".material_code, '')) " + sortDirection
-                    + ", LOWER(COALESCE(" + alias + ".warehouse_name, '')) ASC";
+                    + ", " + alias + ".material_id ASC";
         };
     }
 }

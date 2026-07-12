@@ -2,6 +2,7 @@ package com.leo.erp.sales.order.service;
 
 import com.leo.erp.allocation.appservice.PurchaseItemQueryAppService;
 import com.leo.erp.allocation.appservice.PurchaseItemPieceWeightAppService;
+import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.concurrency.SourceAllocationLockService;
 import com.leo.erp.common.error.BusinessException;
@@ -18,6 +19,7 @@ import com.leo.erp.purchase.order.domain.entity.PurchaseOrderItem;
 import com.leo.erp.security.permission.WorkflowTransitionGuard;
 import com.leo.erp.sales.order.repository.SalesOrderItemRepository;
 import com.leo.erp.sales.order.repository.SalesOrderRepository;
+import com.leo.erp.sales.order.domain.entity.SalesOrder;
 import com.leo.erp.sales.order.domain.entity.SalesOrderItem;
 import com.leo.erp.sales.order.mapper.SalesOrderMapper;
 import com.leo.erp.sales.order.service.SalesOrderItemMapper;
@@ -27,6 +29,11 @@ import com.leo.erp.sales.order.web.dto.SalesOrderResponse;
 import com.leo.erp.sales.outbound.domain.entity.SalesOutbound;
 import com.leo.erp.sales.outbound.domain.entity.SalesOutboundItem;
 import com.leo.erp.security.support.SecurityPrincipal;
+import jakarta.persistence.criteria.CriteriaBuilder;
+import jakarta.persistence.criteria.CriteriaQuery;
+import jakarta.persistence.criteria.Path;
+import jakarta.persistence.criteria.Predicate;
+import jakarta.persistence.criteria.Root;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.InOrder;
@@ -108,6 +115,60 @@ class SalesOrderServiceTest {
         InOrder flow = inOrder(lockService, applyService);
         flow.verify(lockService).lockTradeItemSources(List.of(202L), List.of(102L), List.of());
         flow.verify(applyService).apply(any(), eq(request), any());
+    }
+
+    @Test
+    void shouldKeepCustomerIdWhenNormalizingCreateRequest() {
+        SalesOrderRepository repository = mock(SalesOrderRepository.class);
+        SnowflakeIdGenerator idGenerator = mock(SnowflakeIdGenerator.class);
+        SalesOrderApplyService applyService = mock(SalesOrderApplyService.class);
+        SalesOrderService service = lockAwareService(
+                repository,
+                idGenerator,
+                applyService,
+                mock(SalesOrderPurchaseAllocationService.class),
+                mock(SourceAllocationLockService.class)
+        );
+        SalesOrderRequest sourceRequest = sourceBackedSalesOrderRequest(102L, 202L);
+        SalesOrderRequest request = new SalesOrderRequest(
+                "SO-LOCK-001", null, null, "C001", 1001L, "客户A", 2001L, "项目A",
+                null, null, LocalDate.of(2026, 4, 26), "张三", "草稿", null,
+                sourceRequest.items()
+        );
+        when(idGenerator.nextId()).thenReturn(1L);
+
+        service.create(request);
+
+        var requestCaptor = forClass(SalesOrderRequest.class);
+        verify(applyService).apply(any(), requestCaptor.capture(), any());
+        assertThat(requestCaptor.getValue().customerId()).isEqualTo(1001L);
+    }
+
+    @Test
+    void shouldKeepCustomerIdWhenNormalizingUpdateRequest() {
+        SalesOrderRepository repository = mock(SalesOrderRepository.class);
+        SalesOrderApplyService applyService = mock(SalesOrderApplyService.class);
+        SalesOrderService service = lockAwareService(
+                repository,
+                mock(SnowflakeIdGenerator.class),
+                applyService,
+                mock(SalesOrderPurchaseAllocationService.class),
+                mock(SourceAllocationLockService.class)
+        );
+        SalesOrder existing = salesOrderWithSources(101L, 201L);
+        SalesOrderRequest sourceRequest = sourceBackedSalesOrderRequest(102L, 202L);
+        SalesOrderRequest request = new SalesOrderRequest(
+                "SO-LOCK-001", null, null, "C001", 1001L, "客户A", 2001L, "项目A",
+                null, null, LocalDate.of(2026, 4, 26), "张三", "草稿", null,
+                sourceRequest.items()
+        );
+        when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(existing));
+
+        service.update(1L, request);
+
+        var requestCaptor = forClass(SalesOrderRequest.class);
+        verify(applyService).apply(eq(existing), requestCaptor.capture(), any());
+        assertThat(requestCaptor.getValue().customerId()).isEqualTo(1001L);
     }
 
     @Test
@@ -510,6 +571,64 @@ class SalesOrderServiceTest {
             assertThat(response.status()).isEqualTo(StatusConstants.AUDITED);
         });
         verify(repository).findAll(any(Specification.class), any(Pageable.class));
+    }
+
+    @Test
+    void shouldFilterSalesOrderPageByStableCustomerAndProjectIds() {
+        SalesOrderRepository repository = mock(SalesOrderRepository.class);
+        SalesOrderService service = service(
+                repository,
+                mock(SnowflakeIdGenerator.class),
+                mock(SalesOrderMapper.class),
+                mock(TradeItemMaterialSupport.class),
+                mock(PurchaseItemQueryAppService.class),
+                mock(PurchaseItemPieceWeightAppService.class),
+                mock(SalesOrderItemRepository.class),
+                mock(WarehouseSelectionSupport.class),
+                stubbedSalesOrderItemMapper(),
+                mock(WorkflowTransitionGuard.class)
+        );
+        when(repository.findAll(any(Specification.class), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of()));
+
+        service.page(
+                PageQuery.of(0, 20, null, null),
+                PageFilter.of(null, null, null, null, null)
+                        .withIdentity(101L, 102L, null, null, null)
+        );
+
+        var specCaptor = forClass(Specification.class);
+        verify(repository).findAll(specCaptor.capture(), any(Pageable.class));
+        assertStableIdentityPredicates(specCaptor.getValue(), 101L, 102L);
+    }
+
+    @Test
+    void shouldFilterOutboundImportCandidatesByStableCustomerAndProjectIds() {
+        SalesOrderRepository repository = mock(SalesOrderRepository.class);
+        SalesOrderService service = service(
+                repository,
+                mock(SnowflakeIdGenerator.class),
+                mock(SalesOrderMapper.class),
+                mock(TradeItemMaterialSupport.class),
+                mock(PurchaseItemQueryAppService.class),
+                mock(PurchaseItemPieceWeightAppService.class),
+                mock(SalesOrderItemRepository.class),
+                mock(WarehouseSelectionSupport.class),
+                stubbedSalesOrderItemMapper(),
+                mock(WorkflowTransitionGuard.class)
+        );
+        when(repository.findAll(any(Specification.class), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of()));
+
+        service.outboundImportCandidates(
+                PageQuery.of(0, 20, null, null),
+                PageFilter.of(null, null, null, null, null)
+                        .withIdentity(101L, 102L, null, null, null)
+        );
+
+        var specCaptor = forClass(Specification.class);
+        verify(repository).findAll(specCaptor.capture(), any(Pageable.class));
+        assertStableIdentityPredicates(specCaptor.getValue(), 101L, 102L);
     }
 
     @Test
@@ -1137,7 +1256,7 @@ class SalesOrderServiceTest {
                 eq(List.of(order.getItems().get(0).getId())),
                 eq(Map.of(order.getItems().get(0).getId(), new BigDecimal("3888.00")))
         );
-        verify(completionSyncService).syncBySalesOrderReference("SO-PRICE-002");
+        verify(completionSyncService).syncBySalesOrderId(1L);
         verify(pieceWeightAppService, never()).releaseSalesOrderItems(any());
     }
 
@@ -1192,7 +1311,7 @@ class SalesOrderServiceTest {
         verify(repository, never()).saveAndFlush(any());
         verify(pieceWeightAppService, never()).releaseSalesOrderItems(any());
         verify(pieceWeightAppService, never()).allocateForSalesOrderItem(any(), any(), any(), anyInt());
-        verify(completionSyncService).syncBySalesOrderReference("SO-PRICE-005");
+        verify(completionSyncService).syncBySalesOrderId(1L);
     }
 
     @Test
@@ -1287,7 +1406,7 @@ class SalesOrderServiceTest {
                 eq(List.of(order.getItems().get(0).getId())),
                 eq(Map.of(order.getItems().get(0).getId(), new BigDecimal("3888.00")))
         );
-        verify(completionSyncService, never()).syncBySalesOrderReference("SO-PRICE-004");
+        verify(completionSyncService, never()).syncBySalesOrderId(1L);
     }
 
     @Test
@@ -1981,6 +2100,29 @@ class SalesOrderServiceTest {
                 "M1", "宝钢", "盘螺", "HRB400", "8", "吨", "B1");
     }
 
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    private void assertStableIdentityPredicates(
+            Specification specification,
+            Long customerId,
+            Long projectId
+    ) {
+        Root root = mock(Root.class);
+        CriteriaQuery<?> query = mock(CriteriaQuery.class);
+        CriteriaBuilder criteriaBuilder = mock(CriteriaBuilder.class);
+        Path<Object> customerIdPath = mock(Path.class);
+        Path<Object> projectIdPath = mock(Path.class);
+        when(root.get("customerId")).thenReturn(customerIdPath);
+        when(root.get("projectId")).thenReturn(projectIdPath);
+        when(criteriaBuilder.conjunction()).thenReturn(mock(Predicate.class));
+        when(criteriaBuilder.equal(customerIdPath, customerId)).thenReturn(mock(Predicate.class));
+        when(criteriaBuilder.equal(projectIdPath, projectId)).thenReturn(mock(Predicate.class));
+
+        specification.toPredicate(root, query, criteriaBuilder);
+
+        verify(criteriaBuilder).equal(customerIdPath, customerId);
+        verify(criteriaBuilder).equal(projectIdPath, projectId);
+    }
+
     private PurchaseItemQueryAppService.SourceInboundItemRecord sourceInboundRecord(
             Long id,
             String warehouseName,
@@ -2269,8 +2411,9 @@ class SalesOrderServiceTest {
             SalesOrderItem item = invocation.getArgument(2);
             SalesOrderItemRequest source = invocation.getArgument(1);
             String materialCode = invocation.getArgument(4);
-            java.math.BigDecimal weightTon = invocation.getArgument(6);
-            java.math.BigDecimal pieceWeightTon = invocation.getArgument(7);
+            Long effectiveWarehouseId = invocation.getArgument(6);
+            java.math.BigDecimal weightTon = invocation.getArgument(7);
+            java.math.BigDecimal pieceWeightTon = invocation.getArgument(8);
             item.setLineNo(invocation.getArgument(3));
             item.setMaterialCode(materialCode);
             item.setBrand(source.brand());
@@ -2281,6 +2424,7 @@ class SalesOrderServiceTest {
             item.setUnit(source.unit());
             item.setSourceInboundItemId(source.sourceInboundItemId());
             item.setSourcePurchaseOrderItemId(source.sourcePurchaseOrderItemId());
+            item.setWarehouseId(effectiveWarehouseId);
             item.setWarehouseName(source.warehouseName());
             item.setBatchNo(source.batchNo());
             item.setQuantity(source.quantity());
@@ -2290,7 +2434,7 @@ class SalesOrderServiceTest {
             item.setWeightTon(weightTon);
             item.setUnitPrice(source.unitPrice());
             return null;
-        }).when(mapper).applyItemFields(any(), any(), any(), anyInt(), anyString(), any(), any(), any());
+        }).when(mapper).applyItemFields(any(), any(), any(), anyInt(), anyString(), any(), any(), any(), any());
         return mapper;
     }
 

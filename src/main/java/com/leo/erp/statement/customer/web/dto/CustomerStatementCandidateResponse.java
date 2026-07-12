@@ -14,8 +14,25 @@ public record CustomerStatementCandidateResponse(
         String salesName,
         BigDecimal totalWeight,
         BigDecimal totalAmount,
-        String status
+        String status,
+        Long customerId,
+        Long projectId
 ) {
+    public CustomerStatementCandidateResponse(Long id,
+                                              String orderNo,
+                                              String customerName,
+                                              String projectName,
+                                              Long settlementCompanyId,
+                                              String settlementCompanyName,
+                                              LocalDate deliveryDate,
+                                              String salesName,
+                                              BigDecimal totalWeight,
+                                              BigDecimal totalAmount,
+                                              String status) {
+        this(id, orderNo, customerName, projectName, settlementCompanyId, settlementCompanyName, deliveryDate,
+                salesName, totalWeight, totalAmount, status, null, null);
+    }
+
     public CustomerStatementCandidateResponse(Long id,
                                               String orderNo,
                                               String customerName,
@@ -26,6 +43,6 @@ public record CustomerStatementCandidateResponse(
                                               BigDecimal totalAmount,
                                               String status) {
         this(id, orderNo, customerName, projectName, null, null, deliveryDate, salesName,
-                totalWeight, totalAmount, status);
+                totalWeight, totalAmount, status, null, null);
     }
 }

@@ -36,7 +36,9 @@ public class InvoiceIssueSourceService {
 
     SourceApplyResult applyItems(InvoiceIssue entity,
                                  List<InvoiceIssueItemRequest> itemRequests,
+                                 Long customerId,
                                  String customerName,
+                                 Long projectId,
                                  String projectName,
                                  LongSupplier nextIdSupplier) {
         List<Long> sourceItemIds = extractSourceItemIds(itemRequests);
@@ -44,6 +46,7 @@ public class InvoiceIssueSourceService {
         Map<Long, AllocationProgress> allocatedProgressMap = loadAllocatedProgressMap(sourceItemIds, entity.getId());
         Map<Long, AllocationProgress> requestProgressMap = new HashMap<>();
         SettlementCompanySnapshot settlementCompany = SettlementCompanySnapshot.EMPTY;
+        PartySnapshot party = PartySnapshot.EMPTY;
         List<InvoiceIssueItem> items = ManagedEntityItemSupport.syncById(
                 entity.getItems(),
                 itemRequests,
@@ -60,7 +63,9 @@ public class InvoiceIssueSourceService {
                     source,
                     sourceSalesOrderItemMap,
                     i + 1,
+                    customerId,
                     customerName,
+                    projectId,
                     projectName
             );
             validateSourceSalesOrderAllocation(
@@ -72,11 +77,13 @@ public class InvoiceIssueSourceService {
                     requestProgressMap
             );
             settlementCompany = mergeSettlementCompany(settlementCompany, resolvedItem, i + 1);
+            party = mergeParty(party, resolvedItem, i + 1);
             InvoiceIssueItem item = items.get(i);
             item.setInvoiceIssue(entity);
             item.setLineNo(i + 1);
             item.setSourceNo(resolvedItem.sourceNo());
             item.setSourceSalesOrderItemId(source.sourceSalesOrderItemId());
+            item.setMaterialId(resolvedItem.materialId());
             item.setMaterialCode(resolvedItem.materialCode());
             item.setBrand(resolvedItem.brand());
             item.setCategory(resolvedItem.category());
@@ -85,6 +92,7 @@ public class InvoiceIssueSourceService {
             item.setLength(resolvedItem.length());
             item.setUnit(resolvedItem.unit());
             item.setWarehouseName(resolvedItem.warehouseName());
+            item.setWarehouseId(resolvedItem.warehouseId());
             item.setBatchNo(resolvedItem.batchNo());
             item.setQuantity(source.quantity());
             item.setQuantityUnit(resolvedItem.quantityUnit());
@@ -97,7 +105,21 @@ public class InvoiceIssueSourceService {
             amount = amount.add(lineAmount);
         }
         entity.getItems().sort(java.util.Comparator.comparing(InvoiceIssueItem::getLineNo));
-        return new SourceApplyResult(amount, settlementCompany.id(), settlementCompany.name());
+        return new SourceApplyResult(
+                amount,
+                settlementCompany.id(),
+                settlementCompany.name(),
+                party.customerId(),
+                party.projectId()
+        );
+    }
+
+    SourceApplyResult applyItems(InvoiceIssue entity,
+                                 List<InvoiceIssueItemRequest> itemRequests,
+                                 String customerName,
+                                 String projectName,
+                                 LongSupplier nextIdSupplier) {
+        return applyItems(entity, itemRequests, null, customerName, null, projectName, nextIdSupplier);
     }
 
     void validateExistingItemsForIssue(InvoiceIssue entity) {
@@ -186,7 +208,9 @@ public class InvoiceIssueSourceService {
                     source,
                     sourceSalesOrderItemMap,
                     i + 1,
+                    null,
                     headerCustomerName,
+                    null,
                     headerProjectName
             );
             validateSourceSalesOrderAllocation(
@@ -257,7 +281,9 @@ public class InvoiceIssueSourceService {
     private ResolvedInvoiceIssueItem resolveItem(InvoiceIssueItemRequest source,
                                                  Map<Long, SalesOrderItem> sourceSalesOrderItemMap,
                                                  int lineNo,
+                                                 Long headerCustomerId,
                                                  String headerCustomerName,
+                                                 Long headerProjectId,
                                                  String headerProjectName) {
         Long sourceSalesOrderItemId = source.sourceSalesOrderItemId();
         if (sourceSalesOrderItemId == null) {
@@ -271,13 +297,26 @@ public class InvoiceIssueSourceService {
         if (sourceSalesOrder == null || sourceSalesOrder.getOrderNo() == null || sourceSalesOrder.getOrderNo().isBlank()) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行来源销售订单不存在");
         }
-        validateSourceSalesOrder(sourceSalesOrder, headerCustomerName, headerProjectName, lineNo);
+        validateSourceSalesOrder(
+                sourceSalesOrder,
+                headerCustomerId,
+                headerCustomerName,
+                headerProjectId,
+                headerProjectName,
+                lineNo
+        );
+        requireSameIdentity(source.materialId(), sourceSalesOrderItem.getMaterialId(), lineNo, "商品");
+        requireSameIdentity(source.warehouseId(), sourceSalesOrderItem.getWarehouseId(), lineNo, "仓库");
         BigDecimal pieceWeightTon = TradeItemCalculator.scaleWeightTon(sourceSalesOrderItem.getPieceWeightTon());
         BigDecimal unitPrice = TradeItemCalculator.scaleAmount(sourceSalesOrderItem.getUnitPrice());
         BigDecimal weightTon = TradeItemCalculator.calculateWeightTon(source.quantity(), pieceWeightTon);
         BigDecimal amount = TradeItemCalculator.calculateAmount(weightTon, unitPrice);
         return new ResolvedInvoiceIssueItem(
                 sourceSalesOrder.getOrderNo(),
+                sourceSalesOrder.getCustomerId(),
+                sourceSalesOrder.getProjectId(),
+                sourceSalesOrderItem.getMaterialId(),
+                sourceSalesOrderItem.getWarehouseId(),
                 sourceSalesOrderItem.getMaterialCode(),
                 sourceSalesOrderItem.getBrand(),
                 sourceSalesOrderItem.getCategory(),
@@ -299,7 +338,9 @@ public class InvoiceIssueSourceService {
     }
 
     private void validateSourceSalesOrder(SalesOrder sourceSalesOrder,
+                                          Long headerCustomerId,
                                           String headerCustomerName,
+                                          Long headerProjectId,
                                           String headerProjectName,
                                           int lineNo) {
         BusinessDocumentValidator.requireStatusIn(
@@ -317,6 +358,29 @@ public class InvoiceIssueSourceService {
                 sourceSalesOrder.getProjectName(),
                 "第" + lineNo + "行来源销售订单项目与开票单不一致"
         );
+        requireSameIdentity(headerCustomerId, sourceSalesOrder.getCustomerId(), lineNo, "客户");
+        requireSameIdentity(headerProjectId, sourceSalesOrder.getProjectId(), lineNo, "项目");
+    }
+
+    private void requireSameIdentity(Long requestedId, Long sourceId, int lineNo, String fieldName) {
+        if (requestedId != null && !requestedId.equals(sourceId)) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR,
+                    "第" + lineNo + "行" + fieldName + "ID与来源销售订单不一致");
+        }
+    }
+
+    private PartySnapshot mergeParty(PartySnapshot current,
+                                     ResolvedInvoiceIssueItem item,
+                                     int lineNo) {
+        PartySnapshot next = new PartySnapshot(item.customerId(), item.projectId());
+        if (current.isEmpty()) {
+            return next;
+        }
+        if (!current.equals(next)) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR,
+                    "第" + lineNo + "行来源销售订单客户或项目不一致");
+        }
+        return current;
     }
 
     private SettlementCompanySnapshot mergeSettlementCompany(SettlementCompanySnapshot current,
@@ -340,6 +404,10 @@ public class InvoiceIssueSourceService {
 
     private record ResolvedInvoiceIssueItem(
             String sourceNo,
+            Long customerId,
+            Long projectId,
+            Long materialId,
+            Long warehouseId,
             String materialCode,
             String brand,
             String category,
@@ -363,8 +431,23 @@ public class InvoiceIssueSourceService {
     record SourceApplyResult(
             BigDecimal amount,
             Long settlementCompanyId,
-            String settlementCompanyName
+            String settlementCompanyName,
+            Long customerId,
+            Long projectId
     ) {
+        SourceApplyResult(BigDecimal amount,
+                          Long settlementCompanyId,
+                          String settlementCompanyName) {
+            this(amount, settlementCompanyId, settlementCompanyName, null, null);
+        }
+    }
+
+    private record PartySnapshot(Long customerId, Long projectId) {
+        private static final PartySnapshot EMPTY = new PartySnapshot(null, null);
+
+        boolean isEmpty() {
+            return customerId == null && projectId == null;
+        }
     }
 
     private record SettlementCompanySnapshot(Long id, String name) {

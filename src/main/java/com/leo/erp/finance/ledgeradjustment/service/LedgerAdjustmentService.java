@@ -122,6 +122,7 @@ public class LedgerAdjustmentService extends AbstractCrudService<LedgerAdjustmen
                 resolveCreateBusinessNo(MODULE_KEY, request.adjustmentNo(), entityId),
                 request.direction(),
                 request.counterpartyType(),
+                request.counterpartyId(),
                 request.counterpartyCode(),
                 request.counterpartyName(),
                 request.settlementCompanyId(),
@@ -144,6 +145,7 @@ public class LedgerAdjustmentService extends AbstractCrudService<LedgerAdjustmen
                 entity.getAdjustmentNo(),
                 request.direction(),
                 request.counterpartyType(),
+                request.counterpartyId(),
                 request.counterpartyCode(),
                 request.counterpartyName(),
                 request.settlementCompanyId(),
@@ -205,15 +207,26 @@ public class LedgerAdjustmentService extends AbstractCrudService<LedgerAdjustmen
                 StatusConstants.AUDITED
         );
         BigDecimal amount = normalizeAmount(request.amount());
-        ResolvedCounterparty counterparty = resolveCounterparty(counterpartyType, request.counterpartyCode());
+        ResolvedCounterparty counterparty = resolveCounterparty(
+                counterpartyType,
+                request.counterpartyId(),
+                request.counterpartyCode(),
+                request.counterpartyName()
+        );
         CompanySetting settlementCompany = companySettingService.requireActiveSettlementCompany(
                 request.settlementCompanyId()
         );
-        ResolvedProject project = resolveProject(request.projectId(), request.projectName());
+        ResolvedProject project = resolveProject(
+                counterpartyType,
+                counterparty.id(),
+                request.projectId(),
+                request.projectName()
+        );
 
         entity.setAdjustmentNo(request.adjustmentNo());
         entity.setDirection(direction);
         entity.setCounterpartyType(counterpartyType);
+        entity.setCounterpartyId(counterparty.id());
         entity.setCounterpartyCode(counterparty.code());
         entity.setCounterpartyName(counterparty.name());
         entity.setSettlementCompanyId(settlementCompany.getId());
@@ -263,31 +276,115 @@ public class LedgerAdjustmentService extends AbstractCrudService<LedgerAdjustmen
         return amount.setScale(2, java.math.RoundingMode.HALF_UP);
     }
 
-    private ResolvedCounterparty resolveCounterparty(String counterpartyType, String counterpartyCode) {
+    private ResolvedCounterparty resolveCounterparty(String counterpartyType,
+                                                     Long counterpartyId,
+                                                     String counterpartyCode,
+                                                     String counterpartyName) {
+        if (counterpartyId != null) {
+            return resolveCounterpartyById(
+                    counterpartyType,
+                    counterpartyId,
+                    counterpartyCode,
+                    counterpartyName
+            );
+        }
         String normalizedCode = trimRequired(counterpartyCode, "往来单位编码");
         if ("客户".equals(counterpartyType)) {
             return customerRepository.findByCustomerCodeAndDeletedFlagFalse(normalizedCode)
-                    .map(customer -> new ResolvedCounterparty(customer.getCustomerCode(), customer.getCustomerName()))
+                    .map(customer -> resolvedCounterparty(
+                            customer.getId(),
+                            customer.getCustomerCode(),
+                            customer.getCustomerName(),
+                            "客户"
+                    ))
                     .orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_ERROR, "客户不存在"));
         }
         if ("供应商".equals(counterpartyType)) {
             return supplierRepository.findBySupplierCodeAndDeletedFlagFalse(normalizedCode)
-                    .map(supplier -> new ResolvedCounterparty(supplier.getSupplierCode(), supplier.getSupplierName()))
+                    .map(supplier -> resolvedCounterparty(
+                            supplier.getId(),
+                            supplier.getSupplierCode(),
+                            supplier.getSupplierName(),
+                            "供应商"
+                    ))
                     .orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_ERROR, "供应商不存在"));
         }
         return carrierRepository.findByCarrierCodeAndDeletedFlagFalse(normalizedCode)
-                .map(carrier -> new ResolvedCounterparty(carrier.getCarrierCode(), carrier.getCarrierName()))
+                .map(carrier -> resolvedCounterparty(
+                        carrier.getId(),
+                        carrier.getCarrierCode(),
+                        carrier.getCarrierName(),
+                        "物流商"
+                ))
                 .orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_ERROR, "物流商不存在"));
     }
 
-    private ResolvedProject resolveProject(Long projectId, String projectName) {
+    private ResolvedCounterparty resolveCounterpartyById(String counterpartyType,
+                                                         Long counterpartyId,
+                                                         String counterpartyCode,
+                                                         String counterpartyName) {
+        ResolvedCounterparty resolved;
+        if ("客户".equals(counterpartyType)) {
+            resolved = customerRepository.findByIdAndDeletedFlagFalse(counterpartyId)
+                    .map(customer -> resolvedCounterparty(
+                            customer.getId(), customer.getCustomerCode(), customer.getCustomerName(), "客户"))
+                    .orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_ERROR, "客户不存在"));
+        } else if ("供应商".equals(counterpartyType)) {
+            resolved = supplierRepository.findByIdAndDeletedFlagFalse(counterpartyId)
+                    .map(supplier -> resolvedCounterparty(
+                            supplier.getId(), supplier.getSupplierCode(), supplier.getSupplierName(), "供应商"))
+                    .orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_ERROR, "供应商不存在"));
+        } else {
+            resolved = carrierRepository.findByIdAndDeletedFlagFalse(counterpartyId)
+                    .map(carrier -> resolvedCounterparty(
+                            carrier.getId(), carrier.getCarrierCode(), carrier.getCarrierName(), "物流商"))
+                    .orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_ERROR, "物流商不存在"));
+        }
+        requireSnapshotMatches(counterpartyCode, resolved.code(), counterpartyType + "编码与ID不一致");
+        requireSnapshotMatches(counterpartyName, resolved.name(), counterpartyType + "名称与ID不一致");
+        return resolved;
+    }
+
+    private ResolvedCounterparty resolvedCounterparty(Long id, String code, String name, String label) {
+        if (id == null) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, label + "缺少内部ID");
+        }
+        return new ResolvedCounterparty(id, code, name);
+    }
+
+    private ResolvedProject resolveProject(String counterpartyType,
+                                           Long counterpartyId,
+                                           Long projectId,
+                                           String projectName) {
         String normalizedName = trimToNull(projectName);
+        if (!"客户".equals(counterpartyType)) {
+            if (projectId != null || normalizedName != null) {
+                throw new BusinessException(ErrorCode.VALIDATION_ERROR, "供应商或物流商台账调整不能选择项目");
+            }
+            return new ResolvedProject(null, null);
+        }
         if (projectId == null) {
-            return new ResolvedProject(null, normalizedName);
+            if (normalizedName != null) {
+                throw new BusinessException(ErrorCode.VALIDATION_ERROR, "项目名称不能脱离项目ID单独提交");
+            }
+            return new ResolvedProject(null, null);
         }
         return projectRepository.findByIdAndDeletedFlagFalse(projectId)
-                .map(project -> new ResolvedProject(project.getId(), project.getProjectName()))
+                .map(project -> {
+                    if (!java.util.Objects.equals(project.getCustomerId(), counterpartyId)) {
+                        throw new BusinessException(ErrorCode.BUSINESS_ERROR, "项目不属于所选客户");
+                    }
+                    requireSnapshotMatches(projectName, project.getProjectName(), "项目名称与ID不一致");
+                    return new ResolvedProject(project.getId(), project.getProjectName());
+                })
                 .orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_ERROR, "项目不存在"));
+    }
+
+    private void requireSnapshotMatches(String requestedValue, String resolvedValue, String message) {
+        String normalizedRequested = trimToNull(requestedValue);
+        if (normalizedRequested != null && !normalizedRequested.equals(trimToNull(resolvedValue))) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, message);
+        }
     }
 
     private String trimRequired(String value, String label) {
@@ -305,7 +402,7 @@ public class LedgerAdjustmentService extends AbstractCrudService<LedgerAdjustmen
         return value.trim();
     }
 
-    private record ResolvedCounterparty(String code, String name) {
+    private record ResolvedCounterparty(Long id, String code, String name) {
     }
 
     private record ResolvedProject(Long id, String name) {

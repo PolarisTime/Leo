@@ -37,6 +37,7 @@ import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -110,6 +111,9 @@ class PurchaseRefundServiceTest {
     void shouldPreviewAuthoritativeRefundWithoutLockingOrSaving() {
         Fixture fixture = fixture();
         PurchaseOrder order = sourceOrder(1L, 101L, 18, "35.23800000", "3250.00");
+        order.setSupplierId(501L);
+        order.getItems().getFirst().setMaterialId(601L);
+        order.getItems().getFirst().setWarehouseId(701L);
         when(fixture.purchaseOrderRepository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(order));
         when(fixture.inboundItemRepository.findAllActiveBySourcePurchaseOrderItemIds(List.of(101L)))
                 .thenReturn(List.of(inboundItem(101L, 18, "36.00000000", "35.23800000", "3250.00")));
@@ -117,6 +121,15 @@ class PurchaseRefundServiceTest {
         PurchaseRefundPreviewResponse preview = fixture.service.preview(1L);
 
         assertThat(preview.sourcePurchaseOrderId()).isEqualTo(1L);
+        assertThat(PurchaseRefundPreviewResponse.class.getRecordComponents())
+                .extracting(java.lang.reflect.RecordComponent::getName)
+                .contains("supplierId");
+        assertThat(preview.items().getFirst().getClass().getRecordComponents())
+                .extracting(java.lang.reflect.RecordComponent::getName)
+                .contains("materialId", "warehouseId", "batchNoNormalized");
+        assertThat(ReflectionTestUtils.getField(preview, "supplierId")).isEqualTo(501L);
+        assertThat(ReflectionTestUtils.getField(preview.items().getFirst(), "materialId")).isEqualTo(601L);
+        assertThat(ReflectionTestUtils.getField(preview.items().getFirst(), "warehouseId")).isEqualTo(701L);
         assertThat(preview.purchaseOrderNo()).isEqualTo("PO-001");
         assertThat(preview.supplierCode()).isEqualTo("SUP-001");
         assertThat(preview.totalQuantity()).isZero();
@@ -480,7 +493,7 @@ class PurchaseRefundServiceTest {
         InOrder flow = inOrder(fixture.repository, completionSyncService);
         flow.verify(fixture.repository).save(refund);
         flow.verify(fixture.repository).flush();
-        flow.verify(completionSyncService).synchronizeAfterPurchaseRefundStatusChange("PO-001");
+        flow.verify(completionSyncService).synchronizeAfterPurchaseRefundStatusChange(List.of(101L));
     }
 
     @Test
@@ -502,7 +515,7 @@ class PurchaseRefundServiceTest {
         InOrder flow = inOrder(fixture.repository, completionSyncService);
         flow.verify(fixture.repository).save(any(PurchaseRefund.class));
         flow.verify(fixture.repository).flush();
-        flow.verify(completionSyncService).synchronizeAfterPurchaseRefundStatusChange("PO-001");
+        flow.verify(completionSyncService).synchronizeAfterPurchaseRefundStatusChange(List.of(101L));
     }
 
     @Test
@@ -527,7 +540,7 @@ class PurchaseRefundServiceTest {
         InOrder flow = inOrder(fixture.repository, completionSyncService);
         flow.verify(fixture.repository).save(refund);
         flow.verify(fixture.repository).flush();
-        flow.verify(completionSyncService).synchronizeAfterPurchaseRefundStatusChange("PO-001");
+        flow.verify(completionSyncService).synchronizeAfterPurchaseRefundStatusChange(List.of(101L));
     }
 
     @Test
@@ -552,7 +565,7 @@ class PurchaseRefundServiceTest {
         InOrder flow = inOrder(fixture.repository, completionSyncService);
         flow.verify(fixture.repository).save(refund);
         flow.verify(fixture.repository).flush();
-        flow.verify(completionSyncService).synchronizeAfterPurchaseRefundStatusChange("PO-001");
+        flow.verify(completionSyncService).synchronizeAfterPurchaseRefundStatusChange(List.of(101L));
     }
 
     private Fixture fixture() {
@@ -582,12 +595,14 @@ class PurchaseRefundServiceTest {
         WorkflowTransitionGuard workflowTransitionGuard = mock(WorkflowTransitionGuard.class);
         SupplierRepository supplierRepository = mock(SupplierRepository.class);
         Supplier supplier = new Supplier();
+        supplier.setId(501L);
         supplier.setSupplierCode("SUP-001");
         supplier.setSupplierName("供应商A");
         when(supplierRepository.findFirstBySupplierNameAndDeletedFlagFalseOrderBySupplierCodeAsc("供应商A"))
                 .thenReturn(Optional.of(supplier));
         when(supplierRepository.findBySupplierCodeAndDeletedFlagFalse("SUP-001"))
                 .thenReturn(Optional.of(supplier));
+        when(supplierRepository.findByIdAndDeletedFlagFalse(501L)).thenReturn(Optional.of(supplier));
         when(idGenerator.nextId()).thenReturn(900L, 901L, 902L);
         when(purchaseOrderItemRepository.findActiveIdsByPurchaseOrderId(any()))
                 .thenAnswer(invocation -> List.of(invocation.<Long>getArgument(0) * 100L + 1L));

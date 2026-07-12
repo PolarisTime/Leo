@@ -1,6 +1,7 @@
 package com.leo.erp.finance.payment.repository;
 
 import com.leo.erp.common.support.StatusConstants;
+import com.leo.erp.testsupport.StableIdentityPostgresFixtures;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -40,6 +41,9 @@ class PaymentRootLockPostgresTest {
     private static final long ALLOCATION_TWO_ID = BASE_ID + 102;
     private static final long STATEMENT_ONE_ID = BASE_ID + 201;
     private static final long STATEMENT_TWO_ID = BASE_ID + 202;
+    private static final long SUPPLIER_ID = BASE_ID + 301;
+    private static final long SETTLEMENT_COMPANY_ID = BASE_ID + 302;
+    private static final String SUPPLIER_CODE = "TEST-SUP-ROOT";
     private static final BigDecimal PAYMENT_AMOUNT = new BigDecimal("100.00");
     private static final BigDecimal ALLOCATION_AMOUNT = new BigDecimal("60.00");
     private static final long LOCK_ASSERT_MILLIS = 500;
@@ -188,41 +192,78 @@ class PaymentRootLockPostgresTest {
         jdbcTemplate.update("DELETE FROM fm_payment_allocation WHERE payment_id = ?", PAYMENT_ID);
         jdbcTemplate.update(
                 "INSERT INTO fm_payment_allocation "
-                        + "(id, payment_id, line_no, source_statement_id, allocated_amount) "
-                        + "VALUES (?, ?, 1, ?, ?)",
+                        + "(id, payment_id, line_no, source_statement_id, "
+                        + "source_supplier_statement_id, allocated_amount) "
+                        + "VALUES (?, ?, 1, ?, ?, ?)",
                 allocationId,
                 PAYMENT_ID,
+                statementId,
                 statementId,
                 ALLOCATION_AMOUNT
         );
     }
 
     private void insertFixtures() {
+        StableIdentityPostgresFixtures.insertSupplier(
+                jdbcTemplate,
+                SUPPLIER_ID,
+                SUPPLIER_CODE,
+                "并发测试供应商"
+        );
+        StableIdentityPostgresFixtures.insertSettlementCompany(
+                jdbcTemplate,
+                SETTLEMENT_COMPANY_ID,
+                "并发测试结算主体"
+        );
         jdbcTemplate.update("""
                 INSERT INTO po_purchase_order (
-                    id, order_no, supplier_code, supplier_name, order_date, total_weight, total_amount,
+                    id, order_no, supplier_id, supplier_code, supplier_name,
+                    order_date, total_weight, total_amount,
                     status, settlement_company_id, settlement_company_name, deleted_flag
-                ) VALUES (?, 'TEST-PREPAY-ROOT-PO', 'TEST-SUP-ROOT', '并发测试供应商', CURRENT_TIMESTAMP,
-                          1, 100, '已审核', 31, '并发测试结算主体', FALSE)
-                """, PURCHASE_ORDER_ID);
+                ) VALUES (?, 'TEST-PREPAY-ROOT-PO', ?, ?, '并发测试供应商', CURRENT_TIMESTAMP,
+                          1, 100, '已审核', ?, '并发测试结算主体', FALSE)
+                """, PURCHASE_ORDER_ID, SUPPLIER_ID, SUPPLIER_CODE, SETTLEMENT_COMPANY_ID);
+        jdbcTemplate.update("""
+                INSERT INTO st_supplier_statement (
+                    id, version, statement_no, supplier_id, supplier_code, supplier_name,
+                    settlement_company_id, settlement_company_name,
+                    start_date, end_date, purchase_amount, payment_amount, closing_amount,
+                    status, deleted_flag
+                ) VALUES
+                    (?, 0, 'TEST-PREPAY-ROOT-STMT-1', ?, ?, '并发测试供应商',
+                     ?, '并发测试结算主体', CURRENT_DATE, CURRENT_DATE, 60, 0, 60, '已确认', FALSE),
+                    (?, 0, 'TEST-PREPAY-ROOT-STMT-2', ?, ?, '并发测试供应商',
+                     ?, '并发测试结算主体', CURRENT_DATE, CURRENT_DATE, 60, 0, 60, '已确认', FALSE)
+                """,
+                STATEMENT_ONE_ID, SUPPLIER_ID, SUPPLIER_CODE, SETTLEMENT_COMPANY_ID,
+                STATEMENT_TWO_ID, SUPPLIER_ID, SUPPLIER_CODE, SETTLEMENT_COMPANY_ID);
         jdbcTemplate.update("""
                 INSERT INTO fm_payment (
-                    id, version, payment_no, business_type, payment_purpose,
+                    id, version, payment_no, business_type, counterparty_type, counterparty_id,
+                    payment_purpose,
                     counterparty_name, counterparty_code, source_purchase_order_id,
                     purchase_order_no, supplier_code, supplier_name,
                     settlement_company_id, settlement_company_name,
                     payment_date, pay_type, amount, status, operator_name, deleted_flag
-                ) VALUES (?, 0, 'TEST-PREPAY-ROOT-PAY', '供应商', 'PURCHASE_PREPAYMENT',
-                          '并发测试供应商', 'TEST-SUP-ROOT', ?, 'TEST-PREPAY-ROOT-PO',
-                          'TEST-SUP-ROOT', '并发测试供应商', 31, '并发测试结算主体',
+                ) VALUES (?, 0, 'TEST-PREPAY-ROOT-PAY', '供应商', '供应商', ?, 'PURCHASE_PREPAYMENT',
+                          '并发测试供应商', ?, ?, 'TEST-PREPAY-ROOT-PO',
+                          ?, '并发测试供应商', ?, '并发测试结算主体',
                           CURRENT_DATE, '银行转账', ?, '已付款', '并发测试', FALSE)
-                """, PAYMENT_ID, PURCHASE_ORDER_ID, PAYMENT_AMOUNT);
+                """, PAYMENT_ID, SUPPLIER_ID, SUPPLIER_CODE, PURCHASE_ORDER_ID,
+                SUPPLIER_CODE, SETTLEMENT_COMPANY_ID, PAYMENT_AMOUNT);
     }
 
     private void cleanupFixtures() {
         jdbcTemplate.update("DELETE FROM fm_payment_allocation WHERE payment_id = ?", PAYMENT_ID);
         jdbcTemplate.update("DELETE FROM fm_payment WHERE id = ?", PAYMENT_ID);
+        jdbcTemplate.update(
+                "DELETE FROM st_supplier_statement WHERE id IN (?, ?)",
+                STATEMENT_ONE_ID,
+                STATEMENT_TWO_ID
+        );
         jdbcTemplate.update("DELETE FROM po_purchase_order WHERE id = ?", PURCHASE_ORDER_ID);
+        jdbcTemplate.update("DELETE FROM md_supplier WHERE id = ?", SUPPLIER_ID);
+        jdbcTemplate.update("DELETE FROM sys_company_setting WHERE id = ?", SETTLEMENT_COMPANY_ID);
     }
 
     private BigDecimal totalAllocatedAmount() {

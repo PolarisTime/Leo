@@ -18,6 +18,7 @@ import com.leo.erp.logistics.bill.web.dto.FreightBillResponse;
 import com.leo.erp.master.carrier.domain.entity.Carrier;
 import com.leo.erp.master.carrier.repository.CarrierRepository;
 import com.leo.erp.sales.outbound.domain.entity.SalesOutbound;
+import com.leo.erp.sales.outbound.domain.entity.SalesOutboundItem;
 import com.leo.erp.sales.outbound.repository.SalesOutboundRepository;
 import com.leo.erp.security.support.SecurityPrincipal;
 import com.leo.erp.security.permission.WorkflowTransitionGuard;
@@ -128,8 +129,14 @@ class FreightBillServiceTest {
     }
 
     private FreightBillItemRequest buildItemRequest(String sourceNo) {
+        return buildItemRequest(sourceNo, 20L);
+    }
+
+    private FreightBillItemRequest buildItemRequest(String sourceNo, Long sourceSalesOutboundItemId) {
         return new FreightBillItemRequest(
+                null,
                 sourceNo,
+                sourceSalesOutboundItemId,
                 "客户甲",
                 "项目甲",
                 "M001",
@@ -1378,21 +1385,24 @@ class FreightBillServiceTest {
         Root<FreightBill> billRoot = mockRoot();
         Join<FreightBill, FreightBillItem> itemJoin = mock(Join.class, Answers.RETURNS_DEEP_STUBS);
         Root<SalesOutbound> root = mockRoot();
+        Root<SalesOutboundItem> sourceItemRoot = mockRoot();
         Predicate billNotDeleted = mock(Predicate.class);
-        Predicate sourceNoMatches = mock(Predicate.class);
+        Predicate sourceItemBelongsToOutbound = mock(Predicate.class);
+        Predicate sourceItemMatches = mock(Predicate.class);
         Predicate exists = mock(Predicate.class);
         Predicate notExists = mock(Predicate.class);
         Expression<Long> literal = mock(Expression.class);
-        Expression<String> trimmedSourceNo = mock(Expression.class);
 
         when(cb.isFalse(any(Expression.class))).thenReturn(billNotDeleted);
-        when(cb.equal(any(Expression.class), any(Expression.class))).thenReturn(sourceNoMatches);
+        when(cb.equal(sourceItemRoot.get("salesOutbound"), root)).thenReturn(sourceItemBelongsToOutbound);
+        when(cb.equal(itemJoin.get("sourceSalesOutboundItemId"), sourceItemRoot.get("id")))
+                .thenReturn(sourceItemMatches);
         when(cb.literal(1L)).thenReturn(literal);
-        when(cb.trim(any(Expression.class))).thenReturn(trimmedSourceNo);
         when(cb.exists(subquery)).thenReturn(exists);
         when(cb.not(exists)).thenReturn(notExists);
         when(query.subquery(Long.class)).thenReturn(subquery);
         when(subquery.from(FreightBill.class)).thenReturn(billRoot);
+        when(subquery.from(SalesOutboundItem.class)).thenReturn(sourceItemRoot);
         org.mockito.Mockito.doReturn(itemJoin).when(billRoot).<FreightBill, FreightBillItem>join("items");
         when(subquery.select(literal)).thenReturn(subquery);
         when(subquery.where(any(Predicate[].class))).thenReturn(subquery);
@@ -1403,8 +1413,8 @@ class FreightBillServiceTest {
         verify(query).subquery(Long.class);
         verify(billRoot).<FreightBill, FreightBillItem>join("items");
         verify(cb).isFalse(billRoot.get("deletedFlag"));
-        verify(cb).trim(itemJoin.get("sourceNo"));
-        verify(cb).equal(trimmedSourceNo, root.get("outboundNo"));
+        verify(cb).equal(sourceItemRoot.get("salesOutbound"), root);
+        verify(cb).equal(itemJoin.get("sourceSalesOutboundItemId"), sourceItemRoot.get("id"));
         verify(cb).exists(subquery);
         verify(cb).not(exists);
     }
@@ -1648,8 +1658,8 @@ class FreightBillServiceTest {
         FreightBillSourceService sourceService = mock(FreightBillSourceService.class);
         SourceAllocationLockService lockService = mock(SourceAllocationLockService.class);
         when(repository.save(any(FreightBill.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(salesOutboundRepository.findByOutboundNoInAndDeletedFlagFalse(anyCollection()))
-                .thenReturn(List.of(salesOutbound(30L, "OB-002"), salesOutbound(10L, "OB-001")));
+        when(salesOutboundRepository.findSourceOutboundIdsByItemIds(List.of(201L, 202L)))
+                .thenReturn(List.of(30L, 10L));
         when(sourceService.validateSources(any(FreightBillRequest.class), any()))
                 .thenReturn(new FreightBillSourceService.SourceValidationContext(Map.of(), Map.of()));
         FreightBillService service = createService(
@@ -1663,9 +1673,9 @@ class FreightBillServiceTest {
 
         service.create(buildRequest(
                 "FB-LOCK-CREATE",
-                buildItemRequest("OB-002"),
-                buildItemRequest(" OB-001 "),
-                buildItemRequest("OB-002")
+                buildItemRequest("OB-002", 202L),
+                buildItemRequest(" OB-001 ", 201L),
+                buildItemRequest("OB-002", 202L)
         ));
 
         InOrder inOrder = inOrder(lockService, sourceService);
@@ -1685,11 +1695,12 @@ class FreightBillServiceTest {
         existing.setStatus(StatusConstants.UNAUDITED);
         FreightBillItem existingItem = new FreightBillItem();
         existingItem.setSourceNo("OB-OLD");
+        existingItem.setSourceSalesOutboundItemId(401L);
         existing.setItems(new ArrayList<>(List.of(existingItem)));
         when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(existing));
         when(repository.save(any(FreightBill.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(salesOutboundRepository.findByOutboundNoInAndDeletedFlagFalse(anyCollection()))
-                .thenReturn(List.of(salesOutbound(40L, "OB-OLD"), salesOutbound(20L, "OB-NEW")));
+        when(salesOutboundRepository.findSourceOutboundIdsByItemIds(List.of(401L, 402L)))
+                .thenReturn(List.of(40L, 20L));
         when(sourceService.validateSources(any(FreightBillRequest.class), any()))
                 .thenReturn(new FreightBillSourceService.SourceValidationContext(Map.of(), Map.of()));
         FreightBillService service = createService(
@@ -1701,7 +1712,7 @@ class FreightBillServiceTest {
                 lockService
         );
 
-        service.update(1L, buildRequest("IGNORED", buildItemRequest("OB-NEW")));
+        service.update(1L, buildRequest("IGNORED", buildItemRequest("OB-NEW", 402L)));
 
         InOrder inOrder = inOrder(lockService, sourceService);
         inOrder.verify(lockService).lockDocumentSources(List.of(), List.of(), List.of(20L, 40L), List.of());
@@ -1720,11 +1731,12 @@ class FreightBillServiceTest {
         existing.setStatus(StatusConstants.UNAUDITED);
         FreightBillItem existingItem = new FreightBillItem();
         existingItem.setSourceNo("OB-STATUS");
+        existingItem.setSourceSalesOutboundItemId(501L);
         existing.setItems(new ArrayList<>(List.of(existingItem)));
         when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(existing));
         when(repository.save(any(FreightBill.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(salesOutboundRepository.findByOutboundNoInAndDeletedFlagFalse(anyCollection()))
-                .thenReturn(List.of(salesOutbound(50L, "OB-STATUS")));
+        when(salesOutboundRepository.findSourceOutboundIdsByItemIds(List.of(501L)))
+                .thenReturn(List.of(50L));
         FreightBillService service = createService(
                 repository,
                 salesOutboundRepository,
@@ -1738,7 +1750,7 @@ class FreightBillServiceTest {
 
         InOrder inOrder = inOrder(lockService, sourceService);
         inOrder.verify(lockService).lockDocumentSources(List.of(), List.of(), List.of(50L), List.of());
-        inOrder.verify(sourceService).assertSourceNosAuditable(List.of("OB-STATUS"));
+        inOrder.verify(sourceService).assertSourceItemsAuditable(List.of(501L));
     }
 
     @Test
@@ -1751,11 +1763,12 @@ class FreightBillServiceTest {
         existing.setStatus(StatusConstants.UNAUDITED);
         FreightBillItem existingItem = new FreightBillItem();
         existingItem.setSourceNo("OB-DELETE");
+        existingItem.setSourceSalesOutboundItemId(601L);
         existing.setItems(new ArrayList<>(List.of(existingItem)));
         when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(existing));
         when(repository.save(any(FreightBill.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(salesOutboundRepository.findByOutboundNoInAndDeletedFlagFalse(anyCollection()))
-                .thenReturn(List.of(salesOutbound(60L, "OB-DELETE")));
+        when(salesOutboundRepository.findSourceOutboundIdsByItemIds(List.of(601L)))
+                .thenReturn(List.of(60L));
         FreightBillService service = createService(
                 repository,
                 salesOutboundRepository,
@@ -1785,11 +1798,12 @@ class FreightBillServiceTest {
         existing.setStatus(StatusConstants.AUDITED);
         FreightBillItem existingItem = new FreightBillItem();
         existingItem.setSourceNo("OB-REVERSE");
+        existingItem.setSourceSalesOutboundItemId(701L);
         existing.setItems(new ArrayList<>(List.of(existingItem)));
         when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(existing));
         when(repository.save(any(FreightBill.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(salesOutboundRepository.findByOutboundNoInAndDeletedFlagFalse(anyCollection()))
-                .thenReturn(List.of(salesOutbound(70L, "OB-REVERSE")));
+        when(salesOutboundRepository.findSourceOutboundIdsByItemIds(List.of(701L)))
+                .thenReturn(List.of(70L));
         FreightBillService service = createServiceWithDownstreamGuard(
                 repository,
                 salesOutboundRepository,
@@ -1819,11 +1833,12 @@ class FreightBillServiceTest {
         existing.setStatus(StatusConstants.UNAUDITED);
         FreightBillItem existingItem = new FreightBillItem();
         existingItem.setSourceNo("OB-DELETE-GUARD");
+        existingItem.setSourceSalesOutboundItemId(801L);
         existing.setItems(new ArrayList<>(List.of(existingItem)));
         when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(existing));
         when(repository.save(any(FreightBill.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(salesOutboundRepository.findByOutboundNoInAndDeletedFlagFalse(anyCollection()))
-                .thenReturn(List.of(salesOutbound(80L, "OB-DELETE-GUARD")));
+        when(salesOutboundRepository.findSourceOutboundIdsByItemIds(List.of(801L)))
+                .thenReturn(List.of(80L));
         FreightBillService service = createServiceWithDownstreamGuard(
                 repository,
                 salesOutboundRepository,

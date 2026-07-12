@@ -12,6 +12,7 @@ public class SupplierRefundReceiptMapper {
                 receipt.getId(),
                 receipt.getRefundReceiptNo(),
                 receipt.getPurchaseRefundId(),
+                receipt.getSupplierId(),
                 receipt.getSupplierCode(),
                 receipt.getSupplierName(),
                 receipt.getSettlementCompanyId(),

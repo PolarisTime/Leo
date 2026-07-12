@@ -133,6 +133,43 @@ class MasterDataReferenceGuardTest {
     }
 
     @Test
+    void shouldFormatActiveParentReferenceWithValidatedIdentifiers() {
+        JdbcTemplate jdbc = mock(JdbcTemplate.class);
+        when(jdbc.queryForObject(any(String.class), eq(Long.class), any(Object[].class))).thenReturn(0L);
+        MasterDataReferenceGuard guard = new MasterDataReferenceGuard(jdbc);
+
+        guard.assertNoReferences("该商品", List.of(
+                ReferenceCheck.ofActiveParent(
+                        "po_purchase_order_item",
+                        "material_id",
+                        9L,
+                        "po_purchase_order",
+                        "order_id"
+                ),
+                ReferenceCheck.legacyOfActiveParent(
+                        "po_purchase_order_item",
+                        "warehouse_name",
+                        "一号库",
+                        "warehouse_id",
+                        "po_purchase_order",
+                        "order_id"
+                )
+        ));
+
+        ArgumentCaptor<String> sqlCaptor = ArgumentCaptor.forClass(String.class);
+        verify(jdbc, org.mockito.Mockito.times(2))
+                .queryForObject(sqlCaptor.capture(), eq(Long.class), any(Object[].class));
+        assertThat(sqlCaptor.getAllValues()).containsExactly(
+                "SELECT COUNT(*) FROM po_purchase_order_item WHERE material_id = ? "
+                        + "AND EXISTS (SELECT 1 FROM po_purchase_order parent "
+                        + "WHERE parent.id = po_purchase_order_item.order_id AND parent.deleted_flag = false)",
+                "SELECT COUNT(*) FROM po_purchase_order_item WHERE warehouse_name = ? "
+                        + "AND warehouse_id IS NULL AND EXISTS (SELECT 1 FROM po_purchase_order parent "
+                        + "WHERE parent.id = po_purchase_order_item.order_id AND parent.deleted_flag = false)"
+        );
+    }
+
+    @Test
     void shouldNormalizeNullExtraArgumentsAndIgnoreBlankExtraCondition() {
         JdbcTemplate jdbc = mock(JdbcTemplate.class);
         when(jdbc.queryForObject(any(String.class), eq(Long.class), any(Object[].class))).thenReturn(0L);
@@ -159,5 +196,10 @@ class MasterDataReferenceGuardTest {
         assertThatThrownBy(() -> ReferenceCheck.active("so_sales_order", "customer-code", "C001"))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("columnName must be a trusted SQL identifier");
+
+        assertThatThrownBy(() -> ReferenceCheck.ofActiveParent(
+                "so_sales_order_item", "material_id", 1L, "so-sales-order", "order_id"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("parentTableName must be a trusted SQL identifier");
     }
 }

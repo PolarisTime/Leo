@@ -258,7 +258,9 @@ class FreightBillRequestValidationTest {
 
     private FreightBillItemRequest validItem() {
         return new FreightBillItemRequest(
+                null,
                 "SO001",
+                1001L,
                 "客户名称",
                 "项目名称",
                 "M001",

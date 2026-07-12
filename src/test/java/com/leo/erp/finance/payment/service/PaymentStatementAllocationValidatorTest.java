@@ -316,6 +316,7 @@ class PaymentStatementAllocationValidatorTest {
     private SupplierStatement supplierStatement() {
         SupplierStatement statement = new SupplierStatement();
         statement.setId(11L);
+        statement.setSupplierId(201L);
         statement.setSupplierName("供应商A");
         statement.setSupplierCode("S-001");
         statement.setSettlementCompanyId(1001L);
@@ -328,6 +329,7 @@ class PaymentStatementAllocationValidatorTest {
     private FreightStatement freightStatement() {
         FreightStatement statement = new FreightStatement();
         statement.setId(31L);
+        statement.setCarrierId(301L);
         statement.setCarrierName("物流商A");
         statement.setCarrierCode("C-001");
         statement.setSettlementCompanyId(1001L);

@@ -25,6 +25,11 @@ on:
         options:
           - local
           - ssh
+      flyway_target:
+        description: "Highest Flyway version allowed in production"
+        required: true
+        default: "19"
+        type: string
       release_note:
         description: "Optional release note"
         required: false
@@ -37,6 +42,9 @@ permissions:
 concurrency:
   group: production-deploy
   cancel-in-progress: false
+
+env:
+  FLYWAY_TARGET: ${{ inputs.flyway_target || vars.PROD_FLYWAY_TARGET }}
 
 jobs:
   backend:
@@ -99,12 +107,22 @@ jobs:
       - name: Test
         run: mvn -B -ntp test
 
+      - name: Validate production Flyway target
+        run: |
+          set -euo pipefail
+          : "${FLYWAY_TARGET:?Missing production Flyway target}"
+          if [[ ! "$FLYWAY_TARGET" =~ ^[1-9][0-9]*$ ]]; then
+            echo "Production Flyway target must be a positive integer version: $FLYWAY_TARGET" >&2
+            exit 1
+          fi
+
       - name: Verify Flyway migrations
         run: |
           mvn -B -ntp flyway:migrate \
             -Dflyway.url="$SPRING_DATASOURCE_URL" \
             -Dflyway.user="$SPRING_DATASOURCE_USERNAME" \
             -Dflyway.password="$SPRING_DATASOURCE_PASSWORD" \
+            -Dflyway.target="$FLYWAY_TARGET" \
             -Dflyway.locations="filesystem:src/main/resources/db/migration" \
             -Dflyway.cleanDisabled=true \
             -Dflyway.placeholderReplacement=false \
@@ -113,6 +131,7 @@ jobs:
             -Dflyway.url="$SPRING_DATASOURCE_URL" \
             -Dflyway.user="$SPRING_DATASOURCE_USERNAME" \
             -Dflyway.password="$SPRING_DATASOURCE_PASSWORD" \
+            -Dflyway.target="$FLYWAY_TARGET" \
             -Dflyway.locations="filesystem:src/main/resources/db/migration" \
             -Dflyway.cleanDisabled=true \
             -Dflyway.placeholderReplacement=false \
@@ -173,6 +192,7 @@ jobs:
             --arg runId "$GITHUB_RUN_ID" \
             --arg runNumber "$GITHUB_RUN_NUMBER" \
             --arg deployTarget "${{ inputs.deploy_target || 'local' }}" \
+            --arg flywayTarget "$FLYWAY_TARGET" \
             --argjson dryRun "${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || false }}" \
             --arg releaseNote "${{ inputs.release_note || '' }}" \
             '{
@@ -182,6 +202,7 @@ jobs:
               runId: $runId,
               runNumber: $runNumber,
               deployTarget: $deployTarget,
+              flywayTarget: $flywayTarget,
               dryRun: $dryRun,
               releaseNote: $releaseNote
             }' > release/manifest.json
@@ -213,6 +234,7 @@ jobs:
           echo "Dry run completed. Release archive was built but not deployed."
           echo "Leo ref:   ${{ inputs.leo_ref || github.ref_name }}"
           echo "Target:    ${{ inputs.deploy_target || 'local' }}"
+          echo "Flyway:   $FLYWAY_TARGET"
 
   deploy-local:
     name: Deploy Production Local
@@ -254,9 +276,15 @@ jobs:
           chmod 0755 production-release/extracted/deploy/install-production-release.sh
           chmod 0755 production-release/extracted/deploy/steelx-process.sh
 
-      - name: Verify local production target
+      - name: Verify local production Flyway target
         run: |
           set -euo pipefail
+          : "${FLYWAY_TARGET:?Missing production Flyway target}"
+          if [[ ! "$FLYWAY_TARGET" =~ ^[1-9][0-9]*$ ]]; then
+            echo "Production Flyway target must be a positive integer version: $FLYWAY_TARGET" >&2
+            exit 1
+          fi
+          expected_flyway_target="$FLYWAY_TARGET"
           if [[ ! -d "$PROD_SHARED_DIR" ]]; then
             echo "Local production shared directory is not initialized: $PROD_SHARED_DIR" >&2
             echo "Run scripts/deploy/trigger-local-steelx-deploy.sh once on the host before enabling automated deployment." >&2
@@ -266,6 +294,21 @@ jobs:
             echo "Missing production env file: $PROD_SHARED_DIR/steelx.env" >&2
             exit 1
           fi
+          runtime_flyway_target="$(awk '
+            $0 ~ /^SPRING_FLYWAY_TARGET=/ {
+              count++
+              value = substr($0, length("SPRING_FLYWAY_TARGET=") + 1)
+            }
+            END {
+              if (count != 1) exit 1
+              print value
+            }
+          ' "$PROD_SHARED_DIR/steelx.env" 2>/dev/null || true)"
+          if [[ "$runtime_flyway_target" != "$expected_flyway_target" ]]; then
+            echo "Production SPRING_FLYWAY_TARGET must equal requested target $expected_flyway_target; found ${runtime_flyway_target:-<empty>}" >&2
+            exit 1
+          fi
+          echo "Verified production Flyway target: $expected_flyway_target"
           mkdir -p "$PROD_RELEASE_ROOT"
           install -m 0755 production-release/extracted/deploy/steelx-process.sh "$PROD_SHARED_DIR/steelx-process.sh"
 
@@ -343,6 +386,45 @@ jobs:
             ssh-keyscan -p "$PROD_SSH_PORT" "$PROD_SSH_HOST" > "$HOME/.ssh/known_hosts"
           fi
           chmod 644 "$HOME/.ssh/known_hosts"
+
+      - name: Verify SSH production Flyway target
+        run: |
+          set -euo pipefail
+          : "${FLYWAY_TARGET:?Missing production Flyway target}"
+          if [[ ! "$FLYWAY_TARGET" =~ ^[1-9][0-9]*$ ]]; then
+            echo "Production Flyway target must be a positive integer version: $FLYWAY_TARGET" >&2
+            exit 1
+          fi
+          quote() { printf '%q' "$1"; }
+          remote_command="sudo bash -s -- $(quote "$PROD_SHARED_DIR") $(quote "$FLYWAY_TARGET")"
+          ssh -i "$HOME/.ssh/leo-production" \
+            -p "$PROD_SSH_PORT" \
+            "${PROD_SSH_USER}@${PROD_SSH_HOST}" \
+            "$remote_command" <<'REMOTE'
+          set -euo pipefail
+          shared_dir="$1"
+          expected_flyway_target="$2"
+          env_file="$shared_dir/steelx.env"
+          if [[ ! -f "$env_file" ]]; then
+            echo "Missing production env file: $env_file" >&2
+            exit 1
+          fi
+          runtime_flyway_target="$(awk '
+            $0 ~ /^SPRING_FLYWAY_TARGET=/ {
+              count++
+              value = substr($0, length("SPRING_FLYWAY_TARGET=") + 1)
+            }
+            END {
+              if (count != 1) exit 1
+              print value
+            }
+          ' "$env_file" 2>/dev/null || true)"
+          if [[ "$runtime_flyway_target" != "$expected_flyway_target" ]]; then
+            echo "Production SPRING_FLYWAY_TARGET must equal requested target $expected_flyway_target; found ${runtime_flyway_target:-<empty>}" >&2
+            exit 1
+          fi
+          echo "Verified production Flyway target: $expected_flyway_target"
+          REMOTE
 
       - name: Upload release archive
         run: |

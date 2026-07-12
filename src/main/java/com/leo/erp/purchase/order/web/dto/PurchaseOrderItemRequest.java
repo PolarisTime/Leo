@@ -9,6 +9,7 @@ import java.math.BigDecimal;
 
 public record PurchaseOrderItemRequest(
         Long id,
+        Long materialId,
         @NotBlank(message = "商品编码不能为空")
         String materialCode,
         @NotBlank(message = "品牌不能为空")
@@ -22,6 +23,7 @@ public record PurchaseOrderItemRequest(
         String length,
         @NotBlank(message = "单位不能为空")
         String unit,
+        Long warehouseId,
         String warehouseName,
         String batchNo,
         @NotNull(message = "数量不能为空")
@@ -40,6 +42,27 @@ public record PurchaseOrderItemRequest(
         BigDecimal unitPrice,
         BigDecimal amount
 ) {
+    public PurchaseOrderItemRequest(Long id,
+                                    String materialCode,
+                                    String brand,
+                                    String category,
+                                    String material,
+                                    String spec,
+                                    String length,
+                                    String unit,
+                                    String warehouseName,
+                                    String batchNo,
+                                    Integer quantity,
+                                    String quantityUnit,
+                                    BigDecimal pieceWeightTon,
+                                    Integer piecesPerBundle,
+                                    BigDecimal weightTon,
+                                    BigDecimal unitPrice,
+                                    BigDecimal amount) {
+        this(id, null, materialCode, brand, category, material, spec, length, unit, null, warehouseName, batchNo,
+                quantity, quantityUnit, pieceWeightTon, piecesPerBundle, weightTon, unitPrice, amount);
+    }
+
     public PurchaseOrderItemRequest(String materialCode,
                                     String brand,
                                     String category,
@@ -56,7 +79,7 @@ public record PurchaseOrderItemRequest(
                                     BigDecimal weightTon,
                                     BigDecimal unitPrice,
                                     BigDecimal amount) {
-        this(null, materialCode, brand, category, material, spec, length, unit, warehouseName, batchNo, quantity,
+        this(null, null, materialCode, brand, category, material, spec, length, unit, null, warehouseName, batchNo, quantity,
                 quantityUnit, pieceWeightTon, piecesPerBundle, weightTon, unitPrice, amount);
     }
 }

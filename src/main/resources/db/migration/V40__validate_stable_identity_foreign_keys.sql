@@ -1,0 +1,139 @@
+ALTER TABLE public.md_project
+    VALIDATE CONSTRAINT fk_md_project_customer_identity;
+
+ALTER TABLE public.ct_purchase_contract
+    VALIDATE CONSTRAINT fk_ct_purchase_contract_supplier_identity;
+ALTER TABLE public.po_purchase_order
+    VALIDATE CONSTRAINT fk_po_purchase_order_supplier_identity;
+ALTER TABLE public.po_purchase_inbound
+    VALIDATE CONSTRAINT fk_po_purchase_inbound_supplier_identity,
+    VALIDATE CONSTRAINT fk_po_purchase_inbound_warehouse_identity,
+    VALIDATE CONSTRAINT fk_po_purchase_inbound_settlement_company;
+ALTER TABLE public.po_purchase_refund
+    VALIDATE CONSTRAINT fk_po_purchase_refund_supplier_identity,
+    VALIDATE CONSTRAINT fk_po_purchase_refund_settlement_company;
+ALTER TABLE public.fm_invoice_receipt
+    VALIDATE CONSTRAINT fk_fm_invoice_receipt_supplier_identity,
+    VALIDATE CONSTRAINT fk_fm_invoice_receipt_settlement_company;
+ALTER TABLE public.st_supplier_statement
+    VALIDATE CONSTRAINT fk_st_supplier_statement_supplier_identity,
+    VALIDATE CONSTRAINT fk_st_supplier_statement_settlement_company;
+ALTER TABLE public.fm_supplier_refund_receipt
+    VALIDATE CONSTRAINT fk_fm_supplier_refund_receipt_supplier_identity,
+    VALIDATE CONSTRAINT fk_fm_supplier_refund_receipt_settlement_company;
+
+ALTER TABLE public.so_sales_order
+    VALIDATE CONSTRAINT fk_so_sales_order_customer_identity,
+    VALIDATE CONSTRAINT fk_so_sales_order_customer_project,
+    VALIDATE CONSTRAINT fk_so_sales_order_settlement_company;
+ALTER TABLE public.ct_sales_contract
+    VALIDATE CONSTRAINT fk_ct_sales_contract_customer_identity,
+    VALIDATE CONSTRAINT fk_ct_sales_contract_customer_project;
+ALTER TABLE public.so_sales_outbound
+    VALIDATE CONSTRAINT fk_so_sales_outbound_customer_identity,
+    VALIDATE CONSTRAINT fk_so_sales_outbound_customer_project,
+    VALIDATE CONSTRAINT fk_so_sales_outbound_warehouse_identity,
+    VALIDATE CONSTRAINT fk_so_sales_outbound_settlement_company;
+ALTER TABLE public.fm_invoice_issue
+    VALIDATE CONSTRAINT fk_fm_invoice_issue_customer_identity,
+    VALIDATE CONSTRAINT fk_fm_invoice_issue_customer_project,
+    VALIDATE CONSTRAINT fk_fm_invoice_issue_settlement_company;
+ALTER TABLE public.st_customer_statement
+    VALIDATE CONSTRAINT fk_st_customer_statement_customer_identity,
+    VALIDATE CONSTRAINT fk_st_customer_statement_customer_project,
+    VALIDATE CONSTRAINT fk_st_customer_statement_settlement_company;
+ALTER TABLE public.st_customer_statement_item
+    VALIDATE CONSTRAINT fk_st_customer_stmt_item_customer_identity,
+    VALIDATE CONSTRAINT fk_st_customer_stmt_item_customer_project,
+    VALIDATE CONSTRAINT fk_st_customer_stmt_item_material_identity,
+    VALIDATE CONSTRAINT fk_st_customer_stmt_item_warehouse_identity,
+    VALIDATE CONSTRAINT fk_st_customer_stmt_item_source_identity;
+ALTER TABLE public.fm_receipt
+    VALIDATE CONSTRAINT fk_fm_receipt_customer_identity,
+    VALIDATE CONSTRAINT fk_fm_receipt_customer_project,
+    VALIDATE CONSTRAINT fk_fm_receipt_source_customer_statement,
+    VALIDATE CONSTRAINT fk_fm_receipt_settlement_company;
+ALTER TABLE public.lg_freight_bill_item
+    VALIDATE CONSTRAINT fk_lg_freight_bill_item_customer_identity,
+    VALIDATE CONSTRAINT fk_lg_freight_bill_item_customer_project,
+    VALIDATE CONSTRAINT fk_lg_freight_bill_item_material_identity,
+    VALIDATE CONSTRAINT fk_lg_freight_bill_item_warehouse_identity,
+    VALIDATE CONSTRAINT fk_lg_freight_bill_item_source_identity,
+    VALIDATE CONSTRAINT fk_lg_freight_bill_item_settlement_company;
+ALTER TABLE public.st_freight_statement_item
+    VALIDATE CONSTRAINT fk_st_freight_statement_item_customer_identity,
+    VALIDATE CONSTRAINT fk_st_freight_statement_item_customer_project,
+    VALIDATE CONSTRAINT fk_st_freight_stmt_item_material_identity,
+    VALIDATE CONSTRAINT fk_st_freight_stmt_item_warehouse_identity,
+    VALIDATE CONSTRAINT fk_st_freight_statement_item_source_bill,
+    VALIDATE CONSTRAINT fk_st_freight_statement_item_source_bill_item,
+    VALIDATE CONSTRAINT fk_st_freight_statement_item_source_bill_pair,
+    VALIDATE CONSTRAINT fk_st_freight_stmt_item_source_outbound_identity,
+    VALIDATE CONSTRAINT fk_st_freight_statement_item_settlement_company;
+ALTER TABLE public.fm_ledger_adjustment
+    VALIDATE CONSTRAINT fk_fm_ledger_adjustment_project_identity,
+    VALIDATE CONSTRAINT fk_fm_ledger_adjustment_settlement_company;
+
+ALTER TABLE public.ct_purchase_contract_item
+    VALIDATE CONSTRAINT fk_ct_purchase_contract_item_material_identity;
+ALTER TABLE public.ct_sales_contract_item
+    VALIDATE CONSTRAINT fk_ct_sales_contract_item_material_identity;
+ALTER TABLE public.po_purchase_order_item
+    VALIDATE CONSTRAINT fk_po_purchase_order_item_material_identity,
+    VALIDATE CONSTRAINT fk_po_purchase_order_item_warehouse_identity;
+ALTER TABLE public.po_purchase_inbound_item
+    VALIDATE CONSTRAINT fk_po_purchase_inbound_item_material_identity,
+    VALIDATE CONSTRAINT fk_po_purchase_inbound_item_warehouse_identity,
+    VALIDATE CONSTRAINT fk_po_purchase_inbound_item_source_identity,
+    VALIDATE CONSTRAINT fk_po_purchase_inbound_item_settlement_company;
+ALTER TABLE public.po_purchase_refund_item
+    VALIDATE CONSTRAINT fk_po_purchase_refund_item_material_identity,
+    VALIDATE CONSTRAINT fk_po_purchase_refund_item_warehouse_identity;
+ALTER TABLE public.so_sales_order_item
+    VALIDATE CONSTRAINT fk_so_sales_order_item_material_identity,
+    VALIDATE CONSTRAINT fk_so_sales_order_item_warehouse_identity,
+    VALIDATE CONSTRAINT fk_so_sales_order_item_source_inbound_identity,
+    VALIDATE CONSTRAINT fk_so_sales_order_item_source_purchase_identity,
+    VALIDATE CONSTRAINT fk_so_sales_order_item_settlement_company;
+ALTER TABLE public.so_sales_outbound_item
+    VALIDATE CONSTRAINT fk_so_sales_outbound_item_material_identity,
+    VALIDATE CONSTRAINT fk_so_sales_outbound_item_warehouse_identity,
+    VALIDATE CONSTRAINT fk_so_sales_outbound_item_source_identity,
+    VALIDATE CONSTRAINT fk_so_sales_outbound_item_settlement_company;
+ALTER TABLE public.fm_invoice_issue_item
+    VALIDATE CONSTRAINT fk_fm_invoice_issue_item_material_identity,
+    VALIDATE CONSTRAINT fk_fm_invoice_issue_item_warehouse_identity,
+    VALIDATE CONSTRAINT fk_fm_invoice_issue_item_source_identity;
+ALTER TABLE public.fm_invoice_receipt_item
+    VALIDATE CONSTRAINT fk_fm_invoice_receipt_item_material_identity,
+    VALIDATE CONSTRAINT fk_fm_invoice_receipt_item_warehouse_identity,
+    VALIDATE CONSTRAINT fk_fm_invoice_receipt_item_source_identity;
+ALTER TABLE public.st_supplier_statement_item
+    VALIDATE CONSTRAINT fk_st_supplier_stmt_item_material_identity,
+    VALIDATE CONSTRAINT fk_st_supplier_stmt_item_warehouse_identity,
+    VALIDATE CONSTRAINT fk_st_supplier_stmt_item_source_identity;
+
+ALTER TABLE public.lg_freight_bill
+    VALIDATE CONSTRAINT fk_lg_freight_bill_carrier_identity,
+    VALIDATE CONSTRAINT fk_lg_freight_bill_vehicle_identity,
+    VALIDATE CONSTRAINT fk_lg_freight_bill_settlement_company;
+ALTER TABLE public.st_freight_statement
+    VALIDATE CONSTRAINT fk_st_freight_statement_carrier_identity,
+    VALIDATE CONSTRAINT fk_st_freight_statement_settlement_company;
+
+ALTER TABLE public.fm_receipt_allocation
+    VALIDATE CONSTRAINT fk_fm_receipt_allocation_customer_statement;
+ALTER TABLE public.fm_payment_allocation
+    VALIDATE CONSTRAINT fk_fm_payment_allocation_supplier_statement,
+    VALIDATE CONSTRAINT fk_fm_payment_allocation_freight_statement;
+
+ALTER TABLE public.md_carrier
+    VALIDATE CONSTRAINT fk_md_carrier_default_settlement_company;
+ALTER TABLE public.md_customer
+    VALIDATE CONSTRAINT fk_md_customer_default_settlement_company;
+ALTER TABLE public.po_purchase_order
+    VALIDATE CONSTRAINT fk_po_purchase_order_settlement_company;
+ALTER TABLE public.fm_payment
+    VALIDATE CONSTRAINT fk_fm_payment_settlement_company;
+ALTER TABLE public.sys_print_template
+    VALIDATE CONSTRAINT fk_sys_print_template_settlement_company;

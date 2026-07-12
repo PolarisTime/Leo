@@ -102,6 +102,8 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
         Specification<SalesOrder> spec = Specs.<SalesOrder>keywordLike(filter.keyword(), "orderNo", "purchaseOrderNo", "customerName", "projectName")
                 .and(Specs.equalIfPresent("customerName", filter.name()))
                 .and(Specs.equalIfPresent("projectName", filter.projectName()))
+                .and(Specs.equalValueIfPresent("customerId", filter.customerId()))
+                .and(Specs.equalValueIfPresent("projectId", filter.projectId()))
                 .and(Specs.equalValueIfPresent("settlementCompanyId", filter.settlementCompanyId()))
                 .and(Specs.equalIfPresent("status", filter.status()))
                 .and(Specs.betweenIfPresent("deliveryDate", filter.startDate(), filter.endDate()));
@@ -113,6 +115,8 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
         Specification<SalesOrder> spec = Specs.<SalesOrder>keywordLike(filter.keyword(), SALES_ORDER_SEARCH_FIELDS)
                 .and(Specs.equalIfPresent("customerName", filter.name()))
                 .and(Specs.equalIfPresent("projectName", filter.projectName()))
+                .and(Specs.equalValueIfPresent("customerId", filter.customerId()))
+                .and(Specs.equalValueIfPresent("projectId", filter.projectId()))
                 .and(Specs.equalValueIfPresent("settlementCompanyId", filter.settlementCompanyId()))
                 .and(Specs.equalIfPresent("status", StatusConstants.AUDITED))
                 .and(Specs.betweenIfPresent("deliveryDate", filter.startDate(), filter.endDate()));
@@ -195,6 +199,7 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
                 request.purchaseInboundNo(),
                 request.purchaseOrderNo(),
                 request.customerCode(),
+                request.customerId(),
                 request.customerName(),
                 request.projectId(),
                 request.projectName(),
@@ -215,6 +220,7 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
                 request.purchaseInboundNo(),
                 request.purchaseOrderNo(),
                 request.customerCode(),
+                request.customerId(),
                 request.customerName(),
                 request.projectId(),
                 request.projectName(),

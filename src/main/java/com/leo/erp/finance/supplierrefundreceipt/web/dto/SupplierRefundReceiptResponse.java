@@ -7,6 +7,7 @@ public record SupplierRefundReceiptResponse(
         Long id,
         String refundReceiptNo,
         Long purchaseRefundId,
+        Long supplierId,
         String supplierCode,
         String supplierName,
         Long settlementCompanyId,
@@ -19,4 +20,22 @@ public record SupplierRefundReceiptResponse(
         String operatorName,
         String remark
 ) {
+    public SupplierRefundReceiptResponse(Long id,
+                                         String refundReceiptNo,
+                                         Long purchaseRefundId,
+                                         String supplierCode,
+                                         String supplierName,
+                                         Long settlementCompanyId,
+                                         String settlementCompanyName,
+                                         LocalDate receiptDate,
+                                         String receiptMethod,
+                                         BigDecimal amount,
+                                         String status,
+                                         boolean deletedFlag,
+                                         String operatorName,
+                                         String remark) {
+        this(id, refundReceiptNo, purchaseRefundId, null, supplierCode, supplierName,
+                settlementCompanyId, settlementCompanyName, receiptDate, receiptMethod, amount,
+                status, deletedFlag, operatorName, remark);
+    }
 }

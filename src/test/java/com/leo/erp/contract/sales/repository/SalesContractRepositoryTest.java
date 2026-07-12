@@ -1,9 +1,12 @@
 package com.leo.erp.contract.sales.repository;
 
 import com.leo.erp.contract.sales.domain.entity.SalesContract;
+import com.leo.erp.testsupport.StableIdentityPostgresFixtures;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 
 import java.math.BigDecimal;
@@ -18,8 +21,34 @@ import static org.assertj.core.api.Assertions.assertThat;
 @ActiveProfiles("test")
 class SalesContractRepositoryTest {
 
+    private static final long CUSTOMER_ID = 8_812_000_000_000_000_001L;
+    private static final long PROJECT_ID = 8_812_000_000_000_000_002L;
+    private static final String CUSTOMER_CODE = "TEST-SC-REPOSITORY-CUSTOMER";
+
     @Autowired
     private SalesContractRepository repository;
+
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
+
+    @BeforeEach
+    void insertPartyFixtures() {
+        StableIdentityPostgresFixtures.insertCustomer(
+                jdbcTemplate,
+                CUSTOMER_ID,
+                CUSTOMER_CODE,
+                "客户A",
+                "项目A"
+        );
+        StableIdentityPostgresFixtures.insertProject(
+                jdbcTemplate,
+                PROJECT_ID,
+                "TEST-SC-REPOSITORY-PROJECT",
+                "项目A",
+                CUSTOMER_ID,
+                CUSTOMER_CODE
+        );
+    }
 
     @Test
     void shouldSaveAndFindById() {
@@ -70,7 +99,10 @@ class SalesContractRepositoryTest {
         var entity = new SalesContract();
         entity.setId(id);
         entity.setContractNo(contractNo);
+        entity.setCustomerId(CUSTOMER_ID);
+        entity.setCustomerCode(CUSTOMER_CODE);
         entity.setCustomerName("客户A");
+        entity.setProjectId(PROJECT_ID);
         entity.setProjectName("项目A");
         entity.setSignDate(LocalDate.now());
         entity.setEffectiveDate(LocalDate.now());

@@ -29,7 +29,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
@@ -112,7 +111,6 @@ public class SupplierService extends AbstractCrudService<Supplier, SupplierReque
                 .map(s -> new SupplierOptionResponse(
                         s.getId(),
                         s.getSupplierCode(),
-                        s.getSupplierName(),
                         s.getSupplierName()
                 ))
                 .toList();
@@ -262,34 +260,30 @@ public class SupplierService extends AbstractCrudService<Supplier, SupplierReque
     }
 
     private List<ReferenceCheck> supplierReferences(Supplier entity) {
-        String supplierCode = entity.getSupplierCode();
-        String supplierName = entity.getSupplierName();
-        List<ReferenceCheck> references = new ArrayList<>(supplierCodeReferences(supplierCode));
-        references.addAll(List.of(
-                ReferenceCheck.active("ct_purchase_contract", "supplier_name", supplierName),
-                ReferenceCheck.activeWhen(
-                        "st_supplier_statement",
-                        "supplier_name",
-                        supplierName,
-                        "(supplier_code IS NULL OR BTRIM(supplier_code) = '')"
-                ),
+        Long supplierId = entity.getId();
+        return List.of(
+                ReferenceCheck.active("ct_purchase_contract", "supplier_id", supplierId),
+                ReferenceCheck.active("po_purchase_order", "supplier_id", supplierId),
+                ReferenceCheck.active("po_purchase_inbound", "supplier_id", supplierId),
+                ReferenceCheck.active("po_purchase_refund", "supplier_id", supplierId),
+                ReferenceCheck.active("fm_invoice_receipt", "supplier_id", supplierId),
+                ReferenceCheck.active("st_supplier_statement", "supplier_id", supplierId),
+                ReferenceCheck.active("fm_supplier_refund_receipt", "supplier_id", supplierId),
                 ReferenceCheck.activeWhen(
                         "fm_payment",
-                        "counterparty_name",
-                        supplierName,
-                        "business_type IN (?, ?) AND (counterparty_code IS NULL OR BTRIM(counterparty_code) = '')",
-                        "供应商",
-                        "供应商付款"
+                        "counterparty_id",
+                        supplierId,
+                        "counterparty_type = ?",
+                        "供应商"
                 ),
                 ReferenceCheck.activeWhen(
                         "fm_ledger_adjustment",
-                        "counterparty_name",
-                        supplierName,
-                        "counterparty_type = ? AND (counterparty_code IS NULL OR BTRIM(counterparty_code) = '')",
+                        "counterparty_id",
+                        supplierId,
+                        "counterparty_type = ?",
                         "供应商"
                 )
-        ));
-        return List.copyOf(references);
+        );
     }
 
 }

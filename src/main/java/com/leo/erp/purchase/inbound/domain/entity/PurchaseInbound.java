@@ -38,6 +38,9 @@ public class PurchaseInbound extends AbstractAuditableEntity {
     @Column(name = "supplier_code", nullable = false, length = 64)
     private String supplierCode;
 
+    @Column(name = "supplier_id")
+    private Long supplierId;
+
     @Column(name = "supplier_name", nullable = false, length = 128)
     private String supplierName;
 
@@ -49,6 +52,9 @@ public class PurchaseInbound extends AbstractAuditableEntity {
 
     @Column(name = "warehouse_name", nullable = false, length = 128)
     private String warehouseName;
+
+    @Column(name = "warehouse_id")
+    private Long warehouseId;
 
     @Column(name = "inbound_date", nullable = false)
     private LocalDate inboundDate;

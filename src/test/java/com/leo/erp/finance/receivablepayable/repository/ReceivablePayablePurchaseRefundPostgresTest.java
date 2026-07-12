@@ -3,6 +3,7 @@ package com.leo.erp.finance.receivablepayable.repository;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.finance.receivablepayable.web.dto.ReceivablePayableResponse;
 import com.leo.erp.security.permission.DataScopeContext;
+import com.leo.erp.testsupport.StableIdentityPostgresFixtures;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -24,6 +25,9 @@ class ReceivablePayablePurchaseRefundPostgresTest {
     private static final String SETTLEMENT_COMPANY_NAME = "采购结算主体甲";
     private static final String SUPPLIER_CODE = "TEST-REFUND-SUPPLIER";
     private static final String SUPPLIER_NAME = "采购退款测试供应商";
+    private static final long SUPPLIER_ID = BASE_ID;
+    private static final long MATERIAL_ID = BASE_ID + 101;
+    private static final long WAREHOUSE_ID = BASE_ID + 102;
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
@@ -35,6 +39,14 @@ class ReceivablePayablePurchaseRefundPostgresTest {
         repository = new ReceivablePayableQueryRepository(new NamedParameterJdbcTemplate(jdbcTemplate));
         ReceivablePayablePostgresTestSchemaSupport.preparePurchaseLedgerSchema(jdbcTemplate);
         insertSupplier();
+        StableIdentityPostgresFixtures.insertMaterial(
+                jdbcTemplate, MATERIAL_ID, "TEST-REFUND-MATERIAL");
+        StableIdentityPostgresFixtures.insertWarehouse(
+                jdbcTemplate, WAREHOUSE_ID, "TEST-REFUND-WAREHOUSE", "退款测试仓");
+        StableIdentityPostgresFixtures.insertSettlementCompany(
+                jdbcTemplate, SETTLEMENT_COMPANY_ID, SETTLEMENT_COMPANY_NAME);
+        StableIdentityPostgresFixtures.insertSettlementCompany(
+                jdbcTemplate, SETTLEMENT_COMPANY_ID + 1, "采购结算主体乙");
         insertPurchaseOrder();
         insertInbound();
     }
@@ -69,7 +81,8 @@ class ReceivablePayablePurchaseRefundPostgresTest {
             var result = pageUnreconciled();
 
             assertThat(result).singleElement().satisfies(row -> {
-                assertThat(row.id()).isEqualTo("应付:供应商:未对账:" + SETTLEMENT_COMPANY_ID + ":" + SUPPLIER_CODE);
+                assertThat(row.id()).isEqualTo("应付:供应商:未对账:" + SETTLEMENT_COMPANY_ID + ":" + SUPPLIER_ID);
+                assertThat(row.counterpartyId()).isEqualTo(SUPPLIER_ID);
                 assertThat(row.recognizedAmount()).isEqualByComparingTo("114523.50");
                 assertThat(row.settledAmount()).isEqualByComparingTo("114523.50");
                 assertThat(row.balanceAmount()).isEqualByComparingTo("0.00");
@@ -121,8 +134,8 @@ class ReceivablePayablePurchaseRefundPostgresTest {
                 .reduce(java.math.BigDecimal.ZERO, java.math.BigDecimal::add))
                 .isEqualByComparingTo("117000.00");
         assertThat(repository.detailItems(
-                "应付", "供应商", SUPPLIER_CODE,
-                String.valueOf(SETTLEMENT_COMPANY_ID), "已对账"
+                "应付", "供应商", SUPPLIER_ID,
+                SETTLEMENT_COMPANY_ID, "已对账"
         )).filteredOn(item -> "采购预付款".equals(item.sourceType()))
                 .singleElement()
                 .satisfies(item -> {
@@ -152,8 +165,8 @@ class ReceivablePayablePurchaseRefundPostgresTest {
             assertThat(row.entryCount()).isEqualTo(2L);
         });
         assertThat(repository.detailItems(
-                "应付", "供应商", SUPPLIER_CODE,
-                String.valueOf(SETTLEMENT_COMPANY_ID), "未对账"
+                "应付", "供应商", SUPPLIER_ID,
+                SETTLEMENT_COMPANY_ID, "未对账"
         )).isEmpty();
     }
 
@@ -251,8 +264,8 @@ class ReceivablePayablePurchaseRefundPostgresTest {
         return repository.detailItems(
                 "应付",
                 "供应商",
-                SUPPLIER_CODE,
-                String.valueOf(SETTLEMENT_COMPANY_ID),
+                SUPPLIER_ID,
+                SETTLEMENT_COMPANY_ID,
                 "未对账"
         );
     }
@@ -267,91 +280,96 @@ class ReceivablePayablePurchaseRefundPostgresTest {
     private void insertPurchaseOrder() {
         jdbcTemplate.update("""
                 INSERT INTO po_purchase_order (
-                    id, order_no, supplier_code, supplier_name, order_date,
+                    id, order_no, supplier_id, supplier_code, supplier_name, order_date,
                     settlement_company_id, settlement_company_name,
                     total_weight, total_amount, status, deleted_flag, created_by
-                ) VALUES (?, 'TEST-REFUND-PO', ?, ?, TIMESTAMP '2026-07-10 10:00:00', ?, ?,
+                ) VALUES (?, 'TEST-REFUND-PO', ?, ?, ?, TIMESTAMP '2026-07-10 10:00:00', ?, ?,
                           36, 117000, '已审核', FALSE, 0)
-                """, BASE_ID + 1, SUPPLIER_CODE, SUPPLIER_NAME,
+                """, BASE_ID + 1, SUPPLIER_ID, SUPPLIER_CODE, SUPPLIER_NAME,
                 SETTLEMENT_COMPANY_ID, SETTLEMENT_COMPANY_NAME);
         jdbcTemplate.update("""
                 INSERT INTO po_purchase_order_item (
-                    id, order_id, line_no, material_code, brand, category, material, spec, unit,
+                    id, order_id, line_no, material_id, material_code, brand, category, material, spec, unit,
                     quantity, quantity_unit, piece_weight_ton, pieces_per_bundle, weight_ton,
-                    unit_price, amount
-                ) VALUES (?, ?, 1, 'TEST-REFUND-MATERIAL', '新澎辉', '盘螺', 'HRB400E', '8', '吨',
-                          18, '件', 2, 1, 36, 3250, 117000)
-                """, BASE_ID + 2, BASE_ID + 1);
+                    unit_price, amount, warehouse_id
+                ) VALUES (?, ?, 1, ?, 'TEST-REFUND-MATERIAL', '新澎辉', '盘螺', 'HRB400E', '8', '吨',
+                          18, '件', 2, 1, 36, 3250, 117000, ?)
+                """, BASE_ID + 2, BASE_ID + 1, MATERIAL_ID, WAREHOUSE_ID);
     }
 
     private void insertInbound() {
         jdbcTemplate.update("""
                 INSERT INTO po_purchase_inbound (
-                    id, inbound_no, purchase_order_no, supplier_code, supplier_name, warehouse_name, inbound_date,
+                    id, inbound_no, purchase_order_no, supplier_id, supplier_code, supplier_name,
+                    warehouse_id, warehouse_name, inbound_date,
                     settlement_company_id, settlement_company_name,
                     settlement_mode, total_weight, total_amount, status, deleted_flag, created_by
-                ) VALUES (?, 'TEST-REFUND-PI', 'TEST-REFUND-PO', ?, ?, '退款测试仓',
+                ) VALUES (?, 'TEST-REFUND-PI', 'TEST-REFUND-PO', ?, ?, ?, ?, '退款测试仓',
                           TIMESTAMP '2026-07-10 11:00:00', ?, ?, '过磅', 35.238, 114523.50,
                           '已审核', FALSE, 101)
-                """, BASE_ID + 3, SUPPLIER_CODE, SUPPLIER_NAME,
-                SETTLEMENT_COMPANY_ID, SETTLEMENT_COMPANY_NAME);
+                """, BASE_ID + 3, SUPPLIER_ID, SUPPLIER_CODE, SUPPLIER_NAME,
+                WAREHOUSE_ID, SETTLEMENT_COMPANY_ID, SETTLEMENT_COMPANY_NAME);
         jdbcTemplate.update("""
                 INSERT INTO po_purchase_inbound_item (
-                    id, inbound_id, line_no, material_code, brand, category, material, spec, unit,
+                    id, inbound_id, line_no, material_id, material_code, brand, category, material, spec, unit,
                     quantity, quantity_unit, piece_weight_ton, pieces_per_bundle, weight_ton,
                     weigh_weight_ton, weight_adjustment_ton, weight_adjustment_amount,
-                    unit_price, amount, warehouse_name, source_purchase_order_item_id, settlement_mode
-                ) VALUES (?, ?, 1, 'TEST-REFUND-MATERIAL', '新澎辉', '盘螺', 'HRB400E', '8', '吨',
+                    unit_price, amount, warehouse_id, warehouse_name, source_purchase_order_item_id, settlement_mode
+                ) VALUES (?, ?, 1, ?, 'TEST-REFUND-MATERIAL', '新澎辉', '盘螺', 'HRB400E', '8', '吨',
                           18, '件', 2, 1, 36, 35.238, -0.762, -2476.50,
-                          3250, 117000, '退款测试仓', ?, '过磅')
-                """, BASE_ID + 4, BASE_ID + 3, BASE_ID + 2);
+                          3250, 117000, ?, '退款测试仓', ?, '过磅')
+                """, BASE_ID + 4, BASE_ID + 3, MATERIAL_ID, WAREHOUSE_ID, BASE_ID + 2);
     }
 
     private void insertStandaloneInboundForOtherCompany() {
         jdbcTemplate.update("""
                 INSERT INTO po_purchase_inbound (
-                    id, inbound_no, supplier_code, supplier_name, warehouse_name, inbound_date,
+                    id, inbound_no, supplier_id, supplier_code, supplier_name,
+                    warehouse_id, warehouse_name, inbound_date,
                     settlement_company_id, settlement_company_name,
                     settlement_mode, total_weight, total_amount, status, deleted_flag, created_by
-                ) VALUES (?, 'TEST-REFUND-PI-B', ?, ?, '退款测试仓',
+                ) VALUES (?, 'TEST-REFUND-PI-B', ?, ?, ?, ?, '退款测试仓',
                           TIMESTAMP '2026-07-10 12:00:00', ?, '采购结算主体乙',
                           '理计', 1, 200, '已审核', FALSE, 0)
-                """, BASE_ID + 20, SUPPLIER_CODE, SUPPLIER_NAME, SETTLEMENT_COMPANY_ID + 1);
+                """, BASE_ID + 20, SUPPLIER_ID, SUPPLIER_CODE, SUPPLIER_NAME,
+                WAREHOUSE_ID, SETTLEMENT_COMPANY_ID + 1);
         jdbcTemplate.update("""
                 INSERT INTO po_purchase_inbound_item (
-                    id, inbound_id, line_no, material_code, brand, category, material, spec, unit,
+                    id, inbound_id, line_no, material_id, material_code, brand, category, material, spec, unit,
                     quantity, quantity_unit, piece_weight_ton, pieces_per_bundle, weight_ton,
                     weigh_weight_ton, weight_adjustment_ton, weight_adjustment_amount,
-                    unit_price, amount, warehouse_name, settlement_mode
-                ) VALUES (?, ?, 1, 'TEST-REFUND-MATERIAL-B', '新澎辉', '盘螺', 'HRB400E', '10', '吨',
-                          1, '件', 1, 1, 1, 1, 0, 0, 200, 200, '退款测试仓', '理计')
-                """, BASE_ID + 21, BASE_ID + 20);
+                    unit_price, amount, warehouse_id, warehouse_name,
+                    source_purchase_order_item_id, settlement_mode
+                ) VALUES (?, ?, 1, ?, 'TEST-REFUND-MATERIAL-B', '新澎辉', '盘螺', 'HRB400E', '10', '吨',
+                          1, '件', 1, 1, 1, 1, 0, 0, 200, 200, ?, '退款测试仓', ?, '理计')
+                """, BASE_ID + 21, BASE_ID + 20, MATERIAL_ID, WAREHOUSE_ID, BASE_ID + 2);
     }
 
     private void insertRefund(String status) {
         jdbcTemplate.update("""
                 INSERT INTO po_purchase_refund (
                     id, version, refund_no, source_purchase_order_id, purchase_order_no,
-                    supplier_code, supplier_name, settlement_company_id, settlement_company_name,
+                    supplier_id, supplier_code, supplier_name, settlement_company_id, settlement_company_name,
                     refund_date, total_quantity, total_weight, total_amount,
                     status, operator_name, deleted_flag, created_by
-                ) VALUES (?, 0, 'TEST-REFUND-PR', ?, 'TEST-REFUND-PO', ?, ?, ?, ?, DATE '2026-07-10',
+                ) VALUES (?, 0, 'TEST-REFUND-PR', ?, 'TEST-REFUND-PO', ?, ?, ?, ?, ?, DATE '2026-07-10',
                           0, 0.762, 2476.50, ?, '测试员', FALSE, 0)
-                """, BASE_ID + 5, BASE_ID + 1, SUPPLIER_CODE, SUPPLIER_NAME,
+                """, BASE_ID + 5, BASE_ID + 1, SUPPLIER_ID, SUPPLIER_CODE, SUPPLIER_NAME,
                 SETTLEMENT_COMPANY_ID, SETTLEMENT_COMPANY_NAME, status);
     }
 
     private void insertPurchasePrepayment() {
         jdbcTemplate.update("""
                 INSERT INTO fm_payment (
-                    id, payment_no, business_type, counterparty_code, counterparty_name,
+                    id, payment_no, business_type, counterparty_type, counterparty_id,
+                    counterparty_code, counterparty_name,
                     payment_purpose, source_purchase_order_id, purchase_order_no,
                     supplier_code, supplier_name, settlement_company_id, settlement_company_name,
                     payment_date, pay_type, amount, status, operator_name, deleted_flag, created_by
-                ) VALUES (?, 'TEST-REFUND-PAY', '供应商', ?, ?, 'PURCHASE_PREPAYMENT', ?,
+                ) VALUES (?, 'TEST-REFUND-PAY', '供应商', '供应商', ?, ?, ?, 'PURCHASE_PREPAYMENT', ?,
                           'TEST-REFUND-PO', ?, ?, ?, ?, TIMESTAMP '2026-07-09 10:00:00', '银行转账',
                           117000, '已付款', '测试员', FALSE, 202)
-                """, BASE_ID + 8, SUPPLIER_CODE, SUPPLIER_NAME, BASE_ID + 1,
+                """, BASE_ID + 8, SUPPLIER_ID, SUPPLIER_CODE, SUPPLIER_NAME, BASE_ID + 1,
                 SUPPLIER_CODE, SUPPLIER_NAME, SETTLEMENT_COMPANY_ID, SETTLEMENT_COMPANY_NAME);
     }
 
@@ -359,43 +377,45 @@ class ReceivablePayablePurchaseRefundPostgresTest {
         jdbcTemplate.update("""
                 INSERT INTO fm_supplier_refund_receipt (
                     id, version, refund_receipt_no, purchase_refund_id,
-                    supplier_code, supplier_name, settlement_company_id, settlement_company_name,
+                    supplier_id, supplier_code, supplier_name, settlement_company_id, settlement_company_name,
                     receipt_date, receipt_method, amount, status, operator_name, deleted_flag, created_by
-                ) VALUES (?, 0, 'TEST-REFUND-RR', ?, ?, ?, ?, ?, DATE '2026-07-11',
+                ) VALUES (?, 0, 'TEST-REFUND-RR', ?, ?, ?, ?, ?, ?, DATE '2026-07-11',
                           '银行转账', 2476.50, ?, '测试员', FALSE, 303)
-                """, BASE_ID + 9, BASE_ID + 5, SUPPLIER_CODE, SUPPLIER_NAME,
+                """, BASE_ID + 9, BASE_ID + 5, SUPPLIER_ID, SUPPLIER_CODE, SUPPLIER_NAME,
                 SETTLEMENT_COMPANY_ID, SETTLEMENT_COMPANY_NAME, status);
     }
 
     private void insertConfirmedSupplierStatement() {
         jdbcTemplate.update("""
                 INSERT INTO st_supplier_statement (
-                    id, statement_no, supplier_code, supplier_name,
+                    id, statement_no, supplier_id, supplier_code, supplier_name,
                     settlement_company_id, settlement_company_name,
                     start_date, end_date, purchase_amount, payment_amount,
                     closing_amount, status, deleted_flag
-                ) VALUES (?, 'TEST-REFUND-SS', ?, ?, ?, ?, TIMESTAMP '2026-07-01 00:00:00',
+                ) VALUES (?, 'TEST-REFUND-SS', ?, ?, ?, ?, ?, TIMESTAMP '2026-07-01 00:00:00',
                           TIMESTAMP '2026-07-31 23:59:59', 114523.50, 0, 114523.50, '已确认', FALSE)
-                """, BASE_ID + 6, SUPPLIER_CODE, SUPPLIER_NAME,
+                """, BASE_ID + 6, SUPPLIER_ID, SUPPLIER_CODE, SUPPLIER_NAME,
                 SETTLEMENT_COMPANY_ID, SETTLEMENT_COMPANY_NAME);
         jdbcTemplate.update("""
                 INSERT INTO st_supplier_statement_item (
                     id, statement_id, line_no, source_no, source_inbound_item_id,
-                    material_code, brand, category, material, spec, unit,
+                    material_id, material_code, brand, category, material, spec, unit,
                     quantity, quantity_unit, piece_weight_ton, pieces_per_bundle,
                     weight_ton, weigh_weight_ton, weight_adjustment_ton,
-                    weight_adjustment_amount, unit_price, amount
-                ) VALUES (?, ?, 1, 'TEST-REFUND-PI', ?, 'TEST-REFUND-MATERIAL',
+                    weight_adjustment_amount, unit_price, amount, warehouse_id
+                ) VALUES (?, ?, 1, 'TEST-REFUND-PI', ?, ?, 'TEST-REFUND-MATERIAL',
                           '新澎辉', '盘螺', 'HRB400E', '8', '吨', 18, '件', 2, 1,
-                          36, 35.238, -0.762, -2476.50, 3250, 117000)
-                """, BASE_ID + 7, BASE_ID + 6, BASE_ID + 4);
+                          36, 35.238, -0.762, -2476.50, 3250, 117000, ?)
+                """, BASE_ID + 7, BASE_ID + 6, BASE_ID + 4, MATERIAL_ID, WAREHOUSE_ID);
     }
 
     private void insertPaymentAllocation(String allocatedAmount) {
         jdbcTemplate.update("""
                 INSERT INTO fm_payment_allocation (
-                    id, payment_id, line_no, source_statement_id, allocated_amount
-                ) VALUES (?, ?, 1, ?, ?)
-                """, BASE_ID + 10, BASE_ID + 8, BASE_ID + 6, new java.math.BigDecimal(allocatedAmount));
+                    id, payment_id, line_no, source_statement_id,
+                    source_supplier_statement_id, allocated_amount
+                ) VALUES (?, ?, 1, ?, ?, ?)
+                """, BASE_ID + 10, BASE_ID + 8, BASE_ID + 6, BASE_ID + 6,
+                new java.math.BigDecimal(allocatedAmount));
     }
 }

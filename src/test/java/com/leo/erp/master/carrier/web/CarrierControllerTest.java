@@ -7,6 +7,7 @@ import com.leo.erp.master.carrier.service.CarrierService;
 import com.leo.erp.master.carrier.web.dto.CarrierOptionResponse;
 import com.leo.erp.master.carrier.web.dto.CarrierRequest;
 import com.leo.erp.master.carrier.web.dto.CarrierResponse;
+import com.leo.erp.master.carrier.web.dto.VehicleOptionResponse;
 import org.junit.jupiter.api.Test;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
@@ -27,13 +28,23 @@ class CarrierControllerTest {
 
     @Test
     void optionsReturnsActiveCarriers() {
-        CarrierOptionResponse option = mock(CarrierOptionResponse.class);
+        CarrierOptionResponse option = new CarrierOptionResponse(
+                1L,
+                1L,
+                "物流商A",
+                "CR001",
+                "物流商A",
+                9L,
+                "上海结算主体",
+                List.of(new VehicleOptionResponse(101L, "苏A12345"))
+        );
         when(carrierService.listActiveOptions()).thenReturn(List.of(option));
 
         ApiResponse<List<CarrierOptionResponse>> response = controller.options();
 
         assertThat(response.code()).isEqualTo(0);
         assertThat(response.data()).containsExactly(option);
+        assertThat((Object) response.data().get(0).value()).isEqualTo(1L);
         verify(carrierService).listActiveOptions();
     }
 

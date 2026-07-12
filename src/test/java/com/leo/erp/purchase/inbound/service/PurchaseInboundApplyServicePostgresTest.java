@@ -1,16 +1,20 @@
 package com.leo.erp.purchase.inbound.service;
 
 import com.leo.erp.common.support.TradeItemMaterialSupport;
+import com.leo.erp.common.support.TradeItemMaterialSupportTestDoubles;
 import com.leo.erp.common.support.TradeMaterialSnapshot;
 import com.leo.erp.purchase.inbound.domain.entity.PurchaseInbound;
 import com.leo.erp.purchase.inbound.domain.entity.PurchaseInboundItem;
 import com.leo.erp.purchase.inbound.web.dto.PurchaseInboundItemRequest;
 import com.leo.erp.purchase.inbound.web.dto.PurchaseInboundRequest;
+import com.leo.erp.testsupport.StableIdentityPostgresFixtures;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
 import org.springframework.boot.test.autoconfigure.orm.jpa.TestEntityManager;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 
 import java.math.BigDecimal;
@@ -36,6 +40,11 @@ class PurchaseInboundApplyServicePostgresTest {
     private static final long EXISTING_ITEM_ID = INBOUND_ID + 1;
     private static final long NEW_ITEM_ID = INBOUND_ID + 2;
     private static final long SOURCE_ITEM_ID = INBOUND_ID + 3;
+    private static final long SUPPLIER_ID = INBOUND_ID + 100;
+    private static final long MATERIAL_OLD_ID = INBOUND_ID + 101;
+    private static final long MATERIAL_NEW_ID = INBOUND_ID + 102;
+    private static final long WAREHOUSE_ID = INBOUND_ID + 103;
+    private static final long SOURCE_ORDER_ID = INBOUND_ID + 104;
     private static final String SUPPLIER_CODE = "TEST-INBOUND-SUPPLIER";
     private static final int LINE_NO_ARGUMENT_INDEX = 3;
     private static final LocalDate INBOUND_DATE = LocalDate.of(2026, 7, 10);
@@ -43,6 +52,36 @@ class PurchaseInboundApplyServicePostgresTest {
 
     @Autowired
     private TestEntityManager entityManager;
+
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
+
+    @BeforeEach
+    void insertStableIdentityFixtures() {
+        StableIdentityPostgresFixtures.insertSupplier(
+                jdbcTemplate, SUPPLIER_ID, SUPPLIER_CODE, "测试供应商");
+        StableIdentityPostgresFixtures.insertMaterial(
+                jdbcTemplate, MATERIAL_OLD_ID, "M-OLD");
+        StableIdentityPostgresFixtures.insertMaterial(
+                jdbcTemplate, MATERIAL_NEW_ID, "M-NEW");
+        StableIdentityPostgresFixtures.insertWarehouse(
+                jdbcTemplate, WAREHOUSE_ID, "TEST-INBOUND-WAREHOUSE", "测试仓库");
+        jdbcTemplate.update("""
+                INSERT INTO po_purchase_order (
+                    id, order_no, supplier_id, supplier_code, supplier_name, order_date,
+                    total_weight, total_amount, status, deleted_flag
+                ) VALUES (?, 'PO-TEST', ?, ?, '测试供应商', CURRENT_TIMESTAMP,
+                          1, 1000, '已审核', FALSE)
+                """, SOURCE_ORDER_ID, SUPPLIER_ID, SUPPLIER_CODE);
+        jdbcTemplate.update("""
+                INSERT INTO po_purchase_order_item (
+                    id, order_id, line_no, material_id, material_code, brand, category,
+                    material, spec, unit, quantity, piece_weight_ton, pieces_per_bundle,
+                    weight_ton, unit_price, amount, warehouse_id
+                ) VALUES (?, ?, 1, ?, 'M-OLD', '测试品牌', '测试品类', '测试材质',
+                          'TEST-SPEC', '吨', 2, 0.5, 1, 1, 1000, 1000, ?)
+                """, SOURCE_ITEM_ID, SOURCE_ORDER_ID, MATERIAL_OLD_ID, WAREHOUSE_ID);
+    }
 
     @Test
     void shouldInitializeNewItemBeforePublishingItToManagedCollection() {
@@ -53,6 +92,7 @@ class PurchaseInboundApplyServicePostgresTest {
 
         PurchaseInboundRequest request = request();
         TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
+        TradeItemMaterialSupportTestDoubles.stubMaterialCodeNormalization(materialSupport);
         PurchaseInboundSourceValidator sourceValidator = mock(PurchaseInboundSourceValidator.class);
         PurchaseInboundWeightSettlementService weightSettlementService =
                 mock(PurchaseInboundWeightSettlementService.class);
@@ -70,8 +110,8 @@ class PurchaseInboundApplyServicePostgresTest {
         WeightSettlementResult settlement = settlement();
 
         when(materialSupport.loadMaterialMap(List.of("M-OLD", "M-NEW"))).thenReturn(Map.of(
-                "M-OLD", new TradeMaterialSnapshot("M-OLD", false),
-                "M-NEW", new TradeMaterialSnapshot("M-NEW", false)
+                "M-OLD", new TradeMaterialSnapshot(MATERIAL_OLD_ID, "M-OLD", false),
+                "M-NEW", new TradeMaterialSnapshot(MATERIAL_NEW_ID, "M-NEW", false)
         ));
         when(materialSupport.normalizeMaterialCode(anyString(), anyInt())).thenAnswer(invocation ->
                 invocation.<String>getArgument(0).trim());
@@ -134,8 +174,10 @@ class PurchaseInboundApplyServicePostgresTest {
         PurchaseInbound inbound = new PurchaseInbound();
         inbound.setId(INBOUND_ID);
         inbound.setInboundNo("TEST-INBOUND-AUTO-FLUSH");
+        inbound.setSupplierId(SUPPLIER_ID);
         inbound.setSupplierCode(SUPPLIER_CODE);
         inbound.setSupplierName("测试供应商");
+        inbound.setWarehouseId(WAREHOUSE_ID);
         inbound.setWarehouseName("测试仓库");
         inbound.setInboundDate(INBOUND_DATE);
         inbound.setSettlementMode("理算");
@@ -156,7 +198,10 @@ class PurchaseInboundApplyServicePostgresTest {
         return new PurchaseInboundRequest(
                 "TEST-INBOUND-AUTO-FLUSH",
                 "PO-TEST",
+                SUPPLIER_ID,
+                SUPPLIER_CODE,
                 "测试供应商",
+                WAREHOUSE_ID,
                 "测试仓库",
                 INBOUND_DATE,
                 "理算",
@@ -172,6 +217,7 @@ class PurchaseInboundApplyServicePostgresTest {
     private PurchaseInboundItemRequest itemRequest(Long id, String materialCode) {
         return new PurchaseInboundItemRequest(
                 id,
+                materialId(materialCode),
                 materialCode,
                 "测试品牌",
                 "测试品类",
@@ -180,6 +226,7 @@ class PurchaseInboundApplyServicePostgresTest {
                 "12m",
                 "吨",
                 SOURCE_ITEM_ID,
+                WAREHOUSE_ID,
                 "测试仓库",
                 "理算",
                 null,
@@ -202,6 +249,7 @@ class PurchaseInboundApplyServicePostgresTest {
                                 int lineNo) {
         item.setPurchaseInbound(inbound);
         item.setLineNo(lineNo);
+        item.setMaterialId(materialId(source.materialCode()));
         item.setMaterialCode(source.materialCode());
         item.setBrand(source.brand());
         item.setCategory(source.category());
@@ -210,6 +258,7 @@ class PurchaseInboundApplyServicePostgresTest {
         item.setLength(source.length());
         item.setUnit(source.unit());
         item.setSourcePurchaseOrderItemId(source.sourcePurchaseOrderItemId());
+        item.setWarehouseId(WAREHOUSE_ID);
         item.setWarehouseName(source.warehouseName());
         item.setSettlementMode("理算");
         item.setBatchNo(source.batchNo());
@@ -223,6 +272,10 @@ class PurchaseInboundApplyServicePostgresTest {
         item.setWeightAdjustmentAmount(BigDecimal.ZERO);
         item.setUnitPrice(source.unitPrice());
         item.setAmount(new BigDecimal("2000.00"));
+    }
+
+    private long materialId(String materialCode) {
+        return "M-OLD".equals(materialCode) ? MATERIAL_OLD_ID : MATERIAL_NEW_ID;
     }
 
     private PurchaseInboundSourceValidator.SourceValidationContext sourceContext() {

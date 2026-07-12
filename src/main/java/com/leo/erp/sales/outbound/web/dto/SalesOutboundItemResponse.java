@@ -9,6 +9,7 @@ public record SalesOutboundItemResponse(
         Long sourceSalesOrderItemId,
         Long settlementCompanyId,
         String settlementCompanyName,
+        Long materialId,
         String materialCode,
         String brand,
         String category,
@@ -16,8 +17,10 @@ public record SalesOutboundItemResponse(
         String spec,
         String length,
         String unit,
+        Long warehouseId,
         String warehouseName,
         String batchNo,
+        String batchNoNormalized,
         Integer quantity,
         String quantityUnit,
         BigDecimal pieceWeightTon,
@@ -26,6 +29,34 @@ public record SalesOutboundItemResponse(
         BigDecimal unitPrice,
         BigDecimal amount
 ) {
+    public SalesOutboundItemResponse(Long id,
+                                     Integer lineNo,
+                                     String sourceNo,
+                                     Long sourceSalesOrderItemId,
+                                     Long settlementCompanyId,
+                                     String settlementCompanyName,
+                                     String materialCode,
+                                     String brand,
+                                     String category,
+                                     String material,
+                                     String spec,
+                                     String length,
+                                     String unit,
+                                     String warehouseName,
+                                     String batchNo,
+                                     Integer quantity,
+                                     String quantityUnit,
+                                     BigDecimal pieceWeightTon,
+                                     Integer piecesPerBundle,
+                                     BigDecimal weightTon,
+                                     BigDecimal unitPrice,
+                                     BigDecimal amount) {
+        this(id, lineNo, sourceNo, sourceSalesOrderItemId, settlementCompanyId, settlementCompanyName,
+                null, materialCode, brand, category, material, spec, length, unit, null, warehouseName,
+                batchNo, null, quantity, quantityUnit, pieceWeightTon, piecesPerBundle, weightTon,
+                unitPrice, amount);
+    }
+
     public SalesOutboundItemResponse(Long id,
                                      Integer lineNo,
                                      String sourceNo,
@@ -46,8 +77,8 @@ public record SalesOutboundItemResponse(
                                      BigDecimal weightTon,
                                      BigDecimal unitPrice,
                                      BigDecimal amount) {
-        this(id, lineNo, sourceNo, sourceSalesOrderItemId, null, null, materialCode, brand, category,
-                material, spec, length, unit, warehouseName, batchNo, quantity, quantityUnit,
+        this(id, lineNo, sourceNo, sourceSalesOrderItemId, null, null, null, materialCode, brand, category,
+                material, spec, length, unit, null, warehouseName, batchNo, null, quantity, quantityUnit,
                 pieceWeightTon, piecesPerBundle, weightTon, unitPrice, amount);
     }
 }

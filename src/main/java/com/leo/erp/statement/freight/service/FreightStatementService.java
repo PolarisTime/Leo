@@ -7,12 +7,9 @@ import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.service.AbstractCrudService;
-import com.leo.erp.common.support.BusinessDocumentValidator;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.security.permission.DataScopeContext;
-import com.leo.erp.logistics.bill.domain.entity.FreightBill;
-import com.leo.erp.logistics.bill.repository.FreightBillRepository;
 import com.leo.erp.statement.freight.domain.entity.FreightStatement;
 import com.leo.erp.statement.freight.domain.entity.FreightStatementItem;
 import com.leo.erp.statement.freight.mapper.FreightStatementWebMapper;
@@ -44,7 +41,6 @@ public class FreightStatementService extends AbstractCrudService<FreightStatemen
     private final FreightStatementViewAssembler viewAssembler;
     private final FreightStatementPageAssembler pageAssembler;
     private final FreightStatementApplyService freightStatementApplyService;
-    private final FreightBillRepository freightBillRepository;
     private final SourceAllocationLockService sourceAllocationLockService;
     private final StatementSettlementMutationGuard settlementMutationGuard;
 
@@ -57,7 +53,6 @@ public class FreightStatementService extends AbstractCrudService<FreightStatemen
                                    FreightStatementViewAssembler viewAssembler,
                                    FreightStatementPageAssembler pageAssembler,
                                    FreightStatementApplyService freightStatementApplyService,
-                                   FreightBillRepository freightBillRepository,
                                    SourceAllocationLockService sourceAllocationLockService,
                                    StatementSettlementMutationGuard settlementMutationGuard) {
         super(idGenerator);
@@ -68,7 +63,6 @@ public class FreightStatementService extends AbstractCrudService<FreightStatemen
         this.viewAssembler = viewAssembler;
         this.pageAssembler = pageAssembler;
         this.freightStatementApplyService = freightStatementApplyService;
-        this.freightBillRepository = freightBillRepository;
         this.sourceAllocationLockService = sourceAllocationLockService;
         this.settlementMutationGuard = settlementMutationGuard;
     }
@@ -82,6 +76,7 @@ public class FreightStatementService extends AbstractCrudService<FreightStatemen
     public Page<FreightStatementView> page(PageQuery query, PageFilter filter, String carrierCode) {
         Specification<FreightStatement> spec = applyDeletedVisibilityPolicy(
                 Specs.<FreightStatement>keywordLike(filter.keyword(), "statementNo", "carrierCode", "carrierName")
+                .and(Specs.equalValueIfPresent("carrierId", filter.carrierId()))
                 .and(Specs.equalIfPresent("carrierCode", carrierCode))
                 .and(Specs.equalIfPresent("carrierName", filter.name()))
                 .and(Specs.equalValueIfPresent("settlementCompanyId", filter.settlementCompanyId()))
@@ -196,7 +191,8 @@ public class FreightStatementService extends AbstractCrudService<FreightStatemen
                 command.signStatus(),
                 command.attachment(),
                 command.remark(),
-                command.items()
+                command.items(),
+                command.carrierId()
         );
     }
 
@@ -218,7 +214,8 @@ public class FreightStatementService extends AbstractCrudService<FreightStatemen
                 command.signStatus(),
                 command.attachment(),
                 command.remark(),
-                command.items()
+                command.items(),
+                command.carrierId()
         );
     }
 
@@ -297,18 +294,18 @@ public class FreightStatementService extends AbstractCrudService<FreightStatemen
     }
 
     private boolean freightFinancialLinkageChanged(FreightStatement entity, FreightStatementCommand command) {
-        boolean identityChanged = explicitTextChanged(entity.getCarrierCode(), command.carrierCode())
+        boolean identityChanged = (command.carrierId() != null
+                && !Objects.equals(entity.getCarrierId(), command.carrierId()))
+                || explicitTextChanged(entity.getCarrierCode(), command.carrierCode())
                 || !Objects.equals(normalizeText(entity.getCarrierName()), normalizeText(command.carrierName()))
                 || (command.settlementCompanyId() != null
                 && !Objects.equals(entity.getSettlementCompanyId(), command.settlementCompanyId()));
-        Set<String> existingSources = entity.getItems().stream()
-                .map(FreightStatementItem::getSourceNo)
-                .map(this::normalizeText)
+        Set<Long> existingSources = entity.getItems().stream()
+                .map(FreightStatementItem::getSourceFreightBillId)
                 .filter(Objects::nonNull)
                 .collect(java.util.stream.Collectors.toSet());
-        Set<String> requestedSources = command.items().stream()
-                .map(FreightStatementItemCommand::sourceNo)
-                .map(this::normalizeText)
+        Set<Long> requestedSources = command.items().stream()
+                .map(FreightStatementItemCommand::sourceFreightBillId)
                 .filter(Objects::nonNull)
                 .collect(java.util.stream.Collectors.toSet());
         return identityChanged || !existingSources.equals(requestedSources);
@@ -325,24 +322,14 @@ public class FreightStatementService extends AbstractCrudService<FreightStatemen
     }
 
     private void lockSourceFreightBills(FreightStatement entity, FreightStatementCommand command) {
-        TreeSet<String> sourceNos = new TreeSet<>();
+        TreeSet<Long> sourceIds = new TreeSet<>();
         entity.getItems().stream()
-                .map(FreightStatementItem::getSourceNo)
-                .map(BusinessDocumentValidator::trimToNull)
+                .map(FreightStatementItem::getSourceFreightBillId)
                 .filter(Objects::nonNull)
-                .forEach(sourceNos::add);
+                .forEach(sourceIds::add);
         if (command != null) {
             command.items().stream()
-                    .map(FreightStatementItemCommand::sourceNo)
-                    .map(BusinessDocumentValidator::trimToNull)
-                    .filter(Objects::nonNull)
-                    .forEach(sourceNos::add);
-        }
-
-        TreeSet<Long> sourceIds = new TreeSet<>();
-        if (!sourceNos.isEmpty()) {
-            freightBillRepository.findByBillNoInAndDeletedFlagFalse(sourceNos).stream()
-                    .map(FreightBill::getId)
+                    .map(FreightStatementItemCommand::sourceFreightBillId)
                     .filter(Objects::nonNull)
                     .forEach(sourceIds::add);
         }

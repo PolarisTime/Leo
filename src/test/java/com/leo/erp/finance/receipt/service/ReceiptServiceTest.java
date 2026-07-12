@@ -236,7 +236,7 @@ class ReceiptServiceTest {
         ReceiptRepository receiptRepository = mock(ReceiptRepository.class);
         CustomerStatementQueryService customerStatementQueryService = mock(CustomerStatementQueryService.class);
         ResourceRecordAccessGuard resourceRecordAccessGuard = mock(ResourceRecordAccessGuard.class);
-        CustomerStatement statement = new CustomerStatement();
+        CustomerStatement statement = customerStatementWithIdentity();
         statement.setStatus(StatusConstants.CONFIRMED);
         statement.setId(21L);
         statement.setCustomerName("客户B");
@@ -273,7 +273,7 @@ class ReceiptServiceTest {
         ReceiptRepository receiptRepository = mock(ReceiptRepository.class);
         CustomerStatementQueryService customerStatementQueryService = mock(CustomerStatementQueryService.class);
         ResourceRecordAccessGuard resourceRecordAccessGuard = mock(ResourceRecordAccessGuard.class);
-        CustomerStatement statement = new CustomerStatement();
+        CustomerStatement statement = customerStatementWithIdentity();
         statement.setStatus(StatusConstants.CONFIRMED);
         statement.setId(21L);
         statement.setCustomerName("客户A");
@@ -310,7 +310,7 @@ class ReceiptServiceTest {
         ReceiptRepository receiptRepository = mock(ReceiptRepository.class);
         CustomerStatementQueryService customerStatementQueryService = mock(CustomerStatementQueryService.class);
         ResourceRecordAccessGuard resourceRecordAccessGuard = mock(ResourceRecordAccessGuard.class);
-        CustomerStatement statement = new CustomerStatement();
+        CustomerStatement statement = customerStatementWithIdentity();
         statement.setStatus(StatusConstants.CONFIRMED);
         statement.setId(21L);
         statement.setCustomerName("客户A");
@@ -349,7 +349,7 @@ class ReceiptServiceTest {
     void shouldRejectZeroAllocationAmount() {
         ReceiptRepository receiptRepository = mock(ReceiptRepository.class);
         CustomerStatementQueryService customerStatementQueryService = mock(CustomerStatementQueryService.class);
-        CustomerStatement statement = new CustomerStatement();
+        CustomerStatement statement = customerStatementWithIdentity();
         statement.setStatus(StatusConstants.CONFIRMED);
         statement.setId(21L);
         statement.setCustomerName("客户A");
@@ -385,7 +385,7 @@ class ReceiptServiceTest {
     void shouldRejectReceiptAmountNotMatchingAllocations() {
         ReceiptRepository receiptRepository = mock(ReceiptRepository.class);
         CustomerStatementQueryService customerStatementQueryService = mock(CustomerStatementQueryService.class);
-        CustomerStatement statement = new CustomerStatement();
+        CustomerStatement statement = customerStatementWithIdentity();
         statement.setStatus(StatusConstants.CONFIRMED);
         statement.setId(21L);
         statement.setCustomerName("客户A");
@@ -421,7 +421,7 @@ class ReceiptServiceTest {
     void shouldRejectReceivedReceiptWithUnconfirmedCustomerStatement() {
         ReceiptRepository receiptRepository = mock(ReceiptRepository.class);
         CustomerStatementQueryService customerStatementQueryService = mock(CustomerStatementQueryService.class);
-        CustomerStatement statement = new CustomerStatement();
+        CustomerStatement statement = customerStatementWithIdentity();
         statement.setStatus(StatusConstants.PENDING_CONFIRM);
         statement.setId(21L);
         statement.setCustomerName("客户A");
@@ -486,7 +486,7 @@ class ReceiptServiceTest {
         ReceiptRepository receiptRepository = mock(ReceiptRepository.class);
         ReceiptMapper receiptMapper = mock(ReceiptMapper.class);
         CustomerStatementQueryService customerStatementQueryService = mock(CustomerStatementQueryService.class);
-        CustomerStatement statement = new CustomerStatement();
+        CustomerStatement statement = customerStatementWithIdentity();
         statement.setStatus(StatusConstants.CONFIRMED);
         statement.setId(21L);
         statement.setCustomerCode("C-001");
@@ -539,7 +539,7 @@ class ReceiptServiceTest {
     void shouldRejectCustomerCodeMismatchBetweenReceiptAndStatement() {
         ReceiptRepository receiptRepository = mock(ReceiptRepository.class);
         CustomerStatementQueryService customerStatementQueryService = mock(CustomerStatementQueryService.class);
-        CustomerStatement statement = new CustomerStatement();
+        CustomerStatement statement = customerStatementWithIdentity();
         statement.setStatus(StatusConstants.CONFIRMED);
         statement.setId(21L);
         statement.setCustomerCode("C-001");
@@ -578,7 +578,7 @@ class ReceiptServiceTest {
         ReceiptRepository receiptRepository = mock(ReceiptRepository.class);
         ReceiptAllocationRepository allocationRepository = mock(ReceiptAllocationRepository.class);
         CustomerStatementQueryService customerStatementQueryService = mock(CustomerStatementQueryService.class);
-        CustomerStatement statement = new CustomerStatement();
+        CustomerStatement statement = customerStatementWithIdentity();
         statement.setStatus(StatusConstants.CONFIRMED);
         statement.setId(21L);
         statement.setCustomerName("客户A");
@@ -620,7 +620,7 @@ class ReceiptServiceTest {
         ReceiptRepository receiptRepository = mock(ReceiptRepository.class);
         ReceiptAllocationRepository allocationRepository = mock(ReceiptAllocationRepository.class);
         CustomerStatementQueryService customerStatementQueryService = mock(CustomerStatementQueryService.class);
-        CustomerStatement statement = new CustomerStatement();
+        CustomerStatement statement = customerStatementWithIdentity();
         statement.setStatus(StatusConstants.CONFIRMED);
         statement.setId(21L);
         statement.setCustomerName("客户A");
@@ -661,7 +661,7 @@ class ReceiptServiceTest {
     void shouldRejectAllocationAmountExceedingReceiptAmount() {
         ReceiptRepository receiptRepository = mock(ReceiptRepository.class);
         CustomerStatementQueryService customerStatementQueryService = mock(CustomerStatementQueryService.class);
-        CustomerStatement statement = new CustomerStatement();
+        CustomerStatement statement = customerStatementWithIdentity();
         statement.setStatus(StatusConstants.CONFIRMED);
         statement.setId(21L);
         statement.setCustomerName("客户A");
@@ -698,7 +698,7 @@ class ReceiptServiceTest {
         ReceiptRepository receiptRepository = mock(ReceiptRepository.class);
         CustomerStatementQueryService customerStatementQueryService = mock(CustomerStatementQueryService.class);
         ResourceRecordAccessGuard resourceRecordAccessGuard = mock(ResourceRecordAccessGuard.class);
-        CustomerStatement statement = new CustomerStatement();
+        CustomerStatement statement = customerStatementWithIdentity();
         statement.setStatus(StatusConstants.CONFIRMED);
         statement.setId(21L);
         statement.setCustomerName("客户A");
@@ -744,7 +744,7 @@ class ReceiptServiceTest {
         WorkflowTransitionGuard workflowTransitionGuard = mock(WorkflowTransitionGuard.class);
         SnowflakeIdGenerator idGenerator = new SnowflakeIdGenerator(0L);
 
-        CustomerStatement statement = new CustomerStatement();
+        CustomerStatement statement = customerStatementWithIdentity();
         statement.setStatus(StatusConstants.CONFIRMED);
         statement.setId(21L);
         statement.setCustomerName("客户A");
@@ -794,7 +794,7 @@ class ReceiptServiceTest {
         ApplicationEventPublisher eventPublisher = mock(ApplicationEventPublisher.class);
         ResourceRecordAccessGuard resourceRecordAccessGuard = mock(ResourceRecordAccessGuard.class);
 
-        CustomerStatement statement = new CustomerStatement();
+        CustomerStatement statement = customerStatementWithIdentity();
         statement.setStatus(StatusConstants.CONFIRMED);
         statement.setId(21L);
         statement.setCustomerName("客户A");
@@ -1057,7 +1057,7 @@ class ReceiptServiceTest {
         existing.setProjectName("项目A");
         existing.setAmount(new BigDecimal("100.00"));
 
-        CustomerStatement statement = new CustomerStatement();
+        CustomerStatement statement = customerStatementWithIdentity();
         statement.setStatus(StatusConstants.CONFIRMED);
         statement.setId(21L);
         statement.setCustomerName("客户A");
@@ -1175,7 +1175,7 @@ class ReceiptServiceTest {
         ResourceRecordAccessGuard resourceRecordAccessGuard = mock(ResourceRecordAccessGuard.class);
         ReceiptMapper receiptMapper = mock(ReceiptMapper.class);
 
-        CustomerStatement statement = new CustomerStatement();
+        CustomerStatement statement = customerStatementWithIdentity();
         statement.setStatus(StatusConstants.CONFIRMED);
         statement.setId(21L);
         statement.setCustomerName("客户A");
@@ -1218,7 +1218,7 @@ class ReceiptServiceTest {
     void shouldRejectNegativeAllocationAmount() {
         ReceiptRepository receiptRepository = mock(ReceiptRepository.class);
         CustomerStatementQueryService customerStatementQueryService = mock(CustomerStatementQueryService.class);
-        CustomerStatement statement = new CustomerStatement();
+        CustomerStatement statement = customerStatementWithIdentity();
         statement.setStatus(StatusConstants.CONFIRMED);
         statement.setId(21L);
         statement.setCustomerName("客户A");
@@ -1260,7 +1260,7 @@ class ReceiptServiceTest {
         allocation.setAllocatedAmount(new BigDecimal("100.00"));
         existing.setItems(new ArrayList<>(List.of(allocation)));
 
-        CustomerStatement statement = new CustomerStatement();
+        CustomerStatement statement = customerStatementWithIdentity();
         statement.setStatus(StatusConstants.CONFIRMED);
         statement.setId(21L);
         statement.setStatementNo("ST-001");
@@ -1512,11 +1512,27 @@ class ReceiptServiceTest {
         );
         ReceiptAllocationService allocationService = new ReceiptAllocationService(statementAllocationValidator);
         ReceiptSettlementSyncService settlementSyncService = new ReceiptSettlementSyncService(eventPublisher);
+        ReceiptPartyIdentityResolver partyIdentityResolver = mock(ReceiptPartyIdentityResolver.class);
+        when(partyIdentityResolver.resolve(any(ReceiptRequest.class))).thenAnswer(invocation -> {
+            ReceiptRequest request = invocation.getArgument(0);
+            return new ReceiptPartyIdentityResolver.PartySnapshot(
+                    request.customerId() == null ? 101L : request.customerId(),
+                    request.customerCode(),
+                    request.customerName(),
+                    request.projectId() == null ? 1001L : request.projectId(),
+                    request.projectName()
+            );
+        });
         return new ReceiptService(
                 receiptRepository,
                 snowflakeIdGenerator,
                 receiptMapper,
-                new ReceiptApplyService(workflowTransitionGuard, allocationService, settlementSyncService),
+                new ReceiptApplyService(
+                        workflowTransitionGuard,
+                        allocationService,
+                        settlementSyncService,
+                        partyIdentityResolver
+                ),
                 allocationService,
                 new ReceiptAllocationResponseAssembler(customerStatementQueryService),
                 settlementSyncService,
@@ -1570,6 +1586,13 @@ class ReceiptServiceTest {
         receipt.setItems(new ArrayList<>());
         receipt.setOriginalAllocationStatementIds(new java.util.LinkedHashSet<>());
         return receipt;
+    }
+
+    private CustomerStatement customerStatementWithIdentity() {
+        CustomerStatement statement = new CustomerStatement();
+        statement.setCustomerId(101L);
+        statement.setProjectId(1001L);
+        return statement;
     }
 
     private ReceiptRequest buildRequest(Long sourceStatementId,

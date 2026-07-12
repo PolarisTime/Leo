@@ -25,8 +25,35 @@ public record CustomerStatementItemRequest(
         @NotNull @Min(0) Integer piecesPerBundle,
         BigDecimal weightTon,
         @NotNull @DecimalMin("0.00") BigDecimal unitPrice,
-        BigDecimal amount
+        BigDecimal amount,
+        Long customerId,
+        Long projectId,
+        Long materialId,
+        Long warehouseId
 ) {
+    public CustomerStatementItemRequest(Long id,
+                                        String sourceNo,
+                                        Long sourceSalesOrderItemId,
+                                        String materialCode,
+                                        String brand,
+                                        String category,
+                                        String material,
+                                        String spec,
+                                        String length,
+                                        String unit,
+                                        String batchNo,
+                                        Integer quantity,
+                                        String quantityUnit,
+                                        BigDecimal pieceWeightTon,
+                                        Integer piecesPerBundle,
+                                        BigDecimal weightTon,
+                                        BigDecimal unitPrice,
+                                        BigDecimal amount) {
+        this(id, sourceNo, sourceSalesOrderItemId, materialCode, brand, category, material, spec, length, unit,
+                batchNo, quantity, quantityUnit, pieceWeightTon, piecesPerBundle, weightTon, unitPrice, amount,
+                null, null, null, null);
+    }
+
     public CustomerStatementItemRequest(String sourceNo,
                                         Long sourceSalesOrderItemId,
                                         String materialCode,
@@ -45,6 +72,6 @@ public record CustomerStatementItemRequest(
                                         BigDecimal unitPrice,
                                         BigDecimal amount) {
         this(null, sourceNo, sourceSalesOrderItemId, materialCode, brand, category, material, spec, length, unit, batchNo, quantity,
-                quantityUnit, pieceWeightTon, piecesPerBundle, weightTon, unitPrice, amount);
+                quantityUnit, pieceWeightTon, piecesPerBundle, weightTon, unitPrice, amount, null, null, null, null);
     }
 }

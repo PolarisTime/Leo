@@ -129,6 +129,8 @@ class DeploymentSetupHardeningTest {
                 fixture.script().toString(),
                 "--confirm",
                 "--skip-tests",
+                "--flyway-target",
+                "19",
                 "--root",
                 deploymentRoot.toString(),
                 "--db-admin-password",

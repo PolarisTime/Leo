@@ -11,7 +11,8 @@ import java.util.List;
 public record PaymentRequest(
         String paymentNo,
         @jakarta.validation.constraints.NotBlank(message = "业务类型不能为空")
-        String businessType,
+        String counterpartyType,
+        Long counterpartyId,
         String paymentPurpose,
         String counterpartyCode,
         @jakarta.validation.constraints.NotBlank(message = "往来单位不能为空")
@@ -40,6 +41,31 @@ public record PaymentRequest(
 ) {
     public PaymentRequest(String paymentNo,
                           String businessType,
+                          String paymentPurpose,
+                          String counterpartyCode,
+                          String counterpartyName,
+                          Long sourceStatementId,
+                          Long sourcePurchaseOrderId,
+                          String purchaseOrderNo,
+                          String supplierCode,
+                          String supplierName,
+                          Long settlementCompanyId,
+                          String settlementCompanyName,
+                          LocalDate paymentDate,
+                          String payType,
+                          BigDecimal amount,
+                          String status,
+                          String operatorName,
+                          String remark,
+                          List<PaymentAllocationRequest> items) {
+        this(paymentNo, businessType, null, paymentPurpose, counterpartyCode, counterpartyName,
+                sourceStatementId, sourcePurchaseOrderId, purchaseOrderNo, supplierCode, supplierName,
+                settlementCompanyId, settlementCompanyName, paymentDate, payType, amount, status,
+                operatorName, remark, items);
+    }
+
+    public PaymentRequest(String paymentNo,
+                          String businessType,
                           String counterpartyCode,
                           String counterpartyName,
                           Long sourceStatementId,
@@ -53,6 +79,7 @@ public record PaymentRequest(
         this(
                 paymentNo,
                 businessType,
+                null,
                 null,
                 counterpartyCode,
                 counterpartyName,
@@ -89,6 +116,7 @@ public record PaymentRequest(
                 businessType,
                 null,
                 null,
+                null,
                 counterpartyName,
                 sourceStatementId,
                 null,
@@ -105,5 +133,10 @@ public record PaymentRequest(
                 remark,
                 items
         );
+    }
+
+    @Deprecated(forRemoval = false)
+    public String businessType() {
+        return counterpartyType;
     }
 }

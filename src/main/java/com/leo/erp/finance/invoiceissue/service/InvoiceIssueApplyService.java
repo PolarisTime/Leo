@@ -49,13 +49,23 @@ public class InvoiceIssueApplyService {
         entity.setOperatorName(request.operatorName());
         entity.setRemark(request.remark());
 
-        InvoiceIssueSourceService.SourceApplyResult sourceResult = invoiceIssueSourceService.applyItems(
-                entity,
-                request.items(),
-                request.customerName(),
-                request.projectName(),
-                nextIdSupplier
-        );
+        InvoiceIssueSourceService.SourceApplyResult sourceResult = request.customerId() == null && request.projectId() == null
+                ? invoiceIssueSourceService.applyItems(
+                        entity,
+                        request.items(),
+                        request.customerName(),
+                        request.projectName(),
+                        nextIdSupplier
+                )
+                : invoiceIssueSourceService.applyItems(
+                        entity,
+                        request.items(),
+                        request.customerId(),
+                        request.customerName(),
+                        request.projectId(),
+                        request.projectName(),
+                        nextIdSupplier
+                );
         InvoiceAmountCalculator.InvoiceAmounts amounts = amountCalculator.resolve(
                 "开票",
                 sourceResult.amount(),
@@ -66,5 +76,7 @@ public class InvoiceIssueApplyService {
         entity.setTaxAmount(amounts.taxAmount());
         entity.setSettlementCompanyId(sourceResult.settlementCompanyId());
         entity.setSettlementCompanyName(sourceResult.settlementCompanyName());
+        entity.setCustomerId(sourceResult.customerId());
+        entity.setProjectId(sourceResult.projectId());
     }
 }

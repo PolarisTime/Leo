@@ -40,6 +40,8 @@ public class ReceiptAllocationService {
     ) {
         List<ReceiptAllocationRequest> allocationRequests = normalizeAllocationRequests(request);
         String resolvedCustomerCode = null;
+        Long resolvedCustomerId = null;
+        Long resolvedProjectId = null;
         SettlementCompanySnapshot settlementCompany = SettlementCompanySnapshot.EMPTY;
         BigDecimal totalAllocatedAmount = BigDecimal.ZERO;
         Map<Long, BigDecimal> requestAllocatedAmountMap = new HashMap<>();
@@ -65,6 +67,8 @@ public class ReceiptAllocationService {
                     requestAllocatedAmountMap,
                     i + 1
             );
+            resolvedCustomerId = mergeIdentity(resolvedCustomerId, statement.getCustomerId(), "客户");
+            resolvedProjectId = mergeIdentity(resolvedProjectId, statement.getProjectId(), "项目");
             resolvedCustomerCode = mergeCustomerCode(resolvedCustomerCode, statement.getCustomerCode());
             settlementCompany = mergeSettlementCompany(settlementCompany, statement, i + 1);
 
@@ -72,6 +76,7 @@ public class ReceiptAllocationService {
             item.setReceipt(entity);
             item.setLineNo(i + 1);
             item.setSourceStatementId(statement.getId());
+            item.setSourceCustomerStatementId(statement.getId());
             item.setAllocatedAmount(allocatedAmount);
             totalAllocatedAmount = totalAllocatedAmount.add(allocatedAmount);
         }
@@ -84,6 +89,8 @@ public class ReceiptAllocationService {
         entity.getItems().addAll(items);
         entity.getItems().sort(java.util.Comparator.comparing(ReceiptAllocation::getLineNo));
         return new AllocationApplyResult(
+                resolvedCustomerId,
+                resolvedProjectId,
                 resolvedCustomerCode,
                 settlementCompany.id(),
                 settlementCompany.name(),
@@ -105,6 +112,8 @@ public class ReceiptAllocationService {
         );
         Map<Long, BigDecimal> requestAllocatedAmountMap = new HashMap<>();
         String resolvedCustomerCode = null;
+        Long resolvedCustomerId = null;
+        Long resolvedProjectId = null;
         SettlementCompanySnapshot settlementCompany = SettlementCompanySnapshot.EMPTY;
         for (int i = 0; i < entity.getItems().size(); i++) {
             ReceiptAllocation item = entity.getItems().get(i);
@@ -117,10 +126,15 @@ public class ReceiptAllocationService {
                     requestAllocatedAmountMap,
                     i + 1
             );
+            item.setSourceCustomerStatementId(statement.getId());
+            resolvedCustomerId = mergeIdentity(resolvedCustomerId, statement.getCustomerId(), "客户");
+            resolvedProjectId = mergeIdentity(resolvedProjectId, statement.getProjectId(), "项目");
             resolvedCustomerCode = mergeCustomerCode(resolvedCustomerCode, statement.getCustomerCode());
             settlementCompany = mergeSettlementCompany(settlementCompany, statement, i + 1);
         }
         entity.setCustomerCode(mergeCustomerCode(entity.getCustomerCode(), resolvedCustomerCode));
+        entity.setCustomerId(mergeIdentity(entity.getCustomerId(), resolvedCustomerId, "客户"));
+        entity.setProjectId(mergeIdentity(entity.getProjectId(), resolvedProjectId, "项目"));
         entity.setSettlementCompanyId(settlementCompany.id());
         entity.setSettlementCompanyName(settlementCompany.name());
     }
@@ -135,6 +149,16 @@ public class ReceiptAllocationService {
             return normalizedCurrentCode;
         }
         throw new BusinessException(ErrorCode.BUSINESS_ERROR, "同一收款单不能核销不同客户编码的对账单");
+    }
+
+    private Long mergeIdentity(Long currentId, Long nextId, String label) {
+        if (currentId == null) {
+            return nextId;
+        }
+        if (nextId == null || currentId.equals(nextId)) {
+            return currentId;
+        }
+        throw new BusinessException(ErrorCode.BUSINESS_ERROR, "同一收款单不能核销不同" + label + "ID的对账单");
     }
 
     BigDecimal totalAllocatedAmount(List<ReceiptAllocation> items) {
@@ -172,10 +196,13 @@ public class ReceiptAllocationService {
     private ReceiptRequest toStatusOnlyRequest(Receipt entity) {
         return new ReceiptRequest(
                 entity.getReceiptNo(),
+                entity.getCustomerId(),
                 entity.getCustomerCode(),
                 entity.getCustomerName(),
                 entity.getProjectId(),
                 entity.getProjectName(),
+                entity.getSettlementCompanyId(),
+                entity.getSettlementCompanyName(),
                 entity.getSourceStatementId(),
                 entity.getReceiptDate(),
                 entity.getPayType(),
@@ -217,6 +244,8 @@ public class ReceiptAllocationService {
     }
 
     record AllocationApplyResult(
+            Long customerId,
+            Long projectId,
             String customerCode,
             Long settlementCompanyId,
             String settlementCompanyName,

@@ -31,6 +31,9 @@ public class PurchaseOrderItem {
     @Column(name = "material_code", nullable = false, length = 64)
     private String materialCode;
 
+    @Column(name = "material_id")
+    private Long materialId;
+
     @Column(name = "brand", nullable = false, length = 64)
     private String brand;
 
@@ -52,8 +55,14 @@ public class PurchaseOrderItem {
     @Column(name = "warehouse_name", length = 128)
     private String warehouseName;
 
+    @Column(name = "warehouse_id")
+    private Long warehouseId;
+
     @Column(name = "batch_no", length = 64)
     private String batchNo;
+
+    @Column(name = "batch_no_normalized", insertable = false, updatable = false, length = 64)
+    private String batchNoNormalized;
 
     @Column(name = "quantity", nullable = false)
     private Integer quantity;

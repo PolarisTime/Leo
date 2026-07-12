@@ -124,6 +124,10 @@ public class PaymentPurchasePrepaymentService {
 
     private SourceSnapshot sourceSnapshot(PurchaseOrder sourceOrder) {
         String orderNo = requireText(sourceOrder.getOrderNo(), "来源采购订单号不能为空");
+        Long supplierId = sourceOrder.getSupplierId();
+        if (supplierId == null) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "来源采购订单供应商ID不能为空");
+        }
         String supplierCode = requireText(sourceOrder.getSupplierCode(), "来源采购订单供应商编码不能为空");
         String supplierName = requireText(sourceOrder.getSupplierName(), "来源采购订单供应商名称不能为空");
         Long settlementCompanyId = sourceOrder.getSettlementCompanyId();
@@ -137,6 +141,7 @@ public class PaymentPurchasePrepaymentService {
         BigDecimal originalAmount = originalAmount(sourceOrder);
         return new SourceSnapshot(
                 orderNo,
+                supplierId,
                 supplierCode,
                 supplierName,
                 settlementCompanyId,
@@ -181,12 +186,19 @@ public class PaymentPurchasePrepaymentService {
     private void applySnapshot(Payment payment,
                                PurchaseOrder sourceOrder,
                                SourceSnapshot snapshot) {
+        if (payment.getCounterpartyId() != null
+                && !payment.getCounterpartyId().equals(snapshot.supplierId())) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "付款单往来方ID与来源采购订单供应商ID不一致");
+        }
         payment.setSourcePurchaseOrderId(sourceOrder.getId());
         payment.setPurchaseOrderNo(snapshot.purchaseOrderNo());
         payment.setSupplierCode(snapshot.supplierCode());
         payment.setSupplierName(snapshot.supplierName());
         payment.setSettlementCompanyId(snapshot.settlementCompanyId());
         payment.setSettlementCompanyName(snapshot.settlementCompanyName());
+        payment.setBusinessType(PaymentAllocationService.SUPPLIER_PAYMENT_TYPE);
+        payment.setCounterpartyType(PaymentAllocationService.SUPPLIER_PAYMENT_TYPE);
+        payment.setCounterpartyId(snapshot.supplierId());
         payment.setCounterpartyCode(snapshot.supplierCode());
         payment.setCounterpartyName(snapshot.supplierName());
     }
@@ -278,6 +290,7 @@ public class PaymentPurchasePrepaymentService {
 
     private record SourceSnapshot(
             String purchaseOrderNo,
+            Long supplierId,
             String supplierCode,
             String supplierName,
             Long settlementCompanyId,

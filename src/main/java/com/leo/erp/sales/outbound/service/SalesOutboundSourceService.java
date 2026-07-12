@@ -79,8 +79,11 @@ public class SalesOutboundSourceService {
     void validateSourceSalesOrderItem(SalesOutboundItemRequest request,
                                       SalesOrderItem sourceSalesOrderItem,
                                       Long sourceSalesOrderItemId,
+                                      Long headerCustomerId,
                                       String headerCustomerName,
+                                      Long headerProjectId,
                                       String headerProjectName,
+                                      Long warehouseId,
                                       String warehouseName,
                                       String batchNo,
                                       Map<Long, Integer> requestSourceQuantityMap,
@@ -95,14 +98,18 @@ public class SalesOutboundSourceService {
                 java.util.Set.of(StatusConstants.AUDITED),
                 "第" + lineNo + "行来源销售订单未审核，不能作为来源单据"
         );
+        assertSameId(headerCustomerId, sourceSalesOrder.getCustomerId(), lineNo, "客户ID");
         assertSameOrderText(headerCustomerName, sourceSalesOrder.getCustomerName(), lineNo, "客户");
+        assertSameId(headerProjectId, sourceSalesOrder.getProjectId(), lineNo, "项目ID");
         assertSameOrderText(headerProjectName, sourceSalesOrder.getProjectName(), lineNo, "项目");
+        assertSameId(request.materialId(), sourceSalesOrderItem.getMaterialId(), lineNo, "商品ID");
         BusinessDocumentValidator.requireSameSourceText(request.materialCode(), sourceSalesOrderItem.getMaterialCode(), lineNo, "来源销售订单明细", "物料编码");
         BusinessDocumentValidator.requireSameSourceText(request.brand(), sourceSalesOrderItem.getBrand(), lineNo, "来源销售订单明细", "品牌");
         BusinessDocumentValidator.requireSameSourceText(request.category(), sourceSalesOrderItem.getCategory(), lineNo, "来源销售订单明细", "品类");
         BusinessDocumentValidator.requireSameSourceText(request.material(), sourceSalesOrderItem.getMaterial(), lineNo, "来源销售订单明细", "材质");
         BusinessDocumentValidator.requireSameSourceText(request.spec(), sourceSalesOrderItem.getSpec(), lineNo, "来源销售订单明细", "规格");
         BusinessDocumentValidator.requireSameSourceText(request.unit(), sourceSalesOrderItem.getUnit(), lineNo, "来源销售订单明细", "单位");
+        assertSameId(warehouseId, sourceSalesOrderItem.getWarehouseId(), lineNo, "仓库ID");
         BusinessDocumentValidator.requireSameSourceText(warehouseName, sourceSalesOrderItem.getWarehouseName(), lineNo, "来源销售订单明细", "仓库");
         BusinessDocumentValidator.requireSameSourceText(batchNo, sourceSalesOrderItem.getBatchNo(), lineNo, "来源销售订单明细", "批号");
 
@@ -116,6 +123,31 @@ public class SalesOutboundSourceService {
             );
         }
         requestSourceQuantityMap.put(sourceSalesOrderItemId, requestedQuantity + currentQuantity);
+    }
+
+    void validateSourceSalesOrderItem(SalesOutboundItemRequest request,
+                                      SalesOrderItem sourceSalesOrderItem,
+                                      Long sourceSalesOrderItemId,
+                                      String headerCustomerName,
+                                      String headerProjectName,
+                                      String warehouseName,
+                                      String batchNo,
+                                      Map<Long, Integer> requestSourceQuantityMap,
+                                      int lineNo) {
+        validateSourceSalesOrderItem(
+                request,
+                sourceSalesOrderItem,
+                sourceSalesOrderItemId,
+                null,
+                headerCustomerName,
+                null,
+                headerProjectName,
+                null,
+                warehouseName,
+                batchNo,
+                requestSourceQuantityMap,
+                lineNo
+        );
     }
 
     void assertSourceSalesOrderItemsNotOccupied(
@@ -191,5 +223,14 @@ public class SalesOutboundSourceService {
                 "来源销售订单",
                 fieldName
         );
+    }
+
+    private void assertSameId(Long requestedValue, Long sourceValue, int lineNo, String fieldName) {
+        if (requestedValue != null && !java.util.Objects.equals(requestedValue, sourceValue)) {
+            throw new BusinessException(
+                    ErrorCode.BUSINESS_ERROR,
+                    "第" + lineNo + "行" + fieldName + "与来源销售订单不一致"
+            );
+        }
     }
 }

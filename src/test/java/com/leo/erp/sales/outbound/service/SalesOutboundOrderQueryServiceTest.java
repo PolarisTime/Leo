@@ -16,14 +16,17 @@ import static org.mockito.Mockito.when;
 class SalesOutboundOrderQueryServiceTest {
 
     @Test
-    void shouldMapActiveOutboundsToSalesOrderSnapshots() {
+    void shouldMapAuditedOutboundsSelectedBySourceItemIds() {
         SalesOutboundRepository repository = mock(SalesOutboundRepository.class);
         SalesOutbound outbound = outbound();
-        when(repository.findByDeletedFlagFalse()).thenReturn(List.of(outbound));
+        when(repository.findAllWithItemsByStatusAndSourceSalesOrderItemIds(
+                StatusConstants.AUDITED,
+                List.of(101L)
+        )).thenReturn(List.of(outbound));
 
         SalesOutboundOrderQueryService service = new SalesOutboundOrderQueryService(repository);
 
-        var records = service.findActiveOutbounds();
+        var records = service.findAuditedOutboundsBySourceSalesOrderItemIds(List.of(101L));
 
         assertThat(records).hasSize(1);
         assertThat(records.get(0).salesOrderNo()).isEqualTo("SO-001");

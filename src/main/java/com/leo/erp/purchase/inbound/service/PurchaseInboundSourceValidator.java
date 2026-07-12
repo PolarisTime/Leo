@@ -89,8 +89,10 @@ public class PurchaseInboundSourceValidator {
         validateSourcePurchaseOrderItemFields(
                 source,
                 sourcePurchaseOrderItem,
+                request.supplierId(),
                 request.supplierCode(),
                 request.supplierName(),
+                request.warehouseId(),
                 request.warehouseName(),
                 lineNo
         );
@@ -99,8 +101,10 @@ public class PurchaseInboundSourceValidator {
 
     private void validateSourcePurchaseOrderItemFields(PurchaseInboundItemRequest request,
                                                        PurchaseOrderItem sourceItem,
+                                                       Long headerSupplierId,
                                                        String headerSupplierCode,
                                                        String headerSupplierName,
+                                                       Long headerWarehouseId,
                                                        String headerWarehouseName,
                                                        int lineNo) {
         PurchaseOrder sourceOrder = sourceItem.getPurchaseOrder();
@@ -110,12 +114,14 @@ public class PurchaseInboundSourceValidator {
                 Set.of(StatusConstants.AUDITED),
                 "第" + lineNo + "行来源采购订单未审核，不能作为来源单据"
         );
+        assertSourceId(headerSupplierId, sourceOrder.getSupplierId(), lineNo, "供应商ID");
         String requestedSupplierCode = BusinessDocumentValidator.trimToNull(headerSupplierCode);
         if (requestedSupplierCode != null) {
             assertSourceOrderText(requestedSupplierCode, sourceOrder.getSupplierCode(), lineNo, "供应商编码");
         }
         assertSourceOrderText(headerSupplierName, sourceOrder.getSupplierName(), lineNo, "供应商");
         assertSourceItemText(request.materialCode(), sourceItem.getMaterialCode(), lineNo, "物料编码");
+        assertSourceId(request.materialId(), sourceItem.getMaterialId(), lineNo, "商品ID");
         assertSourceItemText(request.brand(), sourceItem.getBrand(), lineNo, "品牌");
         assertSourceItemText(request.category(), sourceItem.getCategory(), lineNo, "品类");
         assertSourceItemText(request.material(), sourceItem.getMaterial(), lineNo, "材质");
@@ -124,6 +130,8 @@ public class PurchaseInboundSourceValidator {
         assertSourceItemText(request.unit(), sourceItem.getUnit(), lineNo, "单位");
         String requestedWarehouseName = BusinessDocumentValidator.trimToNull(request.warehouseName()) == null
                 ? headerWarehouseName : request.warehouseName();
+        Long requestedWarehouseId = request.warehouseId() == null ? headerWarehouseId : request.warehouseId();
+        assertSourceId(requestedWarehouseId, sourceItem.getWarehouseId(), lineNo, "仓库ID");
         assertSourceItemText(requestedWarehouseName, sourceItem.getWarehouseName(), lineNo, "仓库");
         assertSourceItemText(request.batchNo(), sourceItem.getBatchNo(), lineNo, "批号");
         assertSourceItemText(
@@ -135,6 +143,15 @@ public class PurchaseInboundSourceValidator {
         assertSourceItemDecimal(request.pieceWeightTon(), sourceItem.getPieceWeightTon(), lineNo, "件重");
         assertSourceItemInteger(request.piecesPerBundle(), sourceItem.getPiecesPerBundle(), lineNo, "每捆支数");
         assertSourceItemDecimal(request.unitPrice(), sourceItem.getUnitPrice(), lineNo, "单价");
+    }
+
+    private void assertSourceId(Long requestedValue, Long sourceValue, int lineNo, String fieldName) {
+        if (requestedValue != null && !java.util.Objects.equals(requestedValue, sourceValue)) {
+            throw new BusinessException(
+                    ErrorCode.BUSINESS_ERROR,
+                    "第" + lineNo + "行" + fieldName + "与来源采购订单不一致"
+            );
+        }
     }
 
     private void assertSourceOrderText(String requestedValue, String sourceValue, int lineNo, String fieldName) {

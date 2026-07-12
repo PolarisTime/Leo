@@ -80,12 +80,15 @@ public class BusinessCreateIdResolver {
         }
         try {
             long parsedValue = Long.parseLong(rawValue.trim());
-            if (parsedValue > 0 && businessPreallocationService != null) {
-                String moduleKey = resolveBusinessModuleKey();
-                businessPreallocationService.assertReservedByPrincipal(moduleKey, parsedValue, currentPrincipal());
-                return new PreallocatedEntityId(parsedValue, moduleKey);
+            if (parsedValue <= 0) {
+                throw new BusinessException(ErrorCode.VALIDATION_ERROR, "预分配雪花ID必须为正整数");
             }
-            return parsedValue > 0 ? new PreallocatedEntityId(parsedValue, null) : null;
+            if (businessPreallocationService == null) {
+                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "预分配服务不可用，无法校验雪花ID");
+            }
+            String moduleKey = resolveBusinessModuleKey();
+            businessPreallocationService.assertReservedByPrincipal(moduleKey, parsedValue, currentPrincipal());
+            return new PreallocatedEntityId(parsedValue, moduleKey);
         } catch (NumberFormatException ex) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "预分配雪花ID格式不正确");
         }

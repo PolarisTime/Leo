@@ -99,6 +99,8 @@ public class InvoiceIssueService extends AbstractCrudService<InvoiceIssue, Invoi
                 request.invoiceNo(),
                 request.customerName(),
                 request.projectName(),
+                request.settlementCompanyId(),
+                request.settlementCompanyName(),
                 request.invoiceDate(),
                 request.invoiceType(),
                 request.amount(),
@@ -106,7 +108,9 @@ public class InvoiceIssueService extends AbstractCrudService<InvoiceIssue, Invoi
                 request.status(),
                 request.operatorName(),
                 request.remark(),
-                request.items()
+                request.items(),
+                request.customerId(),
+                request.projectId()
         );
     }
 
@@ -117,6 +121,8 @@ public class InvoiceIssueService extends AbstractCrudService<InvoiceIssue, Invoi
                 request.invoiceNo(),
                 request.customerName(),
                 request.projectName(),
+                request.settlementCompanyId(),
+                request.settlementCompanyName(),
                 request.invoiceDate(),
                 request.invoiceType(),
                 request.amount(),
@@ -124,7 +130,9 @@ public class InvoiceIssueService extends AbstractCrudService<InvoiceIssue, Invoi
                 request.status(),
                 request.operatorName(),
                 request.remark(),
-                request.items()
+                request.items(),
+                request.customerId(),
+                request.projectId()
         );
     }
 

@@ -46,6 +46,7 @@ public class SupplierStatementApplyService {
         entity.setSupplierName(sourceResult.supplierName() == null
                 ? request.supplierName()
                 : sourceResult.supplierName());
+        entity.setSupplierId(sourceResult.supplierId());
         entity.setSettlementCompanyId(sourceResult.settlementCompanyId());
         entity.setSettlementCompanyName(sourceResult.settlementCompanyName());
         entity.setStartDate(request.startDate());

@@ -30,7 +30,7 @@ class PaymentPrepaymentAllocationUpdateRequestValidationTest {
         assertThat(violations)
                 .extracting(violation -> violation.getPropertyPath().toString())
                 .containsExactlyInAnyOrder(
-                        "items[0].sourceStatementId",
+                        "items[0].statementSourceValid",
                         "items[0].allocatedAmount"
                 );
     }

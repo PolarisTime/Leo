@@ -34,17 +34,26 @@ public class SalesOrderDeliveryVerificationGuard {
                 .distinct()
                 .sorted()
                 .toList();
-        if (itemIds.isEmpty()) {
+        assertMutableByItemIds(itemIds, action);
+    }
+
+    public void assertMutableByItemIds(List<Long> itemIds, String action) {
+        List<Long> stableItemIds = itemIds == null ? List.of() : itemIds.stream()
+                .filter(Objects::nonNull)
+                .distinct()
+                .sorted()
+                .toList();
+        if (stableItemIds.isEmpty()) {
             return;
         }
-        sourceAllocationLockService.lockTradeItemSources(List.of(), List.of(), itemIds);
-        if (!invoiceIssueRepository.summarizeAllocatedBySourceSalesOrderItemIds(itemIds, null).isEmpty()) {
+        sourceAllocationLockService.lockTradeItemSources(List.of(), List.of(), stableItemIds);
+        if (!invoiceIssueRepository.summarizeAllocatedBySourceSalesOrderItemIds(stableItemIds, null).isEmpty()) {
             throw new BusinessException(
                     ErrorCode.BUSINESS_ERROR,
                     "销售订单已存在开票记录（含草稿或已开票），不能" + action + "，请先删除或反审核相关开票单"
             );
         }
-        if (!customerStatementRepository.findSourceSalesOrderItemIds(itemIds).isEmpty()) {
+        if (!customerStatementRepository.findSourceSalesOrderItemIds(stableItemIds).isEmpty()) {
             throw new BusinessException(
                     ErrorCode.BUSINESS_ERROR,
                     "销售订单已存在客户对账单，不能" + action + "，请先删除相关客户对账单"

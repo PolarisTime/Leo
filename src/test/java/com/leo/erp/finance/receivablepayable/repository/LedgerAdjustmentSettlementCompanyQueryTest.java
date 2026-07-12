@@ -20,9 +20,10 @@ class LedgerAdjustmentSettlementCompanyQueryTest {
         assertThat(sql)
                 .contains("adjustment.settlement_company_id")
                 .contains("adjustment.settlement_company_name")
+                .contains("adjustment.counterparty_id")
                 .doesNotContain("CAST(NULL AS BIGINT) AS settlement_company_id")
                 .doesNotContain("CAST(NULL AS VARCHAR) AS settlement_company_name")
-                .contains("COALESCE(source.settlement_company_id::TEXT, 'none') AS settlement_company_key")
-                .contains("ledger.settlement_company_key");
+                .contains("source.settlement_company_id IS NOT NULL")
+                .contains("ledger.settlement_company_id");
     }
 }

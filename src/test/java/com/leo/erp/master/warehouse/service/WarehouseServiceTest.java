@@ -4,15 +4,17 @@ import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.support.MasterDataReferenceGuard;
+import com.leo.erp.common.support.MasterDataReferenceGuard.ReferenceCheck;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.WarehouseSelectionSupport;
-import com.leo.erp.common.web.OptionResponse;
 import com.leo.erp.master.warehouse.domain.entity.Warehouse;
 import com.leo.erp.master.warehouse.mapper.WarehouseMapper;
 import com.leo.erp.master.warehouse.repository.WarehouseRepository;
+import com.leo.erp.master.warehouse.web.dto.WarehouseOptionResponse;
 import com.leo.erp.master.warehouse.web.dto.WarehouseRequest;
 import com.leo.erp.master.warehouse.web.dto.WarehouseResponse;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 
 import java.lang.reflect.Proxy;
 import java.util.List;
@@ -20,6 +22,7 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.groups.Tuple.tuple;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
@@ -50,14 +53,44 @@ class WarehouseServiceTest {
     }
 
     @Test
-    void shouldReturnActiveOptions_whenCallingListActiveOptions() {
-        var warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
-        when(warehouseSelectionSupport.listActiveOptions()).thenReturn(List.of(new OptionResponse("一号库", "一号库")));
-        var service = new WarehouseService(null, new SnowflakeIdGenerator(1), null, warehouseSelectionSupport);
+    void shouldReturnStableActiveOptionsWithoutMergingSameNameWarehouses() {
+        WarehouseRepository repository = mock(WarehouseRepository.class);
+        Warehouse first = createWarehouse(9007199254740993L, "WH001");
+        first.setWarehouseName("同名库");
+        Warehouse second = createWarehouse(9007199254740995L, "WH002");
+        second.setWarehouseName("同名库");
+        when(repository.findByDeletedFlagFalseAndStatusOrderByWarehouseNameAsc("正常"))
+                .thenReturn(List.of(first, second));
+        var service = new WarehouseService(repository, new SnowflakeIdGenerator(1), null, null);
 
-        var result = service.listActiveOptions();
+        List<WarehouseOptionResponse> result = service.listActiveOptions();
 
-        assertThat(result).hasSize(1);
+        assertThat(result)
+                .extracting(
+                        WarehouseOptionResponse::id,
+                        WarehouseOptionResponse::value,
+                        WarehouseOptionResponse::label,
+                        WarehouseOptionResponse::warehouseCode,
+                        WarehouseOptionResponse::warehouseName
+                )
+                .containsExactly(
+                        tuple(9007199254740993L, 9007199254740993L, "WH001 / 同名库", "WH001", "同名库"),
+                        tuple(9007199254740995L, 9007199254740995L, "WH002 / 同名库", "WH002", "同名库")
+                );
+    }
+
+    @Test
+    void shouldFailClosedWhenActiveWarehouseHasNoStableId() {
+        WarehouseRepository repository = mock(WarehouseRepository.class);
+        Warehouse warehouse = createWarehouse(null, "WH001");
+        warehouse.setWarehouseName("一号库");
+        when(repository.findByDeletedFlagFalseAndStatusOrderByWarehouseNameAsc("正常"))
+                .thenReturn(List.of(warehouse));
+        var service = new WarehouseService(repository, new SnowflakeIdGenerator(1), null, null);
+
+        assertThatThrownBy(service::listActiveOptions)
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("稳定ID");
     }
 
     @Test
@@ -277,7 +310,7 @@ class WarehouseServiceTest {
     }
 
     @Test
-    void shouldDelete_success() {
+    void shouldCheckStableWarehouseIdentityAndNullIdLegacySnapshotsBeforeDelete() {
         var repository = (WarehouseRepository) Proxy.newProxyInstance(
                 WarehouseRepository.class.getClassLoader(),
                 new Class[]{WarehouseRepository.class},
@@ -297,7 +330,31 @@ class WarehouseServiceTest {
 
         service.delete(1L);
 
-        verify(referenceGuard).assertNoReferences(eq("该仓库"), any(List.class));
+        ArgumentCaptor<List<ReferenceCheck>> captor = ArgumentCaptor.forClass(List.class);
+        verify(referenceGuard).assertNoReferences(eq("该仓库"), captor.capture());
+        List<ReferenceCheck> references = captor.getValue();
+        assertThat(references)
+                .filteredOn(check -> "warehouse_id".equals(check.columnName()))
+                .extracting(ReferenceCheck::tableName, ReferenceCheck::columnName, ReferenceCheck::value)
+                .containsExactly(
+                        tuple("po_purchase_order_item", "warehouse_id", 1L),
+                        tuple("po_purchase_inbound", "warehouse_id", 1L),
+                        tuple("po_purchase_inbound_item", "warehouse_id", 1L),
+                        tuple("po_purchase_refund_item", "warehouse_id", 1L),
+                        tuple("so_sales_order_item", "warehouse_id", 1L),
+                        tuple("so_sales_outbound", "warehouse_id", 1L),
+                        tuple("so_sales_outbound_item", "warehouse_id", 1L),
+                        tuple("lg_freight_bill_item", "warehouse_id", 1L),
+                        tuple("fm_invoice_issue_item", "warehouse_id", 1L),
+                        tuple("fm_invoice_receipt_item", "warehouse_id", 1L),
+                        tuple("st_customer_statement_item", "warehouse_id", 1L),
+                        tuple("st_supplier_statement_item", "warehouse_id", 1L),
+                        tuple("st_freight_statement_item", "warehouse_id", 1L)
+                );
+        assertThat(references)
+                .filteredOn(check -> "warehouse_name".equals(check.columnName()))
+                .isNotEmpty()
+                .allSatisfy(check -> assertThat(check.extraCondition()).contains("warehouse_id IS NULL"));
         verify(warehouseSelectionSupport).evictCache();
     }
 

@@ -1677,6 +1677,7 @@ class PaymentServiceTest {
 
     private SupplierStatement validSupplierStatement() {
         SupplierStatement statement = new SupplierStatement();
+        statement.setSupplierId(201L);
         statement.setSupplierCode("SUP-001");
         statement.setSettlementCompanyId(9L);
         statement.setSettlementCompanyName("结算主体A");
@@ -1685,6 +1686,7 @@ class PaymentServiceTest {
 
     private FreightStatement validFreightStatement() {
         FreightStatement statement = new FreightStatement();
+        statement.setCarrierId(301L);
         statement.setCarrierCode("CAR-001");
         statement.setSettlementCompanyId(9L);
         statement.setSettlementCompanyName("结算主体A");

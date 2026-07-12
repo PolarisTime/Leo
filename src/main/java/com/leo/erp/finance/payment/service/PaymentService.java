@@ -111,6 +111,7 @@ public class PaymentService extends AbstractCrudService<Payment, PaymentRequest,
         return new PaymentRequest(
                 resolveCreateBusinessNo("payment", request.paymentNo(), entityId),
                 request.businessType(),
+                request.counterpartyId(),
                 request.paymentPurpose(),
                 request.counterpartyCode(),
                 request.counterpartyName(),
@@ -136,6 +137,7 @@ public class PaymentService extends AbstractCrudService<Payment, PaymentRequest,
         return new PaymentRequest(
                 entity.getPaymentNo(),
                 request.businessType(),
+                request.counterpartyId(),
                 request.paymentPurpose(),
                 request.counterpartyCode(),
                 request.counterpartyName(),
@@ -232,6 +234,7 @@ public class PaymentService extends AbstractCrudService<Payment, PaymentRequest,
                 response.id(),
                 response.paymentNo(),
                 response.businessType(),
+                response.counterpartyId(),
                 response.paymentPurpose(),
                 response.counterpartyCode(),
                 response.counterpartyName(),
@@ -293,7 +296,7 @@ public class PaymentService extends AbstractCrudService<Payment, PaymentRequest,
     private List<Long> existingAllocationStatementIds(Payment entity) {
         if (entity.getItems() != null && !entity.getItems().isEmpty()) {
             return entity.getItems().stream()
-                    .map(PaymentAllocation::getSourceStatementId)
+                    .map(item -> allocationStatementId(entity.getBusinessType(), item))
                     .filter(java.util.Objects::nonNull)
                     .toList();
         }
@@ -305,13 +308,27 @@ public class PaymentService extends AbstractCrudService<Payment, PaymentRequest,
     private List<Long> requestedAllocationStatementIds(PaymentRequest request) {
         if (request.items() != null && !request.items().isEmpty()) {
             return request.items().stream()
-                    .map(PaymentAllocationRequest::sourceStatementId)
+                    .map(item -> allocationStatementId(request.businessType(), item))
                     .filter(java.util.Objects::nonNull)
                     .toList();
         }
         return request.sourceStatementId() == null
                 ? List.of()
                 : List.of(request.sourceStatementId());
+    }
+
+    private Long allocationStatementId(String businessType, PaymentAllocation item) {
+        Long typedId = PaymentAllocationService.SUPPLIER_PAYMENT_TYPE.equals(businessType)
+                ? item.getSourceSupplierStatementId()
+                : item.getSourceFreightStatementId();
+        return typedId == null ? item.getSourceStatementId() : typedId;
+    }
+
+    private Long allocationStatementId(String businessType, PaymentAllocationRequest item) {
+        Long typedId = PaymentAllocationService.SUPPLIER_PAYMENT_TYPE.equals(businessType)
+                ? item.sourceSupplierStatementId()
+                : item.sourceFreightStatementId();
+        return typedId == null ? item.sourceStatementId() : typedId;
     }
 
     private void addStatementIds(String businessType,

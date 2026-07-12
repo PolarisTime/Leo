@@ -11,6 +11,7 @@ import org.springframework.stereotype.Service;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -39,12 +40,13 @@ public class PurchaseInboundCompletionSyncService {
         return isFullyAllocated(inbound);
     }
 
-    public void synchronizeAfterPurchaseRefundStatusChange(String purchaseOrderNo) {
-        if (purchaseOrderNo == null || purchaseOrderNo.isBlank()) {
+    public void synchronizeAfterPurchaseRefundStatusChange(Collection<Long> sourcePurchaseOrderItemIds) {
+        List<Long> affectedSourceItemIds = distinctSourceItemIds(sourcePurchaseOrderItemIds);
+        if (affectedSourceItemIds.isEmpty()) {
             return;
         }
         List<PurchaseInbound> changedInbounds = new ArrayList<>();
-        for (PurchaseInbound inbound : repository.findByPurchaseOrderNoAndDeletedFlagFalse(purchaseOrderNo)) {
+        for (PurchaseInbound inbound : repository.findAllActiveBySourcePurchaseOrderItemIds(affectedSourceItemIds)) {
             if (!StatusConstants.AUDITED.equals(inbound.getStatus())
                     && !StatusConstants.INBOUND_COMPLETED.equals(inbound.getStatus())) {
                 continue;
@@ -114,12 +116,30 @@ public class PurchaseInboundCompletionSyncService {
                 .toList();
     }
 
+    private List<Long> distinctSourceItemIds(Collection<Long> sourcePurchaseOrderItemIds) {
+        if (sourcePurchaseOrderItemIds == null) {
+            return List.of();
+        }
+        return sourcePurchaseOrderItemIds.stream()
+                .filter(id -> id != null)
+                .distinct()
+                .toList();
+    }
+
     private void maybeCompletePurchaseOrder(PurchaseOrder purchaseOrder) {
         if (!StatusConstants.AUDITED.equals(purchaseOrder.getStatus())) {
             return;
         }
+        List<Long> sourceItemIds = purchaseOrder.getItems().stream()
+                .map(PurchaseOrderItem::getId)
+                .filter(id -> id != null)
+                .distinct()
+                .toList();
+        if (sourceItemIds.isEmpty()) {
+            return;
+        }
         List<PurchaseInbound> allInbounds = repository
-                .findByPurchaseOrderNoAndDeletedFlagFalse(purchaseOrder.getOrderNo());
+                .findAllActiveBySourcePurchaseOrderItemIds(sourceItemIds);
         boolean allInboundCompleted = allInbounds.stream()
                 .allMatch(i -> StatusConstants.INBOUND_COMPLETED.equals(i.getStatus()));
         if (!allInboundCompleted) {

@@ -28,7 +28,7 @@ class SupplierControllerTest {
     @Test
     void optionsReturnsActiveSuppliers() {
         SupplierOptionResponse option = new SupplierOptionResponse(
-                1L, "供应商A", "S001"
+                1L, 1L, "供应商A", "S001", "供应商A"
         );
         when(supplierService.listActiveOptions()).thenReturn(List.of(option));
 
@@ -36,6 +36,8 @@ class SupplierControllerTest {
 
         assertThat(response.code()).isEqualTo(0);
         assertThat(response.data()).containsExactly(option);
+        assertThat((Object) response.data().get(0).value()).isEqualTo(1L);
+        verify(supplierService).listActiveOptions();
     }
 
     @Test

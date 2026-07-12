@@ -69,8 +69,10 @@ public class PurchaseInboundResponseAssembler {
                 : weightSummary.getTotalWeightAdjustmentTon();
         return new PurchaseInboundResponse(
                 response.id(), response.inboundNo(), response.purchaseOrderNo(),
+                response.supplierId(),
                 response.supplierCode(),
                 response.supplierName(), response.settlementCompanyId(), response.settlementCompanyName(),
+                response.warehouseId(),
                 response.warehouseName(), response.inboundDate(),
                 response.settlementMode(), response.totalWeight(), response.totalAmount(),
                 response.status(), response.deletedFlag(), response.remark(),
@@ -92,21 +94,25 @@ public class PurchaseInboundResponseAssembler {
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         return new PurchaseInboundResponse(
                 response.id(), response.inboundNo(), response.purchaseOrderNo(),
+                response.supplierId(),
                 response.supplierCode(),
                 response.supplierName(), response.settlementCompanyId(), response.settlementCompanyName(),
+                response.warehouseId(),
                 response.warehouseName(), response.inboundDate(),
                 response.settlementMode(), response.totalWeight(), response.totalAmount(),
                 response.status(), response.deletedFlag(), response.remark(),
                 TradeItemCalculator.scaleWeightTon(totalWeighWeightTon),
                 TradeItemCalculator.scaleWeightTon(totalWeightAdjustmentTon),
                 items.stream().map(item -> new PurchaseInboundItemResponse(
-                        item.getId(), item.getLineNo(), item.getMaterialCode(),
+                        item.getId(), item.getLineNo(), item.getMaterialId(), item.getMaterialCode(),
                         item.getBrand(), item.getCategory(), item.getMaterial(),
                         item.getSpec(), item.getLength(), item.getUnit(),
                         item.getSourcePurchaseOrderItemId(),
                         item.getSettlementCompanyId(), item.getSettlementCompanyName(),
+                        item.getWarehouseId(),
                         item.getWarehouseName(), item.getSettlementMode(),
                         item.getBatchNo(),
+                        item.getBatchNoNormalized(),
                         remainingQuantity(item, allocatedQuantityMap),
                         item.getQuantity(), item.getQuantityUnit(),
                         item.getPieceWeightTon(), item.getPiecesPerBundle(),

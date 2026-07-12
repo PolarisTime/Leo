@@ -12,6 +12,7 @@ public record SalesOutboundItemRequest(
         String sourceNo,
         @NotNull(message = "来源销售订单明细不能为空")
         Long sourceSalesOrderItemId,
+        Long materialId,
         @NotBlank String materialCode,
         @NotBlank String brand,
         @NotBlank String category,
@@ -19,6 +20,7 @@ public record SalesOutboundItemRequest(
         @NotBlank String spec,
         String length,
         @NotBlank String unit,
+        Long warehouseId,
         @NotBlank String warehouseName,
         String batchNo,
         @NotNull @Min(0) Integer quantity,
@@ -29,6 +31,30 @@ public record SalesOutboundItemRequest(
         @NotNull @DecimalMin("0.00") BigDecimal unitPrice,
         BigDecimal amount
 ) {
+    public SalesOutboundItemRequest(Long id,
+                                    String sourceNo,
+                                    Long sourceSalesOrderItemId,
+                                    String materialCode,
+                                    String brand,
+                                    String category,
+                                    String material,
+                                    String spec,
+                                    String length,
+                                    String unit,
+                                    String warehouseName,
+                                    String batchNo,
+                                    Integer quantity,
+                                    String quantityUnit,
+                                    BigDecimal pieceWeightTon,
+                                    Integer piecesPerBundle,
+                                    BigDecimal weightTon,
+                                    BigDecimal unitPrice,
+                                    BigDecimal amount) {
+        this(id, sourceNo, sourceSalesOrderItemId, null, materialCode, brand, category, material, spec,
+                length, unit, null, warehouseName, batchNo, quantity, quantityUnit, pieceWeightTon,
+                piecesPerBundle, weightTon, unitPrice, amount);
+    }
+
     public SalesOutboundItemRequest(String sourceNo,
                                     Long sourceSalesOrderItemId,
                                     String materialCode,
@@ -47,7 +73,8 @@ public record SalesOutboundItemRequest(
                                     BigDecimal weightTon,
                                     BigDecimal unitPrice,
                                     BigDecimal amount) {
-        this(null, sourceNo, sourceSalesOrderItemId, materialCode, brand, category, material, spec, length, unit,
-                warehouseName, batchNo, quantity, quantityUnit, pieceWeightTon, piecesPerBundle, weightTon, unitPrice, amount);
+        this(null, sourceNo, sourceSalesOrderItemId, null, materialCode, brand, category, material, spec, length, unit,
+                null, warehouseName, batchNo, quantity, quantityUnit, pieceWeightTon, piecesPerBundle,
+                weightTon, unitPrice, amount);
     }
 }

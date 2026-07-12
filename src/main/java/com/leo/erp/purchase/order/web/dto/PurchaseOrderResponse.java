@@ -7,6 +7,7 @@ import java.util.List;
 public record PurchaseOrderResponse(
         Long id,
         String orderNo,
+        Long supplierId,
         String supplierCode,
         String supplierName,
         LocalDateTime orderDate,
@@ -22,6 +23,7 @@ public record PurchaseOrderResponse(
 ) {
     public PurchaseOrderResponse(Long id,
                                  String orderNo,
+                                 String supplierCode,
                                  String supplierName,
                                  LocalDateTime orderDate,
                                  String buyerName,
@@ -33,7 +35,24 @@ public record PurchaseOrderResponse(
                                  boolean deletedFlag,
                                  String remark,
                                  List<PurchaseOrderItemResponse> items) {
-        this(id, orderNo, null, supplierName, orderDate, buyerName, settlementCompanyId,
+        this(id, orderNo, null, supplierCode, supplierName, orderDate, buyerName, settlementCompanyId,
+                settlementCompanyName, totalWeight, totalAmount, status, deletedFlag, remark, items);
+    }
+
+    public PurchaseOrderResponse(Long id,
+                                 String orderNo,
+                                 String supplierName,
+                                 LocalDateTime orderDate,
+                                 String buyerName,
+                                 Long settlementCompanyId,
+                                 String settlementCompanyName,
+                                 BigDecimal totalWeight,
+                                 BigDecimal totalAmount,
+                                 String status,
+                                 boolean deletedFlag,
+                                 String remark,
+                                 List<PurchaseOrderItemResponse> items) {
+        this(id, orderNo, null, null, supplierName, orderDate, buyerName, settlementCompanyId,
                 settlementCompanyName, totalWeight, totalAmount, status, deletedFlag, remark, items);
     }
 
@@ -52,6 +71,7 @@ public record PurchaseOrderResponse(
         this(
                 id,
                 orderNo,
+                null,
                 null,
                 supplierName,
                 orderDate,
@@ -80,6 +100,7 @@ public record PurchaseOrderResponse(
         this(
                 id,
                 orderNo,
+                null,
                 null,
                 supplierName,
                 orderDate,

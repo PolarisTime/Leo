@@ -23,7 +23,7 @@ public class ReceiptSettlementSyncService {
     }
 
     Long resolveLegacySourceStatementId(Receipt entity) {
-        return entity.getItems().size() == 1 ? entity.getItems().get(0).getSourceStatementId() : null;
+        return entity.getItems().size() == 1 ? statementId(entity.getItems().get(0)) : null;
     }
 
     void syncCustomerStatements(Receipt entity) {
@@ -37,10 +37,17 @@ public class ReceiptSettlementSyncService {
     private Set<Long> collectStatementIds(List<ReceiptAllocation> items) {
         Set<Long> statementIds = new LinkedHashSet<>();
         for (ReceiptAllocation item : items) {
-            if (item.getSourceStatementId() != null) {
-                statementIds.add(item.getSourceStatementId());
+            Long statementId = statementId(item);
+            if (statementId != null) {
+                statementIds.add(statementId);
             }
         }
         return statementIds;
+    }
+
+    private Long statementId(ReceiptAllocation item) {
+        return item.getSourceCustomerStatementId() == null
+                ? item.getSourceStatementId()
+                : item.getSourceCustomerStatementId();
     }
 }

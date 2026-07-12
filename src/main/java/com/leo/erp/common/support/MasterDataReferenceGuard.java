@@ -95,6 +95,46 @@ public class MasterDataReferenceGuard {
             );
         }
 
+        public static ReferenceCheck ofActiveParent(String tableName,
+                                                    String columnName,
+                                                    Object value,
+                                                    String parentTableName,
+                                                    String parentForeignKey) {
+            return when(
+                    tableName,
+                    columnName,
+                    value,
+                    activeParentCondition(tableName, parentTableName, parentForeignKey)
+            );
+        }
+
+        public static ReferenceCheck legacyOfActiveParent(String tableName,
+                                                          String snapshotColumn,
+                                                          Object snapshotValue,
+                                                          String identityColumn,
+                                                          String parentTableName,
+                                                          String parentForeignKey) {
+            validateIdentifier(identityColumn, "identityColumn");
+            return when(
+                    tableName,
+                    snapshotColumn,
+                    snapshotValue,
+                    identityColumn + " IS NULL AND "
+                            + activeParentCondition(tableName, parentTableName, parentForeignKey)
+            );
+        }
+
+        private static String activeParentCondition(String tableName,
+                                                    String parentTableName,
+                                                    String parentForeignKey) {
+            validateIdentifier(tableName, "tableName");
+            validateIdentifier(parentTableName, "parentTableName");
+            validateIdentifier(parentForeignKey, "parentForeignKey");
+            return "EXISTS (SELECT 1 FROM " + parentTableName + " parent "
+                    + "WHERE parent.id = " + tableName + "." + parentForeignKey
+                    + " AND parent.deleted_flag = false)";
+        }
+
         private boolean hasBlankValue() {
             if (value == null) {
                 return true;

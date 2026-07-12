@@ -2,8 +2,8 @@ package com.leo.erp.sales.outbound.service;
 
 import com.leo.erp.finance.receipt.repository.ReceiptAllocationRepository;
 import com.leo.erp.logistics.bill.repository.FreightBillRepository;
+import com.leo.erp.sales.order.service.SalesOrderDeliveryVerificationGuard;
 import com.leo.erp.sales.outbound.domain.entity.SalesOutbound;
-import com.leo.erp.statement.customer.repository.CustomerStatementRepository;
 import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
@@ -17,7 +17,7 @@ class SalesOutboundDownstreamMutationGuardContractTest {
         assertThat(Arrays.stream(SalesOutboundDownstreamMutationGuard.class.getDeclaredConstructors())
                 .flatMap(constructor -> Arrays.stream(constructor.getParameterTypes())))
                 .contains(
-                        CustomerStatementRepository.class,
+                        SalesOrderDeliveryVerificationGuard.class,
                         ReceiptAllocationRepository.class,
                         FreightBillRepository.class
                 );

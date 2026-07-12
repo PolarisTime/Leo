@@ -4,8 +4,8 @@ import com.leo.erp.common.api.ApiResponse;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.api.PageResponse;
 import com.leo.erp.common.web.BindPageQuery;
-import com.leo.erp.common.web.OptionResponse;
 import com.leo.erp.master.warehouse.service.WarehouseService;
+import com.leo.erp.master.warehouse.web.dto.WarehouseOptionResponse;
 import com.leo.erp.master.warehouse.web.dto.WarehouseRequest;
 import com.leo.erp.master.warehouse.web.dto.WarehouseResponse;
 import com.leo.erp.security.permission.RequiresPermission;
@@ -36,7 +36,7 @@ public class WarehouseController {
 
     @GetMapping("/options")
     @RequiresPermission(resource = "warehouse", action = "read")
-    public ApiResponse<List<OptionResponse>> options() {
+    public ApiResponse<List<WarehouseOptionResponse>> options() {
         return ApiResponse.success(warehouseService.listActiveOptions());
     }
 

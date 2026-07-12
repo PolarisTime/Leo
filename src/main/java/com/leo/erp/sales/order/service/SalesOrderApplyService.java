@@ -10,6 +10,8 @@ import com.leo.erp.common.support.TradeItemMaterialSupport;
 import com.leo.erp.common.support.TradeMaterialSnapshot;
 import com.leo.erp.master.customer.domain.entity.Customer;
 import com.leo.erp.master.customer.repository.CustomerRepository;
+import com.leo.erp.master.project.domain.entity.Project;
+import com.leo.erp.master.project.repository.ProjectRepository;
 import com.leo.erp.sales.order.domain.entity.SalesOrder;
 import com.leo.erp.sales.order.domain.entity.SalesOrderItem;
 import com.leo.erp.sales.order.web.dto.SalesOrderItemRequest;
@@ -17,6 +19,8 @@ import com.leo.erp.sales.order.web.dto.SalesOrderRequest;
 import com.leo.erp.security.permission.WorkflowTransitionGuard;
 import com.leo.erp.system.company.domain.entity.CompanySetting;
 import com.leo.erp.system.company.service.CompanySettingService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -24,11 +28,12 @@ import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Map;
 import java.util.function.LongSupplier;
 
 @Service
 public class SalesOrderApplyService {
+
+    private static final Logger log = LoggerFactory.getLogger(SalesOrderApplyService.class);
 
     private final TradeItemMaterialSupport tradeItemMaterialSupport;
     private final SalesOrderSourceAllocationService sourceAllocationService;
@@ -37,6 +42,7 @@ public class SalesOrderApplyService {
     private final SalesOrderItemMapper salesOrderItemMapper;
     private final WorkflowTransitionGuard workflowTransitionGuard;
     private final CustomerRepository customerRepository;
+    private final ProjectRepository projectRepository;
     private final CompanySettingService companySettingService;
 
     public SalesOrderApplyService(TradeItemMaterialSupport tradeItemMaterialSupport,
@@ -60,7 +66,6 @@ public class SalesOrderApplyService {
                 salesOrderItemMapper, workflowTransitionGuard, customerRepository, null);
     }
 
-    @Autowired
     public SalesOrderApplyService(TradeItemMaterialSupport tradeItemMaterialSupport,
                                   SalesOrderSourceAllocationService sourceAllocationService,
                                   SalesOrderWeightResolver weightResolver,
@@ -69,6 +74,20 @@ public class SalesOrderApplyService {
                                   WorkflowTransitionGuard workflowTransitionGuard,
                                   CustomerRepository customerRepository,
                                   CompanySettingService companySettingService) {
+        this(tradeItemMaterialSupport, sourceAllocationService, weightResolver, purchaseAllocationService,
+                salesOrderItemMapper, workflowTransitionGuard, customerRepository, null, companySettingService);
+    }
+
+    @Autowired
+    public SalesOrderApplyService(TradeItemMaterialSupport tradeItemMaterialSupport,
+                                  SalesOrderSourceAllocationService sourceAllocationService,
+                                  SalesOrderWeightResolver weightResolver,
+                                  SalesOrderPurchaseAllocationService purchaseAllocationService,
+                                  SalesOrderItemMapper salesOrderItemMapper,
+                                  WorkflowTransitionGuard workflowTransitionGuard,
+                                  CustomerRepository customerRepository,
+                                  ProjectRepository projectRepository,
+                                  CompanySettingService companySettingService) {
         this.tradeItemMaterialSupport = tradeItemMaterialSupport;
         this.sourceAllocationService = sourceAllocationService;
         this.weightResolver = weightResolver;
@@ -76,15 +95,18 @@ public class SalesOrderApplyService {
         this.salesOrderItemMapper = salesOrderItemMapper;
         this.workflowTransitionGuard = workflowTransitionGuard;
         this.customerRepository = customerRepository;
+        this.projectRepository = projectRepository;
         this.companySettingService = companySettingService;
     }
 
     void apply(SalesOrder entity, SalesOrderRequest request, LongSupplier nextIdSupplier) {
         Customer customer = requireCustomerSnapshot(
+                request.customerId(),
                 request.customerCode(),
                 request.customerName(),
                 request.projectName()
         );
+        Project project = requireProjectSnapshot(request.projectId(), request.projectName(), customer);
         String nextStatus = BusinessStatusValidator.normalizeWithDefault(
                 request.status(),
                 entity.getStatus() != null ? entity.getStatus() : StatusConstants.DRAFT,
@@ -98,29 +120,47 @@ public class SalesOrderApplyService {
                 StatusConstants.AUDITED,
                 StatusConstants.SALES_COMPLETED
         );
-        applyHeader(entity, request, nextStatus, customer);
+        applyHeader(entity, request, nextStatus, customer, project);
         applyItems(entity, request, nextIdSupplier);
     }
 
     void validateCustomerSnapshot(SalesOrderRequest request) {
-        requireCustomerSnapshot(request.customerCode(), request.customerName(), request.projectName());
+        Customer customer = requireCustomerSnapshot(
+                request.customerId(),
+                request.customerCode(),
+                request.customerName(),
+                request.projectName()
+        );
+        requireProjectSnapshot(request.projectId(), request.projectName(), customer);
     }
 
     void validateCustomerSnapshot(SalesOrder entity) {
-        requireCustomerSnapshot(entity.getCustomerCode(), entity.getCustomerName(), entity.getProjectName());
+        Customer customer = requireCustomerSnapshot(
+                entity.getCustomerId(),
+                entity.getCustomerCode(),
+                entity.getCustomerName(),
+                entity.getProjectName()
+        );
+        requireProjectSnapshot(entity.getProjectId(), entity.getProjectName(), customer);
     }
 
     private void applyHeader(SalesOrder entity,
                              SalesOrderRequest request,
                              String nextStatus,
-                             Customer customer) {
+                             Customer customer,
+                             Project project) {
         entity.setOrderNo(request.orderNo());
         entity.setPurchaseInboundNo(request.purchaseInboundNo());
         entity.setPurchaseOrderNo(request.purchaseOrderNo());
         entity.setCustomerName(customer == null ? request.customerName() : trimToNull(customer.getCustomerName()));
-        entity.setProjectName(customer == null ? request.projectName() : trimToNull(customer.getProjectName()));
+        entity.setProjectName(project != null
+                ? trimToNull(project.getProjectName())
+                : customer != null
+                        ? trimToNull(customer.getProjectName())
+                        : request.projectName());
         entity.setCustomerCode(customer == null ? request.customerCode() : trimToNull(customer.getCustomerCode()));
-        entity.setProjectId(customer == null || customer.getId() == null ? request.projectId() : customer.getId());
+        entity.setCustomerId(customer == null ? null : customer.getId());
+        entity.setProjectId(project == null ? request.projectId() : project.getId());
         entity.setDeliveryDate(request.deliveryDate());
         entity.setSalesName(request.salesName());
         applyCustomerSettlementCompany(entity, request, customer);
@@ -131,9 +171,6 @@ public class SalesOrderApplyService {
     private void applyItems(SalesOrder entity, SalesOrderRequest request, LongSupplier nextIdSupplier) {
         BigDecimal totalWeight = BigDecimal.ZERO;
         BigDecimal totalAmount = BigDecimal.ZERO;
-        Map<String, TradeMaterialSnapshot> materialMap = tradeItemMaterialSupport.loadMaterialMap(
-                request.items().stream().map(SalesOrderItemRequest::materialCode).toList()
-        );
         SalesOrderSourceContext sourceContext = sourceAllocationService.prepareContext(request, entity.getId());
         purchaseAllocationService.releaseSalesOrderItems(entity);
         sourceContext = weightResolver.withPurchaseOrderRemainingWeights(sourceContext);
@@ -153,7 +190,6 @@ public class SalesOrderApplyService {
                     request.items().get(i),
                     items.get(i),
                     i + 1,
-                    materialMap,
                     sourceContext
             );
             totalWeight = totalWeight.add(itemTotals.weightTon());
@@ -172,16 +208,36 @@ public class SalesOrderApplyService {
                                  SalesOrderItemRequest source,
                                  SalesOrderItem item,
                                  int lineNo,
-                                 Map<String, TradeMaterialSnapshot> materialMap,
                                  SalesOrderSourceContext sourceContext) {
-        String materialCode = tradeItemMaterialSupport.normalizeMaterialCode(source.materialCode(), lineNo);
-        TradeMaterialSnapshot material = materialMap.get(materialCode);
         var sourceInboundItem = sourceAllocationService.resolveSourceInbound(source, sourceContext);
         var sourcePurchaseOrderItem = sourceAllocationService.resolveSourcePurchaseOrder(source, sourceContext);
+        Long sourceMaterialId = sourceInboundItem != null
+                ? sourceInboundItem.materialId()
+                : sourcePurchaseOrderItem == null ? null : sourcePurchaseOrderItem.materialId();
+        Long sourceWarehouseId = sourceInboundItem != null
+                ? sourceInboundItem.warehouseId()
+                : sourcePurchaseOrderItem == null ? null : sourcePurchaseOrderItem.warehouseId();
+        TradeMaterialSnapshot material = tradeItemMaterialSupport.resolveMaterial(
+                source.materialId() == null ? sourceMaterialId : source.materialId(),
+                source.materialCode(),
+                lineNo
+        );
         sourceAllocationService.validateLine(source, lineNo, sourceContext);
         BigDecimal pieceWeightTon = weightResolver.resolvePieceWeightTon(source, sourceContext);
         BigDecimal weightTon = weightResolver.resolveWeightTon(source, pieceWeightTon, sourceContext);
-        salesOrderItemMapper.applyItemFields(entity, source, item, lineNo, materialCode, material, weightTon, pieceWeightTon);
+        Long effectiveWarehouseId = sourceWarehouseId == null ? source.warehouseId() : sourceWarehouseId;
+        salesOrderItemMapper.applyItemFields(
+                entity,
+                source,
+                item,
+                lineNo,
+                material.materialCode(),
+                material,
+                effectiveWarehouseId,
+                weightTon,
+                pieceWeightTon
+        );
+        item.setMaterialId(sourceMaterialId == null ? material.materialId() : sourceMaterialId);
         applyPurchaseSettlementCompany(item, sourceInboundItem, sourcePurchaseOrderItem);
         BigDecimal amount = TradeItemCalculator.calculateAmount(weightTon, source.unitPrice());
         item.setAmount(amount);
@@ -218,28 +274,99 @@ public class SalesOrderApplyService {
                 || StatusConstants.SALES_COMPLETED.equals(entity.getStatus());
     }
 
-    private Customer requireCustomerSnapshot(String requestedCode,
+    private Customer requireCustomerSnapshot(Long requestedId,
+                                             String requestedCode,
                                              String requestedName,
                                              String requestedProjectName) {
         if (customerRepository == null) {
             return null;
         }
         String customerCode = trimToNull(requestedCode);
-        if (customerCode == null) {
+        if (requestedId == null && customerCode == null) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "客户编码不能为空");
         }
-        Customer customer = customerRepository.findByCustomerCodeAndDeletedFlagFalse(customerCode)
-                .orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_ERROR, "客户编码不存在"));
+        Customer customer;
+        if (requestedId == null) {
+            customer = customerRepository.findByCustomerCodeAndDeletedFlagFalse(customerCode)
+                    .orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_ERROR, "客户编码不存在"));
+            log.warn(
+                    "identity fallback used: module=sales-order, field=customerId, "
+                            + "reason=legacy-customer-code, resolvedId={}",
+                    customer.getId()
+            );
+        } else {
+            customer = customerRepository.findByIdAndDeletedFlagFalse(requestedId)
+                    .orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_ERROR, "客户不存在"));
+        }
+        if (requestedId != null
+                && customerCode != null
+                && !java.util.Objects.equals(customerCode, trimToNull(customer.getCustomerCode()))) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "客户ID与客户编码不一致");
+        }
         if (!java.util.Objects.equals(trimToNull(requestedName), trimToNull(customer.getCustomerName()))) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "客户名称与客户主数据不一致");
         }
-        if (!java.util.Objects.equals(
+        if (projectRepository == null && !java.util.Objects.equals(
                 trimToNull(requestedProjectName),
                 trimToNull(customer.getProjectName())
         )) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "项目名称与客户主数据不一致");
         }
         return customer;
+    }
+
+    private Project requireProjectSnapshot(Long requestedId, String requestedName, Customer customer) {
+        if (projectRepository == null) {
+            return null;
+        }
+        Project project;
+        if (requestedId == null) {
+            String customerCode = customer == null ? null : trimToNull(customer.getCustomerCode());
+            String projectName = trimToNull(requestedName);
+            if (customerCode == null || projectName == null) {
+                throw new BusinessException(ErrorCode.VALIDATION_ERROR, "项目ID或项目名称不能为空");
+            }
+            List<Project> matchingProjects = projectRepository
+                    .findByCustomerCodeAndProjectNameAndDeletedFlagFalseOrderByProjectCodeAsc(
+                            customerCode,
+                            projectName
+                    );
+            if (matchingProjects.size() > 1) {
+                throw new BusinessException(
+                        ErrorCode.BUSINESS_ERROR,
+                        "项目名称对应多个项目，请选择项目ID"
+                );
+            }
+            project = matchingProjects
+                    .stream()
+                    .findFirst()
+                    .orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_ERROR, "项目不存在"));
+            log.warn(
+                    "identity fallback used: module=sales-order, field=projectId, "
+                            + "reason=legacy-customer-code-project-name, resolvedId={}",
+                    project.getId()
+            );
+        } else {
+            project = projectRepository.findByIdAndDeletedFlagFalse(requestedId)
+                    .orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_ERROR, "项目不存在"));
+        }
+        if (customer != null) {
+            boolean belongsToAnotherCustomer = project.getCustomerId() != null
+                    ? !java.util.Objects.equals(project.getCustomerId(), customer.getId())
+                    : !java.util.Objects.equals(
+                            trimToNull(project.getCustomerCode()),
+                            trimToNull(customer.getCustomerCode())
+                    );
+            if (belongsToAnotherCustomer) {
+                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "项目不属于所选客户");
+            }
+        }
+        String projectName = trimToNull(project.getProjectName());
+        String requestedProjectName = trimToNull(requestedName);
+        if (requestedProjectName != null && !java.util.Objects.equals(requestedProjectName, projectName)) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "项目ID与项目名称不一致");
+        }
+        return project;
     }
 
     private SettlementCompanySnapshot resolveRequestedSettlementCompany(SalesOrderRequest request) {

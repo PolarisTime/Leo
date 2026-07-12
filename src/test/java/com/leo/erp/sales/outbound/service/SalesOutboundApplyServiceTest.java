@@ -3,8 +3,10 @@ package com.leo.erp.sales.outbound.service;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.support.TradeItemMaterialSupport;
+import com.leo.erp.common.support.TradeItemMaterialSupportTestDoubles;
 import com.leo.erp.common.support.TradeMaterialSnapshot;
 import com.leo.erp.common.support.WarehouseSelectionSupport;
+import com.leo.erp.common.support.WarehouseSnapshot;
 import com.leo.erp.sales.order.domain.entity.SalesOrder;
 import com.leo.erp.sales.order.domain.entity.SalesOrderItem;
 import com.leo.erp.sales.order.service.SalesOrderItemQueryService;
@@ -38,7 +40,7 @@ class SalesOutboundApplyServiceTest {
     void shouldApplyItemsAndSummariesFromSourceSalesOrder() {
         SalesOutboundRepository repository = mock(SalesOutboundRepository.class);
         SalesOrderItemQueryService queryService = mock(SalesOrderItemQueryService.class);
-        TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
+        TradeItemMaterialSupport materialSupport = materialSupport();
         WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
         SalesOutboundSourceService sourceService = new SalesOutboundSourceService(queryService, repository);
         SalesOutboundApplyService service = new SalesOutboundApplyService(
@@ -83,7 +85,7 @@ class SalesOutboundApplyServiceTest {
     void shouldUseSourceSalesOrderUnitPriceInsteadOfRequestedPrice() {
         SalesOutboundRepository repository = mock(SalesOutboundRepository.class);
         SalesOrderItemQueryService queryService = mock(SalesOrderItemQueryService.class);
-        TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
+        TradeItemMaterialSupport materialSupport = materialSupport();
         WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
         SalesOutboundApplyService service = new SalesOutboundApplyService(
                 materialSupport,
@@ -117,7 +119,7 @@ class SalesOutboundApplyServiceTest {
 
     @Test
     void shouldFallbackToRequestSalesOrderNoAndHeaderWarehouseWhenSourceNosEmpty() {
-        TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
+        TradeItemMaterialSupport materialSupport = materialSupport();
         WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
         SalesOutboundSourceService sourceService = mock(SalesOutboundSourceService.class);
         SalesOutboundWeightService weightService = mock(SalesOutboundWeightService.class);
@@ -141,6 +143,8 @@ class SalesOutboundApplyServiceTest {
                 ((String) invocation.getArgument(0)).trim());
         when(materialSupport.normalizeBatchNo(any(), eq("B1"), eq(1), eq(true))).thenReturn("B1");
         when(warehouseSelectionSupport.normalizeWarehouseName("仓库HEADER", 1, true)).thenReturn("仓库HEADER");
+        when(warehouseSelectionSupport.resolveWarehouse(null, "仓库HEADER", 1, true))
+                .thenReturn(new WarehouseSnapshot(null, null, "仓库HEADER"));
         when(sourceService.loadSourceSalesOrderItemMap(
                 anyListOfSalesOutboundItemRequest(),
                 anyListOfSalesOutboundItem()
@@ -161,7 +165,7 @@ class SalesOutboundApplyServiceTest {
 
     @Test
     void shouldFallbackToHeaderWarehouseWhenLineWarehouseIsMissing() {
-        TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
+        TradeItemMaterialSupport materialSupport = materialSupport();
         WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
         SalesOutboundSourceService sourceService = mock(SalesOutboundSourceService.class);
         SalesOutboundWeightService weightService = mock(SalesOutboundWeightService.class);
@@ -185,6 +189,8 @@ class SalesOutboundApplyServiceTest {
                 ((String) invocation.getArgument(0)).trim());
         when(materialSupport.normalizeBatchNo(any(), eq("B1"), eq(1), eq(true))).thenReturn("B1");
         when(warehouseSelectionSupport.normalizeWarehouseName("仓库HEADER", 1, true)).thenReturn("仓库HEADER");
+        when(warehouseSelectionSupport.resolveWarehouse(null, "仓库HEADER", 1, true))
+                .thenReturn(new WarehouseSnapshot(null, null, "仓库HEADER"));
         when(sourceService.loadSourceSalesOrderItemMap(
                 anyListOfSalesOutboundItemRequest(),
                 anyListOfSalesOutboundItem()
@@ -202,7 +208,7 @@ class SalesOutboundApplyServiceTest {
 
     @Test
     void shouldNotCollectSettlementCompanyWhenSourceSalesOrderItemIdMissing() {
-        TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
+        TradeItemMaterialSupport materialSupport = materialSupport();
         WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
         SalesOutboundSourceService sourceService = mock(SalesOutboundSourceService.class);
         SalesOutboundWeightService weightService = mock(SalesOutboundWeightService.class);
@@ -245,7 +251,7 @@ class SalesOutboundApplyServiceTest {
 
     @Test
     void shouldSkipMissingSourceItemWhenCollectingSettlementCompany() {
-        TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
+        TradeItemMaterialSupport materialSupport = materialSupport();
         WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
         SalesOutboundSourceService sourceService = mock(SalesOutboundSourceService.class);
         SalesOutboundWeightService weightService = mock(SalesOutboundWeightService.class);
@@ -290,7 +296,7 @@ class SalesOutboundApplyServiceTest {
     void shouldApplySameSalesSettlementCompanyToHeader() {
         SalesOutboundRepository repository = mock(SalesOutboundRepository.class);
         SalesOrderItemQueryService queryService = mock(SalesOrderItemQueryService.class);
-        TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
+        TradeItemMaterialSupport materialSupport = materialSupport();
         WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
         SalesOutboundWeightService weightService = mock(SalesOutboundWeightService.class);
         SalesOutboundApplyService service = new SalesOutboundApplyService(
@@ -331,7 +337,7 @@ class SalesOutboundApplyServiceTest {
     void shouldRejectDifferentSalesSettlementCompanies() {
         SalesOutboundRepository repository = mock(SalesOutboundRepository.class);
         SalesOrderItemQueryService queryService = mock(SalesOrderItemQueryService.class);
-        TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
+        TradeItemMaterialSupport materialSupport = materialSupport();
         WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
         SalesOutboundWeightService weightService = mock(SalesOutboundWeightService.class);
         SalesOutboundApplyService service = new SalesOutboundApplyService(
@@ -373,7 +379,7 @@ class SalesOutboundApplyServiceTest {
     void shouldApplySettlementCompanyNameWhenSourceHasNameOnly() {
         SalesOutboundRepository repository = mock(SalesOutboundRepository.class);
         SalesOrderItemQueryService queryService = mock(SalesOrderItemQueryService.class);
-        TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
+        TradeItemMaterialSupport materialSupport = materialSupport();
         WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
         SalesOutboundWeightService weightService = mock(SalesOutboundWeightService.class);
         SalesOutboundApplyService service = new SalesOutboundApplyService(
@@ -434,6 +440,12 @@ class SalesOutboundApplyServiceTest {
                         null
                 ))
         );
+    }
+
+    private TradeItemMaterialSupport materialSupport() {
+        TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
+        TradeItemMaterialSupportTestDoubles.stubMaterialCodeNormalization(materialSupport);
+        return materialSupport;
     }
 
     private SalesOutboundRequest request(String outboundNo,

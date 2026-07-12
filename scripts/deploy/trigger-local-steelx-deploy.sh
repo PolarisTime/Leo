@@ -22,6 +22,7 @@ REDIS_DATABASE=""
 REDIS_PASSWORD=""
 CONFIRM=false
 SKIP_TESTS=false
+FLYWAY_TARGET="${SPRING_FLYWAY_TARGET:-}"
 
 usage() {
   cat <<'EOF'
@@ -43,6 +44,7 @@ usage() {
   --redis-port <port>          Redis 端口，默认沿用开发环境
   --redis-database <db>        Redis 逻辑库，默认沿用开发环境
   --redis-password <value>     Redis 密码，默认沿用开发环境
+  --flyway-target <version>    生产允许迁移到的最高 Flyway 版本（必填）
   --skip-tests                 跳过测试，仅构建部署
   -h, --help                   查看帮助
 EOF
@@ -64,6 +66,7 @@ while [[ $# -gt 0 ]]; do
     --redis-port) REDIS_PORT="$2"; shift 2 ;;
     --redis-database) REDIS_DATABASE="$2"; shift 2 ;;
     --redis-password) REDIS_PASSWORD="$2"; shift 2 ;;
+    --flyway-target) FLYWAY_TARGET="$2"; shift 2 ;;
     --skip-tests) SKIP_TESTS=true; shift ;;
     -h|--help) usage; exit 0 ;;
     *) echo "未知参数: $1" >&2; usage; exit 1 ;;
@@ -147,6 +150,14 @@ REDIS_HOST="${REDIS_HOST:-${SPRING_DATA_REDIS_HOST:-127.0.0.1}}"
 REDIS_PORT="${REDIS_PORT:-${SPRING_DATA_REDIS_PORT:-16379}}"
 REDIS_DATABASE="${REDIS_DATABASE:-${SPRING_DATA_REDIS_DATABASE:-3}}"
 REDIS_PASSWORD="${REDIS_PASSWORD:-${SPRING_DATA_REDIS_PASSWORD:-}}"
+if [[ -z "$FLYWAY_TARGET" ]]; then
+  echo "缺少 --flyway-target，拒绝生产部署。" >&2
+  exit 1
+fi
+if [[ ! "$FLYWAY_TARGET" =~ ^[1-9][0-9]*$ ]]; then
+  echo "FLYWAY_TARGET must be a positive integer: $FLYWAY_TARGET" >&2
+  exit 1
+fi
 LEO_VERSION="$(read_maven_version)"
 
 if [[ "$CONFIRM" != "true" ]]; then
@@ -223,6 +234,7 @@ SQL
 cat > "$STEELX_ENV_FILE" <<EOF
 SERVER_PORT=$BACKEND_PORT
 SPRING_PROFILES_ACTIVE=prod
+SPRING_FLYWAY_TARGET=$FLYWAY_TARGET
 LEO_CORS_ALLOWED_ORIGINS=$CORS_ALLOWED_ORIGINS
 SPRING_DATASOURCE_HOST=$DB_HOST
 SPRING_DATASOURCE_PORT=$DB_PORT

@@ -1,6 +1,7 @@
 package com.leo.erp.purchase.refund.web;
 
 import com.leo.erp.common.api.ApiResponse;
+import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.purchase.refund.service.PurchaseRefundService;
 import com.leo.erp.purchase.refund.web.dto.PurchaseRefundPreviewResponse;
 import com.leo.erp.purchase.refund.web.dto.PurchaseRefundSourceCandidateResponse;
@@ -8,6 +9,7 @@ import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.api.PageResponse;
 import com.leo.erp.security.permission.RequiresPermission;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.data.domain.PageImpl;
 
 import java.time.LocalDate;
@@ -32,6 +34,7 @@ class PurchaseRefundControllerTest {
         ApiResponse<PageResponse<PurchaseRefundSourceCandidateResponse>> response = controller.sourceCandidates(
                 query,
                 null,
+                101L,
                 null,
                 null,
                 null,
@@ -40,6 +43,9 @@ class PurchaseRefundControllerTest {
 
         assertThat(response.code()).isZero();
         assertThat(response.data().content()).containsExactly(candidate);
+        ArgumentCaptor<PageFilter> filterCaptor = ArgumentCaptor.forClass(PageFilter.class);
+        verify(service).sourceCandidates(org.mockito.ArgumentMatchers.eq(query), filterCaptor.capture());
+        assertThat(filterCaptor.getValue().supplierId()).isEqualTo(101L);
     }
 
     @Test
@@ -63,6 +69,7 @@ class PurchaseRefundControllerTest {
                         "sourceCandidates",
                         PageQuery.class,
                         String.class,
+                        Long.class,
                         String.class,
                         Long.class,
                         LocalDate.class,

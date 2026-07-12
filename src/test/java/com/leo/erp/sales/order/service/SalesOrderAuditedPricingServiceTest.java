@@ -69,6 +69,32 @@ class SalesOrderAuditedPricingServiceTest {
     }
 
     @Test
+    void shouldRejectChangedCustomerIdForAuditedPricingUpdate() {
+        var service = new SalesOrderAuditedPricingService(null);
+        SalesOrder order = auditedSalesOrder(11L);
+        order.setCustomerId(1001L);
+        SalesOrderRequest request = new SalesOrderRequest(
+                order.getOrderNo(),
+                order.getPurchaseInboundNo(),
+                order.getPurchaseOrderNo(),
+                order.getCustomerCode(),
+                1002L,
+                order.getCustomerName(),
+                order.getProjectId(),
+                order.getProjectName(),
+                null,
+                null,
+                order.getDeliveryDate().plusDays(1),
+                order.getSalesName(),
+                StatusConstants.AUDITED,
+                "改价备注",
+                List.of(itemRequestFrom(order.getItems().get(0), new BigDecimal("3200.00")))
+        );
+
+        assertThat(service.matchesAuditedPricingUpdate(order, request)).isFalse();
+    }
+
+    @Test
     void shouldRejectDifferentItemCount() {
         var service = new SalesOrderAuditedPricingService(null);
         SalesOrder order = auditedSalesOrder(11L);
@@ -240,6 +266,25 @@ class SalesOrderAuditedPricingServiceTest {
     }
 
     @Test
+    void shouldRejectChangedMaterialOrWarehouseStableIdentity() {
+        var service = new SalesOrderAuditedPricingService(null);
+        SalesOrder order = auditedSalesOrder(11L);
+        SalesOrderItem item = order.getItems().get(0);
+
+        SalesOrderRequest changedMaterial = requestWithItems(
+                order,
+                List.of(itemRequestWithStableIds(item, 502L, item.getWarehouseId()))
+        );
+        SalesOrderRequest changedWarehouse = requestWithItems(
+                order,
+                List.of(itemRequestWithStableIds(item, item.getMaterialId(), 602L))
+        );
+
+        assertThat(service.matchesAuditedPricingUpdate(order, changedMaterial)).isFalse();
+        assertThat(service.matchesAuditedPricingUpdate(order, changedWarehouse)).isFalse();
+    }
+
+    @Test
     void shouldAllowNormalizedEquivalentItemFields() {
         var service = new SalesOrderAuditedPricingService(null);
         SalesOrder order = auditedSalesOrder(11L);
@@ -342,6 +387,7 @@ class SalesOrderAuditedPricingServiceTest {
         item.setId(itemId);
         item.setSalesOrder(order);
         item.setLineNo(1);
+        item.setMaterialId(501L);
         item.setMaterialCode("M1");
         item.setBrand("宝钢");
         item.setCategory("盘螺");
@@ -351,6 +397,7 @@ class SalesOrderAuditedPricingServiceTest {
         item.setUnit("吨");
         item.setSourceInboundItemId(21L);
         item.setSourcePurchaseOrderItemId(31L);
+        item.setWarehouseId(601L);
         item.setWarehouseName("一号库");
         item.setBatchNo("B1");
         item.setQuantity(2);
@@ -428,6 +475,7 @@ class SalesOrderAuditedPricingServiceTest {
     private SalesOrderItemRequest itemRequestFrom(SalesOrderItem item, BigDecimal unitPrice) {
         return new SalesOrderItemRequest(
                 item.getId(),
+                item.getMaterialId(),
                 item.getMaterialCode(),
                 item.getBrand(),
                 item.getCategory(),
@@ -437,6 +485,7 @@ class SalesOrderAuditedPricingServiceTest {
                 item.getUnit(),
                 item.getSourceInboundItemId(),
                 item.getSourcePurchaseOrderItemId(),
+                item.getWarehouseId(),
                 item.getWarehouseName(),
                 item.getBatchNo(),
                 item.getQuantity(),
@@ -471,6 +520,7 @@ class SalesOrderAuditedPricingServiceTest {
     ) {
         return new SalesOrderItemRequest(
                 id,
+                item.getMaterialId(),
                 materialCode,
                 brand,
                 category,
@@ -480,6 +530,7 @@ class SalesOrderAuditedPricingServiceTest {
                 unit,
                 sourceInboundItemId,
                 sourcePurchaseOrderItemId,
+                item.getWarehouseId(),
                 warehouseName,
                 batchNo,
                 quantity,
@@ -492,11 +543,41 @@ class SalesOrderAuditedPricingServiceTest {
         );
     }
 
+    private SalesOrderItemRequest itemRequestWithStableIds(
+            SalesOrderItem item,
+            Long materialId,
+            Long warehouseId) {
+        return new SalesOrderItemRequest(
+                item.getId(),
+                materialId,
+                item.getMaterialCode(),
+                item.getBrand(),
+                item.getCategory(),
+                item.getMaterial(),
+                item.getSpec(),
+                item.getLength(),
+                item.getUnit(),
+                item.getSourceInboundItemId(),
+                item.getSourcePurchaseOrderItemId(),
+                warehouseId,
+                item.getWarehouseName(),
+                item.getBatchNo(),
+                item.getQuantity(),
+                item.getQuantityUnit(),
+                item.getPieceWeightTon(),
+                item.getPiecesPerBundle(),
+                item.getWeightTon(),
+                new BigDecimal("3200.00"),
+                item.getAmount()
+        );
+    }
+
     private SalesOrderItem copyItem(SalesOrderItem source, Long id, int lineNo) {
         SalesOrderItem item = new SalesOrderItem();
         item.setId(id);
         item.setSalesOrder(source.getSalesOrder());
         item.setLineNo(lineNo);
+        item.setMaterialId(source.getMaterialId());
         item.setMaterialCode(source.getMaterialCode());
         item.setBrand(source.getBrand());
         item.setCategory(source.getCategory());
@@ -506,6 +587,7 @@ class SalesOrderAuditedPricingServiceTest {
         item.setUnit(source.getUnit());
         item.setSourceInboundItemId(source.getSourceInboundItemId());
         item.setSourcePurchaseOrderItemId(source.getSourcePurchaseOrderItemId());
+        item.setWarehouseId(source.getWarehouseId());
         item.setWarehouseName(source.getWarehouseName());
         item.setBatchNo(source.getBatchNo());
         item.setQuantity(source.getQuantity());

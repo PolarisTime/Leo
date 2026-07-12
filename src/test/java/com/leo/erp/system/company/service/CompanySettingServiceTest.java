@@ -3,6 +3,7 @@ package com.leo.erp.system.company.service;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.config.CacheConfig;
 import com.leo.erp.common.support.MasterDataReferenceGuard;
+import com.leo.erp.common.support.MasterDataReferenceGuard.ReferenceCheck;
 import com.leo.erp.common.support.RedisJsonCacheSupport;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
@@ -20,6 +21,7 @@ import com.leo.erp.system.runtimeconfig.service.RuntimeConfigService;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.cache.annotation.Caching;
 import org.springframework.cache.concurrent.ConcurrentMapCacheManager;
@@ -33,6 +35,7 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.groups.Tuple.tuple;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
@@ -850,7 +853,7 @@ class CompanySettingServiceTest {
     }
 
     @Test
-    void shouldCheckReferencesBeforeDeleteWhenGuardAvailable() {
+    void shouldCheckEveryStableSettlementCompanyReferenceBeforeDelete() {
         var entity = createCompanySetting(1L);
         var repository = mock(CompanySettingRepository.class);
         var referenceGuard = mock(MasterDataReferenceGuard.class);
@@ -861,7 +864,35 @@ class CompanySettingServiceTest {
 
         service.delete(1L);
 
-        verify(referenceGuard).assertNoReferences(eq("该结算主体"), any());
+        ArgumentCaptor<List<ReferenceCheck>> captor = ArgumentCaptor.forClass(List.class);
+        verify(referenceGuard).assertNoReferences(eq("该结算主体"), captor.capture());
+        assertThat(captor.getValue())
+                .extracting(ReferenceCheck::tableName, ReferenceCheck::columnName, ReferenceCheck::value)
+                .containsExactly(
+                        tuple("md_carrier", "default_settlement_company_id", 1L),
+                        tuple("md_customer", "default_settlement_company_id", 1L),
+                        tuple("po_purchase_order", "settlement_company_id", 1L),
+                        tuple("po_purchase_inbound", "settlement_company_id", 1L),
+                        tuple("po_purchase_inbound_item", "settlement_company_id", 1L),
+                        tuple("po_purchase_refund", "settlement_company_id", 1L),
+                        tuple("so_sales_order", "settlement_company_id", 1L),
+                        tuple("so_sales_order_item", "settlement_company_id", 1L),
+                        tuple("so_sales_outbound", "settlement_company_id", 1L),
+                        tuple("so_sales_outbound_item", "settlement_company_id", 1L),
+                        tuple("lg_freight_bill", "settlement_company_id", 1L),
+                        tuple("lg_freight_bill_item", "settlement_company_id", 1L),
+                        tuple("st_customer_statement", "settlement_company_id", 1L),
+                        tuple("st_supplier_statement", "settlement_company_id", 1L),
+                        tuple("st_freight_statement", "settlement_company_id", 1L),
+                        tuple("st_freight_statement_item", "settlement_company_id", 1L),
+                        tuple("fm_invoice_issue", "settlement_company_id", 1L),
+                        tuple("fm_invoice_receipt", "settlement_company_id", 1L),
+                        tuple("fm_receipt", "settlement_company_id", 1L),
+                        tuple("fm_payment", "settlement_company_id", 1L),
+                        tuple("fm_supplier_refund_receipt", "settlement_company_id", 1L),
+                        tuple("fm_ledger_adjustment", "settlement_company_id", 1L),
+                        tuple("sys_print_template", "settlement_company_id", 1L)
+                );
         verify(repository).save(entity);
         assertThat(entity.isDeletedFlag()).isTrue();
     }

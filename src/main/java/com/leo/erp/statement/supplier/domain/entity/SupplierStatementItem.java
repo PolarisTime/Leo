@@ -37,6 +37,12 @@ public class SupplierStatementItem {
     @Column(name = "material_code", nullable = false, length = 64)
     private String materialCode;
 
+    @Column(name = "material_id")
+    private Long materialId;
+
+    @Column(name = "warehouse_id")
+    private Long warehouseId;
+
     @Column(name = "brand", nullable = false, length = 64)
     private String brand;
 
@@ -57,6 +63,9 @@ public class SupplierStatementItem {
 
     @Column(name = "batch_no", length = 64)
     private String batchNo;
+
+    @Column(name = "batch_no_normalized", insertable = false, updatable = false, length = 64)
+    private String batchNoNormalized;
 
     @Column(name = "quantity", nullable = false)
     private Integer quantity;

@@ -66,6 +66,8 @@ public class SalesOutboundService extends AbstractCrudService<SalesOutbound, Sal
         Specification<SalesOutbound> spec = Specs.<SalesOutbound>keywordLike(filter.keyword(), "outboundNo", "salesOrderNo", "customerName", "projectName")
                 .and(Specs.equalIfPresent("customerName", filter.name()))
                 .and(Specs.equalIfPresent("projectName", filter.projectName()))
+                .and(Specs.equalValueIfPresent("customerId", filter.customerId()))
+                .and(Specs.equalValueIfPresent("projectId", filter.projectId()))
                 .and(Specs.equalValueIfPresent("settlementCompanyId", filter.settlementCompanyId()))
                 .and(Specs.equalIfPresent("status", filter.status()))
                 .and(Specs.betweenIfPresent("outboundDate", filter.startDate(), filter.endDate()));
@@ -103,8 +105,11 @@ public class SalesOutboundService extends AbstractCrudService<SalesOutbound, Sal
         return new SalesOutboundRequest(
                 resolveCreateBusinessNo("sales-outbound", request.outboundNo(), entityId),
                 null,
+                request.customerId(),
                 request.customerName(),
+                request.projectId(),
                 request.projectName(),
+                request.warehouseId(),
                 request.warehouseName(),
                 request.outboundDate(),
                 request.status(),
@@ -121,8 +126,11 @@ public class SalesOutboundService extends AbstractCrudService<SalesOutbound, Sal
         return new SalesOutboundRequest(
                 entity.getOutboundNo(),
                 entity.getSalesOrderNo(),
+                request.customerId() == null ? entity.getCustomerId() : request.customerId(),
                 request.customerName(),
+                request.projectId() == null ? entity.getProjectId() : request.projectId(),
                 request.projectName(),
+                request.warehouseId() == null ? entity.getWarehouseId() : request.warehouseId(),
                 request.warehouseName(),
                 request.outboundDate(),
                 request.status(),
@@ -154,8 +162,11 @@ public class SalesOutboundService extends AbstractCrudService<SalesOutbound, Sal
         return new SalesOutboundRequest(
                 entity.getOutboundNo(),
                 entity.getSalesOrderNo(),
+                entity.getCustomerId(),
                 entity.getCustomerName(),
+                entity.getProjectId(),
                 entity.getProjectName(),
+                entity.getWarehouseId(),
                 entity.getWarehouseName(),
                 request.outboundDate(),
                 request.status(),
@@ -173,6 +184,7 @@ public class SalesOutboundService extends AbstractCrudService<SalesOutbound, Sal
                 item.getId(),
                 null,
                 item.getSourceSalesOrderItemId(),
+                item.getMaterialId(),
                 item.getMaterialCode(),
                 item.getBrand(),
                 item.getCategory(),
@@ -180,6 +192,7 @@ public class SalesOutboundService extends AbstractCrudService<SalesOutbound, Sal
                 item.getSpec(),
                 item.getLength(),
                 item.getUnit(),
+                item.getWarehouseId(),
                 item.getWarehouseName(),
                 item.getBatchNo(),
                 nextQuantity,
@@ -244,8 +257,11 @@ public class SalesOutboundService extends AbstractCrudService<SalesOutbound, Sal
         );
         entity.setOutboundNo(request.outboundNo());
         entity.setSalesOrderNo(request.salesOrderNo());
+        entity.setCustomerId(request.customerId());
         entity.setCustomerName(request.customerName());
+        entity.setProjectId(request.projectId());
         entity.setProjectName(request.projectName());
+        entity.setWarehouseId(request.warehouseId());
         entity.setOutboundDate(request.outboundDate());
         entity.setStatus(nextStatus);
         entity.setRemark(request.remark());

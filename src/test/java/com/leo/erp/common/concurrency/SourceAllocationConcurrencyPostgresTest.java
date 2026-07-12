@@ -1,5 +1,6 @@
 package com.leo.erp.common.concurrency;
 
+import com.leo.erp.testsupport.StableIdentityPostgresFixtures;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -54,6 +55,9 @@ class SourceAllocationConcurrencyPostgresTest {
     private static final long STATEMENT_TWO_ID = BASE_ID + 2_002;
     private static final long STATEMENT_ITEM_ONE_ID = BASE_ID + 2_101;
     private static final long STATEMENT_ITEM_TWO_ID = BASE_ID + 2_102;
+    private static final long SUPPLIER_ID = BASE_ID + 3_001;
+    private static final long MATERIAL_ID = BASE_ID + 3_002;
+    private static final long WAREHOUSE_ID = BASE_ID + 3_003;
     private static final String PURCHASE_INBOUND_NO = "TEST-CONC-INBOUND";
     private static final BigDecimal SOURCE_CAPACITY = new BigDecimal("10.00000000");
     private static final BigDecimal ALLOCATION_REQUEST = new BigDecimal("6.00000000");
@@ -350,21 +354,22 @@ class SourceAllocationConcurrencyPostgresTest {
         JdbcTemplate transactionJdbc = transactionJdbc(connection);
         transactionJdbc.update("""
                 INSERT INTO fm_invoice_receipt (
-                    id, receive_no, invoice_no, supplier_code, supplier_name, invoice_date, invoice_type,
+                    id, receive_no, invoice_no, supplier_id, supplier_code, supplier_name, invoice_date, invoice_type,
                     amount, tax_amount, status, operator_name, deleted_flag
-                ) VALUES (?, ?, ?, 'TEST-CONC-SUPPLIER', '并发测试供应商', CURRENT_TIMESTAMP, '增值税专票',
+                ) VALUES (?, ?, ?, ?, 'TEST-CONC-SUPPLIER', '并发测试供应商', CURRENT_TIMESTAMP, '增值税专票',
                           ?, 0, '已收票', '并发测试', FALSE)
                 """, receiptId, "TEST-CONC-RECEIPT-" + attempt, "TEST-CONC-INVOICE-" + attempt,
-                ALLOCATION_REQUEST);
+                SUPPLIER_ID, ALLOCATION_REQUEST);
         transactionJdbc.update("""
                 INSERT INTO fm_invoice_receipt_item (
                     id, receipt_id, line_no, source_no, source_purchase_order_item_id,
-                    material_code, brand, category, material, spec, unit, quantity, quantity_unit,
+                    material_id, material_code, brand, category, material, spec, unit, quantity, quantity_unit,
                     piece_weight_ton, pieces_per_bundle, weight_ton, unit_price, amount
                 ) VALUES (?, ?, 1, 'TEST-CONC-PO-1', ?,
-                          'TEST-CONC-MATERIAL', '测试品牌', '测试类别', '测试材质', 'TEST-SPEC', '吨',
+                          ?, 'TEST-CONC-MATERIAL', '测试品牌', '测试类别', '测试材质', 'TEST-SPEC', '吨',
                           6, '件', 1, 1, ?, 1, ?)
-                """, itemId, receiptId, PURCHASE_ORDER_ITEM_ONE_ID, ALLOCATION_REQUEST, ALLOCATION_REQUEST);
+                """, itemId, receiptId, PURCHASE_ORDER_ITEM_ONE_ID, MATERIAL_ID,
+                ALLOCATION_REQUEST, ALLOCATION_REQUEST);
     }
 
     private boolean exclusiveSourceIsClaimed(Connection connection) {
@@ -386,19 +391,20 @@ class SourceAllocationConcurrencyPostgresTest {
         JdbcTemplate transactionJdbc = transactionJdbc(connection);
         transactionJdbc.update("""
                 INSERT INTO st_supplier_statement (
-                    id, statement_no, supplier_name, start_date, end_date,
+                    id, statement_no, supplier_id, supplier_name, start_date, end_date,
                     purchase_amount, payment_amount, closing_amount, status, deleted_flag
-                ) VALUES (?, ?, '并发测试供应商', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP,
+                ) VALUES (?, ?, ?, '并发测试供应商', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP,
                           10, 0, 10, '待确认', FALSE)
-                """, statementId, "TEST-CONC-STATEMENT-" + attempt);
+                """, statementId, "TEST-CONC-STATEMENT-" + attempt, SUPPLIER_ID);
         transactionJdbc.update("""
                 INSERT INTO st_supplier_statement_item (
                     id, statement_id, line_no, source_no, material_code, brand, category,
-                    material, spec, unit, quantity, quantity_unit, piece_weight_ton,
+                    material_id, material, spec, unit, quantity, quantity_unit, piece_weight_ton,
                     pieces_per_bundle, weight_ton, unit_price, amount, source_inbound_item_id
                 ) VALUES (?, ?, 1, ?, 'TEST-CONC-MATERIAL', '测试品牌', '测试类别',
-                          '测试材质', 'TEST-SPEC', '吨', 10, '件', 1, 1, 10, 1, 10, ?)
-                """, statementItemId, statementId, PURCHASE_INBOUND_NO, PURCHASE_INBOUND_ITEM_ID);
+                          ?, '测试材质', 'TEST-SPEC', '吨', 10, '件', 1, 1, 10, 1, 10, ?)
+                """, statementItemId, statementId, PURCHASE_INBOUND_NO, MATERIAL_ID,
+                PURCHASE_INBOUND_ITEM_ID);
     }
 
     private int committedExclusiveClaims() {
@@ -413,40 +419,49 @@ class SourceAllocationConcurrencyPostgresTest {
     }
 
     private void insertSourceFixtures() {
+        StableIdentityPostgresFixtures.insertSupplier(
+                jdbcTemplate, SUPPLIER_ID, "TEST-CONC-SUPPLIER", "并发测试供应商");
+        StableIdentityPostgresFixtures.insertMaterial(
+                jdbcTemplate, MATERIAL_ID, "TEST-CONC-MATERIAL");
+        StableIdentityPostgresFixtures.insertWarehouse(
+                jdbcTemplate, WAREHOUSE_ID, "TEST-CONC-WAREHOUSE", "并发测试仓");
         insertPurchaseOrder(PURCHASE_ORDER_ONE_ID, PURCHASE_ORDER_ITEM_ONE_ID, 1);
         insertPurchaseOrder(PURCHASE_ORDER_TWO_ID, PURCHASE_ORDER_ITEM_TWO_ID, 2);
         jdbcTemplate.update("""
                 INSERT INTO po_purchase_inbound (
-                    id, inbound_no, supplier_code, supplier_name, warehouse_name, inbound_date, settlement_mode,
+                    id, inbound_no, supplier_id, supplier_code, supplier_name, warehouse_id, warehouse_name,
+                    inbound_date, settlement_mode,
                     total_weight, total_amount, status, deleted_flag
-                ) VALUES (?, ?, 'TEST-CONC-SUPPLIER', '并发测试供应商', '并发测试仓', CURRENT_TIMESTAMP,
+                ) VALUES (?, ?, ?, 'TEST-CONC-SUPPLIER', '并发测试供应商', ?, '并发测试仓', CURRENT_TIMESTAMP,
                           '按重量', 10, 10, '完成入库', FALSE)
-                """, PURCHASE_INBOUND_ID, PURCHASE_INBOUND_NO);
+                """, PURCHASE_INBOUND_ID, PURCHASE_INBOUND_NO, SUPPLIER_ID, WAREHOUSE_ID);
         jdbcTemplate.update("""
                 INSERT INTO po_purchase_inbound_item (
-                    id, inbound_id, line_no, material_code, brand, category, material, spec, unit,
+                    id, inbound_id, line_no, material_id, material_code, brand, category, material, spec, unit,
                     quantity, piece_weight_ton, pieces_per_bundle, weight_ton, unit_price, amount,
-                    quantity_unit, warehouse_name, settlement_mode
-                ) VALUES (?, ?, 1, 'TEST-CONC-MATERIAL', '测试品牌', '测试类别', '测试材质',
-                          'TEST-SPEC', '吨', 10, 1, 1, 10, 1, 10, '件', '并发测试仓', '按重量')
-                """, PURCHASE_INBOUND_ITEM_ID, PURCHASE_INBOUND_ID);
+                    quantity_unit, warehouse_id, warehouse_name, source_purchase_order_item_id, settlement_mode
+                ) VALUES (?, ?, 1, ?, 'TEST-CONC-MATERIAL', '测试品牌', '测试类别', '测试材质',
+                          'TEST-SPEC', '吨', 10, 1, 1, 10, 1, 10, '件', ?, '并发测试仓', ?, '按重量')
+                """, PURCHASE_INBOUND_ITEM_ID, PURCHASE_INBOUND_ID, MATERIAL_ID, WAREHOUSE_ID,
+                PURCHASE_ORDER_ITEM_ONE_ID);
     }
 
     private void insertPurchaseOrder(long orderId, long itemId, int sequence) {
         jdbcTemplate.update("""
                 INSERT INTO po_purchase_order (
-                    id, order_no, supplier_code, supplier_name, order_date, total_weight, total_amount,
+                    id, order_no, supplier_id, supplier_code, supplier_name, order_date, total_weight, total_amount,
                     status, deleted_flag
-                ) VALUES (?, ?, 'TEST-CONC-SUPPLIER', '并发测试供应商', CURRENT_TIMESTAMP, 10, 10, '已审核', FALSE)
-                """, orderId, "TEST-CONC-PO-" + sequence);
+                ) VALUES (?, ?, ?, 'TEST-CONC-SUPPLIER', '并发测试供应商', CURRENT_TIMESTAMP,
+                          10, 10, '已审核', FALSE)
+                """, orderId, "TEST-CONC-PO-" + sequence, SUPPLIER_ID);
         jdbcTemplate.update("""
                 INSERT INTO po_purchase_order_item (
-                    id, order_id, line_no, material_code, brand, category, material, spec, unit,
+                    id, order_id, line_no, material_id, material_code, brand, category, material, spec, unit,
                     quantity, piece_weight_ton, pieces_per_bundle, weight_ton, unit_price, amount,
-                    quantity_unit
-                ) VALUES (?, ?, 1, 'TEST-CONC-MATERIAL', '测试品牌', '测试类别', '测试材质',
-                          'TEST-SPEC', '吨', 10, 1, 1, 10, 1, 10, '件')
-                """, itemId, orderId);
+                    quantity_unit, warehouse_id
+                ) VALUES (?, ?, 1, ?, 'TEST-CONC-MATERIAL', '测试品牌', '测试类别', '测试材质',
+                          'TEST-SPEC', '吨', 10, 1, 1, 10, 1, 10, '件', ?)
+                """, itemId, orderId, MATERIAL_ID, WAREHOUSE_ID);
     }
 
     private void cleanupFixtures() {
@@ -482,6 +497,9 @@ class SourceAllocationConcurrencyPostgresTest {
                 PURCHASE_ORDER_ONE_ID,
                 PURCHASE_ORDER_TWO_ID
         );
+        jdbcTemplate.update("DELETE FROM md_warehouse WHERE id = ?", WAREHOUSE_ID);
+        jdbcTemplate.update("DELETE FROM md_material WHERE id = ?", MATERIAL_ID);
+        jdbcTemplate.update("DELETE FROM md_supplier WHERE id = ?", SUPPLIER_ID);
     }
 
     private void assertDistinctConnections(Queue<Integer> backendPids) {

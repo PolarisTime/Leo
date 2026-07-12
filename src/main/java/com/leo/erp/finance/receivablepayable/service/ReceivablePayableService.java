@@ -74,8 +74,8 @@ public class ReceivablePayableService {
         ReceivablePayableResponse summary = queryRepository.findSummary(
                 key.direction(),
                 key.counterpartyType(),
-                key.counterpartyKey(),
-                key.settlementCompanyKey(),
+                key.counterpartyId(),
+                key.settlementCompanyId(),
                 key.reconciliationStatus()
         );
         if (summary == null) {
@@ -85,6 +85,7 @@ public class ReceivablePayableService {
                 summary.id(),
                 summary.direction(),
                 summary.counterpartyType(),
+                summary.counterpartyId(),
                 summary.counterpartyCode(),
                 summary.counterpartyName(),
                 summary.settlementCompanyId(),
@@ -103,8 +104,8 @@ public class ReceivablePayableService {
                 queryRepository.detailItems(
                         key.direction(),
                         key.counterpartyType(),
-                        key.counterpartyKey(),
-                        key.settlementCompanyKey(),
+                        key.counterpartyId(),
+                        key.settlementCompanyId(),
                         key.reconciliationStatus()
                 )
         );
@@ -207,13 +208,13 @@ public class ReceivablePayableService {
         String direction = validateDirection(parts[0]);
         String counterpartyType = validateCounterpartyType(parts[1]);
         String reconciliationStatus = validateReconciliationStatus(parts[2]);
-        String settlementCompanyKey = normalizeSettlementCompanyKey(parts[3]);
-        String counterpartyKey = parts[4].trim();
+        Long settlementCompanyId = parsePositiveId(parts[3]);
+        Long counterpartyId = parsePositiveId(parts[4]);
         if (direction == null
                 || counterpartyType == null
                 || reconciliationStatus == null
-                || settlementCompanyKey == null
-                || !isValidCounterpartyKey(counterpartyKey)) {
+                || settlementCompanyId == null
+                || counterpartyId == null) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "应收应付汇总ID不合法");
         }
         if (("客户".equals(counterpartyType) && !"应收".equals(direction))
@@ -224,41 +225,21 @@ public class ReceivablePayableService {
                 direction,
                 counterpartyType,
                 reconciliationStatus,
-                settlementCompanyKey,
-                normalizeCounterpartyKey(counterpartyKey)
+                settlementCompanyId,
+                counterpartyId
         );
     }
 
-    private boolean isValidCounterpartyKey(String value) {
-        if (value == null || value.isBlank()) {
-            return false;
-        }
-        String normalized = value.trim();
-        return normalized.matches("[A-Za-z0-9._-]{1,64}")
-                || normalized.matches("name:[a-fA-F0-9]{32}");
-    }
-
-    private String normalizeCounterpartyKey(String value) {
-        String normalized = value.trim();
-        if (normalized.matches("name:[a-fA-F0-9]{32}")) {
-            return "name:" + normalized.substring("name:".length()).toLowerCase();
-        }
-        return normalized;
-    }
-
-    private String normalizeSettlementCompanyKey(String value) {
+    private Long parsePositiveId(String value) {
         if (value == null || value.isBlank()) {
             return null;
         }
-        String normalized = value.trim().toLowerCase(java.util.Locale.ROOT);
-        if ("none".equals(normalized)) {
-            return normalized;
-        }
+        String normalized = value.trim();
         if (!normalized.matches("[1-9][0-9]{0,18}")) {
             return null;
         }
         try {
-            return String.valueOf(Long.parseLong(normalized));
+            return Long.parseLong(normalized);
         } catch (NumberFormatException ignored) {
             return null;
         }
@@ -271,7 +252,7 @@ public class ReceivablePayableService {
     private record SummaryKey(String direction,
                               String counterpartyType,
                               String reconciliationStatus,
-                              String settlementCompanyKey,
-                              String counterpartyKey) {
+                              Long settlementCompanyId,
+                              Long counterpartyId) {
     }
 }

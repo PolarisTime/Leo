@@ -36,7 +36,7 @@ class PaymentRequestValidationTest {
                 .map(violation -> violation.getPropertyPath().toString())
                 .collect(Collectors.toSet());
 
-        assertThat(violations).contains("businessType");
+        assertThat(violations).contains("counterpartyType");
     }
 
     @Test
@@ -224,7 +224,7 @@ class PaymentRequestValidationTest {
                 .map(violation -> violation.getPropertyPath().toString())
                 .collect(Collectors.toSet());
 
-        assertThat(violations).contains("items[0].sourceStatementId");
+        assertThat(violations).contains("items[0].statementSourceValid");
         assertThat(violations).contains("items[0].allocatedAmount");
     }
 

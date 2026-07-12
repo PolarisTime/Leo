@@ -206,12 +206,14 @@ public class SalesOrderSourceAllocationService {
                                          int lineNo,
                                          String sourceName) {
         assertSameText(request.materialCode(), source.materialCode(), lineNo, sourceName, "物料编码");
+        assertSameId(request.materialId(), source.materialId(), lineNo, sourceName, "商品ID");
         assertSameText(request.brand(), source.brand(), lineNo, sourceName, "品牌");
         assertSameText(request.category(), source.category(), lineNo, sourceName, "品类");
         assertSameText(request.material(), source.material(), lineNo, sourceName, "材质");
         assertSameText(request.spec(), source.spec(), lineNo, sourceName, "规格");
         assertSameText(request.unit(), source.unit(), lineNo, sourceName, "单位");
         assertSameText(request.warehouseName(), source.warehouseName(), lineNo, sourceName, "仓库");
+        assertSameId(request.warehouseId(), source.warehouseId(), lineNo, sourceName, "仓库ID");
         assertSameText(request.batchNo(), source.batchNo(), lineNo, sourceName, "批号");
     }
 
@@ -220,12 +222,14 @@ public class SalesOrderSourceAllocationService {
                                          int lineNo,
                                          String sourceName) {
         assertSameText(request.materialCode(), source.materialCode(), lineNo, sourceName, "物料编码");
+        assertSameId(request.materialId(), source.materialId(), lineNo, sourceName, "商品ID");
         assertSameText(request.brand(), source.brand(), lineNo, sourceName, "品牌");
         assertSameText(request.category(), source.category(), lineNo, sourceName, "品类");
         assertSameText(request.material(), source.material(), lineNo, sourceName, "材质");
         assertSameText(request.spec(), source.spec(), lineNo, sourceName, "规格");
         assertSameText(request.unit(), source.unit(), lineNo, sourceName, "单位");
         assertSameText(request.warehouseName(), source.warehouseName(), lineNo, sourceName, "仓库");
+        assertSameId(request.warehouseId(), source.warehouseId(), lineNo, sourceName, "仓库ID");
         assertSameText(request.batchNo(), source.batchNo(), lineNo, sourceName, "批号");
     }
 
@@ -241,6 +245,19 @@ public class SalesOrderSourceAllocationService {
                 sourceName,
                 fieldName
         );
+    }
+
+    private void assertSameId(Long requestedValue,
+                              Long sourceValue,
+                              int lineNo,
+                              String sourceName,
+                              String fieldName) {
+        if (requestedValue != null && !java.util.Objects.equals(requestedValue, sourceValue)) {
+            throw new BusinessException(
+                    ErrorCode.BUSINESS_ERROR,
+                    "第" + lineNo + "行" + sourceName + fieldName + "不一致"
+            );
+        }
     }
 
     private void validateAvailableQuantity(Integer requestedQuantityValue,

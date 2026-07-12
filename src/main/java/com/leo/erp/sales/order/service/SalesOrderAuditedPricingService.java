@@ -42,6 +42,7 @@ public class SalesOrderAuditedPricingService {
                 || !normalize(entity.getPurchaseInboundNo()).equals(normalize(request.purchaseInboundNo()))
                 || !normalize(entity.getPurchaseOrderNo()).equals(normalize(request.purchaseOrderNo()))
                 || !normalize(entity.getCustomerCode()).equals(normalize(request.customerCode()))
+                || !Objects.equals(entity.getCustomerId(), request.customerId())
                 || !normalize(entity.getCustomerName()).equals(normalize(request.customerName()))
                 || !Objects.equals(entity.getProjectId(), request.projectId())
                 || !normalize(entity.getProjectName()).equals(normalize(request.projectName()))
@@ -89,6 +90,7 @@ public class SalesOrderAuditedPricingService {
 
     private boolean matchesPricingUpdateItem(SalesOrderItem entityItem, SalesOrderItemRequest requestItem) {
         return Objects.equals(entityItem.getId(), requestItem.id())
+                && Objects.equals(entityItem.getMaterialId(), requestItem.materialId())
                 && normalize(entityItem.getMaterialCode()).equals(normalize(requestItem.materialCode()))
                 && normalize(entityItem.getBrand()).equals(normalize(requestItem.brand()))
                 && normalize(entityItem.getCategory()).equals(normalize(requestItem.category()))
@@ -98,6 +100,7 @@ public class SalesOrderAuditedPricingService {
                 && normalize(entityItem.getUnit()).equals(normalize(requestItem.unit()))
                 && Objects.equals(entityItem.getSourceInboundItemId(), requestItem.sourceInboundItemId())
                 && Objects.equals(entityItem.getSourcePurchaseOrderItemId(), requestItem.sourcePurchaseOrderItemId())
+                && Objects.equals(entityItem.getWarehouseId(), requestItem.warehouseId())
                 && normalize(entityItem.getWarehouseName()).equals(normalize(requestItem.warehouseName()))
                 && normalize(entityItem.getBatchNo()).equals(normalize(requestItem.batchNo()))
                 && Objects.equals(entityItem.getQuantity(), requestItem.quantity())

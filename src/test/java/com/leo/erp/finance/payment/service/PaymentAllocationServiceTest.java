@@ -104,7 +104,18 @@ class PaymentAllocationServiceTest {
 
         PaymentAllocationService.AllocationApplyResult result = service.applyAllocations(
                 payment,
-                paymentRequest(PaymentAllocationService.SUPPLIER_PAYMENT_TYPE, 21L, new BigDecimal("100.00"), null),
+                paymentRequest(
+                        PaymentAllocationService.SUPPLIER_PAYMENT_TYPE,
+                        null,
+                        new BigDecimal("100.00"),
+                        List.of(new PaymentAllocationRequest(
+                                null,
+                                null,
+                                21L,
+                                null,
+                                new BigDecimal("100.00")
+                        ))
+                ),
                 StatusConstants.DRAFT,
                 new AtomicLong(100)::incrementAndGet
         );
@@ -120,8 +131,77 @@ class PaymentAllocationServiceTest {
                     assertThat(item.getPayment()).isSameAs(payment);
                     assertThat(item.getLineNo()).isEqualTo(1);
                     assertThat(item.getSourceStatementId()).isEqualTo(21L);
+                    assertThat(item.getSourceSupplierStatementId()).isEqualTo(21L);
+                    assertThat(item.getSourceFreightStatementId()).isNull();
                     assertThat(item.getAllocatedAmount()).isEqualByComparingTo("100.00");
                 });
+    }
+
+    @Test
+    void shouldApplyFreightAllocationToFreightStatementColumnOnly() {
+        PaymentStatementAllocationValidator validator = mock(PaymentStatementAllocationValidator.class);
+        when(validator.validate(
+                any(PaymentRequest.class),
+                eq(StatusConstants.DRAFT),
+                eq(1L),
+                eq(31L),
+                eq(new BigDecimal("100.00")),
+                any(),
+                eq(1)
+        )).thenReturn(validatedStatement("CAR-001"));
+        PaymentAllocationService service = new PaymentAllocationService(validator);
+        Payment payment = payment(PaymentAllocationService.FREIGHT_PAYMENT_TYPE, new BigDecimal("100.00"));
+
+        service.applyAllocations(
+                payment,
+                paymentRequest(
+                        PaymentAllocationService.FREIGHT_PAYMENT_TYPE,
+                        null,
+                        new BigDecimal("100.00"),
+                        List.of(new PaymentAllocationRequest(
+                                null,
+                                null,
+                                null,
+                                31L,
+                                new BigDecimal("100.00")
+                        ))
+                ),
+                StatusConstants.DRAFT,
+                new AtomicLong(100)::incrementAndGet
+        );
+
+        assertThat(payment.getItems()).singleElement().satisfies(item -> {
+            assertThat(item.getSourceStatementId()).isEqualTo(31L);
+            assertThat(item.getSourceSupplierStatementId()).isNull();
+            assertThat(item.getSourceFreightStatementId()).isEqualTo(31L);
+        });
+    }
+
+    @Test
+    void shouldRejectAllocationWithBothTypedStatementSources() {
+        PaymentAllocationService service = new PaymentAllocationService(
+                mock(PaymentStatementAllocationValidator.class)
+        );
+
+        assertThatThrownBy(() -> service.applyAllocations(
+                payment(PaymentAllocationService.SUPPLIER_PAYMENT_TYPE, new BigDecimal("100.00")),
+                paymentRequest(
+                        PaymentAllocationService.SUPPLIER_PAYMENT_TYPE,
+                        null,
+                        new BigDecimal("100.00"),
+                        List.of(new PaymentAllocationRequest(
+                                null,
+                                null,
+                                21L,
+                                31L,
+                                new BigDecimal("100.00")
+                        ))
+                ),
+                StatusConstants.DRAFT,
+                new AtomicLong(100)::incrementAndGet
+        ))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("只能关联一种对账单来源");
     }
 
     @Test
@@ -539,6 +619,7 @@ class PaymentAllocationServiceTest {
                                                 String settlementCompanyName) {
         SupplierStatement statement = new SupplierStatement();
         statement.setId(id);
+        statement.setSupplierId(201L);
         statement.setSupplierCode("SUP-001");
         statement.setSupplierName("供应商A");
         statement.setSettlementCompanyId(settlementCompanyId);
@@ -553,6 +634,7 @@ class PaymentAllocationServiceTest {
                                               String settlementCompanyName) {
         FreightStatement statement = new FreightStatement();
         statement.setId(id);
+        statement.setCarrierId(301L);
         statement.setCarrierCode("CAR-001");
         statement.setCarrierName("物流商A");
         statement.setSettlementCompanyId(settlementCompanyId);

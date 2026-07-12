@@ -99,6 +99,7 @@ class PaymentApplyServiceTest {
     void shouldDeriveSettlementCompanySnapshotFromStatementAndIgnoreClientValues() {
         SupplierStatement statement = new SupplierStatement();
         statement.setId(11L);
+        statement.setSupplierId(201L);
         statement.setSupplierCode("SUP-001");
         statement.setSupplierName("供应商A");
         statement.setSettlementCompanyId(1001L);
@@ -144,6 +145,8 @@ class PaymentApplyServiceTest {
 
         assertThat(entity.getSettlementCompanyId()).isEqualTo(1001L);
         assertThat(entity.getSettlementCompanyName()).isEqualTo("来源结算主体");
+        assertThat(entity.getCounterpartyType()).isEqualTo(PaymentAllocationService.SUPPLIER_PAYMENT_TYPE);
+        assertThat(entity.getCounterpartyId()).isEqualTo(201L);
     }
 
     @Test

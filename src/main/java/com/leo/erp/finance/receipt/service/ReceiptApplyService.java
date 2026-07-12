@@ -19,13 +19,16 @@ public class ReceiptApplyService {
     private final WorkflowTransitionGuard workflowTransitionGuard;
     private final ReceiptAllocationService receiptAllocationService;
     private final ReceiptSettlementSyncService settlementSyncService;
+    private final ReceiptPartyIdentityResolver partyIdentityResolver;
 
     public ReceiptApplyService(WorkflowTransitionGuard workflowTransitionGuard,
                                ReceiptAllocationService receiptAllocationService,
-                               ReceiptSettlementSyncService settlementSyncService) {
+                               ReceiptSettlementSyncService settlementSyncService,
+                               ReceiptPartyIdentityResolver partyIdentityResolver) {
         this.workflowTransitionGuard = workflowTransitionGuard;
         this.receiptAllocationService = receiptAllocationService;
         this.settlementSyncService = settlementSyncService;
+        this.partyIdentityResolver = partyIdentityResolver;
     }
 
     void apply(Receipt entity, ReceiptRequest request, LongSupplier nextIdSupplier) {
@@ -55,8 +58,21 @@ public class ReceiptApplyService {
         entity.setRemark(request.remark());
         ReceiptAllocationService.AllocationApplyResult allocationResult =
                 receiptAllocationService.applyAllocations(entity, request, nextStatus, nextIdSupplier);
+        ReceiptPartyIdentityResolver.PartySnapshot partySnapshot = allocationResult.allocationEmpty()
+                ? partyIdentityResolver.resolve(request)
+                : new ReceiptPartyIdentityResolver.PartySnapshot(
+                        allocationResult.customerId(),
+                        request.customerCode(),
+                        request.customerName(),
+                        allocationResult.projectId(),
+                        request.projectName()
+                );
+        entity.setCustomerId(partySnapshot.customerId());
+        entity.setCustomerName(partySnapshot.customerName());
+        entity.setProjectId(partySnapshot.projectId());
+        entity.setProjectName(partySnapshot.projectName());
         entity.setCustomerCode(receiptAllocationService.mergeCustomerCode(
-                entity.getCustomerCode(),
+                partySnapshot.customerCode(),
                 allocationResult.customerCode()
         ));
         entity.setSettlementCompanyId(allocationResult.settlementCompanyId());

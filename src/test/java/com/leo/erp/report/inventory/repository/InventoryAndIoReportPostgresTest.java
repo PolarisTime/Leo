@@ -14,6 +14,8 @@ import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 
 import java.math.BigDecimal;
+import java.util.HashMap;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -22,8 +24,18 @@ import static org.assertj.core.api.Assertions.assertThat;
 class InventoryAndIoReportPostgresTest {
 
     private static final long BASE_ID = 8_700_000_000_000_000_000L;
+    private static final long MATERIAL_ID = BASE_ID + 10_000;
+    private static final long SUPPLIER_ID = BASE_ID + 10_001;
+    private static final long CUSTOMER_ID = BASE_ID + 10_002;
+    private static final long PROJECT_ID = BASE_ID + 10_003;
+    private static final long SOURCE_PURCHASE_ORDER_ID = BASE_ID + 10_004;
+    private static final long SOURCE_PURCHASE_ORDER_ITEM_ID = BASE_ID + 10_005;
     private static final String MATERIAL_CODE = "TEST-INV-STATUS-MATRIX";
     private static final String SUPPLIER_CODE = "TEST-INV-SUPPLIER";
+    private static final String CUSTOMER_CODE = "TEST-INV-CUSTOMER";
+
+    private final Map<String, Long> warehouseIds = new HashMap<>();
+    private long nextWarehouseId = BASE_ID + 11_000;
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
@@ -36,6 +48,7 @@ class InventoryAndIoReportPostgresTest {
         NamedParameterJdbcTemplate namedJdbc = new NamedParameterJdbcTemplate(jdbcTemplate);
         inventoryRepository = new InventoryReportQueryRepository(namedJdbc);
         ioRepository = new IoReportQueryRepository(namedJdbc);
+        insertMasterData();
     }
 
     @Test
@@ -101,68 +114,155 @@ class InventoryAndIoReportPostgresTest {
     private void insertInbound(long offset, String status, boolean deleted, int quantity,
                                BigDecimal weight, String warehouseName) {
         long inboundId = BASE_ID + offset;
+        long warehouseId = warehouseId(warehouseName);
         jdbcTemplate.update("""
                 INSERT INTO po_purchase_inbound (
-                    id, inbound_no, supplier_code, supplier_name, warehouse_name, inbound_date, settlement_mode,
-                    total_weight, total_amount, status, deleted_flag
-                ) VALUES (?, ?, ?, '测试供应商', ?, CURRENT_DATE, '按重量', ?, 0, ?, ?)
-                """, inboundId, "TEST-IN-" + offset, SUPPLIER_CODE, warehouseName, weight, status, deleted);
+                    id, inbound_no, supplier_id, supplier_code, supplier_name, warehouse_id, warehouse_name,
+                    inbound_date, settlement_mode, total_weight, total_amount, status, deleted_flag
+                ) VALUES (?, ?, ?, ?, '测试供应商', ?, ?, CURRENT_DATE, '按重量', ?, 0, ?, ?)
+                """, inboundId, "TEST-IN-" + offset, SUPPLIER_ID, SUPPLIER_CODE,
+                warehouseId, warehouseName, weight, status, deleted);
         jdbcTemplate.update("""
                 INSERT INTO po_purchase_inbound_item (
-                    id, inbound_id, line_no, material_code, brand, category, material, spec, unit,
+                    id, inbound_id, line_no, material_id, material_code, brand, category, material, spec, unit,
                     quantity, piece_weight_ton, pieces_per_bundle, weight_ton, unit_price, amount,
-                    warehouse_name, settlement_mode
-                ) VALUES (?, ?, 1, ?, '测试品牌', '测试类别', '测试材质', 'TEST-SPEC', '吨',
-                          ?, 1, 1, ?, 0, 0, ?, '按重量')
-                """, BASE_ID + 100 + offset, inboundId, MATERIAL_CODE, quantity, weight, warehouseName);
+                    warehouse_id, warehouse_name, source_purchase_order_item_id, settlement_mode
+                ) VALUES (?, ?, 1, ?, ?, '测试品牌', '测试类别', '测试材质', 'TEST-SPEC', '吨',
+                          ?, 1, 1, ?, 0, 0, ?, ?, ?, '按重量')
+                """, BASE_ID + 100 + offset, inboundId, MATERIAL_ID, MATERIAL_CODE,
+                quantity, weight, warehouseId, warehouseName, SOURCE_PURCHASE_ORDER_ITEM_ID);
     }
 
     private void insertOutbound(long offset, String status, boolean deleted, int quantity,
                                 BigDecimal weight, String headerWarehouse, String itemWarehouse) {
         long outboundId = BASE_ID + offset;
+        long headerWarehouseId = warehouseId(headerWarehouse);
+        long itemWarehouseId = warehouseId(itemWarehouse);
+        long sourceOrderId = BASE_ID + 1_000 + offset;
+        long sourceOrderItemId = BASE_ID + 2_000 + offset;
+        insertSourceSalesOrder(sourceOrderId, sourceOrderItemId, itemWarehouseId, weight, quantity);
         jdbcTemplate.update("""
                 INSERT INTO so_sales_outbound (
-                    id, outbound_no, customer_name, project_name, warehouse_name, outbound_date,
-                    total_weight, total_amount, status, deleted_flag
-                ) VALUES (?, ?, '测试客户', '测试项目', ?, CURRENT_DATE, ?, 0, ?, ?)
-                """, outboundId, "TEST-OUT-" + offset, headerWarehouse, weight, status, deleted);
+                    id, outbound_no, customer_id, customer_name, project_id, project_name,
+                    warehouse_id, warehouse_name, outbound_date, total_weight, total_amount, status, deleted_flag
+                ) VALUES (?, ?, ?, '测试客户', ?, '测试项目', ?, ?, CURRENT_DATE, ?, 0, ?, ?)
+                """, outboundId, "TEST-OUT-" + offset, CUSTOMER_ID, PROJECT_ID,
+                headerWarehouseId, headerWarehouse, weight, status, deleted);
         jdbcTemplate.update("""
                 INSERT INTO so_sales_outbound_item (
-                    id, outbound_id, line_no, material_code, brand, category, material, spec, unit,
+                    id, outbound_id, line_no, material_id, material_code, brand, category, material, spec, unit,
                     quantity, piece_weight_ton, pieces_per_bundle, weight_ton, unit_price, amount,
-                    warehouse_name
-                ) VALUES (?, ?, 1, ?, '测试品牌', '测试类别', '测试材质', 'TEST-SPEC', '吨',
-                          ?, 1, 1, ?, 0, 0, ?)
-                """, BASE_ID + 100 + offset, outboundId, MATERIAL_CODE, quantity, weight, itemWarehouse);
+                    warehouse_id, warehouse_name, source_sales_order_item_id
+                ) VALUES (?, ?, 1, ?, ?, '测试品牌', '测试类别', '测试材质', 'TEST-SPEC', '吨',
+                          ?, 1, 1, ?, 0, 0, ?, ?, ?)
+                """, BASE_ID + 100 + offset, outboundId, MATERIAL_ID, MATERIAL_CODE,
+                quantity, weight, itemWarehouseId, itemWarehouse, sourceOrderItemId);
     }
 
     private void insertInboundWithWeigh(long offset, String status, int quantity,
                                         BigDecimal theoreticalWeight, BigDecimal weighWeight,
                                         String warehouseName) {
         long inboundId = BASE_ID + offset;
+        long warehouseId = warehouseId(warehouseName);
         jdbcTemplate.update("""
                 INSERT INTO po_purchase_inbound (
-                    id, inbound_no, supplier_code, supplier_name, warehouse_name, inbound_date, settlement_mode,
-                    total_weight, total_amount, status, deleted_flag
-                ) VALUES (?, ?, ?, '测试供应商', ?, CURRENT_DATE, '过磅', ?, 0, ?, FALSE)
-                """, inboundId, "TEST-IN-" + offset, SUPPLIER_CODE, warehouseName, theoreticalWeight, status);
+                    id, inbound_no, supplier_id, supplier_code, supplier_name, warehouse_id, warehouse_name,
+                    inbound_date, settlement_mode, total_weight, total_amount, status, deleted_flag
+                ) VALUES (?, ?, ?, ?, '测试供应商', ?, ?, CURRENT_DATE, '过磅', ?, 0, ?, FALSE)
+                """, inboundId, "TEST-IN-" + offset, SUPPLIER_ID, SUPPLIER_CODE,
+                warehouseId, warehouseName, theoreticalWeight, status);
         jdbcTemplate.update("""
                 INSERT INTO po_purchase_inbound_item (
-                    id, inbound_id, line_no, material_code, brand, category, material, spec, unit,
+                    id, inbound_id, line_no, material_id, material_code, brand, category, material, spec, unit,
                     quantity, piece_weight_ton, pieces_per_bundle, weight_ton, weigh_weight_ton,
                     weight_adjustment_ton, weight_adjustment_amount, unit_price, amount,
-                    warehouse_name, settlement_mode
-                ) VALUES (?, ?, 1, ?, '测试品牌', '测试类别', '测试材质', 'TEST-SPEC', '吨',
-                          ?, 2, 1, ?, ?, ?, 0, 0, 0, ?, '过磅')
+                    warehouse_id, warehouse_name, source_purchase_order_item_id, settlement_mode
+                ) VALUES (?, ?, 1, ?, ?, '测试品牌', '测试类别', '测试材质', 'TEST-SPEC', '吨',
+                          ?, 2, 1, ?, ?, ?, 0, 0, 0, ?, ?, ?, '过磅')
                 """,
                 BASE_ID + 100 + offset,
                 inboundId,
+                MATERIAL_ID,
                 MATERIAL_CODE,
                 quantity,
                 theoreticalWeight,
                 weighWeight,
                 weighWeight.subtract(theoreticalWeight),
-                warehouseName
+                warehouseId,
+                warehouseName,
+                SOURCE_PURCHASE_ORDER_ITEM_ID
         );
+    }
+
+    private void insertMasterData() {
+        jdbcTemplate.update("""
+                INSERT INTO md_supplier (id, supplier_code, supplier_name, status, deleted_flag)
+                VALUES (?, ?, '测试供应商', '正常', FALSE)
+                """, SUPPLIER_ID, SUPPLIER_CODE);
+        jdbcTemplate.update("""
+                INSERT INTO md_material (
+                    id, material_code, brand, material, category, spec, unit,
+                    piece_weight_ton, pieces_per_bundle, unit_price, deleted_flag
+                ) VALUES (?, ?, '测试品牌', '测试材质', '测试类别', 'TEST-SPEC', '吨', 1, 1, 0, FALSE)
+                """, MATERIAL_ID, MATERIAL_CODE);
+        jdbcTemplate.update("""
+                INSERT INTO md_customer (
+                    id, customer_code, customer_name, project_name, status, deleted_flag
+                ) VALUES (?, ?, '测试客户', '测试项目', '正常', FALSE)
+                """, CUSTOMER_ID, CUSTOMER_CODE);
+        jdbcTemplate.update("""
+                INSERT INTO md_project (
+                    id, project_code, project_name, customer_id, customer_code, status, deleted_flag
+                ) VALUES (?, 'TEST-INV-PROJECT', '测试项目', ?, ?, '正常', FALSE)
+                """, PROJECT_ID, CUSTOMER_ID, CUSTOMER_CODE);
+        jdbcTemplate.update("""
+                INSERT INTO po_purchase_order (
+                    id, order_no, supplier_id, supplier_code, supplier_name, order_date,
+                    total_weight, total_amount, status, deleted_flag
+                ) VALUES (?, 'TEST-INV-SOURCE-PO', ?, ?, '测试供应商', CURRENT_TIMESTAMP,
+                          1, 1, '已审核', FALSE)
+                """, SOURCE_PURCHASE_ORDER_ID, SUPPLIER_ID, SUPPLIER_CODE);
+        jdbcTemplate.update("""
+                INSERT INTO po_purchase_order_item (
+                    id, order_id, line_no, material_id, material_code, brand, category,
+                    material, spec, unit, quantity, piece_weight_ton, pieces_per_bundle,
+                    weight_ton, unit_price, amount
+                ) VALUES (?, ?, 1, ?, ?, '测试品牌', '测试类别', '测试材质',
+                          'TEST-SPEC', '吨', 1, 1, 1, 1, 1, 1)
+                """, SOURCE_PURCHASE_ORDER_ITEM_ID, SOURCE_PURCHASE_ORDER_ID, MATERIAL_ID, MATERIAL_CODE);
+    }
+
+    private long warehouseId(String warehouseName) {
+        return warehouseIds.computeIfAbsent(warehouseName, name -> {
+            long id = nextWarehouseId++;
+            jdbcTemplate.update("""
+                    INSERT INTO md_warehouse (
+                        id, warehouse_code, warehouse_name, warehouse_type, status, deleted_flag
+                    ) VALUES (?, ?, ?, '常规仓', '正常', FALSE)
+                    """, id, "TEST-INV-WH-" + (id - BASE_ID), name);
+            return id;
+        });
+    }
+
+    private void insertSourceSalesOrder(long orderId, long itemId, long warehouseId,
+                                        BigDecimal weight, int quantity) {
+        jdbcTemplate.update("""
+                INSERT INTO so_sales_order (
+                    id, order_no, customer_id, customer_code, customer_name, project_id, project_name,
+                    delivery_date, sales_name, total_weight, total_amount, status, deleted_flag
+                ) VALUES (?, ?, ?, ?, '测试客户', ?, '测试项目', CURRENT_DATE,
+                          '测试销售', ?, 0, '已审核', FALSE)
+                """, orderId, "TEST-SOURCE-SO-" + orderId, CUSTOMER_ID, CUSTOMER_CODE,
+                PROJECT_ID, weight);
+        jdbcTemplate.update("""
+                INSERT INTO so_sales_order_item (
+                    id, order_id, line_no, material_id, material_code, brand, category, material,
+                    spec, unit, quantity, piece_weight_ton, pieces_per_bundle, weight_ton,
+                    unit_price, amount, warehouse_id, warehouse_name
+                ) VALUES (?, ?, 1, ?, ?, '测试品牌', '测试类别', '测试材质', 'TEST-SPEC', '吨',
+                          ?, 1, 1, ?, 0, 0, ?,
+                          (SELECT warehouse_name FROM md_warehouse WHERE id = ?))
+                """, itemId, orderId, MATERIAL_ID, MATERIAL_CODE, quantity, weight,
+                warehouseId, warehouseId);
     }
 }

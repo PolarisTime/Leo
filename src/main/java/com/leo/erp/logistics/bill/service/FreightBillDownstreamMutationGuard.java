@@ -2,7 +2,6 @@ package com.leo.erp.logistics.bill.service;
 
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
-import com.leo.erp.common.support.BusinessDocumentValidator;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.finance.payment.repository.PaymentAllocationRepository;
 import com.leo.erp.logistics.bill.domain.entity.FreightBill;
@@ -35,12 +34,15 @@ public class FreightBillDownstreamMutationGuard {
     }
 
     private void assertMutationAllowed(FreightBill bill, String action) {
-        String billNo = BusinessDocumentValidator.trimToNull(bill == null ? null : bill.getBillNo());
-        if (billNo == null) {
+        Long billId = bill == null ? null : bill.getId();
+        if (billId == null) {
             return;
         }
         List<FreightStatement> statements =
-                freightStatementRepository.findAllBySourceNosExcludingCurrentStatement(List.of(billNo), null);
+                freightStatementRepository.findAllBySourceFreightBillIdsExcludingCurrentStatement(
+                        List.of(billId),
+                        null
+                );
         for (FreightStatement statement : statements) {
             long paidAllocationCount = paymentAllocationRepository
                     .countSettledAllocationsByStatementIdAndBusinessTypeAndStatus(

@@ -12,14 +12,13 @@ import com.leo.erp.common.support.RedisCacheHealthCheck;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.master.carrier.domain.entity.Carrier;
-import com.leo.erp.master.carrier.domain.entity.Vehicle;
 import com.leo.erp.master.carrier.repository.CarrierRepository;
 import com.leo.erp.master.carrier.repository.VehicleRepository;
 import com.leo.erp.master.carrier.mapper.CarrierMapper;
 import com.leo.erp.master.carrier.web.dto.CarrierOptionResponse;
 import com.leo.erp.master.carrier.web.dto.CarrierRequest;
 import com.leo.erp.master.carrier.web.dto.CarrierResponse;
-import com.leo.erp.master.carrier.web.dto.VehicleItem;
+import com.leo.erp.master.carrier.web.dto.VehicleOptionResponse;
 import com.leo.erp.system.company.domain.entity.CompanySetting;
 import com.leo.erp.system.company.service.CompanySettingService;
 import org.springframework.data.domain.Page;
@@ -31,7 +30,6 @@ import org.springframework.cache.CacheManager;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
@@ -45,6 +43,7 @@ public class CarrierService extends AbstractCrudService<Carrier, CarrierRequest,
     private final CarrierMapper carrierMapper;
     private final MasterDataReferenceGuard referenceGuard;
     private final CompanySettingService companySettingService;
+    private final CarrierVehicleSynchronizer vehicleSynchronizer;
     private CacheManager cacheManager;
 
     @Autowired
@@ -61,6 +60,7 @@ public class CarrierService extends AbstractCrudService<Carrier, CarrierRequest,
         this.carrierMapper = carrierMapper;
         this.referenceGuard = referenceGuard;
         this.companySettingService = companySettingService;
+        this.vehicleSynchronizer = new CarrierVehicleSynchronizer(this::nextId, referenceGuard);
     }
 
     public CarrierService(CarrierRepository carrierRepository,
@@ -129,10 +129,9 @@ public class CarrierService extends AbstractCrudService<Carrier, CarrierRequest,
                         c.getId(),
                         c.getCarrierCode(),
                         c.getCarrierName(),
-                        c.getCarrierName(),
-                        resolveVehiclePlates(c),
                         c.getDefaultSettlementCompanyId(),
-                        c.getDefaultSettlementCompanyName()
+                        c.getDefaultSettlementCompanyName(),
+                        resolveVehicleOptions(c)
                 ))
                 .toList();
     }
@@ -215,24 +214,7 @@ public class CarrierService extends AbstractCrudService<Carrier, CarrierRequest,
         entity.setContactName(emptyToNull(request.contactName()));
         entity.setContactPhone(emptyToNull(request.contactPhone()));
         entity.setVehicleType(emptyToNull(request.vehicleType()));
-        // Sync vehicles
-        if (request.vehicles() != null) {
-            entity.getVehicles().clear();
-            for (int i = 0; i < request.vehicles().size(); i++) {
-                VehicleItem item = request.vehicles().get(i);
-                if (item.plate() != null && !item.plate().trim().isEmpty()) {
-                    Vehicle vehicle = new Vehicle();
-                    vehicle.setId(nextId());
-                    vehicle.setCarrier(entity);
-                    vehicle.setPlate(item.plate().trim());
-                    vehicle.setContact(emptyToNull(item.contact()));
-                    vehicle.setPhone(emptyToNull(item.phone()));
-                    vehicle.setRemark(emptyToNull(item.remark()));
-                    vehicle.setSortOrder(i);
-                    entity.getVehicles().add(vehicle);
-                }
-            }
-        }
+        vehicleSynchronizer.synchronize(entity, request.vehicles());
         entity.setPriceMode(request.priceMode());
         SettlementCompanySnapshot settlementCompany = resolveSettlementCompany(request.defaultSettlementCompanyId());
         entity.setDefaultSettlementCompanyId(settlementCompany.id());
@@ -262,33 +244,25 @@ public class CarrierService extends AbstractCrudService<Carrier, CarrierRequest,
     }
 
     private List<ReferenceCheck> carrierReferences(Carrier entity) {
-        String carrierCode = entity.getCarrierCode();
-        String carrierName = entity.getCarrierName();
-        List<ReferenceCheck> references = new ArrayList<>(carrierCodeReferences(carrierCode));
-        references.addAll(List.of(
-                ReferenceCheck.activeWhen(
-                        "st_freight_statement",
-                        "carrier_name",
-                        carrierName,
-                        "(carrier_code IS NULL OR BTRIM(carrier_code) = '')"
-                ),
+        Long carrierId = entity.getId();
+        return List.of(
+                ReferenceCheck.active("lg_freight_bill", "carrier_id", carrierId),
+                ReferenceCheck.active("st_freight_statement", "carrier_id", carrierId),
                 ReferenceCheck.activeWhen(
                         "fm_payment",
-                        "counterparty_name",
-                        carrierName,
-                        "business_type IN (?, ?) AND (counterparty_code IS NULL OR BTRIM(counterparty_code) = '')",
-                        "物流商",
-                        "物流付款"
+                        "counterparty_id",
+                        carrierId,
+                        "counterparty_type = ?",
+                        "物流商"
                 ),
                 ReferenceCheck.activeWhen(
                         "fm_ledger_adjustment",
-                        "counterparty_name",
-                        carrierName,
-                        "counterparty_type = ? AND (counterparty_code IS NULL OR BTRIM(counterparty_code) = '')",
+                        "counterparty_id",
+                        carrierId,
+                        "counterparty_type = ?",
                         "物流商"
                 )
-        ));
-        return List.copyOf(references);
+        );
     }
 
     private void assertCarrierCodeMutable(String carrierCode) {
@@ -324,9 +298,14 @@ public class CarrierService extends AbstractCrudService<Carrier, CarrierRequest,
         );
     }
 
-    private List<String> resolveVehiclePlates(Carrier carrier) {
+    private List<VehicleOptionResponse> resolveVehicleOptions(Carrier carrier) {
         return carrier.getVehicles().stream()
-                .map(Vehicle::getPlate)
+                .map(vehicle -> new VehicleOptionResponse(
+                        vehicle.getId(),
+                        vehicle.getId(),
+                        vehicle.getPlate(),
+                        vehicle.getPlate()
+                ))
                 .toList();
     }
 
@@ -340,4 +319,5 @@ public class CarrierService extends AbstractCrudService<Carrier, CarrierRequest,
 
     private record SettlementCompanySnapshot(Long id, String name) {
     }
+
 }

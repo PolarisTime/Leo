@@ -27,8 +27,17 @@ public class SalesContract extends AbstractAuditableEntity {
     @Column(name = "contract_no", nullable = false, unique = true, length = 64)
     private String contractNo;
 
+    @Column(name = "customer_id")
+    private Long customerId;
+
+    @Column(name = "customer_code", length = 64)
+    private String customerCode;
+
     @Column(name = "customer_name", nullable = false, length = 128)
     private String customerName;
+
+    @Column(name = "project_id")
+    private Long projectId;
 
     @Column(name = "project_name", nullable = false, length = 200)
     private String projectName;

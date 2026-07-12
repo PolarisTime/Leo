@@ -31,6 +31,9 @@ public class ReceiptAllocation {
     @Column(name = "source_statement_id", nullable = false)
     private Long sourceStatementId;
 
+    @Column(name = "source_customer_statement_id")
+    private Long sourceCustomerStatementId;
+
     @Column(name = "allocated_amount", nullable = false, precision = 14, scale = 2)
     private BigDecimal allocatedAmount;
 }

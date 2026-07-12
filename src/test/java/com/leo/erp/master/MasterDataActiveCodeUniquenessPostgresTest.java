@@ -1,5 +1,6 @@
 package com.leo.erp.master;
 
+import com.leo.erp.testsupport.StableIdentityPostgresFixtures;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -35,6 +36,8 @@ class MasterDataActiveCodeUniquenessPostgresTest {
     private static final long PROJECT_ONE_ID = 8_890_000_000_000_000_001L;
     private static final long PROJECT_TWO_ID = 8_890_000_000_000_000_002L;
     private static final long PROJECT_CONFLICT_ID = 8_890_000_000_000_000_003L;
+    private static final long CUSTOMER_ID = 8_890_000_000_000_000_101L;
+    private static final String CUSTOMER_CODE = "TEST-ACTIVE-CODE-CUSTOMER";
     private static final String REUSABLE_PROJECT_CODE = "TEST-ACTIVE-CODE-REUSE";
 
     private static final List<MasterCode> MASTER_CODES = List.of(
@@ -79,7 +82,16 @@ class MasterDataActiveCodeUniquenessPostgresTest {
                 "PostgreSQL test schema is not initialized"
         );
         postgresReady = true;
-        inTransaction(this::cleanupProjectFixtures);
+        inTransaction(() -> {
+            cleanupProjectFixtures();
+            StableIdentityPostgresFixtures.insertCustomer(
+                    jdbcTemplate,
+                    CUSTOMER_ID,
+                    CUSTOMER_CODE,
+                    "唯一性测试客户",
+                    "唯一性测试项目"
+            );
+        });
     }
 
     @AfterEach
@@ -230,11 +242,14 @@ class MasterDataActiveCodeUniquenessPostgresTest {
     }
 
     private void insertProject(long id, String projectCode, String projectName) {
-        jdbcTemplate.update("""
-                INSERT INTO md_project (
-                    id, project_code, project_name, customer_code, status, deleted_flag
-                ) VALUES (?, ?, ?, 'TEST-ACTIVE-CODE-CUSTOMER', '正常', FALSE)
-                """, id, projectCode, projectName);
+        StableIdentityPostgresFixtures.insertProject(
+                jdbcTemplate,
+                id,
+                projectCode,
+                projectName,
+                CUSTOMER_ID,
+                CUSTOMER_CODE
+        );
     }
 
     private int projectCount(boolean deleted) {
@@ -254,6 +269,7 @@ class MasterDataActiveCodeUniquenessPostgresTest {
                 PROJECT_TWO_ID,
                 PROJECT_CONFLICT_ID
         );
+        jdbcTemplate.update("DELETE FROM md_customer WHERE id = ?", CUSTOMER_ID);
     }
 
     private void inTransaction(Runnable work) {

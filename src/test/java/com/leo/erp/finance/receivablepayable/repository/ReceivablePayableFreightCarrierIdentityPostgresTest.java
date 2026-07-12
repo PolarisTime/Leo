@@ -1,6 +1,7 @@
 package com.leo.erp.finance.receivablepayable.repository;
 
 import com.leo.erp.common.api.PageQuery;
+import com.leo.erp.testsupport.StableIdentityPostgresFixtures;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -34,13 +35,18 @@ class ReceivablePayableFreightCarrierIdentityPostgresTest {
     @BeforeEach
     void setUp() {
         repository = new ReceivablePayableQueryRepository(new NamedParameterJdbcTemplate(jdbcTemplate));
+        StableIdentityPostgresFixtures.insertSettlementCompany(
+                jdbcTemplate,
+                SETTLEMENT_COMPANY_ID,
+                "稳定身份测试结算主体"
+        );
     }
 
     @Test
-    void shouldUseFreightBillCarrierCodeWhenActiveCarriersShareTheSameName() {
+    void shouldUseFreightBillCarrierIdWhenActiveCarriersShareTheSameName() {
         insertCarrier(BASE_ID, CARRIER_CODE_A);
         insertCarrier(BASE_ID + 1, CARRIER_CODE_B);
-        insertFreightBill(BASE_ID + 2, CARRIER_CODE_B);
+        insertFreightBill(BASE_ID + 2, BASE_ID + 1, CARRIER_CODE_B);
 
         var result = repository.page(
                 PageQuery.of(0, 20, "counterpartyCode", "asc"),
@@ -54,8 +60,9 @@ class ReceivablePayableFreightCarrierIdentityPostgresTest {
 
         assertThat(result).singleElement().satisfies(row -> {
             assertThat(row.counterpartyCode()).isEqualTo(CARRIER_CODE_B);
+            assertThat(row.counterpartyId()).isEqualTo(BASE_ID + 1);
             assertThat(row.id()).isEqualTo(
-                    "应付:物流商:未对账:" + SETTLEMENT_COMPANY_ID + ":" + CARRIER_CODE_B
+                    "应付:物流商:未对账:" + SETTLEMENT_COMPANY_ID + ":" + (BASE_ID + 1)
             );
             assertThat(row.recognizedAmount()).isEqualByComparingTo("120.00");
         });
@@ -69,15 +76,15 @@ class ReceivablePayableFreightCarrierIdentityPostgresTest {
                 """, id, carrierCode, CARRIER_NAME);
     }
 
-    private void insertFreightBill(long id, String carrierCode) {
+    private void insertFreightBill(long id, long carrierId, String carrierCode) {
         jdbcTemplate.update("""
                 INSERT INTO lg_freight_bill (
-                    id, bill_no, carrier_code, carrier_name, customer_name, project_name,
+                    id, bill_no, carrier_id, carrier_code, carrier_name, customer_name, project_name,
                     bill_time, unit_price, total_weight, total_freight, status,
                     settlement_company_id, settlement_company_name, deleted_flag, created_by
-                ) VALUES (?, ?, ?, ?, '稳定身份测试客户', '稳定身份测试项目', ?, 120, 1, ?, '已审核',
+                ) VALUES (?, ?, ?, ?, ?, '稳定身份测试客户', '稳定身份测试项目', ?, 120, 1, ?, '已审核',
                           ?, '稳定身份测试结算主体', FALSE, 0)
-                """, id, "TEST-FREIGHT-BILL-" + id, carrierCode, CARRIER_NAME,
+                """, id, "TEST-FREIGHT-BILL-" + id, carrierId, carrierCode, CARRIER_NAME,
                 LocalDateTime.of(2026, 7, 11, 10, 0), new BigDecimal("120.00"), SETTLEMENT_COMPANY_ID);
     }
 }

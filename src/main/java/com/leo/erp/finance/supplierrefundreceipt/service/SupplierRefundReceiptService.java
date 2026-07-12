@@ -114,6 +114,7 @@ public class SupplierRefundReceiptService extends AbstractCrudService<
         return new SupplierRefundReceiptRequest(
                 resolveCreateBusinessNo(MODULE_KEY, request.refundReceiptNo(), entityId),
                 request.purchaseRefundId(),
+                request.supplierId(),
                 request.receiptDate(),
                 request.receiptMethod(),
                 request.amount(),
@@ -131,6 +132,7 @@ public class SupplierRefundReceiptService extends AbstractCrudService<
         return new SupplierRefundReceiptRequest(
                 entity.getRefundReceiptNo(),
                 request.purchaseRefundId(),
+                request.supplierId(),
                 request.receiptDate(),
                 request.receiptMethod(),
                 request.amount(),
@@ -200,6 +202,7 @@ public class SupplierRefundReceiptService extends AbstractCrudService<
 
         entity.setRefundReceiptNo(request.refundReceiptNo());
         entity.setPurchaseRefundId(purchaseRefund.getId());
+        entity.setSupplierId(resolveSourceSupplierId(purchaseRefund, request.supplierId()));
         entity.setSupplierCode(trimRequired(purchaseRefund.getSupplierCode(), "采购退款单供应商编码"));
         entity.setSupplierName(trimRequired(purchaseRefund.getSupplierName(), "采购退款单供应商名称"));
         applySettlementCompanySnapshot(entity, purchaseRefund);
@@ -218,6 +221,7 @@ public class SupplierRefundReceiptService extends AbstractCrudService<
             String nextStatus
     ) {
         PurchaseRefund purchaseRefund = lockAndRequireAuditedRefund(entity, entity.getPurchaseRefundId());
+        assertReceiptSupplierMatchesSource(entity, purchaseRefund);
         if (StatusConstants.RECEIVED.equals(nextStatus)) {
             assertReceiptAmountWithinRefund(purchaseRefund, entity.getAmount(), entity.getId());
         }
@@ -225,7 +229,8 @@ public class SupplierRefundReceiptService extends AbstractCrudService<
 
     @Override
     protected void beforeDelete(SupplierRefundReceipt entity) {
-        lockAndRequireAuditedRefund(entity, entity.getPurchaseRefundId());
+        PurchaseRefund purchaseRefund = lockAndRequireAuditedRefund(entity, entity.getPurchaseRefundId());
+        assertReceiptSupplierMatchesSource(entity, purchaseRefund);
     }
 
     @Override
@@ -340,6 +345,27 @@ public class SupplierRefundReceiptService extends AbstractCrudService<
         }
         receipt.setSettlementCompanyId(settlementCompanyId);
         receipt.setSettlementCompanyName(settlementCompanyName);
+    }
+
+    private Long resolveSourceSupplierId(PurchaseRefund purchaseRefund, Long requestedSupplierId) {
+        Long sourceSupplierId = purchaseRefund.getSupplierId();
+        if (sourceSupplierId == null) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "采购退款单缺少供应商ID");
+        }
+        if (requestedSupplierId != null && !requestedSupplierId.equals(sourceSupplierId)) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "供应商ID与采购退款单不一致");
+        }
+        return sourceSupplierId;
+    }
+
+    private void assertReceiptSupplierMatchesSource(
+            SupplierRefundReceipt receipt,
+            PurchaseRefund purchaseRefund
+    ) {
+        if (receipt.getSupplierId() == null) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "供应商退款到账单缺少供应商ID");
+        }
+        resolveSourceSupplierId(purchaseRefund, receipt.getSupplierId());
     }
 
     private BigDecimal normalizeAmount(BigDecimal amount) {

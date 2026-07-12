@@ -37,6 +37,9 @@ public class FreightStatement extends AbstractAuditableEntity {
     @Column(name = "carrier_code", length = 64)
     private String carrierCode;
 
+    @Column(name = "carrier_id")
+    private Long carrierId;
+
     @Column(name = "settlement_company_id")
     private Long settlementCompanyId;
 

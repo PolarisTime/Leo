@@ -22,9 +22,13 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.util.Collection;
 import java.util.LinkedHashSet;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.function.LongSupplier;
 import java.util.stream.Collectors;
@@ -58,15 +62,18 @@ public class FreightStatementSourceService {
     Page<FreightStatementCandidateResponse> candidatePage(PageQuery query,
                                                            PageFilter filter,
                                                            String carrierCode) {
-        Set<String> occupiedBillNos = collectOccupiedBillNos(null);
+        Set<Long> occupiedBillIds = toIdSet(
+                repository.findOccupiedSourceFreightBillIdsExcludingCurrentStatement(filter.currentRecordId())
+        );
         Specification<FreightBill> spec = Specs.<FreightBill>notDeleted()
                 .and(Specs.keywordLike(filter.keyword(), FREIGHT_BILL_CANDIDATE_SEARCH_FIELDS))
+                .and(Specs.equalValueIfPresent("carrierId", filter.carrierId()))
                 .and(Specs.equalIfPresent("carrierCode", carrierCode))
                 .and(Specs.equalIfPresent("carrierName", filter.name()))
                 .and(Specs.equalValueIfPresent("settlementCompanyId", filter.settlementCompanyId()))
                 .and(Specs.equalIfPresent("status", StatusConstants.AUDITED))
                 .and(Specs.betweenIfPresent("billTime", filter.startDate(), filter.endDate()))
-                .and(StatementCandidateSupport.excludeFieldValues("billNo", occupiedBillNos));
+                .and(StatementCandidateSupport.excludeFieldValues("id", occupiedBillIds));
         return freightBillRepository.findAll(DataScopeContext.apply(spec), query.toPageable("id"))
                 .map(this::toCandidateResponse);
     }
@@ -74,8 +81,10 @@ public class FreightStatementSourceService {
     SourceApplyResult applyItems(FreightStatement entity,
                                  FreightStatementCommand command,
                                  LongSupplier nextIdSupplier) {
+        validateStableSourceIds(command.items());
         List<FreightBill> sourceBills = loadSourceBills(command, entity.getId());
-        CarrierSnapshot carrier = resolveStatementCarrier(sourceBills, command.carrierCode());
+        CarrierSnapshot carrier = resolveStatementCarrier(sourceBills, command.carrierId(), command.carrierCode());
+        entity.setCarrierId(carrier.id());
         entity.setCarrierCode(carrier.code());
         entity.setCarrierName(carrier.name());
         SettlementCompanySnapshot settlementCompany = resolveStatementSettlementCompany(sourceBills);
@@ -93,32 +102,39 @@ public class FreightStatementSourceService {
         );
         for (int i = 0; i < command.items().size(); i++) {
             FreightStatementItemCommand source = command.items().get(i);
-            FreightBill sourceBill = resolveSourceBill(sourceBills, source.sourceNo(), i + 1);
+            FreightBill sourceBill = resolveSourceBill(sourceBills, source, i + 1);
             FreightBillItem sourceBillItem = resolveSourceBillItem(sourceBill, source, i + 1);
+            validateRequestedIdentity(source, sourceBill, sourceBillItem, i + 1);
             FreightStatementItem item = items.get(i);
             item.setFreightStatement(entity);
             item.setLineNo(i + 1);
             item.setSourceNo(sourceBill.getBillNo());
+            item.setSourceFreightBillId(sourceBill.getId());
+            item.setSourceFreightBillItemId(sourceBillItem.getId());
             item.setSourceSalesOutboundItemId(sourceBillItem.getSourceSalesOutboundItemId());
             item.setSettlementCompanyId(sourceBillItem.getSettlementCompanyId());
             item.setSettlementCompanyName(sourceBillItem.getSettlementCompanyName());
-            item.setCustomerName(source.customerName());
-            item.setProjectName(source.projectName());
-            item.setMaterialCode(source.materialCode());
-            item.setMaterialName(source.materialName());
-            item.setBrand(source.brand());
-            item.setCategory(source.category());
-            item.setMaterial(source.material());
-            item.setSpec(source.spec());
-            item.setLength(source.length());
-            item.setQuantity(source.quantity());
-            item.setQuantityUnit(TradeItemCalculator.normalizeQuantityUnit(source.quantityUnit()));
-            item.setPieceWeightTon(source.pieceWeightTon());
-            item.setPiecesPerBundle(source.piecesPerBundle());
-            item.setBatchNo(source.batchNo());
-            BigDecimal weightTon = TradeItemCalculator.calculateWeightTon(source.quantity(), source.pieceWeightTon());
+            item.setCustomerId(sourceBillItem.getCustomerId());
+            item.setCustomerName(sourceBillItem.getCustomerName());
+            item.setProjectId(sourceBillItem.getProjectId());
+            item.setProjectName(sourceBillItem.getProjectName());
+            item.setMaterialId(sourceBillItem.getMaterialId());
+            item.setMaterialCode(sourceBillItem.getMaterialCode());
+            item.setMaterialName(sourceBillItem.getMaterialName());
+            item.setBrand(sourceBillItem.getBrand());
+            item.setCategory(sourceBillItem.getCategory());
+            item.setMaterial(sourceBillItem.getMaterial());
+            item.setSpec(sourceBillItem.getSpec());
+            item.setLength(sourceBillItem.getLength());
+            item.setQuantity(sourceBillItem.getQuantity());
+            item.setQuantityUnit(TradeItemCalculator.normalizeQuantityUnit(sourceBillItem.getQuantityUnit()));
+            item.setPieceWeightTon(sourceBillItem.getPieceWeightTon());
+            item.setPiecesPerBundle(sourceBillItem.getPiecesPerBundle());
+            item.setBatchNo(sourceBillItem.getBatchNo());
+            BigDecimal weightTon = TradeItemCalculator.scaleWeightTon(sourceBillItem.getWeightTon());
             item.setWeightTon(weightTon);
-            item.setWarehouseName(source.warehouseName());
+            item.setWarehouseId(sourceBillItem.getWarehouseId());
+            item.setWarehouseName(sourceBillItem.getWarehouseName());
             totalWeight = totalWeight.add(weightTon);
         }
         entity.getItems().sort(java.util.Comparator.comparing(FreightStatementItem::getLineNo));
@@ -129,38 +145,25 @@ public class FreightStatementSourceService {
         return new SourceApplyResult(totalWeight, totalFreight);
     }
 
-    Set<String> collectOccupiedBillNos(Long currentStatementId) {
-        Specification<FreightStatement> spec = Specs.notDeleted();
-        if (currentStatementId != null) {
-            spec = spec.and((root, query, cb) -> cb.notEqual(root.get("id"), currentStatementId));
-        }
-        Set<String> occupiedBillNos = new LinkedHashSet<>();
-        repository.findAll(spec).stream()
-                .flatMap(entity -> entity.getItems().stream())
-                .map(FreightStatementItem::getSourceNo)
-                .filter(v -> v != null && !v.isBlank())
-                .map(String::trim)
-                .forEach(occupiedBillNos::add);
-        return occupiedBillNos;
-    }
-
     private List<FreightBill> loadSourceBills(FreightStatementCommand command, Long currentStatementId) {
-        Set<String> requestedBillNos = command.items().stream()
-                .map(FreightStatementItemCommand::sourceNo)
-                .filter(value -> value != null && !value.isBlank())
-                .map(String::trim)
+        Set<Long> requestedBillIds = command.items().stream()
+                .map(FreightStatementItemCommand::sourceFreightBillId)
                 .collect(Collectors.toCollection(LinkedHashSet::new));
-        if (requestedBillNos.isEmpty()) {
+        if (requestedBillIds.isEmpty()) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "物流对账单来源物流单不能为空");
         }
-        List<FreightBill> bills = freightBillRepository.findByBillNoInAndDeletedFlagFalse(requestedBillNos);
-        Map<String, FreightBill> billMap = bills.stream()
-                .collect(Collectors.toMap(FreightBill::getBillNo, bill -> bill));
-        for (String billNo : requestedBillNos) {
-            if (!billMap.containsKey(billNo)) {
-                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "来源物流单" + billNo + "不存在");
+        Map<Long, FreightBill> billById = new LinkedHashMap<>();
+        if (!requestedBillIds.isEmpty()) {
+            freightBillRepository.findByIdInAndDeletedFlagFalse(requestedBillIds)
+                    .forEach(bill -> billById.put(bill.getId(), bill));
+            for (Long requestedBillId : requestedBillIds) {
+                if (!billById.containsKey(requestedBillId)) {
+                    throw new BusinessException(ErrorCode.BUSINESS_ERROR,
+                            "来源物流单ID" + requestedBillId + "不存在");
+                }
             }
         }
+        List<FreightBill> bills = new ArrayList<>(billById.values());
         for (FreightBill bill : bills) {
             DataScopeContext.assertCanAccess(bill);
             if (command.settlementCompanyId() != null
@@ -172,55 +175,85 @@ public class FreightStatementSourceService {
                 throw new BusinessException(ErrorCode.BUSINESS_ERROR, "来源物流单" + bill.getBillNo() + "未审核，不能生成物流对账单");
             }
         }
-        assertSourceBillsNotOccupied(requestedBillNos, currentStatementId);
+        assertSourceBillsNotOccupied(bills, currentStatementId);
         return bills;
     }
 
-    private void assertSourceBillsNotOccupied(Set<String> requestedBillNos, Long currentStatementId) {
-        List<FreightStatement> occupiedStatements =
-                repository.findAllBySourceNosExcludingCurrentStatement(requestedBillNos, currentStatementId);
-        Set<String> occupiedBillNos = occupiedStatements.stream()
-                .flatMap(entity -> entity.getItems().stream())
-                .map(FreightStatementItem::getSourceNo)
-                .filter(v -> v != null && !v.isBlank())
-                .map(String::trim)
+    private void assertSourceBillsNotOccupied(List<FreightBill> requestedBills, Long currentStatementId) {
+        Set<Long> requestedBillIds = requestedBills.stream()
+                .map(FreightBill::getId)
                 .collect(Collectors.toCollection(LinkedHashSet::new));
-        for (String billNo : requestedBillNos) {
-            if (occupiedBillNos.contains(billNo)) {
-                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "来源物流单" + billNo + "已生成物流对账单");
+        Set<Long> occupiedBillIds = toIdSet(
+                repository.findMatchingOccupiedSourceFreightBillIdsExcludingCurrentStatement(
+                        requestedBillIds,
+                        currentStatementId
+                )
+        );
+        for (FreightBill bill : requestedBills) {
+            if (occupiedBillIds.contains(bill.getId())) {
+                throw new BusinessException(ErrorCode.BUSINESS_ERROR,
+                        "来源物流单" + bill.getBillNo() + "已生成物流对账单");
             }
         }
     }
 
-    private FreightBill resolveSourceBill(List<FreightBill> bills, String sourceNo, int lineNo) {
-        String normalizedSourceNo = sourceNo == null ? "" : sourceNo.trim();
-        for (FreightBill bill : bills) {
-            if (bill.getBillNo().equals(normalizedSourceNo)) {
-                return bill;
-            }
-        }
-        throw new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行来源物流单不存在");
+    private FreightBill resolveSourceBill(List<FreightBill> bills,
+                                          FreightStatementItemCommand source,
+                                          int lineNo) {
+        return bills.stream()
+                .filter(bill -> source.sourceFreightBillId().equals(bill.getId()))
+                .findFirst()
+                .orElseThrow(() -> new BusinessException(
+                        ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行来源物流单不存在"));
     }
 
     private FreightBillItem resolveSourceBillItem(FreightBill sourceBill, FreightStatementItemCommand source, int lineNo) {
-        if (source.sourceSalesOutboundItemId() != null) {
-            return sourceBill.getItems().stream()
-                    .filter(item -> source.sourceSalesOutboundItemId().equals(item.getSourceSalesOutboundItemId()))
-                    .findFirst()
-                    .orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行来源物流单明细不存在"));
-        }
         return sourceBill.getItems().stream()
-                .filter(item -> normalizeText(source.materialCode()).equals(normalizeText(item.getMaterialCode())))
-                .filter(item -> normalizeText(source.batchNo()).equals(normalizeText(item.getBatchNo())))
-                .filter(item -> normalizeText(source.warehouseName()).equals(normalizeText(item.getWarehouseName())))
-                .filter(item -> java.util.Objects.equals(source.quantity(), item.getQuantity()))
+                .filter(item -> source.sourceFreightBillItemId().equals(item.getId()))
                 .findFirst()
                 .orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行来源物流单明细不存在"));
     }
 
-    private String normalizeText(String value) {
-        String normalized = trimToNull(value);
-        return normalized == null ? "" : normalized;
+    private void validateStableSourceIds(List<FreightStatementItemCommand> items) {
+        Set<Long> sourceItemIds = new LinkedHashSet<>();
+        for (int index = 0; index < items.size(); index++) {
+            FreightStatementItemCommand item = items.get(index);
+            int lineNo = index + 1;
+            if (item.sourceFreightBillId() == null) {
+                throw new BusinessException(
+                        ErrorCode.VALIDATION_ERROR,
+                        "第" + lineNo + "行来源物流单ID不能为空"
+                );
+            }
+            if (item.sourceFreightBillItemId() == null) {
+                throw new BusinessException(
+                        ErrorCode.VALIDATION_ERROR,
+                        "第" + lineNo + "行来源物流单明细ID不能为空"
+                );
+            }
+            if (!sourceItemIds.add(item.sourceFreightBillItemId())) {
+                throw new BusinessException(ErrorCode.VALIDATION_ERROR, "来源物流单明细ID重复");
+            }
+        }
+    }
+
+    private void validateRequestedIdentity(FreightStatementItemCommand requested,
+                                           FreightBill sourceBill,
+                                           FreightBillItem sourceItem,
+                                           int lineNo) {
+        requireSameId(requested.sourceFreightBillId(), sourceBill.getId(), lineNo, "来源物流单");
+        requireSameId(requested.sourceFreightBillItemId(), sourceItem.getId(), lineNo, "来源物流单明细");
+        requireSameId(requested.customerId(), sourceItem.getCustomerId(), lineNo, "客户");
+        requireSameId(requested.projectId(), sourceItem.getProjectId(), lineNo, "项目");
+        requireSameId(requested.materialId(), sourceItem.getMaterialId(), lineNo, "商品");
+        requireSameId(requested.warehouseId(), sourceItem.getWarehouseId(), lineNo, "仓库");
+    }
+
+    private void requireSameId(Long requestedId, Long sourceId, int lineNo, String fieldName) {
+        if (requestedId != null && !requestedId.equals(sourceId)) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR,
+                    "第" + lineNo + "行" + fieldName + "ID与来源物流单不一致");
+        }
     }
 
     private SettlementCompanySnapshot resolveStatementSettlementCompany(List<FreightBill> sourceBills) {
@@ -238,9 +271,15 @@ public class FreightStatementSourceService {
         return snapshots.get(0);
     }
 
-    private CarrierSnapshot resolveStatementCarrier(List<FreightBill> sourceBills, String requestedCarrierCode) {
+    private CarrierSnapshot resolveStatementCarrier(List<FreightBill> sourceBills,
+                                                    Long requestedCarrierId,
+                                                    String requestedCarrierCode) {
         List<CarrierSnapshot> snapshots = sourceBills.stream()
-                .map(bill -> new CarrierSnapshot(trimToNull(bill.getCarrierCode()), trimToNull(bill.getCarrierName())))
+                .map(bill -> new CarrierSnapshot(
+                        bill.getCarrierId(),
+                        trimToNull(bill.getCarrierCode()),
+                        trimToNull(bill.getCarrierName())
+                ))
                 .toList();
         if (snapshots.stream().anyMatch(snapshot -> snapshot.code() == null)) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "来源物流单物流商编码缺失，不能生成物流对账单");
@@ -250,6 +289,18 @@ public class FreightStatementSourceService {
                 .collect(Collectors.toCollection(LinkedHashSet::new));
         if (carrierCodes.size() != 1) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "来源物流单存在不同物流商编码，不能合并生成物流对账单");
+        }
+        Set<Long> carrierIds = snapshots.stream()
+                .map(CarrierSnapshot::id)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        if (carrierIds.size() > 1) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR,
+                    "来源物流单存在不同物流商ID，不能合并生成物流对账单");
+        }
+        Long sourceCarrierId = carrierIds.stream().findFirst().orElse(null);
+        if (requestedCarrierId != null && !Objects.equals(requestedCarrierId, sourceCarrierId)) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "物流商ID与来源物流单不一致");
         }
         String sourceCarrierCode = carrierCodes.iterator().next();
         String normalizedRequestedCode = trimToNull(requestedCarrierCode);
@@ -266,7 +317,7 @@ public class FreightStatementSourceService {
                         ErrorCode.BUSINESS_ERROR,
                         "来源物流单物流商名称缺失，不能生成物流对账单"
                 ));
-        return new CarrierSnapshot(sourceCarrierCode, sourceCarrierName);
+        return new CarrierSnapshot(sourceCarrierId, sourceCarrierCode, sourceCarrierName);
     }
 
     private FreightStatementCandidateResponse toCandidateResponse(FreightBill bill) {
@@ -283,6 +334,7 @@ public class FreightStatementSourceService {
                 bill.getTotalWeight(),
                 bill.getTotalFreight(),
                 bill.getStatus()
+                , bill.getCarrierId()
         );
     }
 
@@ -299,9 +351,13 @@ public class FreightStatementSourceService {
         return value.trim();
     }
 
+    private Set<Long> toIdSet(Collection<Long> ids) {
+        return ids == null ? Set.of() : new LinkedHashSet<>(ids);
+    }
+
     private record SettlementCompanySnapshot(Long id, String name) {
     }
 
-    private record CarrierSnapshot(String code, String name) {
+    private record CarrierSnapshot(Long id, String code, String name) {
     }
 }

@@ -1,6 +1,7 @@
 package com.leo.erp.sales.outbound.web;
 
 import com.leo.erp.common.api.ApiResponse;
+import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.api.PageResponse;
 import com.leo.erp.common.web.dto.StatusUpdateRequest;
@@ -8,9 +9,13 @@ import com.leo.erp.sales.outbound.service.SalesOutboundService;
 import com.leo.erp.sales.outbound.web.dto.SalesOutboundRequest;
 import com.leo.erp.sales.outbound.web.dto.SalesOutboundResponse;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 
+import java.lang.reflect.Method;
+import java.time.LocalDate;
+import java.util.Arrays;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -63,10 +68,46 @@ class SalesOutboundControllerTest {
         PageQuery query = new PageQuery(0, 20, null, null);
         when(service.page(any(), any())).thenReturn(page);
 
-        ApiResponse<PageResponse<SalesOutboundResponse>> response = controller.page(query, "test", "customer", "project", 7L, "active", null, null);
+        ApiResponse<PageResponse<SalesOutboundResponse>> response = controller.page(
+                query, "test", null, "customer", null, "project", 7L, "active", null, null
+        );
 
         assertThat(response.code()).isEqualTo(0);
         assertThat(response.data().content()).hasSize(1);
+    }
+
+    @Test
+    void pagePassesStableCustomerAndProjectIds() throws Exception {
+        PageQuery query = new PageQuery(0, 20, null, null);
+        when(service.page(any(), any())).thenReturn(Page.empty());
+        Class<?>[] parameterTypes = {
+                PageQuery.class,
+                String.class,
+                Long.class,
+                String.class,
+                Long.class,
+                String.class,
+                Long.class,
+                String.class,
+                LocalDate.class,
+                LocalDate.class
+        };
+        Method method = Arrays.stream(SalesOutboundController.class.getMethods())
+                .filter(candidate -> candidate.getName().equals("page"))
+                .filter(candidate -> Arrays.equals(candidate.getParameterTypes(), parameterTypes))
+                .findFirst()
+                .orElse(null);
+
+        assertThat(method).as("销售出库列表接口应接收 customerId/projectId").isNotNull();
+        method.invoke(
+                controller,
+                query, "test", 101L, "customer", 102L, "project", 7L, "active", null, null
+        );
+
+        ArgumentCaptor<PageFilter> filterCaptor = ArgumentCaptor.forClass(PageFilter.class);
+        verify(service).page(eq(query), filterCaptor.capture());
+        assertThat(filterCaptor.getValue().customerId()).isEqualTo(101L);
+        assertThat(filterCaptor.getValue().projectId()).isEqualTo(102L);
     }
 
     @Test

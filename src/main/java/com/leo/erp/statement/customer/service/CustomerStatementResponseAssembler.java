@@ -39,7 +39,8 @@ public class CustomerStatementResponseAssembler {
                 response.status(),
                 response.deletedFlag(),
                 response.remark(),
-                entity.getItems().stream().map(this::toItemResponse).toList()
+                entity.getItems().stream().map(this::toItemResponse).toList(),
+                entity.getCustomerId()
         );
     }
 
@@ -63,7 +64,12 @@ public class CustomerStatementResponseAssembler {
                 item.getPiecesPerBundle(),
                 item.getWeightTon(),
                 item.getUnitPrice(),
-                item.getAmount()
+                item.getAmount(),
+                item.getCustomerId(),
+                item.getProjectId(),
+                item.getMaterialId(),
+                item.getWarehouseId(),
+                item.getBatchNoNormalized()
         );
     }
 }

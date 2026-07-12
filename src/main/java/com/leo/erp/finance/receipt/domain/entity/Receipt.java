@@ -41,7 +41,7 @@ public class Receipt extends AbstractAuditableEntity {
     private String projectName;
 
     @Column(name = "source_customer_statement_id")
-    private Long sourceStatementId;
+    private Long sourceCustomerStatementId;
 
     @Column(name = "receipt_date", nullable = false)
     private LocalDate receiptDate;
@@ -57,6 +57,9 @@ public class Receipt extends AbstractAuditableEntity {
 
     @Column(name = "customer_code", length = 64)
     private String customerCode;
+
+    @Column(name = "customer_id")
+    private Long customerId;
 
     @Column(name = "project_id")
     private Long projectId;
@@ -78,4 +81,14 @@ public class Receipt extends AbstractAuditableEntity {
 
     @Transient
     private Set<Long> originalAllocationStatementIds = new LinkedHashSet<>();
+
+    @Deprecated(forRemoval = false)
+    public Long getSourceStatementId() {
+        return sourceCustomerStatementId;
+    }
+
+    @Deprecated(forRemoval = false)
+    public void setSourceStatementId(Long sourceStatementId) {
+        this.sourceCustomerStatementId = sourceStatementId;
+    }
 }

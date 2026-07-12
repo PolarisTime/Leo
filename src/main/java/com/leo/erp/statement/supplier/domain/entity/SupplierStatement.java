@@ -37,6 +37,9 @@ public class SupplierStatement extends AbstractAuditableEntity {
     @Column(name = "supplier_code", length = 64)
     private String supplierCode;
 
+    @Column(name = "supplier_id")
+    private Long supplierId;
+
     @Column(name = "settlement_company_id")
     private Long settlementCompanyId;
 

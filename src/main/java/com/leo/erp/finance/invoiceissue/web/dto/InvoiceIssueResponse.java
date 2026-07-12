@@ -20,8 +20,31 @@ public record InvoiceIssueResponse(
         boolean deletedFlag,
         String operatorName,
         String remark,
-        List<InvoiceIssueItemResponse> items
+        List<InvoiceIssueItemResponse> items,
+        Long customerId,
+        Long projectId
 ) {
+    public InvoiceIssueResponse(Long id,
+                                String issueNo,
+                                String invoiceNo,
+                                String customerName,
+                                String projectName,
+                                Long settlementCompanyId,
+                                String settlementCompanyName,
+                                LocalDate invoiceDate,
+                                String invoiceType,
+                                BigDecimal amount,
+                                BigDecimal taxAmount,
+                                String status,
+                                boolean deletedFlag,
+                                String operatorName,
+                                String remark,
+                                List<InvoiceIssueItemResponse> items) {
+        this(id, issueNo, invoiceNo, customerName, projectName, settlementCompanyId, settlementCompanyName,
+                invoiceDate, invoiceType, amount, taxAmount, status, deletedFlag, operatorName, remark, items,
+                null, null);
+    }
+
     public InvoiceIssueResponse(Long id,
                                 String issueNo,
                                 String invoiceNo,
@@ -38,7 +61,7 @@ public record InvoiceIssueResponse(
                                 String remark,
                                 List<InvoiceIssueItemResponse> items) {
         this(id, issueNo, invoiceNo, customerName, projectName, settlementCompanyId, settlementCompanyName,
-                invoiceDate, invoiceType, amount, taxAmount, status, false, operatorName, remark, items);
+                invoiceDate, invoiceType, amount, taxAmount, status, false, operatorName, remark, items, null, null);
     }
 
     public InvoiceIssueResponse(Long id,
@@ -55,6 +78,6 @@ public record InvoiceIssueResponse(
                                 String remark,
                                 List<InvoiceIssueItemResponse> items) {
         this(id, issueNo, invoiceNo, customerName, projectName, null, null, invoiceDate, invoiceType,
-                amount, taxAmount, status, false, operatorName, remark, items);
+                amount, taxAmount, status, false, operatorName, remark, items, null, null);
     }
 }

@@ -25,6 +25,7 @@ class CarrierResponseTest {
         assertThat(response.contactPhone()).isEqualTo("13900139000");
         assertThat(response.vehicleType()).isEqualTo("货车");
         assertThat(response.vehicles()).hasSize(1);
+        assertThat(response.vehicles().get(0).vehicleId()).isEqualTo(1L);
         assertThat(response.vehicles().get(0).plate()).isEqualTo("京A12345");
         assertThat(response.priceMode()).isEqualTo("固定价格");
         assertThat(response.status()).isEqualTo("启用");

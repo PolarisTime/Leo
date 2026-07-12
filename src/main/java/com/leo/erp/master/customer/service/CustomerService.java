@@ -257,71 +257,41 @@ public class CustomerService extends AbstractCrudService<Customer, CustomerReque
     }
 
     private List<ReferenceCheck> customerReferences(Customer entity) {
-        String customerCode = entity.getCustomerCode();
-        String customerName = entity.getCustomerName();
+        Long customerId = entity.getId();
         return List.of(
-                ReferenceCheck.active("md_project", "customer_code", customerCode),
-                ReferenceCheck.active("so_sales_order", "customer_code", customerCode),
-                ReferenceCheck.active("fm_receipt", "customer_code", customerCode),
-                ReferenceCheck.active("st_customer_statement", "customer_code", customerCode),
-                ReferenceCheck.when(
+                ReferenceCheck.active("md_project", "customer_id", customerId),
+                ReferenceCheck.active("so_sales_order", "customer_id", customerId),
+                ReferenceCheck.active("ct_sales_contract", "customer_id", customerId),
+                ReferenceCheck.active("so_sales_outbound", "customer_id", customerId),
+                ReferenceCheck.active("fm_invoice_issue", "customer_id", customerId),
+                ReferenceCheck.active("st_customer_statement", "customer_id", customerId),
+                ReferenceCheck.ofActiveParent(
                         "st_customer_statement_item",
-                        "customer_code",
-                        customerCode,
-                        "EXISTS (SELECT 1 FROM st_customer_statement parent "
-                                + "WHERE parent.id = st_customer_statement_item.statement_id "
-                                + "AND parent.deleted_flag = false)"
-                ),
-                ReferenceCheck.activeWhen(
-                        "fm_ledger_adjustment",
-                        "counterparty_code",
-                        customerCode,
-                        "counterparty_type = ?",
-                        "客户"
-                ),
-                ReferenceCheck.activeWhen(
-                        "so_sales_order",
-                        "customer_name",
-                        customerName,
-                        "(customer_code IS NULL OR BTRIM(customer_code) = '')"
-                ),
-                ReferenceCheck.active("so_sales_outbound", "customer_name", customerName),
-                ReferenceCheck.active("lg_freight_bill", "customer_name", customerName),
-                ReferenceCheck.when(
-                        "lg_freight_bill_item",
-                        "customer_name",
-                        customerName,
-                        "EXISTS (SELECT 1 FROM lg_freight_bill parent "
-                                + "WHERE parent.id = lg_freight_bill_item.bill_id "
-                                + "AND parent.deleted_flag = false)"
-                ),
-                ReferenceCheck.active("ct_sales_contract", "customer_name", customerName),
-                ReferenceCheck.activeWhen(
+                        "customer_id",
+                        customerId,
                         "st_customer_statement",
-                        "customer_name",
-                        customerName,
-                        "(customer_code IS NULL OR BTRIM(customer_code) = '')"
+                        "statement_id"
                 ),
-                ReferenceCheck.when(
+                ReferenceCheck.active("fm_receipt", "customer_id", customerId),
+                ReferenceCheck.ofActiveParent(
+                        "lg_freight_bill_item",
+                        "customer_id",
+                        customerId,
+                        "lg_freight_bill",
+                        "bill_id"
+                ),
+                ReferenceCheck.ofActiveParent(
                         "st_freight_statement_item",
-                        "customer_name",
-                        customerName,
-                        "EXISTS (SELECT 1 FROM st_freight_statement parent "
-                                + "WHERE parent.id = st_freight_statement_item.statement_id "
-                                + "AND parent.deleted_flag = false)"
+                        "customer_id",
+                        customerId,
+                        "st_freight_statement",
+                        "statement_id"
                 ),
-                ReferenceCheck.activeWhen(
-                        "fm_receipt",
-                        "customer_name",
-                        customerName,
-                        "(customer_code IS NULL OR BTRIM(customer_code) = '')"
-                ),
-                ReferenceCheck.active("fm_invoice_issue", "customer_name", customerName),
                 ReferenceCheck.activeWhen(
                         "fm_ledger_adjustment",
-                        "counterparty_name",
-                        customerName,
-                        "counterparty_type = ? AND (counterparty_code IS NULL OR BTRIM(counterparty_code) = '')",
+                        "counterparty_id",
+                        customerId,
+                        "counterparty_type = ?",
                         "客户"
                 )
         );

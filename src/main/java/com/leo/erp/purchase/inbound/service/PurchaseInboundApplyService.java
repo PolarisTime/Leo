@@ -46,9 +46,6 @@ public class PurchaseInboundApplyService {
     void applyItems(PurchaseInbound inbound, PurchaseInboundRequest request, LongSupplier nextIdSupplier) {
         BigDecimal totalWeight = BigDecimal.ZERO;
         BigDecimal totalAmount = BigDecimal.ZERO;
-        Map<String, TradeMaterialSnapshot> materialMap = tradeItemMaterialSupport.loadMaterialMap(
-                request.items().stream().map(PurchaseInboundItemRequest::materialCode).toList()
-        );
         List<Long> previousSourcePurchaseOrderItemIds = inbound.getItems().stream()
                 .map(PurchaseInboundItem::getSourcePurchaseOrderItemId)
                 .filter(id -> id != null)
@@ -63,6 +60,8 @@ public class PurchaseInboundApplyService {
                 new HashMap<>();
         LinkedHashSet<String> sourcePurchaseOrderNos = new LinkedHashSet<>();
         String firstLineWarehouseName = null;
+        Long firstLineWarehouseId = null;
+        LinkedHashSet<Long> warehouseIds = new LinkedHashSet<>();
         List<PurchaseInboundItem> managedItems = inbound.getItems();
         List<PurchaseInboundItem> items = ManagedEntityItemSupport.syncById(
                 new ArrayList<>(managedItems),
@@ -77,9 +76,18 @@ public class PurchaseInboundApplyService {
         for (int i = 0; i < request.items().size(); i++) {
             PurchaseInboundItemRequest source = request.items().get(i);
             int lineNo = i + 1;
-            String materialCode = tradeItemMaterialSupport.normalizeMaterialCode(source.materialCode(), lineNo);
-            TradeMaterialSnapshot material = materialMap.get(materialCode);
             PurchaseInboundItem item = items.get(i);
+            PurchaseOrderItem sourceOrderItem = source.sourcePurchaseOrderItemId() == null
+                    ? null
+                    : sourcePurchaseOrderItemMap.get(source.sourcePurchaseOrderItemId());
+            Long materialId = source.materialId() != null
+                    ? source.materialId()
+                    : sourceOrderItem == null ? null : sourceOrderItem.getMaterialId();
+            TradeMaterialSnapshot material = tradeItemMaterialSupport.resolveMaterial(
+                    materialId,
+                    source.materialCode(),
+                    lineNo
+            );
 
             sourceValidator.validateLine(source, lineNo, request, sourceContext);
             WeightSettlementResult weightSettlement = weightSettlementService.resolveWeightSettlement(
@@ -87,10 +95,11 @@ public class PurchaseInboundApplyService {
                     weightSettlementService.resolveLineSettlementMode(source, request, lineNo));
 
             InboundItemMapper.ItemMappingResult result = inboundItemMapper.applyItemFields(
-                    inbound, source, item, lineNo, materialCode, material,
+                    inbound, source, item, lineNo, material.materialCode(), material,
                     sourcePurchaseOrderItemMap,
                     new InboundItemMapper.ItemMappingContext(
                             weightSettlement,
+                            request.warehouseId(),
                             request.warehouseName(),
                             request.settlementMode()
                     ));
@@ -100,6 +109,12 @@ public class PurchaseInboundApplyService {
             }
             if (firstLineWarehouseName == null) {
                 firstLineWarehouseName = result.firstLineWarehouseName();
+            }
+            if (firstLineWarehouseId == null) {
+                firstLineWarehouseId = item.getWarehouseId();
+            }
+            if (item.getWarehouseId() != null) {
+                warehouseIds.add(item.getWarehouseId());
             }
 
             totalWeight = totalWeight.add(result.weightTon());
@@ -114,6 +129,13 @@ public class PurchaseInboundApplyService {
                 ? request.purchaseOrderNo()
                 : String.join(", ", sourcePurchaseOrderNos));
         applyHeaderSupplier(inbound, request, sourcePurchaseOrderItemMap);
+        if (warehouseIds.size() > 1) {
+            throw new com.leo.erp.common.error.BusinessException(
+                    com.leo.erp.common.error.ErrorCode.BUSINESS_ERROR,
+                    "采购入库单明细存在不同仓库，不能合并保存"
+            );
+        }
+        inbound.setWarehouseId(request.warehouseId() == null ? firstLineWarehouseId : request.warehouseId());
         inbound.setWarehouseName(resolveHeaderWarehouseName(request.warehouseName(), firstLineWarehouseName));
         inbound.setSettlementMode(resolveHeaderSettlementMode(request.settlementMode(), items));
         applyHeaderSettlementCompany(inbound, items);
@@ -132,6 +154,7 @@ public class PurchaseInboundApplyService {
                                      Map<Long, PurchaseOrderItem> sourcePurchaseOrderItemMap) {
         LinkedHashSet<String> supplierCodes = new LinkedHashSet<>();
         LinkedHashSet<String> supplierNames = new LinkedHashSet<>();
+        LinkedHashSet<Long> supplierIds = new LinkedHashSet<>();
         request.items().stream()
                 .map(PurchaseInboundItemRequest::sourcePurchaseOrderItemId)
                 .filter(Objects::nonNull)
@@ -140,6 +163,9 @@ public class PurchaseInboundApplyService {
                 .map(PurchaseOrderItem::getPurchaseOrder)
                 .filter(Objects::nonNull)
                 .forEach(order -> {
+                    if (order.getSupplierId() != null) {
+                        supplierIds.add(order.getSupplierId());
+                    }
                     String supplierCode = trimToNull(order.getSupplierCode());
                     String supplierName = trimToNull(order.getSupplierName());
                     if (supplierCode != null) {
@@ -149,7 +175,7 @@ public class PurchaseInboundApplyService {
                         supplierNames.add(supplierName);
                     }
                 });
-        if (supplierCodes.size() > 1 || supplierNames.size() > 1) {
+        if (supplierIds.size() > 1 || supplierCodes.size() > 1 || supplierNames.size() > 1) {
             throw new com.leo.erp.common.error.BusinessException(
                     com.leo.erp.common.error.ErrorCode.BUSINESS_ERROR,
                     "来源采购订单存在不同供应商，不能合并生成采购入库单"
@@ -161,6 +187,7 @@ public class PurchaseInboundApplyService {
         String supplierName = supplierNames.isEmpty()
                 ? trimToNull(request.supplierName())
                 : supplierNames.iterator().next();
+        inbound.setSupplierId(supplierIds.isEmpty() ? request.supplierId() : supplierIds.iterator().next());
         if (supplierCode != null) {
             inbound.setSupplierCode(supplierCode);
         }

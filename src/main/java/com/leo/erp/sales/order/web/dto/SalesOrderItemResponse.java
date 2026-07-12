@@ -5,6 +5,7 @@ import java.math.BigDecimal;
 public record SalesOrderItemResponse(
         Long id,
         Integer lineNo,
+        Long materialId,
         String materialCode,
         String brand,
         String category,
@@ -16,8 +17,10 @@ public record SalesOrderItemResponse(
         Long sourcePurchaseOrderItemId,
         Long settlementCompanyId,
         String settlementCompanyName,
+        Long warehouseId,
         String warehouseName,
         String batchNo,
+        String batchNoNormalized,
         Integer quantity,
         String quantityUnit,
         BigDecimal pieceWeightTon,
@@ -27,6 +30,35 @@ public record SalesOrderItemResponse(
         BigDecimal amount,
         BigDecimal originalWeightTon
 ) {
+    public SalesOrderItemResponse(Long id,
+                                  Integer lineNo,
+                                  String materialCode,
+                                  String brand,
+                                  String category,
+                                  String material,
+                                  String spec,
+                                  String length,
+                                  String unit,
+                                  Long sourceInboundItemId,
+                                  Long sourcePurchaseOrderItemId,
+                                  Long settlementCompanyId,
+                                  String settlementCompanyName,
+                                  String warehouseName,
+                                  String batchNo,
+                                  Integer quantity,
+                                  String quantityUnit,
+                                  BigDecimal pieceWeightTon,
+                                  Integer piecesPerBundle,
+                                  BigDecimal weightTon,
+                                  BigDecimal unitPrice,
+                                  BigDecimal amount,
+                                  BigDecimal originalWeightTon) {
+        this(id, lineNo, null, materialCode, brand, category, material, spec, length, unit,
+                sourceInboundItemId, sourcePurchaseOrderItemId, settlementCompanyId, settlementCompanyName,
+                null, warehouseName, batchNo, null, quantity, quantityUnit, pieceWeightTon, piecesPerBundle,
+                weightTon, unitPrice, amount, originalWeightTon);
+    }
+
     public SalesOrderItemResponse(Long id,
                                   Integer lineNo,
                                   String materialCode,
@@ -48,8 +80,8 @@ public record SalesOrderItemResponse(
                                   BigDecimal unitPrice,
                                   BigDecimal amount,
                                   BigDecimal originalWeightTon) {
-        this(id, lineNo, materialCode, brand, category, material, spec, length, unit,
-                sourceInboundItemId, sourcePurchaseOrderItemId, null, null, warehouseName, batchNo,
+        this(id, lineNo, null, materialCode, brand, category, material, spec, length, unit,
+                sourceInboundItemId, sourcePurchaseOrderItemId, null, null, null, warehouseName, batchNo, null,
                 quantity, quantityUnit, pieceWeightTon, piecesPerBundle, weightTon, unitPrice, amount,
                 originalWeightTon);
     }

@@ -188,6 +188,7 @@ public class PurchaseRefundService extends AbstractCrudService<
                         SEARCH_FIELDS
                 )
                 .and(Specs.equalIfPresent("supplierName", filter.name()))
+                .and(Specs.equalValueIfPresent("supplierId", filter.supplierId()))
                 .and(Specs.equalValueIfPresent("settlementCompanyId", filter.settlementCompanyId()))
                 .and(Specs.equalIfPresent("status", filter.status()))
                 .and(Specs.betweenIfPresent("refundDate", filter.startDate(), filter.endDate()));
@@ -205,6 +206,7 @@ public class PurchaseRefundService extends AbstractCrudService<
                 .and((root, criteriaQuery, criteriaBuilder) -> root.get("status").in(ALLOWED_SOURCE_STATUSES))
                 .and(Specs.keywordLike(filter.keyword(), "orderNo", "supplierName"))
                 .and(Specs.equalIfPresent("supplierName", filter.name()))
+                .and(Specs.equalValueIfPresent("supplierId", filter.supplierId()))
                 .and(Specs.equalValueIfPresent("settlementCompanyId", filter.settlementCompanyId()))
                 .and(Specs.dateTimeBetweenDatesIfPresent(
                         "orderDate",
@@ -301,6 +303,7 @@ public class PurchaseRefundService extends AbstractCrudService<
                     null,
                     index + 1,
                     sourceItem.getId(),
+                    sourceItem.getMaterialId(),
                     sourceItem.getMaterialCode(),
                     sourceItem.getBrand(),
                     sourceItem.getCategory(),
@@ -308,8 +311,10 @@ public class PurchaseRefundService extends AbstractCrudService<
                     sourceItem.getSpec(),
                     sourceItem.getLength(),
                     sourceItem.getUnit(),
+                    sourceItem.getWarehouseId(),
                     sourceItem.getWarehouseName(),
                     sourceItem.getBatchNo(),
+                    sourceItem.getBatchNoNormalized(),
                     line.quantity(),
                     sourceItem.getQuantityUnit(),
                     sourceItem.getPieceWeightTon(),
@@ -322,6 +327,7 @@ public class PurchaseRefundService extends AbstractCrudService<
         return new PurchaseRefundPreviewResponse(
                 sourceOrder.getId(),
                 sourceOrder.getOrderNo(),
+                supplier.id(),
                 supplier.code(),
                 supplier.name(),
                 sourceOrder.getSettlementCompanyId(),
@@ -476,7 +482,11 @@ public class PurchaseRefundService extends AbstractCrudService<
         repository.flush();
         if (inboundCompletionSyncService != null) {
             inboundCompletionSyncService.synchronizeAfterPurchaseRefundStatusChange(
-                    entity.getPurchaseOrderNo()
+                    entity.getItems().stream()
+                            .map(PurchaseRefundItem::getSourcePurchaseOrderItemId)
+                            .filter(Objects::nonNull)
+                            .distinct()
+                            .toList()
             );
         }
         return saved;
@@ -567,6 +577,7 @@ public class PurchaseRefundService extends AbstractCrudService<
         SupplierIdentity supplier = resolveSupplierIdentity(entity, sourceOrder);
         entity.setSourcePurchaseOrderId(sourceOrder.getId());
         entity.setPurchaseOrderNo(sourceOrder.getOrderNo());
+        entity.setSupplierId(supplier.id());
         entity.setSupplierCode(supplier.code());
         entity.setSupplierName(supplier.name());
         entity.setSettlementCompanyId(sourceOrder.getSettlementCompanyId());
@@ -595,6 +606,7 @@ public class PurchaseRefundService extends AbstractCrudService<
             item.setPurchaseRefund(entity);
             item.setSourcePurchaseOrderItemId(sourceItem.getId());
             item.setLineNo(index + 1);
+            item.setMaterialId(sourceItem.getMaterialId());
             item.setMaterialCode(sourceItem.getMaterialCode());
             item.setBrand(sourceItem.getBrand());
             item.setCategory(sourceItem.getCategory());
@@ -602,6 +614,7 @@ public class PurchaseRefundService extends AbstractCrudService<
             item.setSpec(sourceItem.getSpec());
             item.setLength(sourceItem.getLength());
             item.setUnit(sourceItem.getUnit());
+            item.setWarehouseId(sourceItem.getWarehouseId());
             item.setWarehouseName(sourceItem.getWarehouseName());
             item.setBatchNo(sourceItem.getBatchNo());
             item.setQuantity(line.quantity());
@@ -636,6 +649,15 @@ public class PurchaseRefundService extends AbstractCrudService<
     }
 
     private SupplierIdentity resolveSupplierIdentity(PurchaseRefund entity, PurchaseOrder sourceOrder) {
+        if (sourceOrder.getSupplierId() != null) {
+            SupplierIdentity sourceIdentity = requireSourceSupplierIdentity(sourceOrder);
+            if (Objects.equals(entity.getSourcePurchaseOrderId(), sourceOrder.getId())
+                    && entity.getSupplierId() != null
+                    && !Objects.equals(entity.getSupplierId(), sourceIdentity.id())) {
+                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "采购退款单供应商ID与来源采购订单不一致");
+            }
+            return sourceIdentity;
+        }
         if (!Objects.equals(entity.getSourcePurchaseOrderId(), sourceOrder.getId())) {
             return requireSourceSupplierIdentity(sourceOrder);
         }
@@ -667,10 +689,34 @@ public class PurchaseRefundService extends AbstractCrudService<
                     "采购退款单供应商编码与来源采购订单不一致"
             );
         }
-        return new SupplierIdentity(supplierCode, boundSupplierName);
+        return new SupplierIdentity(supplier.getId(), supplierCode, boundSupplierName);
     }
 
     private SupplierIdentity requireSourceSupplierIdentity(PurchaseOrder sourceOrder) {
+        if (sourceOrder.getSupplierId() != null) {
+            Supplier supplier = supplierRepository.findByIdAndDeletedFlagFalse(sourceOrder.getSupplierId())
+                    .orElseThrow(() -> new BusinessException(
+                            ErrorCode.BUSINESS_ERROR,
+                            "来源采购订单供应商ID已失效"
+                    ));
+            String sourceCode = normalizeRequiredSupplierText(
+                    sourceOrder.getSupplierCode() == null
+                            ? supplier.getSupplierCode()
+                            : sourceOrder.getSupplierCode(),
+                    "来源采购订单供应商编码缺失"
+            );
+            if (!Objects.equals(sourceCode, normalizeRequiredSupplierText(
+                    supplier.getSupplierCode(),
+                    "供应商编码不能为空"
+            ))) {
+                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "来源采购订单供应商ID与编码不一致");
+            }
+            return new SupplierIdentity(
+                    supplier.getId(),
+                    sourceCode,
+                    normalizeRequiredSupplierText(sourceOrder.getSupplierName(), "来源采购订单供应商名称缺失")
+            );
+        }
         String sourceSupplierCode = sourceOrder.getSupplierCode();
         if (sourceSupplierCode == null || sourceSupplierCode.isBlank()) {
             Supplier supplier = supplierRepository
@@ -688,6 +734,9 @@ public class PurchaseRefundService extends AbstractCrudService<
                         "来源采购订单供应商编码已失效"
                 ));
         return new SupplierIdentity(
+                supplierRepository.findBySupplierCodeAndDeletedFlagFalse(normalizedCode)
+                        .map(Supplier::getId)
+                        .orElse(null),
                 normalizedCode,
                 normalizeRequiredSupplierText(sourceOrder.getSupplierName(), "来源采购订单供应商名称缺失")
         );
@@ -695,6 +744,7 @@ public class PurchaseRefundService extends AbstractCrudService<
 
     private SupplierIdentity toSupplierIdentity(Supplier supplier) {
         return new SupplierIdentity(
+                supplier.getId(),
                 normalizeRequiredSupplierText(supplier.getSupplierCode(), "供应商编码不能为空"),
                 normalizeRequiredSupplierText(supplier.getSupplierName(), "供应商名称不能为空")
         );
@@ -723,6 +773,8 @@ public class PurchaseRefundService extends AbstractCrudService<
         return new PurchaseRefundSourceCandidateResponse(
                 sourceOrder.getId(),
                 sourceOrder.getOrderNo(),
+                sourceOrder.getSupplierId(),
+                sourceOrder.getSupplierCode(),
                 sourceOrder.getSupplierName(),
                 sourceOrder.getSettlementCompanyId(),
                 sourceOrder.getSettlementCompanyName(),
@@ -734,6 +786,6 @@ public class PurchaseRefundService extends AbstractCrudService<
         );
     }
 
-    private record SupplierIdentity(String code, String name) {
+    private record SupplierIdentity(Long id, String code, String name) {
     }
 }

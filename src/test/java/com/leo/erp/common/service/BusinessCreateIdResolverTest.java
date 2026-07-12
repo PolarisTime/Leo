@@ -60,16 +60,15 @@ class BusinessCreateIdResolverTest {
     }
 
     @Test
-    void shouldUsePreallocatedIdWithoutConsumeService() {
+    void shouldRejectPreallocatedIdWhenPreallocationServiceIsMissing() {
         MockHttpServletRequest request = new MockHttpServletRequest();
         request.addHeader("X-Preallocated-Id", "123456789");
         RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(request));
         BusinessCreateIdResolver resolver = new BusinessCreateIdResolver(new SnowflakeIdGenerator(0L), null, getClass());
 
-        CreateEntityId result = resolver.resolve();
-
-        assertThat(result.id()).isEqualTo(123456789L);
-        assertThat(result.preallocatedModuleKey()).isNull();
+        assertThatThrownBy(resolver::resolve)
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("预分配服务不可用");
     }
 
     @Test
@@ -307,16 +306,27 @@ class BusinessCreateIdResolverTest {
     }
 
     @Test
-    void shouldIgnoreNegativePreallocatedId() {
+    void shouldRejectNegativePreallocatedId() {
         MockHttpServletRequest request = new MockHttpServletRequest();
         request.addHeader("X-Preallocated-Id", "-5");
         RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(request));
         BusinessCreateIdResolver resolver = new BusinessCreateIdResolver(new SnowflakeIdGenerator(0L), null, getClass());
 
-        CreateEntityId result = resolver.resolve();
+        assertThatThrownBy(resolver::resolve)
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("必须为正整数");
+    }
 
-        assertThat(result.id()).isPositive();
-        assertThat(result.preallocatedModuleKey()).isNull();
+    @Test
+    void shouldRejectZeroPreallocatedId() {
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.addHeader("X-Preallocated-Id", "0");
+        RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(request));
+        BusinessCreateIdResolver resolver = new BusinessCreateIdResolver(new SnowflakeIdGenerator(0L), null, getClass());
+
+        assertThatThrownBy(resolver::resolve)
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("必须为正整数");
     }
 
     @Test

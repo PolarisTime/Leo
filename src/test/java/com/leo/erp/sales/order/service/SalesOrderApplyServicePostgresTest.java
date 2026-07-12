@@ -5,7 +5,11 @@ import com.leo.erp.allocation.appservice.PurchaseItemQueryAppService;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.support.TradeItemMaterialSupport;
 import com.leo.erp.common.support.TradeMaterialSnapshot;
+import com.leo.erp.common.support.WarehouseCatalog;
 import com.leo.erp.common.support.WarehouseSelectionSupport;
+import com.leo.erp.common.support.WarehouseSnapshot;
+import com.leo.erp.master.customer.repository.CustomerRepository;
+import com.leo.erp.master.project.repository.ProjectRepository;
 import com.leo.erp.sales.order.domain.entity.SalesOrder;
 import com.leo.erp.sales.order.domain.entity.SalesOrderItem;
 import com.leo.erp.sales.order.repository.SalesOrderItemRepository;
@@ -13,10 +17,13 @@ import com.leo.erp.sales.order.repository.SalesOrderRepository;
 import com.leo.erp.sales.order.web.dto.SalesOrderItemRequest;
 import com.leo.erp.sales.order.web.dto.SalesOrderRequest;
 import com.leo.erp.security.permission.WorkflowTransitionGuard;
+import com.leo.erp.testsupport.StableIdentityPostgresFixtures;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
 import org.springframework.boot.test.autoconfigure.orm.jpa.TestEntityManager;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 
 import java.math.BigDecimal;
@@ -35,6 +42,12 @@ class SalesOrderApplyServicePostgresTest {
     private static final long ORDER_ID = 8_820_000_000_000_000_001L;
     private static final long EXISTING_ITEM_ID = 8_820_000_000_000_000_101L;
     private static final long NEW_ITEM_ID = 8_820_000_000_000_000_102L;
+    private static final long CUSTOMER_ID = ORDER_ID + 201;
+    private static final long PROJECT_ID = ORDER_ID + 202;
+    private static final long MATERIAL_ONE_ID = ORDER_ID + 203;
+    private static final long MATERIAL_TWO_ID = ORDER_ID + 204;
+    private static final long WAREHOUSE_ID = ORDER_ID + 205;
+    private static final String CUSTOMER_CODE = "TEST-SO-AUTO-CUSTOMER";
     private static final String WAREHOUSE_NAME = "AUTO-FLUSH-销售仓";
 
     @Autowired
@@ -45,6 +58,42 @@ class SalesOrderApplyServicePostgresTest {
 
     @Autowired
     private SalesOrderItemRepository salesOrderItemRepository;
+
+    @Autowired
+    private CustomerRepository customerRepository;
+
+    @Autowired
+    private ProjectRepository projectRepository;
+
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
+
+    @BeforeEach
+    void insertStableIdentityFixtures() {
+        StableIdentityPostgresFixtures.insertCustomer(
+                jdbcTemplate,
+                CUSTOMER_ID,
+                CUSTOMER_CODE,
+                "测试客户",
+                "测试项目"
+        );
+        StableIdentityPostgresFixtures.insertProject(
+                jdbcTemplate,
+                PROJECT_ID,
+                "TEST-SO-AUTO-PROJECT",
+                "测试项目",
+                CUSTOMER_ID,
+                CUSTOMER_CODE
+        );
+        StableIdentityPostgresFixtures.insertMaterial(jdbcTemplate, MATERIAL_ONE_ID, "M1");
+        StableIdentityPostgresFixtures.insertMaterial(jdbcTemplate, MATERIAL_TWO_ID, "M2");
+        StableIdentityPostgresFixtures.insertWarehouse(
+                jdbcTemplate,
+                WAREHOUSE_ID,
+                "TEST-SO-AUTO-WAREHOUSE",
+                WAREHOUSE_NAME
+        );
+    }
 
     @Test
     void shouldKeepNewItemDetachedWhileMapperQueriesJpa() {
@@ -88,12 +137,24 @@ class SalesOrderApplyServicePostgresTest {
 
     private SalesOrderApplyService applyService() {
         TradeItemMaterialSupport materialSupport = new TradeItemMaterialSupport(() -> List.of(
-                new TradeMaterialSnapshot("M1", true),
-                new TradeMaterialSnapshot("M2", true)
+                new TradeMaterialSnapshot(MATERIAL_ONE_ID, "M1", true),
+                new TradeMaterialSnapshot(MATERIAL_TWO_ID, "M2", true)
         ));
-        WarehouseSelectionSupport warehouseSelectionSupport = new WarehouseSelectionSupport(() -> {
-            salesOrderItemRepository.count();
-            return List.of(WAREHOUSE_NAME);
+        WarehouseSelectionSupport warehouseSelectionSupport = new WarehouseSelectionSupport(new WarehouseCatalog() {
+            @Override
+            public List<String> listActiveWarehouseNames() {
+                return List.of(WAREHOUSE_NAME);
+            }
+
+            @Override
+            public List<WarehouseSnapshot> listActiveWarehouses() {
+                salesOrderItemRepository.count();
+                return List.of(new WarehouseSnapshot(
+                        WAREHOUSE_ID,
+                        "TEST-SO-AUTO-WAREHOUSE",
+                        WAREHOUSE_NAME
+                ));
+            }
         });
         PurchaseItemQueryAppService purchaseItemQueryAppService = mock(PurchaseItemQueryAppService.class);
         PurchaseItemPieceWeightAppService pieceWeightAppService = mock(PurchaseItemPieceWeightAppService.class);
@@ -104,7 +165,10 @@ class SalesOrderApplyServicePostgresTest {
                 new SalesOrderWeightResolver(pieceWeightAppService),
                 new SalesOrderPurchaseAllocationService(purchaseItemQueryAppService, pieceWeightAppService),
                 new SalesOrderItemMapper(materialSupport, warehouseSelectionSupport),
-                mock(WorkflowTransitionGuard.class)
+                mock(WorkflowTransitionGuard.class),
+                customerRepository,
+                projectRepository,
+                null
         );
     }
 
@@ -112,7 +176,10 @@ class SalesOrderApplyServicePostgresTest {
         SalesOrder order = new SalesOrder();
         order.setId(ORDER_ID);
         order.setOrderNo("TEST-SO-AUTO-FLUSH");
+        order.setCustomerId(CUSTOMER_ID);
+        order.setCustomerCode(CUSTOMER_CODE);
         order.setCustomerName("测试客户");
+        order.setProjectId(PROJECT_ID);
         order.setProjectName("测试项目");
         order.setDeliveryDate(LocalDate.of(2026, 7, 10));
         order.setSalesName("测试销售员");
@@ -130,9 +197,10 @@ class SalesOrderApplyServicePostgresTest {
                 "TEST-SO-AUTO-FLUSH",
                 null,
                 null,
-                null,
+                CUSTOMER_CODE,
+                CUSTOMER_ID,
                 "测试客户",
-                null,
+                PROJECT_ID,
                 "测试项目",
                 null,
                 null,
@@ -150,6 +218,7 @@ class SalesOrderApplyServicePostgresTest {
         BigDecimal unitPrice = new BigDecimal("4000.00");
         return new SalesOrderItemRequest(
                 id,
+                materialId(materialCode),
                 materialCode,
                 "测试品牌",
                 "螺纹钢",
@@ -159,6 +228,7 @@ class SalesOrderApplyServicePostgresTest {
                 "吨",
                 null,
                 null,
+                WAREHOUSE_ID,
                 WAREHOUSE_NAME,
                 "TEST-BATCH-" + materialCode,
                 quantity,
@@ -181,6 +251,7 @@ class SalesOrderApplyServicePostgresTest {
         item.setId(id);
         item.setSalesOrder(order);
         item.setLineNo(lineNo);
+        item.setMaterialId(request.materialId());
         item.setMaterialCode(request.materialCode());
         item.setBrand(request.brand());
         item.setCategory(request.category());
@@ -188,6 +259,7 @@ class SalesOrderApplyServicePostgresTest {
         item.setSpec(request.spec());
         item.setLength(request.length());
         item.setUnit(request.unit());
+        item.setWarehouseId(request.warehouseId());
         item.setWarehouseName(request.warehouseName());
         item.setBatchNo(request.batchNo());
         item.setQuantity(request.quantity());
@@ -199,5 +271,9 @@ class SalesOrderApplyServicePostgresTest {
         item.setUnitPrice(request.unitPrice());
         item.setAmount(request.amount());
         return item;
+    }
+
+    private Long materialId(String materialCode) {
+        return "M1".equals(materialCode) ? MATERIAL_ONE_ID : MATERIAL_TWO_ID;
     }
 }

@@ -38,12 +38,12 @@ public class InventoryReportController {
     public ApiResponse<PageResponse<InventoryReportResponse>> page(
             @BindPageQuery(sortFieldKey = "inventory-report", directionParam = "sortDirection") PageQuery query,
             @RequestParam(required = false) String keyword,
-            @RequestParam(required = false) String warehouseName,
+            @RequestParam(required = false) Long warehouseId,
             @RequestParam(required = false) String category,
             @RequestParam(required = false) Boolean includeOutbound
     ) {
         return ApiResponse.success(PageResponse.from(
-                inventoryReportService.page(query, keyword, warehouseName, category, includeOutbound)
+                inventoryReportService.page(query, keyword, warehouseId, category, includeOutbound)
         ));
     }
 
@@ -55,7 +55,7 @@ public class InventoryReportController {
                 : request;
         return toDownloadResponse(inventoryReportService.exportExcel(
                 safeRequest.keyword(),
-                safeRequest.warehouseName(),
+                safeRequest.warehouseId(),
                 safeRequest.category(),
                 safeRequest.includeOutbound()
         ));

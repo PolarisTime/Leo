@@ -84,17 +84,14 @@ class PurchaseInboundRepositoryTest {
     }
 
     @Test
-    void findByPurchaseOrderNoAndDeletedFlagFalseShouldReturnMatchingInbounds() {
+    void findAllActiveBySourcePurchaseOrderItemIdsShouldReturnMatchingInbounds() {
         PurchaseInbound inbound1 = activeInbound("PI-006");
-        inbound1.setPurchaseOrderNo("PO-001");
-
         PurchaseInbound inbound2 = activeInbound("PI-007");
-        inbound2.setPurchaseOrderNo("PO-001");
 
-        when(repository.findByPurchaseOrderNoAndDeletedFlagFalse("PO-001"))
+        when(repository.findAllActiveBySourcePurchaseOrderItemIds(List.of(201L)))
                 .thenReturn(List.of(inbound1, inbound2));
 
-        List<PurchaseInbound> result = repository.findByPurchaseOrderNoAndDeletedFlagFalse("PO-001");
+        List<PurchaseInbound> result = repository.findAllActiveBySourcePurchaseOrderItemIds(List.of(201L));
 
         assertThat(result).hasSize(2);
         assertThat(result).extracting(PurchaseInbound::getInboundNo)
@@ -102,10 +99,10 @@ class PurchaseInboundRepositoryTest {
     }
 
     @Test
-    void findByPurchaseOrderNoAndDeletedFlagFalseShouldReturnEmptyWhenNoMatch() {
-        when(repository.findByPurchaseOrderNoAndDeletedFlagFalse("NONEXIST")).thenReturn(List.of());
+    void findAllActiveBySourcePurchaseOrderItemIdsShouldReturnEmptyWhenNoMatch() {
+        when(repository.findAllActiveBySourcePurchaseOrderItemIds(List.of(999L))).thenReturn(List.of());
 
-        List<PurchaseInbound> result = repository.findByPurchaseOrderNoAndDeletedFlagFalse("NONEXIST");
+        List<PurchaseInbound> result = repository.findAllActiveBySourcePurchaseOrderItemIds(List.of(999L));
 
         assertThat(result).isEmpty();
     }

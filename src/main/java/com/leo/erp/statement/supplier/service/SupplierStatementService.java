@@ -70,6 +70,7 @@ public class SupplierStatementService extends AbstractCrudService<SupplierStatem
     public Page<SupplierStatementResponse> page(PageQuery query, PageFilter filter) {
         Specification<SupplierStatement> spec = Specs.<SupplierStatement>keywordLike(filter.keyword(), "statementNo", "supplierName")
                 .and(Specs.equalIfPresent("supplierName", filter.name()))
+                .and(Specs.equalValueIfPresent("supplierId", filter.supplierId()))
                 .and(Specs.equalValueIfPresent("settlementCompanyId", filter.settlementCompanyId()))
                 .and(Specs.equalIfPresent("status", filter.status()))
                 .and(Specs.betweenIfPresent("endDate", filter.startDate(), filter.endDate()));
@@ -131,7 +132,8 @@ public class SupplierStatementService extends AbstractCrudService<SupplierStatem
                 request.closingAmount(),
                 request.status(),
                 request.remark(),
-                request.items()
+                request.items(),
+                request.supplierId()
         );
     }
 
@@ -150,7 +152,8 @@ public class SupplierStatementService extends AbstractCrudService<SupplierStatem
                 request.closingAmount(),
                 request.status(),
                 request.remark(),
-                request.items()
+                request.items(),
+                request.supplierId()
         );
     }
 

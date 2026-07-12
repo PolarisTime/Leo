@@ -58,6 +58,7 @@ public class FreightStatementController {
     public ApiResponse<PageResponse<FreightStatementResponse>> page(
             @BindPageQuery(sortFieldKey = "freight-statement") PageQuery query,
             @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) Long carrierId,
             @RequestParam(required = false) String carrierCode,
             @RequestParam(required = false) String carrierName,
             @RequestParam(required = false) Long settlementCompanyId,
@@ -71,7 +72,8 @@ public class FreightStatementController {
                         query,
                         new PageFilter(keyword, status, periodStart, periodEnd,
                                 carrierName, null, null, null, null, null, signStatus, null, null, null, null,
-                                settlementCompanyId),
+                                settlementCompanyId)
+                                .withIdentity(null, null, null, carrierId, null),
                         carrierCode
                 )
         ));
@@ -83,16 +85,19 @@ public class FreightStatementController {
     public ApiResponse<PageResponse<FreightStatementCandidateResponse>> candidates(
             @BindPageQuery(sortFieldKey = "freight-bill") PageQuery query,
             @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) Long carrierId,
             @RequestParam(required = false) String carrierCode,
             @RequestParam(required = false) String carrierName,
             @RequestParam(required = false) Long settlementCompanyId,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate,
+            @RequestParam(required = false) Long currentStatementId
     ) {
         return ApiResponse.success(PageResponse.from(
                 freightStatementService.candidatePage(
                         query,
-                        PageFilter.of(keyword, carrierName, settlementCompanyId, null, startDate, endDate),
+                        PageFilter.of(keyword, carrierName, settlementCompanyId, null, startDate, endDate)
+                                .withIdentity(null, null, null, carrierId, currentStatementId),
                         carrierCode
                 )
         ));

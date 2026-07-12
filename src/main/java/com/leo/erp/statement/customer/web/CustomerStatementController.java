@@ -58,14 +58,22 @@ public class CustomerStatementController {
     public ApiResponse<PageResponse<CustomerStatementResponse>> page(
             @BindPageQuery(sortFieldKey = "customer-statement") PageQuery query,
             @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) Long customerId,
             @RequestParam(required = false) String customerName,
+            @RequestParam(required = false) Long projectId,
+            @RequestParam(required = false) String projectName,
             @RequestParam(required = false) Long settlementCompanyId,
             @RequestParam(required = false) String status,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate periodStart,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate periodEnd
     ) {
         return ApiResponse.success(PageResponse.from(
-                customerStatementService.page(query, PageFilter.of(keyword, customerName, settlementCompanyId, status, periodStart, periodEnd))
+                customerStatementService.page(
+                        query,
+                        PageFilter.of(keyword, customerName, projectName, settlementCompanyId, status,
+                                        periodStart, periodEnd)
+                                .withIdentity(customerId, projectId, null, null, null)
+                )
         ));
     }
 
@@ -75,14 +83,22 @@ public class CustomerStatementController {
     public ApiResponse<PageResponse<CustomerStatementCandidateResponse>> candidates(
             @BindPageQuery(sortFieldKey = "sales-order") PageQuery query,
             @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) Long customerId,
             @RequestParam(required = false) String customerName,
+            @RequestParam(required = false) Long projectId,
             @RequestParam(required = false) String projectName,
             @RequestParam(required = false) Long settlementCompanyId,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate,
+            @RequestParam(required = false) Long currentStatementId
     ) {
         return ApiResponse.success(PageResponse.from(
-                customerStatementService.candidatePage(query, PageFilter.of(keyword, customerName, projectName, settlementCompanyId, null, startDate, endDate))
+                customerStatementService.candidatePage(
+                        query,
+                        PageFilter.of(keyword, customerName, projectName, settlementCompanyId, null,
+                                        startDate, endDate)
+                                .withIdentity(customerId, projectId, null, null, currentStatementId)
+                )
         ));
     }
 

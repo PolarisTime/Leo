@@ -4,6 +4,7 @@ import com.leo.erp.common.support.TradeItemCalculator;
 import com.leo.erp.common.support.TradeItemMaterialSupport;
 import com.leo.erp.common.support.TradeMaterialSnapshot;
 import com.leo.erp.common.support.WarehouseSelectionSupport;
+import com.leo.erp.common.support.WarehouseSnapshot;
 import com.leo.erp.sales.order.domain.entity.SalesOrder;
 import com.leo.erp.sales.order.domain.entity.SalesOrderItem;
 import com.leo.erp.sales.order.web.dto.SalesOrderItemRequest;
@@ -29,8 +30,31 @@ public class SalesOrderItemMapper {
     void applyItemFields(SalesOrder entity, SalesOrderItemRequest source, SalesOrderItem item,
                          int lineNo, String materialCode, TradeMaterialSnapshot material,
                          BigDecimal weightTon, BigDecimal pieceWeightTon) {
+        applyItemFields(
+                entity,
+                source,
+                item,
+                lineNo,
+                materialCode,
+                material,
+                source.warehouseId(),
+                weightTon,
+                pieceWeightTon
+        );
+    }
+
+    void applyItemFields(SalesOrder entity, SalesOrderItemRequest source, SalesOrderItem item,
+                         int lineNo, String materialCode, TradeMaterialSnapshot material,
+                         Long effectiveWarehouseId, BigDecimal weightTon, BigDecimal pieceWeightTon) {
+        WarehouseSnapshot warehouse = warehouseSelectionSupport.resolveWarehouse(
+                effectiveWarehouseId,
+                source.warehouseName(),
+                lineNo,
+                true
+        );
         item.setSalesOrder(entity);
         item.setLineNo(lineNo);
+        item.setMaterialId(material.materialId());
         item.setMaterialCode(materialCode);
         item.setBrand(source.brand());
         item.setCategory(source.category());
@@ -40,7 +64,8 @@ public class SalesOrderItemMapper {
         item.setUnit(source.unit());
         item.setSourceInboundItemId(source.sourceInboundItemId());
         item.setSourcePurchaseOrderItemId(source.sourcePurchaseOrderItemId());
-        item.setWarehouseName(warehouseSelectionSupport.normalizeWarehouseName(source.warehouseName(), lineNo, true));
+        item.setWarehouseId(warehouse.warehouseId());
+        item.setWarehouseName(warehouse.warehouseName());
         item.setBatchNo(tradeItemMaterialSupport.normalizeBatchNo(material, source.batchNo(), lineNo, true));
         item.setQuantity(source.quantity());
         item.setQuantityUnit(TradeItemCalculator.normalizeQuantityUnit(source.quantityUnit()));

@@ -165,6 +165,7 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
     public Page<PurchaseOrderResponse> page(PageQuery query, PageFilter filter) {
         Specification<PurchaseOrder> spec = Specs.<PurchaseOrder>keywordLike(filter.keyword(), PURCHASE_ORDER_SEARCH_FIELDS)
                 .and(Specs.equalIfPresent("supplierName", filter.name()))
+                .and(Specs.equalValueIfPresent("supplierId", filter.supplierId()))
                 .and(Specs.equalValueIfPresent("settlementCompanyId", filter.settlementCompanyId()))
                 .and(Specs.equalIfPresent("status", filter.status()))
                 .and(Specs.dateTimeBetweenDatesIfPresent("orderDate", filter.startDate(), filter.endDate()));
@@ -184,6 +185,7 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
         Specification<PurchaseOrder> spec = Specs.<PurchaseOrder>notDeleted()
                 .and(Specs.keywordLike(filter.keyword(), PURCHASE_ORDER_SEARCH_FIELDS))
                 .and(Specs.equalIfPresent("supplierName", filter.name()))
+                .and(Specs.equalValueIfPresent("supplierId", filter.supplierId()))
                 .and(Specs.equalValueIfPresent("settlementCompanyId", filter.settlementCompanyId()))
                 .and(Specs.equalIfPresent("status", filter.status()))
                 .and(Specs.dateTimeBetweenDatesIfPresent("orderDate", filter.startDate(), filter.endDate()));
@@ -195,6 +197,7 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
         Specification<PurchaseOrder> spec = Specs.<PurchaseOrder>notDeleted()
                 .and(Specs.keywordLike(filter.keyword(), PURCHASE_ORDER_SEARCH_FIELDS))
                 .and(Specs.equalIfPresent("supplierName", filter.name()))
+                .and(Specs.equalValueIfPresent("supplierId", filter.supplierId()))
                 .and(Specs.equalValueIfPresent("settlementCompanyId", filter.settlementCompanyId()))
                 .and(prepaymentSourceStatus(filter.status()))
                 .and(Specs.dateTimeBetweenDatesIfPresent("orderDate", filter.startDate(), filter.endDate()));
@@ -251,6 +254,7 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
         return new PurchaseOrderImportCandidateResponse(
                 order.getId(),
                 order.getOrderNo(),
+                order.getSupplierId(),
                 order.getSupplierCode(),
                 order.getSupplierName(),
                 order.getSettlementCompanyId(),
@@ -296,6 +300,7 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
     protected PurchaseOrderRequest normalizeCreateRequest(PurchaseOrderRequest request, long entityId) {
         return new PurchaseOrderRequest(
                 resolveCreateBusinessNo("purchase-order", request.orderNo(), entityId),
+                request.supplierId(),
                 request.supplierCode(),
                 request.supplierName(),
                 request.orderDate(),
@@ -311,6 +316,7 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
     protected PurchaseOrderRequest normalizeUpdateRequest(PurchaseOrder entity, PurchaseOrderRequest request) {
         return new PurchaseOrderRequest(
                 entity.getOrderNo(),
+                request.supplierId() == null ? entity.getSupplierId() : request.supplierId(),
                 request.supplierCode() == null || request.supplierCode().isBlank()
                         ? entity.getSupplierCode()
                         : request.supplierCode(),
@@ -384,7 +390,12 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
         );
         purchaseOrder.setOrderNo(request.orderNo());
         PurchaseOrderSupplierResolver.SupplierIdentity supplierIdentity =
-                supplierResolver.requireMasterSupplier(request.supplierCode(), request.supplierName());
+                supplierResolver.requireMasterSupplier(
+                        request.supplierId(),
+                        request.supplierCode(),
+                        request.supplierName()
+                );
+        purchaseOrder.setSupplierId(supplierIdentity.supplierId());
         purchaseOrder.setSupplierCode(supplierIdentity.supplierCode());
         purchaseOrder.setSupplierName(supplierIdentity.supplierName());
         purchaseOrder.setOrderDate(request.orderDate());

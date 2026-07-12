@@ -44,7 +44,6 @@ import java.util.Set;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.verify;
@@ -226,7 +225,7 @@ class FreightStatementServiceTest {
 
         assertThatThrownBy(() -> svc.create(command("FS-NEW", "物流甲", BigDecimal.ZERO, item(null, "FB-MISSING"))))
                 .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("来源物流单FB-MISSING不存在");
+                .hasMessageContaining("来源物流单ID1不存在");
     }
 
     @Test
@@ -264,7 +263,9 @@ class FreightStatementServiceTest {
     @Test
     void shouldRejectCreate_whenSourceBillAlreadyOccupied() {
         FreightStatement occupied = createEntity(2L, "FS-USED");
-        occupied.setItems(List.of(entityItem("FB-001")));
+        FreightStatementItem occupiedItem = entityItem("FB-001");
+        occupiedItem.setSourceFreightBillId(1L);
+        occupied.setItems(List.of(occupiedItem));
         var svc = service(repository(List.of(), false, List.of(occupied)), freightBillRepository, carrierRepository);
 
         assertThatThrownBy(() -> svc.create(command("FS-NEW", "物流甲", BigDecimal.ZERO, item(null, "FB-001"))))
@@ -345,21 +346,18 @@ class FreightStatementServiceTest {
     @Test
     void shouldLockActualFreightBillsBeforeCreateApply() {
         FreightStatementRepository statementRepository = mock(FreightStatementRepository.class);
-        FreightBillRepository billRepository = mock(FreightBillRepository.class);
         FreightStatementApplyService applyService = mock(FreightStatementApplyService.class);
         SourceAllocationLockService lockService = mock(SourceAllocationLockService.class);
         when(statementRepository.save(any(FreightStatement.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(billRepository.findByBillNoInAndDeletedFlagFalse(anyCollection()))
-                .thenReturn(List.of(sourceFreightBill(30L, "FB-002"), sourceFreightBill(10L, "FB-001")));
-        FreightStatementService service = lockingService(statementRepository, billRepository, applyService, lockService);
+        FreightStatementService service = lockingService(statementRepository, applyService, lockService);
 
         service.create(command(
                 "FS-LOCK-CREATE",
                 "物流甲",
                 BigDecimal.ZERO,
-                item(null, "FB-002"),
-                item(null, " FB-001 "),
-                item(null, "FB-002")
+                item(null, "FB-002", 30L, 301L),
+                item(null, " FB-001 ", 10L, 101L),
+                item(null, "FB-002", 30L, 302L)
         ));
 
         InOrder inOrder = inOrder(lockService, applyService);
@@ -370,21 +368,20 @@ class FreightStatementServiceTest {
     @Test
     void shouldLockOldAndNewActualFreightBillsBeforeUpdateApply() {
         FreightStatementRepository statementRepository = mock(FreightStatementRepository.class);
-        FreightBillRepository billRepository = mock(FreightBillRepository.class);
         FreightStatementApplyService applyService = mock(FreightStatementApplyService.class);
         SourceAllocationLockService lockService = mock(SourceAllocationLockService.class);
         FreightStatement statement = createEntity(1L, "FS-LOCK-UPDATE");
-        statement.setItems(new java.util.ArrayList<>(List.of(entityItem("FB-OLD"))));
+        statement.setItems(new java.util.ArrayList<>(List.of(entityItem("FB-OLD", 40L))));
         when(statementRepository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(statement));
         when(statementRepository.save(any(FreightStatement.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(billRepository.findByBillNoInAndDeletedFlagFalse(anyCollection())).thenReturn(List.of(
-                sourceFreightBill(40L, "FB-OLD"),
-                sourceFreightBill(20L, "FB-NEW"),
-                sourceFreightBill(20L, "FB-NEW")
-        ));
-        FreightStatementService service = lockingService(statementRepository, billRepository, applyService, lockService);
+        FreightStatementService service = lockingService(statementRepository, applyService, lockService);
 
-        service.update(1L, command("IGNORED", "物流甲", BigDecimal.ZERO, item(null, "FB-NEW")));
+        service.update(1L, command(
+                "IGNORED",
+                "物流甲",
+                BigDecimal.ZERO,
+                item(null, "FB-NEW", 20L, 201L)
+        ));
 
         InOrder inOrder = inOrder(lockService, applyService);
         inOrder.verify(lockService).lockDocumentSources(List.of(), List.of(), List.of(), List.of(20L, 40L));
@@ -394,17 +391,13 @@ class FreightStatementServiceTest {
     @Test
     void shouldLockExistingActualFreightBillsBeforeStatusMutation() {
         FreightStatementRepository statementRepository = mock(FreightStatementRepository.class);
-        FreightBillRepository billRepository = mock(FreightBillRepository.class);
         SourceAllocationLockService lockService = mock(SourceAllocationLockService.class);
         FreightStatement statement = createEntity(1L, "FS-LOCK-STATUS");
-        statement.setItems(new java.util.ArrayList<>(List.of(entityItem("FB-STATUS"))));
+        statement.setItems(new java.util.ArrayList<>(List.of(entityItem("FB-STATUS", 50L))));
         when(statementRepository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(statement));
         when(statementRepository.save(any(FreightStatement.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(billRepository.findByBillNoInAndDeletedFlagFalse(anyCollection()))
-                .thenReturn(List.of(sourceFreightBill(50L, "FB-STATUS")));
         FreightStatementService service = lockingService(
                 statementRepository,
-                billRepository,
                 mock(FreightStatementApplyService.class),
                 lockService
         );
@@ -419,17 +412,13 @@ class FreightStatementServiceTest {
     @Test
     void shouldLockExistingActualFreightBillsBeforeDeleteMutation() {
         FreightStatementRepository statementRepository = mock(FreightStatementRepository.class);
-        FreightBillRepository billRepository = mock(FreightBillRepository.class);
         SourceAllocationLockService lockService = mock(SourceAllocationLockService.class);
         FreightStatement statement = createEntity(1L, "FS-LOCK-DELETE");
-        statement.setItems(new java.util.ArrayList<>(List.of(entityItem("FB-DELETE"))));
+        statement.setItems(new java.util.ArrayList<>(List.of(entityItem("FB-DELETE", 60L))));
         when(statementRepository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(statement));
         when(statementRepository.save(any(FreightStatement.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(billRepository.findByBillNoInAndDeletedFlagFalse(anyCollection()))
-                .thenReturn(List.of(sourceFreightBill(60L, "FB-DELETE")));
         FreightStatementService service = lockingService(
                 statementRepository,
-                billRepository,
                 mock(FreightStatementApplyService.class),
                 lockService
         );
@@ -439,6 +428,45 @@ class FreightStatementServiceTest {
         InOrder inOrder = inOrder(lockService, statementRepository);
         inOrder.verify(lockService).lockDocumentSources(List.of(), List.of(), List.of(), List.of(60L));
         inOrder.verify(statementRepository).save(statement);
+    }
+
+    @Test
+    void shouldNotResolveSourceLockFromBusinessNumberSnapshot() {
+        FreightStatementRepository statementRepository = mock(FreightStatementRepository.class);
+        FreightStatementApplyService applyService = mock(FreightStatementApplyService.class);
+        SourceAllocationLockService lockService = mock(SourceAllocationLockService.class);
+        when(statementRepository.save(any(FreightStatement.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        FreightStatementService service = lockingService(statementRepository, applyService, lockService);
+
+        service.create(command(
+                "FS-LEGACY-SNAPSHOT",
+                "物流甲",
+                BigDecimal.ZERO,
+                legacyItem(null, "FB-LEGACY")
+        ));
+
+        verify(lockService).lockDocumentSources(List.of(), List.of(), List.of(), List.of());
+    }
+
+    @Test
+    void shouldIgnoreSourceNumberSnapshotWhenCheckingFinancialLinkage() {
+        FreightStatement entity = createEntity(1L, "FS-SNAPSHOT");
+        entity.setItems(new java.util.ArrayList<>(List.of(entityItem("FB-OLD"))));
+        FreightStatementCommand command = command(
+                "IGNORED",
+                "物流甲",
+                BigDecimal.ZERO,
+                legacyItem(null, "FB-NEW")
+        );
+
+        Boolean changed = ReflectionTestUtils.invokeMethod(
+                service,
+                "freightFinancialLinkageChanged",
+                entity,
+                command
+        );
+
+        assertThat(changed).isFalse();
     }
 
     @Test
@@ -523,14 +551,12 @@ class FreightStatementServiceTest {
                 mock(FreightStatementViewAssembler.class),
                 mock(FreightStatementPageAssembler.class),
                 mock(FreightStatementApplyService.class),
-                mock(FreightBillRepository.class),
                 mock(SourceAllocationLockService.class),
                 guard
         );
     }
 
     private FreightStatementService lockingService(FreightStatementRepository statementRepository,
-                                                    FreightBillRepository billRepository,
                                                     FreightStatementApplyService applyService,
                                                     SourceAllocationLockService lockService) {
         return new FreightStatementService(
@@ -542,7 +568,6 @@ class FreightStatementServiceTest {
                 mock(FreightStatementViewAssembler.class),
                 mock(FreightStatementPageAssembler.class),
                 applyService,
-                billRepository,
                 lockService,
                 mock(com.leo.erp.statement.service.StatementSettlementMutationGuard.class)
         );
@@ -566,7 +591,6 @@ class FreightStatementServiceTest {
                         new FreightStatementCarrierResolver(carrierRepo),
                         sourceService
                 ),
-                billRepo,
                 sourceAllocationLockService,
                 mock(com.leo.erp.statement.service.StatementSettlementMutationGuard.class)
         );
@@ -595,6 +619,22 @@ class FreightStatementServiceTest {
                     case "existsByStatementNoAndDeletedFlagFalse" -> duplicateStatementNo;
                     case "save" -> args[0];
                     case "findAllBySourceNosExcludingCurrentStatement" -> occupiedStatements;
+                    case "findOccupiedSourceFreightBillIdsExcludingCurrentStatement" -> occupiedStatements.stream()
+                            .flatMap(statement -> statement.getItems().stream())
+                            .map(FreightStatementItem::getSourceFreightBillId)
+                            .filter(java.util.Objects::nonNull)
+                            .distinct()
+                            .toList();
+                    case "findMatchingOccupiedSourceFreightBillIdsExcludingCurrentStatement" -> {
+                        Set<Long> requestedIds = (Set<Long>) args[0];
+                        yield occupiedStatements.stream()
+                                .flatMap(statement -> statement.getItems().stream())
+                                .map(FreightStatementItem::getSourceFreightBillId)
+                                .filter(java.util.Objects::nonNull)
+                                .filter(requestedIds::contains)
+                                .distinct()
+                                .toList();
+                    }
                     case "toString" -> "FreightStatementRepositoryStub";
                     case "hashCode" -> System.identityHashCode(proxy);
                     case "equals" -> proxy == args[0];
@@ -609,6 +649,9 @@ class FreightStatementServiceTest {
                 new Class[]{FreightBillRepository.class},
                 (proxy, method, args) -> switch (method.getName()) {
                     case "findAll" -> new PageImpl<>(bills);
+                    case "findByIdInAndDeletedFlagFalse" -> bills.stream()
+                            .filter(bill -> ((Set<Long>) args[0]).contains(bill.getId()))
+                            .toList();
                     case "findByBillNoInAndDeletedFlagFalse" -> bills.stream()
                             .filter(bill -> ((Set<String>) args[0]).contains(bill.getBillNo()))
                             .toList();
@@ -658,6 +701,45 @@ class FreightStatementServiceTest {
     }
 
     private static FreightStatementItemCommand item(Long id, String sourceNo) {
+        return item(id, sourceNo, 1L, 11L);
+    }
+
+    private static FreightStatementItemCommand item(Long id,
+                                                    String sourceNo,
+                                                    Long sourceFreightBillId,
+                                                    Long sourceFreightBillItemId) {
+        return new FreightStatementItemCommand(
+                id,
+                sourceNo,
+                null,
+                null,
+                null,
+                "客户甲",
+                "项目甲",
+                "M-001",
+                "螺纹钢",
+                "HRB400",
+                "钢材",
+                "钢",
+                "10",
+                "9m",
+                4,
+                "件",
+                new BigDecimal("0.5"),
+                2,
+                "B-001",
+                null,
+                "仓库甲",
+                sourceFreightBillId,
+                sourceFreightBillItemId,
+                null,
+                null,
+                null,
+                null
+        );
+    }
+
+    private static FreightStatementItemCommand legacyItem(Long id, String sourceNo) {
         return new FreightStatementItemCommand(
                 id,
                 sourceNo,
@@ -671,7 +753,7 @@ class FreightStatementServiceTest {
                 "10",
                 "9m",
                 4,
-                null,
+                "件",
                 new BigDecimal("0.5"),
                 2,
                 "B-001",
@@ -681,9 +763,14 @@ class FreightStatementServiceTest {
     }
 
     private static FreightStatementItem entityItem(String sourceNo) {
+        return entityItem(sourceNo, null);
+    }
+
+    private static FreightStatementItem entityItem(String sourceNo, Long sourceFreightBillId) {
         FreightStatementItem item = new FreightStatementItem();
         item.setId(10L);
         item.setSourceNo(sourceNo);
+        item.setSourceFreightBillId(sourceFreightBillId);
         return item;
     }
 
@@ -716,12 +803,6 @@ class FreightStatementServiceTest {
         bill.setStatus(StatusConstants.AUDITED);
         bill.setTotalFreight(new BigDecimal("100"));
         bill.setItems(new java.util.ArrayList<>(List.of(freightBillItem(bill))));
-        return bill;
-    }
-
-    private static FreightBill sourceFreightBill(Long id, String billNo) {
-        FreightBill bill = createFreightBill(billNo);
-        bill.setId(id);
         return bill;
     }
 

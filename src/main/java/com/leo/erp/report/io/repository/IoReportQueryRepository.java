@@ -25,6 +25,10 @@ public class IoReportQueryRepository {
     private static final String IO_REPORT_FROM_SQL = """
             FROM (
                 SELECT
+                    item.id AS id,
+                    inbound.id AS source_document_id,
+                    item.material_id,
+                    COALESCE(item.warehouse_id, inbound.warehouse_id) AS warehouse_id,
                     inbound.inbound_date AS business_date,
                     '采购入库' AS business_type,
                     inbound.inbound_no AS source_no,
@@ -50,6 +54,10 @@ public class IoReportQueryRepository {
                   AND inbound.status IN (:effectiveInboundStatuses)
                 UNION ALL
                 SELECT
+                    item.id AS id,
+                    outbound.id AS source_document_id,
+                    item.material_id,
+                    COALESCE(item.warehouse_id, outbound.warehouse_id) AS warehouse_id,
                     outbound.outbound_date AS business_date,
                     '销售出库' AS business_type,
                     outbound.outbound_no AS source_no,
@@ -78,6 +86,9 @@ public class IoReportQueryRepository {
 
     private static final RowMapper<IoReportResponse> ROW_MAPPER = (rs, rowNum) -> new IoReportResponse(
             rs.getLong("id"),
+            rs.getLong("source_document_id"),
+            rs.getLong("material_id"),
+            rs.getLong("warehouse_id"),
             rs.getObject("business_date", LocalDate.class),
             rs.getString("business_type"),
             rs.getString("source_no"),
@@ -124,34 +135,34 @@ public class IoReportQueryRepository {
 
         String orderExpression = sortExpression("report", query.sortBy(), query.direction());
         String dataSql = """
-                SELECT *
-                FROM (
-                    SELECT
-                        ROW_NUMBER() OVER (ORDER BY %s) AS id,
-                        report.business_date,
-                        report.business_type,
-                        report.source_no,
-                        report.material_code,
-                        report.brand,
-                        report.material,
-                        report.category,
-                        report.spec,
-                        report.length,
-                        report.warehouse_name,
-                        report.batch_no,
-                        report.in_quantity,
-                        report.out_quantity,
-                        report.quantity_unit,
-                        report.in_weight_ton,
-                        report.out_weight_ton,
-                        report.unit,
-                        report.remark
-                    %s
-                    %s
-                ) paged
+                SELECT
+                    report.id,
+                    report.source_document_id,
+                    report.material_id,
+                    report.warehouse_id,
+                    report.business_date,
+                    report.business_type,
+                    report.source_no,
+                    report.material_code,
+                    report.brand,
+                    report.material,
+                    report.category,
+                    report.spec,
+                    report.length,
+                    report.warehouse_name,
+                    report.batch_no,
+                    report.in_quantity,
+                    report.out_quantity,
+                    report.quantity_unit,
+                    report.in_weight_ton,
+                    report.out_weight_ton,
+                    report.unit,
+                    report.remark
+                %s
+                %s
                 ORDER BY %s
                 LIMIT :limit OFFSET :offset
-                """.formatted(orderExpression, IO_REPORT_FROM_SQL, whereClause, sortExpression("paged", query.sortBy(), query.direction()));
+                """.formatted(IO_REPORT_FROM_SQL, whereClause, orderExpression);
 
         List<IoReportResponse> rows = jdbcTemplate.query(dataSql, params, ROW_MAPPER);
         return new PageImpl<>(rows, PageRequest.of(query.page(), query.size()), total);
@@ -210,15 +221,15 @@ public class IoReportQueryRepository {
         String sortDirection = "asc".equalsIgnoreCase(direction) ? "ASC" : "DESC";
         return switch (sortBy == null ? "" : sortBy.trim()) {
             case "businessType" -> "LOWER(COALESCE(" + alias + ".business_type, '')) " + sortDirection
-                    + ", " + alias + ".business_date DESC, LOWER(COALESCE(" + alias + ".source_no, '')) DESC";
+                    + ", " + alias + ".business_date DESC, " + alias + ".id DESC";
             case "sourceNo" -> "LOWER(COALESCE(" + alias + ".source_no, '')) " + sortDirection
-                    + ", " + alias + ".business_date DESC";
+                    + ", " + alias + ".business_date DESC, " + alias + ".id DESC";
             case "materialCode" -> "LOWER(COALESCE(" + alias + ".material_code, '')) " + sortDirection
-                    + ", " + alias + ".business_date DESC";
+                    + ", " + alias + ".business_date DESC, " + alias + ".id DESC";
             case "warehouseName" -> "LOWER(COALESCE(" + alias + ".warehouse_name, '')) " + sortDirection
-                    + ", " + alias + ".business_date DESC, LOWER(COALESCE(" + alias + ".source_no, '')) DESC";
+                    + ", " + alias + ".business_date DESC, " + alias + ".id DESC";
             default -> alias + ".business_date " + sortDirection
-                    + ", LOWER(COALESCE(" + alias + ".source_no, '')) DESC";
+                    + ", " + alias + ".id DESC";
         };
     }
 }

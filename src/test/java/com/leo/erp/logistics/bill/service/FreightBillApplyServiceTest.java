@@ -5,6 +5,7 @@ import com.leo.erp.logistics.bill.domain.entity.FreightBillItem;
 import com.leo.erp.logistics.bill.web.dto.FreightBillItemRequest;
 import com.leo.erp.logistics.bill.web.dto.FreightBillRequest;
 import com.leo.erp.sales.outbound.domain.entity.SalesOutboundItem;
+import com.leo.erp.sales.outbound.domain.entity.SalesOutbound;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
@@ -110,6 +111,81 @@ class FreightBillApplyServiceTest {
             assertThat(item.getSourceSalesOutboundItemId()).isEqualTo(61L);
             assertThat(item.getSettlementCompanyId()).isEqualTo(71L);
             assertThat(item.getSettlementCompanyName()).isEqualTo("结算主体甲");
+        });
+    }
+
+    @Test
+    void shouldUseParentOutboundMappedByLineNumber() {
+        FreightBill bill = new FreightBill();
+        bill.setItems(new ArrayList<>());
+        SalesOutbound outbound = new SalesOutbound();
+        outbound.setOutboundNo("OB-001");
+        outbound.setCustomerId(101L);
+        outbound.setCustomerName("权威客户");
+        outbound.setProjectId(102L);
+        outbound.setProjectName("权威项目");
+        SalesOutboundItem sourceOutboundItem = sourceOutboundItem(61L, 71L, "结算主体甲");
+        sourceOutboundItem.setWeightTon(new BigDecimal("2.500"));
+        FreightBillSourceService.SourceValidationContext sourceContext =
+                new FreightBillSourceService.SourceValidationContext(
+                        Map.of("OB-001", outbound),
+                        Map.of(1, sourceOutboundItem),
+                        Map.of(1, outbound)
+                );
+
+        service.applyItems(
+                bill,
+                request(
+                        new BigDecimal("20.00"),
+                        item(null, "OB-001", "请求客户", "请求项目", null, "宝钢", 2,
+                                new BigDecimal("1.250"))
+                ),
+                sourceContext,
+                new AtomicLong(81L)::getAndIncrement
+        );
+
+        assertThat(bill.getCustomerName()).isEqualTo("权威客户");
+        assertThat(bill.getProjectName()).isEqualTo("权威项目");
+        assertThat(bill.getItems()).singleElement().satisfies(item -> {
+            assertThat(item.getCustomerId()).isEqualTo(101L);
+            assertThat(item.getProjectId()).isEqualTo(102L);
+        });
+    }
+
+    @Test
+    void shouldCopyStableIdentityFromSourceOutbound() {
+        FreightBill bill = new FreightBill();
+        bill.setItems(new ArrayList<>());
+        SalesOutbound outbound = new SalesOutbound();
+        outbound.setCustomerId(101L);
+        outbound.setProjectId(102L);
+        outbound.setWarehouseId(104L);
+        SalesOutboundItem sourceOutboundItem = sourceOutboundItem(61L, 71L, "结算主体甲");
+        sourceOutboundItem.setSalesOutbound(outbound);
+        sourceOutboundItem.setMaterialId(103L);
+        sourceOutboundItem.setWarehouseId(104L);
+        sourceOutboundItem.setBatchNo(" B001 ");
+        sourceOutboundItem.setBatchNoNormalized("B001");
+        sourceOutboundItem.setWeightTon(new BigDecimal("2.500"));
+        FreightBillSourceService.SourceValidationContext sourceContext =
+                new FreightBillSourceService.SourceValidationContext(Map.of(), Map.of(1, sourceOutboundItem));
+
+        service.applyItems(
+                bill,
+                request(
+                        new BigDecimal("20.00"),
+                        item(null, "OB-001", "客户甲", "项目甲", null, "宝钢", 2, new BigDecimal("1.250"))
+                ),
+                sourceContext,
+                new AtomicLong(81L)::getAndIncrement
+        );
+
+        assertThat(bill.getItems()).singleElement().satisfies(item -> {
+            assertThat(item.getCustomerId()).isEqualTo(101L);
+            assertThat(item.getProjectId()).isEqualTo(102L);
+            assertThat(item.getMaterialId()).isEqualTo(103L);
+            assertThat(item.getWarehouseId()).isEqualTo(104L);
+            assertThat(item.getBatchNo()).isEqualTo(" B001 ");
         });
     }
 

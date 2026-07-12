@@ -32,11 +32,20 @@ public class SalesOutbound extends AbstractAuditableEntity {
     @Column(name = "customer_name", nullable = false, length = 128)
     private String customerName;
 
+    @Column(name = "customer_id")
+    private Long customerId;
+
     @Column(name = "project_name", nullable = false, length = 200)
     private String projectName;
 
+    @Column(name = "project_id")
+    private Long projectId;
+
     @Column(name = "warehouse_name", nullable = false, length = 128)
     private String warehouseName;
+
+    @Column(name = "warehouse_id")
+    private Long warehouseId;
 
     @Column(name = "settlement_company_id")
     private Long settlementCompanyId;

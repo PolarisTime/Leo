@@ -69,7 +69,9 @@ public class SalesOrderController {
     public ApiResponse<PageResponse<SalesOrderResponse>> page(
             @BindPageQuery(sortFieldKey = "sales-order") PageQuery query,
             @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) Long customerId,
             @RequestParam(required = false) String customerName,
+            @RequestParam(required = false) Long projectId,
             @RequestParam(required = false) String projectName,
             @RequestParam(required = false) Long settlementCompanyId,
             @RequestParam(required = false) String status,
@@ -77,7 +79,11 @@ public class SalesOrderController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate
     ) {
         return ApiResponse.success(PageResponse.from(
-                service.page(query, PageFilter.of(keyword, customerName, projectName, settlementCompanyId, status, startDate, endDate))
+                service.page(
+                        query,
+                        PageFilter.of(keyword, customerName, projectName, settlementCompanyId, status, startDate, endDate)
+                                .withIdentity(customerId, projectId, null, null, null)
+                )
         ));
     }
 
@@ -87,7 +93,9 @@ public class SalesOrderController {
     public ApiResponse<PageResponse<SalesOrderResponse>> outboundImportCandidates(
             @BindPageQuery(sortFieldKey = "sales-order") PageQuery query,
             @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) Long customerId,
             @RequestParam(required = false) String customerName,
+            @RequestParam(required = false) Long projectId,
             @RequestParam(required = false) String projectName,
             @RequestParam(required = false) Long settlementCompanyId,
             @RequestParam(required = false) String status,
@@ -98,6 +106,7 @@ public class SalesOrderController {
                 service.outboundImportCandidates(
                         query,
                         PageFilter.of(keyword, customerName, projectName, settlementCompanyId, status, startDate, endDate)
+                                .withIdentity(customerId, projectId, null, null, null)
                 )
         ));
     }

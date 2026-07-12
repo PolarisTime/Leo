@@ -71,7 +71,7 @@ class FreightBillControllerTest {
         when(service.page(any(), any(), any())).thenReturn(page);
 
         ApiResponse<PageResponse<FreightBillResponse>> response = controller.page(
-                query, "test", "CR-001", "carrier", 7L, "active", null, null
+                query, "test", 101L, "CR-001", "carrier", 7L, "active", null, null
         );
 
         assertThat(response.code()).isEqualTo(0);
@@ -86,7 +86,7 @@ class FreightBillControllerTest {
         when(service.page(any(), any(), any())).thenReturn(page);
 
         ApiResponse<PageResponse<FreightBillResponse>> response = controller.page(
-                query, null, null, null, null, null, null, null
+                query, null, null, null, null, null, null, null, null
         );
 
         assertThat(response.code()).isEqualTo(0);
@@ -114,12 +114,15 @@ class FreightBillControllerTest {
         ApiResponse<PageResponse<FreightBillImportCandidateResponse>> response = controller.importCandidates(
                 query,
                 "OB",
+                101L,
                 "客户甲",
+                102L,
                 "项目甲",
                 7L,
                 "已审核",
                 LocalDate.of(2026, 6, 1),
-                LocalDate.of(2026, 6, 30)
+                LocalDate.of(2026, 6, 30),
+                201L
         );
 
         assertThat(response.code()).isEqualTo(0);
@@ -130,6 +133,9 @@ class FreightBillControllerTest {
         assertThat(filter.keyword()).isEqualTo("OB");
         assertThat(filter.name()).isEqualTo("客户甲");
         assertThat(filter.projectName()).isEqualTo("项目甲");
+        assertThat(filter.customerId()).isEqualTo(101L);
+        assertThat(filter.projectId()).isEqualTo(102L);
+        assertThat(filter.currentRecordId()).isEqualTo(201L);
         assertThat(filter.settlementCompanyId()).isEqualTo(7L);
         assertThat(filter.status()).isEqualTo("已审核");
         assertThat(filter.startDate()).isEqualTo(LocalDate.of(2026, 6, 1));
@@ -143,12 +149,15 @@ class FreightBillControllerTest {
                         "importCandidates",
                         PageQuery.class,
                         String.class,
+                        Long.class,
                         String.class,
+                        Long.class,
                         String.class,
                         Long.class,
                         String.class,
                         LocalDate.class,
-                        LocalDate.class
+                        LocalDate.class,
+                        Long.class
                 )
                 .getAnnotation(RequiresPermission.class);
 

@@ -89,6 +89,7 @@ class ReceiptAllocationServiceTest {
                     assertThat(item.getReceipt()).isSameAs(receipt);
                     assertThat(item.getLineNo()).isEqualTo(1);
                     assertThat(item.getSourceStatementId()).isEqualTo(21L);
+                    assertThat(item.getSourceCustomerStatementId()).isEqualTo(21L);
                     assertThat(item.getAllocatedAmount()).isEqualByComparingTo("100.00");
                 });
     }
@@ -269,7 +270,9 @@ class ReceiptAllocationServiceTest {
                                                 String settlementCompanyName) {
         CustomerStatement statement = new CustomerStatement();
         statement.setId(id);
+        statement.setCustomerId(101L);
         statement.setCustomerCode(customerCode);
+        statement.setProjectId(1001L);
         statement.setSettlementCompanyId(settlementCompanyId);
         statement.setSettlementCompanyName(settlementCompanyName);
         return statement;

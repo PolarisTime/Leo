@@ -1,0 +1,75 @@
+ALTER TABLE public.fm_payment
+    VALIDATE CONSTRAINT chk_fm_payment_typed_counterparty;
+ALTER TABLE public.fm_ledger_adjustment
+    VALIDATE CONSTRAINT chk_fm_ledger_adjustment_counterparty_identity_nn;
+ALTER TABLE public.fm_payment_allocation
+    VALIDATE CONSTRAINT chk_fm_payment_allocation_typed_source;
+ALTER TABLE public.fm_receipt_allocation
+    VALIDATE CONSTRAINT chk_fm_receipt_allocation_typed_source;
+ALTER TABLE public.so_sales_order_item
+    VALIDATE CONSTRAINT chk_so_sales_order_item_source_exclusive;
+
+ALTER TABLE public.md_project
+    VALIDATE CONSTRAINT chk_md_project_customer_identity_nn;
+ALTER TABLE public.ct_purchase_contract
+    VALIDATE CONSTRAINT chk_ct_purchase_contract_supplier_identity_nn;
+ALTER TABLE public.po_purchase_order
+    VALIDATE CONSTRAINT chk_po_purchase_order_supplier_identity_nn;
+ALTER TABLE public.po_purchase_inbound
+    VALIDATE CONSTRAINT chk_po_purchase_inbound_identity_nn;
+ALTER TABLE public.po_purchase_refund
+    VALIDATE CONSTRAINT chk_po_purchase_refund_supplier_identity_nn;
+ALTER TABLE public.fm_invoice_receipt
+    VALIDATE CONSTRAINT chk_fm_invoice_receipt_supplier_identity_nn;
+ALTER TABLE public.st_supplier_statement
+    VALIDATE CONSTRAINT chk_st_supplier_statement_supplier_identity_nn;
+ALTER TABLE public.fm_supplier_refund_receipt
+    VALIDATE CONSTRAINT chk_fm_supplier_refund_supplier_identity_nn;
+
+ALTER TABLE public.so_sales_order
+    VALIDATE CONSTRAINT chk_so_sales_order_party_identity_nn;
+ALTER TABLE public.ct_sales_contract
+    VALIDATE CONSTRAINT chk_ct_sales_contract_party_identity_nn;
+ALTER TABLE public.so_sales_outbound
+    VALIDATE CONSTRAINT chk_so_sales_outbound_identity_nn;
+ALTER TABLE public.fm_invoice_issue
+    VALIDATE CONSTRAINT chk_fm_invoice_issue_party_identity_nn;
+ALTER TABLE public.st_customer_statement
+    VALIDATE CONSTRAINT chk_st_customer_statement_party_identity_nn;
+ALTER TABLE public.st_customer_statement_item
+    VALIDATE CONSTRAINT chk_st_customer_stmt_item_party_identity_nn,
+    VALIDATE CONSTRAINT chk_st_customer_stmt_item_material_identity_nn;
+ALTER TABLE public.fm_receipt
+    VALIDATE CONSTRAINT chk_fm_receipt_party_identity_nn;
+ALTER TABLE public.lg_freight_bill_item
+    VALIDATE CONSTRAINT chk_lg_freight_bill_item_party_identity_nn,
+    VALIDATE CONSTRAINT chk_lg_freight_bill_item_stock_source_identity_nn;
+ALTER TABLE public.st_freight_statement_item
+    VALIDATE CONSTRAINT chk_st_freight_statement_item_party_identity_nn,
+    VALIDATE CONSTRAINT chk_st_freight_stmt_item_material_source_identity_nn;
+
+ALTER TABLE public.ct_purchase_contract_item
+    VALIDATE CONSTRAINT chk_ct_purchase_contract_item_material_identity_nn;
+ALTER TABLE public.ct_sales_contract_item
+    VALIDATE CONSTRAINT chk_ct_sales_contract_item_material_identity_nn;
+ALTER TABLE public.po_purchase_order_item
+    VALIDATE CONSTRAINT chk_po_purchase_order_item_material_identity_nn;
+ALTER TABLE public.po_purchase_inbound_item
+    VALIDATE CONSTRAINT chk_po_purchase_inbound_item_stock_identity_nn;
+ALTER TABLE public.po_purchase_refund_item
+    VALIDATE CONSTRAINT chk_po_purchase_refund_item_material_identity_nn;
+ALTER TABLE public.so_sales_order_item
+    VALIDATE CONSTRAINT chk_so_sales_order_item_material_identity_nn;
+ALTER TABLE public.so_sales_outbound_item
+    VALIDATE CONSTRAINT chk_so_sales_outbound_item_stock_identity_nn;
+ALTER TABLE public.fm_invoice_issue_item
+    VALIDATE CONSTRAINT chk_fm_invoice_issue_item_material_identity_nn;
+ALTER TABLE public.fm_invoice_receipt_item
+    VALIDATE CONSTRAINT chk_fm_invoice_receipt_item_material_identity_nn;
+ALTER TABLE public.st_supplier_statement_item
+    VALIDATE CONSTRAINT chk_st_supplier_stmt_item_material_identity_nn;
+
+ALTER TABLE public.lg_freight_bill
+    VALIDATE CONSTRAINT chk_lg_freight_bill_carrier_identity_nn;
+ALTER TABLE public.st_freight_statement
+    VALIDATE CONSTRAINT chk_st_freight_statement_carrier_identity_nn;

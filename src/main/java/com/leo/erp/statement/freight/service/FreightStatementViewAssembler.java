@@ -46,7 +46,8 @@ public class FreightStatementViewAssembler {
                 joinAttachmentNames(attachments),
                 attachments,
                 entity.getRemark(),
-                entity.getItems().stream().map(this::toItemView).toList()
+                entity.getItems().stream().map(this::toItemView).toList(),
+                entity.getCarrierId()
         );
     }
 
@@ -73,7 +74,14 @@ public class FreightStatementViewAssembler {
                 item.getPiecesPerBundle(),
                 item.getBatchNo(),
                 item.getWeightTon(),
-                item.getWarehouseName()
+                item.getWarehouseName(),
+                item.getSourceFreightBillId(),
+                item.getSourceFreightBillItemId(),
+                item.getCustomerId(),
+                item.getProjectId(),
+                item.getMaterialId(),
+                item.getWarehouseId(),
+                item.getBatchNoNormalized()
         );
     }
 

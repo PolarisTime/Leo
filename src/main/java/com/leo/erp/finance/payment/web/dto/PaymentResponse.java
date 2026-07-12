@@ -7,7 +7,8 @@ import java.util.List;
 public record PaymentResponse(
         Long id,
         String paymentNo,
-        String businessType,
+        String counterpartyType,
+        Long counterpartyId,
         String paymentPurpose,
         String counterpartyCode,
         String counterpartyName,
@@ -30,6 +31,33 @@ public record PaymentResponse(
     public PaymentResponse(Long id,
                            String paymentNo,
                            String businessType,
+                           String paymentPurpose,
+                           String counterpartyCode,
+                           String counterpartyName,
+                           Long sourceStatementId,
+                           Long sourcePurchaseOrderId,
+                           String purchaseOrderNo,
+                           String supplierCode,
+                           String supplierName,
+                           Long settlementCompanyId,
+                           String settlementCompanyName,
+                           LocalDate paymentDate,
+                           String payType,
+                           BigDecimal amount,
+                           String status,
+                           boolean deletedFlag,
+                           String operatorName,
+                           String remark,
+                           List<PaymentAllocationResponse> items) {
+        this(id, paymentNo, businessType, null, paymentPurpose, counterpartyCode, counterpartyName,
+                sourceStatementId, sourcePurchaseOrderId, purchaseOrderNo, supplierCode, supplierName,
+                settlementCompanyId, settlementCompanyName, paymentDate, payType, amount, status,
+                deletedFlag, operatorName, remark, items);
+    }
+
+    public PaymentResponse(Long id,
+                           String paymentNo,
+                           String businessType,
                            String counterpartyCode,
                            String counterpartyName,
                            Long sourceStatementId,
@@ -45,6 +73,7 @@ public record PaymentResponse(
                 id,
                 paymentNo,
                 businessType,
+                null,
                 null,
                 counterpartyCode,
                 counterpartyName,
@@ -84,6 +113,7 @@ public record PaymentResponse(
                 paymentNo,
                 businessType,
                 null,
+                null,
                 counterpartyCode,
                 counterpartyName,
                 sourceStatementId,
@@ -122,6 +152,7 @@ public record PaymentResponse(
                 businessType,
                 null,
                 null,
+                null,
                 counterpartyName,
                 sourceStatementId,
                 null,
@@ -139,5 +170,10 @@ public record PaymentResponse(
                 remark,
                 items
         );
+    }
+
+    @Deprecated(forRemoval = false)
+    public String businessType() {
+        return counterpartyType;
     }
 }

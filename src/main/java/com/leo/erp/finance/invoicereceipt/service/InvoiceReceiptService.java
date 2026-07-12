@@ -105,7 +105,8 @@ public class InvoiceReceiptService extends AbstractCrudService<InvoiceReceipt, I
                 request.status(),
                 request.operatorName(),
                 request.remark(),
-                request.items()
+                request.items(),
+                request.supplierId()
         );
     }
 
@@ -126,7 +127,8 @@ public class InvoiceReceiptService extends AbstractCrudService<InvoiceReceipt, I
                 request.status(),
                 request.operatorName(),
                 request.remark(),
-                request.items()
+                request.items(),
+                request.supplierId()
         );
     }
 

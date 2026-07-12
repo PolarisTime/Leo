@@ -24,8 +24,29 @@ public record CustomerStatementRequest(
         @DecimalMin("0.00") BigDecimal closingAmount,
         String status,
         String remark,
-        @Valid @NotEmpty List<CustomerStatementItemRequest> items
+        @Valid @NotEmpty List<CustomerStatementItemRequest> items,
+        Long customerId
 ) {
+    public CustomerStatementRequest(String statementNo,
+                                    String customerCode,
+                                    String customerName,
+                                    Long projectId,
+                                    String projectName,
+                                    Long settlementCompanyId,
+                                    String settlementCompanyName,
+                                    LocalDate startDate,
+                                    LocalDate endDate,
+                                    BigDecimal salesAmount,
+                                    BigDecimal receiptAmount,
+                                    BigDecimal closingAmount,
+                                    String status,
+                                    String remark,
+                                    List<CustomerStatementItemRequest> items) {
+        this(statementNo, customerCode, customerName, projectId, projectName, settlementCompanyId,
+                settlementCompanyName, startDate, endDate, salesAmount, receiptAmount, closingAmount, status,
+                remark, items, null);
+    }
+
     public CustomerStatementRequest(String statementNo,
                                     String customerName,
                                     String projectName,
@@ -38,7 +59,7 @@ public record CustomerStatementRequest(
                                     String remark,
                                     List<CustomerStatementItemRequest> items) {
         this(statementNo, null, customerName, null, projectName, null, null, startDate, endDate,
-                salesAmount, receiptAmount, closingAmount, status, remark, items);
+                salesAmount, receiptAmount, closingAmount, status, remark, items, null);
     }
 
     public CustomerStatementRequest(String statementNo,
@@ -55,6 +76,6 @@ public record CustomerStatementRequest(
                                     String remark,
                                     List<CustomerStatementItemRequest> items) {
         this(statementNo, customerCode, customerName, projectId, projectName, null, null, startDate, endDate,
-                salesAmount, receiptAmount, closingAmount, status, remark, items);
+                salesAmount, receiptAmount, closingAmount, status, remark, items, null);
     }
 }

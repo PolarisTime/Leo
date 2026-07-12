@@ -9,6 +9,7 @@ import java.math.BigDecimal;
 
 public record PurchaseInboundItemRequest(
         Long id,
+        Long materialId,
         @NotBlank String materialCode,
         @NotBlank String brand,
         @NotBlank String category,
@@ -18,6 +19,7 @@ public record PurchaseInboundItemRequest(
         @NotBlank String unit,
         @NotNull(message = "来源采购订单明细不能为空")
         Long sourcePurchaseOrderItemId,
+        Long warehouseId,
         String warehouseName,
         String settlementMode,
         String batchNo,
@@ -42,6 +44,7 @@ public record PurchaseInboundItemRequest(
                                       String unit,
                                       Long sourcePurchaseOrderItemId,
                                       String warehouseName,
+                                      String settlementMode,
                                       String batchNo,
                                       Integer quantity,
                                       String quantityUnit,
@@ -53,7 +56,35 @@ public record PurchaseInboundItemRequest(
                                       BigDecimal weightAdjustmentAmount,
                                       BigDecimal unitPrice,
                                       BigDecimal amount) {
-        this(id, materialCode, brand, category, material, spec, length, unit, sourcePurchaseOrderItemId, warehouseName,
+        this(id, null, materialCode, brand, category, material, spec, length, unit, sourcePurchaseOrderItemId,
+                null, warehouseName, settlementMode, batchNo, quantity, quantityUnit, pieceWeightTon,
+                piecesPerBundle, weightTon, weighWeightTon, weightAdjustmentTon, weightAdjustmentAmount,
+                unitPrice, amount);
+    }
+
+    public PurchaseInboundItemRequest(Long id,
+                                      String materialCode,
+                                      String brand,
+                                      String category,
+                                      String material,
+                                      String spec,
+                                      String length,
+                                      String unit,
+                                      Long sourcePurchaseOrderItemId,
+                                      String warehouseName,
+                                      String batchNo,
+                                      Integer quantity,
+                                      String quantityUnit,
+                                      BigDecimal pieceWeightTon,
+                                      Integer piecesPerBundle,
+                                      BigDecimal weightTon,
+                                      BigDecimal weighWeightTon,
+                                      BigDecimal weightAdjustmentTon,
+                                      BigDecimal weightAdjustmentAmount,
+                                      BigDecimal unitPrice,
+                                      BigDecimal amount) {
+        this(id, null, materialCode, brand, category, material, spec, length, unit, sourcePurchaseOrderItemId,
+                null, warehouseName,
                 null, batchNo, quantity, quantityUnit, pieceWeightTon, piecesPerBundle, weightTon, weighWeightTon,
                 weightAdjustmentTon, weightAdjustmentAmount, unitPrice, amount);
     }
@@ -76,7 +107,8 @@ public record PurchaseInboundItemRequest(
                                       BigDecimal weightTon,
                                       BigDecimal unitPrice,
                                       BigDecimal amount) {
-        this(id, materialCode, brand, category, material, spec, length, unit, sourcePurchaseOrderItemId, warehouseName,
+        this(id, null, materialCode, brand, category, material, spec, length, unit, sourcePurchaseOrderItemId,
+                null, warehouseName,
                 null, batchNo, quantity, quantityUnit, pieceWeightTon, piecesPerBundle, weightTon, null, null, null,
                 unitPrice, amount);
     }
@@ -98,7 +130,8 @@ public record PurchaseInboundItemRequest(
                                       BigDecimal weightTon,
                                       BigDecimal unitPrice,
                                       BigDecimal amount) {
-        this(null, materialCode, brand, category, material, spec, length, unit, sourcePurchaseOrderItemId, warehouseName,
+        this(null, null, materialCode, brand, category, material, spec, length, unit, sourcePurchaseOrderItemId,
+                null, warehouseName,
                 null, batchNo, quantity, quantityUnit, pieceWeightTon, piecesPerBundle, weightTon, null, null, null,
                 unitPrice, amount);
     }

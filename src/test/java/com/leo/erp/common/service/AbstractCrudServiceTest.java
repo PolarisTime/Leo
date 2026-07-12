@@ -233,7 +233,7 @@ class AbstractCrudServiceTest {
     }
 
     @Test
-    void createShouldUsePreallocatedIdFromHeader() {
+    void createShouldRejectPreallocatedIdWhenValidationServiceIsMissing() {
         MockHttpServletRequest request = new MockHttpServletRequest();
         request.addHeader("X-Preallocated-Id", "123456789");
         RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(request));
@@ -242,8 +242,9 @@ class AbstractCrudServiceTest {
 
         TestCrudService service = new TestCrudService();
 
-        var result = service.create("request");
-        assertThat(result).isEqualTo("response");
+        assertThatThrownBy(() -> service.create("request"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("预分配服务不可用");
     }
 
     @Test

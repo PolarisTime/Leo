@@ -35,6 +35,9 @@ public class PurchaseOrder extends AbstractAuditableEntity {
     @Column(name = "supplier_code", nullable = false, length = 64)
     private String supplierCode;
 
+    @Column(name = "supplier_id")
+    private Long supplierId;
+
     @Column(name = "supplier_name", nullable = false, length = 128)
     private String supplierName;
 

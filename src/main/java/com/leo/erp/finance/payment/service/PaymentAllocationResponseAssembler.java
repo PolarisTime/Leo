@@ -32,21 +32,31 @@ public class PaymentAllocationResponseAssembler {
 
     private PaymentAllocationResponse toResponse(String businessType, PaymentAllocation item) {
         if (PaymentAllocationService.SUPPLIER_PAYMENT_TYPE.equals(businessType)) {
-            SupplierStatement statement = findSupplierStatement(item.getSourceStatementId());
+            Long statementId = item.getSourceSupplierStatementId() == null
+                    ? item.getSourceStatementId()
+                    : item.getSourceSupplierStatementId();
+            SupplierStatement statement = findSupplierStatement(statementId);
             return new PaymentAllocationResponse(
                     item.getId(),
                     item.getLineNo(),
-                    item.getSourceStatementId(),
+                    statementId,
+                    statementId,
+                    null,
                     statement == null ? null : statement.getStatementNo(),
                     statement == null ? BigDecimal.ZERO : statement.getClosingAmount(),
                     item.getAllocatedAmount()
             );
         }
-        FreightStatement statement = findFreightStatement(item.getSourceStatementId());
+        Long statementId = item.getSourceFreightStatementId() == null
+                ? item.getSourceStatementId()
+                : item.getSourceFreightStatementId();
+        FreightStatement statement = findFreightStatement(statementId);
         return new PaymentAllocationResponse(
                 item.getId(),
                 item.getLineNo(),
-                item.getSourceStatementId(),
+                statementId,
+                null,
+                statementId,
                 statement == null ? null : statement.getStatementNo(),
                 statement == null ? BigDecimal.ZERO : statement.getUnpaidAmount(),
                 item.getAllocatedAmount()

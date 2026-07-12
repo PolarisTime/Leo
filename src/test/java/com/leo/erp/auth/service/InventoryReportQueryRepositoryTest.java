@@ -104,13 +104,13 @@ class InventoryReportQueryRepositoryTest {
         assertThat(dataSql.getValue()).contains("FROM inventory_report report");
         assertThat(dataSql.getValue()).contains("JSONB_AGG(");
         assertThat(dataSql.getValue()).contains("JSONB_BUILD_OBJECT(");
-        assertThat(dataSql.getValue()).contains("'materialCode', stock.material_code");
-        assertThat(dataSql.getValue()).contains("'brand', stock.brand");
-        assertThat(dataSql.getValue()).contains("'material', stock.material");
-        assertThat(dataSql.getValue()).contains("'category', stock.category");
-        assertThat(dataSql.getValue()).contains("'spec', stock.spec");
-        assertThat(dataSql.getValue()).contains("'length', stock.length");
-        assertThat(dataSql.getValue()).contains("'warehouseName', stock.warehouse_name");
+        assertThat(dataSql.getValue()).contains("'materialCode', material.material_code");
+        assertThat(dataSql.getValue()).contains("'brand', material.brand");
+        assertThat(dataSql.getValue()).contains("'material', material.material");
+        assertThat(dataSql.getValue()).contains("'category', material.category");
+        assertThat(dataSql.getValue()).contains("'spec', material.spec");
+        assertThat(dataSql.getValue()).contains("'length', material.length");
+        assertThat(dataSql.getValue()).contains("'warehouseName', warehouse.warehouse_name");
         assertThat(dataSql.getValue()).contains("'batchNo', stock.batch_no");
         assertThat(dataSql.getValue()).contains("outbound.outbound_no AS outbound_no");
         assertThat(dataSql.getValue()).contains("TO_CHAR(outbound.outbound_date, 'YYYY-MM-DD') AS outbound_date");
@@ -188,14 +188,14 @@ class InventoryReportQueryRepositoryTest {
         when(jdbcTemplate.queryForObject(anyString(), any(MapSqlParameterSource.class), eq(Number.class)))
                 .thenReturn(0);
 
-        repository.page(new PageQuery(0, 10, null, null), null, "二号码头", null, false);
+        repository.page(new PageQuery(0, 10, null, null), null, 202L, null, false);
 
         var sql = forClass(String.class);
         var params = forClass(MapSqlParameterSource.class);
         verify(jdbcTemplate).queryForObject(sql.capture(), params.capture(), eq(Number.class));
 
-        assertThat(sql.getValue()).contains("stock.warehouse_name = :warehouseName");
-        assertThat(params.getValue().getValue("warehouseName")).isEqualTo("二号码头");
+        assertThat(sql.getValue()).contains("movement.warehouse_id = :warehouseId");
+        assertThat(params.getValue().getValue("warehouseId")).isEqualTo(202L);
     }
 
     @Test
@@ -246,6 +246,7 @@ class InventoryReportQueryRepositoryTest {
                     RowMapper<InventoryReportResponse> mapper = invocation.getArgument(2, RowMapper.class);
                     ResultSet rs = mock(ResultSet.class);
                     when(rs.getLong("id")).thenReturn(1L);
+                    when(rs.getLong("material_id")).thenReturn(1L);
                     when(rs.getString("material_code")).thenReturn("M-001");
                     when(rs.getString("brand")).thenReturn("品牌A");
                     when(rs.getString("material")).thenReturn("材质A");
@@ -268,7 +269,9 @@ class InventoryReportQueryRepositoryTest {
                     when(rs.getObject("items_json")).thenReturn("""
                             [
                               {
-                                "id": "M-001|一号仓|B-001",
+                                "id": 11,
+                                "materialId": 1,
+                                "warehouseId": 101,
                                 "materialCode": "M-001",
                                 "brand": "品牌A",
                                 "material": "材质A",
@@ -294,6 +297,10 @@ class InventoryReportQueryRepositoryTest {
                 new PageQuery(0, 10, null, null), null, null, null, false);
 
         assertThat(result.getContent().getFirst().items()).hasSize(1);
+        assertThat(result.getContent().getFirst().materialId()).isEqualTo(1L);
+        assertThat(result.getContent().getFirst().items().getFirst().id()).isEqualTo(11L);
+        assertThat(result.getContent().getFirst().items().getFirst().materialId()).isEqualTo(1L);
+        assertThat(result.getContent().getFirst().items().getFirst().warehouseId()).isEqualTo(101L);
         assertThat(result.getContent().getFirst().items().getFirst().materialCode()).isEqualTo("M-001");
         assertThat(result.getContent().getFirst().items().getFirst().brand()).isEqualTo("品牌A");
         assertThat(result.getContent().getFirst().items().getFirst().material()).isEqualTo("材质A");
@@ -330,11 +337,11 @@ class InventoryReportQueryRepositoryTest {
     }
 
     @Test
-    void pageWithWarehouseNameAppliesEqualityFilter() {
+    void pageWithWarehouseIdAppliesEqualityFilter() {
         when(jdbcTemplate.queryForObject(anyString(), any(MapSqlParameterSource.class), eq(Number.class)))
                 .thenReturn(0);
 
-        repository.page(new PageQuery(0, 10, null, null), null, "warehouse1", null, false);
+        repository.page(new PageQuery(0, 10, null, null), null, 101L, null, false);
 
         verify(jdbcTemplate).queryForObject(
                 anyString(),
@@ -362,7 +369,7 @@ class InventoryReportQueryRepositoryTest {
         when(jdbcTemplate.queryForObject(anyString(), any(MapSqlParameterSource.class), eq(Number.class)))
                 .thenReturn(0);
 
-        repository.page(new PageQuery(0, 10, "materialCode", "asc"), "test", "warehouse1", "category1", false);
+        repository.page(new PageQuery(0, 10, "materialCode", "asc"), "test", 101L, "category1", false);
 
         verify(jdbcTemplate).queryForObject(
                 anyString(),
@@ -504,7 +511,7 @@ class InventoryReportQueryRepositoryTest {
         when(jdbcTemplate.query(anyString(), any(MapSqlParameterSource.class), any(RowMapper.class)))
                 .thenReturn(List.of());
 
-        repository.list(new PageQuery(0, 10, "brand", "desc"), "test", "warehouse1", "category1", false);
+        repository.list(new PageQuery(0, 10, "brand", "desc"), "test", 101L, "category1", false);
 
         verify(jdbcTemplate).query(anyString(), any(MapSqlParameterSource.class), any(RowMapper.class));
     }
@@ -512,18 +519,18 @@ class InventoryReportQueryRepositoryTest {
     @Test
     void listBindsAllStockFiltersToSqlParameters() {
         CapturedQuery query = captureListQuery(
-                new PageQuery(0, 10, null, null), "  AbC  ", "二号码头", "盘螺", false);
+                new PageQuery(0, 10, null, null), "  AbC  ", 202L, "盘螺", false);
 
         assertThat(query.sql()).contains("report.on_hand_quantity <> 0");
         assertThat(query.sql()).contains("report.reserved_quantity <> 0");
-        assertThat(query.sql()).contains("LOWER(COALESCE(stock.material_code, '')) LIKE :keyword");
-        assertThat(query.sql()).contains("LOWER(COALESCE(stock.brand, '')) LIKE :keyword");
-        assertThat(query.sql()).contains("LOWER(COALESCE(stock.spec, '')) LIKE :keyword");
-        assertThat(query.sql()).contains("LOWER(COALESCE(stock.material, '')) LIKE :keyword");
-        assertThat(query.sql()).contains("stock.warehouse_name = :warehouseName");
-        assertThat(query.sql()).contains("stock.category = :category");
+        assertThat(query.sql()).contains("LOWER(COALESCE(material.material_code, '')) LIKE :keyword");
+        assertThat(query.sql()).contains("LOWER(COALESCE(material.brand, '')) LIKE :keyword");
+        assertThat(query.sql()).contains("LOWER(COALESCE(material.spec, '')) LIKE :keyword");
+        assertThat(query.sql()).contains("LOWER(COALESCE(material.material, '')) LIKE :keyword");
+        assertThat(query.sql()).contains("movement.warehouse_id = :warehouseId");
+        assertThat(query.sql()).contains("material.category = :category");
         assertThat(query.params().getValue("keyword")).isEqualTo("%abc%");
-        assertThat(query.params().getValue("warehouseName")).isEqualTo("二号码头");
+        assertThat(query.params().getValue("warehouseId")).isEqualTo(202L);
         assertThat(query.params().getValue("category")).isEqualTo("盘螺");
     }
 
@@ -531,16 +538,16 @@ class InventoryReportQueryRepositoryTest {
     void listBuildsSqlForSupportedSortFields() {
         assertThat(captureListQuery(
                 new PageQuery(0, 10, "category", "asc"), null, null, null, false).sql())
-                .contains("ROW_NUMBER() OVER (ORDER BY LOWER(COALESCE(report.category, '')) ASC");
+                .contains("ORDER BY LOWER(COALESCE(report.category, '')) ASC");
         assertThat(captureListQuery(
                 new PageQuery(0, 10, "warehouseName", "desc"), null, null, null, false).sql())
-                .contains("ROW_NUMBER() OVER (ORDER BY LOWER(COALESCE(report.warehouse_name, '')) DESC");
+                .contains("ORDER BY LOWER(COALESCE(report.warehouse_name, '')) DESC");
         assertThat(captureListQuery(
                 new PageQuery(0, 10, "quantity", "asc"), null, null, null, false).sql())
-                .contains("ROW_NUMBER() OVER (ORDER BY report.on_hand_quantity ASC");
+                .contains("ORDER BY report.on_hand_quantity ASC");
         assertThat(captureListQuery(
                 new PageQuery(0, 10, "weightTon", "desc"), null, null, null, false).sql())
-                .contains("ROW_NUMBER() OVER (ORDER BY report.on_hand_weight_ton DESC");
+                .contains("ORDER BY report.on_hand_weight_ton DESC");
     }
 
     @Test
@@ -617,14 +624,14 @@ class InventoryReportQueryRepositoryTest {
         verify(jdbcTemplate).queryForObject(anyString(), any(MapSqlParameterSource.class), eq(Number.class));
     }
 
-    private CapturedQuery captureListQuery(PageQuery query, String keyword, String warehouseName, String category,
+    private CapturedQuery captureListQuery(PageQuery query, String keyword, Long warehouseId, String category,
                                            boolean includeOutbound) {
         NamedParameterJdbcTemplate localJdbcTemplate = mock(NamedParameterJdbcTemplate.class);
         InventoryReportQueryRepository localRepository = new InventoryReportQueryRepository(localJdbcTemplate);
         when(localJdbcTemplate.query(anyString(), any(MapSqlParameterSource.class), any(RowMapper.class)))
                 .thenReturn(List.of());
 
-        localRepository.list(query, keyword, warehouseName, category, includeOutbound);
+        localRepository.list(query, keyword, warehouseId, category, includeOutbound);
 
         var sql = forClass(String.class);
         var params = forClass(MapSqlParameterSource.class);
@@ -635,6 +642,7 @@ class InventoryReportQueryRepositoryTest {
     private static ResultSet resultSetWithItems(Object itemsJson) throws Exception {
         ResultSet rs = mock(ResultSet.class);
         when(rs.getLong("id")).thenReturn(1L);
+        when(rs.getLong("material_id")).thenReturn(1L);
         when(rs.getString("material_code")).thenReturn("M-001");
         when(rs.getString("brand")).thenReturn("品牌A");
         when(rs.getString("material")).thenReturn("材质A");

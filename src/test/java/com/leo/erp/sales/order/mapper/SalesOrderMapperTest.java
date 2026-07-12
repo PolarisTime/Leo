@@ -22,6 +22,7 @@ class SalesOrderMapperTest {
         entity.setPurchaseInboundNo("PI-001");
         entity.setPurchaseOrderNo("PO-001");
         entity.setCustomerCode("C-001");
+        entity.setCustomerId(10L);
         entity.setCustomerName("客户甲");
         entity.setProjectId(100L);
         entity.setProjectName("项目A");
@@ -39,6 +40,7 @@ class SalesOrderMapperTest {
         assertThat(response.purchaseInboundNo()).isEqualTo("PI-001");
         assertThat(response.purchaseOrderNo()).isEqualTo("PO-001");
         assertThat(response.customerCode()).isEqualTo("C-001");
+        assertThat(response.customerId()).isEqualTo(10L);
         assertThat(response.customerName()).isEqualTo("客户甲");
         assertThat(response.projectId()).isEqualTo(100L);
         assertThat(response.projectName()).isEqualTo("项目A");

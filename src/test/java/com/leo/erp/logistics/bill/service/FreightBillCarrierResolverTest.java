@@ -27,11 +27,27 @@ class FreightBillCarrierResolverTest {
 
         FreightBillCarrierResolver.CarrierSnapshot snapshot = resolver.resolve(" CR-001 ", " 物流甲 ");
 
+        assertThat(snapshot.id()).isNull();
         assertThat(snapshot.code()).isEqualTo("CR-001");
         assertThat(snapshot.name()).isEqualTo("物流甲");
         assertThat(snapshot.defaultSettlementCompanyId()).isEqualTo(7L);
         assertThat(snapshot.defaultSettlementCompanyName()).isEqualTo("物流结算主体");
         verify(repository).findByCarrierCodeAndDeletedFlagFalse("CR-001");
+    }
+
+    @Test
+    void shouldResolveCanonicalCarrierSnapshotById() {
+        CarrierRepository repository = mock(CarrierRepository.class);
+        Carrier carrier = carrier("CR-001", "物流甲");
+        carrier.setId(101L);
+        when(repository.findByIdAndDeletedFlagFalse(101L)).thenReturn(Optional.of(carrier));
+        FreightBillCarrierResolver resolver = new FreightBillCarrierResolver(repository);
+
+        FreightBillCarrierResolver.CarrierSnapshot snapshot = resolver.resolve(101L, "CR-001", "物流甲");
+
+        assertThat(snapshot.id()).isEqualTo(101L);
+        assertThat(snapshot.code()).isEqualTo("CR-001");
+        verify(repository).findByIdAndDeletedFlagFalse(101L);
     }
 
     @Test

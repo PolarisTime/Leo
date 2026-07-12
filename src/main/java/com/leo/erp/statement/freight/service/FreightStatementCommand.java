@@ -20,8 +20,30 @@ public record FreightStatementCommand(
         String signStatus,
         String attachment,
         String remark,
-        List<FreightStatementItemCommand> items
+        List<FreightStatementItemCommand> items,
+        Long carrierId
 ) {
+    public FreightStatementCommand(String statementNo,
+                                   String carrierCode,
+                                   String carrierName,
+                                   Long settlementCompanyId,
+                                   String settlementCompanyName,
+                                   LocalDate startDate,
+                                   LocalDate endDate,
+                                   BigDecimal totalWeight,
+                                   BigDecimal totalFreight,
+                                   BigDecimal paidAmount,
+                                   BigDecimal unpaidAmount,
+                                   String status,
+                                   String signStatus,
+                                   String attachment,
+                                   String remark,
+                                   List<FreightStatementItemCommand> items) {
+        this(statementNo, carrierCode, carrierName, settlementCompanyId, settlementCompanyName, startDate, endDate,
+                totalWeight, totalFreight, paidAmount, unpaidAmount, status, signStatus, attachment, remark, items,
+                null);
+    }
+
     public FreightStatementCommand(String statementNo,
                                    String carrierName,
                                    LocalDate startDate,
@@ -35,7 +57,8 @@ public record FreightStatementCommand(
                                    String attachment,
                                    String remark,
                                    List<FreightStatementItemCommand> items) {
-        this(statementNo, null, carrierName, null, null, startDate, endDate, totalWeight, totalFreight, paidAmount, unpaidAmount, status, signStatus, attachment, remark, items);
+        this(statementNo, null, carrierName, null, null, startDate, endDate, totalWeight, totalFreight, paidAmount,
+                unpaidAmount, status, signStatus, attachment, remark, items, null);
     }
 
     public FreightStatementCommand(String statementNo,
@@ -53,6 +76,6 @@ public record FreightStatementCommand(
                                    String remark,
                                    List<FreightStatementItemCommand> items) {
         this(statementNo, carrierCode, carrierName, null, null, startDate, endDate, totalWeight, totalFreight,
-                paidAmount, unpaidAmount, status, signStatus, attachment, remark, items);
+                paidAmount, unpaidAmount, status, signStatus, attachment, remark, items, null);
     }
 }

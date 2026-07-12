@@ -105,6 +105,8 @@ spring:
   flyway:
     # 启用数据库迁移
     enabled: true
+    # 非生产环境默认验证完整迁移链；生产环境在 application-prod.yml 中要求显式阶段上限
+    target: ${SPRING_FLYWAY_TARGET:latest}
     # 对已有库允许以基线模式接入迁移管理
     baseline-on-migrate: true
     # 禁止执行危险的 clean 操作

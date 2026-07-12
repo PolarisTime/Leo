@@ -32,6 +32,9 @@ public class Project extends AbstractAuditableEntity {
     @Column(name = "project_manager", length = 32)
     private String projectManager;
 
+    @Column(name = "customer_id")
+    private Long customerId;
+
     @Column(name = "customer_code", nullable = false, length = 64)
     private String customerCode;
 

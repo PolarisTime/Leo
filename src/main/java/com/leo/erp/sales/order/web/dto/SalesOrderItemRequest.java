@@ -9,6 +9,7 @@ import java.math.BigDecimal;
 
 public record SalesOrderItemRequest(
         Long id,
+        Long materialId,
         @NotBlank String materialCode,
         @NotBlank String brand,
         @NotBlank String category,
@@ -18,6 +19,7 @@ public record SalesOrderItemRequest(
         @NotBlank String unit,
         Long sourceInboundItemId,
         Long sourcePurchaseOrderItemId,
+        Long warehouseId,
         @NotBlank String warehouseName,
         String batchNo,
         @NotNull @Min(0) Integer quantity,
@@ -28,6 +30,30 @@ public record SalesOrderItemRequest(
         @NotNull @DecimalMin("0.00") BigDecimal unitPrice,
         BigDecimal amount
 ) {
+    public SalesOrderItemRequest(Long id,
+                                 String materialCode,
+                                 String brand,
+                                 String category,
+                                 String material,
+                                 String spec,
+                                 String length,
+                                 String unit,
+                                 Long sourceInboundItemId,
+                                 Long sourcePurchaseOrderItemId,
+                                 String warehouseName,
+                                 String batchNo,
+                                 Integer quantity,
+                                 String quantityUnit,
+                                 BigDecimal pieceWeightTon,
+                                 Integer piecesPerBundle,
+                                 BigDecimal weightTon,
+                                 BigDecimal unitPrice,
+                                 BigDecimal amount) {
+        this(id, null, materialCode, brand, category, material, spec, length, unit, sourceInboundItemId,
+                sourcePurchaseOrderItemId, null, warehouseName, batchNo, quantity, quantityUnit,
+                pieceWeightTon, piecesPerBundle, weightTon, unitPrice, amount);
+    }
+
     public SalesOrderItemRequest(String materialCode,
                                  String brand,
                                  String category,
@@ -46,7 +72,8 @@ public record SalesOrderItemRequest(
                                  BigDecimal weightTon,
                                  BigDecimal unitPrice,
                                  BigDecimal amount) {
-        this(null, materialCode, brand, category, material, spec, length, unit, sourceInboundItemId, sourcePurchaseOrderItemId, warehouseName,
+        this(null, null, materialCode, brand, category, material, spec, length, unit, sourceInboundItemId,
+                sourcePurchaseOrderItemId, null, warehouseName,
                 batchNo, quantity, quantityUnit, pieceWeightTon, piecesPerBundle, weightTon, unitPrice, amount);
     }
 

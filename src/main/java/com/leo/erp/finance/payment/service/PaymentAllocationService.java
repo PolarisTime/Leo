@@ -52,6 +52,7 @@ public class PaymentAllocationService {
         }
 
         String resolvedCounterpartyCode = null;
+        Long resolvedCounterpartyId = null;
         SettlementCompanySnapshot settlementCompany = null;
         BigDecimal totalAllocatedAmount = BigDecimal.ZERO;
         Map<Long, BigDecimal> requestAllocatedAmountMap = new HashMap<>();
@@ -67,25 +68,31 @@ public class PaymentAllocationService {
 
         for (int i = 0; i < allocationRequests.size(); i++) {
             PaymentAllocationRequest source = allocationRequests.get(i);
+            int lineNo = i + 1;
+            Long sourceStatementId = resolveSourceStatementId(source, request.businessType(), lineNo);
             BigDecimal allocatedAmount = normalizeAllocatedAmount(source.allocatedAmount(), i + 1);
             PaymentAllocation item = items.get(i);
             item.setPayment(entity);
-            item.setLineNo(i + 1);
-            item.setSourceStatementId(source.sourceStatementId());
+            item.setLineNo(lineNo);
+            applyTypedSource(item, request.businessType(), sourceStatementId);
             item.setAllocatedAmount(allocatedAmount);
             PaymentStatementAllocationValidator.ValidatedStatement validatedStatement =
                     statementAllocationValidator.validate(
                             request,
                             nextStatus,
                             entity.getId(),
-                            source.sourceStatementId(),
+                            sourceStatementId,
                             allocatedAmount,
                             requestAllocatedAmountMap,
-                            i + 1
+                            lineNo
                     );
             resolvedCounterpartyCode = mergeCounterpartyCode(
                     resolvedCounterpartyCode,
                     validatedStatement.counterpartyCode()
+            );
+            resolvedCounterpartyId = mergeCounterpartyId(
+                    resolvedCounterpartyId,
+                    validatedStatement.counterpartyId()
             );
             settlementCompany = mergeSettlementCompany(settlementCompany, validatedStatement);
             totalAllocatedAmount = totalAllocatedAmount.add(allocatedAmount);
@@ -99,6 +106,8 @@ public class PaymentAllocationService {
         entity.getItems().addAll(items);
         entity.getItems().sort(java.util.Comparator.comparing(PaymentAllocation::getLineNo));
         return new AllocationApplyResult(
+                request.businessType(),
+                resolvedCounterpartyId,
                 resolvedCounterpartyCode,
                 settlementCompany == null ? null : settlementCompany.id(),
                 settlementCompany == null ? null : settlementCompany.name(),
@@ -121,16 +130,18 @@ public class PaymentAllocationService {
         );
         Map<Long, BigDecimal> requestAllocatedAmountMap = new HashMap<>();
         String resolvedCounterpartyCode = null;
+        Long resolvedCounterpartyId = null;
         SettlementCompanySnapshot settlementCompany = null;
         for (int i = 0; i < entity.getItems().size(); i++) {
             PaymentAllocation item = entity.getItems().get(i);
+            Long sourceStatementId = requireExistingSourceStatementId(item, entity.getBusinessType(), i + 1);
             BigDecimal allocatedAmount = TradeItemCalculator.safeBigDecimal(item.getAllocatedAmount());
             PaymentStatementAllocationValidator.ValidatedStatement validatedStatement =
                     statementAllocationValidator.validate(
                             request,
                             nextStatus,
                             entity.getId(),
-                            item.getSourceStatementId(),
+                            sourceStatementId,
                             allocatedAmount,
                             requestAllocatedAmountMap,
                             i + 1
@@ -139,9 +150,15 @@ public class PaymentAllocationService {
                     resolvedCounterpartyCode,
                     validatedStatement.counterpartyCode()
             );
+            resolvedCounterpartyId = mergeCounterpartyId(
+                    resolvedCounterpartyId,
+                    validatedStatement.counterpartyId()
+            );
             settlementCompany = mergeSettlementCompany(settlementCompany, validatedStatement);
         }
         entity.setCounterpartyCode(mergeCounterpartyCode(entity.getCounterpartyCode(), resolvedCounterpartyCode));
+        entity.setCounterpartyType(entity.getBusinessType());
+        entity.setCounterpartyId(mergeCounterpartyId(entity.getCounterpartyId(), resolvedCounterpartyId));
         entity.setSettlementCompanyId(settlementCompany == null ? null : settlementCompany.id());
         entity.setSettlementCompanyName(settlementCompany == null ? null : settlementCompany.name());
     }
@@ -160,7 +177,87 @@ public class PaymentAllocationService {
         if (request.sourceStatementId() == null) {
             return List.of();
         }
-        return List.of(new PaymentAllocationRequest(null, request.sourceStatementId(), request.amount()));
+        return List.of(typedAllocationRequest(
+                request.businessType(),
+                request.sourceStatementId(),
+                request.amount()
+        ));
+    }
+
+    private PaymentAllocationRequest typedAllocationRequest(String businessType,
+                                                            Long sourceStatementId,
+                                                            BigDecimal allocatedAmount) {
+        return new PaymentAllocationRequest(
+                null,
+                sourceStatementId,
+                SUPPLIER_PAYMENT_TYPE.equals(businessType) ? sourceStatementId : null,
+                FREIGHT_PAYMENT_TYPE.equals(businessType) ? sourceStatementId : null,
+                allocatedAmount
+        );
+    }
+
+    private Long resolveSourceStatementId(PaymentAllocationRequest request,
+                                          String businessType,
+                                          int lineNo) {
+        if (request.sourceSupplierStatementId() != null && request.sourceFreightStatementId() != null) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR,
+                    "第" + lineNo + "行只能关联一种对账单来源");
+        }
+        Long typedSourceId;
+        if (SUPPLIER_PAYMENT_TYPE.equals(businessType)) {
+            if (request.sourceFreightStatementId() != null) {
+                throw new BusinessException(ErrorCode.VALIDATION_ERROR,
+                        "第" + lineNo + "行供应商付款不能关联物流对账单");
+            }
+            typedSourceId = request.sourceSupplierStatementId();
+        } else {
+            if (request.sourceSupplierStatementId() != null) {
+                throw new BusinessException(ErrorCode.VALIDATION_ERROR,
+                        "第" + lineNo + "行物流付款不能关联供应商对账单");
+            }
+            typedSourceId = request.sourceFreightStatementId();
+        }
+        Long legacySourceId = request.sourceStatementId();
+        if (typedSourceId != null && legacySourceId != null && !typedSourceId.equals(legacySourceId)) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR,
+                    "第" + lineNo + "行类型化对账单ID与兼容来源ID不一致");
+        }
+        Long resolved = typedSourceId == null ? legacySourceId : typedSourceId;
+        if (resolved == null) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR,
+                    "第" + lineNo + "行核销对账单不能为空");
+        }
+        return resolved;
+    }
+
+    private Long requireExistingSourceStatementId(PaymentAllocation item,
+                                                  String businessType,
+                                                  int lineNo) {
+        Long typedSourceId = SUPPLIER_PAYMENT_TYPE.equals(businessType)
+                ? item.getSourceSupplierStatementId()
+                : item.getSourceFreightStatementId();
+        Long sourceStatementId = typedSourceId == null ? item.getSourceStatementId() : typedSourceId;
+        if (sourceStatementId == null) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR,
+                    "第" + lineNo + "行付款核销明细缺少对账单ID");
+        }
+        if (item.getSourceStatementId() != null && !sourceStatementId.equals(item.getSourceStatementId())) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR,
+                    "第" + lineNo + "行付款核销来源ID冲突");
+        }
+        applyTypedSource(item, businessType, sourceStatementId);
+        return sourceStatementId;
+    }
+
+    private void applyTypedSource(PaymentAllocation item, String businessType, Long sourceStatementId) {
+        item.setSourceStatementId(sourceStatementId);
+        if (SUPPLIER_PAYMENT_TYPE.equals(businessType)) {
+            item.setSourceSupplierStatementId(sourceStatementId);
+            item.setSourceFreightStatementId(null);
+            return;
+        }
+        item.setSourceSupplierStatementId(null);
+        item.setSourceFreightStatementId(sourceStatementId);
     }
 
     String mergeCounterpartyCode(String currentCode, String nextCode) {
@@ -173,6 +270,16 @@ public class PaymentAllocationService {
             return normalizedCurrentCode;
         }
         throw new BusinessException(ErrorCode.BUSINESS_ERROR, "同一付款单不能核销不同往来单位编码的对账单");
+    }
+
+    private Long mergeCounterpartyId(Long currentId, Long nextId) {
+        if (currentId == null) {
+            return nextId;
+        }
+        if (nextId == null || currentId.equals(nextId)) {
+            return currentId;
+        }
+        throw new BusinessException(ErrorCode.BUSINESS_ERROR, "同一付款单不能核销不同往来方ID的对账单");
     }
 
     private SettlementCompanySnapshot mergeSettlementCompany(
@@ -246,12 +353,22 @@ public class PaymentAllocationService {
     }
 
     record AllocationApplyResult(
+            String counterpartyType,
+            Long counterpartyId,
             String counterpartyCode,
             Long settlementCompanyId,
             String settlementCompanyName,
             BigDecimal totalAllocatedAmount,
             boolean allocationEmpty
     ) {
+        AllocationApplyResult(String counterpartyCode,
+                              Long settlementCompanyId,
+                              String settlementCompanyName,
+                              BigDecimal totalAllocatedAmount,
+                              boolean allocationEmpty) {
+            this(null, null, counterpartyCode, settlementCompanyId, settlementCompanyName,
+                    totalAllocatedAmount, allocationEmpty);
+        }
     }
 
     private record SettlementCompanySnapshot(Long id, String name) {

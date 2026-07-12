@@ -1,6 +1,7 @@
 package com.leo.erp.finance.receivablepayable.repository;
 
 import com.leo.erp.common.api.PageQuery;
+import com.leo.erp.testsupport.StableIdentityPostgresFixtures;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -22,6 +23,10 @@ class ReceivablePayableSalesActualPostgresTest {
 
     private static final long BASE_ID = 8_740_000_000_000_000_000L;
     private static final long SETTLEMENT_COMPANY_ID = BASE_ID + 100;
+    private static final long CUSTOMER_ID = BASE_ID + 101;
+    private static final long PROJECT_ID = BASE_ID + 102;
+    private static final long MATERIAL_ID = BASE_ID + 103;
+    private static final long WAREHOUSE_ID = BASE_ID + 104;
     private static final String CUSTOMER_CODE = "TEST-RECEIVABLE-CUSTOMER";
 
     @Autowired
@@ -33,6 +38,7 @@ class ReceivablePayableSalesActualPostgresTest {
     void setUp() {
         ReceivablePayablePostgresTestSchemaSupport.preparePurchaseLedgerSchema(jdbcTemplate);
         repository = new ReceivablePayableQueryRepository(new NamedParameterJdbcTemplate(jdbcTemplate));
+        insertMasterData();
         insertAuditedSalesOrder();
     }
 
@@ -68,8 +74,8 @@ class ReceivablePayableSalesActualPostgresTest {
             assertThat(row.entryCount()).isEqualTo(2L);
         });
         assertThat(repository.findSummary(
-                "应收", "客户", CUSTOMER_CODE,
-                String.valueOf(SETTLEMENT_COMPANY_ID), "未对账"
+                "应收", "客户", CUSTOMER_ID,
+                SETTLEMENT_COMPANY_ID, "未对账"
         ).recognizedAmount()).isEqualByComparingTo("960.00");
         assertThat(repository.listForExport(
                 "应收", "客户", SETTLEMENT_COMPANY_ID, "未对账", null, CUSTOMER_CODE
@@ -79,8 +85,8 @@ class ReceivablePayableSalesActualPostgresTest {
         assertThat(repository.detailItems(
                 "应收",
                 "客户",
-                CUSTOMER_CODE,
-                String.valueOf(SETTLEMENT_COMPANY_ID),
+                CUSTOMER_ID,
+                SETTLEMENT_COMPANY_ID,
                 "未对账"
         )).satisfiesExactlyInAnyOrder(
                 item -> {
@@ -121,13 +127,13 @@ class ReceivablePayableSalesActualPostgresTest {
     private void insertAuditedSalesOrder() {
         jdbcTemplate.update("""
                 INSERT INTO so_sales_order (
-                    id, order_no, customer_code, customer_name, project_name, delivery_date,
+                    id, order_no, customer_id, customer_code, customer_name, project_id, project_name, delivery_date,
                     sales_name, settlement_company_id, settlement_company_name,
                     total_weight, total_amount, status, deleted_flag, created_by
-                ) VALUES (?, 'TEST-RECEIVABLE-SO', ?, '应收实绩测试客户', '应收实绩测试项目',
+                ) VALUES (?, 'TEST-RECEIVABLE-SO', ?, ?, '应收实绩测试客户', ?, '应收实绩测试项目',
                           TIMESTAMP '2026-07-10 10:00:00', '测试销售', ?, '销售结算主体甲',
                           100, 1000, '已审核', FALSE, 101)
-                """, BASE_ID + 1, CUSTOMER_CODE, SETTLEMENT_COMPANY_ID);
+                """, BASE_ID + 1, CUSTOMER_ID, CUSTOMER_CODE, PROJECT_ID, SETTLEMENT_COMPANY_ID);
         insertSalesOrderItem(BASE_ID + 2, 1, "400.00");
         insertSalesOrderItem(BASE_ID + 3, 2, "560.00");
         insertSalesOrderItem(BASE_ID + 4, 3, "30.00");
@@ -137,12 +143,12 @@ class ReceivablePayableSalesActualPostgresTest {
     private void insertSalesOrderItem(long itemId, int lineNo, String amount) {
         jdbcTemplate.update("""
                 INSERT INTO so_sales_order_item (
-                    id, order_id, line_no, material_code, brand, category, material, spec, unit,
+                    id, order_id, line_no, material_id, material_code, brand, category, material, spec, unit,
                     quantity, quantity_unit, piece_weight_ton, pieces_per_bundle, weight_ton,
-                    unit_price, amount
-                ) VALUES (?, ?, ?, 'TEST-RECEIVABLE-MATERIAL', '测试品牌', '测试品类',
-                          '测试材质', '10', '吨', 1, '件', 1, 1, 1, 10, ?)
-                """, itemId, BASE_ID + 1, lineNo, new BigDecimal(amount));
+                    unit_price, amount, warehouse_id
+                ) VALUES (?, ?, ?, ?, 'TEST-RECEIVABLE-MATERIAL', '测试品牌', '测试品类',
+                          '测试材质', '10', '吨', 1, '件', 1, 1, 1, 10, ?, ?)
+                """, itemId, BASE_ID + 1, lineNo, MATERIAL_ID, new BigDecimal(amount), WAREHOUSE_ID);
     }
 
     private void insertOutbound(long outboundId,
@@ -155,23 +161,50 @@ class ReceivablePayableSalesActualPostgresTest {
         BigDecimal actualAmount = new BigDecimal(amount);
         jdbcTemplate.update("""
                 INSERT INTO so_sales_outbound (
-                    id, outbound_no, sales_order_no, customer_name, project_name, warehouse_name,
+                    id, outbound_no, sales_order_no, customer_id, customer_name,
+                    project_id, project_name, warehouse_id, warehouse_name,
                     outbound_date, settlement_company_id, settlement_company_name,
                     total_weight, total_amount, status, deleted_flag, created_by
-                ) VALUES (?, ?, 'TEST-RECEIVABLE-SO', '应收实绩测试客户', '应收实绩测试项目',
-                          '应收实绩测试仓', ?, ?, '销售结算主体甲',
+                ) VALUES (?, ?, 'TEST-RECEIVABLE-SO', ?, '应收实绩测试客户', ?, '应收实绩测试项目',
+                          ?, '应收实绩测试仓', ?, ?, '销售结算主体甲',
                           ?, ?, ?, ?, 202)
-                """, outboundId, outboundNo, java.sql.Date.valueOf(outboundDate), SETTLEMENT_COMPANY_ID,
+                """, outboundId, outboundNo, CUSTOMER_ID, PROJECT_ID, WAREHOUSE_ID,
+                java.sql.Date.valueOf(outboundDate), SETTLEMENT_COMPANY_ID,
                 actualAmount.movePointLeft(1),
                 actualAmount, status, deleted);
         jdbcTemplate.update("""
                 INSERT INTO so_sales_outbound_item (
                     id, outbound_id, line_no, source_sales_order_item_id,
-                    material_code, brand, category, material, spec, unit,
+                    material_id, material_code, brand, category, material, spec, unit,
                     quantity, quantity_unit, piece_weight_ton, pieces_per_bundle, weight_ton,
-                    unit_price, amount, warehouse_name
-                ) VALUES (?, ?, 1, ?, 'TEST-RECEIVABLE-MATERIAL', '测试品牌', '测试品类',
-                          '测试材质', '10', '吨', 1, '件', 1, 1, 1, 10, ?, '应收实绩测试仓')
-                """, outboundId + 1, outboundId, sourceSalesOrderItemId, actualAmount);
+                    unit_price, amount, warehouse_id, warehouse_name
+                ) VALUES (?, ?, 1, ?, ?, 'TEST-RECEIVABLE-MATERIAL', '测试品牌', '测试品类',
+                          '测试材质', '10', '吨', 1, '件', 1, 1, 1, 10, ?, ?, '应收实绩测试仓')
+                """, outboundId + 1, outboundId, sourceSalesOrderItemId, MATERIAL_ID,
+                actualAmount, WAREHOUSE_ID);
+    }
+
+    private void insertMasterData() {
+        StableIdentityPostgresFixtures.insertCustomer(
+                jdbcTemplate,
+                CUSTOMER_ID,
+                CUSTOMER_CODE,
+                "应收实绩测试客户",
+                "应收实绩测试项目"
+        );
+        StableIdentityPostgresFixtures.insertProject(
+                jdbcTemplate,
+                PROJECT_ID,
+                "TEST-RECEIVABLE-PROJECT",
+                "应收实绩测试项目",
+                CUSTOMER_ID,
+                CUSTOMER_CODE
+        );
+        StableIdentityPostgresFixtures.insertMaterial(
+                jdbcTemplate, MATERIAL_ID, "TEST-RECEIVABLE-MATERIAL");
+        StableIdentityPostgresFixtures.insertWarehouse(
+                jdbcTemplate, WAREHOUSE_ID, "TEST-RECEIVABLE-WAREHOUSE", "应收实绩测试仓");
+        StableIdentityPostgresFixtures.insertSettlementCompany(
+                jdbcTemplate, SETTLEMENT_COMPANY_ID, "销售结算主体甲");
     }
 }

@@ -46,8 +46,34 @@ public record InvoiceReceiptItemRequest(
         BigDecimal unitPrice,
         @NotNull(message = "金额不能为空")
         @DecimalMin(value = "0.00", message = "金额不能小于0")
-        BigDecimal amount
+        BigDecimal amount,
+        Long materialId,
+        Long warehouseId
 ) {
+    public InvoiceReceiptItemRequest(Long id,
+                                     String sourceNo,
+                                     Long sourcePurchaseOrderItemId,
+                                     String materialCode,
+                                     String brand,
+                                     String category,
+                                     String material,
+                                     String spec,
+                                     String length,
+                                     String unit,
+                                     String warehouseName,
+                                     String batchNo,
+                                     Integer quantity,
+                                     String quantityUnit,
+                                     BigDecimal pieceWeightTon,
+                                     Integer piecesPerBundle,
+                                     BigDecimal weightTon,
+                                     BigDecimal unitPrice,
+                                     BigDecimal amount) {
+        this(id, sourceNo, sourcePurchaseOrderItemId, materialCode, brand, category, material, spec, length, unit,
+                warehouseName, batchNo, quantity, quantityUnit, pieceWeightTon, piecesPerBundle, weightTon,
+                unitPrice, amount, null, null);
+    }
+
     public InvoiceReceiptItemRequest(String sourceNo,
                                      Long sourcePurchaseOrderItemId,
                                      String materialCode,
@@ -68,6 +94,6 @@ public record InvoiceReceiptItemRequest(
                                      BigDecimal amount) {
         this(null, sourceNo, sourcePurchaseOrderItemId, materialCode, brand, category, material, spec, length, unit,
                 warehouseName, batchNo, quantity, quantityUnit, pieceWeightTon, piecesPerBundle, weightTon, unitPrice,
-                amount);
+                amount, null, null);
     }
 }

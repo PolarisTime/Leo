@@ -36,7 +36,9 @@ public class SalesOrderSaveService {
     }
 
     SalesOrder saveStatus(SalesOrder entity) {
-        return repository.save(entity);
+        SalesOrder saved = repository.save(entity);
+        syncCompletionAfterAuditedSave(saved);
+        return saved;
     }
 
     SalesOrder saveAuditedPricingUpdate(SalesOrder entity) {
@@ -49,6 +51,6 @@ public class SalesOrderSaveService {
         if (completionSyncService == null || !completionPolicy.shouldSyncAfterSave(entity)) {
             return;
         }
-        completionSyncService.syncBySalesOrderReference(entity.getOrderNo());
+        completionSyncService.syncBySalesOrderId(entity.getId());
     }
 }

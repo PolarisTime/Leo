@@ -10,6 +10,7 @@ public record SalesOrderResponse(
         String purchaseInboundNo,
         String purchaseOrderNo,
         String customerCode,
+        Long customerId,
         String customerName,
         Long projectId,
         String projectName,
@@ -39,9 +40,32 @@ public record SalesOrderResponse(
                               BigDecimal totalWeight,
                               BigDecimal totalAmount,
                               String status,
+                              boolean deletedFlag,
                               String remark,
                               List<SalesOrderItemResponse> items) {
-        this(id, orderNo, purchaseInboundNo, purchaseOrderNo, customerCode, customerName, projectId, projectName,
+        this(id, orderNo, purchaseInboundNo, purchaseOrderNo, customerCode, null, customerName, projectId,
+                projectName, settlementCompanyId, settlementCompanyName, deliveryDate, salesName, totalWeight,
+                totalAmount, status, deletedFlag, remark, items);
+    }
+
+    public SalesOrderResponse(Long id,
+                              String orderNo,
+                              String purchaseInboundNo,
+                              String purchaseOrderNo,
+                              String customerCode,
+                              String customerName,
+                              Long projectId,
+                              String projectName,
+                              Long settlementCompanyId,
+                              String settlementCompanyName,
+                              LocalDate deliveryDate,
+                              String salesName,
+                              BigDecimal totalWeight,
+                              BigDecimal totalAmount,
+                              String status,
+                              String remark,
+                              List<SalesOrderItemResponse> items) {
+        this(id, orderNo, purchaseInboundNo, purchaseOrderNo, customerCode, null, customerName, projectId, projectName,
                 settlementCompanyId, settlementCompanyName, deliveryDate, salesName, totalWeight, totalAmount,
                 status, false, remark, items);
     }
@@ -60,7 +84,7 @@ public record SalesOrderResponse(
                               String status,
                               String remark,
                               List<SalesOrderItemResponse> items) {
-        this(id, orderNo, purchaseInboundNo, null, customerCode, customerName, projectId, projectName, null, null,
+        this(id, orderNo, purchaseInboundNo, null, customerCode, null, customerName, projectId, projectName, null, null,
                 deliveryDate, salesName, totalWeight, totalAmount, status, false, remark, items);
     }
 
@@ -76,7 +100,7 @@ public record SalesOrderResponse(
                               String status,
                               String remark,
                               List<SalesOrderItemResponse> items) {
-        this(id, orderNo, purchaseInboundNo, null, null, customerName, null, projectName, null, null, deliveryDate,
+        this(id, orderNo, purchaseInboundNo, null, null, null, customerName, null, projectName, null, null, deliveryDate,
                 salesName, totalWeight, totalAmount, status, false, remark, items);
     }
 
@@ -93,7 +117,7 @@ public record SalesOrderResponse(
                               String status,
                               String remark,
                               List<SalesOrderItemResponse> items) {
-        this(id, orderNo, purchaseInboundNo, purchaseOrderNo, null, customerName, null, projectName, null, null,
+        this(id, orderNo, purchaseInboundNo, purchaseOrderNo, null, null, customerName, null, projectName, null, null,
                 deliveryDate, salesName, totalWeight, totalAmount, status, false, remark, items);
     }
 
@@ -112,7 +136,7 @@ public record SalesOrderResponse(
                               String status,
                               String remark,
                               List<SalesOrderItemResponse> items) {
-        this(id, orderNo, purchaseInboundNo, purchaseOrderNo, customerCode, customerName, projectId,
+        this(id, orderNo, purchaseInboundNo, purchaseOrderNo, customerCode, null, customerName, projectId,
                 projectName, null, null, deliveryDate, salesName, totalWeight, totalAmount, status, false, remark, items);
     }
 }

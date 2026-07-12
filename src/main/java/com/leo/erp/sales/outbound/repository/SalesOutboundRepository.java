@@ -70,6 +70,29 @@ public interface SalesOutboundRepository extends JpaRepository<SalesOutbound, Lo
             @Param("sourceSalesOrderItemIds") Collection<Long> sourceSalesOrderItemIds
     );
 
+    @EntityGraph(attributePaths = "items")
+    @Query("""
+            select distinct outbound
+            from SalesOutbound outbound
+            where outbound.deletedFlag = false
+              and exists (
+                    select 1
+                    from SalesOutboundItem item
+                    where item.salesOutbound = outbound
+                      and item.id in :itemIds
+              )
+            """)
+    List<SalesOutbound> findAllWithItemsByItemIds(@Param("itemIds") Collection<Long> itemIds);
+
+    @Query("""
+            select distinct outbound.id
+            from SalesOutbound outbound
+            join outbound.items item
+            where outbound.deletedFlag = false
+              and item.id in :itemIds
+            """)
+    List<Long> findSourceOutboundIdsByItemIds(@Param("itemIds") Collection<Long> itemIds);
+
     @Query("""
             select distinct item.sourceSalesOrderItemId
             from SalesOutbound outbound

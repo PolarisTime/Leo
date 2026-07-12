@@ -58,6 +58,7 @@ public class SupplierStatementController {
     public ApiResponse<PageResponse<SupplierStatementResponse>> page(
             @BindPageQuery(sortFieldKey = "supplier-statement") PageQuery query,
             @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) Long supplierId,
             @RequestParam(required = false) String supplierName,
             @RequestParam(required = false) Long settlementCompanyId,
             @RequestParam(required = false) String status,
@@ -65,7 +66,11 @@ public class SupplierStatementController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate periodEnd
     ) {
         return ApiResponse.success(PageResponse.from(
-                supplierStatementService.page(query, PageFilter.of(keyword, supplierName, settlementCompanyId, status, periodStart, periodEnd))
+                supplierStatementService.page(
+                        query,
+                        PageFilter.of(keyword, supplierName, settlementCompanyId, status, periodStart, periodEnd)
+                                .withIdentity(null, null, supplierId, null, null)
+                )
         ));
     }
 
@@ -75,13 +80,19 @@ public class SupplierStatementController {
     public ApiResponse<PageResponse<SupplierStatementCandidateResponse>> candidates(
             @BindPageQuery(sortFieldKey = "purchase-inbound") PageQuery query,
             @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) Long supplierId,
             @RequestParam(required = false) String supplierName,
             @RequestParam(required = false) Long settlementCompanyId,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate,
+            @RequestParam(required = false) Long currentStatementId
     ) {
         return ApiResponse.success(PageResponse.from(
-                supplierStatementService.candidatePage(query, PageFilter.of(keyword, supplierName, settlementCompanyId, null, startDate, endDate))
+                supplierStatementService.candidatePage(
+                        query,
+                        PageFilter.of(keyword, supplierName, settlementCompanyId, null, startDate, endDate)
+                                .withIdentity(null, null, supplierId, null, currentStatementId)
+                )
         ));
     }
 

@@ -27,13 +27,13 @@ class InventoryReportServiceTest {
     private final InventoryReportService service = new InventoryReportService(repo, excelExportService);
 
     @Test
-    void shouldNormalizeWarehouseNameAndCategoryWithoutRejectingUnknownValues() {
+    void shouldPassStableWarehouseIdAndNormalizeCategory() {
         PageQuery query = new PageQuery(0, 20, null, null);
-        when(repo.page(query, null, "任意仓库名", "任意类别", false)).thenReturn(new PageImpl<>(List.of()));
+        when(repo.page(query, null, 101L, "任意类别", false)).thenReturn(new PageImpl<>(List.of()));
 
-        assertThatCode(() -> service.page(query, null, " 任意仓库名 ", " 任意类别 ", null))
+        assertThatCode(() -> service.page(query, null, 101L, " 任意类别 ", null))
                 .doesNotThrowAnyException();
-        verify(repo).page(query, null, "任意仓库名", "任意类别", false);
+        verify(repo).page(query, null, 101L, "任意类别", false);
     }
 
     @Test
@@ -54,16 +54,16 @@ class InventoryReportServiceTest {
                 "吨",
                 new BigDecimal("0.625")
         );
-        when(repo.list(PageQuery.of(0, 200, null, null), "m-001", "一号仓", "类别A", true))
+        when(repo.list(PageQuery.of(0, 200, null, null), "m-001", 101L, "类别A", true))
                 .thenReturn(List.of(row));
         when(excelExportService.export(any(), any()))
                 .thenReturn(new byte[]{1, 2, 3});
 
-        var file = service.exportExcel(" M-001 ", " 一号仓 ", " 类别A ", true);
+        var file = service.exportExcel(" M-001 ", 101L, " 类别A ", true);
 
         assertThat(file.filename()).isEqualTo("商品库存报表.xlsx");
         assertThat(file.content()).containsExactly(1, 2, 3);
-        verify(repo).list(PageQuery.of(0, 200, null, null), "m-001", "一号仓", "类别A", true);
+        verify(repo).list(PageQuery.of(0, 200, null, null), "m-001", 101L, "类别A", true);
     }
 
     @Test
@@ -90,12 +90,12 @@ class InventoryReportServiceTest {
     }
 
     @Test
-    void shouldNormalizeNullWarehouseNameAndCategoryToNull() {
+    void shouldNormalizeBlankCategoryToNull() {
         PageQuery query = new PageQuery(0, 20, null, null);
         Page<InventoryReportResponse> expected = new PageImpl<>(List.of());
         when(repo.page(any(), isNull(), isNull(), isNull(), eq(false))).thenReturn(expected);
 
-        service.page(query, null, "   ", "   ", null);
+        service.page(query, null, null, "   ", null);
 
         verify(repo).page(query, null, null, null, false);
     }

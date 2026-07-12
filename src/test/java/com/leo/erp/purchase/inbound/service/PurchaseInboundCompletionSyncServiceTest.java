@@ -35,13 +35,13 @@ class PurchaseInboundCompletionSyncServiceTest {
         );
         PurchaseInbound inbound = inbound("已审核", 4);
         PurchaseOrderItem sourceItem = sourcePurchaseOrderItem(201L, 10);
-        when(repository.findByPurchaseOrderNoAndDeletedFlagFalse("PO-001")).thenReturn(List.of(inbound));
+        when(repository.findAllActiveBySourcePurchaseOrderItemIds(List.of(201L))).thenReturn(List.of(inbound));
         when(sourceValidator.loadSourcePurchaseOrderItemMap(List.of(201L)))
                 .thenReturn(Map.of(201L, sourceItem));
         when(allocationService.loadAllocatedQuantityMap(List.of(201L), 1L))
                 .thenReturn(Map.of(201L, 6));
 
-        service.synchronizeAfterPurchaseRefundStatusChange("PO-001");
+        service.synchronizeAfterPurchaseRefundStatusChange(List.of(201L));
 
         assertThat(inbound.getStatus()).isEqualTo("完成入库");
         verify(repository).saveAll(List.of(inbound));
@@ -59,13 +59,13 @@ class PurchaseInboundCompletionSyncServiceTest {
         );
         PurchaseInbound inbound = inbound("完成入库", 4);
         PurchaseOrderItem sourceItem = sourcePurchaseOrderItem(201L, 10);
-        when(repository.findByPurchaseOrderNoAndDeletedFlagFalse("PO-001")).thenReturn(List.of(inbound));
+        when(repository.findAllActiveBySourcePurchaseOrderItemIds(List.of(201L))).thenReturn(List.of(inbound));
         when(sourceValidator.loadSourcePurchaseOrderItemMap(List.of(201L)))
                 .thenReturn(Map.of(201L, sourceItem));
         when(allocationService.loadAllocatedQuantityMap(List.of(201L), 1L))
                 .thenReturn(Map.of());
 
-        service.synchronizeAfterPurchaseRefundStatusChange("PO-001");
+        service.synchronizeAfterPurchaseRefundStatusChange(List.of(201L));
 
         assertThat(inbound.getStatus()).isEqualTo("已审核");
         verify(repository).saveAll(List.of(inbound));
@@ -233,7 +233,7 @@ class PurchaseInboundCompletionSyncServiceTest {
         sourceOrder.getItems().add(sourceItem);
         PurchaseInbound inbound = inbound("完成入库", 10);
         when(itemQueryService.findActiveByIdIn(List.of(201L))).thenReturn(List.of(sourceItem));
-        when(repository.findByPurchaseOrderNoAndDeletedFlagFalse("PO-001")).thenReturn(List.of(inbound));
+        when(repository.findAllActiveBySourcePurchaseOrderItemIds(List.of(201L))).thenReturn(List.of(inbound));
 
         service.completeSourcePurchaseOrders(inbound);
 
@@ -257,7 +257,8 @@ class PurchaseInboundCompletionSyncServiceTest {
         PurchaseInbound current = inbound("完成入库", 10);
         PurchaseInbound draft = inbound("已审核", 10);
         when(itemQueryService.findActiveByIdIn(List.of(201L))).thenReturn(List.of(sourceItem));
-        when(repository.findByPurchaseOrderNoAndDeletedFlagFalse("PO-001")).thenReturn(List.of(current, draft));
+        when(repository.findAllActiveBySourcePurchaseOrderItemIds(List.of(201L)))
+                .thenReturn(List.of(current, draft));
 
         service.completeSourcePurchaseOrders(current);
 
@@ -340,7 +341,7 @@ class PurchaseInboundCompletionSyncServiceTest {
         sourceOrder.getItems().add(sourceItem);
         PurchaseInbound inbound = inbound("完成入库", null);
         when(itemQueryService.findActiveByIdIn(List.of(201L))).thenReturn(List.of(sourceItem));
-        when(repository.findByPurchaseOrderNoAndDeletedFlagFalse("PO-001")).thenReturn(List.of(inbound));
+        when(repository.findAllActiveBySourcePurchaseOrderItemIds(List.of(201L))).thenReturn(List.of(inbound));
 
         service.completeSourcePurchaseOrders(inbound);
 
@@ -364,7 +365,7 @@ class PurchaseInboundCompletionSyncServiceTest {
         PurchaseInbound inbound = inbound("完成入库", 10);
         inbound.getItems().add(inboundItem(102L, null, 99));
         when(itemQueryService.findActiveByIdIn(List.of(201L))).thenReturn(List.of(sourceItem));
-        when(repository.findByPurchaseOrderNoAndDeletedFlagFalse("PO-001")).thenReturn(List.of(inbound));
+        when(repository.findAllActiveBySourcePurchaseOrderItemIds(List.of(201L))).thenReturn(List.of(inbound));
 
         service.completeSourcePurchaseOrders(inbound);
 
@@ -387,7 +388,7 @@ class PurchaseInboundCompletionSyncServiceTest {
         sourceOrder.getItems().add(sourceItem);
         PurchaseInbound inbound = inbound("完成入库", 94);
         when(itemQueryService.findActiveByIdIn(List.of(201L))).thenReturn(List.of(sourceItem));
-        when(repository.findByPurchaseOrderNoAndDeletedFlagFalse("PO-001")).thenReturn(List.of(inbound));
+        when(repository.findAllActiveBySourcePurchaseOrderItemIds(List.of(201L))).thenReturn(List.of(inbound));
 
         service.completeSourcePurchaseOrders(inbound);
 

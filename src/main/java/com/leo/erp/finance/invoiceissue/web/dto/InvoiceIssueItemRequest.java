@@ -46,8 +46,34 @@ public record InvoiceIssueItemRequest(
         BigDecimal unitPrice,
         @NotNull(message = "金额不能为空")
         @DecimalMin(value = "0.00", message = "金额不能小于0")
-        BigDecimal amount
+        BigDecimal amount,
+        Long materialId,
+        Long warehouseId
 ) {
+    public InvoiceIssueItemRequest(Long id,
+                                   String sourceNo,
+                                   Long sourceSalesOrderItemId,
+                                   String materialCode,
+                                   String brand,
+                                   String category,
+                                   String material,
+                                   String spec,
+                                   String length,
+                                   String unit,
+                                   String warehouseName,
+                                   String batchNo,
+                                   Integer quantity,
+                                   String quantityUnit,
+                                   BigDecimal pieceWeightTon,
+                                   Integer piecesPerBundle,
+                                   BigDecimal weightTon,
+                                   BigDecimal unitPrice,
+                                   BigDecimal amount) {
+        this(id, sourceNo, sourceSalesOrderItemId, materialCode, brand, category, material, spec, length, unit,
+                warehouseName, batchNo, quantity, quantityUnit, pieceWeightTon, piecesPerBundle, weightTon,
+                unitPrice, amount, null, null);
+    }
+
     public InvoiceIssueItemRequest(String sourceNo,
                                    Long sourceSalesOrderItemId,
                                    String materialCode,
@@ -68,6 +94,6 @@ public record InvoiceIssueItemRequest(
                                    BigDecimal amount) {
         this(null, sourceNo, sourceSalesOrderItemId, materialCode, brand, category, material, spec, length, unit,
                 warehouseName, batchNo, quantity, quantityUnit, pieceWeightTon, piecesPerBundle, weightTon, unitPrice,
-                amount);
+                amount, null, null);
     }
 }

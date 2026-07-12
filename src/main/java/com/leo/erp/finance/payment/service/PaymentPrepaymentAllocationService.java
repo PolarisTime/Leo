@@ -121,15 +121,13 @@ public class PaymentPrepaymentAllocationService {
             if (item == null) {
                 throw new BusinessException(ErrorCode.VALIDATION_ERROR, "第" + lineNo + "行核销明细不能为空");
             }
-            if (item.sourceStatementId() == null) {
-                throw new BusinessException(ErrorCode.VALIDATION_ERROR, "第" + lineNo + "行核销对账单不能为空");
-            }
-            if (!statementIds.add(item.sourceStatementId())) {
+            Long sourceStatementId = resolveSupplierStatementId(item, lineNo);
+            if (!statementIds.add(sourceStatementId)) {
                 throw new BusinessException(ErrorCode.BUSINESS_ERROR, "同一付款单不能重复核销同一供应商对账单");
             }
             allocations.add(new NormalizedAllocation(
                     item.id(),
-                    item.sourceStatementId(),
+                    sourceStatementId,
                     SettlementAllocationRule.requirePositiveAmount(item.allocatedAmount(), lineNo),
                     lineNo
             ));
@@ -150,7 +148,7 @@ public class PaymentPrepaymentAllocationService {
         TreeSet<Long> statementIds = new TreeSet<>();
         if (payment.getItems() != null) {
             payment.getItems().stream()
-                    .map(PaymentAllocation::getSourceStatementId)
+                    .map(this::existingSupplierStatementId)
                     .filter(Objects::nonNull)
                     .forEach(statementIds::add);
         }
@@ -233,6 +231,8 @@ public class PaymentPrepaymentAllocationService {
             item.setPayment(payment);
             item.setLineNo(index + 1);
             item.setSourceStatementId(source.sourceStatementId());
+            item.setSourceSupplierStatementId(source.sourceStatementId());
+            item.setSourceFreightStatementId(null);
             item.setAllocatedAmount(source.allocatedAmount());
         }
         if (payment.getItems() == null) {
@@ -241,6 +241,34 @@ public class PaymentPrepaymentAllocationService {
             payment.getItems().clear();
         }
         payment.getItems().addAll(nextItems);
+    }
+
+    private Long resolveSupplierStatementId(PaymentAllocationRequest item, int lineNo) {
+        if (item.sourceFreightStatementId() != null) {
+            throw new BusinessException(
+                    ErrorCode.VALIDATION_ERROR,
+                    "第" + lineNo + "行采购预付款只能核销供应商对账单"
+            );
+        }
+        Long typedId = item.sourceSupplierStatementId();
+        Long legacyId = item.sourceStatementId();
+        if (typedId != null && legacyId != null && !typedId.equals(legacyId)) {
+            throw new BusinessException(
+                    ErrorCode.BUSINESS_ERROR,
+                    "第" + lineNo + "行供应商对账单ID与兼容来源ID不一致"
+            );
+        }
+        Long resolvedId = typedId == null ? legacyId : typedId;
+        if (resolvedId == null) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "第" + lineNo + "行核销对账单不能为空");
+        }
+        return resolvedId;
+    }
+
+    private Long existingSupplierStatementId(PaymentAllocation item) {
+        return item.getSourceSupplierStatementId() == null
+                ? item.getSourceStatementId()
+                : item.getSourceSupplierStatementId();
     }
 
     private record NormalizedAllocation(

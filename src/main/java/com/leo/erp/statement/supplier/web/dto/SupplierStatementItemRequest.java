@@ -28,8 +28,36 @@ public record SupplierStatementItemRequest(
         BigDecimal weightAdjustmentTon,
         BigDecimal weightAdjustmentAmount,
         @NotNull @DecimalMin("0.00") BigDecimal unitPrice,
-        BigDecimal amount
+        BigDecimal amount,
+        Long materialId,
+        Long warehouseId
 ) {
+    public SupplierStatementItemRequest(Long id,
+                                        String sourceNo,
+                                        Long sourceInboundItemId,
+                                        String materialCode,
+                                        String brand,
+                                        String category,
+                                        String material,
+                                        String spec,
+                                        String length,
+                                        String unit,
+                                        String batchNo,
+                                        Integer quantity,
+                                        String quantityUnit,
+                                        BigDecimal pieceWeightTon,
+                                        Integer piecesPerBundle,
+                                        BigDecimal weightTon,
+                                        BigDecimal weighWeightTon,
+                                        BigDecimal weightAdjustmentTon,
+                                        BigDecimal weightAdjustmentAmount,
+                                        BigDecimal unitPrice,
+                                        BigDecimal amount) {
+        this(id, sourceNo, sourceInboundItemId, materialCode, brand, category, material, spec, length, unit,
+                batchNo, quantity, quantityUnit, pieceWeightTon, piecesPerBundle, weightTon, weighWeightTon,
+                weightAdjustmentTon, weightAdjustmentAmount, unitPrice, amount, null, null);
+    }
+
     public SupplierStatementItemRequest(Long id,
                                         String sourceNo,
                                         Long sourceInboundItemId,
@@ -49,7 +77,8 @@ public record SupplierStatementItemRequest(
                                         BigDecimal unitPrice,
                                         BigDecimal amount) {
         this(id, sourceNo, sourceInboundItemId, materialCode, brand, category, material, spec, length, unit, batchNo, quantity,
-                quantityUnit, pieceWeightTon, piecesPerBundle, weightTon, null, null, null, unitPrice, amount);
+                quantityUnit, pieceWeightTon, piecesPerBundle, weightTon, null, null, null, unitPrice, amount,
+                null, null);
     }
 
     public SupplierStatementItemRequest(String sourceNo,
@@ -70,6 +99,7 @@ public record SupplierStatementItemRequest(
                                         BigDecimal unitPrice,
                                         BigDecimal amount) {
         this(null, sourceNo, sourceInboundItemId, materialCode, brand, category, material, spec, length, unit, batchNo, quantity,
-                quantityUnit, pieceWeightTon, piecesPerBundle, weightTon, null, null, null, unitPrice, amount);
+                quantityUnit, pieceWeightTon, piecesPerBundle, weightTon, null, null, null, unitPrice, amount,
+                null, null);
     }
 }

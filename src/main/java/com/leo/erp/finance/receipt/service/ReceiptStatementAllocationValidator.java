@@ -39,6 +39,18 @@ public class ReceiptStatementAllocationValidator {
                                Map<Long, BigDecimal> requestAllocatedAmountMap,
                                int lineNo) {
         CustomerStatement statement = requireAccessibleCustomerStatement(sourceStatementId);
+        requireSameIdentity(
+                request.customerId(),
+                statement.getCustomerId(),
+                "第" + lineNo + "行对账单客户ID与收款单不一致",
+                "第" + lineNo + "行客户对账单缺少客户ID"
+        );
+        requireSameIdentity(
+                request.projectId(),
+                statement.getProjectId(),
+                "第" + lineNo + "行对账单项目ID与收款单不一致",
+                "第" + lineNo + "行客户对账单缺少项目ID"
+        );
         BusinessDocumentValidator.requireSameText(
                 request.customerName(),
                 statement.getCustomerName(),
@@ -77,6 +89,18 @@ public class ReceiptStatementAllocationValidator {
         }
         requestAllocatedAmountMap.put(statement.getId(), allocatedAmount);
         return statement;
+    }
+
+    private void requireSameIdentity(Long requestedId,
+                                     Long sourceId,
+                                     String conflictMessage,
+                                     String missingMessage) {
+        if (sourceId == null) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, missingMessage);
+        }
+        if (requestedId != null && !requestedId.equals(sourceId)) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, conflictMessage);
+        }
     }
 
     private CustomerStatement requireAccessibleCustomerStatement(Long statementId) {

@@ -3,8 +3,8 @@ package com.leo.erp.master.warehouse.web;
 import com.leo.erp.common.api.ApiResponse;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.api.PageResponse;
-import com.leo.erp.common.web.OptionResponse;
 import com.leo.erp.master.warehouse.service.WarehouseService;
+import com.leo.erp.master.warehouse.web.dto.WarehouseOptionResponse;
 import com.leo.erp.master.warehouse.web.dto.WarehouseRequest;
 import com.leo.erp.master.warehouse.web.dto.WarehouseResponse;
 import org.junit.jupiter.api.Test;
@@ -27,10 +27,16 @@ class WarehouseControllerTest {
 
     @Test
     void optionsReturnsActiveWarehouses() {
-        OptionResponse option = new OptionResponse("仓库A", "W001");
+        WarehouseOptionResponse option = new WarehouseOptionResponse(
+                9007199254740993L,
+                9007199254740993L,
+                "W001 / 仓库A",
+                "W001",
+                "仓库A"
+        );
         when(warehouseService.listActiveOptions()).thenReturn(List.of(option));
 
-        ApiResponse<List<OptionResponse>> response = controller.options();
+        ApiResponse<List<WarehouseOptionResponse>> response = controller.options();
 
         assertThat(response.code()).isEqualTo(0);
         assertThat(response.data()).containsExactly(option);

@@ -42,6 +42,34 @@ class WarehouseSelectionSupportTest {
     }
 
     @Test
+    void shouldResolveWarehouseByStableIdAndRejectNameConflict() {
+        WarehouseCatalog catalog = mock(WarehouseCatalog.class);
+        when(catalog.listActiveWarehouseNames()).thenReturn(List.of("一号库"));
+        when(catalog.listActiveWarehouses()).thenReturn(List.of(
+                new WarehouseSnapshot(201L, "WH-001", "一号库")
+        ));
+        WarehouseSelectionSupport support = new WarehouseSelectionSupport(catalog);
+
+        assertThat(support.resolveWarehouse(201L, "一号库", 1, true).warehouseId()).isEqualTo(201L);
+        assertThatThrownBy(() -> support.resolveWarehouse(201L, "二号库", 1, true))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("仓库ID与名称不一致");
+    }
+
+    @Test
+    void shouldKeepSameNameWarehousesSeparateByStableId() {
+        WarehouseCatalog catalog = mock(WarehouseCatalog.class);
+        when(catalog.listActiveWarehouses()).thenReturn(List.of(
+                new WarehouseSnapshot(201L, "WH-001", "同名库"),
+                new WarehouseSnapshot(202L, "WH-002", "同名库")
+        ));
+        WarehouseSelectionSupport support = new WarehouseSelectionSupport(catalog);
+
+        assertThat(support.resolveWarehouse(201L, "同名库", 1, true).warehouseId()).isEqualTo(201L);
+        assertThat(support.resolveWarehouse(202L, "同名库", 1, true).warehouseId()).isEqualTo(202L);
+    }
+
+    @Test
     void shouldReturnNullWhenNotRequiredAndNull() {
         WarehouseSelectionSupport support = new WarehouseSelectionSupport(repository(List.of()));
 

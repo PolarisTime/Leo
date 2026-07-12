@@ -6,6 +6,8 @@ import java.time.LocalDateTime;
 public record PurchaseRefundSourceCandidateResponse(
         Long id,
         String orderNo,
+        Long supplierId,
+        String supplierCode,
         String supplierName,
         Long settlementCompanyId,
         String settlementCompanyName,
@@ -15,4 +17,17 @@ public record PurchaseRefundSourceCandidateResponse(
         BigDecimal refundableWeight,
         BigDecimal refundableAmount
 ) {
+    public PurchaseRefundSourceCandidateResponse(Long id,
+                                                 String orderNo,
+                                                 String supplierName,
+                                                 Long settlementCompanyId,
+                                                 String settlementCompanyName,
+                                                 LocalDateTime orderDate,
+                                                 String status,
+                                                 Integer refundableQuantity,
+                                                 BigDecimal refundableWeight,
+                                                 BigDecimal refundableAmount) {
+        this(id, orderNo, null, null, supplierName, settlementCompanyId, settlementCompanyName,
+                orderDate, status, refundableQuantity, refundableWeight, refundableAmount);
+    }
 }

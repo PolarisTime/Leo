@@ -38,9 +38,6 @@ public class PurchaseOrderApplyService {
                     LongSupplier nextIdSupplier) {
         BigDecimal totalWeight = BigDecimal.ZERO;
         BigDecimal totalAmount = BigDecimal.ZERO;
-        var materialMap = tradeItemMaterialSupport.loadMaterialMap(
-                request.items().stream().map(PurchaseOrderItemRequest::materialCode).toList()
-        );
         // Keep newly created items detached until every required field is initialized.
         List<PurchaseOrderItem> items = ManagedEntityItemSupport.syncById(
                 new ArrayList<>(purchaseOrder.getItems()),
@@ -59,15 +56,19 @@ public class PurchaseOrderApplyService {
         for (int index = 0; index < request.items().size(); index++) {
             PurchaseOrderItemRequest itemRequest = request.items().get(index);
             PurchaseOrderItem item = items.get(index);
-            String materialCode = tradeItemMaterialSupport.normalizeMaterialCode(itemRequest.materialCode(), index + 1);
+            int lineNo = index + 1;
+            TradeMaterialSnapshot material = tradeItemMaterialSupport.resolveMaterial(
+                    itemRequest.materialId(),
+                    itemRequest.materialCode(),
+                    lineNo
+            );
             BigDecimal weightTon = applyItem(
                     purchaseOrder,
                     item,
                     itemRequest,
-                    materialCode,
-                    materialMap.get(materialCode),
+                    material,
                     inboundWeightAdjustmentMap.getOrDefault(item.getId(), BigDecimal.ZERO),
-                    index + 1
+                    lineNo
             );
             BigDecimal amount = TradeItemCalculator.calculateAmount(weightTon, itemRequest.unitPrice());
             item.setAmount(amount);
@@ -85,20 +86,27 @@ public class PurchaseOrderApplyService {
     private BigDecimal applyItem(PurchaseOrder purchaseOrder,
                                  PurchaseOrderItem item,
                                  PurchaseOrderItemRequest itemRequest,
-                                 String materialCode,
                                  TradeMaterialSnapshot material,
                                  BigDecimal weightAdjustmentTon,
                                  int lineNo) {
         item.setPurchaseOrder(purchaseOrder);
         item.setLineNo(lineNo);
-        item.setMaterialCode(materialCode);
+        item.setMaterialId(material.materialId());
+        item.setMaterialCode(material.materialCode());
         item.setBrand(itemRequest.brand());
         item.setCategory(itemRequest.category());
         item.setMaterial(itemRequest.material());
         item.setSpec(itemRequest.spec());
         item.setLength(itemRequest.length());
         item.setUnit(itemRequest.unit());
-        item.setWarehouseName(warehouseSelectionSupport.normalizeWarehouseName(itemRequest.warehouseName(), lineNo, true));
+        var warehouse = warehouseSelectionSupport.resolveWarehouse(
+                itemRequest.warehouseId(),
+                itemRequest.warehouseName(),
+                lineNo,
+                true
+        );
+        item.setWarehouseId(warehouse.warehouseId());
+        item.setWarehouseName(warehouse.warehouseName());
         item.setBatchNo(tradeItemMaterialSupport.normalizeBatchNo(material, itemRequest.batchNo(), lineNo, false));
         item.setQuantity(itemRequest.quantity());
         item.setQuantityUnit(TradeItemCalculator.normalizeQuantityUnit(itemRequest.quantityUnit()));

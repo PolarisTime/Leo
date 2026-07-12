@@ -69,6 +69,8 @@ public class CustomerStatementService extends AbstractCrudService<CustomerStatem
     @Transactional(readOnly = true)
     public Page<CustomerStatementResponse> page(PageQuery query, PageFilter filter) {
         Specification<CustomerStatement> spec = Specs.<CustomerStatement>keywordLike(filter.keyword(), "statementNo", "customerName", "projectName")
+                .and(Specs.equalValueIfPresent("customerId", filter.customerId()))
+                .and(Specs.equalValueIfPresent("projectId", filter.projectId()))
                 .and(Specs.equalIfPresent("customerName", filter.name()))
                 .and(Specs.equalValueIfPresent("settlementCompanyId", filter.settlementCompanyId()))
                 .and(Specs.equalIfPresent("status", filter.status()))
@@ -134,7 +136,8 @@ public class CustomerStatementService extends AbstractCrudService<CustomerStatem
                 request.closingAmount(),
                 request.status(),
                 request.remark(),
-                request.items()
+                request.items(),
+                request.customerId()
         );
     }
 
@@ -155,7 +158,8 @@ public class CustomerStatementService extends AbstractCrudService<CustomerStatem
                 request.closingAmount(),
                 request.status(),
                 request.remark(),
-                request.items()
+                request.items(),
+                request.customerId()
         );
     }
 

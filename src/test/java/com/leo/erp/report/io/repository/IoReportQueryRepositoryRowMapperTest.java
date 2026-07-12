@@ -28,6 +28,9 @@ class IoReportQueryRepositoryRowMapperTest {
         jdbcTemplate.total = 1L;
         jdbcTemplate.resultSetRows = List.of(Map.ofEntries(
                 Map.entry("id", 3L),
+                Map.entry("source_document_id", 30L),
+                Map.entry("material_id", 300L),
+                Map.entry("warehouse_id", 3000L),
                 Map.entry("business_date", LocalDate.of(2026, 5, 2)),
                 Map.entry("business_type", "采购入库"),
                 Map.entry("source_no", "PI-001"),
@@ -52,9 +55,12 @@ class IoReportQueryRepositoryRowMapperTest {
         var page = repository.page(new PageQuery(0, 10, "sourceNo", "asc"), null, null, null, null);
 
         assertThat(jdbcTemplate.dataSql).contains("LOWER(COALESCE(report.source_no, '')) ASC");
-        assertThat(jdbcTemplate.dataSql).contains("LOWER(COALESCE(paged.source_no, '')) ASC");
+        assertThat(jdbcTemplate.dataSql).doesNotContain("ROW_NUMBER()", "paged.");
         assertThat(page.getContent()).singleElement().satisfies(row -> {
             assertThat(row.id()).isEqualTo(3L);
+            assertThat(row.sourceDocumentId()).isEqualTo(30L);
+            assertThat(row.materialId()).isEqualTo(300L);
+            assertThat(row.warehouseId()).isEqualTo(3000L);
             assertThat(row.businessDate()).isEqualTo(LocalDate.of(2026, 5, 2));
             assertThat(row.businessType()).isEqualTo("采购入库");
             assertThat(row.sourceNo()).isEqualTo("PI-001");
@@ -85,16 +91,19 @@ class IoReportQueryRepositoryRowMapperTest {
 
         repository.page(new PageQuery(0, 10, "materialCode", "desc"), null, null, null, null);
         assertThat(jdbcTemplate.dataSql).contains("LOWER(COALESCE(report.material_code, '')) DESC");
-        assertThat(jdbcTemplate.dataSql).contains("LOWER(COALESCE(paged.material_code, '')) DESC");
+        assertThat(jdbcTemplate.dataSql).doesNotContain("paged.material_code");
 
         repository.page(new PageQuery(0, 10, "warehouseName", "asc"), null, null, null, null);
         assertThat(jdbcTemplate.dataSql).contains("LOWER(COALESCE(report.warehouse_name, '')) ASC");
-        assertThat(jdbcTemplate.dataSql).contains("LOWER(COALESCE(paged.warehouse_name, '')) ASC");
+        assertThat(jdbcTemplate.dataSql).doesNotContain("paged.warehouse_name");
     }
 
     private Map<String, Object> row() {
         return Map.ofEntries(
                 Map.entry("id", 1L),
+                Map.entry("source_document_id", 10L),
+                Map.entry("material_id", 100L),
+                Map.entry("warehouse_id", 1000L),
                 Map.entry("business_date", LocalDate.of(2026, 5, 2)),
                 Map.entry("business_type", "销售出库"),
                 Map.entry("source_no", "SO-001"),

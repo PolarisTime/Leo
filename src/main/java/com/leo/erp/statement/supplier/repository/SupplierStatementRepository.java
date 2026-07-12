@@ -19,15 +19,36 @@ public interface SupplierStatementRepository extends JpaRepository<SupplierState
     Optional<SupplierStatement> findByIdAndDeletedFlagFalse(Long id);
 
     @Query("""
-            select distinct ss
-            from SupplierStatement ss
-            join fetch ss.items item
-            where ss.deletedFlag = false
-              and item.sourceNo in :sourceNos
-              and (:currentStatementId is null or ss.id <> :currentStatementId)
+            select distinct sourceItem.purchaseInbound.id
+            from PurchaseInboundItem sourceItem
+            where sourceItem.id in (
+                select item.sourceInboundItemId
+                from SupplierStatement ss
+                join ss.items item
+                where ss.deletedFlag = false
+                  and item.sourceInboundItemId is not null
+                  and (:currentStatementId is null or ss.id <> :currentStatementId)
+            )
             """)
-    List<SupplierStatement> findAllBySourceNosExcludingCurrentStatement(
-            @Param("sourceNos") Collection<String> sourceNos,
+    List<Long> findOccupiedSourceInboundIdsExcludingCurrentStatement(
+            @Param("currentStatementId") Long currentStatementId
+    );
+
+    @Query("""
+            select distinct sourceItem.purchaseInbound.id
+            from PurchaseInboundItem sourceItem
+            where sourceItem.purchaseInbound.id in :sourceInboundIds
+              and sourceItem.id in (
+                  select item.sourceInboundItemId
+                  from SupplierStatement ss
+                  join ss.items item
+                  where ss.deletedFlag = false
+                    and item.sourceInboundItemId is not null
+                    and (:currentStatementId is null or ss.id <> :currentStatementId)
+              )
+            """)
+    List<Long> findMatchingOccupiedSourceInboundIdsExcludingCurrentStatement(
+            @Param("sourceInboundIds") Collection<Long> sourceInboundIds,
             @Param("currentStatementId") Long currentStatementId
     );
 }

@@ -71,6 +71,7 @@ public class PurchaseRefundController {
     public ApiResponse<PageResponse<PurchaseRefundSourceCandidateResponse>> sourceCandidates(
             @BindPageQuery(sortFieldKey = "purchase-order") PageQuery query,
             @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) Long supplierId,
             @RequestParam(required = false) String supplierName,
             @RequestParam(required = false) Long settlementCompanyId,
             @RequestParam(required = false)
@@ -87,7 +88,7 @@ public class PurchaseRefundController {
                         null,
                         startDate,
                         endDate
-                )
+                ).withIdentity(null, null, supplierId, null, null)
         )));
     }
 
@@ -97,6 +98,7 @@ public class PurchaseRefundController {
     public ApiResponse<PageResponse<PurchaseRefundResponse>> page(
             @BindPageQuery(sortFieldKey = "purchase-refund") PageQuery query,
             @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) Long supplierId,
             @RequestParam(required = false) String supplierName,
             @RequestParam(required = false) Long settlementCompanyId,
             @RequestParam(required = false) String status,
@@ -114,7 +116,7 @@ public class PurchaseRefundController {
                         status,
                         startDate,
                         endDate
-                )
+                ).withIdentity(null, null, supplierId, null, null)
         )));
     }
 

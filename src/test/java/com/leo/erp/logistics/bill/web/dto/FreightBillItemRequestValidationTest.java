@@ -15,6 +15,38 @@ class FreightBillItemRequestValidationTest {
     private static final Validator VALIDATOR = validator();
 
     @Test
+    void shouldRequirePositiveSourceSalesOutboundItemId() {
+        FreightBillItemRequest missingId = new FreightBillItemRequest(
+                null,
+                "SO001",
+                "客户名称",
+                "项目名称",
+                "M001",
+                "钢材",
+                "品牌A",
+                "类别A",
+                "钢材",
+                "10mm",
+                "6m",
+                100,
+                "件",
+                BigDecimal.valueOf(0.500),
+                10,
+                "B001",
+                BigDecimal.valueOf(50.000),
+                "仓库A"
+        );
+        FreightBillItemRequest nonPositiveId = new FreightBillItemRequest(
+                null, "SO001", 0L, null, null, "客户名称", "项目名称", "M001", "钢材",
+                "品牌A", "类别A", "钢材", "10mm", "6m", 100, "件",
+                BigDecimal.valueOf(0.500), 10, "B001", BigDecimal.valueOf(50.000), "仓库A"
+        );
+
+        assertThat(violationFields(missingId)).contains("sourceSalesOutboundItemId");
+        assertThat(violationFields(nonPositiveId)).contains("sourceSalesOutboundItemId");
+    }
+
+    @Test
     void shouldRejectBlankSourceNo() {
         FreightBillItemRequest item = new FreightBillItemRequest(
                 null,
@@ -79,6 +111,7 @@ class FreightBillItemRequestValidationTest {
         FreightBillItemRequest item = new FreightBillItemRequest(
                 null,
                 "SO001",
+                20L,
                 "客户名称",
                 "",
                 "M001",
@@ -109,6 +142,7 @@ class FreightBillItemRequestValidationTest {
         FreightBillItemRequest item = new FreightBillItemRequest(
                 null,
                 "SO001",
+                20L,
                 "客户名称",
                 "项目名称",
                 "",
@@ -439,6 +473,7 @@ class FreightBillItemRequestValidationTest {
         FreightBillItemRequest item = new FreightBillItemRequest(
                 null,
                 "SO001",
+                20L,
                 "客户名称",
                 "项目名称",
                 "M001",
@@ -469,6 +504,7 @@ class FreightBillItemRequestValidationTest {
         FreightBillItemRequest item = new FreightBillItemRequest(
                 null,
                 "SO001",
+                20L,
                 "客户名称",
                 "项目名称",
                 "M001",
@@ -498,5 +534,11 @@ class FreightBillItemRequestValidationTest {
         LocalValidatorFactoryBean bean = new LocalValidatorFactoryBean();
         bean.afterPropertiesSet();
         return bean;
+    }
+
+    private Set<String> violationFields(FreightBillItemRequest item) {
+        return VALIDATOR.validate(item).stream()
+                .map(violation -> violation.getPropertyPath().toString())
+                .collect(Collectors.toSet());
     }
 }

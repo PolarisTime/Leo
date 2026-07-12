@@ -13,6 +13,8 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
@@ -27,6 +29,22 @@ class FreightBillDownstreamMutationGuardTest {
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("物流对账单")
                 .hasMessageContaining("不能反审核");
+    }
+
+    @Test
+    void shouldProtectByFreightBillIdWithoutUsingBillNumberAsIdentity() {
+        Fixture fixture = new Fixture();
+        fixture.bill.setBillNo(null);
+        fixture.stubStatement(0L);
+
+        assertThatThrownBy(() -> fixture.guard.assertReverseAuditAllowed(fixture.bill))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("物流对账单")
+                .hasMessageContaining("不能反审核");
+        verify(fixture.freightStatementRepository)
+                .findAllBySourceFreightBillIdsExcludingCurrentStatement(List.of(1L), null);
+        verify(fixture.freightStatementRepository, never())
+                .findAllBySourceNosExcludingCurrentStatement(List.of("FB-001"), null);
     }
 
     @Test
@@ -87,15 +105,15 @@ class FreightBillDownstreamMutationGuardTest {
         private final FreightStatement statement = statement();
 
         private Fixture() {
-            when(freightStatementRepository.findAllBySourceNosExcludingCurrentStatement(
-                    List.of("FB-001"),
+            when(freightStatementRepository.findAllBySourceFreightBillIdsExcludingCurrentStatement(
+                    List.of(1L),
                     null
             )).thenReturn(List.of());
         }
 
         private void stubStatement(long settledAllocationCount) {
-            when(freightStatementRepository.findAllBySourceNosExcludingCurrentStatement(
-                    List.of("FB-001"),
+            when(freightStatementRepository.findAllBySourceFreightBillIdsExcludingCurrentStatement(
+                    List.of(1L),
                     null
             )).thenReturn(List.of(statement));
             when(paymentAllocationRepository.countSettledAllocationsByStatementIdAndBusinessTypeAndStatus(

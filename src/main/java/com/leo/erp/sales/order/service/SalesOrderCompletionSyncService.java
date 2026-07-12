@@ -9,7 +9,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.ArrayList;
-import java.util.Arrays;
+import java.util.Collection;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -36,23 +36,42 @@ public class SalesOrderCompletionSyncService {
     }
 
     @Transactional
-    public void syncBySalesOrderReference(String salesOrderReference) {
-        Set<String> orderNos = parseSalesOrderNos(salesOrderReference);
-        if (orderNos.isEmpty()) {
+    public void syncBySourceSalesOrderItemIds(Collection<Long> sourceSalesOrderItemIds) {
+        Set<Long> sourceItemIds = normalizeIds(sourceSalesOrderItemIds);
+        if (sourceItemIds.isEmpty()) {
             return;
         }
+        synchronizeOrders(salesOrderRepository.findAllWithItemsBySourceItemIds(sourceItemIds));
+    }
 
-        List<SalesOrder> orders = salesOrderRepository.findByOrderNoInAndDeletedFlagFalse(orderNos);
-        if (orders.isEmpty()) {
+    @Transactional
+    public void syncBySalesOrderId(Long salesOrderId) {
+        if (salesOrderId == null || salesOrderId <= 0) {
             return;
         }
+        salesOrderRepository.findByIdAndDeletedFlagFalse(salesOrderId)
+                .ifPresent(order -> synchronizeOrders(List.of(order)));
+    }
 
-        // 收集所有未删除销售出库，用于销售订单完成状态判断。
-        List<SalesOrderOutboundQueryService.OutboundRecord> allOutbounds = outboundQueryService.findActiveOutbounds();
+    private void synchronizeOrders(List<SalesOrder> orders) {
+        if (orders == null || orders.isEmpty()) {
+            return;
+        }
+        Set<Long> orderItemIds = orders.stream()
+                .filter(order -> order.getItems() != null)
+                .flatMap(order -> order.getItems().stream())
+                .map(item -> item.getId())
+                .filter(id -> id != null)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        if (orderItemIds.isEmpty()) {
+            return;
+        }
+        List<SalesOrderOutboundQueryService.OutboundRecord> auditedOutbounds =
+                outboundQueryService.findAuditedOutboundsBySourceSalesOrderItemIds(orderItemIds);
+        Map<Long, Integer> outboundQtyByItemId = aggregateOutboundQuantities(auditedOutbounds, orderItemIds);
         List<SalesOrder> changedOrders = new ArrayList<>();
         for (SalesOrder order : orders) {
-            String normalizedOrderNo = normalize(order.getOrderNo());
-            boolean fullyOutbounded = isFullyOutbounded(order, allOutbounds, normalizedOrderNo);
+            boolean fullyOutbounded = isFullyOutbounded(order, outboundQtyByItemId);
             if (applyCompletedStatus(order, fullyOutbounded && isPriced(order))) {
                 changedOrders.add(order);
             }
@@ -62,26 +81,23 @@ public class SalesOrderCompletionSyncService {
         }
     }
 
-    private boolean isFullyOutbounded(
-            SalesOrder order,
-            List<SalesOrderOutboundQueryService.OutboundRecord> allOutbounds,
-            String normalizedOrderNo
+    private Map<Long, Integer> aggregateOutboundQuantities(
+            List<SalesOrderOutboundQueryService.OutboundRecord> auditedOutbounds,
+            Set<Long> orderItemIds
     ) {
-        // Pre-compute: aggregate outbound quantities by sales order item ID
-        Map<Long, Integer> outboundQtyByItemId = allOutbounds.stream()
+        return auditedOutbounds.stream()
                 .filter(ob -> StatusConstants.AUDITED.equals(normalize(ob.status())))
-                .filter(ob -> parseSalesOrderNos(ob.salesOrderNo())
-                        .contains(normalizedOrderNo))
                 .flatMap(ob -> ob.items().stream())
-                .filter(obi -> obi.sourceSalesOrderItemId() != null)
+                .filter(obi -> orderItemIds.contains(obi.sourceSalesOrderItemId()))
                 .collect(Collectors.groupingBy(
                         SalesOrderOutboundQueryService.OutboundItemRecord::sourceSalesOrderItemId,
                         Collectors.summingInt(
                                 obi -> obi.quantity() != null ? obi.quantity() : 0
                         )
                 ));
+    }
 
-        // Check each order item against pre-computed map with tolerance
+    private boolean isFullyOutbounded(SalesOrder order, Map<Long, Integer> outboundQtyByItemId) {
         return order.getItems().stream().allMatch(item -> {
             int expected = item.getQuantity() != null ? item.getQuantity() : 0;
             int actual = outboundQtyByItemId.getOrDefault(item.getId(), 0);
@@ -130,14 +146,13 @@ public class SalesOrderCompletionSyncService {
                         && item.getUnitPrice().compareTo(BigDecimal.ZERO) > 0);
     }
 
-    private Set<String> parseSalesOrderNos(String salesOrderReference) {
-        if (salesOrderReference == null || salesOrderReference.isBlank()) {
+    private Set<Long> normalizeIds(Collection<Long> ids) {
+        if (ids == null || ids.isEmpty()) {
             return Set.of();
         }
-        return Arrays.stream(salesOrderReference.split(","))
-                .map(this::normalize)
-                .filter(value -> !value.isEmpty())
-                .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
+        return ids.stream()
+                .filter(id -> id != null && id > 0)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
     }
 
     private String normalize(String value) {

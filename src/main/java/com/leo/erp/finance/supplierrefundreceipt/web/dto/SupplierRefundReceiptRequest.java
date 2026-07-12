@@ -12,6 +12,7 @@ public record SupplierRefundReceiptRequest(
         String refundReceiptNo,
         @NotNull(message = "采购退款单不能为空")
         Long purchaseRefundId,
+        Long supplierId,
         @NotNull(message = "到账日期不能为空")
         LocalDate receiptDate,
         @NotBlank(message = "到账方式不能为空")
@@ -26,4 +27,15 @@ public record SupplierRefundReceiptRequest(
         String operatorName,
         String remark
 ) {
+    public SupplierRefundReceiptRequest(String refundReceiptNo,
+                                        Long purchaseRefundId,
+                                        LocalDate receiptDate,
+                                        String receiptMethod,
+                                        BigDecimal amount,
+                                        String status,
+                                        String operatorName,
+                                        String remark) {
+        this(refundReceiptNo, purchaseRefundId, null, receiptDate, receiptMethod, amount, status,
+                operatorName, remark);
+    }
 }

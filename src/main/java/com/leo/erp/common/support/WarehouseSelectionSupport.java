@@ -11,6 +11,7 @@ import java.util.Collection;
 import java.time.Duration;
 import java.util.List;
 import java.util.Set;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 @Component
@@ -34,21 +35,48 @@ public class WarehouseSelectionSupport implements RedisCacheHealthCheck {
     }
 
     public String normalizeWarehouseName(String warehouseName, int lineNo, boolean required) {
-        String normalized = warehouseName == null ? null : warehouseName.trim();
-        if (normalized != null && normalized.isBlank()) {
-            normalized = null;
-        }
+        return resolveWarehouse(null, warehouseName, lineNo, required).warehouseName();
+    }
+
+    public WarehouseSnapshot resolveWarehouse(Long warehouseId,
+                                               String warehouseName,
+                                               int lineNo,
+                                               boolean required) {
+        String trimmedName = warehouseName == null ? null : warehouseName.trim();
+        String normalized = trimmedName == null || trimmedName.isBlank() ? null : trimmedName;
         if (required && normalized == null) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "第" + lineNo + "行码头不能为空");
         }
-        if (normalized == null) {
-            return null;
+        if (warehouseId == null && normalized == null) {
+            return new WarehouseSnapshot(null, null, null);
         }
-        if (normalized.length() > 128) {
+        if (normalized != null && normalized.length() > 128) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "第" + lineNo + "行码头长度不能超过128");
         }
-        validateWarehouseNames(Set.of(normalized));
-        return normalized;
+        List<WarehouseSnapshot> warehouses = loadActiveWarehouses();
+        if (warehouseId != null) {
+            WarehouseSnapshot resolved = warehouses.stream()
+                    .filter(warehouse -> warehouseId.equals(warehouse.warehouseId()))
+                    .findFirst()
+                    .orElseThrow(() -> new BusinessException(
+                            ErrorCode.BUSINESS_ERROR,
+                            "第" + lineNo + "行仓库不存在或已停用"
+                    ));
+            if (normalized != null && !normalized.equals(resolved.warehouseName())) {
+                throw new BusinessException(ErrorCode.VALIDATION_ERROR,
+                        "第" + lineNo + "行仓库ID与名称不一致");
+            }
+            return resolved;
+        }
+
+        List<WarehouseSnapshot> candidates = warehouses.stream()
+                .filter(warehouse -> Objects.equals(normalized, warehouse.warehouseName()))
+                .toList();
+        if (candidates.size() != 1) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR,
+                    candidates.isEmpty() ? "码头不存在: " + normalized : "码头名称不唯一: " + normalized);
+        }
+        return candidates.get(0);
     }
 
     public void validateWarehouseNames(Collection<String> warehouseNames) {
@@ -77,8 +105,36 @@ public class WarehouseSelectionSupport implements RedisCacheHealthCheck {
     }
 
     public List<OptionResponse> listActiveOptions() {
-        return loadActiveWarehouseNames().stream()
-                .map(name -> new OptionResponse(name, name))
+        return loadActiveWarehouses().stream()
+                .filter(warehouse -> warehouse.warehouseName() != null && !warehouse.warehouseName().isBlank())
+                .map(warehouse -> new OptionResponse(
+                        warehouse.warehouseCode() == null || warehouse.warehouseCode().isBlank()
+                                ? warehouse.warehouseName()
+                                : warehouse.warehouseCode() + " / " + warehouse.warehouseName(),
+                        warehouse.warehouseId() == null
+                                ? warehouse.warehouseName()
+                                : warehouse.warehouseId().toString()
+                ))
+                .toList();
+    }
+
+    private List<WarehouseSnapshot> loadActiveWarehouses() {
+        if (warehouseCatalog == null) {
+            return List.of();
+        }
+        List<WarehouseSnapshot> snapshots = warehouseCatalog.listActiveWarehouses();
+        if (snapshots == null || snapshots.isEmpty()) {
+            snapshots = warehouseCatalog.listActiveWarehouseNames().stream()
+                    .map(name -> new WarehouseSnapshot(null, null, name))
+                    .toList();
+        }
+        return snapshots.stream()
+                .filter(Objects::nonNull)
+                .map(warehouse -> new WarehouseSnapshot(
+                        warehouse.warehouseId(),
+                        warehouse.warehouseCode() == null ? null : warehouse.warehouseCode().trim(),
+                        warehouse.warehouseName() == null ? null : warehouse.warehouseName().trim()
+                ))
                 .toList();
     }
 

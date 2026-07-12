@@ -58,6 +58,7 @@ public class PurchaseOrderController {
     public ApiResponse<PageResponse<PurchaseOrderImportCandidateResponse>> importCandidates(
             @BindPageQuery(sortFieldKey = "purchase-order") PageQuery query,
             @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) Long supplierId,
             @RequestParam(required = false) String supplierName,
             @RequestParam(required = false) Long settlementCompanyId,
             @RequestParam(required = false) String status,
@@ -68,7 +69,8 @@ public class PurchaseOrderController {
         return ApiResponse.success(PageResponse.from(
                 purchaseOrderService.importCandidates(
                         query,
-                        PageFilter.of(keyword, supplierName, settlementCompanyId, status, startDate, endDate),
+                        PageFilter.of(keyword, supplierName, settlementCompanyId, status, startDate, endDate)
+                                .withIdentity(null, null, supplierId, null, null),
                         usage
                 )
         ));
@@ -80,6 +82,7 @@ public class PurchaseOrderController {
     public ApiResponse<PageResponse<PurchaseOrderImportCandidateResponse>> prepaymentCandidates(
             @BindPageQuery(sortFieldKey = "purchase-order") PageQuery query,
             @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) Long supplierId,
             @RequestParam(required = false) String supplierName,
             @RequestParam(required = false) Long settlementCompanyId,
             @RequestParam(required = false) String status,
@@ -90,6 +93,7 @@ public class PurchaseOrderController {
                 purchaseOrderService.prepaymentCandidates(
                         query,
                         PageFilter.of(keyword, supplierName, settlementCompanyId, status, startDate, endDate)
+                                .withIdentity(null, null, supplierId, null, null)
                 )
         ));
     }
@@ -100,6 +104,7 @@ public class PurchaseOrderController {
     public ApiResponse<PageResponse<PurchaseOrderResponse>> page(
             @BindPageQuery(sortFieldKey = "purchase-order") PageQuery query,
             @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) Long supplierId,
             @RequestParam(required = false) String supplierName,
             @RequestParam(required = false) Long settlementCompanyId,
             @RequestParam(required = false) String status,
@@ -107,7 +112,11 @@ public class PurchaseOrderController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate
     ) {
         return ApiResponse.success(PageResponse.from(
-                purchaseOrderService.page(query, PageFilter.of(keyword, supplierName, settlementCompanyId, status, startDate, endDate))
+                purchaseOrderService.page(
+                        query,
+                        PageFilter.of(keyword, supplierName, settlementCompanyId, status, startDate, endDate)
+                                .withIdentity(null, null, supplierId, null, null)
+                )
         ));
     }
 

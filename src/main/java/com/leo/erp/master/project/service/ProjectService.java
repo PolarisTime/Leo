@@ -8,11 +8,17 @@ import com.leo.erp.common.service.AbstractCrudService;
 import com.leo.erp.common.support.MasterDataReferenceGuard;
 import com.leo.erp.common.support.MasterDataReferenceGuard.ReferenceCheck;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
+import com.leo.erp.common.support.StatusConstants;
+import com.leo.erp.master.customer.domain.entity.Customer;
+import com.leo.erp.master.customer.repository.CustomerRepository;
 import com.leo.erp.master.project.domain.entity.Project;
 import com.leo.erp.master.project.mapper.ProjectMapper;
 import com.leo.erp.master.project.repository.ProjectRepository;
 import com.leo.erp.master.project.web.dto.ProjectRequest;
+import com.leo.erp.master.project.web.dto.ProjectOptionResponse;
 import com.leo.erp.master.project.web.dto.ProjectResponse;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.jpa.domain.Specification;
@@ -25,25 +31,37 @@ import java.util.Optional;
 @Service
 public class ProjectService extends AbstractCrudService<Project, ProjectRequest, ProjectResponse> {
 
+    private static final Logger log = LoggerFactory.getLogger(ProjectService.class);
+
     private final ProjectRepository projectRepository;
     private final ProjectMapper projectMapper;
     private final MasterDataReferenceGuard referenceGuard;
+    private final CustomerRepository customerRepository;
 
     @Autowired
     public ProjectService(SnowflakeIdGenerator snowflakeIdGenerator,
                           ProjectRepository projectRepository,
                           ProjectMapper projectMapper,
-                          MasterDataReferenceGuard referenceGuard) {
+                          MasterDataReferenceGuard referenceGuard,
+                          CustomerRepository customerRepository) {
         super(snowflakeIdGenerator);
         this.projectRepository = projectRepository;
         this.projectMapper = projectMapper;
         this.referenceGuard = referenceGuard;
+        this.customerRepository = customerRepository;
+    }
+
+    public ProjectService(SnowflakeIdGenerator snowflakeIdGenerator,
+                          ProjectRepository projectRepository,
+                          ProjectMapper projectMapper,
+                          MasterDataReferenceGuard referenceGuard) {
+        this(snowflakeIdGenerator, projectRepository, projectMapper, referenceGuard, null);
     }
 
     public ProjectService(SnowflakeIdGenerator snowflakeIdGenerator,
                           ProjectRepository projectRepository,
                           ProjectMapper projectMapper) {
-        this(snowflakeIdGenerator, projectRepository, projectMapper, null);
+        this(snowflakeIdGenerator, projectRepository, projectMapper, null, null);
     }
 
     @Transactional(readOnly = true)
@@ -56,6 +74,29 @@ public class ProjectService extends AbstractCrudService<Project, ProjectRequest,
         return page(query, spec, projectRepository);
     }
 
+    @Transactional(readOnly = true)
+    public List<ProjectOptionResponse> listActiveOptions(Long customerId) {
+        Customer customer = customerRepository.findByIdAndDeletedFlagFalse(customerId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_ERROR, "客户不存在"));
+        String customerCode = trimToNull(customer.getCustomerCode());
+        return projectRepository.findActiveOptionsByCustomerIdentity(
+                        customer.getId(),
+                        customerCode,
+                        StatusConstants.NORMAL
+                ).stream()
+                .map(project -> new ProjectOptionResponse(
+                        project.getId(),
+                        project.getProjectCode() + " / " + project.getProjectName(),
+                        project.getId(),
+                        project.getCustomerId() == null ? customer.getId() : project.getCustomerId(),
+                        project.getCustomerCode(),
+                        project.getProjectCode(),
+                        project.getProjectName(),
+                        project.getProjectNameAbbr()
+                ))
+                .toList();
+    }
+
     @Override
     protected void validateCreate(ProjectRequest request) {
         ensureProjectCodeUnique(request.projectCode());
@@ -66,6 +107,16 @@ public class ProjectService extends AbstractCrudService<Project, ProjectRequest,
         if (!entity.getProjectCode().equals(request.projectCode())) {
             ensureProjectCodeUnique(request.projectCode());
         }
+    }
+
+    @Override
+    protected ProjectRequest normalizeCreateRequest(ProjectRequest request) {
+        return normalizeCustomerIdentity(request);
+    }
+
+    @Override
+    protected ProjectRequest normalizeUpdateRequest(Project entity, ProjectRequest request) {
+        return normalizeCustomerIdentity(request);
     }
 
     @Override
@@ -103,6 +154,7 @@ public class ProjectService extends AbstractCrudService<Project, ProjectRequest,
         entity.setProjectNameAbbr(request.projectNameAbbr());
         entity.setProjectAddress(request.projectAddress());
         entity.setProjectManager(request.projectManager());
+        entity.setCustomerId(request.customerId());
         entity.setCustomerCode(request.customerCode());
         entity.setStatus(request.status());
         entity.setRemark(request.remark());
@@ -124,67 +176,83 @@ public class ProjectService extends AbstractCrudService<Project, ProjectRequest,
         }
     }
 
+    private ProjectRequest normalizeCustomerIdentity(ProjectRequest request) {
+        if (customerRepository == null) {
+            return request;
+        }
+        String requestedCustomerCode = trimToNull(request.customerCode());
+        if (request.customerId() == null && requestedCustomerCode == null) {
+            return request;
+        }
+        Customer customer;
+        if (request.customerId() == null) {
+            customer = customerRepository.findByCustomerCodeAndDeletedFlagFalse(requestedCustomerCode)
+                    .orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_ERROR, "客户不存在"));
+            log.warn(
+                    "identity fallback used: module=project, field=customerId, "
+                            + "reason=legacy-customer-code, resolvedId={}",
+                    customer.getId()
+            );
+        } else {
+            customer = customerRepository.findByIdAndDeletedFlagFalse(request.customerId())
+                    .orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_ERROR, "客户不存在"));
+        }
+        String customerCode = trimToNull(customer.getCustomerCode());
+        if (requestedCustomerCode != null && !requestedCustomerCode.equals(customerCode)) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "客户ID与客户编码不一致");
+        }
+        return new ProjectRequest(
+                request.projectCode(),
+                request.projectName(),
+                request.projectNameAbbr(),
+                request.projectAddress(),
+                request.projectManager(),
+                customer.getId(),
+                customerCode,
+                request.status(),
+                request.remark()
+        );
+    }
+
+    private String trimToNull(String value) {
+        if (value == null) {
+            return null;
+        }
+        String normalized = value.trim();
+        return normalized.isEmpty() ? null : normalized;
+    }
+
     private List<ReferenceCheck> projectReferences(Project entity) {
         Long projectId = entity.getId();
-        String projectName = entity.getProjectName();
         return List.of(
                 ReferenceCheck.active("so_sales_order", "project_id", projectId),
-                ReferenceCheck.active("fm_receipt", "project_id", projectId),
+                ReferenceCheck.active("ct_sales_contract", "project_id", projectId),
+                ReferenceCheck.active("so_sales_outbound", "project_id", projectId),
+                ReferenceCheck.active("fm_invoice_issue", "project_id", projectId),
                 ReferenceCheck.active("st_customer_statement", "project_id", projectId),
-                ReferenceCheck.when(
+                ReferenceCheck.ofActiveParent(
                         "st_customer_statement_item",
                         "project_id",
                         projectId,
-                        "EXISTS (SELECT 1 FROM st_customer_statement parent "
-                                + "WHERE parent.id = st_customer_statement_item.statement_id "
-                                + "AND parent.deleted_flag = false)"
-                ),
-                ReferenceCheck.active("fm_ledger_adjustment", "project_id", projectId),
-                ReferenceCheck.active("md_customer", "project_name", projectName),
-                ReferenceCheck.activeWhen(
-                        "so_sales_order",
-                        "project_name",
-                        projectName,
-                        "project_id IS NULL"
-                ),
-                ReferenceCheck.active("so_sales_outbound", "project_name", projectName),
-                ReferenceCheck.active("lg_freight_bill", "project_name", projectName),
-                ReferenceCheck.when(
-                        "lg_freight_bill_item",
-                        "project_name",
-                        projectName,
-                        "EXISTS (SELECT 1 FROM lg_freight_bill parent "
-                                + "WHERE parent.id = lg_freight_bill_item.bill_id "
-                                + "AND parent.deleted_flag = false)"
-                ),
-                ReferenceCheck.active("ct_sales_contract", "project_name", projectName),
-                ReferenceCheck.activeWhen(
                         "st_customer_statement",
-                        "project_name",
-                        projectName,
-                        "project_id IS NULL"
+                        "statement_id"
                 ),
-                ReferenceCheck.when(
+                ReferenceCheck.active("fm_receipt", "project_id", projectId),
+                ReferenceCheck.ofActiveParent(
+                        "lg_freight_bill_item",
+                        "project_id",
+                        projectId,
+                        "lg_freight_bill",
+                        "bill_id"
+                ),
+                ReferenceCheck.ofActiveParent(
                         "st_freight_statement_item",
-                        "project_name",
-                        projectName,
-                        "EXISTS (SELECT 1 FROM st_freight_statement parent "
-                                + "WHERE parent.id = st_freight_statement_item.statement_id "
-                                + "AND parent.deleted_flag = false)"
+                        "project_id",
+                        projectId,
+                        "st_freight_statement",
+                        "statement_id"
                 ),
-                ReferenceCheck.activeWhen(
-                        "fm_receipt",
-                        "project_name",
-                        projectName,
-                        "project_id IS NULL"
-                ),
-                ReferenceCheck.active("fm_invoice_issue", "project_name", projectName),
-                ReferenceCheck.activeWhen(
-                        "fm_ledger_adjustment",
-                        "project_name",
-                        projectName,
-                        "project_id IS NULL"
-                )
+                ReferenceCheck.active("fm_ledger_adjustment", "project_id", projectId)
         );
     }
 }

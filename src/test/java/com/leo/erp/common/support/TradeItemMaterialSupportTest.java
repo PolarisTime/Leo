@@ -44,6 +44,27 @@ class TradeItemMaterialSupportTest {
     }
 
     @Test
+    void shouldResolveMaterialByStableIdAndRejectCodeConflict() {
+        TradeMaterialSnapshot material = new TradeMaterialSnapshot(101L, "MAT-001", Boolean.TRUE);
+        TradeItemMaterialSupport support = new TradeItemMaterialSupport(repository(List.of(material)));
+
+        assertThat(support.resolveMaterial(101L, "MAT-001", 1)).isEqualTo(material);
+        assertThatThrownBy(() -> support.resolveMaterial(101L, "MAT-002", 1))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("商品ID与编码不一致");
+    }
+
+    @Test
+    void shouldKeepSameCodeMaterialsSeparateByStableId() {
+        TradeMaterialSnapshot first = new TradeMaterialSnapshot(101L, "MAT-001", Boolean.TRUE);
+        TradeMaterialSnapshot second = new TradeMaterialSnapshot(102L, "MAT-001", Boolean.TRUE);
+        TradeItemMaterialSupport support = new TradeItemMaterialSupport(repository(List.of(first, second)));
+
+        assertThat(support.resolveMaterial(101L, "MAT-001", 1).materialId()).isEqualTo(101L);
+        assertThat(support.resolveMaterial(102L, "MAT-001", 1).materialId()).isEqualTo(102L);
+    }
+
+    @Test
     void shouldReturnEmptyMapWhenMaterialCodesAreNullOrBlank() {
         TradeItemMaterialSupport support = new TradeItemMaterialSupport(repository(List.of(batchManagedMaterial("MAT-001"))));
 

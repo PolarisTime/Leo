@@ -90,7 +90,7 @@ class CacheConfigTest {
     @Test
     void redisValueSerializer_restoresStreamToListCacheValue() {
         GenericJackson2JsonRedisSerializer serializer = CacheConfig.redisValueSerializer(new ObjectMapper().findAndRegisterModules());
-        List<SupplierOptionResponse> expected = Stream.of(new SupplierOptionResponse(1L, "供应商A", "供应商A"))
+        List<SupplierOptionResponse> expected = Stream.of(new SupplierOptionResponse(1L, "S001", "供应商A"))
                 .toList();
 
         Object decoded = serializer.deserialize(serializer.serialize(expected));

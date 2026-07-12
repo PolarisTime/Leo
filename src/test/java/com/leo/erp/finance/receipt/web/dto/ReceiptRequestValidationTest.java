@@ -224,7 +224,7 @@ class ReceiptRequestValidationTest {
                 .map(violation -> violation.getPropertyPath().toString())
                 .collect(Collectors.toSet());
 
-        assertThat(violations).contains("items[0].sourceStatementId");
+        assertThat(violations).contains("items[0].sourceCustomerStatementId");
         assertThat(violations).contains("items[0].allocatedAmount");
     }
 

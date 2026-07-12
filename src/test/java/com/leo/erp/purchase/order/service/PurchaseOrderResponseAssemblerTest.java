@@ -7,6 +7,7 @@ import com.leo.erp.purchase.order.domain.entity.PurchaseOrderItem;
 import com.leo.erp.purchase.order.mapper.PurchaseOrderMapper;
 import com.leo.erp.purchase.order.web.dto.PurchaseOrderResponse;
 import org.junit.jupiter.api.Test;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -22,6 +23,16 @@ class PurchaseOrderResponseAssemblerTest {
     @Test
     void shouldAppendAvailabilityFieldsToDetailResponse() {
         PurchaseOrder order = order();
+        assertThat(PurchaseOrder.class.getDeclaredFields())
+                .extracting(java.lang.reflect.Field::getName)
+                .contains("supplierId");
+        assertThat(PurchaseOrderItem.class.getDeclaredFields())
+                .extracting(java.lang.reflect.Field::getName)
+                .contains("materialId", "warehouseId", "batchNoNormalized");
+        ReflectionTestUtils.setField(order, "supplierId", 501L);
+        ReflectionTestUtils.setField(order.getItems().get(0), "materialId", 101L);
+        ReflectionTestUtils.setField(order.getItems().get(0), "warehouseId", 201L);
+        ReflectionTestUtils.setField(order.getItems().get(0), "batchNoNormalized", "B1");
         PurchaseInboundItemQueryService inboundQueryService = mock(PurchaseInboundItemQueryService.class);
         ItemAllocationNativeRepository allocationRepo = mock(ItemAllocationNativeRepository.class);
         PurchaseOrderItemPieceWeightService pieceWeightService = mock(PurchaseOrderItemPieceWeightService.class);
@@ -46,6 +57,10 @@ class PurchaseOrderResponseAssemblerTest {
                 .toDetailResponse(order);
 
         assertThat(response.items()).singleElement().satisfies(item -> {
+            assertThat(ReflectionTestUtils.getField(response, "supplierId")).isEqualTo(501L);
+            assertThat(ReflectionTestUtils.getField(item, "materialId")).isEqualTo(101L);
+            assertThat(ReflectionTestUtils.getField(item, "warehouseId")).isEqualTo(201L);
+            assertThat(ReflectionTestUtils.getField(item, "batchNoNormalized")).isEqualTo("B1");
             assertThat(item.remainingQuantity()).isEqualTo(6);
             assertThat(item.salesRemainingQuantity()).isEqualTo(7);
             assertThat(item.salesRemainingWeightTon()).isEqualByComparingTo("0.700");

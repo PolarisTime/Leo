@@ -19,15 +19,36 @@ public interface CustomerStatementRepository extends JpaRepository<CustomerState
     Optional<CustomerStatement> findByIdAndDeletedFlagFalse(Long id);
 
     @Query("""
-            select distinct cs
-            from CustomerStatement cs
-            join fetch cs.items item
-            where cs.deletedFlag = false
-              and item.sourceNo in :sourceNos
-              and (:currentStatementId is null or cs.id <> :currentStatementId)
+            select distinct sourceItem.salesOrder.id
+            from SalesOrderItem sourceItem
+            where sourceItem.id in (
+                select item.sourceSalesOrderItemId
+                from CustomerStatement cs
+                join cs.items item
+                where cs.deletedFlag = false
+                  and item.sourceSalesOrderItemId is not null
+                  and (:currentStatementId is null or cs.id <> :currentStatementId)
+            )
             """)
-    List<CustomerStatement> findAllBySourceNosExcludingCurrentStatement(
-            @Param("sourceNos") Collection<String> sourceNos,
+    List<Long> findOccupiedSourceSalesOrderIdsExcludingCurrentStatement(
+            @Param("currentStatementId") Long currentStatementId
+    );
+
+    @Query("""
+            select distinct sourceItem.salesOrder.id
+            from SalesOrderItem sourceItem
+            where sourceItem.salesOrder.id in :sourceSalesOrderIds
+              and sourceItem.id in (
+                  select item.sourceSalesOrderItemId
+                  from CustomerStatement cs
+                  join cs.items item
+                  where cs.deletedFlag = false
+                    and item.sourceSalesOrderItemId is not null
+                    and (:currentStatementId is null or cs.id <> :currentStatementId)
+              )
+            """)
+    List<Long> findMatchingOccupiedSourceSalesOrderIdsExcludingCurrentStatement(
+            @Param("sourceSalesOrderIds") Collection<Long> sourceSalesOrderIds,
             @Param("currentStatementId") Long currentStatementId
     );
 

@@ -11,10 +11,12 @@ import java.util.List;
 
 public record FreightBillRequest(
         String billNo,
+        Long carrierId,
         String carrierCode,
         @jakarta.validation.constraints.NotBlank String carrierName,
         Long settlementCompanyId,
         String settlementCompanyName,
+        Long vehicleId,
         String vehiclePlate,
         @jakarta.validation.constraints.NotBlank String customerName,
         @jakarta.validation.constraints.NotBlank String projectName,
@@ -27,6 +29,8 @@ public record FreightBillRequest(
     public FreightBillRequest(String billNo,
                               String carrierCode,
                               String carrierName,
+                              Long settlementCompanyId,
+                              String settlementCompanyName,
                               String vehiclePlate,
                               String customerName,
                               String projectName,
@@ -35,7 +39,22 @@ public record FreightBillRequest(
                               String status,
                               String remark,
                               List<FreightBillItemRequest> items) {
-        this(billNo, carrierCode, carrierName, null, null, vehiclePlate, customerName, projectName,
+        this(billNo, null, carrierCode, carrierName, settlementCompanyId, settlementCompanyName, null, vehiclePlate,
+                customerName, projectName, billTime, unitPrice, status, remark, items);
+    }
+
+    public FreightBillRequest(String billNo,
+                              String carrierCode,
+                              String carrierName,
+                              String vehiclePlate,
+                              String customerName,
+                              String projectName,
+                              LocalDate billTime,
+                              BigDecimal unitPrice,
+                              String status,
+                              String remark,
+                              List<FreightBillItemRequest> items) {
+        this(billNo, null, carrierCode, carrierName, null, null, null, vehiclePlate, customerName, projectName,
                 billTime, unitPrice, status, remark, items);
     }
 
@@ -51,7 +70,7 @@ public record FreightBillRequest(
                               String status,
                               String remark,
                               List<FreightBillItemRequest> items) {
-        this(billNo, null, carrierName, settlementCompanyId, settlementCompanyName, vehiclePlate,
+        this(billNo, null, null, carrierName, settlementCompanyId, settlementCompanyName, null, vehiclePlate,
                 customerName, projectName, billTime, unitPrice, status, remark, items);
     }
 
@@ -65,7 +84,7 @@ public record FreightBillRequest(
                               String status,
                               String remark,
                               List<FreightBillItemRequest> items) {
-        this(billNo, null, carrierName, null, null, vehiclePlate, customerName, projectName, billTime,
+        this(billNo, null, null, carrierName, null, null, null, vehiclePlate, customerName, projectName, billTime,
                 unitPrice, status, remark, items);
     }
 }

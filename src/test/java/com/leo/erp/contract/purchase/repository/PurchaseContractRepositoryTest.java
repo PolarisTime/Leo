@@ -1,9 +1,12 @@
 package com.leo.erp.contract.purchase.repository;
 
 import com.leo.erp.contract.purchase.domain.entity.PurchaseContract;
+import com.leo.erp.testsupport.StableIdentityPostgresFixtures;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 
 import java.math.BigDecimal;
@@ -18,8 +21,24 @@ import static org.assertj.core.api.Assertions.assertThat;
 @ActiveProfiles("test")
 class PurchaseContractRepositoryTest {
 
+    private static final long SUPPLIER_ID = 8_811_000_000_000_000_001L;
+    private static final String SUPPLIER_CODE = "TEST-PC-REPOSITORY-SUPPLIER";
+
     @Autowired
     private PurchaseContractRepository repository;
+
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
+
+    @BeforeEach
+    void insertSupplierFixture() {
+        StableIdentityPostgresFixtures.insertSupplier(
+                jdbcTemplate,
+                SUPPLIER_ID,
+                SUPPLIER_CODE,
+                "供应商A"
+        );
+    }
 
     @Test
     void shouldSaveAndFindById() {
@@ -70,6 +89,8 @@ class PurchaseContractRepositoryTest {
         var entity = new PurchaseContract();
         entity.setId(id);
         entity.setContractNo(contractNo);
+        entity.setSupplierId(SUPPLIER_ID);
+        entity.setSupplierCode(SUPPLIER_CODE);
         entity.setSupplierName("供应商A");
         entity.setSignDate(LocalDate.now());
         entity.setEffectiveDate(LocalDate.now());

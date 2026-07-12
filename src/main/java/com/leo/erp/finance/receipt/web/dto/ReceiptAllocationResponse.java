@@ -5,10 +5,14 @@ import java.math.BigDecimal;
 public record ReceiptAllocationResponse(
         Long id,
         Integer lineNo,
-        Long sourceStatementId,
+        Long sourceCustomerStatementId,
         String statementNo,
         String projectName,
         BigDecimal statementBalanceAmount,
         BigDecimal allocatedAmount
 ) {
+    @Deprecated(forRemoval = false)
+    public Long sourceStatementId() {
+        return sourceCustomerStatementId;
+    }
 }

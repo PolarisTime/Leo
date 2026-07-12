@@ -34,11 +34,20 @@ public class FreightBillItem {
     @Column(name = "settlement_company_name", length = 128)
     private String settlementCompanyName;
 
+    @Column(name = "customer_id")
+    private Long customerId;
+
     @Column(name = "customer_name", nullable = false, length = 128)
     private String customerName;
 
+    @Column(name = "project_id")
+    private Long projectId;
+
     @Column(name = "project_name", nullable = false, length = 200)
     private String projectName;
+
+    @Column(name = "material_id")
+    private Long materialId;
 
     @Column(name = "material_code", nullable = false, length = 64)
     private String materialCode;
@@ -76,9 +85,15 @@ public class FreightBillItem {
     @Column(name = "batch_no", length = 64)
     private String batchNo;
 
+    @Column(name = "batch_no_normalized", insertable = false, updatable = false, length = 64)
+    private String batchNoNormalized;
+
     @Column(name = "weight_ton", nullable = false, precision = 18, scale = 8)
     private BigDecimal weightTon;
 
     @Column(name = "warehouse_name", length = 128)
     private String warehouseName;
+
+    @Column(name = "warehouse_id")
+    private Long warehouseId;
 }

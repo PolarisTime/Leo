@@ -15,6 +15,7 @@ CONFIRM_PRODUCTION=false
 ALLOW_DIRTY=false
 WATCH=false
 RELEASE_NOTE=""
+FLYWAY_TARGET="${SPRING_FLYWAY_TARGET:-}"
 
 usage() {
   cat <<'EOF'
@@ -27,6 +28,7 @@ usage() {
   --repo <owner/repo>      GitHub 仓库，默认 PolarisTime/Leo
   --dry-run               只触发构建打包，不部署生产
   --deploy-target <target> 部署目标，local 或 ssh，默认 local
+  --flyway-target <version> 生产允许迁移到的最高 Flyway 版本（必填）
   --confirm-production    确认触发真实生产部署
   --allow-dirty           允许本地工作区存在未提交改动
   --watch                 触发后跟踪 Actions 运行状态
@@ -34,9 +36,9 @@ usage() {
   -h, --help              查看帮助
 
 示例:
-  bash leo/scripts/deploy/trigger-production-deploy.sh --dry-run
-  bash leo/scripts/deploy/trigger-production-deploy.sh --confirm-production --leo-ref main --watch
-  bash leo/scripts/deploy/trigger-production-deploy.sh --confirm-production --deploy-target ssh --leo-ref main --watch
+  bash leo/scripts/deploy/trigger-production-deploy.sh --dry-run --flyway-target 19
+  bash leo/scripts/deploy/trigger-production-deploy.sh --confirm-production --flyway-target 19 --leo-ref main --watch
+  bash leo/scripts/deploy/trigger-production-deploy.sh --confirm-production --flyway-target 19 --deploy-target ssh --leo-ref main --watch
 EOF
 }
 
@@ -47,6 +49,7 @@ while [[ $# -gt 0 ]]; do
     --repo) REPO="$2"; shift 2 ;;
     --dry-run) DRY_RUN=true; shift ;;
     --deploy-target) DEPLOY_TARGET="$2"; shift 2 ;;
+    --flyway-target) FLYWAY_TARGET="$2"; shift 2 ;;
     --confirm-production) CONFIRM_PRODUCTION=true; shift ;;
     --allow-dirty) ALLOW_DIRTY=true; shift ;;
     --watch) WATCH=true; shift ;;
@@ -119,6 +122,14 @@ if [[ "$DEPLOY_TARGET" != "local" && "$DEPLOY_TARGET" != "ssh" ]]; then
   echo "--deploy-target 只支持 local 或 ssh: $DEPLOY_TARGET" >&2
   exit 1
 fi
+if [[ -z "$FLYWAY_TARGET" ]]; then
+  echo "缺少 --flyway-target，拒绝触发生产发布。" >&2
+  exit 1
+fi
+if [[ ! "$FLYWAY_TARGET" =~ ^[1-9][0-9]*$ ]]; then
+  echo "FLYWAY_TARGET must be a positive integer: $FLYWAY_TARGET" >&2
+  exit 1
+fi
 
 LEO_REF="${LEO_REF:-$(current_branch_or_head "$LEO_DIR")}"
 
@@ -148,6 +159,7 @@ echo "  workflow:     $WORKFLOW"
 echo "  workflow ref: $WORKFLOW_REF"
 echo "  leo ref:      $LEO_REF"
 echo "  target:       $DEPLOY_TARGET"
+echo "  flyway:      $FLYWAY_TARGET"
 echo "  dry run:      $DRY_RUN"
 
 gh workflow run "$WORKFLOW" \
@@ -156,6 +168,7 @@ gh workflow run "$WORKFLOW" \
   -f "leo_ref=$LEO_REF" \
   -f "dry_run=$DRY_RUN" \
   -f "deploy_target=$DEPLOY_TARGET" \
+  -f "flyway_target=$FLYWAY_TARGET" \
   -f "release_note=$RELEASE_NOTE"
 
 if [[ "$WATCH" == "true" ]]; then

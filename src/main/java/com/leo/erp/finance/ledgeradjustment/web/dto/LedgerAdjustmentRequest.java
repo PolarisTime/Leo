@@ -13,6 +13,7 @@ public record LedgerAdjustmentRequest(
         String direction,
         @NotBlank(message = "往来类型不能为空")
         String counterpartyType,
+        Long counterpartyId,
         @NotBlank(message = "往来单位编码不能为空")
         String counterpartyCode,
         @NotBlank(message = "往来单位不能为空")
@@ -37,4 +38,24 @@ public record LedgerAdjustmentRequest(
         String operatorName,
         String remark
 ) {
+    public LedgerAdjustmentRequest(String adjustmentNo,
+                                   String direction,
+                                   String counterpartyType,
+                                   String counterpartyCode,
+                                   String counterpartyName,
+                                   Long settlementCompanyId,
+                                   String settlementCompanyName,
+                                   Long projectId,
+                                   String projectName,
+                                   LocalDate adjustmentDate,
+                                   BigDecimal amount,
+                                   String adjustmentType,
+                                   String effect,
+                                   String status,
+                                   String operatorName,
+                                   String remark) {
+        this(adjustmentNo, direction, counterpartyType, null, counterpartyCode, counterpartyName,
+                settlementCompanyId, settlementCompanyName, projectId, projectName, adjustmentDate,
+                amount, adjustmentType, effect, status, operatorName, remark);
+    }
 }

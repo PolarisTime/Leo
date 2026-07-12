@@ -105,6 +105,7 @@ class LedgerAdjustmentServiceTest {
         CustomerRepository customerRepository = mock(CustomerRepository.class);
         LedgerAdjustmentMapper mapper = mock(LedgerAdjustmentMapper.class);
         Customer customer = new Customer();
+        customer.setId(71L);
         customer.setCustomerCode("C-001");
         customer.setCustomerName("客户A");
         when(customerRepository.findByCustomerCodeAndDeletedFlagFalse("C-001"))
@@ -127,7 +128,7 @@ class LedgerAdjustmentServiceTest {
                 31L,
                 "结算主体A",
                 null,
-                "项目A",
+                null,
                 LocalDate.of(2026, 6, 1),
                 new BigDecimal("100.456"),
                 "坏账",
@@ -143,6 +144,144 @@ class LedgerAdjustmentServiceTest {
         assertThat(response.counterpartyName()).isEqualTo("客户A");
         assertThat(response.amount()).isEqualByComparingTo("100.46");
         assertThat(response.status()).isEqualTo(StatusConstants.AUDITED);
+    }
+
+    @Test
+    void shouldResolveCustomerByStableIdAndPersistTypedParty() {
+        LedgerAdjustmentRepository repository = mock(LedgerAdjustmentRepository.class);
+        CustomerRepository customerRepository = mock(CustomerRepository.class);
+        LedgerAdjustmentMapper mapper = mock(LedgerAdjustmentMapper.class);
+        Customer customer = new Customer();
+        customer.setId(71L);
+        customer.setCustomerCode("C-071");
+        customer.setCustomerName("客户七十一");
+        when(customerRepository.findByIdAndDeletedFlagFalse(71L)).thenReturn(Optional.of(customer));
+        when(repository.existsByAdjustmentNoAndDeletedFlagFalse("LA-ID-001")).thenReturn(false);
+        when(repository.save(any(LedgerAdjustment.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(mapper.toResponse(any(LedgerAdjustment.class)))
+                .thenAnswer(invocation -> toResponse(invocation.getArgument(0)));
+        LedgerAdjustmentService service = newService(
+                repository,
+                mapper,
+                customerRepository,
+                mock(SupplierRepository.class),
+                mock(CarrierRepository.class),
+                mock(ProjectRepository.class)
+        );
+
+        LedgerAdjustmentResponse response = service.create(new LedgerAdjustmentRequest(
+                "LA-ID-001",
+                "应收",
+                "客户",
+                71L,
+                "C-071",
+                "客户七十一",
+                31L,
+                "结算主体A",
+                null,
+                null,
+                LocalDate.of(2026, 7, 11),
+                new BigDecimal("100.00"),
+                "其他调整",
+                "增加余额",
+                StatusConstants.DRAFT,
+                "财务A",
+                null
+        ));
+
+        assertThat(response.counterpartyId()).isEqualTo(71L);
+        verify(customerRepository).findByIdAndDeletedFlagFalse(71L);
+        verify(customerRepository, never()).findByCustomerCodeAndDeletedFlagFalse(any());
+    }
+
+    @Test
+    void shouldRejectCounterpartyCodeThatConflictsWithStableId() {
+        LedgerAdjustmentRepository repository = mock(LedgerAdjustmentRepository.class);
+        CustomerRepository customerRepository = mock(CustomerRepository.class);
+        Customer customer = new Customer();
+        customer.setId(71L);
+        customer.setCustomerCode("C-071");
+        customer.setCustomerName("客户七十一");
+        when(customerRepository.findByIdAndDeletedFlagFalse(71L)).thenReturn(Optional.of(customer));
+        when(repository.existsByAdjustmentNoAndDeletedFlagFalse("LA-ID-002")).thenReturn(false);
+        LedgerAdjustmentService service = newService(
+                repository,
+                mock(LedgerAdjustmentMapper.class),
+                customerRepository,
+                mock(SupplierRepository.class),
+                mock(CarrierRepository.class),
+                mock(ProjectRepository.class)
+        );
+
+        assertThatThrownBy(() -> service.create(new LedgerAdjustmentRequest(
+                "LA-ID-002",
+                "应收",
+                "客户",
+                71L,
+                "C-999",
+                "客户七十一",
+                31L,
+                "结算主体A",
+                null,
+                null,
+                LocalDate.of(2026, 7, 11),
+                new BigDecimal("100.00"),
+                "其他调整",
+                "增加余额",
+                StatusConstants.DRAFT,
+                "财务A",
+                null
+        )))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("客户编码与ID不一致");
+    }
+
+    @Test
+    void shouldRejectProjectOwnedByAnotherCustomer() {
+        LedgerAdjustmentRepository repository = mock(LedgerAdjustmentRepository.class);
+        CustomerRepository customerRepository = mock(CustomerRepository.class);
+        ProjectRepository projectRepository = mock(ProjectRepository.class);
+        Customer customer = new Customer();
+        customer.setId(71L);
+        customer.setCustomerCode("C-071");
+        customer.setCustomerName("客户七十一");
+        Project project = new Project();
+        project.setId(11L);
+        project.setCustomerId(72L);
+        project.setProjectName("其他客户项目");
+        when(customerRepository.findByIdAndDeletedFlagFalse(71L)).thenReturn(Optional.of(customer));
+        when(projectRepository.findByIdAndDeletedFlagFalse(11L)).thenReturn(Optional.of(project));
+        when(repository.existsByAdjustmentNoAndDeletedFlagFalse("LA-ID-003")).thenReturn(false);
+        LedgerAdjustmentService service = newService(
+                repository,
+                mock(LedgerAdjustmentMapper.class),
+                customerRepository,
+                mock(SupplierRepository.class),
+                mock(CarrierRepository.class),
+                projectRepository
+        );
+
+        assertThatThrownBy(() -> service.create(new LedgerAdjustmentRequest(
+                "LA-ID-003",
+                "应收",
+                "客户",
+                71L,
+                "C-071",
+                "客户七十一",
+                31L,
+                "结算主体A",
+                11L,
+                "其他客户项目",
+                LocalDate.of(2026, 7, 11),
+                new BigDecimal("100.00"),
+                "其他调整",
+                "增加余额",
+                StatusConstants.DRAFT,
+                "财务A",
+                null
+        )))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("项目不属于所选客户");
     }
 
     @Test
@@ -222,6 +361,7 @@ class LedgerAdjustmentServiceTest {
         SupplierRepository supplierRepository = mock(SupplierRepository.class);
         LedgerAdjustmentMapper mapper = mock(LedgerAdjustmentMapper.class);
         Supplier supplier = new Supplier();
+        supplier.setId(81L);
         supplier.setSupplierCode("S-001");
         supplier.setSupplierName("供应商A");
         when(repository.existsByAdjustmentNoAndDeletedFlagFalse("LA-002")).thenReturn(false);
@@ -263,12 +403,13 @@ class LedgerAdjustmentServiceTest {
     }
 
     @Test
-    void shouldResolveCarrierAndProjectById() {
+    void shouldRejectProjectForCarrier() {
         LedgerAdjustmentRepository repository = mock(LedgerAdjustmentRepository.class);
         CarrierRepository carrierRepository = mock(CarrierRepository.class);
         ProjectRepository projectRepository = mock(ProjectRepository.class);
         LedgerAdjustmentMapper mapper = mock(LedgerAdjustmentMapper.class);
         Carrier carrier = new Carrier();
+        carrier.setId(91L);
         carrier.setCarrierCode("L-001");
         carrier.setCarrierName("物流商A");
         Project project = new Project();
@@ -290,7 +431,7 @@ class LedgerAdjustmentServiceTest {
                 projectRepository
         );
 
-        LedgerAdjustmentResponse response = service.create(new LedgerAdjustmentRequest(
+        assertThatThrownBy(() -> service.create(new LedgerAdjustmentRequest(
                 "LA-003",
                 "应付",
                 "物流商",
@@ -307,12 +448,9 @@ class LedgerAdjustmentServiceTest {
                 StatusConstants.DRAFT,
                 "财务A",
                 " 备注 "
-        ));
-
-        assertThat(response.counterpartyName()).isEqualTo("物流商A");
-        assertThat(response.projectId()).isEqualTo(11L);
-        assertThat(response.projectName()).isEqualTo("项目A");
-        assertThat(response.remark()).isEqualTo("备注");
+        )))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("供应商或物流商台账调整不能选择项目");
     }
 
     @Test
@@ -340,6 +478,7 @@ class LedgerAdjustmentServiceTest {
         LedgerAdjustmentMapper mapper = mock(LedgerAdjustmentMapper.class);
         LedgerAdjustment existing = adjustment("LA-OLD", StatusConstants.DRAFT);
         Customer customer = new Customer();
+        customer.setId(72L);
         customer.setCustomerCode("C-002");
         customer.setCustomerName("客户B");
         when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(existing));
@@ -365,7 +504,7 @@ class LedgerAdjustmentServiceTest {
                 31L,
                 "结算主体A",
                 null,
-                "  项目B  ",
+                null,
                 LocalDate.of(2026, 6, 2),
                 new BigDecimal("25.125"),
                 "其他调整",
@@ -377,7 +516,7 @@ class LedgerAdjustmentServiceTest {
 
         assertThat(response.adjustmentNo()).isEqualTo("LA-OLD");
         assertThat(response.counterpartyName()).isEqualTo("客户B");
-        assertThat(response.projectName()).isEqualTo("项目B");
+        assertThat(response.projectName()).isNull();
         assertThat(response.amount()).isEqualByComparingTo("25.13");
         assertThat(response.operatorName()).isEqualTo("财务B");
         assertThat(response.remark()).isEqualTo("更新备注");
@@ -596,9 +735,11 @@ class LedgerAdjustmentServiceTest {
         CarrierRepository carrierRepository = mock(CarrierRepository.class);
         ProjectRepository projectRepository = mock(ProjectRepository.class);
         Customer customer = new Customer();
+        customer.setId(71L);
         customer.setCustomerCode("C-001");
         customer.setCustomerName("客户A");
         Carrier carrier = new Carrier();
+        carrier.setId(91L);
         carrier.setCarrierCode("L-001");
         carrier.setCarrierName("物流商A");
         when(repository.existsByAdjustmentNoAndDeletedFlagFalse("LA-CUSTOMER")).thenReturn(false);
@@ -752,6 +893,7 @@ class LedgerAdjustmentServiceTest {
         adjustment.setAdjustmentNo(adjustmentNo);
         adjustment.setDirection("应收");
         adjustment.setCounterpartyType("客户");
+        adjustment.setCounterpartyId(71L);
         adjustment.setCounterpartyCode("C-001");
         adjustment.setCounterpartyName("客户A");
         adjustment.setSettlementCompanyId(31L);
@@ -771,6 +913,7 @@ class LedgerAdjustmentServiceTest {
                 adjustment.getAdjustmentNo(),
                 adjustment.getDirection(),
                 adjustment.getCounterpartyType(),
+                adjustment.getCounterpartyId(),
                 adjustment.getCounterpartyCode(),
                 adjustment.getCounterpartyName(),
                 adjustment.getSettlementCompanyId(),

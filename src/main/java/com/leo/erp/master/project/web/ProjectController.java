@@ -5,6 +5,7 @@ import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.api.PageResponse;
 import com.leo.erp.common.web.BindPageQuery;
 import com.leo.erp.master.project.service.ProjectService;
+import com.leo.erp.master.project.web.dto.ProjectOptionResponse;
 import com.leo.erp.master.project.web.dto.ProjectRequest;
 import com.leo.erp.master.project.web.dto.ProjectResponse;
 import com.leo.erp.security.permission.RequiresPermission;
@@ -20,6 +21,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.List;
+
 @RestController
 @Validated
 @RequestMapping("/projects")
@@ -29,6 +32,12 @@ public class ProjectController {
 
     public ProjectController(ProjectService projectService) {
         this.projectService = projectService;
+    }
+
+    @GetMapping("/options")
+    @RequiresPermission(resource = "project", action = "read")
+    public ApiResponse<List<ProjectOptionResponse>> options(@RequestParam Long customerId) {
+        return ApiResponse.success(projectService.listActiveOptions(customerId));
     }
 
     @GetMapping

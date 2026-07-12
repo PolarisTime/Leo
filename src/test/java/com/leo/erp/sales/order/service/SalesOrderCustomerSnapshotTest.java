@@ -7,8 +7,10 @@ import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.support.TradeItemMaterialSupport;
+import com.leo.erp.common.support.TradeItemMaterialSupportTestDoubles;
 import com.leo.erp.common.support.TradeMaterialSnapshot;
 import com.leo.erp.common.support.WarehouseSelectionSupport;
+import com.leo.erp.common.support.WarehouseSelectionSupportTestDoubles;
 import com.leo.erp.master.customer.domain.entity.Customer;
 import com.leo.erp.master.customer.repository.CustomerRepository;
 import com.leo.erp.sales.order.domain.entity.SalesOrder;
@@ -192,7 +194,9 @@ class SalesOrderCustomerSnapshotTest {
         SalesOrderRepository repository = mock(SalesOrderRepository.class);
         SalesOrderItemRepository itemRepository = mock(SalesOrderItemRepository.class);
         TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
+        TradeItemMaterialSupportTestDoubles.stubMaterialCodeNormalization(materialSupport);
         WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
+        WarehouseSelectionSupportTestDoubles.stubWarehouseResolution(warehouseSelectionSupport);
         PurchaseItemQueryAppService purchaseItemQueryAppService = mock(PurchaseItemQueryAppService.class);
         PurchaseItemPieceWeightAppService pieceWeightAppService = mock(PurchaseItemPieceWeightAppService.class);
         SalesOrderPurchaseAllocationService purchaseAllocationService =

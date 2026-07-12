@@ -25,6 +25,12 @@ class SalesOutboundResponseAssemblerTest {
     @Test
     void shouldAppendItemResponsesWithResolvedSourceNo() {
         SalesOutbound outbound = outbound();
+        assertThat(SalesOutbound.class.getDeclaredFields())
+                .extracting(java.lang.reflect.Field::getName)
+                .contains("customerId", "projectId", "warehouseId");
+        assertThat(SalesOutboundItem.class.getDeclaredFields())
+                .extracting(java.lang.reflect.Field::getName)
+                .contains("materialId", "warehouseId", "batchNoNormalized");
         outbound.setDeletedFlag(true);
         outbound.setStatus("已审核");
         SalesOutboundMapper mapper = mock(SalesOutboundMapper.class);

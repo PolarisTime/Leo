@@ -24,8 +24,43 @@ public record FreightStatementItemView(
         Integer piecesPerBundle,
         String batchNo,
         BigDecimal weightTon,
-        String warehouseName
+        String warehouseName,
+        Long sourceFreightBillId,
+        Long sourceFreightBillItemId,
+        Long customerId,
+        Long projectId,
+        Long materialId,
+        Long warehouseId,
+        String batchNoNormalized
 ) {
+    public FreightStatementItemView(Long id,
+                                    Integer lineNo,
+                                    String sourceNo,
+                                    Long sourceSalesOutboundItemId,
+                                    Long settlementCompanyId,
+                                    String settlementCompanyName,
+                                    String customerName,
+                                    String projectName,
+                                    String materialCode,
+                                    String materialName,
+                                    String brand,
+                                    String category,
+                                    String material,
+                                    String spec,
+                                    String length,
+                                    Integer quantity,
+                                    String quantityUnit,
+                                    BigDecimal pieceWeightTon,
+                                    Integer piecesPerBundle,
+                                    String batchNo,
+                                    BigDecimal weightTon,
+                                    String warehouseName) {
+        this(id, lineNo, sourceNo, sourceSalesOutboundItemId, settlementCompanyId, settlementCompanyName,
+                customerName, projectName, materialCode, materialName, brand, category, material, spec, length,
+                quantity, quantityUnit, pieceWeightTon, piecesPerBundle, batchNo, weightTon, warehouseName,
+                null, null, null, null, null, null, null);
+    }
+
     public FreightStatementItemView(Long id,
                                     Integer lineNo,
                                     String sourceNo,
@@ -47,6 +82,7 @@ public record FreightStatementItemView(
                                     String warehouseName) {
         this(id, lineNo, sourceNo, null, null, null, customerName, projectName, materialCode,
                 materialName, brand, category, material, spec, length, quantity, quantityUnit,
-                pieceWeightTon, piecesPerBundle, batchNo, weightTon, warehouseName);
+                pieceWeightTon, piecesPerBundle, batchNo, weightTon, warehouseName,
+                null, null, null, null, null, null, null);
     }
 }

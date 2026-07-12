@@ -9,7 +9,9 @@ final class ReceivablePayablePostgresTestSchemaSupport {
 
     static void preparePurchaseLedgerSchema(JdbcTemplate jdbcTemplate) {
         jdbcTemplate.execute("ALTER TABLE po_purchase_order ADD COLUMN IF NOT EXISTS supplier_code VARCHAR(64)");
+        jdbcTemplate.execute("ALTER TABLE po_purchase_order ADD COLUMN IF NOT EXISTS supplier_id BIGINT");
         jdbcTemplate.execute("ALTER TABLE po_purchase_inbound ADD COLUMN IF NOT EXISTS supplier_code VARCHAR(64)");
+        jdbcTemplate.execute("ALTER TABLE po_purchase_inbound ADD COLUMN IF NOT EXISTS supplier_id BIGINT");
         jdbcTemplate.execute("ALTER TABLE fm_payment ADD COLUMN IF NOT EXISTS payment_purpose VARCHAR(32) NOT NULL DEFAULT 'STATEMENT_SETTLEMENT'");
         jdbcTemplate.execute("ALTER TABLE fm_payment ADD COLUMN IF NOT EXISTS source_purchase_order_id BIGINT");
         jdbcTemplate.execute("ALTER TABLE fm_payment ADD COLUMN IF NOT EXISTS purchase_order_no VARCHAR(64)");
@@ -17,6 +19,14 @@ final class ReceivablePayablePostgresTestSchemaSupport {
         jdbcTemplate.execute("ALTER TABLE fm_payment ADD COLUMN IF NOT EXISTS supplier_name VARCHAR(128)");
         jdbcTemplate.execute("ALTER TABLE fm_payment ADD COLUMN IF NOT EXISTS settlement_company_id BIGINT");
         jdbcTemplate.execute("ALTER TABLE fm_payment ADD COLUMN IF NOT EXISTS settlement_company_name VARCHAR(128)");
+        jdbcTemplate.execute("ALTER TABLE fm_payment ADD COLUMN IF NOT EXISTS counterparty_type VARCHAR(32)");
+        jdbcTemplate.execute("ALTER TABLE fm_payment ADD COLUMN IF NOT EXISTS counterparty_id BIGINT");
+        jdbcTemplate.execute("ALTER TABLE fm_payment_allocation ADD COLUMN IF NOT EXISTS source_supplier_statement_id BIGINT");
+        jdbcTemplate.execute("ALTER TABLE fm_payment_allocation ADD COLUMN IF NOT EXISTS source_freight_statement_id BIGINT");
+        jdbcTemplate.execute("ALTER TABLE fm_receipt_allocation ADD COLUMN IF NOT EXISTS source_customer_statement_id BIGINT");
+        jdbcTemplate.execute("ALTER TABLE st_supplier_statement ADD COLUMN IF NOT EXISTS supplier_id BIGINT");
+        jdbcTemplate.execute("ALTER TABLE so_sales_order ADD COLUMN IF NOT EXISTS customer_id BIGINT");
+        jdbcTemplate.execute("ALTER TABLE so_sales_outbound ADD COLUMN IF NOT EXISTS customer_id BIGINT");
         jdbcTemplate.execute("""
                 CREATE TABLE IF NOT EXISTS fm_supplier_refund_receipt (
                     id BIGINT PRIMARY KEY,
@@ -42,5 +52,6 @@ final class ReceivablePayablePostgresTestSchemaSupport {
                     deleted_flag BOOLEAN NOT NULL DEFAULT FALSE
                 )
                 """);
+        jdbcTemplate.execute("ALTER TABLE fm_supplier_refund_receipt ADD COLUMN IF NOT EXISTS supplier_id BIGINT");
     }
 }

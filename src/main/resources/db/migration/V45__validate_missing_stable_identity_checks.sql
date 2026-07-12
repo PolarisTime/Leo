@@ -1,0 +1,10 @@
+ALTER TABLE public.st_customer_statement_item
+    VALIDATE CONSTRAINT chk_st_customer_stmt_item_source_identity_nn;
+ALTER TABLE public.st_supplier_statement_item
+    VALIDATE CONSTRAINT chk_st_supplier_stmt_item_source_identity_nn;
+ALTER TABLE public.fm_invoice_issue_item
+    VALIDATE CONSTRAINT chk_fm_invoice_issue_item_source_identity_nn;
+ALTER TABLE public.fm_invoice_receipt_item
+    VALIDATE CONSTRAINT chk_fm_invoice_receipt_item_source_identity_nn;
+ALTER TABLE public.fm_ledger_adjustment
+    VALIDATE CONSTRAINT chk_fm_ledger_adjustment_typed_party_project;

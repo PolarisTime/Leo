@@ -1,10 +1,13 @@
 package com.leo.erp.sales.outbound.service;
 
 import com.leo.erp.common.error.BusinessException;
+import com.leo.erp.common.concurrency.SourceAllocationLockService;
 import com.leo.erp.common.support.StatusConstants;
+import com.leo.erp.finance.invoiceissue.repository.InvoiceIssueRepository;
 import com.leo.erp.finance.receipt.repository.ReceiptAllocationRepository;
 import com.leo.erp.logistics.bill.domain.entity.FreightBill;
 import com.leo.erp.logistics.bill.repository.FreightBillRepository;
+import com.leo.erp.sales.order.service.SalesOrderDeliveryVerificationGuard;
 import com.leo.erp.sales.outbound.domain.entity.SalesOutbound;
 import com.leo.erp.sales.outbound.domain.entity.SalesOutboundItem;
 import com.leo.erp.statement.customer.repository.CustomerStatementRepository;
@@ -20,6 +23,22 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class SalesOutboundDownstreamMutationGuardTest {
+
+    @Test
+    void shouldRejectReverseAuditWhenInvoiceIssueExists() {
+        Fixture fixture = new Fixture();
+        InvoiceIssueRepository.SourceAllocationSummary allocation =
+                mock(InvoiceIssueRepository.SourceAllocationSummary.class);
+        when(fixture.invoiceIssueRepository.summarizeAllocatedBySourceSalesOrderItemIds(
+                List.of(101L),
+                null
+        )).thenReturn(List.of(allocation));
+
+        assertThatThrownBy(() -> fixture.guard.assertReverseAuditAllowed(fixture.outbound))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("开票")
+                .hasMessageContaining("不能反审核");
+    }
 
     @Test
     void shouldRejectReverseAuditWhenCustomerStatementExists() {
@@ -50,8 +69,8 @@ class SalesOutboundDownstreamMutationGuardTest {
     @Test
     void shouldRejectReverseAuditWhenFreightBillExists() {
         Fixture fixture = new Fixture();
-        when(fixture.freightBillRepository.findAllBySourceNosExcludingCurrentBill(
-                List.of("SOO-001"),
+        when(fixture.freightBillRepository.findAllBySourceItemIdsExcludingCurrentBill(
+                List.of(201L),
                 null
         )).thenReturn(List.of(new FreightBill()));
 
@@ -67,26 +86,39 @@ class SalesOutboundDownstreamMutationGuardTest {
 
         assertThatCode(() -> fixture.guard.assertReverseAuditAllowed(fixture.outbound))
                 .doesNotThrowAnyException();
+        verify(fixture.invoiceIssueRepository).summarizeAllocatedBySourceSalesOrderItemIds(
+                List.of(101L),
+                null
+        );
         verify(fixture.customerStatementRepository).findSourceSalesOrderItemIds(List.of(101L));
         verify(fixture.receiptAllocationRepository).findReceivedSourceSalesOrderItemIds(
                 List.of(101L),
                 StatusConstants.RECEIVED
         );
-        verify(fixture.freightBillRepository).findAllBySourceNosExcludingCurrentBill(
-                List.of("SOO-001"),
+        verify(fixture.freightBillRepository).findAllBySourceItemIdsExcludingCurrentBill(
+                List.of(201L),
                 null
         );
     }
 
     private static final class Fixture {
+        private final InvoiceIssueRepository invoiceIssueRepository = mock(InvoiceIssueRepository.class);
         private final CustomerStatementRepository customerStatementRepository =
                 mock(CustomerStatementRepository.class);
+        private final SourceAllocationLockService sourceAllocationLockService =
+                mock(SourceAllocationLockService.class);
+        private final SalesOrderDeliveryVerificationGuard deliveryVerificationGuard =
+                new SalesOrderDeliveryVerificationGuard(
+                        invoiceIssueRepository,
+                        customerStatementRepository,
+                        sourceAllocationLockService
+                );
         private final ReceiptAllocationRepository receiptAllocationRepository =
                 mock(ReceiptAllocationRepository.class);
         private final FreightBillRepository freightBillRepository = mock(FreightBillRepository.class);
         private final SalesOutboundDownstreamMutationGuard guard =
                 new SalesOutboundDownstreamMutationGuard(
-                        customerStatementRepository,
+                        deliveryVerificationGuard,
                         receiptAllocationRepository,
                         freightBillRepository
                 );
@@ -99,8 +131,8 @@ class SalesOutboundDownstreamMutationGuardTest {
                     List.of(101L),
                     StatusConstants.RECEIVED
             )).thenReturn(List.of());
-            when(freightBillRepository.findAllBySourceNosExcludingCurrentBill(
-                    List.of("SOO-001"),
+            when(freightBillRepository.findAllBySourceItemIdsExcludingCurrentBill(
+                    List.of(201L),
                     null
             )).thenReturn(List.of());
         }

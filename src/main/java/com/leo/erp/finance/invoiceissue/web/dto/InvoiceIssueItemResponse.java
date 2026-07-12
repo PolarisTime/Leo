@@ -22,6 +22,33 @@ public record InvoiceIssueItemResponse(
         Integer piecesPerBundle,
         BigDecimal weightTon,
         BigDecimal unitPrice,
-        BigDecimal amount
+        BigDecimal amount,
+        Long materialId,
+        Long warehouseId,
+        String batchNoNormalized
 ) {
+    public InvoiceIssueItemResponse(Long id,
+                                    Integer lineNo,
+                                    String sourceNo,
+                                    Long sourceSalesOrderItemId,
+                                    String materialCode,
+                                    String brand,
+                                    String category,
+                                    String material,
+                                    String spec,
+                                    String length,
+                                    String unit,
+                                    String warehouseName,
+                                    String batchNo,
+                                    Integer quantity,
+                                    String quantityUnit,
+                                    BigDecimal pieceWeightTon,
+                                    Integer piecesPerBundle,
+                                    BigDecimal weightTon,
+                                    BigDecimal unitPrice,
+                                    BigDecimal amount) {
+        this(id, lineNo, sourceNo, sourceSalesOrderItemId, materialCode, brand, category, material, spec, length,
+                unit, warehouseName, batchNo, quantity, quantityUnit, pieceWeightTon, piecesPerBundle, weightTon,
+                unitPrice, amount, null, null, null);
+    }
 }

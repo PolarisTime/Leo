@@ -12,6 +12,7 @@ public record SalesOrderRequest(
         String purchaseInboundNo,
         String purchaseOrderNo,
         String customerCode,
+        @jakarta.validation.constraints.Positive Long customerId,
         @jakarta.validation.constraints.NotBlank String customerName,
         Long projectId,
         @jakarta.validation.constraints.NotBlank String projectName,
@@ -30,12 +31,30 @@ public record SalesOrderRequest(
                              String customerName,
                              Long projectId,
                              String projectName,
+                             Long settlementCompanyId,
+                             String settlementCompanyName,
                              LocalDate deliveryDate,
                              String salesName,
                              String status,
                              String remark,
                              List<SalesOrderItemRequest> items) {
-        this(orderNo, purchaseInboundNo, purchaseOrderNo, customerCode, customerName, projectId, projectName,
+        this(orderNo, purchaseInboundNo, purchaseOrderNo, customerCode, null, customerName, projectId, projectName,
+                settlementCompanyId, settlementCompanyName, deliveryDate, salesName, status, remark, items);
+    }
+
+    public SalesOrderRequest(String orderNo,
+                             String purchaseInboundNo,
+                             String purchaseOrderNo,
+                             String customerCode,
+                             String customerName,
+                             Long projectId,
+                             String projectName,
+                             LocalDate deliveryDate,
+                             String salesName,
+                             String status,
+                             String remark,
+                             List<SalesOrderItemRequest> items) {
+        this(orderNo, purchaseInboundNo, purchaseOrderNo, customerCode, null, customerName, projectId, projectName,
                 null, null, deliveryDate, salesName, status, remark, items);
     }
 
@@ -50,7 +69,7 @@ public record SalesOrderRequest(
                              String status,
                              String remark,
                              List<SalesOrderItemRequest> items) {
-        this(orderNo, purchaseInboundNo, null, customerCode, customerName, projectId, projectName,
+        this(orderNo, purchaseInboundNo, null, customerCode, null, customerName, projectId, projectName,
                 null, null, deliveryDate, salesName, status, remark, items);
     }
 
@@ -63,7 +82,7 @@ public record SalesOrderRequest(
                              String status,
                              String remark,
                              List<SalesOrderItemRequest> items) {
-        this(orderNo, purchaseInboundNo, null, null, customerName, null, projectName,
+        this(orderNo, purchaseInboundNo, null, null, null, customerName, null, projectName,
                 null, null, deliveryDate, salesName, status, remark, items);
     }
 
@@ -77,7 +96,7 @@ public record SalesOrderRequest(
                              String status,
                              String remark,
                              List<SalesOrderItemRequest> items) {
-        this(orderNo, purchaseInboundNo, purchaseOrderNo, null, customerName, null, projectName,
+        this(orderNo, purchaseInboundNo, purchaseOrderNo, null, null, customerName, null, projectName,
                 null, null, deliveryDate, salesName, status, remark, items);
     }
 }

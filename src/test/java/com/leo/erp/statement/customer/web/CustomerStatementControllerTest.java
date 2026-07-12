@@ -1,6 +1,7 @@
 package com.leo.erp.statement.customer.web;
 
 import com.leo.erp.common.api.ApiResponse;
+import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.api.PageResponse;
 import com.leo.erp.common.web.dto.StatusUpdateRequest;
@@ -9,6 +10,7 @@ import com.leo.erp.statement.customer.web.dto.CustomerStatementCandidateResponse
 import com.leo.erp.statement.customer.web.dto.CustomerStatementRequest;
 import com.leo.erp.statement.customer.web.dto.CustomerStatementResponse;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 
@@ -56,7 +58,9 @@ class CustomerStatementControllerTest {
         PageQuery query = new PageQuery(0, 20, null, null);
         when(customerStatementService.page(any(), any())).thenReturn(page);
 
-        ApiResponse<PageResponse<CustomerStatementResponse>> response = controller.page(query, "test", "customer", 7L, "active", null, null);
+        ApiResponse<PageResponse<CustomerStatementResponse>> response = controller.page(
+                query, "test", 101L, "customer", 102L, "project", 7L, "active", null, null
+        );
 
         assertThat(response.code()).isEqualTo(0);
         assertThat(response.data().content()).hasSize(1);
@@ -69,10 +73,17 @@ class CustomerStatementControllerTest {
         PageQuery query = new PageQuery(0, 20, null, null);
         when(customerStatementService.candidatePage(any(), any())).thenReturn(page);
 
-        ApiResponse<PageResponse<CustomerStatementCandidateResponse>> response = controller.candidates(query, "test", "customer", "project", 7L, null, null);
+        ApiResponse<PageResponse<CustomerStatementCandidateResponse>> response = controller.candidates(
+                query, "test", 101L, "customer", 102L, "project", 7L, null, null, 201L
+        );
 
         assertThat(response.code()).isEqualTo(0);
         assertThat(response.data().content()).hasSize(1);
+        ArgumentCaptor<PageFilter> filterCaptor = ArgumentCaptor.forClass(PageFilter.class);
+        verify(customerStatementService).candidatePage(eq(query), filterCaptor.capture());
+        assertThat(filterCaptor.getValue().customerId()).isEqualTo(101L);
+        assertThat(filterCaptor.getValue().projectId()).isEqualTo(102L);
+        assertThat(filterCaptor.getValue().currentRecordId()).isEqualTo(201L);
     }
 
     @Test

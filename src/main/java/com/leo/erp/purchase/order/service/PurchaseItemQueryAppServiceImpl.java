@@ -48,7 +48,8 @@ public class PurchaseItemQueryAppServiceImpl implements PurchaseItemQueryAppServ
                 item.getBrand(), item.getMaterial(), item.getSpec(),
                 item.getMaterialCode(), item.getCategory(), item.getUnit(),
                 item.getWarehouseName(), item.getBatchNo(),
-                item.getSettlementCompanyId(), item.getSettlementCompanyName()
+                item.getSettlementCompanyId(), item.getSettlementCompanyName(),
+                item.getMaterialId(), item.getWarehouseId(), item.getBatchNoNormalized()
         );
     }
 
@@ -65,7 +66,8 @@ public class PurchaseItemQueryAppServiceImpl implements PurchaseItemQueryAppServ
                 item.getMaterialCode(), item.getCategory(), item.getUnit(),
                 item.getWarehouseName(), item.getBatchNo(),
                 order != null ? order.getSettlementCompanyId() : null,
-                order != null ? order.getSettlementCompanyName() : null
+                order != null ? order.getSettlementCompanyName() : null,
+                item.getMaterialId(), item.getWarehouseId(), item.getBatchNoNormalized()
         );
     }
 }

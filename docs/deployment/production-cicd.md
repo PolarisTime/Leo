@@ -30,6 +30,8 @@
 
 仓库必须配置 `SEMANTIC_RELEASE_TOKEN` secret。该 token 需要具备向 `PolarisTime/Leo` 推送 release commit/tag 并创建 GitHub Release 的权限；不要只依赖默认 `GITHUB_TOKEN`，否则由 workflow 创建的 tag 不会继续触发部署 workflow。
 
+仓库级 Variable `PROD_FLYWAY_TARGET` 必须配置为当前生产允许迁移到的最高正整数版本。tag 自动发布使用该值；手工 `workflow_dispatch` 使用显式 `flyway_target` 输入。构建期 `flyway:migrate/validate`、local/SSH 部署前校验和生产 `SPRING_FLYWAY_TARGET` 必须保持一致，缺失、`latest` 或不一致都会停止发布。
+
 默认生产目标是 `local`，要求本机已注册 GitHub self-hosted runner，并带有以下标签：
 
 - `self-hosted`
@@ -116,6 +118,7 @@ SPRING_DATA_REDIS_HOST=127.0.0.1
 SPRING_DATA_REDIS_PORT=6379
 SPRING_DATA_REDIS_DATABASE=3
 SPRING_DATA_REDIS_PASSWORD=change-me
+SPRING_FLYWAY_TARGET=19
 LEO_JWT_SECRET=change-me-at-least-32-chars
 TOTP_ENCRYPTION_KEY=change-me-at-least-16-chars
 LEO_SETUP_BOOTSTRAP_TOKEN=<32-byte-base64url-token>
@@ -196,7 +199,7 @@ gh auth status
 只构建打包，不部署生产：
 
 ```bash
-bash leo/scripts/deploy/trigger-production-deploy.sh --dry-run --watch
+bash leo/scripts/deploy/trigger-production-deploy.sh --dry-run --flyway-target 19 --watch
 ```
 
 真实生产发布：
@@ -205,6 +208,7 @@ bash leo/scripts/deploy/trigger-production-deploy.sh --dry-run --watch
 bash leo/scripts/deploy/trigger-production-deploy.sh \
   --confirm-production \
   --deploy-target local \
+  --flyway-target 19 \
   --leo-ref main \
   --aries-ref dev \
   --watch
@@ -233,7 +237,7 @@ bash leo/scripts/deploy/trigger-production-deploy.sh \
 
 ```bash
 PGPASSWORD="<postgres-admin-password>" \
-  bash leo/scripts/deploy/trigger-local-steelx-deploy.sh --confirm
+  bash leo/scripts/deploy/trigger-local-steelx-deploy.sh --confirm --flyway-target 19
 ```
 
 脚本会安装 `/etc/nginx/conf.d/steelx.conf`，执行 `nginx -t` 后 reload Nginx。执行用户需要 root 权限，或具备免密 sudo 执行 `install`、`nginx -t`、`nginx -s reload` 的权限。生产实例对外地址为 `https://in1ove.com`，`http://in1ove.com` 会跳转到 HTTPS。
@@ -265,6 +269,7 @@ jq . /instance/steelx/backend/current/manifest.json
 - `leoSha`：实际打包部署的 Leo commit。
 - `leoRef` / `ariesRef`：触发部署时选择的后端和前端 ref。
 - `deployTarget`：必须为 `local`。
+- `flywayTarget`：必须等于本次批准的生产迁移阶段上限。
 - `dryRun`：必须为 `false`。
 
 2. 使用 manifest 中的 `runId` 查询 GitHub Actions：

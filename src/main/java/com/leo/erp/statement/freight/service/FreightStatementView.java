@@ -25,8 +25,33 @@ public record FreightStatementView(
         String attachment,
         List<AttachmentView> attachments,
         String remark,
-        List<FreightStatementItemView> items
+        List<FreightStatementItemView> items,
+        Long carrierId
 ) {
+    public FreightStatementView(Long id,
+                                String statementNo,
+                                String carrierCode,
+                                String carrierName,
+                                Long settlementCompanyId,
+                                String settlementCompanyName,
+                                LocalDate startDate,
+                                LocalDate endDate,
+                                BigDecimal totalWeight,
+                                BigDecimal totalFreight,
+                                BigDecimal paidAmount,
+                                BigDecimal unpaidAmount,
+                                String status,
+                                boolean deletedFlag,
+                                String signStatus,
+                                String attachment,
+                                List<AttachmentView> attachments,
+                                String remark,
+                                List<FreightStatementItemView> items) {
+        this(id, statementNo, carrierCode, carrierName, settlementCompanyId, settlementCompanyName, startDate,
+                endDate, totalWeight, totalFreight, paidAmount, unpaidAmount, status, deletedFlag, signStatus,
+                attachment, attachments, remark, items, null);
+    }
+
     public FreightStatementView(Long id,
                                 String statementNo,
                                 String carrierName,
@@ -43,6 +68,6 @@ public record FreightStatementView(
                                 String remark,
                                 List<FreightStatementItemView> items) {
         this(id, statementNo, null, carrierName, null, null, startDate, endDate, totalWeight, totalFreight,
-                paidAmount, unpaidAmount, status, false, signStatus, attachment, attachments, remark, items);
+                paidAmount, unpaidAmount, status, false, signStatus, attachment, attachments, remark, items, null);
     }
 }

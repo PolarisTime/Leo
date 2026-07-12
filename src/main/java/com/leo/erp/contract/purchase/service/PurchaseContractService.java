@@ -10,6 +10,8 @@ import com.leo.erp.common.support.ManagedEntityItemSupport;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.support.TradeItemCalculator;
+import com.leo.erp.common.support.TradeItemMaterialSupport;
+import com.leo.erp.common.support.TradeMaterialSnapshot;
 import com.leo.erp.contract.purchase.domain.entity.PurchaseContract;
 import com.leo.erp.contract.purchase.domain.entity.PurchaseContractItem;
 import com.leo.erp.contract.purchase.repository.PurchaseContractRepository;
@@ -18,7 +20,12 @@ import com.leo.erp.contract.purchase.web.dto.PurchaseContractRequest;
 import com.leo.erp.contract.purchase.web.dto.PurchaseContractResponse;
 import com.leo.erp.contract.purchase.web.dto.PurchaseContractItemRequest;
 import com.leo.erp.contract.purchase.web.dto.PurchaseContractItemResponse;
+import com.leo.erp.master.supplier.domain.entity.Supplier;
+import com.leo.erp.master.supplier.repository.SupplierRepository;
 import com.leo.erp.security.permission.WorkflowTransitionGuard;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
@@ -31,18 +38,34 @@ import java.util.Optional;
 @Service
 public class PurchaseContractService extends AbstractCrudService<PurchaseContract, PurchaseContractRequest, PurchaseContractResponse> {
 
+    private static final Logger log = LoggerFactory.getLogger(PurchaseContractService.class);
+
     private final PurchaseContractRepository repository;
     private final PurchaseContractMapper purchaseContractMapper;
     private final WorkflowTransitionGuard workflowTransitionGuard;
+    private final SupplierRepository supplierRepository;
+    private final TradeItemMaterialSupport tradeItemMaterialSupport;
 
     public PurchaseContractService(PurchaseContractRepository repository,
                                    SnowflakeIdGenerator idGenerator,
                                    PurchaseContractMapper purchaseContractMapper,
                                    WorkflowTransitionGuard workflowTransitionGuard) {
+        this(repository, idGenerator, purchaseContractMapper, workflowTransitionGuard, null, null);
+    }
+
+    @Autowired
+    public PurchaseContractService(PurchaseContractRepository repository,
+                                   SnowflakeIdGenerator idGenerator,
+                                   PurchaseContractMapper purchaseContractMapper,
+                                   WorkflowTransitionGuard workflowTransitionGuard,
+                                   SupplierRepository supplierRepository,
+                                   TradeItemMaterialSupport tradeItemMaterialSupport) {
         super(idGenerator);
         this.repository = repository;
         this.purchaseContractMapper = purchaseContractMapper;
         this.workflowTransitionGuard = workflowTransitionGuard;
+        this.supplierRepository = supplierRepository;
+        this.tradeItemMaterialSupport = tradeItemMaterialSupport;
     }
 
     public Page<PurchaseContractResponse> page(PageQuery query, PageFilter filter) {
@@ -67,12 +90,13 @@ public class PurchaseContractService extends AbstractCrudService<PurchaseContrac
     protected PurchaseContractResponse toDetailResponse(PurchaseContract entity) {
         PurchaseContractResponse response = purchaseContractMapper.toResponse(entity);
         return new PurchaseContractResponse(
-                response.id(), response.contractNo(), response.supplierName(),
+                response.id(), response.contractNo(), entity.getSupplierId(), entity.getSupplierCode(),
+                response.supplierName(),
                 response.signDate(), response.effectiveDate(), response.expireDate(),
                 response.buyerName(), response.totalWeight(), response.totalAmount(),
                 response.status(), response.deletedFlag(), response.remark(),
                 entity.getItems().stream().map(item -> new PurchaseContractItemResponse(
-                        item.getId(), item.getLineNo(), item.getMaterialCode(),
+                        item.getId(), item.getLineNo(), item.getMaterialId(), item.getMaterialCode(),
                         item.getBrand(), item.getCategory(), item.getMaterial(),
                         item.getSpec(), item.getLength(), item.getUnit(),
                         item.getQuantity(), item.getQuantityUnit(), item.getPieceWeightTon(),
@@ -102,6 +126,8 @@ public class PurchaseContractService extends AbstractCrudService<PurchaseContrac
     protected PurchaseContractRequest normalizeCreateRequest(PurchaseContractRequest request, long entityId) {
         return new PurchaseContractRequest(
                 resolveCreateBusinessNo("purchase-contract", request.contractNo(), entityId),
+                request.supplierId(),
+                request.supplierCode(),
                 request.supplierName(),
                 request.signDate(),
                 request.effectiveDate(),
@@ -117,6 +143,8 @@ public class PurchaseContractService extends AbstractCrudService<PurchaseContrac
     protected PurchaseContractRequest normalizeUpdateRequest(PurchaseContract entity, PurchaseContractRequest request) {
         return new PurchaseContractRequest(
                 entity.getContractNo(),
+                request.supplierId(),
+                request.supplierCode(),
                 request.supplierName(),
                 request.signDate(),
                 request.effectiveDate(),
@@ -178,8 +206,11 @@ public class PurchaseContractService extends AbstractCrudService<PurchaseContrac
                 "已签署",
                 "已归档"
         );
+        SupplierIdentity supplier = resolveSupplier(request);
         entity.setContractNo(request.contractNo());
-        entity.setSupplierName(request.supplierName());
+        entity.setSupplierId(supplier.id());
+        entity.setSupplierCode(supplier.code());
+        entity.setSupplierName(supplier.name());
         entity.setSignDate(request.signDate());
         entity.setEffectiveDate(request.effectiveDate());
         entity.setExpireDate(request.expireDate());
@@ -202,9 +233,11 @@ public class PurchaseContractService extends AbstractCrudService<PurchaseContrac
         for (int i = 0; i < request.items().size(); i++) {
             PurchaseContractItemRequest source = request.items().get(i);
             PurchaseContractItem item = items.get(i);
+            TradeMaterialSnapshot material = resolveMaterial(source, i + 1);
             item.setPurchaseContract(entity);
             item.setLineNo(i + 1);
-            item.setMaterialCode(source.materialCode());
+            item.setMaterialId(material.materialId());
+            item.setMaterialCode(material.materialCode());
             item.setBrand(source.brand());
             item.setCategory(source.category());
             item.setMaterial(source.material());
@@ -262,6 +295,7 @@ public class PurchaseContractService extends AbstractCrudService<PurchaseContrac
 
     private boolean matchesExistingLineItem(PurchaseContractItem entityItem, PurchaseContractItemRequest requestItem) {
         return Objects.equals(entityItem.getId(), requestItem.id())
+                && Objects.equals(entityItem.getMaterialId(), requestItem.materialId())
                 && normalize(entityItem.getMaterialCode()).equals(normalize(requestItem.materialCode()))
                 && normalize(entityItem.getBrand()).equals(normalize(requestItem.brand()))
                 && normalize(entityItem.getCategory()).equals(normalize(requestItem.category()))
@@ -293,5 +327,72 @@ public class PurchaseContractService extends AbstractCrudService<PurchaseContrac
 
     private BusinessException readonlyLineItemsChanged() {
         return new BusinessException(com.leo.erp.common.error.ErrorCode.BUSINESS_ERROR, "采购合同明细不允许编辑");
+    }
+
+    private SupplierIdentity resolveSupplier(PurchaseContractRequest request) {
+        if (supplierRepository == null) {
+            return new SupplierIdentity(request.supplierId(), normalizeNullable(request.supplierCode()),
+                    normalizeNullable(request.supplierName()));
+        }
+        Supplier supplier = findSupplier(request);
+        String requestedCode = normalizeNullable(request.supplierCode());
+        String requestedName = normalizeNullable(request.supplierName());
+        if (requestedCode != null && !Objects.equals(requestedCode, normalizeNullable(supplier.getSupplierCode()))) {
+            throw new BusinessException(com.leo.erp.common.error.ErrorCode.BUSINESS_ERROR,
+                    "供应商ID与供应商编码不一致");
+        }
+        if (requestedName != null && !Objects.equals(requestedName, normalizeNullable(supplier.getSupplierName()))) {
+            throw new BusinessException(com.leo.erp.common.error.ErrorCode.BUSINESS_ERROR,
+                    "供应商ID与供应商名称不一致");
+        }
+        return new SupplierIdentity(supplier.getId(), supplier.getSupplierCode(), supplier.getSupplierName());
+    }
+
+    private Supplier findSupplier(PurchaseContractRequest request) {
+        if (request.supplierId() != null) {
+            return supplierRepository.findByIdAndDeletedFlagFalse(request.supplierId())
+                    .orElseThrow(this::supplierNotFound);
+        }
+        String supplierCode = normalizeNullable(request.supplierCode());
+        if (supplierCode != null) {
+            Supplier supplier = supplierRepository.findBySupplierCodeAndDeletedFlagFalse(supplierCode)
+                    .orElseThrow(this::supplierNotFound);
+            log.warn("identity_fallback module=purchase-contract field=supplierId reason=supplier-code resolvedId={}",
+                    supplier.getId());
+            return supplier;
+        }
+        List<Supplier> candidates = supplierRepository.findBySupplierNameAndDeletedFlagFalseOrderBySupplierCodeAsc(
+                normalize(request.supplierName())
+        );
+        if (candidates.size() != 1) {
+            if (candidates.isEmpty()) {
+                throw supplierNotFound();
+            }
+            throw new BusinessException(com.leo.erp.common.error.ErrorCode.BUSINESS_ERROR,
+                    "供应商名称对应多个编码，请选择供应商ID");
+        }
+        log.warn("identity_fallback module=purchase-contract field=supplierId reason=supplier-name resolvedId={}",
+                candidates.get(0).getId());
+        return candidates.get(0);
+    }
+
+    private BusinessException supplierNotFound() {
+        return new BusinessException(com.leo.erp.common.error.ErrorCode.BUSINESS_ERROR,
+                "供应商不存在，请先在主数据供应商资料中维护");
+    }
+
+    private TradeMaterialSnapshot resolveMaterial(PurchaseContractItemRequest source, int lineNo) {
+        if (tradeItemMaterialSupport == null) {
+            return new TradeMaterialSnapshot(source.materialId(), source.materialCode(), false);
+        }
+        return tradeItemMaterialSupport.resolveMaterial(source.materialId(), source.materialCode(), lineNo);
+    }
+
+    private String normalizeNullable(String value) {
+        String normalized = normalize(value);
+        return normalized.isEmpty() ? null : normalized;
+    }
+
+    private record SupplierIdentity(Long id, String code, String name) {
     }
 }

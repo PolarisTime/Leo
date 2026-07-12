@@ -6,6 +6,7 @@ import java.time.LocalDateTime;
 public record PurchaseOrderImportCandidateResponse(
         Long id,
         String orderNo,
+        Long supplierId,
         String supplierCode,
         String supplierName,
         Long settlementCompanyId,
@@ -20,6 +21,7 @@ public record PurchaseOrderImportCandidateResponse(
     public PurchaseOrderImportCandidateResponse(
             Long id,
             String orderNo,
+            String supplierCode,
             String supplierName,
             Long settlementCompanyId,
             String settlementCompanyName,
@@ -30,7 +32,24 @@ public record PurchaseOrderImportCandidateResponse(
             String status,
             Integer importableQuantity
     ) {
-        this(id, orderNo, null, supplierName, settlementCompanyId, settlementCompanyName,
+        this(id, orderNo, null, supplierCode, supplierName, settlementCompanyId, settlementCompanyName,
+                buyerName, orderDate, totalWeight, totalAmount, status, importableQuantity);
+    }
+
+    public PurchaseOrderImportCandidateResponse(
+            Long id,
+            String orderNo,
+            String supplierName,
+            Long settlementCompanyId,
+            String settlementCompanyName,
+            String buyerName,
+            LocalDateTime orderDate,
+            BigDecimal totalWeight,
+            BigDecimal totalAmount,
+            String status,
+            Integer importableQuantity
+    ) {
+        this(id, orderNo, null, null, supplierName, settlementCompanyId, settlementCompanyName,
                 buyerName, orderDate, totalWeight, totalAmount, status, importableQuantity);
     }
 
@@ -43,7 +62,7 @@ public record PurchaseOrderImportCandidateResponse(
             String status,
             Integer importableQuantity
     ) {
-        this(id, orderNo, null, supplierName, null, null, buyerName, orderDate,
+        this(id, orderNo, null, null, supplierName, null, null, buyerName, orderDate,
                 null, null, status, importableQuantity);
     }
 }

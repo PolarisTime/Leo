@@ -7,6 +7,7 @@ import com.leo.erp.common.support.TradeItemMaterialSupport;
 import com.leo.erp.common.support.TradeItemMaterialSupportTestDoubles;
 import com.leo.erp.common.support.TradeMaterialSnapshot;
 import com.leo.erp.common.support.WarehouseSelectionSupport;
+import com.leo.erp.common.support.WarehouseSelectionSupportTestDoubles;
 import com.leo.erp.master.supplier.domain.entity.Supplier;
 import com.leo.erp.master.supplier.repository.SupplierRepository;
 import com.leo.erp.purchase.inbound.service.PurchaseInboundItemQueryService;
@@ -1665,6 +1666,7 @@ class PurchaseOrderServiceTest {
                                          JdbcTemplate jdbc,
                                          CompanySettingService companySettingService) {
         TradeItemMaterialSupportTestDoubles.stubMaterialCodeNormalization(tradeItemMaterialSupport);
+        WarehouseSelectionSupportTestDoubles.stubWarehouseResolution(warehouseSelectionSupport);
         PurchaseOrderAvailabilityService availabilityService = new PurchaseOrderAvailabilityService(
                 purchaseInboundItemQueryService,
                 itemAllocationRepo,

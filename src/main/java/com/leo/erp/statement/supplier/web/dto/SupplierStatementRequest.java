@@ -22,8 +22,26 @@ public record SupplierStatementRequest(
         @DecimalMin("0.00") BigDecimal closingAmount,
         String status,
         String remark,
-        @Valid @NotEmpty List<SupplierStatementItemRequest> items
+        @Valid @NotEmpty List<SupplierStatementItemRequest> items,
+        Long supplierId
 ) {
+    public SupplierStatementRequest(String statementNo,
+                                    String supplierCode,
+                                    String supplierName,
+                                    Long settlementCompanyId,
+                                    String settlementCompanyName,
+                                    LocalDate startDate,
+                                    LocalDate endDate,
+                                    BigDecimal purchaseAmount,
+                                    BigDecimal paymentAmount,
+                                    BigDecimal closingAmount,
+                                    String status,
+                                    String remark,
+                                    List<SupplierStatementItemRequest> items) {
+        this(statementNo, supplierCode, supplierName, settlementCompanyId, settlementCompanyName, startDate,
+                endDate, purchaseAmount, paymentAmount, closingAmount, status, remark, items, null);
+    }
+
     public SupplierStatementRequest(String statementNo,
                                     String supplierName,
                                     LocalDate startDate,
@@ -35,7 +53,7 @@ public record SupplierStatementRequest(
                                     String remark,
                                     List<SupplierStatementItemRequest> items) {
         this(statementNo, null, supplierName, null, null, startDate, endDate, purchaseAmount,
-                paymentAmount, closingAmount, status, remark, items);
+                paymentAmount, closingAmount, status, remark, items, null);
     }
 
     public SupplierStatementRequest(String statementNo,
@@ -50,6 +68,6 @@ public record SupplierStatementRequest(
                                     String remark,
                                     List<SupplierStatementItemRequest> items) {
         this(statementNo, supplierCode, supplierName, null, null, startDate, endDate, purchaseAmount,
-                paymentAmount, closingAmount, status, remark, items);
+                paymentAmount, closingAmount, status, remark, items, null);
     }
 }

@@ -28,6 +28,9 @@ public class PurchaseContractItem {
     @Column(name = "line_no", nullable = false)
     private Integer lineNo;
 
+    @Column(name = "material_id")
+    private Long materialId;
+
     @Column(name = "material_code", nullable = false, length = 64)
     private String materialCode;
 

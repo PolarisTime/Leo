@@ -22,7 +22,12 @@ public record PageFilter(
         Long recordId,
         Long userId,
         String authType,
-        Long settlementCompanyId
+        Long settlementCompanyId,
+        Long customerId,
+        Long projectId,
+        Long supplierId,
+        Long carrierId,
+        Long currentRecordId
 ) {
     public PageFilter {
         // defaults via compact constructor — no-op, all nullable
@@ -46,19 +51,45 @@ public record PageFilter(
             String authType
     ) {
         this(keyword, status, startDate, endDate, name, projectName, businessType, moduleName,
-                actionType, resultStatus, signStatus, usageScope, recordId, userId, authType, null);
+                actionType, resultStatus, signStatus, usageScope, recordId, userId, authType,
+                null, null, null, null, null, null);
+    }
+
+    public PageFilter(
+            String keyword,
+            String status,
+            LocalDate startDate,
+            LocalDate endDate,
+            String name,
+            String projectName,
+            String businessType,
+            String moduleName,
+            String actionType,
+            String resultStatus,
+            String signStatus,
+            String usageScope,
+            Long recordId,
+            Long userId,
+            String authType,
+            Long settlementCompanyId
+    ) {
+        this(keyword, status, startDate, endDate, name, projectName, businessType, moduleName,
+                actionType, resultStatus, signStatus, usageScope, recordId, userId, authType,
+                settlementCompanyId, null, null, null, null, null);
     }
 
     /** 最常用的四字段构造 */
     public static PageFilter of(String keyword, String status, LocalDate startDate, LocalDate endDate) {
         return new PageFilter(keyword, status, startDate, endDate,
-                null, null, null, null, null, null, null, null, null, null, null, null);
+                null, null, null, null, null, null, null, null, null, null, null,
+                null, null, null, null, null, null);
     }
 
     /** 带一个名称过滤 */
     public static PageFilter of(String keyword, String name, String status, LocalDate startDate, LocalDate endDate) {
         return new PageFilter(keyword, status, startDate, endDate,
-                name, null, null, null, null, null, null, null, null, null, null, null);
+                name, null, null, null, null, null, null, null, null, null, null,
+                null, null, null, null, null, null);
     }
 
     /** 带一个名称过滤和结算主体过滤 */
@@ -71,7 +102,8 @@ public record PageFilter(
             LocalDate endDate
     ) {
         return new PageFilter(keyword, status, startDate, endDate,
-                name, null, null, null, null, null, null, null, null, null, null, settlementCompanyId);
+                name, null, null, null, null, null, null, null, null, null, null,
+                settlementCompanyId, null, null, null, null, null);
     }
 
     /** 带名称、项目和结算主体过滤 */
@@ -85,6 +117,19 @@ public record PageFilter(
             LocalDate endDate
     ) {
         return new PageFilter(keyword, status, startDate, endDate,
-                name, projectName, null, null, null, null, null, null, null, null, null, settlementCompanyId);
+                name, projectName, null, null, null, null, null, null, null, null, null,
+                settlementCompanyId, null, null, null, null, null);
+    }
+
+    public PageFilter withIdentity(Long customerId,
+                                   Long projectId,
+                                   Long supplierId,
+                                   Long carrierId,
+                                   Long currentRecordId) {
+        return new PageFilter(
+                keyword, status, startDate, endDate, name, projectName, businessType, moduleName,
+                actionType, resultStatus, signStatus, usageScope, recordId, userId, authType,
+                settlementCompanyId, customerId, projectId, supplierId, carrierId, currentRecordId
+        );
     }
 }

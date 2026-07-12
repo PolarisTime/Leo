@@ -21,8 +21,31 @@ public record InvoiceReceiptResponse(
         boolean deletedFlag,
         String operatorName,
         String remark,
-        List<InvoiceReceiptItemResponse> items
+        List<InvoiceReceiptItemResponse> items,
+        Long supplierId
 ) {
+    public InvoiceReceiptResponse(Long id,
+                                  String receiveNo,
+                                  String invoiceNo,
+                                  String supplierCode,
+                                  String supplierName,
+                                  Long settlementCompanyId,
+                                  String settlementCompanyName,
+                                  String invoiceTitle,
+                                  LocalDate invoiceDate,
+                                  String invoiceType,
+                                  BigDecimal amount,
+                                  BigDecimal taxAmount,
+                                  String status,
+                                  boolean deletedFlag,
+                                  String operatorName,
+                                  String remark,
+                                  List<InvoiceReceiptItemResponse> items) {
+        this(id, receiveNo, invoiceNo, supplierCode, supplierName, settlementCompanyId, settlementCompanyName,
+                invoiceTitle, invoiceDate, invoiceType, amount, taxAmount, status, deletedFlag, operatorName,
+                remark, items, null);
+    }
+
     public InvoiceReceiptResponse(Long id,
                                   String receiveNo,
                                   String invoiceNo,
@@ -41,7 +64,7 @@ public record InvoiceReceiptResponse(
                                   List<InvoiceReceiptItemResponse> items) {
         this(id, receiveNo, invoiceNo, null, supplierName, settlementCompanyId,
                 settlementCompanyName, invoiceTitle, invoiceDate, invoiceType, amount,
-                taxAmount, status, deletedFlag, operatorName, remark, items);
+                taxAmount, status, deletedFlag, operatorName, remark, items, null);
     }
 
     public InvoiceReceiptResponse(Long id,
@@ -58,6 +81,6 @@ public record InvoiceReceiptResponse(
                                   String remark,
                                   List<InvoiceReceiptItemResponse> items) {
         this(id, receiveNo, invoiceNo, null, supplierName, null, null, invoiceTitle, invoiceDate, invoiceType,
-                amount, taxAmount, status, false, operatorName, remark, items);
+                amount, taxAmount, status, false, operatorName, remark, items, null);
     }
 }

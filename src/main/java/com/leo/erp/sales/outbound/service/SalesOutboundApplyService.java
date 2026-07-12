@@ -5,6 +5,7 @@ import com.leo.erp.common.support.TradeItemCalculator;
 import com.leo.erp.common.support.TradeItemMaterialSupport;
 import com.leo.erp.common.support.TradeMaterialSnapshot;
 import com.leo.erp.common.support.WarehouseSelectionSupport;
+import com.leo.erp.common.support.WarehouseSnapshot;
 import com.leo.erp.sales.order.domain.entity.SalesOrderItem;
 import com.leo.erp.sales.outbound.domain.entity.SalesOutbound;
 import com.leo.erp.sales.outbound.domain.entity.SalesOutboundItem;
@@ -46,9 +47,6 @@ public class SalesOutboundApplyService {
         BigDecimal totalWeight = BigDecimal.ZERO;
         BigDecimal totalAmount = BigDecimal.ZERO;
         String firstLineWarehouseName = null;
-        var materialMap = tradeItemMaterialSupport.loadMaterialMap(
-                request.items().stream().map(SalesOutboundItemRequest::materialCode).toList()
-        );
         List<SalesOutboundItem> managedItems = entity.getItems();
         List<SalesOutboundItem> items = ManagedEntityItemSupport.syncById(
                 new ArrayList<>(managedItems),
@@ -65,20 +63,20 @@ public class SalesOutboundApplyService {
         LinkedHashSet<String> sourceSalesOrderNos = new LinkedHashSet<>();
         LinkedHashSet<Long> sourceSalesOrderItemIds = new LinkedHashSet<>();
         LinkedHashSet<SettlementCompanySnapshot> salesSettlementCompanies = new LinkedHashSet<>();
+        LinkedHashSet<Long> customerIds = new LinkedHashSet<>();
+        LinkedHashSet<Long> projectIds = new LinkedHashSet<>();
+        LinkedHashSet<Long> warehouseIds = new LinkedHashSet<>();
 
         for (int i = 0; i < request.items().size(); i++) {
             SalesOutboundItemRequest source = request.items().get(i);
             SalesOutboundItem item = items.get(i);
             int lineNo = i + 1;
-            String materialCode = tradeItemMaterialSupport.normalizeMaterialCode(source.materialCode(), lineNo);
             LineApplyResult result = applyItem(
                     entity,
                     request,
                     source,
                     item,
                     lineNo,
-                    materialCode,
-                    materialMap.get(materialCode),
                     sourceSalesOrderItemMap,
                     requestSourceQuantityMap
             );
@@ -90,6 +88,14 @@ public class SalesOutboundApplyService {
                     result.sourceSalesOrderItemId()
             );
             collectSalesSettlementCompany(salesSettlementCompanies, result.sourceSalesOrderItemId(), sourceSalesOrderItemMap);
+            SalesOrderItem sourceItem = result.sourceSalesOrderItemId() == null
+                    ? null
+                    : sourceSalesOrderItemMap.get(result.sourceSalesOrderItemId());
+            if (sourceItem != null && sourceItem.getSalesOrder() != null) {
+                addIfPresent(customerIds, sourceItem.getSalesOrder().getCustomerId());
+                addIfPresent(projectIds, sourceItem.getSalesOrder().getProjectId());
+            }
+            addIfPresent(warehouseIds, item.getWarehouseId());
             totalWeight = totalWeight.add(result.weightTon());
             totalAmount = totalAmount.add(result.amount());
             if (firstLineWarehouseName == null) {
@@ -105,6 +111,9 @@ public class SalesOutboundApplyService {
                 ? trimToNull(request.salesOrderNo())
                 : String.join(", ", sourceSalesOrderNos));
         applyHeaderSettlementCompany(entity, salesSettlementCompanies);
+        entity.setCustomerId(resolveSingleIdentity(customerIds, request.customerId(), "客户"));
+        entity.setProjectId(resolveSingleIdentity(projectIds, request.projectId(), "项目"));
+        entity.setWarehouseId(resolveSingleIdentity(warehouseIds, request.warehouseId(), "仓库"));
         entity.setWarehouseName(firstLineWarehouseName == null ? trimToNull(request.warehouseName()) : firstLineWarehouseName);
         entity.setTotalWeight(totalWeight);
         entity.setTotalAmount(totalAmount);
@@ -125,8 +134,6 @@ public class SalesOutboundApplyService {
                                       SalesOutboundItemRequest source,
                                       SalesOutboundItem item,
                                       int lineNo,
-                                      String materialCode,
-                                      TradeMaterialSnapshot material,
                                       Map<Long, SalesOrderItem> sourceSalesOrderItemMap,
                                       Map<Long, Integer> requestSourceQuantityMap) {
         item.setSalesOutbound(entity);
@@ -134,32 +141,54 @@ public class SalesOutboundApplyService {
         Long sourceSalesOrderItemId = sourceService.resolveSourceSalesOrderItemId(source, item, lineNo);
         SalesOrderItem sourceSalesOrderItem =
                 sourceService.resolveSourceSalesOrderItem(sourceSalesOrderItemMap, sourceSalesOrderItemId, lineNo);
+        TradeMaterialSnapshot material = tradeItemMaterialSupport.resolveMaterial(
+                source.materialId() == null ? sourceSalesOrderItem.getMaterialId() : source.materialId(),
+                source.materialCode(),
+                lineNo
+        );
         item.setSourceSalesOrderItemId(sourceSalesOrderItemId);
         item.setSettlementCompanyId(sourceSalesOrderItem.getSettlementCompanyId());
         item.setSettlementCompanyName(sourceSalesOrderItem.getSettlementCompanyName());
-        item.setMaterialCode(materialCode);
-        item.setBrand(source.brand());
-        item.setCategory(source.category());
-        item.setMaterial(source.material());
-        item.setSpec(source.spec());
-        item.setLength(source.length());
-        item.setUnit(source.unit());
-        String warehouseName = warehouseSelectionSupport.normalizeWarehouseName(
-                source.warehouseName() == null || source.warehouseName().isBlank() ? request.warehouseName() : source.warehouseName(),
-                lineNo,
-                true
-        );
-        item.setWarehouseName(warehouseName);
-        item.setBatchNo(tradeItemMaterialSupport.normalizeBatchNo(material, source.batchNo(), lineNo, true));
+        item.setMaterialId(sourceSalesOrderItem.getMaterialId() == null
+                ? material.materialId() : sourceSalesOrderItem.getMaterialId());
+        item.setMaterialCode(sourceSalesOrderItem.getMaterialCode());
+        item.setBrand(sourceSalesOrderItem.getBrand());
+        item.setCategory(sourceSalesOrderItem.getCategory());
+        item.setMaterial(sourceSalesOrderItem.getMaterial());
+        item.setSpec(sourceSalesOrderItem.getSpec());
+        item.setLength(sourceSalesOrderItem.getLength());
+        item.setUnit(sourceSalesOrderItem.getUnit());
+        String requestedWarehouseName = source.warehouseName() == null || source.warehouseName().isBlank()
+                ? request.warehouseName() : source.warehouseName();
+        WarehouseSnapshot warehouse = sourceSalesOrderItem.getSalesOrder() != null
+                && (sourceSalesOrderItem.getWarehouseId() != null
+                || trimToNull(sourceSalesOrderItem.getWarehouseName()) != null)
+                ? new WarehouseSnapshot(
+                        sourceSalesOrderItem.getWarehouseId(),
+                        null,
+                        sourceSalesOrderItem.getWarehouseName()
+                )
+                : warehouseSelectionSupport.resolveWarehouse(
+                        source.warehouseId() == null ? request.warehouseId() : source.warehouseId(),
+                        requestedWarehouseName,
+                        lineNo,
+                        true
+                );
+        item.setWarehouseId(warehouse.warehouseId());
+        item.setWarehouseName(warehouse.warehouseName());
+        item.setBatchNo(sourceSalesOrderItem.getBatchNo());
         item.setQuantity(source.quantity());
         item.setQuantityUnit(TradeItemCalculator.normalizeQuantityUnit(source.quantityUnit()));
         sourceService.validateSourceSalesOrderItem(
                 source,
                 sourceSalesOrderItem,
                 sourceSalesOrderItemId,
+                request.customerId(),
                 request.customerName(),
+                request.projectId(),
                 request.projectName(),
-                warehouseName,
+                source.warehouseId() == null ? request.warehouseId() : source.warehouseId(),
+                warehouse.warehouseName(),
                 item.getBatchNo(),
                 requestSourceQuantityMap,
                 lineNo
@@ -177,7 +206,7 @@ public class SalesOutboundApplyService {
         item.setUnitPrice(sourceUnitPrice);
         BigDecimal amount = TradeItemCalculator.calculateAmount(weightTon, sourceUnitPrice);
         item.setAmount(amount);
-        return new LineApplyResult(sourceSalesOrderItemId, warehouseName, weightTon, amount);
+        return new LineApplyResult(sourceSalesOrderItemId, warehouse.warehouseName(), weightTon, amount);
     }
 
     private void collectSalesSettlementCompany(
@@ -221,6 +250,22 @@ public class SalesOutboundApplyService {
 
     private String trimToNull(String value) {
         return value == null || value.isBlank() ? null : value.trim();
+    }
+
+    private void addIfPresent(LinkedHashSet<Long> values, Long value) {
+        if (value != null) {
+            values.add(value);
+        }
+    }
+
+    private Long resolveSingleIdentity(LinkedHashSet<Long> values, Long fallback, String fieldName) {
+        if (values.size() > 1) {
+            throw new BusinessException(
+                    ErrorCode.BUSINESS_ERROR,
+                    "来源销售订单存在不同" + fieldName + "，不能合并生成销售出库单"
+            );
+        }
+        return values.isEmpty() ? fallback : values.iterator().next();
     }
 
     private record LineApplyResult(

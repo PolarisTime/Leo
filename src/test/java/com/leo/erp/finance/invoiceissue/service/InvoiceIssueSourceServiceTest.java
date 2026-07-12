@@ -182,6 +182,43 @@ class InvoiceIssueSourceServiceTest {
     }
 
     @Test
+    void shouldCopyCustomerProjectMaterialAndWarehouseIdentityFromSource() {
+        InvoiceIssueRepository repository = mock(InvoiceIssueRepository.class);
+        SalesOrderItemQueryService itemQueryService = mock(SalesOrderItemQueryService.class);
+        SalesOrderItem sourceItem = sourceItem(1L, "SO-001");
+        sourceItem.getSalesOrder().setCustomerId(101L);
+        sourceItem.getSalesOrder().setProjectId(102L);
+        sourceItem.setMaterialId(103L);
+        sourceItem.setWarehouseId(104L);
+        when(itemQueryService.findActiveByIdIn(any(Collection.class))).thenReturn(List.of(sourceItem));
+        when(repository.summarizeAllocatedBySourceSalesOrderItemIds(any(Collection.class), eq(10L)))
+                .thenReturn(List.of());
+        InvoiceIssueSourceService service = new InvoiceIssueSourceService(repository, itemQueryService);
+        InvoiceIssueItemRequest request = new InvoiceIssueItemRequest(
+                null, "SO-OLD", 1L, "M-1", "品牌A", "品类A", "材质A", "规格A", null,
+                "吨", "仓库A", null, 1, "件", new BigDecimal("1.000"), 1,
+                BigDecimal.ONE, new BigDecimal("100.00"), new BigDecimal("100.00"), 103L, 104L
+        );
+
+        InvoiceIssue entity = issue();
+        InvoiceIssueSourceService.SourceApplyResult result = service.applyItems(
+                entity,
+                List.of(request),
+                101L,
+                "客户A",
+                102L,
+                "项目A",
+                () -> 100L
+        );
+
+        assertThat(result.customerId()).isEqualTo(101L);
+        assertThat(result.projectId()).isEqualTo(102L);
+        InvoiceIssueItem item = entity.getItems().get(0);
+        assertThat(item.getMaterialId()).isEqualTo(103L);
+        assertThat(item.getWarehouseId()).isEqualTo(104L);
+    }
+
+    @Test
     void shouldKeepSettlementCompanyNameWhenIdIsMissing() {
         InvoiceIssueRepository repository = mock(InvoiceIssueRepository.class);
         SalesOrderItemQueryService itemQueryService = mock(SalesOrderItemQueryService.class);

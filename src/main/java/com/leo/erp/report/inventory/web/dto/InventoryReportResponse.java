@@ -8,6 +8,7 @@ import java.util.List;
 
 public record InventoryReportResponse(
         Long id,
+        Long materialId,
         String materialCode,
         String brand,
         String material,
@@ -29,6 +30,51 @@ public record InventoryReportResponse(
 ) {
     public InventoryReportResponse {
         items = items == null ? List.of() : List.copyOf(items);
+    }
+
+    public InventoryReportResponse(
+            Long id,
+            String materialCode,
+            String brand,
+            String material,
+            String category,
+            String spec,
+            String length,
+            String warehouseName,
+            String batchNo,
+            Integer onHandQuantity,
+            Integer reservedQuantity,
+            Integer availableQuantity,
+            String quantityUnit,
+            BigDecimal onHandWeightTon,
+            BigDecimal reservedWeightTon,
+            BigDecimal availableWeightTon,
+            String unit,
+            BigDecimal pieceWeightTon,
+            List<InventoryReportItemResponse> items
+    ) {
+        this(
+                id,
+                id,
+                materialCode,
+                brand,
+                material,
+                category,
+                spec,
+                length,
+                warehouseName,
+                batchNo,
+                onHandQuantity,
+                reservedQuantity,
+                availableQuantity,
+                quantityUnit,
+                onHandWeightTon,
+                reservedWeightTon,
+                availableWeightTon,
+                unit,
+                pieceWeightTon,
+                items
+        );
     }
 
     @JsonProperty("quantity")
@@ -61,6 +107,7 @@ public record InventoryReportResponse(
             List<InventoryReportItemResponse> items
     ) {
         this(
+                id,
                 id,
                 materialCode,
                 brand,
@@ -100,6 +147,7 @@ public record InventoryReportResponse(
             BigDecimal pieceWeightTon
     ) {
         this(
+                id,
                 id,
                 materialCode,
                 brand,

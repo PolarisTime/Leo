@@ -61,14 +61,17 @@ public class SupplierStatementSourceService {
     }
 
     Page<SupplierStatementCandidateResponse> candidatePage(PageQuery query, PageFilter filter) {
-        Set<String> occupiedInboundNos = collectOccupiedInboundNos(null);
+        Set<Long> occupiedInboundIds = toIdSet(
+                repository.findOccupiedSourceInboundIdsExcludingCurrentStatement(filter.currentRecordId())
+        );
         Specification<PurchaseInbound> spec = Specs.<PurchaseInbound>notDeleted()
                 .and(Specs.keywordLike(filter.keyword(), PURCHASE_INBOUND_CANDIDATE_SEARCH_FIELDS))
                 .and(Specs.equalIfPresent("supplierName", filter.name()))
+                .and(Specs.equalValueIfPresent("supplierId", filter.supplierId()))
                 .and(Specs.equalValueIfPresent("settlementCompanyId", filter.settlementCompanyId()))
                 .and(Specs.equalIfPresent("status", StatusConstants.INBOUND_COMPLETED))
                 .and(Specs.betweenIfPresent("inboundDate", filter.startDate(), filter.endDate()))
-                .and(StatementCandidateSupport.excludeFieldValues("inboundNo", occupiedInboundNos));
+                .and(StatementCandidateSupport.excludeFieldValues("id", occupiedInboundIds));
         return purchaseInboundRepository.findAll(DataScopeContext.apply(spec), query.toPageable("id"))
                 .map(this::toCandidateResponse);
     }
@@ -86,6 +89,7 @@ public class SupplierStatementSourceService {
                         .toList(),
                 request
         );
+        entity.setSupplierId(supplierIdentity.id());
         entity.setSupplierCode(supplierIdentity.code());
         SettlementCompanySnapshot settlementCompany = resolveStatementSettlementCompany(sourceInboundItemMap.values().stream()
                 .map(PurchaseInboundItem::getPurchaseInbound)
@@ -108,6 +112,8 @@ public class SupplierStatementSourceService {
             item.setLineNo(i + 1);
             item.setSourceNo(sourceInboundItem.getPurchaseInbound().getInboundNo());
             item.setSourceInboundItemId(sourceInboundItem.getId());
+            item.setMaterialId(sourceInboundItem.getMaterialId());
+            item.setWarehouseId(sourceInboundItem.getWarehouseId());
             item.setMaterialCode(sourceInboundItem.getMaterialCode());
             item.setBrand(sourceInboundItem.getBrand());
             item.setCategory(sourceInboundItem.getCategory());
@@ -136,6 +142,7 @@ public class SupplierStatementSourceService {
         entity.getItems().sort(java.util.Comparator.comparing(SupplierStatementItem::getLineNo));
         return new SourceApplyResult(
                 purchaseAmount,
+                supplierIdentity.id(),
                 supplierIdentity.code(),
                 supplierIdentity.name(),
                 settlementCompany.id(),
@@ -143,28 +150,15 @@ public class SupplierStatementSourceService {
         );
     }
 
-    Set<String> collectOccupiedInboundNos(Long currentStatementId) {
-        org.springframework.data.jpa.domain.Specification<SupplierStatement> spec =
-                com.leo.erp.common.persistence.Specs.notDeleted();
-        if (currentStatementId != null) {
-            spec = spec.and((root, query, cb) -> cb.notEqual(root.get("id"), currentStatementId));
-        }
-        Set<String> occupiedInboundNos = new LinkedHashSet<>();
-        repository.findAll(spec).stream()
-                .flatMap(entity -> entity.getItems().stream())
-                .map(SupplierStatementItem::getSourceNo)
-                .filter(v -> v != null && !v.isBlank())
-                .map(String::trim)
-                .forEach(occupiedInboundNos::add);
-        return occupiedInboundNos;
-    }
-
     private Map<Long, PurchaseInboundItem> loadSourceInboundItemMap(List<SupplierStatementItemRequest> items) {
-        List<Long> sourceInboundItemIds = items.stream()
-                .map(SupplierStatementItemRequest::sourceInboundItemId)
-                .filter(id -> id != null)
-                .distinct()
-                .toList();
+        Set<Long> uniqueSourceItemIds = new LinkedHashSet<>();
+        for (SupplierStatementItemRequest item : items) {
+            Long sourceItemId = item.sourceInboundItemId();
+            if (sourceItemId != null && !uniqueSourceItemIds.add(sourceItemId)) {
+                throw new BusinessException(ErrorCode.VALIDATION_ERROR, "来源采购入库明细ID重复");
+            }
+        }
+        List<Long> sourceInboundItemIds = List.copyOf(uniqueSourceItemIds);
         if (sourceInboundItemIds.isEmpty()) {
             return Map.of();
         }
@@ -175,11 +169,11 @@ public class SupplierStatementSourceService {
     private void validateSourceInbounds(SupplierStatementRequest request,
                                         Map<Long, PurchaseInboundItem> sourceInboundItemMap,
                                         Long currentStatementId) {
-        Set<String> requestedInboundNos = new LinkedHashSet<>();
+        Map<Long, PurchaseInbound> requestedInbounds = new java.util.LinkedHashMap<>();
         for (PurchaseInboundItem item : sourceInboundItemMap.values()) {
             PurchaseInbound inbound = item.getPurchaseInbound();
             DataScopeContext.assertCanAccess(inbound);
-            requestedInboundNos.add(inbound.getInboundNo());
+            requestedInbounds.put(inbound.getId(), inbound);
             BusinessDocumentValidator.requireSameText(
                     request.supplierName(),
                     inbound.getSupplierName(),
@@ -203,12 +197,14 @@ public class SupplierStatementSourceService {
                     && !request.settlementCompanyId().equals(inbound.getSettlementCompanyId())) {
                 throw new BusinessException(ErrorCode.BUSINESS_ERROR, "来源采购入库单存在不同采购结算主体，不能合并生成供应商对账单");
             }
+            requireSameIdentity(request.supplierId(), inbound.getSupplierId(),
+                    "来源采购入库单供应商ID与对账单不一致");
         }
-        if (requestedInboundNos.isEmpty()) {
+        if (requestedInbounds.isEmpty()) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "供应商对账单来源采购入库单不能为空");
         }
         assertCompleteSourceItemCoverage(sourceInboundItemMap.values());
-        assertSourceInboundsNotOccupied(requestedInboundNos, currentStatementId);
+        assertSourceInboundsNotOccupied(requestedInbounds, currentStatementId);
     }
 
     private void assertCompleteSourceItemCoverage(Collection<PurchaseInboundItem> requestedItems) {
@@ -236,18 +232,20 @@ public class SupplierStatementSourceService {
                 && left.getId().equals(right.getId());
     }
 
-    private void assertSourceInboundsNotOccupied(Set<String> requestedInboundNos, Long currentStatementId) {
-        List<SupplierStatement> occupiedStatements =
-                repository.findAllBySourceNosExcludingCurrentStatement(requestedInboundNos, currentStatementId);
-        Set<String> occupiedInboundNos = occupiedStatements.stream()
-                .flatMap(entity -> entity.getItems().stream())
-                .map(SupplierStatementItem::getSourceNo)
-                .filter(v -> v != null && !v.isBlank())
-                .map(String::trim)
-                .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
-        for (String inboundNo : requestedInboundNos) {
-            if (occupiedInboundNos.contains(inboundNo)) {
-                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "来源采购入库单" + inboundNo + "已生成供应商对账单");
+    private void assertSourceInboundsNotOccupied(Map<Long, PurchaseInbound> requestedInbounds,
+                                                 Long currentStatementId) {
+        Set<Long> occupiedInboundIds = toIdSet(
+                repository.findMatchingOccupiedSourceInboundIdsExcludingCurrentStatement(
+                        requestedInbounds.keySet(),
+                        currentStatementId
+                )
+        );
+        for (PurchaseInbound inbound : requestedInbounds.values()) {
+            if (occupiedInboundIds.contains(inbound.getId())) {
+                throw new BusinessException(
+                        ErrorCode.BUSINESS_ERROR,
+                        "来源采购入库单" + inbound.getInboundNo() + "已生成供应商对账单"
+                );
             }
         }
     }
@@ -261,6 +259,10 @@ public class SupplierStatementSourceService {
             if (sourceInboundItem == null) {
                 throw new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行来源采购入库明细不存在");
             }
+            requireSameIdentity(source.materialId(), sourceInboundItem.getMaterialId(),
+                    "第" + lineNo + "行商品ID与来源采购入库明细不一致");
+            requireSameIdentity(source.warehouseId(), sourceInboundItem.getWarehouseId(),
+                    "第" + lineNo + "行仓库ID与来源采购入库明细不一致");
             return sourceInboundItem;
         }
         throw new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行来源采购入库明细不能为空");
@@ -282,6 +284,19 @@ public class SupplierStatementSourceService {
 
     private SupplierIdentity resolveSupplierIdentity(List<PurchaseInbound> inbounds,
                                                      SupplierStatementRequest request) {
+        List<Long> supplierIds = inbounds.stream()
+                .map(PurchaseInbound::getSupplierId)
+                .filter(java.util.Objects::nonNull)
+                .distinct()
+                .toList();
+        if (supplierIds.size() > 1) {
+            throw new BusinessException(
+                    ErrorCode.BUSINESS_ERROR,
+                    "来源采购入库单存在不同供应商ID，不能合并生成供应商对账单"
+            );
+        }
+        Long supplierId = supplierIds.isEmpty() ? null : supplierIds.get(0);
+        requireSameIdentity(request.supplierId(), supplierId, "供应商ID与来源采购入库单不一致");
         List<String> supplierCodes = inbounds.stream()
                 .map(PurchaseInbound::getSupplierCode)
                 .map(this::trimToNull)
@@ -307,11 +322,21 @@ public class SupplierStatementSourceService {
                 .distinct()
                 .toList();
         String supplierName = supplierNames.isEmpty() ? trimToNull(request.supplierName()) : supplierNames.get(0);
-        return new SupplierIdentity(supplierCode, supplierName);
+        return new SupplierIdentity(supplierId, supplierCode, supplierName);
+    }
+
+    private void requireSameIdentity(Long requestedId, Long sourceId, String message) {
+        if (requestedId != null && !requestedId.equals(sourceId)) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, message);
+        }
     }
 
     private String trimToNull(String value) {
         return BusinessDocumentValidator.trimToNull(value);
+    }
+
+    private Set<Long> toIdSet(Collection<Long> ids) {
+        return ids == null ? Set.of() : new LinkedHashSet<>(ids);
     }
 
     private SettlementCompanySnapshot resolveStatementSettlementCompany(List<PurchaseInbound> inbounds) {
@@ -341,25 +366,36 @@ public class SupplierStatementSourceService {
                 inbound.getSettlementMode(),
                 inbound.getTotalWeight(),
                 inbound.getTotalAmount(),
-                inbound.getStatus()
+                inbound.getStatus(),
+                inbound.getSupplierId(),
+                inbound.getWarehouseId()
         );
     }
 
     record SourceApplyResult(
             BigDecimal purchaseAmount,
+            Long supplierId,
             String supplierCode,
             String supplierName,
             Long settlementCompanyId,
             String settlementCompanyName
     ) {
         SourceApplyResult(BigDecimal purchaseAmount,
+                          String supplierCode,
+                          String supplierName,
                           Long settlementCompanyId,
                           String settlementCompanyName) {
-            this(purchaseAmount, null, null, settlementCompanyId, settlementCompanyName);
+            this(purchaseAmount, null, supplierCode, supplierName, settlementCompanyId, settlementCompanyName);
+        }
+
+        SourceApplyResult(BigDecimal purchaseAmount,
+                          Long settlementCompanyId,
+                          String settlementCompanyName) {
+            this(purchaseAmount, null, null, null, settlementCompanyId, settlementCompanyName);
         }
     }
 
-    private record SupplierIdentity(String code, String name) {
+    private record SupplierIdentity(Long id, String code, String name) {
     }
 
     private record SettlementCompanySnapshot(Long id, String name) {

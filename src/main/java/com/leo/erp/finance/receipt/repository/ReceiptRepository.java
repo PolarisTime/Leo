@@ -21,7 +21,7 @@ public interface ReceiptRepository extends JpaRepository<Receipt, Long>, JpaSpec
             select coalesce(sum(receipt.amount), 0)
             from Receipt receipt
             where receipt.deletedFlag = false
-              and receipt.sourceStatementId = :statementId
+              and receipt.sourceCustomerStatementId = :statementId
               and receipt.status = :status
             """)
     BigDecimal sumAmountBySourceStatementIdAndStatus(@Param("statementId") Long statementId, @Param("status") String status);
@@ -30,7 +30,7 @@ public interface ReceiptRepository extends JpaRepository<Receipt, Long>, JpaSpec
             select coalesce(sum(receipt.amount), 0)
             from Receipt receipt
             where receipt.deletedFlag = false
-              and receipt.sourceStatementId = :statementId
+              and receipt.sourceCustomerStatementId = :statementId
               and receipt.status = :status
               and (:currentReceiptId is null or receipt.id <> :currentReceiptId)
             """)

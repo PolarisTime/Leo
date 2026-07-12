@@ -38,8 +38,14 @@ public class InvoiceIssue extends AbstractAuditableEntity {
     @Column(name = "customer_name", nullable = false, length = 128)
     private String customerName;
 
+    @Column(name = "customer_id")
+    private Long customerId;
+
     @Column(name = "project_name", nullable = false, length = 200)
     private String projectName;
+
+    @Column(name = "project_id")
+    private Long projectId;
 
     @Column(name = "settlement_company_id")
     private Long settlementCompanyId;

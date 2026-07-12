@@ -4,12 +4,14 @@ import com.leo.erp.common.support.PrecisionConstants;
 import com.leo.erp.common.support.TradeItemMaterialSupport;
 import com.leo.erp.common.support.TradeMaterialSnapshot;
 import com.leo.erp.common.support.WarehouseSelectionSupport;
+import com.leo.erp.common.support.WarehouseSelectionSupportTestDoubles;
 import com.leo.erp.purchase.inbound.domain.entity.PurchaseInbound;
 import com.leo.erp.purchase.inbound.domain.entity.PurchaseInboundItem;
 import com.leo.erp.purchase.inbound.web.dto.PurchaseInboundItemRequest;
 import com.leo.erp.purchase.order.domain.entity.PurchaseOrder;
 import com.leo.erp.purchase.order.domain.entity.PurchaseOrderItem;
 import org.junit.jupiter.api.Test;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
 import java.util.Map;
@@ -26,10 +28,57 @@ import static org.mockito.Mockito.when;
 class InboundItemMapperTest {
 
     @Test
+    void shouldInheritMaterialAndWarehouseIdentityFromSourcePurchaseOrderItem() {
+        TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
+        WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
+        InboundItemMapper mapper = mapper(materialSupport, warehouseSelectionSupport);
+        when(materialSupport.normalizeBatchNo(any(), eq("B1"), eq(1), eq(true))).thenReturn("B1");
+        when(warehouseSelectionSupport.normalizeWarehouseName("一号库", 1, true)).thenReturn("一号库");
+
+        PurchaseOrder sourceOrder = new PurchaseOrder();
+        sourceOrder.setId(100L);
+        sourceOrder.setOrderNo("PO-001");
+        PurchaseOrderItem sourceOrderItem = new PurchaseOrderItem();
+        sourceOrderItem.setId(201L);
+        sourceOrderItem.setPurchaseOrder(sourceOrder);
+        sourceOrderItem.setMaterialId(301L);
+        sourceOrderItem.setWarehouseId(401L);
+        sourceOrderItem.setMaterialCode("M1");
+        sourceOrderItem.setWarehouseName("一号库");
+
+        PurchaseInboundItemRequest source = new PurchaseInboundItemRequest(
+                null, "M1", "宝钢", "螺纹钢", "HRB400", "18", "12m", "吨",
+                201L, "一号库", "B1", 10, "支",
+                new BigDecimal("0.100"), 1, new BigDecimal("1.000"),
+                new BigDecimal("4000.00"), new BigDecimal("4000.00")
+        );
+        PurchaseInboundItem item = new PurchaseInboundItem();
+        WeightSettlementResult settlement = new WeightSettlementResult(
+                new BigDecimal("1.000"), null,
+                BigDecimal.ZERO.setScale(PrecisionConstants.WEIGHT_SCALE),
+                BigDecimal.ZERO.setScale(2),
+                new BigDecimal("0.100"), new BigDecimal("1.000")
+        );
+
+        mapper.applyItemFields(
+                new PurchaseInbound(), source, item, 1, "M1",
+                new TradeMaterialSnapshot(301L, "M1", true),
+                Map.of(201L, sourceOrderItem),
+                new InboundItemMapper.ItemMappingContext(settlement, "一号库", "理算")
+        );
+
+        assertThat(PurchaseInboundItem.class.getDeclaredFields())
+                .extracting(java.lang.reflect.Field::getName)
+                .contains("materialId", "warehouseId", "batchNoNormalized");
+        assertThat(ReflectionTestUtils.getField(item, "materialId")).isEqualTo(301L);
+        assertThat(ReflectionTestUtils.getField(item, "warehouseId")).isEqualTo(401L);
+    }
+
+    @Test
     void shouldMapBasicFieldsFromRequestToItem() {
         TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
         WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
-        InboundItemMapper mapper = new InboundItemMapper(materialSupport, warehouseSelectionSupport);
+        InboundItemMapper mapper = mapper(materialSupport, warehouseSelectionSupport);
 
         when(materialSupport.normalizeBatchNo(any(), eq("B1"), eq(1), eq(true))).thenReturn("B1");
         when(warehouseSelectionSupport.normalizeWarehouseName("一号库", 1, true)).thenReturn("一号库");
@@ -83,7 +132,7 @@ class InboundItemMapperTest {
     void shouldResolveSourceOrderNoWhenSourceItemLinked() {
         TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
         WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
-        InboundItemMapper mapper = new InboundItemMapper(materialSupport, warehouseSelectionSupport);
+        InboundItemMapper mapper = mapper(materialSupport, warehouseSelectionSupport);
 
         when(materialSupport.normalizeBatchNo(any(), anyString(), anyInt(), anyBoolean())).thenReturn("B1");
         when(warehouseSelectionSupport.normalizeWarehouseName(anyString(), anyInt(), eq(true))).thenReturn("一号库");
@@ -125,7 +174,7 @@ class InboundItemMapperTest {
     void shouldReturnNullSourceOrderNoWhenNoSourceLinked() {
         TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
         WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
-        InboundItemMapper mapper = new InboundItemMapper(materialSupport, warehouseSelectionSupport);
+        InboundItemMapper mapper = mapper(materialSupport, warehouseSelectionSupport);
 
         when(materialSupport.normalizeBatchNo(any(), anyString(), anyInt(), anyBoolean())).thenReturn("B1");
         when(warehouseSelectionSupport.normalizeWarehouseName(anyString(), anyInt(), eq(true))).thenReturn("一号库");
@@ -158,7 +207,7 @@ class InboundItemMapperTest {
     void shouldUseHeaderWarehouseWhenLineWarehouseIsBlank() {
         TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
         WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
-        InboundItemMapper mapper = new InboundItemMapper(materialSupport, warehouseSelectionSupport);
+        InboundItemMapper mapper = mapper(materialSupport, warehouseSelectionSupport);
 
         when(materialSupport.normalizeBatchNo(any(), anyString(), anyInt(), anyBoolean())).thenReturn("B1");
         when(warehouseSelectionSupport.normalizeWarehouseName("默认仓库", 1, true)).thenReturn("默认仓库");
@@ -188,7 +237,7 @@ class InboundItemMapperTest {
     void shouldSetWeighWeightFieldsFromSettlementResult() {
         TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
         WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
-        InboundItemMapper mapper = new InboundItemMapper(materialSupport, warehouseSelectionSupport);
+        InboundItemMapper mapper = mapper(materialSupport, warehouseSelectionSupport);
 
         when(materialSupport.normalizeBatchNo(any(), anyString(), anyInt(), anyBoolean())).thenReturn("B1");
         when(warehouseSelectionSupport.normalizeWarehouseName("一号库", 1, true)).thenReturn("一号库");
@@ -220,7 +269,7 @@ class InboundItemMapperTest {
     void shouldSettlementModeFallbackToHeaderThenDefault() {
         TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
         WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
-        InboundItemMapper mapper = new InboundItemMapper(materialSupport, warehouseSelectionSupport);
+        InboundItemMapper mapper = mapper(materialSupport, warehouseSelectionSupport);
 
         when(materialSupport.normalizeBatchNo(any(), anyString(), anyInt(), anyBoolean())).thenReturn("B1");
         when(warehouseSelectionSupport.normalizeWarehouseName("一号库", 1, true)).thenReturn("一号库");
@@ -250,7 +299,7 @@ class InboundItemMapperTest {
     void shouldUseLineSettlementModeWhenPresentAndHeaderWhenLineBlank() {
         TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
         WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
-        InboundItemMapper mapper = new InboundItemMapper(materialSupport, warehouseSelectionSupport);
+        InboundItemMapper mapper = mapper(materialSupport, warehouseSelectionSupport);
 
         when(materialSupport.normalizeBatchNo(any(), anyString(), anyInt(), anyBoolean())).thenReturn("B1");
         when(warehouseSelectionSupport.normalizeWarehouseName("一号库", 1, true)).thenReturn("一号库");
@@ -275,7 +324,7 @@ class InboundItemMapperTest {
     void shouldClearSettlementCompanyWhenSourceItemMissingOrDetached() {
         TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
         WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
-        InboundItemMapper mapper = new InboundItemMapper(materialSupport, warehouseSelectionSupport);
+        InboundItemMapper mapper = mapper(materialSupport, warehouseSelectionSupport);
 
         when(materialSupport.normalizeBatchNo(any(), anyString(), anyInt(), anyBoolean())).thenReturn("B1");
         when(warehouseSelectionSupport.normalizeWarehouseName("一号库", 1, true)).thenReturn("一号库");
@@ -302,7 +351,7 @@ class InboundItemMapperTest {
     void shouldCopySettlementCompanyFromLinkedSourceOrder() {
         TradeItemMaterialSupport materialSupport = mock(TradeItemMaterialSupport.class);
         WarehouseSelectionSupport warehouseSelectionSupport = mock(WarehouseSelectionSupport.class);
-        InboundItemMapper mapper = new InboundItemMapper(materialSupport, warehouseSelectionSupport);
+        InboundItemMapper mapper = mapper(materialSupport, warehouseSelectionSupport);
 
         when(materialSupport.normalizeBatchNo(any(), anyString(), anyInt(), anyBoolean())).thenReturn("B1");
         when(warehouseSelectionSupport.normalizeWarehouseName("一号库", 1, true)).thenReturn("一号库");
@@ -356,5 +405,11 @@ class InboundItemMapperTest {
 
     private TradeMaterialSnapshot material() {
         return new TradeMaterialSnapshot("M1", Boolean.FALSE);
+    }
+
+    private InboundItemMapper mapper(TradeItemMaterialSupport materialSupport,
+                                     WarehouseSelectionSupport warehouseSelectionSupport) {
+        WarehouseSelectionSupportTestDoubles.stubWarehouseResolution(warehouseSelectionSupport);
+        return new InboundItemMapper(materialSupport, warehouseSelectionSupport);
     }
 }

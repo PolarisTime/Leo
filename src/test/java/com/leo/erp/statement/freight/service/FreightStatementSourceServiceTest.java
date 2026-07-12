@@ -8,15 +8,9 @@ import com.leo.erp.logistics.bill.domain.entity.FreightBill;
 import com.leo.erp.logistics.bill.domain.entity.FreightBillItem;
 import com.leo.erp.logistics.bill.repository.FreightBillRepository;
 import com.leo.erp.statement.freight.domain.entity.FreightStatement;
-import com.leo.erp.statement.freight.domain.entity.FreightStatementItem;
 import com.leo.erp.statement.freight.repository.FreightStatementRepository;
 import com.leo.erp.statement.freight.web.dto.FreightStatementCandidateResponse;
-import jakarta.persistence.criteria.CriteriaBuilder;
-import jakarta.persistence.criteria.CriteriaQuery;
-import jakarta.persistence.criteria.Predicate;
-import jakarta.persistence.criteria.Root;
 import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentCaptor;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
@@ -32,6 +26,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.mockingDetails;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -42,7 +37,6 @@ class FreightStatementSourceServiceTest {
         FreightStatementRepository repository = mock(FreightStatementRepository.class);
         FreightBillRepository freightBillRepository = mock(FreightBillRepository.class);
         FreightBill sourceBill = sourceBill();
-        when(repository.findAll(any(Specification.class))).thenReturn(List.of());
         when(freightBillRepository.findAll(any(Specification.class), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(sourceBill)));
 
@@ -58,35 +52,30 @@ class FreightStatementSourceServiceTest {
         assertThat(candidates.get(0).carrierName()).isEqualTo("物流甲");
         assertThat(candidates.get(0).customerName()).isEqualTo("客户甲");
         assertThat(candidates.get(0).status()).isEqualTo(StatusConstants.AUDITED);
+        assertThat(invokedMethodNames(repository))
+                .contains("findOccupiedSourceFreightBillIdsExcludingCurrentStatement")
+                .doesNotContain("findAll");
     }
 
     @Test
-    void shouldCollectOccupiedBillNosWithCurrentStatementAndIgnoreBlankSources() {
-        FreightStatementRepository repository = mock(FreightStatementRepository.class);
-        FreightStatement occupied = new FreightStatement();
-        FreightStatementItem blankItem = new FreightStatementItem();
-        blankItem.setSourceNo(" ");
-        FreightStatementItem nullItem = new FreightStatementItem();
-        nullItem.setSourceNo(null);
-        FreightStatementItem sourceItem = new FreightStatementItem();
-        sourceItem.setSourceNo(" FB-001 ");
-        FreightStatementItem duplicateItem = new FreightStatementItem();
-        duplicateItem.setSourceNo("FB-001");
-        occupied.getItems().addAll(List.of(blankItem, nullItem, sourceItem, duplicateItem));
-        when(repository.findAll(any(Specification.class))).thenReturn(List.of(occupied));
-        FreightStatementSourceService service = new FreightStatementSourceService(
-                repository,
-                mock(FreightBillRepository.class)
-        );
+    void shouldUseStableFreightBillIdWhenSourceNumberSnapshotChanged() {
+        FreightStatementRepository repository = repositoryWithOccupiedFreightBillId(1L);
+        FreightBillRepository freightBillRepository = mock(FreightBillRepository.class);
+        FreightBill sourceBill = sourceBillWithItem("FB-RENAMED");
+        when(freightBillRepository.findByIdInAndDeletedFlagFalse(Set.of(1L))).thenReturn(List.of(sourceBill));
+        FreightStatementSourceService service = new FreightStatementSourceService(repository, freightBillRepository);
 
-        Set<String> occupiedBillNos = service.collectOccupiedBillNos(99L);
-
-        assertThat(occupiedBillNos).containsExactly("FB-001");
-        assertCurrentStatementExclusionPredicateWasBuilt(repository);
+        assertThatThrownBy(() -> service.applyItems(
+                new FreightStatement(),
+                command(null, null, null, directItem(1L, 11L)),
+                () -> 1000L
+        ))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("来源物流单FB-RENAMED已生成物流对账单");
     }
 
     @Test
-    void shouldApplySourceBillItemBySalesOutboundItemIdAndAllowBlankSettlementCompany() {
+    void shouldRejectSalesOutboundItemFallbackWithoutDirectFreightSourceIds() {
         FreightStatementRepository repository = mock(FreightStatementRepository.class);
         FreightBillRepository freightBillRepository = mock(FreightBillRepository.class);
         FreightBill sourceBill = sourceBillWithItem("FB-001");
@@ -96,27 +85,51 @@ class FreightStatementSourceServiceTest {
         item.setSourceSalesOutboundItemId(21L);
         item.setMaterialCode("OTHER");
         when(freightBillRepository.findByBillNoInAndDeletedFlagFalse(Set.of("FB-001"))).thenReturn(List.of(sourceBill));
-        when(repository.findAllBySourceNosExcludingCurrentStatement(Set.of("FB-001"), 99L)).thenReturn(List.of());
-        FreightStatement entity = new FreightStatement();
-        entity.setId(99L);
-        AtomicLong nextId = new AtomicLong(1000L);
         FreightStatementSourceService service = new FreightStatementSourceService(repository, freightBillRepository);
 
-        FreightStatementSourceService.SourceApplyResult result = service.applyItems(
-                entity,
+        assertThatThrownBy(() -> service.applyItems(
+                new FreightStatement(),
                 command(1L, null, null, itemBySourceSalesOutboundItemId(" FB-001 ", 21L)),
-                nextId::getAndIncrement
+                () -> 1000L
+        ))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("第1行来源物流单ID不能为空");
+    }
+
+    @Test
+    void shouldResolveDirectSourceIdsAndCopyStableMasterIdentity() {
+        FreightStatementRepository repository = mock(FreightStatementRepository.class);
+        FreightBillRepository freightBillRepository = mock(FreightBillRepository.class);
+        FreightBill sourceBill = sourceBillWithItem("FB-001");
+        sourceBill.setCarrierId(5L);
+        FreightBillItem sourceItem = sourceBill.getItems().get(0);
+        sourceItem.setCustomerId(101L);
+        sourceItem.setProjectId(102L);
+        sourceItem.setMaterialId(103L);
+        sourceItem.setWarehouseId(104L);
+        sourceItem.setBatchNoNormalized("B-001");
+        when(freightBillRepository.findByIdInAndDeletedFlagFalse(Set.of(1L))).thenReturn(List.of(sourceBill));
+        FreightStatementSourceService service = new FreightStatementSourceService(repository, freightBillRepository);
+        FreightStatementItemCommand commandItem = new FreightStatementItemCommand(
+                null, "FB-OLD-SNAPSHOT", null, null, null, "客户甲", "项目甲", "M-001", "螺纹钢",
+                "HRB400", "钢材", "钢", "10", "9m", 4, "件", new BigDecimal("0.5"), 2,
+                "B-001", null, "仓库甲", 1L, 11L, 101L, 102L, 103L, 104L
         );
 
-        assertThat(result.totalWeight()).isEqualByComparingTo("2.00000000");
-        assertThat(result.totalFreight()).isEqualByComparingTo("100.00");
-        assertThat(entity.getSettlementCompanyId()).isNull();
-        assertThat(entity.getSettlementCompanyName()).isNull();
-        assertThat(entity.getItems()).hasSize(1);
-        assertThat(entity.getItems().get(0).getId()).isEqualTo(1000L);
-        assertThat(entity.getItems().get(0).getSourceNo()).isEqualTo("FB-001");
-        assertThat(entity.getItems().get(0).getSourceSalesOutboundItemId()).isEqualTo(21L);
-        assertThat(entity.getItems().get(0).getMaterialCode()).isEqualTo("M-001");
+        FreightStatement entity = new FreightStatement();
+        service.applyItems(entity, command(1L, "物流主体A", null, commandItem), () -> 1000L);
+
+        assertThat(entity.getCarrierId()).isEqualTo(5L);
+        assertThat(entity.getItems()).singleElement().satisfies(item -> {
+            assertThat(item.getSourceFreightBillId()).isEqualTo(1L);
+            assertThat(item.getSourceFreightBillItemId()).isEqualTo(11L);
+            assertThat(item.getSourceNo()).isEqualTo("FB-001");
+            assertThat(item.getCustomerId()).isEqualTo(101L);
+            assertThat(item.getProjectId()).isEqualTo(102L);
+            assertThat(item.getMaterialId()).isEqualTo(103L);
+            assertThat(item.getWarehouseId()).isEqualTo(104L);
+            assertThat(item.getBatchNo()).isEqualTo("B-001");
+        });
     }
 
     @Test
@@ -125,7 +138,6 @@ class FreightStatementSourceServiceTest {
         FreightBillRepository freightBillRepository = mock(FreightBillRepository.class);
         FreightBill sourceBill = sourceBillWithItem("FB-001");
         when(freightBillRepository.findByBillNoInAndDeletedFlagFalse(Set.of("FB-001"))).thenReturn(List.of(sourceBill));
-        when(repository.findAllBySourceNosExcludingCurrentStatement(Set.of("FB-001"), null)).thenReturn(List.of());
         FreightStatementSourceService service = new FreightStatementSourceService(repository, freightBillRepository);
 
         assertThatThrownBy(() -> service.applyItems(
@@ -140,7 +152,7 @@ class FreightStatementSourceServiceTest {
                 () -> 1000L
         ))
                 .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("第2行来源物流单不存在");
+                .hasMessageContaining("第1行来源物流单ID不能为空");
     }
 
     @Test
@@ -149,7 +161,6 @@ class FreightStatementSourceServiceTest {
         FreightBillRepository freightBillRepository = mock(FreightBillRepository.class);
         FreightBill sourceBill = sourceBillWithItem("FB-001");
         when(freightBillRepository.findByBillNoInAndDeletedFlagFalse(Set.of("FB-001"))).thenReturn(List.of(sourceBill));
-        when(repository.findAllBySourceNosExcludingCurrentStatement(Set.of("FB-001"), null)).thenReturn(List.of());
         FreightStatementSourceService service = new FreightStatementSourceService(repository, freightBillRepository);
 
         assertThatThrownBy(() -> service.applyItems(
@@ -164,29 +175,20 @@ class FreightStatementSourceServiceTest {
                 () -> 1000L
         ))
                 .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("第2行来源物流单不存在");
+                .hasMessageContaining("第1行来源物流单ID不能为空");
     }
 
     @Test
-    void shouldApplyWhenSettlementCompanyMatchesAndOccupiedSourcesAreBlankOrDifferent() {
+    void shouldApplyWhenStableFreightBillIdIsNotOccupied() {
         FreightStatementRepository repository = mock(FreightStatementRepository.class);
         FreightBillRepository freightBillRepository = mock(FreightBillRepository.class);
         FreightBill sourceBill = sourceBillWithItem("FB-001");
-        FreightStatement occupied = new FreightStatement();
-        FreightStatementItem nullItem = new FreightStatementItem();
-        nullItem.setSourceNo(null);
-        FreightStatementItem blankItem = new FreightStatementItem();
-        blankItem.setSourceNo(" ");
-        FreightStatementItem otherItem = new FreightStatementItem();
-        otherItem.setSourceNo("FB-OTHER");
-        occupied.getItems().addAll(List.of(nullItem, blankItem, otherItem));
-        when(freightBillRepository.findByBillNoInAndDeletedFlagFalse(Set.of("FB-001"))).thenReturn(List.of(sourceBill));
-        when(repository.findAllBySourceNosExcludingCurrentStatement(Set.of("FB-001"), null)).thenReturn(List.of(occupied));
+        when(freightBillRepository.findByIdInAndDeletedFlagFalse(Set.of(1L))).thenReturn(List.of(sourceBill));
         FreightStatementSourceService service = new FreightStatementSourceService(repository, freightBillRepository);
 
         FreightStatementSourceService.SourceApplyResult result = service.applyItems(
                 new FreightStatement(),
-                command(1L, "物流主体A", null, itemByFields("FB-001")),
+                command(1L, "物流主体A", null, directItem(1L, 11L)),
                 () -> 1000L
         );
 
@@ -194,7 +196,7 @@ class FreightStatementSourceServiceTest {
     }
 
     @Test
-    void shouldMatchSourceBillItemWhenNullableTextFieldsAreEmptyOnBothSides() {
+    void shouldRejectFieldGuessingWithoutDirectFreightSourceIds() {
         FreightStatementRepository repository = mock(FreightStatementRepository.class);
         FreightBillRepository freightBillRepository = mock(FreightBillRepository.class);
         FreightBill sourceBill = sourceBillWithItem("FB-001");
@@ -203,18 +205,15 @@ class FreightStatementSourceServiceTest {
         sourceItem.setBatchNo(null);
         sourceItem.setWarehouseName(null);
         when(freightBillRepository.findByBillNoInAndDeletedFlagFalse(Set.of("FB-001"))).thenReturn(List.of(sourceBill));
-        when(repository.findAllBySourceNosExcludingCurrentStatement(Set.of("FB-001"), null)).thenReturn(List.of());
-        FreightStatement entity = new FreightStatement();
         FreightStatementSourceService service = new FreightStatementSourceService(repository, freightBillRepository);
 
-        service.applyItems(
-                entity,
+        assertThatThrownBy(() -> service.applyItems(
+                new FreightStatement(),
                 command(null, null, null, itemByFields("FB-001", null, null, null, 4)),
                 () -> 1000L
-        );
-
-        assertThat(entity.getItems()).hasSize(1);
-        assertThat(entity.getItems().get(0).getMaterialCode()).isNull();
+        ))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("第1行来源物流单ID不能为空");
     }
 
     @Test
@@ -224,7 +223,6 @@ class FreightStatementSourceServiceTest {
         FreightBill sourceBill = sourceBillWithItem("FB-001");
         sourceBill.getItems().get(0).setSourceSalesOutboundItemId(21L);
         when(freightBillRepository.findByBillNoInAndDeletedFlagFalse(Set.of("FB-001"))).thenReturn(List.of(sourceBill));
-        when(repository.findAllBySourceNosExcludingCurrentStatement(Set.of("FB-001"), null)).thenReturn(List.of());
         FreightStatementSourceService service = new FreightStatementSourceService(repository, freightBillRepository);
 
         assertThatThrownBy(() -> service.applyItems(
@@ -233,7 +231,7 @@ class FreightStatementSourceServiceTest {
                 () -> 1000L
         ))
                 .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("第1行来源物流单明细不存在");
+                .hasMessageContaining("第1行来源物流单ID不能为空");
     }
 
     @Test
@@ -242,7 +240,6 @@ class FreightStatementSourceServiceTest {
         FreightBillRepository freightBillRepository = mock(FreightBillRepository.class);
         FreightBill sourceBill = sourceBillWithItem("FB-001");
         when(freightBillRepository.findByBillNoInAndDeletedFlagFalse(Set.of("FB-001"))).thenReturn(List.of(sourceBill));
-        when(repository.findAllBySourceNosExcludingCurrentStatement(Set.of("FB-001"), null)).thenReturn(List.of());
         FreightStatementSourceService service = new FreightStatementSourceService(repository, freightBillRepository);
 
         assertThatThrownBy(() -> service.applyItems(
@@ -251,7 +248,42 @@ class FreightStatementSourceServiceTest {
                 () -> 1000L
         ))
                 .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("第1行来源物流单明细不存在");
+                .hasMessageContaining("第1行来源物流单ID不能为空");
+    }
+
+    @Test
+    void shouldRejectMissingDirectFreightBillItemId() {
+        FreightStatementRepository repository = mock(FreightStatementRepository.class);
+        FreightBillRepository freightBillRepository = mock(FreightBillRepository.class);
+        FreightBill sourceBill = sourceBillWithItem("FB-001");
+        when(freightBillRepository.findByIdInAndDeletedFlagFalse(Set.of(1L))).thenReturn(List.of(sourceBill));
+        FreightStatementSourceService service = new FreightStatementSourceService(repository, freightBillRepository);
+
+        assertThatThrownBy(() -> service.applyItems(
+                new FreightStatement(),
+                command(null, null, null, directItem(1L, null)),
+                () -> 1000L
+        ))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("第1行来源物流单明细ID不能为空");
+    }
+
+    @Test
+    void shouldRejectDuplicateSourceFreightBillItemIds() {
+        FreightStatementRepository repository = mock(FreightStatementRepository.class);
+        FreightBillRepository freightBillRepository = mock(FreightBillRepository.class);
+        FreightBill sourceBill = sourceBillWithItem("FB-001");
+        when(freightBillRepository.findByIdInAndDeletedFlagFalse(Set.of(1L))).thenReturn(List.of(sourceBill));
+        FreightStatementSourceService service = new FreightStatementSourceService(repository, freightBillRepository);
+        AtomicLong nextId = new AtomicLong(1000L);
+
+        assertThatThrownBy(() -> service.applyItems(
+                new FreightStatement(),
+                command(null, null, null, directItem(1L, 11L), directItem(1L, 11L)),
+                nextId::getAndIncrement
+        ))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("来源物流单明细ID重复");
     }
 
     @Test
@@ -259,7 +291,7 @@ class FreightStatementSourceServiceTest {
         FreightBillRepository freightBillRepository = mock(FreightBillRepository.class);
         FreightBill sourceBill = sourceBillWithItem("FB-001");
         sourceBill.setSettlementCompanyId(2L);
-        when(freightBillRepository.findByBillNoInAndDeletedFlagFalse(Set.of("FB-001"))).thenReturn(List.of(sourceBill));
+        when(freightBillRepository.findByIdInAndDeletedFlagFalse(Set.of(1L))).thenReturn(List.of(sourceBill));
         FreightStatementSourceService service = new FreightStatementSourceService(
                 mock(FreightStatementRepository.class),
                 freightBillRepository
@@ -267,7 +299,7 @@ class FreightStatementSourceServiceTest {
 
         assertThatThrownBy(() -> service.applyItems(
                 new FreightStatement(),
-                command(1L, "物流主体A", null, itemByFields("FB-001")),
+                command(1L, "物流主体A", null, directItem(1L, 11L)),
                 () -> 1000L
         ))
                 .isInstanceOf(BusinessException.class)
@@ -283,17 +315,16 @@ class FreightStatementSourceServiceTest {
         firstBill.setSettlementCompanyName("物流主体A");
         FreightBill secondBill = sourceBillWithItem("FB-002");
         secondBill.setId(2L);
+        secondBill.getItems().get(0).setId(12L);
         secondBill.setSettlementCompanyId(null);
         secondBill.setSettlementCompanyName("物流主体B");
-        when(freightBillRepository.findByBillNoInAndDeletedFlagFalse(new LinkedHashSet<>(List.of("FB-001", "FB-002"))))
+        when(freightBillRepository.findByIdInAndDeletedFlagFalse(new LinkedHashSet<>(List.of(1L, 2L))))
                 .thenReturn(List.of(firstBill, secondBill));
-        when(repository.findAllBySourceNosExcludingCurrentStatement(new LinkedHashSet<>(List.of("FB-001", "FB-002")), null))
-                .thenReturn(List.of());
         FreightStatementSourceService service = new FreightStatementSourceService(repository, freightBillRepository);
 
         assertThatThrownBy(() -> service.applyItems(
                 new FreightStatement(),
-                command(null, null, null, itemByFields("FB-001"), itemByFields("FB-002")),
+                command(null, null, null, directItem(1L, 11L), directItem(2L, 12L)),
                 () -> 1000L
         ))
                 .isInstanceOf(BusinessException.class)
@@ -315,21 +346,20 @@ class FreightStatementSourceServiceTest {
         return bill;
     }
 
-    @SuppressWarnings("unchecked")
-    private void assertCurrentStatementExclusionPredicateWasBuilt(FreightStatementRepository repository) {
-        ArgumentCaptor<Specification<FreightStatement>> captor = ArgumentCaptor.forClass(Specification.class);
-        verify(repository).findAll(captor.capture());
-        Root<FreightStatement> root = mock(Root.class);
-        CriteriaQuery<?> query = mock(CriteriaQuery.class);
-        CriteriaBuilder criteriaBuilder = mock(CriteriaBuilder.class);
-        Predicate predicate = mock(Predicate.class);
-        when(root.get("deletedFlag")).thenReturn(mock(jakarta.persistence.criteria.Path.class));
-        when(root.get("id")).thenReturn(mock(jakarta.persistence.criteria.Path.class));
-        when(criteriaBuilder.isFalse(any())).thenReturn(predicate);
-        when(criteriaBuilder.notEqual(any(), any())).thenReturn(predicate);
-        when(criteriaBuilder.and(any(Predicate.class), any(Predicate.class))).thenReturn(predicate);
+    private FreightStatementRepository repositoryWithOccupiedFreightBillId(Long occupiedFreightBillId) {
+        return mock(FreightStatementRepository.class, invocation -> {
+            if ("findMatchingOccupiedSourceFreightBillIdsExcludingCurrentStatement"
+                    .equals(invocation.getMethod().getName())) {
+                return List.of(occupiedFreightBillId);
+            }
+            return org.mockito.Mockito.RETURNS_DEFAULTS.answer(invocation);
+        });
+    }
 
-        assertThat(captor.getValue().toPredicate(root, query, criteriaBuilder)).isSameAs(predicate);
+    private List<String> invokedMethodNames(FreightStatementRepository repository) {
+        return mockingDetails(repository).getInvocations().stream()
+                .map(invocation -> invocation.getMethod().getName())
+                .toList();
     }
 
     private FreightStatementCommand command(Long settlementCompanyId,
@@ -413,6 +443,38 @@ class FreightStatementSourceServiceTest {
                 "B-001",
                 null,
                 "仓库甲"
+        );
+    }
+
+    private FreightStatementItemCommand directItem(Long sourceFreightBillId, Long sourceFreightBillItemId) {
+        return new FreightStatementItemCommand(
+                null,
+                "FB-SNAPSHOT",
+                null,
+                null,
+                null,
+                "客户甲",
+                "项目甲",
+                "M-001",
+                "螺纹钢",
+                "HRB400",
+                "钢材",
+                "钢",
+                "10",
+                "9m",
+                4,
+                "件",
+                new BigDecimal("0.5"),
+                2,
+                "B-001",
+                null,
+                "仓库甲",
+                sourceFreightBillId,
+                sourceFreightBillItemId,
+                null,
+                null,
+                null,
+                null
         );
     }
 

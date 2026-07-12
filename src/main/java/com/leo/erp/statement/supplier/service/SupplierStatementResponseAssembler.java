@@ -37,7 +37,8 @@ public class SupplierStatementResponseAssembler {
                 response.status(),
                 response.deletedFlag(),
                 response.remark(),
-                entity.getItems().stream().map(this::toItemResponse).toList()
+                entity.getItems().stream().map(this::toItemResponse).toList(),
+                entity.getSupplierId()
         );
     }
 
@@ -64,7 +65,10 @@ public class SupplierStatementResponseAssembler {
                 item.getWeightAdjustmentTon(),
                 item.getWeightAdjustmentAmount(),
                 item.getUnitPrice(),
-                item.getAmount()
+                item.getAmount(),
+                item.getMaterialId(),
+                item.getWarehouseId(),
+                item.getBatchNoNormalized()
         );
     }
 }

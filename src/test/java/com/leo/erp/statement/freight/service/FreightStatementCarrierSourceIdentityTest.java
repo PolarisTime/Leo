@@ -25,9 +25,9 @@ class FreightStatementCarrierSourceIdentityTest {
     void shouldInheritCarrierCodeAndNameFromSourceFreightBill() {
         FreightBill sourceBill = sourceBill(1L, "FB-001", "CR-001", "物流甲", 11L);
         FreightStatement entity = new FreightStatement();
-        FreightStatementSourceService service = service(List.of(sourceBill), new LinkedHashSet<>(List.of("FB-001")));
+        FreightStatementSourceService service = service(List.of(sourceBill), new LinkedHashSet<>(List.of(1L)));
 
-        service.applyItems(entity, command(null, "物流甲", item("FB-001", 11L)), () -> 1000L);
+        service.applyItems(entity, command(null, "物流甲", item(1L, 11L)), () -> 1000L);
 
         assertThat(entity.getCarrierCode()).isEqualTo("CR-001");
         assertThat(entity.getCarrierName()).isEqualTo("物流甲");
@@ -37,12 +37,12 @@ class FreightStatementCarrierSourceIdentityTest {
     void shouldRejectSameCarrierNameWithDifferentStableCodes() {
         FreightBill first = sourceBill(1L, "FB-001", "CR-001", "同名物流", 11L);
         FreightBill second = sourceBill(2L, "FB-002", "CR-002", "同名物流", 22L);
-        LinkedHashSet<String> billNos = new LinkedHashSet<>(List.of("FB-001", "FB-002"));
-        FreightStatementSourceService service = service(List.of(first, second), billNos);
+        LinkedHashSet<Long> billIds = new LinkedHashSet<>(List.of(1L, 2L));
+        FreightStatementSourceService service = service(List.of(first, second), billIds);
 
         assertThatThrownBy(() -> service.applyItems(
                 new FreightStatement(),
-                command(null, "同名物流", item("FB-001", 11L), item("FB-002", 22L)),
+                command(null, "同名物流", item(1L, 11L), item(2L, 22L)),
                 () -> 1000L
         ))
                 .isInstanceOf(BusinessException.class)
@@ -52,22 +52,21 @@ class FreightStatementCarrierSourceIdentityTest {
     @Test
     void shouldRejectRequestedCarrierCodeThatDiffersFromSource() {
         FreightBill sourceBill = sourceBill(1L, "FB-001", "CR-001", "物流甲", 11L);
-        FreightStatementSourceService service = service(List.of(sourceBill), new LinkedHashSet<>(List.of("FB-001")));
+        FreightStatementSourceService service = service(List.of(sourceBill), new LinkedHashSet<>(List.of(1L)));
 
         assertThatThrownBy(() -> service.applyItems(
                 new FreightStatement(),
-                command("CR-002", "物流甲", item("FB-001", 11L)),
+                command("CR-002", "物流甲", item(1L, 11L)),
                 () -> 1000L
         ))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("物流商编码与来源物流单不一致");
     }
 
-    private FreightStatementSourceService service(List<FreightBill> bills, LinkedHashSet<String> billNos) {
+    private FreightStatementSourceService service(List<FreightBill> bills, LinkedHashSet<Long> billIds) {
         FreightStatementRepository statementRepository = mock(FreightStatementRepository.class);
         FreightBillRepository billRepository = mock(FreightBillRepository.class);
-        when(billRepository.findByBillNoInAndDeletedFlagFalse(billNos)).thenReturn(bills);
-        when(statementRepository.findAllBySourceNosExcludingCurrentStatement(billNos, null)).thenReturn(List.of());
+        when(billRepository.findByIdInAndDeletedFlagFalse(billIds)).thenReturn(bills);
         return new FreightStatementSourceService(statementRepository, billRepository);
     }
 
@@ -94,11 +93,11 @@ class FreightStatementCarrierSourceIdentityTest {
         );
     }
 
-    private FreightStatementItemCommand item(String billNo, Long sourceItemId) {
+    private FreightStatementItemCommand item(Long billId, Long sourceItemId) {
         return new FreightStatementItemCommand(
                 null,
-                billNo,
-                sourceItemId,
+                "FB-SNAPSHOT",
+                null,
                 null,
                 null,
                 "客户甲",
@@ -116,7 +115,13 @@ class FreightStatementCarrierSourceIdentityTest {
                 1,
                 "B-001",
                 null,
-                "仓库甲"
+                "仓库甲",
+                billId,
+                sourceItemId,
+                null,
+                null,
+                null,
+                null
         );
     }
 

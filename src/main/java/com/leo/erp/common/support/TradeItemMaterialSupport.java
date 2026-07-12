@@ -6,6 +6,8 @@ import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.service.BusinessNumberAllocator;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.Collection;
 import java.time.Duration;
@@ -17,6 +19,7 @@ import java.util.Objects;
 @Component
 public class TradeItemMaterialSupport implements RedisCacheHealthCheck {
 
+    private static final Logger log = LoggerFactory.getLogger(TradeItemMaterialSupport.class);
     private static final String MATERIAL_CACHE_KEY = "leo:material:all";
     private static final Duration MATERIAL_CACHE_TTL = Duration.ofMinutes(10);
     private static final TypeReference<List<TradeMaterialSnapshot>> MATERIAL_LIST_TYPE = new TypeReference<>() { };
@@ -79,6 +82,27 @@ public class TradeItemMaterialSupport implements RedisCacheHealthCheck {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "商品不存在: " + missingCodes.get(0));
         }
         return materialMap;
+    }
+
+    public TradeMaterialSnapshot resolveMaterial(Long materialId, String materialCode, int lineNo) {
+        String normalizedCode = normalizeMaterialCode(materialCode, lineNo);
+        if (materialId != null) {
+            TradeMaterialSnapshot resolved = loadActiveMaterialsFromCatalog().stream()
+                    .filter(material -> materialId.equals(material.materialId()))
+                    .findFirst()
+                    .orElseThrow(() -> new BusinessException(
+                            ErrorCode.BUSINESS_ERROR,
+                            "第" + lineNo + "行商品不存在或已停用"
+                    ));
+            if (!normalizedCode.equals(normalizeOptionalMaterialCode(resolved.materialCode()))) {
+                throw new BusinessException(ErrorCode.VALIDATION_ERROR,
+                        "第" + lineNo + "行商品ID与编码不一致");
+            }
+            return resolved;
+        }
+
+        log.warn("identity_fallback module=trade-item field=materialId line={} reason=material-code", lineNo);
+        return loadMaterialMap(List.of(normalizedCode)).get(normalizedCode);
     }
 
     public String normalizeMaterialCode(String materialCode, int lineNo) {

@@ -4,6 +4,8 @@ import com.leo.erp.sales.order.domain.entity.SalesOrder;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import java.util.Collection;
 import java.util.List;
@@ -21,4 +23,20 @@ public interface SalesOrderRepository extends JpaRepository<SalesOrder, Long>, J
 
     @EntityGraph(attributePaths = "items")
     Optional<SalesOrder> findByIdAndDeletedFlagFalse(Long id);
+
+    @EntityGraph(attributePaths = "items")
+    @Query("""
+            select distinct salesOrder
+            from SalesOrder salesOrder
+            where salesOrder.deletedFlag = false
+              and exists (
+                    select 1
+                    from SalesOrderItem item
+                    where item.salesOrder = salesOrder
+                      and item.id in :sourceItemIds
+              )
+            """)
+    List<SalesOrder> findAllWithItemsBySourceItemIds(
+            @Param("sourceItemIds") Collection<Long> sourceItemIds
+    );
 }

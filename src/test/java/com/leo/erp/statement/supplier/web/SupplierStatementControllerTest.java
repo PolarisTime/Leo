@@ -1,6 +1,7 @@
 package com.leo.erp.statement.supplier.web;
 
 import com.leo.erp.common.api.ApiResponse;
+import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.api.PageResponse;
 import com.leo.erp.common.web.dto.StatusUpdateRequest;
@@ -9,6 +10,7 @@ import com.leo.erp.statement.supplier.web.dto.SupplierStatementCandidateResponse
 import com.leo.erp.statement.supplier.web.dto.SupplierStatementRequest;
 import com.leo.erp.statement.supplier.web.dto.SupplierStatementResponse;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 
@@ -56,10 +58,15 @@ class SupplierStatementControllerTest {
         PageQuery query = new PageQuery(0, 20, null, null);
         when(supplierStatementService.page(any(), any())).thenReturn(page);
 
-        ApiResponse<PageResponse<SupplierStatementResponse>> response = controller.page(query, "test", "supplier", 7L, "active", null, null);
+        ApiResponse<PageResponse<SupplierStatementResponse>> response = controller.page(
+                query, "test", 101L, "supplier", 7L, "active", null, null
+        );
 
         assertThat(response.code()).isEqualTo(0);
         assertThat(response.data().content()).hasSize(1);
+        ArgumentCaptor<PageFilter> filterCaptor = ArgumentCaptor.forClass(PageFilter.class);
+        verify(supplierStatementService).page(eq(query), filterCaptor.capture());
+        assertThat(filterCaptor.getValue().supplierId()).isEqualTo(101L);
     }
 
     @Test
@@ -69,10 +76,16 @@ class SupplierStatementControllerTest {
         PageQuery query = new PageQuery(0, 20, null, null);
         when(supplierStatementService.candidatePage(any(), any())).thenReturn(page);
 
-        ApiResponse<PageResponse<SupplierStatementCandidateResponse>> response = controller.candidates(query, "test", "supplier", 7L, null, null);
+        ApiResponse<PageResponse<SupplierStatementCandidateResponse>> response = controller.candidates(
+                query, "test", 101L, "supplier", 7L, null, null, 201L
+        );
 
         assertThat(response.code()).isEqualTo(0);
         assertThat(response.data().content()).hasSize(1);
+        ArgumentCaptor<PageFilter> filterCaptor = ArgumentCaptor.forClass(PageFilter.class);
+        verify(supplierStatementService).candidatePage(eq(query), filterCaptor.capture());
+        assertThat(filterCaptor.getValue().supplierId()).isEqualTo(101L);
+        assertThat(filterCaptor.getValue().currentRecordId()).isEqualTo(201L);
     }
 
     @Test

@@ -100,7 +100,10 @@ class SalesOrderProtectedUpdatePolicyTest {
         assertRejected(order, "orderNo", requestWith(order, StatusConstants.DRAFT, builder -> builder.orderNo = "SO-CHANGED"));
         assertRejected(order, "purchaseInboundNo", requestWith(order, StatusConstants.DRAFT, builder -> builder.purchaseInboundNo = "PI-CHANGED"));
         assertRejected(order, "purchaseOrderNo", requestWith(order, StatusConstants.DRAFT, builder -> builder.purchaseOrderNo = "PO-CHANGED"));
+        assertRejected(order, "customerCode", requestWith(order, StatusConstants.DRAFT, builder -> builder.customerCode = "C999"));
+        assertRejected(order, "customerId", requestWith(order, StatusConstants.DRAFT, builder -> builder.customerId = 1002L));
         assertRejected(order, "customerName", requestWith(order, StatusConstants.DRAFT, builder -> builder.customerName = "客户B"));
+        assertRejected(order, "projectId", requestWith(order, StatusConstants.DRAFT, builder -> builder.projectId = 202L));
         assertRejected(order, "projectName", requestWith(order, StatusConstants.DRAFT, builder -> builder.projectName = "项目B"));
         assertRejected(order, "deliveryDate", requestWith(order, StatusConstants.DRAFT, builder -> builder.deliveryDate = order.getDeliveryDate().plusDays(1)));
         assertRejected(order, "salesName", requestWith(order, StatusConstants.DRAFT, builder -> builder.salesName = "李四"));
@@ -120,6 +123,7 @@ class SalesOrderProtectedUpdatePolicyTest {
         SalesOrder order = auditedSalesOrder();
 
         assertRejected(order, "item.id", requestWithItem(order, builder -> builder.id = 12L));
+        assertRejected(order, "item.materialId", requestWithItem(order, builder -> builder.materialId = 502L));
         assertRejected(order, "item.materialCode", requestWithItem(order, builder -> builder.materialCode = "M2"));
         assertRejected(order, "item.brand", requestWithItem(order, builder -> builder.brand = "鞍钢"));
         assertRejected(order, "item.category", requestWithItem(order, builder -> builder.category = "螺纹"));
@@ -129,6 +133,7 @@ class SalesOrderProtectedUpdatePolicyTest {
         assertRejected(order, "item.unit", requestWithItem(order, builder -> builder.unit = "支"));
         assertRejected(order, "item.sourceInboundItemId", requestWithItem(order, builder -> builder.sourceInboundItemId = 22L));
         assertRejected(order, "item.sourcePurchaseOrderItemId", requestWithItem(order, builder -> builder.sourcePurchaseOrderItemId = 32L));
+        assertRejected(order, "item.warehouseId", requestWithItem(order, builder -> builder.warehouseId = 602L));
         assertRejected(order, "item.warehouseName", requestWithItem(order, builder -> builder.warehouseName = "二号库"));
         assertRejected(order, "item.batchNo", requestWithItem(order, builder -> builder.batchNo = "B2"));
         assertRejected(order, "item.quantity", requestWithItem(order, builder -> builder.quantity = 3));
@@ -161,6 +166,7 @@ class SalesOrderProtectedUpdatePolicyTest {
         order.setPurchaseInboundNo("PI-001");
         order.setPurchaseOrderNo("PO-001");
         order.setCustomerCode("C001");
+        order.setCustomerId(1001L);
         order.setCustomerName("客户A");
         order.setProjectId(101L);
         order.setProjectName("项目A");
@@ -175,6 +181,7 @@ class SalesOrderProtectedUpdatePolicyTest {
         item.setId(11L);
         item.setSalesOrder(order);
         item.setLineNo(1);
+        item.setMaterialId(501L);
         item.setMaterialCode("M1");
         item.setBrand("宝钢");
         item.setCategory("盘螺");
@@ -184,6 +191,7 @@ class SalesOrderProtectedUpdatePolicyTest {
         item.setUnit("吨");
         item.setSourceInboundItemId(21L);
         item.setSourcePurchaseOrderItemId(31L);
+        item.setWarehouseId(601L);
         item.setWarehouseName("一号库");
         item.setBatchNo("B1");
         item.setQuantity(2);
@@ -253,6 +261,7 @@ class SalesOrderProtectedUpdatePolicyTest {
         private String purchaseInboundNo;
         private String purchaseOrderNo;
         private String customerCode;
+        private Long customerId;
         private String customerName;
         private Long projectId;
         private String projectName;
@@ -269,6 +278,7 @@ class SalesOrderProtectedUpdatePolicyTest {
             this.purchaseInboundNo = order.getPurchaseInboundNo();
             this.purchaseOrderNo = order.getPurchaseOrderNo();
             this.customerCode = order.getCustomerCode();
+            this.customerId = order.getCustomerId();
             this.customerName = order.getCustomerName();
             this.projectId = order.getProjectId();
             this.projectName = order.getProjectName();
@@ -289,6 +299,7 @@ class SalesOrderProtectedUpdatePolicyTest {
                     purchaseInboundNo,
                     purchaseOrderNo,
                     customerCode,
+                    customerId,
                     customerName,
                     projectId,
                     projectName,
@@ -305,6 +316,7 @@ class SalesOrderProtectedUpdatePolicyTest {
 
     private static final class SalesOrderItemRequestBuilder {
         private Long id;
+        private Long materialId;
         private String materialCode;
         private String brand;
         private String category;
@@ -314,6 +326,7 @@ class SalesOrderProtectedUpdatePolicyTest {
         private String unit;
         private Long sourceInboundItemId;
         private Long sourcePurchaseOrderItemId;
+        private Long warehouseId;
         private String warehouseName;
         private String batchNo;
         private Integer quantity;
@@ -326,6 +339,7 @@ class SalesOrderProtectedUpdatePolicyTest {
 
         private SalesOrderItemRequestBuilder(SalesOrderItem item) {
             this.id = item.getId();
+            this.materialId = item.getMaterialId();
             this.materialCode = item.getMaterialCode();
             this.brand = item.getBrand();
             this.category = item.getCategory();
@@ -335,6 +349,7 @@ class SalesOrderProtectedUpdatePolicyTest {
             this.unit = item.getUnit();
             this.sourceInboundItemId = item.getSourceInboundItemId();
             this.sourcePurchaseOrderItemId = item.getSourcePurchaseOrderItemId();
+            this.warehouseId = item.getWarehouseId();
             this.warehouseName = item.getWarehouseName();
             this.batchNo = item.getBatchNo();
             this.quantity = item.getQuantity();
@@ -349,6 +364,7 @@ class SalesOrderProtectedUpdatePolicyTest {
         private SalesOrderItemRequest build() {
             return new SalesOrderItemRequest(
                     id,
+                    materialId,
                     materialCode,
                     brand,
                     category,
@@ -358,6 +374,7 @@ class SalesOrderProtectedUpdatePolicyTest {
                     unit,
                     sourceInboundItemId,
                     sourcePurchaseOrderItemId,
+                    warehouseId,
                     warehouseName,
                     batchNo,
                     quantity,

@@ -4,6 +4,7 @@ import com.leo.erp.common.api.ApiResponse;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.api.PageResponse;
 import com.leo.erp.master.project.service.ProjectService;
+import com.leo.erp.master.project.web.dto.ProjectOptionResponse;
 import com.leo.erp.master.project.web.dto.ProjectRequest;
 import com.leo.erp.master.project.web.dto.ProjectResponse;
 import org.junit.jupiter.api.Test;
@@ -23,6 +24,19 @@ class ProjectControllerTest {
 
     private final ProjectService projectService = mock(ProjectService.class);
     private final ProjectController controller = new ProjectController(projectService);
+
+    @Test
+    void optionsReturnProjectsForSelectedCustomer() {
+        ProjectOptionResponse option = new ProjectOptionResponse(
+                20L, "P001 / 项目A", 20L, 10L, "C001", "P001", "项目A", "项A");
+        when(projectService.listActiveOptions(10L)).thenReturn(List.of(option));
+
+        ApiResponse<List<ProjectOptionResponse>> response = controller.options(10L);
+
+        assertThat(response.code()).isEqualTo(0);
+        assertThat(response.data()).containsExactly(option);
+        verify(projectService).listActiveOptions(10L);
+    }
 
     @Test
     void pageReturnsPaginatedProjects() {

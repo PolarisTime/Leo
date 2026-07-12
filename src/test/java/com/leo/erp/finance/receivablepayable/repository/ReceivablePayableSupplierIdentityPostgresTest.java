@@ -2,6 +2,7 @@ package com.leo.erp.finance.receivablepayable.repository;
 
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.finance.receivablepayable.web.dto.ReceivablePayableResponse;
+import com.leo.erp.testsupport.StableIdentityPostgresFixtures;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -23,8 +24,13 @@ class ReceivablePayableSupplierIdentityPostgresTest {
 
     private static final long BASE_ID = 8_760_000_000_000_000_000L;
     private static final String SUPPLIER_CODE = "TEST-PAYABLE-SUPPLIER";
+    private static final long SUPPLIER_ID = BASE_ID + 50;
     private static final long COMPANY_A_ID = BASE_ID + 100;
     private static final long COMPANY_B_ID = BASE_ID + 101;
+    private static final long MATERIAL_ID = BASE_ID + 60;
+    private static final long WAREHOUSE_ID = BASE_ID + 61;
+    private static final long SOURCE_ORDER_ID = BASE_ID + 62;
+    private static final long SOURCE_ITEM_ID = BASE_ID + 63;
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
@@ -35,13 +41,14 @@ class ReceivablePayableSupplierIdentityPostgresTest {
     void setUp() {
         repository = new ReceivablePayableQueryRepository(new NamedParameterJdbcTemplate(jdbcTemplate));
         ReceivablePayablePostgresTestSchemaSupport.preparePurchaseLedgerSchema(jdbcTemplate);
+        insertStableIdentityFixtures();
     }
 
     @Test
-    void shouldMergeHistoricalSupplierNamesByCodeAndDisplayLatestBusinessSnapshot() {
-        insertInbound(BASE_ID, "TEST-PAYABLE-OLD", SUPPLIER_CODE, "供应商旧名称",
+    void shouldMergeHistoricalSupplierNamesByIdAndDisplayLatestBusinessSnapshot() {
+        insertInbound(BASE_ID, "TEST-PAYABLE-OLD", SUPPLIER_ID, SUPPLIER_CODE, "供应商旧名称",
                 COMPANY_A_ID, "结算主体甲", LocalDateTime.of(2026, 7, 9, 10, 0), new BigDecimal("100.00"));
-        insertInbound(BASE_ID + 2, "TEST-PAYABLE-NEW", SUPPLIER_CODE, "供应商新名称",
+        insertInbound(BASE_ID + 2, "TEST-PAYABLE-NEW", SUPPLIER_ID, SUPPLIER_CODE, "供应商新名称",
                 COMPANY_A_ID, "结算主体甲", LocalDateTime.of(2026, 7, 10, 10, 0), new BigDecimal("200.00"));
 
         var result = repository.page(
@@ -55,7 +62,8 @@ class ReceivablePayableSupplierIdentityPostgresTest {
         );
 
         assertThat(result).singleElement().satisfies(row -> {
-            assertThat(row.id()).isEqualTo("应付:供应商:未对账:" + COMPANY_A_ID + ":" + SUPPLIER_CODE);
+            assertThat(row.id()).isEqualTo("应付:供应商:未对账:" + COMPANY_A_ID + ":" + SUPPLIER_ID);
+            assertThat(row.counterpartyId()).isEqualTo(SUPPLIER_ID);
             assertThat(row.counterpartyCode()).isEqualTo(SUPPLIER_CODE);
             assertThat(row.counterpartyName()).isEqualTo("供应商新名称");
             assertThat(row.settlementCompanyId()).isEqualTo(COMPANY_A_ID);
@@ -67,10 +75,11 @@ class ReceivablePayableSupplierIdentityPostgresTest {
     }
 
     @Test
-    void shouldKeepSameNameSuppliersSeparateWhenCodesDiffer() {
-        insertInbound(BASE_ID + 4, "TEST-PAYABLE-A", SUPPLIER_CODE + "-A", "同名供应商",
+    void shouldKeepSameNameSuppliersSeparateWhenIdsDiffer() {
+        String sharedCode = SUPPLIER_CODE + "-SHARED";
+        insertInbound(BASE_ID + 4, "TEST-PAYABLE-A", SUPPLIER_ID + 1, sharedCode, "同名供应商",
                 COMPANY_A_ID, "结算主体甲", LocalDateTime.of(2026, 7, 9, 10, 0), new BigDecimal("100.00"));
-        insertInbound(BASE_ID + 6, "TEST-PAYABLE-B", SUPPLIER_CODE + "-B", "同名供应商",
+        insertInbound(BASE_ID + 6, "TEST-PAYABLE-B", SUPPLIER_ID + 2, sharedCode, "同名供应商",
                 COMPANY_A_ID, "结算主体甲", LocalDateTime.of(2026, 7, 10, 10, 0), new BigDecimal("200.00"));
 
         var result = repository.page(
@@ -80,12 +89,15 @@ class ReceivablePayableSupplierIdentityPostgresTest {
                 COMPANY_A_ID,
                 "未对账",
                 null,
-                SUPPLIER_CODE + "-"
+                sharedCode
         );
 
         assertThat(result.getContent())
-                .extracting(ReceivablePayableResponse::counterpartyCode)
-                .containsExactly(SUPPLIER_CODE + "-A", SUPPLIER_CODE + "-B");
+                .extracting(ReceivablePayableResponse::counterpartyId)
+                .containsExactlyInAnyOrder(SUPPLIER_ID + 1, SUPPLIER_ID + 2);
+        assertThat(result.getContent())
+                .extracting(ReceivablePayableResponse::balanceAmount)
+                .containsExactlyInAnyOrder(new BigDecimal("100.00"), new BigDecimal("200.00"));
         assertThat(result.getContent())
                 .extracting(ReceivablePayableResponse::id)
                 .doesNotHaveDuplicates();
@@ -93,9 +105,9 @@ class ReceivablePayableSupplierIdentityPostgresTest {
 
     @Test
     void shouldKeepSameSupplierSeparateAcrossSettlementCompanies() {
-        insertInbound(BASE_ID + 8, "TEST-PAYABLE-COMPANY-A", SUPPLIER_CODE, "同一供应商",
+        insertInbound(BASE_ID + 8, "TEST-PAYABLE-COMPANY-A", SUPPLIER_ID, SUPPLIER_CODE, "同一供应商",
                 COMPANY_A_ID, "结算主体甲", LocalDateTime.of(2026, 7, 9, 10, 0), new BigDecimal("100.00"));
-        insertInbound(BASE_ID + 10, "TEST-PAYABLE-COMPANY-B", SUPPLIER_CODE, "同一供应商",
+        insertInbound(BASE_ID + 10, "TEST-PAYABLE-COMPANY-B", SUPPLIER_ID, SUPPLIER_CODE, "同一供应商",
                 COMPANY_B_ID, "结算主体乙", LocalDateTime.of(2026, 7, 10, 10, 0), new BigDecimal("200.00"));
 
         var result = repository.page(
@@ -115,10 +127,10 @@ class ReceivablePayableSupplierIdentityPostgresTest {
     }
 
     @Test
-    void shouldKeepHistoricalNullSettlementCompanySeparateFromConcreteCompany() {
-        insertInbound(BASE_ID + 12, "TEST-PAYABLE-COMPANY-NONE", SUPPLIER_CODE, "同一供应商",
+    void shouldExcludeRowsWithoutStableSettlementCompanyIdentity() {
+        insertInbound(BASE_ID + 12, "TEST-PAYABLE-COMPANY-NONE", SUPPLIER_ID, SUPPLIER_CODE, "同一供应商",
                 null, null, LocalDateTime.of(2026, 7, 9, 10, 0), new BigDecimal("100.00"));
-        insertInbound(BASE_ID + 14, "TEST-PAYABLE-COMPANY-SET", SUPPLIER_CODE, "同一供应商",
+        insertInbound(BASE_ID + 14, "TEST-PAYABLE-COMPANY-SET", SUPPLIER_ID, SUPPLIER_CODE, "同一供应商",
                 COMPANY_A_ID, "结算主体甲", LocalDateTime.of(2026, 7, 10, 10, 0), new BigDecimal("200.00"));
 
         var result = repository.page(
@@ -126,17 +138,15 @@ class ReceivablePayableSupplierIdentityPostgresTest {
                 "应付", "供应商", null, "未对账", null, SUPPLIER_CODE
         );
 
-        assertThat(result.getContent()).hasSize(2);
+        assertThat(result.getContent()).hasSize(1);
         assertThat(result.getContent())
                 .extracting(ReceivablePayableResponse::id)
-                .containsExactlyInAnyOrder(
-                        "应付:供应商:未对账:none:" + SUPPLIER_CODE,
-                        "应付:供应商:未对账:" + COMPANY_A_ID + ":" + SUPPLIER_CODE
-                );
+                .containsExactly("应付:供应商:未对账:" + COMPANY_A_ID + ":" + SUPPLIER_ID);
     }
 
     private void insertInbound(long inboundId,
                                String inboundNo,
+                               long supplierId,
                                String supplierCode,
                                String supplierName,
                                Long settlementCompanyId,
@@ -145,20 +155,55 @@ class ReceivablePayableSupplierIdentityPostgresTest {
                                BigDecimal amount) {
         jdbcTemplate.update("""
                 INSERT INTO po_purchase_inbound (
-                    id, inbound_no, supplier_code, supplier_name, warehouse_name, inbound_date,
+                    id, inbound_no, supplier_id, supplier_code, supplier_name,
+                    warehouse_id, warehouse_name, inbound_date,
                     settlement_company_id, settlement_company_name,
                     settlement_mode, total_weight, total_amount, status, deleted_flag, created_by
-                ) VALUES (?, ?, ?, ?, '稳定身份测试仓', ?, ?, ?, '理计', 1, ?, '已审核', FALSE, 0)
-                """, inboundId, inboundNo, supplierCode, supplierName, inboundDate,
+                ) VALUES (?, ?, ?, ?, ?, ?, '稳定身份测试仓', ?, ?, ?, '理计', 1, ?, '已审核', FALSE, 0)
+                """, inboundId, inboundNo, supplierId, supplierCode, supplierName, WAREHOUSE_ID, inboundDate,
                 settlementCompanyId, settlementCompanyName, amount);
         jdbcTemplate.update("""
                 INSERT INTO po_purchase_inbound_item (
-                    id, inbound_id, line_no, material_code, brand, category, material, spec, unit,
+                    id, inbound_id, line_no, material_id, material_code, brand, category, material, spec, unit,
                     quantity, quantity_unit, piece_weight_ton, pieces_per_bundle, weight_ton,
                     weigh_weight_ton, weight_adjustment_ton, weight_adjustment_amount,
-                    unit_price, amount, warehouse_name, settlement_mode
-                ) VALUES (?, ?, 1, 'TEST-PAYABLE-MATERIAL', '测试品牌', '测试品类', '测试材质', '1', '吨',
-                          1, '件', 1, 1, 1, 1, 0, 0, ?, ?, '稳定身份测试仓', '理计')
-                """, inboundId + 1, inboundId, amount, amount);
+                    unit_price, amount, warehouse_id, warehouse_name,
+                    source_purchase_order_item_id, settlement_mode
+                ) VALUES (?, ?, 1, ?, 'TEST-PAYABLE-MATERIAL', '测试品牌', '测试品类', '测试材质', '1', '吨',
+                          1, '件', 1, 1, 1, 1, 0, 0, ?, ?, ?, '稳定身份测试仓', ?, '理计')
+                """, inboundId + 1, inboundId, MATERIAL_ID, amount, amount,
+                WAREHOUSE_ID, SOURCE_ITEM_ID);
+    }
+
+    private void insertStableIdentityFixtures() {
+        StableIdentityPostgresFixtures.insertSupplier(
+                jdbcTemplate, SUPPLIER_ID, SUPPLIER_CODE, "同一供应商");
+        StableIdentityPostgresFixtures.insertSupplier(
+                jdbcTemplate, SUPPLIER_ID + 1, SUPPLIER_CODE + "-MASTER-A", "同名供应商");
+        StableIdentityPostgresFixtures.insertSupplier(
+                jdbcTemplate, SUPPLIER_ID + 2, SUPPLIER_CODE + "-MASTER-B", "同名供应商");
+        StableIdentityPostgresFixtures.insertMaterial(
+                jdbcTemplate, MATERIAL_ID, "TEST-PAYABLE-MATERIAL");
+        StableIdentityPostgresFixtures.insertWarehouse(
+                jdbcTemplate, WAREHOUSE_ID, "TEST-PAYABLE-WAREHOUSE", "稳定身份测试仓");
+        StableIdentityPostgresFixtures.insertSettlementCompany(
+                jdbcTemplate, COMPANY_A_ID, "结算主体甲");
+        StableIdentityPostgresFixtures.insertSettlementCompany(
+                jdbcTemplate, COMPANY_B_ID, "结算主体乙");
+        jdbcTemplate.update("""
+                INSERT INTO po_purchase_order (
+                    id, order_no, supplier_id, supplier_code, supplier_name, order_date,
+                    total_weight, total_amount, status, deleted_flag
+                ) VALUES (?, 'TEST-PAYABLE-SOURCE-PO', ?, ?, '同一供应商', CURRENT_TIMESTAMP,
+                          1, 1, '已审核', FALSE)
+                """, SOURCE_ORDER_ID, SUPPLIER_ID, SUPPLIER_CODE);
+        jdbcTemplate.update("""
+                INSERT INTO po_purchase_order_item (
+                    id, order_id, line_no, material_id, material_code, brand, category,
+                    material, spec, unit, quantity, piece_weight_ton, pieces_per_bundle,
+                    weight_ton, unit_price, amount, warehouse_id
+                ) VALUES (?, ?, 1, ?, 'TEST-PAYABLE-MATERIAL', '测试品牌', '测试品类',
+                          '测试材质', '1', '吨', 1, 1, 1, 1, 1, 1, ?)
+                """, SOURCE_ITEM_ID, SOURCE_ORDER_ID, MATERIAL_ID, WAREHOUSE_ID);
     }
 }

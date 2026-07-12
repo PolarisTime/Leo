@@ -3,6 +3,7 @@ package com.leo.erp.report.pendinginvoicereceipt.repository;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.report.pendinginvoicereceipt.web.dto.PendingInvoiceReceiptReportResponse;
 import com.leo.erp.security.permission.DataScopeContext;
+import com.leo.erp.testsupport.StableIdentityPostgresFixtures;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -28,6 +29,9 @@ class PendingInvoiceReceiptReportPostgresTest {
     private static final long BASE_ID = 8_600_000_000_000_000_000L;
     private static final String MATRIX_CODE = "TEST-PENDING-MATRIX";
     private static final String SUPPLIER_CODE = "TEST-PENDING-SUPPLIER";
+    private static final long SUPPLIER_ID = BASE_ID + 50_001;
+    private static final long SETTLEMENT_COMPANY_ID = BASE_ID + 50_002;
+    private static final long MATERIAL_ID_BASE = BASE_ID + 60_000;
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
@@ -38,6 +42,17 @@ class PendingInvoiceReceiptReportPostgresTest {
     void setUp() {
         repository = new PendingInvoiceReceiptReportQueryRepository(
                 new NamedParameterJdbcTemplate(jdbcTemplate));
+        StableIdentityPostgresFixtures.insertSupplier(
+                jdbcTemplate,
+                SUPPLIER_ID,
+                SUPPLIER_CODE,
+                "测试供应商"
+        );
+        StableIdentityPostgresFixtures.insertSettlementCompany(
+                jdbcTemplate,
+                SETTLEMENT_COMPANY_ID,
+                "测试结算主体"
+        );
     }
 
     @AfterEach
@@ -160,27 +175,42 @@ class PendingInvoiceReceiptReportPostgresTest {
     @Test
     void shouldPageAllRowsBeyondFormerCandidateLimitWithoutDuplicates() {
         jdbcTemplate.update("""
+                INSERT INTO md_material (
+                    id, material_code, brand, material, category, spec, unit,
+                    piece_weight_ton, pieces_per_bundle, unit_price, deleted_flag
+                )
+                SELECT ? + value,
+                       'TEST-PENDING-PAGE-' || LPAD(value::text, 4, '0'),
+                       '测试品牌', '测试材质', '测试类别',
+                       'TEST-SPEC-' || LPAD(value::text, 4, '0'), '吨',
+                       1, 1, 1, FALSE
+                FROM generate_series(1, 1005) AS value
+                """, MATERIAL_ID_BASE);
+        jdbcTemplate.update("""
                 INSERT INTO po_purchase_order (
-                    id, order_no, supplier_code, supplier_name, order_date, total_weight, total_amount,
+                    id, order_no, supplier_id, supplier_code, supplier_name,
+                    order_date, total_weight, total_amount,
                     status, deleted_flag, created_by
                 )
                 SELECT ? + value,
                        'TEST-PENDING-PAGE-' || LPAD(value::text, 4, '0'),
-                       'TEST-PENDING-SUPPLIER', '批量供应商', TIMESTAMP '2026-01-01 00:00:00', 1, 1,
+                       ?, 'TEST-PENDING-SUPPLIER', '批量供应商',
+                       TIMESTAMP '2026-01-01 00:00:00', 1, 1,
                        '已审核', FALSE, 77
                 FROM generate_series(1, 1005) AS value
-                """, BASE_ID + 10_000);
+                """, BASE_ID + 10_000, SUPPLIER_ID);
         jdbcTemplate.update("""
                 INSERT INTO po_purchase_order_item (
-                    id, order_id, line_no, material_code, brand, category, material, spec, unit,
+                    id, order_id, line_no, material_id, material_code,
+                    brand, category, material, spec, unit,
                     quantity, piece_weight_ton, pieces_per_bundle, weight_ton, unit_price, amount
                 )
-                SELECT ? + value, ? + value, 1,
+                SELECT ? + value, ? + value, 1, ? + value,
                        'TEST-PENDING-PAGE-' || LPAD(value::text, 4, '0'),
                        '测试品牌', '测试类别', '测试材质', 'TEST-SPEC', '吨',
                        1, 1, 1, 1, 1, 1
                 FROM generate_series(1, 1005) AS value
-                """, BASE_ID + 20_000, BASE_ID + 10_000);
+                """, BASE_ID + 20_000, BASE_ID + 10_000, MATERIAL_ID_BASE);
 
         DataScopeContext.set(77L, "pending-invoice-receipt-report", "self");
         Set<Long> ids = new HashSet<>();
@@ -200,21 +230,32 @@ class PendingInvoiceReceiptReportPostgresTest {
     private void insertPurchaseOrder(long offset, String status, int quantity, String amount,
                                      long createdBy, String materialCode) {
         long orderId = BASE_ID + offset;
+        long materialId = MATERIAL_ID_BASE + offset;
+        jdbcTemplate.update("""
+                INSERT INTO md_material (
+                    id, material_code, brand, material, category, spec, length, unit,
+                    piece_weight_ton, pieces_per_bundle, unit_price, deleted_flag
+                ) VALUES (?, ?, '测试品牌', '测试材质', '测试类别', 'TEST-SPEC', ?, '吨',
+                          1, 1, 1, FALSE)
+                """, materialId, materialCode, "PENDING-" + offset);
         jdbcTemplate.update("""
                 INSERT INTO po_purchase_order (
-                    id, order_no, supplier_code, supplier_name, order_date, total_weight, total_amount,
+                    id, order_no, supplier_id, supplier_code, supplier_name,
+                    order_date, total_weight, total_amount,
                     status, settlement_company_id, settlement_company_name, deleted_flag, created_by
-                ) VALUES (?, ?, ?, '测试供应商', TIMESTAMP '2026-03-01 10:00:00', ?, ?, ?,
-                          700510000000000001, '测试结算主体', FALSE, ?)
-                """, orderId, "TEST-PENDING-ORDER-" + offset, SUPPLIER_CODE,
-                quantity, new BigDecimal(amount), status, createdBy);
+                ) VALUES (?, ?, ?, ?, '测试供应商', TIMESTAMP '2026-03-01 10:00:00', ?, ?, ?,
+                          ?, '测试结算主体', FALSE, ?)
+                """, orderId, "TEST-PENDING-ORDER-" + offset, SUPPLIER_ID, SUPPLIER_CODE,
+                quantity, new BigDecimal(amount), status, SETTLEMENT_COMPANY_ID, createdBy);
         jdbcTemplate.update("""
                 INSERT INTO po_purchase_order_item (
-                    id, order_id, line_no, material_code, brand, category, material, spec, unit,
+                    id, order_id, line_no, material_id, material_code,
+                    brand, category, material, spec, unit,
                     quantity, piece_weight_ton, pieces_per_bundle, weight_ton, unit_price, amount
-                ) VALUES (?, ?, 1, ?, '测试品牌', '测试类别', '测试材质', 'TEST-SPEC', '吨',
+                ) VALUES (?, ?, 1, ?, ?, '测试品牌', '测试类别', '测试材质', 'TEST-SPEC', '吨',
                           ?, 1, 1, ?, 10, ?)
-                """, BASE_ID + 100 + offset, orderId, materialCode, quantity, quantity, new BigDecimal(amount));
+                """, BASE_ID + 100 + offset, orderId, materialId, materialCode,
+                quantity, quantity, new BigDecimal(amount));
     }
 
     private void insertInvoiceReceipt(long offset, String status, boolean deleted,
@@ -222,20 +263,22 @@ class PendingInvoiceReceiptReportPostgresTest {
         long receiptId = BASE_ID + 1_000 + offset;
         jdbcTemplate.update("""
                 INSERT INTO fm_invoice_receipt (
-                    id, receive_no, invoice_no, supplier_code, supplier_name, invoice_date, invoice_type,
+                    id, receive_no, invoice_no, supplier_id, supplier_code, supplier_name,
+                    invoice_date, invoice_type,
                     amount, tax_amount, status, operator_name, deleted_flag
-                ) VALUES (?, ?, ?, ?, '测试供应商', CURRENT_DATE, '增值税专票', ?, 0, ?, '测试员', ?)
+                ) VALUES (?, ?, ?, ?, ?, '测试供应商', CURRENT_DATE, '增值税专票', ?, 0, ?, '测试员', ?)
                 """, receiptId, "TEST-RECEIVE-" + offset, "TEST-INVOICE-" + offset,
-                SUPPLIER_CODE, new BigDecimal(amount), status, deleted);
+                SUPPLIER_ID, SUPPLIER_CODE, new BigDecimal(amount), status, deleted);
         jdbcTemplate.update("""
                 INSERT INTO fm_invoice_receipt_item (
                     id, receipt_id, line_no, source_no, source_purchase_order_item_id,
-                    material_code, brand, category, material, spec, unit, quantity, quantity_unit,
+                    material_id, material_code, brand, category, material, spec, unit, quantity, quantity_unit,
                     piece_weight_ton, pieces_per_bundle, weight_ton, unit_price, amount
-                ) VALUES (?, ?, 1, ?, ?, ?, '测试品牌', '测试类别', '测试材质', 'TEST-SPEC', '吨',
+                ) VALUES (?, ?, 1, ?, ?, ?, ?, '测试品牌', '测试类别', '测试材质', 'TEST-SPEC', '吨',
                           ?, '件', 1, 1, ?, 10, ?)
                 """, BASE_ID + 2_000 + offset, receiptId, "TEST-PENDING-ORDER-" + sourceOrderOffset,
-                BASE_ID + 100 + sourceOrderOffset, MATRIX_CODE, weight, weight, new BigDecimal(amount));
+                BASE_ID + 100 + sourceOrderOffset, MATERIAL_ID_BASE + sourceOrderOffset,
+                MATRIX_CODE, weight, weight, new BigDecimal(amount));
     }
 
     private void insertPurchaseRefund(long offset, String status, boolean deleted, long sourceOrderOffset,
@@ -244,21 +287,23 @@ class PendingInvoiceReceiptReportPostgresTest {
         jdbcTemplate.update("""
                 INSERT INTO po_purchase_refund (
                     id, refund_no, source_purchase_order_id, purchase_order_no,
-                    supplier_code, supplier_name, refund_date, total_quantity,
+                    supplier_id, supplier_code, supplier_name, refund_date, total_quantity,
                     total_weight, total_amount, status, operator_name, deleted_flag
-                ) VALUES (?, ?, ?, ?, 'TEST-SUPPLIER', '测试供应商', CURRENT_DATE,
+                ) VALUES (?, ?, ?, ?, ?, ?, '测试供应商', CURRENT_DATE,
                           ?, ?, ?, ?, '测试员', ?)
                 """, refundId, "TEST-REFUND-" + offset, BASE_ID + sourceOrderOffset,
-                "TEST-PENDING-ORDER-" + sourceOrderOffset, weight, weight, new BigDecimal(amount), status, deleted);
+                "TEST-PENDING-ORDER-" + sourceOrderOffset, SUPPLIER_ID, SUPPLIER_CODE,
+                weight, weight, new BigDecimal(amount), status, deleted);
         jdbcTemplate.update("""
                 INSERT INTO po_purchase_refund_item (
                     id, refund_id, source_purchase_order_item_id, line_no,
-                    material_code, brand, category, material, spec, unit,
+                    material_id, material_code, brand, category, material, spec, unit,
                     quantity, quantity_unit, piece_weight_ton, pieces_per_bundle,
                     weight_ton, unit_price, amount
-                ) VALUES (?, ?, ?, 1, ?, '测试品牌', '测试类别', '测试材质', 'TEST-SPEC', '吨',
+                ) VALUES (?, ?, ?, 1, ?, ?, '测试品牌', '测试类别', '测试材质', 'TEST-SPEC', '吨',
                           ?, '件', 1, 1, ?, 10, ?)
                 """, BASE_ID + 4_000 + offset, refundId, BASE_ID + 100 + sourceOrderOffset,
-                MATRIX_CODE, weight, weight, new BigDecimal(amount));
+                MATERIAL_ID_BASE + sourceOrderOffset, MATRIX_CODE,
+                weight, weight, new BigDecimal(amount));
     }
 }

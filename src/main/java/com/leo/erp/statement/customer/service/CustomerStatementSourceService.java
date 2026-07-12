@@ -77,15 +77,19 @@ public class CustomerStatementSourceService {
     }
 
     Page<CustomerStatementCandidateResponse> candidatePage(PageQuery query, PageFilter filter) {
-        Set<String> occupiedOrderNos = collectOccupiedOrderNos(null);
+        Set<Long> occupiedOrderIds = toIdSet(
+                repository.findOccupiedSourceSalesOrderIdsExcludingCurrentStatement(filter.currentRecordId())
+        );
         Specification<SalesOrder> spec = Specs.<SalesOrder>notDeleted()
                 .and(Specs.keywordLike(filter.keyword(), SALES_ORDER_CANDIDATE_SEARCH_FIELDS))
+                .and(Specs.equalValueIfPresent("customerId", filter.customerId()))
+                .and(Specs.equalValueIfPresent("projectId", filter.projectId()))
                 .and(Specs.equalIfPresent("customerName", filter.name()))
                 .and(Specs.equalIfPresent("projectName", filter.projectName()))
                 .and(Specs.equalValueIfPresent("settlementCompanyId", filter.settlementCompanyId()))
                 .and(Specs.equalIfPresent("status", StatusConstants.SALES_COMPLETED))
                 .and(Specs.betweenIfPresent("deliveryDate", filter.startDate(), filter.endDate()))
-                .and(StatementCandidateSupport.excludeFieldValues("orderNo", occupiedOrderNos));
+                .and(StatementCandidateSupport.excludeFieldValues("id", occupiedOrderIds));
         return salesOrderRepository.findAll(DataScopeContext.apply(spec), query.toPageable("id"))
                 .map(this::toCandidateResponse);
     }
@@ -103,6 +107,9 @@ public class CustomerStatementSourceService {
                 .map(SalesOrderItem::getSalesOrder)
                 .distinct()
                 .toList());
+        PartyIdentity partyIdentity = resolvePartyIdentity(sourceSalesOrderItemMap.values());
+        entity.setCustomerId(partyIdentity.customerId());
+        entity.setProjectId(partyIdentity.projectId());
         entity.setCustomerCode(resolveCustomerCode(
                 request.customerCode(),
                 request.customerName(),
@@ -131,6 +138,10 @@ public class CustomerStatementSourceService {
             item.setLineNo(i + 1);
             item.setSourceNo(sourceSalesOrderItem.getSalesOrder().getOrderNo());
             item.setSourceSalesOrderItemId(sourceSalesOrderItem.getId());
+            item.setCustomerId(sourceSalesOrderItem.getSalesOrder().getCustomerId());
+            item.setProjectId(sourceSalesOrderItem.getSalesOrder().getProjectId());
+            item.setMaterialId(sourceSalesOrderItem.getMaterialId());
+            item.setWarehouseId(sourceSalesOrderItem.getWarehouseId());
             item.setMaterialCode(sourceSalesOrderItem.getMaterialCode());
             item.setBrand(sourceSalesOrderItem.getBrand());
             item.setCategory(sourceSalesOrderItem.getCategory());
@@ -159,28 +170,15 @@ public class CustomerStatementSourceService {
         return new SourceApplyResult(salesAmount, settlementCompany.id(), settlementCompany.name());
     }
 
-    Set<String> collectOccupiedOrderNos(Long currentStatementId) {
-        org.springframework.data.jpa.domain.Specification<CustomerStatement> spec =
-                com.leo.erp.common.persistence.Specs.notDeleted();
-        if (currentStatementId != null) {
-            spec = spec.and((root, query, cb) -> cb.notEqual(root.get("id"), currentStatementId));
-        }
-        Set<String> occupiedOrderNos = new LinkedHashSet<>();
-        repository.findAll(spec).stream()
-                .flatMap(entity -> entity.getItems().stream())
-                .map(CustomerStatementItem::getSourceNo)
-                .filter(v -> v != null && !v.isBlank())
-                .map(String::trim)
-                .forEach(occupiedOrderNos::add);
-        return occupiedOrderNos;
-    }
-
     private Map<Long, SalesOrderItem> loadSourceSalesOrderItemMap(List<CustomerStatementItemRequest> items) {
-        List<Long> sourceSalesOrderItemIds = items.stream()
-                .map(CustomerStatementItemRequest::sourceSalesOrderItemId)
-                .filter(id -> id != null)
-                .distinct()
-                .toList();
+        Set<Long> uniqueSourceItemIds = new LinkedHashSet<>();
+        for (CustomerStatementItemRequest item : items) {
+            Long sourceItemId = item.sourceSalesOrderItemId();
+            if (sourceItemId != null && !uniqueSourceItemIds.add(sourceItemId)) {
+                throw new BusinessException(ErrorCode.VALIDATION_ERROR, "来源销售订单明细ID重复");
+            }
+        }
+        List<Long> sourceSalesOrderItemIds = List.copyOf(uniqueSourceItemIds);
         if (sourceSalesOrderItemIds.isEmpty()) {
             return Map.of();
         }
@@ -225,11 +223,11 @@ public class CustomerStatementSourceService {
     private void validateSourceSalesOrders(CustomerStatementRequest request,
                                            Map<Long, SalesOrderItem> sourceSalesOrderItemMap,
                                            Long currentStatementId) {
-        Set<String> requestedOrderNos = new LinkedHashSet<>();
+        Map<Long, SalesOrder> requestedOrders = new java.util.LinkedHashMap<>();
         for (SalesOrderItem item : sourceSalesOrderItemMap.values()) {
             SalesOrder order = item.getSalesOrder();
             DataScopeContext.assertCanAccess(order);
-            requestedOrderNos.add(order.getOrderNo());
+            requestedOrders.put(order.getId(), order);
             BusinessDocumentValidator.requireSameText(
                     request.customerName(),
                     order.getCustomerName(),
@@ -250,12 +248,14 @@ public class CustomerStatementSourceService {
                     && !request.settlementCompanyId().equals(order.getSettlementCompanyId())) {
                 throw new BusinessException(ErrorCode.BUSINESS_ERROR, "来源销售订单存在不同客户结算主体，不能合并生成客户对账单");
             }
+            requireSameIdentity(request.customerId(), order.getCustomerId(), "客户ID与来源销售订单不一致");
+            requireSameIdentity(request.projectId(), order.getProjectId(), "项目ID与来源销售订单不一致");
         }
-        if (requestedOrderNos.isEmpty()) {
+        if (requestedOrders.isEmpty()) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "客户对账单来源销售订单不能为空");
         }
         assertCompleteSourceItemCoverage(sourceSalesOrderItemMap.values());
-        assertSourceOrdersNotOccupied(requestedOrderNos, currentStatementId);
+        assertSourceOrdersNotOccupied(requestedOrders, currentStatementId);
     }
 
     private void assertCompleteSourceItemCoverage(Collection<SalesOrderItem> requestedItems) {
@@ -283,18 +283,20 @@ public class CustomerStatementSourceService {
                 && left.getId().equals(right.getId());
     }
 
-    private void assertSourceOrdersNotOccupied(Set<String> requestedOrderNos, Long currentStatementId) {
-        List<CustomerStatement> occupiedStatements =
-                repository.findAllBySourceNosExcludingCurrentStatement(requestedOrderNos, currentStatementId);
-        Set<String> occupiedOrderNos = occupiedStatements.stream()
-                .flatMap(entity -> entity.getItems().stream())
-                .map(CustomerStatementItem::getSourceNo)
-                .filter(v -> v != null && !v.isBlank())
-                .map(String::trim)
-                .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
-        for (String orderNo : requestedOrderNos) {
-            if (occupiedOrderNos.contains(orderNo)) {
-                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "来源销售订单" + orderNo + "已生成客户对账单");
+    private void assertSourceOrdersNotOccupied(Map<Long, SalesOrder> requestedOrders,
+                                               Long currentStatementId) {
+        Set<Long> occupiedOrderIds = toIdSet(
+                repository.findMatchingOccupiedSourceSalesOrderIdsExcludingCurrentStatement(
+                        requestedOrders.keySet(),
+                        currentStatementId
+                )
+        );
+        for (SalesOrder order : requestedOrders.values()) {
+            if (occupiedOrderIds.contains(order.getId())) {
+                throw new BusinessException(
+                        ErrorCode.BUSINESS_ERROR,
+                        "来源销售订单" + order.getOrderNo() + "已生成客户对账单"
+                );
             }
         }
     }
@@ -308,6 +310,14 @@ public class CustomerStatementSourceService {
             if (sourceSalesOrderItem == null) {
                 throw new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行来源销售订单明细不存在");
             }
+            requireSameIdentity(source.customerId(), sourceSalesOrderItem.getSalesOrder().getCustomerId(),
+                    "第" + lineNo + "行客户ID与来源销售订单不一致");
+            requireSameIdentity(source.projectId(), sourceSalesOrderItem.getSalesOrder().getProjectId(),
+                    "第" + lineNo + "行项目ID与来源销售订单不一致");
+            requireSameIdentity(source.materialId(), sourceSalesOrderItem.getMaterialId(),
+                    "第" + lineNo + "行商品ID与来源销售订单不一致");
+            requireSameIdentity(source.warehouseId(), sourceSalesOrderItem.getWarehouseId(),
+                    "第" + lineNo + "行仓库ID与来源销售订单不一致");
             return sourceSalesOrderItem;
         }
         throw new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行来源销售订单明细不能为空");
@@ -337,6 +347,26 @@ public class CustomerStatementSourceService {
                 .orElse(null);
     }
 
+    private PartyIdentity resolvePartyIdentity(Collection<SalesOrderItem> sourceItems) {
+        List<PartyIdentity> identities = sourceItems.stream()
+                .map(SalesOrderItem::getSalesOrder)
+                .filter(java.util.Objects::nonNull)
+                .map(order -> new PartyIdentity(order.getCustomerId(), order.getProjectId()))
+                .distinct()
+                .toList();
+        if (identities.size() != 1) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR,
+                    "来源销售订单存在不同客户或项目ID，不能合并生成客户对账单");
+        }
+        return identities.get(0);
+    }
+
+    private void requireSameIdentity(Long requestedId, Long sourceId, String message) {
+        if (requestedId != null && !requestedId.equals(sourceId)) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, message);
+        }
+    }
+
     private String mergeCustomerCode(String currentCode, String nextCode) {
         if (currentCode == null) {
             return nextCode;
@@ -349,6 +379,10 @@ public class CustomerStatementSourceService {
 
     private String trimToNull(String value) {
         return BusinessDocumentValidator.trimToNull(value);
+    }
+
+    private Set<Long> toIdSet(Collection<Long> ids) {
+        return ids == null ? Set.of() : new LinkedHashSet<>(ids);
     }
 
     private SettlementCompanySnapshot resolveStatementSettlementCompany(List<SalesOrder> orders) {
@@ -378,7 +412,9 @@ public class CustomerStatementSourceService {
                 order.getSalesName(),
                 order.getTotalWeight(),
                 order.getTotalAmount(),
-                order.getStatus()
+                order.getStatus(),
+                order.getCustomerId(),
+                order.getProjectId()
         );
     }
 
@@ -390,6 +426,9 @@ public class CustomerStatementSourceService {
     }
 
     private record SettlementCompanySnapshot(Long id, String name) {
+    }
+
+    private record PartyIdentity(Long customerId, Long projectId) {
     }
 
     private record AuditedOutboundActual(long quantity, BigDecimal weightTon, BigDecimal amount) {

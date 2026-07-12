@@ -22,6 +22,7 @@ public class ReceivablePayableQueryRepository {
             rs.getString("id"),
             rs.getString("direction"),
             rs.getString("counterparty_type"),
+            rs.getObject("counterparty_id", Long.class),
             rs.getString("counterparty_code"),
             rs.getString("counterparty_name"),
             rs.getObject("settlement_company_id", Long.class),
@@ -152,20 +153,20 @@ public class ReceivablePayableQueryRepository {
 
     public ReceivablePayableResponse findSummary(String direction,
                                                  String counterpartyType,
-                                                 String counterpartyKey,
-                                                 String settlementCompanyKey,
+                                                 Long counterpartyId,
+                                                 Long settlementCompanyId,
                                                  String reconciliationStatus) {
         MapSqlParameterSource params = new MapSqlParameterSource()
                 .addValue("direction", direction)
                 .addValue("counterpartyType", counterpartyType)
-                .addValue("counterpartyKey", counterpartyKey)
-                .addValue("settlementCompanyKey", settlementCompanyKey)
+                .addValue("counterpartyId", counterpartyId)
+                .addValue("settlementCompanyId", settlementCompanyId)
                 .addValue("reconciliationStatus", reconciliationStatus);
         String dataSql = ledgerCte() + summaryQuerySql() + """
                 WHERE rp.direction = :direction
                   AND rp.counterparty_type = :counterpartyType
-                  AND rp.counterparty_key = :counterpartyKey
-                  AND rp.settlement_company_key = :settlementCompanyKey
+                  AND rp.counterparty_id = :counterpartyId
+                  AND rp.settlement_company_id = :settlementCompanyId
                   AND rp.reconciliation_status = :reconciliationStatus
                 """;
         List<ReceivablePayableResponse> rows = jdbcTemplate.query(dataSql, params, ROW_MAPPER);
@@ -174,14 +175,14 @@ public class ReceivablePayableQueryRepository {
 
     public List<ReceivablePayableDetailItemResponse> detailItems(String direction,
                                                                  String counterpartyType,
-                                                                 String counterpartyKey,
-                                                                 String settlementCompanyKey,
+                                                                 Long counterpartyId,
+                                                                 Long settlementCompanyId,
                                                                  String reconciliationStatus) {
         MapSqlParameterSource params = new MapSqlParameterSource()
                 .addValue("direction", direction)
                 .addValue("counterpartyType", counterpartyType)
-                .addValue("counterpartyKey", counterpartyKey)
-                .addValue("settlementCompanyKey", settlementCompanyKey)
+                .addValue("counterpartyId", counterpartyId)
+                .addValue("settlementCompanyId", settlementCompanyId)
                 .addValue("reconciliationStatus", reconciliationStatus);
         String dataSql = ledgerCte() + """
                 SELECT
@@ -189,6 +190,10 @@ public class ReceivablePayableQueryRepository {
                         ledger.direction,
                         ':',
                         ledger.counterparty_type,
+                        ':',
+                        ledger.counterparty_id,
+                        ':',
+                        ledger.settlement_company_id,
                         ':',
                         ledger.reconciliation_status,
                         ':',
@@ -198,9 +203,7 @@ public class ReceivablePayableQueryRepository {
                         ':',
                         ledger.source_document_id,
                         ':',
-                        COALESCE(ledger.source_line_id::TEXT, ''),
-                        ':',
-                        ledger.source_no
+                        COALESCE(ledger.source_line_id::TEXT, '0')
                     ) AS id,
                     ledger.entry_role,
                     ledger.source_type,
@@ -225,8 +228,8 @@ public class ReceivablePayableQueryRepository {
                 FROM ledger
                 WHERE ledger.direction = :direction
                   AND ledger.counterparty_type = :counterpartyType
-                  AND ledger.counterparty_key = :counterpartyKey
-                  AND ledger.settlement_company_key = :settlementCompanyKey
+                  AND ledger.counterparty_id = :counterpartyId
+                  AND ledger.settlement_company_id = :settlementCompanyId
                   AND ledger.reconciliation_status = :reconciliationStatus
                 ORDER BY ledger.accounting_date DESC, ledger.source_type ASC, ledger.source_no DESC
                 """;
@@ -327,14 +330,13 @@ public class ReceivablePayableQueryRepository {
                         ':',
                         pt.reconciliation_status,
                         ':',
-                        pt.settlement_company_key,
+                        pt.settlement_company_id,
                         ':',
-                        pt.counterparty_key
+                        pt.counterparty_id
                     ) AS id,
-                    pt.counterparty_key,
-                    pt.settlement_company_key,
                     pt.direction,
                     pt.counterparty_type,
+                    pt.counterparty_id,
                     latest_snapshot.counterparty_code,
                     latest_snapshot.counterparty_name,
                     latest_snapshot.settlement_company_id,
@@ -357,62 +359,36 @@ public class ReceivablePayableQueryRepository {
                 JOIN latest_party_snapshots latest_snapshot
                     ON latest_snapshot.direction = pt.direction
                    AND latest_snapshot.counterparty_type = pt.counterparty_type
-                   AND latest_snapshot.counterparty_key = pt.counterparty_key
-                   AND latest_snapshot.settlement_company_key = pt.settlement_company_key
+                   AND latest_snapshot.counterparty_id = pt.counterparty_id
+                   AND latest_snapshot.settlement_company_id = pt.settlement_company_id
                    AND latest_snapshot.reconciliation_status = pt.reconciliation_status
                 LEFT JOIN aged_balances ag
                     ON ag.direction = pt.direction
                    AND ag.counterparty_type = pt.counterparty_type
-                   AND ag.counterparty_key = pt.counterparty_key
-                   AND ag.settlement_company_key = pt.settlement_company_key
+                   AND ag.counterparty_id = pt.counterparty_id
+                   AND ag.settlement_company_id = pt.settlement_company_id
                    AND ag.reconciliation_status = pt.reconciliation_status
                 """;
     }
 
     private String ledgerCte() {
         return """
-                WITH customer_by_name AS (
-                    SELECT DISTINCT ON (LOWER(BTRIM(customer_name)))
-                        LOWER(BTRIM(customer_name)) AS customer_name_key,
-                        customer_code
-                    FROM md_customer
-                    WHERE deleted_flag = FALSE
-                      AND COALESCE(BTRIM(customer_name), '') <> ''
-                    ORDER BY LOWER(BTRIM(customer_name)), customer_code ASC
-                ),
-                supplier_by_name AS (
-                    SELECT DISTINCT ON (LOWER(BTRIM(supplier_name)))
-                        LOWER(BTRIM(supplier_name)) AS supplier_name_key,
-                        supplier_code
-                    FROM md_supplier
-                    WHERE deleted_flag = FALSE
-                      AND COALESCE(BTRIM(supplier_name), '') <> ''
-                    ORDER BY LOWER(BTRIM(supplier_name)), supplier_code ASC
-                ),
-                carrier_by_name AS (
-                    SELECT DISTINCT ON (LOWER(BTRIM(carrier_name)))
-                        LOWER(BTRIM(carrier_name)) AS carrier_name_key,
-                        carrier_code
-                    FROM md_carrier
-                    WHERE deleted_flag = FALSE
-                      AND COALESCE(BTRIM(carrier_name), '') <> ''
-                    ORDER BY LOWER(BTRIM(carrier_name)), carrier_code ASC
-                ),
-                customer_statement_matches AS (
+                WITH customer_statement_matches AS (
                     SELECT
-                        statement_item.source_no AS order_no,
+                        statement_item.source_sales_order_item_id,
                         MIN(statement.statement_no) AS statement_no
                     FROM st_customer_statement statement
                     JOIN st_customer_statement_item statement_item
                         ON statement_item.statement_id = statement.id
                     WHERE statement.deleted_flag = FALSE
                       AND statement.status = '已确认'
-                      AND COALESCE(BTRIM(statement_item.source_no), '') <> ''
-                    GROUP BY statement_item.source_no
+                      AND statement_item.source_sales_order_item_id IS NOT NULL
+                    GROUP BY statement_item.source_sales_order_item_id
                 ),
                 audited_sales_outbound_receivable AS (
                     SELECT
                         outbound.id,
+                        outbound.customer_id,
                         outbound.outbound_no,
                         outbound.sales_order_no,
                         COALESCE(NULLIF(BTRIM(outbound.customer_name), ''), MIN(source_order.customer_name)) AS customer_name,
@@ -428,11 +404,11 @@ public class ReceivablePayableQueryRepository {
                         outbound.remark,
                         outbound.created_by,
                         CASE
-                            WHEN BOOL_AND(customer_match.order_no IS NOT NULL) THEN '已对账'
+                            WHEN BOOL_AND(customer_match.source_sales_order_item_id IS NOT NULL) THEN '已对账'
                             ELSE '未对账'
                         END AS reconciliation_status,
                         CASE
-                            WHEN BOOL_AND(customer_match.order_no IS NOT NULL) THEN STRING_AGG(
+                            WHEN BOOL_AND(customer_match.source_sales_order_item_id IS NOT NULL) THEN STRING_AGG(
                                 DISTINCT customer_match.statement_no,
                                 ', ' ORDER BY customer_match.statement_no
                             )
@@ -450,28 +426,35 @@ public class ReceivablePayableQueryRepository {
                     JOIN so_sales_order source_order
                         ON source_order.id = source_order_item.order_id
                     LEFT JOIN customer_statement_matches customer_match
-                        ON customer_match.order_no = source_order.order_no
+                        ON customer_match.source_sales_order_item_id = source_order_item.id
                     WHERE outbound.deleted_flag = FALSE
                       AND outbound.status = '已审核'
                     GROUP BY outbound.id
                 ),
                 supplier_statement_matches AS (
                     SELECT
-                        statement_item.source_no AS inbound_no,
+                        statement_item.source_inbound_item_id,
                         MIN(statement.statement_no) AS statement_no
                     FROM st_supplier_statement statement
                     JOIN st_supplier_statement_item statement_item
                         ON statement_item.statement_id = statement.id
                     WHERE statement.deleted_flag = FALSE
                       AND statement.status = '已确认'
-                      AND COALESCE(BTRIM(statement_item.source_no), '') <> ''
-                    GROUP BY statement_item.source_no
+                      AND statement_item.source_inbound_item_id IS NOT NULL
+                    GROUP BY statement_item.source_inbound_item_id
                 ),
                 inbound_payable AS (
                     SELECT
                         item.inbound_id,
-                        SUM(item.amount + item.weight_adjustment_amount) AS total_amount
+                        SUM(item.amount + item.weight_adjustment_amount) AS total_amount,
+                        BOOL_AND(supplier_match.source_inbound_item_id IS NOT NULL) AS fully_reconciled,
+                        STRING_AGG(
+                            DISTINCT supplier_match.statement_no,
+                            ', ' ORDER BY supplier_match.statement_no
+                        ) AS statement_nos
                     FROM po_purchase_inbound_item item
+                    LEFT JOIN supplier_statement_matches supplier_match
+                        ON supplier_match.source_inbound_item_id = item.id
                     GROUP BY item.inbound_id
                 ),
                 purchase_prepayment_allocation_totals AS (
@@ -486,7 +469,7 @@ public class ReceivablePayableQueryRepository {
                     SELECT
                         payment.id AS payment_id,
                         allocation.id AS source_line_id,
-                        allocation.source_statement_id,
+                        allocation.source_supplier_statement_id,
                         allocation.allocated_amount AS event_amount,
                         '已对账' AS reconciliation_status
                     FROM fm_payment payment
@@ -496,12 +479,12 @@ public class ReceivablePayableQueryRepository {
                     WHERE payment.deleted_flag = FALSE
                       AND payment.status = '已付款'
                       AND payment.payment_purpose = 'PURCHASE_PREPAYMENT'
-                      AND payment.business_type IN ('供应商', '供应商付款')
+                      AND payment.counterparty_type = '供应商'
                     UNION ALL
                     SELECT
                         payment.id AS payment_id,
                         CAST(NULL AS BIGINT) AS source_line_id,
-                        CAST(NULL AS BIGINT) AS source_statement_id,
+                        CAST(NULL AS BIGINT) AS source_supplier_statement_id,
                         payment.amount - COALESCE(allocation_total.allocated_amount, 0) AS event_amount,
                         '未对账' AS reconciliation_status
                     FROM fm_payment payment
@@ -510,34 +493,28 @@ public class ReceivablePayableQueryRepository {
                     WHERE payment.deleted_flag = FALSE
                       AND payment.status = '已付款'
                       AND payment.payment_purpose = 'PURCHASE_PREPAYMENT'
-                      AND payment.business_type IN ('供应商', '供应商付款')
+                      AND payment.counterparty_type = '供应商'
                       AND payment.amount > COALESCE(allocation_total.allocated_amount, 0)
                 ),
                 freight_statement_matches AS (
                     SELECT
-                        statement_item.source_no AS bill_no,
+                        statement_item.source_freight_bill_id,
                         MIN(statement.statement_no) AS statement_no
                     FROM st_freight_statement statement
                     JOIN st_freight_statement_item statement_item
                         ON statement_item.statement_id = statement.id
                     WHERE statement.deleted_flag = FALSE
                       AND statement.status = '已审核'
-                      AND COALESCE(BTRIM(statement_item.source_no), '') <> ''
-                    GROUP BY statement_item.source_no
+                      AND statement_item.source_freight_bill_id IS NOT NULL
+                    GROUP BY statement_item.source_freight_bill_id
                 ),
                 ledger_source AS (
                     SELECT
                         '应收' AS direction,
                         '客户' AS counterparty_type,
-                        COALESCE(NULLIF(BTRIM(outbound_receivable.customer_code), ''), customer_lookup.customer_code) AS counterparty_code,
+                        outbound_receivable.customer_id AS counterparty_id,
+                        NULLIF(BTRIM(outbound_receivable.customer_code), '') AS counterparty_code,
                         outbound_receivable.customer_name AS counterparty_name,
-                        COALESCE(
-                            NULLIF(BTRIM(COALESCE(
-                                NULLIF(BTRIM(outbound_receivable.customer_code), ''),
-                                customer_lookup.customer_code
-                            )), ''),
-                            CONCAT('name:', MD5(outbound_receivable.customer_name))
-                        ) AS counterparty_key,
                         outbound_receivable.settlement_company_id,
                         outbound_receivable.settlement_company_name,
                         outbound_receivable.reconciliation_status,
@@ -556,20 +533,15 @@ public class ReceivablePayableQueryRepository {
                         outbound_receivable.remark,
                         outbound_receivable.created_by
                     FROM audited_sales_outbound_receivable outbound_receivable
-                    LEFT JOIN customer_by_name customer_lookup
-                        ON LOWER(BTRIM(outbound_receivable.customer_name)) = customer_lookup.customer_name_key
                     UNION ALL
                     SELECT
                         '应收' AS direction,
                         '客户' AS counterparty_type,
-                        COALESCE(NULLIF(BTRIM(statement.customer_code), ''), customer_lookup.customer_code) AS counterparty_code,
+                        receipt.customer_id AS counterparty_id,
+                        NULLIF(BTRIM(statement.customer_code), '') AS counterparty_code,
                         statement.customer_name AS counterparty_name,
-                        COALESCE(
-                            NULLIF(BTRIM(COALESCE(NULLIF(BTRIM(statement.customer_code), ''), customer_lookup.customer_code)), ''),
-                            CONCAT('name:', MD5(statement.customer_name))
-                        ) AS counterparty_key,
-                        COALESCE(receipt.settlement_company_id, statement.settlement_company_id) AS settlement_company_id,
-                        COALESCE(receipt.settlement_company_name, statement.settlement_company_name) AS settlement_company_name,
+                        receipt.settlement_company_id,
+                        receipt.settlement_company_name,
                         '已对账' AS reconciliation_status,
                         'SETTLEMENT' AS entry_role,
                         '收款单' AS source_type,
@@ -589,32 +561,32 @@ public class ReceivablePayableQueryRepository {
                     JOIN fm_receipt_allocation allocation
                         ON allocation.receipt_id = receipt.id
                     JOIN st_customer_statement statement
-                        ON statement.id = allocation.source_statement_id
+                        ON statement.id = allocation.source_customer_statement_id
                        AND statement.deleted_flag = FALSE
                        AND statement.status = '已确认'
-                    LEFT JOIN customer_by_name customer_lookup
-                        ON LOWER(BTRIM(statement.customer_name)) = customer_lookup.customer_name_key
+                       AND statement.customer_id = receipt.customer_id
+                       AND statement.settlement_company_id = receipt.settlement_company_id
                     WHERE receipt.deleted_flag = FALSE
                       AND receipt.status = '已收款'
                     UNION ALL
                     SELECT
                         '应付' AS direction,
                         '供应商' AS counterparty_type,
+                        inbound.supplier_id AS counterparty_id,
                         inbound.supplier_code AS counterparty_code,
                         inbound.supplier_name AS counterparty_name,
-                        COALESCE(NULLIF(BTRIM(inbound.supplier_code), ''), CONCAT('name:', MD5(inbound.supplier_name))) AS counterparty_key,
                         inbound.settlement_company_id,
                         inbound.settlement_company_name,
                         CASE
-                            WHEN supplier_match.inbound_no IS NULL THEN '未对账'
-                            ELSE '已对账'
+                            WHEN inbound_payable.fully_reconciled THEN '已对账'
+                            ELSE '未对账'
                         END AS reconciliation_status,
                         'RECOGNITION' AS entry_role,
                         '采购入库单' AS source_type,
                         inbound.id AS source_document_id,
                         CAST(NULL AS BIGINT) AS source_line_id,
                         inbound.inbound_no AS document_no,
-                        COALESCE(supplier_match.statement_no, inbound.inbound_no) AS source_no,
+                        COALESCE(inbound_payable.statement_nos, inbound.inbound_no) AS source_no,
                         CAST(NULL AS VARCHAR) AS project_name,
                         inbound.inbound_date::date AS accounting_date,
                         inbound.inbound_date::date AS due_date,
@@ -624,8 +596,6 @@ public class ReceivablePayableQueryRepository {
                         inbound.remark,
                         inbound.created_by
                     FROM po_purchase_inbound inbound
-                    LEFT JOIN supplier_statement_matches supplier_match
-                        ON supplier_match.inbound_no = inbound.inbound_no
                     JOIN inbound_payable
                         ON inbound_payable.inbound_id = inbound.id
                     WHERE inbound.deleted_flag = FALSE
@@ -634,26 +604,15 @@ public class ReceivablePayableQueryRepository {
                     SELECT
                         '应付' AS direction,
                         '供应商' AS counterparty_type,
+                        payment.counterparty_id,
                         COALESCE(
                             NULLIF(BTRIM(payment.supplier_code), ''),
                             NULLIF(BTRIM(payment.counterparty_code), ''),
                             NULLIF(BTRIM(source_order.supplier_code), '')
                         ) AS counterparty_code,
                         COALESCE(NULLIF(BTRIM(payment.supplier_name), ''), payment.counterparty_name, source_order.supplier_name) AS counterparty_name,
-                        COALESCE(
-                            NULLIF(BTRIM(COALESCE(
-                                NULLIF(BTRIM(payment.supplier_code), ''),
-                                NULLIF(BTRIM(payment.counterparty_code), ''),
-                                NULLIF(BTRIM(source_order.supplier_code), '')
-                            )), ''),
-                            CONCAT('name:', MD5(COALESCE(
-                                NULLIF(BTRIM(payment.supplier_name), ''),
-                                payment.counterparty_name,
-                                source_order.supplier_name
-                            )))
-                        ) AS counterparty_key,
-                        COALESCE(payment.settlement_company_id, source_order.settlement_company_id) AS settlement_company_id,
-                        COALESCE(payment.settlement_company_name, source_order.settlement_company_name) AS settlement_company_name,
+                        payment.settlement_company_id,
+                        payment.settlement_company_name,
                         prepayment_event.reconciliation_status,
                         'SETTLEMENT' AS entry_role,
                         '采购预付款' AS source_type,
@@ -680,21 +639,19 @@ public class ReceivablePayableQueryRepository {
                     LEFT JOIN po_purchase_order source_order
                         ON source_order.id = payment.source_purchase_order_id
                     LEFT JOIN st_supplier_statement supplier_statement
-                        ON supplier_statement.id = prepayment_event.source_statement_id
+                        ON supplier_statement.id = prepayment_event.source_supplier_statement_id
                        AND supplier_statement.deleted_flag = FALSE
                        AND supplier_statement.status = '已确认'
+                    WHERE payment.counterparty_type = '供应商'
                     UNION ALL
                     SELECT
                         '应付' AS direction,
                         '供应商' AS counterparty_type,
+                        refund_receipt.supplier_id AS counterparty_id,
                         refund_receipt.supplier_code AS counterparty_code,
                         refund_receipt.supplier_name AS counterparty_name,
-                        COALESCE(
-                            NULLIF(BTRIM(refund_receipt.supplier_code), ''),
-                            CONCAT('name:', MD5(refund_receipt.supplier_name))
-                        ) AS counterparty_key,
-                        COALESCE(refund_receipt.settlement_company_id, purchase_refund.settlement_company_id) AS settlement_company_id,
-                        COALESCE(refund_receipt.settlement_company_name, purchase_refund.settlement_company_name) AS settlement_company_name,
+                        refund_receipt.settlement_company_id,
+                        refund_receipt.settlement_company_name,
                         '未对账' AS reconciliation_status,
                         'SETTLEMENT_REVERSAL' AS entry_role,
                         '供应商退款到账单' AS source_type,
@@ -719,13 +676,13 @@ public class ReceivablePayableQueryRepository {
                     SELECT
                         '应付' AS direction,
                         '物流商' AS counterparty_type,
+                        bill.carrier_id AS counterparty_id,
                         bill.carrier_code AS counterparty_code,
                         bill.carrier_name AS counterparty_name,
-                        bill.carrier_code AS counterparty_key,
                         bill.settlement_company_id,
                         bill.settlement_company_name,
                         CASE
-                            WHEN freight_match.bill_no IS NULL THEN '未对账'
+                            WHEN freight_match.source_freight_bill_id IS NULL THEN '未对账'
                             ELSE '已对账'
                         END AS reconciliation_status,
                         'RECOGNITION' AS entry_role,
@@ -744,58 +701,30 @@ public class ReceivablePayableQueryRepository {
                         bill.created_by
                     FROM lg_freight_bill bill
                     LEFT JOIN freight_statement_matches freight_match
-                        ON freight_match.bill_no = bill.bill_no
+                        ON freight_match.source_freight_bill_id = bill.id
                     WHERE bill.deleted_flag = FALSE
                       AND bill.status = '已审核'
                     UNION ALL
                     SELECT
                         '应付' AS direction,
+                        payment.counterparty_type,
+                        payment.counterparty_id,
                         CASE
-                            WHEN payment.business_type IN ('供应商', '供应商付款') THEN '供应商'
-                            ELSE '物流商'
-                        END AS counterparty_type,
-                        CASE
-                            WHEN payment.business_type IN ('供应商', '供应商付款') THEN COALESCE(
+                            WHEN payment.counterparty_type = '供应商' THEN COALESCE(
                                 NULLIF(BTRIM(supplier_statement.supplier_code), ''),
-                                NULLIF(BTRIM(payment.counterparty_code), ''),
-                                supplier_lookup.supplier_code
+                                NULLIF(BTRIM(payment.counterparty_code), '')
                             )
                             ELSE COALESCE(
                                 NULLIF(BTRIM(freight_statement.carrier_code), ''),
-                                NULLIF(BTRIM(payment.counterparty_code), ''),
-                                carrier_lookup.carrier_code
+                                NULLIF(BTRIM(payment.counterparty_code), '')
                             )
                         END AS counterparty_code,
                         CASE
-                            WHEN payment.business_type IN ('供应商', '供应商付款') THEN COALESCE(supplier_statement.supplier_name, payment.counterparty_name)
+                            WHEN payment.counterparty_type = '供应商' THEN COALESCE(supplier_statement.supplier_name, payment.counterparty_name)
                             ELSE COALESCE(freight_statement.carrier_name, payment.counterparty_name)
                         END AS counterparty_name,
-                        COALESCE(
-                            NULLIF(BTRIM(CASE
-                                WHEN payment.business_type IN ('供应商', '供应商付款') THEN COALESCE(
-                                    NULLIF(BTRIM(supplier_statement.supplier_code), ''),
-                                    NULLIF(BTRIM(payment.counterparty_code), ''),
-                                    supplier_lookup.supplier_code
-                                )
-                                ELSE COALESCE(
-                                    NULLIF(BTRIM(freight_statement.carrier_code), ''),
-                                    NULLIF(BTRIM(payment.counterparty_code), ''),
-                                    carrier_lookup.carrier_code
-                                )
-                            END), ''),
-                            CONCAT('name:', MD5(CASE
-                                WHEN payment.business_type IN ('供应商', '供应商付款') THEN COALESCE(supplier_statement.supplier_name, payment.counterparty_name)
-                                ELSE COALESCE(freight_statement.carrier_name, payment.counterparty_name)
-                            END))
-                        ) AS counterparty_key,
-                        CASE
-                            WHEN payment.business_type IN ('供应商', '供应商付款') THEN supplier_statement.settlement_company_id
-                            ELSE freight_statement.settlement_company_id
-                        END AS settlement_company_id,
-                        CASE
-                            WHEN payment.business_type IN ('供应商', '供应商付款') THEN supplier_statement.settlement_company_name
-                            ELSE freight_statement.settlement_company_name
-                        END AS settlement_company_name,
+                        payment.settlement_company_id,
+                        payment.settlement_company_name,
                         '已对账' AS reconciliation_status,
                         'SETTLEMENT' AS entry_role,
                         '付款单' AS source_type,
@@ -815,25 +744,25 @@ public class ReceivablePayableQueryRepository {
                     JOIN fm_payment_allocation allocation
                         ON allocation.payment_id = payment.id
                     LEFT JOIN st_supplier_statement supplier_statement
-                        ON supplier_statement.id = allocation.source_statement_id
+                        ON supplier_statement.id = allocation.source_supplier_statement_id
                        AND supplier_statement.deleted_flag = FALSE
                        AND supplier_statement.status = '已确认'
-                       AND payment.business_type IN ('供应商', '供应商付款')
+                       AND payment.counterparty_type = '供应商'
+                       AND supplier_statement.supplier_id = payment.counterparty_id
                     LEFT JOIN st_freight_statement freight_statement
-                        ON freight_statement.id = allocation.source_statement_id
+                        ON freight_statement.id = allocation.source_freight_statement_id
                        AND freight_statement.deleted_flag = FALSE
                        AND freight_statement.status = '已审核'
-                       AND payment.business_type IN ('物流商', '物流付款')
-                    LEFT JOIN supplier_by_name supplier_lookup
-                        ON LOWER(BTRIM(COALESCE(supplier_statement.supplier_name, payment.counterparty_name))) = supplier_lookup.supplier_name_key
-                       AND payment.business_type IN ('供应商', '供应商付款')
-                    LEFT JOIN carrier_by_name carrier_lookup
-                        ON LOWER(BTRIM(COALESCE(freight_statement.carrier_name, payment.counterparty_name))) = carrier_lookup.carrier_name_key
-                       AND payment.business_type IN ('物流商', '物流付款')
+                       AND payment.counterparty_type = '物流商'
+                       AND freight_statement.carrier_id = payment.counterparty_id
                     WHERE payment.deleted_flag = FALSE
                       AND payment.status = '已付款'
                       AND payment.payment_purpose = 'STATEMENT_SETTLEMENT'
-                      AND payment.business_type IN ('供应商', '物流商', '供应商付款', '物流付款')
+                      AND payment.counterparty_type IN ('供应商', '物流商')
+                      AND num_nonnulls(
+                          allocation.source_supplier_statement_id,
+                          allocation.source_freight_statement_id
+                      ) = 1
                       AND (
                           supplier_statement.id IS NOT NULL
                           OR freight_statement.id IS NOT NULL
@@ -842,9 +771,9 @@ public class ReceivablePayableQueryRepository {
                     SELECT
                         adjustment.direction,
                         adjustment.counterparty_type,
+                        adjustment.counterparty_id,
                         adjustment.counterparty_code,
                         adjustment.counterparty_name,
-                        COALESCE(NULLIF(BTRIM(adjustment.counterparty_code), ''), CONCAT('name:', MD5(adjustment.counterparty_name))) AS counterparty_key,
                         adjustment.settlement_company_id,
                         adjustment.settlement_company_name,
                         '已对账' AS reconciliation_status,
@@ -878,23 +807,22 @@ public class ReceivablePayableQueryRepository {
                       AND adjustment.status = '已审核'
                 ),
                 ledger AS (
-                    SELECT
-                        source.*,
-                        COALESCE(source.settlement_company_id::TEXT, 'none') AS settlement_company_key
+                    SELECT source.*
                     FROM ledger_source source
+                    WHERE source.counterparty_id IS NOT NULL
+                      AND source.settlement_company_id IS NOT NULL
                 ),
                 latest_party_snapshots AS (
                     SELECT DISTINCT ON (
                         ledger.direction,
                         ledger.counterparty_type,
-                        ledger.counterparty_key,
-                        ledger.settlement_company_key,
+                        ledger.counterparty_id,
+                        ledger.settlement_company_id,
                         ledger.reconciliation_status
                     )
                         ledger.direction,
                         ledger.counterparty_type,
-                        ledger.counterparty_key,
-                        ledger.settlement_company_key,
+                        ledger.counterparty_id,
                         ledger.reconciliation_status,
                         NULLIF(BTRIM(ledger.counterparty_code), '') AS counterparty_code,
                         ledger.counterparty_name,
@@ -903,8 +831,8 @@ public class ReceivablePayableQueryRepository {
                     FROM ledger
                     ORDER BY ledger.direction,
                              ledger.counterparty_type,
-                             ledger.counterparty_key,
-                             ledger.settlement_company_key,
+                             ledger.counterparty_id,
+                             ledger.settlement_company_id,
                              ledger.reconciliation_status,
                              ledger.accounting_date DESC NULLS LAST,
                              ledger.source_document_id DESC,
@@ -917,8 +845,8 @@ public class ReceivablePayableQueryRepository {
                     SELECT
                         ledger.direction,
                         ledger.counterparty_type,
-                        ledger.counterparty_key,
-                        ledger.settlement_company_key,
+                        ledger.counterparty_id,
+                        ledger.settlement_company_id,
                         ledger.reconciliation_status,
                         SUM(
                             CASE
@@ -945,16 +873,16 @@ public class ReceivablePayableQueryRepository {
                     FROM ledger
                     GROUP BY ledger.direction,
                              ledger.counterparty_type,
-                             ledger.counterparty_key,
-                             ledger.settlement_company_key,
+                             ledger.counterparty_id,
+                             ledger.settlement_company_id,
                              ledger.reconciliation_status
                 ),
                 recognition_entries AS (
                     SELECT
                         ledger.direction,
                         ledger.counterparty_type,
-                        ledger.counterparty_key,
-                        ledger.settlement_company_key,
+                        ledger.counterparty_id,
+                        ledger.settlement_company_id,
                         ledger.reconciliation_status,
                         ledger.source_document_id,
                         ledger.due_date,
@@ -969,7 +897,7 @@ public class ReceivablePayableQueryRepository {
                                 ELSE ledger.credit_amount
                             END
                         ) OVER (
-                            PARTITION BY ledger.direction, ledger.counterparty_type, ledger.counterparty_key, ledger.settlement_company_key, ledger.reconciliation_status
+                            PARTITION BY ledger.direction, ledger.counterparty_type, ledger.counterparty_id, ledger.settlement_company_id, ledger.reconciliation_status
                             ORDER BY ledger.due_date ASC, ledger.source_document_id ASC
                             ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING
                         ), 0) AS recognized_before
@@ -977,8 +905,8 @@ public class ReceivablePayableQueryRepository {
                     JOIN party_totals pt
                         ON pt.direction = ledger.direction
                        AND pt.counterparty_type = ledger.counterparty_type
-                       AND pt.counterparty_key = ledger.counterparty_key
-                       AND pt.settlement_company_key = ledger.settlement_company_key
+                       AND pt.counterparty_id = ledger.counterparty_id
+                       AND pt.settlement_company_id = ledger.settlement_company_id
                        AND pt.reconciliation_status = ledger.reconciliation_status
                     WHERE ledger.entry_role = 'RECOGNITION'
                 ),
@@ -986,8 +914,8 @@ public class ReceivablePayableQueryRepository {
                     SELECT
                         recognition_entries.direction,
                         recognition_entries.counterparty_type,
-                        recognition_entries.counterparty_key,
-                        recognition_entries.settlement_company_key,
+                        recognition_entries.counterparty_id,
+                        recognition_entries.settlement_company_id,
                         recognition_entries.reconciliation_status,
                         recognition_entries.due_date,
                         GREATEST(
@@ -1004,8 +932,8 @@ public class ReceivablePayableQueryRepository {
                     SELECT
                         open_recognition_entries.direction,
                         open_recognition_entries.counterparty_type,
-                        open_recognition_entries.counterparty_key,
-                        open_recognition_entries.settlement_company_key,
+                        open_recognition_entries.counterparty_id,
+                        open_recognition_entries.settlement_company_id,
                         open_recognition_entries.reconciliation_status,
                         SUM(
                             CASE
@@ -1034,8 +962,8 @@ public class ReceivablePayableQueryRepository {
                     FROM open_recognition_entries
                     GROUP BY open_recognition_entries.direction,
                              open_recognition_entries.counterparty_type,
-                             open_recognition_entries.counterparty_key,
-                             open_recognition_entries.settlement_company_key,
+                             open_recognition_entries.counterparty_id,
+                             open_recognition_entries.settlement_company_id,
                              open_recognition_entries.reconciliation_status
                 )
                 """;

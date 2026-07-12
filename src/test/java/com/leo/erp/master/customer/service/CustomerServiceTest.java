@@ -6,6 +6,7 @@ import com.leo.erp.common.config.CacheConfig;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.support.MasterDataReferenceGuard;
+import com.leo.erp.common.support.MasterDataReferenceGuard.ReferenceCheck;
 import com.leo.erp.common.support.RedisJsonCacheSupport;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
@@ -18,6 +19,7 @@ import com.leo.erp.master.customer.web.dto.CustomerResponse;
 import com.leo.erp.system.company.domain.entity.CompanySetting;
 import com.leo.erp.system.company.service.CompanySettingService;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.cache.concurrent.ConcurrentMapCacheManager;
@@ -30,6 +32,7 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.groups.Tuple.tuple;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -472,7 +475,7 @@ class CustomerServiceTest {
     }
 
     @Test
-    void shouldDelete_success() {
+    void shouldCheckStableCustomerIdentityBeforeDelete() {
         var repository = (CustomerRepository) Proxy.newProxyInstance(
                 CustomerRepository.class.getClassLoader(),
                 new Class[]{CustomerRepository.class},
@@ -491,7 +494,27 @@ class CustomerServiceTest {
 
         service.delete(1L);
 
-        verify(referenceGuard).assertNoReferences(eq("该客户"), any(List.class));
+        ArgumentCaptor<List<ReferenceCheck>> captor = ArgumentCaptor.forClass(List.class);
+        verify(referenceGuard).assertNoReferences(eq("该客户"), captor.capture());
+        assertThat(captor.getValue())
+                .extracting(ReferenceCheck::tableName, ReferenceCheck::columnName, ReferenceCheck::value)
+                .containsExactly(
+                        tuple("md_project", "customer_id", 1L),
+                        tuple("so_sales_order", "customer_id", 1L),
+                        tuple("ct_sales_contract", "customer_id", 1L),
+                        tuple("so_sales_outbound", "customer_id", 1L),
+                        tuple("fm_invoice_issue", "customer_id", 1L),
+                        tuple("st_customer_statement", "customer_id", 1L),
+                        tuple("st_customer_statement_item", "customer_id", 1L),
+                        tuple("fm_receipt", "customer_id", 1L),
+                        tuple("lg_freight_bill_item", "customer_id", 1L),
+                        tuple("st_freight_statement_item", "customer_id", 1L),
+                        tuple("fm_ledger_adjustment", "counterparty_id", 1L)
+                );
+        assertThat(captor.getValue().getLast()).satisfies(check -> {
+            assertThat(check.extraCondition()).isEqualTo("counterparty_type = ?");
+            assertThat(check.extraArguments()).containsExactly("客户");
+        });
     }
 
     @Test

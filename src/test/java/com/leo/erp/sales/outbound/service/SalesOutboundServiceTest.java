@@ -1,5 +1,7 @@
 package com.leo.erp.sales.outbound.service;
 
+import com.leo.erp.common.api.PageFilter;
+import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.concurrency.SourceAllocationLockService;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
@@ -21,9 +23,16 @@ import com.leo.erp.sales.outbound.web.dto.SalesOutboundRequest;
 import com.leo.erp.sales.outbound.web.dto.SalesOutboundResponse;
 import com.leo.erp.purchase.order.service.PurchaseOrderItemPieceWeightService;
 import com.leo.erp.security.permission.WorkflowTransitionGuard;
+import jakarta.persistence.criteria.CriteriaBuilder;
+import jakarta.persistence.criteria.CriteriaQuery;
+import jakarta.persistence.criteria.Path;
+import jakarta.persistence.criteria.Predicate;
+import jakarta.persistence.criteria.Root;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.junit.jupiter.api.Test;
 import org.mockito.InOrder;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -490,6 +499,7 @@ class SalesOutboundServiceTest {
         existing.setTotalWeight(BigDecimal.ZERO);
         existing.setTotalAmount(BigDecimal.ZERO);
         existing.setItems(new ArrayList<>());
+        buildExistingOutboundItem(8000L, existing, 9000L);
 
         when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(existing));
         when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
@@ -498,7 +508,7 @@ class SalesOutboundServiceTest {
         service.updateStatus(1L, StatusConstants.AUDITED);
 
         assertThat(existing.getStatus()).isEqualTo("已审核");
-        verify(syncService).syncBySalesOrderReference("SO-001");
+        verify(syncService).syncBySourceSalesOrderItemIds(List.of(9000L));
     }
 
     @Test
@@ -630,6 +640,7 @@ class SalesOutboundServiceTest {
         existing.setTotalWeight(BigDecimal.ZERO);
         existing.setTotalAmount(BigDecimal.ZERO);
         existing.setItems(new ArrayList<>());
+        buildExistingOutboundItem(8005L, existing, 9005L);
         buildExistingOutboundItem(8020L, existing, 9021L);
         SalesOrderItem sourceSalesOrderItem = buildSalesOrderItem(9021L, "SO-PO-PRE");
         sourceSalesOrderItem.setSourcePurchaseOrderItemId(3021L);
@@ -1293,6 +1304,7 @@ class SalesOutboundServiceTest {
         existing.setTotalWeight(BigDecimal.ZERO);
         existing.setTotalAmount(BigDecimal.ZERO);
         existing.setItems(new ArrayList<>());
+        buildExistingOutboundItem(8005L, existing, 9005L);
 
         when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(existing));
         when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
@@ -1301,7 +1313,7 @@ class SalesOutboundServiceTest {
         service.updateStatus(1L, StatusConstants.AUDITED);
 
         assertThat(existing.getStatus()).isEqualTo("已审核");
-        verify(syncService).syncBySalesOrderReference("SO-SYNC");
+        verify(syncService).syncBySourceSalesOrderItemIds(List.of(9005L));
     }
 
     @Test
@@ -1474,6 +1486,30 @@ class SalesOutboundServiceTest {
                 any(org.springframework.data.jpa.domain.Specification.class),
                 any(org.springframework.data.domain.Pageable.class)
         );
+    }
+
+    @Test
+    void shouldFilterSalesOutboundPageByStableCustomerAndProjectIds() {
+        SalesOutboundRepository repository = mock(SalesOutboundRepository.class);
+        SalesOutboundService service = createService(
+                repository,
+                mock(SalesOutboundMapper.class),
+                mock(TradeItemMaterialSupport.class),
+                mock(WarehouseSelectionSupport.class),
+                mock(SalesOrderItemQueryService.class)
+        );
+        when(repository.findAll(any(Specification.class), any(Pageable.class)))
+                .thenReturn(new org.springframework.data.domain.PageImpl<>(List.of()));
+
+        service.page(
+                PageQuery.of(0, 20, null, null),
+                PageFilter.of(null, null, null, null, null)
+                        .withIdentity(101L, 102L, null, null, null)
+        );
+
+        var specCaptor = forClass(Specification.class);
+        verify(repository).findAll(specCaptor.capture(), any(Pageable.class));
+        assertStableIdentityPredicates(specCaptor.getValue(), 101L, 102L);
     }
 
     @Test
@@ -1702,6 +1738,29 @@ class SalesOutboundServiceTest {
                 mock(PurchaseOrderItemPieceWeightService.class),
                 mock(JdbcTemplate.class)
         );
+    }
+
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    private void assertStableIdentityPredicates(
+            Specification specification,
+            Long customerId,
+            Long projectId
+    ) {
+        Root root = mock(Root.class);
+        CriteriaQuery<?> query = mock(CriteriaQuery.class);
+        CriteriaBuilder criteriaBuilder = mock(CriteriaBuilder.class);
+        Path<Object> customerIdPath = mock(Path.class);
+        Path<Object> projectIdPath = mock(Path.class);
+        when(root.get("customerId")).thenReturn(customerIdPath);
+        when(root.get("projectId")).thenReturn(projectIdPath);
+        when(criteriaBuilder.conjunction()).thenReturn(mock(Predicate.class));
+        when(criteriaBuilder.equal(customerIdPath, customerId)).thenReturn(mock(Predicate.class));
+        when(criteriaBuilder.equal(projectIdPath, projectId)).thenReturn(mock(Predicate.class));
+
+        specification.toPredicate(root, query, criteriaBuilder);
+
+        verify(criteriaBuilder).equal(customerIdPath, customerId);
+        verify(criteriaBuilder).equal(projectIdPath, projectId);
     }
 
     private SalesOutboundService createService(SalesOutboundRepository repository,

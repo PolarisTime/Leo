@@ -7,8 +7,11 @@ public record FreightBillImportCandidateResponse(
         Long id,
         String outboundNo,
         String salesOrderNo,
+        Long customerId,
         String customerName,
+        Long projectId,
         String projectName,
+        Long warehouseId,
         String warehouseName,
         Long settlementCompanyId,
         String settlementCompanyName,
@@ -17,6 +20,22 @@ public record FreightBillImportCandidateResponse(
         BigDecimal totalAmount,
         String status
 ) {
+    public FreightBillImportCandidateResponse(Long id,
+                                              String outboundNo,
+                                              String salesOrderNo,
+                                              String customerName,
+                                              String projectName,
+                                              String warehouseName,
+                                              Long settlementCompanyId,
+                                              String settlementCompanyName,
+                                              LocalDate outboundDate,
+                                              BigDecimal totalWeight,
+                                              BigDecimal totalAmount,
+                                              String status) {
+        this(id, outboundNo, salesOrderNo, null, customerName, null, projectName, null, warehouseName,
+                settlementCompanyId, settlementCompanyName, outboundDate, totalWeight, totalAmount, status);
+    }
+
     public FreightBillImportCandidateResponse(
             Long id,
             String outboundNo,
@@ -29,7 +48,7 @@ public record FreightBillImportCandidateResponse(
             BigDecimal totalAmount,
             String status
     ) {
-        this(id, outboundNo, salesOrderNo, customerName, projectName, warehouseName, null, null,
+        this(id, outboundNo, salesOrderNo, null, customerName, null, projectName, null, warehouseName, null, null,
                 outboundDate, totalWeight, totalAmount, status);
     }
 }

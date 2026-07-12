@@ -37,6 +37,7 @@ public class InvoiceReceiptSourceService {
 
     SourceApplyResult applyItems(InvoiceReceipt entity,
                                  List<InvoiceReceiptItemRequest> itemRequests,
+                                 Long supplierId,
                                  String supplierCode,
                                  String supplierName,
                                  LongSupplier nextIdSupplier) {
@@ -63,6 +64,7 @@ public class InvoiceReceiptSourceService {
                     source,
                     sourcePurchaseOrderItemMap,
                     i + 1,
+                    supplierId,
                     supplierCode,
                     supplierName,
                     allocationSnapshots.invoices(),
@@ -84,6 +86,7 @@ public class InvoiceReceiptSourceService {
             item.setLineNo(i + 1);
             item.setSourceNo(resolvedItem.sourceNo());
             item.setSourcePurchaseOrderItemId(source.sourcePurchaseOrderItemId());
+            item.setMaterialId(resolvedItem.materialId());
             item.setMaterialCode(resolvedItem.materialCode());
             item.setBrand(resolvedItem.brand());
             item.setCategory(resolvedItem.category());
@@ -92,6 +95,7 @@ public class InvoiceReceiptSourceService {
             item.setLength(resolvedItem.length());
             item.setUnit(resolvedItem.unit());
             item.setWarehouseName(resolvedItem.warehouseName());
+            item.setWarehouseId(resolvedItem.warehouseId());
             item.setBatchNo(resolvedItem.batchNo());
             item.setQuantity(source.quantity());
             item.setQuantityUnit(resolvedItem.quantityUnit());
@@ -106,6 +110,7 @@ public class InvoiceReceiptSourceService {
         entity.getItems().sort(java.util.Comparator.comparing(InvoiceReceiptItem::getLineNo));
         return new SourceApplyResult(
                 amount,
+                supplierIdentity.id(),
                 supplierIdentity.code(),
                 supplierIdentity.name(),
                 settlementCompany.id(),
@@ -116,9 +121,17 @@ public class InvoiceReceiptSourceService {
 
     SourceApplyResult applyItems(InvoiceReceipt entity,
                                  List<InvoiceReceiptItemRequest> itemRequests,
+                                 String supplierCode,
                                  String supplierName,
                                  LongSupplier nextIdSupplier) {
-        return applyItems(entity, itemRequests, null, supplierName, nextIdSupplier);
+        return applyItems(entity, itemRequests, null, supplierCode, supplierName, nextIdSupplier);
+    }
+
+    SourceApplyResult applyItems(InvoiceReceipt entity,
+                                 List<InvoiceReceiptItemRequest> itemRequests,
+                                 String supplierName,
+                                 LongSupplier nextIdSupplier) {
+        return applyItems(entity, itemRequests, null, null, supplierName, nextIdSupplier);
     }
 
     void validateExistingItemsForReceipt(InvoiceReceipt entity) {
@@ -148,6 +161,7 @@ public class InvoiceReceiptSourceService {
         List<Long> sourceItemIds = extractSourceItemIds(items);
         AllocationSnapshots allocationSnapshots = loadAllocationSnapshots(sourceItemIds, entity.getId());
         SourceSnapshots snapshots = validateSourcePurchaseOrderAllocations(
+                entity.getSupplierId(),
                 entity.getSupplierCode(),
                 entity.getSupplierName(),
                 items,
@@ -156,6 +170,7 @@ public class InvoiceReceiptSourceService {
                 allocationSnapshots.invoices(),
                 allocationSnapshots.refunds()
         );
+        entity.setSupplierId(snapshots.supplierIdentity().id());
         entity.setSupplierCode(snapshots.supplierIdentity().code());
         entity.setSupplierName(snapshots.supplierIdentity().name());
         entity.setSettlementCompanyId(snapshots.settlementCompany().id());
@@ -224,6 +239,7 @@ public class InvoiceReceiptSourceService {
     }
 
     private SourceSnapshots validateSourcePurchaseOrderAllocations(
+            Long headerSupplierId,
             String headerSupplierCode,
             String headerSupplierName,
             List<InvoiceReceiptItemRequest> items,
@@ -241,6 +257,7 @@ public class InvoiceReceiptSourceService {
                     source,
                     sourcePurchaseOrderItemMap,
                     i + 1,
+                    headerSupplierId,
                     headerSupplierCode,
                     headerSupplierName,
                     invoiceProgressMap,
@@ -324,6 +341,7 @@ public class InvoiceReceiptSourceService {
     private ResolvedInvoiceReceiptItem resolveItem(InvoiceReceiptItemRequest source,
                                                    Map<Long, PurchaseOrderItem> sourcePurchaseOrderItemMap,
                                                    int lineNo,
+                                                   Long headerSupplierId,
                                                    String headerSupplierCode,
                                                    String headerSupplierName,
                                                    Map<Long, AllocationProgress> invoiceProgressMap,
@@ -341,7 +359,15 @@ public class InvoiceReceiptSourceService {
         if (sourcePurchaseOrder == null || sourcePurchaseOrder.getOrderNo() == null || sourcePurchaseOrder.getOrderNo().isBlank()) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行来源采购订单不存在");
         }
-        validateSourcePurchaseOrder(sourcePurchaseOrder, headerSupplierCode, headerSupplierName, lineNo);
+        validateSourcePurchaseOrder(
+                sourcePurchaseOrder,
+                headerSupplierId,
+                headerSupplierCode,
+                headerSupplierName,
+                lineNo
+        );
+        requireSameIdentity(source.materialId(), sourcePurchaseOrderItem.getMaterialId(), lineNo, "商品");
+        requireSameIdentity(source.warehouseId(), sourcePurchaseOrderItem.getWarehouseId(), lineNo, "仓库");
         BigDecimal pieceWeightTon = TradeItemCalculator.scaleWeightTon(sourcePurchaseOrderItem.getPieceWeightTon());
         BigDecimal unitPrice = TradeItemCalculator.scaleAmount(sourcePurchaseOrderItem.getUnitPrice());
         AllocationProgress refundProgress = refundProgressMap.getOrDefault(
@@ -360,6 +386,9 @@ public class InvoiceReceiptSourceService {
         );
         return new ResolvedInvoiceReceiptItem(
                 sourcePurchaseOrder.getOrderNo(),
+                sourcePurchaseOrder.getSupplierId(),
+                sourcePurchaseOrderItem.getMaterialId(),
+                sourcePurchaseOrderItem.getWarehouseId(),
                 sourcePurchaseOrderItem.getMaterialCode(),
                 sourcePurchaseOrderItem.getBrand(),
                 sourcePurchaseOrderItem.getCategory(),
@@ -433,6 +462,7 @@ public class InvoiceReceiptSourceService {
     }
 
     private void validateSourcePurchaseOrder(PurchaseOrder sourcePurchaseOrder,
+                                             Long headerSupplierId,
                                              String headerSupplierCode,
                                              String headerSupplierName,
                                              int lineNo) {
@@ -453,12 +483,24 @@ public class InvoiceReceiptSourceService {
                     "第" + lineNo + "行来源采购订单供应商编码与收票单不一致"
             );
         }
+        requireSameIdentity(headerSupplierId, sourcePurchaseOrder.getSupplierId(), lineNo, "供应商");
+    }
+
+    private void requireSameIdentity(Long requestedId, Long sourceId, int lineNo, String fieldName) {
+        if (requestedId != null && !requestedId.equals(sourceId)) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR,
+                    "第" + lineNo + "行" + fieldName + "ID与来源采购订单不一致");
+        }
     }
 
     private SupplierIdentitySnapshot mergeSupplierIdentity(SupplierIdentitySnapshot current,
                                                             ResolvedInvoiceReceiptItem item,
                                                             int lineNo) {
-        SupplierIdentitySnapshot next = new SupplierIdentitySnapshot(item.supplierCode(), item.supplierName());
+        SupplierIdentitySnapshot next = new SupplierIdentitySnapshot(
+                item.supplierId(),
+                item.supplierCode(),
+                item.supplierName()
+        );
         if (next.code() == null || next.name() == null) {
             throw new BusinessException(
                     ErrorCode.BUSINESS_ERROR,
@@ -500,6 +542,9 @@ public class InvoiceReceiptSourceService {
 
     private record ResolvedInvoiceReceiptItem(
             String sourceNo,
+            Long supplierId,
+            Long materialId,
+            Long warehouseId,
             String materialCode,
             String brand,
             String category,
@@ -553,6 +598,7 @@ public class InvoiceReceiptSourceService {
 
     record SourceApplyResult(
             BigDecimal amount,
+            Long supplierId,
             String supplierCode,
             String supplierName,
             Long settlementCompanyId,
@@ -564,13 +610,13 @@ public class InvoiceReceiptSourceService {
                           String supplierName,
                           Long settlementCompanyId,
                           String settlementCompanyName) {
-            this(amount, supplierCode, supplierName, settlementCompanyId, settlementCompanyName, false);
+            this(amount, null, supplierCode, supplierName, settlementCompanyId, settlementCompanyName, false);
         }
 
         SourceApplyResult(BigDecimal amount,
                           Long settlementCompanyId,
                           String settlementCompanyName) {
-            this(amount, null, null, settlementCompanyId, settlementCompanyName, false);
+            this(amount, null, null, null, settlementCompanyId, settlementCompanyName, false);
         }
     }
 
@@ -580,12 +626,12 @@ public class InvoiceReceiptSourceService {
     ) {
     }
 
-    private record SupplierIdentitySnapshot(String code, String name) {
+    private record SupplierIdentitySnapshot(Long id, String code, String name) {
 
-        private static final SupplierIdentitySnapshot EMPTY = new SupplierIdentitySnapshot(null, null);
+        private static final SupplierIdentitySnapshot EMPTY = new SupplierIdentitySnapshot(null, null, null);
 
         boolean isEmpty() {
-            return code == null && name == null;
+            return id == null && code == null && name == null;
         }
     }
 

@@ -47,13 +47,22 @@ public class InvoiceReceiptApplyService {
         entity.setOperatorName(request.operatorName());
         entity.setRemark(request.remark());
 
-        InvoiceReceiptSourceService.SourceApplyResult sourceResult = invoiceReceiptSourceService.applyItems(
-                entity,
-                request.items(),
-                request.supplierCode(),
-                request.supplierName(),
-                nextIdSupplier
-        );
+        InvoiceReceiptSourceService.SourceApplyResult sourceResult = request.supplierId() == null
+                ? invoiceReceiptSourceService.applyItems(
+                        entity,
+                        request.items(),
+                        request.supplierCode(),
+                        request.supplierName(),
+                        nextIdSupplier
+                )
+                : invoiceReceiptSourceService.applyItems(
+                        entity,
+                        request.items(),
+                        request.supplierId(),
+                        request.supplierCode(),
+                        request.supplierName(),
+                        nextIdSupplier
+                );
         InvoiceAmountCalculator.InvoiceAmounts amounts = amountCalculator.resolve(
                 "收票",
                 sourceResult.amount(),
@@ -68,6 +77,7 @@ public class InvoiceReceiptApplyService {
         entity.setSupplierName(sourceResult.supplierName() == null
                 ? request.supplierName()
                 : sourceResult.supplierName());
+        entity.setSupplierId(sourceResult.supplierId());
         entity.setSettlementCompanyId(sourceResult.settlementCompanyId());
         entity.setSettlementCompanyName(sourceResult.settlementCompanyName());
         entity.setInvoiceTitle(sourceResult.settlementCompanyName());

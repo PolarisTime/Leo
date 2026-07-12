@@ -136,8 +136,10 @@ public class PurchaseInboundService extends AbstractCrudService<
         return new PurchaseInboundRequest(
                 resolveCreateBusinessNo("purchase-inbound", request.inboundNo(), entityId),
                 request.purchaseOrderNo(),
+                request.supplierId(),
                 request.supplierCode(),
                 request.supplierName(),
+                request.warehouseId(),
                 request.warehouseName(),
                 request.inboundDate(),
                 request.settlementMode(),
@@ -152,10 +154,12 @@ public class PurchaseInboundService extends AbstractCrudService<
         return new PurchaseInboundRequest(
                 entity.getInboundNo(),
                 request.purchaseOrderNo(),
+                request.supplierId() == null ? entity.getSupplierId() : request.supplierId(),
                 request.supplierCode() == null || request.supplierCode().isBlank()
                         ? entity.getSupplierCode()
                         : request.supplierCode(),
                 request.supplierName(),
+                request.warehouseId() == null ? entity.getWarehouseId() : request.warehouseId(),
                 request.warehouseName(),
                 request.inboundDate(),
                 request.settlementMode(),
@@ -218,8 +222,10 @@ public class PurchaseInboundService extends AbstractCrudService<
         );
         inbound.setInboundNo(request.inboundNo());
         inbound.setPurchaseOrderNo(request.purchaseOrderNo());
+        inbound.setSupplierId(request.supplierId());
         inbound.setSupplierCode(request.supplierCode());
         inbound.setSupplierName(request.supplierName());
+        inbound.setWarehouseId(request.warehouseId());
         inbound.setInboundDate(request.inboundDate());
         inbound.setStatus(nextStatus);
         inbound.setRemark(request.remark());
