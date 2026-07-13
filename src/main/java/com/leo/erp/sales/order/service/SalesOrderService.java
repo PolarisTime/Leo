@@ -389,7 +389,14 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
     @Override
     protected void apply(SalesOrder entity, SalesOrderRequest request) {
         lockPurchaseSources(entity, request);
-        if (entity.getItems().stream().anyMatch(item -> item.getId() != null)
+        boolean auditedPricingUpdate = salesOrderAuditedPricingService.isAuditedPricingUpdate(entity, request);
+        if (downstreamMutationGuard != null
+                && StatusConstants.AUDITED.equals(entity.getStatus())
+                && StatusConstants.DRAFT.equals(request.status() == null ? null : request.status().trim())) {
+            downstreamMutationGuard.assertMutable(entity, "反审核");
+        }
+        if (!auditedPricingUpdate
+                && entity.getItems().stream().anyMatch(item -> item.getId() != null)
                 && downstreamMutationGuard != null) {
             downstreamMutationGuard.assertSourceLineMutationAllowed(entity, request.items(), "修改");
         }
@@ -400,7 +407,7 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
         } else if (entity.getId() != null && invoiceSourceMutationGuard != null) {
             invoiceSourceMutationGuard.assertSalesOrderMutable(entity, "修改");
         }
-        if (salesOrderAuditedPricingService.isAuditedPricingUpdate(entity, request)) {
+        if (auditedPricingUpdate) {
             salesOrderApplyService.validateCustomerSnapshot(request);
             salesOrderAuditedPricingService.applyAuditedPricingUpdate(entity, request);
             return;

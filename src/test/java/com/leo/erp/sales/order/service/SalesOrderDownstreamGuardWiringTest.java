@@ -125,6 +125,66 @@ class SalesOrderDownstreamGuardWiringTest {
         verify(guard, never()).assertSourceLineMutationAllowed(any(), any(), any());
     }
 
+    @Test
+    void shouldCheckDownstreamWhenGeneralUpdateReverseAuditsToDraft() {
+        SalesOrderRepository repository = mock(SalesOrderRepository.class);
+        SalesOrderApplyService applyService = mock(SalesOrderApplyService.class);
+        SalesOrderAuditedPricingService pricingService = mock(SalesOrderAuditedPricingService.class);
+        SalesOrderProtectedUpdatePolicy protectedUpdatePolicy = mock(SalesOrderProtectedUpdatePolicy.class);
+        SalesOrderDownstreamMutationGuard guard = mock(SalesOrderDownstreamMutationGuard.class);
+        SalesOrder order = order(StatusConstants.AUDITED);
+        SalesOrderRequest request = request(1);
+        SalesOrderService service = service(
+                repository,
+                mock(SnowflakeIdGenerator.class),
+                applyService,
+                pricingService,
+                protectedUpdatePolicy,
+                mock(SalesOrderSaveService.class),
+                guard
+        );
+        when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(order));
+        when(protectedUpdatePolicy.allowsProtectedUpdate(order, request)).thenReturn(true);
+        doThrow(blocked()).when(guard).assertMutable(order, "反审核");
+
+        assertThatThrownBy(() -> service.update(1L, request))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("下游占用");
+
+        verify(applyService, never()).apply(any(), any(), any());
+    }
+
+    @Test
+    void shouldKeepSynchronizedAuditedPricingUpdateOutsideSourceMutationGuard() {
+        SalesOrderRepository repository = mock(SalesOrderRepository.class);
+        SalesOrderApplyService applyService = mock(SalesOrderApplyService.class);
+        SalesOrderAuditedPricingService pricingService = mock(SalesOrderAuditedPricingService.class);
+        SalesOrderProtectedUpdatePolicy protectedUpdatePolicy = mock(SalesOrderProtectedUpdatePolicy.class);
+        SalesOrderDownstreamMutationGuard guard = mock(SalesOrderDownstreamMutationGuard.class);
+        SalesOrderSaveService saveService = mock(SalesOrderSaveService.class);
+        SalesOrder order = order(StatusConstants.AUDITED);
+        SalesOrderRequest request = request(StatusConstants.AUDITED, 1);
+        SalesOrderService service = service(
+                repository,
+                mock(SnowflakeIdGenerator.class),
+                applyService,
+                pricingService,
+                protectedUpdatePolicy,
+                saveService,
+                guard
+        );
+        when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(order));
+        when(protectedUpdatePolicy.allowsProtectedUpdate(order, request)).thenReturn(true);
+        when(pricingService.isAuditedPricingUpdate(order, request)).thenReturn(true);
+        when(saveService.saveAuditedPricingUpdate(order)).thenReturn(order);
+
+        service.update(1L, request);
+
+        verify(guard, never()).assertMutable(any(), any());
+        verify(guard, never()).assertSourceLineMutationAllowed(any(), any(), any());
+        verify(pricingService).applyAuditedPricingUpdate(order, request);
+    }
+
     private SalesOrderService service(
             SalesOrderRepository repository,
             SalesOrderApplyService applyService,
@@ -137,6 +197,7 @@ class SalesOrderDownstreamGuardWiringTest {
                 mock(SnowflakeIdGenerator.class),
                 applyService,
                 pricingService,
+                mock(SalesOrderProtectedUpdatePolicy.class),
                 saveService,
                 guard
         );
@@ -150,6 +211,26 @@ class SalesOrderDownstreamGuardWiringTest {
             SalesOrderSaveService saveService,
             SalesOrderDownstreamMutationGuard guard
     ) {
+        return service(
+                repository,
+                idGenerator,
+                applyService,
+                pricingService,
+                mock(SalesOrderProtectedUpdatePolicy.class),
+                saveService,
+                guard
+        );
+    }
+
+    private SalesOrderService service(
+            SalesOrderRepository repository,
+            SnowflakeIdGenerator idGenerator,
+            SalesOrderApplyService applyService,
+            SalesOrderAuditedPricingService pricingService,
+            SalesOrderProtectedUpdatePolicy protectedUpdatePolicy,
+            SalesOrderSaveService saveService,
+            SalesOrderDownstreamMutationGuard guard
+    ) {
         return new SalesOrderService(
                 repository,
                 idGenerator,
@@ -157,7 +238,7 @@ class SalesOrderDownstreamGuardWiringTest {
                 applyService,
                 mock(SalesOrderPurchaseAllocationService.class),
                 pricingService,
-                mock(SalesOrderProtectedUpdatePolicy.class),
+                protectedUpdatePolicy,
                 saveService,
                 mock(SalesOrderItemRepository.class),
                 mock(SourceAllocationLockService.class),
@@ -182,6 +263,10 @@ class SalesOrderDownstreamGuardWiringTest {
     }
 
     private SalesOrderRequest request(Integer quantity) {
+        return request(StatusConstants.DRAFT, quantity);
+    }
+
+    private SalesOrderRequest request(String status, Integer quantity) {
         SalesOrderItemRequest item = new SalesOrderItemRequest(
                 11L,
                 101L,
@@ -218,7 +303,7 @@ class SalesOrderDownstreamGuardWiringTest {
                 "结算主体A",
                 LocalDate.of(2026, 7, 13),
                 "销售员",
-                StatusConstants.DRAFT,
+                status,
                 null,
                 List.of(item)
         );
