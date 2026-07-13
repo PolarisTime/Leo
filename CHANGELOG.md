@@ -1,3 +1,26 @@
+# [3.0.0](https://github.com/PolarisTime/Leo/compare/v2.2.0...v3.0.0) (2026-07-13)
+
+
+* feat(finance)!: 完善采购退款与结算闭环 ([7c1f0c4](https://github.com/PolarisTime/Leo/commit/7c1f0c4299aa83acb6203482d2b0a85aadd0f04f))
+
+
+### Bug Fixes
+
+* **flyway:** 补齐物流商编码检查约束 ([8f096c8](https://github.com/PolarisTime/Leo/commit/8f096c8270833c788a1c527508dad8bad77423c3))
+* **purchase:** 修复采购入库审核后订单未自动完成 ([ebe813d](https://github.com/PolarisTime/Leo/commit/ebe813dc7124cd32f66b55a3c2583c538b303a81))
+
+
+### Features
+
+* **identity:** 完成全系统雪花稳定身份迁移 ([ac3ace1](https://github.com/PolarisTime/Leo/commit/ac3ace15e6a8b7d0d4878aa40230b87db533139f))
+* **identity:** 完成生产稳定身份迁移发布 ([0c7225f](https://github.com/PolarisTime/Leo/commit/0c7225f2c9c56081a30a7dd9ac4e7fe1c326c2ab))
+* **sales:** 新增销售订单交付核定流程 ([dd5488c](https://github.com/PolarisTime/Leo/commit/dd5488c6b9135303f591e91ebad15155c85f7b39))
+
+
+### BREAKING CHANGES
+
+* 物流单与物流对账单现在要求稳定 carrierCode；V18 迁移后旧版本服务无法继续写入缺少 carrier_code 的物流单。
+
 # [2.2.0](https://github.com/PolarisTime/Leo/compare/v2.1.2...v2.2.0) (2026-07-10)
 
 
