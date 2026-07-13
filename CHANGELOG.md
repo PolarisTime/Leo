@@ -1,3 +1,10 @@
+## [3.1.2](https://github.com/PolarisTime/Leo/compare/v3.1.1...v3.1.2) (2026-07-13)
+
+
+### Bug Fixes
+
+* **order:** 完善销售订单保护更新校验 ([cd576d9](https://github.com/PolarisTime/Leo/commit/cd576d9c3d9b721a8083863124729600b8d98999))
+
 ## [3.1.1](https://github.com/PolarisTime/Leo/compare/v3.1.0...v3.1.1) (2026-07-13)
 
 
