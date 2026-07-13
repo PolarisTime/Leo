@@ -1,3 +1,10 @@
+# [3.1.0](https://github.com/PolarisTime/Leo/compare/v3.0.1...v3.1.0) (2026-07-13)
+
+
+### Features
+
+* **import:** 完善来源候选筛选与完成状态反审核 ([438be46](https://github.com/PolarisTime/Leo/commit/438be46601ee9889da6fa9a2f742de0b6850aac0))
+
 ## [3.0.1](https://github.com/PolarisTime/Leo/compare/v3.0.0...v3.0.1) (2026-07-13)
 
 
