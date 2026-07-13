@@ -1,3 +1,11 @@
+## [3.0.1](https://github.com/PolarisTime/Leo/compare/v3.0.0...v3.0.1) (2026-07-13)
+
+
+### Bug Fixes
+
+* **identity:** 补充开发库身份与打印模板关联修复 ([0644e49](https://github.com/PolarisTime/Leo/commit/0644e49e31d337b33372a036a46acb445481afcf))
+* **sales-order:** 允许导入完成采购订单 ([75fa42d](https://github.com/PolarisTime/Leo/commit/75fa42df7de560a96a71db95269d16b0f792919b))
+
 # [3.0.0](https://github.com/PolarisTime/Leo/compare/v2.2.0...v3.0.0) (2026-07-13)
 
 
