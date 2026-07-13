@@ -1,3 +1,12 @@
+## [3.1.1](https://github.com/PolarisTime/Leo/compare/v3.1.0...v3.1.1) (2026-07-13)
+
+
+### Bug Fixes
+
+* **ci:** 补齐后端烟雾测试迁移目标 ([1b12d9b](https://github.com/PolarisTime/Leo/commit/1b12d9bff5b9a6528689a3a4b2f91e76e90892cf))
+* **order:** 补齐源单下游校验与合同状态接口 ([7b9ae40](https://github.com/PolarisTime/Leo/commit/7b9ae407bc07f6bbbc54ef2261d5e8e92c9d4390))
+* **order:** 避免新建单据触发下游校验 ([f75be34](https://github.com/PolarisTime/Leo/commit/f75be347801dd901a91a10bffd64ee9cf14f8a41))
+
 # [3.1.0](https://github.com/PolarisTime/Leo/compare/v3.0.1...v3.1.0) (2026-07-13)
 
 
