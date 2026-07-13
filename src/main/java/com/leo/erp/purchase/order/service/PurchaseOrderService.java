@@ -407,7 +407,8 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
     @Override
     protected void apply(PurchaseOrder purchaseOrder, PurchaseOrderRequest request) {
         if (purchaseOrder.getId() != null) {
-            if (downstreamMutationGuard != null) {
+            if (downstreamMutationGuard != null
+                    && purchaseOrder.getItems().stream().anyMatch(item -> item.getId() != null)) {
                 downstreamMutationGuard.assertSourceLineMutationAllowed(purchaseOrder, request.items(), "修改");
             }
             assertNoActivePurchaseRefund(purchaseOrder, "修改");

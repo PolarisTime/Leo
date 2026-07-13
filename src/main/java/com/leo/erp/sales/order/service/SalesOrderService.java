@@ -389,7 +389,8 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
     @Override
     protected void apply(SalesOrder entity, SalesOrderRequest request) {
         lockPurchaseSources(entity, request);
-        if (entity.getId() != null && downstreamMutationGuard != null) {
+        if (entity.getItems().stream().anyMatch(item -> item.getId() != null)
+                && downstreamMutationGuard != null) {
             downstreamMutationGuard.assertSourceLineMutationAllowed(entity, request.items(), "修改");
         }
         if (entity.getId() != null
