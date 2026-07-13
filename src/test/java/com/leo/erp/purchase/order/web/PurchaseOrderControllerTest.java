@@ -82,7 +82,7 @@ class PurchaseOrderControllerTest {
         when(purchaseOrderService.importCandidates(any(), any(), eq("usage"))).thenReturn(page);
 
         ApiResponse<PageResponse<PurchaseOrderImportCandidateResponse>> response = controller.importCandidates(
-                query, "test", 101L, "supplier", 7L, "active", null, null, "usage"
+                query, "test", 101L, "supplier", 7L, "active", null, null, 9001L, "usage"
         );
 
         assertThat(response.code()).isEqualTo(0);
@@ -91,6 +91,7 @@ class PurchaseOrderControllerTest {
         verify(purchaseOrderService).importCandidates(eq(query), filterCaptor.capture(), eq("usage"));
         assertThat(filterCaptor.getValue().settlementCompanyId()).isEqualTo(7L);
         assertThat(filterCaptor.getValue().supplierId()).isEqualTo(101L);
+        assertThat(filterCaptor.getValue().currentRecordId()).isEqualTo(9001L);
     }
 
     @Test

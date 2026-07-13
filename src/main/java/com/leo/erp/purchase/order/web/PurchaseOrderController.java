@@ -64,13 +64,14 @@ public class PurchaseOrderController {
             @RequestParam(required = false) String status,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate,
+            @RequestParam(required = false) Long currentRecordId,
             @RequestParam String usage
     ) {
         return ApiResponse.success(PageResponse.from(
                 purchaseOrderService.importCandidates(
                         query,
                         PageFilter.of(keyword, supplierName, settlementCompanyId, status, startDate, endDate)
-                                .withIdentity(null, null, supplierId, null, null),
+                                .withIdentity(null, null, supplierId, null, currentRecordId),
                         usage
                 )
         ));

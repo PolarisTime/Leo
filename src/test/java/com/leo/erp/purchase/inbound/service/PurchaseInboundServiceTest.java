@@ -66,6 +66,31 @@ class PurchaseInboundServiceTest {
     }
 
     @Test
+    void shouldReverseCompletedInboundToDraftAndRecalculateSourceOrder() {
+        PurchaseInboundRepository repository = mock(PurchaseInboundRepository.class);
+        PurchaseInboundCompletionSyncService completionSyncService =
+                mock(PurchaseInboundCompletionSyncService.class);
+        PurchaseInboundService service = lockAwareService(
+                repository,
+                mock(SnowflakeIdGenerator.class),
+                mock(PurchaseInboundApplyService.class),
+                mock(PurchaseInboundDeleteService.class),
+                completionSyncService,
+                mock(SourceAllocationLockService.class)
+        );
+        PurchaseInbound existing = inbound();
+        existing.setStatus(StatusConstants.INBOUND_COMPLETED);
+
+        when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(existing));
+        when(repository.save(existing)).thenReturn(existing);
+
+        service.updateStatus(1L, StatusConstants.DRAFT);
+
+        assertThat(existing.getStatus()).isEqualTo(StatusConstants.DRAFT);
+        verify(completionSyncService).synchronizeSourcePurchaseOrders(existing);
+    }
+
+    @Test
     void shouldRequireSourceAllocationLockServiceAsConstructorDependency() {
         boolean hasRequiredDependency = java.util.Arrays.stream(PurchaseInboundService.class.getConstructors())
                 .anyMatch(constructor -> java.util.Arrays.asList(constructor.getParameterTypes())
@@ -250,6 +275,66 @@ class PurchaseInboundServiceTest {
     }
 
     @Test
+    void shouldRejectUnauditingCompletedInboundWhileAuditedRefundDependsOnIt() {
+        PurchaseInboundRepository repository = mock(PurchaseInboundRepository.class);
+        PurchaseRefundRepository refundRepository = mock(PurchaseRefundRepository.class);
+        PurchaseInboundService service = lockAwareService(
+                repository,
+                mock(SnowflakeIdGenerator.class),
+                mock(PurchaseInboundApplyService.class),
+                mock(PurchaseInboundDeleteService.class),
+                mock(PurchaseInboundCompletionSyncService.class),
+                mock(SourceAllocationLockService.class),
+                new PurchaseInboundRefundGuard(refundRepository)
+        );
+        PurchaseInbound existing = inbound();
+        existing.setStatus(StatusConstants.INBOUND_COMPLETED);
+        existing.getItems().add(inboundItem(101L, existing, 4));
+        PurchaseRefundRepository.PurchaseOrderRefundQuantitySummary refundSummary =
+                mock(PurchaseRefundRepository.PurchaseOrderRefundQuantitySummary.class);
+
+        when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(existing));
+        when(refundRepository.summarizeAuditedQuantityBySourcePurchaseOrderItemIds(List.of(201L)))
+                .thenReturn(List.of(refundSummary));
+
+        assertThatThrownBy(() -> service.updateStatus(1L, StatusConstants.DRAFT))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("采购退款单")
+                .hasMessageContaining("反审核");
+
+        assertThat(existing.getStatus()).isEqualTo(StatusConstants.INBOUND_COMPLETED);
+        verify(repository, org.mockito.Mockito.never()).save(any());
+    }
+
+    @Test
+    void shouldCheckSupplierStatementBeforeReopeningCompletedInbound() {
+        PurchaseInboundRepository repository = mock(PurchaseInboundRepository.class);
+        PurchaseInboundStatementGuard statementGuard = mock(PurchaseInboundStatementGuard.class);
+        PurchaseInboundService service = lockAwareService(
+                repository,
+                mock(SnowflakeIdGenerator.class),
+                mock(PurchaseInboundApplyService.class),
+                mock(PurchaseInboundDeleteService.class),
+                mock(PurchaseInboundCompletionSyncService.class),
+                mock(SourceAllocationLockService.class),
+                mock(PurchaseInboundRefundGuard.class),
+                statementGuard
+        );
+        PurchaseInbound existing = inbound();
+        existing.setStatus(StatusConstants.INBOUND_COMPLETED);
+        when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(existing));
+        when(repository.save(existing)).thenReturn(existing);
+
+        service.updateStatus(1L, StatusConstants.DRAFT);
+
+        verify(statementGuard).assertStatusTransitionAllowed(
+                existing,
+                StatusConstants.INBOUND_COMPLETED,
+                StatusConstants.DRAFT
+        );
+    }
+
+    @Test
     void shouldCompleteInboundAndSourcePurchaseOrderWhenAuditingByStatusEndpoint() {
         PurchaseInboundRepository repository = mock(PurchaseInboundRepository.class);
         PurchaseInboundCompletionSyncService completionSyncService =
@@ -271,7 +356,7 @@ class PurchaseInboundServiceTest {
         service.updateStatus(1L, "已审核");
 
         assertThat(existing.getStatus()).isEqualTo("完成入库");
-        verify(completionSyncService).completeSourcePurchaseOrders(existing);
+        verify(completionSyncService).synchronizeSourcePurchaseOrders(existing);
     }
 
     @Test
@@ -310,7 +395,7 @@ class PurchaseInboundServiceTest {
         var saved = forClass(PurchaseInbound.class);
         verify(repository).save(saved.capture());
         assertThat(saved.getValue().getStatus()).isEqualTo("完成入库");
-        verify(completionSyncService).completeSourcePurchaseOrders(saved.getValue());
+        verify(completionSyncService).synchronizeSourcePurchaseOrders(saved.getValue());
     }
 
     @Test
@@ -1098,7 +1183,8 @@ class PurchaseInboundServiceTest {
                 deleteService,
                 completionSyncService,
                 lockService,
-                mock(PurchaseInboundRefundGuard.class)
+                mock(PurchaseInboundRefundGuard.class),
+                mock(PurchaseInboundStatementGuard.class)
         );
     }
 
@@ -1111,6 +1197,28 @@ class PurchaseInboundServiceTest {
             SourceAllocationLockService lockService,
             PurchaseInboundRefundGuard purchaseInboundRefundGuard
     ) {
+        return lockAwareService(
+                repository,
+                idGenerator,
+                applyService,
+                deleteService,
+                completionSyncService,
+                lockService,
+                purchaseInboundRefundGuard,
+                mock(PurchaseInboundStatementGuard.class)
+        );
+    }
+
+    private PurchaseInboundService lockAwareService(
+            PurchaseInboundRepository repository,
+            SnowflakeIdGenerator idGenerator,
+            PurchaseInboundApplyService applyService,
+            PurchaseInboundDeleteService deleteService,
+            PurchaseInboundCompletionSyncService completionSyncService,
+            SourceAllocationLockService lockService,
+            PurchaseInboundRefundGuard purchaseInboundRefundGuard,
+            PurchaseInboundStatementGuard purchaseInboundStatementGuard
+    ) {
         return new PurchaseInboundService(
                 repository,
                 idGenerator,
@@ -1122,7 +1230,8 @@ class PurchaseInboundServiceTest {
                 mock(PurchaseInboundPieceWeightService.class),
                 mock(WorkflowTransitionGuard.class),
                 lockService,
-                purchaseInboundRefundGuard
+                purchaseInboundRefundGuard,
+                purchaseInboundStatementGuard
         );
     }
 
@@ -1161,7 +1270,8 @@ class PurchaseInboundServiceTest {
                 new PurchaseInboundPieceWeightService(new PurchaseInboundItemQueryService(purchaseInboundItemRepository, null)),
                 workflowTransitionGuard,
                 mock(SourceAllocationLockService.class),
-                mock(PurchaseInboundRefundGuard.class)
+                mock(PurchaseInboundRefundGuard.class),
+                mock(PurchaseInboundStatementGuard.class)
         );
     }
 

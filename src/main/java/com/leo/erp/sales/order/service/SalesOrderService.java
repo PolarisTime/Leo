@@ -133,7 +133,7 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
             pageIndex++;
         } while (orderPage.hasNext());
 
-        java.util.Set<Long> occupiedItemIds = occupiedItemIds(orders);
+        java.util.Set<Long> occupiedItemIds = occupiedItemIds(orders, filter.currentRecordId());
         List<SalesOrderResponse> candidates = orders.stream()
                 .filter(order -> StatusConstants.AUDITED.equals(order.getStatus()))
                 .filter(order -> order.getItems().stream()
@@ -153,7 +153,7 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
         );
     }
 
-    private java.util.Set<Long> occupiedItemIds(List<SalesOrder> orders) {
+    private java.util.Set<Long> occupiedItemIds(List<SalesOrder> orders, Long currentOutboundId) {
         List<Long> itemIds = orders.stream()
                 .flatMap(order -> order.getItems().stream())
                 .map(SalesOrderItem::getId)
@@ -163,7 +163,10 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
         if (itemIds.isEmpty()) {
             return java.util.Set.of();
         }
-        return new java.util.HashSet<>(salesOrderItemRepository.findOccupiedSourceSalesOrderItemIds(itemIds));
+        return new java.util.HashSet<>(salesOrderItemRepository.findOccupiedSourceSalesOrderItemIds(
+                itemIds,
+                currentOutboundId
+        ));
     }
 
     private static final String[] SALES_ORDER_SEARCH_FIELDS = {"orderNo", "purchaseOrderNo", "customerName", "projectName"};

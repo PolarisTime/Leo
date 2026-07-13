@@ -472,7 +472,7 @@ class SalesOrderServiceTest {
 
         when(repository.findAll(any(Specification.class), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(auditedOpen, auditedOccupied, draftOpen)));
-        when(salesOrderItemRepository.findOccupiedSourceSalesOrderItemIds(anyCollection()))
+        when(salesOrderItemRepository.findOccupiedSourceSalesOrderItemIds(anyCollection(), eq(9001L)))
                 .thenReturn(List.of(102L, 104L));
         when(mapper.toResponse(any())).thenAnswer(invocation -> {
             com.leo.erp.sales.order.domain.entity.SalesOrder order = invocation.getArgument(0);
@@ -500,6 +500,7 @@ class SalesOrderServiceTest {
         var page = service.outboundImportCandidates(
                 com.leo.erp.common.api.PageQuery.of(0, 20, null, null),
                 com.leo.erp.common.api.PageFilter.of("", null, null, null, null)
+                        .withIdentity(null, null, null, null, 9001L)
         );
 
         assertThat(page.getContent()).singleElement().satisfies(candidate -> {
@@ -509,6 +510,8 @@ class SalesOrderServiceTest {
             assertThat(candidate.items()).extracting("id").containsExactly(101L);
         });
         assertThat(page.getTotalElements()).isEqualTo(1);
+        verify(salesOrderItemRepository)
+                .findOccupiedSourceSalesOrderItemIds(anyCollection(), eq(9001L));
     }
 
     @Test
@@ -659,7 +662,8 @@ class SalesOrderServiceTest {
 
         assertThat(page.getContent()).isEmpty();
         assertThat(page.getTotalElements()).isZero();
-        verify(salesOrderItemRepository, never()).findOccupiedSourceSalesOrderItemIds(anyCollection());
+        verify(salesOrderItemRepository, never())
+                .findOccupiedSourceSalesOrderItemIds(anyCollection(), any());
     }
 
     @Test
@@ -697,7 +701,7 @@ class SalesOrderServiceTest {
                                 201
                         )
                 );
-        when(salesOrderItemRepository.findOccupiedSourceSalesOrderItemIds(anyCollection()))
+        when(salesOrderItemRepository.findOccupiedSourceSalesOrderItemIds(anyCollection(), any()))
                 .thenReturn(List.of());
         when(mapper.toResponse(any())).thenAnswer(invocation -> {
             com.leo.erp.sales.order.domain.entity.SalesOrder order = invocation.getArgument(0);

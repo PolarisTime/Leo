@@ -46,6 +46,8 @@ public class PurchaseInboundRefundGuard {
 
     private boolean crossesAuditBoundary(String currentStatus, String nextStatus) {
         return (StatusConstants.DRAFT.equals(currentStatus) && StatusConstants.AUDITED.equals(nextStatus))
-                || (StatusConstants.AUDITED.equals(currentStatus) && StatusConstants.DRAFT.equals(nextStatus));
+                || (StatusConstants.DRAFT.equals(nextStatus)
+                && (StatusConstants.AUDITED.equals(currentStatus)
+                || StatusConstants.INBOUND_COMPLETED.equals(currentStatus)));
     }
 }

@@ -1,13 +1,17 @@
 package com.leo.erp.finance.invoiceissue.web;
 
 import com.leo.erp.common.api.ApiResponse;
+import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.api.PageResponse;
 import com.leo.erp.common.web.dto.StatusUpdateRequest;
+import com.leo.erp.finance.invoiceissue.service.InvoiceIssueCandidateService;
 import com.leo.erp.finance.invoiceissue.service.InvoiceIssueService;
 import com.leo.erp.finance.invoiceissue.web.dto.InvoiceIssueRequest;
 import com.leo.erp.finance.invoiceissue.web.dto.InvoiceIssueResponse;
+import com.leo.erp.finance.invoiceissue.web.dto.InvoiceIssueSourceCandidateResponse;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 
@@ -23,7 +27,8 @@ import static org.mockito.Mockito.when;
 class InvoiceIssueControllerTest {
 
     private final InvoiceIssueService service = mock(InvoiceIssueService.class);
-    private final InvoiceIssueController controller = new InvoiceIssueController(service);
+    private final InvoiceIssueCandidateService candidateService = mock(InvoiceIssueCandidateService.class);
+    private final InvoiceIssueController controller = new InvoiceIssueController(service, candidateService);
 
     @Test
     void searchReturnsInvoiceIssueList() {
@@ -67,6 +72,36 @@ class InvoiceIssueControllerTest {
 
         assertThat(response.code()).isEqualTo(0);
         assertThat(response.data().content()).hasSize(1);
+    }
+
+    @Test
+    void sourceCandidatesPassStableFiltersAndCurrentIssueId() {
+        InvoiceIssueSourceCandidateResponse candidate = mock(InvoiceIssueSourceCandidateResponse.class);
+        PageQuery query = PageQuery.of(0, 15, null, null);
+        when(candidateService.sourceCandidates(any(), any()))
+                .thenReturn(new PageImpl<>(List.of(candidate)));
+
+        ApiResponse<PageResponse<InvoiceIssueSourceCandidateResponse>> response = controller.sourceCandidates(
+                query,
+                "SO-001",
+                501L,
+                "客户A",
+                601L,
+                "项目A",
+                88L,
+                null,
+                null,
+                null,
+                9001L
+        );
+
+        assertThat(response.data().content()).containsExactly(candidate);
+        ArgumentCaptor<PageFilter> filterCaptor = ArgumentCaptor.forClass(PageFilter.class);
+        verify(candidateService).sourceCandidates(eq(query), filterCaptor.capture());
+        assertThat(filterCaptor.getValue().customerId()).isEqualTo(501L);
+        assertThat(filterCaptor.getValue().projectId()).isEqualTo(601L);
+        assertThat(filterCaptor.getValue().settlementCompanyId()).isEqualTo(88L);
+        assertThat(filterCaptor.getValue().currentRecordId()).isEqualTo(9001L);
     }
 
     @Test

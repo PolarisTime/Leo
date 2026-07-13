@@ -56,6 +56,7 @@ import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.ArgumentMatchers.nullable;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -69,6 +70,36 @@ class PurchaseOrderServiceTest {
     @AfterEach
     void clearSecurityContext() {
         SecurityContextHolder.clearContext();
+    }
+
+    @Test
+    void shouldReopenCompletedPurchaseOrderToAudited() {
+        PurchaseOrderRepository repository = mock(PurchaseOrderRepository.class);
+        PurchaseOrderMapper mapper = mock(PurchaseOrderMapper.class);
+        PurchaseOrderService service = service(
+                repository,
+                mock(SnowflakeIdGenerator.class),
+                mapper,
+                mock(TradeItemMaterialSupport.class),
+                mock(WarehouseSelectionSupport.class),
+                mock(SupplierRepository.class),
+                mock(PurchaseInboundItemQueryService.class),
+                mock(ItemAllocationNativeRepository.class),
+                mock(PurchaseOrderItemPieceWeightService.class),
+                mock(WorkflowTransitionGuard.class),
+                mock(JdbcTemplate.class)
+        );
+        PurchaseOrder order = buildOrder();
+        order.setStatus("完成采购");
+
+        when(repository.findByIdAndDeletedFlagFalse(1L)).thenReturn(Optional.of(order));
+        when(repository.save(order)).thenReturn(order);
+        when(mapper.toResponse(order)).thenReturn(summaryResponse("已审核"));
+
+        service.updateStatus(1L, "已审核");
+
+        assertThat(order.getStatus()).isEqualTo("已审核");
+        verify(repository).save(order);
     }
 
     @Test
@@ -1579,7 +1610,8 @@ class PurchaseOrderServiceTest {
         importableQuantityMap.put(2L, 3);
         when(availabilityService.buildImportableQuantityMap(
                 any(),
-                eq(PurchaseOrderAvailabilityService.ImportCandidateUsage.PURCHASE_INBOUND)
+                eq(PurchaseOrderAvailabilityService.ImportCandidateUsage.PURCHASE_INBOUND),
+                isNull()
         )).thenReturn(importableQuantityMap);
 
         var page = service.importCandidates(

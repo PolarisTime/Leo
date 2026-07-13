@@ -25,9 +25,11 @@ public interface PurchaseRefundRepository extends JpaRepository<PurchaseRefund, 
             from PurchaseRefund refund
             where refund.deletedFlag = false
               and refund.sourcePurchaseOrderId in :sourcePurchaseOrderIds
+              and (:currentRefundId is null or refund.id <> :currentRefundId)
             """)
     List<Long> findActiveSourcePurchaseOrderIdsBySourcePurchaseOrderIdIn(
-            @Param("sourcePurchaseOrderIds") Collection<Long> sourcePurchaseOrderIds
+            @Param("sourcePurchaseOrderIds") Collection<Long> sourcePurchaseOrderIds,
+            @Param("currentRefundId") Long currentRefundId
     );
 
     @EntityGraph(attributePaths = "items")

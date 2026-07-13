@@ -96,7 +96,7 @@ public class PurchaseInboundCompletionSyncService {
         });
     }
 
-    void completeSourcePurchaseOrders(PurchaseInbound inbound) {
+    void synchronizeSourcePurchaseOrders(PurchaseInbound inbound) {
         List<Long> sourcePurchaseOrderItemIds = sourcePurchaseOrderItemIds(inbound);
         if (sourcePurchaseOrderItemIds.isEmpty()) {
             return;
@@ -127,7 +127,8 @@ public class PurchaseInboundCompletionSyncService {
     }
 
     private void maybeCompletePurchaseOrder(PurchaseOrder purchaseOrder) {
-        if (!StatusConstants.AUDITED.equals(purchaseOrder.getStatus())) {
+        if (!StatusConstants.AUDITED.equals(purchaseOrder.getStatus())
+                && !StatusConstants.PURCHASE_COMPLETED.equals(purchaseOrder.getStatus())) {
             return;
         }
         List<Long> sourceItemIds = purchaseOrder.getItems().stream()
@@ -142,10 +143,6 @@ public class PurchaseInboundCompletionSyncService {
                 .findAllActiveBySourcePurchaseOrderItemIds(sourceItemIds);
         boolean allInboundCompleted = allInbounds.stream()
                 .allMatch(i -> StatusConstants.INBOUND_COMPLETED.equals(i.getStatus()));
-        if (!allInboundCompleted) {
-            return;
-        }
-
         Map<Long, Integer> receivedQtyByItemId = allInbounds.stream()
                 .flatMap(inbound -> inbound.getItems().stream())
                 .filter(item -> item.getSourcePurchaseOrderItemId() != null)
@@ -162,9 +159,9 @@ public class PurchaseInboundCompletionSyncService {
             return quantityWithinTolerance(expected, actual);
         });
 
-        if (allFulfilled) {
-            purchaseOrder.setStatus(StatusConstants.PURCHASE_COMPLETED);
-        }
+        purchaseOrder.setStatus(allInboundCompleted && allFulfilled
+                ? StatusConstants.PURCHASE_COMPLETED
+                : StatusConstants.AUDITED);
     }
 
     private boolean quantityWithinTolerance(int expected, int actual) {

@@ -6,9 +6,11 @@ import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.api.PageResponse;
 import com.leo.erp.common.web.BindPageQuery;
 import com.leo.erp.common.web.dto.StatusUpdateRequest;
+import com.leo.erp.finance.invoiceissue.service.InvoiceIssueCandidateService;
 import com.leo.erp.finance.invoiceissue.service.InvoiceIssueService;
 import com.leo.erp.finance.invoiceissue.web.dto.InvoiceIssueRequest;
 import com.leo.erp.finance.invoiceissue.web.dto.InvoiceIssueResponse;
+import com.leo.erp.finance.invoiceissue.web.dto.InvoiceIssueSourceCandidateResponse;
 import com.leo.erp.security.permission.RequiresPermission;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -26,6 +28,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDate;
+import org.springframework.format.annotation.DateTimeFormat;
 
 @RestController
 @Validated
@@ -34,9 +37,12 @@ import java.time.LocalDate;
 public class InvoiceIssueController {
 
     private final InvoiceIssueService service;
+    private final InvoiceIssueCandidateService candidateService;
 
-    public InvoiceIssueController(InvoiceIssueService service) {
+    public InvoiceIssueController(InvoiceIssueService service,
+                                  InvoiceIssueCandidateService candidateService) {
         this.service = service;
+        this.candidateService = candidateService;
     }
 
     @GetMapping("/search")
@@ -47,6 +53,37 @@ public class InvoiceIssueController {
             @RequestParam(defaultValue = "100") int limit
     ) {
         return ApiResponse.success(service.search(keyword != null ? keyword : "", Math.min(limit, 500)));
+    }
+
+    @GetMapping("/source-candidates")
+    @RequiresPermission(resource = "sales-order", action = "read")
+    @Operation(summary = "分页查询开票来源候选")
+    public ApiResponse<PageResponse<InvoiceIssueSourceCandidateResponse>> sourceCandidates(
+            @BindPageQuery(sortFieldKey = "sales-order") PageQuery query,
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) Long customerId,
+            @RequestParam(required = false) String customerName,
+            @RequestParam(required = false) Long projectId,
+            @RequestParam(required = false) String projectName,
+            @RequestParam(required = false) Long settlementCompanyId,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @RequestParam(required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate,
+            @RequestParam(required = false) Long currentRecordId
+    ) {
+        PageFilter filter = PageFilter.of(
+                        keyword,
+                        customerName,
+                        projectName,
+                        settlementCompanyId,
+                        status,
+                        startDate,
+                        endDate
+                )
+                .withIdentity(customerId, projectId, null, null, currentRecordId);
+        return ApiResponse.success(PageResponse.from(candidateService.sourceCandidates(query, filter)));
     }
 
     @GetMapping

@@ -38,7 +38,8 @@ class PurchaseRefundControllerTest {
                 null,
                 null,
                 null,
-                null
+                null,
+                9001L
         );
 
         assertThat(response.code()).isZero();
@@ -46,6 +47,7 @@ class PurchaseRefundControllerTest {
         ArgumentCaptor<PageFilter> filterCaptor = ArgumentCaptor.forClass(PageFilter.class);
         verify(service).sourceCandidates(org.mockito.ArgumentMatchers.eq(query), filterCaptor.capture());
         assertThat(filterCaptor.getValue().supplierId()).isEqualTo(101L);
+        assertThat(filterCaptor.getValue().currentRecordId()).isEqualTo(9001L);
     }
 
     @Test
@@ -73,7 +75,8 @@ class PurchaseRefundControllerTest {
                         String.class,
                         Long.class,
                         LocalDate.class,
-                        LocalDate.class
+                        LocalDate.class,
+                        Long.class
                 )
                 .getAnnotation(RequiresPermission.class);
 

@@ -100,13 +100,14 @@ public class SalesOrderController {
             @RequestParam(required = false) Long settlementCompanyId,
             @RequestParam(required = false) String status,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate,
+            @RequestParam(required = false) Long currentRecordId
     ) {
         return ApiResponse.success(PageResponse.from(
                 service.outboundImportCandidates(
                         query,
                         PageFilter.of(keyword, customerName, projectName, settlementCompanyId, status, startDate, endDate)
-                                .withIdentity(customerId, projectId, null, null, null)
+                                .withIdentity(customerId, projectId, null, null, currentRecordId)
                 )
         ));
     }

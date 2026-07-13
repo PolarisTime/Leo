@@ -77,7 +77,8 @@ public class PurchaseRefundController {
             @RequestParam(required = false)
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
             @RequestParam(required = false)
-            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate,
+            @RequestParam(required = false) Long currentRecordId
     ) {
         return ApiResponse.success(PageResponse.from(purchaseRefundService.sourceCandidates(
                 query,
@@ -88,7 +89,7 @@ public class PurchaseRefundController {
                         null,
                         startDate,
                         endDate
-                ).withIdentity(null, null, supplierId, null, null)
+                ).withIdentity(null, null, supplierId, null, currentRecordId)
         )));
     }
 

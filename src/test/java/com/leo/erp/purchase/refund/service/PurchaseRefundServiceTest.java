@@ -82,7 +82,7 @@ class PurchaseRefundServiceTest {
                     4
             );
         });
-        when(fixture.repository.findActiveSourcePurchaseOrderIdsBySourcePurchaseOrderIdIn(any()))
+        when(fixture.repository.findActiveSourcePurchaseOrderIdsBySourcePurchaseOrderIdIn(any(), eq(9001L)))
                 .thenReturn(List.of(1L));
         when(fixture.inboundItemRepository.findAllActiveBySourcePurchaseOrderItemIds(any()))
                 .thenReturn(List.of(
@@ -93,6 +93,7 @@ class PurchaseRefundServiceTest {
         Page<PurchaseRefundSourceCandidateResponse> result = fixture.service.sourceCandidates(
                 new PageQuery(0, 1, null, null),
                 PageFilter.of(null, null, null, null, null, null)
+                        .withIdentity(null, null, null, null, 9001L)
         );
 
         assertThat(result.getTotalElements()).isEqualTo(1);
@@ -105,6 +106,8 @@ class PurchaseRefundServiceTest {
         assertThat(candidate.refundableWeight()).isEqualByComparingTo("0.76200000");
         assertThat(candidate.refundableAmount()).isEqualByComparingTo("2476.50");
         verify(fixture.purchaseOrderRepository).findAll(any(Specification.class), any(Pageable.class));
+        verify(fixture.repository)
+                .findActiveSourcePurchaseOrderIdsBySourcePurchaseOrderIdIn(any(), eq(9001L));
     }
 
     @Test

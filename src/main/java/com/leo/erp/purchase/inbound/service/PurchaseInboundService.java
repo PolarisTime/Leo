@@ -44,6 +44,7 @@ public class PurchaseInboundService extends AbstractCrudService<
     private final WorkflowTransitionGuard workflowTransitionGuard;
     private final SourceAllocationLockService sourceAllocationLockService;
     private final PurchaseInboundRefundGuard purchaseInboundRefundGuard;
+    private final PurchaseInboundStatementGuard purchaseInboundStatementGuard;
 
     @Autowired
     public PurchaseInboundService(PurchaseInboundRepository repository,
@@ -56,7 +57,8 @@ public class PurchaseInboundService extends AbstractCrudService<
                                   PurchaseInboundPieceWeightService pieceWeightService,
                                   WorkflowTransitionGuard workflowTransitionGuard,
                                   SourceAllocationLockService sourceAllocationLockService,
-                                  PurchaseInboundRefundGuard purchaseInboundRefundGuard) {
+                                  PurchaseInboundRefundGuard purchaseInboundRefundGuard,
+                                  PurchaseInboundStatementGuard purchaseInboundStatementGuard) {
         super(idGenerator);
         this.repository = repository;
         this.purchaseInboundMapper = purchaseInboundMapper;
@@ -68,6 +70,7 @@ public class PurchaseInboundService extends AbstractCrudService<
         this.workflowTransitionGuard = workflowTransitionGuard;
         this.sourceAllocationLockService = sourceAllocationLockService;
         this.purchaseInboundRefundGuard = purchaseInboundRefundGuard;
+        this.purchaseInboundStatementGuard = purchaseInboundStatementGuard;
     }
 
     @Transactional(readOnly = true)
@@ -201,7 +204,7 @@ public class PurchaseInboundService extends AbstractCrudService<
 
     @Override
     protected java.util.Set<String> allowedStatusTransitions() {
-        return StatusConstants.DRAFT_AUDIT_TRANSITIONS;
+        return StatusConstants.PURCHASE_INBOUND_TRANSITIONS;
     }
 
     @Override
@@ -242,6 +245,7 @@ public class PurchaseInboundService extends AbstractCrudService<
     protected void beforeStatusUpdate(PurchaseInbound inbound, String currentStatus, String nextStatus) {
         lockSourcePurchaseOrderItems(inbound, null);
         purchaseInboundRefundGuard.assertStatusTransitionAllowed(inbound, currentStatus, nextStatus);
+        purchaseInboundStatementGuard.assertStatusTransitionAllowed(inbound, currentStatus, nextStatus);
     }
 
     private void lockSourcePurchaseOrderItems(PurchaseInbound inbound, PurchaseInboundRequest request) {
@@ -266,27 +270,29 @@ public class PurchaseInboundService extends AbstractCrudService<
 
     @Override
     protected PurchaseInbound saveCreatedEntity(PurchaseInbound entity, PurchaseInboundRequest request) {
-        return saveWithCompletionSync(entity);
+        return saveWithCompletionSync(entity, false);
     }
 
     @Override
     protected PurchaseInbound saveUpdatedEntity(PurchaseInbound entity, PurchaseInboundRequest request) {
-        return saveWithCompletionSync(entity);
+        return saveWithCompletionSync(entity, false);
     }
 
     @Override
     protected PurchaseInbound saveStatusEntity(PurchaseInbound entity) {
-        return saveWithCompletionSync(entity);
+        return saveWithCompletionSync(entity, true);
     }
 
-    private PurchaseInbound saveWithCompletionSync(PurchaseInbound entity) {
+    private PurchaseInbound saveWithCompletionSync(PurchaseInbound entity, boolean recalculateDraftSourceOrder) {
         boolean completedByServer = completionSyncService.shouldCompleteInbound(entity);
         if (completedByServer) {
             entity.setStatus(StatusConstants.INBOUND_COMPLETED);
         }
+        boolean shouldRecalculateSourceOrder = completedByServer
+                || (recalculateDraftSourceOrder && StatusConstants.DRAFT.equals(entity.getStatus()));
         PurchaseInbound saved = saveEntity(entity);
-        if (completedByServer) {
-            completionSyncService.completeSourcePurchaseOrders(saved);
+        if (shouldRecalculateSourceOrder) {
+            completionSyncService.synchronizeSourcePurchaseOrders(saved);
         }
         return saved;
     }

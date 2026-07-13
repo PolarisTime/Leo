@@ -189,7 +189,7 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
                 .and(Specs.equalValueIfPresent("settlementCompanyId", filter.settlementCompanyId()))
                 .and(Specs.equalIfPresent("status", filter.status()))
                 .and(Specs.dateTimeBetweenDatesIfPresent("orderDate", filter.startDate(), filter.endDate()));
-        return importableCandidates(query, spec, candidateUsage);
+        return importableCandidates(query, spec, candidateUsage, filter.currentRecordId());
     }
 
     @Transactional(readOnly = true)
@@ -208,7 +208,8 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
     private Page<PurchaseOrderImportCandidateResponse> importableCandidates(
             PageQuery query,
             Specification<PurchaseOrder> baseSpec,
-            PurchaseOrderAvailabilityService.ImportCandidateUsage usage
+            PurchaseOrderAvailabilityService.ImportCandidateUsage usage,
+            Long currentRecordId
     ) {
         Set<String> allowedStatuses = usage == PurchaseOrderAvailabilityService.ImportCandidateUsage.SALES_ORDER
                 ? StatusConstants.SALES_ORDER_SOURCE_PURCHASE_ORDER_STATUS
@@ -231,7 +232,8 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
         Map<Long, Integer> importableQuantityMap =
                 availabilityService.buildImportableQuantityMap(
                         orders,
-                        usage
+                        usage,
+                        currentRecordId
                 );
         List<PurchaseOrderImportCandidateResponse> candidates = orders.stream()
                 .filter(order -> allowedStatuses.contains(order.getStatus()))
@@ -367,7 +369,7 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
 
     @Override
     protected java.util.Set<String> allowedStatusTransitions() {
-        return StatusConstants.DRAFT_AUDIT_TRANSITIONS;
+        return StatusConstants.PURCHASE_ORDER_TRANSITIONS;
     }
 
     @Override

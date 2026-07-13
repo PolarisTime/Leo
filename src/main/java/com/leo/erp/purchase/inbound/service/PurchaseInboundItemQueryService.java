@@ -97,6 +97,25 @@ public class PurchaseInboundItemQueryService {
     }
 
     @Transactional(readOnly = true)
+    public Map<Long, Long> summarizeAllocatedQuantityBySourcePurchaseOrderItemIdsExcludingInbound(
+            Collection<Long> sourcePurchaseOrderItemIds,
+            Long currentInboundId
+    ) {
+        if (sourcePurchaseOrderItemIds == null || sourcePurchaseOrderItemIds.isEmpty()) {
+            return Map.of();
+        }
+        return repository.summarizeAllocatedQuantityBySourcePurchaseOrderItemIdsExcludingInbound(
+                        sourcePurchaseOrderItemIds,
+                        currentInboundId
+                )
+                .stream()
+                .collect(Collectors.toMap(
+                        PurchaseInboundItemRepository.PurchaseOrderAllocationSummary::getSourcePurchaseOrderItemId,
+                        PurchaseInboundItemRepository.PurchaseOrderAllocationSummary::getTotalQuantity
+                ));
+    }
+
+    @Transactional(readOnly = true)
     public Map<Long, BigDecimal> summarizeWeightAdjustmentBySourcePurchaseOrderItemIds(
             Collection<Long> sourcePurchaseOrderItemIds) {
         if (sourcePurchaseOrderItemIds == null || sourcePurchaseOrderItemIds.isEmpty()) {

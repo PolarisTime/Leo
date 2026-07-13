@@ -94,6 +94,14 @@ public class PurchaseOrderAvailabilityService {
     }
 
     Map<Long, Integer> buildImportableQuantityMap(List<PurchaseOrder> orders, ImportCandidateUsage usage) {
+        return buildImportableQuantityMap(orders, usage, null);
+    }
+
+    Map<Long, Integer> buildImportableQuantityMap(
+            List<PurchaseOrder> orders,
+            ImportCandidateUsage usage,
+            Long currentRecordId
+    ) {
         if (orders == null || orders.isEmpty()) {
             return Map.of();
         }
@@ -111,15 +119,23 @@ public class PurchaseOrderAvailabilityService {
 
         Map<Long, Integer> allocatedQuantityMap = switch (usage) {
             case PURCHASE_INBOUND -> toIntegerQuantityMap(
-                    purchaseInboundItemQueryService.summarizeAllocatedQuantityBySourcePurchaseOrderItemIds(itemIds)
+                    currentRecordId == null
+                            ? purchaseInboundItemQueryService
+                            .summarizeAllocatedQuantityBySourcePurchaseOrderItemIds(itemIds)
+                            : purchaseInboundItemQueryService
+                            .summarizeAllocatedQuantityBySourcePurchaseOrderItemIdsExcludingInbound(
+                                    itemIds,
+                                    currentRecordId
+                            )
             );
             case SALES_ORDER -> toIntegerQuantityMap(
-                    itemAllocationRepo.summarizeSalesByPurchaseOrderItems(itemIds, null)
+                    itemAllocationRepo.summarizeSalesByPurchaseOrderItems(itemIds, currentRecordId)
                             .stream().collect(Collectors.toMap(
                                     ItemAllocationNativeRepository.AllocationProjection::getSourceItemId,
                                     p -> p.getTotalQuantity()
                             ))
             );
+            case PURCHASE_CONTRACT -> Map.of();
         };
 
         Map<Long, Integer> result = new HashMap<>();
@@ -150,7 +166,8 @@ public class PurchaseOrderAvailabilityService {
 
     enum ImportCandidateUsage {
         PURCHASE_INBOUND("purchase-inbound"),
-        SALES_ORDER("sales-order");
+        SALES_ORDER("sales-order"),
+        PURCHASE_CONTRACT("purchase-contract");
 
         private final String value;
 

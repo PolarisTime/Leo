@@ -235,9 +235,34 @@ class PurchaseInboundCompletionSyncServiceTest {
         when(itemQueryService.findActiveByIdIn(List.of(201L))).thenReturn(List.of(sourceItem));
         when(repository.findAllActiveBySourcePurchaseOrderItemIds(List.of(201L))).thenReturn(List.of(inbound));
 
-        service.completeSourcePurchaseOrders(inbound);
+        service.synchronizeSourcePurchaseOrders(inbound);
 
         assertThat(sourceOrder.getStatus()).isEqualTo("完成采购");
+    }
+
+    @Test
+    void shouldReopenCompletedPurchaseOrderWhenInboundIsReversed() {
+        PurchaseInboundRepository repository = mock(PurchaseInboundRepository.class);
+        PurchaseOrderItemQueryService itemQueryService = mock(PurchaseOrderItemQueryService.class);
+        PurchaseInboundItemRepository inboundItemRepository = mock(PurchaseInboundItemRepository.class);
+        PurchaseInboundCompletionSyncService service = new PurchaseInboundCompletionSyncService(
+                repository,
+                sourceValidator(itemQueryService, inboundItemRepository),
+                new PurchaseInboundAllocationService(inboundItemRepository)
+        );
+
+        PurchaseOrder sourceOrder = sourcePurchaseOrder();
+        sourceOrder.setStatus("完成采购");
+        PurchaseOrderItem sourceItem = sourcePurchaseOrderItem(sourceOrder, 201L, 10);
+        sourceOrder.getItems().add(sourceItem);
+        PurchaseInbound reversedInbound = inbound("草稿", 10);
+        when(itemQueryService.findActiveByIdIn(List.of(201L))).thenReturn(List.of(sourceItem));
+        when(repository.findAllActiveBySourcePurchaseOrderItemIds(List.of(201L)))
+                .thenReturn(List.of(reversedInbound));
+
+        service.synchronizeSourcePurchaseOrders(reversedInbound);
+
+        assertThat(sourceOrder.getStatus()).isEqualTo("已审核");
     }
 
     @Test
@@ -260,7 +285,7 @@ class PurchaseInboundCompletionSyncServiceTest {
         when(repository.findAllActiveBySourcePurchaseOrderItemIds(List.of(201L)))
                 .thenReturn(List.of(current, draft));
 
-        service.completeSourcePurchaseOrders(current);
+        service.synchronizeSourcePurchaseOrders(current);
 
         assertThat(sourceOrder.getStatus()).isEqualTo("已审核");
     }
@@ -276,7 +301,7 @@ class PurchaseInboundCompletionSyncServiceTest {
                 inboundItemRepository
         );
 
-        service.completeSourcePurchaseOrders(inboundWithoutSource("完成入库", 10));
+        service.synchronizeSourcePurchaseOrders(inboundWithoutSource("完成入库", 10));
 
         verifyNoInteractions(itemQueryService, repository);
     }
@@ -296,7 +321,7 @@ class PurchaseInboundCompletionSyncServiceTest {
         PurchaseInbound inbound = inbound("完成入库", 10);
         when(itemQueryService.findActiveByIdIn(List.of(201L))).thenReturn(List.of(sourceItem));
 
-        service.completeSourcePurchaseOrders(inbound);
+        service.synchronizeSourcePurchaseOrders(inbound);
 
         verifyNoInteractions(repository);
     }
@@ -319,7 +344,7 @@ class PurchaseInboundCompletionSyncServiceTest {
         PurchaseInbound inbound = inbound("完成入库", 10);
         when(itemQueryService.findActiveByIdIn(List.of(201L))).thenReturn(List.of(sourceItem));
 
-        service.completeSourcePurchaseOrders(inbound);
+        service.synchronizeSourcePurchaseOrders(inbound);
 
         assertThat(sourceOrder.getStatus()).isEqualTo("草稿");
         verifyNoInteractions(repository);
@@ -343,7 +368,7 @@ class PurchaseInboundCompletionSyncServiceTest {
         when(itemQueryService.findActiveByIdIn(List.of(201L))).thenReturn(List.of(sourceItem));
         when(repository.findAllActiveBySourcePurchaseOrderItemIds(List.of(201L))).thenReturn(List.of(inbound));
 
-        service.completeSourcePurchaseOrders(inbound);
+        service.synchronizeSourcePurchaseOrders(inbound);
 
         assertThat(sourceOrder.getStatus()).isEqualTo("完成采购");
     }
@@ -367,7 +392,7 @@ class PurchaseInboundCompletionSyncServiceTest {
         when(itemQueryService.findActiveByIdIn(List.of(201L))).thenReturn(List.of(sourceItem));
         when(repository.findAllActiveBySourcePurchaseOrderItemIds(List.of(201L))).thenReturn(List.of(inbound));
 
-        service.completeSourcePurchaseOrders(inbound);
+        service.synchronizeSourcePurchaseOrders(inbound);
 
         assertThat(sourceOrder.getStatus()).isEqualTo("完成采购");
     }
@@ -390,7 +415,7 @@ class PurchaseInboundCompletionSyncServiceTest {
         when(itemQueryService.findActiveByIdIn(List.of(201L))).thenReturn(List.of(sourceItem));
         when(repository.findAllActiveBySourcePurchaseOrderItemIds(List.of(201L))).thenReturn(List.of(inbound));
 
-        service.completeSourcePurchaseOrders(inbound);
+        service.synchronizeSourcePurchaseOrders(inbound);
 
         assertThat(sourceOrder.getStatus()).isEqualTo("已审核");
     }

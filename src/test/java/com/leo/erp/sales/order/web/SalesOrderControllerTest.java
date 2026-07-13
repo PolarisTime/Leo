@@ -113,7 +113,7 @@ class SalesOrderControllerTest {
         when(service.outboundImportCandidates(any(), any())).thenReturn(page);
 
         ApiResponse<PageResponse<SalesOrderResponse>> response = controller.outboundImportCandidates(
-                query, "test", null, "customer", null, "project", 7L, "active", null, null);
+                query, "test", null, "customer", null, "project", 7L, "active", null, null, 9001L);
 
         assertThat(response.code()).isEqualTo(0);
         assertThat(response.data().content()).hasSize(1);
@@ -122,6 +122,7 @@ class SalesOrderControllerTest {
         assertThat(filterCaptor.getValue().name()).isEqualTo("customer");
         assertThat(filterCaptor.getValue().projectName()).isEqualTo("project");
         assertThat(filterCaptor.getValue().settlementCompanyId()).isEqualTo(7L);
+        assertThat(filterCaptor.getValue().currentRecordId()).isEqualTo(9001L);
     }
 
     @Test
@@ -133,13 +134,14 @@ class SalesOrderControllerTest {
         assertThat(method).as("销售订单出库候选接口应接收 customerId/projectId").isNotNull();
         method.invoke(
                 controller,
-                query, "test", 101L, "customer", 102L, "project", 7L, "active", null, null
+                query, "test", 101L, "customer", 102L, "project", 7L, "active", null, null, 9002L
         );
 
         ArgumentCaptor<PageFilter> filterCaptor = ArgumentCaptor.forClass(PageFilter.class);
         verify(service).outboundImportCandidates(eq(query), filterCaptor.capture());
         assertThat(filterCaptor.getValue().customerId()).isEqualTo(101L);
         assertThat(filterCaptor.getValue().projectId()).isEqualTo(102L);
+        assertThat(filterCaptor.getValue().currentRecordId()).isEqualTo(9002L);
     }
 
     @Test
@@ -280,21 +282,14 @@ class SalesOrderControllerTest {
     }
 
     private Method identityAwarePageMethod(String name) {
-        Class<?>[] parameterTypes = {
-                PageQuery.class,
-                String.class,
-                Long.class,
-                String.class,
-                Long.class,
-                String.class,
-                Long.class,
-                String.class,
-                LocalDate.class,
-                LocalDate.class
-        };
         return Arrays.stream(SalesOrderController.class.getMethods())
                 .filter(method -> method.getName().equals(name))
-                .filter(method -> Arrays.equals(method.getParameterTypes(), parameterTypes))
+                .filter(method -> {
+                    List<String> parameterNames = Arrays.stream(method.getParameters())
+                            .map(java.lang.reflect.Parameter::getName)
+                            .toList();
+                    return parameterNames.contains("customerId") && parameterNames.contains("projectId");
+                })
                 .findFirst()
                 .orElse(null);
     }

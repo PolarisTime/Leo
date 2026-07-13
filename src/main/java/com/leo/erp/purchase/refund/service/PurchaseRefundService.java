@@ -232,7 +232,10 @@ public class PurchaseRefundService extends AbstractCrudService<
                     "read",
                     order
             ));
-            for (PurchaseRefundSourceCandidateResponse candidate : calculateSourceCandidates(sourceOrders)) {
+            for (PurchaseRefundSourceCandidateResponse candidate : calculateSourceCandidates(
+                    sourceOrders,
+                    filter.currentRecordId()
+            )) {
                 if (candidateCount >= requestedStart && candidateCount < requestedEnd) {
                     requestedCandidates.add(candidate);
                 }
@@ -256,14 +259,18 @@ public class PurchaseRefundService extends AbstractCrudService<
     }
 
     private List<PurchaseRefundSourceCandidateResponse> calculateSourceCandidates(
-            List<PurchaseOrder> sourceOrders
+            List<PurchaseOrder> sourceOrders,
+            Long currentRecordId
     ) {
         if (sourceOrders.isEmpty()) {
             return List.of();
         }
         List<Long> sourceOrderIds = sourceOrders.stream().map(PurchaseOrder::getId).toList();
         Set<Long> unavailableOrderIds = Set.copyOf(
-                repository.findActiveSourcePurchaseOrderIdsBySourcePurchaseOrderIdIn(sourceOrderIds)
+                repository.findActiveSourcePurchaseOrderIdsBySourcePurchaseOrderIdIn(
+                        sourceOrderIds,
+                        currentRecordId
+                )
         );
         List<Long> sourceItemIds = sourceOrders.stream()
                 .filter(order -> !unavailableOrderIds.contains(order.getId()))

@@ -36,9 +36,11 @@ public interface SalesOrderItemRepository extends JpaRepository<SalesOrderItem, 
             join outboundItem.salesOutbound outbound
             where outbound.deletedFlag = false
               and outboundItem.sourceSalesOrderItemId in :sourceSalesOrderItemIds
+              and (:currentOutboundId is null or outbound.id <> :currentOutboundId)
             """)
     List<Long> findOccupiedSourceSalesOrderItemIds(
-            @Param("sourceSalesOrderItemIds") Collection<Long> sourceSalesOrderItemIds
+            @Param("sourceSalesOrderItemIds") Collection<Long> sourceSalesOrderItemIds,
+            @Param("currentOutboundId") Long currentOutboundId
     );
 
     @Query("""

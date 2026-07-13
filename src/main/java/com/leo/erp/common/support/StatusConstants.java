@@ -92,6 +92,16 @@ public final class StatusConstants {
             DRAFT + "->" + AUDITED,
             AUDITED + "->" + DRAFT
     );
+    public static final Set<String> PURCHASE_ORDER_TRANSITIONS = Set.of(
+            DRAFT + "->" + AUDITED,
+            AUDITED + "->" + DRAFT,
+            PURCHASE_COMPLETED + "->" + AUDITED
+    );
+    public static final Set<String> PURCHASE_INBOUND_TRANSITIONS = Set.of(
+            DRAFT + "->" + AUDITED,
+            AUDITED + "->" + DRAFT,
+            INBOUND_COMPLETED + "->" + DRAFT
+    );
     public static final Set<String> SALES_OUTBOUND_TRANSITIONS = Set.of(
             DRAFT + "->" + PRE_OUTBOUND,
             PRE_OUTBOUND + "->" + DRAFT,
