@@ -111,6 +111,31 @@ class PrintTemplateSeedMigrationTest {
         );
     }
 
+    @Test
+    void settlementCompanyRepairSeedUpdatesOnlyApprovedOrphanTemplates() throws IOException {
+        String sql = readSql("/db/seed/S9__repair_print_template_settlement_company_identity.sql");
+
+        assertThat(sql).contains(
+                "322775358715723776",
+                "700540000000000024",
+                "700540000000000026",
+                "700540000000000028",
+                "700540000000000029",
+                "307698191887761408",
+                "332284010484989952",
+                "UPDATE public.sys_print_template target",
+                "WHERE target.id = approved.template_id",
+                "AND target.template_code = approved.template_code",
+                "AND target.settlement_company_id = company.old_company_id"
+        );
+        assertThat(sql).doesNotContain(
+                "DELETE FROM",
+                "TRUNCATE",
+                "DROP TABLE",
+                "ON CONFLICT DO NOTHING"
+        );
+    }
+
     private String readSql(String resourcePath) throws IOException {
         try (InputStream stream = getClass().getResourceAsStream(resourcePath)) {
             assertThat(stream).as(resourcePath + " should exist").isNotNull();
