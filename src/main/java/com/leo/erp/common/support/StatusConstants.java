@@ -83,6 +83,7 @@ public final class StatusConstants {
     );
     public static final Set<String> INVOICEABLE_SALES_ORDER_STATUS = Set.of(AUDITED, SALES_COMPLETED);
     public static final Set<String> INVOICEABLE_PURCHASE_ORDER_STATUS = Set.of(AUDITED, PURCHASE_COMPLETED);
+    public static final Set<String> SALES_ORDER_SOURCE_PURCHASE_ORDER_STATUS = Set.of(AUDITED, PURCHASE_COMPLETED);
     public static final Set<String> SETTLEABLE_CUSTOMER_STATEMENT_STATUS = Set.of(CONFIRMED);
     public static final Set<String> SETTLEABLE_SUPPLIER_STATEMENT_STATUS = Set.of(CONFIRMED);
     public static final Set<String> SETTLEABLE_FREIGHT_STATEMENT_STATUS = Set.of(AUDITED);

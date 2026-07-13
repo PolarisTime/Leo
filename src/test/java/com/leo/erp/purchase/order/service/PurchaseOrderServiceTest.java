@@ -16,6 +16,7 @@ import com.leo.erp.purchase.order.domain.entity.PurchaseOrderItem;
 import com.leo.erp.purchase.order.repository.PurchaseOrderRepository;
 import com.leo.erp.purchase.order.mapper.PurchaseOrderMapper;
 import com.leo.erp.purchase.order.web.dto.PurchaseOrderItemRequest;
+import com.leo.erp.purchase.order.web.dto.PurchaseOrderImportCandidateResponse;
 import com.leo.erp.purchase.order.web.dto.PurchaseOrderRequest;
 import com.leo.erp.purchase.order.web.dto.PurchaseOrderResponse;
 import com.leo.erp.allocation.repository.ItemAllocationNativeRepository;
@@ -51,6 +52,7 @@ import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -614,7 +616,7 @@ class PurchaseOrderServiceTest {
     }
 
     @Test
-    void shouldExposeOnlyAuditedSalesOrderCandidatesWithRemainingQuantity() {
+    void shouldExposeAuditedAndCompletedPurchaseOrdersForSalesOrderImport() {
         PurchaseOrderRepository repository = mock(PurchaseOrderRepository.class);
         ItemAllocationNativeRepository itemAllocationRepo = mock(ItemAllocationNativeRepository.class);
         PurchaseOrderService service = service(
@@ -650,9 +652,16 @@ class PurchaseOrderServiceTest {
         PurchaseOrderItem draftOpenItem = buildItem(13L, draftOpen);
         draftOpen.getItems().add(draftOpenItem);
 
+        PurchaseOrder completedOpen = buildOrder();
+        completedOpen.setId(4L);
+        completedOpen.setOrderNo("PO-004");
+        completedOpen.setStatus("完成采购");
+        PurchaseOrderItem completedOpenItem = buildItem(14L, completedOpen);
+        completedOpen.getItems().add(completedOpenItem);
+
         when(repository.findAll(any(Specification.class), any(Pageable.class)))
-                .thenReturn(new PageImpl<>(List.of(auditedOpen, auditedFull, draftOpen)));
-        when(itemAllocationRepo.summarizeSalesByPurchaseOrderItems(List.of(11L, 12L, 13L), null))
+                .thenReturn(new PageImpl<>(List.of(auditedOpen, auditedFull, draftOpen, completedOpen)));
+        when(itemAllocationRepo.summarizeSalesByPurchaseOrderItems(List.of(11L, 12L, 13L, 14L), null))
                 .thenReturn(List.of(
                         allocationProjection(11L, 9L),
                         allocationProjection(12L, 10L)
@@ -664,12 +673,17 @@ class PurchaseOrderServiceTest {
                 "sales-order"
         );
 
-        assertThat(page.getContent()).singleElement().satisfies(candidate -> {
-            assertThat(candidate.id()).isEqualTo(1L);
-            assertThat(candidate.status()).isEqualTo("已审核");
-            assertThat(candidate.importableQuantity()).isEqualTo(1);
-        });
-        assertThat(page.getTotalElements()).isEqualTo(1);
+        assertThat(page.getContent())
+                .extracting(
+                        PurchaseOrderImportCandidateResponse::id,
+                        PurchaseOrderImportCandidateResponse::status,
+                        PurchaseOrderImportCandidateResponse::importableQuantity
+                )
+                .containsExactly(
+                        tuple(1L, "已审核", 1),
+                        tuple(4L, "完成采购", 10)
+                );
+        assertThat(page.getTotalElements()).isEqualTo(2);
     }
 
     @Test

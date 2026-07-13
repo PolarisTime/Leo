@@ -210,7 +210,12 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
             Specification<PurchaseOrder> baseSpec,
             PurchaseOrderAvailabilityService.ImportCandidateUsage usage
     ) {
-        Specification<PurchaseOrder> spec = baseSpec.and(Specs.equalIfPresent("status", StatusConstants.AUDITED));
+        Set<String> allowedStatuses = usage == PurchaseOrderAvailabilityService.ImportCandidateUsage.SALES_ORDER
+                ? StatusConstants.SALES_ORDER_SOURCE_PURCHASE_ORDER_STATUS
+                : Set.of(StatusConstants.AUDITED);
+        Specification<PurchaseOrder> spec = baseSpec.and(
+                (root, criteriaQuery, criteriaBuilder) -> root.get("status").in(allowedStatuses)
+        );
         List<PurchaseOrder> orders = new java.util.ArrayList<>();
         int pageIndex = 0;
         Page<PurchaseOrder> orderPage;
@@ -229,7 +234,7 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
                         usage
                 );
         List<PurchaseOrderImportCandidateResponse> candidates = orders.stream()
-                .filter(order -> StatusConstants.AUDITED.equals(order.getStatus()))
+                .filter(order -> allowedStatuses.contains(order.getStatus()))
                 .map(order -> toImportCandidateResponse(
                         order,
                         importableQuantityMap.getOrDefault(order.getId(), 0)

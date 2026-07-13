@@ -71,6 +71,16 @@ class SalesOrderSourceAllocationServiceTest {
     }
 
     @Test
+    void shouldAllowCompletedPurchaseOrderAsSalesOrderSource() {
+        SalesOrderSourceContext context = context(
+                Map.of(),
+                Map.of(20L, purchaseOrderRecord(20L, 10, "PO-001", StatusConstants.PURCHASE_COMPLETED))
+        );
+
+        service.validateLine(request(null, 20L, 1), 1, context);
+    }
+
+    @Test
     void shouldMergeSourceAllocationsAndScaleWeight() {
         SalesOrderSourceAllocation merged = SalesOrderSourceAllocation.merge(
                 new SalesOrderSourceAllocation(2, new BigDecimal("0.123456784")),
@@ -155,13 +165,22 @@ class SalesOrderSourceAllocationServiceTest {
             Integer quantity,
             String orderNo
     ) {
+        return purchaseOrderRecord(id, quantity, orderNo, StatusConstants.AUDITED);
+    }
+
+    private PurchaseItemQueryAppService.SourcePurchaseOrderItemRecord purchaseOrderRecord(
+            Long id,
+            Integer quantity,
+            String orderNo,
+            String orderStatus
+    ) {
         return new PurchaseItemQueryAppService.SourcePurchaseOrderItemRecord(
                 id,
                 quantity,
                 new BigDecimal("1.000"),
                 new BigDecimal("0.100"),
                 orderNo,
-                StatusConstants.AUDITED,
+                orderStatus,
                 "宝钢",
                 "HRB400",
                 "8",

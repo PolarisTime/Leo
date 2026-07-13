@@ -18,6 +18,7 @@ import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 @Service
 public class SalesOrderSourceAllocationService {
@@ -80,7 +81,12 @@ public class SalesOrderSourceAllocationService {
             if (sourcePurchaseOrderItem == null) {
                 throw new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行来源采购订单明细不存在");
             }
-            assertSourceParentStatus(sourcePurchaseOrderItem.orderStatus(), StatusConstants.AUDITED, lineNo, "来源采购订单");
+            assertSourceParentStatus(
+                    sourcePurchaseOrderItem.orderStatus(),
+                    StatusConstants.SALES_ORDER_SOURCE_PURCHASE_ORDER_STATUS,
+                    lineNo,
+                    "来源采购订单"
+            );
             assertSourceFieldsMatch(source, sourcePurchaseOrderItem, lineNo, "来源采购订单明细");
             int allocatedQuantity = context.purchaseOrderAllocatedMap()
                     .getOrDefault(sourcePurchaseOrderItemId, SalesOrderSourceAllocation.ZERO)
@@ -100,7 +106,12 @@ public class SalesOrderSourceAllocationService {
         if (sourceInboundItem == null) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行来源采购入库明细不存在");
         }
-        assertSourceParentStatus(sourceInboundItem.inboundStatus(), StatusConstants.AUDITED, lineNo, "来源采购入库单");
+        assertSourceParentStatus(
+                sourceInboundItem.inboundStatus(),
+                Set.of(StatusConstants.AUDITED),
+                lineNo,
+                "来源采购入库单"
+        );
         assertSourceFieldsMatch(source, sourceInboundItem, lineNo, "来源采购入库明细");
         int allocatedQuantity = context.inboundAllocatedMap()
                 .getOrDefault(sourceInboundItemId, SalesOrderSourceAllocation.ZERO)
@@ -193,10 +204,15 @@ public class SalesOrderSourceAllocationService {
         return allocatedMap;
     }
 
-    private void assertSourceParentStatus(String actualStatus, String requiredStatus, int lineNo, String sourceName) {
+    private void assertSourceParentStatus(
+            String actualStatus,
+            Set<String> allowedStatuses,
+            int lineNo,
+            String sourceName
+    ) {
         BusinessDocumentValidator.requireStatusIn(
                 actualStatus,
-                java.util.Set.of(requiredStatus),
+                allowedStatuses,
                 "第" + lineNo + "行" + sourceName + "未审核，不能作为来源单据"
         );
     }
