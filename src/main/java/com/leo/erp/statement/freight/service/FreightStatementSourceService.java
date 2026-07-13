@@ -38,7 +38,6 @@ public class FreightStatementSourceService {
 
     private static final String[] FREIGHT_BILL_CANDIDATE_SEARCH_FIELDS = {
             "billNo",
-            "outboundNo",
             "carrierCode",
             "carrierName",
             "vehiclePlate",
