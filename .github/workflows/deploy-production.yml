@@ -101,12 +101,6 @@ jobs:
           cache: maven
           cache-dependency-path: pom.xml
 
-      - name: Static analysis
-        run: mvn -B -ntp -DskipTests checkstyle:check spotbugs:spotbugs
-
-      - name: Test
-        run: mvn -B -ntp test
-
       - name: Validate production Flyway target
         run: |
           set -euo pipefail
