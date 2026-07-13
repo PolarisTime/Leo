@@ -1,6 +1,9 @@
 package com.leo.erp.common.concurrency;
 
 import com.leo.erp.testsupport.StableIdentityPostgresFixtures;
+import com.leo.erp.purchase.order.domain.entity.PurchaseOrder;
+import com.leo.erp.purchase.order.repository.PurchaseOrderRepository;
+import com.leo.erp.purchase.order.service.PurchaseOrderDownstreamMutationGuard;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -10,6 +13,7 @@ import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.jdbc.datasource.SingleConnectionDataSource;
+import org.springframework.context.annotation.Import;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Propagation;
@@ -38,6 +42,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 @ActiveProfiles("test")
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
+@Import({SourceAllocationLockService.class, PurchaseOrderDownstreamMutationGuard.class})
 class SourceAllocationConcurrencyPostgresTest {
 
     private static final long BASE_ID = 8_850_000_000_000_000_000L;
@@ -47,6 +52,8 @@ class SourceAllocationConcurrencyPostgresTest {
     private static final long PURCHASE_ORDER_ITEM_TWO_ID = BASE_ID + 102;
     private static final long PURCHASE_INBOUND_ID = BASE_ID + 201;
     private static final long PURCHASE_INBOUND_ITEM_ID = BASE_ID + 301;
+    private static final long RACING_PURCHASE_INBOUND_ID = BASE_ID + 202;
+    private static final long RACING_PURCHASE_INBOUND_ITEM_ID = BASE_ID + 302;
     private static final long RECEIPT_ONE_ID = BASE_ID + 1_001;
     private static final long RECEIPT_TWO_ID = BASE_ID + 1_002;
     private static final long RECEIPT_ITEM_ONE_ID = BASE_ID + 1_101;
@@ -73,6 +80,12 @@ class SourceAllocationConcurrencyPostgresTest {
 
     @Autowired
     private PlatformTransactionManager transactionManager;
+
+    @Autowired
+    private PurchaseOrderRepository purchaseOrderRepository;
+
+    @Autowired
+    private PurchaseOrderDownstreamMutationGuard purchaseOrderDownstreamMutationGuard;
 
     private boolean postgresReady;
     private TransactionTemplate controlTransaction;
@@ -212,6 +225,71 @@ class SourceAllocationConcurrencyPostgresTest {
             assertDistinctConnections(backendPids);
             assertThat(committedExclusiveClaims()).isEqualTo(1);
         } finally {
+            shutdown(executor);
+        }
+    }
+
+    @Test
+    void shouldRejectDownstreamCreationAfterConcurrentSourceReversalCommits() throws Exception {
+        CountDownLatch sourceCheckCompleted = new CountDownLatch(1);
+        CountDownLatch downstreamLockAttempted = new CountDownLatch(1);
+        CountDownLatch downstreamLockAcquired = new CountDownLatch(1);
+        CountDownLatch downstreamValidationCompleted = new CountDownLatch(1);
+        ExecutorService executor = newExecutor();
+        try {
+            Future<Boolean> reversal = executor.submit(() -> Boolean.TRUE.equals(
+                    controlTransaction.execute(status -> {
+                        PurchaseOrder order = purchaseOrderRepository
+                                .findByIdAndDeletedFlagFalse(PURCHASE_ORDER_TWO_ID)
+                                .orElseThrow();
+                        purchaseOrderDownstreamMutationGuard.assertMutable(order, "反审核");
+                        sourceCheckCompleted.countDown();
+                        awaitLatchUnchecked(downstreamLockAttempted, "downstream source lock attempt");
+                        if (awaitLatchQuietly(downstreamLockAcquired, 1, TimeUnit.SECONDS)) {
+                            awaitLatchUnchecked(downstreamValidationCompleted, "downstream validation");
+                        }
+                        order.setStatus("草稿");
+                        purchaseOrderRepository.saveAndFlush(order);
+                        return true;
+                    })
+            ));
+            Future<Boolean> downstreamCreation = executor.submit(() -> {
+                try {
+                    return inTransaction(connection -> {
+                        awaitLatch(sourceCheckCompleted, "source downstream check");
+                        downstreamLockAttempted.countDown();
+                        lockService(connection).lockTradeItemSources(
+                                List.of(PURCHASE_ORDER_ITEM_TWO_ID),
+                                List.of(),
+                                List.of()
+                        );
+                        downstreamLockAcquired.countDown();
+                        String sourceStatus = transactionJdbc(connection).queryForObject(
+                                "SELECT status FROM po_purchase_order WHERE id = ?",
+                                String.class,
+                                PURCHASE_ORDER_TWO_ID
+                        );
+                        if (!"已审核".equals(sourceStatus)) {
+                            throw new ExpectedBusinessRejection();
+                        }
+                        insertRacingPurchaseInbound(connection);
+                        return true;
+                    });
+                } catch (ExpectedBusinessRejection ignored) {
+                    return false;
+                } finally {
+                    downstreamValidationCompleted.countDown();
+                }
+            });
+
+            assertThat(await(reversal)).isTrue();
+            assertThat(await(downstreamCreation)).isFalse();
+            assertThat(purchaseOrderTwoStatus()).isEqualTo("草稿");
+            assertThat(racingPurchaseInboundCount()).isZero();
+        } finally {
+            sourceCheckCompleted.countDown();
+            downstreamLockAttempted.countDown();
+            downstreamValidationCompleted.countDown();
             shutdown(executor);
         }
     }
@@ -407,6 +485,45 @@ class SourceAllocationConcurrencyPostgresTest {
                 PURCHASE_INBOUND_ITEM_ID);
     }
 
+    private void insertRacingPurchaseInbound(Connection connection) {
+        JdbcTemplate transactionJdbc = transactionJdbc(connection);
+        transactionJdbc.update("""
+                INSERT INTO po_purchase_inbound (
+                    id, inbound_no, supplier_id, supplier_code, supplier_name, warehouse_id, warehouse_name,
+                    inbound_date, settlement_mode, total_weight, total_amount, status, deleted_flag
+                ) VALUES (?, 'TEST-CONC-RACING-INBOUND', ?, 'TEST-CONC-SUPPLIER', '并发测试供应商',
+                          ?, '并发测试仓', CURRENT_TIMESTAMP, '按重量', 10, 10, '草稿', FALSE)
+                """, RACING_PURCHASE_INBOUND_ID, SUPPLIER_ID, WAREHOUSE_ID);
+        transactionJdbc.update("""
+                INSERT INTO po_purchase_inbound_item (
+                    id, inbound_id, line_no, material_id, material_code, brand, category, material, spec, unit,
+                    quantity, piece_weight_ton, pieces_per_bundle, weight_ton, unit_price, amount,
+                    quantity_unit, warehouse_id, warehouse_name, source_purchase_order_item_id, settlement_mode
+                ) VALUES (?, ?, 1, ?, 'TEST-CONC-MATERIAL', '测试品牌', '测试类别', '测试材质',
+                          'TEST-SPEC', '吨', 10, 1, 1, 10, 1, 10, '件', ?, '并发测试仓', ?, '按重量')
+                """, RACING_PURCHASE_INBOUND_ITEM_ID, RACING_PURCHASE_INBOUND_ID, MATERIAL_ID,
+                WAREHOUSE_ID, PURCHASE_ORDER_ITEM_TWO_ID);
+    }
+
+    private String purchaseOrderTwoStatus() {
+        return controlTransaction.execute(status -> jdbcTemplate.queryForObject(
+                "SELECT status FROM po_purchase_order WHERE id = ?",
+                String.class,
+                PURCHASE_ORDER_TWO_ID
+        ));
+    }
+
+    private int racingPurchaseInboundCount() {
+        Integer count = controlTransaction.execute(status -> jdbcTemplate.queryForObject("""
+                        SELECT COUNT(*)
+                        FROM po_purchase_inbound_item item
+                        JOIN po_purchase_inbound inbound ON inbound.id = item.inbound_id
+                        WHERE item.source_purchase_order_item_id = ?
+                          AND inbound.deleted_flag = FALSE
+                        """, Integer.class, PURCHASE_ORDER_ITEM_TWO_ID));
+        return count == null ? 0 : count;
+    }
+
     private int committedExclusiveClaims() {
         Integer count = controlTransaction.execute(status -> jdbcTemplate.queryForObject("""
                         SELECT COUNT(*)
@@ -466,6 +583,14 @@ class SourceAllocationConcurrencyPostgresTest {
 
     private void cleanupFixtures() {
         jdbcTemplate.update(
+                "DELETE FROM po_purchase_inbound_item WHERE inbound_id = ?",
+                RACING_PURCHASE_INBOUND_ID
+        );
+        jdbcTemplate.update(
+                "DELETE FROM po_purchase_inbound WHERE id = ?",
+                RACING_PURCHASE_INBOUND_ID
+        );
+        jdbcTemplate.update(
                 "DELETE FROM st_supplier_statement_item WHERE statement_id IN (?, ?)",
                 STATEMENT_ONE_ID,
                 STATEMENT_TWO_ID
@@ -510,6 +635,24 @@ class SourceAllocationConcurrencyPostgresTest {
     private void awaitLatch(CountDownLatch latch, String description) throws InterruptedException {
         if (!latch.await(LATCH_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
             throw new IllegalStateException("Timed out waiting for " + description);
+        }
+    }
+
+    private void awaitLatchUnchecked(CountDownLatch latch, String description) {
+        try {
+            awaitLatch(latch, description);
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Interrupted while waiting for " + description, exception);
+        }
+    }
+
+    private boolean awaitLatchQuietly(CountDownLatch latch, long timeout, TimeUnit unit) {
+        try {
+            return latch.await(timeout, unit);
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Interrupted while waiting for concurrent source lock", exception);
         }
     }
 
