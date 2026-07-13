@@ -20,6 +20,7 @@ import com.leo.erp.contract.sales.web.dto.SalesContractRequest;
 import com.leo.erp.contract.sales.web.dto.SalesContractResponse;
 import com.leo.erp.contract.sales.web.dto.SalesContractItemRequest;
 import com.leo.erp.contract.sales.web.dto.SalesContractItemResponse;
+import com.leo.erp.contract.support.ContractStatusPolicy;
 import com.leo.erp.master.customer.domain.entity.Customer;
 import com.leo.erp.master.customer.repository.CustomerRepository;
 import com.leo.erp.master.project.domain.entity.Project;
@@ -158,7 +159,7 @@ public class SalesContractService extends AbstractCrudService<SalesContract, Sal
                 request.effectiveDate(),
                 request.expireDate(),
                 request.salesName(),
-                request.status(),
+                ContractStatusPolicy.preserveForOrdinaryUpdate(entity.getStatus(), request.status()),
                 request.remark(),
                 request.items()
         );

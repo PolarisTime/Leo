@@ -55,6 +55,7 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
     private final InvoiceSourceMutationGuard invoiceSourceMutationGuard;
     private final PurchaseRefundRepository purchaseRefundRepository;
     private final PaymentPurchasePrepaymentService purchasePrepaymentService;
+    private final PurchaseOrderDownstreamMutationGuard downstreamMutationGuard;
 
     public PurchaseOrderService(PurchaseOrderRepository purchaseOrderRepository,
                                 SnowflakeIdGenerator snowflakeIdGenerator,
@@ -131,7 +132,6 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
         );
     }
 
-    @Autowired
     public PurchaseOrderService(PurchaseOrderRepository purchaseOrderRepository,
                                 SnowflakeIdGenerator snowflakeIdGenerator,
                                 PurchaseOrderAvailabilityService availabilityService,
@@ -144,6 +144,37 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
                                 InvoiceSourceMutationGuard invoiceSourceMutationGuard,
                                 PurchaseRefundRepository purchaseRefundRepository,
                                 PaymentPurchasePrepaymentService purchasePrepaymentService) {
+        this(
+                purchaseOrderRepository,
+                snowflakeIdGenerator,
+                availabilityService,
+                responseAssembler,
+                supplierResolver,
+                purchaseOrderApplyService,
+                pieceWeightQueryService,
+                workflowTransitionGuard,
+                companySettingService,
+                invoiceSourceMutationGuard,
+                purchaseRefundRepository,
+                purchasePrepaymentService,
+                null
+        );
+    }
+
+    @Autowired
+    public PurchaseOrderService(PurchaseOrderRepository purchaseOrderRepository,
+                                SnowflakeIdGenerator snowflakeIdGenerator,
+                                PurchaseOrderAvailabilityService availabilityService,
+                                PurchaseOrderResponseAssembler responseAssembler,
+                                PurchaseOrderSupplierResolver supplierResolver,
+                                PurchaseOrderApplyService purchaseOrderApplyService,
+                                PurchaseOrderPieceWeightQueryService pieceWeightQueryService,
+                                WorkflowTransitionGuard workflowTransitionGuard,
+                                CompanySettingService companySettingService,
+                                InvoiceSourceMutationGuard invoiceSourceMutationGuard,
+                                PurchaseRefundRepository purchaseRefundRepository,
+                                PaymentPurchasePrepaymentService purchasePrepaymentService,
+                                PurchaseOrderDownstreamMutationGuard downstreamMutationGuard) {
         super(snowflakeIdGenerator);
         this.purchaseOrderRepository = purchaseOrderRepository;
         this.availabilityService = availabilityService;
@@ -156,6 +187,7 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
         this.invoiceSourceMutationGuard = invoiceSourceMutationGuard;
         this.purchaseRefundRepository = purchaseRefundRepository;
         this.purchasePrepaymentService = purchasePrepaymentService;
+        this.downstreamMutationGuard = downstreamMutationGuard;
     }
 
     private static final String[] PURCHASE_ORDER_SEARCH_FIELDS = {"orderNo", "supplierName"};
@@ -375,6 +407,9 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
     @Override
     protected void apply(PurchaseOrder purchaseOrder, PurchaseOrderRequest request) {
         if (purchaseOrder.getId() != null) {
+            if (downstreamMutationGuard != null) {
+                downstreamMutationGuard.assertSourceLineMutationAllowed(purchaseOrder, request.items(), "修改");
+            }
             assertNoActivePurchaseRefund(purchaseOrder, "修改");
             assertNoActivePurchasePrepayment(purchaseOrder, "修改");
             if (invoiceSourceMutationGuard != null) {
@@ -419,6 +454,9 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
     protected void beforeStatusUpdate(PurchaseOrder entity, String currentStatus, String nextStatus) {
         if (StatusConstants.DRAFT.equals(nextStatus)
                 && !StatusConstants.DRAFT.equals(currentStatus)) {
+            if (downstreamMutationGuard != null) {
+                downstreamMutationGuard.assertMutable(entity, "反审核");
+            }
             assertNoActivePurchaseRefund(entity, "反审核");
             assertNoActivePurchasePrepayment(entity, "反审核");
             if (invoiceSourceMutationGuard != null) {
@@ -429,6 +467,9 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
 
     @Override
     protected void beforeDelete(PurchaseOrder entity) {
+        if (downstreamMutationGuard != null) {
+            downstreamMutationGuard.assertMutable(entity, "删除");
+        }
         assertNoActivePurchaseRefund(entity, "删除");
         assertNoActivePurchasePrepayment(entity, "删除");
         if (invoiceSourceMutationGuard != null) {

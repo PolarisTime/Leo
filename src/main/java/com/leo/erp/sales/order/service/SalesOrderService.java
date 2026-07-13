@@ -43,6 +43,7 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
     private final SourceAllocationLockService sourceAllocationLockService;
     private final InvoiceSourceMutationGuard invoiceSourceMutationGuard;
     private final SalesOrderDeliveryVerificationGuard deliveryVerificationGuard;
+    private final SalesOrderDownstreamMutationGuard downstreamMutationGuard;
 
     public SalesOrderService(SalesOrderRepository repository,
                              SnowflakeIdGenerator idGenerator,
@@ -70,7 +71,6 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
         );
     }
 
-    @Autowired
     public SalesOrderService(SalesOrderRepository repository,
                              SnowflakeIdGenerator idGenerator,
                              SalesOrderResponseAssembler responseAssembler,
@@ -83,6 +83,37 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
                              SourceAllocationLockService sourceAllocationLockService,
                              InvoiceSourceMutationGuard invoiceSourceMutationGuard,
                              SalesOrderDeliveryVerificationGuard deliveryVerificationGuard) {
+        this(
+                repository,
+                idGenerator,
+                responseAssembler,
+                salesOrderApplyService,
+                salesOrderPurchaseAllocationService,
+                salesOrderAuditedPricingService,
+                protectedUpdatePolicy,
+                saveService,
+                salesOrderItemRepository,
+                sourceAllocationLockService,
+                invoiceSourceMutationGuard,
+                deliveryVerificationGuard,
+                null
+        );
+    }
+
+    @Autowired
+    public SalesOrderService(SalesOrderRepository repository,
+                             SnowflakeIdGenerator idGenerator,
+                             SalesOrderResponseAssembler responseAssembler,
+                             SalesOrderApplyService salesOrderApplyService,
+                             SalesOrderPurchaseAllocationService salesOrderPurchaseAllocationService,
+                             SalesOrderAuditedPricingService salesOrderAuditedPricingService,
+                             SalesOrderProtectedUpdatePolicy protectedUpdatePolicy,
+                             SalesOrderSaveService saveService,
+                             SalesOrderItemRepository salesOrderItemRepository,
+                             SourceAllocationLockService sourceAllocationLockService,
+                             InvoiceSourceMutationGuard invoiceSourceMutationGuard,
+                             SalesOrderDeliveryVerificationGuard deliveryVerificationGuard,
+                             SalesOrderDownstreamMutationGuard downstreamMutationGuard) {
         super(idGenerator);
         this.repository = repository;
         this.responseAssembler = responseAssembler;
@@ -95,6 +126,7 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
         this.sourceAllocationLockService = sourceAllocationLockService;
         this.invoiceSourceMutationGuard = invoiceSourceMutationGuard;
         this.deliveryVerificationGuard = deliveryVerificationGuard;
+        this.downstreamMutationGuard = downstreamMutationGuard;
     }
 
     @Transactional(readOnly = true)
@@ -240,6 +272,9 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
     @Override
     protected void beforeDelete(SalesOrder entity) {
         lockPurchaseSources(entity, null);
+        if (downstreamMutationGuard != null) {
+            downstreamMutationGuard.assertMutable(entity, "删除");
+        }
         if (invoiceSourceMutationGuard != null) {
             invoiceSourceMutationGuard.assertSalesOrderMutable(entity, "删除");
         }
@@ -249,6 +284,11 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
     @Override
     protected void beforeStatusUpdate(SalesOrder entity, String currentStatus, String nextStatus) {
         lockPurchaseSources(entity, null);
+        if (downstreamMutationGuard != null
+                && StatusConstants.DRAFT.equals(nextStatus)
+                && !StatusConstants.DRAFT.equals(currentStatus)) {
+            downstreamMutationGuard.assertMutable(entity, "反审核");
+        }
         if (StatusConstants.AUDITED.equals(nextStatus)
                 || StatusConstants.SALES_COMPLETED.equals(nextStatus)) {
             salesOrderApplyService.validateCustomerSnapshot(entity);
@@ -349,6 +389,9 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
     @Override
     protected void apply(SalesOrder entity, SalesOrderRequest request) {
         lockPurchaseSources(entity, request);
+        if (entity.getId() != null && downstreamMutationGuard != null) {
+            downstreamMutationGuard.assertSourceLineMutationAllowed(entity, request.items(), "修改");
+        }
         if (entity.getId() != null
                 && StatusConstants.DELIVERY_VERIFICATION.equals(entity.getStatus())
                 && deliveryVerificationGuard != null) {

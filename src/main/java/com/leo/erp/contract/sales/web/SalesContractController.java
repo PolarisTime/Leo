@@ -6,6 +6,7 @@ import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.api.PageResponse;
 import com.leo.erp.common.web.BindPageQuery;
+import com.leo.erp.common.web.dto.StatusUpdateRequest;
 import com.leo.erp.contract.sales.service.SalesContractService;
 import com.leo.erp.contract.sales.web.dto.SalesContractRequest;
 import com.leo.erp.contract.sales.web.dto.SalesContractResponse;
@@ -16,6 +17,7 @@ import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -84,6 +86,16 @@ public class SalesContractController {
     @Operation(summary = "更新销售合同")
     public ApiResponse<SalesContractResponse> update(@PathVariable Long id, @Valid @RequestBody SalesContractRequest request) {
         return ApiResponse.success("更新成功", salesContractService.update(id, request));
+    }
+
+    @PatchMapping("/{id}/status")
+    @RequiresPermission(resource = "sales-contract", action = "audit")
+    @Operation(summary = "更新销售合同状态")
+    public ApiResponse<SalesContractResponse> updateStatus(
+            @PathVariable Long id,
+            @Valid @RequestBody StatusUpdateRequest request
+    ) {
+        return ApiResponse.success("状态更新成功", salesContractService.updateStatus(id, request.status()));
     }
 
     @DeleteMapping("/{id}")

@@ -1,13 +1,12 @@
-package com.leo.erp.purchase.inbound.service;
+package com.leo.erp.sales.order.service;
 
 import com.leo.erp.common.concurrency.SourceAllocationLockService;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
-import com.leo.erp.common.support.StatusConstants;
-import com.leo.erp.purchase.inbound.domain.entity.PurchaseInbound;
-import com.leo.erp.purchase.inbound.domain.entity.PurchaseInboundItem;
-import com.leo.erp.purchase.inbound.web.dto.PurchaseInboundItemRequest;
-import com.leo.erp.statement.supplier.repository.SupplierStatementRepository;
+import com.leo.erp.sales.order.domain.entity.SalesOrder;
+import com.leo.erp.sales.order.domain.entity.SalesOrderItem;
+import com.leo.erp.sales.order.web.dto.SalesOrderItemRequest;
+import com.leo.erp.sales.outbound.repository.SalesOutboundRepository;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -17,67 +16,67 @@ import java.util.List;
 import java.util.Objects;
 
 @Service
-public class PurchaseInboundStatementGuard {
+public class SalesOrderDownstreamMutationGuard {
 
-    private final SupplierStatementRepository supplierStatementRepository;
+    private final SalesOutboundRepository salesOutboundRepository;
     private final SourceAllocationLockService sourceAllocationLockService;
 
-    public PurchaseInboundStatementGuard(
-            SupplierStatementRepository supplierStatementRepository,
+    public SalesOrderDownstreamMutationGuard(
+            SalesOutboundRepository salesOutboundRepository,
             SourceAllocationLockService sourceAllocationLockService
     ) {
-        this.supplierStatementRepository = supplierStatementRepository;
+        this.salesOutboundRepository = salesOutboundRepository;
         this.sourceAllocationLockService = sourceAllocationLockService;
     }
 
-    public void assertStatusTransitionAllowed(
-            PurchaseInbound inbound,
-            String currentStatus,
-            String nextStatus
-    ) {
-        if (!StatusConstants.INBOUND_COMPLETED.equals(currentStatus)
-                || !StatusConstants.DRAFT.equals(nextStatus)) {
+    public void assertMutable(SalesOrder order, String action) {
+        List<Long> itemIds = sourceItemIds(order);
+        if (itemIds.isEmpty()) {
             return;
         }
-        assertMutable(inbound, "反审核");
-    }
-
-    public void assertMutable(PurchaseInbound inbound, String action) {
-        if (inbound == null || inbound.getId() == null) {
-            return;
-        }
-        List<Long> inboundIds = List.of(inbound.getId());
-        sourceAllocationLockService.lockDocumentSources(inboundIds, List.of(), List.of(), List.of());
-        if (!supplierStatementRepository
-                .findMatchingOccupiedSourceInboundIdsExcludingCurrentStatement(inboundIds, null)
+        sourceAllocationLockService.lockTradeItemSources(List.of(), List.of(), itemIds);
+        if (!salesOutboundRepository
+                .findAllBySourceSalesOrderItemIdsExcludingCurrentOutbound(itemIds, null)
                 .isEmpty()) {
             throw new BusinessException(
                     ErrorCode.BUSINESS_ERROR,
-                    "采购入库已被供应商对账单引用，不能" + action + "，请先删除相关供应商对账单"
+                    "销售订单已存在销售出库单，不能" + action + "，请先删除相关销售出库单"
             );
         }
     }
 
     public void assertSourceLineMutationAllowed(
-            PurchaseInbound inbound,
-            Collection<PurchaseInboundItemRequest> requestedItems,
+            SalesOrder order,
+            Collection<SalesOrderItemRequest> requestedItems,
             String action
     ) {
-        if (sourceLinesChanged(inbound, requestedItems)) {
-            assertMutable(inbound, action);
+        if (sourceLinesChanged(order, requestedItems)) {
+            assertMutable(order, action);
         }
     }
 
-    private boolean sourceLinesChanged(
-            PurchaseInbound inbound,
-            Collection<PurchaseInboundItemRequest> requestedItems
-    ) {
-        List<PurchaseInboundItem> currentItems = inbound == null || inbound.getItems() == null
-                ? List.of()
-                : inbound.getItems().stream()
-                .sorted(Comparator.comparing(PurchaseInboundItem::getLineNo))
+    private List<Long> sourceItemIds(SalesOrder order) {
+        if (order == null || order.getItems() == null) {
+            return List.of();
+        }
+        return order.getItems().stream()
+                .map(SalesOrderItem::getId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .sorted()
                 .toList();
-        List<PurchaseInboundItemRequest> nextItems = requestedItems == null
+    }
+
+    private boolean sourceLinesChanged(
+            SalesOrder order,
+            Collection<SalesOrderItemRequest> requestedItems
+    ) {
+        List<SalesOrderItem> currentItems = order == null || order.getItems() == null
+                ? List.of()
+                : order.getItems().stream()
+                .sorted(Comparator.comparing(SalesOrderItem::getLineNo))
+                .toList();
+        List<SalesOrderItemRequest> nextItems = requestedItems == null
                 ? List.of()
                 : List.copyOf(requestedItems);
         if (currentItems.size() != nextItems.size()) {
@@ -91,7 +90,7 @@ public class PurchaseInboundStatementGuard {
         return false;
     }
 
-    private boolean sameSourceLine(PurchaseInboundItem current, PurchaseInboundItemRequest next) {
+    private boolean sameSourceLine(SalesOrderItem current, SalesOrderItemRequest next) {
         return next != null
                 && Objects.equals(current.getId(), next.id())
                 && Objects.equals(current.getMaterialId(), next.materialId())
@@ -102,19 +101,16 @@ public class PurchaseInboundStatementGuard {
                 && sameText(current.getSpec(), next.spec())
                 && sameText(current.getLength(), next.length())
                 && sameText(current.getUnit(), next.unit())
+                && Objects.equals(current.getSourceInboundItemId(), next.sourceInboundItemId())
                 && Objects.equals(current.getSourcePurchaseOrderItemId(), next.sourcePurchaseOrderItemId())
                 && Objects.equals(current.getWarehouseId(), next.warehouseId())
                 && sameText(current.getWarehouseName(), next.warehouseName())
-                && sameText(current.getSettlementMode(), next.settlementMode())
                 && sameText(current.getBatchNo(), next.batchNo())
                 && Objects.equals(current.getQuantity(), next.quantity())
                 && sameText(current.getQuantityUnit(), next.quantityUnit())
                 && sameNumber(current.getPieceWeightTon(), next.pieceWeightTon())
                 && Objects.equals(current.getPiecesPerBundle(), next.piecesPerBundle())
                 && sameOptionalNumber(current.getWeightTon(), next.weightTon())
-                && sameOptionalNumber(current.getWeighWeightTon(), next.weighWeightTon())
-                && sameOptionalNumber(current.getWeightAdjustmentTon(), next.weightAdjustmentTon())
-                && sameOptionalNumber(current.getWeightAdjustmentAmount(), next.weightAdjustmentAmount())
                 && sameNumber(current.getUnitPrice(), next.unitPrice());
     }
 

@@ -20,6 +20,7 @@ import com.leo.erp.contract.purchase.web.dto.PurchaseContractRequest;
 import com.leo.erp.contract.purchase.web.dto.PurchaseContractResponse;
 import com.leo.erp.contract.purchase.web.dto.PurchaseContractItemRequest;
 import com.leo.erp.contract.purchase.web.dto.PurchaseContractItemResponse;
+import com.leo.erp.contract.support.ContractStatusPolicy;
 import com.leo.erp.master.supplier.domain.entity.Supplier;
 import com.leo.erp.master.supplier.repository.SupplierRepository;
 import com.leo.erp.security.permission.WorkflowTransitionGuard;
@@ -150,7 +151,7 @@ public class PurchaseContractService extends AbstractCrudService<PurchaseContrac
                 request.effectiveDate(),
                 request.expireDate(),
                 request.buyerName(),
-                request.status(),
+                ContractStatusPolicy.preserveForOrdinaryUpdate(entity.getStatus(), request.status()),
                 request.remark(),
                 request.items()
         );

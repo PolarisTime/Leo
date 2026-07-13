@@ -15,6 +15,8 @@ import com.leo.erp.contract.purchase.web.dto.PurchaseContractResponse;
 import com.leo.erp.security.permission.WorkflowTransitionGuard;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 
 import java.lang.reflect.Proxy;
 import java.math.BigDecimal;
@@ -148,14 +150,83 @@ class PurchaseContractServiceTest {
         var svc = new PurchaseContractService(repo, new SnowflakeIdGenerator(1), purchaseContractMapper, workflowTransitionGuard);
 
         var result = svc.update(1L, new PurchaseContractRequest("PC-001", "供应商A", LocalDate.now(),
-                LocalDate.now(), LocalDate.now().plusYears(1), "采购甲", "执行中", "备注", List.of()));
+                LocalDate.now(), LocalDate.now().plusYears(1), "采购甲", "草稿", "备注", List.of()));
         assertThat(result).isNotNull();
+    }
+
+    @ParameterizedTest(name = "{0} -> {1}")
+    @CsvSource({
+            "草稿, 执行中",
+            "执行中, 草稿",
+            "执行中, 已签署",
+            "已签署, 执行中",
+            "已签署, 已归档"
+    })
+    void shouldUpdateStatusThroughDedicatedStatusOperation(String currentStatus, String nextStatus) {
+        var entity = createEntity(1L, "PC-001");
+        entity.setStatus(currentStatus);
+        var svc = new PurchaseContractService(
+                repositoryReturning(entity),
+                new SnowflakeIdGenerator(1),
+                purchaseContractMapper,
+                workflowTransitionGuard
+        );
+
+        svc.updateStatus(1L, nextStatus);
+
+        assertThat(entity.getStatus()).isEqualTo(nextStatus);
+    }
+
+    @ParameterizedTest(name = "ordinary update must reject {0} -> {1}")
+    @CsvSource({
+            "草稿, 执行中",
+            "执行中, 草稿"
+    })
+    void shouldRejectStatusTransitionThroughOrdinaryUpdate(String currentStatus, String requestedStatus) {
+        var entity = createEntity(1L, "PC-001");
+        entity.setStatus(currentStatus);
+        var svc = new PurchaseContractService(
+                repositoryReturning(entity),
+                new SnowflakeIdGenerator(1),
+                purchaseContractMapper,
+                workflowTransitionGuard
+        );
+
+        assertThatThrownBy(() -> svc.update(1L, new PurchaseContractRequest(
+                "PC-001", "供应商A", LocalDate.now(), LocalDate.now(), LocalDate.now().plusYears(1),
+                "采购甲", requestedStatus, "备注", List.of()
+        )))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("专用状态接口");
     }
 
     @Test
     void shouldRejectForgedTerminalStatusTransitionOnUpdate() {
         assertThatThrownBy(() -> service.update(1L, new PurchaseContractRequest("PC-001", "供应商A", LocalDate.now(),
                 LocalDate.now(), LocalDate.now().plusYears(1), "采购甲", "已签署", "备注", List.of())))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("专用状态接口");
+    }
+
+    @Test
+    void shouldRejectStatusTransitionFromArchivedContract() {
+        var entity = createEntity(1L, "PC-001");
+        entity.setStatus(StatusConstants.ARCHIVED);
+        var svc = new PurchaseContractService(
+                repositoryReturning(entity),
+                new SnowflakeIdGenerator(1),
+                purchaseContractMapper,
+                workflowTransitionGuard
+        );
+
+        assertThatThrownBy(() -> svc.updateStatus(1L, StatusConstants.SIGNED))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("不能从");
+    }
+
+    @Test
+    void shouldRejectSkippedStatusTransitionThroughDedicatedStatusOperation() {
+        assertThatThrownBy(() -> service.updateStatus(1L, StatusConstants.SIGNED))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("不能从");
     }

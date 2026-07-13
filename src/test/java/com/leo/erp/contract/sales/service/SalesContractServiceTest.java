@@ -15,6 +15,8 @@ import com.leo.erp.contract.sales.web.dto.SalesContractResponse;
 import com.leo.erp.security.permission.WorkflowTransitionGuard;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 
 import java.lang.reflect.Proxy;
 import java.math.BigDecimal;
@@ -159,14 +161,83 @@ class SalesContractServiceTest {
         var svc = new SalesContractService(repo, new SnowflakeIdGenerator(1), salesContractMapper, workflowTransitionGuard);
 
         var result = svc.update(1L, new SalesContractRequest("SC-001", "客户A", "项目A", LocalDate.now(),
-                LocalDate.now(), LocalDate.now().plusYears(1), "销售甲", "执行中", "备注", List.of()));
+                LocalDate.now(), LocalDate.now().plusYears(1), "销售甲", "草稿", "备注", List.of()));
         assertThat(result).isNotNull();
+    }
+
+    @ParameterizedTest(name = "{0} -> {1}")
+    @CsvSource({
+            "草稿, 执行中",
+            "执行中, 草稿",
+            "执行中, 已签署",
+            "已签署, 执行中",
+            "已签署, 已归档"
+    })
+    void shouldUpdateStatusThroughDedicatedStatusOperation(String currentStatus, String nextStatus) {
+        var entity = createEntity(1L, "SC-001");
+        entity.setStatus(currentStatus);
+        var svc = new SalesContractService(
+                repositoryReturning(entity),
+                new SnowflakeIdGenerator(1),
+                salesContractMapper,
+                workflowTransitionGuard
+        );
+
+        svc.updateStatus(1L, nextStatus);
+
+        assertThat(entity.getStatus()).isEqualTo(nextStatus);
+    }
+
+    @ParameterizedTest(name = "ordinary update must reject {0} -> {1}")
+    @CsvSource({
+            "草稿, 执行中",
+            "执行中, 草稿"
+    })
+    void shouldRejectStatusTransitionThroughOrdinaryUpdate(String currentStatus, String requestedStatus) {
+        var entity = createEntity(1L, "SC-001");
+        entity.setStatus(currentStatus);
+        var svc = new SalesContractService(
+                repositoryReturning(entity),
+                new SnowflakeIdGenerator(1),
+                salesContractMapper,
+                workflowTransitionGuard
+        );
+
+        assertThatThrownBy(() -> svc.update(1L, new SalesContractRequest(
+                "SC-001", "客户A", "项目A", LocalDate.now(), LocalDate.now(), LocalDate.now().plusYears(1),
+                "销售甲", requestedStatus, "备注", List.of()
+        )))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("专用状态接口");
     }
 
     @Test
     void shouldRejectForgedTerminalStatusTransitionOnUpdate() {
         assertThatThrownBy(() -> service.update(1L, new SalesContractRequest("SC-001", "客户A", "项目A", LocalDate.now(),
                 LocalDate.now(), LocalDate.now().plusYears(1), "销售甲", "已签署", "备注", List.of())))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("专用状态接口");
+    }
+
+    @Test
+    void shouldRejectStatusTransitionFromArchivedContract() {
+        var entity = createEntity(1L, "SC-001");
+        entity.setStatus(StatusConstants.ARCHIVED);
+        var svc = new SalesContractService(
+                repositoryReturning(entity),
+                new SnowflakeIdGenerator(1),
+                salesContractMapper,
+                workflowTransitionGuard
+        );
+
+        assertThatThrownBy(() -> svc.updateStatus(1L, StatusConstants.SIGNED))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("不能从");
+    }
+
+    @Test
+    void shouldRejectSkippedStatusTransitionThroughDedicatedStatusOperation() {
+        assertThatThrownBy(() -> service.updateStatus(1L, StatusConstants.SIGNED))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("不能从");
     }
@@ -303,5 +374,21 @@ class SalesContractServiceTest {
     private static SalesContractRequest request(String contractNo) {
         return new SalesContractRequest(contractNo, "客户A", "项目A", LocalDate.now(),
                 LocalDate.now(), LocalDate.now().plusYears(1), "销售甲", "草稿", "备注", List.of());
+    }
+
+    private static SalesContractRepository repositoryReturning(SalesContract entity) {
+        return (SalesContractRepository) Proxy.newProxyInstance(
+                SalesContractRepository.class.getClassLoader(),
+                new Class[]{SalesContractRepository.class},
+                (proxy, method, args) -> switch (method.getName()) {
+                    case "findByIdAndDeletedFlagFalse", "findById" -> Optional.of(entity);
+                    case "existsByContractNoAndDeletedFlagFalse" -> false;
+                    case "save" -> args[0];
+                    case "toString" -> "SalesContractRepositoryStub";
+                    case "hashCode" -> System.identityHashCode(proxy);
+                    case "equals" -> proxy == args[0];
+                    default -> throw new UnsupportedOperationException(method.getName());
+                }
+        );
     }
 }

@@ -210,6 +210,9 @@ public class PurchaseInboundService extends AbstractCrudService<
     @Override
     protected void apply(PurchaseInbound inbound, PurchaseInboundRequest request) {
         lockSourcePurchaseOrderItems(inbound, request);
+        if (inbound.getItems().stream().anyMatch(item -> item.getId() != null)) {
+            purchaseInboundStatementGuard.assertSourceLineMutationAllowed(inbound, request.items(), "修改");
+        }
         String nextStatus = BusinessStatusValidator.normalizeWithDefault(
                 request.status(),
                 StatusConstants.DRAFT,
@@ -238,6 +241,7 @@ public class PurchaseInboundService extends AbstractCrudService<
     @Override
     protected void beforeDelete(PurchaseInbound inbound) {
         lockSourcePurchaseOrderItems(inbound, null);
+        purchaseInboundStatementGuard.assertMutable(inbound, "删除");
         deleteService.beforeDelete(inbound);
     }
 
