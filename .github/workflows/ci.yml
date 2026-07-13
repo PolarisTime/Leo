@@ -15,6 +15,86 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  test-plan:
+    name: Plan Tests
+    runs-on: ubuntu-latest
+    outputs:
+      batches: ${{ steps.plan.outputs.batches }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Select affected test batches
+        id: plan
+        env:
+          PR_BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}
+        run: |
+          set -euo pipefail
+
+          all_batches=(system auth security common master-attachment business)
+          selected_batches=()
+          run_full=false
+          base_sha="$PR_BASE_SHA"
+
+          add_batch() {
+            local candidate="$1"
+            local existing
+            for existing in "${selected_batches[@]}"; do
+              [[ "$existing" == "$candidate" ]] && return
+            done
+            selected_batches+=("$candidate")
+          }
+
+          if [[ "$GITHUB_REF" == "refs/heads/main" || "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
+            run_full=true
+          elif [[ -z "$base_sha" ]]; then
+            base_sha="$(git merge-base HEAD origin/main 2>/dev/null || true)"
+          fi
+
+          if [[ "$run_full" != "true" ]] && { [[ -z "$base_sha" ]] || ! git cat-file -e "${base_sha}^{commit}" 2>/dev/null; }; then
+            run_full=true
+          elif [[ "$run_full" != "true" ]]; then
+            mapfile -t changed_files < <(git diff --name-only "$base_sha" HEAD)
+            for changed_file in "${changed_files[@]}"; do
+              case "$changed_file" in
+                pom.xml|.mvn/*|Dockerfile|.github/workflows/ci.yml|src/main/resources/*|src/test/resources/*|src/main/java/com/leo/erp/common/*|src/test/java/com/leo/erp/common/*|src/test/java/com/leo/erp/testsupport/*)
+                  run_full=true
+                  break
+                  ;;
+                src/main/java/com/leo/erp/system/*|src/test/java/com/leo/erp/system/*|src/main/java/com/leo/erp/deployment/*|src/test/java/com/leo/erp/deployment/*|src/main/java/com/leo/erp/mcp/*|src/test/java/com/leo/erp/mcp/*)
+                  add_batch system
+                  ;;
+                src/main/java/com/leo/erp/auth/*|src/test/java/com/leo/erp/auth/*)
+                  add_batch auth
+                  ;;
+                src/main/java/com/leo/erp/security/*|src/test/java/com/leo/erp/security/*)
+                  add_batch security
+                  ;;
+                src/main/java/com/leo/erp/master/*|src/test/java/com/leo/erp/master/*|src/main/java/com/leo/erp/attachment/*|src/test/java/com/leo/erp/attachment/*)
+                  add_batch master-attachment
+                  ;;
+                src/main/java/com/leo/erp/*|src/test/java/com/leo/erp/*)
+                  add_batch business
+                  ;;
+              esac
+            done
+          fi
+
+          if [[ "$run_full" == "true" ]]; then
+            selected_batches=("${all_batches[@]}")
+          elif [[ "${#selected_batches[@]}" -eq 0 ]]; then
+            selected_batches=(none)
+          fi
+
+          batches_json="$(printf '%s\n' "${selected_batches[@]}" | jq -Rsc 'split("\n") | map(select(length > 0))')"
+          echo "Selected test batches: $batches_json"
+          echo "batches=$batches_json" >> "$GITHUB_OUTPUT"
+
   static-analysis:
     name: Static Analysis
     runs-on: ubuntu-latest
@@ -38,18 +118,14 @@ jobs:
 
   unit-tests:
     name: Test / ${{ matrix.batch }}
-    needs: static-analysis
+    needs:
+      - static-analysis
+      - test-plan
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        batch:
-          - system            # ~50 classes
-          - auth              # ~40 classes
-          - security          # ~42 classes
-          - common            # ~57 classes
-          - master-attachment # ~63 classes
-          - business          # ~55 classes
+        batch: ${{ fromJSON(needs.test-plan.outputs.batches) }}
     services:
       postgres:
         image: postgres:16-alpine
@@ -104,7 +180,7 @@ jobs:
 
       - name: Test (system)
         if: matrix.batch == 'system'
-        run: mvn -B -ntp test -Dtest="com.leo.erp.system.**"
+        run: mvn -B -ntp test -Dtest="com.leo.erp.system.**,com.leo.erp.deployment.**,com.leo.erp.mcp.**"
 
       - name: Test (auth)
         if: matrix.batch == 'auth'
@@ -125,6 +201,10 @@ jobs:
       - name: Test (business)
         if: matrix.batch == 'business'
         run: mvn -B -ntp test -Dtest="com.leo.erp.finance.**,com.leo.erp.sales.**,com.leo.erp.statement.**,com.leo.erp.contract.**,com.leo.erp.purchase.**,com.leo.erp.report.**,com.leo.erp.logistics.**,com.leo.erp.allocation.**,com.leo.erp.config.**,com.leo.erp.search.**"
+
+      - name: Skip tests
+        if: matrix.batch == 'none'
+        run: echo "No backend unit-test batch is affected"
 
   package:
     name: Package & Smoke
