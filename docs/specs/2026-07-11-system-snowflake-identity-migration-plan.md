@@ -11,7 +11,7 @@
 | 审计基线 | `leo@99703021`、`aries@1d247de4` |
 | 当前数据库版本 | 当前生产应用连接 `master_prod_cutover_current_20260713_102500`：主线 V56/56、repair baseline + D3 + D4 为 3/3，失效索引和新增未验证约束均为 0；旧 `Master_Prod` 保留 V11（11 success、0 failed）作为回滚库；下一主线数据库变更只能新增 V57+ |
 | 核心决策 | 复用现有 `BIGINT` 雪花主键作为唯一内部身份，不新增 UUID 或平行身份体系 |
-| 当前操作边界 | 生产 Leo 已在 `57217` 以待发布 2.2.0 构建运行，Flyway target 显式为 56；生产配置仅切换数据库名，旧库、实时 dump 与 SHA-256 均保留；Git 提交和 push 仍待本轮完成，完整 E2E 仍未通过 |
+| 当前操作边界 | Leo `v3.0.0` 与 Aries `v2.3.0` 已提交、push 并由 self-hosted runner 完成生产部署，Flyway target 显式为 56；生产配置仅切换数据库名，旧库、实时 dump 与 SHA-256 均保留；完整 E2E 仍未通过 |
 
 ### 1.1 当前实施进度（截至 2026-07-13）
 
@@ -153,7 +153,8 @@
 - 维护窗口先停止生产 Leo，使用 PostgreSQL 18 客户端对当时的 `Master_Prod` 生成一致性 dump：`355,385 bytes`，SHA-256 `a9f81bf754db4a362369f94bca8f01815011c7aea7a80cb81767ff964e0201c8`，文件权限 600；原库未执行迁移、删除或重命名。
 - 从该 dump 创建 `master_prod_cutover_current_20260713_102500`，按 `V12–V29 → D3 → V30–V47 → D4 → V48–V56` 顺序执行；主线 `56/56`、repair `baseline + D3 + D4 = 3/3`，两条 `validate` 成功。D3/D4 实时 manifest SHA-256 分别为 `98d0bc9f7690890673e7c17e083c3d051e230a67b4000c0dcc27079b5b7073de` 与 `3a7b0b3f40779dc0fd76e3a9d4f26c64253b651f769c3b1c17380ed4c646afc2`。
 - 迁移后 64 张原有表仅出现预期行数差异：Flyway history、D3 新增 4 个项目、D4 新增 2 辆车辆及菜单/动作/编号规则/角色权限种子；失效索引 0、新增未验证约束 0。
-- 生产配置 `SPRING_DATASOURCE_DB` 已切换到该副本，并显式设置 `SPRING_FLYWAY_TARGET=56`；旧 `Master_Prod` 仍可连接且保持 V11。Leo `57217` 以 2.2.0 构建启动，Flyway 校验 56 项且无需迁移；`/api/health`、认证 ping、版本接口为 200，未认证系统健康与客户 options 为 403。
+- 生产配置 `SPRING_DATASOURCE_DB` 已切换到该副本，并显式设置 `SPRING_FLYWAY_TARGET=56`；旧 `Master_Prod` 仍可连接且保持 V11。Leo `v3.0.0` 已由 production-deploy run `29220370990` 部署到 `57217`，Flyway 校验 56 项且无需迁移；`/api/health`、认证 ping、版本接口为 200，未认证系统健康与客户 options 为 403。
+- Aries `v2.3.0` 已由 frontend-production-deploy run `29220231919` 完成本地生产部署；Nginx 返回的生产 `index.html` 与 `/instance/steelx/frontend/current/index.html` SHA-256 一致。首次 Leo tag deploy 因缺少 `PROD_FLYWAY_TARGET` 在安装前失败关闭，随后使用显式 `flyway_target=56` 的既有 workflow_dispatch 成功完成构建、打包、安装和健康检查。
 - 此次切换没有把失败 E2E 写成通过：最后一次可复核完整归档仍为 `25 passed / 57 failed / 2 skipped`；后续完整 E2E、生产 fallback 周期、业务守恒和正式发布门禁仍未完成。
 
 ## 2. 结论
