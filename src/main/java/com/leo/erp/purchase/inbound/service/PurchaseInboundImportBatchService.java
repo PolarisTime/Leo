@@ -102,7 +102,9 @@ public class PurchaseInboundImportBatchService {
 
         List<PurchaseInboundImportBatchResponse.InboundDraft> created = new ArrayList<>();
         for (PurchaseInboundSplitPreviewResponse.Group group : preview.groups()) {
-            PurchaseInboundResponse response = purchaseInboundService.create(toCreateRequest(order, group, request));
+            PurchaseInboundResponse response = purchaseInboundService.createFromImportBatch(
+                    toCreateRequest(order, group, request)
+            );
             PurchaseInbound inbound = purchaseInboundRepository.findByIdAndDeletedFlagFalse(response.id())
                     .orElseThrow(() -> new BusinessException(
                             ErrorCode.BUSINESS_ERROR,
@@ -157,6 +159,9 @@ public class PurchaseInboundImportBatchService {
         }
         Map<Long, Integer> allocatedQuantityMap = allocationService
                 .loadAllocatedQuantityMap(sourceItemIds, null);
+        if (allocatedQuantityMap.values().stream().anyMatch(quantity -> quantity != null && quantity > 0)) {
+            return blockedPreview(order, "采购订单已存在采购入库单，不允许分批或重复入库");
+        }
         Map<String, PurchaseInboundWeightSettlementService.PurchaseWeighCategoryRule> categoryRules =
                 weightSettlementService.loadPurchaseWeighCategoryRules(
                         order.getItems().stream().map(PurchaseOrderItem::getCategory).toList()

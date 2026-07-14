@@ -140,7 +140,13 @@ public class PurchaseOrderAvailabilityService {
 
         Map<Long, Integer> result = new HashMap<>();
         for (PurchaseOrder order : orders) {
-            int importableQuantity = order.getItems().stream()
+            boolean hasInboundAllocation = usage == ImportCandidateUsage.PURCHASE_INBOUND
+                    && order.getItems().stream().anyMatch(
+                    item -> allocatedQuantityMap.getOrDefault(item.getId(), 0) > 0
+            );
+            int importableQuantity = hasInboundAllocation
+                    ? 0
+                    : order.getItems().stream()
                     .mapToInt(item -> remainingQuantity(item, allocatedQuantityMap))
                     .sum();
             result.put(order.getId(), importableQuantity);

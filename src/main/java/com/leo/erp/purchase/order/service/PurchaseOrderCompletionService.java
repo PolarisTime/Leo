@@ -91,7 +91,9 @@ public class PurchaseOrderCompletionService {
                 ? List.of()
                 : inboundItemRepository.findAllActiveBySourcePurchaseOrderItemIds(sourceItemIds);
         assertNoDraftInbound(inboundItems);
-        assertPresaleCapacityCovered(sourceItemIds, inboundItems);
+        Map<Long, Long> inboundQuantityBySourceItemId = effectiveInboundQuantityBySourceItemId(inboundItems);
+        assertFullyInbound(purchaseOrder, inboundQuantityBySourceItemId);
+        assertPresaleCapacityCovered(sourceItemIds, inboundQuantityBySourceItemId);
 
         if (!StatusConstants.PURCHASE_COMPLETED.equals(purchaseOrder.getStatus())) {
             lockSupplierLedger(purchaseOrder);
@@ -118,14 +120,8 @@ public class PurchaseOrderCompletionService {
         }
     }
 
-    private void assertPresaleCapacityCovered(
-            List<Long> sourceItemIds,
-            List<PurchaseInboundItem> inboundItems
-    ) {
-        if (sourceItemIds.isEmpty()) {
-            return;
-        }
-        Map<Long, Long> inboundQuantityBySourceItemId = inboundItems.stream()
+    private Map<Long, Long> effectiveInboundQuantityBySourceItemId(List<PurchaseInboundItem> inboundItems) {
+        return inboundItems.stream()
                 .filter(item -> item.getSourcePurchaseOrderItemId() != null)
                 .filter(item -> item.getPurchaseInbound() != null)
                 .filter(item -> EFFECTIVE_INBOUND_STATUSES.contains(item.getPurchaseInbound().getStatus()))
@@ -133,6 +129,31 @@ public class PurchaseOrderCompletionService {
                         PurchaseInboundItem::getSourcePurchaseOrderItemId,
                         Collectors.summingLong(item -> item.getQuantity() == null ? 0L : item.getQuantity())
                 ));
+    }
+
+    private void assertFullyInbound(
+            PurchaseOrder purchaseOrder,
+            Map<Long, Long> inboundQuantityBySourceItemId
+    ) {
+        for (PurchaseOrderItem item : purchaseOrder.getItems()) {
+            long orderedQuantity = item.getQuantity() == null ? 0L : item.getQuantity();
+            long inboundQuantity = inboundQuantityBySourceItemId.getOrDefault(item.getId(), 0L);
+            if (orderedQuantity < 1 || inboundQuantity != orderedQuantity) {
+                throw new BusinessException(
+                        ErrorCode.BUSINESS_ERROR,
+                        "采购订单必须全部商品完成入库后才能完成采购"
+                );
+            }
+        }
+    }
+
+    private void assertPresaleCapacityCovered(
+            List<Long> sourceItemIds,
+            Map<Long, Long> inboundQuantityBySourceItemId
+    ) {
+        if (sourceItemIds.isEmpty()) {
+            return;
+        }
         for (SalesOrderItemRepository.SourcePurchaseOrderAllocationSummary summary
                 : salesOrderItemRepository.summarizeAllocatedQuantityBySourcePurchaseOrderItemIds(
                         sourceItemIds,

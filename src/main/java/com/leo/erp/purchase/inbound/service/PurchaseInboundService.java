@@ -140,6 +140,20 @@ public class PurchaseInboundService extends AbstractCrudService<
         return pieceWeightService.getPieceWeights(itemId);
     }
 
+    @Override
+    @Transactional
+    public PurchaseInboundResponse create(PurchaseInboundRequest request) {
+        throw new BusinessException(
+                ErrorCode.BUSINESS_ERROR,
+                "采购入库必须通过采购订单全量导入创建，不允许手工分批入库"
+        );
+    }
+
+    @Transactional
+    PurchaseInboundResponse createFromImportBatch(PurchaseInboundRequest request) {
+        return super.create(request);
+    }
+
     @Transactional
     public PurchaseInboundResponse audit(
             Long id,
@@ -150,7 +164,7 @@ public class PurchaseInboundService extends AbstractCrudService<
                 || StatusConstants.INBOUND_COMPLETED.equals(inbound.getStatus())) {
             repository.flush();
             weightWriteBackService.synchronizeAfterSave(inbound);
-            completionSyncService.synchronizeSourcePurchaseOrders(inbound);
+            completionSyncService.synchronizeSourcePurchaseOrders(inbound, false);
             return toSavedResponse(inbound);
         }
         if (!StatusConstants.DRAFT.equals(inbound.getStatus())) {
@@ -315,6 +329,7 @@ public class PurchaseInboundService extends AbstractCrudService<
     @Override
     protected void beforeDelete(PurchaseInbound inbound) {
         lockSourcePurchaseOrderItems(inbound, null);
+        purchaseInboundSourceStatusGuard.assertDeletionAllowed(inbound);
         purchaseInboundStatementGuard.assertMutable(inbound, "删除");
     }
 
@@ -333,6 +348,11 @@ public class PurchaseInboundService extends AbstractCrudService<
             );
         }
         prepareStatusTransition(inbound, currentStatus, nextStatus);
+        inbound.setSourcePurchaseOrderReopenAllowed(
+                StatusConstants.DRAFT.equals(nextStatus)
+                        && (StatusConstants.AUDITED.equals(currentStatus)
+                        || StatusConstants.INBOUND_COMPLETED.equals(currentStatus))
+        );
         if (StatusConstants.DRAFT.equals(nextStatus)) {
             inbound.getItems().forEach(this::clearToleranceConfirmation);
         }
@@ -539,7 +559,11 @@ public class PurchaseInboundService extends AbstractCrudService<
         PurchaseInbound saved = saveEntity(entity);
         repository.flush();
         weightWriteBackService.synchronizeAfterSave(saved);
-        completionSyncService.synchronizeSourcePurchaseOrders(saved);
+        completionSyncService.synchronizeSourcePurchaseOrders(
+                saved,
+                saved.isSourcePurchaseOrderReopenAllowed()
+        );
+        saved.setSourcePurchaseOrderReopenAllowed(false);
         return saved;
     }
 

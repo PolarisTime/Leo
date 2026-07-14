@@ -83,4 +83,7 @@ public class PurchaseInbound extends AbstractAuditableEntity {
 
     @Transient
     private List<Long> affectedSourcePurchaseOrderItemIds = new ArrayList<>();
+
+    @Transient
+    private boolean sourcePurchaseOrderReopenAllowed;
 }

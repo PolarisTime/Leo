@@ -24,17 +24,20 @@ public class PurchaseInboundAuditCommandService {
     private final PurchaseInboundRepository inboundRepository;
     private final PurchaseOrderRepository purchaseOrderRepository;
     private final PurchaseOrderItemQueryService purchaseOrderItemQueryService;
+    private final PurchaseInboundAllocationService allocationService;
     private final PurchaseInboundService purchaseInboundService;
 
     public PurchaseInboundAuditCommandService(
             PurchaseInboundRepository inboundRepository,
             PurchaseOrderRepository purchaseOrderRepository,
             PurchaseOrderItemQueryService purchaseOrderItemQueryService,
+            PurchaseInboundAllocationService allocationService,
             PurchaseInboundService purchaseInboundService
     ) {
         this.inboundRepository = inboundRepository;
         this.purchaseOrderRepository = purchaseOrderRepository;
         this.purchaseOrderItemQueryService = purchaseOrderItemQueryService;
+        this.allocationService = allocationService;
         this.purchaseInboundService = purchaseInboundService;
     }
 
@@ -74,7 +77,33 @@ public class PurchaseInboundAuditCommandService {
         if (sourceOrderIds.size() != 1) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "一张采购入库单必须且只能关联一张采购订单");
         }
-        purchaseOrderRepository.findByIdAndDeletedFlagFalseForUpdate(sourceOrderIds.getFirst())
+        PurchaseOrder sourceOrder = purchaseOrderRepository
+                .findByIdAndDeletedFlagFalseForUpdate(sourceOrderIds.getFirst())
                 .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "来源采购订单不存在"));
+        assertFullyAllocated(sourceOrder);
+    }
+
+    private void assertFullyAllocated(PurchaseOrder sourceOrder) {
+        List<Long> sourceItemIds = sourceOrder.getItems().stream()
+                .map(PurchaseOrderItem::getId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .sorted()
+                .toList();
+        if (sourceItemIds.size() != sourceOrder.getItems().size()) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "采购订单存在无效商品明细，不能审核采购入库");
+        }
+        var allocatedQuantityMap = allocationService.loadAllocatedQuantityMap(sourceItemIds, null);
+        boolean fullyAllocated = sourceOrder.getItems().stream().allMatch(item -> {
+            int orderedQuantity = item.getQuantity() == null ? 0 : item.getQuantity();
+            int allocatedQuantity = allocatedQuantityMap.getOrDefault(item.getId(), 0);
+            return orderedQuantity >= 1 && allocatedQuantity == orderedQuantity;
+        });
+        if (!fullyAllocated) {
+            throw new BusinessException(
+                    ErrorCode.BUSINESS_ERROR,
+                    "采购订单必须全部商品一次性完成入库，不允许分批审核"
+            );
+        }
     }
 }

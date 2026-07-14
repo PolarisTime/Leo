@@ -389,6 +389,7 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
 
     @Override
     protected void apply(PurchaseOrder purchaseOrder, PurchaseOrderRequest request) {
+        assertLineQuantities(request);
         if (purchaseOrder.getId() != null) {
             if (downstreamMutationGuard != null
                     && purchaseOrder.getItems().stream().anyMatch(item -> item.getId() != null)) {
@@ -452,6 +453,9 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
 
     @Override
     protected void beforeStatusUpdate(PurchaseOrder entity, String currentStatus, String nextStatus) {
+        if (StatusConstants.DRAFT.equals(currentStatus) && StatusConstants.AUDITED.equals(nextStatus)) {
+            assertAuditableLineQuantities(entity);
+        }
         if (StatusConstants.PURCHASE_COMPLETED.equals(nextStatus)
                 && !StatusConstants.PURCHASE_COMPLETED.equals(currentStatus)) {
             throw new BusinessException(
@@ -519,6 +523,29 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
     private void assertNoActivePurchasePrepayment(PurchaseOrder purchaseOrder, String action) {
         if (purchasePrepaymentService != null) {
             purchasePrepaymentService.assertNoActivePrepayment(purchaseOrder.getId(), action);
+        }
+    }
+
+    private void assertLineQuantities(PurchaseOrderRequest request) {
+        for (int index = 0; index < request.items().size(); index++) {
+            Integer quantity = request.items().get(index).quantity();
+            if (quantity == null || quantity < 1) {
+                throw new BusinessException(
+                        ErrorCode.VALIDATION_ERROR,
+                        "第" + (index + 1) + "行数量必须至少为1个数量单位"
+                );
+            }
+        }
+    }
+
+    private void assertAuditableLineQuantities(PurchaseOrder purchaseOrder) {
+        for (var item : purchaseOrder.getItems()) {
+            if (item.getQuantity() == null || item.getQuantity() < 1) {
+                throw new BusinessException(
+                        ErrorCode.BUSINESS_ERROR,
+                        "第" + item.getLineNo() + "行数量必须至少为1个数量单位"
+                );
+            }
         }
     }
 

@@ -66,7 +66,7 @@ public class PurchaseInboundCompletionSyncService {
         });
     }
 
-    void synchronizeSourcePurchaseOrders(PurchaseInbound inbound) {
+    void synchronizeSourcePurchaseOrders(PurchaseInbound inbound, boolean allowReopen) {
         List<Long> sourcePurchaseOrderItemIds = sourcePurchaseOrderItemIds(inbound);
         if (sourcePurchaseOrderItemIds.isEmpty()) {
             return;
@@ -75,7 +75,7 @@ public class PurchaseInboundCompletionSyncService {
                 .map(PurchaseOrderItem::getPurchaseOrder)
                 .filter(order -> order != null)
                 .distinct()
-                .forEach(this::maybeCompletePurchaseOrder);
+                .forEach(order -> synchronizePurchaseOrder(order, allowReopen));
     }
 
     private List<Long> sourcePurchaseOrderItemIds(PurchaseInbound inbound) {
@@ -86,7 +86,7 @@ public class PurchaseInboundCompletionSyncService {
                 .toList();
     }
 
-    private void maybeCompletePurchaseOrder(PurchaseOrder purchaseOrder) {
+    private void synchronizePurchaseOrder(PurchaseOrder purchaseOrder, boolean allowReopen) {
         if (!StatusConstants.AUDITED.equals(purchaseOrder.getStatus())
                 && !StatusConstants.PURCHASE_COMPLETED.equals(purchaseOrder.getStatus())) {
             return;
@@ -116,12 +116,14 @@ public class PurchaseInboundCompletionSyncService {
         boolean allFulfilled = purchaseOrder.getItems().stream().allMatch(item -> {
             int expected = item.getQuantity() != null ? item.getQuantity() : 0;
             int actual = receivedQtyByItemId.getOrDefault(item.getId(), 0);
-            return expected == actual;
+            return expected >= 1 && expected == actual;
         });
 
-        purchaseOrder.setStatus(allInboundCompleted && allFulfilled
-                ? StatusConstants.PURCHASE_COMPLETED
-                : StatusConstants.AUDITED);
+        if (allInboundCompleted && allFulfilled) {
+            purchaseOrder.setStatus(StatusConstants.PURCHASE_COMPLETED);
+        } else if (allowReopen && StatusConstants.PURCHASE_COMPLETED.equals(purchaseOrder.getStatus())) {
+            purchaseOrder.setStatus(StatusConstants.AUDITED);
+        }
     }
 
 }

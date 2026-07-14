@@ -27,7 +27,7 @@ public record PurchaseOrderItemRequest(
         String warehouseName,
         String batchNo,
         @NotNull(message = "数量不能为空")
-        @Min(value = 0, message = "数量不能小于0")
+        @Min(value = 1, message = "数量必须至少为1个数量单位")
         Integer quantity,
         String quantityUnit,
         @NotNull(message = "件重不能为空")
