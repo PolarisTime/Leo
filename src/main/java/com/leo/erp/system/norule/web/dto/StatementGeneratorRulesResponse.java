@@ -1,7 +1,6 @@
 package com.leo.erp.system.norule.web.dto;
 
 public record StatementGeneratorRulesResponse(
-        boolean customerStatementReceiptAmountZero,
-        boolean supplierStatementFullPayment
+        boolean customerStatementReceiptAmountZero
 ) {
 }

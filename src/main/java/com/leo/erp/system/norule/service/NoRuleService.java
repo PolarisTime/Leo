@@ -78,8 +78,7 @@ public class NoRuleService extends AbstractCrudService<NoRule, NoRuleRequest, No
 
     public StatementGeneratorRulesResponse statementGeneratorRules() {
         return new StatementGeneratorRulesResponse(
-                systemSwitchService.shouldDefaultCustomerStatementReceiptAmountToZero(),
-                systemSwitchService.shouldDefaultSupplierStatementToFullPayment()
+                systemSwitchService.shouldDefaultCustomerStatementReceiptAmountToZero()
         );
     }
 

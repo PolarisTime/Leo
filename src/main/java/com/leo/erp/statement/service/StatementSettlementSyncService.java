@@ -8,8 +8,6 @@ import com.leo.erp.statement.customer.domain.entity.CustomerStatement;
 import com.leo.erp.statement.customer.repository.CustomerStatementRepository;
 import com.leo.erp.statement.freight.domain.entity.FreightStatement;
 import com.leo.erp.statement.freight.repository.FreightStatementRepository;
-import com.leo.erp.statement.supplier.domain.entity.SupplierStatement;
-import com.leo.erp.statement.supplier.repository.SupplierStatementRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -20,33 +18,21 @@ public class StatementSettlementSyncService {
 
     public static final String PAYMENT_STATUS_SETTLED = StatusConstants.AUDITED;
     public static final String RECEIPT_STATUS_SETTLED = StatusConstants.AUDITED;
-    private static final String SUPPLIER_PAYMENT_TYPE = "供应商";
     private static final String FREIGHT_PAYMENT_TYPE = "物流商";
 
-    private final SupplierStatementRepository supplierStatementRepository;
     private final CustomerStatementRepository customerStatementRepository;
     private final FreightStatementRepository freightStatementRepository;
     private final PaymentAllocationRepository paymentAllocationRepository;
     private final ReceiptAllocationRepository receiptAllocationRepository;
 
-    public StatementSettlementSyncService(SupplierStatementRepository supplierStatementRepository,
-                                          CustomerStatementRepository customerStatementRepository,
+    public StatementSettlementSyncService(CustomerStatementRepository customerStatementRepository,
                                           FreightStatementRepository freightStatementRepository,
                                           PaymentAllocationRepository paymentAllocationRepository,
                                           ReceiptAllocationRepository receiptAllocationRepository) {
-        this.supplierStatementRepository = supplierStatementRepository;
         this.customerStatementRepository = customerStatementRepository;
         this.freightStatementRepository = freightStatementRepository;
         this.paymentAllocationRepository = paymentAllocationRepository;
         this.receiptAllocationRepository = receiptAllocationRepository;
-    }
-
-    @Transactional
-    public SupplierStatement syncSupplierStatement(SupplierStatement statement) {
-        BigDecimal paymentAmount = resolveSupplierPaymentAmount(statement.getId());
-        statement.setPaymentAmount(paymentAmount);
-        statement.setClosingAmount(statement.getPurchaseAmount().subtract(paymentAmount).max(BigDecimal.ZERO));
-        return supplierStatementRepository.save(statement);
     }
 
     @Transactional
@@ -67,19 +53,6 @@ public class StatementSettlementSyncService {
         statement.setPaidAmount(paidAmount);
         statement.setUnpaidAmount(statement.getTotalFreight().subtract(paidAmount).max(BigDecimal.ZERO));
         return freightStatementRepository.save(statement);
-    }
-
-    public BigDecimal resolveSupplierPaymentAmount(Long statementId) {
-        if (statementId == null) {
-            return TradeItemCalculator.scaleAmount(BigDecimal.ZERO);
-        }
-        return TradeItemCalculator.scaleAmount(TradeItemCalculator.safeBigDecimal(
-                paymentAllocationRepository.sumAllocatedAmountBySourceStatementIdAndBusinessTypeAndStatus(
-                        statementId,
-                        SUPPLIER_PAYMENT_TYPE,
-                        PAYMENT_STATUS_SETTLED
-                )
-        ));
     }
 
     public BigDecimal resolveCustomerReceiptAmount(Long statementId) {

@@ -41,7 +41,8 @@ public class PaymentSettlementSyncService {
                         statementId(entity.getBusinessType(), item)
                 )));
         for (StatementLink link : links) {
-            if (link.statementId() == null || link.businessType() == null) {
+            if (link.statementId() == null
+                    || !PaymentAllocationService.FREIGHT_PAYMENT_TYPE.equals(link.businessType())) {
                 continue;
             }
             eventPublisher.publishEvent(new PaymentSettledEvent(link.statementId(), link.businessType()));
@@ -50,6 +51,9 @@ public class PaymentSettlementSyncService {
 
     private Set<Long> collectStatementIds(String businessType, List<PaymentAllocation> items) {
         Set<Long> statementIds = new LinkedHashSet<>();
+        if (!PaymentAllocationService.FREIGHT_PAYMENT_TYPE.equals(businessType)) {
+            return statementIds;
+        }
         for (PaymentAllocation item : items) {
             Long statementId = statementId(businessType, item);
             if (statementId != null) {
@@ -60,9 +64,7 @@ public class PaymentSettlementSyncService {
     }
 
     private Long statementId(String businessType, PaymentAllocation item) {
-        Long typedId = PaymentAllocationService.SUPPLIER_PAYMENT_TYPE.equals(businessType)
-                ? item.getSourceSupplierStatementId()
-                : item.getSourceFreightStatementId();
+        Long typedId = item.getSourceFreightStatementId();
         return typedId == null ? item.getSourceStatementId() : typedId;
     }
 

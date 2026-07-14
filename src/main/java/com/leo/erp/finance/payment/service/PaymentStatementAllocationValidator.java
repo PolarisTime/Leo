@@ -11,8 +11,6 @@ import com.leo.erp.security.permission.ResourcePermissionCatalog;
 import com.leo.erp.security.permission.ResourceRecordAccessGuard;
 import com.leo.erp.statement.freight.domain.entity.FreightStatement;
 import com.leo.erp.statement.freight.service.FreightStatementQueryService;
-import com.leo.erp.statement.supplier.domain.entity.SupplierStatement;
-import com.leo.erp.statement.supplier.service.SupplierStatementQueryService;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -22,16 +20,13 @@ import java.util.Map;
 public class PaymentStatementAllocationValidator {
 
     private final PaymentAllocationRepository paymentAllocationRepository;
-    private final SupplierStatementQueryService supplierStatementQueryService;
     private final FreightStatementQueryService freightStatementQueryService;
     private final ResourceRecordAccessGuard resourceRecordAccessGuard;
 
     public PaymentStatementAllocationValidator(PaymentAllocationRepository paymentAllocationRepository,
-                                               SupplierStatementQueryService supplierStatementQueryService,
                                                FreightStatementQueryService freightStatementQueryService,
                                                ResourceRecordAccessGuard resourceRecordAccessGuard) {
         this.paymentAllocationRepository = paymentAllocationRepository;
-        this.supplierStatementQueryService = supplierStatementQueryService;
         this.freightStatementQueryService = freightStatementQueryService;
         this.resourceRecordAccessGuard = resourceRecordAccessGuard;
     }
@@ -43,16 +38,8 @@ public class PaymentStatementAllocationValidator {
                                 BigDecimal allocatedAmount,
                                 Map<Long, BigDecimal> requestAllocatedAmountMap,
                                 int lineNo) {
-        if (PaymentAllocationService.SUPPLIER_PAYMENT_TYPE.equals(request.businessType())) {
-            return validateSupplierStatement(
-                    request,
-                    normalizedStatus,
-                    currentPaymentId,
-                    requireAccessibleSupplierStatement(sourceStatementId),
-                    allocatedAmount,
-                    requestAllocatedAmountMap,
-                    lineNo
-            );
+        if (!PaymentAllocationService.FREIGHT_PAYMENT_TYPE.equals(request.businessType())) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "仅物流商对账单支持付款核销");
         }
         return validateFreightStatement(
                 request,
@@ -65,16 +52,6 @@ public class PaymentStatementAllocationValidator {
         );
     }
 
-    private SupplierStatement requireAccessibleSupplierStatement(Long statementId) {
-        SupplierStatement statement = supplierStatementQueryService.requireActiveById(statementId);
-        resourceRecordAccessGuard.assertCurrentUserCanAccess(
-                "supplier-statement",
-                ResourcePermissionCatalog.READ,
-                statement
-        );
-        return statement;
-    }
-
     private FreightStatement requireAccessibleFreightStatement(Long statementId) {
         FreightStatement statement = freightStatementQueryService.requireActiveById(statementId);
         resourceRecordAccessGuard.assertCurrentUserCanAccess(
@@ -83,57 +60,6 @@ public class PaymentStatementAllocationValidator {
                 statement
         );
         return statement;
-    }
-
-    private ValidatedStatement validateSupplierStatement(PaymentRequest request,
-                                                         String normalizedStatus,
-                                                         Long currentPaymentId,
-                                                         SupplierStatement statement,
-                                                         BigDecimal allocatedAmount,
-                                                         Map<Long, BigDecimal> requestAllocatedAmountMap,
-                                                         int lineNo) {
-        String statementSupplierCode = BusinessDocumentValidator.trimToNull(statement.getSupplierCode());
-        Long supplierId = requireCounterpartyId(statement.getSupplierId(), lineNo, "供应商");
-        requireRequestedCounterpartyId(request.counterpartyId(), supplierId, lineNo, "供应商");
-        if (statementSupplierCode == null) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行对账单供应商编码不能为空，不能付款核销");
-        }
-        String requestSupplierCode = BusinessDocumentValidator.trimToNull(request.counterpartyCode());
-        if (requestSupplierCode != null && !requestSupplierCode.equals(statementSupplierCode)) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行对账单供应商编码与付款单往来单位编码不一致");
-        }
-        ValidatedStatement validatedStatement = validatedStatement(
-                PaymentAllocationService.SUPPLIER_PAYMENT_TYPE,
-                supplierId,
-                statementSupplierCode,
-                statement.getSettlementCompanyId(),
-                statement.getSettlementCompanyName(),
-                lineNo
-        );
-        if (requestAllocatedAmountMap.containsKey(statement.getId())) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "同一付款单不能重复核销同一供应商对账单");
-        }
-        if (PaymentAllocationService.PAYMENT_STATUS_SETTLED.equals(normalizedStatus)) {
-            BusinessDocumentValidator.requireStatusIn(
-                    statement.getStatus(),
-                    StatusConstants.SETTLEABLE_SUPPLIER_STATEMENT_STATUS,
-                    "第" + lineNo + "行供应商对账单未确认，不能付款"
-            );
-            BigDecimal settledAmount = TradeItemCalculator.safeBigDecimal(
-                    paymentAllocationRepository.sumAllocatedAmountBySourceStatementIdAndBusinessTypeAndStatusExcludingPaymentId(
-                            statement.getId(),
-                            PaymentAllocationService.SUPPLIER_PAYMENT_TYPE,
-                            PaymentAllocationService.PAYMENT_STATUS_SETTLED,
-                            currentPaymentId
-                    )
-            );
-            BigDecimal nextSettledAmount = settledAmount.add(allocatedAmount);
-            if (nextSettledAmount.compareTo(statement.getPurchaseAmount()) > 0) {
-                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行关联供应商对账单累计付款金额不能超过采购金额");
-            }
-        }
-        requestAllocatedAmountMap.put(statement.getId(), allocatedAmount);
-        return validatedStatement;
     }
 
     private ValidatedStatement validateFreightStatement(PaymentRequest request,

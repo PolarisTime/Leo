@@ -9,7 +9,6 @@ import com.leo.erp.common.web.BindPageQuery;
 import com.leo.erp.common.web.dto.StatusUpdateRequest;
 import com.leo.erp.purchase.order.service.PurchaseOrderService;
 import com.leo.erp.purchase.order.web.dto.PurchaseOrderImportCandidateResponse;
-import com.leo.erp.purchase.order.web.dto.PieceWeightResponse;
 import com.leo.erp.purchase.order.web.dto.PurchaseOrderRequest;
 import com.leo.erp.purchase.order.web.dto.PurchaseOrderResponse;
 import com.leo.erp.security.permission.RequiresPermission;
@@ -157,19 +156,4 @@ public class PurchaseOrderController {
         return ApiResponse.success("删除成功");
     }
 
-    @Operation(summary = "查询逐件重量明细")
-    @GetMapping("/items/{itemId}/piece-weights")
-    @RequiresPermission(resource = "purchase-order", action = "read")
-    public ApiResponse<List<PieceWeightResponse>> pieceWeights(@PathVariable Long itemId) {
-        return ApiResponse.success(purchaseOrderService.getPieceWeights(itemId));
-    }
-
-    @Operation(summary = "按销售订单明细ID查询逐件重量")
-    @GetMapping("/items/piece-weights/by-sales-order-item")
-    @RequiresPermission(resource = "purchase-order", action = "read")
-    public ApiResponse<List<PieceWeightResponse>> pieceWeightsBySalesOrderItem(
-            @RequestParam Long salesOrderItemId) {
-        return ApiResponse.success(
-                purchaseOrderService.getPieceWeightsBySalesOrderItemId(salesOrderItemId));
-    }
 }

@@ -16,7 +16,6 @@ public final class PageSortFieldCatalog {
             Map.entry("sales-order", Set.of("id", "orderNo", "purchaseInboundNo", "purchaseOrderNo", "customerName", "projectName", "deliveryDate", "salesName", "totalWeight", "totalAmount", "status")),
             Map.entry("sales-outbound", Set.of("id", "outboundNo", "salesOrderNo", "customerName", "projectName", "warehouseName", "outboundDate", "totalWeight", "totalAmount", "status")),
             Map.entry("freight-bill", Set.of("id", "billNo", "carrierCode", "carrierName", "vehiclePlate", "customerName", "projectName", "billTime", "unitPrice", "totalWeight", "totalFreight", "status")),
-            Map.entry("supplier-statement", Set.of("id", "statementNo", "supplierCode", "supplierName", "startDate", "endDate", "purchaseAmount", "paymentAmount", "closingAmount", "status")),
             Map.entry("customer-statement", Set.of("id", "statementNo", "customerName", "projectName", "startDate", "endDate", "salesAmount", "receiptAmount", "closingAmount", "status")),
             Map.entry("freight-statement", Set.of("id", "statementNo", "carrierCode", "carrierName", "startDate", "endDate", "totalWeight", "totalFreight", "paidAmount", "unpaidAmount", "status", "signStatus")),
             Map.entry("receipt", Set.of("id", "receiptNo", "customerName", "projectName", "receiptDate", "payType", "amount", "status", "operatorName")),

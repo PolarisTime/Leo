@@ -16,7 +16,6 @@ import com.leo.erp.sales.order.domain.entity.SalesOrder;
 import com.leo.erp.sales.outbound.domain.entity.SalesOutbound;
 import com.leo.erp.statement.customer.domain.entity.CustomerStatement;
 import com.leo.erp.statement.freight.domain.entity.FreightStatement;
-import com.leo.erp.statement.supplier.domain.entity.SupplierStatement;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -36,7 +35,6 @@ public class BusinessEntityConfig {
         registrar.register("sales-order", SalesOrder.class);
         registrar.register("sales-outbound", SalesOutbound.class);
         registrar.register("freight-bill", FreightBill.class);
-        registrar.register("supplier-statement", SupplierStatement.class);
         registrar.register("customer-statement", CustomerStatement.class);
         registrar.register("freight-statement", FreightStatement.class);
         registrar.register("receipt", Receipt.class);

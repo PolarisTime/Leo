@@ -107,7 +107,6 @@ public final class ResourcePermissionCatalog {
             entry("freight-bill", "物流单", "物流", true, List.of("/freight-bill", "/freight-bills"), BUSINESS_ACTIONS),
             entry("inventory-report", "商品库存报表", "报表", true, List.of("/inventory-report"), REPORT_ACTIONS),
             entry("io-report", "出入库报表", "报表", true, List.of("/io-report"), REPORT_ACTIONS),
-            entry("supplier-statement", "供应商对账单", "对账", true, List.of("/supplier-statement", "/supplier-statements"), BUSINESS_ACTIONS),
             entry("customer-statement", "客户对账单", "对账", true, List.of("/customer-statement", "/customer-statements"), BUSINESS_ACTIONS),
             entry("freight-statement", "物流对账单", "对账", true, List.of("/freight-statement", "/freight-statements"), BUSINESS_ACTIONS),
             entry("receipt", "收款单", "财务", true, List.of("/receipt", "/receipts"), BUSINESS_ACTIONS),

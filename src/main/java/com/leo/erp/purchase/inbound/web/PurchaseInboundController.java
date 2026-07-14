@@ -8,7 +8,6 @@ import com.leo.erp.common.web.BindPageQuery;
 import com.leo.erp.common.web.dto.StatusUpdateRequest;
 import com.leo.erp.purchase.inbound.service.PurchaseInboundService;
 import com.leo.erp.purchase.inbound.service.PurchaseInboundAuditCommandService;
-import com.leo.erp.purchase.order.web.dto.PieceWeightResponse;
 import com.leo.erp.purchase.inbound.web.dto.PurchaseInboundRequest;
 import com.leo.erp.purchase.inbound.web.dto.PurchaseInboundResponse;
 import com.leo.erp.purchase.inbound.web.dto.PurchaseInboundAuditRequest;
@@ -81,13 +80,6 @@ public class PurchaseInboundController {
     @Operation(summary = "查询采购入库详情")
     public ApiResponse<PurchaseInboundResponse> detail(@PathVariable Long id) {
         return ApiResponse.success(service.detail(id));
-    }
-
-    @GetMapping("/items/{itemId}/piece-weights")
-    @RequiresPermission(resource = "purchase-inbound", action = "read")
-    @Operation(summary = "查询采购入库明细逐件重量")
-    public ApiResponse<List<PieceWeightResponse>> pieceWeights(@PathVariable Long itemId) {
-        return ApiResponse.success(service.getPieceWeights(itemId));
     }
 
     @PutMapping("/{id}")

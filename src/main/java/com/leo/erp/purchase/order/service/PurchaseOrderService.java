@@ -14,7 +14,6 @@ import com.leo.erp.finance.payment.service.PaymentPurchasePrepaymentService;
 import com.leo.erp.purchase.order.domain.entity.PurchaseOrder;
 import com.leo.erp.purchase.order.repository.PurchaseOrderRepository;
 import com.leo.erp.purchase.order.web.dto.PurchaseOrderImportCandidateResponse;
-import com.leo.erp.purchase.order.web.dto.PieceWeightResponse;
 import com.leo.erp.purchase.order.web.dto.PurchaseOrderRequest;
 import com.leo.erp.purchase.order.web.dto.PurchaseOrderResponse;
 import com.leo.erp.security.permission.WorkflowTransitionGuard;
@@ -47,7 +46,6 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
     private final PurchaseOrderResponseAssembler responseAssembler;
     private final PurchaseOrderSupplierResolver supplierResolver;
     private final PurchaseOrderApplyService purchaseOrderApplyService;
-    private final PurchaseOrderPieceWeightQueryService pieceWeightQueryService;
     private final WorkflowTransitionGuard workflowTransitionGuard;
     private final CompanySettingService companySettingService;
     private final PaymentPurchasePrepaymentService purchasePrepaymentService;
@@ -59,7 +57,6 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
                                 PurchaseOrderResponseAssembler responseAssembler,
                                 PurchaseOrderSupplierResolver supplierResolver,
                                 PurchaseOrderApplyService purchaseOrderApplyService,
-                                PurchaseOrderPieceWeightQueryService pieceWeightQueryService,
                                 WorkflowTransitionGuard workflowTransitionGuard,
                                 CompanySettingService companySettingService) {
         this(
@@ -69,7 +66,6 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
                 responseAssembler,
                 supplierResolver,
                 purchaseOrderApplyService,
-                pieceWeightQueryService,
                 workflowTransitionGuard,
                 companySettingService,
                 null
@@ -82,7 +78,6 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
                                 PurchaseOrderResponseAssembler responseAssembler,
                                 PurchaseOrderSupplierResolver supplierResolver,
                                 PurchaseOrderApplyService purchaseOrderApplyService,
-                                PurchaseOrderPieceWeightQueryService pieceWeightQueryService,
                                 WorkflowTransitionGuard workflowTransitionGuard,
                                 CompanySettingService companySettingService,
                                 PaymentPurchasePrepaymentService purchasePrepaymentService) {
@@ -93,7 +88,6 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
                 responseAssembler,
                 supplierResolver,
                 purchaseOrderApplyService,
-                pieceWeightQueryService,
                 workflowTransitionGuard,
                 companySettingService,
                 purchasePrepaymentService,
@@ -108,7 +102,6 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
                                 PurchaseOrderResponseAssembler responseAssembler,
                                 PurchaseOrderSupplierResolver supplierResolver,
                                 PurchaseOrderApplyService purchaseOrderApplyService,
-                                PurchaseOrderPieceWeightQueryService pieceWeightQueryService,
                                 WorkflowTransitionGuard workflowTransitionGuard,
                                 CompanySettingService companySettingService,
                                 PaymentPurchasePrepaymentService purchasePrepaymentService,
@@ -119,7 +112,6 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
         this.responseAssembler = responseAssembler;
         this.supplierResolver = supplierResolver;
         this.purchaseOrderApplyService = purchaseOrderApplyService;
-        this.pieceWeightQueryService = pieceWeightQueryService;
         this.workflowTransitionGuard = workflowTransitionGuard;
         this.companySettingService = companySettingService;
         this.purchasePrepaymentService = purchasePrepaymentService;
@@ -453,14 +445,6 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
     @Override
     protected PurchaseOrderResponse toSavedResponse(PurchaseOrder entity) {
         return toDetailResponse(entity);
-    }
-
-    public List<PieceWeightResponse> getPieceWeights(Long itemId) {
-        return pieceWeightQueryService.getPieceWeights(itemId);
-    }
-
-    public List<PieceWeightResponse> getPieceWeightsBySalesOrderItemId(Long salesOrderItemId) {
-        return pieceWeightQueryService.getPieceWeightsBySalesOrderItemId(salesOrderItemId);
     }
 
     private void assertSettlementCompanyMutable(PurchaseOrder purchaseOrder, Long requestedSettlementCompanyId) {

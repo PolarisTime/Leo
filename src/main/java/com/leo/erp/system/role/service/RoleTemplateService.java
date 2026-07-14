@@ -32,8 +32,7 @@ public class RoleTemplateService {
                                 new PermissionEntry("purchase-inbound", Set.of("read", "create", "update")),
                                 new PermissionEntry("supplier", Set.of("read")),
                                 new PermissionEntry("material", Set.of("read")),
-                                new PermissionEntry("warehouse", Set.of("read")),
-                                new PermissionEntry("supplier-statement", Set.of("read"))
+                                new PermissionEntry("warehouse", Set.of("read"))
                         )),
                 new Template("销售员", "销售订单、销售出库、客户管理",
                         List.of(
@@ -49,7 +48,6 @@ public class RoleTemplateService {
                                 new PermissionEntry("receipt", Set.of("read", "create", "update", "audit")),
                                 new PermissionEntry("payment", Set.of("read", "create", "update", "audit")),
                                 new PermissionEntry("customer-statement", Set.of("read", "export")),
-                                new PermissionEntry("supplier-statement", Set.of("read", "export")),
                                 new PermissionEntry("company-setting", Set.of("read"))
                         )),
                 new Template("仓管", "仓库、入库出库只读",

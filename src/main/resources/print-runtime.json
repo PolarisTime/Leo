@@ -43,13 +43,6 @@
       "productPrintItems": true,
       "printItemAmount": true
     },
-    "supplier-statement": {
-      "tableName": "st_supplier_statement",
-      "itemTableName": "st_supplier_statement_item",
-      "itemFkColumn": "statement_id",
-      "productPrintItems": true,
-      "printItemAmount": true
-    },
     "freight-statement": {
       "tableName": "st_freight_statement",
       "itemTableName": "st_freight_statement_item",
@@ -399,7 +392,6 @@
     {"billType": "sales-order", "resource": "print-forms/default-sales-order.layout.json"},
     {"billType": "sales-outbound", "resource": "print-forms/default-sales-outbound.layout.json"},
     {"billType": "customer-statement", "resource": "print-forms/default-customer-statement.layout.json"},
-    {"billType": "supplier-statement", "resource": "print-forms/default-supplier-statement.layout.json"},
     {"billType": "freight-statement", "resource": "print-forms/default-freight-statement.layout.json"},
     {"billTypePrefix": "purchase-", "resource": "print-forms/default-purchase.layout.json"},
     {"billTypePrefix": "sales-", "resource": "print-forms/default-sales.layout.json"},

@@ -42,7 +42,7 @@ public class PaymentAllocationService {
         List<PaymentAllocationRequest> allocationRequests = normalizeAllocationRequests(request);
         if (!supportsSettlement(request.businessType())) {
             if (PAYMENT_STATUS_SETTLED.equals(nextStatus)) {
-                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "已审核状态必须关联供应商或物流商对账单核销");
+                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "已审核状态必须关联物流商对账单核销");
             }
             if (!allocationRequests.isEmpty()) {
                 throw new BusinessException(ErrorCode.VALIDATION_ERROR, "当前业务类型不支持对账单核销");
@@ -190,7 +190,6 @@ public class PaymentAllocationService {
         return new PaymentAllocationRequest(
                 null,
                 sourceStatementId,
-                SUPPLIER_PAYMENT_TYPE.equals(businessType) ? sourceStatementId : null,
                 FREIGHT_PAYMENT_TYPE.equals(businessType) ? sourceStatementId : null,
                 allocatedAmount
         );
@@ -199,24 +198,11 @@ public class PaymentAllocationService {
     private Long resolveSourceStatementId(PaymentAllocationRequest request,
                                           String businessType,
                                           int lineNo) {
-        if (request.sourceSupplierStatementId() != null && request.sourceFreightStatementId() != null) {
-            throw new BusinessException(ErrorCode.VALIDATION_ERROR,
-                    "第" + lineNo + "行只能关联一种对账单来源");
-        }
         Long typedSourceId;
-        if (SUPPLIER_PAYMENT_TYPE.equals(businessType)) {
-            if (request.sourceFreightStatementId() != null) {
-                throw new BusinessException(ErrorCode.VALIDATION_ERROR,
-                        "第" + lineNo + "行供应商付款不能关联物流对账单");
-            }
-            typedSourceId = request.sourceSupplierStatementId();
-        } else {
-            if (request.sourceSupplierStatementId() != null) {
-                throw new BusinessException(ErrorCode.VALIDATION_ERROR,
-                        "第" + lineNo + "行物流付款不能关联供应商对账单");
-            }
-            typedSourceId = request.sourceFreightStatementId();
+        if (!FREIGHT_PAYMENT_TYPE.equals(businessType)) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "仅物流商对账单支持付款核销");
         }
+        typedSourceId = request.sourceFreightStatementId();
         Long legacySourceId = request.sourceStatementId();
         if (typedSourceId != null && legacySourceId != null && !typedSourceId.equals(legacySourceId)) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR,
@@ -233,9 +219,7 @@ public class PaymentAllocationService {
     private Long requireExistingSourceStatementId(PaymentAllocation item,
                                                   String businessType,
                                                   int lineNo) {
-        Long typedSourceId = SUPPLIER_PAYMENT_TYPE.equals(businessType)
-                ? item.getSourceSupplierStatementId()
-                : item.getSourceFreightStatementId();
+        Long typedSourceId = item.getSourceFreightStatementId();
         Long sourceStatementId = typedSourceId == null ? item.getSourceStatementId() : typedSourceId;
         if (sourceStatementId == null) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR,
@@ -251,11 +235,6 @@ public class PaymentAllocationService {
 
     private void applyTypedSource(PaymentAllocation item, String businessType, Long sourceStatementId) {
         item.setSourceStatementId(sourceStatementId);
-        if (SUPPLIER_PAYMENT_TYPE.equals(businessType)) {
-            item.setSourceSupplierStatementId(sourceStatementId);
-            item.setSourceFreightStatementId(null);
-            return;
-        }
         item.setSourceSupplierStatementId(null);
         item.setSourceFreightStatementId(sourceStatementId);
     }
@@ -300,14 +279,14 @@ public class PaymentAllocationService {
     }
 
     private boolean supportsSettlement(String businessType) {
-        return SUPPLIER_PAYMENT_TYPE.equals(businessType) || FREIGHT_PAYMENT_TYPE.equals(businessType);
+        return FREIGHT_PAYMENT_TYPE.equals(businessType);
     }
 
     private void assertBusinessTypeSupportsSettlement(String businessType) {
         if (supportsSettlement(businessType)) {
             return;
         }
-        throw new BusinessException(ErrorCode.BUSINESS_ERROR, "已审核状态必须关联供应商或物流商对账单核销");
+        throw new BusinessException(ErrorCode.BUSINESS_ERROR, "已审核状态必须关联物流商对账单核销");
     }
 
     private void assertSettlementAllocationsComplete(String nextStatus,

@@ -11,11 +11,9 @@ import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.finance.common.service.SupplierLedgerLockService;
 import com.leo.erp.finance.payment.domain.entity.Payment;
-import com.leo.erp.finance.payment.domain.entity.PaymentAllocation;
 import com.leo.erp.finance.payment.domain.entity.PaymentPurposes;
 import com.leo.erp.finance.payment.mapper.PaymentMapper;
 import com.leo.erp.finance.payment.repository.PaymentRepository;
-import com.leo.erp.finance.payment.web.dto.PaymentAllocationRequest;
 import com.leo.erp.finance.payment.web.dto.PaymentRequest;
 import com.leo.erp.finance.payment.web.dto.PaymentResponse;
 import org.springframework.data.domain.Page;
@@ -284,31 +282,22 @@ public class PaymentService extends AbstractCrudService<Payment, PaymentRequest,
     }
 
     private void lockAllocationStatements(Payment entity, PaymentRequest request) {
-        TreeSet<Long> supplierStatementIds = new TreeSet<>();
         TreeSet<Long> freightStatementIds = new TreeSet<>();
         if (entity != null
                 && !PaymentPurposes.isPurchasePrepayment(entity.getPaymentPurpose())
-                && !PaymentPurposes.isSupplierTotalPayment(entity.getPaymentPurpose())) {
-            addStatementIds(
-                    entity.getBusinessType(),
-                    existingAllocationStatementIds(entity),
-                    supplierStatementIds,
-                    freightStatementIds
-            );
+                && !PaymentPurposes.isSupplierTotalPayment(entity.getPaymentPurpose())
+                && PaymentAllocationService.FREIGHT_PAYMENT_TYPE.equals(entity.getBusinessType())) {
+            freightStatementIds.addAll(existingAllocationStatementIds(entity));
         }
         if (request != null
                 && !PaymentPurposes.isPurchasePrepayment(request.paymentPurpose())
-                && !PaymentPurposes.isSupplierTotalPayment(request.paymentPurpose())) {
-            addStatementIds(
-                    request.businessType(),
-                    requestedAllocationStatementIds(request),
-                    supplierStatementIds,
-                    freightStatementIds
-            );
+                && !PaymentPurposes.isSupplierTotalPayment(request.paymentPurpose())
+                && PaymentAllocationService.FREIGHT_PAYMENT_TYPE.equals(request.businessType())) {
+            freightStatementIds.addAll(requestedAllocationStatementIds(request));
         }
         sourceAllocationLockService.lockStatementSources(
                 List.of(),
-                List.copyOf(supplierStatementIds),
+                List.of(),
                 List.copyOf(freightStatementIds)
         );
     }
@@ -316,7 +305,9 @@ public class PaymentService extends AbstractCrudService<Payment, PaymentRequest,
     private List<Long> existingAllocationStatementIds(Payment entity) {
         if (entity.getItems() != null && !entity.getItems().isEmpty()) {
             return entity.getItems().stream()
-                    .map(item -> allocationStatementId(entity.getBusinessType(), item))
+                    .map(item -> item.getSourceFreightStatementId() == null
+                            ? item.getSourceStatementId()
+                            : item.getSourceFreightStatementId())
                     .filter(java.util.Objects::nonNull)
                     .toList();
         }
@@ -328,38 +319,15 @@ public class PaymentService extends AbstractCrudService<Payment, PaymentRequest,
     private List<Long> requestedAllocationStatementIds(PaymentRequest request) {
         if (request.items() != null && !request.items().isEmpty()) {
             return request.items().stream()
-                    .map(item -> allocationStatementId(request.businessType(), item))
+                    .map(item -> item.sourceFreightStatementId() == null
+                            ? item.sourceStatementId()
+                            : item.sourceFreightStatementId())
                     .filter(java.util.Objects::nonNull)
                     .toList();
         }
         return request.sourceStatementId() == null
                 ? List.of()
                 : List.of(request.sourceStatementId());
-    }
-
-    private Long allocationStatementId(String businessType, PaymentAllocation item) {
-        Long typedId = PaymentAllocationService.SUPPLIER_PAYMENT_TYPE.equals(businessType)
-                ? item.getSourceSupplierStatementId()
-                : item.getSourceFreightStatementId();
-        return typedId == null ? item.getSourceStatementId() : typedId;
-    }
-
-    private Long allocationStatementId(String businessType, PaymentAllocationRequest item) {
-        Long typedId = PaymentAllocationService.SUPPLIER_PAYMENT_TYPE.equals(businessType)
-                ? item.sourceSupplierStatementId()
-                : item.sourceFreightStatementId();
-        return typedId == null ? item.sourceStatementId() : typedId;
-    }
-
-    private void addStatementIds(String businessType,
-                                 List<Long> statementIds,
-                                 TreeSet<Long> supplierStatementIds,
-                                 TreeSet<Long> freightStatementIds) {
-        if (PaymentAllocationService.SUPPLIER_PAYMENT_TYPE.equals(businessType)) {
-            supplierStatementIds.addAll(statementIds);
-        } else if (PaymentAllocationService.FREIGHT_PAYMENT_TYPE.equals(businessType)) {
-            freightStatementIds.addAll(statementIds);
-        }
     }
 
     @Override

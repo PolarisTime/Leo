@@ -15,7 +15,6 @@ import com.leo.erp.purchase.inbound.domain.entity.PurchaseInbound;
 import com.leo.erp.purchase.inbound.domain.entity.PurchaseInboundItem;
 import com.leo.erp.purchase.inbound.repository.PurchaseInboundItemRepository;
 import com.leo.erp.purchase.inbound.repository.PurchaseInboundRepository;
-import com.leo.erp.purchase.order.web.dto.PieceWeightResponse;
 import com.leo.erp.purchase.inbound.mapper.PurchaseInboundMapper;
 import com.leo.erp.security.permission.WorkflowTransitionGuard;
 import com.leo.erp.purchase.inbound.web.dto.*;
@@ -48,11 +47,9 @@ public class PurchaseInboundService extends AbstractCrudService<
     private final PurchaseInboundDeleteService deleteService;
     private final PurchaseInboundCompletionSyncService completionSyncService;
     private final PurchaseInboundResponseAssembler responseAssembler;
-    private final PurchaseInboundPieceWeightService pieceWeightService;
     private final WorkflowTransitionGuard workflowTransitionGuard;
     private final SourceAllocationLockService sourceAllocationLockService;
     private final PurchaseInboundSourceStatusGuard purchaseInboundSourceStatusGuard;
-    private final PurchaseInboundStatementGuard purchaseInboundStatementGuard;
     private final PurchaseInboundWeightSettlementService weightSettlementService;
     private final PurchaseInboundWeightWriteBackService weightWriteBackService;
 
@@ -74,13 +71,11 @@ public class PurchaseInboundService extends AbstractCrudService<
                                   PurchaseInboundDeleteService deleteService,
                                   PurchaseInboundCompletionSyncService completionSyncService,
                                   PurchaseInboundResponseAssembler responseAssembler,
-                                  PurchaseInboundPieceWeightService pieceWeightService,
                                   WorkflowTransitionGuard workflowTransitionGuard,
                                   SourceAllocationLockService sourceAllocationLockService,
                                   PurchaseInboundWeightSettlementService weightSettlementService,
                                   PurchaseInboundWeightWriteBackService weightWriteBackService,
-                                  PurchaseInboundSourceStatusGuard purchaseInboundSourceStatusGuard,
-                                  PurchaseInboundStatementGuard purchaseInboundStatementGuard) {
+                                  PurchaseInboundSourceStatusGuard purchaseInboundSourceStatusGuard) {
         super(idGenerator);
         this.repository = repository;
         this.purchaseInboundMapper = purchaseInboundMapper;
@@ -88,13 +83,11 @@ public class PurchaseInboundService extends AbstractCrudService<
         this.deleteService = deleteService;
         this.completionSyncService = completionSyncService;
         this.responseAssembler = responseAssembler;
-        this.pieceWeightService = pieceWeightService;
         this.workflowTransitionGuard = workflowTransitionGuard;
         this.sourceAllocationLockService = sourceAllocationLockService;
         this.weightSettlementService = weightSettlementService;
         this.weightWriteBackService = weightWriteBackService;
         this.purchaseInboundSourceStatusGuard = purchaseInboundSourceStatusGuard;
-        this.purchaseInboundStatementGuard = purchaseInboundStatementGuard;
     }
 
     @Transactional(readOnly = true)
@@ -133,11 +126,6 @@ public class PurchaseInboundService extends AbstractCrudService<
     @Override
     protected PurchaseInboundResponse toDetailResponse(PurchaseInbound inbound) {
         return responseAssembler.toDetailResponse(inbound);
-    }
-
-    @Transactional(readOnly = true)
-    public List<PieceWeightResponse> getPieceWeights(Long itemId) {
-        return pieceWeightService.getPieceWeights(itemId);
     }
 
     @Transactional
@@ -269,9 +257,6 @@ public class PurchaseInboundService extends AbstractCrudService<
     @Override
     protected void apply(PurchaseInbound inbound, PurchaseInboundRequest request) {
         lockSourcePurchaseOrderItems(inbound, request);
-        if (inbound.getItems().stream().anyMatch(item -> item.getId() != null)) {
-            purchaseInboundStatementGuard.assertSourceLineMutationAllowed(inbound, request.items(), "修改");
-        }
         String nextStatus = BusinessStatusValidator.normalizeWithDefault(
                 request.status(),
                 StatusConstants.DRAFT,
@@ -321,7 +306,6 @@ public class PurchaseInboundService extends AbstractCrudService<
     protected void beforeDelete(PurchaseInbound inbound) {
         lockSourcePurchaseOrderItems(inbound, null);
         purchaseInboundSourceStatusGuard.assertDeletionAllowed(inbound);
-        purchaseInboundStatementGuard.assertMutable(inbound, "删除");
     }
 
     @Override
@@ -355,7 +339,6 @@ public class PurchaseInboundService extends AbstractCrudService<
             assertAuditableLineItems(inbound);
         }
         purchaseInboundSourceStatusGuard.assertStatusTransitionAllowed(inbound, currentStatus, nextStatus);
-        purchaseInboundStatementGuard.assertStatusTransitionAllowed(inbound, currentStatus, nextStatus);
     }
 
     private void applyToleranceConfirmations(

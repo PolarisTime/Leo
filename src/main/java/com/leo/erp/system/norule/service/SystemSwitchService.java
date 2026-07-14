@@ -34,7 +34,6 @@ public class SystemSwitchService implements CrudRuntimeSettings, PageQuerySettin
     public static final String ADMIN_VIEW_DELETED_RECORDS_SWITCH = "SYS_ADMIN_VIEW_DELETED_RECORDS";
     public static final String SHOW_SNOWFLAKE_ID_SWITCH = "UI_SHOW_SNOWFLAKE_ID";
     public static final String CUSTOMER_STATEMENT_RECEIPT_ZERO_FROM_SALES_ORDER_SWITCH = "SYS_CUSTOMER_STATEMENT_RECEIPT_ZERO_FROM_SALES_ORDER";
-    public static final String SUPPLIER_STATEMENT_FULL_PAYMENT_FROM_PURCHASE_SWITCH = "SYS_SUPPLIER_STATEMENT_FULL_PAYMENT_FROM_PURCHASE";
     public static final String LOGIN_CAPTCHA_SWITCH = "SYS_LOGIN_CAPTCHA";
     public static final String USE_SNOWFLAKE_ID_AS_BUSINESS_NO_SWITCH = "SYS_USE_SNOWFLAKE_ID_AS_BUSINESS_NO";
     public static final String UI_WATERMARK_ENABLED_SWITCH = "UI_WATERMARK_ENABLED";
@@ -61,7 +60,6 @@ public class SystemSwitchService implements CrudRuntimeSettings, PageQuerySettin
             ADMIN_VIEW_DELETED_RECORDS_SWITCH,
             SHOW_SNOWFLAKE_ID_SWITCH,
             CUSTOMER_STATEMENT_RECEIPT_ZERO_FROM_SALES_ORDER_SWITCH,
-            SUPPLIER_STATEMENT_FULL_PAYMENT_FROM_PURCHASE_SWITCH,
             LOGIN_CAPTCHA_SWITCH,
             USE_SNOWFLAKE_ID_AS_BUSINESS_NO_SWITCH,
             UI_WATERMARK_ENABLED_SWITCH,
@@ -173,11 +171,6 @@ public class SystemSwitchService implements CrudRuntimeSettings, PageQuerySettin
     @Transactional(readOnly = true)
     public boolean shouldDefaultCustomerStatementReceiptAmountToZero() {
         return isEnabled(CUSTOMER_STATEMENT_RECEIPT_ZERO_FROM_SALES_ORDER_SWITCH);
-    }
-
-    @Transactional(readOnly = true)
-    public boolean shouldDefaultSupplierStatementToFullPayment() {
-        return isEnabled(SUPPLIER_STATEMENT_FULL_PAYMENT_FROM_PURCHASE_SWITCH);
     }
 
     @Transactional(readOnly = true)

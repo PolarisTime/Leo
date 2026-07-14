@@ -65,7 +65,6 @@ public class RuntimeConfigService implements RedisCacheHealthCheck {
             WATERMARK_DENSITY_SETTING,
             CompanySettingService.DEFAULT_TAX_RATE_SETTING_CODE,
             SystemSwitchService.CUSTOMER_STATEMENT_RECEIPT_ZERO_FROM_SALES_ORDER_SWITCH,
-            SystemSwitchService.SUPPLIER_STATEMENT_FULL_PAYMENT_FROM_PURCHASE_SWITCH,
             SystemSwitchService.USE_SNOWFLAKE_ID_AS_BUSINESS_NO_SWITCH,
             WEIGHT_ONLY_PURCHASE_INBOUNDS_SETTING,
             WEIGHT_ONLY_SALES_OUTBOUNDS_SETTING
@@ -163,8 +162,7 @@ public class RuntimeConfigService implements RedisCacheHealthCheck {
 
     private RuntimeBusinessConfig businessConfig(Map<String, NoRule> settings) {
         RuntimeStatementConfig statement = new RuntimeStatementConfig(
-                enabled(settings, SystemSwitchService.CUSTOMER_STATEMENT_RECEIPT_ZERO_FROM_SALES_ORDER_SWITCH),
-                enabled(settings, SystemSwitchService.SUPPLIER_STATEMENT_FULL_PAYMENT_FROM_PURCHASE_SWITCH)
+                enabled(settings, SystemSwitchService.CUSTOMER_STATEMENT_RECEIPT_ZERO_FROM_SALES_ORDER_SWITCH)
         );
         RuntimeBusinessNoConfig businessNo = new RuntimeBusinessNoConfig(
                 enabled(settings, SystemSwitchService.USE_SNOWFLAKE_ID_AS_BUSINESS_NO_SWITCH)
