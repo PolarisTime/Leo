@@ -11,7 +11,7 @@ import java.math.BigDecimal;
 public record FreightBillItemRequest(
         Long id,
         @NotBlank String sourceNo,
-        @NotNull @Positive Long sourceSalesOutboundItemId,
+        Long sourceSalesOutboundItemId,
         Long settlementCompanyId,
         String settlementCompanyName,
         Long customerId,
@@ -35,8 +35,42 @@ public record FreightBillItemRequest(
         Long warehouseId,
         String warehouseName,
         Long sourceFreightBillId,
-        Long sourceFreightBillItemId
+        Long sourceFreightBillItemId,
+        @NotNull @Positive Long sourceSalesOrderItemId
 ) {
+    public FreightBillItemRequest(Long id,
+                                  String sourceNo,
+                                  Long sourceSalesOutboundItemId,
+                                  Long settlementCompanyId,
+                                  String settlementCompanyName,
+                                  Long customerId,
+                                  String customerName,
+                                  Long projectId,
+                                  String projectName,
+                                  Long materialId,
+                                  String materialCode,
+                                  String materialName,
+                                  String brand,
+                                  String category,
+                                  String material,
+                                  String spec,
+                                  String length,
+                                  Integer quantity,
+                                  String quantityUnit,
+                                  BigDecimal pieceWeightTon,
+                                  Integer piecesPerBundle,
+                                  String batchNo,
+                                  BigDecimal weightTon,
+                                  Long warehouseId,
+                                  String warehouseName,
+                                  Long sourceFreightBillId,
+                                  Long sourceFreightBillItemId) {
+        this(id, sourceNo, sourceSalesOutboundItemId, settlementCompanyId, settlementCompanyName, customerId,
+                customerName, projectId, projectName, materialId, materialCode, materialName, brand, category,
+                material, spec, length, quantity, quantityUnit, pieceWeightTon, piecesPerBundle, batchNo, weightTon,
+                warehouseId, warehouseName, sourceFreightBillId, sourceFreightBillItemId, null);
+    }
+
     public FreightBillItemRequest(Long id,
                                   String sourceNo,
                                   Long sourceSalesOutboundItemId,

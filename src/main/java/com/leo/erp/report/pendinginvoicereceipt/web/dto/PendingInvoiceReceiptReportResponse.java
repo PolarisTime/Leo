@@ -17,17 +17,14 @@ public record PendingInvoiceReceiptReportResponse(
         String length,
         Integer orderQuantity,
         Integer receivedInvoiceQuantity,
-        Integer refundedQuantity,
         Integer pendingInvoiceQuantity,
         String quantityUnit,
         BigDecimal orderWeightTon,
         BigDecimal receivedInvoiceWeightTon,
-        BigDecimal refundedWeightTon,
         BigDecimal pendingInvoiceWeightTon,
         BigDecimal unitPrice,
         BigDecimal orderAmount,
         BigDecimal receivedInvoiceAmount,
-        BigDecimal refundedAmount,
         BigDecimal pendingInvoiceAmount,
         String status
 ) {

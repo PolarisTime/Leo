@@ -42,9 +42,7 @@ public class SalesOrderSaveService {
     }
 
     SalesOrder saveAuditedPricingUpdate(SalesOrder entity) {
-        SalesOrder saved = repository.save(entity);
-        syncCompletionAfterAuditedSave(saved);
-        return saved;
+        return repository.save(entity);
     }
 
     private void syncCompletionAfterAuditedSave(SalesOrder entity) {

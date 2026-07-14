@@ -239,7 +239,6 @@ public class SupplierService extends AbstractCrudService<Supplier, SupplierReque
                 ReferenceCheck.active("st_supplier_statement", "supplier_code", supplierCode),
                 ReferenceCheck.active("po_purchase_order", "supplier_code", supplierCode),
                 ReferenceCheck.active("po_purchase_inbound", "supplier_code", supplierCode),
-                ReferenceCheck.active("po_purchase_refund", "supplier_code", supplierCode),
                 ReferenceCheck.active("fm_invoice_receipt", "supplier_code", supplierCode),
                 ReferenceCheck.activeWhen(
                         "fm_payment",
@@ -265,10 +264,8 @@ public class SupplierService extends AbstractCrudService<Supplier, SupplierReque
                 ReferenceCheck.active("ct_purchase_contract", "supplier_id", supplierId),
                 ReferenceCheck.active("po_purchase_order", "supplier_id", supplierId),
                 ReferenceCheck.active("po_purchase_inbound", "supplier_id", supplierId),
-                ReferenceCheck.active("po_purchase_refund", "supplier_id", supplierId),
                 ReferenceCheck.active("fm_invoice_receipt", "supplier_id", supplierId),
                 ReferenceCheck.active("st_supplier_statement", "supplier_id", supplierId),
-                ReferenceCheck.active("fm_supplier_refund_receipt", "supplier_id", supplierId),
                 ReferenceCheck.activeWhen(
                         "fm_payment",
                         "counterparty_id",

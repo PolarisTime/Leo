@@ -40,10 +40,6 @@ final class WarehouseReferenceGuard {
                         "po_purchase_inbound", "inbound_id"
                 ),
                 ReferenceCheck.ofActiveParent(
-                        "po_purchase_refund_item", "warehouse_id", warehouseId,
-                        "po_purchase_refund", "refund_id"
-                ),
-                ReferenceCheck.ofActiveParent(
                         "so_sales_order_item", "warehouse_id", warehouseId,
                         "so_sales_order", "order_id"
                 ),
@@ -93,10 +89,6 @@ final class WarehouseReferenceGuard {
                 ReferenceCheck.legacyOfActiveParent(
                         "po_purchase_inbound_item", "warehouse_name", warehouseName, "warehouse_id",
                         "po_purchase_inbound", "inbound_id"
-                ),
-                ReferenceCheck.legacyOfActiveParent(
-                        "po_purchase_refund_item", "warehouse_name", warehouseName, "warehouse_id",
-                        "po_purchase_refund", "refund_id"
                 ),
                 ReferenceCheck.legacyOfActiveParent(
                         "so_sales_order_item", "warehouse_name", warehouseName, "warehouse_id",

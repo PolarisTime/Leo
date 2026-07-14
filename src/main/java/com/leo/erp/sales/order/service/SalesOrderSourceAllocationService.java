@@ -8,6 +8,7 @@ import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.support.BusinessDocumentValidator;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.support.TradeItemCalculator;
+import com.leo.erp.sales.order.domain.entity.SalesModes;
 import com.leo.erp.sales.order.repository.SalesOrderItemRepository;
 import com.leo.erp.sales.order.web.dto.SalesOrderItemRequest;
 import com.leo.erp.sales.order.web.dto.SalesOrderRequest;
@@ -33,6 +34,14 @@ public class SalesOrderSourceAllocationService {
     }
 
     SalesOrderSourceContext prepareContext(SalesOrderRequest request, Long currentOrderId) {
+        return prepareContext(request, currentOrderId, Set.of());
+    }
+
+    SalesOrderSourceContext prepareContext(SalesOrderRequest request,
+                                           Long currentOrderId,
+                                           Set<Long> existingPurchaseOrderSourceItemIds) {
+        String salesMode = SalesModes.normalizeRequired(request.salesMode());
+        validateSourceShape(request, salesMode);
         List<Long> sourceInboundItemIds = extractSourceInboundItemIds(request);
         List<Long> sourcePurchaseOrderItemIds = extractSourcePurchaseOrderItemIds(request);
         return new SalesOrderSourceContext(
@@ -46,7 +55,10 @@ public class SalesOrderSourceAllocationService {
                 new HashMap<>(),
                 new HashMap<>(),
                 new LinkedHashSet<>(),
-                new LinkedHashSet<>()
+                new LinkedHashSet<>(),
+                existingPurchaseOrderSourceItemIds == null
+                        ? Set.of()
+                        : Set.copyOf(existingPurchaseOrderSourceItemIds)
         );
     }
 
@@ -71,22 +83,23 @@ public class SalesOrderSourceAllocationService {
         return sourcePurchaseOrderItem;
     }
 
-    void validateLine(SalesOrderItemRequest source, int lineNo, SalesOrderSourceContext context) {
+    void validateLine(SalesOrderItemRequest source,
+                      int lineNo,
+                      String salesMode,
+                      SalesOrderSourceContext context) {
         Long sourcePurchaseOrderItemId = source.sourcePurchaseOrderItemId();
         if (source.sourceInboundItemId() != null && sourcePurchaseOrderItemId != null) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行来源采购入库明细和来源采购订单明细不能同时填写");
         }
         if (sourcePurchaseOrderItemId != null) {
+            if (!SalesModes.PRESALE.equals(salesMode)) {
+                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "正常销售只能导入已完成采购的入库明细");
+            }
             SourcePurchaseOrderItemRecord sourcePurchaseOrderItem = context.sourcePurchaseOrderItemMap().get(sourcePurchaseOrderItemId);
             if (sourcePurchaseOrderItem == null) {
                 throw new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行来源采购订单明细不存在");
             }
-            assertSourceParentStatus(
-                    sourcePurchaseOrderItem.orderStatus(),
-                    StatusConstants.SALES_ORDER_SOURCE_PURCHASE_ORDER_STATUS,
-                    lineNo,
-                    "来源采购订单"
-            );
+            assertPresaleSourceStatus(sourcePurchaseOrderItem, sourcePurchaseOrderItemId, lineNo, context);
             assertSourceFieldsMatch(source, sourcePurchaseOrderItem, lineNo, "来源采购订单明细");
             int allocatedQuantity = context.purchaseOrderAllocatedMap()
                     .getOrDefault(sourcePurchaseOrderItemId, SalesOrderSourceAllocation.ZERO)
@@ -100,7 +113,10 @@ public class SalesOrderSourceAllocationService {
 
         Long sourceInboundItemId = source.sourceInboundItemId();
         if (sourceInboundItemId == null) {
-            return;
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行必须导入上级采购来源明细");
+        }
+        if (!SalesModes.NORMAL.equals(salesMode)) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "预售只能导入未完成采购的采购订单明细");
         }
         SourceInboundItemRecord sourceInboundItem = context.sourceInboundItemMap().get(sourceInboundItemId);
         if (sourceInboundItem == null) {
@@ -108,10 +124,16 @@ public class SalesOrderSourceAllocationService {
         }
         assertSourceParentStatus(
                 sourceInboundItem.inboundStatus(),
-                Set.of(StatusConstants.AUDITED),
+                Set.of(StatusConstants.AUDITED, StatusConstants.INBOUND_COMPLETED),
                 lineNo,
                 "来源采购入库单"
         );
+        if (!StatusConstants.PURCHASE_COMPLETED.equals(sourceInboundItem.purchaseOrderStatus())) {
+            throw new BusinessException(
+                    ErrorCode.BUSINESS_ERROR,
+                    "第" + lineNo + "行来源采购订单尚未完成采购，不能用于正常销售"
+            );
+        }
         assertSourceFieldsMatch(source, sourceInboundItem, lineNo, "来源采购入库明细");
         int allocatedQuantity = context.inboundAllocatedMap()
                 .getOrDefault(sourceInboundItemId, SalesOrderSourceAllocation.ZERO)
@@ -120,6 +142,40 @@ public class SalesOrderSourceAllocationService {
                 .getOrDefault(sourceInboundItemId, SalesOrderSourceAllocation.ZERO)
                 .quantity();
         validateAvailableQuantity(source.quantity(), sourceInboundItem.quantity(), allocatedQuantity, requestedQuantity, lineNo);
+    }
+
+    private void validateSourceShape(SalesOrderRequest request, String salesMode) {
+        Set<Long> inboundSourceIds = new LinkedHashSet<>();
+        Set<Long> purchaseOrderSourceIds = new LinkedHashSet<>();
+        for (int index = 0; index < request.items().size(); index++) {
+            SalesOrderItemRequest item = request.items().get(index);
+            boolean inboundSource = item.sourceInboundItemId() != null;
+            boolean purchaseOrderSource = item.sourcePurchaseOrderItemId() != null;
+            if (inboundSource == purchaseOrderSource) {
+                throw new BusinessException(
+                        ErrorCode.BUSINESS_ERROR,
+                        "第" + (index + 1) + "行必须且只能选择一个采购来源明细"
+                );
+            }
+            if (SalesModes.NORMAL.equals(salesMode) && !inboundSource) {
+                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "正常销售只能导入已完成采购的入库明细");
+            }
+            if (SalesModes.PRESALE.equals(salesMode) && !purchaseOrderSource) {
+                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "预售只能导入未完成采购的采购订单明细");
+            }
+            if (inboundSource && !inboundSourceIds.add(item.sourceInboundItemId())) {
+                throw new BusinessException(
+                        ErrorCode.BUSINESS_ERROR,
+                        "第" + (index + 1) + "行重复导入同一采购入库明细"
+                );
+            }
+            if (purchaseOrderSource && !purchaseOrderSourceIds.add(item.sourcePurchaseOrderItemId())) {
+                throw new BusinessException(
+                        ErrorCode.BUSINESS_ERROR,
+                        "第" + (index + 1) + "行重复导入同一采购订单明细"
+                );
+            }
+        }
     }
 
     void recordAllocation(SalesOrderItemRequest source, BigDecimal weightTon, SalesOrderSourceContext context) {
@@ -217,6 +273,24 @@ public class SalesOrderSourceAllocationService {
         );
     }
 
+    private void assertPresaleSourceStatus(SourcePurchaseOrderItemRecord source,
+                                           Long sourceItemId,
+                                           int lineNo,
+                                           SalesOrderSourceContext context) {
+        String status = BusinessDocumentValidator.normalizeText(source.orderStatus());
+        if (StatusConstants.AUDITED.equals(status)) {
+            return;
+        }
+        if (StatusConstants.PURCHASE_COMPLETED.equals(status)
+                && context.existingPurchaseOrderSourceItemIds().contains(sourceItemId)) {
+            return;
+        }
+        throw new BusinessException(
+                ErrorCode.BUSINESS_ERROR,
+                "第" + lineNo + "行来源采购订单必须处于已审核且未完成采购状态"
+        );
+    }
+
     private void assertSourceFieldsMatch(SalesOrderItemRequest request,
                                          SourceInboundItemRecord source,
                                          int lineNo,
@@ -227,7 +301,11 @@ public class SalesOrderSourceAllocationService {
         assertSameText(request.category(), source.category(), lineNo, sourceName, "品类");
         assertSameText(request.material(), source.material(), lineNo, sourceName, "材质");
         assertSameText(request.spec(), source.spec(), lineNo, sourceName, "规格");
+        assertSameOptionalText(request.length(), source.length(), lineNo, sourceName, "长度");
         assertSameText(request.unit(), source.unit(), lineNo, sourceName, "单位");
+        assertSameOptionalQuantityUnit(request.quantityUnit(), source.quantityUnit(), lineNo, sourceName);
+        assertSameOptionalDecimal(request.pieceWeightTon(), source.pieceWeightTon(), lineNo, sourceName, "件重");
+        assertSameOptionalInteger(request.piecesPerBundle(), source.piecesPerBundle(), lineNo, sourceName, "每捆支数");
         assertSameText(request.warehouseName(), source.warehouseName(), lineNo, sourceName, "仓库");
         assertSameId(request.warehouseId(), source.warehouseId(), lineNo, sourceName, "仓库ID");
         assertSameText(request.batchNo(), source.batchNo(), lineNo, sourceName, "批号");
@@ -243,7 +321,11 @@ public class SalesOrderSourceAllocationService {
         assertSameText(request.category(), source.category(), lineNo, sourceName, "品类");
         assertSameText(request.material(), source.material(), lineNo, sourceName, "材质");
         assertSameText(request.spec(), source.spec(), lineNo, sourceName, "规格");
+        assertSameOptionalText(request.length(), source.length(), lineNo, sourceName, "长度");
         assertSameText(request.unit(), source.unit(), lineNo, sourceName, "单位");
+        assertSameOptionalQuantityUnit(request.quantityUnit(), source.quantityUnit(), lineNo, sourceName);
+        assertSameOptionalDecimal(request.pieceWeightTon(), source.pieceWeightTon(), lineNo, sourceName, "件重");
+        assertSameOptionalInteger(request.piecesPerBundle(), source.piecesPerBundle(), lineNo, sourceName, "每捆支数");
         assertSameText(request.warehouseName(), source.warehouseName(), lineNo, sourceName, "仓库");
         assertSameId(request.warehouseId(), source.warehouseId(), lineNo, sourceName, "仓库ID");
         assertSameText(request.batchNo(), source.batchNo(), lineNo, sourceName, "批号");
@@ -272,6 +354,63 @@ public class SalesOrderSourceAllocationService {
             throw new BusinessException(
                     ErrorCode.BUSINESS_ERROR,
                     "第" + lineNo + "行" + sourceName + fieldName + "不一致"
+            );
+        }
+    }
+
+    private void assertSameOptionalText(String requestedValue,
+                                        String sourceValue,
+                                        int lineNo,
+                                        String sourceName,
+                                        String fieldName) {
+        if (sourceValue != null) {
+            assertSameText(requestedValue, sourceValue, lineNo, sourceName, fieldName);
+        }
+    }
+
+    private void assertSameOptionalQuantityUnit(String requestedValue,
+                                                String sourceValue,
+                                                int lineNo,
+                                                String sourceName) {
+        if (sourceValue != null) {
+            assertSameText(
+                    TradeItemCalculator.normalizeQuantityUnit(requestedValue),
+                    TradeItemCalculator.normalizeQuantityUnit(sourceValue),
+                    lineNo,
+                    sourceName,
+                    "数量单位"
+            );
+        }
+    }
+
+    private void assertSameOptionalInteger(Integer requestedValue,
+                                           Integer sourceValue,
+                                           int lineNo,
+                                           String sourceName,
+                                           String fieldName) {
+        if (sourceValue != null) {
+            BusinessDocumentValidator.requireSameSourceInteger(
+                    requestedValue,
+                    sourceValue,
+                    lineNo,
+                    sourceName,
+                    fieldName
+            );
+        }
+    }
+
+    private void assertSameOptionalDecimal(BigDecimal requestedValue,
+                                           BigDecimal sourceValue,
+                                           int lineNo,
+                                           String sourceName,
+                                           String fieldName) {
+        if (sourceValue != null) {
+            BusinessDocumentValidator.requireSameSourceDecimal(
+                    requestedValue,
+                    sourceValue,
+                    lineNo,
+                    sourceName,
+                    fieldName
             );
         }
     }

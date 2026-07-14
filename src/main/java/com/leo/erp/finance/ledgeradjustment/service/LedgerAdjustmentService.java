@@ -101,6 +101,41 @@ public class LedgerAdjustmentService extends AbstractCrudService<LedgerAdjustmen
         );
     }
 
+    /**
+     * 台账余额不得通过独立调整单直接改写。历史调整单仍可查询，新的余额变更必须
+     * 由具有明确业务来源的付款、收款、冲销或其他受控单据产生。
+     */
+    @Override
+    @Transactional
+    public LedgerAdjustmentResponse create(LedgerAdjustmentRequest request) {
+        throw writeDisabled();
+    }
+
+    @Override
+    @Transactional
+    public LedgerAdjustmentResponse update(Long id, LedgerAdjustmentRequest request) {
+        throw writeDisabled();
+    }
+
+    @Override
+    @Transactional
+    public LedgerAdjustmentResponse updateStatus(Long id, String status) {
+        throw writeDisabled();
+    }
+
+    @Override
+    @Transactional
+    public void delete(Long id) {
+        throw writeDisabled();
+    }
+
+    private BusinessException writeDisabled() {
+        return new BusinessException(
+                ErrorCode.BUSINESS_ERROR,
+                "台账调整单已停用，余额调整必须通过有来源的业务或资金单据完成"
+        );
+    }
+
     @Override
     protected void validateCreate(LedgerAdjustmentRequest request) {
         if (repository.existsByAdjustmentNoAndDeletedFlagFalse(request.adjustmentNo())) {

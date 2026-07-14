@@ -38,8 +38,7 @@ public class GlobalSearchService {
             "receipt",
             "payment",
             "invoice-receipt",
-            "invoice-issue",
-            "ledger-adjustment"
+            "invoice-issue"
     );
 
     private final PermissionService permissionService;

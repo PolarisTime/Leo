@@ -61,6 +61,8 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
     private final SourceAllocationLockService sourceAllocationLockService;
     private final FreightBillDownstreamMutationGuard downstreamMutationGuard;
     private final VehicleRepository vehicleRepository;
+    private FreightBillSalesOrderSourceService salesOrderSourceService;
+    private FreightBillSalesOrderAuditService salesOrderAuditService;
 
     public FreightBillService(FreightBillRepository repository,
                               SalesOutboundRepository salesOutboundRepository,
@@ -145,6 +147,13 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
         this.vehicleRepository = vehicleRepository;
     }
 
+    @Autowired
+    void setSalesOrderFlowServices(FreightBillSalesOrderSourceService salesOrderSourceService,
+                                   FreightBillSalesOrderAuditService salesOrderAuditService) {
+        this.salesOrderSourceService = salesOrderSourceService;
+        this.salesOrderAuditService = salesOrderAuditService;
+    }
+
     public Page<FreightBillResponse> page(PageQuery query, PageFilter filter) {
         return page(query, filter, null);
     }
@@ -163,7 +172,10 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
                 .and(Specs.equalValueIfPresent("settlementCompanyId", filter.settlementCompanyId()))
                 .and(Specs.equalIfPresent("status", filter.status()))
                 .and(Specs.betweenIfPresent("billTime", filter.startDate(), filter.endDate()));
-        return page(query, spec, repository);
+        Page<FreightBillResponse> responses = super.page(query, spec, repository);
+        Map<Long, SalesOutboundRepository.FreightBillOutboundReference> outboundReferences =
+                resolveOutboundReferences(responses.getContent());
+        return responses.map(response -> attachOutboundReference(response, outboundReferences.get(response.id())));
     }
 
     @Transactional(readOnly = true)
@@ -190,13 +202,27 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
     };
 
     public java.util.List<FreightBillResponse> search(String keyword, int maxSize) {
-        return search(keyword, FREIGHT_BILL_SEARCH_FIELDS, maxSize, null, repository);
+        List<FreightBillResponse> responses = super.search(
+                keyword,
+                FREIGHT_BILL_SEARCH_FIELDS,
+                maxSize,
+                null,
+                repository
+        );
+        Map<Long, SalesOutboundRepository.FreightBillOutboundReference> outboundReferences =
+                resolveOutboundReferences(responses);
+        return responses.stream()
+                .map(response -> attachOutboundReference(response, outboundReferences.get(response.id())))
+                .toList();
     }
 
     @Override
     protected FreightBillResponse toDetailResponse(FreightBill entity) {
         FreightBillResponse response = freightBillMapper.toResponse(entity);
         Map<Long, String> sourceStatusByItemId = resolveSourceOutboundStatusByItemId(entity.getItems());
+        SalesOutboundRepository.FreightBillOutboundReference outboundReference = entity.getId() == null
+                ? null
+                : resolveOutboundReferences(List.of(response)).get(entity.getId());
         return new FreightBillResponse(
                 response.id(), response.billNo(),
                 entity.getCarrierId(), response.carrierCode(), response.carrierName(),
@@ -218,8 +244,45 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
                         item.getMaterial(), item.getSpec(), item.getLength(),
                         item.getQuantity(), item.getQuantityUnit(), item.getPieceWeightTon(), item.getPiecesPerBundle(),
                         item.getBatchNo(), item.getBatchNoNormalized(), item.getWeightTon(), item.getWarehouseId(),
-                        item.getWarehouseName()
-                )).toList()
+                        item.getWarehouseName(), null, null, item.getSourceSalesOrderItemId(), null
+                )).toList(),
+                entity.getSourceSalesOrderId(),
+                outboundReference == null ? null : outboundReference.getOutboundId(),
+                outboundReference == null ? null : outboundReference.getOutboundNo()
+        );
+    }
+
+    private Map<Long, SalesOutboundRepository.FreightBillOutboundReference> resolveOutboundReferences(
+            List<FreightBillResponse> responses
+    ) {
+        List<Long> freightBillIds = responses.stream()
+                .map(FreightBillResponse::id)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        if (freightBillIds.isEmpty()) {
+            return Map.of();
+        }
+        return salesOutboundRepository.findActiveFreightBillOutboundReferences(freightBillIds).stream()
+                .collect(Collectors.toMap(
+                        SalesOutboundRepository.FreightBillOutboundReference::getFreightBillId,
+                        reference -> reference,
+                        (left, ignored) -> left
+                ));
+    }
+
+    private FreightBillResponse attachOutboundReference(
+            FreightBillResponse response,
+            SalesOutboundRepository.FreightBillOutboundReference reference
+    ) {
+        return new FreightBillResponse(
+                response.id(), response.billNo(), response.carrierId(), response.carrierCode(), response.carrierName(),
+                response.settlementCompanyId(), response.settlementCompanyName(), response.vehicleId(),
+                response.vehiclePlate(), response.customerName(), response.projectName(), response.billTime(),
+                response.unitPrice(), response.totalWeight(), response.totalFreight(), response.status(),
+                response.deletedFlag(), response.remark(), response.items(), response.sourceSalesOrderId(),
+                reference == null ? null : reference.getOutboundId(),
+                reference == null ? null : reference.getOutboundNo()
         );
     }
 
@@ -249,10 +312,31 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
         if (repository.existsByBillNoAndDeletedFlagFalse(request.billNo())) {
             throw new BusinessException(com.leo.erp.common.error.ErrorCode.BUSINESS_ERROR, "物流单号已存在");
         }
+        String requestedStatus = BusinessDocumentValidator.trimToNull(request.status());
+        if (requestedStatus != null && !StatusConstants.UNAUDITED.equals(requestedStatus)) {
+            throw new BusinessException(
+                    com.leo.erp.common.error.ErrorCode.BUSINESS_ERROR,
+                    "新物流单只能保存为未审核，审核必须通过状态操作完成"
+            );
+        }
+        if (request.sourceSalesOrderId() == null
+                || request.items().stream().anyMatch(item -> item.sourceSalesOrderItemId() == null)) {
+            throw new BusinessException(
+                    com.leo.erp.common.error.ErrorCode.BUSINESS_ERROR,
+                    "新物流单必须从已审核销售订单完整导入"
+            );
+        }
     }
 
     @Override
     protected void validateUpdate(FreightBill entity, FreightBillRequest request) {
+        if (entity.getSourceSalesOrderId() == null) {
+            throw new BusinessException(
+                    com.leo.erp.common.error.ErrorCode.BUSINESS_ERROR,
+                    "历史销售出库来源物流单仅允许查看"
+            );
+        }
+        assertSalesOutboundNotGenerated(entity);
         if (!entity.getBillNo().equals(request.billNo()) && repository.existsByBillNoAndDeletedFlagFalse(request.billNo())) {
             throw new BusinessException(com.leo.erp.common.error.ErrorCode.BUSINESS_ERROR, "物流单号已存在");
         }
@@ -275,12 +359,14 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
                 request.unitPrice(),
                 request.status(),
                 request.remark(),
-                request.items()
+                request.items(),
+                request.sourceSalesOrderId()
         );
     }
 
     @Override
     protected FreightBillRequest normalizeUpdateRequest(FreightBill entity, FreightBillRequest request) {
+        assertOrdinaryUpdateKeepsStatus(entity.getStatus(), request.status());
         return new FreightBillRequest(
                 entity.getBillNo(),
                 request.carrierId(),
@@ -294,10 +380,23 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
                 request.projectName(),
                 request.billTime(),
                 request.unitPrice(),
-                request.status(),
+                entity.getStatus(),
                 request.remark(),
-                request.items()
+                request.items(),
+                entity.getSourceSalesOrderId() == null
+                        ? request.sourceSalesOrderId()
+                        : entity.getSourceSalesOrderId()
         );
+    }
+
+    private void assertOrdinaryUpdateKeepsStatus(String currentStatus, String requestedStatus) {
+        String normalizedRequestedStatus = BusinessDocumentValidator.trimToNull(requestedStatus);
+        if (normalizedRequestedStatus != null && !Objects.equals(currentStatus, normalizedRequestedStatus)) {
+            throw new BusinessException(
+                    com.leo.erp.common.error.ErrorCode.BUSINESS_ERROR,
+                    "物流单状态只能通过审核或反审核操作变更"
+            );
+        }
     }
 
     @Override
@@ -337,7 +436,7 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
 
     @Override
     protected void apply(FreightBill entity, FreightBillRequest request) {
-        lockSourceSalesOutbounds(entity, request);
+        lockSources(entity, request);
         String nextStatus = BusinessStatusValidator.normalizeWithDefault(
                 request.status(),
                 StatusConstants.UNAUDITED,
@@ -364,17 +463,24 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
         entity.setStatus(nextStatus);
         entity.setRemark(request.remark());
 
-        FreightBillSourceService.SourceValidationContext sourceContext =
-                freightBillSourceService.validateSources(request, entity.getId());
-        if (StatusConstants.AUDITED.equals(nextStatus)) {
-            freightBillSourceService.assertSourcesAuditable(sourceContext);
+        if (usesSalesOrderSource(entity, request)) {
+            FreightBillSalesOrderSourceService.SourceContext sourceContext =
+                    salesOrderSourceService.validate(request, entity.getId());
+            entity.setSourceSalesOrderId(sourceContext.order().getId());
+            freightBillApplyService.applySalesOrderItems(entity, request, sourceContext, this::nextId);
+        } else {
+            FreightBillSourceService.SourceValidationContext sourceContext =
+                    freightBillSourceService.validateSources(request, entity.getId());
+            if (StatusConstants.AUDITED.equals(nextStatus)) {
+                freightBillSourceService.assertSourcesAuditable(sourceContext);
+            }
+            freightBillApplyService.applyItems(entity, request, sourceContext, this::nextId);
         }
-        freightBillApplyService.applyItems(entity, request, sourceContext, this::nextId);
     }
 
     @Override
     protected void beforeStatusUpdate(FreightBill entity, String currentStatus, String nextStatus) {
-        lockSourceSalesOutbounds(entity, null);
+        lockSources(entity, null);
         if (StatusConstants.AUDITED.equals(currentStatus) && StatusConstants.UNAUDITED.equals(nextStatus)) {
             lockCurrentFreightBill(entity);
             if (downstreamMutationGuard != null) {
@@ -384,19 +490,27 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
         if (!StatusConstants.AUDITED.equals(nextStatus)) {
             return;
         }
-        freightBillSourceService.assertSourceItemsAuditable(
-                entity.getItems().stream()
-                        .map(FreightBillItem::getSourceSalesOutboundItemId)
-                        .toList()
-        );
+        if (entity.getSourceSalesOrderId() != null) {
+            salesOrderAuditService.synchronizeActualWeightAndAssertAuditable(entity);
+        } else {
+            freightBillSourceService.assertSourceItemsAuditable(
+                    entity.getItems().stream()
+                            .map(FreightBillItem::getSourceSalesOutboundItemId)
+                            .toList()
+            );
+        }
     }
 
     @Override
     protected void beforeDelete(FreightBill entity) {
-        lockSourceSalesOutbounds(entity, null);
+        lockSources(entity, null);
         lockCurrentFreightBill(entity);
         if (downstreamMutationGuard != null) {
             downstreamMutationGuard.assertDeleteAllowed(entity);
+        }
+        if (salesOutboundRepository.existsBySourceFreightBillIdAndDeletedFlagFalse(entity.getId())) {
+            throw new BusinessException(com.leo.erp.common.error.ErrorCode.BUSINESS_ERROR,
+                    "物流单已生成销售出库，不能删除");
         }
     }
 
@@ -412,7 +526,33 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
         );
     }
 
-    private void lockSourceSalesOutbounds(FreightBill entity, FreightBillRequest request) {
+    private void assertSalesOutboundNotGenerated(FreightBill entity) {
+        if (entity.getId() != null
+                && salesOutboundRepository.existsBySourceFreightBillIdAndDeletedFlagFalse(entity.getId())) {
+            throw new BusinessException(
+                    com.leo.erp.common.error.ErrorCode.BUSINESS_ERROR,
+                    "物流单已生成销售出库，不能继续修改"
+            );
+        }
+    }
+
+    private void lockSources(FreightBill entity, FreightBillRequest request) {
+        TreeSet<Long> sourceSalesOrderItemIds = new TreeSet<>();
+        entity.getItems().stream()
+                .map(FreightBillItem::getSourceSalesOrderItemId)
+                .filter(Objects::nonNull)
+                .forEach(sourceSalesOrderItemIds::add);
+        if (request != null) {
+            request.items().stream()
+                    .map(FreightBillItemRequest::sourceSalesOrderItemId)
+                    .filter(Objects::nonNull)
+                    .forEach(sourceSalesOrderItemIds::add);
+        }
+        if (!sourceSalesOrderItemIds.isEmpty()) {
+            sourceAllocationLockService.lockTradeItemSources(
+                    List.of(), List.of(), List.copyOf(sourceSalesOrderItemIds)
+            );
+        }
         TreeSet<Long> sourceItemIds = new TreeSet<>();
         entity.getItems().stream()
                 .map(FreightBillItem::getSourceSalesOutboundItemId)
@@ -437,6 +577,12 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
                 List.copyOf(sourceIds),
                 List.of()
         );
+    }
+
+    private boolean usesSalesOrderSource(FreightBill entity, FreightBillRequest request) {
+        return entity.getSourceSalesOrderId() != null
+                || request.sourceSalesOrderId() != null
+                || request.items().stream().anyMatch(item -> item.sourceSalesOrderItemId() != null);
     }
 
     private FreightBillCarrierResolver.CarrierSnapshot resolveCarrier(FreightBillRequest request) {
@@ -603,6 +749,13 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
     @Override
     protected FreightBill saveEntity(FreightBill entity) {
         return repository.save(entity);
+    }
+
+    @Override
+    protected FreightBill saveUpdatedEntity(FreightBill entity, FreightBillRequest request) {
+        lockCurrentFreightBill(entity);
+        assertSalesOutboundNotGenerated(entity);
+        return saveEntity(entity);
     }
 
     @Override

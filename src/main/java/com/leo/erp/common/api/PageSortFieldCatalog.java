@@ -13,7 +13,6 @@ public final class PageSortFieldCatalog {
             Map.entry("warehouse", Set.of("id", "warehouseCode", "warehouseName", "warehouseType", "contactName", "contactPhone", "address", "status")),
             Map.entry("purchase-order", Set.of("id", "orderNo", "supplierCode", "supplierName", "orderDate", "buyerName", "totalWeight", "totalAmount", "status")),
             Map.entry("purchase-inbound", Set.of("id", "inboundNo", "purchaseOrderNo", "supplierCode", "supplierName", "warehouseName", "inboundDate", "settlementMode", "totalWeight", "totalAmount", "status")),
-            Map.entry("purchase-refund", Set.of("id", "refundNo", "purchaseOrderNo", "supplierCode", "supplierName", "settlementCompanyName", "refundDate", "totalQuantity", "totalWeight", "totalAmount", "status", "operatorName")),
             Map.entry("sales-order", Set.of("id", "orderNo", "purchaseInboundNo", "purchaseOrderNo", "customerName", "projectName", "deliveryDate", "salesName", "totalWeight", "totalAmount", "status")),
             Map.entry("sales-outbound", Set.of("id", "outboundNo", "salesOrderNo", "customerName", "projectName", "warehouseName", "outboundDate", "totalWeight", "totalAmount", "status")),
             Map.entry("freight-bill", Set.of("id", "billNo", "carrierCode", "carrierName", "vehiclePlate", "customerName", "projectName", "billTime", "unitPrice", "totalWeight", "totalFreight", "status")),
@@ -24,7 +23,7 @@ public final class PageSortFieldCatalog {
             Map.entry("freight-statement", Set.of("id", "statementNo", "carrierCode", "carrierName", "startDate", "endDate", "totalWeight", "totalFreight", "paidAmount", "unpaidAmount", "status", "signStatus")),
             Map.entry("receipt", Set.of("id", "receiptNo", "customerName", "projectName", "receiptDate", "payType", "amount", "status", "operatorName")),
             Map.entry("payment", Set.of("id", "paymentNo", "businessType", "counterpartyCode", "counterpartyName", "paymentDate", "payType", "amount", "status", "operatorName")),
-            Map.entry("supplier-refund-receipt", Set.of("id", "refundReceiptNo", "purchaseRefundId", "supplierCode", "supplierName", "settlementCompanyName", "receiptDate", "receiptMethod", "amount", "status", "operatorName")),
+            Map.entry("cash-reversal", Set.of("id", "reversalNo", "counterpartyCode", "counterpartyName", "settlementCompanyName", "reversalDate", "amount", "status", "operatorName")),
             Map.entry("invoice-receipt", Set.of("id", "receiveNo", "invoiceNo", "supplierCode", "supplierName", "settlementCompanyName", "invoiceDate", "invoiceType", "amount", "taxAmount", "status", "operatorName")),
             Map.entry("invoice-issue", Set.of("id", "issueNo", "invoiceNo", "customerName", "projectName", "invoiceDate", "invoiceType", "amount", "taxAmount", "status", "operatorName")),
             Map.entry("ledger-adjustment", Set.of("id", "adjustmentNo", "direction", "counterpartyType", "counterpartyCode", "counterpartyName", "projectName", "adjustmentDate", "amount", "adjustmentType", "effect", "status", "operatorName")),
@@ -39,6 +38,7 @@ public final class PageSortFieldCatalog {
             Map.entry("inventory-report", Set.of("brand", "category", "warehouseName", "quantity", "weightTon")),
             Map.entry("io-report", Set.of("businessDate", "businessType", "sourceNo", "materialCode", "warehouseName")),
             Map.entry("receivable-payable", Set.of("counterpartyCode", "counterpartyName", "direction", "counterpartyType", "reconciliationStatus", "recognizedAmount", "settledAmount", "balanceAmount", "days0To30Amount", "days31To60Amount", "days61To90Amount", "daysOver90Amount", "entryCount", "status")),
+            Map.entry("purchase-finance-flow", Set.of("flowSequence", "businessDate", "documentType", "documentNo", "lineNo", "status")),
             Map.entry("project", Set.of("id", "projectCode", "projectName", "projectNameAbbr", "customerCode", "projectManager", "status"))
     );
 

@@ -304,7 +304,6 @@ public class CompanySettingService extends AbstractCrudService<CompanySetting, C
                         "po_purchase_inbound",
                         "inbound_id"
                 ),
-                ReferenceCheck.active("po_purchase_refund", "settlement_company_id", entity.getId()),
                 ReferenceCheck.active("so_sales_order", "settlement_company_id", entity.getId()),
                 ReferenceCheck.ofActiveParent(
                         "so_sales_order_item",
@@ -343,7 +342,6 @@ public class CompanySettingService extends AbstractCrudService<CompanySetting, C
                 ReferenceCheck.active("fm_invoice_receipt", "settlement_company_id", entity.getId()),
                 ReferenceCheck.active("fm_receipt", "settlement_company_id", entity.getId()),
                 ReferenceCheck.active("fm_payment", "settlement_company_id", entity.getId()),
-                ReferenceCheck.active("fm_supplier_refund_receipt", "settlement_company_id", entity.getId()),
                 ReferenceCheck.active("fm_ledger_adjustment", "settlement_company_id", entity.getId()),
                 ReferenceCheck.active("sys_print_template", "settlement_company_id", entity.getId())
         ));

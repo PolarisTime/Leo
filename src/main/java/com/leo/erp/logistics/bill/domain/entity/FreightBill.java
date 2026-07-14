@@ -19,6 +19,13 @@ public class FreightBill extends AbstractAuditableEntity {
     @Id
     private Long id;
 
+    @Version
+    @Column(name = "version", nullable = false)
+    private Long version;
+
+    @Column(name = "source_sales_order_id")
+    private Long sourceSalesOrderId;
+
     @Column(name = "bill_no", nullable = false, unique = true, length = 64)
     private String billNo;
 

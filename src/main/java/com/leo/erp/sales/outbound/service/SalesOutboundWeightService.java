@@ -28,6 +28,9 @@ public class SalesOutboundWeightService {
                                         SalesOrderItem sourceSalesOrderItem,
                                         Long sourceSalesOrderItemId,
                                         int lineNo) {
+        if (source.weightTon() != null) {
+            return TradeItemCalculator.scaleWeightTon(source.weightTon());
+        }
         if (sourceSalesOrderItemId == null || source.quantity() == null || source.quantity() <= 0) {
             return fallbackWeightTon(source);
         }

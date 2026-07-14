@@ -6,8 +6,6 @@ import com.leo.erp.sales.order.repository.SalesOrderRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashSet;
@@ -18,13 +16,6 @@ import java.util.stream.Collectors;
 
 @Service
 public class SalesOrderCompletionSyncService {
-
-    /**
-     * Fulfillment tolerance: allow up to 5% under-fulfillment.
-     * Over-fulfillment is not tolerated (upper bound = exact match).
-     * E.g., if expected=100, actual can be 95–100.
-     */
-    private static final BigDecimal FULFILLMENT_TOLERANCE = new BigDecimal("0.05");
 
     private final SalesOrderRepository salesOrderRepository;
     private final SalesOrderOutboundQueryService outboundQueryService;
@@ -72,7 +63,7 @@ public class SalesOrderCompletionSyncService {
         List<SalesOrder> changedOrders = new ArrayList<>();
         for (SalesOrder order : orders) {
             boolean fullyOutbounded = isFullyOutbounded(order, outboundQtyByItemId);
-            if (applyCompletedStatus(order, fullyOutbounded && isPriced(order))) {
+            if (applyDeliveryStatus(order, fullyOutbounded)) {
                 changedOrders.add(order);
             }
         }
@@ -102,31 +93,17 @@ public class SalesOrderCompletionSyncService {
             int expected = item.getQuantity() != null ? item.getQuantity() : 0;
             int actual = outboundQtyByItemId.getOrDefault(item.getId(), 0);
 
-            // Zero-quantity items: must match exactly
-            if (expected == 0) {
-                return actual == 0;
-            }
-
-            // Calculate fulfillment ratio — only allow under-fulfillment tolerance (≤5%);
-            // over-fulfillment is not allowed for piece-count items
-            BigDecimal ratio = BigDecimal.valueOf(actual)
-                    .divide(BigDecimal.valueOf(expected), 4, RoundingMode.HALF_UP);
-            BigDecimal lowerBound = BigDecimal.ONE.subtract(FULFILLMENT_TOLERANCE);
-            BigDecimal upperBound = BigDecimal.ONE;
-
-            return ratio.compareTo(lowerBound) >= 0
-                    && ratio.compareTo(upperBound) <= 0;
+            return actual == expected;
         });
     }
 
-    private boolean applyCompletedStatus(SalesOrder order, boolean completed) {
+    private boolean applyDeliveryStatus(SalesOrder order, boolean delivered) {
         String currentStatus = normalize(order.getStatus());
         if (!StatusConstants.AUDITED.equals(currentStatus)
-                && !StatusConstants.DELIVERY_VERIFICATION.equals(currentStatus)
-                && !StatusConstants.SALES_COMPLETED.equals(currentStatus)) {
+                && !StatusConstants.DELIVERY_VERIFICATION.equals(currentStatus)) {
             return false;
         }
-        if (completed) {
+        if (delivered) {
             if (!StatusConstants.AUDITED.equals(currentStatus)) {
                 return false;
             }
@@ -138,12 +115,6 @@ public class SalesOrderCompletionSyncService {
         }
         order.setStatus(StatusConstants.AUDITED);
         return true;
-    }
-
-    private boolean isPriced(SalesOrder order) {
-        return order.getItems().stream()
-                .allMatch(item -> item.getUnitPrice() != null
-                        && item.getUnitPrice().compareTo(BigDecimal.ZERO) > 0);
     }
 
     private Set<Long> normalizeIds(Collection<Long> ids) {

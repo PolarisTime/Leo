@@ -7,6 +7,7 @@ import java.math.BigDecimal;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 record SalesOrderSourceContext(
         List<Long> sourceInboundItemIds,
@@ -19,7 +20,8 @@ record SalesOrderSourceContext(
         Map<Long, SalesOrderSourceAllocation> requestInboundAllocatedMap,
         Map<Long, SalesOrderSourceAllocation> requestPurchaseOrderAllocatedMap,
         LinkedHashSet<String> sourceInboundNos,
-        LinkedHashSet<String> sourcePurchaseOrderNos
+        LinkedHashSet<String> sourcePurchaseOrderNos,
+        Set<Long> existingPurchaseOrderSourceItemIds
 ) {
     SalesOrderSourceContext withPurchaseOrderRemainingWeightMap(Map<Long, BigDecimal> remainingWeightMap) {
         return new SalesOrderSourceContext(
@@ -33,7 +35,8 @@ record SalesOrderSourceContext(
                 requestInboundAllocatedMap,
                 requestPurchaseOrderAllocatedMap,
                 sourceInboundNos,
-                sourcePurchaseOrderNos
+                sourcePurchaseOrderNos,
+                existingPurchaseOrderSourceItemIds
         );
     }
 

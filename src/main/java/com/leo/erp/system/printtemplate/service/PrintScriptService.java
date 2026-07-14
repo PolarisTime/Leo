@@ -70,8 +70,12 @@ public class PrintScriptService {
 
         recordEnricher.enrich(moduleKey, data, items);
         assertTemplateMatchesSettlementCompany(template, data);
+        items = applyItemSelection(items, options);
         items = applyItemOrder(items, options);
         items = layoutPreparer.prepare(moduleKey, template.getTemplateName(), template.getTemplateHtml(), data, items);
+        if ("COORD".equals(template.getTemplateType())) {
+            items = appendLengthToSpec(items);
+        }
         applyPrintOptions(data, items, options);
 
         Map<String, Object> result = new HashMap<>();
@@ -84,6 +88,18 @@ public class PrintScriptService {
         result.put("data", data);
         result.put("items", items);
         return result;
+    }
+
+    private List<Map<String, String>> appendLengthToSpec(List<Map<String, String>> items) {
+        return items.stream().map(item -> {
+            Map<String, String> printableItem = new HashMap<>(item);
+            String spec = normalizeText(printableItem.get("spec"));
+            String length = normalizeText(printableItem.get("length"));
+            if (!spec.isBlank() && "12米".equals(length) && !spec.endsWith("*12")) {
+                printableItem.put("spec", spec + "*12");
+            }
+            return printableItem;
+        }).toList();
     }
 
     private void assertTemplateMatchesSettlementCompany(PrintTemplate template, Map<String, String> data) {
@@ -215,6 +231,16 @@ public class PrintScriptService {
             }
         }
         return orderedItems;
+    }
+
+    private List<Map<String, String>> applyItemSelection(List<Map<String, String>> items, PrintRenderOptions options) {
+        if (options == null || options.selectedItemIds() == null || items.isEmpty()) {
+            return items;
+        }
+        Set<String> selectedItemIds = new HashSet<>(options.selectedItemIds());
+        return items.stream()
+                .filter(item -> selectedItemIds.contains(item.get("id")))
+                .toList();
     }
 
     private SecurityPrincipal currentPrincipal() {

@@ -236,6 +236,7 @@ public class PurchaseOrderItemPieceWeightService {
         if (salesOrderItemId == null) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "第" + lineNo + "行销售订单明细ID缺失，无法分配逐件重量");
         }
+        repository.releaseBySalesOrderItemIdIn(List.of(salesOrderItemId));
         ensureGenerated(sourceItem);
         List<PurchaseOrderItemPieceWeight> availablePieces =
                 repository.findAvailableByPurchaseOrderItemIdForUpdate(sourceItem.getId());
@@ -290,7 +291,7 @@ public class PurchaseOrderItemPieceWeightService {
                         StatusConstants.SALES_COMPLETED,
                         StatusConstants.AUDITED,
                         StatusConstants.ISSUED,
-                        StatusConstants.RECEIVED
+                        StatusConstants.AUDITED
                 )
                 .stream()
                 .collect(Collectors.toMap(

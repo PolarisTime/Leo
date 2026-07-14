@@ -47,11 +47,6 @@ public class MaterialReferenceGuard {
                         materialId
                 ),
                 ReferenceCheck.any(
-                        "po_purchase_refund_item",
-                        "material_id",
-                        materialId
-                ),
-                ReferenceCheck.any(
                         "so_sales_order_item",
                         "material_id",
                         materialId

@@ -9,7 +9,7 @@ import java.math.BigDecimal;
 
 public record PurchaseInboundItemRequest(
         Long id,
-        Long materialId,
+        @NotNull Long materialId,
         @NotBlank String materialCode,
         @NotBlank String brand,
         @NotBlank String category,
@@ -19,11 +19,11 @@ public record PurchaseInboundItemRequest(
         @NotBlank String unit,
         @NotNull(message = "来源采购订单明细不能为空")
         Long sourcePurchaseOrderItemId,
-        Long warehouseId,
-        String warehouseName,
+        @NotNull Long warehouseId,
+        @NotBlank String warehouseName,
         String settlementMode,
         String batchNo,
-        @NotNull @Min(0) Integer quantity,
+        @NotNull @Min(value = 1, message = "入库数量必须大于0") Integer quantity,
         String quantityUnit,
         @NotNull @DecimalMin("0.000") BigDecimal pieceWeightTon,
         @NotNull @Min(0) Integer piecesPerBundle,

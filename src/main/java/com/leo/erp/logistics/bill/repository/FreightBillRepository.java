@@ -4,6 +4,7 @@ import com.leo.erp.logistics.bill.domain.entity.FreightBill;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -11,12 +12,43 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
+import jakarta.persistence.LockModeType;
+
 public interface FreightBillRepository extends JpaRepository<FreightBill, Long>, JpaSpecificationExecutor<FreightBill> {
 
     boolean existsByBillNoAndDeletedFlagFalse(String billNo);
 
     @EntityGraph(attributePaths = "items")
     Optional<FreightBill> findByIdAndDeletedFlagFalse(Long id);
+
+    @Query("""
+            select bill.id as id,
+                   bill.sourceSalesOrderId as sourceSalesOrderId
+            from FreightBill bill
+            where bill.id = :id
+              and bill.deletedFlag = false
+            """)
+    Optional<SourceSalesOrderReference> findSourceSalesOrderReferenceById(@Param("id") Long id);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @EntityGraph(attributePaths = "items")
+    @Query("select bill from FreightBill bill where bill.id = :id and bill.deletedFlag = false")
+    Optional<FreightBill> findForUpdateByIdAndDeletedFlagFalse(@Param("id") Long id);
+
+    @EntityGraph(attributePaths = "items")
+    Optional<FreightBill> findBySourceSalesOrderIdAndDeletedFlagFalse(Long sourceSalesOrderId);
+
+    @Query("""
+            select bill.sourceSalesOrderId
+            from FreightBill bill
+            where bill.deletedFlag = false
+              and bill.sourceSalesOrderId in :salesOrderIds
+              and (:currentBillId is null or bill.id <> :currentBillId)
+            """)
+    List<Long> findOccupiedSourceSalesOrderIds(
+            @Param("salesOrderIds") Collection<Long> salesOrderIds,
+            @Param("currentBillId") Long currentBillId
+    );
 
     @EntityGraph(attributePaths = "items")
     List<FreightBill> findByBillNoInAndDeletedFlagFalse(Collection<String> billNos);
@@ -67,4 +99,10 @@ public interface FreightBillRepository extends JpaRepository<FreightBill, Long>,
             @Param("status") String status,
             @Param("sourceSalesOutboundItemIds") Collection<Long> sourceSalesOutboundItemIds
     );
+
+    interface SourceSalesOrderReference {
+        Long getId();
+
+        Long getSourceSalesOrderId();
+    }
 }

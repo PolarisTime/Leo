@@ -62,6 +62,7 @@ public class PurchaseInboundApplyService {
         String firstLineWarehouseName = null;
         Long firstLineWarehouseId = null;
         LinkedHashSet<Long> warehouseIds = new LinkedHashSet<>();
+        Boolean weighGroup = null;
         List<PurchaseInboundItem> managedItems = inbound.getItems();
         List<PurchaseInboundItem> items = ManagedEntityItemSupport.syncById(
                 new ArrayList<>(managedItems),
@@ -90,9 +91,19 @@ public class PurchaseInboundApplyService {
             );
 
             sourceValidator.validateLine(source, lineNo, request, sourceContext);
+            String lineSettlementMode = weightSettlementService.resolveLineSettlementMode(source, request, lineNo);
             WeightSettlementResult weightSettlement = weightSettlementService.resolveWeightSettlement(
                     source, lineNo, purchaseWeighCategoryRules,
-                    weightSettlementService.resolveLineSettlementMode(source, request, lineNo));
+                    lineSettlementMode,
+                    com.leo.erp.common.support.StatusConstants.DRAFT.equals(inbound.getStatus()));
+            boolean currentLineWeigh = "过磅".equals(lineSettlementMode.trim());
+            if (weighGroup != null && weighGroup != currentLineWeigh) {
+                throw new com.leo.erp.common.error.BusinessException(
+                        com.leo.erp.common.error.ErrorCode.BUSINESS_ERROR,
+                        "采购入库单不能混合过磅商品和理算商品，请拆分后分别保存"
+                );
+            }
+            weighGroup = currentLineWeigh;
 
             InboundItemMapper.ItemMappingResult result = inboundItemMapper.applyItemFields(
                     inbound, source, item, lineNo, material.materialCode(), material,
@@ -256,22 +267,23 @@ public class PurchaseInboundApplyService {
     private void applyHeaderSettlementCompany(PurchaseInbound inbound, List<PurchaseInboundItem> items) {
         List<SettlementCompanySnapshot> snapshots = items.stream()
                 .map(item -> new SettlementCompanySnapshot(item.getSettlementCompanyId(), trimToNull(item.getSettlementCompanyName())))
-                .filter(snapshot -> snapshot.id() != null || snapshot.name() != null)
                 .distinct()
                 .toList();
-        if (snapshots.isEmpty()) {
+        if (snapshots.size() > 1) {
+            throw new com.leo.erp.common.error.BusinessException(
+                    com.leo.erp.common.error.ErrorCode.BUSINESS_ERROR,
+                    "来源采购订单存在不同结算主体，不能合并生成采购入库单"
+            );
+        }
+        if (snapshots.isEmpty()
+                || snapshots.getFirst().id() == null && snapshots.getFirst().name() == null) {
             inbound.setSettlementCompanyId(null);
             inbound.setSettlementCompanyName(null);
             return;
         }
-        if (snapshots.size() == 1) {
-            SettlementCompanySnapshot snapshot = snapshots.get(0);
-            inbound.setSettlementCompanyId(snapshot.id());
-            inbound.setSettlementCompanyName(snapshot.name());
-            return;
-        }
-        inbound.setSettlementCompanyId(null);
-        inbound.setSettlementCompanyName("多结算主体");
+        SettlementCompanySnapshot snapshot = snapshots.getFirst();
+        inbound.setSettlementCompanyId(snapshot.id());
+        inbound.setSettlementCompanyName(snapshot.name());
     }
 
     private String trimToNull(String value) {

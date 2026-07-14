@@ -140,7 +140,7 @@ public class SalesOrderAllocatedWeightSyncService {
         )));
         lockedIds.addAll(safeList(receiptAllocationRepository.findReceivedSourceSalesOrderItemIds(
                 itemIds,
-                StatusConstants.RECEIVED
+                StatusConstants.AUDITED
         )));
         return lockedIds;
     }

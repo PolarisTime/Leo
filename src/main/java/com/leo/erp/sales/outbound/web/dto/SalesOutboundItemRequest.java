@@ -27,7 +27,7 @@ public record SalesOutboundItemRequest(
         String quantityUnit,
         @NotNull @DecimalMin("0.000") BigDecimal pieceWeightTon,
         @NotNull @Min(0) Integer piecesPerBundle,
-        BigDecimal weightTon,
+        @DecimalMin("0.000") BigDecimal weightTon,
         @NotNull @DecimalMin("0.00") BigDecimal unitPrice,
         BigDecimal amount
 ) {

@@ -28,11 +28,14 @@ public class InvoiceReceiptSourceService {
 
     private final InvoiceReceiptRepository repository;
     private final PurchaseOrderItemQueryService purchaseOrderItemQueryService;
+    private final InvoiceReceiptCapacityService capacityService;
 
     public InvoiceReceiptSourceService(InvoiceReceiptRepository repository,
-                                       PurchaseOrderItemQueryService purchaseOrderItemQueryService) {
+                                       PurchaseOrderItemQueryService purchaseOrderItemQueryService,
+                                       InvoiceReceiptCapacityService capacityService) {
         this.repository = repository;
         this.purchaseOrderItemQueryService = purchaseOrderItemQueryService;
+        this.capacityService = capacityService;
     }
 
     SourceApplyResult applyItems(InvoiceReceipt entity,
@@ -43,8 +46,10 @@ public class InvoiceReceiptSourceService {
                                  LongSupplier nextIdSupplier) {
         List<Long> sourceItemIds = extractSourceItemIds(itemRequests);
         Map<Long, PurchaseOrderItem> sourcePurchaseOrderItemMap = loadSourcePurchaseOrderItemMap(sourceItemIds);
-        AllocationSnapshots allocationSnapshots = loadAllocationSnapshots(sourceItemIds, entity.getId());
-        Map<Long, AllocationProgress> allocatedProgressMap = allocationSnapshots.combined();
+        Map<Long, AllocationProgress> allocatedProgressMap = loadAllocatedProgress(sourceItemIds, entity.getId());
+        Map<Long, AllocationProgress> capacityMap = capacityService.resolveCapacities(
+                sourcePurchaseOrderItemMap.values()
+        );
         Map<Long, AllocationProgress> requestProgressMap = new HashMap<>();
         SettlementCompanySnapshot settlementCompany = SettlementCompanySnapshot.EMPTY;
         SupplierIdentitySnapshot supplierIdentity = SupplierIdentitySnapshot.EMPTY;
@@ -67,8 +72,8 @@ public class InvoiceReceiptSourceService {
                     supplierId,
                     supplierCode,
                     supplierName,
-                    allocationSnapshots.invoices(),
-                    allocationSnapshots.refunds(),
+                    capacityMap,
+                    allocatedProgressMap,
                     requestProgressMap
             );
             validateSourcePurchaseOrderAllocation(
@@ -114,8 +119,7 @@ public class InvoiceReceiptSourceService {
                 supplierIdentity.code(),
                 supplierIdentity.name(),
                 settlementCompany.id(),
-                settlementCompany.name(),
-                allocationSnapshots.hasRefundAdjustment()
+                settlementCompany.name()
         );
     }
 
@@ -159,16 +163,16 @@ public class InvoiceReceiptSourceService {
                 ))
                 .toList();
         List<Long> sourceItemIds = extractSourceItemIds(items);
-        AllocationSnapshots allocationSnapshots = loadAllocationSnapshots(sourceItemIds, entity.getId());
+        Map<Long, PurchaseOrderItem> sourcePurchaseOrderItemMap = loadSourcePurchaseOrderItemMap(sourceItemIds);
+        Map<Long, AllocationProgress> allocatedProgressMap = loadAllocatedProgress(sourceItemIds, entity.getId());
         SourceSnapshots snapshots = validateSourcePurchaseOrderAllocations(
                 entity.getSupplierId(),
                 entity.getSupplierCode(),
                 entity.getSupplierName(),
                 items,
-                loadSourcePurchaseOrderItemMap(sourceItemIds),
-                allocationSnapshots.combined(),
-                allocationSnapshots.invoices(),
-                allocationSnapshots.refunds()
+                sourcePurchaseOrderItemMap,
+                capacityService.resolveCapacities(sourcePurchaseOrderItemMap.values()),
+                allocatedProgressMap
         );
         entity.setSupplierId(snapshots.supplierIdentity().id());
         entity.setSupplierCode(snapshots.supplierIdentity().code());
@@ -194,31 +198,16 @@ public class InvoiceReceiptSourceService {
                 .collect(HashMap::new, (map, item) -> map.put(item.getId(), item), HashMap::putAll);
     }
 
-    private AllocationSnapshots loadAllocationSnapshots(List<Long> sourceItemIds, Long currentReceiptId) {
+    private Map<Long, AllocationProgress> loadAllocatedProgress(List<Long> sourceItemIds, Long currentReceiptId) {
         if (sourceItemIds.isEmpty()) {
-            return AllocationSnapshots.EMPTY;
+            return Map.of();
         }
         Map<Long, AllocationProgress> invoices = new HashMap<>();
         mergeAllocationSummaries(
                 invoices,
                 repository.summarizeAllocatedBySourcePurchaseOrderItemIds(sourceItemIds, currentReceiptId)
         );
-        Map<Long, AllocationProgress> refunds = new HashMap<>();
-        mergeAllocationSummaries(
-                refunds,
-                repository.summarizeAuditedRefundBySourcePurchaseOrderItemIds(sourceItemIds)
-        );
-        Map<Long, AllocationProgress> combined = new HashMap<>(invoices);
-        refunds.forEach((sourceItemId, progress) -> combined.merge(
-                sourceItemId,
-                progress,
-                AllocationProgress::merge
-        ));
-        return new AllocationSnapshots(
-                Map.copyOf(combined),
-                Map.copyOf(invoices),
-                Map.copyOf(refunds)
-        );
+        return Map.copyOf(invoices);
     }
 
     private void mergeAllocationSummaries(
@@ -244,9 +233,8 @@ public class InvoiceReceiptSourceService {
             String headerSupplierName,
             List<InvoiceReceiptItemRequest> items,
             Map<Long, PurchaseOrderItem> sourcePurchaseOrderItemMap,
-            Map<Long, AllocationProgress> allocatedProgressMap,
-            Map<Long, AllocationProgress> invoiceProgressMap,
-            Map<Long, AllocationProgress> refundProgressMap
+            Map<Long, AllocationProgress> capacityMap,
+            Map<Long, AllocationProgress> allocatedProgressMap
     ) {
         Map<Long, AllocationProgress> requestProgressMap = new HashMap<>();
         SettlementCompanySnapshot settlementCompany = SettlementCompanySnapshot.EMPTY;
@@ -260,8 +248,8 @@ public class InvoiceReceiptSourceService {
                     headerSupplierId,
                     headerSupplierCode,
                     headerSupplierName,
-                    invoiceProgressMap,
-                    refundProgressMap,
+                    capacityMap,
+                    allocatedProgressMap,
                     requestProgressMap
             );
             validateSourcePurchaseOrderAllocation(
@@ -302,32 +290,25 @@ public class InvoiceReceiptSourceService {
                 sourcePurchaseOrderItemId,
                 AllocationProgress.EMPTY
         );
+        AllocationProgress capacity = resolvedItem.capacity();
         long nextQuantity = Math.addExact(
                 Math.addExact(allocatedProgress.quantity(), requestProgress.quantity()),
                 source.quantity().longValue()
         );
-        if (nextQuantity > sourcePurchaseOrderItem.getQuantity().longValue()) {
+        if (nextQuantity > capacity.quantity()) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行来源采购订单明细可收票数量不足");
         }
         BigDecimal nextWeightTon = allocatedProgress.weightTon()
                 .add(requestProgress.weightTon())
                 .add(resolvedItem.weightTon());
-        BigDecimal sourceWeightTon = TradeItemCalculator.calculateWeightTon(
-                sourcePurchaseOrderItem.getQuantity(),
-                sourcePurchaseOrderItem.getPieceWeightTon()
-        );
-        if (nextWeightTon.compareTo(sourceWeightTon) > 0) {
+        if (nextWeightTon.compareTo(capacity.weightTon()) > 0) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行来源采购订单明细可收票吨位不足");
         }
 
         BigDecimal nextAmount = allocatedProgress.amount()
                 .add(requestProgress.amount())
                 .add(resolvedItem.amount());
-        BigDecimal sourceAmount = TradeItemCalculator.calculateAmount(
-                sourceWeightTon,
-                sourcePurchaseOrderItem.getUnitPrice()
-        );
-        if (nextAmount.compareTo(sourceAmount) > 0) {
+        if (nextAmount.compareTo(capacity.amount()) > 0) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行来源采购订单明细可收票金额不足");
         }
 
@@ -344,8 +325,8 @@ public class InvoiceReceiptSourceService {
                                                    Long headerSupplierId,
                                                    String headerSupplierCode,
                                                    String headerSupplierName,
+                                                   Map<Long, AllocationProgress> capacityMap,
                                                    Map<Long, AllocationProgress> invoiceProgressMap,
-                                                   Map<Long, AllocationProgress> refundProgressMap,
                                                    Map<Long, AllocationProgress> requestProgressMap) {
         Long sourcePurchaseOrderItemId = source.sourcePurchaseOrderItemId();
         if (sourcePurchaseOrderItemId == null) {
@@ -370,7 +351,7 @@ public class InvoiceReceiptSourceService {
         requireSameIdentity(source.warehouseId(), sourcePurchaseOrderItem.getWarehouseId(), lineNo, "仓库");
         BigDecimal pieceWeightTon = TradeItemCalculator.scaleWeightTon(sourcePurchaseOrderItem.getPieceWeightTon());
         BigDecimal unitPrice = TradeItemCalculator.scaleAmount(sourcePurchaseOrderItem.getUnitPrice());
-        AllocationProgress refundProgress = refundProgressMap.getOrDefault(
+        AllocationProgress capacity = capacityMap.getOrDefault(
                 sourcePurchaseOrderItemId,
                 AllocationProgress.EMPTY
         );
@@ -379,9 +360,8 @@ public class InvoiceReceiptSourceService {
                 AllocationProgress.EMPTY
         ).merge(requestProgressMap.getOrDefault(sourcePurchaseOrderItemId, AllocationProgress.EMPTY));
         ResolvedAllocation allocation = resolveRemainingAllocation(
-                sourcePurchaseOrderItem,
                 source.quantity(),
-                refundProgress,
+                capacity,
                 receiptProgress
         );
         return new ResolvedInvoiceReceiptItem(
@@ -407,53 +387,40 @@ public class InvoiceReceiptSourceService {
                 sourcePurchaseOrderItem.getPiecesPerBundle(),
                 unitPrice,
                 allocation.weightTon(),
-                allocation.amount()
+                allocation.amount(),
+                capacity
         );
     }
 
-    private ResolvedAllocation resolveRemainingAllocation(PurchaseOrderItem sourceItem,
-                                                          Integer requestedQuantity,
-                                                          AllocationProgress refundProgress,
+    private ResolvedAllocation resolveRemainingAllocation(Integer requestedQuantity,
+                                                          AllocationProgress capacity,
                                                           AllocationProgress receiptProgress) {
-        long sourceQuantity = sourceItem.getQuantity() == null ? 0L : sourceItem.getQuantity().longValue();
         long requested = requestedQuantity == null ? 0L : requestedQuantity.longValue();
-        long remainingQuantity = Math.max(sourceQuantity - refundProgress.quantity(), 0L);
-        BigDecimal sourceWeightTon = TradeItemCalculator.calculateWeightTon(
-                sourceItem.getQuantity(),
-                sourceItem.getPieceWeightTon()
-        );
-        BigDecimal sourceAmount = TradeItemCalculator.calculateAmount(sourceWeightTon, sourceItem.getUnitPrice());
-        BigDecimal remainingWeightTon = TradeItemCalculator.scaleWeightTon(
-                sourceWeightTon.subtract(refundProgress.weightTon()).max(BigDecimal.ZERO)
-        );
-        BigDecimal remainingAmount = TradeItemCalculator.scaleAmount(
-                sourceAmount.subtract(refundProgress.amount()).max(BigDecimal.ZERO)
-        );
-        if (requested <= 0L || remainingQuantity <= 0L) {
+        if (requested <= 0L || capacity.quantity() <= 0L) {
             return ResolvedAllocation.EMPTY;
         }
         boolean hasUnquantifiedReceiptValue = receiptProgress.quantity() == 0L
                 && (receiptProgress.weightTon().compareTo(BigDecimal.ZERO) > 0
                 || receiptProgress.amount().compareTo(BigDecimal.ZERO) > 0);
         if (!hasUnquantifiedReceiptValue
-                && Math.addExact(receiptProgress.quantity(), requested) == remainingQuantity) {
+                && Math.addExact(receiptProgress.quantity(), requested) == capacity.quantity()) {
             return new ResolvedAllocation(
                     TradeItemCalculator.scaleWeightTon(
-                            remainingWeightTon.subtract(receiptProgress.weightTon()).max(BigDecimal.ZERO)
+                            capacity.weightTon().subtract(receiptProgress.weightTon()).max(BigDecimal.ZERO)
                     ),
                     TradeItemCalculator.scaleAmount(
-                            remainingAmount.subtract(receiptProgress.amount()).max(BigDecimal.ZERO)
+                            capacity.amount().subtract(receiptProgress.amount()).max(BigDecimal.ZERO)
                     )
             );
         }
         BigDecimal requestedShare = BigDecimal.valueOf(requested);
-        BigDecimal availableQuantity = BigDecimal.valueOf(remainingQuantity);
-        BigDecimal weightTon = remainingWeightTon.multiply(requestedShare).divide(
+        BigDecimal availableQuantity = BigDecimal.valueOf(capacity.quantity());
+        BigDecimal weightTon = capacity.weightTon().multiply(requestedShare).divide(
                 availableQuantity,
                 PrecisionConstants.WEIGHT_SCALE,
                 PrecisionConstants.DEFAULT_ROUNDING
         );
-        BigDecimal amount = remainingAmount.multiply(requestedShare).divide(
+        BigDecimal amount = capacity.amount().multiply(requestedShare).divide(
                 availableQuantity,
                 PrecisionConstants.AMOUNT_SCALE,
                 PrecisionConstants.DEFAULT_ROUNDING
@@ -563,7 +530,8 @@ public class InvoiceReceiptSourceService {
             Integer piecesPerBundle,
             BigDecimal unitPrice,
             BigDecimal weightTon,
-            BigDecimal amount
+            BigDecimal amount,
+            AllocationProgress capacity
     ) {
     }
 
@@ -575,48 +543,26 @@ public class InvoiceReceiptSourceService {
         );
     }
 
-    private record AllocationSnapshots(
-            Map<Long, AllocationProgress> combined,
-            Map<Long, AllocationProgress> invoices,
-            Map<Long, AllocationProgress> refunds
-    ) {
-
-        private static final AllocationSnapshots EMPTY = new AllocationSnapshots(
-                Map.of(),
-                Map.of(),
-                Map.of()
-        );
-
-        boolean hasRefundAdjustment() {
-            return refunds.values().stream().anyMatch(progress ->
-                    progress.quantity() > 0L
-                            || progress.weightTon().compareTo(BigDecimal.ZERO) > 0
-                            || progress.amount().compareTo(BigDecimal.ZERO) > 0
-            );
-        }
-    }
-
     record SourceApplyResult(
             BigDecimal amount,
             Long supplierId,
             String supplierCode,
             String supplierName,
             Long settlementCompanyId,
-            String settlementCompanyName,
-            boolean refundAdjusted
+            String settlementCompanyName
     ) {
         SourceApplyResult(BigDecimal amount,
                           String supplierCode,
                           String supplierName,
                           Long settlementCompanyId,
                           String settlementCompanyName) {
-            this(amount, null, supplierCode, supplierName, settlementCompanyId, settlementCompanyName, false);
+            this(amount, null, supplierCode, supplierName, settlementCompanyId, settlementCompanyName);
         }
 
         SourceApplyResult(BigDecimal amount,
                           Long settlementCompanyId,
                           String settlementCompanyName) {
-            this(amount, null, null, null, settlementCompanyId, settlementCompanyName, false);
+            this(amount, null, null, null, settlementCompanyId, settlementCompanyName);
         }
     }
 

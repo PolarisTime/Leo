@@ -693,7 +693,7 @@ payment_insert AS (
            TIMESTAMP '2026-07-06 10:00:00',
            '银行转账',
            purchase_amount,
-           '已付款',
+           '已审核',
            '出纳A',
            0,
            '开发测试供应商付款'
@@ -743,7 +743,7 @@ receipt_insert AS (
            TIMESTAMP '2026-07-06 11:00:00',
            '银行转账',
            sales_amount,
-           '已收款',
+           '已审核',
            'DEV-CUST-001',
            900000000000000003,
            company_id,

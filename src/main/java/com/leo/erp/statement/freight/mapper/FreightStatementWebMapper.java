@@ -26,5 +26,7 @@ public interface FreightStatementWebMapper {
     FreightStatementResponse toResponse(FreightStatementView view);
 
     @Mapping(target = "sourceSalesOutboundStatus", ignore = true)
+    @Mapping(target = "sourceSalesOrderItemId", ignore = true)
+    @Mapping(target = "sourceSalesOrderStatus", ignore = true)
     FreightBillItemResponse toItemResponse(FreightStatementItemView item);
 }

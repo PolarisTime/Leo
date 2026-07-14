@@ -10,5 +10,8 @@ import org.mapstruct.Mapping;
 public interface FreightBillMapper {
 
     @Mapping(target = "items", ignore = true)
+    @Mapping(target = "sourceSalesOrderId", source = "sourceSalesOrderId")
+    @Mapping(target = "sourceSalesOutboundId", ignore = true)
+    @Mapping(target = "sourceSalesOutboundNo", ignore = true)
     FreightBillResponse toResponse(FreightBill bill);
 }

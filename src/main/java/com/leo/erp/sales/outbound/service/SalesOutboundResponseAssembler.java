@@ -22,7 +22,7 @@ public class SalesOutboundResponseAssembler {
         this.sourceService = sourceService;
     }
 
-    SalesOutboundResponse toDetailResponse(SalesOutbound entity) {
+    public SalesOutboundResponse toDetailResponse(SalesOutbound entity) {
         SalesOutboundResponse response = mapper.toResponse(entity);
         Map<Long, SalesOrderItem> sourceSalesOrderItemMap =
                 sourceService.loadSourceSalesOrderItemMap(entity.getItems());
@@ -46,7 +46,8 @@ public class SalesOutboundResponseAssembler {
                 response.remark(),
                 entity.getItems().stream()
                         .map(item -> toItemResponse(item, sourceSalesOrderItemMap))
-                        .toList()
+                        .toList(),
+                entity.getSourceFreightBillId()
         );
     }
 

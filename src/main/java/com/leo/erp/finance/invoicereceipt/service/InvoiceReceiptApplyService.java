@@ -66,7 +66,7 @@ public class InvoiceReceiptApplyService {
         InvoiceAmountCalculator.InvoiceAmounts amounts = amountCalculator.resolve(
                 "收票",
                 sourceResult.amount(),
-                sourceResult.refundAdjusted() ? null : request.amount(),
+                request.amount(),
                 request.taxAmount()
         );
         entity.setAmount(amounts.amount());

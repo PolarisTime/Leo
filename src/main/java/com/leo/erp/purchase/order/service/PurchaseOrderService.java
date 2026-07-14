@@ -12,13 +12,14 @@ import com.leo.erp.common.support.BusinessStatusValidator;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.finance.common.service.InvoiceSourceMutationGuard;
 import com.leo.erp.finance.payment.service.PaymentPurchasePrepaymentService;
+import com.leo.erp.finance.purchaseflow.service.SupplierLedgerLockService;
 import com.leo.erp.purchase.order.domain.entity.PurchaseOrder;
 import com.leo.erp.purchase.order.repository.PurchaseOrderRepository;
-import com.leo.erp.purchase.refund.repository.PurchaseRefundRepository;
 import com.leo.erp.purchase.order.web.dto.PurchaseOrderImportCandidateResponse;
 import com.leo.erp.purchase.order.web.dto.PieceWeightResponse;
 import com.leo.erp.purchase.order.web.dto.PurchaseOrderRequest;
 import com.leo.erp.purchase.order.web.dto.PurchaseOrderResponse;
+import com.leo.erp.security.permission.DataScopeContext;
 import com.leo.erp.security.permission.WorkflowTransitionGuard;
 import com.leo.erp.system.company.domain.entity.CompanySetting;
 import com.leo.erp.system.company.service.CompanySettingService;
@@ -53,9 +54,9 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
     private final WorkflowTransitionGuard workflowTransitionGuard;
     private final CompanySettingService companySettingService;
     private final InvoiceSourceMutationGuard invoiceSourceMutationGuard;
-    private final PurchaseRefundRepository purchaseRefundRepository;
     private final PaymentPurchasePrepaymentService purchasePrepaymentService;
     private final PurchaseOrderDownstreamMutationGuard downstreamMutationGuard;
+    private SupplierLedgerLockService supplierLedgerLockService;
 
     public PurchaseOrderService(PurchaseOrderRepository purchaseOrderRepository,
                                 SnowflakeIdGenerator snowflakeIdGenerator,
@@ -115,34 +116,6 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
                                 WorkflowTransitionGuard workflowTransitionGuard,
                                 CompanySettingService companySettingService,
                                 InvoiceSourceMutationGuard invoiceSourceMutationGuard,
-                                PurchaseRefundRepository purchaseRefundRepository) {
-        this(
-                purchaseOrderRepository,
-                snowflakeIdGenerator,
-                availabilityService,
-                responseAssembler,
-                supplierResolver,
-                purchaseOrderApplyService,
-                pieceWeightQueryService,
-                workflowTransitionGuard,
-                companySettingService,
-                invoiceSourceMutationGuard,
-                purchaseRefundRepository,
-                null
-        );
-    }
-
-    public PurchaseOrderService(PurchaseOrderRepository purchaseOrderRepository,
-                                SnowflakeIdGenerator snowflakeIdGenerator,
-                                PurchaseOrderAvailabilityService availabilityService,
-                                PurchaseOrderResponseAssembler responseAssembler,
-                                PurchaseOrderSupplierResolver supplierResolver,
-                                PurchaseOrderApplyService purchaseOrderApplyService,
-                                PurchaseOrderPieceWeightQueryService pieceWeightQueryService,
-                                WorkflowTransitionGuard workflowTransitionGuard,
-                                CompanySettingService companySettingService,
-                                InvoiceSourceMutationGuard invoiceSourceMutationGuard,
-                                PurchaseRefundRepository purchaseRefundRepository,
                                 PaymentPurchasePrepaymentService purchasePrepaymentService) {
         this(
                 purchaseOrderRepository,
@@ -155,7 +128,6 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
                 workflowTransitionGuard,
                 companySettingService,
                 invoiceSourceMutationGuard,
-                purchaseRefundRepository,
                 purchasePrepaymentService,
                 null
         );
@@ -172,7 +144,6 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
                                 WorkflowTransitionGuard workflowTransitionGuard,
                                 CompanySettingService companySettingService,
                                 InvoiceSourceMutationGuard invoiceSourceMutationGuard,
-                                PurchaseRefundRepository purchaseRefundRepository,
                                 PaymentPurchasePrepaymentService purchasePrepaymentService,
                                 PurchaseOrderDownstreamMutationGuard downstreamMutationGuard) {
         super(snowflakeIdGenerator);
@@ -185,9 +156,13 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
         this.workflowTransitionGuard = workflowTransitionGuard;
         this.companySettingService = companySettingService;
         this.invoiceSourceMutationGuard = invoiceSourceMutationGuard;
-        this.purchaseRefundRepository = purchaseRefundRepository;
         this.purchasePrepaymentService = purchasePrepaymentService;
         this.downstreamMutationGuard = downstreamMutationGuard;
+    }
+
+    @Autowired(required = false)
+    void setSupplierLedgerLockService(SupplierLedgerLockService supplierLedgerLockService) {
+        this.supplierLedgerLockService = supplierLedgerLockService;
     }
 
     private static final String[] PURCHASE_ORDER_SEARCH_FIELDS = {"orderNo", "supplierName"};
@@ -208,6 +183,48 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
     public java.util.List<PurchaseOrderResponse> search(String keyword, int maxSize) {
         return search(keyword, PURCHASE_ORDER_SEARCH_FIELDS, maxSize,
                 null, purchaseOrderRepository);
+    }
+
+    @Transactional
+    public PurchaseOrderResponse reopenPurchaseOrder(Long id) {
+        PurchaseOrder order = purchaseOrderRepository.findByIdAndDeletedFlagFalseForUpdate(id)
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, notFoundMessage()));
+        DataScopeContext.assertCanAccess(order);
+        if (StatusConstants.AUDITED.equals(order.getStatus())) {
+            return toDetailResponse(order);
+        }
+        if (!StatusConstants.PURCHASE_COMPLETED.equals(order.getStatus())) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "只有完成采购状态可以撤销完成");
+        }
+        workflowTransitionGuard.assertAuditPermissionForProtectedValue(
+                "purchase-order",
+                order.getStatus(),
+                StatusConstants.AUDITED,
+                StatusConstants.PURCHASE_COMPLETED
+        );
+        if (downstreamMutationGuard != null) {
+            downstreamMutationGuard.assertCompletionReopenAllowed(order);
+        }
+        if (invoiceSourceMutationGuard != null) {
+            invoiceSourceMutationGuard.assertPurchaseOrderMutable(order, "撤销完成采购");
+        }
+        lockSupplierLedgerMutation(order);
+        order.setStatus(StatusConstants.AUDITED);
+        purchaseOrderRepository.save(order);
+        return toDetailResponse(order);
+    }
+
+    private void lockSupplierLedgerMutation(PurchaseOrder order) {
+        if (order.getSettlementCompanyId() == null || order.getSupplierId() == null) {
+            throw new BusinessException(
+                    ErrorCode.BUSINESS_ERROR,
+                    "采购订单缺少供应商或结算主体身份，不能撤销完成采购"
+            );
+        }
+        if (supplierLedgerLockService == null) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "供应商账簿锁服务不可用");
+        }
+        supplierLedgerLockService.lock(order.getSettlementCompanyId(), order.getSupplierId());
     }
 
     @Transactional(readOnly = true)
@@ -411,7 +428,6 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
                     && purchaseOrder.getItems().stream().anyMatch(item -> item.getId() != null)) {
                 downstreamMutationGuard.assertSourceLineMutationAllowed(purchaseOrder, request.items(), "修改");
             }
-            assertNoActivePurchaseRefund(purchaseOrder, "修改");
             assertNoActivePurchasePrepayment(purchaseOrder, "修改");
             if (invoiceSourceMutationGuard != null) {
                 invoiceSourceMutationGuard.assertPurchaseOrderMutable(purchaseOrder, "修改");
@@ -424,6 +440,7 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
                 "采购订单状态",
                 StatusConstants.ALLOWED_PURCHASE_ORDER_STATUS
         );
+        assertStatusNotChangedBySave(purchaseOrder, nextStatus);
         workflowTransitionGuard.assertAuditPermissionForProtectedValue(
                 "purchase-order",
                 purchaseOrder.getStatus(),
@@ -451,14 +468,46 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
         purchaseOrderApplyService.applyItems(purchaseOrder, request, this::nextId);
     }
 
+    private void assertStatusNotChangedBySave(PurchaseOrder purchaseOrder, String requestedStatus) {
+        String currentStatus = purchaseOrder.getStatus();
+        if (currentStatus == null) {
+            if (!StatusConstants.DRAFT.equals(requestedStatus)) {
+                throw new BusinessException(
+                        ErrorCode.BUSINESS_ERROR,
+                        "新建采购订单只能保存为草稿，审核请使用审核命令"
+                );
+            }
+            return;
+        }
+        if (!currentStatus.equals(requestedStatus)) {
+            throw new BusinessException(
+                    ErrorCode.BUSINESS_ERROR,
+                    "普通保存不能修改采购订单状态，请使用审核、反审核或完成采购命令"
+            );
+        }
+    }
+
     @Override
     protected void beforeStatusUpdate(PurchaseOrder entity, String currentStatus, String nextStatus) {
+        if (StatusConstants.PURCHASE_COMPLETED.equals(nextStatus)
+                && !StatusConstants.PURCHASE_COMPLETED.equals(currentStatus)) {
+            throw new BusinessException(
+                    ErrorCode.BUSINESS_ERROR,
+                    "完成采购必须使用完成采购接口"
+            );
+        }
+        if (StatusConstants.PURCHASE_COMPLETED.equals(currentStatus)
+                && StatusConstants.AUDITED.equals(nextStatus)) {
+            throw new BusinessException(
+                    ErrorCode.BUSINESS_ERROR,
+                    "完成采购不能通过通用状态接口撤销，请使用撤销完成采购接口"
+            );
+        }
         if (StatusConstants.DRAFT.equals(nextStatus)
                 && !StatusConstants.DRAFT.equals(currentStatus)) {
             if (downstreamMutationGuard != null) {
                 downstreamMutationGuard.assertMutable(entity, "反审核");
             }
-            assertNoActivePurchaseRefund(entity, "反审核");
             assertNoActivePurchasePrepayment(entity, "反审核");
             if (invoiceSourceMutationGuard != null) {
                 invoiceSourceMutationGuard.assertPurchaseOrderMutable(entity, "反审核");
@@ -471,7 +520,6 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
         if (downstreamMutationGuard != null) {
             downstreamMutationGuard.assertMutable(entity, "删除");
         }
-        assertNoActivePurchaseRefund(entity, "删除");
         assertNoActivePurchasePrepayment(entity, "删除");
         if (invoiceSourceMutationGuard != null) {
             invoiceSourceMutationGuard.assertPurchaseOrderMutable(entity, "删除");
@@ -508,16 +556,6 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
         if (StatusConstants.AUDITED.equals(purchaseOrder.getStatus())
                 && !purchaseOrder.getSettlementCompanyId().equals(requestedSettlementCompanyId)) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "已审核采购订单不允许修改采购结算主体");
-        }
-    }
-
-    private void assertNoActivePurchaseRefund(PurchaseOrder purchaseOrder, String action) {
-        if (purchaseRefundRepository != null
-                && purchaseRefundRepository.existsBySourcePurchaseOrderIdAndDeletedFlagFalse(purchaseOrder.getId())) {
-            throw new BusinessException(
-                    ErrorCode.BUSINESS_ERROR,
-                    "采购订单已存在采购退款单，不能" + action
-            );
         }
     }
 

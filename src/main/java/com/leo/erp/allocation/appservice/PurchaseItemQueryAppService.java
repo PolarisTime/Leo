@@ -22,6 +22,7 @@ public interface PurchaseItemQueryAppService {
             String inboundNo,
             String inboundStatus,
             String purchaseOrderNo,
+            String purchaseOrderStatus,
             Integer quantity,
             BigDecimal weighWeightTon,
             String brand,
@@ -36,8 +37,62 @@ public interface PurchaseItemQueryAppService {
             String settlementCompanyName,
             Long materialId,
             Long warehouseId,
-            String batchNoNormalized
+            String batchNoNormalized,
+            String length,
+            String quantityUnit,
+            BigDecimal pieceWeightTon,
+            Integer piecesPerBundle
     ) {
+        public SourceInboundItemRecord(
+                Long id,
+                String inboundNo,
+                String inboundStatus,
+                String purchaseOrderNo,
+                String purchaseOrderStatus,
+                Integer quantity,
+                BigDecimal weighWeightTon,
+                String brand,
+                String material,
+                String spec,
+                String materialCode,
+                String category,
+                String unit,
+                String warehouseName,
+                String batchNo,
+                Long settlementCompanyId,
+                String settlementCompanyName,
+                Long materialId,
+                Long warehouseId,
+                String batchNoNormalized
+        ) {
+            this(id, inboundNo, inboundStatus, purchaseOrderNo, purchaseOrderStatus, quantity, weighWeightTon,
+                    brand, material, spec, materialCode, category, unit, warehouseName, batchNo,
+                    settlementCompanyId, settlementCompanyName, materialId, warehouseId, batchNoNormalized,
+                    null, null, null, null);
+        }
+
+        public SourceInboundItemRecord(
+                Long id,
+                String inboundNo,
+                String inboundStatus,
+                String purchaseOrderNo,
+                String purchaseOrderStatus,
+                Integer quantity,
+                BigDecimal weighWeightTon,
+                String brand,
+                String material,
+                String spec,
+                String materialCode,
+                String category,
+                String unit,
+                String warehouseName,
+                String batchNo
+        ) {
+            this(id, inboundNo, inboundStatus, purchaseOrderNo, purchaseOrderStatus, quantity, weighWeightTon,
+                    brand, material, spec, materialCode, category, unit, warehouseName, batchNo,
+                    null, null, null, null, null);
+        }
+
         public SourceInboundItemRecord(
                 Long id,
                 String inboundNo,
@@ -56,7 +111,7 @@ public interface PurchaseItemQueryAppService {
                 Long settlementCompanyId,
                 String settlementCompanyName
         ) {
-            this(id, inboundNo, inboundStatus, purchaseOrderNo, quantity, weighWeightTon, brand, material,
+            this(id, inboundNo, inboundStatus, purchaseOrderNo, null, quantity, weighWeightTon, brand, material,
                     spec, materialCode, category, unit, warehouseName, batchNo, settlementCompanyId,
                     settlementCompanyName, null, null, null);
         }
@@ -76,7 +131,7 @@ public interface PurchaseItemQueryAppService {
                 String warehouseName,
                 String batchNo
         ) {
-            this(id, inboundNo, null, purchaseOrderNo, quantity, weighWeightTon, brand, material, spec,
+            this(id, inboundNo, null, purchaseOrderNo, null, quantity, weighWeightTon, brand, material, spec,
                     materialCode, category, unit, warehouseName, batchNo, null, null, null, null, null);
         }
 
@@ -96,7 +151,7 @@ public interface PurchaseItemQueryAppService {
                 String warehouseName,
                 String batchNo
         ) {
-            this(id, inboundNo, inboundStatus, purchaseOrderNo, quantity, weighWeightTon, brand, material, spec,
+            this(id, inboundNo, inboundStatus, purchaseOrderNo, null, quantity, weighWeightTon, brand, material, spec,
                     materialCode, category, unit, warehouseName, batchNo, null, null, null, null, null);
         }
     }
@@ -120,8 +175,37 @@ public interface PurchaseItemQueryAppService {
             String settlementCompanyName,
             Long materialId,
             Long warehouseId,
-            String batchNoNormalized
+            String batchNoNormalized,
+            String length,
+            String quantityUnit,
+            Integer piecesPerBundle
     ) {
+        public SourcePurchaseOrderItemRecord(
+                Long id,
+                Integer quantity,
+                BigDecimal weightTon,
+                BigDecimal pieceWeightTon,
+                String orderNo,
+                String orderStatus,
+                String brand,
+                String material,
+                String spec,
+                String materialCode,
+                String category,
+                String unit,
+                String warehouseName,
+                String batchNo,
+                Long settlementCompanyId,
+                String settlementCompanyName,
+                Long materialId,
+                Long warehouseId,
+                String batchNoNormalized
+        ) {
+            this(id, quantity, weightTon, pieceWeightTon, orderNo, orderStatus, brand, material, spec,
+                    materialCode, category, unit, warehouseName, batchNo, settlementCompanyId,
+                    settlementCompanyName, materialId, warehouseId, batchNoNormalized, null, null, null);
+        }
+
         public SourcePurchaseOrderItemRecord(
                 Long id,
                 Integer quantity,

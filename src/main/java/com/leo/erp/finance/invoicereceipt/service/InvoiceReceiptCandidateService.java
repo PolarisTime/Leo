@@ -37,13 +37,16 @@ public class InvoiceReceiptCandidateService {
 
     private final PurchaseOrderRepository purchaseOrderRepository;
     private final InvoiceReceiptRepository invoiceReceiptRepository;
+    private final InvoiceReceiptCapacityService capacityService;
     private final ResourceRecordAccessGuard resourceRecordAccessGuard;
 
     public InvoiceReceiptCandidateService(PurchaseOrderRepository purchaseOrderRepository,
                                           InvoiceReceiptRepository invoiceReceiptRepository,
+                                          InvoiceReceiptCapacityService capacityService,
                                           ResourceRecordAccessGuard resourceRecordAccessGuard) {
         this.purchaseOrderRepository = purchaseOrderRepository;
         this.invoiceReceiptRepository = invoiceReceiptRepository;
+        this.capacityService = capacityService;
         this.resourceRecordAccessGuard = resourceRecordAccessGuard;
     }
 
@@ -114,11 +117,11 @@ public class InvoiceReceiptCandidateService {
                         currentReceiptId
                 )
         );
-        Map<Long, AllocationProgress> refunds = allocationMap(
-                invoiceReceiptRepository.summarizeAuditedRefundBySourcePurchaseOrderItemIds(itemIds)
+        Map<Long, AllocationProgress> capacities = capacityService.resolveCapacities(
+                orders.stream().flatMap(order -> order.getItems().stream()).toList()
         );
         return orders.stream()
-                .map(order -> toCandidate(order, receipts, refunds))
+                .map(order -> toCandidate(order, receipts, capacities))
                 .filter(candidate -> !candidate.items().isEmpty())
                 .toList();
     }
@@ -141,14 +144,14 @@ public class InvoiceReceiptCandidateService {
     private InvoiceReceiptSourceCandidateResponse toCandidate(
             PurchaseOrder order,
             Map<Long, AllocationProgress> receipts,
-            Map<Long, AllocationProgress> refunds
+            Map<Long, AllocationProgress> capacities
     ) {
         List<InvoiceSourceCandidateItemResponse> items = order.getItems().stream()
                 .filter(item -> item.getId() != null)
                 .map(item -> toCandidateItem(
                         item,
                         receipts.getOrDefault(item.getId(), AllocationProgress.EMPTY),
-                        refunds.getOrDefault(item.getId(), AllocationProgress.EMPTY)
+                        capacities.getOrDefault(item.getId(), AllocationProgress.EMPTY)
                 ))
                 .filter(item -> item.quantity() > 0)
                 .toList();
@@ -178,10 +181,10 @@ public class InvoiceReceiptCandidateService {
     private InvoiceSourceCandidateItemResponse toCandidateItem(
             PurchaseOrderItem item,
             AllocationProgress receipt,
-            AllocationProgress refund
+            AllocationProgress capacity
     ) {
-        int quantity = maxImportableQuantity(item, receipt, refund);
-        ResolvedAllocation allocation = resolveAllocation(item, quantity, receipt, refund);
+        int quantity = maxImportableQuantity(receipt, capacity);
+        ResolvedAllocation allocation = resolveAllocation(quantity, receipt, capacity);
         return new InvoiceSourceCandidateItemResponse(
                 item.getId(),
                 item.getLineNo(),
@@ -207,25 +210,18 @@ public class InvoiceReceiptCandidateService {
         );
     }
 
-    private int maxImportableQuantity(
-            PurchaseOrderItem item,
-            AllocationProgress receipt,
-            AllocationProgress refund
-    ) {
-        int sourceQuantity = item.getQuantity() == null ? 0 : item.getQuantity();
-        long usedQuantity = Math.addExact(receipt.quantity(), refund.quantity());
-        int quantityCapacity = (int) Math.max(0L, sourceQuantity - usedQuantity);
-        BigDecimal sourceWeight = TradeItemCalculator.safeBigDecimal(item.getWeightTon());
-        BigDecimal sourceAmount = TradeItemCalculator.safeBigDecimal(item.getAmount());
+    private int maxImportableQuantity(AllocationProgress receipt, AllocationProgress capacity) {
+        int quantityCapacity = Math.toIntExact(Math.max(0L, capacity.quantity() - receipt.quantity()));
         int low = 0;
         int high = quantityCapacity;
         int result = 0;
         while (low <= high) {
             int candidate = low + (high - low) / 2;
-            ResolvedAllocation allocation = resolveAllocation(item, candidate, receipt, refund);
-            BigDecimal nextWeight = receipt.weightTon().add(refund.weightTon()).add(allocation.weightTon());
-            BigDecimal nextAmount = receipt.amount().add(refund.amount()).add(allocation.amount());
-            if (nextWeight.compareTo(sourceWeight) <= 0 && nextAmount.compareTo(sourceAmount) <= 0) {
+            ResolvedAllocation allocation = resolveAllocation(candidate, receipt, capacity);
+            BigDecimal nextWeight = receipt.weightTon().add(allocation.weightTon());
+            BigDecimal nextAmount = receipt.amount().add(allocation.amount());
+            if (nextWeight.compareTo(capacity.weightTon()) <= 0
+                    && nextAmount.compareTo(capacity.amount()) <= 0) {
                 result = candidate;
                 low = candidate + 1;
             } else {
@@ -236,50 +232,36 @@ public class InvoiceReceiptCandidateService {
     }
 
     private ResolvedAllocation resolveAllocation(
-            PurchaseOrderItem item,
             int requestedQuantity,
             AllocationProgress receipt,
-            AllocationProgress refund
+            AllocationProgress capacity
     ) {
-        long sourceQuantity = item.getQuantity() == null ? 0L : item.getQuantity().longValue();
-        long remainingQuantity = Math.max(sourceQuantity - refund.quantity(), 0L);
-        BigDecimal sourceWeight = TradeItemCalculator.calculateWeightTon(
-                item.getQuantity(),
-                item.getPieceWeightTon()
-        );
-        BigDecimal sourceAmount = TradeItemCalculator.calculateAmount(sourceWeight, item.getUnitPrice());
-        BigDecimal remainingWeight = TradeItemCalculator.scaleWeightTon(
-                sourceWeight.subtract(refund.weightTon()).max(BigDecimal.ZERO)
-        );
-        BigDecimal remainingAmount = TradeItemCalculator.scaleAmount(
-                sourceAmount.subtract(refund.amount()).max(BigDecimal.ZERO)
-        );
-        if (requestedQuantity <= 0 || remainingQuantity <= 0) {
+        if (requestedQuantity <= 0 || capacity.quantity() <= 0L) {
             return ResolvedAllocation.EMPTY;
         }
         boolean hasUnquantifiedReceiptValue = receipt.quantity() == 0L
                 && (receipt.weightTon().compareTo(BigDecimal.ZERO) > 0
                 || receipt.amount().compareTo(BigDecimal.ZERO) > 0);
         if (!hasUnquantifiedReceiptValue
-                && Math.addExact(receipt.quantity(), requestedQuantity) == remainingQuantity) {
+                && Math.addExact(receipt.quantity(), requestedQuantity) == capacity.quantity()) {
             return new ResolvedAllocation(
                     TradeItemCalculator.scaleWeightTon(
-                            remainingWeight.subtract(receipt.weightTon()).max(BigDecimal.ZERO)
+                            capacity.weightTon().subtract(receipt.weightTon()).max(BigDecimal.ZERO)
                     ),
                     TradeItemCalculator.scaleAmount(
-                            remainingAmount.subtract(receipt.amount()).max(BigDecimal.ZERO)
+                            capacity.amount().subtract(receipt.amount()).max(BigDecimal.ZERO)
                     )
             );
         }
         BigDecimal share = BigDecimal.valueOf(requestedQuantity);
-        BigDecimal availableQuantity = BigDecimal.valueOf(remainingQuantity);
+        BigDecimal availableQuantity = BigDecimal.valueOf(capacity.quantity());
         return new ResolvedAllocation(
-                remainingWeight.multiply(share).divide(
+                capacity.weightTon().multiply(share).divide(
                         availableQuantity,
                         PrecisionConstants.WEIGHT_SCALE,
                         PrecisionConstants.DEFAULT_ROUNDING
                 ),
-                remainingAmount.multiply(share).divide(
+                capacity.amount().multiply(share).divide(
                         availableQuantity,
                         PrecisionConstants.AMOUNT_SCALE,
                         PrecisionConstants.DEFAULT_ROUNDING

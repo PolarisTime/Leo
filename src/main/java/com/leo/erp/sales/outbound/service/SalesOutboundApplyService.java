@@ -46,7 +46,6 @@ public class SalesOutboundApplyService {
                     LongSupplier nextIdSupplier) {
         BigDecimal totalWeight = BigDecimal.ZERO;
         BigDecimal totalAmount = BigDecimal.ZERO;
-        String firstLineWarehouseName = null;
         List<SalesOutboundItem> managedItems = entity.getItems();
         List<SalesOutboundItem> items = ManagedEntityItemSupport.syncById(
                 new ArrayList<>(managedItems),
@@ -66,6 +65,7 @@ public class SalesOutboundApplyService {
         LinkedHashSet<Long> customerIds = new LinkedHashSet<>();
         LinkedHashSet<Long> projectIds = new LinkedHashSet<>();
         LinkedHashSet<Long> warehouseIds = new LinkedHashSet<>();
+        LinkedHashSet<String> warehouseNames = new LinkedHashSet<>();
 
         for (int i = 0; i < request.items().size(); i++) {
             SalesOutboundItemRequest source = request.items().get(i);
@@ -96,11 +96,9 @@ public class SalesOutboundApplyService {
                 addIfPresent(projectIds, sourceItem.getSalesOrder().getProjectId());
             }
             addIfPresent(warehouseIds, item.getWarehouseId());
+            addIfPresent(warehouseNames, result.warehouseName());
             totalWeight = totalWeight.add(result.weightTon());
             totalAmount = totalAmount.add(result.amount());
-            if (firstLineWarehouseName == null) {
-                firstLineWarehouseName = result.warehouseName();
-            }
         }
 
         sourceService.assertSourceSalesOrderItemsNotOccupied(sourceSalesOrderItemIds, entity.getId());
@@ -113,8 +111,8 @@ public class SalesOutboundApplyService {
         applyHeaderSettlementCompany(entity, salesSettlementCompanies);
         entity.setCustomerId(resolveSingleIdentity(customerIds, request.customerId(), "客户"));
         entity.setProjectId(resolveSingleIdentity(projectIds, request.projectId(), "项目"));
-        entity.setWarehouseId(resolveSingleIdentity(warehouseIds, request.warehouseId(), "仓库"));
-        entity.setWarehouseName(firstLineWarehouseName == null ? trimToNull(request.warehouseName()) : firstLineWarehouseName);
+        entity.setWarehouseId(resolveWarehouseId(warehouseIds, request.warehouseId()));
+        entity.setWarehouseName(resolveWarehouseName(warehouseIds, warehouseNames, request.warehouseName()));
         entity.setTotalWeight(totalWeight);
         entity.setTotalAmount(totalAmount);
     }
@@ -256,6 +254,29 @@ public class SalesOutboundApplyService {
         if (value != null) {
             values.add(value);
         }
+    }
+
+    private void addIfPresent(LinkedHashSet<String> values, String value) {
+        String normalized = trimToNull(value);
+        if (normalized != null) {
+            values.add(normalized);
+        }
+    }
+
+    private Long resolveWarehouseId(LinkedHashSet<Long> warehouseIds, Long fallback) {
+        if (warehouseIds.size() > 1) {
+            return null;
+        }
+        return warehouseIds.isEmpty() ? fallback : warehouseIds.iterator().next();
+    }
+
+    private String resolveWarehouseName(LinkedHashSet<Long> warehouseIds,
+                                        LinkedHashSet<String> warehouseNames,
+                                        String fallback) {
+        if (warehouseIds.size() > 1 || warehouseNames.size() > 1) {
+            return "多仓库";
+        }
+        return warehouseNames.isEmpty() ? trimToNull(fallback) : warehouseNames.iterator().next();
     }
 
     private Long resolveSingleIdentity(LinkedHashSet<Long> values, Long fallback, String fieldName) {

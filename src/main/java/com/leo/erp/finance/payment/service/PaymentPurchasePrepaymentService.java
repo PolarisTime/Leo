@@ -9,14 +9,11 @@ import com.leo.erp.common.support.TradeItemCalculator;
 import com.leo.erp.finance.payment.domain.entity.Payment;
 import com.leo.erp.finance.payment.domain.entity.PaymentPurposes;
 import com.leo.erp.finance.payment.repository.PaymentRepository;
-import com.leo.erp.finance.supplierrefundreceipt.repository.SupplierRefundReceiptRepository;
 import com.leo.erp.purchase.order.domain.entity.PurchaseOrder;
 import com.leo.erp.purchase.order.domain.entity.PurchaseOrderItem;
 import com.leo.erp.purchase.order.repository.PurchaseOrderItemRepository;
 import com.leo.erp.purchase.order.repository.PurchaseOrderRepository;
-import com.leo.erp.purchase.refund.repository.PurchaseRefundRepository;
 import com.leo.erp.security.permission.ResourceRecordAccessGuard;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -38,40 +35,17 @@ public class PaymentPurchasePrepaymentService {
     private final PaymentRepository paymentRepository;
     private final SourceAllocationLockService sourceAllocationLockService;
     private final ResourceRecordAccessGuard resourceRecordAccessGuard;
-    private final PurchaseRefundRepository purchaseRefundRepository;
-    private final SupplierRefundReceiptRepository supplierRefundReceiptRepository;
 
     public PaymentPurchasePrepaymentService(PurchaseOrderRepository purchaseOrderRepository,
                                             PurchaseOrderItemRepository purchaseOrderItemRepository,
                                             PaymentRepository paymentRepository,
                                             SourceAllocationLockService sourceAllocationLockService,
                                             ResourceRecordAccessGuard resourceRecordAccessGuard) {
-        this(
-                purchaseOrderRepository,
-                purchaseOrderItemRepository,
-                paymentRepository,
-                sourceAllocationLockService,
-                resourceRecordAccessGuard,
-                null,
-                null
-        );
-    }
-
-    @Autowired
-    public PaymentPurchasePrepaymentService(PurchaseOrderRepository purchaseOrderRepository,
-                                            PurchaseOrderItemRepository purchaseOrderItemRepository,
-                                            PaymentRepository paymentRepository,
-                                            SourceAllocationLockService sourceAllocationLockService,
-                                            ResourceRecordAccessGuard resourceRecordAccessGuard,
-                                            PurchaseRefundRepository purchaseRefundRepository,
-                                            SupplierRefundReceiptRepository supplierRefundReceiptRepository) {
         this.purchaseOrderRepository = purchaseOrderRepository;
         this.purchaseOrderItemRepository = purchaseOrderItemRepository;
         this.paymentRepository = paymentRepository;
         this.sourceAllocationLockService = sourceAllocationLockService;
         this.resourceRecordAccessGuard = resourceRecordAccessGuard;
-        this.purchaseRefundRepository = purchaseRefundRepository;
-        this.supplierRefundReceiptRepository = supplierRefundReceiptRepository;
     }
 
     void applySourceSnapshot(Payment payment,
@@ -81,7 +55,7 @@ public class PaymentPurchasePrepaymentService {
         validateNoStatementAllocations(payment);
         PurchaseOrder sourceOrder = lockAndRequireSourceOrder(payment, sourcePurchaseOrderId);
         SourceSnapshot snapshot = sourceSnapshot(sourceOrder);
-        if (StatusConstants.PAID.equals(nextStatus)) {
+        if (StatusConstants.AUDITED.equals(nextStatus)) {
             assertPaidCapacity(payment, sourceOrder.getId(), snapshot.originalAmount(), paymentAmount);
         }
         applySnapshot(payment, sourceOrder, snapshot);
@@ -209,22 +183,6 @@ public class PaymentPurchasePrepaymentService {
         }
     }
 
-    public void assertSourcePurchaseOrderFullyPaid(PurchaseOrder sourceOrder) {
-        if (sourceOrder == null || sourceOrder.getId() == null) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "来源采购订单不存在");
-        }
-        BigDecimal originalAmount = originalAmount(sourceOrder);
-        BigDecimal paidAmount = TradeItemCalculator.scaleAmount(TradeItemCalculator.safeBigDecimal(
-                paymentRepository.sumPaidPurchasePrepaymentAmountExcludingId(sourceOrder.getId(), null)
-        ));
-        if (paidAmount.compareTo(originalAmount) < 0) {
-            throw new BusinessException(
-                    ErrorCode.BUSINESS_ERROR,
-                    "来源采购订单采购预付款未足额支付，不能审核采购退款单"
-            );
-        }
-    }
-
     public void assertNoActivePrepayment(Long sourcePurchaseOrderId, String operationName) {
         if (sourcePurchaseOrderId == null) {
             return;
@@ -237,34 +195,6 @@ public class PaymentPurchasePrepaymentService {
             throw new BusinessException(
                     ErrorCode.BUSINESS_ERROR,
                     "采购订单已存在采购预付款，不能" + operationName
-            );
-        }
-    }
-
-    public void assertRefundLifecycleMutable(Payment payment, String operationName) {
-        if (payment == null
-                || !PaymentPurposes.isPurchasePrepayment(payment.getPaymentPurpose())
-                || payment.getSourcePurchaseOrderId() == null) {
-            return;
-        }
-        Long sourcePurchaseOrderId = payment.getSourcePurchaseOrderId();
-        lockSourcePurchaseOrderItems(sourcePurchaseOrderId);
-        if (purchaseRefundRepository != null
-                && purchaseRefundRepository.existsBySourcePurchaseOrderIdAndDeletedFlagFalse(
-                        sourcePurchaseOrderId
-                )) {
-            throw new BusinessException(
-                    ErrorCode.BUSINESS_ERROR,
-                    "采购预付款来源采购订单已存在采购退款单，不能" + operationName
-            );
-        }
-        if (supplierRefundReceiptRepository != null
-                && supplierRefundReceiptRepository.countActiveBySourcePurchaseOrderId(
-                        sourcePurchaseOrderId
-                ) > 0) {
-            throw new BusinessException(
-                    ErrorCode.BUSINESS_ERROR,
-                    "采购预付款来源采购订单已存在供应商退款到账单，不能" + operationName
             );
         }
     }

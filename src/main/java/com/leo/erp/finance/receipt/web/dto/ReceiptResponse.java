@@ -7,6 +7,11 @@ import java.util.List;
 public record ReceiptResponse(
         Long id,
         String receiptNo,
+        String counterpartyType,
+        Long counterpartyId,
+        String counterpartyCode,
+        String counterpartyName,
+        String receiptPurpose,
         Long customerId,
         String customerCode,
         String customerName,
@@ -24,6 +29,31 @@ public record ReceiptResponse(
         String remark,
         List<ReceiptAllocationResponse> items
 ) {
+    public ReceiptResponse(Long id,
+                           String receiptNo,
+                           Long customerId,
+                           String customerCode,
+                           String customerName,
+                           Long projectId,
+                           String projectName,
+                           Long settlementCompanyId,
+                           String settlementCompanyName,
+                           Long sourceCustomerStatementId,
+                           LocalDate receiptDate,
+                           String payType,
+                           BigDecimal amount,
+                           String status,
+                           boolean deletedFlag,
+                           String operatorName,
+                           String remark,
+                           List<ReceiptAllocationResponse> items) {
+        this(id, receiptNo, "客户", customerId, customerCode, customerName,
+                "CUSTOMER_STATEMENT_SETTLEMENT", customerId, customerCode, customerName,
+                projectId, projectName, settlementCompanyId, settlementCompanyName,
+                sourceCustomerStatementId, receiptDate, payType, amount, status, deletedFlag,
+                operatorName, remark, items);
+    }
+
     public ReceiptResponse(Long id,
                            String receiptNo,
                            String customerCode,

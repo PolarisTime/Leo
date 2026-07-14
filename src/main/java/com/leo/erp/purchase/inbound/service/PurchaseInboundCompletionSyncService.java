@@ -8,18 +8,12 @@ import com.leo.erp.purchase.order.domain.entity.PurchaseOrder;
 import com.leo.erp.purchase.order.domain.entity.PurchaseOrderItem;
 import org.springframework.stereotype.Service;
 
-import java.math.BigDecimal;
-import java.math.RoundingMode;
-import java.util.ArrayList;
-import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
 @Service
 public class PurchaseInboundCompletionSyncService {
-
-    private static final BigDecimal FULFILLMENT_TOLERANCE = new BigDecimal("0.05");
 
     private final PurchaseInboundRepository repository;
     private final PurchaseInboundSourceValidator sourceValidator;
@@ -38,30 +32,6 @@ public class PurchaseInboundCompletionSyncService {
             return false;
         }
         return isFullyAllocated(inbound);
-    }
-
-    public void synchronizeAfterPurchaseRefundStatusChange(Collection<Long> sourcePurchaseOrderItemIds) {
-        List<Long> affectedSourceItemIds = distinctSourceItemIds(sourcePurchaseOrderItemIds);
-        if (affectedSourceItemIds.isEmpty()) {
-            return;
-        }
-        List<PurchaseInbound> changedInbounds = new ArrayList<>();
-        for (PurchaseInbound inbound : repository.findAllActiveBySourcePurchaseOrderItemIds(affectedSourceItemIds)) {
-            if (!StatusConstants.AUDITED.equals(inbound.getStatus())
-                    && !StatusConstants.INBOUND_COMPLETED.equals(inbound.getStatus())) {
-                continue;
-            }
-            String nextStatus = isFullyAllocated(inbound)
-                    ? StatusConstants.INBOUND_COMPLETED
-                    : StatusConstants.AUDITED;
-            if (!nextStatus.equals(inbound.getStatus())) {
-                inbound.setStatus(nextStatus);
-                changedInbounds.add(inbound);
-            }
-        }
-        if (!changedInbounds.isEmpty()) {
-            repository.saveAll(changedInbounds);
-        }
     }
 
     private boolean isFullyAllocated(PurchaseInbound inbound) {
@@ -92,7 +62,7 @@ public class PurchaseInboundCompletionSyncService {
             int expected = sourceItem.getQuantity() != null ? sourceItem.getQuantity() : 0;
             int actual = allocatedQuantityMap.getOrDefault(sourceItemId, 0)
                     + currentInboundQuantityMap.getOrDefault(sourceItemId, 0);
-            return quantityWithinTolerance(expected, actual);
+            return expected == actual;
         });
     }
 
@@ -111,16 +81,6 @@ public class PurchaseInboundCompletionSyncService {
     private List<Long> sourcePurchaseOrderItemIds(PurchaseInbound inbound) {
         return inbound.getItems().stream()
                 .map(PurchaseInboundItem::getSourcePurchaseOrderItemId)
-                .filter(id -> id != null)
-                .distinct()
-                .toList();
-    }
-
-    private List<Long> distinctSourceItemIds(Collection<Long> sourcePurchaseOrderItemIds) {
-        if (sourcePurchaseOrderItemIds == null) {
-            return List.of();
-        }
-        return sourcePurchaseOrderItemIds.stream()
                 .filter(id -> id != null)
                 .distinct()
                 .toList();
@@ -156,7 +116,7 @@ public class PurchaseInboundCompletionSyncService {
         boolean allFulfilled = purchaseOrder.getItems().stream().allMatch(item -> {
             int expected = item.getQuantity() != null ? item.getQuantity() : 0;
             int actual = receivedQtyByItemId.getOrDefault(item.getId(), 0);
-            return quantityWithinTolerance(expected, actual);
+            return expected == actual;
         });
 
         purchaseOrder.setStatus(allInboundCompleted && allFulfilled
@@ -164,14 +124,4 @@ public class PurchaseInboundCompletionSyncService {
                 : StatusConstants.AUDITED);
     }
 
-    private boolean quantityWithinTolerance(int expected, int actual) {
-        if (expected == 0) {
-            return actual == 0;
-        }
-        BigDecimal ratio = BigDecimal.valueOf(actual)
-                .divide(BigDecimal.valueOf(expected), 4, RoundingMode.HALF_UP);
-        BigDecimal lowerBound = BigDecimal.ONE.subtract(FULFILLMENT_TOLERANCE);
-        BigDecimal upperBound = BigDecimal.ONE.add(FULFILLMENT_TOLERANCE);
-        return ratio.compareTo(lowerBound) >= 0 && ratio.compareTo(upperBound) <= 0;
-    }
 }

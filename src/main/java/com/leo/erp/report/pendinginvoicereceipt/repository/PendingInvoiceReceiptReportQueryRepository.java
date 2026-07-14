@@ -43,33 +43,41 @@ public class PendingInvoiceReceiptReportQueryRepository {
                   AND item.source_purchase_order_item_id IS NOT NULL
                 GROUP BY item.source_purchase_order_item_id
             ),
-            audited_refund AS (
+            effective_inbound AS (
                 SELECT
                     item.source_purchase_order_item_id,
-                    SUM(item.quantity) AS refunded_quantity,
-                    SUM(item.weight_ton) AS refunded_weight_ton,
-                    SUM(item.amount) AS refunded_amount
-                FROM po_purchase_refund refund
-                JOIN po_purchase_refund_item item ON item.refund_id = refund.id
-                WHERE refund.deleted_flag = FALSE
-                  AND refund.status = :auditedRefundStatus
+                    SUM(item.quantity) AS inbound_quantity,
+                    SUM(COALESCE(item.weigh_weight_ton, item.weight_ton)) AS inbound_weight_ton,
+                    SUM(item.amount + COALESCE(item.weight_adjustment_amount, 0)) AS inbound_amount
+                FROM po_purchase_inbound inbound
+                JOIN po_purchase_inbound_item item ON item.inbound_id = inbound.id
+                WHERE inbound.deleted_flag = FALSE
+                  AND inbound.status IN (:effectiveInboundStatuses)
+                  AND item.source_purchase_order_item_id IS NOT NULL
                 GROUP BY item.source_purchase_order_item_id
             ),
-            original_order_line AS (
+            invoice_capacity AS (
                 SELECT
                     item.id AS item_id,
-                    ROUND(
-                        COALESCE(item.quantity, 0)::NUMERIC
-                            * COALESCE(item.piece_weight_ton, 0),
-                        8
-                    ) AS weight_ton,
-                    ROUND(
-                        COALESCE(item.quantity, 0)::NUMERIC
-                            * COALESCE(item.piece_weight_ton, 0)
-                            * COALESCE(item.unit_price, 0),
-                        2
-                    ) AS amount
+                    CASE
+                        WHEN purchase_order.status = :purchaseCompletedStatus
+                            THEN COALESCE(inbound.inbound_quantity, 0)
+                        ELSE COALESCE(item.quantity, 0)
+                    END AS quantity,
+                    CASE
+                        WHEN purchase_order.status = :purchaseCompletedStatus
+                            THEN COALESCE(inbound.inbound_weight_ton, 0)
+                        ELSE COALESCE(item.weight_ton, 0)
+                    END AS weight_ton,
+                    CASE
+                        WHEN purchase_order.status = :purchaseCompletedStatus
+                            THEN COALESCE(inbound.inbound_amount, 0)
+                        ELSE COALESCE(item.amount, 0)
+                    END AS amount
                 FROM po_purchase_order_item item
+                JOIN po_purchase_order purchase_order ON purchase_order.id = item.order_id
+                LEFT JOIN effective_inbound inbound
+                    ON inbound.source_purchase_order_item_id = item.id
             ),
             pending_report AS (
                 SELECT
@@ -85,43 +93,32 @@ public class PendingInvoiceReceiptReportQueryRepository {
                     item.category,
                     item.spec,
                     item.length,
-                    item.quantity AS order_quantity,
+                    capacity.quantity AS order_quantity,
                     COALESCE(received.received_invoice_quantity, 0) AS received_invoice_quantity,
-                    COALESCE(refunded.refunded_quantity, 0) AS refunded_quantity,
                     GREATEST(
-                        item.quantity
-                            - COALESCE(received.received_invoice_quantity, 0)
-                            - COALESCE(refunded.refunded_quantity, 0),
+                        capacity.quantity - COALESCE(received.received_invoice_quantity, 0),
                         0
                     ) AS pending_invoice_quantity,
                     item.quantity_unit,
-                    original_line.weight_ton AS order_weight_ton,
+                    capacity.weight_ton AS order_weight_ton,
                     COALESCE(received.received_invoice_weight_ton, 0) AS received_invoice_weight_ton,
-                    COALESCE(refunded.refunded_weight_ton, 0) AS refunded_weight_ton,
                     GREATEST(
-                        original_line.weight_ton
-                            - COALESCE(received.received_invoice_weight_ton, 0)
-                            - COALESCE(refunded.refunded_weight_ton, 0),
+                        capacity.weight_ton - COALESCE(received.received_invoice_weight_ton, 0),
                         CAST(0 AS NUMERIC)
                     ) AS pending_invoice_weight_ton,
                     item.unit_price,
-                    original_line.amount AS order_amount,
+                    capacity.amount AS order_amount,
                     COALESCE(received.received_invoice_amount, 0) AS received_invoice_amount,
-                    COALESCE(refunded.refunded_amount, 0) AS refunded_amount,
                     GREATEST(
-                        original_line.amount
-                            - COALESCE(received.received_invoice_amount, 0)
-                            - COALESCE(refunded.refunded_amount, 0),
+                        capacity.amount - COALESCE(received.received_invoice_amount, 0),
                         CAST(0 AS NUMERIC)
                     ) AS pending_invoice_amount,
                     :pendingStatus AS status
                 FROM po_purchase_order purchase_order
                 JOIN po_purchase_order_item item ON item.order_id = purchase_order.id
-                JOIN original_order_line original_line ON original_line.item_id = item.id
+                JOIN invoice_capacity capacity ON capacity.item_id = item.id
                 LEFT JOIN received_invoice received
                     ON received.source_purchase_order_item_id = item.id
-                LEFT JOIN audited_refund refunded
-                    ON refunded.source_purchase_order_item_id = item.id
                 WHERE purchase_order.deleted_flag = FALSE
                   AND purchase_order.status IN (:purchaseOrderStatuses)
                 %s
@@ -143,17 +140,14 @@ public class PendingInvoiceReceiptReportQueryRepository {
                     rs.getString("length"),
                     rs.getInt("order_quantity"),
                     rs.getInt("received_invoice_quantity"),
-                    rs.getInt("refunded_quantity"),
                     rs.getInt("pending_invoice_quantity"),
                     rs.getString("quantity_unit"),
                     rs.getBigDecimal("order_weight_ton"),
                     rs.getBigDecimal("received_invoice_weight_ton"),
-                    rs.getBigDecimal("refunded_weight_ton"),
                     rs.getBigDecimal("pending_invoice_weight_ton"),
                     rs.getBigDecimal("unit_price"),
                     rs.getBigDecimal("order_amount"),
                     rs.getBigDecimal("received_invoice_amount"),
-                    rs.getBigDecimal("refunded_amount"),
                     rs.getBigDecimal("pending_invoice_amount"),
                     rs.getString("status")
             );
@@ -198,17 +192,14 @@ public class PendingInvoiceReceiptReportQueryRepository {
                     report.length,
                     report.order_quantity,
                     report.received_invoice_quantity,
-                    report.refunded_quantity,
                     report.pending_invoice_quantity,
                     report.quantity_unit,
                     report.order_weight_ton,
                     report.received_invoice_weight_ton,
-                    report.refunded_weight_ton,
                     report.pending_invoice_weight_ton,
                     report.unit_price,
                     report.order_amount,
                     report.received_invoice_amount,
-                    report.refunded_amount,
                     report.pending_invoice_amount,
                     report.status
                 FROM pending_report report
@@ -224,7 +215,11 @@ public class PendingInvoiceReceiptReportQueryRepository {
     private MapSqlParameterSource baseParameters(PageQuery query) {
         return new MapSqlParameterSource()
                 .addValue("receivedStatus", StatusConstants.INVOICE_RECEIVED)
-                .addValue("auditedRefundStatus", StatusConstants.AUDITED)
+                .addValue("effectiveInboundStatuses", List.of(
+                        StatusConstants.AUDITED,
+                        StatusConstants.INBOUND_COMPLETED
+                ))
+                .addValue("purchaseCompletedStatus", StatusConstants.PURCHASE_COMPLETED)
                 .addValue("purchaseOrderStatuses", StatusConstants.INVOICEABLE_PURCHASE_ORDER_STATUS)
                 .addValue("pendingStatus", PENDING_STATUS)
                 .addValue("limit", query.size())

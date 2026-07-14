@@ -70,6 +70,7 @@ public class PaymentPrepaymentAllocationService {
             Long paymentId,
             PaymentPrepaymentAllocationUpdateRequest request
     ) {
+        assertLegacyAllocationWriteDisabled();
         Payment payment = paymentRepository.findByIdAndDeletedFlagFalseForUpdate(paymentId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "付款单不存在"));
         DataScopeContext.assertCanAccess(payment);
@@ -91,12 +92,19 @@ public class PaymentPrepaymentAllocationService {
         return responseAssembler.toResponses(saved);
     }
 
+    private void assertLegacyAllocationWriteDisabled() {
+        throw new BusinessException(
+                ErrorCode.BUSINESS_ERROR,
+                "采购预付款核销已停用，历史核销明细仅供查询"
+        );
+    }
+
     private void assertEligiblePayment(Payment payment) {
         if (!PaymentPurposes.isPurchasePrepayment(payment.getPaymentPurpose())) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "仅采购预付款支持后续分配供应商对账单");
         }
-        if (!StatusConstants.PAID.equals(payment.getStatus())) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "仅已付款的采购预付款支持分配供应商对账单");
+        if (!StatusConstants.AUDITED.equals(payment.getStatus())) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "仅已审核的采购预付款支持分配供应商对账单");
         }
         if (!PaymentAllocationService.SUPPLIER_PAYMENT_TYPE.equals(payment.getBusinessType())) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "采购预付款业务类型必须为供应商");
@@ -175,7 +183,7 @@ public class PaymentPrepaymentAllocationService {
                             .sumAllocatedAmountBySourceStatementIdAndBusinessTypeAndStatusExcludingPaymentId(
                                     statement.getId(),
                                     PaymentAllocationService.SUPPLIER_PAYMENT_TYPE,
-                                    StatusConstants.PAID,
+                                    StatusConstants.AUDITED,
                                     payment.getId()
                             )
             );

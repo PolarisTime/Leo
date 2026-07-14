@@ -79,7 +79,7 @@ class PrintRecordDataProvider {
         if (!source.productPrintItems()) {
             String amountColumn = source.allocationAmountColumn().isBlank() ? "''" : source.allocationAmountColumn();
             return "SELECT id, " + source.itemFkColumn() + " AS record_id, "
-                    + "'' AS brand, '' AS category, '' AS settlement_mode, '' AS material, '' AS spec, "
+                    + "'' AS brand, '' AS category, '' AS settlement_mode, '' AS material, '' AS spec, '' AS length, "
                     + "'' AS quantity, '' AS piece_weight_ton, '' AS weight_ton, '' AS unit_price, "
                     + amountColumn + " AS amount "
                     + "FROM " + source.itemTableName()
@@ -89,7 +89,7 @@ class PrintRecordDataProvider {
         String unitPrice = source.printItemAmount() ? "unit_price" : "''";
         String amount = source.printItemAmount() ? "amount" : "''";
         String settlementMode = source.settlementModeColumn().isBlank() ? "''" : source.settlementModeColumn();
-        return "SELECT id, " + source.itemFkColumn() + " AS record_id, brand, category, material, spec, "
+        return "SELECT id, " + source.itemFkColumn() + " AS record_id, brand, category, material, spec, length, "
                 + settlementMode + " AS settlement_mode, "
                 + "quantity, piece_weight_ton, weight_ton, " + unitPrice + " AS unit_price, " + amount + " AS amount "
                 + "FROM " + source.itemTableName()
@@ -107,6 +107,7 @@ class PrintRecordDataProvider {
                 formatter.value(item, "settlementMode"),
                 formatter.value(item, "material"),
                 formatter.value(item, "spec"),
+                formatter.value(item, "length"),
                 formatter.value(item, "quantity"),
                 formatter.value(item, "pieceWeightTon"),
                 formatter.value(item, "weightTon"),

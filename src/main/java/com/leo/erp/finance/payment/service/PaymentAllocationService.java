@@ -25,7 +25,7 @@ public class PaymentAllocationService {
 
     static final String SUPPLIER_PAYMENT_TYPE = "供应商";
     static final String FREIGHT_PAYMENT_TYPE = "物流商";
-    static final String PAYMENT_STATUS_SETTLED = StatusConstants.PAID;
+    static final String PAYMENT_STATUS_SETTLED = StatusConstants.AUDITED;
 
     private final PaymentStatementAllocationValidator statementAllocationValidator;
 
@@ -42,7 +42,7 @@ public class PaymentAllocationService {
         List<PaymentAllocationRequest> allocationRequests = normalizeAllocationRequests(request);
         if (!supportsSettlement(request.businessType())) {
             if (PAYMENT_STATUS_SETTLED.equals(nextStatus)) {
-                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "已付款状态必须关联供应商或物流商对账单核销");
+                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "已审核状态必须关联供应商或物流商对账单核销");
             }
             if (!allocationRequests.isEmpty()) {
                 throw new BusinessException(ErrorCode.VALIDATION_ERROR, "当前业务类型不支持对账单核销");
@@ -117,7 +117,7 @@ public class PaymentAllocationService {
     }
 
     void validateExistingAllocationsForSettlement(Payment entity, String nextStatus) {
-        if (!PAYMENT_STATUS_SETTLED.equals(nextStatus)) {
+        if (!StatusConstants.AUDITED.equals(nextStatus)) {
             return;
         }
         assertBusinessTypeSupportsSettlement(entity.getBusinessType());
@@ -307,7 +307,7 @@ public class PaymentAllocationService {
         if (supportsSettlement(businessType)) {
             return;
         }
-        throw new BusinessException(ErrorCode.BUSINESS_ERROR, "已付款状态必须关联供应商或物流商对账单核销");
+        throw new BusinessException(ErrorCode.BUSINESS_ERROR, "已审核状态必须关联供应商或物流商对账单核销");
     }
 
     private void assertSettlementAllocationsComplete(String nextStatus,
@@ -316,11 +316,11 @@ public class PaymentAllocationService {
                                                      BigDecimal paymentAmount) {
         SettlementAllocationRule.requireCompleteForSettledStatus(
                 nextStatus,
-                PAYMENT_STATUS_SETTLED,
+                StatusConstants.AUDITED,
                 allocationEmpty,
                 totalAllocatedAmount,
                 paymentAmount,
-                "已付款状态必须填写核销明细",
+                "已审核状态必须填写核销明细",
                 "付款金额必须等于核销金额合计"
         );
     }

@@ -29,7 +29,7 @@ public record PaymentRequest(
         @jakarta.validation.constraints.NotBlank(message = "付款方式不能为空")
         String payType,
         @NotNull(message = "金额不能为空")
-        @DecimalMin(value = "0.00", message = "金额不能小于0")
+        @DecimalMin(value = "0.00", inclusive = false, message = "金额必须大于0")
         BigDecimal amount,
         @jakarta.validation.constraints.NotBlank(message = "状态不能为空")
         String status,

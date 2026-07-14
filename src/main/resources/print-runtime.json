@@ -142,38 +142,7 @@
     "adaptiveFields": [
       {
         "sourceField": "projectName",
-        "rules": [
-          {
-            "minDisplayWidth": 160,
-            "values": {
-              "projectNameMultiline": "true",
-              "projectNameTop": "62",
-              "projectNameHeight": "58",
-              "projectNameFontSize": "9",
-              "projectNameWordBreak": "1"
-            }
-          },
-          {
-            "minDisplayWidth": 92,
-            "values": {
-              "projectNameMultiline": "true",
-              "projectNameTop": "70",
-              "projectNameHeight": "54",
-              "projectNameFontSize": "10",
-              "projectNameWordBreak": "1"
-            }
-          },
-          {
-            "minDisplayWidth": 56,
-            "values": {
-              "projectNameMultiline": "true",
-              "projectNameTop": "78",
-              "projectNameHeight": "42",
-              "projectNameFontSize": "12",
-              "projectNameWordBreak": "1"
-            }
-          }
-        ],
+        "rules": [],
         "defaultValues": {
           "projectNameMultiline": "",
           "projectNameTop": "90",

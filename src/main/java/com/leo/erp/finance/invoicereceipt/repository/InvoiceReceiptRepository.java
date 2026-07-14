@@ -40,22 +40,6 @@ public interface InvoiceReceiptRepository extends JpaRepository<InvoiceReceipt, 
     );
 
     @Query("""
-            select item.sourcePurchaseOrderItemId as sourcePurchaseOrderItemId,
-                   coalesce(sum(item.quantity), 0) as totalQuantity,
-                   coalesce(sum(item.weightTon), 0) as totalWeightTon,
-                   coalesce(sum(item.amount), 0) as totalAmount
-            from PurchaseRefundItem item
-            join item.purchaseRefund refund
-            where refund.deletedFlag = false
-              and refund.status = '已审核'
-              and item.sourcePurchaseOrderItemId in :sourceItemIds
-            group by item.sourcePurchaseOrderItemId
-            """)
-    List<SourceAllocationSummary> summarizeAuditedRefundBySourcePurchaseOrderItemIds(
-            @Param("sourceItemIds") Collection<Long> sourceItemIds
-    );
-
-    @Query("""
             select distinct item.sourcePurchaseOrderItemId
             from InvoiceReceipt receipt
             join receipt.items item

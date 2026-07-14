@@ -18,8 +18,8 @@ import java.math.BigDecimal;
 @Service
 public class StatementSettlementSyncService {
 
-    public static final String PAYMENT_STATUS_SETTLED = StatusConstants.PAID;
-    public static final String RECEIPT_STATUS_SETTLED = StatusConstants.RECEIVED;
+    public static final String PAYMENT_STATUS_SETTLED = StatusConstants.AUDITED;
+    public static final String RECEIPT_STATUS_SETTLED = StatusConstants.AUDITED;
     private static final String SUPPLIER_PAYMENT_TYPE = "供应商";
     private static final String FREIGHT_PAYMENT_TYPE = "物流商";
 

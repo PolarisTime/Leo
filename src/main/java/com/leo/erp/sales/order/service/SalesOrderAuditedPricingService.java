@@ -25,8 +25,12 @@ public class SalesOrderAuditedPricingService {
     boolean isAuditedPricingUpdate(SalesOrder entity, SalesOrderRequest request) {
         String currentStatus = normalize(entity.getStatus());
         return isProtectedPricingStatus(currentStatus)
-                && currentStatus.equals(normalize(request.status()))
+                && requestedStatusMatches(currentStatus, normalize(request.status()))
                 && matchesAuditedPricingUpdate(entity, request);
+    }
+
+    private boolean requestedStatusMatches(String currentStatus, String requestedStatus) {
+        return currentStatus.equals(requestedStatus);
     }
 
     private boolean isProtectedPricingStatus(String status) {
@@ -39,6 +43,7 @@ public class SalesOrderAuditedPricingService {
             return false;
         }
         if (!normalize(entity.getOrderNo()).equals(normalize(request.orderNo()))
+                || !normalize(entity.getSalesMode()).equals(normalize(request.salesMode()))
                 || !normalize(entity.getPurchaseInboundNo()).equals(normalize(request.purchaseInboundNo()))
                 || !normalize(entity.getPurchaseOrderNo()).equals(normalize(request.purchaseOrderNo()))
                 || !normalize(entity.getCustomerCode()).equals(normalize(request.customerCode()))
@@ -64,9 +69,6 @@ public class SalesOrderAuditedPricingService {
     }
 
     void applyAuditedPricingUpdate(SalesOrder entity, SalesOrderRequest request) {
-        boolean completesDeliveryVerification = StatusConstants.DELIVERY_VERIFICATION.equals(
-                normalize(entity.getStatus())
-        );
         Map<Long, SalesOrderItemRequest> requestItemMap = request.items().stream()
                 .collect(java.util.stream.Collectors.toMap(SalesOrderItemRequest::id, item -> item));
 
@@ -82,9 +84,6 @@ public class SalesOrderAuditedPricingService {
             totalAmount = totalAmount.add(amount);
         }
         entity.setTotalAmount(TradeItemCalculator.scaleAmount(totalAmount));
-        if (completesDeliveryVerification) {
-            entity.setStatus(StatusConstants.SALES_COMPLETED);
-        }
         syncAuditedSalesOutboundPricing(entity);
     }
 

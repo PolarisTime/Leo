@@ -10,6 +10,8 @@ import com.leo.erp.logistics.bill.web.dto.FreightBillItemRequest;
 import com.leo.erp.logistics.bill.web.dto.FreightBillRequest;
 import com.leo.erp.sales.outbound.domain.entity.SalesOutboundItem;
 import com.leo.erp.sales.outbound.domain.entity.SalesOutbound;
+import com.leo.erp.sales.order.domain.entity.SalesOrder;
+import com.leo.erp.sales.order.domain.entity.SalesOrderItem;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -93,6 +95,62 @@ public class FreightBillApplyService {
         entity.setProjectName(resolveHeaderLabel(projectNames, "多项目"));
         entity.setTotalWeight(totalWeight);
         entity.setTotalFreight(totalWeight.multiply(request.unitPrice()).setScale(PrecisionConstants.AMOUNT_SCALE, PrecisionConstants.DEFAULT_ROUNDING));
+    }
+
+    void applySalesOrderItems(FreightBill entity,
+                              FreightBillRequest request,
+                              FreightBillSalesOrderSourceService.SourceContext sourceContext,
+                              LongSupplier nextId) {
+        SalesOrder sourceOrder = sourceContext.order();
+        BigDecimal totalWeight = BigDecimal.ZERO;
+        List<FreightBillItem> items = ManagedEntityItemSupport.syncById(
+                entity.getItems(),
+                request.items(),
+                FreightBillItem::getId,
+                FreightBillItemRequest::id,
+                FreightBillItem::new,
+                nextId,
+                FreightBillItem::setId
+        );
+        for (int index = 0; index < request.items().size(); index++) {
+            FreightBillItemRequest requested = request.items().get(index);
+            SalesOrderItem source = sourceContext.itemAt(index + 1);
+            FreightBillItem item = items.get(index);
+            item.setFreightBill(entity);
+            item.setLineNo(index + 1);
+            item.setSourceNo(sourceOrder.getOrderNo());
+            item.setSourceSalesOutboundItemId(null);
+            item.setSourceSalesOrderItemId(source.getId());
+            item.setSettlementCompanyId(source.getSettlementCompanyId());
+            item.setSettlementCompanyName(source.getSettlementCompanyName());
+            item.setCustomerId(sourceOrder.getCustomerId());
+            item.setCustomerName(sourceOrder.getCustomerName());
+            item.setProjectId(sourceOrder.getProjectId());
+            item.setProjectName(sourceOrder.getProjectName());
+            item.setMaterialId(source.getMaterialId());
+            item.setMaterialCode(source.getMaterialCode());
+            item.setMaterialName(resolveMaterialName(requested));
+            item.setBrand(source.getBrand());
+            item.setCategory(source.getCategory());
+            item.setMaterial(source.getMaterial());
+            item.setSpec(source.getSpec());
+            item.setLength(source.getLength());
+            item.setQuantity(source.getQuantity());
+            item.setQuantityUnit(TradeItemCalculator.normalizeQuantityUnit(source.getQuantityUnit()));
+            item.setPieceWeightTon(TradeItemCalculator.scaleWeightTon(source.getPieceWeightTon()));
+            item.setPiecesPerBundle(source.getPiecesPerBundle());
+            item.setBatchNo(source.getBatchNo());
+            item.setWeightTon(TradeItemCalculator.scaleWeightTon(source.getWeightTon()));
+            item.setWarehouseId(source.getWarehouseId());
+            item.setWarehouseName(source.getWarehouseName());
+            totalWeight = totalWeight.add(item.getWeightTon());
+        }
+        entity.getItems().sort(java.util.Comparator.comparing(FreightBillItem::getLineNo));
+        entity.setCustomerName(sourceOrder.getCustomerName());
+        entity.setProjectName(sourceOrder.getProjectName());
+        entity.setTotalWeight(TradeItemCalculator.scaleWeightTon(totalWeight));
+        entity.setTotalFreight(totalWeight.multiply(request.unitPrice())
+                .setScale(PrecisionConstants.AMOUNT_SCALE, PrecisionConstants.DEFAULT_ROUNDING));
     }
 
     private String resolveHeaderLabel(Set<String> values, String multipleLabel) {

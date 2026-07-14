@@ -7,9 +7,12 @@ import com.leo.erp.common.api.PageResponse;
 import com.leo.erp.common.web.BindPageQuery;
 import com.leo.erp.common.web.dto.StatusUpdateRequest;
 import com.leo.erp.purchase.inbound.service.PurchaseInboundService;
+import com.leo.erp.purchase.inbound.service.PurchaseInboundAuditCommandService;
 import com.leo.erp.purchase.order.web.dto.PieceWeightResponse;
 import com.leo.erp.purchase.inbound.web.dto.PurchaseInboundRequest;
 import com.leo.erp.purchase.inbound.web.dto.PurchaseInboundResponse;
+import com.leo.erp.purchase.inbound.web.dto.PurchaseInboundAuditRequest;
+import com.leo.erp.purchase.inbound.web.dto.PurchaseInboundAuditResponse;
 import com.leo.erp.security.permission.RequiresPermission;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -26,6 +29,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.beans.factory.annotation.Autowired;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -37,9 +41,19 @@ import java.util.List;
 public class PurchaseInboundController {
 
     private final PurchaseInboundService service;
+    private final PurchaseInboundAuditCommandService auditCommandService;
 
     public PurchaseInboundController(PurchaseInboundService service) {
+        this(service, null);
+    }
+
+    @Autowired
+    public PurchaseInboundController(
+            PurchaseInboundService service,
+            PurchaseInboundAuditCommandService auditCommandService
+    ) {
         this.service = service;
+        this.auditCommandService = auditCommandService;
     }
 
     @GetMapping("/search")
@@ -102,6 +116,19 @@ public class PurchaseInboundController {
     @Operation(summary = "更新采购入库状态")
     public ApiResponse<PurchaseInboundResponse> updateStatus(@PathVariable Long id, @Valid @RequestBody StatusUpdateRequest request) {
         return ApiResponse.success("状态更新成功", service.updateStatus(id, request.status()));
+    }
+
+    @PostMapping("/{id}/audit")
+    @RequiresPermission(resource = "purchase-inbound", action = "audit")
+    @Operation(summary = "审核采购入库并可同时完成采购")
+    public ApiResponse<PurchaseInboundAuditResponse> audit(
+            @PathVariable Long id,
+            @Valid @RequestBody PurchaseInboundAuditRequest request
+    ) {
+        if (auditCommandService == null) {
+            throw new IllegalStateException("采购入库审核命令服务不可用");
+        }
+        return ApiResponse.success("采购入库审核成功", auditCommandService.audit(id, request));
     }
 
     @DeleteMapping("/{id}")

@@ -23,8 +23,60 @@ public record FreightBillResponse(
         String status,
         boolean deletedFlag,
         String remark,
-        List<FreightBillItemResponse> items
+        List<FreightBillItemResponse> items,
+        Long sourceSalesOrderId,
+        Long sourceSalesOutboundId,
+        String sourceSalesOutboundNo
 ) {
+    public FreightBillResponse(Long id,
+                               String billNo,
+                               Long carrierId,
+                               String carrierCode,
+                               String carrierName,
+                               Long settlementCompanyId,
+                               String settlementCompanyName,
+                               Long vehicleId,
+                               String vehiclePlate,
+                               String customerName,
+                               String projectName,
+                               LocalDate billTime,
+                               BigDecimal unitPrice,
+                               BigDecimal totalWeight,
+                               BigDecimal totalFreight,
+                               String status,
+                               boolean deletedFlag,
+                               String remark,
+                               List<FreightBillItemResponse> items,
+                               Long sourceSalesOrderId) {
+        this(id, billNo, carrierId, carrierCode, carrierName, settlementCompanyId, settlementCompanyName, vehicleId,
+                vehiclePlate, customerName, projectName, billTime, unitPrice, totalWeight, totalFreight, status,
+                deletedFlag, remark, items, sourceSalesOrderId, null, null);
+    }
+
+    public FreightBillResponse(Long id,
+                               String billNo,
+                               Long carrierId,
+                               String carrierCode,
+                               String carrierName,
+                               Long settlementCompanyId,
+                               String settlementCompanyName,
+                               Long vehicleId,
+                               String vehiclePlate,
+                               String customerName,
+                               String projectName,
+                               LocalDate billTime,
+                               BigDecimal unitPrice,
+                               BigDecimal totalWeight,
+                               BigDecimal totalFreight,
+                               String status,
+                               boolean deletedFlag,
+                               String remark,
+                               List<FreightBillItemResponse> items) {
+        this(id, billNo, carrierId, carrierCode, carrierName, settlementCompanyId, settlementCompanyName, vehicleId,
+                vehiclePlate, customerName, projectName, billTime, unitPrice, totalWeight, totalFreight, status,
+                deletedFlag, remark, items, null, null, null);
+    }
+
     public FreightBillResponse(Long id,
                                String billNo,
                                String carrierCode,

@@ -22,8 +22,32 @@ public record SalesOutboundResponse(
         String status,
         boolean deletedFlag,
         String remark,
-        List<SalesOutboundItemResponse> items
+        List<SalesOutboundItemResponse> items,
+        Long sourceFreightBillId
 ) {
+    public SalesOutboundResponse(Long id,
+                                 String outboundNo,
+                                 String salesOrderNo,
+                                 Long customerId,
+                                 String customerName,
+                                 Long projectId,
+                                 String projectName,
+                                 Long warehouseId,
+                                 String warehouseName,
+                                 Long settlementCompanyId,
+                                 String settlementCompanyName,
+                                 LocalDate outboundDate,
+                                 BigDecimal totalWeight,
+                                 BigDecimal totalAmount,
+                                 String status,
+                                 boolean deletedFlag,
+                                 String remark,
+                                 List<SalesOutboundItemResponse> items) {
+        this(id, outboundNo, salesOrderNo, customerId, customerName, projectId, projectName, warehouseId,
+                warehouseName, settlementCompanyId, settlementCompanyName, outboundDate, totalWeight, totalAmount,
+                status, deletedFlag, remark, items, null);
+    }
+
     public SalesOutboundResponse(Long id,
                                  String outboundNo,
                                  String salesOrderNo,

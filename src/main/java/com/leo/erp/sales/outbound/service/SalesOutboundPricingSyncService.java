@@ -30,8 +30,8 @@ public class SalesOutboundPricingSyncService implements SalesOrderOutboundPricin
             return;
         }
 
-        List<SalesOutbound> outbounds = salesOutboundRepository.findAllByStatusAndSourceSalesOrderItemIds(
-                StatusConstants.AUDITED,
+        List<SalesOutbound> outbounds = salesOutboundRepository.findAllByStatusesAndSourceSalesOrderItemIds(
+                List.of(StatusConstants.DRAFT, StatusConstants.AUDITED),
                 sourceSalesOrderItemIds
         );
         if (outbounds.isEmpty()) {

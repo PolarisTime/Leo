@@ -47,7 +47,6 @@ public class ModuleCatalog {
         modules.put("department", "部门");
         modules.put("purchase-order", "采购订单");
         modules.put("purchase-inbound", "采购入库");
-        modules.put("purchase-refund", "采购退款单");
         modules.put("sales-order", "销售订单");
         modules.put("sales-outbound", "销售出库");
         modules.put("freight-bill", "物流单");
@@ -58,7 +57,7 @@ public class ModuleCatalog {
         modules.put("freight-statement", "物流对账单");
         modules.put("receipt", "收款单");
         modules.put("payment", "付款单");
-        modules.put("supplier-refund-receipt", "供应商退款到账单");
+        modules.put("cash-reversal", "资金冲销单");
         modules.put("invoice-receipt", "收票单");
         modules.put("invoice-issue", "开票单");
         modules.put("pending-invoice-receipt-report", "未收票报表");

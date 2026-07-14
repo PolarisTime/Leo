@@ -132,4 +132,12 @@ public record PageFilter(
                 settlementCompanyId, customerId, projectId, supplierId, carrierId, currentRecordId
         );
     }
+
+    public PageFilter withBusinessType(String businessType) {
+        return new PageFilter(
+                keyword, status, startDate, endDate, name, projectName, businessType, moduleName,
+                actionType, resultStatus, signStatus, usageScope, recordId, userId, authType,
+                settlementCompanyId, customerId, projectId, supplierId, carrierId, currentRecordId
+        );
+    }
 }

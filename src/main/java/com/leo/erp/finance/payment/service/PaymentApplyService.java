@@ -9,7 +9,11 @@ import com.leo.erp.common.support.TradeItemCalculator;
 import com.leo.erp.finance.payment.domain.entity.Payment;
 import com.leo.erp.finance.payment.domain.entity.PaymentPurposes;
 import com.leo.erp.finance.payment.web.dto.PaymentRequest;
+import com.leo.erp.master.supplier.domain.entity.Supplier;
+import com.leo.erp.master.supplier.repository.SupplierRepository;
 import com.leo.erp.security.permission.WorkflowTransitionGuard;
+import com.leo.erp.system.company.domain.entity.CompanySetting;
+import com.leo.erp.system.company.repository.CompanySettingRepository;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -18,12 +22,12 @@ import java.util.function.LongSupplier;
 @Service
 public class PaymentApplyService {
 
-    private static final String PAYMENT_STATUS_SETTLED = StatusConstants.PAID;
-
     private final WorkflowTransitionGuard workflowTransitionGuard;
     private final PaymentAllocationService paymentAllocationService;
     private final PaymentSettlementSyncService settlementSyncService;
     private final PaymentPurchasePrepaymentService purchasePrepaymentService;
+    private SupplierRepository supplierRepository;
+    private CompanySettingRepository companySettingRepository;
 
     public PaymentApplyService(WorkflowTransitionGuard workflowTransitionGuard,
                                PaymentAllocationService paymentAllocationService,
@@ -35,6 +39,13 @@ public class PaymentApplyService {
         this.purchasePrepaymentService = purchasePrepaymentService;
     }
 
+    @org.springframework.beans.factory.annotation.Autowired
+    void setSupplierDependencies(SupplierRepository supplierRepository,
+                                 CompanySettingRepository companySettingRepository) {
+        this.supplierRepository = supplierRepository;
+        this.companySettingRepository = companySettingRepository;
+    }
+
     void apply(Payment entity, PaymentRequest request, LongSupplier nextIdSupplier) {
         String paymentPurpose = PaymentPurposes.normalize(request.paymentPurpose());
         String nextStatus = BusinessStatusValidator.normalizeWithDefault(
@@ -43,11 +54,12 @@ public class PaymentApplyService {
                 "付款单状态",
                 StatusConstants.ALLOWED_PAYMENT_STATUS
         );
+        assertStatusNotChangedBySave(entity, nextStatus);
         workflowTransitionGuard.assertAuditPermissionForProtectedValue(
                 "payment",
                 entity.getStatus(),
                 nextStatus,
-                PAYMENT_STATUS_SETTLED
+                StatusConstants.AUDITED
         );
         settlementSyncService.captureOriginalAllocationState(entity);
         entity.setPaymentNo(request.paymentNo());
@@ -65,31 +77,92 @@ public class PaymentApplyService {
             applyPurchasePrepayment(entity, request, nextStatus);
             return;
         }
+        if (PaymentPurposes.SUPPLIER_PAYMENT.equals(paymentPurpose)) {
+            applySupplierPayment(entity, request);
+            return;
+        }
+        if (PaymentAllocationService.SUPPLIER_PAYMENT_TYPE.equals(request.businessType())) {
+            throw new BusinessException(
+                    ErrorCode.BUSINESS_ERROR,
+                    "供应商付款已统一为总额付款，不允许关联供应商对账单"
+            );
+        }
         applyStatementSettlement(entity, request, nextStatus, nextIdSupplier);
+    }
+
+    private void assertStatusNotChangedBySave(Payment entity, String requestedStatus) {
+        String currentStatus = entity.getStatus();
+        if (currentStatus == null) {
+            if (!StatusConstants.DRAFT.equals(requestedStatus)) {
+                throw new BusinessException(
+                        ErrorCode.BUSINESS_ERROR,
+                        "新建付款单只能保存为草稿，审核请使用状态接口"
+                );
+            }
+            return;
+        }
+        if (!currentStatus.equals(requestedStatus)) {
+            throw new BusinessException(
+                    ErrorCode.BUSINESS_ERROR,
+                    "普通保存不能修改付款单状态，请使用状态接口"
+            );
+        }
+    }
+
+    private void applySupplierPayment(Payment entity, PaymentRequest request) {
+        if (!PaymentAllocationService.SUPPLIER_PAYMENT_TYPE.equals(request.businessType())) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "供应商总额付款的往来类型必须为供应商");
+        }
+        if (TradeItemCalculator.safeBigDecimal(entity.getAmount()).compareTo(BigDecimal.ZERO) <= 0) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "付款金额必须大于0");
+        }
+        if (request.counterpartyId() == null) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "供应商ID不能为空");
+        }
+        if (request.settlementCompanyId() == null
+                || BusinessDocumentValidator.trimToNull(request.settlementCompanyName()) == null) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "结算主体不能为空");
+        }
+        if (request.sourceStatementId() != null || request.sourcePurchaseOrderId() != null
+                || request.items() != null && !request.items().isEmpty()) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "供应商总额付款不能关联采购或对账明细");
+        }
+        if (supplierRepository == null || companySettingRepository == null) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "供应商付款身份服务不可用");
+        }
+        Supplier supplier = supplierRepository.findByIdAndDeletedFlagFalse(request.counterpartyId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_ERROR, "供应商不存在"));
+        BusinessDocumentValidator.requireSameText(
+                request.counterpartyName(), supplier.getSupplierName(), "供应商名称与ID不一致"
+        );
+        BusinessDocumentValidator.requireSameOptionalCode(
+                request.counterpartyCode(), supplier.getSupplierCode(), "供应商编码与ID不一致"
+        );
+        CompanySetting company = companySettingRepository
+                .findByIdAndDeletedFlagFalse(request.settlementCompanyId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_ERROR, "结算主体不存在"));
+        BusinessDocumentValidator.requireSameText(
+                request.settlementCompanyName(), company.getCompanyName(), "结算主体名称与ID不一致"
+        );
+        entity.setCounterpartyId(supplier.getId());
+        entity.setCounterpartyName(supplier.getSupplierName());
+        entity.setCounterpartyCode(BusinessDocumentValidator.trimToNull(supplier.getSupplierCode()));
+        entity.setSupplierCode(entity.getCounterpartyCode());
+        entity.setSupplierName(entity.getCounterpartyName());
+        entity.setSettlementCompanyId(company.getId());
+        entity.setSettlementCompanyName(company.getCompanyName());
+        entity.setSourceStatementId(null);
+        entity.setSourcePurchaseOrderId(null);
+        entity.setPurchaseOrderNo(null);
+        entity.getItems().clear();
     }
 
     private void applyPurchasePrepayment(Payment entity,
                                          PaymentRequest request,
                                          String nextStatus) {
-        if (!PaymentAllocationService.SUPPLIER_PAYMENT_TYPE.equals(request.businessType())) {
-            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "采购预付款业务类型必须为供应商");
-        }
-        if (TradeItemCalculator.safeBigDecimal(entity.getAmount()).compareTo(BigDecimal.ZERO) <= 0) {
-            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "采购预付款金额必须大于0");
-        }
-        if (request.sourceStatementId() != null) {
-            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "采购预付款不能关联对账单");
-        }
-        if (request.items() != null && !request.items().isEmpty()) {
-            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "采购预付款不能包含对账单核销明细");
-        }
-        entity.setSourceStatementId(null);
-        entity.getItems().clear();
-        purchasePrepaymentService.applySourceSnapshot(
-                entity,
-                request.sourcePurchaseOrderId(),
-                entity.getAmount(),
-                nextStatus
+        throw new BusinessException(
+                ErrorCode.BUSINESS_ERROR,
+                "采购预付款已统一为供应商总额付款形成的预付款余额，不允许新建或修改"
         );
     }
 

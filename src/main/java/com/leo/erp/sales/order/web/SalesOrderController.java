@@ -11,9 +11,11 @@ import com.leo.erp.security.permission.RequiresPermission;
 import com.leo.erp.sales.order.service.SalesOrderPrintExportService;
 import com.leo.erp.sales.order.service.SalesOrderPrintXlsxOptions;
 import com.leo.erp.sales.order.service.SalesOrderService;
+import com.leo.erp.sales.order.service.SalesOrderSourceCandidateService;
 import com.leo.erp.sales.order.web.dto.SalesOrderPrintXlsxRequest;
 import com.leo.erp.sales.order.web.dto.SalesOrderRequest;
 import com.leo.erp.sales.order.web.dto.SalesOrderResponse;
+import com.leo.erp.sales.order.web.dto.SalesOrderSourceCandidateResponse;
 import com.leo.erp.system.operationlog.support.OperationLogResultCollector;
 import com.leo.erp.system.operationlog.support.OperationLoggable;
 import io.swagger.v3.oas.annotations.Operation;
@@ -47,10 +49,39 @@ public class SalesOrderController {
 
     private final SalesOrderService service;
     private final SalesOrderPrintExportService printExportService;
+    private final SalesOrderSourceCandidateService sourceCandidateService;
 
-    public SalesOrderController(SalesOrderService service, SalesOrderPrintExportService printExportService) {
+    public SalesOrderController(SalesOrderService service,
+                                SalesOrderPrintExportService printExportService,
+                                SalesOrderSourceCandidateService sourceCandidateService) {
         this.service = service;
         this.printExportService = printExportService;
+        this.sourceCandidateService = sourceCandidateService;
+    }
+
+    @Operation(summary = "分页查询销售订单采购来源候选")
+    @GetMapping("/source-candidates")
+    @RequiresPermission(resource = "purchase-order", action = "read")
+    public ApiResponse<PageResponse<SalesOrderSourceCandidateResponse>> sourceCandidates(
+            @BindPageQuery(sortFieldKey = "purchase-order") PageQuery query,
+            @RequestParam String salesMode,
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) Long supplierId,
+            @RequestParam(required = false) Long settlementCompanyId,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate,
+            @RequestParam(required = false) Long currentSalesOrderId
+    ) {
+        return ApiResponse.success(sourceCandidateService.page(
+                salesMode,
+                keyword,
+                supplierId,
+                settlementCompanyId,
+                startDate,
+                endDate,
+                currentSalesOrderId,
+                query
+        ));
     }
 
     @Operation(summary = "搜索销售订单")
@@ -112,6 +143,29 @@ public class SalesOrderController {
         ));
     }
 
+    @Operation(summary = "分页查询销售订单物流导入候选")
+    @GetMapping("/freight-import-candidates")
+    @RequiresPermission(resource = "sales-order", action = "read")
+    public ApiResponse<PageResponse<SalesOrderResponse>> freightImportCandidates(
+            @BindPageQuery(sortFieldKey = "sales-order") PageQuery query,
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) Long customerId,
+            @RequestParam(required = false) String customerName,
+            @RequestParam(required = false) Long projectId,
+            @RequestParam(required = false) String projectName,
+            @RequestParam(required = false) Long settlementCompanyId,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate,
+            @RequestParam(required = false) Long currentFreightBillId
+    ) {
+        return ApiResponse.success(PageResponse.from(service.freightImportCandidates(
+                query,
+                PageFilter.of(keyword, customerName, projectName, settlementCompanyId, status, startDate, endDate)
+                        .withIdentity(customerId, projectId, null, null, currentFreightBillId)
+        )));
+    }
+
     @Operation(summary = "查询销售订单详情")
     @GetMapping("/{id}")
     @RequiresPermission(resource = "sales-order", action = "read")
@@ -161,6 +215,13 @@ public class SalesOrderController {
     @RequiresPermission(resource = "sales-order", action = "audit")
     public ApiResponse<SalesOrderResponse> updateStatus(@PathVariable Long id, @Valid @RequestBody StatusUpdateRequest request) {
         return ApiResponse.success("状态更新成功", service.updateStatus(id, request.status()));
+    }
+
+    @Operation(summary = "完成销售")
+    @PostMapping("/{id}/complete")
+    @RequiresPermission(resource = "sales-order", action = "audit")
+    public ApiResponse<SalesOrderResponse> complete(@PathVariable Long id) {
+        return ApiResponse.success("完成销售成功", service.completeSalesOrder(id));
     }
 
     @Operation(summary = "删除销售订单")

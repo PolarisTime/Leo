@@ -9,7 +9,8 @@ public class SalesOrderCompletionPolicy {
 
     boolean shouldSyncAfterSave(SalesOrder entity) {
         return entity != null
-                && StatusConstants.AUDITED.equals(normalize(entity.getStatus()));
+                && (StatusConstants.AUDITED.equals(normalize(entity.getStatus()))
+                || StatusConstants.DELIVERY_VERIFICATION.equals(normalize(entity.getStatus())));
     }
 
     private String normalize(String value) {

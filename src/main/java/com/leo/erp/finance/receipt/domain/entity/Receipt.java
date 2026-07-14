@@ -34,10 +34,25 @@ public class Receipt extends AbstractAuditableEntity {
     @Column(name = "receipt_no", nullable = false, unique = true, length = 64)
     private String receiptNo;
 
-    @Column(name = "customer_name", nullable = false, length = 128)
+    @Column(name = "counterparty_type", nullable = false, length = 32)
+    private String counterpartyType;
+
+    @Column(name = "counterparty_id", nullable = false)
+    private Long counterpartyId;
+
+    @Column(name = "counterparty_code", length = 64)
+    private String counterpartyCode;
+
+    @Column(name = "counterparty_name", nullable = false, length = 128)
+    private String counterpartyName;
+
+    @Column(name = "receipt_purpose", nullable = false, length = 32)
+    private String receiptPurpose;
+
+    @Column(name = "customer_name", length = 128)
     private String customerName;
 
-    @Column(name = "project_name", nullable = false, length = 200)
+    @Column(name = "project_name", length = 200)
     private String projectName;
 
     @Column(name = "source_customer_statement_id")

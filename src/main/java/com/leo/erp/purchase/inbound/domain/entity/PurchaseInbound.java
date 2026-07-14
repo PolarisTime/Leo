@@ -35,6 +35,9 @@ public class PurchaseInbound extends AbstractAuditableEntity {
     @Column(name = "purchase_order_no", length = 256)
     private String purchaseOrderNo;
 
+    @Column(name = "import_batch_id")
+    private Long importBatchId;
+
     @Column(name = "supplier_code", nullable = false, length = 64)
     private String supplierCode;
 

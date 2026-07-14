@@ -31,8 +31,13 @@ public class PurchaseInboundWeightSettlementService {
     }
 
     Map<String, PurchaseWeighCategoryRule> loadPurchaseWeighCategoryRules(PurchaseInboundRequest request) {
-        List<String> categoryNames = request.items().stream()
+        return loadPurchaseWeighCategoryRules(request.items().stream()
                 .map(PurchaseInboundItemRequest::category)
+                .toList());
+    }
+
+    Map<String, PurchaseWeighCategoryRule> loadPurchaseWeighCategoryRules(List<String> categories) {
+        List<String> categoryNames = categories.stream()
                 .map(this::normalizeCategoryName)
                 .filter(category -> !category.isBlank())
                 .distinct()
@@ -86,12 +91,28 @@ public class PurchaseInboundWeightSettlementService {
             Map<String, PurchaseWeighCategoryRule> purchaseWeighCategoryRules,
             String settlementMode
     ) {
+        return resolveWeightSettlement(source, lineNo, purchaseWeighCategoryRules, settlementMode, false);
+    }
+
+    WeightSettlementResult resolveWeightSettlement(
+            PurchaseInboundItemRequest source,
+            int lineNo,
+            Map<String, PurchaseWeighCategoryRule> purchaseWeighCategoryRules,
+            String settlementMode,
+            boolean allowMissingWeighWeight
+    ) {
         BigDecimal sourcePieceWeightTon = TradeItemCalculator.scaleWeightTon(source.pieceWeightTon());
         BigDecimal baseWeightTon = TradeItemCalculator.calculateWeightTon(source.quantity(), sourcePieceWeightTon);
         PurchaseWeighCategoryRule purchaseWeighCategoryRule = resolvePurchaseWeighCategoryRule(
                 purchaseWeighCategoryRules, source.category());
         boolean purchaseWeighRequired = purchaseWeighCategoryRule.purchaseWeighRequired();
         boolean purchaseWeighSettlement = isPurchaseWeighSettlement(settlementMode);
+        if (!purchaseWeighRequired && purchaseWeighSettlement) {
+            throw new BusinessException(
+                    ErrorCode.VALIDATION_ERROR,
+                    "第" + lineNo + "行商品类别无需过磅，请按理算方式入库"
+            );
+        }
         if (!purchaseWeighRequired && !purchaseWeighSettlement) {
             return new WeightSettlementResult(
                     baseWeightTon,
@@ -105,9 +126,21 @@ public class PurchaseInboundWeightSettlementService {
         if (!purchaseWeighSettlement) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "第" + lineNo + "行商品类别需按过磅入库，请将本行结算方式改为过磅");
         }
+        if (allowMissingWeighWeight && source.weighWeightTon() == null) {
+            return new WeightSettlementResult(
+                    baseWeightTon,
+                    null,
+                    BigDecimal.ZERO.setScale(PrecisionConstants.WEIGHT_SCALE),
+                    BigDecimal.ZERO.setScale(PrecisionConstants.AMOUNT_SCALE),
+                    sourcePieceWeightTon,
+                    baseWeightTon
+            );
+        }
         BigDecimal weighWeightTon = requireWeighWeightTon(source, lineNo);
         BigDecimal theoreticalWeightTon = resolveAdjustmentBaseWeightTon(source);
-        validateWeighTolerance(weighWeightTon, theoreticalWeightTon, purchaseWeighCategoryRule, lineNo);
+        if (!allowMissingWeighWeight) {
+            validateWeighTolerance(weighWeightTon, theoreticalWeightTon, purchaseWeighCategoryRule, lineNo);
+        }
         BigDecimal weightAdjustmentTon = TradeItemCalculator
                 .scaleWeightTon(weighWeightTon.subtract(theoreticalWeightTon));
         BigDecimal weightAdjustmentAmount = TradeItemCalculator
@@ -143,6 +176,13 @@ public class PurchaseInboundWeightSettlementService {
         );
     }
 
+    boolean requiresPurchaseWeigh(
+            Map<String, PurchaseWeighCategoryRule> ruleMap,
+            String categoryName
+    ) {
+        return resolvePurchaseWeighCategoryRule(ruleMap, categoryName).purchaseWeighRequired();
+    }
+
     private BigDecimal requireWeighWeightTon(PurchaseInboundItemRequest source, int lineNo) {
         BigDecimal weighWeightTon = source.weighWeightTon();
         if (weighWeightTon == null) {
@@ -168,24 +208,45 @@ public class PurchaseInboundWeightSettlementService {
             PurchaseWeighCategoryRule rule,
             int lineNo
     ) {
-        if (theoreticalWeightTon.compareTo(BigDecimal.ZERO) <= 0) {
+        ToleranceAssessment assessment = assessTolerance(
+                weighWeightTon,
+                theoreticalWeightTon,
+                rule
+        );
+        if (!assessment.overTolerance()) {
             return;
         }
-        BigDecimal diff = weighWeightTon.subtract(theoreticalWeightTon);
-        BigDecimal diffPercent = diff.abs()
+        throw new BusinessException(
+                ErrorCode.VALIDATION_ERROR,
+                "第" + lineNo + "行过磅重量" + assessment.direction() + "超过允许范围，当前差异"
+                        + formatPercent(assessment.actualPercent()) + "%，允许"
+                        + formatPercent(assessment.limitPercent()) + "%"
+        );
+    }
+
+    ToleranceAssessment assessTolerance(
+            BigDecimal weighWeightTon,
+            BigDecimal theoreticalWeightTon,
+            PurchaseWeighCategoryRule rule
+    ) {
+        BigDecimal normalizedTheoretical = TradeItemCalculator.scaleWeightTon(theoreticalWeightTon);
+        BigDecimal normalizedActual = TradeItemCalculator.scaleWeightTon(weighWeightTon);
+        if (normalizedTheoretical.compareTo(BigDecimal.ZERO) <= 0) {
+            return new ToleranceAssessment(false, null, BigDecimal.ZERO, BigDecimal.ZERO);
+        }
+        BigDecimal difference = normalizedActual.subtract(normalizedTheoretical);
+        BigDecimal actualPercent = difference.abs()
                 .multiply(ONE_HUNDRED)
-                .divide(theoreticalWeightTon, 4, RoundingMode.HALF_UP);
-        BigDecimal limitPercent = diff.compareTo(BigDecimal.ZERO) > 0
+                .divide(normalizedTheoretical, 4, RoundingMode.HALF_UP);
+        BigDecimal limitPercent = difference.compareTo(BigDecimal.ZERO) > 0
                 ? rule.overTolerancePercent()
                 : rule.underTolerancePercent();
-        if (diffPercent.compareTo(limitPercent) > 0) {
-            String direction = diff.compareTo(BigDecimal.ZERO) > 0 ? "上差" : "下差";
-            throw new BusinessException(
-                    ErrorCode.VALIDATION_ERROR,
-                    "第" + lineNo + "行过磅重量" + direction + "超过允许范围，当前差异"
-                            + formatPercent(diffPercent) + "%，允许" + formatPercent(limitPercent) + "%"
-            );
-        }
+        return new ToleranceAssessment(
+                actualPercent.compareTo(limitPercent) > 0,
+                difference.compareTo(BigDecimal.ZERO) > 0 ? "上差" : "下差",
+                limitPercent.setScale(4, RoundingMode.HALF_UP),
+                actualPercent
+        );
     }
 
     private BigDecimal normalizeTolerancePercent(BigDecimal value) {
@@ -202,6 +263,14 @@ public class PurchaseInboundWeightSettlementService {
             boolean purchaseWeighRequired,
             BigDecimal overTolerancePercent,
             BigDecimal underTolerancePercent
+    ) {
+    }
+
+    record ToleranceAssessment(
+            boolean overTolerance,
+            String direction,
+            BigDecimal limitPercent,
+            BigDecimal actualPercent
     ) {
     }
 }

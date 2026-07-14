@@ -10,10 +10,12 @@ public final class PaymentPurposes {
 
     public static final String STATEMENT_SETTLEMENT = "STATEMENT_SETTLEMENT";
     public static final String PURCHASE_PREPAYMENT = "PURCHASE_PREPAYMENT";
+    public static final String SUPPLIER_PAYMENT = "SUPPLIER_PAYMENT";
 
     private static final Set<String> ALLOWED_VALUES = Set.of(
             STATEMENT_SETTLEMENT,
-            PURCHASE_PREPAYMENT
+            PURCHASE_PREPAYMENT,
+            SUPPLIER_PAYMENT
     );
 
     private PaymentPurposes() {
@@ -32,5 +34,9 @@ public final class PaymentPurposes {
 
     public static boolean isPurchasePrepayment(String value) {
         return PURCHASE_PREPAYMENT.equals(normalize(value));
+    }
+
+    public static boolean isSupplierTotalPayment(String value) {
+        return SUPPLIER_PAYMENT.equals(normalize(value));
     }
 }

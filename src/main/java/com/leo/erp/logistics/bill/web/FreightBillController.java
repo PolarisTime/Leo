@@ -7,11 +7,13 @@ import com.leo.erp.common.api.PageResponse;
 import com.leo.erp.common.web.BindPageQuery;
 import com.leo.erp.common.web.dto.StatusUpdateRequest;
 import com.leo.erp.logistics.bill.service.FreightBillService;
+import com.leo.erp.logistics.bill.service.FreightBillOutboundCommandService;
 import com.leo.erp.logistics.bill.web.dto.FreightBillImportCandidateResponse;
 import com.leo.erp.logistics.bill.web.dto.FreightBillRequest;
 import com.leo.erp.logistics.bill.web.dto.FreightBillResponse;
 import com.leo.erp.security.permission.RequiresPermission;
 import jakarta.validation.Valid;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -33,9 +35,17 @@ import java.time.LocalDate;
 public class FreightBillController {
 
     private final FreightBillService service;
+    private final FreightBillOutboundCommandService outboundCommandService;
+
+    @Autowired
+    public FreightBillController(FreightBillService service,
+                                 FreightBillOutboundCommandService outboundCommandService) {
+        this.service = service;
+        this.outboundCommandService = outboundCommandService;
+    }
 
     public FreightBillController(FreightBillService service) {
-        this.service = service;
+        this(service, null);
     }
 
     @GetMapping("/search")
@@ -71,6 +81,7 @@ public class FreightBillController {
     }
 
     @GetMapping("/import-candidates")
+    @Deprecated(forRemoval = false)
     @RequiresPermission(resource = "sales-outbound", action = "read")
     public ApiResponse<PageResponse<FreightBillImportCandidateResponse>> importCandidates(
             @BindPageQuery(sortFieldKey = "sales-outbound") PageQuery query,
@@ -107,6 +118,20 @@ public class FreightBillController {
     @RequiresPermission(resource = "freight-bill", action = "create")
     public ApiResponse<FreightBillResponse> create(@Valid @RequestBody FreightBillRequest request) {
         return ApiResponse.success("创建成功", service.create(request));
+    }
+
+    @PostMapping("/{id}/sales-outbound")
+    @RequiresPermission(resource = "sales-outbound", action = "create")
+    public ApiResponse<com.leo.erp.sales.outbound.web.dto.SalesOutboundResponse> createSalesOutbound(
+            @PathVariable Long id
+    ) {
+        if (outboundCommandService == null) {
+            throw new com.leo.erp.common.error.BusinessException(
+                    com.leo.erp.common.error.ErrorCode.BUSINESS_ERROR,
+                    "销售出库生成服务不可用"
+            );
+        }
+        return ApiResponse.success("销售出库草稿生成成功", outboundCommandService.createOutbound(id));
     }
 
     @PutMapping("/{id}")

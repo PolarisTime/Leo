@@ -10,12 +10,15 @@ import java.util.List;
 
 public record ReceiptRequest(
         String receiptNo,
+        String counterpartyType,
+        Long counterpartyId,
+        String counterpartyCode,
+        String counterpartyName,
+        String receiptPurpose,
         Long customerId,
         String customerCode,
-        @jakarta.validation.constraints.NotBlank(message = "客户不能为空")
         String customerName,
         Long projectId,
-        @jakarta.validation.constraints.NotBlank(message = "项目不能为空")
         String projectName,
         Long settlementCompanyId,
         String settlementCompanyName,
@@ -25,7 +28,7 @@ public record ReceiptRequest(
         @jakarta.validation.constraints.NotBlank(message = "收款方式不能为空")
         String payType,
         @NotNull(message = "金额不能为空")
-        @DecimalMin(value = "0.00", message = "金额不能小于0")
+        @DecimalMin(value = "0.00", inclusive = false, message = "金额必须大于0")
         BigDecimal amount,
         @jakarta.validation.constraints.NotBlank(message = "状态不能为空")
         String status,
@@ -35,6 +38,29 @@ public record ReceiptRequest(
         @Valid
         List<ReceiptAllocationRequest> items
 ) {
+    public ReceiptRequest(String receiptNo,
+                          Long customerId,
+                          String customerCode,
+                          String customerName,
+                          Long projectId,
+                          String projectName,
+                          Long settlementCompanyId,
+                          String settlementCompanyName,
+                          Long sourceCustomerStatementId,
+                          LocalDate receiptDate,
+                          String payType,
+                          BigDecimal amount,
+                          String status,
+                          String operatorName,
+                          String remark,
+                          List<ReceiptAllocationRequest> items) {
+        this(receiptNo, "客户", customerId, customerCode, customerName,
+                "CUSTOMER_STATEMENT_SETTLEMENT", customerId, customerCode, customerName,
+                projectId, projectName, settlementCompanyId, settlementCompanyName,
+                sourceCustomerStatementId, receiptDate, payType, amount, status, operatorName,
+                remark, items);
+    }
+
     public ReceiptRequest(String receiptNo,
                           String customerCode,
                           String customerName,

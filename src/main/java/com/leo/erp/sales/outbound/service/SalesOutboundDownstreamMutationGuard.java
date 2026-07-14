@@ -5,6 +5,7 @@ import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.finance.receipt.repository.ReceiptAllocationRepository;
 import com.leo.erp.logistics.bill.repository.FreightBillRepository;
+import com.leo.erp.sales.order.repository.SalesOrderRepository;
 import com.leo.erp.sales.order.service.SalesOrderDeliveryVerificationGuard;
 import com.leo.erp.sales.outbound.domain.entity.SalesOutbound;
 import com.leo.erp.sales.outbound.domain.entity.SalesOutboundItem;
@@ -19,22 +20,26 @@ public class SalesOutboundDownstreamMutationGuard {
     private final SalesOrderDeliveryVerificationGuard deliveryVerificationGuard;
     private final ReceiptAllocationRepository receiptAllocationRepository;
     private final FreightBillRepository freightBillRepository;
+    private final SalesOrderRepository salesOrderRepository;
 
     public SalesOutboundDownstreamMutationGuard(SalesOrderDeliveryVerificationGuard deliveryVerificationGuard,
                                                 ReceiptAllocationRepository receiptAllocationRepository,
-                                                FreightBillRepository freightBillRepository) {
+                                                FreightBillRepository freightBillRepository,
+                                                SalesOrderRepository salesOrderRepository) {
         this.deliveryVerificationGuard = deliveryVerificationGuard;
         this.receiptAllocationRepository = receiptAllocationRepository;
         this.freightBillRepository = freightBillRepository;
+        this.salesOrderRepository = salesOrderRepository;
     }
 
     public void assertReverseAuditAllowed(SalesOutbound outbound) {
         List<Long> sourceSalesOrderItemIds = sourceSalesOrderItemIds(outbound);
         if (!sourceSalesOrderItemIds.isEmpty()) {
+            assertSourceOrderNotCompleted(sourceSalesOrderItemIds, "反审核");
             deliveryVerificationGuard.assertMutableByItemIds(sourceSalesOrderItemIds, "反审核");
             if (!receiptAllocationRepository.findReceivedSourceSalesOrderItemIds(
                     sourceSalesOrderItemIds,
-                    StatusConstants.RECEIVED
+                    StatusConstants.AUDITED
             ).isEmpty()) {
                 throw new BusinessException(ErrorCode.BUSINESS_ERROR, "销售出库已发生收款，不能反审核");
             }
@@ -45,6 +50,45 @@ public class SalesOutboundDownstreamMutationGuard {
                 null
         ).isEmpty()) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "销售出库已生成物流单，不能反审核");
+        }
+    }
+
+    public void assertReverseAuditAllowedForFreightSource(SalesOutbound outbound) {
+        Long freightBillId = outbound == null ? null : outbound.getSourceFreightBillId();
+        if (freightBillId != null) {
+            var bill = freightBillRepository.findByIdAndDeletedFlagFalse(freightBillId).orElse(null);
+            if (bill != null && StatusConstants.AUDITED.equals(bill.getStatus())) {
+                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "物流单已审核，不能反审核销售出库");
+            }
+        }
+        List<Long> sourceSalesOrderItemIds = sourceSalesOrderItemIds(outbound);
+        if (!sourceSalesOrderItemIds.isEmpty()) {
+            assertSourceOrderNotCompleted(sourceSalesOrderItemIds, "反审核");
+            deliveryVerificationGuard.assertMutableByItemIds(sourceSalesOrderItemIds, "反审核");
+            if (!receiptAllocationRepository.findReceivedSourceSalesOrderItemIds(
+                    sourceSalesOrderItemIds,
+                    StatusConstants.AUDITED
+            ).isEmpty()) {
+                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "销售出库已发生收款，不能反审核");
+            }
+        }
+    }
+
+    public void assertDeleteAllowed(SalesOutbound outbound) {
+        List<Long> sourceSalesOrderItemIds = sourceSalesOrderItemIds(outbound);
+        if (!sourceSalesOrderItemIds.isEmpty()) {
+            assertSourceOrderNotCompleted(sourceSalesOrderItemIds, "删除");
+        }
+    }
+
+    private void assertSourceOrderNotCompleted(List<Long> sourceSalesOrderItemIds, String action) {
+        boolean completed = salesOrderRepository.findAllWithItemsBySourceItemIds(sourceSalesOrderItemIds).stream()
+                .anyMatch(order -> StatusConstants.SALES_COMPLETED.equals(normalize(order.getStatus())));
+        if (completed) {
+            throw new BusinessException(
+                    ErrorCode.BUSINESS_ERROR,
+                    "来源销售订单已完成销售，不能" + action + "销售出库"
+            );
         }
     }
 
@@ -70,5 +114,9 @@ public class SalesOutboundDownstreamMutationGuard {
                 .filter(java.util.Objects::nonNull)
                 .forEach(itemIds::add);
         return List.copyOf(itemIds);
+    }
+
+    private String normalize(String value) {
+        return value == null ? "" : value.trim();
     }
 }

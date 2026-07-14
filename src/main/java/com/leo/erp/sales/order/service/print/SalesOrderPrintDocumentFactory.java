@@ -23,6 +23,7 @@ public class SalesOrderPrintDocumentFactory {
         List<SalesOrderItem> items = order.getItems().stream()
                 .sorted(Comparator.comparing(SalesOrderItem::getLineNo, Comparator.nullsLast(Integer::compareTo)))
                 .toList();
+        items = applyItemSelection(items, safeOptions.selectedItemIds());
         items = applyItemOrder(items, safeOptions.itemOptions());
         List<SalesOrderPrintLine> lines = items.stream()
                 .map(item -> toLine(item, safeOptions))
@@ -100,6 +101,16 @@ public class SalesOrderPrintDocumentFactory {
             }
         }
         return orderedItems;
+    }
+
+    private List<SalesOrderItem> applyItemSelection(List<SalesOrderItem> items, List<String> selectedItemIds) {
+        if (selectedItemIds == null || items.isEmpty()) {
+            return items;
+        }
+        Set<String> selectedIds = new HashSet<>(selectedItemIds);
+        return items.stream()
+                .filter(item -> item.getId() != null && selectedIds.contains(String.valueOf(item.getId())))
+                .toList();
     }
 
     private String brand(SalesOrderItem item, PrintItemOptions options) {

@@ -5,6 +5,7 @@ import lombok.Getter;
 import lombok.Setter;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 
 @Getter
 @Setter
@@ -99,4 +100,28 @@ public class PurchaseInboundItem {
 
     @Column(name = "amount", nullable = false, precision = 14, scale = 2)
     private BigDecimal amount;
+
+    @Column(name = "tolerance_direction", length = 8)
+    private String toleranceDirection;
+
+    @Column(name = "tolerance_limit_percent", precision = 8, scale = 4)
+    private BigDecimal toleranceLimitPercent;
+
+    @Column(name = "tolerance_actual_percent", precision = 24, scale = 4)
+    private BigDecimal toleranceActualPercent;
+
+    @Column(name = "tolerance_reason_code", length = 64)
+    private String toleranceReasonCode;
+
+    @Column(name = "tolerance_remark", length = 255)
+    private String toleranceRemark;
+
+    @Column(name = "tolerance_confirmed_by")
+    private Long toleranceConfirmedBy;
+
+    @Column(name = "tolerance_confirmed_name", length = 64)
+    private String toleranceConfirmedName;
+
+    @Column(name = "tolerance_confirmed_at")
+    private LocalDateTime toleranceConfirmedAt;
 }

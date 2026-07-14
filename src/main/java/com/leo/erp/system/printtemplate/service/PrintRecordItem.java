@@ -8,6 +8,7 @@ public record PrintRecordItem(
         String settlementMode,
         String material,
         String spec,
+        String length,
         String quantity,
         String pieceWeightTon,
         String weightTon,
@@ -27,6 +28,6 @@ public record PrintRecordItem(
             String unitPrice,
             String amount
     ) {
-        this(id, recordId, brand, category, "", material, spec, quantity, pieceWeightTon, weightTon, unitPrice, amount);
+        this(id, recordId, brand, category, "", material, spec, "", quantity, pieceWeightTon, weightTon, unitPrice, amount);
     }
 }

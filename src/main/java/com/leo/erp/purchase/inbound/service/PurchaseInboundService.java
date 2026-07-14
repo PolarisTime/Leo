@@ -10,6 +10,7 @@ import com.leo.erp.common.service.AbstractCrudService;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.BusinessStatusValidator;
 import com.leo.erp.common.support.StatusConstants;
+import com.leo.erp.common.support.TradeItemCalculator;
 import com.leo.erp.purchase.inbound.domain.entity.PurchaseInbound;
 import com.leo.erp.purchase.inbound.domain.entity.PurchaseInboundItem;
 import com.leo.erp.purchase.inbound.repository.PurchaseInboundItemRepository;
@@ -23,11 +24,18 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Stream;
 
 @Service
@@ -43,8 +51,19 @@ public class PurchaseInboundService extends AbstractCrudService<
     private final PurchaseInboundPieceWeightService pieceWeightService;
     private final WorkflowTransitionGuard workflowTransitionGuard;
     private final SourceAllocationLockService sourceAllocationLockService;
-    private final PurchaseInboundRefundGuard purchaseInboundRefundGuard;
+    private final PurchaseInboundSourceStatusGuard purchaseInboundSourceStatusGuard;
     private final PurchaseInboundStatementGuard purchaseInboundStatementGuard;
+    private final PurchaseInboundWeightSettlementService weightSettlementService;
+
+    private static final Set<String> TOLERANCE_REASON_CODES = Set.of(
+            "TRANSPORT_LOSS",
+            "HANDLING_LOSS",
+            "MEASUREMENT_DIFFERENCE",
+            "SUPPLIER_CONFIRMED",
+            "MOISTURE_OR_IMPURITY_CHANGE",
+            "THEORETICAL_WEIGHT_DEVIATION",
+            "OTHER"
+    );
 
     @Autowired
     public PurchaseInboundService(PurchaseInboundRepository repository,
@@ -57,7 +76,8 @@ public class PurchaseInboundService extends AbstractCrudService<
                                   PurchaseInboundPieceWeightService pieceWeightService,
                                   WorkflowTransitionGuard workflowTransitionGuard,
                                   SourceAllocationLockService sourceAllocationLockService,
-                                  PurchaseInboundRefundGuard purchaseInboundRefundGuard,
+                                  PurchaseInboundWeightSettlementService weightSettlementService,
+                                  PurchaseInboundSourceStatusGuard purchaseInboundSourceStatusGuard,
                                   PurchaseInboundStatementGuard purchaseInboundStatementGuard) {
         super(idGenerator);
         this.repository = repository;
@@ -69,7 +89,8 @@ public class PurchaseInboundService extends AbstractCrudService<
         this.pieceWeightService = pieceWeightService;
         this.workflowTransitionGuard = workflowTransitionGuard;
         this.sourceAllocationLockService = sourceAllocationLockService;
-        this.purchaseInboundRefundGuard = purchaseInboundRefundGuard;
+        this.weightSettlementService = weightSettlementService;
+        this.purchaseInboundSourceStatusGuard = purchaseInboundSourceStatusGuard;
         this.purchaseInboundStatementGuard = purchaseInboundStatementGuard;
     }
 
@@ -114,6 +135,33 @@ public class PurchaseInboundService extends AbstractCrudService<
     @Transactional(readOnly = true)
     public List<PieceWeightResponse> getPieceWeights(Long itemId) {
         return pieceWeightService.getPieceWeights(itemId);
+    }
+
+    @Transactional
+    public PurchaseInboundResponse audit(
+            Long id,
+            List<PurchaseInboundAuditRequest.OverToleranceConfirmation> confirmations
+    ) {
+        PurchaseInbound inbound = requireEntity(id);
+        if (StatusConstants.AUDITED.equals(inbound.getStatus())
+                || StatusConstants.INBOUND_COMPLETED.equals(inbound.getStatus())) {
+            return toSavedResponse(inbound);
+        }
+        if (!StatusConstants.DRAFT.equals(inbound.getStatus())) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "只有草稿采购入库单可以审核");
+        }
+        workflowTransitionGuard.assertAuditPermissionForProtectedValue(
+                "purchase-inbound",
+                inbound.getStatus(),
+                StatusConstants.AUDITED,
+                StatusConstants.AUDITED,
+                StatusConstants.INBOUND_COMPLETED
+        );
+        prepareStatusTransition(inbound, inbound.getStatus(), StatusConstants.AUDITED);
+        applyToleranceConfirmations(inbound, confirmations == null ? List.of() : confirmations);
+        inbound.setStatus(StatusConstants.AUDITED);
+        PurchaseInbound saved = saveStatusEntity(inbound);
+        return toSavedResponse(saved);
     }
 
     @Override
@@ -219,6 +267,7 @@ public class PurchaseInboundService extends AbstractCrudService<
                 "采购入库状态",
                 StatusConstants.ALLOWED_PURCHASE_INBOUND_STATUS
         );
+        assertStatusNotChangedBySave(inbound, nextStatus);
         workflowTransitionGuard.assertAuditPermissionForProtectedValue(
                 "purchase-inbound",
                 inbound.getStatus(),
@@ -238,6 +287,25 @@ public class PurchaseInboundService extends AbstractCrudService<
         applyService.applyItems(inbound, request, this::nextId);
     }
 
+    private void assertStatusNotChangedBySave(PurchaseInbound inbound, String requestedStatus) {
+        String currentStatus = inbound.getStatus();
+        if (currentStatus == null) {
+            if (!StatusConstants.DRAFT.equals(requestedStatus)) {
+                throw new BusinessException(
+                        ErrorCode.BUSINESS_ERROR,
+                        "新建采购入库只能保存为草稿，审核请使用审核命令"
+                );
+            }
+            return;
+        }
+        if (!currentStatus.equals(requestedStatus)) {
+            throw new BusinessException(
+                    ErrorCode.BUSINESS_ERROR,
+                    "普通保存不能修改采购入库状态，请使用审核或反审核命令"
+            );
+        }
+    }
+
     @Override
     protected void beforeDelete(PurchaseInbound inbound) {
         lockSourcePurchaseOrderItems(inbound, null);
@@ -247,9 +315,174 @@ public class PurchaseInboundService extends AbstractCrudService<
 
     @Override
     protected void beforeStatusUpdate(PurchaseInbound inbound, String currentStatus, String nextStatus) {
+        if (StatusConstants.DRAFT.equals(currentStatus) && StatusConstants.AUDITED.equals(nextStatus)) {
+            throw new BusinessException(
+                    ErrorCode.BUSINESS_ERROR,
+                    "采购入库审核必须使用专用审核接口并提交超差确认"
+            );
+        }
+        prepareStatusTransition(inbound, currentStatus, nextStatus);
+        if (StatusConstants.DRAFT.equals(nextStatus)) {
+            inbound.getItems().forEach(this::clearToleranceConfirmation);
+        }
+    }
+
+    private void prepareStatusTransition(PurchaseInbound inbound, String currentStatus, String nextStatus) {
         lockSourcePurchaseOrderItems(inbound, null);
-        purchaseInboundRefundGuard.assertStatusTransitionAllowed(inbound, currentStatus, nextStatus);
+        if (!StatusConstants.DRAFT.equals(nextStatus)) {
+            assertAuditableLineItems(inbound);
+        }
+        purchaseInboundSourceStatusGuard.assertStatusTransitionAllowed(inbound, currentStatus, nextStatus);
         purchaseInboundStatementGuard.assertStatusTransitionAllowed(inbound, currentStatus, nextStatus);
+    }
+
+    private void applyToleranceConfirmations(
+            PurchaseInbound inbound,
+            List<PurchaseInboundAuditRequest.OverToleranceConfirmation> confirmations
+    ) {
+        Map<Long, PurchaseInboundAuditRequest.OverToleranceConfirmation> confirmationMap = new HashMap<>();
+        for (PurchaseInboundAuditRequest.OverToleranceConfirmation confirmation : confirmations) {
+            if (confirmation == null || confirmation.inboundItemId() == null) {
+                throw new BusinessException(ErrorCode.VALIDATION_ERROR, "超差确认必须关联采购入库明细");
+            }
+            if (confirmationMap.putIfAbsent(confirmation.inboundItemId(), confirmation) != null) {
+                throw new BusinessException(
+                        ErrorCode.VALIDATION_ERROR,
+                        "采购入库明细 " + confirmation.inboundItemId() + " 存在重复超差确认"
+                );
+            }
+        }
+        Map<String, PurchaseInboundWeightSettlementService.PurchaseWeighCategoryRule> ruleMap =
+                weightSettlementService.loadPurchaseWeighCategoryRules(
+                        inbound.getItems().stream().map(PurchaseInboundItem::getCategory).toList()
+                );
+        Set<Long> consumedConfirmationIds = new HashSet<>();
+        for (PurchaseInboundItem item : inbound.getItems()) {
+            String category = item.getCategory() == null ? "" : item.getCategory().trim();
+            PurchaseInboundWeightSettlementService.PurchaseWeighCategoryRule rule = ruleMap.getOrDefault(
+                    category,
+                    new PurchaseInboundWeightSettlementService.PurchaseWeighCategoryRule(
+                            category,
+                            false,
+                            new BigDecimal("5.00"),
+                            new BigDecimal("5.00")
+                    )
+            );
+            boolean weighSettlement = "过磅".equals(item.getSettlementMode());
+            if (rule.purchaseWeighRequired() != weighSettlement) {
+                throw new BusinessException(
+                        ErrorCode.BUSINESS_ERROR,
+                        "第" + item.getLineNo() + "行品类过磅规则已变化，请退回草稿重新保存后再审核"
+                );
+            }
+            if (!weighSettlement) {
+                clearToleranceConfirmation(item);
+                continue;
+            }
+            BigDecimal theoreticalWeight = TradeItemCalculator.calculateWeightTon(
+                    item.getQuantity(),
+                    item.getPieceWeightTon()
+            );
+            PurchaseInboundWeightSettlementService.ToleranceAssessment assessment =
+                    weightSettlementService.assessTolerance(
+                            item.getWeighWeightTon(),
+                            theoreticalWeight,
+                            rule
+                    );
+            if (!assessment.overTolerance()) {
+                clearToleranceConfirmation(item);
+                continue;
+            }
+            PurchaseInboundAuditRequest.OverToleranceConfirmation confirmation = confirmationMap.get(item.getId());
+            if (confirmation == null) {
+                throw new BusinessException(
+                        ErrorCode.BUSINESS_ERROR,
+                        "第" + item.getLineNo() + "行过磅重量" + assessment.direction()
+                                + "超出允许范围，必须选择超差原因后审核"
+                );
+            }
+            applyToleranceConfirmation(item, assessment, confirmation);
+            consumedConfirmationIds.add(item.getId());
+        }
+        confirmationMap.keySet().stream()
+                .filter(id -> !consumedConfirmationIds.contains(id))
+                .findFirst()
+                .ifPresent(id -> {
+                    throw new BusinessException(
+                            ErrorCode.VALIDATION_ERROR,
+                            "采购入库明细 " + id + " 当前未超差，不能提交超差确认"
+                    );
+                });
+    }
+
+    private void applyToleranceConfirmation(
+            PurchaseInboundItem item,
+            PurchaseInboundWeightSettlementService.ToleranceAssessment assessment,
+            PurchaseInboundAuditRequest.OverToleranceConfirmation confirmation
+    ) {
+        String reasonCode = confirmation.reasonCode() == null
+                ? ""
+                : confirmation.reasonCode().trim().toUpperCase(java.util.Locale.ROOT);
+        if (!TOLERANCE_REASON_CODES.contains(reasonCode)) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "第" + item.getLineNo() + "行超差原因不合法");
+        }
+        String remark = confirmation.remark() == null ? null : confirmation.remark().trim();
+        if ("OTHER".equals(reasonCode) && (remark == null || remark.isBlank())) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "第" + item.getLineNo() + "行选择其他原因时必须填写备注");
+        }
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        Long operatorId = authentication != null
+                && authentication.getPrincipal() instanceof com.leo.erp.security.support.SecurityPrincipal principal
+                ? principal.id()
+                : 0L;
+        String operatorName = authentication == null || authentication.getName() == null
+                ? "system"
+                : authentication.getName().trim();
+        if (operatorName.isBlank()) {
+            operatorName = "system";
+        }
+        if (operatorName.length() > 64) {
+            operatorName = operatorName.substring(0, 64);
+        }
+        item.setToleranceDirection(assessment.direction());
+        item.setToleranceLimitPercent(assessment.limitPercent());
+        item.setToleranceActualPercent(assessment.actualPercent());
+        item.setToleranceReasonCode(reasonCode);
+        item.setToleranceRemark(remark == null || remark.isBlank() ? null : remark);
+        item.setToleranceConfirmedBy(operatorId);
+        item.setToleranceConfirmedName(operatorName);
+        item.setToleranceConfirmedAt(LocalDateTime.now());
+    }
+
+    private void clearToleranceConfirmation(PurchaseInboundItem item) {
+        item.setToleranceDirection(null);
+        item.setToleranceLimitPercent(null);
+        item.setToleranceActualPercent(null);
+        item.setToleranceReasonCode(null);
+        item.setToleranceRemark(null);
+        item.setToleranceConfirmedBy(null);
+        item.setToleranceConfirmedName(null);
+        item.setToleranceConfirmedAt(null);
+    }
+
+    private void assertAuditableLineItems(PurchaseInbound inbound) {
+        for (PurchaseInboundItem item : inbound.getItems()) {
+            int lineNo = item.getLineNo() == null ? 0 : item.getLineNo();
+            if (item.getQuantity() == null || item.getQuantity() <= 0) {
+                throw new BusinessException(
+                        ErrorCode.BUSINESS_ERROR,
+                        "第" + lineNo + "行入库数量必须大于0"
+                );
+            }
+            if ("过磅".equals(item.getSettlementMode())
+                    && (item.getWeighWeightTon() == null
+                    || item.getWeighWeightTon().signum() <= 0)) {
+                throw new BusinessException(
+                        ErrorCode.BUSINESS_ERROR,
+                        "第" + lineNo + "行需填写大于0的过磅重量后才能审核"
+                );
+            }
+        }
     }
 
     private void lockSourcePurchaseOrderItems(PurchaseInbound inbound, PurchaseInboundRequest request) {
@@ -274,31 +507,25 @@ public class PurchaseInboundService extends AbstractCrudService<
 
     @Override
     protected PurchaseInbound saveCreatedEntity(PurchaseInbound entity, PurchaseInboundRequest request) {
-        return saveWithCompletionSync(entity, false);
+        return saveWithCompletionSync(entity);
     }
 
     @Override
     protected PurchaseInbound saveUpdatedEntity(PurchaseInbound entity, PurchaseInboundRequest request) {
-        return saveWithCompletionSync(entity, false);
+        return saveWithCompletionSync(entity);
     }
 
     @Override
     protected PurchaseInbound saveStatusEntity(PurchaseInbound entity) {
-        return saveWithCompletionSync(entity, true);
+        return saveWithCompletionSync(entity);
     }
 
-    private PurchaseInbound saveWithCompletionSync(PurchaseInbound entity, boolean recalculateDraftSourceOrder) {
+    private PurchaseInbound saveWithCompletionSync(PurchaseInbound entity) {
         boolean completedByServer = completionSyncService.shouldCompleteInbound(entity);
         if (completedByServer) {
             entity.setStatus(StatusConstants.INBOUND_COMPLETED);
         }
-        boolean shouldRecalculateSourceOrder = completedByServer
-                || (recalculateDraftSourceOrder && StatusConstants.DRAFT.equals(entity.getStatus()));
-        PurchaseInbound saved = saveEntity(entity);
-        if (shouldRecalculateSourceOrder) {
-            completionSyncService.synchronizeSourcePurchaseOrders(saved);
-        }
-        return saved;
+        return saveEntity(entity);
     }
 
     @Override

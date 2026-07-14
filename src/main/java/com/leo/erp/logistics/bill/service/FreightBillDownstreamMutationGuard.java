@@ -48,7 +48,7 @@ public class FreightBillDownstreamMutationGuard {
                     .countSettledAllocationsByStatementIdAndBusinessTypeAndStatus(
                             statement.getId(),
                             FREIGHT_PAYMENT_TYPE,
-                            StatusConstants.PAID
+                            StatusConstants.AUDITED
                     );
             if (paidAllocationCount > 0) {
                 throw new BusinessException(

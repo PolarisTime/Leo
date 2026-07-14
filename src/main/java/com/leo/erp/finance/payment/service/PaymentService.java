@@ -17,6 +17,7 @@ import com.leo.erp.finance.payment.repository.PaymentRepository;
 import com.leo.erp.finance.payment.web.dto.PaymentAllocationRequest;
 import com.leo.erp.finance.payment.web.dto.PaymentRequest;
 import com.leo.erp.finance.payment.web.dto.PaymentResponse;
+import com.leo.erp.finance.purchaseflow.service.SupplierLedgerLockService;
 import org.springframework.data.domain.Page;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -30,8 +31,6 @@ import java.util.TreeSet;
 @Service
 public class PaymentService extends AbstractCrudService<Payment, PaymentRequest, PaymentResponse> {
 
-    private static final String PAYMENT_STATUS_SETTLED = StatusConstants.PAID;
-
     private final PaymentRepository paymentRepository;
     private final PaymentMapper paymentMapper;
     private final PaymentApplyService applyService;
@@ -40,6 +39,7 @@ public class PaymentService extends AbstractCrudService<Payment, PaymentRequest,
     private final PaymentSettlementSyncService settlementSyncService;
     private final SourceAllocationLockService sourceAllocationLockService;
     private final PaymentPurchasePrepaymentService purchasePrepaymentService;
+    private SupplierLedgerLockService supplierLedgerLockService;
 
     @Autowired
     public PaymentService(PaymentRepository paymentRepository,
@@ -60,6 +60,11 @@ public class PaymentService extends AbstractCrudService<Payment, PaymentRequest,
         this.settlementSyncService = settlementSyncService;
         this.sourceAllocationLockService = sourceAllocationLockService;
         this.purchasePrepaymentService = purchasePrepaymentService;
+    }
+
+    @Autowired(required = false)
+    void setSupplierLedgerLockService(SupplierLedgerLockService supplierLedgerLockService) {
+        this.supplierLedgerLockService = supplierLedgerLockService;
     }
 
     public Page<PaymentResponse> page(PageQuery query, PageFilter filter) {
@@ -101,6 +106,10 @@ public class PaymentService extends AbstractCrudService<Payment, PaymentRequest,
 
     @Override
     protected void validateUpdate(Payment entity, PaymentRequest request) {
+        if (StatusConstants.AUDITED.equals(entity.getStatus())) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "已审核付款单禁止修改，请使用资金冲销单纠错");
+        }
+        assertLegacySupplierPaymentReadOnly(entity, "修改");
         if (!entity.getPaymentNo().equals(request.paymentNo())) {
             ensurePaymentNoUnique(request.paymentNo());
         }
@@ -190,27 +199,31 @@ public class PaymentService extends AbstractCrudService<Payment, PaymentRequest,
 
     @Override
     protected java.util.Set<String> allowedStatusTransitions() {
-        return java.util.Set.of(
-                StatusConstants.DRAFT + "->" + StatusConstants.PAID,
-                StatusConstants.PAID + "->" + StatusConstants.DRAFT
-        );
+        return java.util.Set.of(StatusConstants.DRAFT + "->" + StatusConstants.AUDITED);
     }
 
     @Override
     protected void beforeStatusUpdate(Payment entity, String currentStatus, String nextStatus) {
+        if (StatusConstants.AUDITED.equals(currentStatus)) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "已审核付款单禁止反审核，请使用资金冲销单纠错");
+        }
+        assertLegacySupplierPaymentReadOnly(entity, "审核");
         if (PaymentPurposes.isPurchasePrepayment(entity.getPaymentPurpose())) {
-            if (StatusConstants.PAID.equals(nextStatus)) {
-                purchasePrepaymentService.applySourceSnapshot(
-                        entity,
-                        entity.getSourcePurchaseOrderId(),
-                        entity.getAmount(),
-                        nextStatus
-                );
-            } else {
-                purchasePrepaymentService.assertRefundLifecycleMutable(entity, "反审核");
-                purchasePrepaymentService.validateNoStatementAllocations(entity);
-            }
+            purchasePrepaymentService.applySourceSnapshot(
+                    entity,
+                    entity.getSourcePurchaseOrderId(),
+                    entity.getAmount(),
+                    nextStatus
+            );
+            lockSupplierLedgerMutation(entity);
             return;
+        }
+        if (PaymentPurposes.isSupplierTotalPayment(entity.getPaymentPurpose())) {
+            lockSupplierLedgerMutation(entity);
+            return;
+        }
+        if (PaymentAllocationService.SUPPLIER_PAYMENT_TYPE.equals(entity.getCounterpartyType())) {
+            lockSupplierLedgerMutation(entity);
         }
         lockAllocationStatements(entity, null);
         settlementSyncService.captureOriginalAllocationState(entity);
@@ -219,8 +232,11 @@ public class PaymentService extends AbstractCrudService<Payment, PaymentRequest,
 
     @Override
     protected void beforeDelete(Payment entity) {
+        if (StatusConstants.AUDITED.equals(entity.getStatus())) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "已审核付款单禁止删除，请使用资金冲销单纠错");
+        }
+        assertLegacySupplierPaymentReadOnly(entity, "删除");
         if (PaymentPurposes.isPurchasePrepayment(entity.getPaymentPurpose())) {
-            purchasePrepaymentService.assertRefundLifecycleMutable(entity, "删除");
             purchasePrepaymentService.validateNoStatementAllocations(entity);
             return;
         }
@@ -270,7 +286,9 @@ public class PaymentService extends AbstractCrudService<Payment, PaymentRequest,
     private void lockAllocationStatements(Payment entity, PaymentRequest request) {
         TreeSet<Long> supplierStatementIds = new TreeSet<>();
         TreeSet<Long> freightStatementIds = new TreeSet<>();
-        if (entity != null && !PaymentPurposes.isPurchasePrepayment(entity.getPaymentPurpose())) {
+        if (entity != null
+                && !PaymentPurposes.isPurchasePrepayment(entity.getPaymentPurpose())
+                && !PaymentPurposes.isSupplierTotalPayment(entity.getPaymentPurpose())) {
             addStatementIds(
                     entity.getBusinessType(),
                     existingAllocationStatementIds(entity),
@@ -278,7 +296,9 @@ public class PaymentService extends AbstractCrudService<Payment, PaymentRequest,
                     freightStatementIds
             );
         }
-        if (request != null && !PaymentPurposes.isPurchasePrepayment(request.paymentPurpose())) {
+        if (request != null
+                && !PaymentPurposes.isPurchasePrepayment(request.paymentPurpose())
+                && !PaymentPurposes.isSupplierTotalPayment(request.paymentPurpose())) {
             addStatementIds(
                     request.businessType(),
                     requestedAllocationStatementIds(request),
@@ -362,5 +382,35 @@ public class PaymentService extends AbstractCrudService<Payment, PaymentRequest,
 
     private void lockPaymentRoot(Long id) {
         paymentRepository.findByIdAndDeletedFlagFalseForUpdate(id);
+    }
+
+    private SupplierLedgerLockService requireSupplierLedgerLockService() {
+        if (supplierLedgerLockService == null) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "供应商账簿锁服务不可用");
+        }
+        return supplierLedgerLockService;
+    }
+
+    private void lockSupplierLedgerMutation(Payment entity) {
+        if (entity.getCounterpartyId() == null || entity.getSettlementCompanyId() == null) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "供应商付款缺少供应商或结算主体身份");
+        }
+        requireSupplierLedgerLockService().lock(
+                entity.getSettlementCompanyId(),
+                entity.getCounterpartyId()
+        );
+    }
+
+    private void assertLegacySupplierPaymentReadOnly(Payment entity, String operation) {
+        boolean purchasePrepayment = PaymentPurposes.isPurchasePrepayment(entity.getPaymentPurpose());
+        boolean supplierStatementSettlement = PaymentPurposes.STATEMENT_SETTLEMENT.equals(
+                PaymentPurposes.normalize(entity.getPaymentPurpose())
+        ) && PaymentAllocationService.SUPPLIER_PAYMENT_TYPE.equals(entity.getBusinessType());
+        if (purchasePrepayment || supplierStatementSettlement) {
+            throw new BusinessException(
+                    ErrorCode.BUSINESS_ERROR,
+                    "旧采购预付款及供应商对账付款仅供历史查询，不允许" + operation
+            );
+        }
     }
 }

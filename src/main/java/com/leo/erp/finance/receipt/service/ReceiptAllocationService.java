@@ -24,7 +24,7 @@ import java.util.function.LongSupplier;
 @Service
 public class ReceiptAllocationService {
 
-    static final String RECEIPT_STATUS_SETTLED = StatusConstants.RECEIVED;
+    static final String RECEIPT_STATUS_SETTLED = StatusConstants.AUDITED;
 
     private final ReceiptStatementAllocationValidator statementAllocationValidator;
 
@@ -100,7 +100,7 @@ public class ReceiptAllocationService {
     }
 
     void validateExistingAllocationsForSettlement(Receipt entity, String nextStatus) {
-        if (!RECEIPT_STATUS_SETTLED.equals(nextStatus)) {
+        if (!StatusConstants.AUDITED.equals(nextStatus)) {
             return;
         }
         ReceiptRequest request = toStatusOnlyRequest(entity);
@@ -184,11 +184,11 @@ public class ReceiptAllocationService {
                                                      BigDecimal receiptAmount) {
         SettlementAllocationRule.requireCompleteForSettledStatus(
                 nextStatus,
-                RECEIPT_STATUS_SETTLED,
+                StatusConstants.AUDITED,
                 allocationEmpty,
                 totalAllocatedAmount,
                 receiptAmount,
-                "已收款状态必须填写核销明细",
+                "已审核状态必须填写核销明细",
                 "收款金额必须等于核销金额合计"
         );
     }

@@ -14,6 +14,7 @@ import com.leo.erp.master.project.domain.entity.Project;
 import com.leo.erp.master.project.repository.ProjectRepository;
 import com.leo.erp.sales.order.domain.entity.SalesOrder;
 import com.leo.erp.sales.order.domain.entity.SalesOrderItem;
+import com.leo.erp.sales.order.domain.entity.SalesModes;
 import com.leo.erp.sales.order.web.dto.SalesOrderItemRequest;
 import com.leo.erp.sales.order.web.dto.SalesOrderRequest;
 import com.leo.erp.security.permission.WorkflowTransitionGuard;
@@ -28,7 +29,9 @@ import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Set;
 import java.util.function.LongSupplier;
+import java.util.stream.Collectors;
 
 @Service
 public class SalesOrderApplyService {
@@ -107,6 +110,7 @@ public class SalesOrderApplyService {
                 request.projectName()
         );
         Project project = requireProjectSnapshot(request.projectId(), request.projectName(), customer);
+        String salesMode = SalesModes.normalizeRequired(request.salesMode());
         String nextStatus = BusinessStatusValidator.normalizeWithDefault(
                 request.status(),
                 entity.getStatus() != null ? entity.getStatus() : StatusConstants.DRAFT,
@@ -118,9 +122,10 @@ public class SalesOrderApplyService {
                 entity.getStatus(),
                 nextStatus,
                 StatusConstants.AUDITED,
+                StatusConstants.DELIVERY_VERIFICATION,
                 StatusConstants.SALES_COMPLETED
         );
-        applyHeader(entity, request, nextStatus, customer, project);
+        applyHeader(entity, request, nextStatus, salesMode, customer, project);
         applyItems(entity, request, nextIdSupplier);
     }
 
@@ -144,12 +149,28 @@ public class SalesOrderApplyService {
         requireProjectSnapshot(entity.getProjectId(), entity.getProjectName(), customer);
     }
 
+    void assertCompletionPermission(SalesOrder entity) {
+        assertStatusPermission(entity, StatusConstants.SALES_COMPLETED);
+    }
+
+    void assertStatusPermission(SalesOrder entity, String nextStatus) {
+        workflowTransitionGuard.assertAuditPermissionForProtectedValue(
+                "sales-order",
+                entity.getStatus(),
+                nextStatus,
+                StatusConstants.AUDITED,
+                StatusConstants.SALES_COMPLETED
+        );
+    }
+
     private void applyHeader(SalesOrder entity,
                              SalesOrderRequest request,
                              String nextStatus,
+                             String salesMode,
                              Customer customer,
                              Project project) {
         entity.setOrderNo(request.orderNo());
+        entity.setSalesMode(salesMode);
         entity.setPurchaseInboundNo(request.purchaseInboundNo());
         entity.setPurchaseOrderNo(request.purchaseOrderNo());
         entity.setCustomerName(customer == null ? request.customerName() : trimToNull(customer.getCustomerName()));
@@ -171,10 +192,18 @@ public class SalesOrderApplyService {
     private void applyItems(SalesOrder entity, SalesOrderRequest request, LongSupplier nextIdSupplier) {
         BigDecimal totalWeight = BigDecimal.ZERO;
         BigDecimal totalAmount = BigDecimal.ZERO;
-        SalesOrderSourceContext sourceContext = sourceAllocationService.prepareContext(request, entity.getId());
+        List<SalesOrderItem> managedItems = entity.getItems();
+        Set<Long> existingPurchaseOrderSourceItemIds = managedItems.stream()
+                .map(SalesOrderItem::getSourcePurchaseOrderItemId)
+                .filter(java.util.Objects::nonNull)
+                .collect(Collectors.toUnmodifiableSet());
+        SalesOrderSourceContext sourceContext = sourceAllocationService.prepareContext(
+                request,
+                entity.getId(),
+                existingPurchaseOrderSourceItemIds
+        );
         purchaseAllocationService.releaseSalesOrderItems(entity);
         sourceContext = weightResolver.withPurchaseOrderRemainingWeights(sourceContext);
-        List<SalesOrderItem> managedItems = entity.getItems();
         List<SalesOrderItem> items = ManagedEntityItemSupport.syncById(
                 new ArrayList<>(managedItems),
                 request.items(),
@@ -222,7 +251,7 @@ public class SalesOrderApplyService {
                 source.materialCode(),
                 lineNo
         );
-        sourceAllocationService.validateLine(source, lineNo, sourceContext);
+        sourceAllocationService.validateLine(source, lineNo, entity.getSalesMode(), sourceContext);
         BigDecimal pieceWeightTon = weightResolver.resolvePieceWeightTon(source, sourceContext);
         BigDecimal weightTon = weightResolver.resolveWeightTon(source, pieceWeightTon, sourceContext);
         Long effectiveWarehouseId = sourceWarehouseId == null ? source.warehouseId() : sourceWarehouseId;
@@ -271,6 +300,7 @@ public class SalesOrderApplyService {
             return false;
         }
         return StatusConstants.AUDITED.equals(entity.getStatus())
+                || StatusConstants.DELIVERY_VERIFICATION.equals(entity.getStatus())
                 || StatusConstants.SALES_COMPLETED.equals(entity.getStatus());
     }
 

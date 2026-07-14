@@ -10,16 +10,19 @@ import com.leo.erp.common.service.AbstractCrudService;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.finance.receipt.domain.entity.Receipt;
+import com.leo.erp.finance.receipt.domain.entity.ReceiptPurposes;
 import com.leo.erp.finance.receipt.domain.entity.ReceiptAllocation;
 import com.leo.erp.finance.receipt.mapper.ReceiptMapper;
 import com.leo.erp.finance.receipt.repository.ReceiptRepository;
 import com.leo.erp.finance.receipt.web.dto.ReceiptAllocationRequest;
 import com.leo.erp.finance.receipt.web.dto.ReceiptRequest;
 import com.leo.erp.finance.receipt.web.dto.ReceiptResponse;
+import com.leo.erp.finance.purchaseflow.service.SupplierPrepaymentBalanceService;
 import org.springframework.data.domain.Page;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Optional;
@@ -28,8 +31,6 @@ import java.util.TreeSet;
 @Service
 public class ReceiptService extends AbstractCrudService<Receipt, ReceiptRequest, ReceiptResponse> {
 
-    private static final String RECEIPT_STATUS_SETTLED = StatusConstants.RECEIVED;
-
     private final ReceiptRepository receiptRepository;
     private final ReceiptMapper receiptMapper;
     private final ReceiptApplyService applyService;
@@ -37,6 +38,7 @@ public class ReceiptService extends AbstractCrudService<Receipt, ReceiptRequest,
     private final ReceiptAllocationResponseAssembler allocationResponseAssembler;
     private final ReceiptSettlementSyncService settlementSyncService;
     private final SourceAllocationLockService sourceAllocationLockService;
+    private SupplierPrepaymentBalanceService supplierPrepaymentBalanceService;
 
     @Autowired
     public ReceiptService(ReceiptRepository receiptRepository,
@@ -57,9 +59,22 @@ public class ReceiptService extends AbstractCrudService<Receipt, ReceiptRequest,
         this.sourceAllocationLockService = sourceAllocationLockService;
     }
 
+    @Autowired(required = false)
+    void setSupplierPrepaymentBalanceService(SupplierPrepaymentBalanceService supplierPrepaymentBalanceService) {
+        this.supplierPrepaymentBalanceService = supplierPrepaymentBalanceService;
+    }
+
     public Page<ReceiptResponse> page(PageQuery query, PageFilter filter) {
-        Specification<Receipt> spec = Specs.<Receipt>keywordLike(filter.keyword(), "receiptNo", "customerName", "projectName")
+        Specification<Receipt> spec = Specs.<Receipt>keywordLike(
+                        filter.keyword(),
+                        "receiptNo",
+                        "counterpartyCode",
+                        "counterpartyName",
+                        "customerName",
+                        "projectName"
+                )
                 .and(Specs.equalIfPresent("customerName", filter.name()))
+                .and(Specs.equalIfPresent("counterpartyType", filter.businessType()))
                 .and(Specs.equalValueIfPresent("settlementCompanyId", filter.settlementCompanyId()))
                 .and(Specs.equalIfPresent("status", filter.status()))
                 .and(Specs.betweenIfPresent("receiptDate", filter.startDate(), filter.endDate()));
@@ -77,12 +92,29 @@ public class ReceiptService extends AbstractCrudService<Receipt, ReceiptRequest,
     }
 
     @Override
+    @Transactional
+    public ReceiptResponse updateStatus(Long id, String status) {
+        lockReceiptRoot(id);
+        return super.updateStatus(id, status);
+    }
+
+    @Override
+    @Transactional
+    public void delete(Long id) {
+        lockReceiptRoot(id);
+        super.delete(id);
+    }
+
+    @Override
     protected void validateCreate(ReceiptRequest request) {
         ensureReceiptNoUnique(request.receiptNo());
     }
 
     @Override
     protected void validateUpdate(Receipt entity, ReceiptRequest request) {
+        if (StatusConstants.AUDITED.equals(entity.getStatus())) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "已审核收款单禁止修改，请使用资金冲销单纠错");
+        }
         if (!entity.getReceiptNo().equals(request.receiptNo())) {
             ensureReceiptNoUnique(request.receiptNo());
         }
@@ -92,6 +124,11 @@ public class ReceiptService extends AbstractCrudService<Receipt, ReceiptRequest,
     protected ReceiptRequest normalizeCreateRequest(ReceiptRequest request, long entityId) {
         return new ReceiptRequest(
                 resolveCreateBusinessNo("receipt", request.receiptNo(), entityId),
+                request.counterpartyType(),
+                request.counterpartyId(),
+                request.counterpartyCode(),
+                request.counterpartyName(),
+                request.receiptPurpose(),
                 request.customerId(),
                 request.customerCode(),
                 request.customerName(),
@@ -114,6 +151,11 @@ public class ReceiptService extends AbstractCrudService<Receipt, ReceiptRequest,
     protected ReceiptRequest normalizeUpdateRequest(Receipt entity, ReceiptRequest request) {
         return new ReceiptRequest(
                 entity.getReceiptNo(),
+                request.counterpartyType(),
+                request.counterpartyId(),
+                request.counterpartyCode(),
+                request.counterpartyName(),
+                request.receiptPurpose(),
                 request.customerId(),
                 request.customerCode(),
                 request.customerName(),
@@ -164,14 +206,21 @@ public class ReceiptService extends AbstractCrudService<Receipt, ReceiptRequest,
 
     @Override
     protected java.util.Set<String> allowedStatusTransitions() {
-        return java.util.Set.of(
-                StatusConstants.DRAFT + "->" + StatusConstants.RECEIVED,
-                StatusConstants.RECEIVED + "->" + StatusConstants.DRAFT
-        );
+        return java.util.Set.of(StatusConstants.DRAFT + "->" + StatusConstants.AUDITED);
     }
 
     @Override
     protected void beforeStatusUpdate(Receipt entity, String currentStatus, String nextStatus) {
+        if (StatusConstants.AUDITED.equals(currentStatus)) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "已审核收款单禁止反审核，请使用资金冲销单纠错");
+        }
+        if (ReceiptPurposes.isSupplierReceipt(entity.getReceiptPurpose())) {
+            if (entity.getCounterpartyId() == null || entity.getSettlementCompanyId() == null) {
+                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "供应商收款缺少供应商或结算主体身份");
+            }
+            requireSupplierPrepaymentBalanceService().validateSupplierReceipt(entity, nextStatus);
+            return;
+        }
         lockAllocationStatements(entity, null);
         settlementSyncService.captureOriginalAllocationStatementIds(entity);
         receiptAllocationService.validateExistingAllocationsForSettlement(entity, nextStatus);
@@ -179,6 +228,9 @@ public class ReceiptService extends AbstractCrudService<Receipt, ReceiptRequest,
 
     @Override
     protected void beforeDelete(Receipt entity) {
+        if (StatusConstants.AUDITED.equals(entity.getStatus())) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "已审核收款单禁止删除，请使用资金冲销单纠错");
+        }
         lockAllocationStatements(entity, null);
     }
 
@@ -188,6 +240,11 @@ public class ReceiptService extends AbstractCrudService<Receipt, ReceiptRequest,
         return new ReceiptResponse(
                 response.id(),
                 response.receiptNo(),
+                response.counterpartyType(),
+                response.counterpartyId(),
+                response.counterpartyCode(),
+                response.counterpartyName(),
+                response.receiptPurpose(),
                 response.customerId(),
                 response.customerCode(),
                 response.customerName(),
@@ -220,10 +277,10 @@ public class ReceiptService extends AbstractCrudService<Receipt, ReceiptRequest,
 
     private void lockAllocationStatements(Receipt entity, ReceiptRequest request) {
         TreeSet<Long> customerStatementIds = new TreeSet<>();
-        if (entity != null) {
+        if (entity != null && !ReceiptPurposes.isSupplierReceipt(entity.getReceiptPurpose())) {
             customerStatementIds.addAll(existingAllocationStatementIds(entity));
         }
-        if (request != null) {
+        if (request != null && !ReceiptPurposes.isSupplierReceipt(request.receiptPurpose())) {
             customerStatementIds.addAll(requestedAllocationStatementIds(request));
         }
         sourceAllocationLockService.lockStatementSources(
@@ -273,6 +330,17 @@ public class ReceiptService extends AbstractCrudService<Receipt, ReceiptRequest,
         if (receiptRepository.existsByReceiptNoAndDeletedFlagFalse(receiptNo)) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "收款单号已存在");
         }
+    }
+
+    private SupplierPrepaymentBalanceService requireSupplierPrepaymentBalanceService() {
+        if (supplierPrepaymentBalanceService == null) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "供应商预付款余额服务不可用");
+        }
+        return supplierPrepaymentBalanceService;
+    }
+
+    private void lockReceiptRoot(Long id) {
+        receiptRepository.findByIdAndDeletedFlagFalseForUpdate(id);
     }
 
 }

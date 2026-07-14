@@ -14,6 +14,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -38,17 +39,81 @@ public class PurchaseInboundSourceValidator {
             Long currentInboundId,
             List<Long> previousSourcePurchaseOrderItemIds
     ) {
+        assertNoDuplicateSourcePurchaseOrderItems(request);
         List<Long> sourcePurchaseOrderItemIds = allocationService.extractSourcePurchaseOrderItemIds(request);
         List<Long> affectedSourcePurchaseOrderItemIds = Stream
                 .concat(previousSourcePurchaseOrderItemIds.stream(), sourcePurchaseOrderItemIds.stream())
                 .distinct()
                 .toList();
+        Map<Long, PurchaseOrderItem> sourcePurchaseOrderItemMap =
+                loadSourcePurchaseOrderItemMap(affectedSourcePurchaseOrderItemIds);
+        assertSingleSourcePurchaseOrder(request, sourcePurchaseOrderItemIds, sourcePurchaseOrderItemMap);
         return new SourceValidationContext(
                 sourcePurchaseOrderItemIds,
                 affectedSourcePurchaseOrderItemIds,
-                loadSourcePurchaseOrderItemMap(affectedSourcePurchaseOrderItemIds),
+                sourcePurchaseOrderItemMap,
                 allocationService.prepareContext(sourcePurchaseOrderItemIds, currentInboundId)
         );
+    }
+
+    private void assertSingleSourcePurchaseOrder(
+            PurchaseInboundRequest request,
+            List<Long> requestedSourceItemIds,
+            Map<Long, PurchaseOrderItem> sourceItemMap
+    ) {
+        Map<String, PurchaseOrder> sourceOrders = requestedSourceItemIds.stream()
+                .map(sourceItemMap::get)
+                .filter(java.util.Objects::nonNull)
+                .map(PurchaseOrderItem::getPurchaseOrder)
+                .filter(java.util.Objects::nonNull)
+                .collect(Collectors.toMap(
+                        this::sourceOrderIdentity,
+                        order -> order,
+                        (left, right) -> left,
+                        java.util.LinkedHashMap::new
+                ));
+        if (sourceOrders.size() > 1) {
+            throw new BusinessException(
+                    ErrorCode.BUSINESS_ERROR,
+                    "一张采购入库单只能导入一张采购订单，不能混合多个来源单据"
+            );
+        }
+        if (sourceOrders.size() == 1) {
+            PurchaseOrder sourceOrder = sourceOrders.values().iterator().next();
+            String sourceOrderNo = BusinessDocumentValidator.trimToNull(sourceOrder.getOrderNo());
+            if (sourceOrderNo != null && !sourceOrderNo.equals(
+                    BusinessDocumentValidator.trimToNull(request.purchaseOrderNo()))) {
+                throw new BusinessException(
+                        ErrorCode.BUSINESS_ERROR,
+                        "采购入库单采购订单号与来源采购订单不一致"
+                );
+            }
+        }
+    }
+
+    private String sourceOrderIdentity(PurchaseOrder order) {
+        if (order.getId() != null) {
+            return "ID:" + order.getId();
+        }
+        return "NO:" + BusinessDocumentValidator.trimToNull(order.getOrderNo());
+    }
+
+    private void assertNoDuplicateSourcePurchaseOrderItems(PurchaseInboundRequest request) {
+        Map<Long, Integer> firstLineBySourceId = new HashMap<>();
+        for (int index = 0; index < request.items().size(); index++) {
+            Long sourceId = request.items().get(index).sourcePurchaseOrderItemId();
+            if (sourceId == null) {
+                continue;
+            }
+            int lineNo = index + 1;
+            Integer firstLine = firstLineBySourceId.putIfAbsent(sourceId, lineNo);
+            if (firstLine != null) {
+                throw new BusinessException(
+                        ErrorCode.BUSINESS_ERROR,
+                        "第" + lineNo + "行重复引用来源采购订单明细（首次出现在第" + firstLine + "行）"
+                );
+            }
+        }
     }
 
     Map<Long, PurchaseOrderItem> loadSourcePurchaseOrderItemMap(List<Long> sourceIds) {
@@ -115,10 +180,7 @@ public class PurchaseInboundSourceValidator {
                 "第" + lineNo + "行来源采购订单未审核，不能作为来源单据"
         );
         assertSourceId(headerSupplierId, sourceOrder.getSupplierId(), lineNo, "供应商ID");
-        String requestedSupplierCode = BusinessDocumentValidator.trimToNull(headerSupplierCode);
-        if (requestedSupplierCode != null) {
-            assertSourceOrderText(requestedSupplierCode, sourceOrder.getSupplierCode(), lineNo, "供应商编码");
-        }
+        assertSourceOrderText(headerSupplierCode, sourceOrder.getSupplierCode(), lineNo, "供应商编码");
         assertSourceOrderText(headerSupplierName, sourceOrder.getSupplierName(), lineNo, "供应商");
         assertSourceItemText(request.materialCode(), sourceItem.getMaterialCode(), lineNo, "物料编码");
         assertSourceId(request.materialId(), sourceItem.getMaterialId(), lineNo, "商品ID");

@@ -446,13 +446,19 @@ public class ReceivablePayableQueryRepository {
                 inbound_payable AS (
                     SELECT
                         item.inbound_id,
-                        SUM(item.amount + item.weight_adjustment_amount) AS total_amount,
+                        SUM(item.amount + COALESCE(item.weight_adjustment_amount, 0)) AS total_amount,
                         BOOL_AND(supplier_match.source_inbound_item_id IS NOT NULL) AS fully_reconciled,
                         STRING_AGG(
                             DISTINCT supplier_match.statement_no,
                             ', ' ORDER BY supplier_match.statement_no
                         ) AS statement_nos
                     FROM po_purchase_inbound_item item
+                    JOIN po_purchase_order_item source_order_item
+                        ON source_order_item.id = item.source_purchase_order_item_id
+                    JOIN po_purchase_order source_order
+                        ON source_order.id = source_order_item.order_id
+                       AND source_order.deleted_flag = FALSE
+                       AND source_order.status = '完成采购'
                     LEFT JOIN supplier_statement_matches supplier_match
                         ON supplier_match.source_inbound_item_id = item.id
                     GROUP BY item.inbound_id
@@ -477,7 +483,7 @@ public class ReceivablePayableQueryRepository {
                         ON allocation.payment_id = payment.id
                        AND allocation.allocated_amount > 0
                     WHERE payment.deleted_flag = FALSE
-                      AND payment.status = '已付款'
+                      AND payment.status = '已审核'
                       AND payment.payment_purpose = 'PURCHASE_PREPAYMENT'
                       AND payment.counterparty_type = '供应商'
                     UNION ALL
@@ -491,7 +497,7 @@ public class ReceivablePayableQueryRepository {
                     LEFT JOIN purchase_prepayment_allocation_totals allocation_total
                         ON allocation_total.payment_id = payment.id
                     WHERE payment.deleted_flag = FALSE
-                      AND payment.status = '已付款'
+                      AND payment.status = '已审核'
                       AND payment.payment_purpose = 'PURCHASE_PREPAYMENT'
                       AND payment.counterparty_type = '供应商'
                       AND payment.amount > COALESCE(allocation_total.allocated_amount, 0)
@@ -567,7 +573,7 @@ public class ReceivablePayableQueryRepository {
                        AND statement.customer_id = receipt.customer_id
                        AND statement.settlement_company_id = receipt.settlement_company_id
                     WHERE receipt.deleted_flag = FALSE
-                      AND receipt.status = '已收款'
+                      AND receipt.status = '已审核'
                     UNION ALL
                     SELECT
                         '应付' AS direction,
@@ -599,7 +605,7 @@ public class ReceivablePayableQueryRepository {
                     JOIN inbound_payable
                         ON inbound_payable.inbound_id = inbound.id
                     WHERE inbound.deleted_flag = FALSE
-                      AND inbound.status IN ('已审核', '完成入库', '完成采购')
+                      AND inbound.status IN ('已审核', '完成入库')
                     UNION ALL
                     SELECT
                         '应付' AS direction,
@@ -647,31 +653,121 @@ public class ReceivablePayableQueryRepository {
                     SELECT
                         '应付' AS direction,
                         '供应商' AS counterparty_type,
-                        refund_receipt.supplier_id AS counterparty_id,
-                        refund_receipt.supplier_code AS counterparty_code,
-                        refund_receipt.supplier_name AS counterparty_name,
-                        refund_receipt.settlement_company_id,
-                        refund_receipt.settlement_company_name,
+                        payment.counterparty_id,
+                        payment.counterparty_code,
+                        payment.counterparty_name,
+                        payment.settlement_company_id,
+                        payment.settlement_company_name,
+                        '未对账' AS reconciliation_status,
+                        'SETTLEMENT' AS entry_role,
+                        '供应商付款单' AS source_type,
+                        payment.id AS source_document_id,
+                        CAST(NULL AS BIGINT) AS source_line_id,
+                        payment.payment_no AS document_no,
+                        payment.payment_no AS source_no,
+                        CAST(NULL AS VARCHAR) AS project_name,
+                        payment.payment_date::date AS accounting_date,
+                        payment.payment_date::date AS due_date,
+                        payment.amount AS debit_amount,
+                        CAST(0 AS NUMERIC(14, 2)) AS credit_amount,
+                        payment.status,
+                        payment.remark,
+                        payment.created_by
+                    FROM fm_payment payment
+                    WHERE payment.deleted_flag = FALSE
+                      AND payment.status = '已审核'
+                      AND payment.payment_purpose = 'SUPPLIER_PAYMENT'
+                      AND payment.counterparty_type = '供应商'
+                    UNION ALL
+                    SELECT
+                        '应付' AS direction,
+                        '供应商' AS counterparty_type,
+                        receipt.counterparty_id,
+                        receipt.counterparty_code,
+                        receipt.counterparty_name,
+                        receipt.settlement_company_id,
+                        receipt.settlement_company_name,
                         '未对账' AS reconciliation_status,
                         'SETTLEMENT_REVERSAL' AS entry_role,
-                        '供应商退款到账单' AS source_type,
-                        refund_receipt.id AS source_document_id,
+                        '收款单' AS source_type,
+                        receipt.id AS source_document_id,
                         CAST(NULL AS BIGINT) AS source_line_id,
-                        refund_receipt.refund_receipt_no AS document_no,
-                        COALESCE(purchase_refund.refund_no, refund_receipt.refund_receipt_no) AS source_no,
+                        receipt.receipt_no AS document_no,
+                        receipt.receipt_no AS source_no,
                         CAST(NULL AS VARCHAR) AS project_name,
-                        refund_receipt.receipt_date::date AS accounting_date,
-                        refund_receipt.receipt_date::date AS due_date,
+                        receipt.receipt_date::date AS accounting_date,
+                        receipt.receipt_date::date AS due_date,
                         CAST(0 AS NUMERIC(14, 2)) AS debit_amount,
-                        COALESCE(refund_receipt.amount, 0) AS credit_amount,
-                        refund_receipt.status,
-                        refund_receipt.remark,
-                        refund_receipt.created_by
-                    FROM fm_supplier_refund_receipt refund_receipt
-                    LEFT JOIN po_purchase_refund purchase_refund
-                        ON purchase_refund.id = refund_receipt.purchase_refund_id
-                    WHERE refund_receipt.deleted_flag = FALSE
-                      AND refund_receipt.status = '已收款'
+                        COALESCE(receipt.amount, 0) AS credit_amount,
+                        receipt.status,
+                        receipt.remark,
+                        receipt.created_by
+                    FROM fm_receipt receipt
+                    WHERE receipt.deleted_flag = FALSE
+                      AND receipt.status = '已审核'
+                      AND receipt.counterparty_type = '供应商'
+                    UNION ALL
+                    SELECT
+                        '应付' AS direction,
+                        '供应商' AS counterparty_type,
+                        reversal.counterparty_id,
+                        reversal.counterparty_code,
+                        reversal.counterparty_name,
+                        reversal.settlement_company_id,
+                        reversal.settlement_company_name,
+                        '未对账' AS reconciliation_status,
+                        'SETTLEMENT_REVERSAL' AS entry_role,
+                        '资金冲销单' AS source_type,
+                        reversal.id AS source_document_id,
+                        CAST(NULL AS BIGINT) AS source_line_id,
+                        reversal.reversal_no AS document_no,
+                        payment.payment_no AS source_no,
+                        CAST(NULL AS VARCHAR) AS project_name,
+                        reversal.reversal_date::date AS accounting_date,
+                        reversal.reversal_date::date AS due_date,
+                        CAST(0 AS NUMERIC(14, 2)) AS debit_amount,
+                        reversal.amount AS credit_amount,
+                        reversal.status,
+                        reversal.reason AS remark,
+                        reversal.created_by
+                    FROM fm_cash_reversal reversal
+                    JOIN fm_payment payment
+                      ON payment.id = reversal.original_payment_id
+                    WHERE reversal.deleted_flag = FALSE
+                      AND reversal.status = '已审核'
+                      AND payment.deleted_flag = FALSE
+                      AND payment.status = '已审核'
+                    UNION ALL
+                    SELECT
+                        '应付' AS direction,
+                        '供应商' AS counterparty_type,
+                        reversal.counterparty_id,
+                        reversal.counterparty_code,
+                        reversal.counterparty_name,
+                        reversal.settlement_company_id,
+                        reversal.settlement_company_name,
+                        '未对账' AS reconciliation_status,
+                        'SETTLEMENT' AS entry_role,
+                        '资金冲销单' AS source_type,
+                        reversal.id AS source_document_id,
+                        CAST(NULL AS BIGINT) AS source_line_id,
+                        reversal.reversal_no AS document_no,
+                        receipt.receipt_no AS source_no,
+                        CAST(NULL AS VARCHAR) AS project_name,
+                        reversal.reversal_date::date AS accounting_date,
+                        reversal.reversal_date::date AS due_date,
+                        reversal.amount AS debit_amount,
+                        CAST(0 AS NUMERIC(14, 2)) AS credit_amount,
+                        reversal.status,
+                        reversal.reason AS remark,
+                        reversal.created_by
+                    FROM fm_cash_reversal reversal
+                    JOIN fm_receipt receipt
+                      ON receipt.id = reversal.original_receipt_id
+                    WHERE reversal.deleted_flag = FALSE
+                      AND reversal.status = '已审核'
+                      AND receipt.deleted_flag = FALSE
+                      AND receipt.status = '已审核'
                     UNION ALL
                     SELECT
                         '应付' AS direction,
@@ -756,7 +852,7 @@ public class ReceivablePayableQueryRepository {
                        AND payment.counterparty_type = '物流商'
                        AND freight_statement.carrier_id = payment.counterparty_id
                     WHERE payment.deleted_flag = FALSE
-                      AND payment.status = '已付款'
+                      AND payment.status = '已审核'
                       AND payment.payment_purpose = 'STATEMENT_SETTLEMENT'
                       AND payment.counterparty_type IN ('供应商', '物流商')
                       AND num_nonnulls(
@@ -806,11 +902,40 @@ public class ReceivablePayableQueryRepository {
                     WHERE adjustment.deleted_flag = FALSE
                       AND adjustment.status = '已审核'
                 ),
-                ledger AS (
+                ledger_raw AS (
                     SELECT source.*
                     FROM ledger_source source
                     WHERE source.counterparty_id IS NOT NULL
                       AND source.settlement_company_id IS NOT NULL
+                ),
+                ledger AS (
+                    SELECT
+                        raw.direction,
+                        raw.counterparty_type,
+                        raw.counterparty_id,
+                        raw.counterparty_code,
+                        raw.counterparty_name,
+                        raw.settlement_company_id,
+                        raw.settlement_company_name,
+                        CASE
+                            WHEN raw.counterparty_type = '供应商' THEN '未对账'
+                            ELSE raw.reconciliation_status
+                        END AS reconciliation_status,
+                        raw.entry_role,
+                        raw.source_type,
+                        raw.source_document_id,
+                        raw.source_line_id,
+                        raw.document_no,
+                        raw.source_no,
+                        raw.project_name,
+                        raw.accounting_date,
+                        raw.due_date,
+                        raw.debit_amount,
+                        raw.credit_amount,
+                        raw.status,
+                        raw.remark,
+                        raw.created_by
+                    FROM ledger_raw raw
                 ),
                 latest_party_snapshots AS (
                     SELECT DISTINCT ON (
@@ -871,6 +996,7 @@ public class ReceivablePayableQueryRepository {
                         ) AS balance_amount,
                         COUNT(1) AS entry_count
                     FROM ledger
+                    WHERE ledger.source_type <> '台账调整单'
                     GROUP BY ledger.direction,
                              ledger.counterparty_type,
                              ledger.counterparty_id,
@@ -909,6 +1035,7 @@ public class ReceivablePayableQueryRepository {
                        AND pt.settlement_company_id = ledger.settlement_company_id
                        AND pt.reconciliation_status = ledger.reconciliation_status
                     WHERE ledger.entry_role = 'RECOGNITION'
+                      AND ledger.source_type <> '台账调整单'
                 ),
                 open_recognition_entries AS (
                     SELECT

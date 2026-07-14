@@ -1,9 +1,11 @@
 package com.leo.erp.finance.receipt.repository;
 
 import com.leo.erp.finance.receipt.domain.entity.Receipt;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -16,6 +18,10 @@ public interface ReceiptRepository extends JpaRepository<Receipt, Long>, JpaSpec
 
     @EntityGraph(attributePaths = "items")
     Optional<Receipt> findByIdAndDeletedFlagFalse(Long id);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select receipt from Receipt receipt where receipt.id = :id and receipt.deletedFlag = false")
+    Optional<Receipt> findByIdAndDeletedFlagFalseForUpdate(@Param("id") Long id);
 
     @Query("""
             select coalesce(sum(receipt.amount), 0)

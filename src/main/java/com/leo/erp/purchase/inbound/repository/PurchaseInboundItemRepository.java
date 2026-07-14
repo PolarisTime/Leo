@@ -5,6 +5,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.math.BigDecimal;
 import java.util.Collection;
 import java.util.List;
 
@@ -104,6 +105,23 @@ public interface PurchaseInboundItemRepository extends JpaRepository<PurchaseInb
             @Param("inboundIds") Collection<Long> inboundIds
     );
 
+    @Query("""
+            select item.sourcePurchaseOrderItemId as sourcePurchaseOrderItemId,
+                   coalesce(sum(item.quantity), 0) as totalQuantity,
+                   coalesce(sum(coalesce(item.weighWeightTon, item.weightTon)), 0) as totalWeightTon,
+                   coalesce(sum(item.amount + coalesce(item.weightAdjustmentAmount, 0)), 0) as totalAmount
+            from PurchaseInboundItem item
+            join item.purchaseInbound inbound
+            where inbound.deletedFlag = false
+              and inbound.status in :effectiveStatuses
+              and item.sourcePurchaseOrderItemId in :sourcePurchaseOrderItemIds
+            group by item.sourcePurchaseOrderItemId
+            """)
+    List<PurchaseOrderInvoiceCapacitySummary> summarizeInvoiceCapacityBySourcePurchaseOrderItemIds(
+            @Param("sourcePurchaseOrderItemIds") Collection<Long> sourcePurchaseOrderItemIds,
+            @Param("effectiveStatuses") Collection<String> effectiveStatuses
+    );
+
     interface PurchaseOrderAllocationSummary {
 
         Long getSourcePurchaseOrderItemId();
@@ -134,5 +152,16 @@ public interface PurchaseInboundItemRepository extends JpaRepository<PurchaseInb
         java.math.BigDecimal getTotalWeighWeightTon();
 
         java.math.BigDecimal getTotalWeightAdjustmentTon();
+    }
+
+    interface PurchaseOrderInvoiceCapacitySummary {
+
+        Long getSourcePurchaseOrderItemId();
+
+        Long getTotalQuantity();
+
+        BigDecimal getTotalWeightTon();
+
+        BigDecimal getTotalAmount();
     }
 }

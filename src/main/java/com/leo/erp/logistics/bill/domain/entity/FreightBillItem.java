@@ -28,6 +28,9 @@ public class FreightBillItem {
     @Column(name = "source_sales_outbound_item_id")
     private Long sourceSalesOutboundItemId;
 
+    @Column(name = "source_sales_order_item_id")
+    private Long sourceSalesOrderItemId;
+
     @Column(name = "settlement_company_id")
     private Long settlementCompanyId;
 

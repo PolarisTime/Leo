@@ -23,8 +23,33 @@ public record SalesOrderResponse(
         String status,
         boolean deletedFlag,
         String remark,
-        List<SalesOrderItemResponse> items
+        List<SalesOrderItemResponse> items,
+        String salesMode
 ) {
+    public SalesOrderResponse(Long id,
+                              String orderNo,
+                              String purchaseInboundNo,
+                              String purchaseOrderNo,
+                              String customerCode,
+                              Long customerId,
+                              String customerName,
+                              Long projectId,
+                              String projectName,
+                              Long settlementCompanyId,
+                              String settlementCompanyName,
+                              LocalDate deliveryDate,
+                              String salesName,
+                              BigDecimal totalWeight,
+                              BigDecimal totalAmount,
+                              String status,
+                              boolean deletedFlag,
+                              String remark,
+                              List<SalesOrderItemResponse> items) {
+        this(id, orderNo, purchaseInboundNo, purchaseOrderNo, customerCode, customerId, customerName, projectId,
+                projectName, settlementCompanyId, settlementCompanyName, deliveryDate, salesName, totalWeight,
+                totalAmount, status, deletedFlag, remark, items, null);
+    }
+
     public SalesOrderResponse(Long id,
                               String orderNo,
                               String purchaseInboundNo,

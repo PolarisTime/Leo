@@ -1,11 +1,15 @@
 package com.leo.erp.purchase.order.repository;
 
 import com.leo.erp.purchase.order.domain.entity.PurchaseOrder;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.jpa.domain.Specification;
+import org.springframework.data.repository.query.Param;
 
 import java.util.Collection;
 import java.util.List;
@@ -23,6 +27,11 @@ public interface PurchaseOrderRepository extends JpaRepository<PurchaseOrder, Lo
 
     @EntityGraph(attributePaths = "items")
     Optional<PurchaseOrder> findByIdAndDeletedFlagFalse(Long id);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select purchaseOrder from PurchaseOrder purchaseOrder "
+            + "where purchaseOrder.id = :id and purchaseOrder.deletedFlag = false")
+    Optional<PurchaseOrder> findByIdAndDeletedFlagFalseForUpdate(@Param("id") Long id);
 
     @EntityGraph(attributePaths = "items")
     List<PurchaseOrder> findByIdInAndDeletedFlagFalse(Collection<Long> ids);

@@ -1,6 +1,7 @@
 package com.leo.erp.purchase.inbound.web.dto;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 
 public record PurchaseInboundItemResponse(
         Long id,
@@ -31,7 +32,15 @@ public record PurchaseInboundItemResponse(
         BigDecimal weightAdjustmentTon,
         BigDecimal weightAdjustmentAmount,
         BigDecimal unitPrice,
-        BigDecimal amount
+        BigDecimal amount,
+        String toleranceDirection,
+        BigDecimal toleranceLimitPercent,
+        BigDecimal toleranceActualPercent,
+        String toleranceReasonCode,
+        String toleranceRemark,
+        Long toleranceConfirmedBy,
+        String toleranceConfirmedName,
+        LocalDateTime toleranceConfirmedAt
 ) {
     public PurchaseInboundItemResponse(Long id,
                                        Integer lineNo,
@@ -63,7 +72,7 @@ public record PurchaseInboundItemResponse(
                 sourcePurchaseOrderItemId, settlementCompanyId, settlementCompanyName, null, warehouseName,
                 settlementMode, batchNo, null, remainingQuantity, quantity, quantityUnit, pieceWeightTon,
                 piecesPerBundle, weightTon, weighWeightTon, weightAdjustmentTon, weightAdjustmentAmount,
-                unitPrice, amount);
+                unitPrice, amount, null, null, null, null, null, null, null, null);
     }
 
     public PurchaseInboundItemResponse(Long id,
@@ -93,6 +102,7 @@ public record PurchaseInboundItemResponse(
         this(id, lineNo, null, materialCode, brand, category, material, spec, length, unit,
                 sourcePurchaseOrderItemId, null, null, null, warehouseName, settlementMode, batchNo, null,
                 remainingQuantity, quantity, quantityUnit, pieceWeightTon, piecesPerBundle,
-                weightTon, weighWeightTon, weightAdjustmentTon, weightAdjustmentAmount, unitPrice, amount);
+                weightTon, weighWeightTon, weightAdjustmentTon, weightAdjustmentAmount, unitPrice, amount,
+                null, null, null, null, null, null, null, null);
     }
 }
