@@ -50,8 +50,6 @@ public class ModuleCatalog {
         modules.put("sales-order", "销售订单");
         modules.put("sales-outbound", "销售出库");
         modules.put("freight-bill", "物流单");
-        modules.put("purchase-contract", "采购合同");
-        modules.put("sales-contract", "销售合同");
         modules.put("supplier-statement", "供应商对账单");
         modules.put("customer-statement", "客户对账单");
         modules.put("freight-statement", "物流对账单");

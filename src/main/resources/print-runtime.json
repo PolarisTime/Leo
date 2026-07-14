@@ -36,20 +36,6 @@
       "productPrintItems": true,
       "printItemAmount": false
     },
-    "purchase-contract": {
-      "tableName": "ct_purchase_contract",
-      "itemTableName": "ct_purchase_contract_item",
-      "itemFkColumn": "contract_id",
-      "productPrintItems": true,
-      "printItemAmount": true
-    },
-    "sales-contract": {
-      "tableName": "ct_sales_contract",
-      "itemTableName": "ct_sales_contract_item",
-      "itemFkColumn": "contract_id",
-      "productPrintItems": true,
-      "printItemAmount": true
-    },
     "customer-statement": {
       "tableName": "st_customer_statement",
       "itemTableName": "st_customer_statement_item",
@@ -410,10 +396,8 @@
   "defaultPdfFormLayouts": [
     {"billType": "purchase-order", "resource": "print-forms/default-purchase-order.layout.json"},
     {"billType": "purchase-inbound", "resource": "print-forms/default-purchase-inbound.layout.json"},
-    {"billType": "purchase-contract", "resource": "print-forms/default-purchase-contract.layout.json"},
     {"billType": "sales-order", "resource": "print-forms/default-sales-order.layout.json"},
     {"billType": "sales-outbound", "resource": "print-forms/default-sales-outbound.layout.json"},
-    {"billType": "sales-contract", "resource": "print-forms/default-sales-contract.layout.json"},
     {"billType": "customer-statement", "resource": "print-forms/default-customer-statement.layout.json"},
     {"billType": "supplier-statement", "resource": "print-forms/default-supplier-statement.layout.json"},
     {"billType": "freight-statement", "resource": "print-forms/default-freight-statement.layout.json"},

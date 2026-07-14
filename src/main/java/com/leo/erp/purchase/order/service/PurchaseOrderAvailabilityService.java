@@ -135,7 +135,6 @@ public class PurchaseOrderAvailabilityService {
                                     p -> p.getTotalQuantity()
                             ))
             );
-            case PURCHASE_CONTRACT -> Map.of();
         };
 
         Map<Long, Integer> result = new HashMap<>();
@@ -172,8 +171,7 @@ public class PurchaseOrderAvailabilityService {
 
     enum ImportCandidateUsage {
         PURCHASE_INBOUND("purchase-inbound"),
-        SALES_ORDER("sales-order"),
-        PURCHASE_CONTRACT("purchase-contract");
+        SALES_ORDER("sales-order");
 
         private final String value;
 

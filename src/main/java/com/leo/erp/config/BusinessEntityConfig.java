@@ -2,8 +2,6 @@ package com.leo.erp.config;
 
 import com.leo.erp.common.support.BusinessEntityRegistrar;
 import com.leo.erp.common.support.BusinessRecordEntityCatalog;
-import com.leo.erp.contract.purchase.domain.entity.PurchaseContract;
-import com.leo.erp.contract.sales.domain.entity.SalesContract;
 import com.leo.erp.finance.payment.domain.entity.Payment;
 import com.leo.erp.finance.receipt.domain.entity.Receipt;
 import com.leo.erp.logistics.bill.domain.entity.FreightBill;
@@ -38,8 +36,6 @@ public class BusinessEntityConfig {
         registrar.register("sales-order", SalesOrder.class);
         registrar.register("sales-outbound", SalesOutbound.class);
         registrar.register("freight-bill", FreightBill.class);
-        registrar.register("purchase-contract", PurchaseContract.class);
-        registrar.register("sales-contract", SalesContract.class);
         registrar.register("supplier-statement", SupplierStatement.class);
         registrar.register("customer-statement", CustomerStatement.class);
         registrar.register("freight-statement", FreightStatement.class);
