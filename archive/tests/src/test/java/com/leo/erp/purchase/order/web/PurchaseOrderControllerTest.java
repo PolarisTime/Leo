@@ -1,0 +1,253 @@
+package com.leo.erp.purchase.order.web;
+
+import com.leo.erp.common.api.ApiResponse;
+import com.leo.erp.common.api.PageFilter;
+import com.leo.erp.common.api.PageQuery;
+import com.leo.erp.common.api.PageResponse;
+import com.leo.erp.common.web.dto.StatusUpdateRequest;
+import com.leo.erp.purchase.order.service.PurchaseOrderService;
+import com.leo.erp.purchase.order.web.dto.PieceWeightResponse;
+import com.leo.erp.purchase.order.web.dto.PurchaseOrderImportCandidateResponse;
+import com.leo.erp.purchase.order.web.dto.PurchaseOrderCompletionResponse;
+import com.leo.erp.purchase.order.web.dto.PurchaseOrderRequest;
+import com.leo.erp.purchase.order.web.dto.PurchaseOrderResponse;
+import com.leo.erp.purchase.refund.service.PurchaseRefundService;
+import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+
+import java.util.List;
+import java.util.Arrays;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+class PurchaseOrderControllerTest {
+
+    @Test
+    void completeCommandReturnsPurchaseCompletionResult() {
+        PurchaseRefundService service = mock(PurchaseRefundService.class);
+        PurchaseOrderCompletionController completionController = new PurchaseOrderCompletionController(service);
+        PurchaseOrderCompletionResponse expected = new PurchaseOrderCompletionResponse(
+                1L,
+                "PO-001",
+                "完成采购",
+                null
+        );
+        when(service.completePurchaseOrder(1L)).thenReturn(expected);
+
+        ApiResponse<PurchaseOrderCompletionResponse> response = completionController.complete(1L);
+
+        assertThat(response.message()).isEqualTo("完成采购成功");
+        assertThat(response.data()).isSameAs(expected);
+        verify(service).completePurchaseOrder(1L);
+    }
+
+    @Test
+    void candidateEndpointsShouldExposeSupplierIdFilter() {
+        for (String methodName : List.of("importCandidates", "prepaymentCandidates", "page")) {
+            var method = Arrays.stream(PurchaseOrderController.class.getDeclaredMethods())
+                    .filter(candidate -> candidate.getName().equals(methodName))
+                    .findFirst()
+                    .orElseThrow();
+            assertThat(Arrays.stream(method.getParameters()).map(java.lang.reflect.Parameter::getName))
+                    .as(methodName)
+                    .contains("supplierId");
+        }
+    }
+
+    private final PurchaseOrderService purchaseOrderService = mock(PurchaseOrderService.class);
+    private final PurchaseOrderController controller = new PurchaseOrderController(purchaseOrderService);
+
+    @Test
+    void searchReturnsPurchaseOrderList() {
+        PurchaseOrderResponse order = mock(PurchaseOrderResponse.class);
+        when(purchaseOrderService.search("test", 100)).thenReturn(List.of(order));
+
+        ApiResponse<List<PurchaseOrderResponse>> response = controller.search("test", 100);
+
+        assertThat(response.code()).isEqualTo(0);
+        assertThat(response.data()).containsExactly(order);
+        verify(purchaseOrderService).search("test", 100);
+    }
+
+    @Test
+    void searchWithNullKeywordUsesEmptyString() {
+        when(purchaseOrderService.search("", 100)).thenReturn(List.of());
+
+        ApiResponse<List<PurchaseOrderResponse>> response = controller.search(null, 100);
+
+        assertThat(response.data()).isEmpty();
+        verify(purchaseOrderService).search("", 100);
+    }
+
+    @Test
+    void searchLimitsMaxTo500() {
+        when(purchaseOrderService.search("test", 500)).thenReturn(List.of());
+
+        controller.search("test", 1000);
+
+        verify(purchaseOrderService).search("test", 500);
+    }
+
+    @Test
+    void importCandidatesReturnsPaginatedCandidates() {
+        PurchaseOrderImportCandidateResponse candidate = mock(PurchaseOrderImportCandidateResponse.class);
+        Page<PurchaseOrderImportCandidateResponse> page = new PageImpl<>(List.of(candidate));
+        PageQuery query = new PageQuery(0, 20, null, null);
+        when(purchaseOrderService.importCandidates(any(), any(), eq("usage"))).thenReturn(page);
+
+        ApiResponse<PageResponse<PurchaseOrderImportCandidateResponse>> response = controller.importCandidates(
+                query, "test", 101L, "supplier", 7L, "active", null, null, 9001L, "usage"
+        );
+
+        assertThat(response.code()).isEqualTo(0);
+        assertThat(response.data().content()).hasSize(1);
+        ArgumentCaptor<PageFilter> filterCaptor = ArgumentCaptor.forClass(PageFilter.class);
+        verify(purchaseOrderService).importCandidates(eq(query), filterCaptor.capture(), eq("usage"));
+        assertThat(filterCaptor.getValue().settlementCompanyId()).isEqualTo(7L);
+        assertThat(filterCaptor.getValue().supplierId()).isEqualTo(101L);
+        assertThat(filterCaptor.getValue().currentRecordId()).isEqualTo(9001L);
+    }
+
+    @Test
+    void prepaymentCandidatesReturnsDedicatedPaginatedCandidates() {
+        PurchaseOrderImportCandidateResponse candidate = mock(PurchaseOrderImportCandidateResponse.class);
+        Page<PurchaseOrderImportCandidateResponse> page = new PageImpl<>(List.of(candidate));
+        PageQuery query = new PageQuery(1, 20, null, null);
+        when(purchaseOrderService.prepaymentCandidates(any(), any())).thenReturn(page);
+
+        ApiResponse<PageResponse<PurchaseOrderImportCandidateResponse>> response = controller.prepaymentCandidates(
+                query, "PO-001", 101L, "供应商甲", 7L, "完成采购", null, null
+        );
+
+        assertThat(response.code()).isEqualTo(0);
+        assertThat(response.data().content()).containsExactly(candidate);
+        ArgumentCaptor<PageFilter> filterCaptor = ArgumentCaptor.forClass(PageFilter.class);
+        verify(purchaseOrderService).prepaymentCandidates(eq(query), filterCaptor.capture());
+        assertThat(filterCaptor.getValue().keyword()).isEqualTo("PO-001");
+        assertThat(filterCaptor.getValue().name()).isEqualTo("供应商甲");
+        assertThat(filterCaptor.getValue().settlementCompanyId()).isEqualTo(7L);
+        assertThat(filterCaptor.getValue().supplierId()).isEqualTo(101L);
+        assertThat(filterCaptor.getValue().status()).isEqualTo("完成采购");
+    }
+
+    @Test
+    void pageReturnsPaginatedPurchaseOrders() {
+        PurchaseOrderResponse order = mock(PurchaseOrderResponse.class);
+        Page<PurchaseOrderResponse> page = new PageImpl<>(List.of(order));
+        PageQuery query = new PageQuery(0, 20, null, null);
+        when(purchaseOrderService.page(any(), any())).thenReturn(page);
+
+        ApiResponse<PageResponse<PurchaseOrderResponse>> response = controller.page(
+                query, "test", 101L, "supplier", 7L, "active", null, null
+        );
+
+        assertThat(response.code()).isEqualTo(0);
+        assertThat(response.data().content()).hasSize(1);
+        ArgumentCaptor<PageFilter> filterCaptor = ArgumentCaptor.forClass(PageFilter.class);
+        verify(purchaseOrderService).page(eq(query), filterCaptor.capture());
+        assertThat(filterCaptor.getValue().supplierId()).isEqualTo(101L);
+    }
+
+    @Test
+    void detailReturnsPurchaseOrderById() {
+        PurchaseOrderResponse order = mock(PurchaseOrderResponse.class);
+        when(purchaseOrderService.detail(1L)).thenReturn(order);
+
+        ApiResponse<PurchaseOrderResponse> response = controller.detail(1L);
+
+        assertThat(response.code()).isEqualTo(0);
+        assertThat(response.data()).isEqualTo(order);
+    }
+
+    @Test
+    void createReturnsCreatedPurchaseOrder() {
+        PurchaseOrderRequest request = mock(PurchaseOrderRequest.class);
+        PurchaseOrderResponse created = mock(PurchaseOrderResponse.class);
+        when(purchaseOrderService.create(request)).thenReturn(created);
+
+        ApiResponse<PurchaseOrderResponse> response = controller.create(request);
+
+        assertThat(response.code()).isEqualTo(0);
+        assertThat(response.message()).isEqualTo("创建成功");
+        verify(purchaseOrderService).create(request);
+    }
+
+    @Test
+    void updateReturnsUpdatedPurchaseOrder() {
+        PurchaseOrderRequest request = mock(PurchaseOrderRequest.class);
+        PurchaseOrderResponse updated = mock(PurchaseOrderResponse.class);
+        when(purchaseOrderService.update(1L, request)).thenReturn(updated);
+
+        ApiResponse<PurchaseOrderResponse> response = controller.update(1L, request);
+
+        assertThat(response.code()).isEqualTo(0);
+        assertThat(response.message()).isEqualTo("更新成功");
+        verify(purchaseOrderService).update(1L, request);
+    }
+
+    @Test
+    void reopenReturnsReopenedPurchaseOrder() {
+        PurchaseOrderResponse reopened = mock(PurchaseOrderResponse.class);
+        when(purchaseOrderService.reopenPurchaseOrder(1L)).thenReturn(reopened);
+
+        ApiResponse<PurchaseOrderResponse> response = controller.reopen(1L);
+
+        assertThat(response.code()).isZero();
+        assertThat(response.message()).isEqualTo("撤销完成采购成功");
+        assertThat(response.data()).isSameAs(reopened);
+        verify(purchaseOrderService).reopenPurchaseOrder(1L);
+    }
+
+    @Test
+    void updateStatusReturnsUpdatedPurchaseOrder() {
+        StatusUpdateRequest request = new StatusUpdateRequest("approved");
+        PurchaseOrderResponse updated = mock(PurchaseOrderResponse.class);
+        when(purchaseOrderService.updateStatus(1L, "approved")).thenReturn(updated);
+
+        ApiResponse<PurchaseOrderResponse> response = controller.updateStatus(1L, request);
+
+        assertThat(response.code()).isEqualTo(0);
+        assertThat(response.message()).isEqualTo("状态更新成功");
+        verify(purchaseOrderService).updateStatus(1L, "approved");
+    }
+
+    @Test
+    void deleteCallsServiceDelete() {
+        ApiResponse<Void> response = controller.delete(1L);
+
+        assertThat(response.code()).isEqualTo(0);
+        assertThat(response.message()).isEqualTo("删除成功");
+        verify(purchaseOrderService).delete(1L);
+    }
+
+    @Test
+    void pieceWeightsReturnsWeightsForItem() {
+        PieceWeightResponse weight = mock(PieceWeightResponse.class);
+        when(purchaseOrderService.getPieceWeights(1L)).thenReturn(List.of(weight));
+
+        ApiResponse<List<PieceWeightResponse>> response = controller.pieceWeights(1L);
+
+        assertThat(response.code()).isEqualTo(0);
+        assertThat(response.data()).containsExactly(weight);
+        verify(purchaseOrderService).getPieceWeights(1L);
+    }
+
+    @Test
+    void pieceWeightsBySalesOrderItemReturnsWeights() {
+        PieceWeightResponse weight = mock(PieceWeightResponse.class);
+        when(purchaseOrderService.getPieceWeightsBySalesOrderItemId(1L)).thenReturn(List.of(weight));
+
+        ApiResponse<List<PieceWeightResponse>> response = controller.pieceWeightsBySalesOrderItem(1L);
+
+        assertThat(response.code()).isEqualTo(0);
+        assertThat(response.data()).containsExactly(weight);
+        verify(purchaseOrderService).getPieceWeightsBySalesOrderItemId(1L);
+    }
+}

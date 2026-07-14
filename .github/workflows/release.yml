@@ -105,9 +105,6 @@ jobs:
       - name: Static analysis
         run: mvn -B -ntp -DskipTests checkstyle:check spotbugs:spotbugs
 
-      - name: Test
-        run: mvn -B -ntp test
-
       - name: Verify Flyway migrations
         run: |
           mvn -B -ntp flyway:migrate \

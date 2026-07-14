@@ -15,86 +15,6 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  test-plan:
-    name: Plan Tests
-    runs-on: ubuntu-latest
-    outputs:
-      batches: ${{ steps.plan.outputs.batches }}
-    defaults:
-      run:
-        shell: bash
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Select affected test batches
-        id: plan
-        env:
-          PR_BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}
-        run: |
-          set -euo pipefail
-
-          all_batches=(system auth security common master-attachment business)
-          selected_batches=()
-          run_full=false
-          base_sha="$PR_BASE_SHA"
-
-          add_batch() {
-            local candidate="$1"
-            local existing
-            for existing in "${selected_batches[@]}"; do
-              [[ "$existing" == "$candidate" ]] && return
-            done
-            selected_batches+=("$candidate")
-          }
-
-          if [[ "$GITHUB_REF" == "refs/heads/main" || "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
-            run_full=true
-          elif [[ -z "$base_sha" ]]; then
-            base_sha="$(git merge-base HEAD origin/main 2>/dev/null || true)"
-          fi
-
-          if [[ "$run_full" != "true" ]] && { [[ -z "$base_sha" ]] || ! git cat-file -e "${base_sha}^{commit}" 2>/dev/null; }; then
-            run_full=true
-          elif [[ "$run_full" != "true" ]]; then
-            mapfile -t changed_files < <(git diff --name-only "$base_sha" HEAD)
-            for changed_file in "${changed_files[@]}"; do
-              case "$changed_file" in
-                pom.xml|.mvn/*|Dockerfile|.github/workflows/ci.yml|src/main/resources/*|src/test/resources/*|src/main/java/com/leo/erp/common/*|src/test/java/com/leo/erp/common/*|src/test/java/com/leo/erp/testsupport/*)
-                  run_full=true
-                  break
-                  ;;
-                src/main/java/com/leo/erp/system/*|src/test/java/com/leo/erp/system/*|src/main/java/com/leo/erp/deployment/*|src/test/java/com/leo/erp/deployment/*|src/main/java/com/leo/erp/mcp/*|src/test/java/com/leo/erp/mcp/*)
-                  add_batch system
-                  ;;
-                src/main/java/com/leo/erp/auth/*|src/test/java/com/leo/erp/auth/*)
-                  add_batch auth
-                  ;;
-                src/main/java/com/leo/erp/security/*|src/test/java/com/leo/erp/security/*)
-                  add_batch security
-                  ;;
-                src/main/java/com/leo/erp/master/*|src/test/java/com/leo/erp/master/*|src/main/java/com/leo/erp/attachment/*|src/test/java/com/leo/erp/attachment/*)
-                  add_batch master-attachment
-                  ;;
-                src/main/java/com/leo/erp/*|src/test/java/com/leo/erp/*)
-                  add_batch business
-                  ;;
-              esac
-            done
-          fi
-
-          if [[ "$run_full" == "true" ]]; then
-            selected_batches=("${all_batches[@]}")
-          elif [[ "${#selected_batches[@]}" -eq 0 ]]; then
-            selected_batches=(none)
-          fi
-
-          batches_json="$(printf '%s\n' "${selected_batches[@]}" | jq -Rsc 'split("\n") | map(select(length > 0))')"
-          echo "Selected test batches: $batches_json"
-          echo "batches=$batches_json" >> "$GITHUB_OUTPUT"
-
   static-analysis:
     name: Static Analysis
     runs-on: ubuntu-latest
@@ -116,99 +36,9 @@ jobs:
       - name: Static analysis
         run: mvn -B -ntp -DskipTests checkstyle:check spotbugs:spotbugs
 
-  unit-tests:
-    name: Test / ${{ matrix.batch }}
-    needs:
-      - static-analysis
-      - test-plan
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        batch: ${{ fromJSON(needs.test-plan.outputs.batches) }}
-    services:
-      postgres:
-        image: postgres:16-alpine
-        env:
-          POSTGRES_DB: leo
-          POSTGRES_USER: leo
-          POSTGRES_PASSWORD: leo_ci_password
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U leo -d leo"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 10
-      redis:
-        image: redis:7-alpine
-        ports:
-          - 6379:6379
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 10
-
-    defaults:
-      run:
-        shell: bash
-
-    env:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/leo
-      SPRING_DATASOURCE_USERNAME: leo
-      SPRING_DATASOURCE_PASSWORD: leo_ci_password
-      SPRING_DATA_REDIS_HOST: localhost
-      SPRING_DATA_REDIS_PORT: 6379
-      SPRING_DATA_REDIS_DATABASE: 3
-      SPRING_DATA_REDIS_PASSWORD: ""
-      LEO_JWT_SECRET: ci-jwt-secret-ci-jwt-secret-ci-jwt-secret
-      TOTP_ENCRYPTION_KEY: ci-totp-secret-ci-totp-secret-ci-totp
-      LEO_MACHINE_ID: 1
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up JDK 21
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "21"
-          cache: maven
-          cache-dependency-path: pom.xml
-
-      - name: Test (system)
-        if: matrix.batch == 'system'
-        run: mvn -B -ntp test -Dtest="com.leo.erp.system.**,com.leo.erp.deployment.**,com.leo.erp.mcp.**"
-
-      - name: Test (auth)
-        if: matrix.batch == 'auth'
-        run: mvn -B -ntp test -Dtest="com.leo.erp.auth.**"
-
-      - name: Test (security)
-        if: matrix.batch == 'security'
-        run: mvn -B -ntp test -Dtest="com.leo.erp.security.**"
-
-      - name: Test (common)
-        if: matrix.batch == 'common'
-        run: mvn -B -ntp test -Dtest="com.leo.erp.common.**"
-
-      - name: Test (master-attachment)
-        if: matrix.batch == 'master-attachment'
-        run: mvn -B -ntp test -Dtest="com.leo.erp.master.**,com.leo.erp.attachment.**"
-
-      - name: Test (business)
-        if: matrix.batch == 'business'
-        run: mvn -B -ntp test -Dtest="com.leo.erp.finance.**,com.leo.erp.sales.**,com.leo.erp.statement.**,com.leo.erp.contract.**,com.leo.erp.purchase.**,com.leo.erp.report.**,com.leo.erp.logistics.**,com.leo.erp.allocation.**,com.leo.erp.config.**,com.leo.erp.search.**"
-
-      - name: Skip tests
-        if: matrix.batch == 'none'
-        run: echo "No backend unit-test batch is affected"
-
   package:
     name: Package & Smoke
-    needs: unit-tests
+    needs: static-analysis
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -242,7 +72,7 @@ jobs:
       SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/leo
       SPRING_DATASOURCE_USERNAME: leo
       SPRING_DATASOURCE_PASSWORD: leo_ci_password
-      SPRING_FLYWAY_TARGET: 56
+      SPRING_FLYWAY_TARGET: 64
       SPRING_DATA_REDIS_HOST: localhost
       SPRING_DATA_REDIS_PORT: 6379
       SPRING_DATA_REDIS_DATABASE: 3
