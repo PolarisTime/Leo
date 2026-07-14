@@ -15,7 +15,6 @@ import org.springframework.stereotype.Service;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -28,18 +27,15 @@ public class PurchaseInboundApplyService {
     private final TradeItemMaterialSupport tradeItemMaterialSupport;
     private final PurchaseInboundSourceValidator sourceValidator;
     private final PurchaseInboundWeightSettlementService weightSettlementService;
-    private final PurchaseInboundWeightWriteBackService weightWriteBackService;
     private final InboundItemMapper inboundItemMapper;
 
     public PurchaseInboundApplyService(TradeItemMaterialSupport tradeItemMaterialSupport,
                                        PurchaseInboundSourceValidator sourceValidator,
                                        PurchaseInboundWeightSettlementService weightSettlementService,
-                                       PurchaseInboundWeightWriteBackService weightWriteBackService,
                                        InboundItemMapper inboundItemMapper) {
         this.tradeItemMaterialSupport = tradeItemMaterialSupport;
         this.sourceValidator = sourceValidator;
         this.weightSettlementService = weightSettlementService;
-        this.weightWriteBackService = weightWriteBackService;
         this.inboundItemMapper = inboundItemMapper;
     }
 
@@ -53,11 +49,10 @@ public class PurchaseInboundApplyService {
                 .toList();
         PurchaseInboundSourceValidator.SourceValidationContext sourceContext =
                 sourceValidator.prepareContext(request, inbound.getId(), previousSourcePurchaseOrderItemIds);
+        inbound.setAffectedSourcePurchaseOrderItemIds(sourceContext.affectedSourcePurchaseOrderItemIds());
         Map<Long, PurchaseOrderItem> sourcePurchaseOrderItemMap = sourceContext.sourcePurchaseOrderItemMap();
         Map<String, PurchaseInboundWeightSettlementService.PurchaseWeighCategoryRule> purchaseWeighCategoryRules =
                 weightSettlementService.loadPurchaseWeighCategoryRules(request);
-        Map<Long, PurchaseInboundWeightWriteBackService.SourceWeighAccumulator> currentWeighAccumulatorMap =
-                new HashMap<>();
         LinkedHashSet<String> sourcePurchaseOrderNos = new LinkedHashSet<>();
         String firstLineWarehouseName = null;
         Long firstLineWarehouseId = null;
@@ -131,7 +126,6 @@ public class PurchaseInboundApplyService {
             totalWeight = totalWeight.add(result.weightTon());
             totalAmount = totalAmount.add(result.amount());
 
-            collectCurrentWeighAccumulator(currentWeighAccumulatorMap, result);
         }
         managedItems.clear();
         managedItems.addAll(items);
@@ -152,12 +146,6 @@ public class PurchaseInboundApplyService {
         applyHeaderSettlementCompany(inbound, items);
         inbound.setTotalWeight(TradeItemCalculator.scaleWeightTon(totalWeight));
         inbound.setTotalAmount(TradeItemCalculator.scaleAmount(totalAmount));
-        weightWriteBackService.writeBackPurchaseOrderWeights(
-                sourceContext.affectedSourcePurchaseOrderItemIds(),
-                inbound.getId(),
-                currentWeighAccumulatorMap,
-                sourcePurchaseOrderItemMap
-        );
     }
 
     private void applyHeaderSupplier(PurchaseInbound inbound,
@@ -223,23 +211,6 @@ public class PurchaseInboundApplyService {
                 .filter(Objects::nonNull)
                 .distinct()
                 .toList();
-    }
-
-    private void collectCurrentWeighAccumulator(
-            Map<Long, PurchaseInboundWeightWriteBackService.SourceWeighAccumulator> currentWeighAccumulatorMap,
-            InboundItemMapper.ItemMappingResult result
-    ) {
-        if (result.sourcePurchaseOrderItemId() == null || result.weighWeightTon() == null) {
-            return;
-        }
-        currentWeighAccumulatorMap.merge(
-                result.sourcePurchaseOrderItemId(),
-                new PurchaseInboundWeightWriteBackService.SourceWeighAccumulator(
-                        result.quantity(),
-                        result.sourceWeightTon()
-                ),
-                weightWriteBackService::mergeWeighAccumulator
-        );
     }
 
     private String resolveHeaderWarehouseName(String requestWarehouseName, String firstLineWarehouseName) {

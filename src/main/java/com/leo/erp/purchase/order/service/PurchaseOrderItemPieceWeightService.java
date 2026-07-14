@@ -201,28 +201,37 @@ public class PurchaseOrderItemPieceWeightService {
     }
 
     /**
-     * 汇总采购入库的过磅实际重量作为逐件分配的总重量基准。
-     * 盘螺/线材等需要过磅结算的品类，实际入库重量与理论重量存在磅差，
-     * 应以过磅实际值为准进行逐件分配，否则会导致销售端可分配重量虚高。
-     *
-     * 若无采购入库（仅有采购订单），则回退使用采购订单的理论重量。
+     * 已入库部分使用有效入库实际重量，未入库部分继续使用采购计划件重。
      */
     private BigDecimal resolveItemTotalWeight(PurchaseOrderItem item) {
         BigDecimal theoreticalWeight = TradeItemCalculator.safeBigDecimal(item.getWeightTon());
-        List<BigDecimal> weighWeights = jdbc.queryForList("""
-                SELECT COALESCE(ini.weigh_weight_ton, ini.weight_ton) AS actual_weight_ton
+        List<EffectiveInboundWeight> inboundWeights = jdbc.query("""
+                SELECT ini.quantity,
+                       COALESCE(ini.weigh_weight_ton, ini.weight_ton) AS actual_weight_ton
                   FROM po_purchase_inbound_item ini
                   JOIN po_purchase_inbound inbound ON inbound.id = ini.inbound_id AND inbound.deleted_flag = FALSE
                  WHERE ini.source_purchase_order_item_id = ?
                    AND inbound.deleted_flag = FALSE
                    AND inbound.status IN ('已审核', '完成入库')
-                """, BigDecimal.class, item.getId());
-        if (weighWeights.isEmpty()) {
+                """, (rs, rowNum) -> new EffectiveInboundWeight(
+                rs.getInt("quantity"),
+                rs.getBigDecimal("actual_weight_ton")
+        ), item.getId());
+        if (inboundWeights.isEmpty()) {
             return theoreticalWeight;
         }
-        BigDecimal totalWeighWeight = weighWeights.stream()
+        int receivedQuantity = inboundWeights.stream()
+                .mapToInt(EffectiveInboundWeight::quantity)
+                .sum();
+        BigDecimal receivedWeight = inboundWeights.stream()
+                .map(EffectiveInboundWeight::weightTon)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
-        return TradeItemCalculator.scaleWeightTon(totalWeighWeight);
+        int remainingQuantity = Math.max(0, item.getQuantity() - receivedQuantity);
+        BigDecimal remainingPlannedWeight = TradeItemCalculator.calculateWeightTon(
+                remainingQuantity,
+                item.getPieceWeightTon()
+        );
+        return TradeItemCalculator.scaleWeightTon(receivedWeight.add(remainingPlannedWeight));
     }
 
     @Transactional
@@ -421,5 +430,8 @@ public class PurchaseOrderItemPieceWeightService {
     }
 
     private record PieceSlot(Long id, Integer pieceNo, Long salesOrderItemId) {
+    }
+
+    private record EffectiveInboundWeight(int quantity, BigDecimal weightTon) {
     }
 }

@@ -81,6 +81,7 @@ public interface PurchaseInboundItemRepository extends JpaRepository<PurchaseInb
             from PurchaseInboundItem item
             join item.purchaseInbound inbound
             where inbound.deletedFlag = false
+              and inbound.status in :effectiveStatuses
               and item.sourcePurchaseOrderItemId in :sourcePurchaseOrderItemIds
               and item.weighWeightTon is not null
               and (:currentInboundId is null or inbound.id <> :currentInboundId)
@@ -88,7 +89,8 @@ public interface PurchaseInboundItemRepository extends JpaRepository<PurchaseInb
             """)
     List<PurchaseOrderWeighWeightSummary> summarizeWeighWeightBySourcePurchaseOrderItemIdsExcludingInbound(
             @Param("sourcePurchaseOrderItemIds") Collection<Long> sourcePurchaseOrderItemIds,
-            @Param("currentInboundId") Long currentInboundId
+            @Param("currentInboundId") Long currentInboundId,
+            @Param("effectiveStatuses") Collection<String> effectiveStatuses
     );
 
     @Query("""

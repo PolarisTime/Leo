@@ -137,6 +137,7 @@ public abstract class AbstractCrudService<E extends AbstractAuditableEntity, Req
         beforeDelete(entity);
         entity.setDeletedFlag(true);
         saveEntity(entity);
+        afterDelete(entity);
         logger().info("{} deleted: id={}", entity.getClass().getSimpleName(), id);
     }
 
@@ -206,6 +207,9 @@ public abstract class AbstractCrudService<E extends AbstractAuditableEntity, Req
     }
 
     protected void beforeDelete(E entity) {
+    }
+
+    protected void afterDelete(E entity) {
     }
 
     protected E saveStatusEntity(E entity) {

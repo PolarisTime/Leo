@@ -1,6 +1,9 @@
 package com.leo.erp.purchase.inbound.service;
 
+import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.support.TradeItemCalculator;
+import com.leo.erp.purchase.inbound.domain.entity.PurchaseInbound;
+import com.leo.erp.purchase.inbound.domain.entity.PurchaseInboundItem;
 import com.leo.erp.purchase.inbound.repository.PurchaseInboundItemRepository;
 import com.leo.erp.purchase.order.domain.entity.PurchaseOrder;
 import com.leo.erp.purchase.order.domain.entity.PurchaseOrderItem;
@@ -15,6 +18,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 @Service
 public class PurchaseInboundWeightWriteBackService {
@@ -23,22 +27,44 @@ public class PurchaseInboundWeightWriteBackService {
     private final PurchaseOrderRepository purchaseOrderRepository;
     private final PurchaseOrderItemPieceWeightService purchaseOrderItemPieceWeightService;
     private final PurchaseOrderPlanWeightSyncService purchaseOrderPlanWeightSyncService;
+    private final PurchaseInboundSourceValidator sourceValidator;
 
     public PurchaseInboundWeightWriteBackService(PurchaseInboundItemRepository purchaseInboundItemRepository,
                                                  PurchaseOrderRepository purchaseOrderRepository,
                                                  PurchaseOrderItemPieceWeightService purchaseOrderItemPieceWeightService) {
-        this(purchaseInboundItemRepository, purchaseOrderRepository, purchaseOrderItemPieceWeightService, null);
+        this(purchaseInboundItemRepository, purchaseOrderRepository, purchaseOrderItemPieceWeightService, null, null);
     }
 
     @Autowired
     public PurchaseInboundWeightWriteBackService(PurchaseInboundItemRepository purchaseInboundItemRepository,
                                                  PurchaseOrderRepository purchaseOrderRepository,
                                                  PurchaseOrderItemPieceWeightService purchaseOrderItemPieceWeightService,
-                                                 PurchaseOrderPlanWeightSyncService purchaseOrderPlanWeightSyncService) {
+                                                 PurchaseOrderPlanWeightSyncService purchaseOrderPlanWeightSyncService,
+                                                 PurchaseInboundSourceValidator sourceValidator) {
         this.purchaseInboundItemRepository = purchaseInboundItemRepository;
         this.purchaseOrderRepository = purchaseOrderRepository;
         this.purchaseOrderItemPieceWeightService = purchaseOrderItemPieceWeightService;
         this.purchaseOrderPlanWeightSyncService = purchaseOrderPlanWeightSyncService;
+        this.sourceValidator = sourceValidator;
+    }
+
+    void synchronizeAfterSave(PurchaseInbound inbound) {
+        List<Long> sourceItemIds = Stream.concat(
+                        inbound.getItems().stream().map(PurchaseInboundItem::getSourcePurchaseOrderItemId),
+                        inbound.getAffectedSourcePurchaseOrderItemIds().stream()
+                )
+                .filter(id -> id != null)
+                .distinct()
+                .toList();
+        if (sourceItemIds.isEmpty() || sourceValidator == null) {
+            return;
+        }
+        writeBackPurchaseOrderWeights(
+                sourceItemIds,
+                inbound.getId(),
+                isEffective(inbound) ? currentWeighAccumulatorMap(inbound) : Map.of(),
+                sourceValidator.loadSourcePurchaseOrderItemMap(sourceItemIds)
+        );
     }
 
     void writeBackPurchaseOrderWeights(
@@ -67,8 +93,12 @@ public class PurchaseInboundWeightWriteBackService {
                     currentWeighAccumulatorMap.get(sourcePurchaseOrderItemId)
             );
             if (weighAccumulator != null && weighAccumulator.hasQuantity()) {
-                sourceItem.setActualWeightTon(TradeItemCalculator.scaleWeightTon(weighAccumulator.weightTon()));
-                sourceItem.setActualPieceWeightTon(null);
+                BigDecimal actualWeightTon = TradeItemCalculator.scaleWeightTon(weighAccumulator.weightTon());
+                sourceItem.setActualWeightTon(actualWeightTon);
+                sourceItem.setActualPieceWeightTon(TradeItemCalculator.calculateRepresentableAveragePieceWeightTon(
+                        weighAccumulator.quantity(),
+                        actualWeightTon
+                ));
             } else {
                 sourceItem.setActualWeightTon(null);
                 sourceItem.setActualPieceWeightTon(null);
@@ -115,7 +145,8 @@ public class PurchaseInboundWeightWriteBackService {
         Map<Long, SourceWeighAccumulator> weighAccumulatorMap = new HashMap<>();
         purchaseInboundItemRepository.summarizeWeighWeightBySourcePurchaseOrderItemIdsExcludingInbound(
                         sourcePurchaseOrderItemIds,
-                        currentInboundId
+                        currentInboundId,
+                        List.of(StatusConstants.AUDITED, StatusConstants.INBOUND_COMPLETED)
                 )
                 .forEach(summary -> weighAccumulatorMap.put(
                         summary.getSourcePurchaseOrderItemId(),
@@ -125,6 +156,28 @@ public class PurchaseInboundWeightWriteBackService {
                         )
                 ));
         return weighAccumulatorMap;
+    }
+
+    private boolean isEffective(PurchaseInbound inbound) {
+        return !inbound.isDeletedFlag()
+                && (StatusConstants.AUDITED.equals(inbound.getStatus())
+                || StatusConstants.INBOUND_COMPLETED.equals(inbound.getStatus()));
+    }
+
+    private Map<Long, SourceWeighAccumulator> currentWeighAccumulatorMap(PurchaseInbound inbound) {
+        Map<Long, SourceWeighAccumulator> accumulatorMap = new HashMap<>();
+        inbound.getItems().stream()
+                .filter(item -> item.getSourcePurchaseOrderItemId() != null)
+                .filter(item -> item.getWeighWeightTon() != null)
+                .forEach(item -> accumulatorMap.merge(
+                        item.getSourcePurchaseOrderItemId(),
+                        new SourceWeighAccumulator(
+                                item.getQuantity(),
+                                TradeItemCalculator.scaleWeightTon(item.getWeighWeightTon())
+                        ),
+                        this::mergeWeighAccumulator
+                ));
+        return accumulatorMap;
     }
 
     private Map<Long, PurchaseOrder> loadAffectedPurchaseOrderMap(

@@ -54,6 +54,7 @@ public class PurchaseInboundService extends AbstractCrudService<
     private final PurchaseInboundSourceStatusGuard purchaseInboundSourceStatusGuard;
     private final PurchaseInboundStatementGuard purchaseInboundStatementGuard;
     private final PurchaseInboundWeightSettlementService weightSettlementService;
+    private final PurchaseInboundWeightWriteBackService weightWriteBackService;
 
     private static final Set<String> TOLERANCE_REASON_CODES = Set.of(
             "TRANSPORT_LOSS",
@@ -77,6 +78,7 @@ public class PurchaseInboundService extends AbstractCrudService<
                                   WorkflowTransitionGuard workflowTransitionGuard,
                                   SourceAllocationLockService sourceAllocationLockService,
                                   PurchaseInboundWeightSettlementService weightSettlementService,
+                                  PurchaseInboundWeightWriteBackService weightWriteBackService,
                                   PurchaseInboundSourceStatusGuard purchaseInboundSourceStatusGuard,
                                   PurchaseInboundStatementGuard purchaseInboundStatementGuard) {
         super(idGenerator);
@@ -90,6 +92,7 @@ public class PurchaseInboundService extends AbstractCrudService<
         this.workflowTransitionGuard = workflowTransitionGuard;
         this.sourceAllocationLockService = sourceAllocationLockService;
         this.weightSettlementService = weightSettlementService;
+        this.weightWriteBackService = weightWriteBackService;
         this.purchaseInboundSourceStatusGuard = purchaseInboundSourceStatusGuard;
         this.purchaseInboundStatementGuard = purchaseInboundStatementGuard;
     }
@@ -145,6 +148,8 @@ public class PurchaseInboundService extends AbstractCrudService<
         PurchaseInbound inbound = requireEntity(id);
         if (StatusConstants.AUDITED.equals(inbound.getStatus())
                 || StatusConstants.INBOUND_COMPLETED.equals(inbound.getStatus())) {
+            repository.flush();
+            weightWriteBackService.synchronizeAfterSave(inbound);
             completionSyncService.synchronizeSourcePurchaseOrders(inbound);
             return toSavedResponse(inbound);
         }
@@ -311,7 +316,12 @@ public class PurchaseInboundService extends AbstractCrudService<
     protected void beforeDelete(PurchaseInbound inbound) {
         lockSourcePurchaseOrderItems(inbound, null);
         purchaseInboundStatementGuard.assertMutable(inbound, "删除");
-        deleteService.beforeDelete(inbound);
+    }
+
+    @Override
+    protected void afterDelete(PurchaseInbound inbound) {
+        repository.flush();
+        deleteService.afterDelete(inbound);
     }
 
     @Override
@@ -527,6 +537,8 @@ public class PurchaseInboundService extends AbstractCrudService<
             entity.setStatus(StatusConstants.INBOUND_COMPLETED);
         }
         PurchaseInbound saved = saveEntity(entity);
+        repository.flush();
+        weightWriteBackService.synchronizeAfterSave(saved);
         completionSyncService.synchronizeSourcePurchaseOrders(saved);
         return saved;
     }

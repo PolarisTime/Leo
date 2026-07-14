@@ -7,6 +7,7 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
+import jakarta.persistence.Transient;
 import jakarta.persistence.Version;
 import lombok.Getter;
 import lombok.Setter;
@@ -79,4 +80,7 @@ public class PurchaseInbound extends AbstractAuditableEntity {
 
     @OneToMany(mappedBy = "purchaseInbound", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<PurchaseInboundItem> items = new ArrayList<>();
+
+    @Transient
+    private List<Long> affectedSourcePurchaseOrderItemIds = new ArrayList<>();
 }
