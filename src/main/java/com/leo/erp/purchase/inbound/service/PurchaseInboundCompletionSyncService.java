@@ -1,11 +1,15 @@
 package com.leo.erp.purchase.inbound.service;
 
+import com.leo.erp.common.error.BusinessException;
+import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.support.StatusConstants;
+import com.leo.erp.finance.common.service.SupplierLedgerLockService;
 import com.leo.erp.purchase.inbound.domain.entity.PurchaseInbound;
 import com.leo.erp.purchase.inbound.domain.entity.PurchaseInboundItem;
 import com.leo.erp.purchase.inbound.repository.PurchaseInboundRepository;
 import com.leo.erp.purchase.order.domain.entity.PurchaseOrder;
 import com.leo.erp.purchase.order.domain.entity.PurchaseOrderItem;
+import com.leo.erp.sales.order.repository.SalesOrderItemRepository;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -18,13 +22,19 @@ public class PurchaseInboundCompletionSyncService {
     private final PurchaseInboundRepository repository;
     private final PurchaseInboundSourceValidator sourceValidator;
     private final PurchaseInboundAllocationService allocationService;
+    private final SupplierLedgerLockService supplierLedgerLockService;
+    private final SalesOrderItemRepository salesOrderItemRepository;
 
     public PurchaseInboundCompletionSyncService(PurchaseInboundRepository repository,
                                                 PurchaseInboundSourceValidator sourceValidator,
-                                                PurchaseInboundAllocationService allocationService) {
+                                                PurchaseInboundAllocationService allocationService,
+                                                SupplierLedgerLockService supplierLedgerLockService,
+                                                SalesOrderItemRepository salesOrderItemRepository) {
         this.repository = repository;
         this.sourceValidator = sourceValidator;
         this.allocationService = allocationService;
+        this.supplierLedgerLockService = supplierLedgerLockService;
+        this.salesOrderItemRepository = salesOrderItemRepository;
     }
 
     boolean shouldCompleteInbound(PurchaseInbound inbound) {
@@ -120,10 +130,52 @@ public class PurchaseInboundCompletionSyncService {
         });
 
         if (allInboundCompleted && allFulfilled) {
-            purchaseOrder.setStatus(StatusConstants.PURCHASE_COMPLETED);
+            assertPresaleCapacityCovered(sourceItemIds, receivedQtyByItemId);
+            if (!StatusConstants.PURCHASE_COMPLETED.equals(purchaseOrder.getStatus())) {
+                lockSupplierLedger(purchaseOrder);
+                purchaseOrder.setStatus(StatusConstants.PURCHASE_COMPLETED);
+            }
         } else if (allowReopen && StatusConstants.PURCHASE_COMPLETED.equals(purchaseOrder.getStatus())) {
             purchaseOrder.setStatus(StatusConstants.AUDITED);
         }
+    }
+
+    private void assertPresaleCapacityCovered(
+            List<Long> sourceItemIds,
+            Map<Long, Integer> receivedQtyByItemId
+    ) {
+        for (SalesOrderItemRepository.SourcePurchaseOrderAllocationSummary summary
+                : salesOrderItemRepository.summarizeAllocatedQuantityBySourcePurchaseOrderItemIds(
+                sourceItemIds,
+                null
+        )) {
+            long inboundQuantity = receivedQtyByItemId.getOrDefault(
+                    summary.getSourcePurchaseOrderItemId(),
+                    0
+            );
+            long presaleQuantity = summary.getTotalQuantity() == null ? 0L : summary.getTotalQuantity();
+            if (presaleQuantity > inboundQuantity) {
+                throw new BusinessException(
+                        ErrorCode.BUSINESS_ERROR,
+                        "来源采购明细 " + summary.getSourcePurchaseOrderItemId()
+                                + " 的预售数量超过最终入库量：已入库 " + inboundQuantity
+                                + " 件，已占用 " + presaleQuantity + " 件，请先调整销售订单数量"
+                );
+            }
+        }
+    }
+
+    private void lockSupplierLedger(PurchaseOrder purchaseOrder) {
+        if (purchaseOrder.getSettlementCompanyId() == null || purchaseOrder.getSupplierId() == null) {
+            throw new BusinessException(
+                    ErrorCode.BUSINESS_ERROR,
+                    "采购订单缺少供应商或结算主体身份，不能完成采购"
+            );
+        }
+        supplierLedgerLockService.lock(
+                purchaseOrder.getSettlementCompanyId(),
+                purchaseOrder.getSupplierId()
+        );
     }
 
 }

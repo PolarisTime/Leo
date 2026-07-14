@@ -64,7 +64,7 @@ public class PurchaseInboundSourceStatusGuard {
         if (sourcePurchaseCompleted) {
             throw new BusinessException(
                     ErrorCode.BUSINESS_ERROR,
-                    "来源采购订单已完成采购，不能变更采购入库状态，请先撤销完成采购"
+                    "来源采购订单已完成采购，必须先反审核原采购入库后才能重新审核"
             );
         }
     }

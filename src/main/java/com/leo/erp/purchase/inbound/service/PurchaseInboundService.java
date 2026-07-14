@@ -140,15 +140,6 @@ public class PurchaseInboundService extends AbstractCrudService<
         return pieceWeightService.getPieceWeights(itemId);
     }
 
-    @Override
-    @Transactional
-    public PurchaseInboundResponse create(PurchaseInboundRequest request) {
-        throw new BusinessException(
-                ErrorCode.BUSINESS_ERROR,
-                "采购入库必须通过采购订单全量导入创建，不允许手工分批入库"
-        );
-    }
-
     @Transactional
     PurchaseInboundResponse createFromImportBatch(PurchaseInboundRequest request) {
         return super.create(request);

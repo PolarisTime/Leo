@@ -149,13 +149,6 @@ public class PurchaseOrderController {
         return ApiResponse.success("状态更新成功", purchaseOrderService.updateStatus(id, request.status()));
     }
 
-    @Operation(summary = "撤销完成采购")
-    @PostMapping("/{id}/reopen")
-    @RequiresPermission(resource = "purchase-order", action = "audit")
-    public ApiResponse<PurchaseOrderResponse> reopen(@PathVariable Long id) {
-        return ApiResponse.success("撤销完成采购成功", purchaseOrderService.reopenPurchaseOrder(id));
-    }
-
     @Operation(summary = "删除采购订单")
     @DeleteMapping("/{id}")
     @RequiresPermission(resource = "purchase-order", action = "delete")

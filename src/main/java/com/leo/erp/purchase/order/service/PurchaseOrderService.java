@@ -10,7 +10,6 @@ import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.BusinessDocumentValidator;
 import com.leo.erp.common.support.BusinessStatusValidator;
 import com.leo.erp.common.support.StatusConstants;
-import com.leo.erp.finance.common.service.SupplierLedgerLockService;
 import com.leo.erp.finance.payment.service.PaymentPurchasePrepaymentService;
 import com.leo.erp.purchase.order.domain.entity.PurchaseOrder;
 import com.leo.erp.purchase.order.repository.PurchaseOrderRepository;
@@ -18,7 +17,6 @@ import com.leo.erp.purchase.order.web.dto.PurchaseOrderImportCandidateResponse;
 import com.leo.erp.purchase.order.web.dto.PieceWeightResponse;
 import com.leo.erp.purchase.order.web.dto.PurchaseOrderRequest;
 import com.leo.erp.purchase.order.web.dto.PurchaseOrderResponse;
-import com.leo.erp.security.permission.DataScopeContext;
 import com.leo.erp.security.permission.WorkflowTransitionGuard;
 import com.leo.erp.system.company.domain.entity.CompanySetting;
 import com.leo.erp.system.company.service.CompanySettingService;
@@ -54,7 +52,6 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
     private final CompanySettingService companySettingService;
     private final PaymentPurchasePrepaymentService purchasePrepaymentService;
     private final PurchaseOrderDownstreamMutationGuard downstreamMutationGuard;
-    private SupplierLedgerLockService supplierLedgerLockService;
 
     public PurchaseOrderService(PurchaseOrderRepository purchaseOrderRepository,
                                 SnowflakeIdGenerator snowflakeIdGenerator,
@@ -129,11 +126,6 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
         this.downstreamMutationGuard = downstreamMutationGuard;
     }
 
-    @Autowired(required = false)
-    void setSupplierLedgerLockService(SupplierLedgerLockService supplierLedgerLockService) {
-        this.supplierLedgerLockService = supplierLedgerLockService;
-    }
-
     private static final String[] PURCHASE_ORDER_SEARCH_FIELDS = {"orderNo", "supplierName"};
 
 
@@ -152,45 +144,6 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
     public java.util.List<PurchaseOrderResponse> search(String keyword, int maxSize) {
         return search(keyword, PURCHASE_ORDER_SEARCH_FIELDS, maxSize,
                 null, purchaseOrderRepository);
-    }
-
-    @Transactional
-    public PurchaseOrderResponse reopenPurchaseOrder(Long id) {
-        PurchaseOrder order = purchaseOrderRepository.findByIdAndDeletedFlagFalseForUpdate(id)
-                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, notFoundMessage()));
-        DataScopeContext.assertCanAccess(order);
-        if (StatusConstants.AUDITED.equals(order.getStatus())) {
-            return toDetailResponse(order);
-        }
-        if (!StatusConstants.PURCHASE_COMPLETED.equals(order.getStatus())) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "只有完成采购状态可以撤销完成");
-        }
-        workflowTransitionGuard.assertAuditPermissionForProtectedValue(
-                "purchase-order",
-                order.getStatus(),
-                StatusConstants.AUDITED,
-                StatusConstants.PURCHASE_COMPLETED
-        );
-        if (downstreamMutationGuard != null) {
-            downstreamMutationGuard.assertCompletionReopenAllowed(order);
-        }
-        lockSupplierLedgerMutation(order);
-        order.setStatus(StatusConstants.AUDITED);
-        purchaseOrderRepository.save(order);
-        return toDetailResponse(order);
-    }
-
-    private void lockSupplierLedgerMutation(PurchaseOrder order) {
-        if (order.getSettlementCompanyId() == null || order.getSupplierId() == null) {
-            throw new BusinessException(
-                    ErrorCode.BUSINESS_ERROR,
-                    "采购订单缺少供应商或结算主体身份，不能撤销完成采购"
-            );
-        }
-        if (supplierLedgerLockService == null) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "供应商账簿锁服务不可用");
-        }
-        supplierLedgerLockService.lock(order.getSettlementCompanyId(), order.getSupplierId());
     }
 
     @Transactional(readOnly = true)
@@ -446,7 +399,7 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
         if (!currentStatus.equals(requestedStatus)) {
             throw new BusinessException(
                     ErrorCode.BUSINESS_ERROR,
-                    "普通保存不能修改采购订单状态，请使用审核、反审核或完成采购命令"
+                    "普通保存不能修改采购订单状态，请使用审核或反审核操作"
             );
         }
     }
@@ -460,14 +413,14 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
                 && !StatusConstants.PURCHASE_COMPLETED.equals(currentStatus)) {
             throw new BusinessException(
                     ErrorCode.BUSINESS_ERROR,
-                    "完成采购必须使用完成采购接口"
+                    "完成采购状态由采购入库审核自动触发"
             );
         }
         if (StatusConstants.PURCHASE_COMPLETED.equals(currentStatus)
                 && StatusConstants.AUDITED.equals(nextStatus)) {
             throw new BusinessException(
                     ErrorCode.BUSINESS_ERROR,
-                    "完成采购不能通过通用状态接口撤销，请使用撤销完成采购接口"
+                    "完成采购状态只能由采购入库反审核自动回退"
             );
         }
         if (StatusConstants.DRAFT.equals(nextStatus)

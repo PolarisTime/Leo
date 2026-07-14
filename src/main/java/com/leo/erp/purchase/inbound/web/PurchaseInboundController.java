@@ -29,8 +29,6 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.beans.factory.annotation.Autowired;
-
 import java.time.LocalDate;
 import java.util.List;
 
@@ -43,11 +41,6 @@ public class PurchaseInboundController {
     private final PurchaseInboundService service;
     private final PurchaseInboundAuditCommandService auditCommandService;
 
-    public PurchaseInboundController(PurchaseInboundService service) {
-        this(service, null);
-    }
-
-    @Autowired
     public PurchaseInboundController(
             PurchaseInboundService service,
             PurchaseInboundAuditCommandService auditCommandService
@@ -97,13 +90,6 @@ public class PurchaseInboundController {
         return ApiResponse.success(service.getPieceWeights(itemId));
     }
 
-    @PostMapping
-    @RequiresPermission(resource = "purchase-inbound", action = "create")
-    @Operation(summary = "创建采购入库")
-    public ApiResponse<PurchaseInboundResponse> create(@Valid @RequestBody PurchaseInboundRequest request) {
-        return ApiResponse.success("创建成功", service.create(request));
-    }
-
     @PutMapping("/{id}")
     @RequiresPermission(resource = "purchase-inbound", action = "update")
     @Operation(summary = "更新采购入库")
@@ -125,9 +111,6 @@ public class PurchaseInboundController {
             @PathVariable Long id,
             @Valid @RequestBody PurchaseInboundAuditRequest request
     ) {
-        if (auditCommandService == null) {
-            throw new IllegalStateException("采购入库审核命令服务不可用");
-        }
         return ApiResponse.success("采购入库审核成功", auditCommandService.audit(id, request));
     }
 
