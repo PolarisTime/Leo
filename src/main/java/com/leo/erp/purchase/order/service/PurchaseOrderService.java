@@ -10,9 +10,8 @@ import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.BusinessDocumentValidator;
 import com.leo.erp.common.support.BusinessStatusValidator;
 import com.leo.erp.common.support.StatusConstants;
-import com.leo.erp.finance.common.service.InvoiceSourceMutationGuard;
+import com.leo.erp.finance.common.service.SupplierLedgerLockService;
 import com.leo.erp.finance.payment.service.PaymentPurchasePrepaymentService;
-import com.leo.erp.finance.purchaseflow.service.SupplierLedgerLockService;
 import com.leo.erp.purchase.order.domain.entity.PurchaseOrder;
 import com.leo.erp.purchase.order.repository.PurchaseOrderRepository;
 import com.leo.erp.purchase.order.web.dto.PurchaseOrderImportCandidateResponse;
@@ -53,7 +52,6 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
     private final PurchaseOrderPieceWeightQueryService pieceWeightQueryService;
     private final WorkflowTransitionGuard workflowTransitionGuard;
     private final CompanySettingService companySettingService;
-    private final InvoiceSourceMutationGuard invoiceSourceMutationGuard;
     private final PaymentPurchasePrepaymentService purchasePrepaymentService;
     private final PurchaseOrderDownstreamMutationGuard downstreamMutationGuard;
     private SupplierLedgerLockService supplierLedgerLockService;
@@ -90,32 +88,6 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
                                 PurchaseOrderPieceWeightQueryService pieceWeightQueryService,
                                 WorkflowTransitionGuard workflowTransitionGuard,
                                 CompanySettingService companySettingService,
-                                InvoiceSourceMutationGuard invoiceSourceMutationGuard) {
-        this(
-                purchaseOrderRepository,
-                snowflakeIdGenerator,
-                availabilityService,
-                responseAssembler,
-                supplierResolver,
-                purchaseOrderApplyService,
-                pieceWeightQueryService,
-                workflowTransitionGuard,
-                companySettingService,
-                invoiceSourceMutationGuard,
-                null
-        );
-    }
-
-    public PurchaseOrderService(PurchaseOrderRepository purchaseOrderRepository,
-                                SnowflakeIdGenerator snowflakeIdGenerator,
-                                PurchaseOrderAvailabilityService availabilityService,
-                                PurchaseOrderResponseAssembler responseAssembler,
-                                PurchaseOrderSupplierResolver supplierResolver,
-                                PurchaseOrderApplyService purchaseOrderApplyService,
-                                PurchaseOrderPieceWeightQueryService pieceWeightQueryService,
-                                WorkflowTransitionGuard workflowTransitionGuard,
-                                CompanySettingService companySettingService,
-                                InvoiceSourceMutationGuard invoiceSourceMutationGuard,
                                 PaymentPurchasePrepaymentService purchasePrepaymentService) {
         this(
                 purchaseOrderRepository,
@@ -127,7 +99,6 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
                 pieceWeightQueryService,
                 workflowTransitionGuard,
                 companySettingService,
-                invoiceSourceMutationGuard,
                 purchasePrepaymentService,
                 null
         );
@@ -143,7 +114,6 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
                                 PurchaseOrderPieceWeightQueryService pieceWeightQueryService,
                                 WorkflowTransitionGuard workflowTransitionGuard,
                                 CompanySettingService companySettingService,
-                                InvoiceSourceMutationGuard invoiceSourceMutationGuard,
                                 PaymentPurchasePrepaymentService purchasePrepaymentService,
                                 PurchaseOrderDownstreamMutationGuard downstreamMutationGuard) {
         super(snowflakeIdGenerator);
@@ -155,7 +125,6 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
         this.pieceWeightQueryService = pieceWeightQueryService;
         this.workflowTransitionGuard = workflowTransitionGuard;
         this.companySettingService = companySettingService;
-        this.invoiceSourceMutationGuard = invoiceSourceMutationGuard;
         this.purchasePrepaymentService = purchasePrepaymentService;
         this.downstreamMutationGuard = downstreamMutationGuard;
     }
@@ -204,9 +173,6 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
         );
         if (downstreamMutationGuard != null) {
             downstreamMutationGuard.assertCompletionReopenAllowed(order);
-        }
-        if (invoiceSourceMutationGuard != null) {
-            invoiceSourceMutationGuard.assertPurchaseOrderMutable(order, "撤销完成采购");
         }
         lockSupplierLedgerMutation(order);
         order.setStatus(StatusConstants.AUDITED);
@@ -429,9 +395,6 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
                 downstreamMutationGuard.assertSourceLineMutationAllowed(purchaseOrder, request.items(), "修改");
             }
             assertNoActivePurchasePrepayment(purchaseOrder, "修改");
-            if (invoiceSourceMutationGuard != null) {
-                invoiceSourceMutationGuard.assertPurchaseOrderMutable(purchaseOrder, "修改");
-            }
         }
         assertSettlementCompanyMutable(purchaseOrder, request.settlementCompanyId());
         String nextStatus = BusinessStatusValidator.normalizeWithDefault(
@@ -509,9 +472,6 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
                 downstreamMutationGuard.assertMutable(entity, "反审核");
             }
             assertNoActivePurchasePrepayment(entity, "反审核");
-            if (invoiceSourceMutationGuard != null) {
-                invoiceSourceMutationGuard.assertPurchaseOrderMutable(entity, "反审核");
-            }
         }
     }
 
@@ -521,9 +481,6 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
             downstreamMutationGuard.assertMutable(entity, "删除");
         }
         assertNoActivePurchasePrepayment(entity, "删除");
-        if (invoiceSourceMutationGuard != null) {
-            invoiceSourceMutationGuard.assertPurchaseOrderMutable(entity, "删除");
-        }
     }
 
     @Override

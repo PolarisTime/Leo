@@ -290,7 +290,6 @@ public class PurchaseOrderItemPieceWeightService {
                         purchaseOrderItemIds,
                         StatusConstants.SALES_COMPLETED,
                         StatusConstants.AUDITED,
-                        StatusConstants.ISSUED,
                         StatusConstants.AUDITED
                 )
                 .stream()

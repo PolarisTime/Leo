@@ -66,14 +66,6 @@ public interface PurchaseOrderItemPieceWeightRepository extends JpaRepository<Pu
                     )
                     OR EXISTS (
                         SELECT 1
-                          FROM fm_invoice_issue_item issue_item
-                          JOIN fm_invoice_issue issue ON issue.id = issue_item.issue_id
-                         WHERE issue.deleted_flag = FALSE
-                           AND issue.status = :issuedStatus
-                           AND issue_item.source_sales_order_item_id = sales_item.id
-                    )
-                    OR EXISTS (
-                        SELECT 1
                           FROM fm_receipt_allocation allocation
                           JOIN fm_receipt receipt ON receipt.id = allocation.receipt_id
                           JOIN st_customer_statement statement ON statement.id = allocation.source_statement_id
@@ -90,7 +82,6 @@ public interface PurchaseOrderItemPieceWeightRepository extends JpaRepository<Pu
             @Param("purchaseOrderItemIds") Collection<Long> purchaseOrderItemIds,
             @Param("salesCompletedStatus") String salesCompletedStatus,
             @Param("auditedStatus") String auditedStatus,
-            @Param("issuedStatus") String issuedStatus,
             @Param("receivedStatus") String receivedStatus
     );
 

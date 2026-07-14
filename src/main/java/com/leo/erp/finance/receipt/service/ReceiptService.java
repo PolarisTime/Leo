@@ -17,7 +17,7 @@ import com.leo.erp.finance.receipt.repository.ReceiptRepository;
 import com.leo.erp.finance.receipt.web.dto.ReceiptAllocationRequest;
 import com.leo.erp.finance.receipt.web.dto.ReceiptRequest;
 import com.leo.erp.finance.receipt.web.dto.ReceiptResponse;
-import com.leo.erp.finance.purchaseflow.service.SupplierPrepaymentBalanceService;
+import com.leo.erp.finance.common.service.SupplierPrepaymentBalanceService;
 import org.springframework.data.domain.Page;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -113,7 +113,7 @@ public class ReceiptService extends AbstractCrudService<Receipt, ReceiptRequest,
     @Override
     protected void validateUpdate(Receipt entity, ReceiptRequest request) {
         if (StatusConstants.AUDITED.equals(entity.getStatus())) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "已审核收款单禁止修改，请使用资金冲销单纠错");
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "已审核收款单禁止修改");
         }
         if (!entity.getReceiptNo().equals(request.receiptNo())) {
             ensureReceiptNoUnique(request.receiptNo());
@@ -212,7 +212,7 @@ public class ReceiptService extends AbstractCrudService<Receipt, ReceiptRequest,
     @Override
     protected void beforeStatusUpdate(Receipt entity, String currentStatus, String nextStatus) {
         if (StatusConstants.AUDITED.equals(currentStatus)) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "已审核收款单禁止反审核，请使用资金冲销单纠错");
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "已审核收款单禁止反审核");
         }
         if (ReceiptPurposes.isSupplierReceipt(entity.getReceiptPurpose())) {
             if (entity.getCounterpartyId() == null || entity.getSettlementCompanyId() == null) {
@@ -229,7 +229,7 @@ public class ReceiptService extends AbstractCrudService<Receipt, ReceiptRequest,
     @Override
     protected void beforeDelete(Receipt entity) {
         if (StatusConstants.AUDITED.equals(entity.getStatus())) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "已审核收款单禁止删除，请使用资金冲销单纠错");
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "已审核收款单禁止删除");
         }
         lockAllocationStatements(entity, null);
     }

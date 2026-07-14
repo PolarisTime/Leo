@@ -338,8 +338,6 @@ public class CompanySettingService extends AbstractCrudService<CompanySetting, C
                         "st_freight_statement",
                         "statement_id"
                 ),
-                ReferenceCheck.active("fm_invoice_issue", "settlement_company_id", entity.getId()),
-                ReferenceCheck.active("fm_invoice_receipt", "settlement_company_id", entity.getId()),
                 ReferenceCheck.active("fm_receipt", "settlement_company_id", entity.getId()),
                 ReferenceCheck.active("fm_payment", "settlement_company_id", entity.getId()),
                 ReferenceCheck.active("fm_ledger_adjustment", "settlement_company_id", entity.getId()),

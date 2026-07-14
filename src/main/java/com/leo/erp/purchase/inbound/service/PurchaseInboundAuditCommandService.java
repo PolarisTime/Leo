@@ -11,9 +11,7 @@ import com.leo.erp.purchase.inbound.web.dto.PurchaseInboundResponse;
 import com.leo.erp.purchase.order.domain.entity.PurchaseOrder;
 import com.leo.erp.purchase.order.domain.entity.PurchaseOrderItem;
 import com.leo.erp.purchase.order.repository.PurchaseOrderRepository;
-import com.leo.erp.purchase.order.service.PurchaseOrderCompletionService;
 import com.leo.erp.purchase.order.service.PurchaseOrderItemQueryService;
-import com.leo.erp.purchase.order.web.dto.PurchaseOrderCompletionResponse;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -27,38 +25,32 @@ public class PurchaseInboundAuditCommandService {
     private final PurchaseOrderRepository purchaseOrderRepository;
     private final PurchaseOrderItemQueryService purchaseOrderItemQueryService;
     private final PurchaseInboundService purchaseInboundService;
-    private final PurchaseOrderCompletionService purchaseOrderCompletionService;
 
     public PurchaseInboundAuditCommandService(
             PurchaseInboundRepository inboundRepository,
             PurchaseOrderRepository purchaseOrderRepository,
             PurchaseOrderItemQueryService purchaseOrderItemQueryService,
-            PurchaseInboundService purchaseInboundService,
-            PurchaseOrderCompletionService purchaseOrderCompletionService
+            PurchaseInboundService purchaseInboundService
     ) {
         this.inboundRepository = inboundRepository;
         this.purchaseOrderRepository = purchaseOrderRepository;
         this.purchaseOrderItemQueryService = purchaseOrderItemQueryService;
         this.purchaseInboundService = purchaseInboundService;
-        this.purchaseOrderCompletionService = purchaseOrderCompletionService;
     }
 
     @Transactional
     public PurchaseInboundAuditResponse audit(Long inboundId, PurchaseInboundAuditRequest request) {
         PurchaseInbound inbound = inboundRepository.findByIdAndDeletedFlagFalse(inboundId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "采购入库不存在"));
-        PurchaseOrder sourceOrder = lockSourcePurchaseOrder(inbound);
+        lockSourcePurchaseOrder(inbound);
         PurchaseInboundResponse inboundResponse = purchaseInboundService.audit(
                 inboundId,
                 request.overToleranceConfirmations()
         );
-        PurchaseOrderCompletionResponse completionResponse = Boolean.TRUE.equals(request.closePurchaseOrder())
-                ? purchaseOrderCompletionService.completePurchaseOrder(sourceOrder.getId())
-                : null;
-        return new PurchaseInboundAuditResponse(inboundResponse, completionResponse);
+        return new PurchaseInboundAuditResponse(inboundResponse);
     }
 
-    private PurchaseOrder lockSourcePurchaseOrder(PurchaseInbound inbound) {
+    private void lockSourcePurchaseOrder(PurchaseInbound inbound) {
         List<Long> sourceItemIds = inbound.getItems().stream()
                 .map(PurchaseInboundItem::getSourcePurchaseOrderItemId)
                 .filter(Objects::nonNull)
@@ -82,7 +74,7 @@ public class PurchaseInboundAuditCommandService {
         if (sourceOrderIds.size() != 1) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "一张采购入库单必须且只能关联一张采购订单");
         }
-        return purchaseOrderRepository.findByIdAndDeletedFlagFalseForUpdate(sourceOrderIds.getFirst())
+        purchaseOrderRepository.findByIdAndDeletedFlagFalseForUpdate(sourceOrderIds.getFirst())
                 .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "来源采购订单不存在"));
     }
 }

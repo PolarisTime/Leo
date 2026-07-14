@@ -2,7 +2,6 @@ package com.leo.erp.sales.order.service;
 
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.support.TradeItemCalculator;
-import com.leo.erp.finance.invoiceissue.repository.InvoiceIssueRepository;
 import com.leo.erp.finance.receipt.repository.ReceiptAllocationRepository;
 import com.leo.erp.purchase.order.repository.PurchaseOrderItemPieceWeightRepository;
 import com.leo.erp.sales.order.domain.entity.SalesOrder;
@@ -34,7 +33,6 @@ public class SalesOrderAllocatedWeightSyncService {
     private final PurchaseOrderItemPieceWeightRepository pieceWeightRepository;
     private final SalesOutboundRepository salesOutboundRepository;
     private final CustomerStatementRepository customerStatementRepository;
-    private final InvoiceIssueRepository invoiceIssueRepository;
     private final ReceiptAllocationRepository receiptAllocationRepository;
     private final SalesOutboundPreOutboundWeightSyncService outboundWeightSyncService;
 
@@ -43,7 +41,6 @@ public class SalesOrderAllocatedWeightSyncService {
                                                 PurchaseOrderItemPieceWeightRepository pieceWeightRepository,
                                                 SalesOutboundRepository salesOutboundRepository,
                                                 CustomerStatementRepository customerStatementRepository,
-                                                InvoiceIssueRepository invoiceIssueRepository,
                                                 ReceiptAllocationRepository receiptAllocationRepository,
                                                 SalesOutboundPreOutboundWeightSyncService outboundWeightSyncService) {
         this.itemRepository = itemRepository;
@@ -51,7 +48,6 @@ public class SalesOrderAllocatedWeightSyncService {
         this.pieceWeightRepository = pieceWeightRepository;
         this.salesOutboundRepository = salesOutboundRepository;
         this.customerStatementRepository = customerStatementRepository;
-        this.invoiceIssueRepository = invoiceIssueRepository;
         this.receiptAllocationRepository = receiptAllocationRepository;
         this.outboundWeightSyncService = outboundWeightSyncService;
     }
@@ -134,10 +130,6 @@ public class SalesOrderAllocatedWeightSyncService {
                 StatusConstants.AUDITED
         )));
         lockedIds.addAll(safeList(customerStatementRepository.findSourceSalesOrderItemIds(itemIds)));
-        lockedIds.addAll(safeList(invoiceIssueRepository.findSourceSalesOrderItemIdsByStatus(
-                itemIds,
-                StatusConstants.ISSUED
-        )));
         lockedIds.addAll(safeList(receiptAllocationRepository.findReceivedSourceSalesOrderItemIds(
                 itemIds,
                 StatusConstants.AUDITED

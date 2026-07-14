@@ -36,9 +36,7 @@ public class GlobalSearchService {
             "customer-statement",
             "freight-statement",
             "receipt",
-            "payment",
-            "invoice-receipt",
-            "invoice-issue"
+            "payment"
     );
 
     private final PermissionService permissionService;

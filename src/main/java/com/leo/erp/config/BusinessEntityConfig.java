@@ -4,8 +4,6 @@ import com.leo.erp.common.support.BusinessEntityRegistrar;
 import com.leo.erp.common.support.BusinessRecordEntityCatalog;
 import com.leo.erp.contract.purchase.domain.entity.PurchaseContract;
 import com.leo.erp.contract.sales.domain.entity.SalesContract;
-import com.leo.erp.finance.invoiceissue.domain.entity.InvoiceIssue;
-import com.leo.erp.finance.invoicereceipt.domain.entity.InvoiceReceipt;
 import com.leo.erp.finance.payment.domain.entity.Payment;
 import com.leo.erp.finance.receipt.domain.entity.Receipt;
 import com.leo.erp.logistics.bill.domain.entity.FreightBill;
@@ -47,8 +45,6 @@ public class BusinessEntityConfig {
         registrar.register("freight-statement", FreightStatement.class);
         registrar.register("receipt", Receipt.class);
         registrar.register("payment", Payment.class);
-        registrar.register("invoice-receipt", InvoiceReceipt.class);
-        registrar.register("invoice-issue", InvoiceIssue.class);
         BusinessRecordEntityCatalog.setRegistrar(registrar);
         return registrar;
     }

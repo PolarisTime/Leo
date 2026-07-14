@@ -57,12 +57,8 @@ public class ModuleCatalog {
         modules.put("freight-statement", "物流对账单");
         modules.put("receipt", "收款单");
         modules.put("payment", "付款单");
-        modules.put("cash-reversal", "资金冲销单");
-        modules.put("invoice-receipt", "收票单");
-        modules.put("invoice-issue", "开票单");
-        modules.put("pending-invoice-receipt-report", "未收票报表");
         modules.put("ledger-adjustment", "台账调整单");
-        modules.put("receivable-payable", "应收应付");
+        modules.put("cash-ledger", "资金流水");
         modules.put("general-setting", "通用设置");
         modules.put("company-setting", "结算主体管理");
         modules.put("permission", "权限管理");

@@ -9,6 +9,7 @@ import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.service.AbstractCrudService;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
+import com.leo.erp.finance.common.service.SupplierLedgerLockService;
 import com.leo.erp.finance.payment.domain.entity.Payment;
 import com.leo.erp.finance.payment.domain.entity.PaymentAllocation;
 import com.leo.erp.finance.payment.domain.entity.PaymentPurposes;
@@ -17,7 +18,6 @@ import com.leo.erp.finance.payment.repository.PaymentRepository;
 import com.leo.erp.finance.payment.web.dto.PaymentAllocationRequest;
 import com.leo.erp.finance.payment.web.dto.PaymentRequest;
 import com.leo.erp.finance.payment.web.dto.PaymentResponse;
-import com.leo.erp.finance.purchaseflow.service.SupplierLedgerLockService;
 import org.springframework.data.domain.Page;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -107,7 +107,7 @@ public class PaymentService extends AbstractCrudService<Payment, PaymentRequest,
     @Override
     protected void validateUpdate(Payment entity, PaymentRequest request) {
         if (StatusConstants.AUDITED.equals(entity.getStatus())) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "已审核付款单禁止修改，请使用资金冲销单纠错");
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "已审核付款单禁止修改");
         }
         assertLegacySupplierPaymentReadOnly(entity, "修改");
         if (!entity.getPaymentNo().equals(request.paymentNo())) {
@@ -205,7 +205,7 @@ public class PaymentService extends AbstractCrudService<Payment, PaymentRequest,
     @Override
     protected void beforeStatusUpdate(Payment entity, String currentStatus, String nextStatus) {
         if (StatusConstants.AUDITED.equals(currentStatus)) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "已审核付款单禁止反审核，请使用资金冲销单纠错");
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "已审核付款单禁止反审核");
         }
         assertLegacySupplierPaymentReadOnly(entity, "审核");
         if (PaymentPurposes.isPurchasePrepayment(entity.getPaymentPurpose())) {
@@ -233,7 +233,7 @@ public class PaymentService extends AbstractCrudService<Payment, PaymentRequest,
     @Override
     protected void beforeDelete(Payment entity) {
         if (StatusConstants.AUDITED.equals(entity.getStatus())) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "已审核付款单禁止删除，请使用资金冲销单纠错");
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "已审核付款单禁止删除");
         }
         assertLegacySupplierPaymentReadOnly(entity, "删除");
         if (PaymentPurposes.isPurchasePrepayment(entity.getPaymentPurpose())) {

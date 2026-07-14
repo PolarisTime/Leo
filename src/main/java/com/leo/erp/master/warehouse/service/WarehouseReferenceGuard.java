@@ -53,14 +53,6 @@ final class WarehouseReferenceGuard {
                         "lg_freight_bill", "bill_id"
                 ),
                 ReferenceCheck.ofActiveParent(
-                        "fm_invoice_issue_item", "warehouse_id", warehouseId,
-                        "fm_invoice_issue", "issue_id"
-                ),
-                ReferenceCheck.ofActiveParent(
-                        "fm_invoice_receipt_item", "warehouse_id", warehouseId,
-                        "fm_invoice_receipt", "receipt_id"
-                ),
-                ReferenceCheck.ofActiveParent(
                         "st_customer_statement_item", "warehouse_id", warehouseId,
                         "st_customer_statement", "statement_id"
                 ),
@@ -105,14 +97,6 @@ final class WarehouseReferenceGuard {
                 ReferenceCheck.legacyOfActiveParent(
                         "lg_freight_bill_item", "warehouse_name", warehouseName, "warehouse_id",
                         "lg_freight_bill", "bill_id"
-                ),
-                ReferenceCheck.legacyOfActiveParent(
-                        "fm_invoice_issue_item", "warehouse_name", warehouseName, "warehouse_id",
-                        "fm_invoice_issue", "issue_id"
-                ),
-                ReferenceCheck.legacyOfActiveParent(
-                        "fm_invoice_receipt_item", "warehouse_name", warehouseName, "warehouse_id",
-                        "fm_invoice_receipt", "receipt_id"
                 ),
                 ReferenceCheck.legacyOfActiveParent(
                         "st_freight_statement_item", "warehouse_name", warehouseName, "warehouse_id",

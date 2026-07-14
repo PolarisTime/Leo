@@ -263,7 +263,6 @@ public class CustomerService extends AbstractCrudService<Customer, CustomerReque
                 ReferenceCheck.active("so_sales_order", "customer_id", customerId),
                 ReferenceCheck.active("ct_sales_contract", "customer_id", customerId),
                 ReferenceCheck.active("so_sales_outbound", "customer_id", customerId),
-                ReferenceCheck.active("fm_invoice_issue", "customer_id", customerId),
                 ReferenceCheck.active("st_customer_statement", "customer_id", customerId),
                 ReferenceCheck.ofActiveParent(
                         "st_customer_statement_item",

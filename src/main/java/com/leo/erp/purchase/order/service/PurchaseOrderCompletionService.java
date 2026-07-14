@@ -4,7 +4,7 @@ import com.leo.erp.common.concurrency.SourceAllocationLockService;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.support.StatusConstants;
-import com.leo.erp.finance.purchaseflow.service.SupplierLedgerLockService;
+import com.leo.erp.finance.common.service.SupplierLedgerLockService;
 import com.leo.erp.purchase.inbound.domain.entity.PurchaseInboundItem;
 import com.leo.erp.purchase.inbound.repository.PurchaseInboundItemRepository;
 import com.leo.erp.purchase.order.domain.entity.PurchaseOrder;

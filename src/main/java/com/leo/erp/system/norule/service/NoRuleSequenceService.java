@@ -42,9 +42,6 @@ public class NoRuleSequenceService implements BusinessNumberAllocator {
             Map.entry("freight-statement", "RULE_FS"),
             Map.entry("receipt", "RULE_RC"),
             Map.entry("payment", "RULE_PM"),
-            Map.entry("cash-reversal", "RULE_CR"),
-            Map.entry("invoice-receipt", "RULE_SP"),
-            Map.entry("invoice-issue", "RULE_KP"),
             Map.entry("ledger-adjustment", "RULE_LA"),
             Map.entry("department", "RULE_DEPT")
     );

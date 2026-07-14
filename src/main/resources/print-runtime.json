@@ -86,20 +86,6 @@
       "productPrintItems": false,
       "printItemAmount": false,
       "allocationAmountColumn": "allocated_amount"
-    },
-    "invoice-issue": {
-      "tableName": "fm_invoice_issue",
-      "itemTableName": "fm_invoice_issue_item",
-      "itemFkColumn": "issue_id",
-      "productPrintItems": true,
-      "printItemAmount": true
-    },
-    "invoice-receipt": {
-      "tableName": "fm_invoice_receipt",
-      "itemTableName": "fm_invoice_receipt_item",
-      "itemFkColumn": "receipt_id",
-      "productPrintItems": true,
-      "printItemAmount": true
     }
   },
   "fieldFormatting": {

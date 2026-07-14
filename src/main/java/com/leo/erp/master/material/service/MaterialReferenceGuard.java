@@ -62,16 +62,6 @@ public class MaterialReferenceGuard {
                         materialId
                 ),
                 ReferenceCheck.any(
-                        "fm_invoice_issue_item",
-                        "material_id",
-                        materialId
-                ),
-                ReferenceCheck.any(
-                        "fm_invoice_receipt_item",
-                        "material_id",
-                        materialId
-                ),
-                ReferenceCheck.any(
                         "st_customer_statement_item",
                         "material_id",
                         materialId

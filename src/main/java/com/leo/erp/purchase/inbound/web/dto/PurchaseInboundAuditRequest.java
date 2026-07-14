@@ -8,7 +8,6 @@ import jakarta.validation.constraints.Size;
 import java.util.List;
 
 public record PurchaseInboundAuditRequest(
-        @NotNull Boolean closePurchaseOrder,
         @Valid @NotNull List<OverToleranceConfirmation> overToleranceConfirmations
 ) {
     public record OverToleranceConfirmation(

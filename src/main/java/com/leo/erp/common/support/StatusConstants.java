@@ -42,8 +42,6 @@ public final class StatusConstants {
     public static final String SIGNED = "已签署";
     public static final String UNSIGNED = "未签署";
     public static final String UNAUDITED = "未审核";
-    public static final String ISSUED = "已开票";
-    public static final String INVOICE_RECEIVED = "已收票";
     public static final String EXECUTING = "执行中";
     public static final String ARCHIVED = "已归档";
 
@@ -71,8 +69,6 @@ public final class StatusConstants {
     public static final Set<String> ALLOWED_FREIGHT_BILL_STATUS = Set.of(UNAUDITED, AUDITED);
     public static final Set<String> ALLOWED_PAYMENT_STATUS = Set.of(DRAFT, AUDITED);
     public static final Set<String> ALLOWED_RECEIPT_STATUS = Set.of(DRAFT, AUDITED);
-    public static final Set<String> ALLOWED_INVOICE_ISSUE_STATUS = Set.of(DRAFT, ISSUED);
-    public static final Set<String> ALLOWED_INVOICE_RECEIPT_STATUS = Set.of(DRAFT, INVOICE_RECEIVED);
 
     public static final Set<String> PROTECTED_DOCUMENT_STATUS = Set.of(
             AUDITED,
@@ -83,12 +79,8 @@ public final class StatusConstants {
             SALES_COMPLETED,
             CONFIRMED,
             SIGNED,
-            ISSUED,
-            INVOICE_RECEIVED,
             ARCHIVED
     );
-    public static final Set<String> INVOICEABLE_SALES_ORDER_STATUS = Set.of(AUDITED, SALES_COMPLETED);
-    public static final Set<String> INVOICEABLE_PURCHASE_ORDER_STATUS = Set.of(AUDITED, PURCHASE_COMPLETED);
     public static final Set<String> SALES_ORDER_SOURCE_PURCHASE_ORDER_STATUS = Set.of(AUDITED, PURCHASE_COMPLETED);
     public static final Set<String> SETTLEABLE_CUSTOMER_STATEMENT_STATUS = Set.of(CONFIRMED);
     public static final Set<String> SETTLEABLE_SUPPLIER_STATEMENT_STATUS = Set.of(CONFIRMED);

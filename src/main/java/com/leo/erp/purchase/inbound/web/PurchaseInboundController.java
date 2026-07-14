@@ -120,7 +120,7 @@ public class PurchaseInboundController {
 
     @PostMapping("/{id}/audit")
     @RequiresPermission(resource = "purchase-inbound", action = "audit")
-    @Operation(summary = "审核采购入库并可同时完成采购")
+    @Operation(summary = "审核采购入库并自动同步采购状态")
     public ApiResponse<PurchaseInboundAuditResponse> audit(
             @PathVariable Long id,
             @Valid @RequestBody PurchaseInboundAuditRequest request

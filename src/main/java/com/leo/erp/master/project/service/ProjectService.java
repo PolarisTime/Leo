@@ -228,7 +228,6 @@ public class ProjectService extends AbstractCrudService<Project, ProjectRequest,
                 ReferenceCheck.active("so_sales_order", "project_id", projectId),
                 ReferenceCheck.active("ct_sales_contract", "project_id", projectId),
                 ReferenceCheck.active("so_sales_outbound", "project_id", projectId),
-                ReferenceCheck.active("fm_invoice_issue", "project_id", projectId),
                 ReferenceCheck.active("st_customer_statement", "project_id", projectId),
                 ReferenceCheck.ofActiveParent(
                         "st_customer_statement_item",

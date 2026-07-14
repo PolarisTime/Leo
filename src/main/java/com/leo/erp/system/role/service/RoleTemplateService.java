@@ -48,8 +48,6 @@ public class RoleTemplateService {
                         List.of(
                                 new PermissionEntry("receipt", Set.of("read", "create", "update", "audit")),
                                 new PermissionEntry("payment", Set.of("read", "create", "update", "audit")),
-                                new PermissionEntry("invoice-issue", Set.of("read", "create", "update")),
-                                new PermissionEntry("invoice-receipt", Set.of("read", "create", "update")),
                                 new PermissionEntry("customer-statement", Set.of("read", "export")),
                                 new PermissionEntry("supplier-statement", Set.of("read", "export")),
                                 new PermissionEntry("company-setting", Set.of("read"))

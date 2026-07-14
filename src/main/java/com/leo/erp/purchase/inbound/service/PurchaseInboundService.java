@@ -145,6 +145,7 @@ public class PurchaseInboundService extends AbstractCrudService<
         PurchaseInbound inbound = requireEntity(id);
         if (StatusConstants.AUDITED.equals(inbound.getStatus())
                 || StatusConstants.INBOUND_COMPLETED.equals(inbound.getStatus())) {
+            completionSyncService.synchronizeSourcePurchaseOrders(inbound);
             return toSavedResponse(inbound);
         }
         if (!StatusConstants.DRAFT.equals(inbound.getStatus())) {
@@ -525,7 +526,9 @@ public class PurchaseInboundService extends AbstractCrudService<
         if (completedByServer) {
             entity.setStatus(StatusConstants.INBOUND_COMPLETED);
         }
-        return saveEntity(entity);
+        PurchaseInbound saved = saveEntity(entity);
+        completionSyncService.synchronizeSourcePurchaseOrders(saved);
+        return saved;
     }
 
     @Override
