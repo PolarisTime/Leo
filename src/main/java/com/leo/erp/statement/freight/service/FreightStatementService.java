@@ -10,6 +10,7 @@ import com.leo.erp.common.service.AbstractCrudService;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.security.permission.DataScopeContext;
+import com.leo.erp.security.permission.WorkflowTransitionGuard;
 import com.leo.erp.statement.freight.domain.entity.FreightStatement;
 import com.leo.erp.statement.freight.domain.entity.FreightStatementItem;
 import com.leo.erp.statement.freight.mapper.FreightStatementWebMapper;
@@ -43,6 +44,7 @@ public class FreightStatementService extends AbstractCrudService<FreightStatemen
     private final FreightStatementApplyService freightStatementApplyService;
     private final SourceAllocationLockService sourceAllocationLockService;
     private final StatementSettlementMutationGuard settlementMutationGuard;
+    private final WorkflowTransitionGuard workflowTransitionGuard;
 
     @Autowired
     public FreightStatementService(FreightStatementRepository repository,
@@ -54,7 +56,8 @@ public class FreightStatementService extends AbstractCrudService<FreightStatemen
                                    FreightStatementPageAssembler pageAssembler,
                                    FreightStatementApplyService freightStatementApplyService,
                                    SourceAllocationLockService sourceAllocationLockService,
-                                   StatementSettlementMutationGuard settlementMutationGuard) {
+                                   StatementSettlementMutationGuard settlementMutationGuard,
+                                   WorkflowTransitionGuard workflowTransitionGuard) {
         super(idGenerator);
         this.repository = repository;
         this.statementSettlementSyncService = statementSettlementSyncService;
@@ -65,6 +68,7 @@ public class FreightStatementService extends AbstractCrudService<FreightStatemen
         this.freightStatementApplyService = freightStatementApplyService;
         this.sourceAllocationLockService = sourceAllocationLockService;
         this.settlementMutationGuard = settlementMutationGuard;
+        this.workflowTransitionGuard = workflowTransitionGuard;
     }
 
     @Transactional(readOnly = true)
@@ -81,7 +85,6 @@ public class FreightStatementService extends AbstractCrudService<FreightStatemen
                 .and(Specs.equalIfPresent("carrierName", filter.name()))
                 .and(Specs.equalValueIfPresent("settlementCompanyId", filter.settlementCompanyId()))
                 .and(Specs.equalIfPresent("status", filter.status()))
-                .and(Specs.equalIfPresent("signStatus", filter.signStatus()))
                 .and(Specs.betweenIfPresent("endDate", filter.startDate(), filter.endDate()))
         );
         Page<FreightStatement> entityPage = repository.findAll(DataScopeContext.apply(spec), query.toPageable("id"));
@@ -136,6 +139,24 @@ public class FreightStatementService extends AbstractCrudService<FreightStatemen
         return freightStatementWebMapper.toResponse(updateStatus(id, status));
     }
 
+    @Transactional
+    public FreightStatementResponse responseCreateAndAudit(FreightStatementRequest request) {
+        workflowTransitionGuard.assertAuditPermissionForProtectedValue(
+                "freight-statement", StatusConstants.DRAFT, StatusConstants.AUDITED, StatusConstants.AUDITED
+        );
+        FreightStatementView created = create(withStatus(freightStatementWebMapper.toCommand(request), StatusConstants.DRAFT));
+        return freightStatementWebMapper.toResponse(updateStatus(created.id(), StatusConstants.AUDITED));
+    }
+
+    @Transactional
+    public FreightStatementResponse responseUpdateAndAudit(Long id, FreightStatementRequest request) {
+        workflowTransitionGuard.assertAuditPermissionForProtectedValue(
+                "freight-statement", StatusConstants.DRAFT, StatusConstants.AUDITED, StatusConstants.AUDITED
+        );
+        update(id, withStatus(freightStatementWebMapper.toCommand(request), StatusConstants.DRAFT));
+        return freightStatementWebMapper.toResponse(updateStatus(id, StatusConstants.AUDITED));
+    }
+
     @Transactional(readOnly = true)
     public Page<FreightStatementCandidateResponse> candidatePage(PageQuery query, PageFilter filter) {
         return freightStatementSourceService.candidatePage(query, filter);
@@ -163,6 +184,10 @@ public class FreightStatementService extends AbstractCrudService<FreightStatemen
         if (repository.existsByStatementNoAndDeletedFlagFalse(command.statementNo())) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "物流对账单号已存在");
         }
+        String status = normalizeText(command.status());
+        if (status != null && !StatusConstants.DRAFT.equals(status)) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "新物流对账单只能保存为草稿");
+        }
     }
 
     @Override
@@ -188,7 +213,6 @@ public class FreightStatementService extends AbstractCrudService<FreightStatemen
                 command.paidAmount(),
                 command.unpaidAmount(),
                 command.status(),
-                command.signStatus(),
                 command.attachment(),
                 command.remark(),
                 command.items(),
@@ -198,6 +222,10 @@ public class FreightStatementService extends AbstractCrudService<FreightStatemen
 
     @Override
     protected FreightStatementCommand normalizeUpdateRequest(FreightStatement entity, FreightStatementCommand command) {
+        String requestedStatus = normalizeText(command.status());
+        if (requestedStatus != null && !Objects.equals(entity.getStatus(), requestedStatus)) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "物流对账单状态只能通过审核或反审核操作变更");
+        }
         return new FreightStatementCommand(
                 entity.getStatementNo(),
                 command.carrierCode(),
@@ -211,11 +239,19 @@ public class FreightStatementService extends AbstractCrudService<FreightStatemen
                 command.paidAmount(),
                 command.unpaidAmount(),
                 command.status(),
-                command.signStatus(),
                 command.attachment(),
                 command.remark(),
                 command.items(),
                 command.carrierId()
+        );
+    }
+
+    private FreightStatementCommand withStatus(FreightStatementCommand command, String status) {
+        return new FreightStatementCommand(
+                command.statementNo(), command.carrierCode(), command.carrierName(),
+                command.settlementCompanyId(), command.settlementCompanyName(), command.startDate(), command.endDate(),
+                command.totalWeight(), command.totalFreight(), command.paidAmount(), command.unpaidAmount(), status,
+                command.attachment(), command.remark(), command.items(), command.carrierId()
         );
     }
 
@@ -252,8 +288,8 @@ public class FreightStatementService extends AbstractCrudService<FreightStatemen
     @Override
     protected java.util.Set<String> allowedStatusTransitions() {
         return java.util.Set.of(
-                StatusConstants.PENDING_AUDIT + "->" + StatusConstants.AUDITED,
-                StatusConstants.AUDITED + "->" + StatusConstants.PENDING_AUDIT
+                StatusConstants.DRAFT + "->" + StatusConstants.AUDITED,
+                StatusConstants.AUDITED + "->" + StatusConstants.DRAFT
         );
     }
 
@@ -274,7 +310,7 @@ public class FreightStatementService extends AbstractCrudService<FreightStatemen
     protected void beforeStatusUpdate(FreightStatement entity, String currentStatus, String nextStatus) {
         lockSourceFreightBills(entity, null);
         if (StatusConstants.AUDITED.equals(currentStatus)
-                && StatusConstants.PENDING_AUDIT.equals(nextStatus)) {
+                && StatusConstants.DRAFT.equals(nextStatus)) {
             settlementMutationGuard.assertNoSettledAllocations(
                     StatementSettlementMutationGuard.StatementType.FREIGHT,
                     entity.getId(),

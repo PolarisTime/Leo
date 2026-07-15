@@ -32,6 +32,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.function.LongSupplier;
 import java.util.stream.Collectors;
+import java.time.LocalDate;
 
 @Service
 public class FreightStatementSourceService {
@@ -99,6 +100,22 @@ public class FreightStatementSourceService {
                 nextIdSupplier,
                 FreightStatementItem::setId
         );
+        Map<Long, Set<Long>> requestedItemIdsByBill = command.items().stream()
+                .collect(Collectors.groupingBy(
+                        FreightStatementItemCommand::sourceFreightBillId,
+                        LinkedHashMap::new,
+                        Collectors.mapping(FreightStatementItemCommand::sourceFreightBillItemId,
+                                Collectors.toCollection(LinkedHashSet::new))));
+        for (FreightBill sourceBill : sourceBills) {
+            Set<Long> expectedItemIds = sourceBill.getItems().stream()
+                    .map(FreightBillItem::getId)
+                    .collect(Collectors.toCollection(LinkedHashSet::new));
+            Set<Long> requestedItemIds = requestedItemIdsByBill.getOrDefault(sourceBill.getId(), Set.of());
+            if (!expectedItemIds.equals(requestedItemIds)) {
+                throw new BusinessException(ErrorCode.BUSINESS_ERROR,
+                        "物流对账单必须整单导入来源物流单" + sourceBill.getBillNo() + "的全部明细");
+            }
+        }
         for (int i = 0; i < command.items().size(); i++) {
             FreightStatementItemCommand source = command.items().get(i);
             FreightBill sourceBill = resolveSourceBill(sourceBills, source, i + 1);
@@ -140,7 +157,17 @@ public class FreightStatementSourceService {
                 .map(FreightBill::getTotalFreight)
                 .map(TradeItemCalculator::scaleAmount)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
-        return new SourceApplyResult(totalWeight, totalFreight);
+        LocalDate startDate = sourceBills.stream()
+                .map(FreightBill::getBillTime)
+                .filter(Objects::nonNull)
+                .min(LocalDate::compareTo)
+                .orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_ERROR, "来源物流单日期不能为空"));
+        LocalDate endDate = sourceBills.stream()
+                .map(FreightBill::getBillTime)
+                .filter(Objects::nonNull)
+                .max(LocalDate::compareTo)
+                .orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_ERROR, "来源物流单日期不能为空"));
+        return new SourceApplyResult(totalWeight, totalFreight, startDate, endDate);
     }
 
     private List<FreightBill> loadSourceBills(FreightStatementCommand command, Long currentStatementId) {
@@ -261,7 +288,8 @@ public class FreightStatementSourceService {
                 .distinct()
                 .toList();
         if (snapshots.isEmpty()) {
-            return new SettlementCompanySnapshot(null, null);
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR,
+                    "来源物流单物流结算主体缺失，不能生成物流对账单");
         }
         if (snapshots.size() > 1) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "来源物流单存在不同物流结算主体，不能合并生成物流对账单");
@@ -338,7 +366,9 @@ public class FreightStatementSourceService {
 
     record SourceApplyResult(
             BigDecimal totalWeight,
-            BigDecimal totalFreight
+            BigDecimal totalFreight,
+            LocalDate startDate,
+            LocalDate endDate
     ) {
     }
 

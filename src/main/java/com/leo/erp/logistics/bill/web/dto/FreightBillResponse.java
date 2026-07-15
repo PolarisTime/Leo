@@ -14,8 +14,6 @@ public record FreightBillResponse(
         String settlementCompanyName,
         Long vehicleId,
         String vehiclePlate,
-        String customerName,
-        String projectName,
         LocalDate billTime,
         BigDecimal unitPrice,
         BigDecimal totalWeight,

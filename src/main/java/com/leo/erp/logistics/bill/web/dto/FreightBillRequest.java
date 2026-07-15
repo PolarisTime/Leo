@@ -18,8 +18,6 @@ public record FreightBillRequest(
         String settlementCompanyName,
         Long vehicleId,
         String vehiclePlate,
-        @jakarta.validation.constraints.NotBlank String customerName,
-        @jakarta.validation.constraints.NotBlank String projectName,
         @NotNull LocalDate billTime,
         @NotNull @DecimalMin("0.00") BigDecimal unitPrice,
         String status,

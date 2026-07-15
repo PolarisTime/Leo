@@ -7,6 +7,8 @@ import com.leo.erp.common.api.PageResponse;
 import com.leo.erp.common.web.BindPageQuery;
 import com.leo.erp.common.web.dto.StatusUpdateRequest;
 import com.leo.erp.logistics.bill.service.FreightBillService;
+import com.leo.erp.logistics.bill.service.FreightBillSalesOrderCandidateService;
+import com.leo.erp.sales.order.web.dto.SalesOrderResponse;
 import com.leo.erp.logistics.bill.web.dto.FreightBillRequest;
 import com.leo.erp.logistics.bill.web.dto.FreightBillResponse;
 import com.leo.erp.security.permission.RequiresPermission;
@@ -32,8 +34,25 @@ import java.time.LocalDate;
 public class FreightBillController {
 
     private final FreightBillService service;
-    public FreightBillController(FreightBillService service) {
+    private final FreightBillSalesOrderCandidateService candidateService;
+    public FreightBillController(FreightBillService service,
+                                 FreightBillSalesOrderCandidateService candidateService) {
         this.service = service;
+        this.candidateService = candidateService;
+    }
+
+    @GetMapping("/sales-order-candidates")
+    @RequiresPermission(resource = "sales-order", action = "read")
+    public ApiResponse<PageResponse<SalesOrderResponse>> salesOrderCandidates(
+            @BindPageQuery(sortFieldKey = "sales-order") PageQuery query,
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) Long currentRecordId
+    ) {
+        return ApiResponse.success(PageResponse.from(candidateService.page(
+                query,
+                PageFilter.of(keyword, null, null, null, null, null)
+                        .withIdentity(null, null, null, null, currentRecordId)
+        )));
     }
 
     @GetMapping("/search")
@@ -80,10 +99,23 @@ public class FreightBillController {
         return ApiResponse.success("创建成功", service.create(request));
     }
 
+    @PostMapping("/save-and-audit")
+    @RequiresPermission(resource = "freight-bill", action = "create")
+    public ApiResponse<FreightBillResponse> createAndAudit(@Valid @RequestBody FreightBillRequest request) {
+        return ApiResponse.success("保存并审核成功", service.createAndAudit(request));
+    }
+
     @PutMapping("/{id}")
     @RequiresPermission(resource = "freight-bill", action = "update")
     public ApiResponse<FreightBillResponse> update(@PathVariable Long id, @Valid @RequestBody FreightBillRequest request) {
         return ApiResponse.success("更新成功", service.update(id, request));
+    }
+
+    @PutMapping("/{id}/save-and-audit")
+    @RequiresPermission(resource = "freight-bill", action = "update")
+    public ApiResponse<FreightBillResponse> updateAndAudit(@PathVariable Long id,
+                                                           @Valid @RequestBody FreightBillRequest request) {
+        return ApiResponse.success("保存并审核成功", service.updateAndAudit(id, request));
     }
 
     @PatchMapping("/{id}/status")

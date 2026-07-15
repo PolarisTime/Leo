@@ -64,9 +64,9 @@ public final class StatusConstants {
     public static final Set<String> ALLOWED_SALES_OUTBOUND_STATUS = Set.of(DRAFT, AUDITED);
     public static final Set<String> ALLOWED_CONTRACT_STATUS = Set.of(DRAFT, EXECUTING, SIGNED, ARCHIVED);
     public static final Set<String> ALLOWED_STATEMENT_STATUS = Set.of(PENDING_CONFIRM, CONFIRMED);
-    public static final Set<String> ALLOWED_FREIGHT_STATEMENT_STATUS = Set.of(PENDING_AUDIT, AUDITED);
+    public static final Set<String> ALLOWED_FREIGHT_STATEMENT_STATUS = Set.of(DRAFT, AUDITED);
     public static final Set<String> ALLOWED_SIGN_STATUS = Set.of(UNSIGNED, SIGNED);
-    public static final Set<String> ALLOWED_FREIGHT_BILL_STATUS = Set.of(UNAUDITED, AUDITED);
+    public static final Set<String> ALLOWED_FREIGHT_BILL_STATUS = Set.of(DRAFT, AUDITED);
     public static final Set<String> ALLOWED_PAYMENT_STATUS = Set.of(DRAFT, AUDITED);
     public static final Set<String> ALLOWED_RECEIPT_STATUS = Set.of(DRAFT, AUDITED);
 
@@ -122,8 +122,8 @@ public final class StatusConstants {
             CONFIRMED + "->" + PENDING_CONFIRM
     );
     public static final Set<String> FREIGHT_BILL_AUDIT_TRANSITIONS = Set.of(
-            UNAUDITED + "->" + AUDITED,
-            AUDITED + "->" + UNAUDITED
+            DRAFT + "->" + AUDITED,
+            AUDITED + "->" + DRAFT
     );
 
     public static String normalizeActiveStatus(String value, String fieldName) {

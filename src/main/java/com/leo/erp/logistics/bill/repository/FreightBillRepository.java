@@ -17,11 +17,11 @@ public interface FreightBillRepository extends JpaRepository<FreightBill, Long>,
 
     boolean existsByBillNoAndDeletedFlagFalse(String billNo);
 
-    @EntityGraph(attributePaths = "items")
+    @EntityGraph(attributePaths = {"items", "sourceOrders"})
     Optional<FreightBill> findByIdAndDeletedFlagFalse(Long id);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @EntityGraph(attributePaths = "items")
+    @EntityGraph(attributePaths = {"items", "sourceOrders"})
     @Query("select bill from FreightBill bill where bill.id = :id and bill.deletedFlag = false")
     Optional<FreightBill> findForUpdateByIdAndDeletedFlagFalse(@Param("id") Long id);
 

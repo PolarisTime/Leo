@@ -42,7 +42,6 @@ public class FreightStatementViewAssembler {
                 entity.getUnpaidAmount(),
                 entity.getStatus(),
                 entity.isDeletedFlag(),
-                entity.getSignStatus(),
                 joinAttachmentNames(attachments),
                 attachments,
                 entity.getRemark(),

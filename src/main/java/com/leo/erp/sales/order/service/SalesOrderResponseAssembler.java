@@ -20,7 +20,7 @@ public class SalesOrderResponseAssembler {
         return salesOrderMapper.toResponse(entity);
     }
 
-    SalesOrderResponse toDetailResponse(SalesOrder entity) {
+    public SalesOrderResponse toDetailResponse(SalesOrder entity) {
         return toDetailResponse(entity, item -> true);
     }
 

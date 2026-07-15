@@ -408,6 +408,11 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
     protected void apply(SalesOrder entity, SalesOrderRequest request) {
         lockPurchaseSources(entity, request);
         boolean auditedPricingUpdate = salesOrderAuditedPricingService.isAuditedPricingUpdate(entity, request);
+        if (entity.getItems().stream().anyMatch(item -> item.getId() != null)
+                && !auditedPricingUpdate
+                && downstreamMutationGuard != null) {
+            downstreamMutationGuard.assertNoFreightReference(entity, "修改");
+        }
         if (!auditedPricingUpdate
                 && entity.getItems().stream().anyMatch(item -> item.getId() != null)
                 && downstreamMutationGuard != null) {

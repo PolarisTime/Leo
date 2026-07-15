@@ -7,6 +7,8 @@ import com.leo.erp.sales.order.domain.entity.SalesOrder;
 import com.leo.erp.sales.order.domain.entity.SalesOrderItem;
 import com.leo.erp.sales.order.web.dto.SalesOrderItemRequest;
 import com.leo.erp.sales.outbound.repository.SalesOutboundRepository;
+import com.leo.erp.logistics.bill.domain.entity.FreightBillSourceOrder;
+import com.leo.erp.logistics.bill.repository.FreightBillSourceOrderRepository;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -20,16 +22,20 @@ public class SalesOrderDownstreamMutationGuard {
 
     private final SalesOutboundRepository salesOutboundRepository;
     private final SourceAllocationLockService sourceAllocationLockService;
+    private final FreightBillSourceOrderRepository freightSourceRepository;
 
     public SalesOrderDownstreamMutationGuard(
             SalesOutboundRepository salesOutboundRepository,
-            SourceAllocationLockService sourceAllocationLockService
+            SourceAllocationLockService sourceAllocationLockService,
+            FreightBillSourceOrderRepository freightSourceRepository
     ) {
         this.salesOutboundRepository = salesOutboundRepository;
         this.sourceAllocationLockService = sourceAllocationLockService;
+        this.freightSourceRepository = freightSourceRepository;
     }
 
     public void assertMutable(SalesOrder order, String action) {
+        assertNoFreightReference(order, action);
         List<Long> itemIds = sourceItemIds(order);
         if (itemIds.isEmpty()) {
             return;
@@ -43,6 +49,21 @@ public class SalesOrderDownstreamMutationGuard {
                     "销售订单已存在销售出库单，不能" + action + "，请先删除相关销售出库单"
             );
         }
+    }
+
+    public void assertNoFreightReference(SalesOrder order, String action) {
+        if (order == null || order.getId() == null) {
+            return;
+        }
+        List<FreightBillSourceOrder> relations = freightSourceRepository.findActiveBySourceOrderId(order.getId());
+        if (relations.isEmpty()) {
+            return;
+        }
+        String billNo = relations.get(0).getFreightBill().getBillNo();
+        throw new BusinessException(
+                ErrorCode.BUSINESS_ERROR,
+                "销售订单已关联物流单" + billNo + "，请先删除物流单后再" + action
+        );
     }
 
     public void assertSourceLineMutationAllowed(

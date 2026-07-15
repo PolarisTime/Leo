@@ -27,17 +27,12 @@ public class FreightStatementApplyService {
     }
 
     void apply(FreightStatement entity, FreightStatementCommand command, LongSupplier nextIdSupplier) {
+        boolean creating = entity.getStatus() == null;
         String nextStatus = BusinessStatusValidator.normalizeWithDefault(
                 command.status(),
-                StatusConstants.PENDING_AUDIT,
+                StatusConstants.DRAFT,
                 "物流对账单审核状态",
                 StatusConstants.ALLOWED_FREIGHT_STATEMENT_STATUS
-        );
-        String nextSignStatus = BusinessStatusValidator.normalizeWithDefault(
-                command.signStatus(),
-                StatusConstants.UNSIGNED,
-                "物流对账单签署状态",
-                StatusConstants.ALLOWED_SIGN_STATUS
         );
         workflowTransitionGuard.assertAuditPermissionForProtectedValue(
                 "freight-statement",
@@ -45,18 +40,11 @@ public class FreightStatementApplyService {
                 nextStatus,
                 StatusConstants.AUDITED
         );
-        workflowTransitionGuard.assertAuditPermissionForProtectedValue(
-                "freight-statement",
-                entity.getSignStatus(),
-                nextSignStatus,
-                StatusConstants.SIGNED
-        );
         entity.setStatementNo(command.statementNo());
-        entity.setStartDate(command.startDate());
-        entity.setEndDate(command.endDate());
         entity.setStatus(nextStatus);
-        entity.setSignStatus(nextSignStatus);
-        if (command.attachment() != null) {
+        // 签署流程已移除，兼容旧数据库列时始终保持未签署。
+        entity.setSignStatus(StatusConstants.UNSIGNED);
+        if (creating && command.attachment() != null) {
             entity.setAttachment(command.attachment());
         }
         entity.setRemark(command.remark());
@@ -74,6 +62,8 @@ public class FreightStatementApplyService {
         BigDecimal totalFreight = sourceResult.totalFreight();
         entity.setTotalWeight(sourceResult.totalWeight());
         entity.setTotalFreight(totalFreight);
+        entity.setStartDate(sourceResult.startDate());
+        entity.setEndDate(sourceResult.endDate());
         BigDecimal paidAmount = entity.getPaidAmount() == null ? BigDecimal.ZERO : entity.getPaidAmount();
         if (paidAmount.compareTo(totalFreight) > 0) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "物流对账单总运费不能低于已付款金额");

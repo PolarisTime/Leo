@@ -63,7 +63,6 @@ public class FreightStatementController {
             @RequestParam(required = false) String carrierName,
             @RequestParam(required = false) Long settlementCompanyId,
             @RequestParam(required = false) String status,
-            @RequestParam(required = false) String signStatus,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate periodStart,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate periodEnd
     ) {
@@ -71,7 +70,7 @@ public class FreightStatementController {
                 freightStatementService.responsePage(
                         query,
                         new PageFilter(keyword, status, periodStart, periodEnd,
-                                carrierName, null, null, null, null, null, signStatus, null, null, null, null,
+                                carrierName, null, null, null, null, null, null, null, null, null, null,
                                 settlementCompanyId)
                                 .withIdentity(null, null, null, carrierId, null),
                         carrierCode
@@ -121,6 +120,13 @@ public class FreightStatementController {
         );
     }
 
+    @Operation(summary = "保存并审核物流对账单")
+    @PostMapping("/save-and-audit")
+    @RequiresPermission(resource = "freight-statement", action = "create")
+    public ApiResponse<FreightStatementResponse> createAndAudit(@Valid @RequestBody FreightStatementRequest request) {
+        return ApiResponse.success("保存并审核成功", freightStatementService.responseCreateAndAudit(request));
+    }
+
     @Operation(summary = "更新物流对账单")
     @PutMapping("/{id}")
     @RequiresPermission(resource = "freight-statement", action = "update")
@@ -130,6 +136,15 @@ public class FreightStatementController {
                 "更新成功",
                 freightStatementService.responseUpdate(id, request)
         );
+    }
+
+    @Operation(summary = "保存并审核物流对账单")
+    @PutMapping("/{id}/save-and-audit")
+    @RequiresPermission(resource = "freight-statement", action = "update")
+    public ApiResponse<FreightStatementResponse> updateAndAudit(
+            @PathVariable Long id,
+            @Valid @RequestBody FreightStatementRequest request) {
+        return ApiResponse.success("保存并审核成功", freightStatementService.responseUpdateAndAudit(id, request));
     }
 
     @Operation(summary = "更新物流对账单状态")

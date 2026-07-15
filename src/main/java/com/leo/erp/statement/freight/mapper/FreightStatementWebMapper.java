@@ -25,5 +25,6 @@ public interface FreightStatementWebMapper {
     @Mapping(target = "attachments", source = "attachments")
     FreightStatementResponse toResponse(FreightStatementView view);
 
+    @Mapping(target = "sourceSalesOrderItemId", ignore = true)
     FreightBillItemResponse toItemResponse(FreightStatementItemView item);
 }

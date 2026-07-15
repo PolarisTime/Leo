@@ -30,6 +30,7 @@ public record FreightBillItemResponse(
         Long warehouseId,
         String warehouseName,
         Long sourceFreightBillId,
-        Long sourceFreightBillItemId
+        Long sourceFreightBillItemId,
+        Long sourceSalesOrderItemId
 ) {
 }

@@ -39,7 +39,7 @@ import java.util.Optional;
 public class FreightBillService extends AbstractCrudService<FreightBill, FreightBillRequest, FreightBillResponse> {
 
     private static final Logger log = LoggerFactory.getLogger(FreightBillService.class);
-    private static final String[] SEARCH_FIELDS = {"billNo", "carrierCode", "carrierName", "customerName"};
+    private static final String[] SEARCH_FIELDS = {"billNo", "carrierCode", "carrierName"};
 
     private final FreightBillRepository repository;
     private final FreightBillMapper mapper;
@@ -88,6 +88,24 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
         return super.page(query, spec, repository);
     }
 
+    @Transactional
+    public FreightBillResponse createAndAudit(FreightBillRequest request) {
+        workflowTransitionGuard.assertAuditPermissionForProtectedValue(
+                "freight-bill", StatusConstants.DRAFT, StatusConstants.AUDITED, StatusConstants.AUDITED
+        );
+        FreightBillResponse created = create(copyRequestWithStatus(request, StatusConstants.DRAFT));
+        return updateStatus(created.id(), StatusConstants.AUDITED);
+    }
+
+    @Transactional
+    public FreightBillResponse updateAndAudit(Long id, FreightBillRequest request) {
+        workflowTransitionGuard.assertAuditPermissionForProtectedValue(
+                "freight-bill", StatusConstants.DRAFT, StatusConstants.AUDITED, StatusConstants.AUDITED
+        );
+        update(id, copyRequestWithStatus(request, StatusConstants.DRAFT));
+        return updateStatus(id, StatusConstants.AUDITED);
+    }
+
     @Transactional(readOnly = true)
     public List<FreightBillResponse> search(String keyword, int maxSize) {
         return super.search(keyword, SEARCH_FIELDS, maxSize, null, repository);
@@ -99,7 +117,7 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
         return new FreightBillResponse(
                 response.id(), response.billNo(), response.carrierId(), response.carrierCode(), response.carrierName(),
                 response.settlementCompanyId(), response.settlementCompanyName(), response.vehicleId(),
-                response.vehiclePlate(), response.customerName(), response.projectName(), response.billTime(),
+                response.vehiclePlate(), response.billTime(),
                 response.unitPrice(), response.totalWeight(), response.totalFreight(), response.status(),
                 response.deletedFlag(), response.remark(), entity.getItems().stream().map(this::toItemResponse).toList()
         );
@@ -113,7 +131,7 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
                 item.getBrand(), item.getCategory(), item.getMaterial(), item.getSpec(), item.getLength(),
                 item.getQuantity(), item.getQuantityUnit(), item.getPieceWeightTon(), item.getPiecesPerBundle(),
                 item.getBatchNo(), item.getBatchNoNormalized(), item.getWeightTon(), item.getWarehouseId(),
-                item.getWarehouseName(), null, null
+                item.getWarehouseName(), null, null, item.getSourceSalesOrderItemId()
         );
     }
 
@@ -123,8 +141,8 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
             throw business("物流单号已存在");
         }
         String status = BusinessDocumentValidator.trimToNull(request.status());
-        if (status != null && !StatusConstants.UNAUDITED.equals(status)) {
-            throw business("新物流单只能保存为未审核，审核必须通过状态操作完成");
+        if (status != null && !StatusConstants.DRAFT.equals(status)) {
+            throw business("新物流单只能保存为草稿");
         }
     }
 
@@ -151,8 +169,17 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
         return new FreightBillRequest(
                 billNo, request.carrierId(), request.carrierCode(), request.carrierName(),
                 request.settlementCompanyId(), request.settlementCompanyName(), request.vehicleId(),
-                request.vehiclePlate(), request.customerName(), request.projectName(), request.billTime(),
+                request.vehiclePlate(), request.billTime(),
                 request.unitPrice(), request.status(), request.remark(), request.items()
+        );
+    }
+
+    private FreightBillRequest copyRequestWithStatus(FreightBillRequest request, String status) {
+        return new FreightBillRequest(
+                request.billNo(), request.carrierId(), request.carrierCode(), request.carrierName(),
+                request.settlementCompanyId(), request.settlementCompanyName(), request.vehicleId(),
+                request.vehiclePlate(), request.billTime(),
+                request.unitPrice(), status, request.remark(), request.items()
         );
     }
 
@@ -171,7 +198,7 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
     @Override
     protected void apply(FreightBill entity, FreightBillRequest request) {
         String nextStatus = BusinessStatusValidator.normalizeWithDefault(
-                request.status(), StatusConstants.UNAUDITED, "物流单状态", StatusConstants.ALLOWED_FREIGHT_BILL_STATUS
+                request.status(), StatusConstants.DRAFT, "物流单状态", StatusConstants.ALLOWED_FREIGHT_BILL_STATUS
         );
         workflowTransitionGuard.assertAuditPermissionForProtectedValue(
                 "freight-bill", entity.getStatus(), nextStatus, StatusConstants.AUDITED
@@ -179,6 +206,9 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
         FreightBillCarrierResolver.CarrierSnapshot carrier = carrierResolver.resolve(
                 request.carrierId(), request.carrierCode(), request.carrierName()
         );
+        if (entity.getCarrierId() != null && !Objects.equals(entity.getCarrierId(), carrier.id())) {
+            throw business("物流单保存后不能更换物流商");
+        }
         VehicleSnapshot vehicle = resolveVehicle(request, carrier);
         entity.setBillNo(request.billNo());
         entity.setCarrierId(carrier.id());
@@ -187,8 +217,8 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
         applySettlementCompany(entity, request, carrier);
         entity.setVehicleId(vehicle.id());
         entity.setVehiclePlate(vehicle.plate());
-        entity.setCustomerName(request.customerName().trim());
-        entity.setProjectName(request.projectName().trim());
+        entity.setCustomerName(null);
+        entity.setProjectName(null);
         entity.setBillTime(request.billTime());
         entity.setUnitPrice(request.unitPrice());
         entity.setStatus(nextStatus);
@@ -199,7 +229,7 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
     @Override
     protected void beforeStatusUpdate(FreightBill entity, String currentStatus, String nextStatus) {
         lockCurrent(entity);
-        if (StatusConstants.AUDITED.equals(currentStatus) && StatusConstants.UNAUDITED.equals(nextStatus)) {
+        if (StatusConstants.AUDITED.equals(currentStatus) && StatusConstants.DRAFT.equals(nextStatus)) {
             downstreamMutationGuard.assertReverseAuditAllowed(entity);
         }
     }
@@ -208,6 +238,11 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
     protected void beforeDelete(FreightBill entity) {
         lockCurrent(entity);
         downstreamMutationGuard.assertDeleteAllowed(entity);
+    }
+
+    @Override
+    protected void afterDelete(FreightBill entity) {
+        entity.getSourceOrders().forEach(source -> source.setActiveFlag(false));
     }
 
     private void lockCurrent(FreightBill entity) {
@@ -231,8 +266,11 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
                     .filter(candidate -> Objects.equals(requestedPlate,
                             BusinessDocumentValidator.trimToNull(candidate.getPlate())))
                     .toList();
+            if (candidates.isEmpty()) {
+                return new VehicleSnapshot(null, VehiclePlateValidator.normalizeAndValidate(requestedPlate));
+            }
             if (candidates.size() != 1) {
-                throw business(candidates.isEmpty() ? "车辆不存在" : "车牌号对应多辆车，请选择车辆ID");
+                throw business("车牌号对应多辆车，请选择车辆ID");
             }
             vehicle = candidates.get(0);
             log.warn("identity_fallback module=freight-bill field=vehicleId reason=vehicle-plate resolvedId={}",
@@ -252,12 +290,10 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
     private void applySettlementCompany(FreightBill entity,
                                         FreightBillRequest request,
                                         FreightBillCarrierResolver.CarrierSnapshot carrier) {
-        if (request.settlementCompanyId() == null) {
-            entity.setSettlementCompanyId(carrier.defaultSettlementCompanyId());
-            entity.setSettlementCompanyName(carrier.defaultSettlementCompanyName());
-            return;
+        if (carrier.defaultSettlementCompanyId() == null) {
+            throw business("物流商未配置默认结算主体，请先完善物流商档案");
         }
-        CompanySetting company = companySettingService.requireActiveSettlementCompany(request.settlementCompanyId());
+        CompanySetting company = companySettingService.requireActiveSettlementCompany(carrier.defaultSettlementCompanyId());
         entity.setSettlementCompanyId(company.getId());
         entity.setSettlementCompanyName(company.getCompanyName());
     }

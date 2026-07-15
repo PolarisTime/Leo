@@ -8,7 +8,9 @@ import lombok.Setter;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 
 @Getter
 @Setter
@@ -47,10 +49,10 @@ public class FreightBill extends AbstractAuditableEntity {
     @Column(name = "vehicle_id")
     private Long vehicleId;
 
-    @Column(name = "customer_name", nullable = false, length = 128)
+    @Column(name = "customer_name", length = 128)
     private String customerName;
 
-    @Column(name = "project_name", nullable = false, length = 200)
+    @Column(name = "project_name", length = 200)
     private String projectName;
 
     @Column(name = "bill_time", nullable = false)
@@ -73,4 +75,7 @@ public class FreightBill extends AbstractAuditableEntity {
 
     @OneToMany(mappedBy = "freightBill", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<FreightBillItem> items = new ArrayList<>();
+
+    @OneToMany(mappedBy = "freightBill", cascade = CascadeType.ALL, orphanRemoval = true)
+    private Set<FreightBillSourceOrder> sourceOrders = new LinkedHashSet<>();
 }
