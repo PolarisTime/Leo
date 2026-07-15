@@ -1,3 +1,21 @@
+# [4.0.0](https://github.com/PolarisTime/Leo/compare/v3.1.2...v4.0.0) (2026-07-15)
+
+
+* feat(finance)!: 重构财务为资金流水模式 ([f7a664f](https://github.com/PolarisTime/Leo/commit/f7a664fdfc72cde1d47d42ac894a34d27d677b33))
+* feat(order-flow)!: 重构采购销售物流及财务单据流 ([3149a05](https://github.com/PolarisTime/Leo/commit/3149a05512b3f8e0a204efb6799e821a106b0123))
+
+
+### Bug Fixes
+
+* **purchase:** 修复采购逐件重量同步逻辑 ([6da9fee](https://github.com/PolarisTime/Leo/commit/6da9feeff4fb22aabed6e71601518921b4ac4cec))
+* **purchase:** 完善采购全量入库及状态流转 ([5806cbc](https://github.com/PolarisTime/Leo/commit/5806cbc2fa1f4d68c0a2226bf9b4ba9cf4e6ae28))
+
+
+### BREAKING CHANGES
+
+* 删除旧采购财务、发票及资金冲销接口，原应收应付入口替换为资金流水。
+* 移除采购退款单和供应商退款到账 API，采购完成、财务流及收票容量改用实际入库与通用收付款口径。
+
 ## [3.1.2](https://github.com/PolarisTime/Leo/compare/v3.1.1...v3.1.2) (2026-07-13)
 
 
