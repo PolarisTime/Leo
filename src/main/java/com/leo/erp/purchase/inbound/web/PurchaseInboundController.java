@@ -13,6 +13,7 @@ import com.leo.erp.purchase.inbound.web.dto.PurchaseInboundResponse;
 import com.leo.erp.purchase.inbound.web.dto.PurchaseInboundAuditRequest;
 import com.leo.erp.purchase.inbound.web.dto.PurchaseInboundAuditResponse;
 import com.leo.erp.security.permission.RequiresPermission;
+import com.leo.erp.system.operationlog.support.DomainEventAudited;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -85,6 +86,7 @@ public class PurchaseInboundController {
     @PutMapping("/{id}")
     @RequiresPermission(resource = "purchase-inbound", action = "update")
     @Operation(summary = "更新采购入库")
+    @DomainEventAudited
     public ApiResponse<PurchaseInboundResponse> update(@PathVariable Long id, @Valid @RequestBody PurchaseInboundRequest request) {
         return ApiResponse.success("更新成功", service.update(id, request));
     }
@@ -92,6 +94,7 @@ public class PurchaseInboundController {
     @PatchMapping("/{id}/status")
     @RequiresPermission(resource = "purchase-inbound", action = "audit")
     @Operation(summary = "更新采购入库状态")
+    @DomainEventAudited
     public ApiResponse<PurchaseInboundResponse> updateStatus(@PathVariable Long id, @Valid @RequestBody StatusUpdateRequest request) {
         return ApiResponse.success("状态更新成功", service.updateStatus(id, request.status()));
     }
@@ -99,6 +102,7 @@ public class PurchaseInboundController {
     @PostMapping("/{id}/audit")
     @RequiresPermission(resource = "purchase-inbound", action = "audit")
     @Operation(summary = "审核采购入库并自动同步采购状态")
+    @DomainEventAudited
     public ApiResponse<PurchaseInboundAuditResponse> audit(
             @PathVariable Long id,
             @Valid @RequestBody PurchaseInboundAuditRequest request
@@ -109,6 +113,7 @@ public class PurchaseInboundController {
     @DeleteMapping("/{id}")
     @RequiresPermission(resource = "purchase-inbound", action = "delete")
     @Operation(summary = "删除采购入库")
+    @DomainEventAudited
     public ApiResponse<Void> delete(@PathVariable Long id) {
         service.delete(id);
         return ApiResponse.success("删除成功");

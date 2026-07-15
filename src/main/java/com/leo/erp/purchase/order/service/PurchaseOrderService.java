@@ -11,6 +11,7 @@ import com.leo.erp.common.support.BusinessDocumentValidator;
 import com.leo.erp.common.support.BusinessStatusValidator;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.finance.payment.service.PaymentPurchasePrepaymentService;
+import com.leo.erp.purchase.order.audit.PurchaseOrderAuditPublisher;
 import com.leo.erp.purchase.order.domain.entity.PurchaseOrder;
 import com.leo.erp.purchase.order.repository.PurchaseOrderRepository;
 import com.leo.erp.purchase.order.web.dto.PurchaseOrderImportCandidateResponse;
@@ -51,6 +52,7 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
     private final PaymentPurchasePrepaymentService purchasePrepaymentService;
     private final PurchaseOrderDownstreamMutationGuard downstreamMutationGuard;
     private final PurchaseOrderItemPieceWeightService pieceWeightService;
+    private final PurchaseOrderAuditPublisher purchaseOrderAuditPublisher;
 
     public PurchaseOrderService(PurchaseOrderRepository purchaseOrderRepository,
                                 SnowflakeIdGenerator snowflakeIdGenerator,
@@ -69,6 +71,7 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
                 purchaseOrderApplyService,
                 workflowTransitionGuard,
                 companySettingService,
+                null,
                 null,
                 null,
                 null
@@ -95,6 +98,34 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
                 companySettingService,
                 purchasePrepaymentService,
                 null,
+                null,
+                null
+        );
+    }
+
+    public PurchaseOrderService(PurchaseOrderRepository purchaseOrderRepository,
+                                SnowflakeIdGenerator snowflakeIdGenerator,
+                                PurchaseOrderAvailabilityService availabilityService,
+                                PurchaseOrderResponseAssembler responseAssembler,
+                                PurchaseOrderSupplierResolver supplierResolver,
+                                PurchaseOrderApplyService purchaseOrderApplyService,
+                                WorkflowTransitionGuard workflowTransitionGuard,
+                                CompanySettingService companySettingService,
+                                PaymentPurchasePrepaymentService purchasePrepaymentService,
+                                PurchaseOrderDownstreamMutationGuard downstreamMutationGuard,
+                                PurchaseOrderItemPieceWeightService pieceWeightService) {
+        this(
+                purchaseOrderRepository,
+                snowflakeIdGenerator,
+                availabilityService,
+                responseAssembler,
+                supplierResolver,
+                purchaseOrderApplyService,
+                workflowTransitionGuard,
+                companySettingService,
+                purchasePrepaymentService,
+                downstreamMutationGuard,
+                pieceWeightService,
                 null
         );
     }
@@ -110,7 +141,8 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
                                 CompanySettingService companySettingService,
                                 PaymentPurchasePrepaymentService purchasePrepaymentService,
                                 PurchaseOrderDownstreamMutationGuard downstreamMutationGuard,
-                                PurchaseOrderItemPieceWeightService pieceWeightService) {
+                                PurchaseOrderItemPieceWeightService pieceWeightService,
+                                PurchaseOrderAuditPublisher purchaseOrderAuditPublisher) {
         super(snowflakeIdGenerator);
         this.purchaseOrderRepository = purchaseOrderRepository;
         this.availabilityService = availabilityService;
@@ -122,6 +154,7 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
         this.purchasePrepaymentService = purchasePrepaymentService;
         this.downstreamMutationGuard = downstreamMutationGuard;
         this.pieceWeightService = pieceWeightService;
+        this.purchaseOrderAuditPublisher = purchaseOrderAuditPublisher;
     }
 
     private static final String[] PURCHASE_ORDER_SEARCH_FIELDS = {"orderNo", "supplierName"};
@@ -339,6 +372,43 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
     }
 
     @Override
+    @Transactional
+    public PurchaseOrderResponse updateStatus(Long id, String status) {
+        PurchaseOrder purchaseOrder = requireEntity(id);
+        String currentStatus = purchaseOrder.getStatus();
+        PurchaseOrderResponse response = super.updateStatus(id, status);
+        if (!currentStatus.equals(response.status())) {
+            publishStatusEvent(purchaseOrder, currentStatus, response.status());
+        }
+        return response;
+    }
+
+    private void publishStatusEvent(PurchaseOrder purchaseOrder, String currentStatus, String nextStatus) {
+        if (purchaseOrderAuditPublisher == null) {
+            return;
+        }
+
+        String eventType;
+        String actionType;
+        if (StatusConstants.DRAFT.equals(currentStatus) && StatusConstants.AUDITED.equals(nextStatus)) {
+            eventType = "PURCHASE_ORDER_AUDITED";
+            actionType = "审核";
+        } else if (StatusConstants.AUDITED.equals(currentStatus) && StatusConstants.DRAFT.equals(nextStatus)) {
+            eventType = "PURCHASE_ORDER_REVERSE_AUDITED";
+            actionType = "反审核";
+        } else {
+            return;
+        }
+
+        purchaseOrderAuditPublisher.publish(
+                purchaseOrder,
+                eventType,
+                actionType,
+                "采购订单状态 " + currentStatus + " -> " + nextStatus
+        );
+    }
+
+    @Override
     protected void apply(PurchaseOrder purchaseOrder, PurchaseOrderRequest request) {
         assertLineQuantities(request);
         if (purchaseOrder.getId() != null) {
@@ -439,18 +509,39 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
     }
 
     @Override
+    protected void afterDelete(PurchaseOrder entity) {
+        publishMutationEvent(entity, "PURCHASE_ORDER_DELETED", "删除");
+    }
+
+    @Override
     protected PurchaseOrder saveEntity(PurchaseOrder entity) {
         return purchaseOrderRepository.save(entity);
     }
 
     @Override
     protected PurchaseOrder saveCreatedEntity(PurchaseOrder entity, PurchaseOrderRequest request) {
-        return saveWithPieceWeights(entity);
+        PurchaseOrder saved = saveWithPieceWeights(entity);
+        publishMutationEvent(saved, "PURCHASE_ORDER_CREATED", "新增");
+        return saved;
     }
 
     @Override
     protected PurchaseOrder saveUpdatedEntity(PurchaseOrder entity, PurchaseOrderRequest request) {
-        return saveWithPieceWeights(entity);
+        PurchaseOrder saved = saveWithPieceWeights(entity);
+        publishMutationEvent(saved, "PURCHASE_ORDER_UPDATED", "编辑");
+        return saved;
+    }
+
+    private void publishMutationEvent(PurchaseOrder entity, String eventType, String actionType) {
+        if (purchaseOrderAuditPublisher == null) {
+            return;
+        }
+        purchaseOrderAuditPublisher.publish(
+                entity,
+                eventType,
+                actionType,
+                actionType + "采购订单 " + entity.getOrderNo()
+        );
     }
 
     private PurchaseOrder saveWithPieceWeights(PurchaseOrder entity) {

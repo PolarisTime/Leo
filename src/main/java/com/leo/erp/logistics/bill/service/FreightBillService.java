@@ -24,9 +24,11 @@ import com.leo.erp.master.carrier.repository.VehicleRepository;
 import com.leo.erp.security.permission.WorkflowTransitionGuard;
 import com.leo.erp.system.company.domain.entity.CompanySetting;
 import com.leo.erp.system.company.service.CompanySettingService;
+import com.leo.erp.system.operationlog.event.BusinessOperationEventPublisher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -50,6 +52,7 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
     private final SourceAllocationLockService sourceAllocationLockService;
     private final FreightBillDownstreamMutationGuard downstreamMutationGuard;
     private final VehicleRepository vehicleRepository;
+    private BusinessOperationEventPublisher businessOperationEventPublisher;
 
     public FreightBillService(FreightBillRepository repository,
                               SnowflakeIdGenerator idGenerator,
@@ -71,6 +74,11 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
         this.sourceAllocationLockService = sourceAllocationLockService;
         this.downstreamMutationGuard = downstreamMutationGuard;
         this.vehicleRepository = vehicleRepository;
+    }
+
+    @Autowired(required = false)
+    void setBusinessOperationEventPublisher(BusinessOperationEventPublisher publisher) {
+        this.businessOperationEventPublisher = publisher;
     }
 
     public Page<FreightBillResponse> page(PageQuery query, PageFilter filter) {
@@ -235,6 +243,20 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
     }
 
     @Override
+    @Transactional
+    public FreightBillResponse updateStatus(Long id, String status) {
+        FreightBill bill = requireEntity(id);
+        String currentStatus = bill.getStatus();
+        FreightBillResponse response = super.updateStatus(id, status);
+        if (!Objects.equals(currentStatus, response.status())) {
+            String actionType = StatusConstants.DRAFT.equals(response.status()) ? "反审核" : "审核";
+            publishEvent(bill, "FREIGHT_BILL_STATUS_CHANGED", actionType,
+                    "物流单状态 " + currentStatus + " -> " + response.status());
+        }
+        return response;
+    }
+
+    @Override
     protected void beforeDelete(FreightBill entity) {
         lockCurrent(entity);
         downstreamMutationGuard.assertDeleteAllowed(entity);
@@ -243,6 +265,7 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
     @Override
     protected void afterDelete(FreightBill entity) {
         entity.getSourceOrders().forEach(source -> source.setActiveFlag(false));
+        publishEvent(entity, "FREIGHT_BILL_DELETED", "删除", "删除物流单 " + entity.getBillNo());
     }
 
     private void lockCurrent(FreightBill entity) {
@@ -339,9 +362,34 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
     }
 
     @Override
+    protected FreightBill saveCreatedEntity(FreightBill entity, FreightBillRequest request) {
+        FreightBill saved = saveEntity(entity);
+        publishEvent(saved, "FREIGHT_BILL_CREATED", "新增", "新增物流单 " + saved.getBillNo());
+        return saved;
+    }
+
+    @Override
     protected FreightBill saveUpdatedEntity(FreightBill entity, FreightBillRequest request) {
         lockCurrent(entity);
-        return saveEntity(entity);
+        FreightBill saved = saveEntity(entity);
+        publishEvent(saved, "FREIGHT_BILL_UPDATED", "编辑", "编辑物流单 " + saved.getBillNo());
+        return saved;
+    }
+
+    private void publishEvent(FreightBill bill, String eventType, String actionType, String remark) {
+        if (businessOperationEventPublisher == null) {
+            return;
+        }
+        businessOperationEventPublisher.publish(
+                eventType,
+                "freight-bill",
+                "物流单",
+                actionType,
+                "FreightBill",
+                bill.getId(),
+                bill.getBillNo(),
+                remark
+        );
     }
 
     @Override

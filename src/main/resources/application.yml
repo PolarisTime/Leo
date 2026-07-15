@@ -118,6 +118,13 @@ spring:
     # 迁移脚本目录
     locations: classpath:db/migration
 
+  modulith:
+    events:
+      # 事件消费成功后保留完成时间，便于审计可靠投递状态
+      completion-mode: update
+      # 应用重启时自动重放未完成事件，消费者必须按 eventId 幂等
+      republish-outstanding-events-on-restart: true
+
   data:
     redis:
       # Redis 主机
@@ -152,6 +159,13 @@ spring:
       max-file-size: 20MB
       # 单次请求总上传大小限制
       max-request-size: 25MB
+
+# JaVers 仅由显式领域事件驱动，表结构统一交给 Flyway 管理
+javers:
+  sql-schema-management-enabled: false
+  auditable-aspect-enabled: false
+  spring-data-auditable-repository-aspect-enabled: false
+  pretty-print: false
 
 # 业务自定义配置
 leo:
@@ -245,14 +259,6 @@ leo:
     enabled: ${LEO_MAINTENANCE_ENABLED:true}
     # 定时任务时区
     zone: ${LEO_MAINTENANCE_ZONE:Asia/Shanghai}
-    operation-log-archive:
-      # 每天 02:30 归档并压缩 30 天前的操作日志
-      enabled: ${LEO_MAINTENANCE_OPERATION_LOG_ARCHIVE_ENABLED:true}
-      cron: ${LEO_MAINTENANCE_OPERATION_LOG_ARCHIVE_CRON:0 30 2 * * *}
-      # 在线表默认保留最近 30 天，早于该阈值的全部归档
-      retention-days: ${LEO_MAINTENANCE_OPERATION_LOG_RETENTION_DAYS:30}
-      batch-size: ${LEO_MAINTENANCE_OPERATION_LOG_ARCHIVE_BATCH_SIZE:1000}
-      archive-path: ${LEO_MAINTENANCE_OPERATION_LOG_ARCHIVE_PATH:/tmp/leo/operation-log-archives}
     redis-cache-health-check:
       # 每 5 分钟校验关键主数据下拉缓存，发现空缓存污染时自动重建
       enabled: ${LEO_MAINTENANCE_REDIS_CACHE_HEALTH_CHECK_ENABLED:true}

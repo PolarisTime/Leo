@@ -3,6 +3,7 @@ package com.leo.erp.sales.order.service;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.sales.order.domain.entity.SalesOrder;
 import com.leo.erp.sales.order.repository.SalesOrderRepository;
+import com.leo.erp.system.operationlog.event.BusinessOperationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -19,11 +20,14 @@ public class SalesOrderCompletionSyncService {
 
     private final SalesOrderRepository salesOrderRepository;
     private final SalesOrderOutboundQueryService outboundQueryService;
+    private final BusinessOperationEventPublisher businessOperationEventPublisher;
 
     public SalesOrderCompletionSyncService(SalesOrderRepository salesOrderRepository,
-                                           SalesOrderOutboundQueryService outboundQueryService) {
+                                           SalesOrderOutboundQueryService outboundQueryService,
+                                           BusinessOperationEventPublisher businessOperationEventPublisher) {
         this.salesOrderRepository = salesOrderRepository;
         this.outboundQueryService = outboundQueryService;
+        this.businessOperationEventPublisher = businessOperationEventPublisher;
     }
 
     @Transactional
@@ -108,13 +112,41 @@ public class SalesOrderCompletionSyncService {
                 return false;
             }
             order.setStatus(StatusConstants.DELIVERY_VERIFICATION);
+            publishStatusEvent(
+                    order,
+                    "SALES_ORDER_DELIVERY_VERIFIED",
+                    "交付核定",
+                    "销售订单状态 已审核 -> 交付核定"
+            );
             return true;
         }
         if (StatusConstants.AUDITED.equals(currentStatus)) {
             return false;
         }
         order.setStatus(StatusConstants.AUDITED);
+        publishStatusEvent(
+                order,
+                "SALES_ORDER_DELIVERY_REOPENED",
+                "退回已审核",
+                "销售订单状态 交付核定 -> 已审核"
+        );
         return true;
+    }
+
+    private void publishStatusEvent(SalesOrder order,
+                                    String eventType,
+                                    String actionType,
+                                    String remark) {
+        businessOperationEventPublisher.publish(
+                eventType,
+                "sales-order",
+                "销售订单",
+                actionType,
+                "SalesOrder",
+                order.getId(),
+                order.getOrderNo(),
+                remark
+        );
     }
 
     private Set<Long> normalizeIds(Collection<Long> ids) {

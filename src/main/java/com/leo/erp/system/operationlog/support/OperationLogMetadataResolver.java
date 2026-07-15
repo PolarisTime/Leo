@@ -20,6 +20,9 @@ public class OperationLogMetadataResolver {
     }
 
     public OperationLogMetadata resolveMetadata(HandlerMethod handlerMethod, HttpServletRequest request) {
+        if (handlerMethod.hasMethodAnnotation(DomainEventAudited.class)) {
+            return null;
+        }
         OperationLoggable operationLoggable = handlerMethod.getMethodAnnotation(OperationLoggable.class);
         if (operationLoggable != null) {
             return new OperationLogMetadata(

@@ -1,0 +1,40 @@
+groups:
+  - name: leo-availability
+    rules:
+      - alert: LeoBackendUnavailable
+        expr: up{job="leo-backend"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: Leo 后端指标端点不可用
+
+      - alert: LeoBackendHighErrorRate
+        expr: >-
+          sum(rate(http_server_requests_seconds_count{job="leo-backend",status=~"5.."}[5m]))
+          /
+          clamp_min(sum(rate(http_server_requests_seconds_count{job="leo-backend"}[5m])), 0.001)
+          > 0.05
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Leo 后端 5xx 比例连续 5 分钟超过 5%
+
+  - name: leo-reliable-events
+    rules:
+      - alert: LeoReliableEventBacklog
+        expr: leo_business_events_incomplete > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Leo 存在未完成业务事件
+
+      - alert: LeoReliableEventStalled
+        expr: leo_business_events_oldest_age_seconds > 900
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: Leo 最早未完成业务事件已等待超过 15 分钟

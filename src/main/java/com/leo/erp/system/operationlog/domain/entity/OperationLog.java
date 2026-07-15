@@ -8,6 +8,7 @@ import lombok.Getter;
 import lombok.Setter;
 
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 @Getter
 @Setter
@@ -62,6 +63,18 @@ public class OperationLog {
 
     @Column(name = "auth_type", length = 16)
     private String authType;
+
+    @Column(name = "event_id")
+    private UUID eventId;
+
+    @Column(name = "trace_id", length = 64)
+    private String traceId;
+
+    @Column(name = "aggregate_type", length = 64)
+    private String aggregateType;
+
+    @Column(name = "event_version")
+    private Integer eventVersion;
 
     @Column(name = "remark", length = 255)
     private String remark;

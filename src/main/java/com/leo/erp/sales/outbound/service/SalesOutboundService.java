@@ -14,6 +14,7 @@ import com.leo.erp.sales.outbound.domain.entity.SalesOutbound;
 import com.leo.erp.sales.outbound.domain.entity.SalesOutboundItem;
 import com.leo.erp.sales.outbound.repository.SalesOutboundRepository;
 import com.leo.erp.security.permission.WorkflowTransitionGuard;
+import com.leo.erp.system.operationlog.event.BusinessOperationEventPublisher;
 import com.leo.erp.sales.order.repository.SalesOrderRepository;
 import com.leo.erp.sales.outbound.web.dto.*;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -43,6 +44,7 @@ public class SalesOutboundService extends AbstractCrudService<SalesOutbound, Sal
     private final SalesOutboundDownstreamMutationGuard downstreamMutationGuard;
     private SalesOutboundCoverageValidator coverageValidator;
     private SalesOrderRepository salesOrderRepository;
+    private BusinessOperationEventPublisher businessOperationEventPublisher;
 
     @Autowired
     public SalesOutboundService(SalesOutboundRepository repository,
@@ -73,6 +75,11 @@ public class SalesOutboundService extends AbstractCrudService<SalesOutbound, Sal
     @Autowired
     void setSalesOrderRepository(SalesOrderRepository salesOrderRepository) {
         this.salesOrderRepository = salesOrderRepository;
+    }
+
+    @Autowired(required = false)
+    void setBusinessOperationEventPublisher(BusinessOperationEventPublisher publisher) {
+        this.businessOperationEventPublisher = publisher;
     }
 
     @Transactional(readOnly = true)
@@ -328,6 +335,20 @@ public class SalesOutboundService extends AbstractCrudService<SalesOutbound, Sal
     }
 
     @Override
+    @Transactional
+    public SalesOutboundResponse updateStatus(Long id, String status) {
+        SalesOutbound outbound = requireEntity(id);
+        String currentStatus = outbound.getStatus();
+        SalesOutboundResponse response = super.updateStatus(id, status);
+        if (!Objects.equals(currentStatus, response.status())) {
+            String actionType = StatusConstants.DRAFT.equals(response.status()) ? "反审核" : "审核";
+            publishEvent(outbound, "SALES_OUTBOUND_STATUS_CHANGED", actionType,
+                    "销售出库状态 " + currentStatus + " -> " + response.status());
+        }
+        return response;
+    }
+
+    @Override
     protected void beforeDelete(SalesOutbound entity) {
         lockSourceSalesOrderItems(entity.getItems(), List.of());
         if (StatusConstants.AUDITED.equals(entity.getStatus())) {
@@ -344,6 +365,11 @@ public class SalesOutboundService extends AbstractCrudService<SalesOutbound, Sal
                 List.of()
         );
         rollbackSourceSalesOrders(entity, sourceSalesOrderIds);
+    }
+
+    @Override
+    protected void afterDelete(SalesOutbound entity) {
+        publishEvent(entity, "SALES_OUTBOUND_DELETED", "删除", "删除销售出库 " + entity.getOutboundNo());
     }
 
     private void rollbackSourceSalesOrders(SalesOutbound entity, List<Long> sourceSalesOrderIds) {
@@ -370,7 +396,24 @@ public class SalesOutboundService extends AbstractCrudService<SalesOutbound, Sal
             }
             order.setStatus(StatusConstants.DRAFT);
             salesOrderRepository.save(order);
+            publishSalesOrderRollbackEvent(order);
         }
+    }
+
+    private void publishSalesOrderRollbackEvent(com.leo.erp.sales.order.domain.entity.SalesOrder order) {
+        if (businessOperationEventPublisher == null) {
+            return;
+        }
+        businessOperationEventPublisher.publish(
+                "SALES_ORDER_REOPENED_AFTER_OUTBOUND_DELETED",
+                "sales-order",
+                "销售订单",
+                "退回草稿",
+                "SalesOrder",
+                order.getId(),
+                order.getOrderNo(),
+                "删除销售出库后，销售订单状态 已审核 -> 草稿"
+        );
     }
 
     private void lockSourceSalesOrderItems(List<SalesOutboundItem> existingItems,
@@ -390,6 +433,36 @@ public class SalesOutboundService extends AbstractCrudService<SalesOutbound, Sal
     @Override
     protected SalesOutbound saveEntity(SalesOutbound entity) {
         return saveService.save(entity);
+    }
+
+    @Override
+    protected SalesOutbound saveCreatedEntity(SalesOutbound entity, SalesOutboundRequest request) {
+        SalesOutbound saved = saveEntity(entity);
+        publishEvent(saved, "SALES_OUTBOUND_CREATED", "新增", "新增销售出库 " + saved.getOutboundNo());
+        return saved;
+    }
+
+    @Override
+    protected SalesOutbound saveUpdatedEntity(SalesOutbound entity, SalesOutboundRequest request) {
+        SalesOutbound saved = saveEntity(entity);
+        publishEvent(saved, "SALES_OUTBOUND_UPDATED", "编辑", "编辑销售出库 " + saved.getOutboundNo());
+        return saved;
+    }
+
+    private void publishEvent(SalesOutbound outbound, String eventType, String actionType, String remark) {
+        if (businessOperationEventPublisher == null) {
+            return;
+        }
+        businessOperationEventPublisher.publish(
+                eventType,
+                "sales-outbound",
+                "销售出库",
+                actionType,
+                "SalesOutbound",
+                outbound.getId(),
+                outbound.getOutboundNo(),
+                remark
+        );
     }
 
     @Override

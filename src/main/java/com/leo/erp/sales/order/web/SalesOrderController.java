@@ -18,6 +18,7 @@ import com.leo.erp.sales.order.web.dto.SalesOrderResponse;
 import com.leo.erp.sales.order.web.dto.SalesOrderSourceCandidateResponse;
 import com.leo.erp.system.operationlog.support.OperationLogResultCollector;
 import com.leo.erp.system.operationlog.support.OperationLoggable;
+import com.leo.erp.system.operationlog.support.DomainEventAudited;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -174,6 +175,7 @@ public class SalesOrderController {
     @Operation(summary = "创建销售订单")
     @PostMapping
     @RequiresPermission(resource = "sales-order", action = "create")
+    @DomainEventAudited
     public ApiResponse<SalesOrderResponse> create(@Valid @RequestBody SalesOrderRequest request) {
         return ApiResponse.success("创建成功", service.create(request));
     }
@@ -181,6 +183,7 @@ public class SalesOrderController {
     @Operation(summary = "更新销售订单")
     @PutMapping("/{id}")
     @RequiresPermission(resource = "sales-order", action = "update")
+    @DomainEventAudited
     public ApiResponse<SalesOrderResponse> update(@PathVariable Long id, @Valid @RequestBody SalesOrderRequest request) {
         return ApiResponse.success("更新成功", service.update(id, request));
     }
@@ -188,6 +191,7 @@ public class SalesOrderController {
     @Operation(summary = "更新销售订单状态")
     @PatchMapping("/{id}/status")
     @RequiresPermission(resource = "sales-order", action = "audit")
+    @DomainEventAudited
     public ApiResponse<SalesOrderResponse> updateStatus(@PathVariable Long id, @Valid @RequestBody StatusUpdateRequest request) {
         return ApiResponse.success("状态更新成功", service.updateStatus(id, request.status()));
     }
@@ -195,6 +199,7 @@ public class SalesOrderController {
     @Operation(summary = "完成销售")
     @PostMapping("/{id}/complete")
     @RequiresPermission(resource = "sales-order", action = "audit")
+    @DomainEventAudited
     public ApiResponse<SalesOrderResponse> complete(@PathVariable Long id) {
         return ApiResponse.success("完成销售成功", service.completeSalesOrder(id));
     }
@@ -202,6 +207,7 @@ public class SalesOrderController {
     @Operation(summary = "删除销售订单")
     @DeleteMapping("/{id}")
     @RequiresPermission(resource = "sales-order", action = "delete")
+    @DomainEventAudited
     public ApiResponse<Void> delete(@PathVariable Long id) {
         service.delete(id);
         return ApiResponse.success("删除成功");

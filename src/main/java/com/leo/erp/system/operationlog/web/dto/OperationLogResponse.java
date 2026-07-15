@@ -1,6 +1,7 @@
 package com.leo.erp.system.operationlog.web.dto;
 
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 public record OperationLogResponse(
         Long id,
@@ -18,6 +19,10 @@ public record OperationLogResponse(
         String clientIp,
         String resultStatus,
         LocalDateTime operationTime,
+        UUID eventId,
+        String traceId,
+        String aggregateType,
+        Integer eventVersion,
         String remark
 ) {
 }

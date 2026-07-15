@@ -12,6 +12,7 @@ import com.leo.erp.purchase.order.web.dto.PurchaseOrderImportCandidateResponse;
 import com.leo.erp.purchase.order.web.dto.PurchaseOrderRequest;
 import com.leo.erp.purchase.order.web.dto.PurchaseOrderResponse;
 import com.leo.erp.security.permission.RequiresPermission;
+import com.leo.erp.system.operationlog.support.DomainEventAudited;
 import jakarta.validation.Valid;
 import java.time.LocalDate;
 import java.util.List;
@@ -130,6 +131,7 @@ public class PurchaseOrderController {
     @Operation(summary = "创建采购订单")
     @PostMapping
     @RequiresPermission(resource = "purchase-order", action = "create")
+    @DomainEventAudited
     public ApiResponse<PurchaseOrderResponse> create(@Valid @RequestBody PurchaseOrderRequest request) {
         return ApiResponse.success("创建成功", purchaseOrderService.create(request));
     }
@@ -137,6 +139,7 @@ public class PurchaseOrderController {
     @Operation(summary = "更新采购订单")
     @PutMapping("/{id}")
     @RequiresPermission(resource = "purchase-order", action = "update")
+    @DomainEventAudited
     public ApiResponse<PurchaseOrderResponse> update(@PathVariable Long id, @Valid @RequestBody PurchaseOrderRequest request) {
         return ApiResponse.success("更新成功", purchaseOrderService.update(id, request));
     }
@@ -144,6 +147,7 @@ public class PurchaseOrderController {
     @Operation(summary = "更新采购订单状态")
     @PatchMapping("/{id}/status")
     @RequiresPermission(resource = "purchase-order", action = "audit")
+    @DomainEventAudited
     public ApiResponse<PurchaseOrderResponse> updateStatus(@PathVariable Long id, @Valid @RequestBody StatusUpdateRequest request) {
         return ApiResponse.success("状态更新成功", purchaseOrderService.updateStatus(id, request.status()));
     }
@@ -151,6 +155,7 @@ public class PurchaseOrderController {
     @Operation(summary = "删除采购订单")
     @DeleteMapping("/{id}")
     @RequiresPermission(resource = "purchase-order", action = "delete")
+    @DomainEventAudited
     public ApiResponse<Void> delete(@PathVariable Long id) {
         purchaseOrderService.delete(id);
         return ApiResponse.success("删除成功");

@@ -17,6 +17,7 @@ import com.leo.erp.sales.order.web.dto.SalesOrderItemRequest;
 import com.leo.erp.sales.order.web.dto.SalesOrderRequest;
 import com.leo.erp.sales.order.web.dto.SalesOrderResponse;
 import com.leo.erp.security.permission.DataScopeContext;
+import com.leo.erp.system.operationlog.event.BusinessOperationEventPublisher;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
@@ -43,6 +44,7 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
     private final SourceAllocationLockService sourceAllocationLockService;
     private final SalesOrderDeliveryVerificationGuard deliveryVerificationGuard;
     private final SalesOrderDownstreamMutationGuard downstreamMutationGuard;
+    private BusinessOperationEventPublisher businessOperationEventPublisher;
 
     public SalesOrderService(SalesOrderRepository repository,
                              SnowflakeIdGenerator idGenerator,
@@ -121,6 +123,11 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
         this.sourceAllocationLockService = sourceAllocationLockService;
         this.deliveryVerificationGuard = deliveryVerificationGuard;
         this.downstreamMutationGuard = downstreamMutationGuard;
+    }
+
+    @Autowired(required = false)
+    void setBusinessOperationEventPublisher(BusinessOperationEventPublisher publisher) {
+        this.businessOperationEventPublisher = publisher;
     }
 
     @Transactional(readOnly = true)
@@ -290,7 +297,10 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
         salesOrderApplyService.assertCompletionPermission(order);
         salesOrderApplyService.validateCustomerSnapshot(order);
         order.setStatus(StatusConstants.SALES_COMPLETED);
-        return toDetailResponse(saveService.saveStatus(order));
+        SalesOrder saved = saveService.saveStatus(order);
+        publishEvent(saved, "SALES_ORDER_COMPLETED", "完成销售",
+                "销售订单状态 " + currentStatus + " -> " + saved.getStatus());
+        return toDetailResponse(saved);
     }
 
     @Override
@@ -300,6 +310,11 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
             downstreamMutationGuard.assertMutable(entity, "删除");
         }
         salesOrderPurchaseAllocationService.releaseSalesOrderItems(entity);
+    }
+
+    @Override
+    protected void afterDelete(SalesOrder entity) {
+        publishEvent(entity, "SALES_ORDER_DELETED", "删除", "删除销售订单 " + entity.getOrderNo());
     }
 
     @Override
@@ -391,6 +406,20 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
     }
 
     @Override
+    @Transactional
+    public SalesOrderResponse updateStatus(Long id, String status) {
+        SalesOrder order = requireEntity(id);
+        String currentStatus = order.getStatus();
+        SalesOrderResponse response = super.updateStatus(id, status);
+        if (!Objects.equals(currentStatus, response.status())) {
+            String actionType = resolveStatusAction(currentStatus, response.status());
+            publishEvent(order, "SALES_ORDER_STATUS_CHANGED", actionType,
+                    "销售订单状态 " + currentStatus + " -> " + response.status());
+        }
+        return response;
+    }
+
+    @Override
     protected boolean allowRequestToWriteFinalStatus(SalesOrder entity,
                                                      SalesOrderRequest request,
                                                      Optional<String> currentStatus) {
@@ -437,11 +466,22 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
     }
 
     @Override
+    protected SalesOrder saveCreatedEntity(SalesOrder entity, SalesOrderRequest request) {
+        SalesOrder saved = saveEntity(entity);
+        publishEvent(saved, "SALES_ORDER_CREATED", "新增", "新增销售订单 " + saved.getOrderNo());
+        return saved;
+    }
+
+    @Override
     protected SalesOrder saveUpdatedEntity(SalesOrder entity, SalesOrderRequest request) {
+        SalesOrder saved;
         if (salesOrderAuditedPricingService.isAuditedPricingUpdate(entity, request)) {
-            return saveService.saveAuditedPricingUpdate(entity);
+            saved = saveService.saveAuditedPricingUpdate(entity);
+        } else {
+            saved = saveEntity(entity);
         }
-        return saveEntity(entity);
+        publishEvent(saved, "SALES_ORDER_UPDATED", "编辑", "编辑销售订单 " + saved.getOrderNo());
+        return saved;
     }
 
     @Override
@@ -461,6 +501,32 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
 
     private String normalizeStatus(String value) {
         return value == null ? "" : value.trim();
+    }
+
+    private String resolveStatusAction(String currentStatus, String nextStatus) {
+        if (StatusConstants.DRAFT.equals(currentStatus) && StatusConstants.AUDITED.equals(nextStatus)) {
+            return "审核";
+        }
+        if (StatusConstants.DRAFT.equals(nextStatus)) {
+            return "反审核";
+        }
+        return "状态变更";
+    }
+
+    private void publishEvent(SalesOrder order, String eventType, String actionType, String remark) {
+        if (businessOperationEventPublisher == null) {
+            return;
+        }
+        businessOperationEventPublisher.publish(
+                eventType,
+                "sales-order",
+                "销售订单",
+                actionType,
+                "SalesOrder",
+                order.getId(),
+                order.getOrderNo(),
+                remark
+        );
     }
 
 }

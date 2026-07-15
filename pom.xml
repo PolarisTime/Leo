@@ -24,6 +24,8 @@
         <jjwt.version>0.12.7</jjwt.version>
         <flyway.version>11.20.3</flyway.version>
         <spring-ai.version>1.1.8</spring-ai.version>
+        <spring-modulith.version>1.4.12</spring-modulith.version>
+        <javers.version>7.9.0</javers.version>
         <aws.sdk.version>2.46.19</aws.sdk.version>
         <bucket4j.version>8.19.0</bucket4j.version>
         <tink.version>1.18.0</tink.version>
@@ -40,6 +42,13 @@
                 <groupId>org.springframework.ai</groupId>
                 <artifactId>spring-ai-bom</artifactId>
                 <version>${spring-ai.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.springframework.modulith</groupId>
+                <artifactId>spring-modulith-bom</artifactId>
+                <version>${spring-modulith.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
@@ -90,6 +99,19 @@
         <dependency>
             <groupId>io.opentelemetry</groupId>
             <artifactId>opentelemetry-exporter-otlp</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-registry-prometheus</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.modulith</groupId>
+            <artifactId>spring-modulith-starter-jpa</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.javers</groupId>
+            <artifactId>javers-spring-boot-starter-sql</artifactId>
+            <version>${javers.version}</version>
         </dependency>
 
         <!-- Flyway -->

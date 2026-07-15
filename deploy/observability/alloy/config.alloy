@@ -1,0 +1,65 @@
+logging {
+  level  = "info"
+  format = "json"
+}
+
+local.file_match "leo_backend" {
+  path_targets = [{
+    __path__     = "/home/instance/steelx/logs/backend.log",
+    job          = "leo-backend",
+    service_name = "leo",
+    environment  = "production",
+  }]
+}
+
+loki.source.file "leo_backend" {
+  targets    = local.file_match.leo_backend.targets
+  forward_to = [loki.process.leo_backend.receiver]
+}
+
+loki.process "leo_backend" {
+  stage.json {
+    expressions = {
+      level    = "\"log.level\"",
+      trace_id = "\"trace.id\"",
+    }
+  }
+
+  stage.labels {
+    values = {
+      level = "",
+    }
+  }
+
+  forward_to = [loki.write.local.receiver]
+}
+
+loki.write "local" {
+  endpoint {
+    url = "http://127.0.0.1:3100/loki/api/v1/push"
+  }
+}
+
+otelcol.receiver.otlp "leo" {
+  grpc {
+    endpoint = "127.0.0.1:4317"
+  }
+
+  http {
+    endpoint = "127.0.0.1:4318"
+  }
+
+  output {
+    traces = [otelcol.exporter.otlp.tempo.input]
+  }
+}
+
+otelcol.exporter.otlp "tempo" {
+  client {
+    endpoint = "127.0.0.1:14317"
+
+    tls {
+      insecure = true
+    }
+  }
+}

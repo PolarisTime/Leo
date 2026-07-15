@@ -12,6 +12,7 @@ import com.leo.erp.sales.order.web.dto.SalesOrderResponse;
 import com.leo.erp.logistics.bill.web.dto.FreightBillRequest;
 import com.leo.erp.logistics.bill.web.dto.FreightBillResponse;
 import com.leo.erp.security.permission.RequiresPermission;
+import com.leo.erp.system.operationlog.support.DomainEventAudited;
 import jakarta.validation.Valid;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.validation.annotation.Validated;
@@ -95,24 +96,28 @@ public class FreightBillController {
 
     @PostMapping
     @RequiresPermission(resource = "freight-bill", action = "create")
+    @DomainEventAudited
     public ApiResponse<FreightBillResponse> create(@Valid @RequestBody FreightBillRequest request) {
         return ApiResponse.success("创建成功", service.create(request));
     }
 
     @PostMapping("/save-and-audit")
     @RequiresPermission(resource = "freight-bill", action = "create")
+    @DomainEventAudited
     public ApiResponse<FreightBillResponse> createAndAudit(@Valid @RequestBody FreightBillRequest request) {
         return ApiResponse.success("保存并审核成功", service.createAndAudit(request));
     }
 
     @PutMapping("/{id}")
     @RequiresPermission(resource = "freight-bill", action = "update")
+    @DomainEventAudited
     public ApiResponse<FreightBillResponse> update(@PathVariable Long id, @Valid @RequestBody FreightBillRequest request) {
         return ApiResponse.success("更新成功", service.update(id, request));
     }
 
     @PutMapping("/{id}/save-and-audit")
     @RequiresPermission(resource = "freight-bill", action = "update")
+    @DomainEventAudited
     public ApiResponse<FreightBillResponse> updateAndAudit(@PathVariable Long id,
                                                            @Valid @RequestBody FreightBillRequest request) {
         return ApiResponse.success("保存并审核成功", service.updateAndAudit(id, request));
@@ -120,12 +125,14 @@ public class FreightBillController {
 
     @PatchMapping("/{id}/status")
     @RequiresPermission(resource = "freight-bill", action = "audit")
+    @DomainEventAudited
     public ApiResponse<FreightBillResponse> updateStatus(@PathVariable Long id, @Valid @RequestBody StatusUpdateRequest request) {
         return ApiResponse.success("状态更新成功", service.updateStatus(id, request.status()));
     }
 
     @DeleteMapping("/{id}")
     @RequiresPermission(resource = "freight-bill", action = "delete")
+    @DomainEventAudited
     public ApiResponse<Void> delete(@PathVariable Long id) {
         service.delete(id);
         return ApiResponse.success("删除成功");

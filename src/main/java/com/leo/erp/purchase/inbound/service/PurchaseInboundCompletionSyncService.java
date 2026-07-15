@@ -9,6 +9,7 @@ import com.leo.erp.purchase.inbound.domain.entity.PurchaseInboundItem;
 import com.leo.erp.purchase.inbound.repository.PurchaseInboundRepository;
 import com.leo.erp.purchase.order.domain.entity.PurchaseOrder;
 import com.leo.erp.purchase.order.domain.entity.PurchaseOrderItem;
+import com.leo.erp.purchase.order.audit.PurchaseOrderAuditPublisher;
 import com.leo.erp.sales.order.repository.SalesOrderItemRepository;
 import org.springframework.stereotype.Service;
 
@@ -24,17 +25,20 @@ public class PurchaseInboundCompletionSyncService {
     private final PurchaseInboundAllocationService allocationService;
     private final SupplierLedgerLockService supplierLedgerLockService;
     private final SalesOrderItemRepository salesOrderItemRepository;
+    private final PurchaseOrderAuditPublisher purchaseOrderAuditPublisher;
 
     public PurchaseInboundCompletionSyncService(PurchaseInboundRepository repository,
                                                 PurchaseInboundSourceValidator sourceValidator,
                                                 PurchaseInboundAllocationService allocationService,
                                                 SupplierLedgerLockService supplierLedgerLockService,
-                                                SalesOrderItemRepository salesOrderItemRepository) {
+                                                SalesOrderItemRepository salesOrderItemRepository,
+                                                PurchaseOrderAuditPublisher purchaseOrderAuditPublisher) {
         this.repository = repository;
         this.sourceValidator = sourceValidator;
         this.allocationService = allocationService;
         this.supplierLedgerLockService = supplierLedgerLockService;
         this.salesOrderItemRepository = salesOrderItemRepository;
+        this.purchaseOrderAuditPublisher = purchaseOrderAuditPublisher;
     }
 
     boolean shouldCompleteInbound(PurchaseInbound inbound) {
@@ -134,10 +138,29 @@ public class PurchaseInboundCompletionSyncService {
             if (!StatusConstants.PURCHASE_COMPLETED.equals(purchaseOrder.getStatus())) {
                 lockSupplierLedger(purchaseOrder);
                 purchaseOrder.setStatus(StatusConstants.PURCHASE_COMPLETED);
+                publishStatusEvent(
+                        purchaseOrder,
+                        "PURCHASE_ORDER_COMPLETED",
+                        "完成采购",
+                        "采购订单状态 已审核 -> 完成采购"
+                );
             }
         } else if (allowReopen && StatusConstants.PURCHASE_COMPLETED.equals(purchaseOrder.getStatus())) {
             purchaseOrder.setStatus(StatusConstants.AUDITED);
+            publishStatusEvent(
+                    purchaseOrder,
+                    "PURCHASE_ORDER_REOPENED",
+                    "退回已审核",
+                    "采购订单状态 完成采购 -> 已审核"
+            );
         }
+    }
+
+    private void publishStatusEvent(PurchaseOrder purchaseOrder,
+                                    String eventType,
+                                    String actionType,
+                                    String remark) {
+        purchaseOrderAuditPublisher.publish(purchaseOrder, eventType, actionType, remark);
     }
 
     private void assertLegacyDirectSalesCapacityCovered(

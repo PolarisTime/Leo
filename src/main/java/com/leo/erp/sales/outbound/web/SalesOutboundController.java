@@ -7,6 +7,7 @@ import com.leo.erp.common.api.PageResponse;
 import com.leo.erp.common.web.BindPageQuery;
 import com.leo.erp.common.web.dto.StatusUpdateRequest;
 import com.leo.erp.security.permission.RequiresPermission;
+import com.leo.erp.system.operationlog.support.DomainEventAudited;
 import com.leo.erp.sales.outbound.service.SalesOutboundService;
 import com.leo.erp.sales.outbound.web.dto.SalesOutboundRequest;
 import com.leo.erp.sales.outbound.web.dto.SalesOutboundResponse;
@@ -84,6 +85,7 @@ public class SalesOutboundController {
     @PostMapping
     @RequiresPermission(resource = "sales-outbound", action = "create")
     @Operation(summary = "创建销售出库")
+    @DomainEventAudited
     public ApiResponse<SalesOutboundResponse> create(@Valid @RequestBody SalesOutboundRequest request) {
         return ApiResponse.success("创建成功", service.create(request));
     }
@@ -91,6 +93,7 @@ public class SalesOutboundController {
     @PutMapping("/{id}")
     @RequiresPermission(resource = "sales-outbound", action = "update")
     @Operation(summary = "更新销售出库")
+    @DomainEventAudited
     public ApiResponse<SalesOutboundResponse> update(@PathVariable Long id, @Valid @RequestBody SalesOutboundRequest request) {
         return ApiResponse.success("更新成功", service.update(id, request));
     }
@@ -98,6 +101,7 @@ public class SalesOutboundController {
     @PatchMapping("/{id}/status")
     @RequiresPermission(resource = "sales-outbound", action = "audit")
     @Operation(summary = "更新销售出库状态")
+    @DomainEventAudited
     public ApiResponse<SalesOutboundResponse> updateStatus(@PathVariable Long id, @Valid @RequestBody StatusUpdateRequest request) {
         return ApiResponse.success("状态更新成功", service.updateStatus(id, request.status()));
     }
@@ -105,6 +109,7 @@ public class SalesOutboundController {
     @DeleteMapping("/{id}")
     @RequiresPermission(resource = "sales-outbound", action = "delete")
     @Operation(summary = "删除销售出库")
+    @DomainEventAudited
     public ApiResponse<Void> delete(@PathVariable Long id) {
         service.delete(id);
         return ApiResponse.success("删除成功");

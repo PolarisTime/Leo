@@ -104,6 +104,9 @@ public class OperationLogService {
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void record(OperationLogCommand command) {
+        if (command.eventId() != null && repository.existsByEventId(command.eventId())) {
+            return;
+        }
         OperatorSnapshot operator = resolveOperator(command);
 
         OperationLog entity = new OperationLog();
@@ -123,7 +126,11 @@ public class OperationLogService {
         entity.setClientIp(trimToNull(command.clientIp()));
         entity.setResultStatus(command.resultStatus());
         entity.setOperationTime(LocalDateTime.now());
-        entity.setAuthType(resolveAuthType());
+        entity.setAuthType(resolveAuthType(command.authType()));
+        entity.setEventId(command.eventId());
+        entity.setTraceId(truncate(command.traceId(), 64));
+        entity.setAggregateType(truncate(command.aggregateType(), 64));
+        entity.setEventVersion(command.eventVersion());
         entity.setRemark(truncate(command.remark(), 255));
         repository.save(entity);
     }
@@ -159,7 +166,11 @@ public class OperationLogService {
         return explicitOperatorName != null ? explicitOperatorName : "system";
     }
 
-    private String resolveAuthType() {
+    private String resolveAuthType(String explicitAuthType) {
+        String normalizedAuthType = trimToNull(explicitAuthType);
+        if (normalizedAuthType != null) {
+            return truncate(normalizedAuthType, 16);
+        }
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         if (authentication != null && authentication.getDetails() instanceof ApiKeyAuthenticationDetails) {
             return "API_KEY";

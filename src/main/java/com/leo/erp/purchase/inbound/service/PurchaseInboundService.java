@@ -17,6 +17,7 @@ import com.leo.erp.purchase.inbound.repository.PurchaseInboundItemRepository;
 import com.leo.erp.purchase.inbound.repository.PurchaseInboundRepository;
 import com.leo.erp.purchase.inbound.mapper.PurchaseInboundMapper;
 import com.leo.erp.security.permission.WorkflowTransitionGuard;
+import com.leo.erp.system.operationlog.event.BusinessOperationEventPublisher;
 import com.leo.erp.purchase.inbound.web.dto.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
@@ -52,6 +53,7 @@ public class PurchaseInboundService extends AbstractCrudService<
     private final PurchaseInboundSourceStatusGuard purchaseInboundSourceStatusGuard;
     private final PurchaseInboundWeightSettlementService weightSettlementService;
     private final PurchaseInboundWeightWriteBackService weightWriteBackService;
+    private BusinessOperationEventPublisher businessOperationEventPublisher;
 
     private static final Set<String> TOLERANCE_REASON_CODES = Set.of(
             "TRANSPORT_LOSS",
@@ -88,6 +90,11 @@ public class PurchaseInboundService extends AbstractCrudService<
         this.weightSettlementService = weightSettlementService;
         this.weightWriteBackService = weightWriteBackService;
         this.purchaseInboundSourceStatusGuard = purchaseInboundSourceStatusGuard;
+    }
+
+    @Autowired(required = false)
+    void setBusinessOperationEventPublisher(BusinessOperationEventPublisher publisher) {
+        this.businessOperationEventPublisher = publisher;
     }
 
     @Transactional(readOnly = true)
@@ -160,6 +167,8 @@ public class PurchaseInboundService extends AbstractCrudService<
         applyToleranceConfirmations(inbound, confirmations == null ? List.of() : confirmations);
         inbound.setStatus(StatusConstants.AUDITED);
         PurchaseInbound saved = saveStatusEntity(inbound);
+        publishEvent(saved, "PURCHASE_INBOUND_AUDITED", "审核",
+                "采购入库状态 " + StatusConstants.DRAFT + " -> " + saved.getStatus());
         return toSavedResponse(saved);
     }
 
@@ -255,6 +264,20 @@ public class PurchaseInboundService extends AbstractCrudService<
     }
 
     @Override
+    @Transactional
+    public PurchaseInboundResponse updateStatus(Long id, String status) {
+        PurchaseInbound inbound = requireEntity(id);
+        String currentStatus = inbound.getStatus();
+        PurchaseInboundResponse response = super.updateStatus(id, status);
+        if (!Objects.equals(currentStatus, response.status())) {
+            String actionType = StatusConstants.DRAFT.equals(response.status()) ? "反审核" : "状态变更";
+            publishEvent(inbound, "PURCHASE_INBOUND_STATUS_CHANGED", actionType,
+                    "采购入库状态 " + currentStatus + " -> " + response.status());
+        }
+        return response;
+    }
+
+    @Override
     protected void apply(PurchaseInbound inbound, PurchaseInboundRequest request) {
         lockSourcePurchaseOrderItems(inbound, request);
         String nextStatus = BusinessStatusValidator.normalizeWithDefault(
@@ -312,6 +335,7 @@ public class PurchaseInboundService extends AbstractCrudService<
     protected void afterDelete(PurchaseInbound inbound) {
         repository.flush();
         deleteService.afterDelete(inbound);
+        publishEvent(inbound, "PURCHASE_INBOUND_DELETED", "删除", "删除采购入库 " + inbound.getInboundNo());
     }
 
     @Override
@@ -512,12 +536,16 @@ public class PurchaseInboundService extends AbstractCrudService<
 
     @Override
     protected PurchaseInbound saveCreatedEntity(PurchaseInbound entity, PurchaseInboundRequest request) {
-        return saveWithCompletionSync(entity);
+        PurchaseInbound saved = saveWithCompletionSync(entity);
+        publishEvent(saved, "PURCHASE_INBOUND_CREATED", "新增", "新增采购入库 " + saved.getInboundNo());
+        return saved;
     }
 
     @Override
     protected PurchaseInbound saveUpdatedEntity(PurchaseInbound entity, PurchaseInboundRequest request) {
-        return saveWithCompletionSync(entity);
+        PurchaseInbound saved = saveWithCompletionSync(entity);
+        publishEvent(saved, "PURCHASE_INBOUND_UPDATED", "编辑", "编辑采购入库 " + saved.getInboundNo());
+        return saved;
     }
 
     @Override
@@ -539,6 +567,22 @@ public class PurchaseInboundService extends AbstractCrudService<
         );
         saved.setSourcePurchaseOrderReopenAllowed(false);
         return saved;
+    }
+
+    private void publishEvent(PurchaseInbound inbound, String eventType, String actionType, String remark) {
+        if (businessOperationEventPublisher == null) {
+            return;
+        }
+        businessOperationEventPublisher.publish(
+                eventType,
+                "purchase-inbound",
+                "采购入库",
+                actionType,
+                "PurchaseInbound",
+                inbound.getId(),
+                inbound.getInboundNo(),
+                remark
+        );
     }
 
     @Override
