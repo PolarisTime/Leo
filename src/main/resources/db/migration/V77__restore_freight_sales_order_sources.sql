@@ -1,9 +1,9 @@
+ALTER TABLE public.lg_freight_bill
+    DROP CONSTRAINT IF EXISTS chk_freight_bill_status;
+
 UPDATE public.lg_freight_bill
 SET status = '草稿'
 WHERE status = '未审核';
-
-ALTER TABLE public.lg_freight_bill
-    DROP CONSTRAINT IF EXISTS chk_freight_bill_status;
 
 ALTER TABLE public.lg_freight_bill
     ADD CONSTRAINT chk_freight_bill_status
@@ -12,12 +12,12 @@ ALTER TABLE public.lg_freight_bill
 ALTER TABLE public.lg_freight_bill
     VALIDATE CONSTRAINT chk_freight_bill_status;
 
+ALTER TABLE public.st_freight_statement
+    DROP CONSTRAINT IF EXISTS chk_freight_stmt_status;
+
 UPDATE public.st_freight_statement
 SET status = '草稿'
 WHERE status = '待审核';
-
-ALTER TABLE public.st_freight_statement
-    DROP CONSTRAINT IF EXISTS chk_freight_stmt_status;
 
 ALTER TABLE public.st_freight_statement
     ADD CONSTRAINT chk_freight_stmt_status

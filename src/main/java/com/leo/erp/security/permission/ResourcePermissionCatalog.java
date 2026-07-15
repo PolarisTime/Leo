@@ -131,8 +131,6 @@ public final class ResourcePermissionCatalog {
                     )),
             entry("access-control", "访问控制", "系统", false,
                     List.of("/access-control"), READ_ONLY_ACTIONS),
-            entry("database", "数据库管理", "系统", false,
-                    List.of("/database", "/system/database", "/system/databases"), List.of(action(READ, "查看"), action(UPDATE, "编辑"), action(EXPORT, "导出"))),
             entry("session", "会话管理", "系统", false, List.of("/auth/refresh-token", "/auth/refresh-tokens"), List.of(action(READ, "查看"), action(UPDATE, "编辑"))),
             entry("api-key", "API Key 管理", "系统", false, List.of("/auth/api-key", "/auth/api-keys"), List.of(action(READ, "查看"), action(CREATE, "新增"), action(UPDATE, "编辑"))),
             entry("security-key", "安全密钥管理", "系统", false, List.of("/system/security-key", "/system/security-keys"), List.of(action(READ, "查看"), action(UPDATE, "编辑"))),

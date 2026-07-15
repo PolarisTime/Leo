@@ -21,18 +21,9 @@ leo:
       headers:
         # 生产环境 HTTPS 就绪后默认启用 HSTS
         hsts-enabled: ${LEO_SECURITY_HSTS_ENABLED:true}
-  database:
-    import:
-      # 生产环境默认禁止通过备份文件导入数据库，需显式开启。
-      enabled: ${LEO_DATABASE_IMPORT_ENABLED:false}
   id:
     # 生产环境默认禁止使用 machine-id=0，避免多实例部署 ID 冲突。
     strict-machine-id: ${LEO_ID_STRICT_MACHINE_ID:true}
-  maintenance:
-    database-backup:
-      # PR7 起生产备份职责外部化，应用内定时备份默认关闭。
-      enabled: ${LEO_MAINTENANCE_DATABASE_BACKUP_ENABLED:false}
-
 spring:
   ai:
     mcp:
