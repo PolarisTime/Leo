@@ -10,7 +10,6 @@ public record SalesOrderSourceCandidateResponse(
         String purchaseOrderNo,
         String sourceDocumentType,
         String sourceNo,
-        String salesMode,
         Long supplierId,
         String supplierCode,
         String supplierName,

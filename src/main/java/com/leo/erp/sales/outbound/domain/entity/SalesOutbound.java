@@ -29,9 +29,6 @@ public class SalesOutbound extends AbstractAuditableEntity {
     @Column(name = "sales_order_no", length = 256)
     private String salesOrderNo;
 
-    @Column(name = "source_freight_bill_id")
-    private Long sourceFreightBillId;
-
     @Column(name = "customer_name", nullable = false, length = 128)
     private String customerName;
 

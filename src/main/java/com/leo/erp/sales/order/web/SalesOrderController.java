@@ -64,7 +64,6 @@ public class SalesOrderController {
     @RequiresPermission(resource = "purchase-order", action = "read")
     public ApiResponse<PageResponse<SalesOrderSourceCandidateResponse>> sourceCandidates(
             @BindPageQuery(sortFieldKey = "purchase-order") PageQuery query,
-            @RequestParam String salesMode,
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) Long supplierId,
             @RequestParam(required = false) Long settlementCompanyId,
@@ -73,7 +72,6 @@ public class SalesOrderController {
             @RequestParam(required = false) Long currentSalesOrderId
     ) {
         return ApiResponse.success(sourceCandidateService.page(
-                salesMode,
                 keyword,
                 supplierId,
                 settlementCompanyId,
@@ -141,29 +139,6 @@ public class SalesOrderController {
                                 .withIdentity(customerId, projectId, null, null, currentRecordId)
                 )
         ));
-    }
-
-    @Operation(summary = "分页查询销售订单物流导入候选")
-    @GetMapping("/freight-import-candidates")
-    @RequiresPermission(resource = "sales-order", action = "read")
-    public ApiResponse<PageResponse<SalesOrderResponse>> freightImportCandidates(
-            @BindPageQuery(sortFieldKey = "sales-order") PageQuery query,
-            @RequestParam(required = false) String keyword,
-            @RequestParam(required = false) Long customerId,
-            @RequestParam(required = false) String customerName,
-            @RequestParam(required = false) Long projectId,
-            @RequestParam(required = false) String projectName,
-            @RequestParam(required = false) Long settlementCompanyId,
-            @RequestParam(required = false) String status,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate,
-            @RequestParam(required = false) Long currentFreightBillId
-    ) {
-        return ApiResponse.success(PageResponse.from(service.freightImportCandidates(
-                query,
-                PageFilter.of(keyword, customerName, projectName, settlementCompanyId, status, startDate, endDate)
-                        .withIdentity(customerId, projectId, null, null, currentFreightBillId)
-        )));
     }
 
     @Operation(summary = "查询销售订单详情")

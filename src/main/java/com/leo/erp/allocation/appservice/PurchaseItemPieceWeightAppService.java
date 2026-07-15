@@ -17,6 +17,13 @@ public interface PurchaseItemPieceWeightAppService {
             Long salesOrderItemId,
             int lineNo);
 
+    /** 按销售订单导入的采购入库明细锁定对应采购逐件重量。 */
+    BigDecimal allocateForInboundSourceSalesOrderItem(
+            Long sourceInboundItemId,
+            Integer quantity,
+            Long salesOrderItemId,
+            int lineNo);
+
     /** 释放已分配给指定销售订单明细的采购明细 */
     void releaseSalesOrderItems(Collection<Long> salesOrderItemIds);
 

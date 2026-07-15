@@ -4,8 +4,6 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 
-import com.leo.erp.sales.order.domain.entity.SalesModes;
-
 import java.time.LocalDate;
 import java.util.List;
 
@@ -24,29 +22,8 @@ public record SalesOrderRequest(
         @jakarta.validation.constraints.NotBlank String salesName,
         String status,
         String remark,
-        @Valid @NotEmpty List<SalesOrderItemRequest> items,
-        String salesMode
+        @Valid @NotEmpty List<SalesOrderItemRequest> items
 ) {
-    public SalesOrderRequest(String orderNo,
-                             String purchaseInboundNo,
-                             String purchaseOrderNo,
-                             String customerCode,
-                             Long customerId,
-                             String customerName,
-                             Long projectId,
-                             String projectName,
-                             Long settlementCompanyId,
-                             String settlementCompanyName,
-                             LocalDate deliveryDate,
-                             String salesName,
-                             String status,
-                             String remark,
-                             List<SalesOrderItemRequest> items) {
-        this(orderNo, purchaseInboundNo, purchaseOrderNo, customerCode, customerId, customerName, projectId,
-                projectName, settlementCompanyId, settlementCompanyName, deliveryDate, salesName, status, remark,
-                items, inferLegacyMode(items));
-    }
-
     public SalesOrderRequest(String orderNo,
                              String purchaseInboundNo,
                              String purchaseOrderNo,
@@ -123,14 +100,4 @@ public record SalesOrderRequest(
                 null, null, deliveryDate, salesName, status, remark, items);
     }
 
-    private static String inferLegacyMode(List<SalesOrderItemRequest> items) {
-        if (items != null && !items.isEmpty() && items.stream().allMatch(
-                item -> item != null
-                        && item.sourcePurchaseOrderItemId() != null
-                        && item.sourceInboundItemId() == null
-        )) {
-            return SalesModes.PRESALE;
-        }
-        return SalesModes.NORMAL;
-    }
 }

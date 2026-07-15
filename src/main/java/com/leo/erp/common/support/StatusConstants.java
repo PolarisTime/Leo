@@ -107,7 +107,8 @@ public final class StatusConstants {
     public static final Set<String> SALES_ORDER_TRANSITIONS = Set.of(
             DRAFT + "->" + AUDITED,
             AUDITED + "->" + DRAFT,
-            DELIVERY_VERIFICATION + "->" + SALES_COMPLETED
+            DELIVERY_VERIFICATION + "->" + SALES_COMPLETED,
+            SALES_COMPLETED + "->" + DELIVERY_VERIFICATION
     );
     public static final Set<String> CONTRACT_TRANSITIONS = Set.of(
             DRAFT + "->" + EXECUTING,

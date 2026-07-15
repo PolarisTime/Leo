@@ -9,7 +9,6 @@ import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.service.AbstractCrudService;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
-import com.leo.erp.logistics.bill.repository.FreightBillRepository;
 import com.leo.erp.sales.order.domain.entity.SalesOrder;
 import com.leo.erp.sales.order.domain.entity.SalesOrderItem;
 import com.leo.erp.sales.order.repository.SalesOrderItemRepository;
@@ -44,7 +43,6 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
     private final SourceAllocationLockService sourceAllocationLockService;
     private final SalesOrderDeliveryVerificationGuard deliveryVerificationGuard;
     private final SalesOrderDownstreamMutationGuard downstreamMutationGuard;
-    private FreightBillRepository freightBillRepository;
 
     public SalesOrderService(SalesOrderRepository repository,
                              SnowflakeIdGenerator idGenerator,
@@ -125,11 +123,6 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
         this.downstreamMutationGuard = downstreamMutationGuard;
     }
 
-    @Autowired
-    void setFreightBillRepository(FreightBillRepository freightBillRepository) {
-        this.freightBillRepository = freightBillRepository;
-    }
-
     @Transactional(readOnly = true)
     public Page<SalesOrderResponse> page(PageQuery query, PageFilter filter) {
         Specification<SalesOrder> spec = Specs.<SalesOrder>keywordLike(filter.keyword(), "orderNo", "purchaseOrderNo", "customerName", "projectName")
@@ -171,7 +164,7 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
                 .filter(order -> StatusConstants.AUDITED.equals(order.getStatus()))
                 .filter(order -> order.getItems().stream()
                         .map(SalesOrderItem::getId)
-                        .anyMatch(itemId -> itemId != null && !occupiedItemIds.contains(itemId)))
+                        .allMatch(itemId -> itemId != null && !occupiedItemIds.contains(itemId)))
                 .map(order -> responseAssembler.toDetailResponse(
                         order,
                         item -> item.getId() != null && !occupiedItemIds.contains(item.getId())
@@ -184,36 +177,6 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
                 query.toPageable("id"),
                 candidates.size()
         );
-    }
-
-    @Transactional(readOnly = true)
-    public Page<SalesOrderResponse> freightImportCandidates(PageQuery query, PageFilter filter) {
-        Specification<SalesOrder> spec = Specs.<SalesOrder>keywordLike(filter.keyword(), SALES_ORDER_SEARCH_FIELDS)
-                .and(Specs.equalIfPresent("customerName", filter.name()))
-                .and(Specs.equalIfPresent("projectName", filter.projectName()))
-                .and(Specs.equalValueIfPresent("customerId", filter.customerId()))
-                .and(Specs.equalValueIfPresent("projectId", filter.projectId()))
-                .and(Specs.equalValueIfPresent("settlementCompanyId", filter.settlementCompanyId()))
-                .and(Specs.equalIfPresent("status", StatusConstants.AUDITED))
-                .and(Specs.betweenIfPresent("deliveryDate", filter.startDate(), filter.endDate()));
-        List<SalesOrder> orders = repository.findAll(
-                com.leo.erp.security.permission.DataScopeContext.apply(spec),
-                org.springframework.data.domain.Sort.by(org.springframework.data.domain.Sort.Direction.DESC, "id")
-        );
-        List<Long> orderIds = orders.stream().map(SalesOrder::getId).filter(Objects::nonNull).toList();
-        java.util.Set<Long> occupiedOrderIds = freightBillRepository == null || orderIds.isEmpty()
-                ? java.util.Set.of()
-                : new java.util.HashSet<>(freightBillRepository.findOccupiedSourceSalesOrderIds(
-                        orderIds,
-                        filter.currentRecordId()
-                ));
-        List<SalesOrderResponse> candidates = orders.stream()
-                .filter(order -> !occupiedOrderIds.contains(order.getId()))
-                .map(responseAssembler::toDetailResponse)
-                .toList();
-        int start = Math.min(query.page() * query.size(), candidates.size());
-        int end = Math.min(start + query.size(), candidates.size());
-        return new PageImpl<>(candidates.subList(start, end), query.toPageable("id"), candidates.size());
     }
 
     private java.util.Set<Long> occupiedItemIds(List<SalesOrder> orders, Long currentOutboundId) {
@@ -279,8 +242,7 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
                 request.salesName(),
                 request.status(),
                 request.remark(),
-                request.items(),
-                request.salesMode()
+                request.items()
         );
     }
 
@@ -302,8 +264,7 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
                 request.salesName(),
                 entity.getStatus(),
                 request.remark(),
-                request.items(),
-                entity.getSalesMode()
+                request.items()
         );
     }
 
@@ -346,6 +307,10 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
         lockPurchaseSources(entity, null);
         if (StatusConstants.SALES_COMPLETED.equals(nextStatus)) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "完成销售必须通过专用完成操作执行");
+        }
+        if (StatusConstants.SALES_COMPLETED.equals(currentStatus)
+                && StatusConstants.DELIVERY_VERIFICATION.equals(nextStatus)) {
+            deliveryVerificationGuard.assertMutable(entity, "反审核");
         }
         salesOrderApplyService.assertStatusPermission(entity, nextStatus);
         if (downstreamMutationGuard != null

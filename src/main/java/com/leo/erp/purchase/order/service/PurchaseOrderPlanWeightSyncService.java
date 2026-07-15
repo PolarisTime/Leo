@@ -39,7 +39,11 @@ public class PurchaseOrderPlanWeightSyncService {
                 .toList();
         Set<Long> lockedSalesOrderItemIds =
                 salesOrderWeightSyncService.findLockedSalesOrderItemIdsByPurchaseOrderItemIds(sourceItemIds);
-        pieceWeightService.rebalanceForPurchaseOrderItems(items, lockedSalesOrderItemIds);
+        if (lockedSalesOrderItemIds.isEmpty()) {
+            pieceWeightService.synchronizeEffectiveWeightsForPurchaseOrderItems(items);
+        } else {
+            pieceWeightService.rebalanceForPurchaseOrderItems(items, lockedSalesOrderItemIds);
+        }
         salesOrderWeightSyncService.syncByPurchaseOrderItemIds(sourceItemIds, lockedSalesOrderItemIds);
     }
 }

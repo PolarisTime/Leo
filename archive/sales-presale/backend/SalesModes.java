@@ -5,6 +5,9 @@ import com.leo.erp.common.error.ErrorCode;
 
 import java.util.Set;
 
+/**
+ * 已归档：销售订单预售模式已退役，生产代码不再编译或引用此类。
+ */
 public final class SalesModes {
 
     public static final String NORMAL = "NORMAL";

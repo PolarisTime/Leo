@@ -14,8 +14,6 @@ import com.leo.erp.sales.outbound.domain.entity.SalesOutbound;
 import com.leo.erp.sales.outbound.domain.entity.SalesOutboundItem;
 import com.leo.erp.sales.outbound.repository.SalesOutboundRepository;
 import com.leo.erp.security.permission.WorkflowTransitionGuard;
-import com.leo.erp.logistics.bill.repository.FreightBillRepository;
-import com.leo.erp.logistics.bill.service.FreightBillDownstreamMutationGuard;
 import com.leo.erp.sales.order.repository.SalesOrderRepository;
 import com.leo.erp.sales.outbound.web.dto.*;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -44,9 +42,7 @@ public class SalesOutboundService extends AbstractCrudService<SalesOutbound, Sal
     private final SourceAllocationLockService sourceAllocationLockService;
     private final SalesOutboundDownstreamMutationGuard downstreamMutationGuard;
     private SalesOutboundCoverageValidator coverageValidator;
-    private FreightBillRepository freightBillRepository;
     private SalesOrderRepository salesOrderRepository;
-    private FreightBillDownstreamMutationGuard freightBillDownstreamMutationGuard;
 
     @Autowired
     public SalesOutboundService(SalesOutboundRepository repository,
@@ -75,15 +71,8 @@ public class SalesOutboundService extends AbstractCrudService<SalesOutbound, Sal
     }
 
     @Autowired
-    void setFlowRepositories(FreightBillRepository freightBillRepository,
-                             SalesOrderRepository salesOrderRepository) {
-        this.freightBillRepository = freightBillRepository;
+    void setSalesOrderRepository(SalesOrderRepository salesOrderRepository) {
         this.salesOrderRepository = salesOrderRepository;
-    }
-
-    @Autowired
-    void setFreightBillDownstreamMutationGuard(FreightBillDownstreamMutationGuard freightBillDownstreamMutationGuard) {
-        this.freightBillDownstreamMutationGuard = freightBillDownstreamMutationGuard;
     }
 
     @Transactional(readOnly = true)
@@ -113,17 +102,20 @@ public class SalesOutboundService extends AbstractCrudService<SalesOutbound, Sal
 
     @Override
     protected void validateCreate(SalesOutboundRequest request) {
-        throw new BusinessException(
-                ErrorCode.BUSINESS_ERROR,
-                "销售出库必须由未审核物流单执行“生成销售出库”创建"
-        );
+        if (repository.existsByOutboundNoAndDeletedFlagFalse(request.outboundNo())) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "销售出库单号已存在");
+        }
+        String status = request.status() == null ? "" : request.status().trim();
+        if (!status.isEmpty() && !StatusConstants.DRAFT.equals(status)) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "新销售出库只能保存为草稿");
+        }
+        if (request.salesOrderNo() == null || request.salesOrderNo().isBlank()) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "销售出库必须从已审核销售订单导入");
+        }
     }
 
     @Override
     protected void validateUpdate(SalesOutbound entity, SalesOutboundRequest request) {
-        if (entity.getSourceFreightBillId() == null) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "历史销售出库仅允许查看");
-        }
         if (!entity.getOutboundNo().equals(request.outboundNo()) && repository.existsByOutboundNoAndDeletedFlagFalse(request.outboundNo())) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "销售出库单号已存在");
         }
@@ -133,7 +125,7 @@ public class SalesOutboundService extends AbstractCrudService<SalesOutbound, Sal
     protected SalesOutboundRequest normalizeCreateRequest(SalesOutboundRequest request, long entityId) {
         return new SalesOutboundRequest(
                 resolveCreateBusinessNo("sales-outbound", request.outboundNo(), entityId),
-                null,
+                request.salesOrderNo(),
                 request.customerId(),
                 request.customerName(),
                 request.projectId(),
@@ -143,8 +135,7 @@ public class SalesOutboundService extends AbstractCrudService<SalesOutbound, Sal
                 request.outboundDate(),
                 request.status(),
                 request.remark(),
-                request.items(),
-                request.sourceFreightBillId()
+                request.items()
         );
     }
 
@@ -166,8 +157,7 @@ public class SalesOutboundService extends AbstractCrudService<SalesOutbound, Sal
                 request.outboundDate(),
                 entity.getStatus(),
                 request.remark(),
-                request.items(),
-                entity.getSourceFreightBillId()
+                request.items()
         );
     }
 
@@ -212,8 +202,7 @@ public class SalesOutboundService extends AbstractCrudService<SalesOutbound, Sal
                 request.outboundDate(),
                 entity.getStatus(),
                 request.remark(),
-                restrictedItems,
-                entity.getSourceFreightBillId()
+                restrictedItems
         );
     }
 
@@ -301,9 +290,6 @@ public class SalesOutboundService extends AbstractCrudService<SalesOutbound, Sal
         );
         entity.setOutboundNo(entity.getOutboundNo() == null ? request.outboundNo() : entity.getOutboundNo());
         entity.setSalesOrderNo(request.salesOrderNo());
-        if (entity.getSourceFreightBillId() == null && request.sourceFreightBillId() != null) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "销售出库来源只能由生成销售出库命令写入");
-        }
         entity.setCustomerId(request.customerId());
         entity.setCustomerName(request.customerName());
         entity.setProjectId(request.projectId());
@@ -313,11 +299,11 @@ public class SalesOutboundService extends AbstractCrudService<SalesOutbound, Sal
         entity.setStatus(nextStatus);
         entity.setRemark(request.remark());
         salesOutboundApplyService.applyItems(entity, request, this::nextId);
+        if (coverageValidator != null) {
+            coverageValidator.assertExactCoverage(entity);
+        }
         if (StatusConstants.AUDITED.equals(nextStatus)) {
             purchaseInboundGuard.assertPurchaseInboundCompletedBeforeAudit(entity);
-            if (coverageValidator != null) {
-                coverageValidator.assertExactCoverage(entity);
-            }
         }
     }
 
@@ -331,11 +317,7 @@ public class SalesOutboundService extends AbstractCrudService<SalesOutbound, Sal
                     List.of(entity.getId()),
                     List.of()
             );
-            if (entity.getSourceFreightBillId() == null) {
-                downstreamMutationGuard.assertReverseAuditAllowed(entity);
-            } else {
-                downstreamMutationGuard.assertReverseAuditAllowedForFreightSource(entity);
-            }
+            downstreamMutationGuard.assertReverseAuditAllowed(entity);
         }
         if (StatusConstants.AUDITED.equals(nextStatus)) {
             purchaseInboundGuard.assertPurchaseInboundCompletedBeforeAudit(entity);
@@ -355,41 +337,13 @@ public class SalesOutboundService extends AbstractCrudService<SalesOutbound, Sal
         List<Long> sourceSalesOrderIds = salesOutboundApplyService.sourceSalesOrderIds(entity).stream()
                 .sorted()
                 .toList();
-        List<Long> freightBillIds = entity.getSourceFreightBillId() == null
-                ? List.of()
-                : List.of(entity.getSourceFreightBillId());
         sourceAllocationLockService.lockDocumentSources(
                 List.of(),
                 sourceSalesOrderIds,
                 List.of(entity.getId()),
-                freightBillIds
+                List.of()
         );
-        deleteSourceFreightBill(entity);
         rollbackSourceSalesOrders(entity, sourceSalesOrderIds);
-    }
-
-    private void deleteSourceFreightBill(SalesOutbound entity) {
-        if (entity.getSourceFreightBillId() == null || freightBillRepository == null) {
-            return;
-        }
-        long remainingOutboundCount = repository.countActiveBySourceFreightBillIdExcludingOutbound(
-                entity.getSourceFreightBillId(),
-                entity.getId()
-        );
-        if (remainingOutboundCount > 0) {
-            return;
-        }
-        var bill = freightBillRepository.findForUpdateByIdAndDeletedFlagFalse(entity.getSourceFreightBillId())
-                .orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_ERROR, "来源物流单不存在或已删除"));
-        if (StatusConstants.AUDITED.equals(bill.getStatus())) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "物流单已审核，不能删除销售出库");
-        }
-        if (freightBillDownstreamMutationGuard == null) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "物流单删除校验服务不可用");
-        }
-        freightBillDownstreamMutationGuard.assertDeleteAllowed(bill);
-        bill.setDeletedFlag(true);
-        freightBillRepository.save(bill);
     }
 
     private void rollbackSourceSalesOrders(SalesOutbound entity, List<Long> sourceSalesOrderIds) {

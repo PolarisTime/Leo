@@ -9,7 +9,7 @@ import com.leo.erp.sales.order.domain.entity.SalesOrderItem;
 import com.leo.erp.sales.order.repository.SalesOrderItemRepository;
 import com.leo.erp.sales.order.repository.SalesOrderRepository;
 import com.leo.erp.sales.outbound.repository.SalesOutboundRepository;
-import com.leo.erp.sales.outbound.service.SalesOutboundPreOutboundWeightSyncService;
+import com.leo.erp.sales.outbound.service.SalesOutboundDraftWeightSyncService;
 import com.leo.erp.statement.customer.repository.CustomerStatementRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -34,7 +34,7 @@ public class SalesOrderAllocatedWeightSyncService {
     private final SalesOutboundRepository salesOutboundRepository;
     private final CustomerStatementRepository customerStatementRepository;
     private final ReceiptAllocationRepository receiptAllocationRepository;
-    private final SalesOutboundPreOutboundWeightSyncService outboundWeightSyncService;
+    private final SalesOutboundDraftWeightSyncService outboundWeightSyncService;
 
     public SalesOrderAllocatedWeightSyncService(SalesOrderItemRepository itemRepository,
                                                 SalesOrderRepository orderRepository,
@@ -42,7 +42,7 @@ public class SalesOrderAllocatedWeightSyncService {
                                                 SalesOutboundRepository salesOutboundRepository,
                                                 CustomerStatementRepository customerStatementRepository,
                                                 ReceiptAllocationRepository receiptAllocationRepository,
-                                                SalesOutboundPreOutboundWeightSyncService outboundWeightSyncService) {
+                                                SalesOutboundDraftWeightSyncService outboundWeightSyncService) {
         this.itemRepository = itemRepository;
         this.orderRepository = orderRepository;
         this.pieceWeightRepository = pieceWeightRepository;

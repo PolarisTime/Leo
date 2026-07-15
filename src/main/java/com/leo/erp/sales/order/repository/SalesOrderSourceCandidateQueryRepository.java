@@ -3,7 +3,6 @@ package com.leo.erp.sales.order.repository;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.api.PageResponse;
 import com.leo.erp.common.support.StatusConstants;
-import com.leo.erp.sales.order.domain.entity.SalesModes;
 import com.leo.erp.sales.order.web.dto.SalesOrderSourceCandidateItemResponse;
 import com.leo.erp.sales.order.web.dto.SalesOrderSourceCandidateResponse;
 import com.leo.erp.security.permission.DataScopeContext;
@@ -32,7 +31,6 @@ public class SalesOrderSourceCandidateQueryRepository {
     }
 
     public PageResponse<SalesOrderSourceCandidateResponse> page(
-            String salesMode,
             String keyword,
             Long supplierId,
             Long settlementCompanyId,
@@ -41,7 +39,6 @@ public class SalesOrderSourceCandidateQueryRepository {
             Long currentSalesOrderId,
             PageQuery query
     ) {
-        String normalizedMode = SalesModes.normalizeRequired(salesMode);
         MapSqlParameterSource params = parameters(
                 keyword,
                 supplierId,
@@ -51,7 +48,7 @@ public class SalesOrderSourceCandidateQueryRepository {
                 currentSalesOrderId,
                 query
         );
-        String sourceCte = sourceCte(normalizedMode, params);
+        String sourceCte = sourceCte(params);
         Long total = jdbcTemplate.queryForObject(
                 sourceCte + "SELECT COUNT(*) FROM candidate_parents",
                 params,
@@ -118,7 +115,7 @@ public class SalesOrderSourceCandidateQueryRepository {
         long totalElements = total == null ? 0L : total;
         int totalPages = totalElements == 0 ? 0 : (int) Math.ceil((double) totalElements / query.size());
         return new PageResponse<>(
-                group(rows, normalizedMode),
+                group(rows),
                 totalElements,
                 totalPages,
                 query.page(),
@@ -127,10 +124,10 @@ public class SalesOrderSourceCandidateQueryRepository {
         );
     }
 
-    private List<SalesOrderSourceCandidateResponse> group(List<SourceLine> rows, String salesMode) {
+    private List<SalesOrderSourceCandidateResponse> group(List<SourceLine> rows) {
         Map<Long, CandidateAccumulator> groups = new LinkedHashMap<>();
         for (SourceLine row : rows) {
-            groups.computeIfAbsent(row.purchaseOrderId(), ignored -> new CandidateAccumulator(row, salesMode))
+            groups.computeIfAbsent(row.purchaseOrderId(), ignored -> new CandidateAccumulator(row))
                     .add(row);
         }
         return groups.values().stream().map(CandidateAccumulator::toResponse).toList();
@@ -156,10 +153,9 @@ public class SalesOrderSourceCandidateQueryRepository {
                 .addValue("offset", (long) query.page() * query.size(), Types.BIGINT);
     }
 
-    private String sourceCte(String salesMode, MapSqlParameterSource params) {
+    private String sourceCte(MapSqlParameterSource params) {
         String dataScope = dataScopeClause(params);
-        String source = SalesModes.NORMAL.equals(salesMode) ? normalSourceSql() : presaleSourceSql();
-        return source.formatted(dataScope) + """
+        return normalSourceSql().formatted(dataScope) + """
                 , candidate_parents AS (
                     SELECT
                         purchase_order_id,
@@ -262,88 +258,6 @@ public class SalesOrderSourceCandidateQueryRepository {
                 """;
     }
 
-    private String presaleSourceSql() {
-        return """
-                WITH sales_allocations AS (
-                    SELECT
-                        sales_item.source_purchase_order_item_id AS source_item_id,
-                        SUM(sales_item.quantity)::integer AS allocated_quantity,
-                        COALESCE(SUM(sales_item.weight_ton), 0) AS allocated_weight_ton
-                    FROM so_sales_order_item sales_item
-                    JOIN so_sales_order sales_order
-                      ON sales_order.id = sales_item.order_id
-                     AND sales_order.deleted_flag = FALSE
-                    WHERE sales_item.source_purchase_order_item_id IS NOT NULL
-                      AND (:currentSalesOrderId IS NULL OR sales_order.id <> :currentSalesOrderId)
-                    GROUP BY sales_item.source_purchase_order_item_id
-                ), candidate_lines AS (
-                    SELECT
-                        purchase_order.id AS purchase_order_id,
-                        purchase_order.order_no AS purchase_order_no,
-                        purchase_order.order_date::date AS order_date,
-                        purchase_order.status AS purchase_order_status,
-                        purchase_order.supplier_id,
-                        purchase_order.supplier_code,
-                        purchase_order.supplier_name,
-                        purchase_order.settlement_company_id,
-                        purchase_order.settlement_company_name,
-                        'purchase-order'::varchar AS source_document_type,
-                        purchase_order.order_no AS source_document_no,
-                        purchase_item.id AS source_item_id,
-                        purchase_item.line_no,
-                        NULL::bigint AS source_inbound_item_id,
-                        purchase_item.id AS source_purchase_order_item_id,
-                        purchase_item.id AS root_purchase_order_item_id,
-                        purchase_item.line_no AS source_line_no,
-                        NULL::varchar AS inbound_no,
-                        purchase_item.material_id,
-                        purchase_item.material_code,
-                        purchase_item.brand,
-                        purchase_item.category,
-                        purchase_item.material,
-                        purchase_item.spec,
-                        purchase_item.length,
-                        purchase_item.unit,
-                        purchase_item.warehouse_id,
-                        purchase_item.warehouse_name,
-                        purchase_item.batch_no,
-                        purchase_item.batch_no_normalized,
-                        purchase_item.quantity AS source_quantity,
-                        GREATEST(purchase_item.quantity - COALESCE(allocation.allocated_quantity, 0), 0)::integer
-                            AS remaining_quantity,
-                        purchase_item.quantity_unit,
-                        purchase_item.piece_weight_ton,
-                        purchase_item.pieces_per_bundle,
-                        purchase_item.weight_ton AS source_weight_ton,
-                        GREATEST(
-                            purchase_item.weight_ton - COALESCE(allocation.allocated_weight_ton, 0),
-                            0
-                        ) AS remaining_weight_ton,
-                        purchase_item.unit_price
-                    FROM po_purchase_order purchase_order
-                    JOIN po_purchase_order_item purchase_item
-                      ON purchase_item.order_id = purchase_order.id
-                    LEFT JOIN sales_allocations allocation
-                      ON allocation.source_item_id = purchase_item.id
-                    WHERE purchase_order.deleted_flag = FALSE
-                      AND purchase_order.status = '已审核'
-                      AND (:supplierId IS NULL OR purchase_order.supplier_id = :supplierId)
-                      AND (:settlementCompanyId IS NULL OR purchase_order.settlement_company_id = :settlementCompanyId)
-                      AND (:startDate IS NULL OR purchase_order.order_date >= :startDate)
-                      AND (:endDateExclusive IS NULL OR purchase_order.order_date < :endDateExclusive)
-                      AND (
-                          :keyword IS NULL
-                          OR POSITION(:keyword IN LOWER(COALESCE(purchase_order.order_no, ''))) > 0
-                          OR POSITION(:keyword IN LOWER(COALESCE(purchase_order.supplier_name, ''))) > 0
-                          OR POSITION(:keyword IN LOWER(COALESCE(purchase_item.material_code, ''))) > 0
-                          OR POSITION(:keyword IN LOWER(COALESCE(purchase_item.material, ''))) > 0
-                          OR POSITION(:keyword IN LOWER(COALESCE(purchase_item.spec, ''))) > 0
-                      )
-                      %s
-                )
-                """;
-    }
-
     private String dataScopeClause(MapSqlParameterSource params) {
         Set<Long> ownerUserIds = DataScopeContext.allowedOwnerUserIds();
         if (ownerUserIds == null) {
@@ -411,15 +325,13 @@ public class SalesOrderSourceCandidateQueryRepository {
 
     private static final class CandidateAccumulator {
         private final SourceLine parent;
-        private final String salesMode;
         private final List<SalesOrderSourceCandidateItemResponse> items = new ArrayList<>();
         private int totalQuantity;
         private BigDecimal totalWeight = BigDecimal.ZERO;
         private BigDecimal totalAmount = BigDecimal.ZERO;
 
-        private CandidateAccumulator(SourceLine parent, String salesMode) {
+        private CandidateAccumulator(SourceLine parent) {
             this.parent = parent;
-            this.salesMode = salesMode;
         }
 
         private void add(SourceLine line) {
@@ -472,7 +384,6 @@ public class SalesOrderSourceCandidateQueryRepository {
                     parent.purchaseOrderNo(),
                     parent.sourceDocumentType(),
                     parent.purchaseOrderNo(),
-                    salesMode,
                     parent.supplierId(),
                     parent.supplierCode(),
                     parent.supplierName(),

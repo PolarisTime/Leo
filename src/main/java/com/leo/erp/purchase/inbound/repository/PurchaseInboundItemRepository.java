@@ -77,17 +77,33 @@ public interface PurchaseInboundItemRepository extends JpaRepository<PurchaseInb
     @Query("""
             select item.sourcePurchaseOrderItemId as sourcePurchaseOrderItemId,
                    sum(item.quantity) as totalQuantity,
-                   coalesce(sum(item.weighWeightTon), 0) as totalWeightTon
+                   coalesce(sum(coalesce(item.weighWeightTon, item.weightTon)), 0) as totalWeightTon
             from PurchaseInboundItem item
             join item.purchaseInbound inbound
             where inbound.deletedFlag = false
               and inbound.status in :effectiveStatuses
               and item.sourcePurchaseOrderItemId in :sourcePurchaseOrderItemIds
-              and item.weighWeightTon is not null
               and (:currentInboundId is null or inbound.id <> :currentInboundId)
             group by item.sourcePurchaseOrderItemId
             """)
-    List<PurchaseOrderWeighWeightSummary> summarizeWeighWeightBySourcePurchaseOrderItemIdsExcludingInbound(
+    List<PurchaseOrderEffectiveWeightSummary> summarizeEffectiveWeightBySourcePurchaseOrderItemIdsExcludingInbound(
+            @Param("sourcePurchaseOrderItemIds") Collection<Long> sourcePurchaseOrderItemIds,
+            @Param("currentInboundId") Long currentInboundId,
+            @Param("effectiveStatuses") Collection<String> effectiveStatuses
+    );
+
+    @Query("""
+            select distinct item.sourcePurchaseOrderItemId
+            from PurchaseInboundItem item
+            join item.purchaseInbound inbound
+            where inbound.deletedFlag = false
+              and inbound.status in :effectiveStatuses
+              and item.sourcePurchaseOrderItemId in :sourcePurchaseOrderItemIds
+              and trim(item.settlementMode) = '过磅'
+              and item.weighWeightTon is not null
+              and (:currentInboundId is null or inbound.id <> :currentInboundId)
+            """)
+    List<Long> findWeighedSourceItemIdsExcludingInbound(
             @Param("sourcePurchaseOrderItemIds") Collection<Long> sourcePurchaseOrderItemIds,
             @Param("currentInboundId") Long currentInboundId,
             @Param("effectiveStatuses") Collection<String> effectiveStatuses
@@ -138,7 +154,7 @@ public interface PurchaseInboundItemRepository extends JpaRepository<PurchaseInb
         java.math.BigDecimal getTotalWeightAdjustmentTon();
     }
 
-    interface PurchaseOrderWeighWeightSummary {
+    interface PurchaseOrderEffectiveWeightSummary {
 
         Long getSourcePurchaseOrderItemId();
 

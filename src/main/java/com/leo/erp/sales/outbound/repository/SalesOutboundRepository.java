@@ -26,35 +26,6 @@ public interface SalesOutboundRepository extends JpaRepository<SalesOutbound, Lo
     @EntityGraph(attributePaths = "items")
     Optional<SalesOutbound> findByIdAndDeletedFlagFalse(Long id);
 
-    @EntityGraph(attributePaths = "items")
-    Optional<SalesOutbound> findBySourceFreightBillIdAndDeletedFlagFalse(Long sourceFreightBillId);
-
-    boolean existsBySourceFreightBillIdAndDeletedFlagFalse(Long sourceFreightBillId);
-
-    @Query("""
-            select outbound.sourceFreightBillId as freightBillId,
-                   outbound.id as outboundId,
-                   outbound.outboundNo as outboundNo
-            from SalesOutbound outbound
-            where outbound.deletedFlag = false
-              and outbound.sourceFreightBillId in :freightBillIds
-            """)
-    List<FreightBillOutboundReference> findActiveFreightBillOutboundReferences(
-            @Param("freightBillIds") Collection<Long> freightBillIds
-    );
-
-    @Query("""
-            select count(outbound.id)
-            from SalesOutbound outbound
-            where outbound.deletedFlag = false
-              and outbound.sourceFreightBillId = :freightBillId
-              and outbound.id <> :excludedOutboundId
-            """)
-    long countActiveBySourceFreightBillIdExcludingOutbound(
-            @Param("freightBillId") Long freightBillId,
-            @Param("excludedOutboundId") Long excludedOutboundId
-    );
-
     @Query("""
             select count(distinct outbound.id)
             from SalesOutbound outbound
@@ -179,11 +150,4 @@ public interface SalesOutboundRepository extends JpaRepository<SalesOutbound, Lo
         String getStatus();
     }
 
-    interface FreightBillOutboundReference {
-        Long getFreightBillId();
-
-        Long getOutboundId();
-
-        String getOutboundNo();
-    }
 }

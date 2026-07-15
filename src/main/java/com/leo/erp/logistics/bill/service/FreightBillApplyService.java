@@ -8,39 +8,16 @@ import com.leo.erp.logistics.bill.domain.entity.FreightBill;
 import com.leo.erp.logistics.bill.domain.entity.FreightBillItem;
 import com.leo.erp.logistics.bill.web.dto.FreightBillItemRequest;
 import com.leo.erp.logistics.bill.web.dto.FreightBillRequest;
-import com.leo.erp.sales.outbound.domain.entity.SalesOutboundItem;
-import com.leo.erp.sales.outbound.domain.entity.SalesOutbound;
-import com.leo.erp.sales.order.domain.entity.SalesOrder;
-import com.leo.erp.sales.order.domain.entity.SalesOrderItem;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
-import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Set;
 import java.util.function.LongSupplier;
 
 @Service
 public class FreightBillApplyService {
 
-    void applyItems(FreightBill entity,
-                    FreightBillRequest request,
-                    LongSupplier nextId) {
-        applyItems(
-                entity,
-                request,
-                new FreightBillSourceService.SourceValidationContext(java.util.Map.of(), java.util.Map.of()),
-                nextId
-        );
-    }
-
-    void applyItems(FreightBill entity,
-                    FreightBillRequest request,
-                    FreightBillSourceService.SourceValidationContext sourceContext,
-                    LongSupplier nextId) {
-        BigDecimal totalWeight = BigDecimal.ZERO;
-        LinkedHashSet<String> customerNames = new LinkedHashSet<>();
-        LinkedHashSet<String> projectNames = new LinkedHashSet<>();
+    void applyItems(FreightBill entity, FreightBillRequest request, LongSupplier nextId) {
         List<FreightBillItem> items = ManagedEntityItemSupport.syncById(
                 entity.getItems(),
                 request.items(),
@@ -50,153 +27,59 @@ public class FreightBillApplyService {
                 nextId,
                 FreightBillItem::setId
         );
-        for (int i = 0; i < request.items().size(); i++) {
-            FreightBillItemRequest source = request.items().get(i);
-            FreightBillItem item = items.get(i);
-            int lineNo = i + 1;
-            SalesOutboundItem sourceOutboundItem = sourceContext.sourceItemAt(lineNo);
-            SalesOutbound sourceOutbound = sourceContext.sourceOutboundAt(lineNo);
-            if (sourceOutbound == null && sourceOutboundItem != null) {
-                sourceOutbound = sourceOutboundItem.getSalesOutbound();
-            }
-            item.setFreightBill(entity);
-            item.setLineNo(lineNo);
-            item.setSourceNo(source.sourceNo());
-            applySourceSnapshot(item, sourceOutbound, sourceOutboundItem);
-            String customerName = sourceOutbound == null ? source.customerName() : sourceOutbound.getCustomerName();
-            String projectName = sourceOutbound == null ? source.projectName() : sourceOutbound.getProjectName();
-            item.setCustomerName(customerName);
-            customerNames.add(customerName);
-            item.setProjectName(projectName);
-            projectNames.add(projectName);
-            item.setMaterialCode(sourceOutboundItem == null
-                    ? source.materialCode()
-                    : sourceOutboundItem.getMaterialCode());
-            item.setMaterialName(resolveMaterialName(source));
-            item.setBrand(source.brand());
-            item.setCategory(source.category());
-            item.setMaterial(source.material());
-            item.setSpec(source.spec());
-            item.setLength(source.length());
-            item.setQuantity(source.quantity());
-            item.setQuantityUnit(TradeItemCalculator.normalizeQuantityUnit(source.quantityUnit()));
-            item.setPieceWeightTon(source.pieceWeightTon());
-            item.setPiecesPerBundle(source.piecesPerBundle());
-            item.setBatchNo(sourceOutboundItem == null ? source.batchNo() : sourceOutboundItem.getBatchNo());
-            BigDecimal weightTon = resolveWeightTon(source, sourceOutboundItem);
-            item.setWeightTon(weightTon);
-            item.setWarehouseName(sourceOutboundItem == null
-                    ? source.warehouseName()
-                    : sourceOutboundItem.getWarehouseName());
-            totalWeight = totalWeight.add(weightTon);
-        }
-        entity.getItems().sort(java.util.Comparator.comparing(FreightBillItem::getLineNo));
-        entity.setCustomerName(resolveHeaderLabel(customerNames, "多客户"));
-        entity.setProjectName(resolveHeaderLabel(projectNames, "多项目"));
-        entity.setTotalWeight(totalWeight);
-        entity.setTotalFreight(totalWeight.multiply(request.unitPrice()).setScale(PrecisionConstants.AMOUNT_SCALE, PrecisionConstants.DEFAULT_ROUNDING));
-    }
-
-    void applySalesOrderItems(FreightBill entity,
-                              FreightBillRequest request,
-                              FreightBillSalesOrderSourceService.SourceContext sourceContext,
-                              LongSupplier nextId) {
-        SalesOrder sourceOrder = sourceContext.order();
         BigDecimal totalWeight = BigDecimal.ZERO;
-        List<FreightBillItem> items = ManagedEntityItemSupport.syncById(
-                entity.getItems(),
-                request.items(),
-                FreightBillItem::getId,
-                FreightBillItemRequest::id,
-                FreightBillItem::new,
-                nextId,
-                FreightBillItem::setId
-        );
         for (int index = 0; index < request.items().size(); index++) {
-            FreightBillItemRequest requested = request.items().get(index);
-            SalesOrderItem source = sourceContext.itemAt(index + 1);
             FreightBillItem item = items.get(index);
-            item.setFreightBill(entity);
-            item.setLineNo(index + 1);
-            item.setSourceNo(sourceOrder.getOrderNo());
-            item.setSourceSalesOutboundItemId(null);
-            item.setSourceSalesOrderItemId(source.getId());
-            item.setSettlementCompanyId(source.getSettlementCompanyId());
-            item.setSettlementCompanyName(source.getSettlementCompanyName());
-            item.setCustomerId(sourceOrder.getCustomerId());
-            item.setCustomerName(sourceOrder.getCustomerName());
-            item.setProjectId(sourceOrder.getProjectId());
-            item.setProjectName(sourceOrder.getProjectName());
-            item.setMaterialId(source.getMaterialId());
-            item.setMaterialCode(source.getMaterialCode());
-            item.setMaterialName(resolveMaterialName(requested));
-            item.setBrand(source.getBrand());
-            item.setCategory(source.getCategory());
-            item.setMaterial(source.getMaterial());
-            item.setSpec(source.getSpec());
-            item.setLength(source.getLength());
-            item.setQuantity(source.getQuantity());
-            item.setQuantityUnit(TradeItemCalculator.normalizeQuantityUnit(source.getQuantityUnit()));
-            item.setPieceWeightTon(TradeItemCalculator.scaleWeightTon(source.getPieceWeightTon()));
-            item.setPiecesPerBundle(source.getPiecesPerBundle());
-            item.setBatchNo(source.getBatchNo());
-            item.setWeightTon(TradeItemCalculator.scaleWeightTon(source.getWeightTon()));
-            item.setWarehouseId(source.getWarehouseId());
-            item.setWarehouseName(source.getWarehouseName());
+            FreightBillItemRequest source = request.items().get(index);
+            applyItem(entity, item, source, index + 1);
             totalWeight = totalWeight.add(item.getWeightTon());
         }
         entity.getItems().sort(java.util.Comparator.comparing(FreightBillItem::getLineNo));
-        entity.setCustomerName(sourceOrder.getCustomerName());
-        entity.setProjectName(sourceOrder.getProjectName());
         entity.setTotalWeight(TradeItemCalculator.scaleWeightTon(totalWeight));
         entity.setTotalFreight(totalWeight.multiply(request.unitPrice())
                 .setScale(PrecisionConstants.AMOUNT_SCALE, PrecisionConstants.DEFAULT_ROUNDING));
     }
 
-    private String resolveHeaderLabel(Set<String> values, String multipleLabel) {
-        if (values.isEmpty()) {
-            return multipleLabel;
-        }
-        if (values.size() == 1) {
-            return values.iterator().next();
-        }
-        return multipleLabel;
+    private void applyItem(FreightBill entity,
+                           FreightBillItem item,
+                           FreightBillItemRequest source,
+                           int lineNo) {
+        item.setFreightBill(entity);
+        item.setLineNo(lineNo);
+        item.setSourceNo(source.sourceNo().trim());
+        item.setSettlementCompanyId(source.settlementCompanyId());
+        item.setSettlementCompanyName(BusinessDocumentValidator.trimToNull(source.settlementCompanyName()));
+        item.setCustomerId(source.customerId());
+        item.setCustomerName(source.customerName().trim());
+        item.setProjectId(source.projectId());
+        item.setProjectName(source.projectName().trim());
+        item.setMaterialId(source.materialId());
+        item.setMaterialCode(source.materialCode().trim());
+        item.setMaterialName(resolveMaterialName(source));
+        item.setBrand(source.brand().trim());
+        item.setCategory(source.category().trim());
+        item.setMaterial(source.material().trim());
+        item.setSpec(source.spec().trim());
+        item.setLength(BusinessDocumentValidator.trimToNull(source.length()));
+        item.setQuantity(source.quantity());
+        item.setQuantityUnit(TradeItemCalculator.normalizeQuantityUnit(source.quantityUnit()));
+        item.setPieceWeightTon(TradeItemCalculator.scaleWeightTon(source.pieceWeightTon()));
+        item.setPiecesPerBundle(source.piecesPerBundle());
+        item.setBatchNo(BusinessDocumentValidator.trimToNull(source.batchNo()));
+        item.setWeightTon(resolveWeightTon(source));
+        item.setWarehouseId(source.warehouseId());
+        item.setWarehouseName(BusinessDocumentValidator.trimToNull(source.warehouseName()));
     }
 
     private String resolveMaterialName(FreightBillItemRequest source) {
         String explicitName = BusinessDocumentValidator.trimToNull(source.materialName());
-        if (explicitName != null) {
-            return explicitName;
-        }
-        return BusinessDocumentValidator.trimToNull(source.brand());
+        return explicitName != null ? explicitName : source.brand().trim();
     }
 
-    private BigDecimal resolveWeightTon(FreightBillItemRequest source, SalesOutboundItem sourceOutboundItem) {
-        if (sourceOutboundItem != null && sourceOutboundItem.getWeightTon() != null) {
-            return TradeItemCalculator.scaleWeightTon(sourceOutboundItem.getWeightTon());
+    private BigDecimal resolveWeightTon(FreightBillItemRequest source) {
+        if (source.weightTon() != null) {
+            return TradeItemCalculator.scaleWeightTon(source.weightTon());
         }
         return TradeItemCalculator.calculateWeightTon(source.quantity(), source.pieceWeightTon());
-    }
-
-    private void applySourceSnapshot(FreightBillItem item,
-                                     SalesOutbound sourceOutbound,
-                                     SalesOutboundItem sourceOutboundItem) {
-        if (sourceOutboundItem == null) {
-            item.setSourceSalesOutboundItemId(null);
-            item.setSettlementCompanyId(null);
-            item.setSettlementCompanyName(null);
-            item.setCustomerId(null);
-            item.setProjectId(null);
-            item.setMaterialId(null);
-            item.setWarehouseId(null);
-            return;
-        }
-        item.setSourceSalesOutboundItemId(sourceOutboundItem.getId());
-        item.setSettlementCompanyId(sourceOutboundItem.getSettlementCompanyId());
-        item.setSettlementCompanyName(sourceOutboundItem.getSettlementCompanyName());
-        item.setCustomerId(sourceOutbound == null ? null : sourceOutbound.getCustomerId());
-        item.setProjectId(sourceOutbound == null ? null : sourceOutbound.getProjectId());
-        item.setMaterialId(sourceOutboundItem.getMaterialId());
-        item.setWarehouseId(sourceOutboundItem.getWarehouseId());
     }
 }

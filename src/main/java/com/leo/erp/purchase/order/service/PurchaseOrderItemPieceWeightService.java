@@ -19,7 +19,6 @@ import java.math.BigInteger;
 import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -52,95 +51,73 @@ public class PurchaseOrderItemPieceWeightService {
     }
 
     @Transactional
-    public void regenerateForPurchaseOrderItems(Collection<PurchaseOrderItem> items) {
+    public void rebuildPlannedWeightsForPurchaseOrderItems(Collection<PurchaseOrderItem> items) {
         if (items == null || items.isEmpty()) {
             return;
         }
-        List<Long> itemIds = items.stream()
-                .map(PurchaseOrderItem::getId)
-                .filter(id -> id != null)
-                .distinct()
-                .toList();
-        if (itemIds.isEmpty()) {
+        List<PurchaseOrderItemPieceWeight> existingPieces = new ArrayList<>();
+        List<PurchaseOrderItemPieceWeight> rebuiltPieces = new ArrayList<>();
+        for (PurchaseOrderItem item : items) {
+            if (item.getId() == null || item.getQuantity() == null || item.getQuantity() <= 0) {
+                continue;
+            }
+            List<PurchaseOrderItemPieceWeight> itemPieces =
+                    repository.findByPurchaseOrderItemIdOrderByPieceNoAsc(item.getId());
+            if (itemPieces.stream().anyMatch(piece -> piece.getSalesOrderItemId() != null)) {
+                throw new BusinessException(
+                        ErrorCode.BUSINESS_ERROR,
+                        "采购明细" + item.getId() + "存在已分配的逐件记录，不能重建采购逐件重量"
+                );
+            }
+            existingPieces.addAll(itemPieces);
+            List<PieceSlot> slots = IntStream.rangeClosed(1, item.getQuantity())
+                    .mapToObj(pieceNo -> new PieceSlot(pieceNo, null))
+                    .toList();
+            rebuiltPieces.addAll(updatePieceWeights(
+                    item.getId(),
+                    slots,
+                    item.getWeightTon(),
+                    List.of()
+            ));
+        }
+        if (!existingPieces.isEmpty()) {
+            repository.deleteAll(existingPieces);
+            repository.flush();
+        }
+        if (!rebuiltPieces.isEmpty()) {
+            repository.saveAll(rebuiltPieces);
+        }
+    }
+
+    @Transactional
+    public void synchronizeEffectiveWeightsForPurchaseOrderItems(Collection<PurchaseOrderItem> items) {
+        if (items == null || items.isEmpty()) {
             return;
         }
         List<PurchaseOrderItemPieceWeight> nextPieces = new ArrayList<>();
+        List<PurchaseOrderItemPieceWeight> stalePieces = new ArrayList<>();
         for (PurchaseOrderItem item : items) {
             if (item.getId() == null || item.getQuantity() == null || item.getQuantity() <= 0) {
                 continue;
             }
             List<PurchaseOrderItemPieceWeight> existingPieces = repository.findByPurchaseOrderItemIdOrderByPieceNoAsc(item.getId());
-            Set<Integer> allocatedPieceNos = existingPieces.stream()
-                    .filter(piece -> piece.getSalesOrderItemId() != null)
-                    .map(PurchaseOrderItemPieceWeight::getPieceNo)
-                    .collect(Collectors.toCollection(HashSet::new));
-            int unallocatedQuantity = item.getQuantity() - allocatedPieceNos.size();
-            BigDecimal allocatedWeightTon = existingPieces.stream()
-                    .filter(piece -> piece.getSalesOrderItemId() != null)
-                    .map(piece -> TradeItemCalculator.safeBigDecimal(piece.getWeightTon()))
-                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+            rejectAllocatedPiecesOutsideQuantity(item, existingPieces);
+            stalePieces.addAll(staleUnallocatedPieces(item, existingPieces));
             BigDecimal totalWeightTon = resolveItemTotalWeight(item);
-            rejectRegenerateWhenAllocatedWeightExceedsTarget(item.getId(), allocatedWeightTon, totalWeightTon);
-            if (unallocatedQuantity <= 0) {
-                rejectRegenerateWhenAllocatedWeightDiffersFromTarget(item.getId(), allocatedWeightTon, totalWeightTon);
-                continue;
-            }
-            BigDecimal unallocatedWeightTon = TradeItemCalculator.scaleWeightTon(
-                    totalWeightTon.subtract(allocatedWeightTon)
-            );
-            List<Integer> unallocatedPieceNos = IntStream.rangeClosed(1, item.getQuantity())
-                    .filter(pieceNo -> !allocatedPieceNos.contains(pieceNo))
-                    .limit(unallocatedQuantity)
-                    .boxed()
-                    .toList();
-            repository.deleteUnallocatedByPurchaseOrderItemIdIn(List.of(item.getId()));
-            nextPieces.addAll(buildPieceWeights(item.getId(), unallocatedPieceNos, unallocatedWeightTon));
+            List<PieceSlot> slots = rebalanceSlots(item, existingPieces, Set.of());
+            nextPieces.addAll(updatePieceWeights(
+                    item.getId(),
+                    slots,
+                    totalWeightTon,
+                    existingPieces
+            ));
+        }
+        if (!stalePieces.isEmpty()) {
+            repository.deleteAll(stalePieces);
         }
         if (!nextPieces.isEmpty()) {
             repository.saveAll(nextPieces);
         }
-    }
-
-    private void rejectRegenerateWhenAllocatedWeightExceedsTarget(Long purchaseOrderItemId,
-                                                                  BigDecimal allocatedWeightTon,
-                                                                  BigDecimal targetWeightTon) {
-        BigDecimal scaledAllocatedWeightTon = TradeItemCalculator.scaleWeightTon(allocatedWeightTon);
-        BigDecimal scaledTargetWeightTon = TradeItemCalculator.scaleWeightTon(targetWeightTon);
-        if (scaledAllocatedWeightTon.compareTo(scaledTargetWeightTon) <= 0) {
-            return;
-        }
-        BigDecimal overWeightTon = TradeItemCalculator.scaleWeightTon(
-                scaledAllocatedWeightTon.subtract(scaledTargetWeightTon)
-        );
-        throw new BusinessException(
-                ErrorCode.BUSINESS_ERROR,
-                "采购明细" + purchaseOrderItemId
-                        + "已分配重量 " + scaledAllocatedWeightTon
-                        + " 大于目标重量 " + scaledTargetWeightTon
-                        + "，差额 " + overWeightTon
-                        + "，不能自动重建逐件重量。请先反审核销售出库/销售订单后再重新入库"
-        );
-    }
-
-    private void rejectRegenerateWhenAllocatedWeightDiffersFromTarget(Long purchaseOrderItemId,
-                                                                      BigDecimal allocatedWeightTon,
-                                                                      BigDecimal targetWeightTon) {
-        BigDecimal scaledAllocatedWeightTon = TradeItemCalculator.scaleWeightTon(allocatedWeightTon);
-        BigDecimal scaledTargetWeightTon = TradeItemCalculator.scaleWeightTon(targetWeightTon);
-        if (scaledAllocatedWeightTon.compareTo(scaledTargetWeightTon) == 0) {
-            return;
-        }
-        BigDecimal differenceWeightTon = TradeItemCalculator.scaleWeightTon(
-                scaledTargetWeightTon.subtract(scaledAllocatedWeightTon)
-        );
-        throw new BusinessException(
-                ErrorCode.BUSINESS_ERROR,
-                "采购明细" + purchaseOrderItemId
-                        + "已全部分配，已分配重量 " + scaledAllocatedWeightTon
-                        + " 与目标重量 " + scaledTargetWeightTon
-                        + " 不一致，差额 " + differenceWeightTon
-                        + "，不能自动重建逐件重量。请先反审核销售出库/销售订单后再重新入库"
-        );
     }
 
     @Transactional
@@ -155,12 +132,15 @@ public class PurchaseOrderItemPieceWeightService {
                 .filter(Objects::nonNull)
                 .collect(Collectors.toSet());
         List<PurchaseOrderItemPieceWeight> nextPieces = new ArrayList<>();
+        List<PurchaseOrderItemPieceWeight> stalePieces = new ArrayList<>();
         for (PurchaseOrderItem item : items) {
             if (item.getId() == null || item.getQuantity() == null || item.getQuantity() <= 0) {
                 continue;
             }
             List<PurchaseOrderItemPieceWeight> existingPieces =
                     repository.findByPurchaseOrderItemIdOrderByPieceNoAsc(item.getId());
+            rejectAllocatedPiecesOutsideQuantity(item, existingPieces);
+            stalePieces.addAll(staleUnallocatedPieces(item, existingPieces));
             List<PurchaseOrderItemPieceWeight> lockedPieces = existingPieces.stream()
                     .filter(piece -> piece.getSalesOrderItemId() != null)
                     .filter(piece -> lockedIds.contains(piece.getSalesOrderItemId()))
@@ -192,8 +172,15 @@ public class PurchaseOrderItemPieceWeightService {
             BigDecimal rebalanceWeightTon = TradeItemCalculator.scaleWeightTon(
                     targetWeightTon.subtract(lockedWeightTon)
             );
-            repository.deleteUnallocatedByPurchaseOrderItemIdIn(List.of(item.getId()));
-            nextPieces.addAll(buildPieceWeightsForSlots(item.getId(), rebalanceSlots, rebalanceWeightTon));
+            nextPieces.addAll(updatePieceWeights(
+                    item.getId(),
+                    rebalanceSlots,
+                    rebalanceWeightTon,
+                    existingPieces
+            ));
+        }
+        if (!stalePieces.isEmpty()) {
+            repository.deleteAll(stalePieces);
         }
         if (!nextPieces.isEmpty()) {
             repository.saveAll(nextPieces);
@@ -207,12 +194,14 @@ public class PurchaseOrderItemPieceWeightService {
         BigDecimal theoreticalWeight = TradeItemCalculator.safeBigDecimal(item.getWeightTon());
         List<EffectiveInboundWeight> inboundWeights = jdbc.query("""
                 SELECT ini.quantity,
-                       COALESCE(ini.weigh_weight_ton, ini.weight_ton) AS actual_weight_ton
+                       ini.weigh_weight_ton AS actual_weight_ton
                   FROM po_purchase_inbound_item ini
                   JOIN po_purchase_inbound inbound ON inbound.id = ini.inbound_id AND inbound.deleted_flag = FALSE
                  WHERE ini.source_purchase_order_item_id = ?
                    AND inbound.deleted_flag = FALSE
                    AND inbound.status IN ('已审核', '完成入库')
+                   AND BTRIM(ini.settlement_mode) = '过磅'
+                   AND ini.weigh_weight_ton IS NOT NULL
                 """, (rs, rowNum) -> new EffectiveInboundWeight(
                 rs.getInt("quantity"),
                 rs.getBigDecimal("actual_weight_ton")
@@ -321,36 +310,39 @@ public class PurchaseOrderItemPieceWeightService {
         List<Integer> pieceNos = IntStream.rangeClosed(1, sourceItem.getQuantity())
                 .boxed()
                 .toList();
-        repository.saveAll(buildPieceWeights(sourceItem.getId(), pieceNos, sourceItem.getWeightTon()));
+        repository.saveAll(updatePieceWeights(
+                sourceItem.getId(),
+                pieceNos.stream().map(pieceNo -> new PieceSlot(pieceNo, null)).toList(),
+                sourceItem.getWeightTon(),
+                List.of()
+        ));
     }
 
-    private List<PurchaseOrderItemPieceWeight> buildPieceWeights(Long purchaseOrderItemId,
-                                                                 List<Integer> pieceNos,
-                                                                 BigDecimal sourceWeightTon) {
-        if (pieceNos == null) {
-            return List.of();
-        }
-        return buildPieceWeightsForSlots(
-                purchaseOrderItemId,
-                pieceNos.stream().map(pieceNo -> new PieceSlot(null, pieceNo, null)).toList(),
-                sourceWeightTon
-        );
-    }
-
-    private List<PurchaseOrderItemPieceWeight> buildPieceWeightsForSlots(Long purchaseOrderItemId,
-                                                                         List<PieceSlot> slots,
-                                                                         BigDecimal sourceWeightTon) {
+    private List<PurchaseOrderItemPieceWeight> updatePieceWeights(Long purchaseOrderItemId,
+                                                                  List<PieceSlot> slots,
+                                                                  BigDecimal sourceWeightTon,
+                                                                  List<PurchaseOrderItemPieceWeight> existingPieces) {
         int quantity = slots == null ? 0 : slots.size();
         if (quantity <= 0) {
             return List.of();
         }
         List<BigDecimal> pieceWeights = splitWeightByDisplayUnit(sourceWeightTon, quantity);
+        Map<Integer, PurchaseOrderItemPieceWeight> existingByPieceNo = existingPieces.stream()
+                .filter(piece -> piece.getPieceNo() != null)
+                .collect(Collectors.toMap(
+                        PurchaseOrderItemPieceWeight::getPieceNo,
+                        piece -> piece,
+                        (left, ignored) -> left
+                ));
 
         List<PurchaseOrderItemPieceWeight> pieces = new ArrayList<>(quantity);
         for (int i = 0; i < quantity; i++) {
             PieceSlot slot = slots.get(i);
-            PurchaseOrderItemPieceWeight piece = new PurchaseOrderItemPieceWeight();
-            piece.setId(slot.id() == null ? snowflakeIdGenerator.nextId() : slot.id());
+            PurchaseOrderItemPieceWeight piece = existingByPieceNo.get(slot.pieceNo());
+            if (piece == null) {
+                piece = new PurchaseOrderItemPieceWeight();
+                piece.setId(snowflakeIdGenerator.nextId());
+            }
             piece.setPurchaseOrderItemId(purchaseOrderItemId);
             piece.setPieceNo(slot.pieceNo());
             piece.setSalesOrderItemId(slot.salesOrderItemId());
@@ -420,16 +412,38 @@ public class PurchaseOrderItemPieceWeightService {
                     && lockedIds.contains(existing.getSalesOrderItemId())) {
                 continue;
             }
-            slots.add(new PieceSlot(
-                    existing == null ? null : existing.getId(),
-                    pieceNo,
-                    existing == null ? null : existing.getSalesOrderItemId()
-            ));
+            slots.add(new PieceSlot(pieceNo, existing == null ? null : existing.getSalesOrderItemId()));
         }
         return slots;
     }
 
-    private record PieceSlot(Long id, Integer pieceNo, Long salesOrderItemId) {
+    private void rejectAllocatedPiecesOutsideQuantity(
+            PurchaseOrderItem item,
+            List<PurchaseOrderItemPieceWeight> existingPieces
+    ) {
+        boolean hasAllocatedPieceOutsideQuantity = existingPieces.stream()
+                .anyMatch(piece -> piece.getPieceNo() != null
+                        && piece.getPieceNo() > item.getQuantity()
+                        && piece.getSalesOrderItemId() != null);
+        if (hasAllocatedPieceOutsideQuantity) {
+            throw new BusinessException(
+                    ErrorCode.BUSINESS_ERROR,
+                    "采购明细" + item.getId() + "存在已分配的超出数量逐件记录，不能减少采购数量"
+            );
+        }
+    }
+
+    private List<PurchaseOrderItemPieceWeight> staleUnallocatedPieces(
+            PurchaseOrderItem item,
+            List<PurchaseOrderItemPieceWeight> existingPieces
+    ) {
+        return existingPieces.stream()
+                .filter(piece -> piece.getPieceNo() == null || piece.getPieceNo() > item.getQuantity())
+                .filter(piece -> piece.getSalesOrderItemId() == null)
+                .toList();
+    }
+
+    private record PieceSlot(Integer pieceNo, Long salesOrderItemId) {
     }
 
     private record EffectiveInboundWeight(int quantity, BigDecimal weightTon) {

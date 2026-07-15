@@ -20,7 +20,6 @@ public class SalesOrderSourceCandidateService {
 
     @Transactional(readOnly = true)
     public PageResponse<SalesOrderSourceCandidateResponse> page(
-            String salesMode,
             String keyword,
             Long supplierId,
             Long settlementCompanyId,
@@ -30,7 +29,6 @@ public class SalesOrderSourceCandidateService {
             PageQuery query
     ) {
         return repository.page(
-                salesMode,
                 keyword,
                 supplierId,
                 settlementCompanyId,

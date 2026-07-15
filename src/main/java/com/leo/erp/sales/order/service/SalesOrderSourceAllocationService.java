@@ -2,13 +2,11 @@ package com.leo.erp.sales.order.service;
 
 import com.leo.erp.allocation.appservice.PurchaseItemQueryAppService;
 import com.leo.erp.allocation.appservice.PurchaseItemQueryAppService.SourceInboundItemRecord;
-import com.leo.erp.allocation.appservice.PurchaseItemQueryAppService.SourcePurchaseOrderItemRecord;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.support.BusinessDocumentValidator;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.support.TradeItemCalculator;
-import com.leo.erp.sales.order.domain.entity.SalesModes;
 import com.leo.erp.sales.order.repository.SalesOrderItemRepository;
 import com.leo.erp.sales.order.web.dto.SalesOrderItemRequest;
 import com.leo.erp.sales.order.web.dto.SalesOrderRequest;
@@ -34,31 +32,15 @@ public class SalesOrderSourceAllocationService {
     }
 
     SalesOrderSourceContext prepareContext(SalesOrderRequest request, Long currentOrderId) {
-        return prepareContext(request, currentOrderId, Set.of());
-    }
-
-    SalesOrderSourceContext prepareContext(SalesOrderRequest request,
-                                           Long currentOrderId,
-                                           Set<Long> existingPurchaseOrderSourceItemIds) {
-        String salesMode = SalesModes.normalizeRequired(request.salesMode());
-        validateSourceShape(request, salesMode);
+        validateSourceShape(request);
         List<Long> sourceInboundItemIds = extractSourceInboundItemIds(request);
-        List<Long> sourcePurchaseOrderItemIds = extractSourcePurchaseOrderItemIds(request);
         return new SalesOrderSourceContext(
                 sourceInboundItemIds,
-                sourcePurchaseOrderItemIds,
                 loadSourceInboundItemMap(sourceInboundItemIds),
-                loadSourcePurchaseOrderItemMap(sourcePurchaseOrderItemIds),
                 loadInboundAllocatedMap(sourceInboundItemIds, currentOrderId),
-                loadPurchaseOrderAllocatedMap(sourcePurchaseOrderItemIds, currentOrderId),
-                Map.of(),
-                new HashMap<>(),
                 new HashMap<>(),
                 new LinkedHashSet<>(),
-                new LinkedHashSet<>(),
-                existingPurchaseOrderSourceItemIds == null
-                        ? Set.of()
-                        : Set.copyOf(existingPurchaseOrderSourceItemIds)
+                new LinkedHashSet<>()
         );
     }
 
@@ -74,49 +56,20 @@ public class SalesOrderSourceAllocationService {
         return sourceInboundItem;
     }
 
-    SourcePurchaseOrderItemRecord resolveSourcePurchaseOrder(SalesOrderItemRequest source, SalesOrderSourceContext context) {
-        SourcePurchaseOrderItemRecord sourcePurchaseOrderItem = source.sourcePurchaseOrderItemId() == null ? null
-                : context.sourcePurchaseOrderItemMap().get(source.sourcePurchaseOrderItemId());
-        if (sourcePurchaseOrderItem != null && sourcePurchaseOrderItem.orderNo() != null) {
-            context.sourcePurchaseOrderNos().add(sourcePurchaseOrderItem.orderNo());
-        }
-        return sourcePurchaseOrderItem;
-    }
-
     void validateLine(SalesOrderItemRequest source,
                       int lineNo,
-                      String salesMode,
                       SalesOrderSourceContext context) {
         Long sourcePurchaseOrderItemId = source.sourcePurchaseOrderItemId();
         if (source.sourceInboundItemId() != null && sourcePurchaseOrderItemId != null) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行来源采购入库明细和来源采购订单明细不能同时填写");
         }
         if (sourcePurchaseOrderItemId != null) {
-            if (!SalesModes.PRESALE.equals(salesMode)) {
-                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "正常销售只能导入已完成采购的入库明细");
-            }
-            SourcePurchaseOrderItemRecord sourcePurchaseOrderItem = context.sourcePurchaseOrderItemMap().get(sourcePurchaseOrderItemId);
-            if (sourcePurchaseOrderItem == null) {
-                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行来源采购订单明细不存在");
-            }
-            assertPresaleSourceStatus(sourcePurchaseOrderItem, sourcePurchaseOrderItemId, lineNo, context);
-            assertSourceFieldsMatch(source, sourcePurchaseOrderItem, lineNo, "来源采购订单明细");
-            int allocatedQuantity = context.purchaseOrderAllocatedMap()
-                    .getOrDefault(sourcePurchaseOrderItemId, SalesOrderSourceAllocation.ZERO)
-                    .quantity();
-            int requestedQuantity = context.requestPurchaseOrderAllocatedMap()
-                    .getOrDefault(sourcePurchaseOrderItemId, SalesOrderSourceAllocation.ZERO)
-                    .quantity();
-            validateAvailableQuantity(source.quantity(), sourcePurchaseOrderItem.quantity(), allocatedQuantity, requestedQuantity, lineNo);
-            return;
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "采购订单直连来源已停用，销售订单只能导入已完成采购的入库明细");
         }
 
         Long sourceInboundItemId = source.sourceInboundItemId();
         if (sourceInboundItemId == null) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行必须导入上级采购来源明细");
-        }
-        if (!SalesModes.NORMAL.equals(salesMode)) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "预售只能导入未完成采购的采购订单明细");
         }
         SourceInboundItemRecord sourceInboundItem = context.sourceInboundItemMap().get(sourceInboundItemId);
         if (sourceInboundItem == null) {
@@ -144,9 +97,8 @@ public class SalesOrderSourceAllocationService {
         validateAvailableQuantity(source.quantity(), sourceInboundItem.quantity(), allocatedQuantity, requestedQuantity, lineNo);
     }
 
-    private void validateSourceShape(SalesOrderRequest request, String salesMode) {
+    private void validateSourceShape(SalesOrderRequest request) {
         Set<Long> inboundSourceIds = new LinkedHashSet<>();
-        Set<Long> purchaseOrderSourceIds = new LinkedHashSet<>();
         for (int index = 0; index < request.items().size(); index++) {
             SalesOrderItemRequest item = request.items().get(index);
             boolean inboundSource = item.sourceInboundItemId() != null;
@@ -157,11 +109,8 @@ public class SalesOrderSourceAllocationService {
                         "第" + (index + 1) + "行必须且只能选择一个采购来源明细"
                 );
             }
-            if (SalesModes.NORMAL.equals(salesMode) && !inboundSource) {
-                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "正常销售只能导入已完成采购的入库明细");
-            }
-            if (SalesModes.PRESALE.equals(salesMode) && !purchaseOrderSource) {
-                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "预售只能导入未完成采购的采购订单明细");
+            if (!inboundSource) {
+                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "采购订单直连来源已停用，销售订单只能导入已完成采购的入库明细");
             }
             if (inboundSource && !inboundSourceIds.add(item.sourceInboundItemId())) {
                 throw new BusinessException(
@@ -169,23 +118,11 @@ public class SalesOrderSourceAllocationService {
                         "第" + (index + 1) + "行重复导入同一采购入库明细"
                 );
             }
-            if (purchaseOrderSource && !purchaseOrderSourceIds.add(item.sourcePurchaseOrderItemId())) {
-                throw new BusinessException(
-                        ErrorCode.BUSINESS_ERROR,
-                        "第" + (index + 1) + "行重复导入同一采购订单明细"
-                );
-            }
         }
     }
 
     void recordAllocation(SalesOrderItemRequest source, BigDecimal weightTon, SalesOrderSourceContext context) {
-        if (source.sourcePurchaseOrderItemId() != null) {
-            context.requestPurchaseOrderAllocatedMap().merge(
-                    source.sourcePurchaseOrderItemId(),
-                    new SalesOrderSourceAllocation(source.quantity(), weightTon),
-                    SalesOrderSourceAllocation::merge
-            );
-        } else if (source.sourceInboundItemId() != null) {
+        if (source.sourceInboundItemId() != null) {
             context.requestInboundAllocatedMap().merge(
                     source.sourceInboundItemId(),
                     new SalesOrderSourceAllocation(source.quantity(), weightTon),
@@ -202,14 +139,6 @@ public class SalesOrderSourceAllocationService {
                 .toList();
     }
 
-    private List<Long> extractSourcePurchaseOrderItemIds(SalesOrderRequest request) {
-        return request.items().stream()
-                .map(SalesOrderItemRequest::sourcePurchaseOrderItemId)
-                .filter(id -> id != null)
-                .distinct()
-                .toList();
-    }
-
     private Map<Long, SourceInboundItemRecord> loadSourceInboundItemMap(List<Long> sourceIds) {
         if (sourceIds.isEmpty()) {
             return Map.of();
@@ -217,15 +146,6 @@ public class SalesOrderSourceAllocationService {
 
         return purchaseItemQueryAppService.findSourceInboundItemsByIds(sourceIds).stream()
                 .collect(java.util.stream.Collectors.toMap(SourceInboundItemRecord::id, item -> item));
-    }
-
-    private Map<Long, SourcePurchaseOrderItemRecord> loadSourcePurchaseOrderItemMap(List<Long> sourceIds) {
-        if (sourceIds.isEmpty()) {
-            return Map.of();
-        }
-
-        return purchaseItemQueryAppService.findSourcePurchaseOrderItemsByIds(sourceIds).stream()
-                .collect(java.util.stream.Collectors.toMap(SourcePurchaseOrderItemRecord::id, item -> item));
     }
 
     private Map<Long, SalesOrderSourceAllocation> loadInboundAllocatedMap(List<Long> sourceInboundItemIds, Long currentOrderId) {
@@ -236,22 +156,6 @@ public class SalesOrderSourceAllocationService {
         salesOrderItemRepository.summarizeAllocatedQuantityBySourceInboundItemIds(sourceInboundItemIds, currentOrderId)
                 .forEach(summary -> allocatedMap.put(
                         summary.getSourceInboundItemId(),
-                        new SalesOrderSourceAllocation(
-                                Math.toIntExact(summary.getTotalQuantity()),
-                                TradeItemCalculator.scaleWeightTon(summary.getTotalWeightTon())
-                        )
-                ));
-        return allocatedMap;
-    }
-
-    private Map<Long, SalesOrderSourceAllocation> loadPurchaseOrderAllocatedMap(List<Long> sourcePurchaseOrderItemIds, Long currentOrderId) {
-        if (sourcePurchaseOrderItemIds.isEmpty()) {
-            return Map.of();
-        }
-        Map<Long, SalesOrderSourceAllocation> allocatedMap = new HashMap<>();
-        salesOrderItemRepository.summarizeAllocatedQuantityBySourcePurchaseOrderItemIds(sourcePurchaseOrderItemIds, currentOrderId)
-                .forEach(summary -> allocatedMap.put(
-                        summary.getSourcePurchaseOrderItemId(),
                         new SalesOrderSourceAllocation(
                                 Math.toIntExact(summary.getTotalQuantity()),
                                 TradeItemCalculator.scaleWeightTon(summary.getTotalWeightTon())
@@ -273,46 +177,8 @@ public class SalesOrderSourceAllocationService {
         );
     }
 
-    private void assertPresaleSourceStatus(SourcePurchaseOrderItemRecord source,
-                                           Long sourceItemId,
-                                           int lineNo,
-                                           SalesOrderSourceContext context) {
-        String status = BusinessDocumentValidator.normalizeText(source.orderStatus());
-        if (StatusConstants.AUDITED.equals(status)) {
-            return;
-        }
-        if (StatusConstants.PURCHASE_COMPLETED.equals(status)
-                && context.existingPurchaseOrderSourceItemIds().contains(sourceItemId)) {
-            return;
-        }
-        throw new BusinessException(
-                ErrorCode.BUSINESS_ERROR,
-                "第" + lineNo + "行来源采购订单必须处于已审核且未完成采购状态"
-        );
-    }
-
     private void assertSourceFieldsMatch(SalesOrderItemRequest request,
                                          SourceInboundItemRecord source,
-                                         int lineNo,
-                                         String sourceName) {
-        assertSameText(request.materialCode(), source.materialCode(), lineNo, sourceName, "物料编码");
-        assertSameId(request.materialId(), source.materialId(), lineNo, sourceName, "商品ID");
-        assertSameText(request.brand(), source.brand(), lineNo, sourceName, "品牌");
-        assertSameText(request.category(), source.category(), lineNo, sourceName, "品类");
-        assertSameText(request.material(), source.material(), lineNo, sourceName, "材质");
-        assertSameText(request.spec(), source.spec(), lineNo, sourceName, "规格");
-        assertSameOptionalText(request.length(), source.length(), lineNo, sourceName, "长度");
-        assertSameText(request.unit(), source.unit(), lineNo, sourceName, "单位");
-        assertSameOptionalQuantityUnit(request.quantityUnit(), source.quantityUnit(), lineNo, sourceName);
-        assertSameOptionalDecimal(request.pieceWeightTon(), source.pieceWeightTon(), lineNo, sourceName, "件重");
-        assertSameOptionalInteger(request.piecesPerBundle(), source.piecesPerBundle(), lineNo, sourceName, "每捆支数");
-        assertSameText(request.warehouseName(), source.warehouseName(), lineNo, sourceName, "仓库");
-        assertSameId(request.warehouseId(), source.warehouseId(), lineNo, sourceName, "仓库ID");
-        assertSameText(request.batchNo(), source.batchNo(), lineNo, sourceName, "批号");
-    }
-
-    private void assertSourceFieldsMatch(SalesOrderItemRequest request,
-                                         SourcePurchaseOrderItemRecord source,
                                          int lineNo,
                                          String sourceName) {
         assertSameText(request.materialCode(), source.materialCode(), lineNo, sourceName, "物料编码");

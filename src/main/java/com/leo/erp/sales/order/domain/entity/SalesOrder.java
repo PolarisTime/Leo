@@ -26,9 +26,6 @@ public class SalesOrder extends AbstractAuditableEntity {
     @Column(name = "order_no", nullable = false, unique = true, length = 64)
     private String orderNo;
 
-    @Column(name = "sales_mode", nullable = false, length = 16)
-    private String salesMode;
-
     @Column(name = "purchase_inbound_no", length = 256)
     private String purchaseInboundNo;
 

@@ -5,7 +5,6 @@ import java.math.BigDecimal;
 public record FreightStatementItemCommand(
         Long id,
         String sourceNo,
-        Long sourceSalesOutboundItemId,
         Long settlementCompanyId,
         String settlementCompanyName,
         String customerName,
@@ -31,53 +30,4 @@ public record FreightStatementItemCommand(
         Long materialId,
         Long warehouseId
 ) {
-    public FreightStatementItemCommand(Long id,
-                                       String sourceNo,
-                                       Long sourceSalesOutboundItemId,
-                                       Long settlementCompanyId,
-                                       String settlementCompanyName,
-                                       String customerName,
-                                       String projectName,
-                                       String materialCode,
-                                       String materialName,
-                                       String brand,
-                                       String category,
-                                       String material,
-                                       String spec,
-                                       String length,
-                                       Integer quantity,
-                                       String quantityUnit,
-                                       BigDecimal pieceWeightTon,
-                                       Integer piecesPerBundle,
-                                       String batchNo,
-                                       BigDecimal weightTon,
-                                       String warehouseName) {
-        this(id, sourceNo, sourceSalesOutboundItemId, settlementCompanyId, settlementCompanyName, customerName,
-                projectName, materialCode, materialName, brand, category, material, spec, length, quantity,
-                quantityUnit, pieceWeightTon, piecesPerBundle, batchNo, weightTon, warehouseName,
-                null, null, null, null, null, null);
-    }
-
-    public FreightStatementItemCommand(Long id,
-                                       String sourceNo,
-                                       String customerName,
-                                       String projectName,
-                                       String materialCode,
-                                       String materialName,
-                                       String brand,
-                                       String category,
-                                       String material,
-                                       String spec,
-                                       String length,
-                                       Integer quantity,
-                                       String quantityUnit,
-                                       BigDecimal pieceWeightTon,
-                                       Integer piecesPerBundle,
-                                       String batchNo,
-                                       BigDecimal weightTon,
-                                       String warehouseName) {
-        this(id, sourceNo, null, null, null, customerName, projectName, materialCode, materialName,
-                brand, category, material, spec, length, quantity, quantityUnit, pieceWeightTon,
-                piecesPerBundle, batchNo, weightTon, warehouseName, null, null, null, null, null, null);
-    }
 }

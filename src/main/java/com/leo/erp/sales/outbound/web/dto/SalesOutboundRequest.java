@@ -19,35 +19,6 @@ public record SalesOutboundRequest(
         @NotNull LocalDate outboundDate,
         String status,
         String remark,
-        @Valid @NotEmpty List<SalesOutboundItemRequest> items,
-        Long sourceFreightBillId
+        @Valid @NotEmpty List<SalesOutboundItemRequest> items
 ) {
-    public SalesOutboundRequest(String outboundNo,
-                                String salesOrderNo,
-                                Long customerId,
-                                String customerName,
-                                Long projectId,
-                                String projectName,
-                                Long warehouseId,
-                                String warehouseName,
-                                LocalDate outboundDate,
-                                String status,
-                                String remark,
-                                List<SalesOutboundItemRequest> items) {
-        this(outboundNo, salesOrderNo, customerId, customerName, projectId, projectName, warehouseId, warehouseName,
-                outboundDate, status, remark, items, null);
-    }
-
-    public SalesOutboundRequest(String outboundNo,
-                                String salesOrderNo,
-                                String customerName,
-                                String projectName,
-                                String warehouseName,
-                                LocalDate outboundDate,
-                                String status,
-                                String remark,
-                                List<SalesOutboundItemRequest> items) {
-        this(outboundNo, salesOrderNo, null, customerName, null, projectName, null, warehouseName,
-                outboundDate, status, remark, items, null);
-    }
 }

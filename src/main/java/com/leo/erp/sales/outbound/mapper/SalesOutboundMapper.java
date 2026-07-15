@@ -10,6 +10,5 @@ import org.mapstruct.Mapping;
 public interface SalesOutboundMapper {
 
     @Mapping(target = "items", ignore = true)
-    @Mapping(target = "sourceFreightBillId", source = "sourceFreightBillId")
     SalesOutboundResponse toResponse(SalesOutbound outbound);
 }

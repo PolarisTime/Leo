@@ -56,7 +56,6 @@ public class FreightStatementViewAssembler {
                 item.getId(),
                 item.getLineNo(),
                 item.getSourceNo(),
-                item.getSourceSalesOutboundItemId(),
                 item.getSettlementCompanyId(),
                 item.getSettlementCompanyName(),
                 item.getCustomerName(),

@@ -43,7 +43,6 @@ public class SalesOrderAuditedPricingService {
             return false;
         }
         if (!normalize(entity.getOrderNo()).equals(normalize(request.orderNo()))
-                || !normalize(entity.getSalesMode()).equals(normalize(request.salesMode()))
                 || !normalize(entity.getPurchaseInboundNo()).equals(normalize(request.purchaseInboundNo()))
                 || !normalize(entity.getPurchaseOrderNo()).equals(normalize(request.purchaseOrderNo()))
                 || !normalize(entity.getCustomerCode()).equals(normalize(request.customerCode()))

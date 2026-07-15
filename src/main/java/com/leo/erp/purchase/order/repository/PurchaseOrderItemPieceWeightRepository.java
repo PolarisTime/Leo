@@ -98,14 +98,6 @@ public interface PurchaseOrderItemPieceWeightRepository extends JpaRepository<Pu
 
     @Modifying
     @Query("""
-            delete from PurchaseOrderItemPieceWeight piece
-            where piece.purchaseOrderItemId in :purchaseOrderItemIds
-              and piece.salesOrderItemId is null
-            """)
-    void deleteUnallocatedByPurchaseOrderItemIdIn(@Param("purchaseOrderItemIds") Collection<Long> purchaseOrderItemIds);
-
-    @Modifying
-    @Query("""
             update PurchaseOrderItemPieceWeight piece
             set piece.salesOrderItemId = null
             where piece.salesOrderItemId in :salesOrderItemIds

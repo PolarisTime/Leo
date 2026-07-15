@@ -130,7 +130,7 @@ public class PurchaseInboundCompletionSyncService {
         });
 
         if (allInboundCompleted && allFulfilled) {
-            assertPresaleCapacityCovered(sourceItemIds, receivedQtyByItemId);
+            assertLegacyDirectSalesCapacityCovered(sourceItemIds, receivedQtyByItemId);
             if (!StatusConstants.PURCHASE_COMPLETED.equals(purchaseOrder.getStatus())) {
                 lockSupplierLedger(purchaseOrder);
                 purchaseOrder.setStatus(StatusConstants.PURCHASE_COMPLETED);
@@ -140,7 +140,7 @@ public class PurchaseInboundCompletionSyncService {
         }
     }
 
-    private void assertPresaleCapacityCovered(
+    private void assertLegacyDirectSalesCapacityCovered(
             List<Long> sourceItemIds,
             Map<Long, Integer> receivedQtyByItemId
     ) {
@@ -153,13 +153,13 @@ public class PurchaseInboundCompletionSyncService {
                     summary.getSourcePurchaseOrderItemId(),
                     0
             );
-            long presaleQuantity = summary.getTotalQuantity() == null ? 0L : summary.getTotalQuantity();
-            if (presaleQuantity > inboundQuantity) {
+            long directSalesQuantity = summary.getTotalQuantity() == null ? 0L : summary.getTotalQuantity();
+            if (directSalesQuantity > inboundQuantity) {
                 throw new BusinessException(
                         ErrorCode.BUSINESS_ERROR,
                         "来源采购明细 " + summary.getSourcePurchaseOrderItemId()
-                                + " 的预售数量超过最终入库量：已入库 " + inboundQuantity
-                                + " 件，已占用 " + presaleQuantity + " 件，请先调整销售订单数量"
+                                + " 的历史直连销售数量超过最终入库量：已入库 " + inboundQuantity
+                                + " 件，已占用 " + directSalesQuantity + " 件，请先处理历史销售订单"
                 );
             }
         }

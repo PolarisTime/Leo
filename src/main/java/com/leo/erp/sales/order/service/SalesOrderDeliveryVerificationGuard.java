@@ -3,6 +3,8 @@ package com.leo.erp.sales.order.service;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.concurrency.SourceAllocationLockService;
+import com.leo.erp.common.support.StatusConstants;
+import com.leo.erp.finance.receipt.repository.ReceiptAllocationRepository;
 import com.leo.erp.sales.order.domain.entity.SalesOrder;
 import com.leo.erp.sales.order.domain.entity.SalesOrderItem;
 import com.leo.erp.statement.customer.repository.CustomerStatementRepository;
@@ -15,11 +17,14 @@ import java.util.Objects;
 public class SalesOrderDeliveryVerificationGuard {
 
     private final CustomerStatementRepository customerStatementRepository;
+    private final ReceiptAllocationRepository receiptAllocationRepository;
     private final SourceAllocationLockService sourceAllocationLockService;
 
     public SalesOrderDeliveryVerificationGuard(CustomerStatementRepository customerStatementRepository,
+                                               ReceiptAllocationRepository receiptAllocationRepository,
                                                SourceAllocationLockService sourceAllocationLockService) {
         this.customerStatementRepository = customerStatementRepository;
+        this.receiptAllocationRepository = receiptAllocationRepository;
         this.sourceAllocationLockService = sourceAllocationLockService;
     }
 
@@ -47,6 +52,15 @@ public class SalesOrderDeliveryVerificationGuard {
             throw new BusinessException(
                     ErrorCode.BUSINESS_ERROR,
                     "销售订单已存在客户对账单，不能" + action + "，请先删除相关客户对账单"
+            );
+        }
+        if (!receiptAllocationRepository.findReceivedSourceSalesOrderItemIds(
+                stableItemIds,
+                StatusConstants.AUDITED
+        ).isEmpty()) {
+            throw new BusinessException(
+                    ErrorCode.BUSINESS_ERROR,
+                    "销售订单已发生收款，不能" + action + "，请先删除相关收款单"
             );
         }
     }

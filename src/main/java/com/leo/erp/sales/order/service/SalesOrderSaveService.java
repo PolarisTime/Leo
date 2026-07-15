@@ -23,16 +23,11 @@ public class SalesOrderSaveService {
     }
 
     SalesOrder save(SalesOrder entity) {
-        if (!purchaseAllocationService.hasPurchaseOrderBackedItems(entity)) {
-            SalesOrder saved = repository.save(entity);
-            syncCompletionAfterAuditedSave(saved);
-            return saved;
-        }
         SalesOrder saved = repository.saveAndFlush(entity);
-        purchaseAllocationService.finalizePurchaseOrderAllocations(saved);
-        SalesOrder finalSaved = repository.save(saved);
-        syncCompletionAfterAuditedSave(finalSaved);
-        return finalSaved;
+        purchaseAllocationService.finalizeInboundSourceAllocations(saved);
+        SalesOrder allocated = repository.save(saved);
+        syncCompletionAfterAuditedSave(allocated);
+        return allocated;
     }
 
     SalesOrder saveStatus(SalesOrder entity) {

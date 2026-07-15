@@ -50,6 +50,7 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
     private final CompanySettingService companySettingService;
     private final PaymentPurchasePrepaymentService purchasePrepaymentService;
     private final PurchaseOrderDownstreamMutationGuard downstreamMutationGuard;
+    private final PurchaseOrderItemPieceWeightService pieceWeightService;
 
     public PurchaseOrderService(PurchaseOrderRepository purchaseOrderRepository,
                                 SnowflakeIdGenerator snowflakeIdGenerator,
@@ -68,6 +69,8 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
                 purchaseOrderApplyService,
                 workflowTransitionGuard,
                 companySettingService,
+                null,
+                null,
                 null
         );
     }
@@ -91,6 +94,7 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
                 workflowTransitionGuard,
                 companySettingService,
                 purchasePrepaymentService,
+                null,
                 null
         );
     }
@@ -105,7 +109,8 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
                                 WorkflowTransitionGuard workflowTransitionGuard,
                                 CompanySettingService companySettingService,
                                 PaymentPurchasePrepaymentService purchasePrepaymentService,
-                                PurchaseOrderDownstreamMutationGuard downstreamMutationGuard) {
+                                PurchaseOrderDownstreamMutationGuard downstreamMutationGuard,
+                                PurchaseOrderItemPieceWeightService pieceWeightService) {
         super(snowflakeIdGenerator);
         this.purchaseOrderRepository = purchaseOrderRepository;
         this.availabilityService = availabilityService;
@@ -116,6 +121,7 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
         this.companySettingService = companySettingService;
         this.purchasePrepaymentService = purchasePrepaymentService;
         this.downstreamMutationGuard = downstreamMutationGuard;
+        this.pieceWeightService = pieceWeightService;
     }
 
     private static final String[] PURCHASE_ORDER_SEARCH_FIELDS = {"orderNo", "supplierName"};
@@ -435,6 +441,24 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
     @Override
     protected PurchaseOrder saveEntity(PurchaseOrder entity) {
         return purchaseOrderRepository.save(entity);
+    }
+
+    @Override
+    protected PurchaseOrder saveCreatedEntity(PurchaseOrder entity, PurchaseOrderRequest request) {
+        return saveWithPieceWeights(entity);
+    }
+
+    @Override
+    protected PurchaseOrder saveUpdatedEntity(PurchaseOrder entity, PurchaseOrderRequest request) {
+        return saveWithPieceWeights(entity);
+    }
+
+    private PurchaseOrder saveWithPieceWeights(PurchaseOrder entity) {
+        PurchaseOrder saved = purchaseOrderRepository.saveAndFlush(entity);
+        if (pieceWeightService != null) {
+            pieceWeightService.rebuildPlannedWeightsForPurchaseOrderItems(saved.getItems());
+        }
+        return saved;
     }
 
     @Override

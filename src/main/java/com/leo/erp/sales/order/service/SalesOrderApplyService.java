@@ -14,7 +14,6 @@ import com.leo.erp.master.project.domain.entity.Project;
 import com.leo.erp.master.project.repository.ProjectRepository;
 import com.leo.erp.sales.order.domain.entity.SalesOrder;
 import com.leo.erp.sales.order.domain.entity.SalesOrderItem;
-import com.leo.erp.sales.order.domain.entity.SalesModes;
 import com.leo.erp.sales.order.web.dto.SalesOrderItemRequest;
 import com.leo.erp.sales.order.web.dto.SalesOrderRequest;
 import com.leo.erp.security.permission.WorkflowTransitionGuard;
@@ -110,7 +109,6 @@ public class SalesOrderApplyService {
                 request.projectName()
         );
         Project project = requireProjectSnapshot(request.projectId(), request.projectName(), customer);
-        String salesMode = SalesModes.normalizeRequired(request.salesMode());
         String nextStatus = BusinessStatusValidator.normalizeWithDefault(
                 request.status(),
                 entity.getStatus() != null ? entity.getStatus() : StatusConstants.DRAFT,
@@ -125,7 +123,7 @@ public class SalesOrderApplyService {
                 StatusConstants.DELIVERY_VERIFICATION,
                 StatusConstants.SALES_COMPLETED
         );
-        applyHeader(entity, request, nextStatus, salesMode, customer, project);
+        applyHeader(entity, request, nextStatus, customer, project);
         applyItems(entity, request, nextIdSupplier);
     }
 
@@ -166,11 +164,9 @@ public class SalesOrderApplyService {
     private void applyHeader(SalesOrder entity,
                              SalesOrderRequest request,
                              String nextStatus,
-                             String salesMode,
                              Customer customer,
                              Project project) {
         entity.setOrderNo(request.orderNo());
-        entity.setSalesMode(salesMode);
         entity.setPurchaseInboundNo(request.purchaseInboundNo());
         entity.setPurchaseOrderNo(request.purchaseOrderNo());
         entity.setCustomerName(customer == null ? request.customerName() : trimToNull(customer.getCustomerName()));
@@ -193,17 +189,8 @@ public class SalesOrderApplyService {
         BigDecimal totalWeight = BigDecimal.ZERO;
         BigDecimal totalAmount = BigDecimal.ZERO;
         List<SalesOrderItem> managedItems = entity.getItems();
-        Set<Long> existingPurchaseOrderSourceItemIds = managedItems.stream()
-                .map(SalesOrderItem::getSourcePurchaseOrderItemId)
-                .filter(java.util.Objects::nonNull)
-                .collect(Collectors.toUnmodifiableSet());
-        SalesOrderSourceContext sourceContext = sourceAllocationService.prepareContext(
-                request,
-                entity.getId(),
-                existingPurchaseOrderSourceItemIds
-        );
+        SalesOrderSourceContext sourceContext = sourceAllocationService.prepareContext(request, entity.getId());
         purchaseAllocationService.releaseSalesOrderItems(entity);
-        sourceContext = weightResolver.withPurchaseOrderRemainingWeights(sourceContext);
         List<SalesOrderItem> items = ManagedEntityItemSupport.syncById(
                 new ArrayList<>(managedItems),
                 request.items(),
@@ -239,19 +226,14 @@ public class SalesOrderApplyService {
                                  int lineNo,
                                  SalesOrderSourceContext sourceContext) {
         var sourceInboundItem = sourceAllocationService.resolveSourceInbound(source, sourceContext);
-        var sourcePurchaseOrderItem = sourceAllocationService.resolveSourcePurchaseOrder(source, sourceContext);
-        Long sourceMaterialId = sourceInboundItem != null
-                ? sourceInboundItem.materialId()
-                : sourcePurchaseOrderItem == null ? null : sourcePurchaseOrderItem.materialId();
-        Long sourceWarehouseId = sourceInboundItem != null
-                ? sourceInboundItem.warehouseId()
-                : sourcePurchaseOrderItem == null ? null : sourcePurchaseOrderItem.warehouseId();
+        Long sourceMaterialId = sourceInboundItem == null ? null : sourceInboundItem.materialId();
+        Long sourceWarehouseId = sourceInboundItem == null ? null : sourceInboundItem.warehouseId();
         TradeMaterialSnapshot material = tradeItemMaterialSupport.resolveMaterial(
                 source.materialId() == null ? sourceMaterialId : source.materialId(),
                 source.materialCode(),
                 lineNo
         );
-        sourceAllocationService.validateLine(source, lineNo, entity.getSalesMode(), sourceContext);
+        sourceAllocationService.validateLine(source, lineNo, sourceContext);
         BigDecimal pieceWeightTon = weightResolver.resolvePieceWeightTon(source, sourceContext);
         BigDecimal weightTon = weightResolver.resolveWeightTon(source, pieceWeightTon, sourceContext);
         Long effectiveWarehouseId = sourceWarehouseId == null ? source.warehouseId() : sourceWarehouseId;
@@ -267,7 +249,7 @@ public class SalesOrderApplyService {
                 pieceWeightTon
         );
         item.setMaterialId(sourceMaterialId == null ? material.materialId() : sourceMaterialId);
-        applyPurchaseSettlementCompany(item, sourceInboundItem, sourcePurchaseOrderItem);
+        applyPurchaseSettlementCompany(item, sourceInboundItem);
         BigDecimal amount = TradeItemCalculator.calculateAmount(weightTon, source.unitPrice());
         item.setAmount(amount);
         sourceAllocationService.recordAllocation(source, weightTon, sourceContext);
@@ -423,17 +405,11 @@ public class SalesOrderApplyService {
 
     private void applyPurchaseSettlementCompany(
             SalesOrderItem item,
-            com.leo.erp.allocation.appservice.PurchaseItemQueryAppService.SourceInboundItemRecord sourceInboundItem,
-            com.leo.erp.allocation.appservice.PurchaseItemQueryAppService.SourcePurchaseOrderItemRecord sourcePurchaseOrderItem
+            com.leo.erp.allocation.appservice.PurchaseItemQueryAppService.SourceInboundItemRecord sourceInboundItem
     ) {
         if (sourceInboundItem != null) {
             item.setSettlementCompanyId(sourceInboundItem.settlementCompanyId());
             item.setSettlementCompanyName(sourceInboundItem.settlementCompanyName());
-            return;
-        }
-        if (sourcePurchaseOrderItem != null) {
-            item.setSettlementCompanyId(sourcePurchaseOrderItem.settlementCompanyId());
-            item.setSettlementCompanyName(sourcePurchaseOrderItem.settlementCompanyName());
             return;
         }
         item.setSettlementCompanyId(null);

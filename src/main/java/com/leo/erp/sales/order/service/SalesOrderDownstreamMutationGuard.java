@@ -3,7 +3,6 @@ package com.leo.erp.sales.order.service;
 import com.leo.erp.common.concurrency.SourceAllocationLockService;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
-import com.leo.erp.logistics.bill.repository.FreightBillRepository;
 import com.leo.erp.sales.order.domain.entity.SalesOrder;
 import com.leo.erp.sales.order.domain.entity.SalesOrderItem;
 import com.leo.erp.sales.order.web.dto.SalesOrderItemRequest;
@@ -20,16 +19,13 @@ import java.util.Objects;
 public class SalesOrderDownstreamMutationGuard {
 
     private final SalesOutboundRepository salesOutboundRepository;
-    private final FreightBillRepository freightBillRepository;
     private final SourceAllocationLockService sourceAllocationLockService;
 
     public SalesOrderDownstreamMutationGuard(
             SalesOutboundRepository salesOutboundRepository,
-            FreightBillRepository freightBillRepository,
             SourceAllocationLockService sourceAllocationLockService
     ) {
         this.salesOutboundRepository = salesOutboundRepository;
-        this.freightBillRepository = freightBillRepository;
         this.sourceAllocationLockService = sourceAllocationLockService;
     }
 
@@ -39,14 +35,6 @@ public class SalesOrderDownstreamMutationGuard {
             return;
         }
         sourceAllocationLockService.lockTradeItemSources(List.of(), List.of(), itemIds);
-        if (order.getId() != null && !freightBillRepository
-                .findOccupiedSourceSalesOrderIds(List.of(order.getId()), null)
-                .isEmpty()) {
-            throw new BusinessException(
-                    ErrorCode.BUSINESS_ERROR,
-                    "销售订单已存在物流单，不能" + action + "，请先删除相关物流单"
-            );
-        }
         if (!salesOutboundRepository
                 .findAllBySourceSalesOrderItemIdsExcludingCurrentOutbound(itemIds, null)
                 .isEmpty()) {

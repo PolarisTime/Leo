@@ -110,7 +110,6 @@ public class FreightStatementSourceService {
             item.setSourceNo(sourceBill.getBillNo());
             item.setSourceFreightBillId(sourceBill.getId());
             item.setSourceFreightBillItemId(sourceBillItem.getId());
-            item.setSourceSalesOutboundItemId(sourceBillItem.getSourceSalesOutboundItemId());
             item.setSettlementCompanyId(sourceBillItem.getSettlementCompanyId());
             item.setSettlementCompanyName(sourceBillItem.getSettlementCompanyName());
             item.setCustomerId(sourceBillItem.getCustomerId());

@@ -37,9 +37,6 @@ public class FreightStatementItem {
     @Column(name = "source_freight_bill_item_id")
     private Long sourceFreightBillItemId;
 
-    @Column(name = "source_sales_outbound_item_id")
-    private Long sourceSalesOutboundItemId;
-
     @Column(name = "settlement_company_id")
     private Long settlementCompanyId;
 
