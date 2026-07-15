@@ -158,6 +158,7 @@ if [[ ! "$FLYWAY_TARGET" =~ ^[1-9][0-9]*$ ]]; then
   echo "FLYWAY_TARGET must be a positive integer: $FLYWAY_TARGET" >&2
   exit 1
 fi
+bash "$LEO_DIR/scripts/deploy/verify-flyway-target.sh" "$LEO_DIR" "$FLYWAY_TARGET"
 LEO_VERSION="$(read_maven_version)"
 
 if [[ "$CONFIRM" != "true" ]]; then

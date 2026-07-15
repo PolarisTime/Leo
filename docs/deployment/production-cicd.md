@@ -30,7 +30,7 @@
 
 仓库必须配置 `SEMANTIC_RELEASE_TOKEN` secret。该 token 需要具备向 `PolarisTime/Leo` 推送 release commit/tag 并创建 GitHub Release 的权限；不要只依赖默认 `GITHUB_TOKEN`，否则由 workflow 创建的 tag 不会继续触发部署 workflow。
 
-仓库级 Variable `PROD_FLYWAY_TARGET` 必须配置为当前生产允许迁移到的最高正整数版本。tag 自动发布使用该值；手工 `workflow_dispatch` 使用显式 `flyway_target` 输入。构建期 `flyway:migrate/validate`、local/SSH 部署前校验和生产 `SPRING_FLYWAY_TARGET` 必须保持一致，缺失、`latest` 或不一致都会停止发布。
+仓库级 Variable `PROD_FLYWAY_TARGET` 必须配置为发布包内最高的 `V*.sql` 迁移版本。tag 自动发布使用该值；手工 `workflow_dispatch` 使用显式 `flyway_target` 输入。构建期会校验 target 与发布包最高迁移版本完全一致，随后 `flyway:migrate/validate`、local/SSH 部署前校验和生产 `SPRING_FLYWAY_TARGET` 也必须保持一致；缺失、`latest`、落后或超前都会停止发布，禁止应用代码先于数据库结构上线。
 
 默认生产目标是 `local`，要求本机已注册 GitHub self-hosted runner，并带有以下标签：
 

@@ -105,10 +105,7 @@ jobs:
         run: |
           set -euo pipefail
           : "${FLYWAY_TARGET:?Missing production Flyway target}"
-          if [[ ! "$FLYWAY_TARGET" =~ ^[1-9][0-9]*$ ]]; then
-            echo "Production Flyway target must be a positive integer version: $FLYWAY_TARGET" >&2
-            exit 1
-          fi
+          bash scripts/deploy/verify-flyway-target.sh . "$FLYWAY_TARGET"
 
       - name: Verify Flyway migrations
         run: |

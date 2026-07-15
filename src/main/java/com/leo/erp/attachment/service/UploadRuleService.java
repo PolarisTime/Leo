@@ -18,6 +18,10 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.Objects;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Service
 public class UploadRuleService implements PageUploadRuleQueryService {
@@ -46,8 +50,17 @@ public class UploadRuleService implements PageUploadRuleQueryService {
     @Transactional(readOnly = true)
     @Override
     public List<PageUploadRuleSummary> listPageUploadRules() {
+        Map<String, UploadRule> persistedRules = repository.findAllByDeletedFlagFalseOrderByIdAsc().stream()
+                .filter(rule -> moduleCatalog.containsModule(rule.getModuleKey()))
+                .collect(Collectors.toMap(
+                        rule -> moduleCatalog.normalizeModuleKey(rule.getModuleKey()),
+                        Function.identity(),
+                        (existing, duplicate) -> existing
+                ));
         return moduleCatalog.orderedModuleKeys().stream()
-                .map(this::getPageUploadRuleSummary)
+                .map(persistedRules::get)
+                .filter(Objects::nonNull)
+                .map(this::toPageUploadRuleSummary)
                 .toList();
     }
 
@@ -88,8 +101,7 @@ public class UploadRuleService implements PageUploadRuleQueryService {
         return filenameResolver.buildFileName(rule.getRenamePattern(), originalFilename, contentType, LocalDateTime.now());
     }
 
-    private PageUploadRuleSummary getPageUploadRuleSummary(String moduleKey) {
-        UploadRule rule = resolveRuleView(moduleKey);
+    private PageUploadRuleSummary toPageUploadRuleSummary(UploadRule rule) {
         String normalizedModuleKey = normalizeModuleKey(rule.getModuleKey());
         return new PageUploadRuleSummary(
                 rule.getId(),
