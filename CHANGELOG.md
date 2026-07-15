@@ -1,3 +1,10 @@
+## [4.0.1](https://github.com/PolarisTime/Leo/compare/v4.0.0...v4.0.1) (2026-07-15)
+
+
+### Bug Fixes
+
+* **system:** 修复系统参数加载并强化迁移门禁 ([24a08e3](https://github.com/PolarisTime/Leo/commit/24a08e3481710f22465f8fbc782764ecbf9145ff))
+
 # [4.0.0](https://github.com/PolarisTime/Leo/compare/v3.1.2...v4.0.0) (2026-07-15)
 
 
