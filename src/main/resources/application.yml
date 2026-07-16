@@ -172,6 +172,12 @@ leo:
   setup:
     # 首次初始化写接口凭证，必须是 32 字节 Base64URL；初始化完成后可从运行环境移除
     bootstrap-token: ${LEO_SETUP_BOOTSTRAP_TOKEN:}
+  observability:
+    operation-log:
+      # 热数据保留 12 个月；按完整月分区清理，实际窗口最多不足 13 个月
+      retention-months: ${LEO_OPERATION_LOG_RETENTION_MONTHS:12}
+      # 从当前月开始至少保持 12 个连续可写月分区
+      partition-lookahead-months: ${LEO_OPERATION_LOG_PARTITION_LOOKAHEAD_MONTHS:12}
   # 受信代理 IP/CIDR 列表（逗号分隔）。只有来自这些地址的请求才会信任 X-Forwarded-For 头。
   # 部署在 nginx / CDN 后面时，填入代理的内网地址。
   # 示例: "127.0.0.1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"；默认不信任任何代理。

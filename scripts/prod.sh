@@ -17,6 +17,8 @@ FRONTEND_PORT="${FRONTEND_PORT:-3100}"
 LOG_DIR="$WORKSPACE_DIR/.local/logs/$RUNTIME_ENV"
 BACKEND_LOG="$LOG_DIR/backend.log"
 FRONTEND_LOG="$LOG_DIR/frontend.log"
+BACKEND_PID_FILE="$LOG_DIR/backend.pid"
+FRONTEND_PID_FILE="$LOG_DIR/frontend.pid"
 
 mkdir -p "$LOG_DIR"
 
@@ -30,22 +32,22 @@ find_pid() {
   ss -ltnpH "( sport = :$port )" 2>/dev/null | sed -n 's/.*pid=\([0-9]\+\).*/\1/p' | head -1
 }
 
-wait_for_port() {
+wait_for_http() {
   local name="$1"
-  local port="$2"
+  local url="$2"
   local log_file="$3"
   local timeout="$4"
 
   for i in $(seq 1 "$timeout"); do
     sleep 1
-    if [[ -n "$(find_pid "$port")" ]]; then
-      ok "$name 就绪 :$port"
-      return 0
-    fi
-    if [[ -f "$log_file" ]] && grep -qiE "BUILD FAILURE|APPLICATION FAILED TO START|error when starting dev server|failed to load config" "$log_file"; then
+    if [[ -f "$log_file" ]] && grep -qiE "BUILD FAILURE|APPLICATION FAILED TO START|Application run failed|Process terminated with exit code|error when starting dev server|failed to load config" "$log_file"; then
       fail "$name 启动失败，日志: $log_file"
       tail -40 "$log_file" 2>/dev/null || true
       return 1
+    fi
+    if curl -fsS --max-time 2 "$url" > /dev/null 2>&1; then
+      ok "$name 就绪 $url"
+      return 0
     fi
   done
 
@@ -71,27 +73,54 @@ do_status() {
   status_one "前端端口(prod)" "$FRONTEND_PORT"
 }
 
-stop_port() {
+read_managed_pid() {
+  local pid_file="$1"
+  local pid
+  [[ -f "$pid_file" ]] || return 1
+  pid="$(<"$pid_file")"
+  [[ "$pid" =~ ^[0-9]+$ ]] || return 1
+  kill -0 "$pid" 2>/dev/null || return 1
+  echo "$pid"
+}
+
+stop_process() {
   local name="$1"
   local port="$2"
+  local pid_file="$3"
   local pid
-  pid="$(find_pid "$port")"
+  pid="$(read_managed_pid "$pid_file" || true)"
   if [[ -z "$pid" ]]; then
+    pid="$(find_pid "$port")"
+  fi
+  if [[ -z "$pid" ]]; then
+    rm -f "$pid_file"
     warn "$name 未运行"
     return 0
   fi
 
-  kill "$pid" 2>/dev/null || true
-  sleep 1
-  if kill -0 "$pid" 2>/dev/null; then
-    kill -9 "$pid" 2>/dev/null || true
+  local pgid
+  pgid="$(ps -o pgid= -p "$pid" 2>/dev/null | tr -d ' ')"
+  if [[ "$pgid" =~ ^[0-9]+$ ]]; then
+    kill -- "-$pgid" 2>/dev/null || true
+    for _ in $(seq 1 10); do
+      if ! kill -0 -- "-$pgid" 2>/dev/null; then
+        rm -f "$pid_file"
+        ok "已停止 $name (PGID=$pgid)"
+        return 0
+      fi
+      sleep 1
+    done
+    kill -9 -- "-$pgid" 2>/dev/null || true
+  else
+    kill "$pid" 2>/dev/null || true
   fi
-  ok "已停止 $name (PID=$pid)"
+  rm -f "$pid_file"
+  ok "已强制停止 $name (PID=$pid)"
 }
 
 do_stop() {
-  stop_port "前端(prod)" "$FRONTEND_PORT"
-  stop_port "后端(prod)" "$BACKEND_PORT"
+  stop_process "前端(prod)" "$FRONTEND_PORT" "$FRONTEND_PID_FILE"
+  stop_process "后端(prod)" "$BACKEND_PORT" "$BACKEND_PID_FILE"
 }
 
 do_check() {
@@ -107,8 +136,12 @@ start_backend() {
   fi
 
   echo "[prod] 启动后端 ..."
-  setsid -f bash "$SCRIPT_DIR/backend/start-prod.sh" > "$BACKEND_LOG" 2>&1 < /dev/null
-  wait_for_port "后端(prod)" "$BACKEND_PORT" "$BACKEND_LOG" 180
+  setsid bash "$SCRIPT_DIR/backend/start-prod.sh" > "$BACKEND_LOG" 2>&1 < /dev/null &
+  echo "$!" > "$BACKEND_PID_FILE"
+  if ! wait_for_http "后端(prod)" "http://127.0.0.1:$BACKEND_PORT/api/health" "$BACKEND_LOG" 180; then
+    stop_process "后端(prod)" "$BACKEND_PORT" "$BACKEND_PID_FILE"
+    return 1
+  fi
 }
 
 start_frontend() {
@@ -120,8 +153,12 @@ start_frontend() {
   fi
 
   echo "[prod] 启动前端生产预览 ..."
-  setsid -f bash "$ARIES_DIR/scripts/frontend/start-prod.sh" > "$FRONTEND_LOG" 2>&1 < /dev/null
-  wait_for_port "前端(prod)" "$FRONTEND_PORT" "$FRONTEND_LOG" 120
+  setsid bash "$ARIES_DIR/scripts/frontend/start-prod.sh" > "$FRONTEND_LOG" 2>&1 < /dev/null &
+  echo "$!" > "$FRONTEND_PID_FILE"
+  if ! wait_for_http "前端(prod)" "http://127.0.0.1:$FRONTEND_PORT" "$FRONTEND_LOG" 120; then
+    stop_process "前端(prod)" "$FRONTEND_PORT" "$FRONTEND_PID_FILE"
+    return 1
+  fi
 }
 
 do_start() {

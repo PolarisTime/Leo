@@ -1,7 +1,6 @@
 package com.leo.erp.system.operationlog.support;
 
 import lombok.extern.slf4j.Slf4j;
-import com.leo.erp.common.api.ApiResponse;
 import com.leo.erp.system.operationlog.service.OperationLogCommand;
 import com.leo.erp.system.operationlog.service.OperationLogService;
 import jakarta.servlet.http.HttpServletRequest;
@@ -19,15 +18,17 @@ public class OperationLogCommandRecorder {
         this.resultCollector = resultCollector;
     }
 
-    public void record(HttpServletRequest request, OperationLogMetadata metadata,
-                       ApiResponse<?> apiResponse, Exception ex, int responseStatus) {
+    public void record(HttpServletRequest request,
+                       OperationLogMetadata metadata,
+                       Exception ex,
+                       int responseStatus) {
         try {
-            String resultStatus = resultCollector.resolveResultStatus(apiResponse, responseStatus, ex);
+            String resultStatus = resultCollector.resolveResultStatus(responseStatus, ex);
             String moduleName = resultCollector.resolveModuleName(request, metadata);
-            String businessNo = resultCollector.resolveBusinessNo(request, apiResponse, metadata);
-            Long recordId = resultCollector.resolveRecordId(request, apiResponse, metadata);
-            String moduleKey = resultCollector.resolveModuleKey(request, apiResponse, metadata);
-            String remark = resultCollector.resolveRemark(apiResponse, ex);
+            String businessNo = resultCollector.resolveBusinessNo(request, metadata);
+            Long recordId = resultCollector.resolveRecordId(request, metadata);
+            String moduleKey = resultCollector.resolveModuleKey(request, metadata);
+            String remark = resultCollector.resolveRemark(ex);
             operationLogService.record(new OperationLogCommand(
                     moduleName,
                     metadata.actionType(),

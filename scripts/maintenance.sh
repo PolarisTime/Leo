@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Leo ERP 数据库只读诊断脚本
-# 用法: maintenance.sh {stats|activity|tables|indexes|queries|all}
+# 用法: maintenance.sh {stats|activity|tables|indexes|queries|operation-log-partitions|all}
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -113,20 +113,53 @@ do_queries() {
     "
 }
 
+do_operation_log_partitions() {
+    local retention_months="${LEO_OPERATION_LOG_RETENTION_MONTHS:-12}"
+    if [[ ! "$retention_months" =~ ^[1-9][0-9]*$ ]]; then
+        echo "LEO_OPERATION_LOG_RETENTION_MONTHS 必须是正整数" >&2
+        return 1
+    fi
+
+    echo "=== 操作日志分区保留状态 ==="
+    psql_cmd "
+        WITH policy AS (
+            SELECT date_trunc('month', CURRENT_DATE)
+                       - make_interval(months => $retention_months) AS cutoff
+        )
+        SELECT
+            $retention_months AS retention_months,
+            cutoff::date AS complete_partition_cutoff,
+            (SELECT count(*) FROM public.sys_operation_log_default) AS default_partition_rows,
+            (
+                SELECT count(*)
+                FROM public.sys_operation_log
+                WHERE operation_time < cutoff
+            ) AS expired_active_rows,
+            (
+                SELECT count(*)
+                FROM pg_inherits
+                WHERE inhparent = 'public.sys_operation_log'::regclass
+            ) AS attached_partitions
+        FROM policy;
+    "
+}
+
 case "${1:-}" in
     stats)    do_stats ;;
     activity) do_activity ;;
     tables)   do_tables ;;
     indexes)  do_indexes ;;
     queries)  do_queries ;;
-    all)      do_stats; echo; do_activity; echo; do_tables; echo; do_indexes; echo; do_queries ;;
+    operation-log-partitions) do_operation_log_partitions ;;
+    all)      do_stats; echo; do_activity; echo; do_tables; echo; do_indexes; echo; do_queries; echo; do_operation_log_partitions ;;
     *)
-        echo "用法: maintenance.sh {stats|activity|tables|indexes|queries|all}"
+        echo "用法: maintenance.sh {stats|activity|tables|indexes|queries|operation-log-partitions|all}"
         echo "  stats     基础状态"
         echo "  activity  会话/锁/长事务"
         echo "  tables    表健康"
         echo "  indexes   索引健康"
         echo "  queries   慢 SQL 摘要（可选 pg_stat_statements）"
+        echo "  operation-log-partitions  操作日志保留期与分区状态"
         echo "  all       查看全部只读诊断"
         exit 1 ;;
 esac

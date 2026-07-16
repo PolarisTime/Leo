@@ -1,6 +1,5 @@
 package com.leo.erp.system.operationlog.support;
 
-import com.leo.erp.common.api.ApiResponse;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.stereotype.Component;
@@ -13,14 +12,11 @@ public class OperationLogInterceptor implements HandlerInterceptor {
     static final String METADATA_ATTRIBUTE = OperationLogInterceptor.class.getName() + ".metadata";
 
     private final OperationLogMetadataResolver metadataResolver;
-    private final OperationLogResultCollector resultCollector;
     private final OperationLogCommandRecorder commandRecorder;
 
     public OperationLogInterceptor(OperationLogMetadataResolver metadataResolver,
-                                   OperationLogResultCollector resultCollector,
                                    OperationLogCommandRecorder commandRecorder) {
         this.metadataResolver = metadataResolver;
-        this.resultCollector = resultCollector;
         this.commandRecorder = commandRecorder;
     }
 
@@ -46,7 +42,6 @@ public class OperationLogInterceptor implements HandlerInterceptor {
             return;
         }
 
-        ApiResponse<?> apiResponse = resultCollector.extractApiResponse(request);
-        commandRecorder.record(request, metadata, apiResponse, ex, response.getStatus());
+        commandRecorder.record(request, metadata, ex, response.getStatus());
     }
 }

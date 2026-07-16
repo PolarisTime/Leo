@@ -11,7 +11,7 @@ import com.leo.erp.statement.freight.service.FreightStatementService;
 import com.leo.erp.statement.freight.web.dto.FreightStatementCandidateResponse;
 import com.leo.erp.statement.freight.web.dto.FreightStatementRequest;
 import com.leo.erp.statement.freight.web.dto.FreightStatementResponse;
-import com.leo.erp.system.operationlog.support.OperationLoggable;
+import com.leo.erp.system.operationlog.support.DomainEventAudited;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -112,7 +112,7 @@ public class FreightStatementController {
     @Operation(summary = "创建物流对账单")
     @PostMapping
     @RequiresPermission(resource = "freight-statement", action = "create")
-    @OperationLoggable(moduleName = "物流对账单", actionType = "新增", businessNoFields = {"statementNo"})
+    @DomainEventAudited
     public ApiResponse<FreightStatementResponse> create(@Valid @RequestBody FreightStatementRequest request) {
         return ApiResponse.success(
                 "创建成功",
@@ -123,6 +123,7 @@ public class FreightStatementController {
     @Operation(summary = "保存并审核物流对账单")
     @PostMapping("/save-and-audit")
     @RequiresPermission(resource = "freight-statement", action = "create")
+    @DomainEventAudited
     public ApiResponse<FreightStatementResponse> createAndAudit(@Valid @RequestBody FreightStatementRequest request) {
         return ApiResponse.success("保存并审核成功", freightStatementService.responseCreateAndAudit(request));
     }
@@ -130,7 +131,7 @@ public class FreightStatementController {
     @Operation(summary = "更新物流对账单")
     @PutMapping("/{id}")
     @RequiresPermission(resource = "freight-statement", action = "update")
-    @OperationLoggable(moduleName = "物流对账单", actionType = "编辑", businessNoFields = {"statementNo"})
+    @DomainEventAudited
     public ApiResponse<FreightStatementResponse> update(@PathVariable Long id, @Valid @RequestBody FreightStatementRequest request) {
         return ApiResponse.success(
                 "更新成功",
@@ -141,6 +142,7 @@ public class FreightStatementController {
     @Operation(summary = "保存并审核物流对账单")
     @PutMapping("/{id}/save-and-audit")
     @RequiresPermission(resource = "freight-statement", action = "update")
+    @DomainEventAudited
     public ApiResponse<FreightStatementResponse> updateAndAudit(
             @PathVariable Long id,
             @Valid @RequestBody FreightStatementRequest request) {
@@ -150,6 +152,7 @@ public class FreightStatementController {
     @Operation(summary = "更新物流对账单状态")
     @PatchMapping("/{id}/status")
     @RequiresPermission(resource = "freight-statement", action = "audit")
+    @DomainEventAudited
     public ApiResponse<FreightStatementResponse> updateStatus(@PathVariable Long id, @Valid @RequestBody StatusUpdateRequest request) {
         return ApiResponse.success("状态更新成功", freightStatementService.responseUpdateStatus(id, request.status()));
     }
@@ -157,7 +160,7 @@ public class FreightStatementController {
     @Operation(summary = "删除物流对账单")
     @DeleteMapping("/{id}")
     @RequiresPermission(resource = "freight-statement", action = "delete")
-    @OperationLoggable(moduleName = "物流对账单", actionType = "删除")
+    @DomainEventAudited
     public ApiResponse<Void> delete(@PathVariable Long id) {
         freightStatementService.delete(id);
         return ApiResponse.success("删除成功");

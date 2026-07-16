@@ -38,3 +38,29 @@ groups:
           severity: critical
         annotations:
           summary: Leo 最早未完成业务事件已等待超过 15 分钟
+
+  - name: leo-operation-log-partitions
+    rules:
+      - alert: LeoOperationLogDefaultPartitionUsed
+        expr: leo_operation_log_default_partition_rows > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Leo 操作日志已有数据落入默认分区
+
+      - alert: LeoOperationLogPartitionsRunningOut
+        expr: leo_operation_log_partition_months_available < 6
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: Leo 操作日志未来连续可用月分区不足 6 个月
+
+      - alert: LeoOperationLogRetentionExceeded
+        expr: leo_operation_log_expired_rows > 0
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary: Leo 存在超过 12 个月保留期的活动操作日志

@@ -20,6 +20,7 @@ import com.leo.erp.statement.freight.web.dto.FreightStatementRequest;
 import com.leo.erp.statement.freight.web.dto.FreightStatementResponse;
 import com.leo.erp.statement.service.StatementSettlementSyncService;
 import com.leo.erp.statement.service.StatementSettlementMutationGuard;
+import com.leo.erp.system.operationlog.event.BusinessOperationEventPublisher;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.jpa.domain.Specification;
@@ -45,6 +46,7 @@ public class FreightStatementService extends AbstractCrudService<FreightStatemen
     private final SourceAllocationLockService sourceAllocationLockService;
     private final StatementSettlementMutationGuard settlementMutationGuard;
     private final WorkflowTransitionGuard workflowTransitionGuard;
+    private BusinessOperationEventPublisher businessOperationEventPublisher;
 
     @Autowired
     public FreightStatementService(FreightStatementRepository repository,
@@ -69,6 +71,11 @@ public class FreightStatementService extends AbstractCrudService<FreightStatemen
         this.sourceAllocationLockService = sourceAllocationLockService;
         this.settlementMutationGuard = settlementMutationGuard;
         this.workflowTransitionGuard = workflowTransitionGuard;
+    }
+
+    @Autowired(required = false)
+    void setBusinessOperationEventPublisher(BusinessOperationEventPublisher publisher) {
+        this.businessOperationEventPublisher = publisher;
     }
 
     @Transactional(readOnly = true)
@@ -320,6 +327,24 @@ public class FreightStatementService extends AbstractCrudService<FreightStatemen
     }
 
     @Override
+    @Transactional
+    public FreightStatementView updateStatus(Long id, String status) {
+        FreightStatement statement = requireEntity(id);
+        String currentStatus = statement.getStatus();
+        FreightStatementView response = super.updateStatus(id, status);
+        if (!Objects.equals(currentStatus, response.status())) {
+            String actionType = StatusConstants.DRAFT.equals(response.status()) ? "反审核" : "审核";
+            publishEvent(
+                    statement,
+                    "FREIGHT_STATEMENT_STATUS_CHANGED",
+                    actionType,
+                    "物流对账单状态 " + currentStatus + " -> " + response.status()
+            );
+        }
+        return response;
+    }
+
+    @Override
     protected void beforeDelete(FreightStatement entity) {
         lockSourceFreightBills(entity, null);
         settlementMutationGuard.assertNoSettledAllocations(
@@ -327,6 +352,11 @@ public class FreightStatementService extends AbstractCrudService<FreightStatemen
                 entity.getId(),
                 "删除"
         );
+    }
+
+    @Override
+    protected void afterDelete(FreightStatement entity) {
+        publishEvent(entity, "FREIGHT_STATEMENT_DELETED", "删除", "删除物流对账单 " + entity.getStatementNo());
     }
 
     private boolean freightFinancialLinkageChanged(FreightStatement entity, FreightStatementCommand command) {
@@ -381,6 +411,36 @@ public class FreightStatementService extends AbstractCrudService<FreightStatemen
     protected FreightStatement saveEntity(FreightStatement entity) {
         FreightStatement saved = repository.save(entity);
         return statementSettlementSyncService.syncFreightStatement(saved);
+    }
+
+    @Override
+    protected FreightStatement saveCreatedEntity(FreightStatement entity, FreightStatementCommand command) {
+        FreightStatement saved = saveEntity(entity);
+        publishEvent(saved, "FREIGHT_STATEMENT_CREATED", "新增", "新增物流对账单 " + saved.getStatementNo());
+        return saved;
+    }
+
+    @Override
+    protected FreightStatement saveUpdatedEntity(FreightStatement entity, FreightStatementCommand command) {
+        FreightStatement saved = saveEntity(entity);
+        publishEvent(saved, "FREIGHT_STATEMENT_UPDATED", "编辑", "编辑物流对账单 " + saved.getStatementNo());
+        return saved;
+    }
+
+    private void publishEvent(FreightStatement statement, String eventType, String actionType, String remark) {
+        if (businessOperationEventPublisher == null) {
+            return;
+        }
+        businessOperationEventPublisher.publish(
+                eventType,
+                "freight-statement",
+                "物流对账单",
+                actionType,
+                "FreightStatement",
+                statement.getId(),
+                statement.getStatementNo(),
+                remark
+        );
     }
 
     @Override

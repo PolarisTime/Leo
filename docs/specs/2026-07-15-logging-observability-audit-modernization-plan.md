@@ -174,7 +174,7 @@ aries 使用 Sentry React SDK 替换当前内存 logger 的远程采集职责。
 
 建议策略：
 
-- 当前热数据保留 6 至 12 个月，最终期限由合规要求确定；
+- 当前热数据保留期确定为 12 个月，仅在完整月分区全部到期后处理，因此实际窗口最多不足 13 个月；
 - 过期数据通过 detach/drop 分区处理，不执行全表大批量 `DELETE`；
 - 需要长期保存时，先导出并校验分区，再删除原分区；
 - 导出作业若仍由应用承担，使用 Spring Batch 管理作业状态、重试和断点；
@@ -408,19 +408,24 @@ Application Service 抛出异常
 - 增加 Prometheus Registry 与可靠事件积压指标 `leo_business_events_incomplete`、`leo_business_events_oldest_age_seconds`，生产管理端口仅绑定 `127.0.0.1:57218`；
 - 增加 Alloy、Loki、Tempo、Prometheus、Grafana 原生部署配置，Loki 仅将低基数日志级别设为 Label，Trace ID 保留为结构化字段并支持跳转 Tempo；
 - V81 将 `sys_operation_log` 切换为按 `operation_time` 月度分区的同名表，以身份表和触发器保证 `id`、`log_no`、`event_id` 跨分区唯一；旧表保留为 `sys_operation_log_unpartitioned` 供迁移核对；
-- 停止应用内 CSV/GZIP 操作日志归档调度及配置，旧归档服务类暂不删除且无调用方；后续文件删除需单独确认；
+- 停止应用内 CSV/GZIP 操作日志归档调度及配置，并删除无调用方的旧归档服务；
 - V82、V83 前滚退役已裁剪合同和供应商对账模块遗留的 FILE 打印模板，避免资源归档后启动同步器因文件缺失终止应用。
+- `OperationLogResponseBodyAdvice` 已删除，HTTP 命令审计不再读取响应体或通过 DTO 方法、字段反射推断业务号、记录 ID、模块键和结果状态；
+- 物流对账单新增、编辑、审核、反审核和删除已改为可靠业务事件，保存并审核同时记录保存事实与审核事实；
+- 增加操作日志默认分区行数、未来连续可用月分区数指标及 Prometheus 告警，当前默认分区为 0 行、未来连续可用分区为 12 个月；
+- 开发与生产测试启动脚本改为等待 HTTP 就绪：后端以 `/api/health` 成功响应为准，前端以首页可访问为准，并补充 Spring、Maven 和 Vite 启动失败关键字识别；脚本记录独立进程组 PID，停止或失败时清理完整进程组，避免 Maven、DevTools 或 Vite 残留进程重新占用端口。
+- 操作日志热数据保留期正式配置为 12 个月，新增过期活动行指标、Prometheus 告警和只读分区诊断命令；到期 detach/drop 继续使用明确分区名的增量 Flyway，不在应用中执行动态 DDL。
 
 已验证：
 
 - 开发库 Flyway V1 至 V83 全部校验成功，V81 迁移前旧表、分区表与身份表均为 138 行；121 个分区已创建，现有数据全部位于 `sys_operation_log_y2026m07`，全局身份字段无重复；
 - JaVers SQL Repository Bean 正常创建，`event_publication` 当前无未完成投递，开发健康接口 `/api/health` 持续返回 UP；
 - 后端使用 `maven.test.skip=true` 编译成功，生产 Flyway 目标门禁识别 V83，未生成或运行测试；
+- 开发启动脚本完成前后端重启验证，仅在后端健康接口返回成功、前端首页可访问后报告就绪；
 - 前端 TypeScript、Biome、ESLint 和生产构建通过；
 - Loki、Tempo、Prometheus 与 Grafana YAML 已通过结构化语法解析；当前主机未安装 Alloy、Loki、Tempo、Prometheus 和 Grafana 原生二进制，组件自身配置校验、安装和启动仍须通过生产部署审批执行。
 
 待部署与受控清理：
 
 - 由运维在生产主机安装并使用对应版本原生命令校验 Alloy、Loki、Tempo、Prometheus 和 Grafana 配置，再逐个启用服务；
-- 确认不再需要应用内归档回滚路径后，单独审批删除 `OperationLogArchiveService`；
-- 分区到期 detach、校验、脱机归档和 drop 属于运维生命周期动作，必须在保留期与回滚窗口获批后实施。
+- 分区到期 detach、校验、脱机归档和 drop 属于运维生命周期动作；保留期已确定为 12 个月，具体回滚窗口和每批明确分区仍须在对应 Flyway 执行前审批。

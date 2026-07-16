@@ -3,17 +3,13 @@ package com.leo.erp.system.operationlog.support;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.leo.erp.common.api.ApiResponse;
 import com.leo.erp.common.support.ClientIpResolver;
 import com.leo.erp.common.support.ModuleCatalog;
 import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.HandlerMapping;
 import org.springframework.web.util.ContentCachingRequestWrapper;
 
-import java.lang.reflect.Field;
-import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import java.util.StringJoiner;
@@ -35,41 +31,24 @@ public class OperationLogResultCollector {
         this.moduleCatalog = moduleCatalog;
     }
 
-    public ApiResponse<?> extractApiResponse(HttpServletRequest request) {
-        Object body = request.getAttribute(OperationLogResponseBodyAdvice.RESPONSE_BODY_ATTRIBUTE);
-        return body instanceof ApiResponse<?> apiResponse ? apiResponse : null;
-    }
-
-    public String resolveResultStatus(ApiResponse<?> apiResponse, HttpServletResponse response, Exception ex) {
-        return resolveResultStatus(apiResponse, response == null ? 0 : response.getStatus(), ex);
-    }
-
-    public String resolveResultStatus(ApiResponse<?> apiResponse, int responseStatus, Exception ex) {
-        if (apiResponse != null) {
-            return apiResponse.code() == 0 ? "成功" : "失败";
-        }
+    public String resolveResultStatus(int responseStatus, Exception ex) {
         if (ex != null || responseStatus >= 400) {
             return "失败";
         }
         return "成功";
     }
 
-    public String resolveBusinessNo(HttpServletRequest request, ApiResponse<?> apiResponse, OperationLogMetadata metadata) {
+    public String resolveBusinessNo(HttpServletRequest request, OperationLogMetadata metadata) {
         String fromAttribute = readStringAttribute(request, BUSINESS_NO_ATTRIBUTE);
         if (fromAttribute != null) {
             return fromAttribute;
         }
-        String fromResponse = joinValues(metadata.businessNoFields(), apiResponse == null ? null : apiResponse.data());
-        if (fromResponse != null) {
-            return fromResponse;
-        }
-
         String fromRequest = joinValues(metadata.businessNoFields(), parseRequestBody(request));
         if (fromRequest != null) {
             return fromRequest;
         }
 
-        String fromRecordId = resolveLogValue(request, apiResponse, metadata.recordIdField());
+        String fromRecordId = resolveLogValue(request, metadata.recordIdField());
         if (fromRecordId != null) {
             return fromRecordId;
         }
@@ -85,12 +64,12 @@ public class OperationLogResultCollector {
         return null;
     }
 
-    public Long resolveRecordId(HttpServletRequest request, ApiResponse<?> apiResponse, OperationLogMetadata metadata) {
+    public Long resolveRecordId(HttpServletRequest request, OperationLogMetadata metadata) {
         Long fromAttribute = readLongAttribute(request, RECORD_ID_ATTRIBUTE);
         if (fromAttribute != null) {
             return fromAttribute;
         }
-        String value = resolveLogValue(request, apiResponse, metadata.recordIdField());
+        String value = resolveLogValue(request, metadata.recordIdField());
         if (value == null) {
             return null;
         }
@@ -101,12 +80,12 @@ public class OperationLogResultCollector {
         }
     }
 
-    public String resolveModuleKey(HttpServletRequest request, ApiResponse<?> apiResponse, OperationLogMetadata metadata) {
+    public String resolveModuleKey(HttpServletRequest request, OperationLogMetadata metadata) {
         String fromAttribute = readStringAttribute(request, MODULE_KEY_ATTRIBUTE);
         if (fromAttribute != null) {
             return fromAttribute;
         }
-        return resolveLogValue(request, apiResponse, metadata.moduleKeyField());
+        return resolveLogValue(request, metadata.moduleKeyField());
     }
 
     public String resolveModuleName(HttpServletRequest request, OperationLogMetadata metadata) {
@@ -124,13 +103,9 @@ public class OperationLogResultCollector {
         return moduleCatalog == null ? moduleKey : moduleCatalog.resolveModuleName(moduleKey);
     }
 
-    private String resolveLogValue(HttpServletRequest request, ApiResponse<?> apiResponse, String field) {
+    private String resolveLogValue(HttpServletRequest request, String field) {
         if (field == null || field.isBlank()) {
             return null;
-        }
-        String fromResponse = readValue(apiResponse == null ? null : apiResponse.data(), field);
-        if (fromResponse != null) {
-            return fromResponse;
         }
         String fromRequest = readValue(parseRequestBody(request), field);
         if (fromRequest != null) {
@@ -162,10 +137,7 @@ public class OperationLogResultCollector {
         return value == null ? null : trimToNull(String.valueOf(value));
     }
 
-    public String resolveRemark(ApiResponse<?> apiResponse, Exception ex) {
-        if (apiResponse != null && apiResponse.message() != null && !apiResponse.message().isBlank()) {
-            return apiResponse.message();
-        }
+    public String resolveRemark(Exception ex) {
         return ex == null ? null : "请求处理失败";
     }
 
@@ -181,7 +153,7 @@ public class OperationLogResultCollector {
         return clientIpResolver.resolveClientIpOrUnknown(request);
     }
 
-    private Object parseRequestBody(HttpServletRequest request) {
+    private JsonNode parseRequestBody(HttpServletRequest request) {
         if (!(request instanceof ContentCachingRequestWrapper wrapper)) {
             return null;
         }
@@ -200,7 +172,7 @@ public class OperationLogResultCollector {
         }
     }
 
-    private String joinValues(String[] fields, Object source) {
+    private String joinValues(String[] fields, JsonNode source) {
         if (fields == null || fields.length == 0 || source == null) {
             return null;
         }
@@ -215,57 +187,16 @@ public class OperationLogResultCollector {
         return joined.isEmpty() ? null : joined;
     }
 
-    private String readValue(Object source, String field) {
+    private String readValue(JsonNode source, String field) {
         if (source == null || field == null || field.isBlank()) {
             return null;
         }
-        if (source instanceof JsonNode jsonNode) {
-            JsonNode value = jsonNode.get(field);
-            if (value == null || value.isNull()) {
-                return null;
-            }
-            String text = value.asText(null);
-            return text == null || text.isBlank() ? null : text.trim();
-        }
-        if (source instanceof Map<?, ?> map) {
-            Object value = map.get(field);
-            return value == null ? null : String.valueOf(value).trim();
-        }
-        Object value = invokeNoArgMethod(source, field);
-        if (value == null) {
-            value = invokeNoArgMethod(source, "get" + Character.toUpperCase(field.charAt(0)) + field.substring(1));
-        }
-        if (value == null) {
-            value = readField(source, field);
-        }
-        if (value == null) {
+        JsonNode value = source.get(field);
+        if (value == null || value.isNull()) {
             return null;
         }
-        String text = String.valueOf(value).trim();
-        return text.isEmpty() ? null : text;
-    }
-
-    private Object invokeNoArgMethod(Object source, String methodName) {
-        try {
-            Method method = source.getClass().getMethod(methodName);
-            return method.invoke(source);
-        } catch (ReflectiveOperationException ignored) {
-            return null;
-        }
-    }
-
-    private Object readField(Object source, String fieldName) {
-        Class<?> type = source.getClass();
-        while (type != Object.class) {
-            try {
-                Field field = type.getDeclaredField(fieldName);
-                field.setAccessible(true);
-                return field.get(source);
-            } catch (ReflectiveOperationException ignored) {
-                type = type.getSuperclass();
-            }
-        }
-        return null;
+        String text = value.asText(null);
+        return text == null || text.isBlank() ? null : text.trim();
     }
 
     private String trimToNull(String value) {
