@@ -14,7 +14,6 @@ import com.leo.erp.security.permission.ModulePermissionGuard;
 import com.leo.erp.security.permission.RateLimit;
 import com.leo.erp.security.permission.RequiresPermission;
 import com.leo.erp.security.support.SecurityPrincipal;
-import com.leo.erp.system.norule.service.SystemSwitchService;
 import com.leo.erp.system.operationlog.support.OperationLoggable;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
@@ -23,7 +22,6 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -48,27 +46,15 @@ public class AttachmentController {
     private final AttachmentWebService attachmentWebService;
     private final ModulePermissionGuard modulePermissionGuard;
     private final AttachmentRecordAccessService attachmentRecordAccessService;
-    private final SystemSwitchService systemSwitchService;
-
-    private static final String ROLE_ADMIN = "ROLE_ADMIN";
 
     public AttachmentController(AttachmentService attachmentService,
                                 AttachmentWebService attachmentWebService,
                                 ModulePermissionGuard modulePermissionGuard,
-                                AttachmentRecordAccessService attachmentRecordAccessService,
-                                SystemSwitchService systemSwitchService) {
+                                AttachmentRecordAccessService attachmentRecordAccessService) {
         this.attachmentService = attachmentService;
         this.attachmentWebService = attachmentWebService;
         this.modulePermissionGuard = modulePermissionGuard;
         this.attachmentRecordAccessService = attachmentRecordAccessService;
-        this.systemSwitchService = systemSwitchService;
-    }
-
-    private boolean isAdmin(SecurityPrincipal principal) {
-        if (principal == null) return false;
-        return principal.getAuthorities().stream()
-                .map(GrantedAuthority::getAuthority)
-                .anyMatch(ROLE_ADMIN::equals);
     }
 
     @PostMapping(value = "/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -119,9 +105,8 @@ public class AttachmentController {
                                                               @RequestParam(defaultValue = "false") boolean inline) {
         String normalizedModuleKey = modulePermissionGuard.requirePermission(principal, moduleKey, "read");
         attachmentRecordAccessService.assertAttachmentAccessible(principal, normalizedModuleKey, "read", id);
-        boolean watermark = systemSwitchService.shouldWatermarkAttachments() && !isAdmin(principal);
         AttachmentService.PresignedAttachmentUrl presignedUrl =
-                attachmentService.createPresignedAccessUrl(id, accessKey, inline, watermark, normalizedModuleKey);
+                attachmentService.createPresignedAccessUrl(id, accessKey, inline);
         return ApiResponse.success(new AttachmentAccessUrlResponse(
                 presignedUrl == null ? null : presignedUrl.url().toString(),
                 inline,
@@ -138,14 +123,12 @@ public class AttachmentController {
                                              @RequestParam String accessKey) {
         String normalizedModuleKey = modulePermissionGuard.requirePermission(principal, moduleKey, "read");
         attachmentRecordAccessService.assertAttachmentAccessible(principal, normalizedModuleKey, "read", id);
-        boolean watermark = systemSwitchService.shouldWatermarkAttachments() && !isAdmin(principal);
         AttachmentService.PresignedAttachmentUrl presignedUrl =
-                attachmentService.createPresignedAccessUrl(id, accessKey, false, watermark, normalizedModuleKey);
+                attachmentService.createPresignedAccessUrl(id, accessKey, false);
         if (presignedUrl != null) {
             return ResponseEntity.status(HttpStatus.FOUND).location(presignedUrl.url()).build();
         }
-        return buildFileResponse(attachmentService.loadDownloadResource(
-                id, accessKey, false, watermark, principal.getUsername()));
+        return buildFileResponse(attachmentService.loadDownloadResource(id, accessKey, false));
     }
 
     @GetMapping("/{id}/preview")
@@ -157,14 +140,12 @@ public class AttachmentController {
                                             @RequestParam String accessKey) {
         String normalizedModuleKey = modulePermissionGuard.requirePermission(principal, moduleKey, "read");
         attachmentRecordAccessService.assertAttachmentAccessible(principal, normalizedModuleKey, "read", id);
-        boolean watermark = systemSwitchService.shouldWatermarkAttachments() && !isAdmin(principal);
         AttachmentService.PresignedAttachmentUrl presignedUrl =
-                attachmentService.createPresignedAccessUrl(id, accessKey, true, watermark, normalizedModuleKey);
+                attachmentService.createPresignedAccessUrl(id, accessKey, true);
         if (presignedUrl != null) {
             return ResponseEntity.status(HttpStatus.FOUND).location(presignedUrl.url()).build();
         }
-        return buildFileResponse(attachmentService.loadDownloadResource(
-                id, accessKey, true, watermark, principal.getUsername()));
+        return buildFileResponse(attachmentService.loadDownloadResource(id, accessKey, true));
     }
 
     private ResponseEntity<Resource> buildFileResponse(AttachmentDownloadResource payload) {

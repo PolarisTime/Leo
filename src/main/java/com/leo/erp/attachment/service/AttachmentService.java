@@ -13,7 +13,6 @@ import com.leo.erp.system.oss.service.OssSettingService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.MediaType;
-import org.springframework.core.io.ByteArrayResource;
 import org.springframework.core.io.Resource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -44,8 +43,6 @@ public class AttachmentService {
     private static final Logger log = LoggerFactory.getLogger(AttachmentService.class);
     private static final String SOURCE_PAGE_UPLOAD = "PAGE_UPLOAD";
     private static final String SOURCE_CLIPBOARD = "CLIPBOARD_PASTE";
-    private static final String TEST_DIRECT_UPLOAD_TOKEN_SECRET =
-            "leo-direct-upload-test-secret-must-be-long-enough";
     private static final String SHA256_HEX_PATTERN = "^[0-9a-fA-F]{64}$";
     private static final String STORAGE_TYPE_LOCAL = "local";
     private static final String STORAGE_TYPE_S3 = "s3";
@@ -56,26 +53,9 @@ public class AttachmentService {
     private final AttachmentFilenameResolver filenameResolver;
     private final UploadRuleService uploadRuleService;
     private final AttachmentStorageResolver storageResolver;
-    private final ImageWatermarkService imageWatermarkService;
-    private final PdfWatermarkService pdfWatermarkService;
     private final AttachmentMetadataService metadataService;
     private final AttachmentDirectUploadTokenService directUploadTokenService;
     private final OssSettingService ossSettingService;
-
-    public AttachmentService(AttachmentFileRepository repository,
-                             SnowflakeIdGenerator idGenerator,
-                             AttachmentProperties properties,
-                             AttachmentFilenameResolver filenameResolver,
-                             UploadRuleService uploadRuleService,
-                             AttachmentStorageResolver storageResolver,
-                             ImageWatermarkService imageWatermarkService,
-                             PdfWatermarkService pdfWatermarkService) {
-        this(repository, idGenerator, properties, filenameResolver, uploadRuleService, storageResolver,
-                imageWatermarkService, pdfWatermarkService,
-                new AttachmentMetadataService(repository, filenameResolver),
-                new AttachmentDirectUploadTokenService(TEST_DIRECT_UPLOAD_TOKEN_SECRET),
-                null);
-    }
 
     @Autowired
     public AttachmentService(AttachmentFileRepository repository,
@@ -84,8 +64,6 @@ public class AttachmentService {
                              AttachmentFilenameResolver filenameResolver,
                              UploadRuleService uploadRuleService,
                              AttachmentStorageResolver storageResolver,
-                             ImageWatermarkService imageWatermarkService,
-                             PdfWatermarkService pdfWatermarkService,
                              AttachmentMetadataService metadataService,
                              AttachmentDirectUploadTokenService directUploadTokenService,
                              OssSettingService ossSettingService) {
@@ -95,25 +73,9 @@ public class AttachmentService {
         this.filenameResolver = filenameResolver;
         this.uploadRuleService = uploadRuleService;
         this.storageResolver = storageResolver;
-        this.imageWatermarkService = imageWatermarkService;
-        this.pdfWatermarkService = pdfWatermarkService;
         this.metadataService = metadataService;
         this.directUploadTokenService = directUploadTokenService;
         this.ossSettingService = ossSettingService;
-    }
-
-    public AttachmentService(AttachmentFileRepository repository,
-                             SnowflakeIdGenerator idGenerator,
-                             AttachmentProperties properties,
-                             AttachmentFilenameResolver filenameResolver,
-                             UploadRuleService uploadRuleService,
-                             AttachmentStorageResolver storageResolver,
-                             ImageWatermarkService imageWatermarkService,
-                             PdfWatermarkService pdfWatermarkService,
-                             AttachmentMetadataService metadataService,
-                             AttachmentDirectUploadTokenService directUploadTokenService) {
-        this(repository, idGenerator, properties, filenameResolver, uploadRuleService, storageResolver,
-                imageWatermarkService, pdfWatermarkService, metadataService, directUploadTokenService, null);
     }
 
     public AttachmentView upload(MultipartFile file, String sourceType) throws IOException {
@@ -321,29 +283,8 @@ public class AttachmentService {
 
     @Transactional(readOnly = true)
     public AttachmentDownloadResource loadDownloadResource(Long id, String accessKey, boolean inline) {
-        return loadDownloadResource(id, accessKey, inline, false, null);
-    }
-
-    @Transactional(readOnly = true)
-    public AttachmentDownloadResource loadDownloadResource(
-            Long id, String accessKey, boolean inline, boolean watermark, String username) {
         AttachmentDownloadPayload payload = inline ? loadForPreview(id, accessKey) : loadForDownload(id, accessKey);
         Resource resource = payload.resource();
-        if (watermark && username != null) {
-            byte[] watermarked;
-            try {
-                watermarked = switch (payload.previewType()) {
-                    case "image" -> imageWatermarkService.apply(resource.getInputStream(), username);
-                    case "pdf" -> pdfWatermarkService.apply(resource.getInputStream(), username);
-                    default -> null;
-                };
-            } catch (IOException e) {
-                throw new BusinessException(ErrorCode.INTERNAL_ERROR, "附件水印处理失败，请联系管理员");
-            }
-            if (watermarked != null) {
-                resource = new ByteArrayResource(watermarked);
-            }
-        }
         MediaType mediaType = (payload.contentType() == null || payload.contentType().isBlank())
                 ? MediaType.APPLICATION_OCTET_STREAM
                 : MediaType.parseMediaType(payload.contentType());
@@ -355,10 +296,7 @@ public class AttachmentService {
 
     @Transactional(readOnly = true)
     public PresignedAttachmentUrl createPresignedAccessUrl(
-            Long id, String accessKey, boolean inline, boolean watermark, String moduleKey) {
-        if (watermark) {
-            return null;
-        }
+            Long id, String accessKey, boolean inline) {
         AttachmentFile entity = getAttachment(id, accessKey);
         String previewType = detectPreviewType(entity);
         if (inline && "none".equals(previewType)) {

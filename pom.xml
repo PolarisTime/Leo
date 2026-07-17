@@ -263,7 +263,7 @@
             <scope>runtime</scope>
             <optional>true</optional>
         </dependency>
-        <!-- iText Community (AGPL) — PDF watermark -->
+        <!-- iText Community (AGPL) - PDF print rendering -->
         <dependency>
             <groupId>com.itextpdf</groupId>
             <artifactId>kernel</artifactId>

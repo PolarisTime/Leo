@@ -59,12 +59,6 @@ public class GeneralSettingQueryService {
             Map.entry("UI_SHOW_SNOWFLAKE_ID", 200),
             Map.entry("SYS_LOGIN_CAPTCHA", 205),
             Map.entry(SystemSwitchService.USE_SNOWFLAKE_ID_AS_BUSINESS_NO_SWITCH, 210),
-            Map.entry(SystemSwitchService.UI_WATERMARK_ENABLED_SWITCH, 220),
-            Map.entry("SYS_WATERMARK_CONTENT", 221),
-            Map.entry("SYS_WATERMARK_FONT_SIZE", 222),
-            Map.entry("SYS_WATERMARK_ROTATE", 223),
-            Map.entry("SYS_WATERMARK_COLOR", 224),
-            Map.entry("SYS_WATERMARK_DENSITY", 225),
             Map.entry("PAGE_UPLOAD", 900)
     );
 

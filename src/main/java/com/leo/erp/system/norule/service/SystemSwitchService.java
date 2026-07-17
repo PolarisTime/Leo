@@ -36,8 +36,6 @@ public class SystemSwitchService implements CrudRuntimeSettings, PageQuerySettin
     public static final String CUSTOMER_STATEMENT_RECEIPT_ZERO_FROM_SALES_ORDER_SWITCH = "SYS_CUSTOMER_STATEMENT_RECEIPT_ZERO_FROM_SALES_ORDER";
     public static final String LOGIN_CAPTCHA_SWITCH = "SYS_LOGIN_CAPTCHA";
     public static final String USE_SNOWFLAKE_ID_AS_BUSINESS_NO_SWITCH = "SYS_USE_SNOWFLAKE_ID_AS_BUSINESS_NO";
-    public static final String UI_WATERMARK_ENABLED_SWITCH = "UI_WATERMARK_ENABLED";
-    public static final String ATTACHMENT_WATERMARK_SWITCH = "SYS_ATTACHMENT_WATERMARK_ENABLED";
     public static final String OOBE_COMPLETED_SWITCH = "SYS_OOBE_COMPLETED";
     public static final String SWITCH_CACHE_KEY = "leo:system:switches";
     private static final Duration SWITCH_CACHE_TTL = Duration.ofMinutes(5);
@@ -62,7 +60,6 @@ public class SystemSwitchService implements CrudRuntimeSettings, PageQuerySettin
             CUSTOMER_STATEMENT_RECEIPT_ZERO_FROM_SALES_ORDER_SWITCH,
             LOGIN_CAPTCHA_SWITCH,
             USE_SNOWFLAKE_ID_AS_BUSINESS_NO_SWITCH,
-            UI_WATERMARK_ENABLED_SWITCH,
             OOBE_COMPLETED_SWITCH
     );
 
@@ -181,11 +178,6 @@ public class SystemSwitchService implements CrudRuntimeSettings, PageQuerySettin
     @Transactional(readOnly = true)
     public boolean shouldUseSnowflakeIdAsBusinessNo() {
         return isEnabled(USE_SNOWFLAKE_ID_AS_BUSINESS_NO_SWITCH);
-    }
-
-    @Transactional(readOnly = true)
-    public boolean shouldWatermarkAttachments() {
-        return isEnabled(ATTACHMENT_WATERMARK_SWITCH);
     }
 
     @Transactional(readOnly = true)
