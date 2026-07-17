@@ -35,10 +35,10 @@ public class ErpMcpTools {
 
     @Tool(
             name = "erp_query_records",
-            description = "分页查询 ERP 只读模块，支持基础资料、采购/销售单据和库存报表白名单。"
+            description = "分页查询 ERP 只读模块，支持基础资料和采购/销售单据白名单。"
     )
     public PageResponse<?> queryRecords(
-            @ToolParam(description = "模块标识，如 material、purchase-order、sales-order、inventory-report。") String moduleKey,
+            @ToolParam(description = "模块标识，如 material、purchase-order、sales-order。") String moduleKey,
             @ToolParam(required = false, description = "关键词过滤。") String keyword,
             @ToolParam(required = false, description = "状态过滤。") String status,
             @ToolParam(required = false, description = "页码，从0开始，默认0。") Integer page,

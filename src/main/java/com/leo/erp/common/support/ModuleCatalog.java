@@ -65,8 +65,6 @@ public class ModuleCatalog {
         modules.put("print-template", "打印模板");
         modules.put("operation-log", "操作日志");
         modules.put("database", "数据库管理");
-        modules.put("io-report", "出入库报表");
-        modules.put("inventory-report", "库存报表");
         return modules;
     }
 }

@@ -80,7 +80,7 @@ public final class ResourcePermissionCatalog {
             action(EXPORT, "导出"),
             action(PRINT, "打印")
     );
-    private static final List<ActionOption> REPORT_ACTIONS = List.of(
+    private static final List<ActionOption> READ_EXPORT_PRINT_ACTIONS = List.of(
             action(READ, "查看"),
             action(EXPORT, "导出"),
             action(PRINT, "打印")
@@ -108,15 +108,13 @@ public final class ResourcePermissionCatalog {
             entry("sales-order", "销售订单", "销售", true, List.of("/sales-order", "/sales-orders"), BUSINESS_ACTIONS),
             entry("sales-outbound", "销售出库", "销售", true, List.of("/sales-outbound", "/sales-outbounds"), BUSINESS_ACTIONS),
             entry("freight-bill", "物流单", "物流", true, List.of("/freight-bill", "/freight-bills"), BUSINESS_ACTIONS),
-            entry("inventory-report", "商品库存报表", "报表", true, List.of("/inventory-report"), REPORT_ACTIONS),
-            entry("io-report", "出入库报表", "报表", true, List.of("/io-report"), REPORT_ACTIONS),
             entry("customer-statement", "客户对账单", "对账", true, List.of("/customer-statement", "/customer-statements"), BUSINESS_ACTIONS),
             entry("freight-statement", "物流对账单", "对账", true, List.of("/freight-statement", "/freight-statements"), BUSINESS_ACTIONS),
             entry("receipt", "收款单", "财务", true, List.of("/receipt", "/receipts"), BUSINESS_ACTIONS),
             entry("payment", "付款单", "财务", true, List.of("/payment", "/payments"), BUSINESS_ACTIONS),
             entry("ledger-adjustment", "台账调整单", "财务", false,
                     List.of("/ledger-adjustment", "/ledger-adjustments"), READ_ONLY_ACTIONS),
-            entry("cash-ledger", "资金流水", "财务", false, List.of("/cash-ledger"), REPORT_ACTIONS),
+            entry("cash-ledger", "资金流水", "财务", false, List.of("/cash-ledger"), READ_EXPORT_PRINT_ACTIONS),
             entry("general-setting", "通用设置", "系统", false,
                     List.of("/general-setting", "/general-settings"), List.of(action(READ, "查看"), action(UPDATE, "编辑"))),
             entry("company-setting", "结算主体管理", "主数据", false, List.of("/company-setting", "/company-settings"), CRUD_ACTIONS),

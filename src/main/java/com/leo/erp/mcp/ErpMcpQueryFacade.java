@@ -15,7 +15,6 @@ import com.leo.erp.master.supplier.service.SupplierService;
 import com.leo.erp.master.warehouse.service.WarehouseService;
 import com.leo.erp.purchase.inbound.service.PurchaseInboundService;
 import com.leo.erp.purchase.order.service.PurchaseOrderService;
-import com.leo.erp.report.inventory.service.InventoryReportService;
 import com.leo.erp.sales.order.service.SalesOrderService;
 import com.leo.erp.sales.outbound.service.SalesOutboundService;
 import com.leo.erp.search.service.GlobalSearchService;
@@ -58,8 +57,7 @@ class ErpMcpQueryFacade {
                       PurchaseOrderService purchaseOrderService,
                       PurchaseInboundService purchaseInboundService,
                       SalesOrderService salesOrderService,
-                      SalesOutboundService salesOutboundService,
-                      InventoryReportService inventoryReportService) {
+                      SalesOutboundService salesOutboundService) {
         this.permissionExecutor = permissionExecutor;
         this.globalSearchService = globalSearchService;
         this.printScriptService = printScriptService;
@@ -74,8 +72,7 @@ class ErpMcpQueryFacade {
                 purchaseOrderService,
                 purchaseInboundService,
                 salesOrderService,
-                salesOutboundService,
-                inventoryReportService
+                salesOutboundService
         );
         this.detailReaders = detailReaders(
                 materialService,
@@ -162,8 +159,7 @@ class ErpMcpQueryFacade {
                                                 PurchaseOrderService purchaseOrderService,
                                                 PurchaseInboundService purchaseInboundService,
                                                 SalesOrderService salesOrderService,
-                                                SalesOutboundService salesOutboundService,
-                                                InventoryReportService inventoryReportService) {
+                                                SalesOutboundService salesOutboundService) {
         Map<String, PageReader> readers = new LinkedHashMap<>();
         readers.put("material", (query, keyword, status) -> PageResponse.from(materialService.page(query, keyword, null, null)));
         readers.put("material-category", (query, keyword, status) ->
@@ -186,8 +182,6 @@ class ErpMcpQueryFacade {
                 query,
                 new PageFilter(keyword, status, null, null, null, null, null, null, null, null, null, null, null, null)
         )));
-        readers.put("inventory-report", (query, keyword, status) ->
-                PageResponse.from(inventoryReportService.page(query, keyword, null, null, null)));
         return Map.copyOf(readers);
     }
 
