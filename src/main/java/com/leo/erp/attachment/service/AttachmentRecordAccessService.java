@@ -4,7 +4,6 @@ import com.leo.erp.attachment.domain.entity.AttachmentBinding;
 import com.leo.erp.attachment.domain.entity.AttachmentFile;
 import com.leo.erp.attachment.repository.AttachmentBindingRepository;
 import com.leo.erp.attachment.repository.AttachmentFileRepository;
-import com.leo.erp.security.jwt.ApiKeyAuthenticationDetails;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.AbstractAuditableEntity;
@@ -13,8 +12,6 @@ import com.leo.erp.security.permission.PermissionService;
 import com.leo.erp.security.permission.ResourcePermissionCatalog;
 import com.leo.erp.security.support.SecurityPrincipal;
 import jakarta.persistence.EntityManager;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -108,18 +105,7 @@ public class AttachmentRecordAccessService {
         }
         String resource = resolveResource(moduleKey);
         String action = ResourcePermissionCatalog.normalizeAction(actionCode);
-        return permissionService.can(principal.id(), resource, action) && apiKeyAllows(resource, action);
-    }
-
-    private boolean apiKeyAllows(String resource, String action) {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        if (authentication == null || !(authentication.getDetails() instanceof ApiKeyAuthenticationDetails details)) {
-            return true;
-        }
-        return details.allowedResources() != null
-                && details.allowedActions() != null
-                && details.allowedResources().contains(resource)
-                && details.allowedActions().contains(action);
+        return permissionService.can(principal.id(), resource, action);
     }
 
     private boolean canAccessBinding(SecurityPrincipal principal, String actionCode, AttachmentBinding binding) {

@@ -18,7 +18,6 @@ public record UserAccountAdminResponse(
         String permissionSummary,
         LocalDateTime lastLoginDate,
         String status,
-        String remark,
-        Boolean totpEnabled
+        String remark
 ) {
 }

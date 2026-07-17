@@ -1,7 +1,5 @@
 package com.leo.erp.system.role.service;
 
-import com.leo.erp.common.support.SnowflakeIdGenerator;
-import com.leo.erp.system.role.domain.entity.RolePermission;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -13,12 +11,6 @@ import java.util.Set;
  */
 @Service
 public class RoleTemplateService {
-
-    private final SnowflakeIdGenerator idGenerator;
-
-    public RoleTemplateService(SnowflakeIdGenerator idGenerator) {
-        this.idGenerator = idGenerator;
-    }
 
     public record Template(String name, String description, List<PermissionEntry> permissions) {}
 
@@ -62,29 +54,4 @@ public class RoleTemplateService {
         );
     }
 
-    public List<RolePermission> buildPermissions(Long roleId, Template template) {
-        var catalog = com.leo.erp.security.permission.ResourcePermissionCatalog.ENTRIES;
-        boolean allResources = template.permissions().stream().anyMatch(p -> "*".equals(p.resource()));
-
-        if (allResources) {
-            return catalog.stream()
-                    .flatMap(entry -> entry.actions().stream()
-                            .map(action -> buildPermission(roleId, entry.code(), action.code())))
-                    .toList();
-        }
-
-        return template.permissions().stream()
-                .flatMap(entry -> entry.actions().stream()
-                        .map(action -> buildPermission(roleId, entry.resource(), action)))
-                .toList();
-    }
-
-    private RolePermission buildPermission(Long roleId, String resourceCode, String actionCode) {
-        RolePermission p = new RolePermission();
-        p.setId(idGenerator.nextId());
-        p.setRoleId(roleId);
-        p.setResourceCode(resourceCode);
-        p.setActionCode(actionCode);
-        return p;
-    }
 }

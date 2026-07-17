@@ -107,19 +107,6 @@ else
   warn "未设置，将优先尝试使用数据库托管密钥"
 fi
 
-check "TOTP 密钥"
-if [[ -n "$TOTP_ENCRYPTION_KEY" ]]; then
-  if [[ ${#TOTP_ENCRYPTION_KEY} -ge 16 ]]; then
-    ok "已配置 (${#TOTP_ENCRYPTION_KEY}字符)"
-  else
-    warn "长度 ${#TOTP_ENCRYPTION_KEY}，建议 >= 16"
-  fi
-elif [[ "$RUNTIME_ENV" == "prod" ]]; then
-  fail "TOTP_ENCRYPTION_KEY 未设置"
-else
-  warn "未设置，将优先尝试使用数据库托管密钥"
-fi
-
 check "Spring Profile"
 if [[ "$SPRING_PROFILES_ACTIVE" == "$RUNTIME_ENV" ]]; then
   ok "$SPRING_PROFILES_ACTIVE"

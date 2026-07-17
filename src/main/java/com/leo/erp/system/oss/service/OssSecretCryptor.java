@@ -1,16 +1,16 @@
 package com.leo.erp.system.oss.service;
 
 import com.leo.erp.system.securitykey.service.SecurityKeyService;
-import com.leo.erp.system.securitykey.service.TotpSecretCryptor;
+import com.leo.erp.system.securitykey.service.DataSecretCryptor;
 import org.springframework.stereotype.Component;
 
 @Component
 public class OssSecretCryptor {
 
     private final SecurityKeyService securityKeyService;
-    private final TotpSecretCryptor cryptor;
+    private final DataSecretCryptor cryptor;
 
-    public OssSecretCryptor(SecurityKeyService securityKeyService, TotpSecretCryptor cryptor) {
+    public OssSecretCryptor(SecurityKeyService securityKeyService, DataSecretCryptor cryptor) {
         this.securityKeyService = securityKeyService;
         this.cryptor = cryptor;
     }
@@ -30,6 +30,6 @@ public class OssSecretCryptor {
     }
 
     private String encryptionKey() {
-        return securityKeyService.getActiveTotpMaterial().secretValue();
+        return securityKeyService.getActiveDataMaterial().secretValue();
     }
 }

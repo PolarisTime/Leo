@@ -2,7 +2,7 @@ package com.leo.erp.system.dashboard.web;
 
 import org.springframework.validation.annotation.Validated;
 import com.leo.erp.common.api.ApiResponse;
-import com.leo.erp.security.permission.RequiresPermission;
+import org.springframework.security.access.prepost.PreAuthorize;
 import com.leo.erp.security.support.SecurityPrincipal;
 import com.leo.erp.system.dashboard.service.DashboardSummaryService;
 import com.leo.erp.system.dashboard.web.dto.DashboardSummaryResponse;
@@ -23,7 +23,7 @@ public class DashboardController {
     }
 
     @GetMapping("/summary")
-    @RequiresPermission(resource = "dashboard", action = "read")
+    @PreAuthorize("@rbac.check('dashboard', 'read')")
     public ApiResponse<DashboardSummaryResponse> summary(@AuthenticationPrincipal SecurityPrincipal principal) {
         return ApiResponse.success(dashboardSummaryService.getSummary(principal.id()));
     }

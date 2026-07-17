@@ -2,7 +2,6 @@ package com.leo.erp.common.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leo.erp.common.api.ApiResponse;
-import com.leo.erp.common.api.RateLimitContext;
 import com.leo.erp.common.error.ErrorCode;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -37,8 +36,7 @@ public class ReadOnlyFilter extends OncePerRequestFilter {
             response.setCharacterEncoding("UTF-8");
             ApiResponse<Void> body = ApiResponse.failure(
                     ErrorCode.FORBIDDEN,
-                    "数据库只读模式，禁止写操作",
-                    RateLimitContext.current(request)
+                    "数据库只读模式，禁止写操作"
             );
             response.getWriter().write(objectMapper.writeValueAsString(body));
             return;

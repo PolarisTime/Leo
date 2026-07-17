@@ -123,7 +123,7 @@ public class ReceiptService extends AbstractCrudService<Receipt, ReceiptRequest,
     @Override
     protected ReceiptRequest normalizeCreateRequest(ReceiptRequest request, long entityId) {
         return new ReceiptRequest(
-                resolveCreateBusinessNo("receipt", request.receiptNo(), entityId),
+                resolveCreateBusinessNo(entityId),
                 request.counterpartyType(),
                 request.counterpartyId(),
                 request.counterpartyCode(),

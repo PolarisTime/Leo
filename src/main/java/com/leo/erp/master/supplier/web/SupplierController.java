@@ -5,7 +5,7 @@ import com.leo.erp.common.api.ApiResponse;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.api.PageResponse;
 import com.leo.erp.common.web.BindPageQuery;
-import com.leo.erp.security.permission.RequiresPermission;
+import org.springframework.security.access.prepost.PreAuthorize;
 import com.leo.erp.master.supplier.service.SupplierService;
 import com.leo.erp.master.supplier.web.dto.SupplierRequest;
 import com.leo.erp.master.supplier.web.dto.SupplierOptionResponse;
@@ -33,13 +33,13 @@ public class SupplierController {
     }
 
     @GetMapping("/options")
-    @RequiresPermission(resource = "supplier", action = "read")
+    @PreAuthorize("@rbac.check('supplier', 'read')")
     public ApiResponse<java.util.List<SupplierOptionResponse>> options() {
         return ApiResponse.success(supplierService.listActiveOptions());
     }
 
     @GetMapping
-    @RequiresPermission(resource = "supplier", action = "read")
+    @PreAuthorize("@rbac.check('supplier', 'read')")
     public ApiResponse<PageResponse<SupplierResponse>> page(
             @BindPageQuery(sortFieldKey = "supplier") PageQuery query,
             @RequestParam(required = false) String keyword,
@@ -49,25 +49,25 @@ public class SupplierController {
     }
 
     @GetMapping("/{id}")
-    @RequiresPermission(resource = "supplier", action = "read")
+    @PreAuthorize("@rbac.check('supplier', 'read')")
     public ApiResponse<SupplierResponse> detail(@PathVariable Long id) {
         return ApiResponse.success(supplierService.detail(id));
     }
 
     @PostMapping
-    @RequiresPermission(resource = "supplier", action = "create")
+    @PreAuthorize("@rbac.check('supplier', 'create')")
     public ApiResponse<SupplierResponse> create(@Valid @RequestBody SupplierRequest request) {
         return ApiResponse.success("创建成功", supplierService.create(request));
     }
 
     @PutMapping("/{id}")
-    @RequiresPermission(resource = "supplier", action = "update")
+    @PreAuthorize("@rbac.check('supplier', 'update')")
     public ApiResponse<SupplierResponse> update(@PathVariable Long id, @Valid @RequestBody SupplierRequest request) {
         return ApiResponse.success("更新成功", supplierService.update(id, request));
     }
 
     @DeleteMapping("/{id}")
-    @RequiresPermission(resource = "supplier", action = "delete")
+    @PreAuthorize("@rbac.check('supplier', 'delete')")
     public ApiResponse<Void> delete(@PathVariable Long id) {
         supplierService.delete(id);
         return ApiResponse.success("删除成功");

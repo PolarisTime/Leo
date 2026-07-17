@@ -47,7 +47,7 @@ if command -v redis-cli >/dev/null 2>&1; then
   fi
 fi
 
-for env_name in LEO_JWT_SECRET TOTP_ENCRYPTION_KEY; do
+for env_name in LEO_JWT_SECRET; do
   if [[ -z "${!env_name:-}" ]]; then
     echo "[leo] 未设置 ${env_name}，将优先尝试使用数据库托管密钥。" >&2
   fi

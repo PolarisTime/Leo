@@ -18,7 +18,6 @@ public record PageFilter(
         String actionType,
         String resultStatus,
         String signStatus,
-        String usageScope,
         Long recordId,
         Long userId,
         String authType,
@@ -45,13 +44,12 @@ public record PageFilter(
             String actionType,
             String resultStatus,
             String signStatus,
-            String usageScope,
             Long recordId,
             Long userId,
             String authType
     ) {
         this(keyword, status, startDate, endDate, name, projectName, businessType, moduleName,
-                actionType, resultStatus, signStatus, usageScope, recordId, userId, authType,
+                actionType, resultStatus, signStatus, recordId, userId, authType,
                 null, null, null, null, null, null);
     }
 
@@ -67,28 +65,27 @@ public record PageFilter(
             String actionType,
             String resultStatus,
             String signStatus,
-            String usageScope,
             Long recordId,
             Long userId,
             String authType,
             Long settlementCompanyId
     ) {
         this(keyword, status, startDate, endDate, name, projectName, businessType, moduleName,
-                actionType, resultStatus, signStatus, usageScope, recordId, userId, authType,
+                actionType, resultStatus, signStatus, recordId, userId, authType,
                 settlementCompanyId, null, null, null, null, null);
     }
 
     /** 最常用的四字段构造 */
     public static PageFilter of(String keyword, String status, LocalDate startDate, LocalDate endDate) {
         return new PageFilter(keyword, status, startDate, endDate,
-                null, null, null, null, null, null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null, null, null,
                 null, null, null, null, null, null);
     }
 
     /** 带一个名称过滤 */
     public static PageFilter of(String keyword, String name, String status, LocalDate startDate, LocalDate endDate) {
         return new PageFilter(keyword, status, startDate, endDate,
-                name, null, null, null, null, null, null, null, null, null, null,
+                name, null, null, null, null, null, null, null, null, null,
                 null, null, null, null, null, null);
     }
 
@@ -102,7 +99,7 @@ public record PageFilter(
             LocalDate endDate
     ) {
         return new PageFilter(keyword, status, startDate, endDate,
-                name, null, null, null, null, null, null, null, null, null, null,
+                name, null, null, null, null, null, null, null, null, null,
                 settlementCompanyId, null, null, null, null, null);
     }
 
@@ -117,7 +114,7 @@ public record PageFilter(
             LocalDate endDate
     ) {
         return new PageFilter(keyword, status, startDate, endDate,
-                name, projectName, null, null, null, null, null, null, null, null, null,
+                name, projectName, null, null, null, null, null, null, null, null,
                 settlementCompanyId, null, null, null, null, null);
     }
 
@@ -128,7 +125,7 @@ public record PageFilter(
                                    Long currentRecordId) {
         return new PageFilter(
                 keyword, status, startDate, endDate, name, projectName, businessType, moduleName,
-                actionType, resultStatus, signStatus, usageScope, recordId, userId, authType,
+                actionType, resultStatus, signStatus, recordId, userId, authType,
                 settlementCompanyId, customerId, projectId, supplierId, carrierId, currentRecordId
         );
     }
@@ -136,7 +133,7 @@ public record PageFilter(
     public PageFilter withBusinessType(String businessType) {
         return new PageFilter(
                 keyword, status, startDate, endDate, name, projectName, businessType, moduleName,
-                actionType, resultStatus, signStatus, usageScope, recordId, userId, authType,
+                actionType, resultStatus, signStatus, recordId, userId, authType,
                 settlementCompanyId, customerId, projectId, supplierId, carrierId, currentRecordId
         );
     }

@@ -1,11 +1,8 @@
 package com.leo.erp.auth.service;
 
 import com.leo.erp.auth.domain.entity.UserAccount;
-import com.leo.erp.auth.web.dto.CaptchaResponse;
 import com.leo.erp.auth.web.dto.LoginRequest;
-import com.leo.erp.auth.web.dto.LoginResponseBody;
 import com.leo.erp.auth.web.dto.TokenResponse;
-import com.leo.erp.system.norule.service.SystemSwitchService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -15,27 +12,17 @@ public class AuthService {
     private final LoginService loginService;
     private final TokenIssuanceService tokenIssuanceService;
     private final SessionManagementService sessionManagementService;
-    private final CaptchaService captchaService;
-    private final SystemSwitchService systemSwitchService;
 
     public AuthService(LoginService loginService,
                        TokenIssuanceService tokenIssuanceService,
-                       SessionManagementService sessionManagementService,
-                       CaptchaService captchaService,
-                       SystemSwitchService systemSwitchService) {
+                       SessionManagementService sessionManagementService) {
         this.loginService = loginService;
         this.tokenIssuanceService = tokenIssuanceService;
         this.sessionManagementService = sessionManagementService;
-        this.captchaService = captchaService;
-        this.systemSwitchService = systemSwitchService;
     }
 
-    public LoginResponseBody login(LoginRequest request, LoginService.AuthRequestContext ctx) {
+    public TokenResponse login(LoginRequest request, LoginService.AuthRequestContext ctx) {
         return loginService.login(request, ctx);
-    }
-
-    public TokenResponse verifyTotpAndIssueTokens(String tempToken, String totpCode, LoginService.AuthRequestContext ctx) {
-        return loginService.verifyTotpAndIssueTokens(tempToken, totpCode, ctx);
     }
 
     public TokenResponse refresh(String refreshToken, String loginIp, String userAgent) {
@@ -54,12 +41,4 @@ public class AuthService {
         });
     }
 
-    public CaptchaResponse captcha() {
-        CaptchaService.CaptchaResult result = captchaService.generate();
-        return new CaptchaResponse(
-                result.captchaId(),
-                result.captchaImage(),
-                systemSwitchService.shouldRequireLoginCaptcha()
-        );
-    }
 }

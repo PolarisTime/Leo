@@ -60,15 +60,6 @@ public class UserAccount extends AbstractAuditableEntity {
     @Column(name = "remark", length = 255)
     private String remark;
 
-    @Column(name = "totp_secret", length = 255)
-    private String totpSecret;
-
-    @Column(name = "totp_enabled", nullable = false)
-    private Boolean totpEnabled = Boolean.FALSE;
-
-    @Column(name = "require_totp_setup", nullable = false)
-    private Boolean requireTotpSetup = Boolean.FALSE;
-
     @Column(name = "preferences_json", columnDefinition = "JSONB")
     @org.hibernate.annotations.ColumnTransformer(read = "preferences_json::text", write = "?::jsonb")
     private String preferencesJson;

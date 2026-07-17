@@ -154,7 +154,7 @@ public class LedgerAdjustmentService extends AbstractCrudService<LedgerAdjustmen
     @Override
     protected LedgerAdjustmentRequest normalizeCreateRequest(LedgerAdjustmentRequest request, long entityId) {
         return new LedgerAdjustmentRequest(
-                resolveCreateBusinessNo(MODULE_KEY, request.adjustmentNo(), entityId),
+                resolveCreateBusinessNo(entityId),
                 request.direction(),
                 request.counterpartyType(),
                 request.counterpartyId(),
@@ -213,8 +213,18 @@ public class LedgerAdjustmentService extends AbstractCrudService<LedgerAdjustmen
     }
 
     @Override
+    protected Optional<LedgerAdjustment> findVisibleEntity(Long id) {
+        return repository.findById(id);
+    }
+
+    @Override
     protected String notFoundMessage() {
         return "台账调整单不存在";
+    }
+
+    @Override
+    protected boolean allowAdminViewDeletedRecords() {
+        return true;
     }
 
     @Override

@@ -3,8 +3,6 @@ package com.leo.erp.auth.web;
 import com.leo.erp.auth.service.UserAccountAdminService;
 import com.leo.erp.auth.service.UserAccountPreferenceService;
 import com.leo.erp.auth.web.dto.LoginNameAvailabilityResponse;
-import com.leo.erp.auth.web.dto.TotpEnableRequest;
-import com.leo.erp.auth.web.dto.TotpSetupResponse;
 import com.leo.erp.auth.web.dto.UserAccountAdminRequest;
 import com.leo.erp.auth.web.dto.UserAccountCreateResponse;
 import com.leo.erp.auth.web.dto.UserAccountAdminResponse;
@@ -13,9 +11,8 @@ import com.leo.erp.common.api.ApiResponse;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.api.PageResponse;
 import com.leo.erp.common.web.BindPageQuery;
-import com.leo.erp.security.permission.RequiresPermission;
+import org.springframework.security.access.prepost.PreAuthorize;
 import com.leo.erp.security.support.SecurityPrincipal;
-import com.leo.erp.security.totp.RequiresTotpVerification;
 import com.leo.erp.system.operationlog.support.OperationLoggable;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Positive;
@@ -46,7 +43,7 @@ public class UserAccountAdminController {
     }
 
     @GetMapping
-    @RequiresPermission(resource = "user-account", action = "read")
+    @PreAuthorize("@rbac.check('user-account', 'read')")
     public ApiResponse<PageResponse<UserAccountAdminResponse>> page(
             @BindPageQuery(sortFieldKey = "user-account") PageQuery query,
             @RequestParam(required = false) String keyword,
@@ -56,7 +53,7 @@ public class UserAccountAdminController {
     }
 
     @GetMapping("/preference")
-    @RequiresPermission(authenticatedOnly = true)
+    @PreAuthorize("isAuthenticated()")
     public ApiResponse<UserAccountPreferencesPayload> preferences(
             @AuthenticationPrincipal SecurityPrincipal principal
     ) {
@@ -64,7 +61,7 @@ public class UserAccountAdminController {
     }
 
     @PutMapping("/preference")
-    @RequiresPermission(authenticatedOnly = true)
+    @PreAuthorize("isAuthenticated()")
     public ApiResponse<UserAccountPreferencesPayload> savePreferences(
             @AuthenticationPrincipal SecurityPrincipal principal,
             @Valid @RequestBody UserAccountPreferencesPayload request
@@ -74,13 +71,13 @@ public class UserAccountAdminController {
     }
 
     @GetMapping("/{id}")
-    @RequiresPermission(resource = "user-account", action = "read")
+    @PreAuthorize("@rbac.check('user-account', 'read')")
     public ApiResponse<UserAccountAdminResponse> detail(@PathVariable @Positive Long id) {
         return ApiResponse.success(userAccountAdminService.detail(id));
     }
 
     @GetMapping("/login-name-availability")
-    @RequiresPermission(resource = "user-account", action = "read")
+    @PreAuthorize("@rbac.check('user-account', 'read')")
     public ApiResponse<LoginNameAvailabilityResponse> checkLoginNameAvailability(
             @RequestParam String loginName,
             @RequestParam(required = false) @Positive Long excludeUserId
@@ -89,50 +86,25 @@ public class UserAccountAdminController {
     }
 
     @PostMapping
-    @RequiresPermission(resource = "user-account", action = "create")
+    @PreAuthorize("@rbac.check('user-account', 'create')")
     @OperationLoggable(moduleName = "用户账户", actionType = "新增", businessNoFields = {"loginName"})
     public ApiResponse<UserAccountCreateResponse> create(@Valid @RequestBody UserAccountAdminRequest request) {
         return ApiResponse.success("创建成功", userAccountAdminService.create(request));
     }
 
     @PutMapping("/{id}")
-    @RequiresPermission(resource = "user-account", action = "update")
+    @PreAuthorize("@rbac.check('user-account', 'update')")
     @OperationLoggable(moduleName = "用户账户", actionType = "编辑", businessNoFields = {"loginName"})
     public ApiResponse<UserAccountAdminResponse> update(@PathVariable @Positive Long id, @Valid @RequestBody UserAccountAdminRequest request) {
         return ApiResponse.success("更新成功", userAccountAdminService.update(id, request));
     }
 
     @DeleteMapping("/{id}")
-    @RequiresPermission(resource = "user-account", action = "delete")
+    @PreAuthorize("@rbac.check('user-account', 'delete')")
     @OperationLoggable(moduleName = "用户账户", actionType = "删除")
     public ApiResponse<Void> delete(@PathVariable @Positive Long id) {
         userAccountAdminService.delete(id);
         return ApiResponse.success("删除成功");
     }
 
-    // --- 2FA 管理 ---
-
-    @PostMapping("/{id}/2fa/setup")
-    @RequiresPermission(resource = "user-account", action = "update")
-    @RequiresTotpVerification
-    @OperationLoggable(moduleName = "用户账户", actionType = "生成2FA密钥")
-    public ApiResponse<TotpSetupResponse> setup2fa(@PathVariable @Positive Long id) {
-        return ApiResponse.success("密钥生成成功", userAccountAdminService.setup2fa(id));
-    }
-
-    @PostMapping("/{id}/2fa/enable")
-    @RequiresPermission(resource = "user-account", action = "update")
-    @RequiresTotpVerification
-    @OperationLoggable(moduleName = "用户账户", actionType = "启用2FA")
-    public ApiResponse<UserAccountAdminResponse> enable2fa(@PathVariable @Positive Long id, @Valid @RequestBody TotpEnableRequest request) {
-        return ApiResponse.success("2FA已启用", userAccountAdminService.enable2fa(id, request));
-    }
-
-    @PostMapping("/{id}/2fa/disable")
-    @RequiresPermission(resource = "user-account", action = "update")
-    @RequiresTotpVerification
-    @OperationLoggable(moduleName = "用户账户", actionType = "禁用2FA")
-    public ApiResponse<UserAccountAdminResponse> disable2fa(@PathVariable @Positive Long id) {
-        return ApiResponse.success("2FA已禁用", userAccountAdminService.disable2fa(id));
-    }
 }

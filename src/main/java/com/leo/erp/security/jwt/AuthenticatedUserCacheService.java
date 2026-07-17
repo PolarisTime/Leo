@@ -196,8 +196,6 @@ public class AuthenticatedUserCacheService {
                 user.getId(),
                 user.getLoginName(),
                 authorityValues,
-                Boolean.TRUE.equals(user.getTotpEnabled()),
-                Boolean.TRUE.equals(user.getRequireTotpSetup()),
                 normalizeCredentialVersion(user.getCredentialVersion())
         );
     }
@@ -240,8 +238,6 @@ public class AuthenticatedUserCacheService {
             Long userId,
             String loginName,
             List<String> authorities,
-            boolean totpEnabled,
-            boolean forceTotpSetup,
             long credentialVersion
     ) {
 
@@ -252,8 +248,6 @@ public class AuthenticatedUserCacheService {
                     authorities.stream()
                             .map(org.springframework.security.core.authority.SimpleGrantedAuthority::new)
                             .toList(),
-                    totpEnabled,
-                    forceTotpSetup,
                     credentialVersion
             );
         }

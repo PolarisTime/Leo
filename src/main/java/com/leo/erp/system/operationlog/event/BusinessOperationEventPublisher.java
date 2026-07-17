@@ -2,7 +2,6 @@ package com.leo.erp.system.operationlog.event;
 
 import com.leo.erp.auth.domain.entity.UserAccount;
 import com.leo.erp.auth.repository.UserAccountRepository;
-import com.leo.erp.security.jwt.ApiKeyAuthenticationDetails;
 import com.leo.erp.security.support.SecurityPrincipal;
 import org.slf4j.MDC;
 import org.springframework.context.ApplicationEventPublisher;
@@ -68,8 +67,7 @@ public class BusinessOperationEventPublisher {
         String operatorName = account == null || account.getUserName() == null || account.getUserName().isBlank()
                 ? principal.username()
                 : account.getUserName();
-        String authType = authentication.getDetails() instanceof ApiKeyAuthenticationDetails ? "API_KEY" : "WEB";
-        return new OperatorSnapshot(principal.id(), operatorName, principal.username(), authType);
+        return new OperatorSnapshot(principal.id(), operatorName, principal.username(), "WEB");
     }
 
     private String normalizeTraceId(String traceId) {

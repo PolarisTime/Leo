@@ -16,14 +16,12 @@ public class RedisTuningProperties {
     private static final Duration DEFAULT_AUTH_USER_TTL = Duration.ofMinutes(2);
     private static final Duration DEFAULT_ONLINE_TTL = Duration.ofMinutes(2);
     private static final Duration DEFAULT_ACTIVITY_WRITE_INTERVAL = Duration.ofSeconds(30);
-    private static final Duration DEFAULT_BUCKET_TTL_FLOOR = Duration.ofSeconds(60);
 
     private final Cache cache = new Cache();
     private final Scan scan = new Scan();
     private final Permission permission = new Permission();
     private final AuthUser authUser = new AuthUser();
     private final Session session = new Session();
-    private final RateLimit rateLimit = new RateLimit();
 
     public Cache getCache() {
         return cache;
@@ -43,10 +41,6 @@ public class RedisTuningProperties {
 
     public Session getSession() {
         return session;
-    }
-
-    public RateLimit getRateLimit() {
-        return rateLimit;
     }
 
     public Duration withTtlJitter(Duration ttl) {
@@ -102,10 +96,6 @@ public class RedisTuningProperties {
 
     public int sessionMgetBatchSize() {
         return bounded(session.mgetBatchSize, 10, 5000, 500);
-    }
-
-    public long rateLimitBucketTtlFloorSeconds() {
-        return Math.max(1L, positiveDuration(rateLimit.bucketTtlFloor, DEFAULT_BUCKET_TTL_FLOOR).toSeconds());
     }
 
     private Duration positiveDuration(Duration value, Duration fallback) {
@@ -260,15 +250,4 @@ public class RedisTuningProperties {
         }
     }
 
-    public static class RateLimit {
-        private Duration bucketTtlFloor = DEFAULT_BUCKET_TTL_FLOOR;
-
-        public Duration getBucketTtlFloor() {
-            return bucketTtlFloor;
-        }
-
-        public void setBucketTtlFloor(Duration bucketTtlFloor) {
-            this.bucketTtlFloor = bucketTtlFloor;
-        }
-    }
 }

@@ -6,11 +6,8 @@ import com.leo.erp.auth.repository.UserAccountRepository;
 import com.leo.erp.auth.web.dto.LoginNameAvailabilityResponse;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
-import com.leo.erp.common.support.RedisJsonCacheSupport;
 import com.leo.erp.system.department.domain.entity.Department;
 import com.leo.erp.system.department.repository.DepartmentRepository;
-import com.leo.erp.system.norule.service.SystemSwitchService;
-import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Service;
 
 import java.security.SecureRandom;
@@ -32,16 +29,11 @@ public class UserAccountValidationService {
 
     private final UserAccountRepository repository;
     private final DepartmentRepository departmentRepository;
-    private final SystemSwitchService systemSwitchService;
-
     public UserAccountValidationService(
             UserAccountRepository repository,
-            DepartmentRepository departmentRepository,
-            @Nullable RedisJsonCacheSupport redisJsonCacheSupport,
-            @Nullable SystemSwitchService systemSwitchService) {
+            DepartmentRepository departmentRepository) {
         this.repository = repository;
         this.departmentRepository = departmentRepository;
-        this.systemSwitchService = systemSwitchService;
     }
 
     public String normalizeLoginName(String loginName) {
@@ -124,10 +116,6 @@ public class UserAccountValidationService {
         }
         entity.setDepartmentId(department.getId());
         entity.setDepartmentName(department.getDepartmentName());
-    }
-
-    public boolean shouldRequireTotpSetupForNewUser() {
-        return systemSwitchService != null && systemSwitchService.shouldForceUserTotpOnFirstLogin();
     }
 
     public String normalizeRequiredValue(String value, String fieldName) {

@@ -164,7 +164,7 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
 
     @Override
     protected FreightBillRequest normalizeCreateRequest(FreightBillRequest request, long entityId) {
-        return copyRequest(request, resolveCreateBusinessNo("freight-bill", request.billNo(), entityId));
+        return copyRequest(request, resolveCreateBusinessNo(entityId));
     }
 
     @Override

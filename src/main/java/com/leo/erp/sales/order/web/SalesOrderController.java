@@ -7,7 +7,7 @@ import com.leo.erp.common.api.PageResponse;
 import com.leo.erp.common.web.BindPageQuery;
 import com.leo.erp.common.web.dto.FileDownloadResponse;
 import com.leo.erp.common.web.dto.StatusUpdateRequest;
-import com.leo.erp.security.permission.RequiresPermission;
+import org.springframework.security.access.prepost.PreAuthorize;
 import com.leo.erp.sales.order.service.SalesOrderPrintExportService;
 import com.leo.erp.sales.order.service.SalesOrderPrintXlsxOptions;
 import com.leo.erp.sales.order.service.SalesOrderService;
@@ -62,7 +62,7 @@ public class SalesOrderController {
 
     @Operation(summary = "分页查询销售订单采购来源候选")
     @GetMapping("/source-candidates")
-    @RequiresPermission(resource = "purchase-order", action = "read")
+    @PreAuthorize("@rbac.check('purchase-order', 'read')")
     public ApiResponse<PageResponse<SalesOrderSourceCandidateResponse>> sourceCandidates(
             @BindPageQuery(sortFieldKey = "purchase-order") PageQuery query,
             @RequestParam(required = false) String keyword,
@@ -85,7 +85,7 @@ public class SalesOrderController {
 
     @Operation(summary = "搜索销售订单")
     @GetMapping("/search")
-    @RequiresPermission(resource = "sales-order", action = "read")
+    @PreAuthorize("@rbac.check('sales-order', 'read')")
     public ApiResponse<java.util.List<SalesOrderResponse>> search(
             @RequestParam(required = false) String keyword,
             @RequestParam(defaultValue = "100") int limit
@@ -95,7 +95,7 @@ public class SalesOrderController {
 
     @Operation(summary = "分页查询销售订单")
     @GetMapping
-    @RequiresPermission(resource = "sales-order", action = "read")
+    @PreAuthorize("@rbac.check('sales-order', 'read')")
     public ApiResponse<PageResponse<SalesOrderResponse>> page(
             @BindPageQuery(sortFieldKey = "sales-order") PageQuery query,
             @RequestParam(required = false) String keyword,
@@ -119,7 +119,7 @@ public class SalesOrderController {
 
     @Operation(summary = "分页查询销售订单出库导入候选")
     @GetMapping("/outbound-import-candidates")
-    @RequiresPermission(resource = "sales-order", action = "read")
+    @PreAuthorize("@rbac.check('sales-order', 'read')")
     public ApiResponse<PageResponse<SalesOrderResponse>> outboundImportCandidates(
             @BindPageQuery(sortFieldKey = "sales-order") PageQuery query,
             @RequestParam(required = false) String keyword,
@@ -144,14 +144,14 @@ public class SalesOrderController {
 
     @Operation(summary = "查询销售订单详情")
     @GetMapping("/{id}")
-    @RequiresPermission(resource = "sales-order", action = "read")
+    @PreAuthorize("@rbac.check('sales-order', 'read')")
     public ApiResponse<SalesOrderResponse> detail(@PathVariable Long id) {
         return ApiResponse.success(service.detail(id));
     }
 
     @Operation(summary = "导出销售订单套打 Excel")
     @GetMapping("/{id}/print-xlsx")
-    @RequiresPermission(resource = "sales-order", action = "print")
+    @PreAuthorize("@rbac.check('sales-order', 'print')")
     @OperationLoggable(moduleName = "销售订单", actionType = "打印", businessNoFields = {"id"}, recordIdField = "id")
     public ResponseEntity<byte[]> exportPrintXlsx(@PathVariable Long id, HttpServletRequest request) {
         return toDownloadResponse(printExportService.exportSalesOrderPrint(id, SalesOrderPrintXlsxOptions.defaults()), request);
@@ -159,7 +159,7 @@ public class SalesOrderController {
 
     @Operation(summary = "按打印选项导出销售订单套打 Excel")
     @PostMapping("/{id}/print-xlsx")
-    @RequiresPermission(resource = "sales-order", action = "print")
+    @PreAuthorize("@rbac.check('sales-order', 'print')")
     @OperationLoggable(moduleName = "销售订单", actionType = "打印", businessNoFields = {"id"}, recordIdField = "id")
     public ResponseEntity<byte[]> exportPrintXlsx(
             @PathVariable Long id,
@@ -174,7 +174,7 @@ public class SalesOrderController {
 
     @Operation(summary = "创建销售订单")
     @PostMapping
-    @RequiresPermission(resource = "sales-order", action = "create")
+    @PreAuthorize("@rbac.check('sales-order', 'create')")
     @DomainEventAudited
     public ApiResponse<SalesOrderResponse> create(@Valid @RequestBody SalesOrderRequest request) {
         return ApiResponse.success("创建成功", service.create(request));
@@ -182,7 +182,7 @@ public class SalesOrderController {
 
     @Operation(summary = "更新销售订单")
     @PutMapping("/{id}")
-    @RequiresPermission(resource = "sales-order", action = "update")
+    @PreAuthorize("@rbac.check('sales-order', 'update')")
     @DomainEventAudited
     public ApiResponse<SalesOrderResponse> update(@PathVariable Long id, @Valid @RequestBody SalesOrderRequest request) {
         return ApiResponse.success("更新成功", service.update(id, request));
@@ -190,7 +190,7 @@ public class SalesOrderController {
 
     @Operation(summary = "更新销售订单状态")
     @PatchMapping("/{id}/status")
-    @RequiresPermission(resource = "sales-order", action = "audit")
+    @PreAuthorize("@rbac.check('sales-order', 'audit')")
     @DomainEventAudited
     public ApiResponse<SalesOrderResponse> updateStatus(@PathVariable Long id, @Valid @RequestBody StatusUpdateRequest request) {
         return ApiResponse.success("状态更新成功", service.updateStatus(id, request.status()));
@@ -198,7 +198,7 @@ public class SalesOrderController {
 
     @Operation(summary = "完成销售")
     @PostMapping("/{id}/complete")
-    @RequiresPermission(resource = "sales-order", action = "audit")
+    @PreAuthorize("@rbac.check('sales-order', 'audit')")
     @DomainEventAudited
     public ApiResponse<SalesOrderResponse> complete(@PathVariable Long id) {
         return ApiResponse.success("完成销售成功", service.completeSalesOrder(id));
@@ -206,7 +206,7 @@ public class SalesOrderController {
 
     @Operation(summary = "删除销售订单")
     @DeleteMapping("/{id}")
-    @RequiresPermission(resource = "sales-order", action = "delete")
+    @PreAuthorize("@rbac.check('sales-order', 'delete')")
     @DomainEventAudited
     public ApiResponse<Void> delete(@PathVariable Long id) {
         service.delete(id);

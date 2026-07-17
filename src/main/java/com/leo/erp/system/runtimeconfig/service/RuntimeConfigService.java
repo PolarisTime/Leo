@@ -3,12 +3,11 @@ package com.leo.erp.system.runtimeconfig.service;
 import com.leo.erp.common.support.RedisJsonCacheSupport;
 import com.leo.erp.common.support.RedisCacheHealthCheck;
 import com.leo.erp.system.company.service.CompanySettingService;
-import com.leo.erp.system.norule.domain.entity.NoRule;
-import com.leo.erp.system.norule.repository.NoRuleRepository;
-import com.leo.erp.system.norule.service.SystemSwitchService;
+import com.leo.erp.system.generalsetting.domain.entity.GeneralSetting;
+import com.leo.erp.system.generalsetting.repository.GeneralSettingRepository;
+import com.leo.erp.system.generalsetting.service.SystemSwitchService;
 import com.leo.erp.system.runtimeconfig.feature.FeatureFlagService;
 import com.leo.erp.system.runtimeconfig.web.dto.RuntimeBusinessConfig;
-import com.leo.erp.system.runtimeconfig.web.dto.RuntimeBusinessNoConfig;
 import com.leo.erp.system.runtimeconfig.web.dto.RuntimeConfigResponse;
 import com.leo.erp.system.runtimeconfig.web.dto.RuntimeFeatureConfig;
 import com.leo.erp.system.runtimeconfig.web.dto.RuntimeStatementConfig;
@@ -47,24 +46,26 @@ public class RuntimeConfigService implements RedisCacheHealthCheck {
             SystemSwitchService.SHOW_SNOWFLAKE_ID_SWITCH,
             CompanySettingService.DEFAULT_TAX_RATE_SETTING_CODE,
             SystemSwitchService.CUSTOMER_STATEMENT_RECEIPT_ZERO_FROM_SALES_ORDER_SWITCH,
-            SystemSwitchService.USE_SNOWFLAKE_ID_AS_BUSINESS_NO_SWITCH,
             WEIGHT_ONLY_PURCHASE_INBOUNDS_SETTING,
             WEIGHT_ONLY_SALES_OUTBOUNDS_SETTING
     );
 
-    private final NoRuleRepository noRuleRepository;
+    private final GeneralSettingRepository generalSettingRepository;
     private final FeatureFlagService featureFlagService;
     private final RedisJsonCacheSupport redisJsonCacheSupport;
 
-    public RuntimeConfigService(NoRuleRepository noRuleRepository, FeatureFlagService featureFlagService) {
-        this(noRuleRepository, featureFlagService, null);
+    public RuntimeConfigService(
+            GeneralSettingRepository generalSettingRepository,
+            FeatureFlagService featureFlagService
+    ) {
+        this(generalSettingRepository, featureFlagService, null);
     }
 
     @Autowired
-    public RuntimeConfigService(NoRuleRepository noRuleRepository,
+    public RuntimeConfigService(GeneralSettingRepository generalSettingRepository,
                                 FeatureFlagService featureFlagService,
                                 @Nullable RedisJsonCacheSupport redisJsonCacheSupport) {
-        this.noRuleRepository = noRuleRepository;
+        this.generalSettingRepository = generalSettingRepository;
         this.featureFlagService = featureFlagService;
         this.redisJsonCacheSupport = redisJsonCacheSupport;
     }
@@ -85,7 +86,7 @@ public class RuntimeConfigService implements RedisCacheHealthCheck {
     }
 
     private RuntimeConfigResponse loadRuntimeConfig() {
-        Map<String, NoRule> settings = loadRuntimeSettings();
+        Map<String, GeneralSetting> settings = loadRuntimeSettings();
         return new RuntimeConfigResponse(
                 uiConfig(settings),
                 businessConfig(settings),
@@ -116,8 +117,8 @@ public class RuntimeConfigService implements RedisCacheHealthCheck {
         }
     }
 
-    private Map<String, NoRule> loadRuntimeSettings() {
-        return noRuleRepository.findBySettingCodeInAndDeletedFlagFalse(RUNTIME_SETTING_CODES).stream()
+    private Map<String, GeneralSetting> loadRuntimeSettings() {
+        return generalSettingRepository.findBySettingCodeInAndDeletedFlagFalse(RUNTIME_SETTING_CODES).stream()
                 .filter(rule -> rule.getSettingCode() != null)
                 .collect(Collectors.toMap(
                         rule -> rule.getSettingCode().trim(),
@@ -126,71 +127,73 @@ public class RuntimeConfigService implements RedisCacheHealthCheck {
                 ));
     }
 
-    private RuntimeUiConfig uiConfig(Map<String, NoRule> settings) {
+    private RuntimeUiConfig uiConfig(Map<String, GeneralSetting> settings) {
         return new RuntimeUiConfig(
-                integer(settings, SystemSwitchService.DEFAULT_LIST_PAGE_SIZE_SETTING, DEFAULT_PAGE_SIZE, MIN_PAGE_SIZE, MAX_PAGE_SIZE),
+                integer(
+                        settings,
+                        SystemSwitchService.DEFAULT_LIST_PAGE_SIZE_SETTING,
+                        DEFAULT_PAGE_SIZE,
+                        MIN_PAGE_SIZE,
+                        MAX_PAGE_SIZE
+                ),
                 featureFlag(SHOW_SNOWFLAKE_ID_FEATURE, settings, SystemSwitchService.SHOW_SNOWFLAKE_ID_SWITCH)
         );
     }
 
-    private RuntimeBusinessConfig businessConfig(Map<String, NoRule> settings) {
+    private RuntimeBusinessConfig businessConfig(Map<String, GeneralSetting> settings) {
         RuntimeStatementConfig statement = new RuntimeStatementConfig(
                 enabled(settings, SystemSwitchService.CUSTOMER_STATEMENT_RECEIPT_ZERO_FROM_SALES_ORDER_SWITCH)
         );
-        RuntimeBusinessNoConfig businessNo = new RuntimeBusinessNoConfig(
-                enabled(settings, SystemSwitchService.USE_SNOWFLAKE_ID_AS_BUSINESS_NO_SWITCH)
-        );
         return new RuntimeBusinessConfig(
                 decimal(settings, CompanySettingService.DEFAULT_TAX_RATE_SETTING_CODE, DEFAULT_TAX_RATE),
-                statement,
-                businessNo
+                statement
         );
     }
 
-    private RuntimeFeatureConfig featureConfig(Map<String, NoRule> settings) {
+    private RuntimeFeatureConfig featureConfig(Map<String, GeneralSetting> settings) {
         return new RuntimeFeatureConfig(
                 featureFlag(WEIGHT_ONLY_PURCHASE_INBOUNDS_FEATURE, settings, WEIGHT_ONLY_PURCHASE_INBOUNDS_SETTING),
                 featureFlag(WEIGHT_ONLY_SALES_OUTBOUNDS_FEATURE, settings, WEIGHT_ONLY_SALES_OUTBOUNDS_SETTING)
         );
     }
 
-    private boolean featureFlag(String key, Map<String, NoRule> settings, String fallbackSettingCode) {
+    private boolean featureFlag(String key, Map<String, GeneralSetting> settings, String fallbackSettingCode) {
         return featureFlagService.isEnabled(key, enabled(settings, fallbackSettingCode));
     }
 
-    private boolean enabled(Map<String, NoRule> settings, String code) {
-        NoRule rule = settings.get(code);
+    private boolean enabled(Map<String, GeneralSetting> settings, String code) {
+        GeneralSetting rule = settings.get(code);
         return rule != null && "正常".equals(rule.getStatus());
     }
 
-    private int integer(Map<String, NoRule> settings, String code, int fallback, int min, int max) {
-        NoRule rule = activeSetting(settings, code);
+    private int integer(Map<String, GeneralSetting> settings, String code, int fallback, int min, int max) {
+        GeneralSetting rule = activeSetting(settings, code);
         if (rule == null) {
             return fallback;
         }
         try {
-            int value = Integer.parseInt(rule.getSampleNo() == null ? "" : rule.getSampleNo().trim());
+            int value = Integer.parseInt(rule.getSettingValue() == null ? "" : rule.getSettingValue().trim());
             return value >= min && value <= max ? value : fallback;
         } catch (NumberFormatException ex) {
             return fallback;
         }
     }
 
-    private BigDecimal decimal(Map<String, NoRule> settings, String code, BigDecimal fallback) {
-        NoRule rule = activeSetting(settings, code);
+    private BigDecimal decimal(Map<String, GeneralSetting> settings, String code, BigDecimal fallback) {
+        GeneralSetting rule = activeSetting(settings, code);
         if (rule == null) {
             return fallback;
         }
         try {
-            BigDecimal value = new BigDecimal(rule.getSampleNo() == null ? "" : rule.getSampleNo().trim());
+            BigDecimal value = new BigDecimal(rule.getSettingValue() == null ? "" : rule.getSettingValue().trim());
             return value.signum() >= 0 ? value : fallback;
         } catch (NumberFormatException ex) {
             return fallback;
         }
     }
 
-    private NoRule activeSetting(Map<String, NoRule> settings, String code) {
-        NoRule rule = settings.get(code);
+    private GeneralSetting activeSetting(Map<String, GeneralSetting> settings, String code) {
+        GeneralSetting rule = settings.get(code);
         return rule != null && "正常".equals(rule.getStatus()) ? rule : null;
     }
 

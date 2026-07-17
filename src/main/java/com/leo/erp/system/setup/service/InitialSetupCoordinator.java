@@ -1,6 +1,5 @@
 package com.leo.erp.system.setup.service;
 
-import com.leo.erp.auth.web.dto.TotpSetupResponse;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.system.setup.domain.entity.BootstrapState;
@@ -10,7 +9,6 @@ import com.leo.erp.system.setup.web.dto.InitialSetupCompanyRequest;
 import com.leo.erp.system.setup.web.dto.InitialSetupStatusResponse;
 import com.leo.erp.system.setup.web.dto.InitialSetupSubmitRequest;
 import com.leo.erp.system.setup.web.dto.InitialSetupSubmitResponse;
-import com.leo.erp.system.setup.web.dto.InitialSetupTotpSetupRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -38,11 +36,6 @@ public class InitialSetupCoordinator {
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public InitialSetupSubmitResponse initialize(InitialSetupSubmitRequest request) {
         return executeLocked(() -> initialSetupService.initialize(request));
-    }
-
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public TotpSetupResponse setupAdminTotp(InitialSetupTotpSetupRequest request) {
-        return executeLocked(() -> initialSetupService.setupAdminTotp(request));
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)

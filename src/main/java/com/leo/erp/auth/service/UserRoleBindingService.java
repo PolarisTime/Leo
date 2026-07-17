@@ -1,18 +1,14 @@
 package com.leo.erp.auth.service;
 
-import com.leo.erp.auth.domain.entity.UserRole;
-import com.leo.erp.auth.repository.UserRoleRepository;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
-import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
+import com.leo.erp.security.permission.CasbinPolicy;
+import com.leo.erp.security.permission.CasbinPolicyStore;
 import com.leo.erp.security.permission.PermissionService;
 import com.leo.erp.security.support.SecurityPrincipal;
-import com.leo.erp.system.role.domain.entity.RolePermission;
 import com.leo.erp.system.role.domain.entity.RoleSetting;
-import com.leo.erp.system.role.repository.RolePermissionRepository;
 import com.leo.erp.system.role.repository.RoleSettingRepository;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -39,29 +35,16 @@ public class UserRoleBindingService {
     private static final String ADMIN_AUTHORITY = "ROLE_ADMIN";
     private static final String ROLE_STATUS_NORMAL = StatusConstants.NORMAL;
 
-    private final UserRoleRepository userRoleRepository;
     private final RoleSettingRepository roleSettingRepository;
-    private final SnowflakeIdGenerator idGenerator;
-    private final RolePermissionRepository rolePermissionRepository;
     private final PermissionService permissionService;
+    private final CasbinPolicyStore casbinPolicyStore;
 
-    @Autowired
-    public UserRoleBindingService(UserRoleRepository userRoleRepository,
-                                  RoleSettingRepository roleSettingRepository,
-                                  SnowflakeIdGenerator idGenerator,
-                                  RolePermissionRepository rolePermissionRepository,
-                                  PermissionService permissionService) {
-        this.userRoleRepository = userRoleRepository;
+    public UserRoleBindingService(RoleSettingRepository roleSettingRepository,
+                                  PermissionService permissionService,
+                                  CasbinPolicyStore casbinPolicyStore) {
         this.roleSettingRepository = roleSettingRepository;
-        this.idGenerator = idGenerator;
-        this.rolePermissionRepository = rolePermissionRepository;
         this.permissionService = permissionService;
-    }
-
-    public UserRoleBindingService(UserRoleRepository userRoleRepository,
-                                  RoleSettingRepository roleSettingRepository,
-                                  SnowflakeIdGenerator idGenerator) {
-        this(userRoleRepository, roleSettingRepository, idGenerator, null, null);
+        this.casbinPolicyStore = casbinPolicyStore;
     }
 
     @Transactional(readOnly = true)
@@ -102,21 +85,10 @@ public class UserRoleBindingService {
 
     @Transactional
     public void replaceUserRoles(Long userId, Collection<RoleSetting> roles) {
-        userRoleRepository.deleteByUserIdAndDeletedFlagFalse(userId);
-        userRoleRepository.flush();
-        if (roles == null || roles.isEmpty()) {
-            return;
-        }
-
-        List<UserRole> bindings = new ArrayList<>();
-        for (RoleSetting role : roles) {
-            UserRole binding = new UserRole();
-            binding.setId(idGenerator.nextId());
-            binding.setUserId(userId);
-            binding.setRoleId(role.getId());
-            bindings.add(binding);
-        }
-        userRoleRepository.saveAll(bindings);
+        List<String> roleCodes = roles == null
+                ? List.of()
+                : roles.stream().map(RoleSetting::getRoleCode).filter(Objects::nonNull).toList();
+        casbinPolicyStore.replaceUserRoles(String.valueOf(userId), roleCodes);
     }
 
     @Transactional
@@ -152,35 +124,31 @@ public class UserRoleBindingService {
 
     @Transactional(readOnly = true)
     public List<RoleSetting> resolveRolesForUser(Long userId) {
-        List<UserRole> bindings = userRoleRepository.findByUserIdAndDeletedFlagFalse(userId);
-        if (bindings.isEmpty()) {
+        List<String> roleCodes = casbinPolicyStore.findDirectRoleCodes(String.valueOf(userId));
+        if (roleCodes.isEmpty()) {
             return List.of();
         }
-        List<Long> roleIds = bindings.stream()
-                .map(UserRole::getRoleId)
-                .filter(Objects::nonNull)
-                .distinct()
-                .toList();
-        if (roleIds.isEmpty()) {
-            return List.of();
-        }
-        List<RoleSetting> boundRoles = roleSettingRepository.findByIdInAndDeletedFlagFalse(roleIds);
+        List<RoleSetting> boundRoles = roleSettingRepository.findByRoleCodeInAndDeletedFlagFalse(roleCodes);
         if (boundRoles.isEmpty()) {
             return List.of();
         }
 
-        Map<Long, RoleSetting> roleMap = new LinkedHashMap<>();
+        Map<String, RoleSetting> roleMap = new LinkedHashMap<>();
         boundRoles.stream()
                 .filter(role -> ROLE_STATUS_NORMAL.equals(role.getStatus()))
-                .forEach(role -> roleMap.put(role.getId(), role));
-        List<RoleSetting> resolved = new ArrayList<>(roleIds.size());
-        for (Long roleId : roleIds) {
-            RoleSetting role = roleMap.get(roleId);
+                .forEach(role -> roleMap.put(role.getRoleCode(), role));
+        List<RoleSetting> resolved = new ArrayList<>(roleCodes.size());
+        for (String roleCode : roleCodes) {
+            RoleSetting role = roleMap.get(roleCode);
             if (role != null) {
                 resolved.add(role);
             }
         }
         return resolved;
+    }
+
+    public List<Long> findUserIdsByRole(String roleCode) {
+        return casbinPolicyStore.findUserIdsByRole(roleCode);
     }
 
     public List<GrantedAuthority> toGrantedAuthorities(Collection<RoleSetting> roles) {
@@ -207,24 +175,24 @@ public class UserRoleBindingService {
     }
 
     private void assertRolesWithinCurrentPrincipalPermissions(Long principalId, List<RoleSetting> requestedRoles) {
-        if (requestedRoles.isEmpty() || rolePermissionRepository == null || permissionService == null) {
+        if (requestedRoles.isEmpty()) {
             return;
         }
         Map<String, Set<String>> currentPermissionMap = permissionService.getUserPermissionMap(principalId);
-        List<Long> requestedRoleIds = requestedRoles.stream()
-                .map(RoleSetting::getId)
+        List<String> requestedRoleCodes = requestedRoles.stream()
+                .map(RoleSetting::getRoleCode)
                 .filter(Objects::nonNull)
                 .distinct()
                 .toList();
-        if (requestedRoleIds.isEmpty()) {
+        if (requestedRoleCodes.isEmpty()) {
             return;
         }
-        for (RolePermission permission : rolePermissionRepository.findByRoleIdInAndDeletedFlagFalse(requestedRoleIds)) {
-            String resource = permission.getResourceCode();
-            String action = permission.getActionCode();
-            Set<String> allowedActions = currentPermissionMap.get(resource);
-            if (allowedActions == null || !allowedActions.contains(action)) {
-                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "不能授予超出自身权限范围的角色");
+        for (List<CasbinPolicy> policies : casbinPolicyStore.findPermissionsByRoles(requestedRoleCodes).values()) {
+            for (CasbinPolicy policy : policies) {
+                Set<String> allowedActions = currentPermissionMap.get(policy.resource());
+                if (allowedActions == null || !allowedActions.contains(policy.action())) {
+                    throw new BusinessException(ErrorCode.BUSINESS_ERROR, "不能授予超出自身权限范围的角色");
+                }
             }
         }
     }

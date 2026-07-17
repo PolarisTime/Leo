@@ -8,7 +8,7 @@ import com.leo.erp.master.carrier.service.CarrierService;
 import com.leo.erp.master.carrier.web.dto.CarrierOptionResponse;
 import com.leo.erp.master.carrier.web.dto.CarrierRequest;
 import com.leo.erp.master.carrier.web.dto.CarrierResponse;
-import com.leo.erp.security.permission.RequiresPermission;
+import org.springframework.security.access.prepost.PreAuthorize;
 import jakarta.validation.Valid;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -35,13 +35,13 @@ public class CarrierController {
     }
 
     @GetMapping("/options")
-    @RequiresPermission(resource = "carrier", action = "read")
+    @PreAuthorize("@rbac.check('carrier', 'read')")
     public ApiResponse<List<CarrierOptionResponse>> options() {
         return ApiResponse.success(carrierService.listActiveOptions());
     }
 
     @GetMapping
-    @RequiresPermission(resource = "carrier", action = "read")
+    @PreAuthorize("@rbac.check('carrier', 'read')")
     public ApiResponse<PageResponse<CarrierResponse>> page(
             @BindPageQuery(sortFieldKey = "carrier") PageQuery query,
             @RequestParam(required = false) String keyword,
@@ -51,25 +51,25 @@ public class CarrierController {
     }
 
     @GetMapping("/{id}")
-    @RequiresPermission(resource = "carrier", action = "read")
+    @PreAuthorize("@rbac.check('carrier', 'read')")
     public ApiResponse<CarrierResponse> detail(@PathVariable Long id) {
         return ApiResponse.success(carrierService.detail(id));
     }
 
     @PostMapping
-    @RequiresPermission(resource = "carrier", action = "create")
+    @PreAuthorize("@rbac.check('carrier', 'create')")
     public ApiResponse<CarrierResponse> create(@Valid @RequestBody CarrierRequest request) {
         return ApiResponse.success("创建成功", carrierService.create(request));
     }
 
     @PutMapping("/{id}")
-    @RequiresPermission(resource = "carrier", action = "update")
+    @PreAuthorize("@rbac.check('carrier', 'update')")
     public ApiResponse<CarrierResponse> update(@PathVariable Long id, @Valid @RequestBody CarrierRequest request) {
         return ApiResponse.success("更新成功", carrierService.update(id, request));
     }
 
     @DeleteMapping("/{id}")
-    @RequiresPermission(resource = "carrier", action = "delete")
+    @PreAuthorize("@rbac.check('carrier', 'delete')")
     public ApiResponse<Void> delete(@PathVariable Long id) {
         carrierService.delete(id);
         return ApiResponse.success("删除成功");

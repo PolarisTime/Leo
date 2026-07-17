@@ -11,7 +11,6 @@ import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.security.jwt.AccessTokenBlacklistService;
 import com.leo.erp.security.jwt.JwtTokenService;
 import com.leo.erp.security.jwt.SessionActivityService;
-import com.leo.erp.system.norule.service.SystemSwitchService;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -39,7 +38,6 @@ public class SessionManagementService {
     private final AccessTokenBlacklistService blacklistService;
     private final SessionActivityService sessionActivityService;
     private final AfterCommitExecutor afterCommitExecutor;
-    private final SystemSwitchService systemSwitchService;
     private final AuthProperties authProperties;
 
     public SessionManagementService(
@@ -50,7 +48,6 @@ public class SessionManagementService {
             AccessTokenBlacklistService blacklistService,
             SessionActivityService sessionActivityService,
             AfterCommitExecutor afterCommitExecutor,
-            @org.springframework.lang.Nullable SystemSwitchService systemSwitchService,
             AuthProperties authProperties
     ) {
         this.userAccountRepository = userAccountRepository;
@@ -60,13 +57,7 @@ public class SessionManagementService {
         this.blacklistService = blacklistService;
         this.sessionActivityService = sessionActivityService;
         this.afterCommitExecutor = afterCommitExecutor;
-        this.systemSwitchService = systemSwitchService;
         this.authProperties = authProperties != null ? authProperties : new AuthProperties();
-    }
-
-    private int maxRefreshTokensPerUser() {
-        if (systemSwitchService == null) return DEFAULT_MAX_REFRESH_TOKENS;
-        return systemSwitchService.getMaxConcurrentSessions();
     }
 
     @Transactional
@@ -206,7 +197,7 @@ public class SessionManagementService {
     }
 
     private void trimActiveSessionsBeforeIssuing(Long userId) {
-        int maxSessions = maxRefreshTokensPerUser();
+        int maxSessions = DEFAULT_MAX_REFRESH_TOKENS;
         if (maxSessions <= 0) {
             return;
         }

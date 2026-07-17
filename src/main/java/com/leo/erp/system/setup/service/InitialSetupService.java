@@ -3,10 +3,7 @@ package com.leo.erp.system.setup.service;
 import com.leo.erp.auth.domain.entity.UserAccount;
 import com.leo.erp.auth.domain.enums.UserStatus;
 import com.leo.erp.auth.repository.UserAccountRepository;
-import com.leo.erp.auth.repository.UserRoleRepository;
-import com.leo.erp.auth.service.TotpService;
 import com.leo.erp.auth.service.UserRoleBindingService;
-import com.leo.erp.auth.web.dto.TotpSetupResponse;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.config.CacheConfig;
@@ -21,9 +18,9 @@ import com.leo.erp.system.company.service.CompanySettingService;
 import com.leo.erp.system.company.web.dto.CompanySettlementAccountResponse;
 import com.leo.erp.system.department.domain.entity.Department;
 import com.leo.erp.system.department.repository.DepartmentRepository;
-import com.leo.erp.system.norule.domain.entity.NoRule;
-import com.leo.erp.system.norule.repository.NoRuleRepository;
-import com.leo.erp.system.norule.service.SystemSwitchService;
+import com.leo.erp.system.generalsetting.domain.entity.GeneralSetting;
+import com.leo.erp.system.generalsetting.repository.GeneralSettingRepository;
+import com.leo.erp.system.generalsetting.service.SystemSwitchService;
 import com.leo.erp.system.role.domain.entity.RoleSetting;
 import com.leo.erp.system.role.repository.RoleSettingRepository;
 import com.leo.erp.system.setup.web.dto.InitialSetupAdminSubmitRequest;
@@ -31,18 +28,14 @@ import com.leo.erp.system.setup.web.dto.InitialSetupCompanyRequest;
 import com.leo.erp.system.setup.web.dto.InitialSetupStatusResponse;
 import com.leo.erp.system.setup.web.dto.InitialSetupSubmitRequest;
 import com.leo.erp.system.setup.web.dto.InitialSetupSubmitResponse;
-import com.leo.erp.system.setup.web.dto.InitialSetupTotpSetupRequest;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Caching;
 
 import java.math.BigDecimal;
-import java.time.Duration;
-import java.util.Base64;
 
 @Service
 public class InitialSetupService {
@@ -50,46 +43,34 @@ public class InitialSetupService {
     private static final String ADMIN_ROLE_CODE = "ADMIN";
     private static final String DEFAULT_COMPANY_STATUS = StatusConstants.NORMAL;
     private static final String SETUP_REMARK = "网页首次初始化创建";
-    private static final String OOBE_TOTP_SECRET_PREFIX = "setup:admin:totp:";
-    private static final Duration OOBE_TOTP_SECRET_TTL = Duration.ofMinutes(10);
-
     private final UserAccountRepository userAccountRepository;
-    private final UserRoleRepository userRoleRepository;
     private final UserRoleBindingService userRoleBindingService;
     private final RoleSettingRepository roleSettingRepository;
     private final CompanySettingRepository companySettingRepository;
-    private final NoRuleRepository noRuleRepository;
+    private final GeneralSettingRepository generalSettingRepository;
     private final DepartmentRepository departmentRepository;
     private final PasswordEncoder passwordEncoder;
     private final SnowflakeIdGenerator snowflakeIdGenerator;
     private final ObjectMapper objectMapper;
-    private final TotpService totpService;
-    private final StringRedisTemplate redisTemplate;
 
     public InitialSetupService(UserAccountRepository userAccountRepository,
-                               UserRoleRepository userRoleRepository,
                                UserRoleBindingService userRoleBindingService,
                                RoleSettingRepository roleSettingRepository,
                                CompanySettingRepository companySettingRepository,
-                               NoRuleRepository noRuleRepository,
+                               GeneralSettingRepository generalSettingRepository,
                                DepartmentRepository departmentRepository,
                                PasswordEncoder passwordEncoder,
                                SnowflakeIdGenerator snowflakeIdGenerator,
-                               ObjectMapper objectMapper,
-                               TotpService totpService,
-                               StringRedisTemplate redisTemplate) {
+                               ObjectMapper objectMapper) {
         this.userAccountRepository = userAccountRepository;
-        this.userRoleRepository = userRoleRepository;
         this.userRoleBindingService = userRoleBindingService;
         this.roleSettingRepository = roleSettingRepository;
         this.companySettingRepository = companySettingRepository;
-        this.noRuleRepository = noRuleRepository;
+        this.generalSettingRepository = generalSettingRepository;
         this.departmentRepository = departmentRepository;
         this.passwordEncoder = passwordEncoder;
         this.snowflakeIdGenerator = snowflakeIdGenerator;
         this.objectMapper = objectMapper;
-        this.totpService = totpService;
-        this.redisTemplate = redisTemplate;
     }
 
     @Transactional(readOnly = true)
@@ -139,19 +120,6 @@ public class InitialSetupService {
         return new InitialSetupSubmitResponse(adminLoginName, companyName);
     }
 
-    @Transactional(readOnly = true)
-    public TotpSetupResponse setupAdminTotp(InitialSetupTotpSetupRequest request) {
-        assertOobeNotCompleted();
-        if (isAdminConfigured()) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "管理员账号已完成初始化");
-        }
-        String loginName = requireText(request == null ? null : request.loginName(), "管理员登录账号不能为空");
-        String secret = totpService.generateSecret();
-        cacheAdminTotpSecret(loginName, secret);
-        byte[] qrCode = totpService.generateQrCodeImage(secret, loginName);
-        return new TotpSetupResponse(Base64.getEncoder().encodeToString(qrCode), secret);
-    }
-
     @Transactional
     public synchronized InitialSetupSubmitResponse configureAdmin(InitialSetupAdminSubmitRequest request) {
         assertOobeNotCompleted();
@@ -182,7 +150,7 @@ public class InitialSetupService {
     }
 
     private boolean isOobeCompleted() {
-        return noRuleRepository.findBySettingCodeAndDeletedFlagFalse(SystemSwitchService.OOBE_COMPLETED_SWITCH)
+        return generalSettingRepository.findBySettingCodeAndDeletedFlagFalse(SystemSwitchService.OOBE_COMPLETED_SWITCH)
                 .map(setting -> StatusConstants.NORMAL.equals(setting.getStatus()))
                 .orElse(false);
     }
@@ -200,14 +168,13 @@ public class InitialSetupService {
     }
 
     private boolean isAdminConfigured() {
-        return roleSettingRepository.findByRoleCodeAndDeletedFlagFalse(ADMIN_ROLE_CODE)
-                .map(role -> userRoleRepository.countActiveUsersByRoleId(role.getId()) > 0)
-                .orElse(false);
+        return !userRoleBindingService.findUserIdsByRole(ADMIN_ROLE_CODE).isEmpty();
     }
 
     private String resolveExistingAdminLoginName() {
-        return roleSettingRepository.findByRoleCodeAndDeletedFlagFalse(ADMIN_ROLE_CODE)
-                .flatMap(role -> userRoleRepository.findFirstActiveUserByRoleId(role.getId()))
+        return userRoleBindingService.findUserIdsByRole(ADMIN_ROLE_CODE).stream()
+                .findFirst()
+                .flatMap(userAccountRepository::findByIdAndDeletedFlagFalse)
                 .map(UserAccount::getLoginName)
                 .orElse("admin");
     }
@@ -225,13 +192,8 @@ public class InitialSetupService {
         String password = requireText(request.admin().password(), "管理员密码不能为空");
         String userName = requireText(request.admin().userName(), "管理员姓名不能为空");
         String mobile = trimToEmpty(request.admin().mobile());
-        String totpCode = requireText(request.totpCode(), "请输入管理员 2FA 验证码");
         if (password.length() < 8) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "管理员密码至少8位");
-        }
-        String totpSecret = resolveCachedAdminTotpSecret(loginName);
-        if (!totpService.verifyCode(totpSecret, totpCode)) {
-            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "管理员 2FA 验证码不正确");
         }
 
         if (userAccountRepository.existsByLoginNameAndDeletedFlagFalse(loginName)) {
@@ -250,14 +212,6 @@ public class InitialSetupService {
         admin.setPermissionSummary("");
         admin.setStatus(UserStatus.NORMAL);
         admin.setRemark(SETUP_REMARK);
-        try {
-            admin.setTotpSecret(totpService.encryptSecret(totpSecret));
-        } catch (IllegalStateException e) {
-            throw new BusinessException(ErrorCode.INTERNAL_ERROR, "TOTP 加密密钥未配置，请联系系统管理员");
-        }
-        admin.setTotpEnabled(Boolean.TRUE);
-        admin.setRequireTotpSetup(Boolean.FALSE);
-
         Department defaultDept = departmentRepository.findByDepartmentCodeAndDeletedFlagFalse("DEPT001")
                 .orElse(null);
         if (defaultDept != null) {
@@ -268,33 +222,10 @@ public class InitialSetupService {
         try {
             userAccountRepository.saveAndFlush(admin);
             userRoleBindingService.replaceUserRoles(admin.getId(), java.util.List.of(adminRole));
-            evictCachedAdminTotpSecret(loginName);
             return admin.getLoginName();
         } catch (DataIntegrityViolationException ex) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "管理员登录账号已存在");
         }
-    }
-
-    private void cacheAdminTotpSecret(String loginName, String secret) {
-        if (redisTemplate == null) {
-            return;
-        }
-        redisTemplate.opsForValue().set(OOBE_TOTP_SECRET_PREFIX + loginName, secret, OOBE_TOTP_SECRET_TTL);
-    }
-
-    private String resolveCachedAdminTotpSecret(String loginName) {
-        if (redisTemplate == null) {
-            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "请先生成并绑定管理员 2FA");
-        }
-        String secret = redisTemplate.opsForValue().get(OOBE_TOTP_SECRET_PREFIX + loginName);
-        if (secret == null || secret.isBlank()) {
-            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "请先生成并绑定管理员 2FA");
-        }
-        return secret;
-    }
-
-    private void evictCachedAdminTotpSecret(String loginName) {
-        redisTemplate.delete(OOBE_TOTP_SECRET_PREFIX + loginName);
     }
 
     private String createCompanyRecord(InitialSetupCompanyRequest request) {
@@ -366,41 +297,33 @@ public class InitialSetupService {
     }
 
     private void upsertDefaultTaxRateSetting(BigDecimal taxRate) {
-        NoRule setting = noRuleRepository.findBySettingCodeAndDeletedFlagFalse(CompanySettingService.DEFAULT_TAX_RATE_SETTING_CODE)
-                .orElseGet(NoRule::new);
+        GeneralSetting setting = generalSettingRepository.findBySettingCodeAndDeletedFlagFalse(CompanySettingService.DEFAULT_TAX_RATE_SETTING_CODE)
+                .orElseGet(GeneralSetting::new);
         if (setting.getId() == null) {
             setting.setId(snowflakeIdGenerator.nextId());
             setting.setSettingCode(CompanySettingService.DEFAULT_TAX_RATE_SETTING_CODE);
             setting.setSettingName("默认税率");
-            setting.setBillName("发票税率");
-            setting.setPrefix("SYS");
-            setting.setDateRule("yyyy");
-            setting.setSerialLength(1);
-            setting.setResetRule("YEARLY");
+            setting.setSettingGroup("发票税率");
         }
-        setting.setSampleNo(taxRate.setScale(PrecisionConstants.TAX_RATE_SCALE, PrecisionConstants.DEFAULT_ROUNDING).toPlainString());
+        setting.setSettingValue(taxRate.setScale(PrecisionConstants.TAX_RATE_SCALE, PrecisionConstants.DEFAULT_ROUNDING).toPlainString());
         setting.setStatus(StatusConstants.NORMAL);
         setting.setRemark("用于发票默认税率与税额自动计算");
-        noRuleRepository.save(setting);
+        generalSettingRepository.save(setting);
     }
 
     private void ensureOobeCompletedSwitch() {
-        NoRule setting = noRuleRepository.findBySettingCodeAndDeletedFlagFalse(SystemSwitchService.OOBE_COMPLETED_SWITCH)
-                .orElseGet(NoRule::new);
+        GeneralSetting setting = generalSettingRepository.findBySettingCodeAndDeletedFlagFalse(SystemSwitchService.OOBE_COMPLETED_SWITCH)
+                .orElseGet(GeneralSetting::new);
         if (setting.getId() == null) {
             setting.setId(snowflakeIdGenerator.nextId());
             setting.setSettingCode(SystemSwitchService.OOBE_COMPLETED_SWITCH);
             setting.setSettingName("OOBE已完成");
-            setting.setBillName("系统初始化");
-            setting.setPrefix("SYS");
-            setting.setDateRule("yyyy");
-            setting.setSerialLength(1);
-            setting.setResetRule("ONCE");
+            setting.setSettingGroup("系统初始化");
         }
-        setting.setSampleNo("COMPLETED");
+        setting.setSettingValue("COMPLETED");
         setting.setStatus(StatusConstants.NORMAL);
         setting.setRemark("首次初始化完成后自动创建，禁止重复执行 OOBE 流程");
-        noRuleRepository.save(setting);
+        generalSettingRepository.save(setting);
     }
 
     void ensureOobeCompletedIfReady() {

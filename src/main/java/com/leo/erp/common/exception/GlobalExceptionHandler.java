@@ -172,7 +172,6 @@ public class GlobalExceptionHandler {
             case SESSION_EVICTED -> HttpStatus.UNAUTHORIZED;
             case CONCURRENT_MODIFICATION -> HttpStatus.CONFLICT;
             case REFRESH_TOKEN_REUSE_CONFLICT -> HttpStatus.CONFLICT;
-            case RATE_LIMITED -> HttpStatus.TOO_MANY_REQUESTS;
             case BUSINESS_ERROR -> HttpStatus.UNPROCESSABLE_ENTITY;
         };
     }

@@ -182,11 +182,6 @@ leo:
   # 部署在 nginx / CDN 后面时，填入代理的内网地址。
   # 示例: "127.0.0.1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"；默认不信任任何代理。
   trusted-proxies: ${LEO_TRUSTED_PROXIES:}
-  rate-limit:
-    local-cache:
-      # 单实例限流桶使用有界空闲过期缓存，避免攻击者构造维度导致常驻内存持续增长。
-      maximum-size: ${LEO_RATE_LIMIT_LOCAL_CACHE_MAXIMUM_SIZE:10000}
-      expire-after-access-ms: ${LEO_RATE_LIMIT_LOCAL_CACHE_EXPIRE_AFTER_ACCESS_MS:600000}
   feature-flags:
     unleash:
       # 默认关闭；启用后 runtime-config 的 feature 字段通过 OpenFeature/Unleash 读取。
@@ -225,8 +220,6 @@ leo:
       # 登录态每个请求都会经过过滤器，这里限制会话活跃时间写入频率
       activity-write-interval: ${LEO_REDIS_SESSION_ACTIVITY_WRITE_INTERVAL:30s}
       mget-batch-size: ${LEO_REDIS_SESSION_MGET_BATCH_SIZE:500}
-    rate-limit:
-      bucket-ttl-floor: ${LEO_REDIS_RATE_LIMIT_BUCKET_TTL_FLOOR:60s}
   attachment:
     # 业务层额外限制的附件大小
     max-file-size: 20MB
@@ -358,11 +351,8 @@ leo:
       access-expiration-ms: 600000
       # Refresh Token 有效期，单位毫秒
       refresh-expiration-ms: 604800000
-    totp:
-      # 2FA 显示给认证器的签发方名称
-      issuer: LeoERP
-      # 启动兜底 2FA 主密钥；执行系统设置中的 2FA 轮转后，运行时优先使用数据库托管密钥
-      encryption-key: ${TOTP_ENCRYPTION_KEY:}
+    # 附件与 OSS 凭据的启动兜底数据加密密钥；运行时优先使用数据库 DATA_MASTER。
+    data-encryption-key: ${LEO_DATA_ENCRYPTION_KEY:}
 
   excel:
     # 最大导出行数

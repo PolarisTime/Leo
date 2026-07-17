@@ -17,6 +17,6 @@ public class SecurityKeyStartupValidator implements ApplicationRunner {
     @Override
     public void run(ApplicationArguments args) {
         securityKeyService.getActiveJwtMaterial();
-        securityKeyService.getActiveTotpMaterial();
+        securityKeyService.getActiveDataMaterial();
     }
 }

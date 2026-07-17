@@ -122,7 +122,7 @@ public class CustomerStatementService extends AbstractCrudService<CustomerStatem
     @Override
     protected CustomerStatementRequest normalizeCreateRequest(CustomerStatementRequest request, long entityId) {
         return new CustomerStatementRequest(
-                resolveCreateBusinessNo("customer-statement", request.statementNo(), entityId),
+                resolveCreateBusinessNo(entityId),
                 request.customerCode(),
                 request.customerName(),
                 request.projectId(),

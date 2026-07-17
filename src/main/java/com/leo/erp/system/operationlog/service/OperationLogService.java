@@ -7,7 +7,6 @@ import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
-import com.leo.erp.security.jwt.ApiKeyAuthenticationDetails;
 import com.leo.erp.security.support.SecurityPrincipal;
 import com.leo.erp.system.operationlog.domain.entity.OperationLog;
 import com.leo.erp.system.operationlog.repository.OperationLogRepository;
@@ -172,9 +171,6 @@ public class OperationLogService {
             return truncate(normalizedAuthType, 16);
         }
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        if (authentication != null && authentication.getDetails() instanceof ApiKeyAuthenticationDetails) {
-            return "API_KEY";
-        }
         return authentication != null ? "WEB" : "SYSTEM";
     }
 

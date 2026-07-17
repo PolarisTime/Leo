@@ -7,8 +7,6 @@ public record AuthUserResponse(
         String loginName,
         String userName,
         String roleName,
-        Boolean totpEnabled,
-        Boolean forceTotpSetup,
         List<ResourcePermissionResponse> permissions
 ) {
 }

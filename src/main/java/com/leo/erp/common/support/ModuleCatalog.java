@@ -64,9 +64,6 @@ public class ModuleCatalog {
         modules.put("role-action-editor", "角色权限配置");
         modules.put("print-template", "打印模板");
         modules.put("operation-log", "操作日志");
-        modules.put("session", "会话管理");
-        modules.put("api-key", "API Key 管理");
-        modules.put("security-key", "安全密钥管理");
         modules.put("database", "数据库管理");
         modules.put("io-report", "出入库报表");
         modules.put("inventory-report", "库存报表");

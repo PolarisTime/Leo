@@ -20,6 +20,13 @@ public class AttachmentFilenameResolver {
     private static final DateTimeFormatter HHMMSS = DateTimeFormatter.ofPattern("HHmmss");
     private static final DateTimeFormatter FULL = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
 
+    public String buildStoredFileName(long attachmentId, String originalFilename, String contentType) {
+        FilenameParts parts = parseFilenameParts(originalFilename, contentType);
+        return parts.extension().isBlank()
+                ? String.valueOf(attachmentId)
+                : attachmentId + "." + parts.extension();
+    }
+
     public String buildFileName(String renamePattern, String originalFilename, String contentType, LocalDateTime now) {
         return renderFileName(renamePattern, originalFilename, contentType, now, String.valueOf(System.currentTimeMillis()), UUID.randomUUID().toString().replace("-", "").substring(0, PrecisionConstants.ID_PREFIX_LENGTH));
     }

@@ -1,7 +1,7 @@
 package com.leo.erp.system.runtimeconfig.web;
 
 import com.leo.erp.common.api.ApiResponse;
-import com.leo.erp.security.permission.RequiresPermission;
+import org.springframework.security.access.prepost.PreAuthorize;
 import com.leo.erp.system.runtimeconfig.service.RuntimeConfigService;
 import com.leo.erp.system.runtimeconfig.web.dto.RuntimeConfigResponse;
 import org.springframework.validation.annotation.Validated;
@@ -21,7 +21,7 @@ public class RuntimeConfigController {
     }
 
     @GetMapping
-    @RequiresPermission(authenticatedOnly = true)
+    @PreAuthorize("isAuthenticated()")
     public ApiResponse<RuntimeConfigResponse> getRuntimeConfig() {
         return ApiResponse.success(runtimeConfigService.getRuntimeConfig());
     }

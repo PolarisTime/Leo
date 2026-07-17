@@ -4,7 +4,7 @@ import com.leo.erp.common.api.ApiResponse;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.api.PageResponse;
 import com.leo.erp.common.web.BindPageQuery;
-import com.leo.erp.security.permission.RequiresPermission;
+import org.springframework.security.access.prepost.PreAuthorize;
 import com.leo.erp.system.operationlog.support.OperationLoggable;
 import com.leo.erp.system.role.service.RoleSettingService;
 import com.leo.erp.system.role.web.dto.RolePermissionItem;
@@ -40,7 +40,7 @@ public class RoleSettingController {
     }
 
     @GetMapping
-    @RequiresPermission(resource = "role", action = "read")
+    @PreAuthorize("@rbac.check('role', 'read')")
     public ApiResponse<PageResponse<RoleSettingResponse>> page(
             @BindPageQuery(sortFieldKey = "role-setting") PageQuery query,
             @RequestParam(required = false) String keyword,
@@ -50,27 +50,27 @@ public class RoleSettingController {
     }
 
     @GetMapping("/{id}")
-    @RequiresPermission(resource = "role", action = "read")
+    @PreAuthorize("@rbac.check('role', 'read')")
     public ApiResponse<RoleSettingResponse> detail(@PathVariable @Positive Long id) {
         return ApiResponse.success(roleSettingService.detail(id));
     }
 
     @PostMapping
-    @RequiresPermission(resource = "role", action = "create")
+    @PreAuthorize("@rbac.check('role', 'create')")
     @OperationLoggable(moduleName = "角色权限配置", actionType = "新增", businessNoFields = {"roleCode"})
     public ApiResponse<RoleSettingResponse> create(@Valid @RequestBody RoleSettingRequest request) {
         return ApiResponse.success("创建成功", roleSettingService.create(request));
     }
 
     @PutMapping("/{id}")
-    @RequiresPermission(resource = "role", action = "update")
+    @PreAuthorize("@rbac.check('role', 'update')")
     @OperationLoggable(moduleName = "角色权限配置", actionType = "编辑", businessNoFields = {"roleCode"})
     public ApiResponse<RoleSettingResponse> update(@PathVariable @Positive Long id, @Valid @RequestBody RoleSettingRequest request) {
         return ApiResponse.success("更新成功", roleSettingService.update(id, request));
     }
 
     @DeleteMapping("/{id}")
-    @RequiresPermission(resource = "role", action = "delete")
+    @PreAuthorize("@rbac.check('role', 'delete')")
     @OperationLoggable(moduleName = "角色权限配置", actionType = "删除")
     public ApiResponse<Void> delete(@PathVariable @Positive Long id) {
         roleSettingService.delete(id);
@@ -78,25 +78,25 @@ public class RoleSettingController {
     }
 
     @GetMapping("/{id}/permission")
-    @RequiresPermission(resource = "role", action = "manage_permissions")
+    @PreAuthorize("@rbac.check('role', 'manage_permissions')")
     public ApiResponse<List<RolePermissionItem>> getRolePermissions(@PathVariable @Positive Long id) {
         return ApiResponse.success(roleSettingService.getRolePermissions(id));
     }
 
     @GetMapping("/permission-options")
-    @RequiresPermission(resource = "role", action = "manage_permissions")
+    @PreAuthorize("@rbac.check('role', 'manage_permissions')")
     public ApiResponse<List<MenuTreeResponse>> listPermissionOptions() {
         return ApiResponse.success(roleSettingService.listPermissionOptions());
     }
 
     @GetMapping("/templates")
-    @RequiresPermission(resource = "role", action = "manage_permissions")
+    @PreAuthorize("@rbac.check('role', 'manage_permissions')")
     public ApiResponse<List<com.leo.erp.system.role.service.RoleTemplateService.Template>> listRoleTemplates() {
         return ApiResponse.success(roleTemplateService.listTemplates());
     }
 
     @PutMapping("/{id}/permission")
-    @RequiresPermission(resource = "role", action = "manage_permissions")
+    @PreAuthorize("@rbac.check('role', 'manage_permissions')")
     @OperationLoggable(moduleName = "角色权限配置", actionType = "编辑权限")
     public ApiResponse<Void> saveRolePermissions(@PathVariable @Positive Long id,
                                                  @Valid @RequestBody List<@Valid RolePermissionItem> permissions) {

@@ -5,7 +5,7 @@ import com.leo.erp.purchase.inbound.service.PurchaseInboundImportBatchService;
 import com.leo.erp.purchase.inbound.web.dto.PurchaseInboundImportBatchRequest;
 import com.leo.erp.purchase.inbound.web.dto.PurchaseInboundImportBatchResponse;
 import com.leo.erp.purchase.inbound.web.dto.PurchaseInboundSplitPreviewResponse;
-import com.leo.erp.security.permission.RequiresPermission;
+import org.springframework.security.access.prepost.PreAuthorize;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -27,14 +27,14 @@ public class PurchaseInboundImportBatchController {
     }
 
     @GetMapping("/purchase-orders/{id}/inbound-split-preview")
-    @RequiresPermission(resource = "purchase-order", action = "read")
+    @PreAuthorize("@rbac.check('purchase-order', 'read')")
     @Operation(summary = "预览采购入库拆分结果")
     public ApiResponse<PurchaseInboundSplitPreviewResponse> preview(@PathVariable Long id) {
         return ApiResponse.success(service.preview(id));
     }
 
     @PostMapping("/purchase-orders/{id}/inbound-import-batches")
-    @RequiresPermission(resource = "purchase-inbound", action = "create")
+    @PreAuthorize("@rbac.check('purchase-inbound', 'create')")
     @Operation(summary = "原子创建采购入库拆分草稿")
     public ApiResponse<PurchaseInboundImportBatchResponse> create(
             @PathVariable Long id,
@@ -44,7 +44,7 @@ public class PurchaseInboundImportBatchController {
     }
 
     @GetMapping("/purchase-inbound-import-batches/{id}")
-    @RequiresPermission(resource = "purchase-inbound", action = "read")
+    @PreAuthorize("@rbac.check('purchase-inbound', 'read')")
     @Operation(summary = "查询采购入库导入批次")
     public ApiResponse<PurchaseInboundImportBatchResponse> detail(@PathVariable Long id) {
         return ApiResponse.success(service.detail(id));

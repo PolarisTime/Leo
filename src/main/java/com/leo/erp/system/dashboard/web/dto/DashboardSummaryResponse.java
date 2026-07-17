@@ -12,7 +12,6 @@ public record DashboardSummaryResponse(
         long moduleCount,
         long actionCount,
         long activeSessionCount,
-        boolean totpEnabled,
         LocalDateTime lastLoginAt,
         LocalDateTime serverTime,
         long materialCount,

@@ -3,9 +3,7 @@ package com.leo.erp.auth.service;
 import com.leo.erp.auth.domain.entity.UserAccount;
 import com.leo.erp.auth.repository.UserAccountRepository;
 import com.leo.erp.auth.mapper.UserAccountAdminMapper;
-import com.leo.erp.auth.web.dto.TotpEnableRequest;
 import com.leo.erp.auth.web.dto.LoginNameAvailabilityResponse;
-import com.leo.erp.auth.web.dto.TotpSetupResponse;
 import com.leo.erp.auth.web.dto.UserAccountCreateResponse;
 import com.leo.erp.auth.web.dto.UserAccountAdminRequest;
 import com.leo.erp.auth.web.dto.UserAccountAdminResponse;
@@ -15,12 +13,11 @@ import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.auth.domain.enums.UserStatus;
-import com.leo.erp.auth.repository.UserRoleRepository;
+import com.leo.erp.security.permission.CasbinPolicyStore;
 import com.leo.erp.security.permission.PermissionService;
 import com.leo.erp.system.role.domain.entity.RoleConflict;
 import com.leo.erp.system.role.domain.entity.RoleSetting;
 import com.leo.erp.system.role.repository.RoleConflictRepository;
-import com.leo.erp.system.role.repository.RoleSettingRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
@@ -29,7 +26,6 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.Base64;
 import java.util.List;
 import java.util.Locale;
 
@@ -42,14 +38,12 @@ public class UserAccountAdminService {
     private final SnowflakeIdGenerator idGenerator;
     private final PasswordEncoder passwordEncoder;
     private final UserAccountAdminMapper userAccountAdminMapper;
-    private final TotpService totpService;
     private final UserRoleBindingService userRoleBindingService;
     private final PermissionService permissionService;
     private final UserAccountValidationService validationService;
     private final UserAccountCacheService cacheService;
     private final RoleConflictRepository roleConflictRepository;
-    private final RoleSettingRepository roleSettingRepository;
-    private final UserRoleRepository userRoleRepository;
+    private final CasbinPolicyStore casbinPolicyStore;
 
     @Autowired
     public UserAccountAdminService(
@@ -57,26 +51,22 @@ public class UserAccountAdminService {
             SnowflakeIdGenerator idGenerator,
             PasswordEncoder passwordEncoder,
             UserAccountAdminMapper userAccountAdminMapper,
-            TotpService totpService,
             UserRoleBindingService userRoleBindingService,
             PermissionService permissionService,
             UserAccountValidationService validationService,
             UserAccountCacheService cacheService,
             RoleConflictRepository roleConflictRepository,
-            RoleSettingRepository roleSettingRepository,
-            UserRoleRepository userRoleRepository) {
+            CasbinPolicyStore casbinPolicyStore) {
         this.repository = repository;
         this.idGenerator = idGenerator;
         this.passwordEncoder = passwordEncoder;
         this.userAccountAdminMapper = userAccountAdminMapper;
-        this.totpService = totpService;
         this.userRoleBindingService = userRoleBindingService;
         this.permissionService = permissionService;
         this.validationService = validationService;
         this.cacheService = cacheService;
         this.roleConflictRepository = roleConflictRepository;
-        this.roleSettingRepository = roleSettingRepository;
-        this.userRoleRepository = userRoleRepository;
+        this.casbinPolicyStore = casbinPolicyStore;
     }
 
     @Transactional(readOnly = true)
@@ -110,7 +100,6 @@ public class UserAccountAdminService {
         UserAccount entity = new UserAccount();
         entity.setId(idGenerator.nextId());
         entity.setPasswordHash(passwordEncoder.encode(initialPassword));
-        entity.setRequireTotpSetup(validationService.shouldRequireTotpSetupForNewUser());
         return new UserAccountCreateResponse(saveWithRoles(entity, request), initialPassword);
     }
 
@@ -128,63 +117,12 @@ public class UserAccountAdminService {
         assertNotLastActiveAdmin(entity, List.of(), UserStatus.DISABLED, true);
         entity.setDeletedFlag(true);
         repository.save(entity);
+        casbinPolicyStore.replaceUserRoles(String.valueOf(entity.getId()), List.of());
         cacheService.evictLoginNameCache(entity.getLoginName());
         cacheService.evictPermissionCache(entity.getId());
         cacheService.evictAuthenticatedUser(entity.getId());
         cacheService.evictDashboard(entity.getId());
     }
-
-    // --- 2FA 管理 ---
-
-    @Transactional
-    public TotpSetupResponse setup2fa(Long id) {
-        UserAccount entity = getEntity(id);
-        String secret = totpService.generateSecret();
-        entity.setTotpSecret(totpService.encryptSecret(secret));
-        entity.setTotpEnabled(Boolean.FALSE);
-        repository.save(entity);
-        cacheService.evictAuthenticatedUser(entity.getId());
-        cacheService.evictDashboard(entity.getId());
-
-        byte[] qrBytes = totpService.generateQrCodeImage(secret, entity.getLoginName());
-        String qrBase64 = Base64.getEncoder().encodeToString(qrBytes);
-
-        return new TotpSetupResponse(qrBase64, secret);
-    }
-
-    @Transactional
-    public UserAccountAdminResponse enable2fa(Long id, TotpEnableRequest request) {
-        UserAccount entity = getEntity(id);
-
-        if (entity.getTotpSecret() == null) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "请先生成2FA密钥");
-        }
-
-        String secret = totpService.decryptSecret(entity.getTotpSecret());
-        if (!totpService.verifyCode(secret, request.totpCode())) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "验证码错误或已过期");
-        }
-
-        entity.setTotpEnabled(Boolean.TRUE);
-        entity.setRequireTotpSetup(Boolean.FALSE);
-        UserAccount saved = repository.save(entity);
-        cacheService.evictAuthenticatedUser(saved.getId());
-        cacheService.evictDashboard(saved.getId());
-        return toResponseWithRoles(saved);
-    }
-
-    @Transactional
-    public UserAccountAdminResponse disable2fa(Long id) {
-        UserAccount entity = getEntity(id);
-        entity.setTotpSecret(null);
-        entity.setTotpEnabled(Boolean.FALSE);
-        UserAccount saved = repository.save(entity);
-        cacheService.evictAuthenticatedUser(saved.getId());
-        cacheService.evictDashboard(saved.getId());
-        return toResponseWithRoles(saved);
-    }
-
-    // --- 内部方法 ---
 
     private UserAccount getEntity(Long id) {
         return repository.findByIdAndDeletedFlagFalse(id)
@@ -201,8 +139,7 @@ public class UserAccountAdminService {
                 roles.stream().map(RoleSetting::getRoleName).toList(),
                 roles.stream().map(RoleSetting::getId).toList(),
                 permissionSummary,
-                response.lastLoginDate(), response.status(), response.remark(),
-                Boolean.TRUE.equals(entity.getTotpEnabled())
+                response.lastLoginDate(), response.status(), response.remark()
         );
     }
 
@@ -293,12 +230,8 @@ public class UserAccountAdminService {
         if (keepsAdmin) {
             return;
         }
-        Long adminRoleId = resolveAdminRoleId();
-        if (adminRoleId == null) {
-            return;
-        }
-        long otherActiveAdmins = userRoleRepository
-                .countUsersByRoleIdAndStatusExcludingUserId(adminRoleId, UserStatus.NORMAL, entity.getId());
+        long otherActiveAdmins = casbinPolicyStore
+                .countActiveUsersByRoleExcluding(ADMIN_ROLE_CODE, entity.getId());
         if (otherActiveAdmins == 0) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "至少保留一个正常状态的系统管理员");
         }
@@ -310,15 +243,6 @@ public class UserAccountAdminService {
 
     private boolean isAdminRole(RoleSetting role) {
         return role != null && ADMIN_ROLE_CODE.equals(normalizeRoleCode(role.getRoleCode()));
-    }
-
-    private Long resolveAdminRoleId() {
-        if (roleSettingRepository == null) {
-            return null;
-        }
-        return roleSettingRepository.findByRoleCodeAndDeletedFlagFalse(ADMIN_ROLE_CODE)
-                .map(RoleSetting::getId)
-                .orElse(null);
     }
 
     private boolean isLoginNameConflict(DataIntegrityViolationException ex) {

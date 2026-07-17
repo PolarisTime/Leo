@@ -9,7 +9,7 @@ import com.leo.erp.common.web.dto.StatusUpdateRequest;
 import com.leo.erp.finance.receipt.service.ReceiptService;
 import com.leo.erp.finance.receipt.web.dto.ReceiptRequest;
 import com.leo.erp.finance.receipt.web.dto.ReceiptResponse;
-import com.leo.erp.security.permission.RequiresPermission;
+import org.springframework.security.access.prepost.PreAuthorize;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -42,7 +42,7 @@ public class ReceiptController {
 
     @Operation(summary = "搜索收款单")
     @GetMapping("/search")
-    @RequiresPermission(resource = "receipt", action = "read")
+    @PreAuthorize("@rbac.check('receipt', 'read')")
     public ApiResponse<java.util.List<ReceiptResponse>> search(
             @RequestParam(required = false) String keyword,
             @RequestParam(defaultValue = "100") int limit
@@ -52,7 +52,7 @@ public class ReceiptController {
 
     @Operation(summary = "分页查询收款单")
     @GetMapping
-    @RequiresPermission(resource = "receipt", action = "read")
+    @PreAuthorize("@rbac.check('receipt', 'read')")
     public ApiResponse<PageResponse<ReceiptResponse>> page(
             @BindPageQuery(sortFieldKey = "receipt") PageQuery query,
             @RequestParam(required = false) String keyword,
@@ -74,35 +74,35 @@ public class ReceiptController {
 
     @Operation(summary = "查询收款单详情")
     @GetMapping("/{id}")
-    @RequiresPermission(resource = "receipt", action = "read")
+    @PreAuthorize("@rbac.check('receipt', 'read')")
     public ApiResponse<ReceiptResponse> detail(@PathVariable Long id) {
         return ApiResponse.success(receiptService.detail(id));
     }
 
     @Operation(summary = "创建收款单")
     @PostMapping
-    @RequiresPermission(resource = "receipt", action = "create")
+    @PreAuthorize("@rbac.check('receipt', 'create')")
     public ApiResponse<ReceiptResponse> create(@Valid @RequestBody ReceiptRequest request) {
         return ApiResponse.success("创建成功", receiptService.create(request));
     }
 
     @Operation(summary = "更新收款单")
     @PutMapping("/{id}")
-    @RequiresPermission(resource = "receipt", action = "update")
+    @PreAuthorize("@rbac.check('receipt', 'update')")
     public ApiResponse<ReceiptResponse> update(@PathVariable Long id, @Valid @RequestBody ReceiptRequest request) {
         return ApiResponse.success("更新成功", receiptService.update(id, request));
     }
 
     @Operation(summary = "更新收款单状态")
     @PatchMapping("/{id}/status")
-    @RequiresPermission(resource = "receipt", action = "audit")
+    @PreAuthorize("@rbac.check('receipt', 'audit')")
     public ApiResponse<ReceiptResponse> updateStatus(@PathVariable Long id, @Valid @RequestBody StatusUpdateRequest request) {
         return ApiResponse.success("状态更新成功", receiptService.updateStatus(id, request.status()));
     }
 
     @Operation(summary = "删除收款单")
     @DeleteMapping("/{id}")
-    @RequiresPermission(resource = "receipt", action = "delete")
+    @PreAuthorize("@rbac.check('receipt', 'delete')")
     public ApiResponse<Void> delete(@PathVariable Long id) {
         receiptService.delete(id);
         return ApiResponse.success("删除成功");

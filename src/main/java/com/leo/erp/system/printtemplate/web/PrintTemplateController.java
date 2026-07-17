@@ -2,7 +2,7 @@ package com.leo.erp.system.printtemplate.web;
 
 import com.leo.erp.common.api.ApiResponse;
 import com.leo.erp.security.permission.ModulePermissionGuard;
-import com.leo.erp.security.permission.RequiresPermission;
+import org.springframework.security.access.prepost.PreAuthorize;
 import com.leo.erp.security.support.SecurityPrincipal;
 import com.leo.erp.system.operationlog.support.OperationLoggable;
 import com.leo.erp.system.printtemplate.service.PrintTemplateService;
@@ -43,7 +43,7 @@ public class PrintTemplateController {
     }
 
     @GetMapping
-    @RequiresPermission(authenticatedOnly = true)
+    @PreAuthorize("isAuthenticated()")
     public ApiResponse<List<PrintTemplateResponse>> list(@AuthenticationPrincipal SecurityPrincipal principal,
                                                          @RequestParam @NotBlank @Size(max = 64) String billType) {
         modulePermissionGuard.requireResourcePermissionAny(
@@ -56,7 +56,7 @@ public class PrintTemplateController {
     }
 
     @PostMapping
-    @RequiresPermission(resource = "print-template", action = "create")
+    @PreAuthorize("@rbac.check('print-template', 'create')")
     @OperationLoggable(moduleName = "打印模板", actionType = "新增", businessNoFields = {"billType", "templateName"})
     public ApiResponse<PrintTemplateResponse> create(@AuthenticationPrincipal SecurityPrincipal principal,
                                                      @Valid @RequestBody PrintTemplateRequest request) {
@@ -65,7 +65,7 @@ public class PrintTemplateController {
     }
 
     @PutMapping("/{id}")
-    @RequiresPermission(resource = "print-template", action = "update")
+    @PreAuthorize("@rbac.check('print-template', 'update')")
     @OperationLoggable(moduleName = "打印模板", actionType = "编辑", businessNoFields = {"billType", "templateName"})
     public ApiResponse<PrintTemplateResponse> update(@AuthenticationPrincipal SecurityPrincipal principal,
                                                      @PathVariable @Positive Long id,
@@ -79,7 +79,7 @@ public class PrintTemplateController {
     }
 
     @PostMapping(value = "/{id}/upload-json", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    @RequiresPermission(resource = "print-template", action = "update")
+    @PreAuthorize("@rbac.check('print-template', 'update')")
     @OperationLoggable(moduleName = "打印模板", actionType = "上传 JSON", businessNoFields = {"id"})
     public ApiResponse<PrintTemplateResponse> uploadJson(@AuthenticationPrincipal SecurityPrincipal principal,
                                                          @PathVariable @Positive Long id,
@@ -93,7 +93,7 @@ public class PrintTemplateController {
     }
 
     @DeleteMapping("/{id}")
-    @RequiresPermission(resource = "print-template", action = "delete")
+    @PreAuthorize("@rbac.check('print-template', 'delete')")
     @OperationLoggable(moduleName = "打印模板", actionType = "删除")
     public ApiResponse<Void> delete(@AuthenticationPrincipal SecurityPrincipal principal,
                                     @PathVariable @Positive Long id) {

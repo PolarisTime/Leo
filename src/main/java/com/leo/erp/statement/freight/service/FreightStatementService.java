@@ -207,7 +207,7 @@ public class FreightStatementService extends AbstractCrudService<FreightStatemen
     @Override
     protected FreightStatementCommand normalizeCreateRequest(FreightStatementCommand command, long entityId) {
         return new FreightStatementCommand(
-                resolveCreateBusinessNo("freight-statement", command.statementNo(), entityId),
+                resolveCreateBusinessNo(entityId),
                 command.carrierCode(),
                 command.carrierName(),
                 command.settlementCompanyId(),

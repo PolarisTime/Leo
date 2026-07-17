@@ -146,7 +146,6 @@ public class DashboardSummaryService {
                 moduleCount,
                 actionCount,
                 activeSessionCount,
-                Boolean.TRUE.equals(user.getTotpEnabled()),
                 user.getLastLoginDate(),
                 now,
                 materialCount,

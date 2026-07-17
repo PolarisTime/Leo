@@ -5,19 +5,14 @@ import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.AbstractAuditableEntity;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
-import com.leo.erp.security.support.SecurityPrincipal;
+import com.leo.erp.security.permission.RbacAuthorizationService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.GrantedAuthority;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.support.TransactionSynchronization;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.util.List;
 import java.util.Objects;
@@ -29,8 +24,7 @@ public abstract class AbstractCrudService<E extends AbstractAuditableEntity, Req
 
     private final SnowflakeIdGenerator idGenerator;
     private CrudRuntimeSettings crudRuntimeSettings;
-    private BusinessNumberAllocator businessNumberAllocator;
-    private BusinessPreallocationService businessPreallocationService;
+    private RbacAuthorizationService rbacAuthorizationService;
     private final CrudStatusGuard statusGuard = new CrudStatusGuard();
 
     protected AbstractCrudService(SnowflakeIdGenerator idGenerator) {
@@ -46,21 +40,12 @@ public abstract class AbstractCrudService<E extends AbstractAuditableEntity, Req
     }
 
     @Autowired(required = false)
-    protected void setBusinessNumberAllocator(BusinessNumberAllocator businessNumberAllocator) {
-        this.businessNumberAllocator = businessNumberAllocator;
-    }
-
-    @Autowired(required = false)
-    protected void setBusinessPreallocationService(BusinessPreallocationService businessPreallocationService) {
-        this.businessPreallocationService = businessPreallocationService;
+    protected void setRbacAuthorizationService(RbacAuthorizationService rbacAuthorizationService) {
+        this.rbacAuthorizationService = rbacAuthorizationService;
     }
 
     private Logger logger() {
         return LoggerFactory.getLogger(getClass());
-    }
-
-    private BusinessCreateIdResolver createIdResolver() {
-        return new BusinessCreateIdResolver(idGenerator, businessPreallocationService, getClass());
     }
 
     @Transactional(readOnly = true)
@@ -71,16 +56,14 @@ public abstract class AbstractCrudService<E extends AbstractAuditableEntity, Req
     @Transactional
     public Res create(Req request) {
         E entity = newEntity();
-        BusinessCreateIdResolver createIdResolver = createIdResolver();
-        CreateEntityId createEntityId = createIdResolver.resolve();
-        assignId(entity, createEntityId.id());
-        request = normalizeCreateRequest(request, createEntityId.id());
+        long entityId = idGenerator.nextId();
+        assignId(entity, entityId);
+        request = normalizeCreateRequest(request, entityId);
         validateCreate(request);
         apply(entity, request);
         statusGuard.assertRequestDidNotWriteFinalStatus(entity);
         Res response = toSavedResponse(saveCreatedEntity(entity, request));
-        createIdResolver.consumeAfterCommit(createEntityId);
-        logger().info("{} created: id={}", entity.getClass().getSimpleName(), createEntityId.id());
+        logger().info("{} created: id={}", entity.getClass().getSimpleName(), entityId);
         return response;
     }
 
@@ -222,39 +205,11 @@ public abstract class AbstractCrudService<E extends AbstractAuditableEntity, Req
     protected void beforeStatusUpdate(E entity, String currentStatus, String nextStatus) {
     }
 
-    protected final String nextBusinessNo(String moduleKey) {
-        if (businessNumberAllocator == null) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "编号规则服务不可用");
+    protected final String resolveCreateBusinessNo(Long entityId) {
+        if (entityId == null || entityId <= 0) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "业务单据雪花ID尚未分配");
         }
-        String generatedNo = businessNumberAllocator.nextValueByModuleKey(moduleKey);
-        if (generatedNo == null || generatedNo.isBlank()) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "模块未配置编号规则: " + moduleKey);
-        }
-        return generatedNo;
-    }
-
-    protected final String resolveCreateBusinessNo(String moduleKey, String requestedNo) {
-        return resolveCreateBusinessNo(moduleKey, requestedNo, null);
-    }
-
-    protected final String resolveCreateBusinessNo(String moduleKey, String requestedNo, Long entityId) {
-        if (crudRuntimeSettings != null && crudRuntimeSettings.shouldUseSnowflakeIdAsBusinessNo()) {
-            if (entityId == null || entityId <= 0) {
-                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "业务单据雪花ID尚未分配");
-            }
-            return String.valueOf(entityId);
-        }
-        if (businessNumberAllocator == null) {
-            if (requestedNo == null || requestedNo.isBlank()) {
-                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "编号规则服务不可用");
-            }
-            return requestedNo;
-        }
-        if (isReservedBusinessNo(moduleKey, requestedNo)) {
-            consumeReservedBusinessNoAfterCommit(moduleKey, requestedNo.trim());
-            return requestedNo.trim();
-        }
-        return nextBusinessNo(moduleKey);
+        return String.valueOf(entityId);
     }
 
     protected boolean allowAdminViewDeletedRecords() {
@@ -290,57 +245,8 @@ public abstract class AbstractCrudService<E extends AbstractAuditableEntity, Req
 
     private boolean shouldAdminViewDeletedRecords() {
         return allowAdminViewDeletedRecords()
-                && crudRuntimeSettings != null
-                && crudRuntimeSettings.shouldAdminSeeDeletedRecords()
-                && currentUserIsAdmin();
-    }
-
-    private boolean currentUserIsAdmin() {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        if (authentication == null || authentication.getAuthorities() == null) {
-            return false;
-        }
-        return authentication.getAuthorities().stream()
-                .map(GrantedAuthority::getAuthority)
-                .anyMatch("ROLE_ADMIN"::equals);
-    }
-
-    private Optional<SecurityPrincipal> currentPrincipal() {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        if (authentication == null || !(authentication.getPrincipal() instanceof SecurityPrincipal principal)) {
-            return Optional.empty();
-        }
-        return Optional.of(principal);
-    }
-
-    private boolean isReservedBusinessNo(String moduleKey, String requestedNo) {
-        if (businessPreallocationService == null || requestedNo == null || requestedNo.isBlank()) {
-            return false;
-        }
-        return currentPrincipal()
-                .map(principal -> businessPreallocationService.isBusinessNoReservedByPrincipal(
-                        moduleKey,
-                        requestedNo.trim(),
-                        principal
-                ))
-                .orElse(false);
-    }
-
-    private void consumeReservedBusinessNoAfterCommit(String moduleKey, String businessNo) {
-        if (businessPreallocationService == null || businessNo == null || businessNo.isBlank()) {
-            return;
-        }
-        Runnable consume = () -> businessPreallocationService.consumeBusinessNo(moduleKey, businessNo);
-        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
-            consume.run();
-            return;
-        }
-        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-            @Override
-            public void afterCommit() {
-                consume.run();
-            }
-        });
+                && rbacAuthorizationService != null
+                && rbacAuthorizationService.check("document", "view_deleted");
     }
 
     private Specification<E> combineSpecifications(Specification<E> left, Specification<E> right) {

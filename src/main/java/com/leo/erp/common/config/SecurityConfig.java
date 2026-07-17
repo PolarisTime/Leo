@@ -1,7 +1,5 @@
 package com.leo.erp.common.config;
 
-import com.leo.erp.security.jwt.ApiKeyAuthenticationFilter;
-import com.leo.erp.security.jwt.ForceTotpSetupFilter;
 import com.leo.erp.security.jwt.JwtAuthenticationFilter;
 import com.leo.erp.system.setup.web.InitialSetupTokenFilter;
 import com.leo.erp.common.idempotent.HttpIdempotencyFilter;
@@ -46,8 +44,6 @@ public class SecurityConfig {
                                                    SurfaceAccessProperties surfaceAccessProperties,
                                                    WebSecurityProperties webSecurityProperties,
                                                    JwtAuthenticationFilter jwtAuthenticationFilter,
-                                                   ApiKeyAuthenticationFilter apiKeyAuthenticationFilter,
-                                                   ForceTotpSetupFilter forceTotpSetupFilter,
                                                    InitialSetupTokenFilter initialSetupTokenFilter,
                                                    HttpIdempotencyFilter httpIdempotencyFilter) throws Exception {
         http
@@ -87,9 +83,7 @@ public class SecurityConfig {
                 })
                 .addFilterAfter(initialSetupTokenFilter, CorsFilter.class)
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
-                .addFilterAfter(apiKeyAuthenticationFilter, JwtAuthenticationFilter.class)
-                .addFilterAfter(forceTotpSetupFilter, ApiKeyAuthenticationFilter.class)
-                .addFilterAfter(httpIdempotencyFilter, ForceTotpSetupFilter.class);
+                .addFilterAfter(httpIdempotencyFilter, JwtAuthenticationFilter.class);
 
         return http.build();
     }
@@ -114,22 +108,6 @@ public class SecurityConfig {
     public FilterRegistrationBean<JwtAuthenticationFilter> jwtAuthenticationFilterRegistration(
             JwtAuthenticationFilter jwtAuthenticationFilter) {
         FilterRegistrationBean<JwtAuthenticationFilter> registration = new FilterRegistrationBean<>(jwtAuthenticationFilter);
-        registration.setEnabled(false);
-        return registration;
-    }
-
-    @Bean
-    public FilterRegistrationBean<ApiKeyAuthenticationFilter> apiKeyAuthenticationFilterRegistration(
-            ApiKeyAuthenticationFilter apiKeyAuthenticationFilter) {
-        FilterRegistrationBean<ApiKeyAuthenticationFilter> registration = new FilterRegistrationBean<>(apiKeyAuthenticationFilter);
-        registration.setEnabled(false);
-        return registration;
-    }
-
-    @Bean
-    public FilterRegistrationBean<ForceTotpSetupFilter> forceTotpSetupFilterRegistration(
-            ForceTotpSetupFilter forceTotpSetupFilter) {
-        FilterRegistrationBean<ForceTotpSetupFilter> registration = new FilterRegistrationBean<>(forceTotpSetupFilter);
         registration.setEnabled(false);
         return registration;
     }

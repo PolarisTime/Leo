@@ -8,7 +8,7 @@ import com.leo.erp.master.material.service.MaterialCategoryService;
 import com.leo.erp.master.material.web.dto.MaterialCategoryOptionResponse;
 import com.leo.erp.master.material.web.dto.MaterialCategoryRequest;
 import com.leo.erp.master.material.web.dto.MaterialCategoryResponse;
-import com.leo.erp.security.permission.RequiresPermission;
+import org.springframework.security.access.prepost.PreAuthorize;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Positive;
 import org.springframework.validation.annotation.Validated;
@@ -36,7 +36,7 @@ public class MaterialCategoryController {
     }
 
     @GetMapping
-    @RequiresPermission(resource = "material", action = "read")
+    @PreAuthorize("@rbac.check('material', 'read')")
     public ApiResponse<PageResponse<MaterialCategoryResponse>> page(
             @BindPageQuery PageQuery query,
             @RequestParam(required = false) String keyword,
@@ -45,33 +45,33 @@ public class MaterialCategoryController {
     }
 
     @GetMapping("/{id}")
-    @RequiresPermission(resource = "material", action = "read")
+    @PreAuthorize("@rbac.check('material', 'read')")
     public ApiResponse<MaterialCategoryResponse> detail(@PathVariable @Positive Long id) {
         return ApiResponse.success(service.detail(id));
     }
 
     @PostMapping
-    @RequiresPermission(resource = "material", action = "create")
+    @PreAuthorize("@rbac.check('material', 'create')")
     public ApiResponse<MaterialCategoryResponse> create(@Valid @RequestBody MaterialCategoryRequest request) {
         return ApiResponse.success("创建成功", service.create(request));
     }
 
     @PutMapping("/{id}")
-    @RequiresPermission(resource = "material", action = "update")
+    @PreAuthorize("@rbac.check('material', 'update')")
     public ApiResponse<MaterialCategoryResponse> update(@PathVariable @Positive Long id,
                                                          @Valid @RequestBody MaterialCategoryRequest request) {
         return ApiResponse.success("更新成功", service.update(id, request));
     }
 
     @DeleteMapping("/{id}")
-    @RequiresPermission(resource = "material", action = "delete")
+    @PreAuthorize("@rbac.check('material', 'delete')")
     public ApiResponse<Void> delete(@PathVariable @Positive Long id) {
         service.delete(id);
         return ApiResponse.success("删除成功");
     }
 
     @GetMapping("/options")
-    @RequiresPermission(resource = "material", action = "read")
+    @PreAuthorize("@rbac.check('material', 'read')")
     public ApiResponse<List<MaterialCategoryOptionResponse>> options() {
         return ApiResponse.success(service.options());
     }

@@ -9,7 +9,7 @@ import com.leo.erp.common.api.ApiResponse;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.security.permission.ModulePermissionGuard;
-import com.leo.erp.security.permission.RequiresPermission;
+import org.springframework.security.access.prepost.PreAuthorize;
 import com.leo.erp.security.support.SecurityPrincipal;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
@@ -46,7 +46,7 @@ public class AttachmentBindingController {
     }
 
     @GetMapping
-    @RequiresPermission(authenticatedOnly = true, allowApiKey = true)
+    @PreAuthorize("isAuthenticated()")
     public ApiResponse<AttachmentBindingResponse> detail(@AuthenticationPrincipal SecurityPrincipal principal,
                                                          @RequestParam @NotBlank @Size(max = 64) String moduleKey,
                                                          @RequestParam @Positive Long recordId) {
@@ -56,7 +56,7 @@ public class AttachmentBindingController {
     }
 
     @GetMapping("/counts")
-    @RequiresPermission(authenticatedOnly = true, allowApiKey = true)
+    @PreAuthorize("isAuthenticated()")
     public ApiResponse<AttachmentBindingCountResponse> counts(@AuthenticationPrincipal SecurityPrincipal principal,
                                                               @RequestParam @NotBlank @Size(max = 64) String moduleKey,
                                                               @RequestParam @NotBlank String recordIds) {
@@ -72,7 +72,7 @@ public class AttachmentBindingController {
     }
 
     @PutMapping
-    @RequiresPermission(authenticatedOnly = true, allowApiKey = true)
+    @PreAuthorize("isAuthenticated()")
     public ApiResponse<AttachmentBindingResponse> update(@AuthenticationPrincipal SecurityPrincipal principal,
                                                          @Valid @RequestBody AttachmentBindingRequest request) {
         String normalizedModuleKey = modulePermissionGuard.requirePermission(principal, request.moduleKey(), "update");

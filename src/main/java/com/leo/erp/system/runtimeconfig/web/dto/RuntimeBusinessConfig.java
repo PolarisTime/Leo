@@ -4,7 +4,6 @@ import java.math.BigDecimal;
 
 public record RuntimeBusinessConfig(
         BigDecimal defaultTaxRate,
-        RuntimeStatementConfig statement,
-        RuntimeBusinessNoConfig businessNo
+        RuntimeStatementConfig statement
 ) {
 }

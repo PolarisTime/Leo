@@ -2,7 +2,7 @@ package com.leo.erp.system.printtemplate.web;
 
 import com.leo.erp.common.api.ApiResponse;
 import com.leo.erp.security.permission.ModulePermissionGuard;
-import com.leo.erp.security.permission.RequiresPermission;
+import org.springframework.security.access.prepost.PreAuthorize;
 import com.leo.erp.security.support.SecurityPrincipal;
 import com.leo.erp.system.operationlog.support.OperationLoggable;
 import com.leo.erp.system.printtemplate.service.PrintOutput;
@@ -42,7 +42,7 @@ public class PrintScriptController {
 
     /** 统一打印接口：由输出服务封装 PDF 与坐标套打响应。 */
     @PostMapping("/record")
-    @RequiresPermission(authenticatedOnly = true)
+    @PreAuthorize("isAuthenticated()")
     @OperationLoggable(
             moduleName = "打印",
             moduleNameField = "moduleKey",
@@ -66,7 +66,7 @@ public class PrintScriptController {
     }
 
     @PostMapping("/brands")
-    @RequiresPermission(authenticatedOnly = true)
+    @PreAuthorize("isAuthenticated()")
     public ApiResponse<List<String>> brands(
             @AuthenticationPrincipal SecurityPrincipal principal,
             @RequestBody @NotNull Map<String, Object> payload) {
@@ -76,7 +76,7 @@ public class PrintScriptController {
     }
 
     @PostMapping("/items")
-    @RequiresPermission(authenticatedOnly = true)
+    @PreAuthorize("isAuthenticated()")
     public ApiResponse<List<PrintRecordItem>> items(
             @AuthenticationPrincipal SecurityPrincipal principal,
             @RequestBody @NotNull Map<String, Object> payload) {

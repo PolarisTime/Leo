@@ -51,7 +51,6 @@ public class AttachmentService {
     private final SnowflakeIdGenerator idGenerator;
     private final AttachmentProperties properties;
     private final AttachmentFilenameResolver filenameResolver;
-    private final UploadRuleService uploadRuleService;
     private final AttachmentStorageResolver storageResolver;
     private final AttachmentMetadataService metadataService;
     private final AttachmentDirectUploadTokenService directUploadTokenService;
@@ -62,7 +61,6 @@ public class AttachmentService {
                              SnowflakeIdGenerator idGenerator,
                              AttachmentProperties properties,
                              AttachmentFilenameResolver filenameResolver,
-                             UploadRuleService uploadRuleService,
                              AttachmentStorageResolver storageResolver,
                              AttachmentMetadataService metadataService,
                              AttachmentDirectUploadTokenService directUploadTokenService,
@@ -71,7 +69,6 @@ public class AttachmentService {
         this.idGenerator = idGenerator;
         this.properties = properties;
         this.filenameResolver = filenameResolver;
-        this.uploadRuleService = uploadRuleService;
         this.storageResolver = storageResolver;
         this.metadataService = metadataService;
         this.directUploadTokenService = directUploadTokenService;
@@ -83,14 +80,12 @@ public class AttachmentService {
     }
 
     public AttachmentView upload(MultipartFile file, String sourceType, String moduleKey) throws IOException {
-        requirePageUploadEnabled(moduleKey);
         validateUpload(file);
 
         String normalizedSourceType = normalizeSourceType(sourceType);
         String originalFileName = normalizeOriginalFileName(file, normalizedSourceType);
-        String candidateFileName = uploadRuleService.buildPageUploadFileName(moduleKey, originalFileName, file.getContentType());
         long attachmentId = idGenerator.nextId();
-        String storedFileName = extractFileName(candidateFileName);
+        String storedFileName = filenameResolver.buildStoredFileName(attachmentId, originalFileName, file.getContentType());
 
         // Store file outside the DB transaction to avoid holding connections during I/O
         String storagePath = storageResolver.store(buildObjectKey(attachmentId, storedFileName), file);
@@ -138,16 +133,14 @@ public class AttachmentService {
             String moduleKey,
             String sha256Hex,
             Long ownerUserId) {
-        requirePageUploadEnabled(moduleKey);
         validateUploadMetadata(fileName, fileSize);
         String normalizedSha256Hex = normalizeSha256Hex(sha256Hex);
         Long normalizedOwnerUserId = normalizeOwnerUserId(ownerUserId);
 
         String normalizedSourceType = normalizeSourceType(sourceType);
         String originalFileName = normalizeOriginalFileName(fileName, contentType, normalizedSourceType);
-        String candidateFileName = uploadRuleService.buildPageUploadFileName(moduleKey, originalFileName, contentType);
         long attachmentId = idGenerator.nextId();
-        String storedFileName = extractFileName(candidateFileName);
+        String storedFileName = filenameResolver.buildStoredFileName(attachmentId, originalFileName, contentType);
         String objectKey = buildObjectKey(attachmentId, storedFileName);
         DirectUploadAttachmentStorage.PresignedUpload presigned =
                 storageResolver.prepareDirectUpload(objectKey, contentType, fileSize, normalizedSha256Hex);
@@ -312,12 +305,6 @@ public class AttachmentService {
         return url == null ? null : new PresignedAttachmentUrl(url, inline);
     }
 
-    private void requirePageUploadEnabled(String moduleKey) {
-        if (!uploadRuleService.isPageUploadEnabled(moduleKey)) {
-            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "当前页面未启用附件标志");
-        }
-    }
-
     private static final Set<String> BLOCKED_ATTACHMENT_EXTENSIONS = Set.of(
             "jsp", "jspx", "php", "phtml", "asp", "aspx", "exe", "bat", "cmd", "sh", "cgi", "war"
     );
@@ -385,14 +372,6 @@ public class AttachmentService {
             normalized = normalized + "/";
         }
         return normalized;
-    }
-
-    private String extractFileName(String candidateFileName) {
-        int slashIndex = candidateFileName.lastIndexOf('/');
-        if (slashIndex >= 0 && slashIndex < candidateFileName.length() - 1) {
-            return candidateFileName.substring(slashIndex + 1);
-        }
-        return candidateFileName;
     }
 
     private String normalizeOriginalFileName(MultipartFile file, String sourceType) {

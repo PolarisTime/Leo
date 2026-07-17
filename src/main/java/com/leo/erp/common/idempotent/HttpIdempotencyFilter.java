@@ -2,7 +2,6 @@ package com.leo.erp.common.idempotent;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leo.erp.common.api.ApiResponse;
-import com.leo.erp.common.api.RateLimitContext;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.security.support.SecurityPrincipal;
 import jakarta.servlet.FilterChain;
@@ -116,8 +115,7 @@ public class HttpIdempotencyFilter extends OncePerRequestFilter {
         response.setCharacterEncoding(StandardCharsets.UTF_8.name());
         ApiResponse<Void> body = ApiResponse.failure(
                 ErrorCode.BUSINESS_ERROR,
-                message,
-                RateLimitContext.current(request)
+                message
         );
         objectMapper.writeValue(response.getOutputStream(), body);
     }

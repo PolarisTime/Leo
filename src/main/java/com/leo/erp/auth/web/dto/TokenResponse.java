@@ -7,15 +7,9 @@ public record TokenResponse(
         long expiresIn,
         long refreshExpiresIn,
         AuthUserResponse user
-) implements LoginResponseBody {
-    @Override
+) {
     public String refreshTokenForCookie() {
         return refreshToken;
-    }
-
-    @Override
-    public LoginResponseBody withoutSensitiveTokens() {
-        return withoutRefreshToken();
     }
 
     public TokenResponse withoutRefreshToken() {

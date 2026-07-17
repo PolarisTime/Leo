@@ -133,8 +133,6 @@ public class TokenIssuanceService {
                 user.getId(),
                 user.getLoginName(),
                 userRoleBindingService.toGrantedAuthorities(boundRoles),
-                Boolean.TRUE.equals(user.getTotpEnabled()),
-                Boolean.TRUE.equals(user.getRequireTotpSetup()),
                 normalizeCredentialVersion(session.getCredentialVersion())
         );
         String accessToken = jwtTokenService.generateAccessToken(principal, sessionTokenId);
@@ -160,8 +158,6 @@ public class TokenIssuanceService {
                         user.getLoginName(),
                         user.getUserName(),
                         currentRoleNames,
-                        user.getTotpEnabled(),
-                        user.getRequireTotpSetup(),
                         permissions
                 )
         );
@@ -175,8 +171,6 @@ public class TokenIssuanceService {
                 user.getId(),
                 user.getLoginName(),
                 userRoleBindingService.toGrantedAuthorities(boundRoles),
-                Boolean.TRUE.equals(user.getTotpEnabled()),
-                Boolean.TRUE.equals(user.getRequireTotpSetup()),
                 normalizeCredentialVersion(user.getCredentialVersion())
         );
         String accessToken = jwtTokenService.generateAccessToken(principal, session.getTokenId());
@@ -197,8 +191,6 @@ public class TokenIssuanceService {
                         user.getLoginName(),
                         user.getUserName(),
                         currentRoleNames,
-                        user.getTotpEnabled(),
-                        user.getRequireTotpSetup(),
                         permissions
                 )
         );

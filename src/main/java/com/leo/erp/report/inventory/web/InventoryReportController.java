@@ -9,7 +9,7 @@ import com.leo.erp.common.web.dto.FileDownloadResponse;
 import com.leo.erp.report.inventory.service.InventoryReportService;
 import com.leo.erp.report.inventory.web.dto.InventoryReportExportRequest;
 import com.leo.erp.report.inventory.web.dto.InventoryReportResponse;
-import com.leo.erp.security.permission.RequiresPermission;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
@@ -34,7 +34,7 @@ public class InventoryReportController {
     }
 
     @GetMapping
-    @RequiresPermission(resource = "inventory-report", action = "read")
+    @PreAuthorize("@rbac.check('inventory-report', 'read')")
     public ApiResponse<PageResponse<InventoryReportResponse>> page(
             @BindPageQuery(sortFieldKey = "inventory-report", directionParam = "sortDirection") PageQuery query,
             @RequestParam(required = false) String keyword,
@@ -48,7 +48,7 @@ public class InventoryReportController {
     }
 
     @PostMapping("/export")
-    @RequiresPermission(resource = "inventory-report", action = "export")
+    @PreAuthorize("@rbac.check('inventory-report', 'export')")
     public ResponseEntity<byte[]> export(@RequestBody(required = false) InventoryReportExportRequest request) {
         InventoryReportExportRequest safeRequest = request == null
                 ? new InventoryReportExportRequest(null, null, null, null)

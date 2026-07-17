@@ -1,7 +1,6 @@
 package com.leo.erp.system.setup.web;
 
 import com.leo.erp.common.api.ApiResponse;
-import com.leo.erp.auth.web.dto.TotpSetupResponse;
 import com.leo.erp.common.web.PublicAccess;
 import com.leo.erp.system.setup.service.InitialSetupCoordinator;
 import com.leo.erp.system.setup.web.dto.InitialSetupAdminSubmitRequest;
@@ -9,7 +8,6 @@ import com.leo.erp.system.setup.web.dto.InitialSetupCompanyRequest;
 import com.leo.erp.system.setup.web.dto.InitialSetupStatusResponse;
 import com.leo.erp.system.setup.web.dto.InitialSetupSubmitRequest;
 import com.leo.erp.system.setup.web.dto.InitialSetupSubmitResponse;
-import com.leo.erp.system.setup.web.dto.InitialSetupTotpSetupRequest;
 import jakarta.validation.Valid;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -38,11 +36,6 @@ public class InitialSetupController {
     @PostMapping("/initialize")
     public ApiResponse<InitialSetupSubmitResponse> initialize(@Valid @RequestBody InitialSetupSubmitRequest request) {
         return ApiResponse.success("系统首次初始化完成", initialSetupCoordinator.initialize(request));
-    }
-
-    @PostMapping("/admin/2fa/setup")
-    public ApiResponse<TotpSetupResponse> setupAdminTotp(@Valid @RequestBody InitialSetupTotpSetupRequest request) {
-        return ApiResponse.success("管理员 2FA 已生成", initialSetupCoordinator.setupAdminTotp(request));
     }
 
     @PostMapping("/admin")

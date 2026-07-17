@@ -131,7 +131,7 @@ public class SalesOutboundService extends AbstractCrudService<SalesOutbound, Sal
     @Override
     protected SalesOutboundRequest normalizeCreateRequest(SalesOutboundRequest request, long entityId) {
         return new SalesOutboundRequest(
-                resolveCreateBusinessNo("sales-outbound", request.outboundNo(), entityId),
+                resolveCreateBusinessNo(entityId),
                 request.salesOrderNo(),
                 request.customerId(),
                 request.customerName(),

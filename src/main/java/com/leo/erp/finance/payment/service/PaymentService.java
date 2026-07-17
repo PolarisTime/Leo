@@ -116,7 +116,7 @@ public class PaymentService extends AbstractCrudService<Payment, PaymentRequest,
     @Override
     protected PaymentRequest normalizeCreateRequest(PaymentRequest request, long entityId) {
         return new PaymentRequest(
-                resolveCreateBusinessNo("payment", request.paymentNo(), entityId),
+                resolveCreateBusinessNo(entityId),
                 request.businessType(),
                 request.counterpartyId(),
                 request.paymentPurpose(),

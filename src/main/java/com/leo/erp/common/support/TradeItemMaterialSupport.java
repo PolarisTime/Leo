@@ -3,7 +3,6 @@ package com.leo.erp.common.support;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
-import com.leo.erp.common.service.BusinessNumberAllocator;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.slf4j.Logger;
@@ -27,33 +26,22 @@ public class TradeItemMaterialSupport implements RedisCacheHealthCheck {
     private final MaterialCatalog materialCatalog;
     private final RedisJsonCacheSupport redisJsonCacheSupport;
     private final TradeItemRuntimeSettings tradeItemRuntimeSettings;
-    private final BusinessNumberAllocator businessNumberAllocator;
     private final SnowflakeIdGenerator snowflakeIdGenerator;
 
     @Autowired
     public TradeItemMaterialSupport(MaterialCatalog materialCatalog,
                                     RedisJsonCacheSupport redisJsonCacheSupport,
                                     TradeItemRuntimeSettings tradeItemRuntimeSettings,
-                                    BusinessNumberAllocator businessNumberAllocator,
                                     SnowflakeIdGenerator snowflakeIdGenerator) {
         this.materialCatalog = materialCatalog;
         this.redisJsonCacheSupport = redisJsonCacheSupport;
         this.tradeItemRuntimeSettings = tradeItemRuntimeSettings;
-        this.businessNumberAllocator = businessNumberAllocator;
         this.snowflakeIdGenerator = Objects.requireNonNull(snowflakeIdGenerator,
                 "SnowflakeIdGenerator must not be null");
     }
 
-    TradeItemMaterialSupport(MaterialCatalog materialCatalog,
-                             RedisJsonCacheSupport redisJsonCacheSupport,
-                             TradeItemRuntimeSettings tradeItemRuntimeSettings,
-                             BusinessNumberAllocator businessNumberAllocator) {
-        this(materialCatalog, redisJsonCacheSupport, tradeItemRuntimeSettings, businessNumberAllocator,
-                new SnowflakeIdGenerator(0L));
-    }
-
     public TradeItemMaterialSupport(MaterialCatalog materialCatalog) {
-        this(materialCatalog, null, null, null, new SnowflakeIdGenerator(0L));
+        this(materialCatalog, null, null, new SnowflakeIdGenerator(0L));
     }
 
     public Map<String, TradeMaterialSnapshot> loadMaterialMap(Collection<String> materialCodes) {
@@ -121,12 +109,8 @@ public class TradeItemMaterialSupport implements RedisCacheHealthCheck {
         if (!isBatchManaged(material)) {
             return null;
         }
-        if (shouldAutoGenerateBatchNo()) {
-            // 前端已生成雪花 ID 则直接使用，否则后端补生成
-            if (normalized == null) {
-                long id = snowflakeIdGenerator.nextId();
-                normalized = Long.toString(id, 36).toUpperCase();
-            }
+        if (normalized == null) {
+            normalized = String.valueOf(snowflakeIdGenerator.nextId());
         }
         if (normalized != null && normalized.length() > 64) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "第" + lineNo + "行批号长度不能超过64");
@@ -183,12 +167,6 @@ public class TradeItemMaterialSupport implements RedisCacheHealthCheck {
                 MATERIAL_LIST_TYPE,
                 expected
         );
-    }
-
-    private boolean shouldAutoGenerateBatchNo() {
-        return tradeItemRuntimeSettings != null
-                && businessNumberAllocator != null
-                && tradeItemRuntimeSettings.shouldAutoGenerateBatchNo();
     }
 
     private boolean isBatchManaged(TradeMaterialSnapshot material) {

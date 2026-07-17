@@ -305,7 +305,7 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
     @Override
     protected PurchaseOrderRequest normalizeCreateRequest(PurchaseOrderRequest request, long entityId) {
         return new PurchaseOrderRequest(
-                resolveCreateBusinessNo("purchase-order", request.orderNo(), entityId),
+                resolveCreateBusinessNo(entityId),
                 request.supplierId(),
                 request.supplierCode(),
                 request.supplierName(),

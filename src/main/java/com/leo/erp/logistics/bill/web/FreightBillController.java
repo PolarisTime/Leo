@@ -11,7 +11,7 @@ import com.leo.erp.logistics.bill.service.FreightBillSalesOrderCandidateService;
 import com.leo.erp.sales.order.web.dto.SalesOrderResponse;
 import com.leo.erp.logistics.bill.web.dto.FreightBillRequest;
 import com.leo.erp.logistics.bill.web.dto.FreightBillResponse;
-import com.leo.erp.security.permission.RequiresPermission;
+import org.springframework.security.access.prepost.PreAuthorize;
 import com.leo.erp.system.operationlog.support.DomainEventAudited;
 import jakarta.validation.Valid;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -43,7 +43,7 @@ public class FreightBillController {
     }
 
     @GetMapping("/sales-order-candidates")
-    @RequiresPermission(resource = "sales-order", action = "read")
+    @PreAuthorize("@rbac.check('sales-order', 'read')")
     public ApiResponse<PageResponse<SalesOrderResponse>> salesOrderCandidates(
             @BindPageQuery(sortFieldKey = "sales-order") PageQuery query,
             @RequestParam(required = false) String keyword,
@@ -57,7 +57,7 @@ public class FreightBillController {
     }
 
     @GetMapping("/search")
-    @RequiresPermission(resource = "freight-bill", action = "read")
+    @PreAuthorize("@rbac.check('freight-bill', 'read')")
     public ApiResponse<java.util.List<FreightBillResponse>> search(
             @RequestParam(required = false) String keyword,
             @RequestParam(defaultValue = "100") int limit
@@ -66,7 +66,7 @@ public class FreightBillController {
     }
 
     @GetMapping
-    @RequiresPermission(resource = "freight-bill", action = "read")
+    @PreAuthorize("@rbac.check('freight-bill', 'read')")
     public ApiResponse<PageResponse<FreightBillResponse>> page(
             @BindPageQuery(sortFieldKey = "freight-bill") PageQuery query,
             @RequestParam(required = false) String keyword,
@@ -89,34 +89,34 @@ public class FreightBillController {
     }
 
     @GetMapping("/{id}")
-    @RequiresPermission(resource = "freight-bill", action = "read")
+    @PreAuthorize("@rbac.check('freight-bill', 'read')")
     public ApiResponse<FreightBillResponse> detail(@PathVariable Long id) {
         return ApiResponse.success(service.detail(id));
     }
 
     @PostMapping
-    @RequiresPermission(resource = "freight-bill", action = "create")
+    @PreAuthorize("@rbac.check('freight-bill', 'create')")
     @DomainEventAudited
     public ApiResponse<FreightBillResponse> create(@Valid @RequestBody FreightBillRequest request) {
         return ApiResponse.success("创建成功", service.create(request));
     }
 
     @PostMapping("/save-and-audit")
-    @RequiresPermission(resource = "freight-bill", action = "create")
+    @PreAuthorize("@rbac.check('freight-bill', 'create')")
     @DomainEventAudited
     public ApiResponse<FreightBillResponse> createAndAudit(@Valid @RequestBody FreightBillRequest request) {
         return ApiResponse.success("保存并审核成功", service.createAndAudit(request));
     }
 
     @PutMapping("/{id}")
-    @RequiresPermission(resource = "freight-bill", action = "update")
+    @PreAuthorize("@rbac.check('freight-bill', 'update')")
     @DomainEventAudited
     public ApiResponse<FreightBillResponse> update(@PathVariable Long id, @Valid @RequestBody FreightBillRequest request) {
         return ApiResponse.success("更新成功", service.update(id, request));
     }
 
     @PutMapping("/{id}/save-and-audit")
-    @RequiresPermission(resource = "freight-bill", action = "update")
+    @PreAuthorize("@rbac.check('freight-bill', 'update')")
     @DomainEventAudited
     public ApiResponse<FreightBillResponse> updateAndAudit(@PathVariable Long id,
                                                            @Valid @RequestBody FreightBillRequest request) {
@@ -124,14 +124,14 @@ public class FreightBillController {
     }
 
     @PatchMapping("/{id}/status")
-    @RequiresPermission(resource = "freight-bill", action = "audit")
+    @PreAuthorize("@rbac.check('freight-bill', 'audit')")
     @DomainEventAudited
     public ApiResponse<FreightBillResponse> updateStatus(@PathVariable Long id, @Valid @RequestBody StatusUpdateRequest request) {
         return ApiResponse.success("状态更新成功", service.updateStatus(id, request.status()));
     }
 
     @DeleteMapping("/{id}")
-    @RequiresPermission(resource = "freight-bill", action = "delete")
+    @PreAuthorize("@rbac.check('freight-bill', 'delete')")
     @DomainEventAudited
     public ApiResponse<Void> delete(@PathVariable Long id) {
         service.delete(id);

@@ -11,8 +11,7 @@ import com.leo.erp.attachment.web.dto.AttachmentDirectUploadPrepareResponse;
 import com.leo.erp.attachment.web.dto.AttachmentUploadResponse;
 import com.leo.erp.common.api.ApiResponse;
 import com.leo.erp.security.permission.ModulePermissionGuard;
-import com.leo.erp.security.permission.RateLimit;
-import com.leo.erp.security.permission.RequiresPermission;
+import org.springframework.security.access.prepost.PreAuthorize;
 import com.leo.erp.security.support.SecurityPrincipal;
 import com.leo.erp.system.operationlog.support.OperationLoggable;
 import jakarta.validation.Valid;
@@ -40,8 +39,6 @@ import java.io.IOException;
 @RequestMapping("/attachments")
 public class AttachmentController {
 
-    private static final double ATTACHMENT_ACCESS_RATE = 2.0;
-    private static final int ATTACHMENT_ACCESS_CAPACITY = 20;
     private final AttachmentService attachmentService;
     private final AttachmentWebService attachmentWebService;
     private final ModulePermissionGuard modulePermissionGuard;
@@ -58,8 +55,7 @@ public class AttachmentController {
     }
 
     @PostMapping(value = "/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    @RateLimit(rate = 0.5, capacity = 10)
-    @RequiresPermission(authenticatedOnly = true, allowApiKey = true)
+    @PreAuthorize("isAuthenticated()")
     @OperationLoggable(moduleName = "附件管理", actionType = "上传附件")
     public ApiResponse<AttachmentUploadResponse> upload(@AuthenticationPrincipal SecurityPrincipal principal,
                                                         @RequestParam @NotBlank(message = "模块标识不能为空") String moduleKey,
@@ -70,8 +66,7 @@ public class AttachmentController {
     }
 
     @PostMapping("/direct-upload/prepare")
-    @RateLimit(rate = 0.5, capacity = 10)
-    @RequiresPermission(authenticatedOnly = true, allowApiKey = true)
+    @PreAuthorize("isAuthenticated()")
     @OperationLoggable(moduleName = "附件管理", actionType = "生成附件直传地址")
     public ApiResponse<AttachmentDirectUploadPrepareResponse> prepareDirectUpload(
             @AuthenticationPrincipal SecurityPrincipal principal,
@@ -83,8 +78,7 @@ public class AttachmentController {
     }
 
     @PostMapping("/direct-upload/complete")
-    @RateLimit(rate = 0.5, capacity = 10)
-    @RequiresPermission(authenticatedOnly = true, allowApiKey = true)
+    @PreAuthorize("isAuthenticated()")
     @OperationLoggable(moduleName = "附件管理", actionType = "完成附件直传")
     public ApiResponse<AttachmentUploadResponse> completeDirectUpload(
             @AuthenticationPrincipal SecurityPrincipal principal,
@@ -96,8 +90,7 @@ public class AttachmentController {
     }
 
     @GetMapping("/{id}/access-url")
-    @RateLimit(rate = ATTACHMENT_ACCESS_RATE, capacity = ATTACHMENT_ACCESS_CAPACITY)
-    @RequiresPermission(authenticatedOnly = true, allowApiKey = true)
+    @PreAuthorize("isAuthenticated()")
     public ApiResponse<AttachmentAccessUrlResponse> accessUrl(@AuthenticationPrincipal SecurityPrincipal principal,
                                                               @PathVariable Long id,
                                                               @RequestParam String moduleKey,
@@ -115,8 +108,7 @@ public class AttachmentController {
     }
 
     @GetMapping("/{id}/download")
-    @RateLimit(rate = ATTACHMENT_ACCESS_RATE, capacity = ATTACHMENT_ACCESS_CAPACITY)
-    @RequiresPermission(authenticatedOnly = true, allowApiKey = true)
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<Resource> download(@AuthenticationPrincipal SecurityPrincipal principal,
                                              @PathVariable Long id,
                                              @RequestParam String moduleKey,
@@ -132,8 +124,7 @@ public class AttachmentController {
     }
 
     @GetMapping("/{id}/preview")
-    @RateLimit(rate = ATTACHMENT_ACCESS_RATE, capacity = ATTACHMENT_ACCESS_CAPACITY)
-    @RequiresPermission(authenticatedOnly = true, allowApiKey = true)
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<Resource> preview(@AuthenticationPrincipal SecurityPrincipal principal,
                                             @PathVariable Long id,
                                             @RequestParam String moduleKey,

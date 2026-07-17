@@ -10,7 +10,7 @@ import com.leo.erp.master.material.service.MaterialService;
 import com.leo.erp.master.material.web.dto.MaterialImportResultResponse;
 import com.leo.erp.master.material.web.dto.MaterialRequest;
 import com.leo.erp.master.material.web.dto.MaterialResponse;
-import com.leo.erp.security.permission.RequiresPermission;
+import org.springframework.security.access.prepost.PreAuthorize;
 import jakarta.validation.Valid;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
@@ -43,7 +43,7 @@ public class MaterialController {
     }
 
     @GetMapping("/search")
-    @RequiresPermission(resource = "material", action = "read")
+    @PreAuthorize("@rbac.check('material', 'read')")
     public ApiResponse<java.util.List<MaterialResponse>> search(
             @RequestParam(required = false) String keyword,
             @RequestParam(defaultValue = "100") int limit
@@ -52,7 +52,7 @@ public class MaterialController {
     }
 
     @GetMapping
-    @RequiresPermission(resource = "material", action = "read")
+    @PreAuthorize("@rbac.check('material', 'read')")
     public ApiResponse<PageResponse<MaterialResponse>> page(
             @BindPageQuery(sortFieldKey = "material") PageQuery query,
             @RequestParam(required = false) String keyword,
@@ -63,67 +63,67 @@ public class MaterialController {
     }
 
     @GetMapping("/{id}")
-    @RequiresPermission(resource = "material", action = "read")
+    @PreAuthorize("@rbac.check('material', 'read')")
     public ApiResponse<MaterialResponse> detail(@PathVariable Long id) {
         return ApiResponse.success(materialService.detail(id));
     }
 
     @PostMapping
-    @RequiresPermission(resource = "material", action = "create")
+    @PreAuthorize("@rbac.check('material', 'create')")
     public ApiResponse<MaterialResponse> create(@Valid @RequestBody MaterialRequest request) {
         return ApiResponse.success("创建成功", materialService.create(request));
     }
 
     @GetMapping("/template")
-    @RequiresPermission(resource = "material", action = "export")
+    @PreAuthorize("@rbac.check('material', 'export')")
     public ResponseEntity<byte[]> downloadTemplate() {
         return toDownloadResponse(materialService.excelTemplate());
     }
 
     @GetMapping("/template/csv")
-    @RequiresPermission(resource = "material", action = "export")
+    @PreAuthorize("@rbac.check('material', 'export')")
     public ResponseEntity<byte[]> downloadCsvTemplate() {
         return toDownloadResponse(materialService.downloadTemplateFile());
     }
 
     @GetMapping("/grades")
-    @RequiresPermission(resource = "material", action = "read")
+    @PreAuthorize("@rbac.check('material', 'read')")
     public ApiResponse<java.util.List<String>> materialGrades() {
         return ApiResponse.success(materialService.materialGrades());
     }
 
     @PostMapping("/export")
-    @RequiresPermission(resource = "material", action = "export")
+    @PreAuthorize("@rbac.check('material', 'export')")
     public ResponseEntity<byte[]> export(@RequestParam(required = false) String keyword) {
         return toDownloadResponse(materialService.exportExcel(keyword));
     }
 
     @PostMapping("/export/csv")
-    @RequiresPermission(resource = "material", action = "export")
+    @PreAuthorize("@rbac.check('material', 'export')")
     public ResponseEntity<byte[]> exportCsv(@RequestParam(required = false) String keyword) {
         return toDownloadResponse(materialService.exportFile(keyword));
     }
 
     @PostMapping(value = "/import", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    @RequiresPermission(resource = "material", action = "update")
+    @PreAuthorize("@rbac.check('material', 'update')")
     public ApiResponse<ImportResult> importMaterials(@RequestParam("file") MultipartFile file) throws IOException {
         return ApiResponse.success("导入成功", materialService.importExcel(file));
     }
 
     @PostMapping(value = "/import/csv", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    @RequiresPermission(resource = "material", action = "update")
+    @PreAuthorize("@rbac.check('material', 'update')")
     public ApiResponse<MaterialImportResultResponse> importCsvMaterials(@RequestParam("file") MultipartFile file) throws IOException {
         return ApiResponse.success("导入成功", materialService.importCsv(file));
     }
 
     @PutMapping("/{id}")
-    @RequiresPermission(resource = "material", action = "update")
+    @PreAuthorize("@rbac.check('material', 'update')")
     public ApiResponse<MaterialResponse> update(@PathVariable Long id, @Valid @RequestBody MaterialRequest request) {
         return ApiResponse.success("更新成功", materialService.update(id, request));
     }
 
     @DeleteMapping("/{id}")
-    @RequiresPermission(resource = "material", action = "delete")
+    @PreAuthorize("@rbac.check('material', 'delete')")
     public ApiResponse<Void> delete(@PathVariable Long id) {
         materialService.delete(id);
         return ApiResponse.success("删除成功");

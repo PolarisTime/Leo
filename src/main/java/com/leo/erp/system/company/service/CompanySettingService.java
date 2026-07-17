@@ -23,8 +23,8 @@ import com.leo.erp.system.company.web.dto.CompanySettingResponse;
 import com.leo.erp.system.company.web.dto.CompanySettlementAccountRequest;
 import com.leo.erp.system.company.web.dto.CompanySettlementAccountResponse;
 import com.leo.erp.system.dashboard.service.DashboardSummaryService;
-import com.leo.erp.system.norule.domain.entity.NoRule;
-import com.leo.erp.system.norule.repository.NoRuleRepository;
+import com.leo.erp.system.generalsetting.domain.entity.GeneralSetting;
+import com.leo.erp.system.generalsetting.repository.GeneralSettingRepository;
 import com.leo.erp.system.runtimeconfig.service.RuntimeConfigService;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -59,7 +59,7 @@ public class CompanySettingService extends AbstractCrudService<CompanySetting, C
     private final CompanySettingRepository companySettingRepository;
     private final CompanySettingMapper companySettingMapper;
     private final DashboardSummaryService dashboardSummaryService;
-    private final NoRuleRepository noRuleRepository;
+    private final GeneralSettingRepository generalSettingRepository;
     private final ObjectMapper objectMapper;
     private final RedisJsonCacheSupport redisJsonCacheSupport;
     private final MasterDataReferenceGuard referenceGuard;
@@ -70,7 +70,7 @@ public class CompanySettingService extends AbstractCrudService<CompanySetting, C
                                  SnowflakeIdGenerator snowflakeIdGenerator,
                                  CompanySettingMapper companySettingMapper,
                                  DashboardSummaryService dashboardSummaryService,
-                                 NoRuleRepository noRuleRepository,
+                                 GeneralSettingRepository generalSettingRepository,
                                  ObjectMapper objectMapper,
                                  RedisJsonCacheSupport redisJsonCacheSupport,
                                  MasterDataReferenceGuard referenceGuard) {
@@ -78,7 +78,7 @@ public class CompanySettingService extends AbstractCrudService<CompanySetting, C
         this.companySettingRepository = companySettingRepository;
         this.companySettingMapper = companySettingMapper;
         this.dashboardSummaryService = dashboardSummaryService;
-        this.noRuleRepository = noRuleRepository;
+        this.generalSettingRepository = generalSettingRepository;
         this.objectMapper = objectMapper;
         this.redisJsonCacheSupport = redisJsonCacheSupport;
         this.referenceGuard = referenceGuard;
@@ -88,21 +88,21 @@ public class CompanySettingService extends AbstractCrudService<CompanySetting, C
                                  SnowflakeIdGenerator snowflakeIdGenerator,
                                  CompanySettingMapper companySettingMapper,
                                  DashboardSummaryService dashboardSummaryService,
-                                 NoRuleRepository noRuleRepository,
+                                 GeneralSettingRepository generalSettingRepository,
                                  ObjectMapper objectMapper) {
         this(companySettingRepository, snowflakeIdGenerator, companySettingMapper, dashboardSummaryService,
-                noRuleRepository, objectMapper, null, null);
+                generalSettingRepository, objectMapper, null, null);
     }
 
     public CompanySettingService(CompanySettingRepository companySettingRepository,
                                  SnowflakeIdGenerator snowflakeIdGenerator,
                                  CompanySettingMapper companySettingMapper,
                                  DashboardSummaryService dashboardSummaryService,
-                                 NoRuleRepository noRuleRepository,
+                                 GeneralSettingRepository generalSettingRepository,
                                  ObjectMapper objectMapper,
                                  RedisJsonCacheSupport redisJsonCacheSupport) {
         this(companySettingRepository, snowflakeIdGenerator, companySettingMapper, dashboardSummaryService,
-                noRuleRepository, objectMapper, redisJsonCacheSupport, null);
+                generalSettingRepository, objectMapper, redisJsonCacheSupport, null);
     }
 
     @Transactional(readOnly = true)
@@ -194,11 +194,11 @@ public class CompanySettingService extends AbstractCrudService<CompanySetting, C
     }
 
     private Optional<BigDecimal> resolveConfiguredTaxRate() {
-        if (noRuleRepository == null) {
+        if (generalSettingRepository == null) {
             return Optional.empty();
         }
-        return noRuleRepository.findBySettingCodeAndDeletedFlagFalse(DEFAULT_TAX_RATE_SETTING_CODE)
-                .map(NoRule::getSampleNo)
+        return generalSettingRepository.findBySettingCodeAndDeletedFlagFalse(DEFAULT_TAX_RATE_SETTING_CODE)
+                .map(GeneralSetting::getSettingValue)
                 .flatMap(this::parseTaxRate);
     }
 

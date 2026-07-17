@@ -1,7 +1,5 @@
 package com.leo.erp.system.role.service;
 
-import com.leo.erp.auth.domain.entity.UserRole;
-import com.leo.erp.auth.repository.UserRoleRepository;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
@@ -10,13 +8,13 @@ import com.leo.erp.common.service.AbstractCrudService;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.security.jwt.AuthenticatedUserCacheService;
+import com.leo.erp.security.permission.CasbinPolicy;
+import com.leo.erp.security.permission.CasbinPolicyStore;
 import com.leo.erp.security.permission.PermissionService;
 import com.leo.erp.security.permission.ResourcePermissionCatalog;
 import com.leo.erp.security.support.SecurityPrincipal;
 import com.leo.erp.system.dashboard.service.DashboardSummaryService;
-import com.leo.erp.system.role.domain.entity.RolePermission;
 import com.leo.erp.system.role.domain.entity.RoleSetting;
-import com.leo.erp.system.role.repository.RolePermissionRepository;
 import com.leo.erp.system.role.repository.RoleSettingRepository;
 import com.leo.erp.system.role.web.dto.RolePermissionItem;
 import com.leo.erp.system.role.web.dto.RoleSettingRequest;
@@ -52,12 +50,10 @@ public class RoleSettingService extends AbstractCrudService<RoleSetting, RoleSet
     private static final Set<String> ALLOWED_ROLE_TYPES = Set.of("平台角色", "系统角色", "业务角色", "财务角色");
 
     private void evictCachesForRole(Long roleId) {
-        List<Long> affectedUserIds = userRoleRepository
-                .findByRoleIdInAndDeletedFlagFalse(List.of(roleId)).stream()
-                .map(com.leo.erp.auth.domain.entity.UserRole::getUserId)
-                .filter(id -> id != null)
-                .distinct()
-                .collect(java.util.stream.Collectors.toList());
+        RoleSetting role = repository.findByIdAndDeletedFlagFalse(roleId).orElse(null);
+        List<Long> affectedUserIds = role == null
+                ? List.of()
+                : casbinPolicyStore.findUserIdsByRole(role.getRoleCode());
         if (affectedUserIds.isEmpty()) return;
         runAfterCommit(() -> evictCachesForUsers(affectedUserIds));
     }
@@ -88,36 +84,24 @@ public class RoleSettingService extends AbstractCrudService<RoleSetting, RoleSet
     private static final Set<String> ALLOWED_STATUS = StatusConstants.ALLOWED_ACTIVE_STATUS;
 
     private final RoleSettingRepository repository;
-    private final RolePermissionRepository rolePermissionRepository;
-    private final UserRoleRepository userRoleRepository;
+    private final CasbinPolicyStore casbinPolicyStore;
     private final PermissionService permissionService;
     private final DashboardSummaryService dashboardSummaryService;
     private final AuthenticatedUserCacheService authenticatedUserCacheService;
 
     @Autowired
     public RoleSettingService(RoleSettingRepository repository,
-                              RolePermissionRepository rolePermissionRepository,
-                              UserRoleRepository userRoleRepository,
                               SnowflakeIdGenerator idGenerator,
+                              CasbinPolicyStore casbinPolicyStore,
                               PermissionService permissionService,
                               DashboardSummaryService dashboardSummaryService,
                               AuthenticatedUserCacheService authenticatedUserCacheService) {
         super(idGenerator);
         this.repository = repository;
-        this.rolePermissionRepository = rolePermissionRepository;
-        this.userRoleRepository = userRoleRepository;
+        this.casbinPolicyStore = casbinPolicyStore;
         this.permissionService = permissionService;
         this.dashboardSummaryService = dashboardSummaryService;
         this.authenticatedUserCacheService = authenticatedUserCacheService;
-    }
-
-    public RoleSettingService(RoleSettingRepository repository,
-                              RolePermissionRepository rolePermissionRepository,
-                              UserRoleRepository userRoleRepository,
-                              SnowflakeIdGenerator idGenerator,
-                              PermissionService permissionService,
-                              AuthenticatedUserCacheService authenticatedUserCacheService) {
-        this(repository, rolePermissionRepository, userRoleRepository, idGenerator, permissionService, null, authenticatedUserCacheService);
     }
 
     @Transactional(readOnly = true)
@@ -162,6 +146,7 @@ public class RoleSettingService extends AbstractCrudService<RoleSetting, RoleSet
                 && repository.existsByRoleCodeAndDeletedFlagFalse(nextRoleCode)) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "角色编码已存在");
         }
+        casbinPolicyStore.renameRole(entity.getRoleCode(), nextRoleCode);
     }
 
     @Override
@@ -169,6 +154,7 @@ public class RoleSettingService extends AbstractCrudService<RoleSetting, RoleSet
         if (isAdminRole(entity)) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "系统管理员角色不能删除");
         }
+        casbinPolicyStore.deleteRole(entity.getRoleCode());
     }
 
     @Override
@@ -205,10 +191,10 @@ public class RoleSettingService extends AbstractCrudService<RoleSetting, RoleSet
 
     @Transactional(readOnly = true)
     public List<RolePermissionItem> getRolePermissions(Long roleId) {
-        requireEntity(roleId);
-        return rolePermissionRepository.findByRoleIdAndDeletedFlagFalse(roleId)
+        RoleSetting role = requireEntity(roleId);
+        return casbinPolicyStore.findPermissionsByRole(role.getRoleCode())
                 .stream()
-                .map(permission -> new RolePermissionItem(permission.getResourceCode(), permission.getActionCode()))
+                .map(permission -> new RolePermissionItem(permission.resource(), permission.action()))
                 .toList();
     }
 
@@ -224,8 +210,6 @@ public class RoleSettingService extends AbstractCrudService<RoleSetting, RoleSet
         Map<String, Set<String>> currentPermissionMap = currentPrincipalPermissionUpperBound();
         Set<String> seen = new LinkedHashSet<>();
         Map<String, Set<String>> actionsByResource = new LinkedHashMap<>();
-        rolePermissionRepository.deleteActiveByRoleId(roleId);
-        rolePermissionRepository.flush();
         for (RolePermissionItem item : permissions) {
             String rawResource = ResourcePermissionCatalog.normalizeResource(item.resource());
             String resource = ResourcePermissionCatalog.isKnownResource(rawResource)
@@ -254,18 +238,11 @@ public class RoleSettingService extends AbstractCrudService<RoleSetting, RoleSet
         }
         actionsByResource.forEach((resource, actions) ->
                 actions.forEach(action -> assertWithinCurrentPrincipalPermissions(currentPermissionMap, resource, action)));
-        List<RolePermission> toSave = new java.util.ArrayList<>(actionsByResource.values().stream().mapToInt(Set::size).sum());
+        List<CasbinPolicy> toSave = new java.util.ArrayList<>(actionsByResource.values().stream().mapToInt(Set::size).sum());
         actionsByResource.forEach((resource, actions) -> actions.forEach(action -> {
-            RolePermission permission = new RolePermission();
-            permission.setId(nextId());
-            permission.setRoleId(roleId);
-            permission.setResourceCode(resource);
-            permission.setActionCode(action);
-            toSave.add(permission);
+            toSave.add(new CasbinPolicy(resource, action));
         }));
-        if (!toSave.isEmpty()) {
-            rolePermissionRepository.saveAll(toSave);
-        }
+        casbinPolicyStore.replaceRolePermissions(role.getRoleCode(), toSave);
         evictCachesForRole(roleId);
     }
 
@@ -323,10 +300,10 @@ public class RoleSettingService extends AbstractCrudService<RoleSetting, RoleSet
     }
 
     private RoleSettingResponse toResponse(RoleSetting entity, RoleStatsSnapshot snapshot) {
-        List<RolePermission> permissions = snapshot.permissionsByRoleId().getOrDefault(entity.getId(), List.of());
+        List<CasbinPolicy> permissions = snapshot.permissionsByRoleId().getOrDefault(entity.getId(), List.of());
         List<String> permissionCodes = permissions.stream()
-                .sorted(Comparator.comparing(RolePermission::getResourceCode).thenComparing(RolePermission::getActionCode))
-                .map(permission -> permission.getResourceCode() + ":" + permission.getActionCode())
+                .sorted(Comparator.comparing(CasbinPolicy::resource).thenComparing(CasbinPolicy::action))
+                .map(permission -> permission.resource() + ":" + permission.action())
                 .toList();
         return new RoleSettingResponse(
                 entity.getId(),
@@ -356,20 +333,32 @@ public class RoleSettingService extends AbstractCrudService<RoleSetting, RoleSet
             return new RoleStatsSnapshot(Map.of(), Map.of());
         }
 
-        Map<Long, List<RolePermission>> permissionsByRoleId = new LinkedHashMap<>();
-        rolePermissionRepository.findByRoleIdInAndDeletedFlagFalse(roleIds).forEach(permission ->
-                permissionsByRoleId.computeIfAbsent(permission.getRoleId(), key -> new java.util.ArrayList<>()).add(permission)
-        );
+        Map<String, Long> roleIdByCode = roles.stream().collect(Collectors.toMap(
+                RoleSetting::getRoleCode,
+                RoleSetting::getId,
+                (left, right) -> left,
+                LinkedHashMap::new
+        ));
+        Map<Long, List<CasbinPolicy>> permissionsByRoleId = new LinkedHashMap<>();
+        casbinPolicyStore.findPermissionsByRoles(roleIdByCode.keySet()).forEach((roleCode, policies) -> {
+            Long roleId = roleIdByCode.get(roleCode);
+            if (roleId != null) {
+                permissionsByRoleId.put(roleId, policies);
+            }
+        });
 
         Map<Long, Long> userCountByRoleId = new LinkedHashMap<>();
-        for (UserRole userRole : userRoleRepository.findByRoleIdInAndDeletedFlagFalse(roleIds)) {
-            userCountByRoleId.merge(userRole.getRoleId(), 1L, Long::sum);
-        }
+        casbinPolicyStore.countUsersByRoles(roleIdByCode.keySet()).forEach((roleCode, count) -> {
+            Long roleId = roleIdByCode.get(roleCode);
+            if (roleId != null) {
+                userCountByRoleId.put(roleId, count);
+            }
+        });
 
         return new RoleStatsSnapshot(permissionsByRoleId, userCountByRoleId);
     }
 
-    private String buildPermissionSummary(List<RolePermission> permissions) {
+    private String buildPermissionSummary(List<CasbinPolicy> permissions) {
         return ResourcePermissionCatalog.buildPermissionSummary(permissions);
     }
 
@@ -500,7 +489,7 @@ public class RoleSettingService extends AbstractCrudService<RoleSetting, RoleSet
     }
 
     private record RoleStatsSnapshot(
-            Map<Long, List<RolePermission>> permissionsByRoleId,
+            Map<Long, List<CasbinPolicy>> permissionsByRoleId,
             Map<Long, Long> userCountByRoleId
     ) {
     }

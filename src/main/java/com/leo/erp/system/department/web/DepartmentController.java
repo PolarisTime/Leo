@@ -4,7 +4,7 @@ import com.leo.erp.common.api.ApiResponse;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.api.PageResponse;
 import com.leo.erp.common.web.BindPageQuery;
-import com.leo.erp.security.permission.RequiresPermission;
+import org.springframework.security.access.prepost.PreAuthorize;
 import com.leo.erp.system.department.service.DepartmentService;
 import com.leo.erp.system.department.web.dto.DepartmentOptionResponse;
 import com.leo.erp.system.department.web.dto.DepartmentRequest;
@@ -36,7 +36,7 @@ public class DepartmentController {
     }
 
     @GetMapping
-    @RequiresPermission(authenticatedOnly = true)
+    @PreAuthorize("isAuthenticated()")
     public ApiResponse<PageResponse<DepartmentResponse>> page(
             @BindPageQuery(sortFieldKey = "department") PageQuery query,
             @RequestParam(required = false) String keyword,
@@ -46,31 +46,31 @@ public class DepartmentController {
     }
 
     @GetMapping("/options")
-    @RequiresPermission(resource = "department", action = "read")
+    @PreAuthorize("@rbac.check('department', 'read')")
     public ApiResponse<List<DepartmentOptionResponse>> options() {
         return ApiResponse.success(departmentService.options());
     }
 
     @GetMapping("/{id}")
-    @RequiresPermission(resource = "department", action = "read")
+    @PreAuthorize("@rbac.check('department', 'read')")
     public ApiResponse<DepartmentResponse> detail(@PathVariable @Positive Long id) {
         return ApiResponse.success(departmentService.detail(id));
     }
 
     @PostMapping
-    @RequiresPermission(resource = "department", action = "create")
+    @PreAuthorize("@rbac.check('department', 'create')")
     public ApiResponse<DepartmentResponse> create(@Valid @RequestBody DepartmentRequest request) {
         return ApiResponse.success("创建成功", departmentService.create(request));
     }
 
     @PutMapping("/{id}")
-    @RequiresPermission(resource = "department", action = "update")
+    @PreAuthorize("@rbac.check('department', 'update')")
     public ApiResponse<DepartmentResponse> update(@PathVariable @Positive Long id, @Valid @RequestBody DepartmentRequest request) {
         return ApiResponse.success("更新成功", departmentService.update(id, request));
     }
 
     @DeleteMapping("/{id}")
-    @RequiresPermission(resource = "department", action = "delete")
+    @PreAuthorize("@rbac.check('department', 'delete')")
     public ApiResponse<Void> delete(@PathVariable @Positive Long id) {
         departmentService.delete(id);
         return ApiResponse.success("删除成功");

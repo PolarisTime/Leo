@@ -2,10 +2,7 @@ package com.leo.erp.security.permission;
 
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
-import com.leo.erp.security.jwt.ApiKeyAuthenticationDetails;
 import com.leo.erp.security.support.SecurityPrincipal;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 
 import java.util.Arrays;
@@ -48,18 +45,6 @@ public class ModulePermissionGuard {
                 .toList();
         if (actions.isEmpty()) {
             throw new BusinessException(ErrorCode.INTERNAL_ERROR, "权限动作配置错误");
-        }
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        if (authentication != null && authentication.getDetails() instanceof ApiKeyAuthenticationDetails details) {
-            if (!details.allowedResources().isEmpty() && !details.allowedResources().contains(resource)) {
-                throw new BusinessException(ErrorCode.FORBIDDEN, "API Key 未开通该资源接口权限");
-            }
-            if (details.allowedActions().isEmpty()) {
-                throw new BusinessException(ErrorCode.FORBIDDEN, "API Key 未配置动作权限");
-            }
-            if (actions.stream().noneMatch(details.allowedActions()::contains)) {
-                throw new BusinessException(ErrorCode.FORBIDDEN, "API Key 未开通该动作权限");
-            }
         }
         String allowedAction = actions.stream()
                 .filter(action -> permissionService.can(principal.id(), resource, action))

@@ -11,42 +11,29 @@ public record ApiResponse<T>(
         String message,
         T data,
         String timestamp,
-        String traceId,
-        RateLimitContext.Snapshot rateLimit
+        String traceId
 ) {
 
     private static final String MDC_TRACE_KEY = "traceId";
 
     public ApiResponse(int code, String message, T data, String timestamp) {
-        this(code, message, data, timestamp, null, null);
-    }
-
-    public ApiResponse(int code, String message, T data, String timestamp, String traceId) {
-        this(code, message, data, timestamp, traceId, null);
+        this(code, message, data, timestamp, null);
     }
 
     public static <T> ApiResponse<T> success(T data) {
-        return new ApiResponse<>(ErrorCode.SUCCESS.getCode(), ErrorCode.SUCCESS.getMessage(), data, DateTimeFormatSupport.now(), null, currentRateLimit());
+        return new ApiResponse<>(ErrorCode.SUCCESS.getCode(), ErrorCode.SUCCESS.getMessage(), data, DateTimeFormatSupport.now(), null);
     }
 
     public static <T> ApiResponse<T> success(String message, T data) {
-        return new ApiResponse<>(ErrorCode.SUCCESS.getCode(), message, data, DateTimeFormatSupport.now(), null, currentRateLimit());
-    }
-
-    public static <T> ApiResponse<T> success(String message, T data, RateLimitContext.Snapshot rateLimit) {
-        return new ApiResponse<>(ErrorCode.SUCCESS.getCode(), message, data, DateTimeFormatSupport.now(), null, rateLimit);
+        return new ApiResponse<>(ErrorCode.SUCCESS.getCode(), message, data, DateTimeFormatSupport.now(), null);
     }
 
     public static ApiResponse<Void> success(String message) {
-        return new ApiResponse<>(ErrorCode.SUCCESS.getCode(), message, null, DateTimeFormatSupport.now(), null, currentRateLimit());
+        return new ApiResponse<>(ErrorCode.SUCCESS.getCode(), message, null, DateTimeFormatSupport.now(), null);
     }
 
     public static ApiResponse<Void> failure(ErrorCode errorCode, String message) {
-        return new ApiResponse<>(errorCode.getCode(), message, null, DateTimeFormatSupport.now(), currentTraceId(), currentRateLimit());
-    }
-
-    public static ApiResponse<Void> failure(ErrorCode errorCode, String message, RateLimitContext.Snapshot rateLimit) {
-        return new ApiResponse<>(errorCode.getCode(), message, null, DateTimeFormatSupport.now(), currentTraceId(), rateLimit);
+        return new ApiResponse<>(errorCode.getCode(), message, null, DateTimeFormatSupport.now(), currentTraceId());
     }
 
     private static String currentTraceId() {
@@ -56,9 +43,5 @@ public record ApiResponse<T>(
         } catch (Exception ignored) {
             return null;
         }
-    }
-
-    private static RateLimitContext.Snapshot currentRateLimit() {
-        return RateLimitContext.current();
     }
 }

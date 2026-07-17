@@ -4,7 +4,7 @@ import com.leo.erp.common.api.ApiResponse;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.api.PageResponse;
 import com.leo.erp.common.web.BindPageQuery;
-import com.leo.erp.security.permission.RequiresPermission;
+import org.springframework.security.access.prepost.PreAuthorize;
 import com.leo.erp.system.permission.service.PermissionEntryService;
 import com.leo.erp.system.permission.web.dto.CatalogEntryResponse;
 import com.leo.erp.system.permission.web.dto.PermissionEntryResponse;
@@ -29,13 +29,13 @@ public class PermissionEntryController {
     }
 
     @GetMapping("/catalog")
-    @RequiresPermission(resource = "permission", action = "read")
+    @PreAuthorize("@rbac.check('permission', 'read')")
     public ApiResponse<List<CatalogEntryResponse>> catalog() {
         return ApiResponse.success(permissionEntryService.catalog());
     }
 
     @GetMapping
-    @RequiresPermission(resource = "permission", action = "read")
+    @PreAuthorize("@rbac.check('permission', 'read')")
     public ApiResponse<PageResponse<PermissionEntryResponse>> page(
             @BindPageQuery(sortFieldKey = "permission") PageQuery query,
             @RequestParam(required = false) String keyword
@@ -44,7 +44,7 @@ public class PermissionEntryController {
     }
 
     @GetMapping("/{id}")
-    @RequiresPermission(resource = "permission", action = "read")
+    @PreAuthorize("@rbac.check('permission', 'read')")
     public ApiResponse<PermissionEntryResponse> detail(@PathVariable Long id) {
         return ApiResponse.success(permissionEntryService.detail(id));
     }

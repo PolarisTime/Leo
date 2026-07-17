@@ -180,11 +180,11 @@ class ErpMcpQueryFacade {
                 PageResponse.from(purchaseInboundService.page(query, PageFilter.of(keyword, status, null, null))));
         readers.put("sales-order", (query, keyword, status) -> PageResponse.from(salesOrderService.page(
                 query,
-                new PageFilter(keyword, status, null, null, null, null, null, null, null, null, null, null, null, null, null)
+                new PageFilter(keyword, status, null, null, null, null, null, null, null, null, null, null, null, null)
         )));
         readers.put("sales-outbound", (query, keyword, status) -> PageResponse.from(salesOutboundService.page(
                 query,
-                new PageFilter(keyword, status, null, null, null, null, null, null, null, null, null, null, null, null, null)
+                new PageFilter(keyword, status, null, null, null, null, null, null, null, null, null, null, null, null)
         )));
         readers.put("inventory-report", (query, keyword, status) ->
                 PageResponse.from(inventoryReportService.page(query, keyword, null, null, null)));

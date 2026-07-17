@@ -73,6 +73,5 @@ set_backend_common_defaults() {
 
   export LEO_AUTH_DEFAULT_PASSWORD="${LEO_AUTH_DEFAULT_PASSWORD:-}"
   export LEO_JWT_SECRET="${LEO_JWT_SECRET:-}"
-  export TOTP_ENCRYPTION_KEY="${TOTP_ENCRYPTION_KEY:-}"
   export LEO_MACHINE_ID="${LEO_MACHINE_ID:-0}"
 }

@@ -86,7 +86,7 @@ public class AttachmentContentCryptor {
     }
 
     private SecretKeySpec key() {
-        String material = securityKeyService.getActiveTotpMaterial().secretValue();
+        String material = securityKeyService.getActiveDataMaterial().secretValue();
         if (material == null || material.isBlank()) {
             throw new BusinessException(ErrorCode.INTERNAL_ERROR, "附件加密主密钥未配置");
         }

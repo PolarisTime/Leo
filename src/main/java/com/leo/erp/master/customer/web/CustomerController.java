@@ -8,7 +8,7 @@ import com.leo.erp.master.customer.service.CustomerService;
 import com.leo.erp.master.customer.web.dto.CustomerOptionResponse;
 import com.leo.erp.master.customer.web.dto.CustomerRequest;
 import com.leo.erp.master.customer.web.dto.CustomerResponse;
-import com.leo.erp.security.permission.RequiresPermission;
+import org.springframework.security.access.prepost.PreAuthorize;
 import jakarta.validation.Valid;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -35,13 +35,13 @@ public class CustomerController {
     }
 
     @GetMapping("/options")
-    @RequiresPermission(resource = "customer", action = "read")
+    @PreAuthorize("@rbac.check('customer', 'read')")
     public ApiResponse<List<CustomerOptionResponse>> options() {
         return ApiResponse.success(customerService.listActiveOptions());
     }
 
     @GetMapping
-    @RequiresPermission(resource = "customer", action = "read")
+    @PreAuthorize("@rbac.check('customer', 'read')")
     public ApiResponse<PageResponse<CustomerResponse>> page(
             @BindPageQuery(sortFieldKey = "customer") PageQuery query,
             @RequestParam(required = false) String keyword,
@@ -51,25 +51,25 @@ public class CustomerController {
     }
 
     @GetMapping("/{id}")
-    @RequiresPermission(resource = "customer", action = "read")
+    @PreAuthorize("@rbac.check('customer', 'read')")
     public ApiResponse<CustomerResponse> detail(@PathVariable Long id) {
         return ApiResponse.success(customerService.detail(id));
     }
 
     @PostMapping
-    @RequiresPermission(resource = "customer", action = "create")
+    @PreAuthorize("@rbac.check('customer', 'create')")
     public ApiResponse<CustomerResponse> create(@Valid @RequestBody CustomerRequest request) {
         return ApiResponse.success("创建成功", customerService.create(request));
     }
 
     @PutMapping("/{id}")
-    @RequiresPermission(resource = "customer", action = "update")
+    @PreAuthorize("@rbac.check('customer', 'update')")
     public ApiResponse<CustomerResponse> update(@PathVariable Long id, @Valid @RequestBody CustomerRequest request) {
         return ApiResponse.success("更新成功", customerService.update(id, request));
     }
 
     @DeleteMapping("/{id}")
-    @RequiresPermission(resource = "customer", action = "delete")
+    @PreAuthorize("@rbac.check('customer', 'delete')")
     public ApiResponse<Void> delete(@PathVariable Long id) {
         customerService.delete(id);
         return ApiResponse.success("删除成功");

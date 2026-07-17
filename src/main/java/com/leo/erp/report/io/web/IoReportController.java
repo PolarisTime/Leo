@@ -7,7 +7,7 @@ import com.leo.erp.common.api.PageResponse;
 import com.leo.erp.common.web.BindPageQuery;
 import com.leo.erp.report.io.service.IoReportService;
 import com.leo.erp.report.io.web.dto.IoReportResponse;
-import com.leo.erp.security.permission.RequiresPermission;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -28,7 +28,7 @@ public class IoReportController {
     }
 
     @GetMapping
-    @RequiresPermission(resource = "io-report", action = "read")
+    @PreAuthorize("@rbac.check('io-report', 'read')")
     public ApiResponse<PageResponse<IoReportResponse>> page(
             @BindPageQuery(sortFieldKey = "io-report", directionParam = "sortDirection") PageQuery query,
             @RequestParam(required = false) String keyword,

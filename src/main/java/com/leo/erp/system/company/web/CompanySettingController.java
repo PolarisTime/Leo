@@ -6,7 +6,7 @@ import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.api.PageResponse;
 import com.leo.erp.common.web.BindPageQuery;
 import com.leo.erp.common.web.PublicAccess;
-import com.leo.erp.security.permission.RequiresPermission;
+import org.springframework.security.access.prepost.PreAuthorize;
 import com.leo.erp.system.company.service.CompanySettingService;
 import com.leo.erp.system.company.web.dto.CompanySettingOptionResponse;
 import com.leo.erp.system.company.web.dto.CompanySettingRequest;
@@ -38,7 +38,7 @@ public class CompanySettingController {
     }
 
     @GetMapping
-    @RequiresPermission(resource = "company-setting", action = "read")
+    @PreAuthorize("@rbac.check('company-setting', 'read')")
     public ApiResponse<PageResponse<CompanySettingResponse>> page(
             @BindPageQuery(sortFieldKey = "company-setting") PageQuery query,
             @RequestParam(required = false) String keyword,
@@ -48,13 +48,13 @@ public class CompanySettingController {
     }
 
     @GetMapping("/options")
-    @RequiresPermission(authenticatedOnly = true)
+    @PreAuthorize("isAuthenticated()")
     public ApiResponse<List<CompanySettingOptionResponse>> options() {
         return ApiResponse.success(companySettingService.listActiveOptions());
     }
 
     @GetMapping("/{id}")
-    @RequiresPermission(resource = "company-setting", action = "read")
+    @PreAuthorize("@rbac.check('company-setting', 'read')")
     public ApiResponse<CompanySettingResponse> detail(@PathVariable Long id) {
         return ApiResponse.success(companySettingService.detail(id));
     }
@@ -67,32 +67,32 @@ public class CompanySettingController {
     }
 
     @GetMapping("/current")
-    @RequiresPermission(resource = "company-setting", action = "read")
+    @PreAuthorize("@rbac.check('company-setting', 'read')")
     public ApiResponse<CompanySettingResponse> current() {
         return ApiResponse.success(companySettingService.current());
     }
 
     @PutMapping("/current")
-    @RequiresPermission(resource = "company-setting", action = "update")
+    @PreAuthorize("@rbac.check('company-setting', 'update')")
     @OperationLoggable(moduleName = "结算主体", actionType = "保存")
     public ApiResponse<CompanySettingResponse> saveCurrent(@Valid @RequestBody CompanySettingRequest request) {
         return ApiResponse.success("保存成功", companySettingService.saveCurrent(request));
     }
 
     @PostMapping
-    @RequiresPermission(resource = "company-setting", action = "create")
+    @PreAuthorize("@rbac.check('company-setting', 'create')")
     public ApiResponse<CompanySettingResponse> create(@Valid @RequestBody CompanySettingRequest request) {
         return ApiResponse.success("创建成功", companySettingService.create(request));
     }
 
     @PutMapping("/{id}")
-    @RequiresPermission(resource = "company-setting", action = "update")
+    @PreAuthorize("@rbac.check('company-setting', 'update')")
     public ApiResponse<CompanySettingResponse> update(@PathVariable Long id, @Valid @RequestBody CompanySettingRequest request) {
         return ApiResponse.success("更新成功", companySettingService.update(id, request));
     }
 
     @DeleteMapping("/{id}")
-    @RequiresPermission(resource = "company-setting", action = "delete")
+    @PreAuthorize("@rbac.check('company-setting', 'delete')")
     public ApiResponse<Void> delete(@PathVariable Long id) {
         companySettingService.delete(id);
         return ApiResponse.success("删除成功");

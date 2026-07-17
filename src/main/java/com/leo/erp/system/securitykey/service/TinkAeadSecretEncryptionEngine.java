@@ -32,7 +32,7 @@ final class TinkAeadSecretEncryptionEngine implements SecretEncryptionEngine {
             byte[] encrypted = aead(encryptionKey).encrypt(plainSecret.getBytes(StandardCharsets.UTF_8), ASSOCIATED_DATA);
             return Base64.getEncoder().encodeToString(encrypted);
         } catch (GeneralSecurityException e) {
-            throw new IllegalStateException("TOTP密钥加密失败", e);
+            throw new IllegalStateException("数据密钥加密失败", e);
         }
     }
 
@@ -43,7 +43,7 @@ final class TinkAeadSecretEncryptionEngine implements SecretEncryptionEngine {
             byte[] decrypted = aead(encryptionKey).decrypt(decoded, ASSOCIATED_DATA);
             return new String(decrypted, StandardCharsets.UTF_8);
         } catch (GeneralSecurityException | IllegalArgumentException e) {
-            throw new IllegalStateException("TOTP密钥解密失败", e);
+            throw new IllegalStateException("数据密钥解密失败", e);
         }
     }
 

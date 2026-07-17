@@ -12,8 +12,6 @@ public record SecurityPrincipal(
         String password,
         boolean enabled,
         Collection<? extends GrantedAuthority> authorities,
-        boolean totpEnabled,
-        boolean forceTotpSetup,
         long credentialVersion
 ) implements UserDetails {
 
@@ -22,25 +20,13 @@ public record SecurityPrincipal(
             String username,
             String password,
             boolean enabled,
-            Collection<? extends GrantedAuthority> authorities,
-            boolean totpEnabled,
-            boolean forceTotpSetup
-    ) {
-        this(id, username, password, enabled, authorities, totpEnabled, forceTotpSetup, 0L);
-    }
-
-    public SecurityPrincipal(
-            Long id,
-            String username,
-            String password,
-            boolean enabled,
             Collection<? extends GrantedAuthority> authorities
     ) {
-        this(id, username, password, enabled, authorities, false, false, 0L);
+        this(id, username, password, enabled, authorities, 0L);
     }
 
     public static SecurityPrincipal system() {
-        return new SecurityPrincipal(0L, "system", "", true, List.of(), false, false, 0L);
+        return new SecurityPrincipal(0L, "system", "", true, List.of(), 0L);
     }
 
     public static SecurityPrincipal authenticated(
@@ -48,25 +34,13 @@ public record SecurityPrincipal(
             String username,
             Collection<? extends GrantedAuthority> authorities
     ) {
-        return authenticated(id, username, authorities, false, false);
+        return authenticated(id, username, authorities, 0L);
     }
 
     public static SecurityPrincipal authenticated(
             Long id,
             String username,
             Collection<? extends GrantedAuthority> authorities,
-            boolean totpEnabled,
-            boolean forceTotpSetup
-    ) {
-        return authenticated(id, username, authorities, totpEnabled, forceTotpSetup, 0L);
-    }
-
-    public static SecurityPrincipal authenticated(
-            Long id,
-            String username,
-            Collection<? extends GrantedAuthority> authorities,
-            boolean totpEnabled,
-            boolean forceTotpSetup,
             long credentialVersion
     ) {
         return new SecurityPrincipal(
@@ -75,8 +49,6 @@ public record SecurityPrincipal(
                 "",
                 true,
                 authorities,
-                totpEnabled,
-                forceTotpSetup,
                 credentialVersion
         );
     }

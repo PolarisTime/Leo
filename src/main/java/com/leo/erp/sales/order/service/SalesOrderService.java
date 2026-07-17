@@ -16,11 +16,14 @@ import com.leo.erp.sales.order.repository.SalesOrderRepository;
 import com.leo.erp.sales.order.web.dto.SalesOrderItemRequest;
 import com.leo.erp.sales.order.web.dto.SalesOrderRequest;
 import com.leo.erp.sales.order.web.dto.SalesOrderResponse;
+import com.leo.erp.security.support.SecurityPrincipal;
 import com.leo.erp.system.operationlog.event.BusinessOperationEventPublisher;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.jpa.domain.Specification;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -226,15 +229,25 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
 
     @Override
     protected void validateUpdate(SalesOrder entity, SalesOrderRequest request) {
+        assertCreatedByCurrentUser(entity);
         if (!entity.getOrderNo().equals(request.orderNo()) && repository.existsByOrderNoAndDeletedFlagFalse(request.orderNo())) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "销售订单号已存在");
+        }
+    }
+
+    private void assertCreatedByCurrentUser(SalesOrder order) {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || !(authentication.getPrincipal() instanceof SecurityPrincipal principal)
+                || !Objects.equals(order.getCreatedBy(), principal.id())) {
+            // 此为业务领域不变量，不属于 ABAC 属性，无需也不应迁移至 jCasbin。
+            throw new BusinessException(ErrorCode.FORBIDDEN, "只能编辑本人创建的销售订单");
         }
     }
 
     @Override
     protected SalesOrderRequest normalizeCreateRequest(SalesOrderRequest request, long entityId) {
         return new SalesOrderRequest(
-                resolveCreateBusinessNo("sales-order", request.orderNo(), entityId),
+                resolveCreateBusinessNo(entityId),
                 request.purchaseInboundNo(),
                 request.purchaseOrderNo(),
                 request.customerCode(),

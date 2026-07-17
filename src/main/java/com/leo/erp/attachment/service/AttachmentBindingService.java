@@ -24,20 +24,17 @@ public class AttachmentBindingService {
 
     private final AttachmentBindingRepository repository;
     private final AttachmentService attachmentService;
-    private final UploadRuleService uploadRuleService;
     private final SnowflakeIdGenerator idGenerator;
     private final ModuleCatalog moduleCatalog;
     private final AttachmentFileRepository attachmentFileRepository;
 
     public AttachmentBindingService(AttachmentBindingRepository repository,
                                     AttachmentService attachmentService,
-                                    UploadRuleService uploadRuleService,
                                     SnowflakeIdGenerator idGenerator,
                                     ModuleCatalog moduleCatalog,
                                     AttachmentFileRepository attachmentFileRepository) {
         this.repository = repository;
         this.attachmentService = attachmentService;
-        this.uploadRuleService = uploadRuleService;
         this.idGenerator = idGenerator;
         this.moduleCatalog = moduleCatalog;
         this.attachmentFileRepository = attachmentFileRepository;
@@ -47,9 +44,6 @@ public class AttachmentBindingService {
     public List<AttachmentView> list(String moduleKey, Long recordId) {
         String normalizedModuleKey = normalizeModuleKey(moduleKey);
         long normalizedRecordId = normalizeRecordId(recordId);
-        if (!uploadRuleService.isPageUploadEnabled(normalizedModuleKey)) {
-            return List.of();
-        }
         List<Long> attachmentIds = repository.findByModuleKeyAndRecordIdAndDeletedFlagFalseOrderBySortOrderAscIdAsc(
                         normalizedModuleKey,
                         normalizedRecordId
@@ -63,9 +57,6 @@ public class AttachmentBindingService {
     public List<AttachmentView> replace(String moduleKey, Long recordId, List<Long> attachmentIds) {
         String normalizedModuleKey = normalizeModuleKey(moduleKey);
         long normalizedRecordId = normalizeRecordId(recordId);
-        if (!uploadRuleService.isPageUploadEnabled(normalizedModuleKey)) {
-            return List.of();
-        }
         List<Long> normalizedAttachmentIds = normalizeAttachmentIds(attachmentIds);
         attachmentService.validateAttachmentIds(normalizedAttachmentIds);
         assertAttachmentsBindable(normalizedModuleKey, normalizedRecordId, normalizedAttachmentIds);

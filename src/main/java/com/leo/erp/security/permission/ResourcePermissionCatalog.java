@@ -1,6 +1,5 @@
 package com.leo.erp.security.permission;
 
-import com.leo.erp.system.role.domain.entity.RolePermission;
 
 import java.util.Collection;
 import java.util.Collections;
@@ -22,6 +21,8 @@ public final class ResourcePermissionCatalog {
     public static final String AUDIT = "audit";
     public static final String EXPORT = "export";
     public static final String PRINT = "print";
+    public static final String WRITE = "write";
+    public static final String VIEW_DELETED = "view_deleted";
     public static final String MANAGE_PERMISSIONS = "manage_permissions";
 
     public record ActionOption(
@@ -43,7 +44,9 @@ public final class ResourcePermissionCatalog {
         }
     }
 
-    private static final Set<String> NO_MENU_RESOURCES = Set.of("user-account", "permission", "role");
+    private static final Set<String> NO_MENU_RESOURCES = Set.of(
+            "user-account", "permission", "role", "document", "mcp_service"
+    );
     private static final Map<String, List<String>> EXTRA_MENU_CODES = Map.of(
             "material", List.of("material-categories", "material-category")
     );
@@ -115,7 +118,7 @@ public final class ResourcePermissionCatalog {
                     List.of("/ledger-adjustment", "/ledger-adjustments"), READ_ONLY_ACTIONS),
             entry("cash-ledger", "资金流水", "财务", false, List.of("/cash-ledger"), REPORT_ACTIONS),
             entry("general-setting", "通用设置", "系统", false,
-                    List.of("/general-setting", "/general-settings", "/general-setting/upload-rule", "/general-settings/upload-rule"), List.of(action(READ, "查看"), action(UPDATE, "编辑"))),
+                    List.of("/general-setting", "/general-settings"), List.of(action(READ, "查看"), action(UPDATE, "编辑"))),
             entry("company-setting", "结算主体管理", "主数据", false, List.of("/company-setting", "/company-settings"), CRUD_ACTIONS),
             entry("operation-log", "操作日志", "系统", false, List.of("/operation-log", "/operation-logs"), READ_ONLY_ACTIONS),
             entry("department", "部门", "主数据", false, List.of("/department", "/departments"), CRUD_ACTIONS),
@@ -131,9 +134,10 @@ public final class ResourcePermissionCatalog {
                     )),
             entry("access-control", "访问控制", "系统", false,
                     List.of("/access-control"), READ_ONLY_ACTIONS),
-            entry("session", "会话管理", "系统", false, List.of("/auth/refresh-token", "/auth/refresh-tokens"), List.of(action(READ, "查看"), action(UPDATE, "编辑"))),
-            entry("api-key", "API Key 管理", "系统", false, List.of("/auth/api-key", "/auth/api-keys"), List.of(action(READ, "查看"), action(CREATE, "新增"), action(UPDATE, "编辑"))),
-            entry("security-key", "安全密钥管理", "系统", false, List.of("/system/security-key", "/system/security-keys"), List.of(action(READ, "查看"), action(UPDATE, "编辑"))),
+            entry("document", "已删除单据", "系统", false,
+                    List.of(), List.of(action(VIEW_DELETED, "查看已删除单据"))),
+            entry("mcp_service", "MCP 机器客户端", "系统", false,
+                    List.of(), List.of(action(READ, "读取"), action(WRITE, "写入"))),
             entry("print-template", "打印模板", "系统", false, List.of("/print-template", "/print-templates"), CRUD_ACTIONS)
     );
 
@@ -303,15 +307,15 @@ public final class ResourcePermissionCatalog {
         return new Entry(code, title, group, List.copyOf(pathPrefixes), List.copyOf(actions), businessResource);
     }
 
-    public static String buildPermissionSummary(Collection<RolePermission> permissions) {
+    public static String buildPermissionSummary(Collection<CasbinPolicy> permissions) {
         if (permissions == null || permissions.isEmpty()) {
             return "";
         }
         List<String> labels = permissions.stream()
-                .sorted(Comparator.comparing(RolePermission::getResourceCode).thenComparing(RolePermission::getActionCode))
+                .sorted(Comparator.comparing(CasbinPolicy::resource).thenComparing(CasbinPolicy::action))
                 .map(permission -> {
-                    String resource = normalizeResource(permission.getResourceCode());
-                    String action = normalizeAction(permission.getActionCode());
+                    String resource = normalizeResource(permission.resource());
+                    String action = normalizeAction(permission.action());
                     return resourceTitle(resource) + "-" + actionTitle(resource, action);
                 })
                 .distinct()

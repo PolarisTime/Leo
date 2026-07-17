@@ -193,7 +193,7 @@ public class PurchaseInboundService extends AbstractCrudService<
     @Override
     protected PurchaseInboundRequest normalizeCreateRequest(PurchaseInboundRequest request, long entityId) {
         return new PurchaseInboundRequest(
-                resolveCreateBusinessNo("purchase-inbound", request.inboundNo(), entityId),
+                resolveCreateBusinessNo(entityId),
                 request.purchaseOrderNo(),
                 request.supplierId(),
                 request.supplierCode(),
