@@ -13,7 +13,7 @@ public interface RoleConflictRepository extends JpaRepository<RoleConflict, Long
     @Query("""
             select rc from RoleConflict rc
             where rc.deletedFlag = false
-              and rc.roleId in :roleIds
+              and (rc.roleId in :roleIds or rc.conflictRoleId in :roleIds)
             """)
     List<RoleConflict> findConflictsByRoleIds(@Param("roleIds") Collection<Long> roleIds);
 }

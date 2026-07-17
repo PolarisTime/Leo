@@ -8,6 +8,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import com.leo.erp.system.operationlog.support.OperationLoggable;
 import com.leo.erp.system.role.service.RoleSettingService;
 import com.leo.erp.system.role.web.dto.RolePermissionItem;
+import com.leo.erp.system.role.web.dto.RoleOptionResponse;
 import com.leo.erp.system.role.web.dto.RoleSettingRequest;
 import com.leo.erp.system.role.web.dto.RoleSettingResponse;
 import com.leo.erp.system.menu.web.dto.MenuTreeResponse;
@@ -55,6 +56,12 @@ public class RoleSettingController {
         return ApiResponse.success(roleSettingService.detail(id));
     }
 
+    @GetMapping("/options")
+    @PreAuthorize("@rbac.check('role', 'read') or @rbac.check('user-account', 'create') or @rbac.check('user-account', 'update')")
+    public ApiResponse<List<RoleOptionResponse>> options() {
+        return ApiResponse.success(roleSettingService.listOptions());
+    }
+
     @PostMapping
     @PreAuthorize("@rbac.check('role', 'create')")
     @OperationLoggable(moduleName = "角色权限配置", actionType = "新增", businessNoFields = {"roleCode"})
@@ -78,13 +85,13 @@ public class RoleSettingController {
     }
 
     @GetMapping("/{id}/permission")
-    @PreAuthorize("@rbac.check('role', 'manage_permissions')")
+    @PreAuthorize("@rbac.check('role', 'read')")
     public ApiResponse<List<RolePermissionItem>> getRolePermissions(@PathVariable @Positive Long id) {
         return ApiResponse.success(roleSettingService.getRolePermissions(id));
     }
 
     @GetMapping("/permission-options")
-    @PreAuthorize("@rbac.check('role', 'manage_permissions')")
+    @PreAuthorize("@rbac.check('role', 'read')")
     public ApiResponse<List<MenuTreeResponse>> listPermissionOptions() {
         return ApiResponse.success(roleSettingService.listPermissionOptions());
     }

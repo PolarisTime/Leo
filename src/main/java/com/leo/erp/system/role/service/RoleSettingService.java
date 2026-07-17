@@ -14,12 +14,15 @@ import com.leo.erp.security.permission.PermissionService;
 import com.leo.erp.security.permission.ResourcePermissionCatalog;
 import com.leo.erp.security.support.SecurityPrincipal;
 import com.leo.erp.system.dashboard.service.DashboardSummaryService;
+import com.leo.erp.system.menu.web.dto.MenuTreeResponse;
+import com.leo.erp.system.role.domain.entity.RoleConflict;
 import com.leo.erp.system.role.domain.entity.RoleSetting;
+import com.leo.erp.system.role.repository.RoleConflictRepository;
 import com.leo.erp.system.role.repository.RoleSettingRepository;
+import com.leo.erp.system.role.web.dto.RoleOptionResponse;
 import com.leo.erp.system.role.web.dto.RolePermissionItem;
 import com.leo.erp.system.role.web.dto.RoleSettingRequest;
 import com.leo.erp.system.role.web.dto.RoleSettingResponse;
-import com.leo.erp.system.menu.web.dto.MenuTreeResponse;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
@@ -33,8 +36,8 @@ import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.util.Comparator;
-import java.util.LinkedHashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -84,6 +87,7 @@ public class RoleSettingService extends AbstractCrudService<RoleSetting, RoleSet
     private static final Set<String> ALLOWED_STATUS = StatusConstants.ALLOWED_ACTIVE_STATUS;
 
     private final RoleSettingRepository repository;
+    private final RoleConflictRepository roleConflictRepository;
     private final CasbinPolicyStore casbinPolicyStore;
     private final PermissionService permissionService;
     private final DashboardSummaryService dashboardSummaryService;
@@ -91,6 +95,7 @@ public class RoleSettingService extends AbstractCrudService<RoleSetting, RoleSet
 
     @Autowired
     public RoleSettingService(RoleSettingRepository repository,
+                              RoleConflictRepository roleConflictRepository,
                               SnowflakeIdGenerator idGenerator,
                               CasbinPolicyStore casbinPolicyStore,
                               PermissionService permissionService,
@@ -98,6 +103,7 @@ public class RoleSettingService extends AbstractCrudService<RoleSetting, RoleSet
                               AuthenticatedUserCacheService authenticatedUserCacheService) {
         super(idGenerator);
         this.repository = repository;
+        this.roleConflictRepository = roleConflictRepository;
         this.casbinPolicyStore = casbinPolicyStore;
         this.permissionService = permissionService;
         this.dashboardSummaryService = dashboardSummaryService;
@@ -115,6 +121,25 @@ public class RoleSettingService extends AbstractCrudService<RoleSetting, RoleSet
                 .map(entity -> toResponse(entity, snapshot))
                 .toList();
         return new PageImpl<>(responses, entityPage.getPageable(), entityPage.getTotalElements());
+    }
+
+    @Transactional(readOnly = true)
+    public List<RoleOptionResponse> listOptions() {
+        List<RoleSetting> roles = repository.findAllByDeletedFlagFalseOrderByRoleNameAsc();
+        RoleStatsSnapshot snapshot = buildStatsSnapshot(roles);
+        return roles.stream().map(role -> {
+            List<CasbinPolicy> permissions = snapshot.permissionsByRoleId()
+                    .getOrDefault(role.getId(), List.of());
+            return new RoleOptionResponse(
+                    role.getId(),
+                    role.getRoleCode(),
+                    role.getRoleName(),
+                    role.getStatus(),
+                    buildPermissionSummary(permissions),
+                    snapshot.conflictRoleIdsByRoleId().getOrDefault(role.getId(), List.of()),
+                    isAssignable(role, permissions, snapshot)
+            );
+        }).toList();
     }
 
     @Override
@@ -226,8 +251,9 @@ public class RoleSettingService extends AbstractCrudService<RoleSetting, RoleSet
             }
             actionsByResource.computeIfAbsent(resource, key -> new LinkedHashSet<>()).add(action);
         }
-        actionsByResource.values().forEach(actions -> {
-            if (actions.stream().anyMatch(action -> !ResourcePermissionCatalog.READ.equals(action))) {
+        actionsByResource.forEach((resource, actions) -> {
+            if (ResourcePermissionCatalog.isAllowed(resource, ResourcePermissionCatalog.READ)
+                    && actions.stream().anyMatch(action -> !ResourcePermissionCatalog.READ.equals(action))) {
                 actions.add(ResourcePermissionCatalog.READ);
             }
         });
@@ -315,13 +341,16 @@ public class RoleSettingService extends AbstractCrudService<RoleSetting, RoleSet
                 buildPermissionSummary(permissions),
                 Math.toIntExact(snapshot.userCountByRoleId().getOrDefault(entity.getId(), 0L)),
                 entity.getStatus(),
-                entity.getRemark()
+                entity.getRemark(),
+                snapshot.conflictRoleIdsByRoleId().getOrDefault(entity.getId(), List.of()),
+                isAssignable(entity, permissions, snapshot)
         );
     }
 
     private RoleStatsSnapshot buildStatsSnapshot(List<RoleSetting> roles) {
+        PrincipalPermissionBounds bounds = currentPrincipalPermissionBounds();
         if (roles == null || roles.isEmpty()) {
-            return new RoleStatsSnapshot(Map.of(), Map.of());
+            return new RoleStatsSnapshot(Map.of(), Map.of(), Map.of(), bounds.unrestricted(), bounds.permissionMap());
         }
 
         List<Long> roleIds = roles.stream()
@@ -330,7 +359,7 @@ public class RoleSettingService extends AbstractCrudService<RoleSetting, RoleSet
                 .distinct()
                 .toList();
         if (roleIds.isEmpty()) {
-            return new RoleStatsSnapshot(Map.of(), Map.of());
+            return new RoleStatsSnapshot(Map.of(), Map.of(), Map.of(), bounds.unrestricted(), bounds.permissionMap());
         }
 
         Map<String, Long> roleIdByCode = roles.stream().collect(Collectors.toMap(
@@ -355,7 +384,50 @@ public class RoleSettingService extends AbstractCrudService<RoleSetting, RoleSet
             }
         });
 
-        return new RoleStatsSnapshot(permissionsByRoleId, userCountByRoleId);
+        Map<Long, Set<Long>> conflictRoleIdSets = new LinkedHashMap<>();
+        for (RoleConflict conflict : roleConflictRepository.findConflictsByRoleIds(roleIds)) {
+            conflictRoleIdSets.computeIfAbsent(conflict.getRoleId(), key -> new LinkedHashSet<>())
+                    .add(conflict.getConflictRoleId());
+            conflictRoleIdSets.computeIfAbsent(conflict.getConflictRoleId(), key -> new LinkedHashSet<>())
+                    .add(conflict.getRoleId());
+        }
+        Map<Long, List<Long>> conflictRoleIdsByRoleId = new LinkedHashMap<>();
+        conflictRoleIdSets.forEach((roleId, conflictIds) ->
+                conflictRoleIdsByRoleId.put(roleId, conflictIds.stream().sorted().toList()));
+
+        return new RoleStatsSnapshot(
+                permissionsByRoleId,
+                userCountByRoleId,
+                conflictRoleIdsByRoleId,
+                bounds.unrestricted(),
+                bounds.permissionMap()
+        );
+    }
+
+    private boolean isAssignable(RoleSetting role,
+                                 List<CasbinPolicy> permissions,
+                                 RoleStatsSnapshot snapshot) {
+        if (!StatusConstants.NORMAL.equals(role.getStatus())) {
+            return false;
+        }
+        if (snapshot.unrestricted()) {
+            return true;
+        }
+        if (isAdminRole(role)) {
+            return false;
+        }
+        return permissions.stream().allMatch(permission ->
+                snapshot.currentPrincipalPermissionMap()
+                        .getOrDefault(permission.resource(), Set.of())
+                        .contains(permission.action()));
+    }
+
+    private PrincipalPermissionBounds currentPrincipalPermissionBounds() {
+        SecurityPrincipal principal = currentPrincipal().orElse(null);
+        if (principal == null || currentPrincipalIsAdmin()) {
+            return new PrincipalPermissionBounds(true, Map.of());
+        }
+        return new PrincipalPermissionBounds(false, permissionService.getUserPermissionMap(principal.id()));
     }
 
     private String buildPermissionSummary(List<CasbinPolicy> permissions) {
@@ -490,7 +562,16 @@ public class RoleSettingService extends AbstractCrudService<RoleSetting, RoleSet
 
     private record RoleStatsSnapshot(
             Map<Long, List<CasbinPolicy>> permissionsByRoleId,
-            Map<Long, Long> userCountByRoleId
+            Map<Long, Long> userCountByRoleId,
+            Map<Long, List<Long>> conflictRoleIdsByRoleId,
+            boolean unrestricted,
+            Map<String, Set<String>> currentPrincipalPermissionMap
+    ) {
+    }
+
+    private record PrincipalPermissionBounds(
+            boolean unrestricted,
+            Map<String, Set<String>> permissionMap
     ) {
     }
 

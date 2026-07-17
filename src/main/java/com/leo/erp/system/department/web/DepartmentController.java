@@ -46,7 +46,7 @@ public class DepartmentController {
     }
 
     @GetMapping("/options")
-    @PreAuthorize("@rbac.check('department', 'read')")
+    @PreAuthorize("@rbac.check('department', 'read') or @rbac.check('user-account', 'create') or @rbac.check('user-account', 'update')")
     public ApiResponse<List<DepartmentOptionResponse>> options() {
         return ApiResponse.success(departmentService.options());
     }

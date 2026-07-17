@@ -2,17 +2,12 @@ package com.leo.erp.system.role.web.dto;
 
 import java.util.List;
 
-public record RoleSettingResponse(
+public record RoleOptionResponse(
         Long id,
         String roleCode,
         String roleName,
-        String roleType,
-        List<String> permissionCodes,
-        Integer permissionCount,
-        String permissionSummary,
-        Integer userCount,
         String status,
-        String remark,
+        String permissionSummary,
         List<Long> conflictRoleIds,
         boolean assignable
 ) {

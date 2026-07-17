@@ -21,12 +21,12 @@ import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Set;
 import java.util.Locale;
-import java.util.stream.Collectors;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 public class UserRoleBindingService {
@@ -98,6 +98,10 @@ public class UserRoleBindingService {
     }
 
     public void assertCurrentPrincipalCanBindRoles(Long targetUserId, Collection<RoleSetting> roles) {
+        List<RoleSetting> requestedRoles = roles == null ? List.of() : new ArrayList<>(roles);
+        if (requestedRoles.stream().anyMatch(role -> !ROLE_STATUS_NORMAL.equals(role.getStatus()))) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "禁用角色不能授予用户");
+        }
         Optional<SecurityPrincipal> principal = currentPrincipal();
         if (principal.isEmpty() || currentPrincipalIsAdmin()) {
             return;
@@ -105,7 +109,6 @@ public class UserRoleBindingService {
         if (Objects.equals(principal.get().id(), targetUserId)) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "不能修改自己的角色集合");
         }
-        List<RoleSetting> requestedRoles = roles == null ? List.of() : new ArrayList<>(roles);
         if (requestedRoles.stream().anyMatch(this::isAdminRole)) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "非系统管理员不能授予系统管理员角色");
         }

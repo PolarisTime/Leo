@@ -20,5 +20,7 @@ public interface RoleSettingRepository extends JpaRepository<RoleSetting, Long>,
 
     List<RoleSetting> findByRoleNameInAndDeletedFlagFalse(Collection<String> roleNames);
 
+    List<RoleSetting> findAllByDeletedFlagFalseOrderByRoleNameAsc();
+
     Optional<RoleSetting> findByIdAndDeletedFlagFalse(Long id);
 }
