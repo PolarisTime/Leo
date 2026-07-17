@@ -29,7 +29,6 @@ public record MaterialRequest(
         Integer piecesPerBundle,
         @DecimalMin(value = "0.00", message = "单价不能小于0")
         BigDecimal unitPrice,
-        Boolean batchNoEnabled,
         String remark
 ) {
 }

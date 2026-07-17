@@ -66,7 +66,7 @@ public class SalesOrderItemMapper {
         item.setSourcePurchaseOrderItemId(source.sourcePurchaseOrderItemId());
         item.setWarehouseId(warehouse.warehouseId());
         item.setWarehouseName(warehouse.warehouseName());
-        item.setBatchNo(tradeItemMaterialSupport.normalizeBatchNo(material, source.batchNo(), lineNo, true));
+        item.setBatchNo(tradeItemMaterialSupport.normalizeBatchNo(source.batchNo(), lineNo));
         item.setQuantity(source.quantity());
         item.setQuantityUnit(TradeItemCalculator.normalizeQuantityUnit(source.quantityUnit()));
         item.setPieceWeightTon(pieceWeightTon);

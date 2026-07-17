@@ -52,9 +52,6 @@ public class Material extends AbstractAuditableEntity {
     @Column(name = "unit_price", nullable = false, precision = 12, scale = 2)
     private BigDecimal unitPrice;
 
-    @Column(name = "batch_no_enabled", nullable = false)
-    private Boolean batchNoEnabled = Boolean.FALSE;
-
     @Column(name = "remark", length = 255)
     private String remark;
 

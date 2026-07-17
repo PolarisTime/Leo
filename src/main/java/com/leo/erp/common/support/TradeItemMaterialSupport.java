@@ -19,29 +19,26 @@ import java.util.Objects;
 public class TradeItemMaterialSupport implements RedisCacheHealthCheck {
 
     private static final Logger log = LoggerFactory.getLogger(TradeItemMaterialSupport.class);
-    private static final String MATERIAL_CACHE_KEY = "leo:material:all";
+    private static final String MATERIAL_CACHE_KEY = "leo:material:all:v2";
     private static final Duration MATERIAL_CACHE_TTL = Duration.ofMinutes(10);
     private static final TypeReference<List<TradeMaterialSnapshot>> MATERIAL_LIST_TYPE = new TypeReference<>() { };
 
     private final MaterialCatalog materialCatalog;
     private final RedisJsonCacheSupport redisJsonCacheSupport;
-    private final TradeItemRuntimeSettings tradeItemRuntimeSettings;
     private final SnowflakeIdGenerator snowflakeIdGenerator;
 
     @Autowired
     public TradeItemMaterialSupport(MaterialCatalog materialCatalog,
                                     RedisJsonCacheSupport redisJsonCacheSupport,
-                                    TradeItemRuntimeSettings tradeItemRuntimeSettings,
                                     SnowflakeIdGenerator snowflakeIdGenerator) {
         this.materialCatalog = materialCatalog;
         this.redisJsonCacheSupport = redisJsonCacheSupport;
-        this.tradeItemRuntimeSettings = tradeItemRuntimeSettings;
         this.snowflakeIdGenerator = Objects.requireNonNull(snowflakeIdGenerator,
                 "SnowflakeIdGenerator must not be null");
     }
 
     public TradeItemMaterialSupport(MaterialCatalog materialCatalog) {
-        this(materialCatalog, null, null, new SnowflakeIdGenerator(0L));
+        this(materialCatalog, null, new SnowflakeIdGenerator(0L));
     }
 
     public Map<String, TradeMaterialSnapshot> loadMaterialMap(Collection<String> materialCodes) {
@@ -101,28 +98,36 @@ public class TradeItemMaterialSupport implements RedisCacheHealthCheck {
         return normalized;
     }
 
-    public String normalizeBatchNo(TradeMaterialSnapshot material, String batchNo, int lineNo, boolean requiredWhenEnabled) {
-        String normalized = batchNo == null ? null : batchNo.trim();
-        if (normalized != null && normalized.isBlank()) {
-            normalized = null;
-        }
-        if (!isBatchManaged(material)) {
-            return null;
-        }
+    public String normalizeBatchNo(String batchNo, int lineNo) {
+        String normalized = normalizeOptionalBatchNo(batchNo);
         if (normalized == null) {
             normalized = String.valueOf(snowflakeIdGenerator.nextId());
         }
-        if (normalized != null && normalized.length() > 64) {
-            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "第" + lineNo + "行批号长度不能超过64");
+        return validateBatchNo(normalized, lineNo);
+    }
+
+    public String normalizeRequiredBatchNo(String batchNo, int lineNo) {
+        String normalized = normalizeOptionalBatchNo(batchNo);
+        if (normalized == null) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "第" + lineNo + "行批号不能为空");
         }
-        if (requiredWhenEnabled && normalized == null) {
-            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "第" + lineNo + "行当前商品需批号管理，批号不能为空");
+        return validateBatchNo(normalized, lineNo);
+    }
+
+    private String validateBatchNo(String batchNo, int lineNo) {
+        String normalized = batchNo.trim();
+        if (normalized.length() > 64) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "第" + lineNo + "行批号长度不能超过64");
         }
         return normalized;
     }
 
-    public boolean normalizeBatchNoEnabled(Boolean batchNoEnabled) {
-        return Boolean.TRUE.equals(batchNoEnabled);
+    private String normalizeOptionalBatchNo(String batchNo) {
+        if (batchNo == null) {
+            return null;
+        }
+        String normalized = batchNo.trim();
+        return normalized.isBlank() ? null : normalized;
     }
 
     public void evictCache() {
@@ -167,14 +172,6 @@ public class TradeItemMaterialSupport implements RedisCacheHealthCheck {
                 MATERIAL_LIST_TYPE,
                 expected
         );
-    }
-
-    private boolean isBatchManaged(TradeMaterialSnapshot material) {
-        return Boolean.TRUE.equals(material.batchNoEnabled()) || shouldForceBatchManagement();
-    }
-
-    private boolean shouldForceBatchManagement() {
-        return tradeItemRuntimeSettings != null && tradeItemRuntimeSettings.shouldForceBatchManagement();
     }
 
     private String normalizeOptionalMaterialCode(String materialCode) {

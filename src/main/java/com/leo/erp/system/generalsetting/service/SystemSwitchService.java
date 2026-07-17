@@ -2,7 +2,6 @@ package com.leo.erp.system.generalsetting.service;
 
 import com.leo.erp.common.service.CrudRuntimeSettings;
 import com.leo.erp.common.support.RedisJsonCacheSupport;
-import com.leo.erp.common.support.TradeItemRuntimeSettings;
 import com.leo.erp.common.web.PageQuerySettings;
 import com.leo.erp.system.generalsetting.repository.GeneralSettingRepository;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -16,9 +15,8 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
-public class SystemSwitchService implements CrudRuntimeSettings, PageQuerySettings, TradeItemRuntimeSettings {
+public class SystemSwitchService implements CrudRuntimeSettings, PageQuerySettings {
 
-    public static final String FORCE_BATCH_MANAGEMENT_SWITCH = "SYS_FORCE_BATCH_MANAGEMENT";
     public static final String DEFAULT_LIST_PAGE_SIZE_SETTING = "UI_DEFAULT_LIST_PAGE_SIZE";
     public static final String HIDE_AUDITED_LIST_RECORDS_SWITCH = "UI_HIDE_AUDITED_LIST_RECORDS";
     public static final String SHOW_SNOWFLAKE_ID_SWITCH = "UI_SHOW_SNOWFLAKE_ID";
@@ -29,7 +27,6 @@ public class SystemSwitchService implements CrudRuntimeSettings, PageQuerySettin
     private static final int DEFAULT_LIST_PAGE_SIZE = 20;
     private static final int MAX_LIST_PAGE_SIZE = 200;
     private static final Set<String> KNOWN_SWITCH_CODES = Set.of(
-            FORCE_BATCH_MANAGEMENT_SWITCH,
             DEFAULT_LIST_PAGE_SIZE_SETTING,
             HIDE_AUDITED_LIST_RECORDS_SWITCH,
             SHOW_SNOWFLAKE_ID_SWITCH,
@@ -59,11 +56,6 @@ public class SystemSwitchService implements CrudRuntimeSettings, PageQuerySettin
         return findSwitch(settingCode)
                 .map(rule -> "正常".equals(rule.status()))
                 .orElse(false);
-    }
-
-    @Transactional(readOnly = true)
-    public boolean shouldForceBatchManagement() {
-        return isEnabled(FORCE_BATCH_MANAGEMENT_SWITCH);
     }
 
     @Transactional(readOnly = true)

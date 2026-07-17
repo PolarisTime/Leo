@@ -57,8 +57,7 @@ public interface MaterialRepository extends JpaRepository<Material, Long>, JpaSp
         return findByDeletedFlagFalseOrderByMaterialCodeAsc().stream()
                 .map(material -> new TradeMaterialSnapshot(
                         material.getId(),
-                        material.getMaterialCode(),
-                        Boolean.TRUE.equals(material.getBatchNoEnabled())))
+                        material.getMaterialCode()))
                 .toList();
     }
 

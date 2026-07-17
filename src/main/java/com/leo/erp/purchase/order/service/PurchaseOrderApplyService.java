@@ -107,7 +107,7 @@ public class PurchaseOrderApplyService {
         );
         item.setWarehouseId(warehouse.warehouseId());
         item.setWarehouseName(warehouse.warehouseName());
-        item.setBatchNo(tradeItemMaterialSupport.normalizeBatchNo(material, itemRequest.batchNo(), lineNo, false));
+        item.setBatchNo(tradeItemMaterialSupport.normalizeRequiredBatchNo(itemRequest.batchNo(), lineNo));
         item.setQuantity(itemRequest.quantity());
         item.setQuantityUnit(TradeItemCalculator.normalizeQuantityUnit(itemRequest.quantityUnit()));
         item.setPieceWeightTon(itemRequest.pieceWeightTon());

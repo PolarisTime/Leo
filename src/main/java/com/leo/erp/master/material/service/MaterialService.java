@@ -59,7 +59,7 @@ import java.util.function.Function;
 public class MaterialService extends AbstractCrudService<Material, MaterialRequest, MaterialResponse> {
 
     private static final List<String> MATERIAL_EXPORT_HEADERS = List.of(
-            "商品编码", "品牌", "材质", "类别", "规格", "长度", "单位", "数量单位", "件重(吨)", "每件支数", "单价", "批号管理", "备注"
+            "商品编码", "品牌", "材质", "类别", "规格", "长度", "单位", "数量单位", "件重(吨)", "每件支数", "单价", "备注"
     );
     private static final CSVFormat MATERIAL_CSV_FORMAT = CSVFormat.DEFAULT.builder()
             .setRecordSeparator("\r\n")
@@ -210,7 +210,6 @@ public class MaterialService extends AbstractCrudService<Material, MaterialReque
                         formatDecimal(material.getPieceWeightTon(), PrecisionConstants.WEIGHT_SCALE),
                         material.getPiecesPerBundle() == null ? "" : material.getPiecesPerBundle().toString(),
                         formatDecimal(material.getUnitPrice(), 2),
-                        formatBoolean(material.getBatchNoEnabled()),
                         safe(material.getRemark())
                 );
             }
@@ -314,10 +313,6 @@ public class MaterialService extends AbstractCrudService<Material, MaterialReque
         entity.setPieceWeightTon(parseBigDecimalOrZero(dto.pieceWeightTon(), rowNumber, "件重(吨)"));
         entity.setPiecesPerBundle(parseIntegerOrZero(dto.piecesPerBundle(), rowNumber, "每件支数"));
         entity.setUnitPrice(parseBigDecimalOrZero(dto.unitPrice(), rowNumber, "单价"));
-        entity.setBatchNoEnabled(tradeItemMaterialSupport.normalizeBatchNoEnabled(
-                dto.batchNoEnabled() != null && !dto.batchNoEnabled().isBlank()
-                        ? ("是".equals(dto.batchNoEnabled()) || "true".equalsIgnoreCase(dto.batchNoEnabled()))
-                        : false));
         entity.setRemark(dto.remark());
     }
 
@@ -329,7 +324,6 @@ public class MaterialService extends AbstractCrudService<Material, MaterialReque
                 entity.getPieceWeightTon() != null ? entity.getPieceWeightTon().toPlainString() : null,
                 entity.getPiecesPerBundle() != null ? entity.getPiecesPerBundle().toString() : null,
                 entity.getUnitPrice() != null ? entity.getUnitPrice().toPlainString() : null,
-                entity.getBatchNoEnabled() != null && entity.getBatchNoEnabled() ? "是" : "否",
                 entity.getRemark()
         );
     }
@@ -435,7 +429,6 @@ public class MaterialService extends AbstractCrudService<Material, MaterialReque
         entity.setPieceWeightTon(request.pieceWeightTon());
         entity.setPiecesPerBundle(request.piecesPerBundle() != null ? request.piecesPerBundle() : 0);
         entity.setUnitPrice(request.unitPrice() != null ? request.unitPrice() : BigDecimal.ZERO);
-        entity.setBatchNoEnabled(tradeItemMaterialSupport.normalizeBatchNoEnabled(request.batchNoEnabled()));
         entity.setRemark(request.remark());
     }
 
@@ -635,7 +628,6 @@ public class MaterialService extends AbstractCrudService<Material, MaterialReque
                 parseBigDecimal(requiredValue(row, headerIndexes, "pieceWeightTon", "件重(吨)", rowNumber), rowNumber, "件重(吨)"),
                 piecesPerBundle,
                 parseBigDecimalOrNull(optionalValue(row, headerIndexes, "unitPrice"), rowNumber, "单价"),
-                parseBatchNoEnabled(optionalValue(row, headerIndexes, "batchNoEnabled"), rowNumber),
                 optionalValue(row, headerIndexes, "remark")
         );
         validateImportedRequest(request, rowNumber);
@@ -656,23 +648,7 @@ public class MaterialService extends AbstractCrudService<Material, MaterialReque
         requireHeader(indexes, "pieceWeightTon", "件重(吨)");
         requireHeader(indexes, "piecesPerBundle", "每件支数");
         requireHeader(indexes, "unitPrice", "单价");
-        requireHeader(indexes, "batchNoEnabled", "批号管理");
         return indexes;
-    }
-
-    private String formatBoolean(Boolean value) {
-        return Boolean.TRUE.equals(value) ? "是" : "否";
-    }
-
-    private Boolean parseBatchNoEnabled(String value, int rowNumber) {
-        if (value == null || value.isBlank()) {
-            return Boolean.FALSE;
-        }
-        return switch (value.trim().toLowerCase(Locale.ROOT)) {
-            case "是", "启用", "1", "true", "y", "yes" -> Boolean.TRUE;
-            case "否", "关闭", "0", "false", "n", "no" -> Boolean.FALSE;
-            default -> throw new BusinessException(ErrorCode.VALIDATION_ERROR, "第" + rowNumber + "行【批号管理】格式不正确");
-        };
     }
 
     private void requireHeader(Map<String, Integer> indexes, String key, String label) {
@@ -784,7 +760,6 @@ public class MaterialService extends AbstractCrudService<Material, MaterialReque
             case "件重(吨)", "件重", "pieceweightton" -> "pieceWeightTon";
             case "每件支数", "piecesperbundle" -> "piecesPerBundle";
             case "单价", "unitprice" -> "unitPrice";
-            case "批号管理", "batchnoenabled" -> "batchNoEnabled";
             case "备注", "remark" -> "remark";
             default -> value;
         };

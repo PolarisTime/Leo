@@ -15,7 +15,6 @@ public record MaterialResponse(
         BigDecimal pieceWeightTon,
         Integer piecesPerBundle,
         BigDecimal unitPrice,
-        Boolean batchNoEnabled,
         String remark
 ) {
 }

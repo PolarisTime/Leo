@@ -48,13 +48,8 @@ public record MaterialImportDTO(
         @ExportColumn(header = "单价", order = 11, format = "0.00")
         String unitPrice,
 
-        @ImportColumn(header = "批号管理", required = false, order = 12,
-                example = "否", enumValues = {"是", "否"})
-        @ExportColumn(header = "批号管理", order = 12)
-        String batchNoEnabled,
-
-        @ImportColumn(header = "备注", required = false, order = 13, example = "示例数据，可删除")
-        @ExportColumn(header = "备注", order = 13)
+        @ImportColumn(header = "备注", required = false, order = 12, example = "示例数据，可删除")
+        @ExportColumn(header = "备注", order = 12)
         String remark
 ) {
 }
