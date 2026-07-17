@@ -16,7 +16,6 @@ import com.leo.erp.sales.order.repository.SalesOrderRepository;
 import com.leo.erp.sales.order.service.SalesOrderItemQueryService;
 import com.leo.erp.sales.outbound.domain.entity.SalesOutboundItem;
 import com.leo.erp.sales.outbound.repository.SalesOutboundRepository;
-import com.leo.erp.security.permission.DataScopeContext;
 import com.leo.erp.statement.customer.domain.entity.CustomerStatement;
 import com.leo.erp.statement.customer.domain.entity.CustomerStatementItem;
 import com.leo.erp.statement.customer.repository.CustomerStatementRepository;
@@ -90,7 +89,7 @@ public class CustomerStatementSourceService {
                 .and(Specs.equalIfPresent("status", StatusConstants.SALES_COMPLETED))
                 .and(Specs.betweenIfPresent("deliveryDate", filter.startDate(), filter.endDate()))
                 .and(StatementCandidateSupport.excludeFieldValues("id", occupiedOrderIds));
-        return salesOrderRepository.findAll(DataScopeContext.apply(spec), query.toPageable("id"))
+        return salesOrderRepository.findAll(spec, query.toPageable("id"))
                 .map(this::toCandidateResponse);
     }
 
@@ -226,7 +225,6 @@ public class CustomerStatementSourceService {
         Map<Long, SalesOrder> requestedOrders = new java.util.LinkedHashMap<>();
         for (SalesOrderItem item : sourceSalesOrderItemMap.values()) {
             SalesOrder order = item.getSalesOrder();
-            DataScopeContext.assertCanAccess(order);
             requestedOrders.put(order.getId(), order);
             BusinessDocumentValidator.requireSameText(
                     request.customerName(),

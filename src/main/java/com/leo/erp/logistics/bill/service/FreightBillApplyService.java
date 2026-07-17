@@ -17,7 +17,6 @@ import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.sales.order.domain.entity.SalesOrder;
 import com.leo.erp.sales.order.domain.entity.SalesOrderItem;
 import com.leo.erp.sales.order.repository.SalesOrderRepository;
-import com.leo.erp.security.permission.DataScopeContext;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -148,7 +147,6 @@ public class FreightBillApplyService {
             throw business("物流单至少需要导入一张销售订单");
         }
         for (SalesOrder order : orders) {
-            DataScopeContext.assertCanAccess(order);
             if (!ALLOWED_SOURCE_STATUS.contains(order.getStatus())) {
                 throw business("销售订单" + order.getOrderNo() + "当前状态不能生成物流单");
             }

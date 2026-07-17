@@ -226,29 +226,6 @@ public class UserRoleBindingService {
             if (allowedActions == null || !allowedActions.contains(action)) {
                 throw new BusinessException(ErrorCode.BUSINESS_ERROR, "不能授予超出自身权限范围的角色");
             }
-            assertRoleDataScopeWithinCurrentPrincipal(principalId, requestedRoles, permission);
-        }
-    }
-
-    private void assertRoleDataScopeWithinCurrentPrincipal(Long principalId,
-                                                           List<RoleSetting> requestedRoles,
-                                                           RolePermission permission) {
-        RoleSetting role = requestedRoles.stream()
-                .filter(candidate -> Objects.equals(candidate.getId(), permission.getRoleId()))
-                .findFirst()
-                .orElse(null);
-        if (role == null) {
-            return;
-        }
-        String resource = com.leo.erp.security.permission.ResourcePermissionCatalog.normalizeResource(permission.getResourceCode());
-        String action = com.leo.erp.security.permission.ResourcePermissionCatalog.normalizeAction(permission.getActionCode());
-        String requestedScope = com.leo.erp.security.permission.ResourcePermissionCatalog.normalizeDataScope(role.getDataScope());
-        String currentScope = permissionService.getUserDataScope(principalId, resource, action);
-        String normalizedCurrentScope = com.leo.erp.security.permission.ResourcePermissionCatalog.normalizeDataScope(currentScope);
-        if (!Objects.equals(
-                com.leo.erp.security.permission.ResourcePermissionCatalog.broaderDataScope(requestedScope, normalizedCurrentScope),
-                normalizedCurrentScope)) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "不能授予超出自身数据范围的角色");
         }
     }
 

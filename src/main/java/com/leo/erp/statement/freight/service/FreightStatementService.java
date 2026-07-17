@@ -9,7 +9,6 @@ import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.service.AbstractCrudService;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
-import com.leo.erp.security.permission.DataScopeContext;
 import com.leo.erp.security.permission.WorkflowTransitionGuard;
 import com.leo.erp.statement.freight.domain.entity.FreightStatement;
 import com.leo.erp.statement.freight.domain.entity.FreightStatementItem;
@@ -94,7 +93,7 @@ public class FreightStatementService extends AbstractCrudService<FreightStatemen
                 .and(Specs.equalIfPresent("status", filter.status()))
                 .and(Specs.betweenIfPresent("endDate", filter.startDate(), filter.endDate()))
         );
-        Page<FreightStatement> entityPage = repository.findAll(DataScopeContext.apply(spec), query.toPageable("id"));
+        Page<FreightStatement> entityPage = repository.findAll(spec, query.toPageable("id"));
         return pageAssembler.toViewPage(entityPage);
     }
 

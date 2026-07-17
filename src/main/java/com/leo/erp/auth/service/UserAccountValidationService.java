@@ -10,7 +10,6 @@ import com.leo.erp.common.support.RedisJsonCacheSupport;
 import com.leo.erp.system.department.domain.entity.Department;
 import com.leo.erp.system.department.repository.DepartmentRepository;
 import com.leo.erp.system.norule.service.SystemSwitchService;
-import com.leo.erp.system.role.domain.entity.RoleSetting;
 import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Service;
 
@@ -18,12 +17,10 @@ import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.Set;
 
 @Service
 public class UserAccountValidationService {
 
-    private static final Set<String> ALLOWED_DATA_SCOPES = Set.of("全部数据", "全部", "本部门", "本人");
     private static final String UPPERCASE_PASSWORD_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
     private static final String LOWERCASE_PASSWORD_CHARS = "abcdefghijklmnopqrstuvwxyz";
     private static final String DIGIT_PASSWORD_CHARS = "0123456789";
@@ -102,20 +99,6 @@ public class UserAccountValidationService {
         return builder.toString();
     }
 
-    public String resolveEffectiveDataScope(List<RoleSetting> roles) {
-        String effective = "本人";
-        int effectiveRank = dataScopeRank(effective);
-        for (RoleSetting role : roles) {
-            String roleDataScope = normalizeDataScope(role.getDataScope());
-            int roleRank = dataScopeRank(roleDataScope);
-            if (roleRank > effectiveRank) {
-                effective = roleDataScope;
-                effectiveRank = roleRank;
-            }
-        }
-        return effective;
-    }
-
     public UserStatus toStatus(String value) {
         String normalized = normalizeOptionalValue(value);
         if (normalized == null || "正常".equals(normalized)) {
@@ -161,25 +144,6 @@ public class UserAccountValidationService {
         }
         String normalized = value.trim();
         return normalized.isEmpty() ? null : normalized;
-    }
-
-    private String normalizeDataScope(String value) {
-        String normalized = normalizeOptionalValue(value);
-        if (normalized == null) {
-            return "本人";
-        }
-        if (!ALLOWED_DATA_SCOPES.contains(normalized)) {
-            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "数据范围不合法");
-        }
-        return "全部".equals(normalized) ? "全部数据" : normalized;
-    }
-
-    private int dataScopeRank(String value) {
-        return switch (normalizeDataScope(value)) {
-            case "全部数据" -> 3;
-            case "本部门" -> 2;
-            default -> 1;
-        };
     }
 
     private char randomChar(String source) {

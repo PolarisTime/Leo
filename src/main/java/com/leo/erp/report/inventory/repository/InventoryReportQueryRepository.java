@@ -7,7 +7,6 @@ import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.report.inventory.domain.InventoryStatusPolicy;
 import com.leo.erp.report.inventory.web.dto.InventoryReportItemResponse;
 import com.leo.erp.report.inventory.web.dto.InventoryReportResponse;
-import com.leo.erp.security.permission.DataScopeContext;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
@@ -19,7 +18,6 @@ import org.springframework.stereotype.Repository;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
-import java.util.Set;
 
 @Repository
 public class InventoryReportQueryRepository {
@@ -55,7 +53,6 @@ public class InventoryReportQueryRepository {
                 JOIN po_purchase_inbound_item item ON item.inbound_id = inbound.id
                 WHERE inbound.deleted_flag = FALSE
                   AND inbound.status IN (:effectiveInboundStatuses)
-                %s
                 UNION ALL
                 SELECT
                     item.id,
@@ -82,7 +79,6 @@ public class InventoryReportQueryRepository {
                 JOIN so_sales_outbound_item item ON item.outbound_id = outbound.id
                 WHERE outbound.deleted_flag = FALSE
                   AND outbound.status IN (:effectiveOutboundStatuses)
-                %s
                 UNION ALL
                 SELECT
                     item.id,
@@ -109,7 +105,6 @@ public class InventoryReportQueryRepository {
                 JOIN so_sales_outbound_item item ON item.outbound_id = outbound.id
                 WHERE outbound.deleted_flag = FALSE
                   AND outbound.status IN (:reservedOutboundStatuses)
-                %s
             ),
             stock_filtered AS (
                 SELECT movement.*
@@ -241,9 +236,6 @@ public class InventoryReportQueryRepository {
                 .addValue("offset", (long) query.page() * query.size());
         addStatusParameters(params);
         String inventoryCte = INVENTORY_CTE.formatted(
-                dataScopeClause(params, "inbound"),
-                dataScopeClause(params, "outbound"),
-                dataScopeClause(params, "outbound"),
                 buildStockWhereClause(params, keyword, warehouseId, category)
         );
         String reportWhereClause = buildReportWhereClause(includeOutbound);
@@ -301,9 +293,6 @@ public class InventoryReportQueryRepository {
         MapSqlParameterSource params = new MapSqlParameterSource();
         addStatusParameters(params);
         String inventoryCte = INVENTORY_CTE.formatted(
-                dataScopeClause(params, "inbound"),
-                dataScopeClause(params, "outbound"),
-                dataScopeClause(params, "outbound"),
                 buildStockWhereClause(params, keyword, warehouseId, category)
         );
         String reportWhereClause = buildReportWhereClause(includeOutbound);
@@ -341,18 +330,6 @@ public class InventoryReportQueryRepository {
         );
 
         return jdbcTemplate.query(dataSql, params, ROW_MAPPER);
-    }
-
-    private String dataScopeClause(MapSqlParameterSource params, String alias) {
-        Set<Long> ownerUserIds = DataScopeContext.allowedOwnerUserIds();
-        if (ownerUserIds == null) {
-            return "";
-        }
-        if (ownerUserIds.isEmpty()) {
-            return "                    AND 1 = 0";
-        }
-        params.addValue("dataScopeOwnerUserIds", ownerUserIds);
-        return "                    AND " + alias + ".created_by IN (:dataScopeOwnerUserIds)";
     }
 
     private String buildStockWhereClause(MapSqlParameterSource params, String keyword, Long warehouseId, String category) {

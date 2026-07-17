@@ -15,7 +15,6 @@ public record UserAccountAdminResponse(
         String departmentName,
         List<String> roleNames,
         List<Long> roleIds,
-        String dataScope,
         String permissionSummary,
         LocalDateTime lastLoginDate,
         String status,

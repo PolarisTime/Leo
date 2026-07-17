@@ -22,7 +22,7 @@ public class ErpMcpTools {
 
     @Tool(
             name = "erp_global_search",
-            description = "ERP 全局搜索，只返回当前用户有查看权限和数据权限的业务记录。"
+            description = "ERP 全局搜索，只返回当前用户有查看权限的业务记录。"
     )
     public List<GlobalSearchResponse> globalSearch(
             @ToolParam(description = "搜索关键词，可传单号、客户、供应商、项目等文本。") String keyword,

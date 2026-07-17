@@ -16,7 +16,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 @Component
 class PermissionResolver {
@@ -48,26 +47,21 @@ class PermissionResolver {
 
         List<RoleSetting> roles = resolveActiveRoles(userId);
         if (roles.isEmpty()) {
-            return new UserPermissionSnapshot(Map.of(), Map.of());
+            return new UserPermissionSnapshot(Map.of());
         }
 
-        Map<Long, String> dataScopeByRoleId = roles.stream()
-                .collect(Collectors.toMap(RoleSetting::getId, role -> ResourcePermissionCatalog.normalizeDataScope(role.getDataScope())));
         List<Long> roleIds = roles.stream().map(RoleSetting::getId).filter(Objects::nonNull).distinct().toList();
         Map<String, Set<String>> permissionMap = new LinkedHashMap<>();
-        Map<String, String> dataScopeByPermission = new LinkedHashMap<>();
         for (RolePermission permission : rolePermissionRepository.findByRoleIdInAndDeletedFlagFalse(roleIds)) {
             String resource = ResourcePermissionCatalog.normalizeResource(permission.getResourceCode());
             String action = ResourcePermissionCatalog.normalizeAction(permission.getActionCode());
             if (!ResourcePermissionCatalog.isAllowed(resource, action)) {
                 continue;
             }
-            String dataScope = dataScopeByRoleId.getOrDefault(permission.getRoleId(), ResourcePermissionCatalog.SCOPE_SELF);
             permissionMap.computeIfAbsent(resource, key -> new LinkedHashSet<>()).add(action);
-            dataScopeByPermission.merge(PermissionScopeKeyParser.key(resource, action), dataScope, ResourcePermissionCatalog::broaderDataScope);
         }
 
-        UserPermissionSnapshot snapshot = new UserPermissionSnapshot(permissionMap, dataScopeByPermission);
+        UserPermissionSnapshot snapshot = new UserPermissionSnapshot(permissionMap);
         cache.write(userId, snapshot);
         return snapshot;
     }

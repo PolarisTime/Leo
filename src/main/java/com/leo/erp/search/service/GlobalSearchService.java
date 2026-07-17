@@ -4,10 +4,8 @@ import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.search.repository.GlobalSearchDocument;
 import com.leo.erp.search.repository.GlobalSearchDocumentRepository;
-import com.leo.erp.search.repository.GlobalSearchModuleAccess;
 import com.leo.erp.search.web.GlobalSearchResponse;
 import com.leo.erp.security.permission.ModulePermissionGuard;
-import com.leo.erp.security.permission.PermissionService;
 import com.leo.erp.security.permission.ResourcePermissionCatalog;
 import com.leo.erp.security.support.SecurityPrincipal;
 import java.util.List;
@@ -36,14 +34,11 @@ public class GlobalSearchService {
             "payment"
     );
 
-    private final PermissionService permissionService;
     private final ModulePermissionGuard modulePermissionGuard;
     private final GlobalSearchDocumentRepository documentRepository;
 
-    public GlobalSearchService(PermissionService permissionService,
-                               ModulePermissionGuard modulePermissionGuard,
+    public GlobalSearchService(ModulePermissionGuard modulePermissionGuard,
                                GlobalSearchDocumentRepository documentRepository) {
-        this.permissionService = permissionService;
         this.modulePermissionGuard = modulePermissionGuard;
         this.documentRepository = documentRepository;
     }
@@ -68,16 +63,16 @@ public class GlobalSearchService {
         }
 
         SecurityPrincipal principal = currentPrincipal();
-        List<GlobalSearchModuleAccess> moduleAccesses = resolveModuleKeys(normalizeModuleKeys(moduleKeys)).stream()
-                .map(moduleKey -> resolveModuleAccess(principal, moduleKey))
+        List<String> allowedModuleKeys = resolveModuleKeys(normalizeModuleKeys(moduleKeys)).stream()
+                .map(moduleKey -> resolveAllowedModuleKey(principal, moduleKey))
                 .flatMap(Optional::stream)
                 .toList();
-        if (moduleAccesses.isEmpty()) {
+        if (allowedModuleKeys.isEmpty()) {
             return List.of();
         }
 
         int normalizedLimit = Math.min(Math.max(limit, 1), MAX_TOTAL_LIMIT);
-        return documentRepository.search(normalizedKeyword, trackId.orElse(null), normalizedLimit, moduleAccesses)
+        return documentRepository.search(normalizedKeyword, trackId.orElse(null), normalizedLimit, allowedModuleKeys)
                 .stream()
                 .map(this::toResponse)
                 .filter(Objects::nonNull)
@@ -106,10 +101,9 @@ public class GlobalSearchService {
                 .collect(Collectors.toUnmodifiableSet());
     }
 
-    private Optional<GlobalSearchModuleAccess> resolveModuleAccess(SecurityPrincipal principal, String moduleKey) {
-        ModulePermissionGuard.PermissionCheck permissionCheck;
+    private Optional<String> resolveAllowedModuleKey(SecurityPrincipal principal, String moduleKey) {
         try {
-            permissionCheck = modulePermissionGuard.requireResourcePermission(
+            modulePermissionGuard.requireResourcePermission(
                     principal,
                     moduleKey,
                     ResourcePermissionCatalog.READ
@@ -121,23 +115,7 @@ public class GlobalSearchService {
             throw ex;
         }
 
-        String resource = permissionCheck.resource();
-        if (!ResourcePermissionCatalog.isBusinessResource(resource)) {
-            return Optional.of(GlobalSearchModuleAccess.all(moduleKey));
-        }
-
-        String dataScope = ResourcePermissionCatalog.normalizeDataScope(
-                permissionService.getUserDataScope(principal.id(), resource, permissionCheck.action())
-        );
-        if (ResourcePermissionCatalog.SCOPE_ALL.equals(dataScope)) {
-            return Optional.of(GlobalSearchModuleAccess.all(moduleKey));
-        }
-
-        Set<Long> ownerUserIds = permissionService.getDataScopeOwnerUserIds(principal.id(), dataScope);
-        if (ownerUserIds == null) {
-            ownerUserIds = Set.of(principal.id());
-        }
-        return Optional.of(new GlobalSearchModuleAccess(moduleKey, ownerUserIds));
+        return Optional.of(moduleKey);
     }
 
     private SecurityPrincipal currentPrincipal() {

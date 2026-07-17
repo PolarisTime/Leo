@@ -3,7 +3,6 @@ package com.leo.erp.report.io.repository;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.report.inventory.domain.InventoryStatusPolicy;
 import com.leo.erp.report.io.web.dto.IoReportResponse;
-import com.leo.erp.security.permission.DataScopeContext;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
@@ -17,7 +16,6 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
-import java.util.Set;
 
 @Repository
 public class IoReportQueryRepository {
@@ -174,7 +172,6 @@ public class IoReportQueryRepository {
                                     LocalDate startDate,
                                     LocalDate endDate) {
         List<String> clauses = new ArrayList<>();
-        addDataScopeClause(params, clauses);
         if (keyword != null) {
             params.addValue("keyword", "%" + keyword.trim().toLowerCase(Locale.ROOT) + "%");
             clauses.add("""
@@ -202,19 +199,6 @@ public class IoReportQueryRepository {
             return "";
         }
         return "WHERE " + String.join(" AND ", clauses);
-    }
-
-    private void addDataScopeClause(MapSqlParameterSource params, List<String> clauses) {
-        Set<Long> ownerUserIds = DataScopeContext.allowedOwnerUserIds();
-        if (ownerUserIds == null) {
-            return;
-        }
-        if (ownerUserIds.isEmpty()) {
-            clauses.add("1 = 0");
-            return;
-        }
-        params.addValue("dataScopeOwnerUserIds", ownerUserIds);
-        clauses.add("report.created_by IN (:dataScopeOwnerUserIds)");
     }
 
     private String sortExpression(String alias, String sortBy, String direction) {

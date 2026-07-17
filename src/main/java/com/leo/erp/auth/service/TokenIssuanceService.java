@@ -18,7 +18,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
-import java.util.Map;
 import java.util.Optional;
 
 @Service
@@ -144,7 +143,6 @@ public class TokenIssuanceService {
 
         permissionService.evictCache(user.getId());
         var permissions = permissionService.getUserPermissions(user.getId());
-        Map<String, String> dataScopes = permissionService.getUserDataScopes(user.getId());
         String currentRoleNames = userRoleBindingService.joinRoleNames(boundRoles);
 
         eventPublisher.publishEvent(new SessionInvalidatedEvent(user.getId(), sessionTokenId, false));
@@ -164,8 +162,7 @@ public class TokenIssuanceService {
                         currentRoleNames,
                         user.getTotpEnabled(),
                         user.getRequireTotpSetup(),
-                        permissions,
-                        dataScopes
+                        permissions
                 )
         );
     }
@@ -186,7 +183,6 @@ public class TokenIssuanceService {
 
         permissionService.evictCache(user.getId());
         var permissions = permissionService.getUserPermissions(user.getId());
-        Map<String, String> dataScopes = permissionService.getUserDataScopes(user.getId());
         String currentRoleNames = userRoleBindingService.joinRoleNames(boundRoles);
         long refreshExpiresIn = jwtTokenService.getRefreshExpirationMs() / MILLIS_PER_SECOND;
 
@@ -203,8 +199,7 @@ public class TokenIssuanceService {
                         currentRoleNames,
                         user.getTotpEnabled(),
                         user.getRequireTotpSetup(),
-                        permissions,
-                        dataScopes
+                        permissions
                 )
         );
     }

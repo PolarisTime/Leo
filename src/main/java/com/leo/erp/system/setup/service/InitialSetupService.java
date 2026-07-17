@@ -48,7 +48,6 @@ import java.util.Base64;
 public class InitialSetupService {
 
     private static final String ADMIN_ROLE_CODE = "ADMIN";
-    private static final String DEFAULT_ADMIN_SCOPE = "全部数据";
     private static final String DEFAULT_COMPANY_STATUS = StatusConstants.NORMAL;
     private static final String SETUP_REMARK = "网页首次初始化创建";
     private static final String OOBE_TOTP_SECRET_PREFIX = "setup:admin:totp:";
@@ -248,7 +247,6 @@ public class InitialSetupService {
         admin.setPasswordHash(passwordEncoder.encode(password));
         admin.setUserName(userName);
         admin.setMobile(mobile);
-        admin.setDataScope(DEFAULT_ADMIN_SCOPE);
         admin.setPermissionSummary("");
         admin.setStatus(UserStatus.NORMAL);
         admin.setRemark(SETUP_REMARK);

@@ -26,9 +26,6 @@ public class RoleSetting extends AbstractAuditableEntity {
     @Column(name = "role_type", nullable = false, length = 32)
     private String roleType;
 
-    @Column(name = "data_scope", nullable = false, length = 32)
-    private String dataScope;
-
     @Column(name = "permission_count", nullable = false)
     private Integer permissionCount;
 

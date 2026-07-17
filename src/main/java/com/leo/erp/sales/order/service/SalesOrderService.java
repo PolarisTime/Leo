@@ -16,7 +16,6 @@ import com.leo.erp.sales.order.repository.SalesOrderRepository;
 import com.leo.erp.sales.order.web.dto.SalesOrderItemRequest;
 import com.leo.erp.sales.order.web.dto.SalesOrderRequest;
 import com.leo.erp.sales.order.web.dto.SalesOrderResponse;
-import com.leo.erp.security.permission.DataScopeContext;
 import com.leo.erp.system.operationlog.event.BusinessOperationEventPublisher;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -286,7 +285,6 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
     public SalesOrderResponse completeSalesOrder(Long id) {
         SalesOrder order = repository.findForUpdateByIdAndDeletedFlagFalse(id)
                 .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, notFoundMessage()));
-        DataScopeContext.assertCanAccess(order);
         String currentStatus = normalizeStatus(order.getStatus());
         if (StatusConstants.SALES_COMPLETED.equals(currentStatus)) {
             return toDetailResponse(order);

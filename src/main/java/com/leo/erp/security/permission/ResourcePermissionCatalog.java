@@ -273,37 +273,6 @@ public final class ResourcePermissionCatalog {
         return normalizeKey(resourceCode);
     }
 
-    public static final String SCOPE_ALL = "all";
-    public static final String SCOPE_DEPARTMENT = "department";
-    /** @deprecated Reserved for future implementation; not yet supported by DataScopeContext. */
-    public static final String SCOPE_CUSTOM = "custom";
-    public static final String SCOPE_SELF = "self";
-
-    public static String normalizeDataScope(String value) {
-        if (value == null || value.isBlank()) {
-            return SCOPE_SELF;
-        }
-        return switch (value.trim().toLowerCase(Locale.ROOT)) {
-            case "全部数据", "全部", "all" -> SCOPE_ALL;
-            case "本部门", "department" -> SCOPE_DEPARTMENT;
-            case "自定义范围", "custom" -> SCOPE_CUSTOM;
-            case "本人", "self" -> SCOPE_SELF;
-            default -> SCOPE_SELF;
-        };
-    }
-
-    public static String broaderDataScope(String left, String right) {
-        return dataScopeRank(left) >= dataScopeRank(right) ? left : right;
-    }
-
-    private static int dataScopeRank(String value) {
-        return switch (value) {
-            case SCOPE_ALL -> 4;
-            case SCOPE_DEPARTMENT -> 2;
-            default -> 1;
-        };
-    }
-
     public static String normalizeAction(String actionCode) {
         String normalized = normalizeKey(actionCode);
         return switch (normalized) {

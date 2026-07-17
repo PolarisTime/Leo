@@ -22,7 +22,6 @@ import com.leo.erp.master.material.web.dto.MaterialImportFailureResponse;
 import com.leo.erp.master.material.web.dto.MaterialImportResultResponse;
 import com.leo.erp.master.material.web.dto.MaterialRequest;
 import com.leo.erp.master.material.web.dto.MaterialResponse;
-import com.leo.erp.security.permission.DataScopeContext;
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVParser;
 import org.apache.commons.csv.CSVPrinter;
@@ -116,7 +115,7 @@ public class MaterialService extends AbstractCrudService<Material, MaterialReque
         Pageable pageable = query.sortBy() != null
                 ? query.toPageable("id")
                 : PageRequest.of(query.page(), query.size(), DEFAULT_MATERIAL_SORT);
-        return materialRepository.findAll(DataScopeContext.apply(spec), pageable)
+        return materialRepository.findAll(spec, pageable)
                 .map(this::toResponse);
     }
 
@@ -124,7 +123,7 @@ public class MaterialService extends AbstractCrudService<Material, MaterialReque
     public java.util.List<MaterialResponse> search(String keyword, int maxSize) {
         Specification<Material> spec = Specs.<Material>notDeleted()
                 .and(com.leo.erp.common.persistence.Specs.keywordLike(keyword, MATERIAL_SEARCH_FIELDS));
-        return materialRepository.findAll(DataScopeContext.apply(spec),
+        return materialRepository.findAll(spec,
                         PageRequest.of(0, maxSize, DEFAULT_MATERIAL_SORT))
                 .map(this::toResponse)
                 .toList();
@@ -193,7 +192,7 @@ public class MaterialService extends AbstractCrudService<Material, MaterialReque
     public byte[] exportCsv(String keyword) {
         Specification<Material> spec = Specs.<Material>notDeleted()
                 .and(Specs.keywordLike(keyword, MATERIAL_SEARCH_FIELDS));
-        List<Material> materials = materialRepository.findAll(DataScopeContext.apply(spec), DEFAULT_MATERIAL_SORT);
+        List<Material> materials = materialRepository.findAll(spec, DEFAULT_MATERIAL_SORT);
         StringWriter writer = new StringWriter();
         writer.append('\uFEFF');
         try (CSVPrinter printer = new CSVPrinter(writer, MATERIAL_CSV_FORMAT)) {
@@ -236,7 +235,7 @@ public class MaterialService extends AbstractCrudService<Material, MaterialReque
     public FileDownloadResponse exportExcel(String keyword) {
         Specification<Material> spec = Specs.<Material>notDeleted()
                 .and(Specs.keywordLike(keyword, MATERIAL_SEARCH_FIELDS));
-        List<Material> materials = materialRepository.findAll(DataScopeContext.apply(spec), DEFAULT_MATERIAL_SORT);
+        List<Material> materials = materialRepository.findAll(spec, DEFAULT_MATERIAL_SORT);
         List<MaterialImportDTO> dtoList = materials.stream().map(this::toImportDTO).toList();
         byte[] data = excelExportService.export(dtoList, MaterialImportDTO.class);
         return new FileDownloadResponse(

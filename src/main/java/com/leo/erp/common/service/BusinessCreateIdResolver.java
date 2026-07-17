@@ -3,7 +3,6 @@ package com.leo.erp.common.service;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
-import com.leo.erp.security.permission.DataScopeContext;
 import com.leo.erp.security.permission.ResourcePermissionCatalog;
 import com.leo.erp.security.support.SecurityPrincipal;
 import org.slf4j.Logger;
@@ -105,7 +104,6 @@ public class BusinessCreateIdResolver {
     private String resolveBusinessModuleKey() {
         String headerModuleKey = resolveBusinessModuleKeyFromHeader();
         if (!headerModuleKey.isBlank()) {
-            assertBusinessModuleKeyMatchesCurrentResource(headerModuleKey);
             return headerModuleKey;
         }
 
@@ -129,19 +127,6 @@ public class BusinessCreateIdResolver {
         }
         String rawValue = servletRequestAttributes.getRequest().getHeader(BUSINESS_MODULE_KEY_HEADER);
         return rawValue == null ? "" : rawValue.trim();
-    }
-
-    private void assertBusinessModuleKeyMatchesCurrentResource(String moduleKey) {
-        DataScopeContext.Context context = DataScopeContext.current();
-        if (context == null || context.resource() == null || context.resource().isBlank()) {
-            return;
-        }
-        String expectedResource = ResourcePermissionCatalog.normalizeResource(context.resource());
-        String moduleResource = ResourcePermissionCatalog.resolveResourceByMenuCode(moduleKey)
-                .orElseGet(() -> ResourcePermissionCatalog.normalizeResource(moduleKey));
-        if (!expectedResource.equals(moduleResource)) {
-            throw new BusinessException(ErrorCode.FORBIDDEN, "预分配雪花ID模块与当前接口不匹配");
-        }
     }
 
     private String normalizeRestCollectionModuleKey(String rawSegment) {

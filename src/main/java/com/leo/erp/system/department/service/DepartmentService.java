@@ -13,7 +13,6 @@ import com.leo.erp.common.support.RedisCacheHealthCheck;
 import com.leo.erp.common.support.RedisJsonCacheSupport;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
-import com.leo.erp.security.permission.PermissionService;
 import com.leo.erp.system.department.domain.entity.Department;
 import com.leo.erp.system.department.repository.DepartmentRepository;
 import com.leo.erp.system.department.web.dto.DepartmentOptionResponse;
@@ -48,28 +47,24 @@ public class DepartmentService extends AbstractCrudService<Department, Departmen
 
     private final DepartmentRepository departmentRepository;
     private final UserAccountRepository userAccountRepository;
-    private final PermissionService permissionService;
     private final RedisJsonCacheSupport redisJsonCacheSupport;
     private CacheManager cacheManager;
 
     @Autowired
     public DepartmentService(DepartmentRepository departmentRepository,
                              UserAccountRepository userAccountRepository,
-                             PermissionService permissionService,
                              SnowflakeIdGenerator idGenerator,
                              RedisJsonCacheSupport redisJsonCacheSupport) {
         super(idGenerator);
         this.departmentRepository = departmentRepository;
         this.userAccountRepository = userAccountRepository;
-        this.permissionService = permissionService;
         this.redisJsonCacheSupport = redisJsonCacheSupport;
     }
 
     public DepartmentService(DepartmentRepository departmentRepository,
                              UserAccountRepository userAccountRepository,
-                             PermissionService permissionService,
                              SnowflakeIdGenerator idGenerator) {
-        this(departmentRepository, userAccountRepository, permissionService, idGenerator, null);
+        this(departmentRepository, userAccountRepository, idGenerator, null);
     }
 
     @Override
@@ -210,7 +205,6 @@ public class DepartmentService extends AbstractCrudService<Department, Departmen
     protected Department saveEntity(Department entity) {
         try {
             Department saved = departmentRepository.save(entity);
-            permissionService.clearDepartmentUserCache();
             syncBoundUserDepartmentName(saved);
             return saved;
         } catch (DataIntegrityViolationException ex) {

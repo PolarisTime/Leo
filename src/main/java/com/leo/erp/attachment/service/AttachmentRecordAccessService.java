@@ -9,7 +9,6 @@ import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.AbstractAuditableEntity;
 import com.leo.erp.common.support.BusinessRecordEntityCatalog;
-import com.leo.erp.security.permission.DataScopeContext;
 import com.leo.erp.security.permission.PermissionService;
 import com.leo.erp.security.permission.ResourcePermissionCatalog;
 import com.leo.erp.security.support.SecurityPrincipal;
@@ -72,9 +71,9 @@ public class AttachmentRecordAccessService {
                 .map(AttachmentBinding::getRecordId)
                 .map(recordId -> loadBusinessEntity(normalizedModuleKey, recordId))
                 .filter(entity -> entity != null && !entity.isDeletedFlag())
-                .anyMatch(entity -> canAccess(principal, normalizedModuleKey, actionCode, entity));
+                .anyMatch(entity -> canAccess(principal, normalizedModuleKey, actionCode));
         if (!accessible) {
-            throw new BusinessException(ErrorCode.FORBIDDEN, "无数据权限");
+            throw new BusinessException(ErrorCode.FORBIDDEN, "无访问权限");
         }
     }
 
@@ -93,38 +92,23 @@ public class AttachmentRecordAccessService {
         }
         boolean accessible = bindings.stream().anyMatch(binding -> canAccessBinding(principal, actionCode, binding));
         if (!accessible) {
-            throw new BusinessException(ErrorCode.FORBIDDEN, "无数据权限");
+            throw new BusinessException(ErrorCode.FORBIDDEN, "无访问权限");
         }
     }
 
     private void assertCanAccess(SecurityPrincipal principal, String moduleKey, String actionCode, AbstractAuditableEntity entity) {
-        if (!canAccess(principal, moduleKey, actionCode, entity)) {
-            throw new BusinessException(ErrorCode.FORBIDDEN, "无数据权限");
+        if (!canAccess(principal, moduleKey, actionCode)) {
+            throw new BusinessException(ErrorCode.FORBIDDEN, "无访问权限");
         }
     }
 
-    private boolean canAccess(SecurityPrincipal principal, String moduleKey, String actionCode, AbstractAuditableEntity entity) {
+    private boolean canAccess(SecurityPrincipal principal, String moduleKey, String actionCode) {
         if (principal == null) {
             return false;
         }
-        DataScopeContext.Context previous = DataScopeContext.current();
         String resource = resolveResource(moduleKey);
         String action = ResourcePermissionCatalog.normalizeAction(actionCode);
-        if (!permissionService.can(principal.id(), resource, action) || !apiKeyAllows(resource, action)) {
-            return false;
-        }
-        String dataScope = permissionService.getUserDataScope(principal.id(), resource, action);
-        try {
-            DataScopeContext.set(
-                    principal.id(),
-                    resource,
-                    dataScope,
-                    permissionService.getDataScopeOwnerUserIds(principal.id(), dataScope)
-            );
-            return DataScopeContext.canAccess(entity);
-        } finally {
-            restore(previous);
-        }
+        return permissionService.can(principal.id(), resource, action) && apiKeyAllows(resource, action);
     }
 
     private boolean apiKeyAllows(String resource, String action) {
@@ -144,7 +128,7 @@ public class AttachmentRecordAccessService {
             return false;
         }
         AbstractAuditableEntity entity = loadBusinessEntity(moduleKey, binding.getRecordId());
-        return entity != null && !entity.isDeletedFlag() && canAccess(principal, moduleKey, actionCode, entity);
+        return entity != null && !entity.isDeletedFlag() && canAccess(principal, moduleKey, actionCode);
     }
 
     private AbstractAuditableEntity loadBusinessEntity(String moduleKey, Long recordId) {
@@ -180,11 +164,4 @@ public class AttachmentRecordAccessService {
         return recordId;
     }
 
-    private void restore(DataScopeContext.Context previous) {
-        if (previous == null) {
-            DataScopeContext.clear();
-            return;
-        }
-        DataScopeContext.set(previous.userId(), previous.resource(), previous.scope(), previous.ownerUserIds());
-    }
 }

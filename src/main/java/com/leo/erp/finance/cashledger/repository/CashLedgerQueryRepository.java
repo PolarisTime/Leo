@@ -5,7 +5,6 @@ import com.leo.erp.common.api.PageResponse;
 import com.leo.erp.finance.cashledger.web.dto.CashLedgerLineResponse;
 import com.leo.erp.finance.cashledger.web.dto.CashLedgerPageResponse;
 import com.leo.erp.finance.cashledger.web.dto.CashLedgerSummaryResponse;
-import com.leo.erp.security.permission.DataScopeContext;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
@@ -20,7 +19,6 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
-import java.util.Set;
 
 @Repository
 public class CashLedgerQueryRepository {
@@ -277,7 +275,6 @@ public class CashLedgerQueryRepository {
 
     private String basePredicate(CashLedgerFilter filter, MapSqlParameterSource parameters) {
         List<String> predicates = new ArrayList<>();
-        addDataScopePredicate(parameters, predicates);
         if (filter.counterpartyType() != null) {
             parameters.addValue("counterpartyType", filter.counterpartyType());
             predicates.add("ledger.counterparty_type = :counterpartyType");
@@ -318,22 +315,6 @@ public class CashLedgerQueryRepository {
             predicates.add("ledger.business_date <= :endDate");
         }
         return predicates.isEmpty() ? "TRUE" : String.join(" AND ", predicates);
-    }
-
-    private void addDataScopePredicate(
-            MapSqlParameterSource parameters,
-            List<String> predicates
-    ) {
-        Set<Long> ownerUserIds = DataScopeContext.allowedOwnerUserIds();
-        if (ownerUserIds == null) {
-            return;
-        }
-        if (ownerUserIds.isEmpty()) {
-            predicates.add("1 = 0");
-            return;
-        }
-        parameters.addValue("dataScopeOwnerUserIds", ownerUserIds);
-        predicates.add("ledger.created_by IN (:dataScopeOwnerUserIds)");
     }
 
     private String whereClause(String... predicates) {

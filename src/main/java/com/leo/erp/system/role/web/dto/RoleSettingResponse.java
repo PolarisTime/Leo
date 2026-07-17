@@ -7,7 +7,6 @@ public record RoleSettingResponse(
         String roleCode,
         String roleName,
         String roleType,
-        String dataScope,
         List<String> permissionCodes,
         Integer permissionCount,
         String permissionSummary,

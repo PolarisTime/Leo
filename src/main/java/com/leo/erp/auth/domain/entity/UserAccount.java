@@ -47,9 +47,6 @@ public class UserAccount extends AbstractAuditableEntity {
     @Column(name = "department_name", length = 128)
     private String departmentName;
 
-    @Column(name = "data_scope", length = 32)
-    private String dataScope;
-
     @Column(name = "permission_summary", length = 500)
     private String permissionSummary;
 

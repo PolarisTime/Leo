@@ -60,10 +60,6 @@ public class UserAccountCacheService {
         }
     }
 
-    public void evictDepartmentUserCaches(Long previousDepartmentId, Long nextDepartmentId) {
-        permissionService.clearDepartmentUserCache();
-    }
-
     public void evictPermissionCache(Long userId) {
         permissionService.evictCache(userId);
     }

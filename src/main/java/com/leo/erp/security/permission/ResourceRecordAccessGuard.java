@@ -12,12 +12,8 @@ import org.springframework.stereotype.Component;
 public class ResourceRecordAccessGuard {
 
     private final ModulePermissionGuard modulePermissionGuard;
-    private final PermissionService permissionService;
-
-    public ResourceRecordAccessGuard(ModulePermissionGuard modulePermissionGuard,
-                                     PermissionService permissionService) {
+    public ResourceRecordAccessGuard(ModulePermissionGuard modulePermissionGuard) {
         this.modulePermissionGuard = modulePermissionGuard;
-        this.permissionService = permissionService;
     }
 
     public void assertCurrentUserCanAccess(String moduleKey, String actionCode, AbstractAuditableEntity entity) {
@@ -28,21 +24,7 @@ public class ResourceRecordAccessGuard {
         if (entity == null) {
             throw new BusinessException(ErrorCode.NOT_FOUND, "业务记录不存在");
         }
-        ModulePermissionGuard.PermissionCheck permission =
-                modulePermissionGuard.requireResourcePermission(principal, moduleKey, actionCode);
-        DataScopeContext.Context previous = DataScopeContext.current();
-        String dataScope = permissionService.getUserDataScope(principal.id(), permission.resource(), permission.action());
-        try {
-            DataScopeContext.set(
-                    principal.id(),
-                    permission.resource(),
-                    dataScope,
-                    permissionService.getDataScopeOwnerUserIds(principal.id(), dataScope)
-            );
-            DataScopeContext.assertCanAccess(entity);
-        } finally {
-            restore(previous);
-        }
+        modulePermissionGuard.requireResourcePermission(principal, moduleKey, actionCode);
     }
 
     private SecurityPrincipal currentPrincipal() {
@@ -53,11 +35,4 @@ public class ResourceRecordAccessGuard {
         throw new BusinessException(ErrorCode.UNAUTHORIZED, "未登录");
     }
 
-    private void restore(DataScopeContext.Context previous) {
-        if (previous == null) {
-            DataScopeContext.clear();
-            return;
-        }
-        DataScopeContext.set(previous.userId(), previous.resource(), previous.scope(), previous.ownerUserIds());
-    }
 }

@@ -33,7 +33,6 @@ public class AuthProperties {
         private String password;
         private String userName;
         private String mobile;
-        private String dataScope;
         private String remark;
         private String roleCode;
 
@@ -75,14 +74,6 @@ public class AuthProperties {
 
         public void setMobile(String mobile) {
             this.mobile = mobile;
-        }
-
-        public String getDataScope() {
-            return dataScope;
-        }
-
-        public void setDataScope(String dataScope) {
-            this.dataScope = dataScope;
         }
 
         public String getRemark() {

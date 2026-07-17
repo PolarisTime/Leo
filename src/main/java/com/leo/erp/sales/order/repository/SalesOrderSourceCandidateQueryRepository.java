@@ -5,7 +5,6 @@ import com.leo.erp.common.api.PageResponse;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.sales.order.web.dto.SalesOrderSourceCandidateItemResponse;
 import com.leo.erp.sales.order.web.dto.SalesOrderSourceCandidateResponse;
-import com.leo.erp.security.permission.DataScopeContext;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Repository;
@@ -19,7 +18,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Set;
 
 @Repository
 public class SalesOrderSourceCandidateQueryRepository {
@@ -48,7 +46,7 @@ public class SalesOrderSourceCandidateQueryRepository {
                 currentSalesOrderId,
                 query
         );
-        String sourceCte = sourceCte(params);
+        String sourceCte = sourceCte();
         Long total = jdbcTemplate.queryForObject(
                 sourceCte + "SELECT COUNT(*) FROM candidate_parents",
                 params,
@@ -153,9 +151,8 @@ public class SalesOrderSourceCandidateQueryRepository {
                 .addValue("offset", (long) query.page() * query.size(), Types.BIGINT);
     }
 
-    private String sourceCte(MapSqlParameterSource params) {
-        String dataScope = dataScopeClause(params);
-        return normalSourceSql().formatted(dataScope) + """
+    private String sourceCte() {
+        return normalSourceSql() + """
                 , candidate_parents AS (
                     SELECT
                         purchase_order_id,
@@ -253,21 +250,8 @@ public class SalesOrderSourceCandidateQueryRepository {
                           OR POSITION(:keyword IN LOWER(COALESCE(inbound_item.material, ''))) > 0
                           OR POSITION(:keyword IN LOWER(COALESCE(inbound_item.spec, ''))) > 0
                       )
-                      %s
                 )
                 """;
-    }
-
-    private String dataScopeClause(MapSqlParameterSource params) {
-        Set<Long> ownerUserIds = DataScopeContext.allowedOwnerUserIds();
-        if (ownerUserIds == null) {
-            return "";
-        }
-        if (ownerUserIds.isEmpty()) {
-            return "AND 1 = 0";
-        }
-        params.addValue("dataScopeOwnerUserIds", ownerUserIds);
-        return "AND purchase_order.created_by IN (:dataScopeOwnerUserIds)";
     }
 
     private String normalize(String value) {

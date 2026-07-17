@@ -41,10 +41,8 @@ class PermissionCache {
 
     UserPermissionSnapshot read(Long userId) {
         String permissionCacheKey = CACHE_PREFIX + userId;
-        String scopeCacheKey = SCOPE_CACHE_PREFIX + userId;
         Map<Object, Object> cachedPermissions = redisTemplate.opsForHash().entries(permissionCacheKey);
-        Map<Object, Object> cachedScopes = redisTemplate.opsForHash().entries(scopeCacheKey);
-        if (cachedPermissions.isEmpty() || cachedScopes.isEmpty()) {
+        if (cachedPermissions.isEmpty()) {
             return null;
         }
         Map<String, Set<String>> permissionMap = new LinkedHashMap<>();
@@ -52,14 +50,7 @@ class PermissionCache {
                 ResourcePermissionCatalog.normalizeResource(key.toString()),
                 splitActions(value.toString())
         ));
-        Map<String, String> dataScopeByPermission = new LinkedHashMap<>();
-        cachedScopes.forEach((key, value) -> {
-            String normalizedKey = PermissionScopeKeyParser.normalize(key.toString());
-            if (!normalizedKey.isBlank()) {
-                dataScopeByPermission.put(normalizedKey, ResourcePermissionCatalog.normalizeDataScope(value.toString()));
-            }
-        });
-        return new UserPermissionSnapshot(permissionMap, dataScopeByPermission);
+        return new UserPermissionSnapshot(permissionMap);
     }
 
     void write(Long userId, UserPermissionSnapshot snapshot) {
@@ -70,10 +61,6 @@ class PermissionCache {
         snapshot.permissionMap().forEach((resource, actions) -> permissionCacheData.put(resource, String.join(",", actions)));
         redisTemplate.opsForHash().putAll(CACHE_PREFIX + userId, permissionCacheData);
         redisTemplate.expire(CACHE_PREFIX + userId, redisTuningProperties.permissionTtl().toSeconds(), TimeUnit.SECONDS);
-        if (!snapshot.dataScopeByPermission().isEmpty()) {
-            redisTemplate.opsForHash().putAll(SCOPE_CACHE_PREFIX + userId, snapshot.dataScopeByPermission());
-            redisTemplate.expire(SCOPE_CACHE_PREFIX + userId, redisTuningProperties.permissionTtl().toSeconds(), TimeUnit.SECONDS);
-        }
         redisTemplate.opsForSet().add(USER_INDEX_KEY, String.valueOf(userId));
         redisTemplate.expire(USER_INDEX_KEY, redisTuningProperties.permissionIndexTtl().toSeconds(), TimeUnit.SECONDS);
     }

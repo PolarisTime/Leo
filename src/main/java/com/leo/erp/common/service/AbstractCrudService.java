@@ -5,7 +5,6 @@ import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.AbstractAuditableEntity;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
-import com.leo.erp.security.permission.DataScopeContext;
 import com.leo.erp.security.support.SecurityPrincipal;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -146,17 +145,9 @@ public abstract class AbstractCrudService<E extends AbstractAuditableEntity, Req
                 .map(this::toResponse);
     }
 
-    protected boolean shouldApplyDataScope() {
-        return true;
-    }
-
-    private Specification<E> withDataScope(Specification<E> spec) {
-        return shouldApplyDataScope() ? DataScopeContext.apply(spec) : spec;
-    }
-
     protected final Page<E> pageEntities(PageQuery query, Specification<E> specification, JpaSpecificationExecutor<E> repository) {
         Specification<E> effectiveSpec = applyListVisibilityPolicy(applyDeletedVisibilityPolicy(specification));
-        return repository.findAll(withDataScope(effectiveSpec), query.toPageable("id"));
+        return repository.findAll(effectiveSpec, query.toPageable("id"));
     }
 
     protected final List<Res> search(String keyword, String[] searchFields, int maxSize,
@@ -165,23 +156,19 @@ public abstract class AbstractCrudService<E extends AbstractAuditableEntity, Req
                 applyListVisibilityPolicy(applyDeletedVisibilityPolicy(baseSpec)),
                 com.leo.erp.common.persistence.Specs.keywordLike(keyword, searchFields)
         );
-        return repository.findAll(withDataScope(spec), org.springframework.data.domain.PageRequest.of(0, maxSize))
+        return repository.findAll(spec, org.springframework.data.domain.PageRequest.of(0, maxSize))
                 .map(this::toResponse)
                 .toList();
     }
 
     protected final E requireEntity(Long id) {
-        E entity = findActiveEntity(id)
+        return findActiveEntity(id)
                 .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, notFoundMessage()));
-        DataScopeContext.assertCanAccess(entity);
-        return entity;
     }
 
     protected final E requireDetailEntity(Long id) {
-        E entity = resolveDetailEntity(id)
+        return resolveDetailEntity(id)
                 .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, notFoundMessage()));
-        DataScopeContext.assertCanAccess(entity);
-        return entity;
     }
 
     protected final long nextId() {

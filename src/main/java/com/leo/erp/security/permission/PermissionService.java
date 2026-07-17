@@ -7,15 +7,14 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.Collection;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
 /**
- * Facade for permission resolution, caching, menu visibility, and department scope.
+ * Facade for permission resolution, caching, and menu visibility.
  * Delegates to {@link PermissionResolver}, {@link PermissionCache},
- * {@link MenuVisibilityService}, and {@link DepartmentScopeResolver}.
+ * and {@link MenuVisibilityService}.
  */
 @Service
 public class PermissionService {
@@ -23,24 +22,20 @@ public class PermissionService {
     private final PermissionResolver resolver;
     private final PermissionCache cache;
     private final MenuVisibilityService menuVisibility;
-    private final DepartmentScopeResolver departmentScope;
 
     @Autowired
     public PermissionService(PermissionResolver resolver,
                              PermissionCache cache,
-                             MenuVisibilityService menuVisibility,
-                             DepartmentScopeResolver departmentScope) {
+                             MenuVisibilityService menuVisibility) {
         this.resolver = resolver;
         this.cache = cache;
         this.menuVisibility = menuVisibility;
-        this.departmentScope = departmentScope;
     }
 
     protected PermissionService() {
         this.resolver = null;
         this.cache = null;
         this.menuVisibility = null;
-        this.departmentScope = null;
     }
 
     // --- Public API ---
@@ -54,35 +49,6 @@ public class PermissionService {
                 .sorted(Map.Entry.comparingByKey())
                 .map(entry -> new ResourcePermissionResponse(entry.getKey(), Set.copyOf(entry.getValue())))
                 .toList();
-    }
-
-    public Map<String, String> getUserDataScopes(Long userId) {
-        Map<String, String> result = new LinkedHashMap<>();
-        for (Map.Entry<String, String> entry : resolver.getUserPermissionSnapshot(userId).dataScopeByPermission().entrySet()) {
-            String resource = PermissionScopeKeyParser.parseResource(entry.getKey());
-            if (resource.isBlank()) {
-                continue;
-            }
-            result.merge(resource, entry.getValue(), ResourcePermissionCatalog::broaderDataScope);
-        }
-        return result;
-    }
-
-    public String getUserDataScope(Long userId, String resourceCode) {
-        String resource = ResourcePermissionCatalog.normalizeResource(resourceCode);
-        return getUserDataScopes(userId).getOrDefault(resource, ResourcePermissionCatalog.SCOPE_SELF);
-    }
-
-    public String getUserDataScope(Long userId, String resourceCode, String actionCode) {
-        String resource = ResourcePermissionCatalog.normalizeResource(resourceCode);
-        String action = ResourcePermissionCatalog.normalizeAction(actionCode);
-        return resolver.getUserPermissionSnapshot(userId)
-                .dataScopeByPermission()
-                .getOrDefault(PermissionScopeKeyParser.key(resource, action), ResourcePermissionCatalog.SCOPE_SELF);
-    }
-
-    public Set<Long> getDataScopeOwnerUserIds(Long userId, String scope) {
-        return departmentScope.getOwnerUserIds(userId, scope);
     }
 
     public Set<String> getVisibleMenuCodes(Long userId) {
@@ -116,26 +82,11 @@ public class PermissionService {
         }
     }
 
-    public void evictDepartmentUserCache(Long departmentId) {
-        if (departmentScope == null) {
-            return;
-        }
-        departmentScope.evictDepartmentUserCache(departmentId);
-    }
-
-    public void clearDepartmentUserCache() {
-        if (departmentScope == null) {
-            return;
-        }
-        departmentScope.clearDepartmentUserCache();
-    }
-
     public void evictMetadataCache() {
         // Menu metadata is loaded directly after the NIH cache migration.
     }
 
     public void evictAllCache() {
-        clearDepartmentUserCache();
         if (cache != null) {
             cache.evictAll();
         }

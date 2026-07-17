@@ -11,7 +11,6 @@ import com.leo.erp.common.support.TradeItemCalculator;
 import com.leo.erp.logistics.bill.domain.entity.FreightBill;
 import com.leo.erp.logistics.bill.domain.entity.FreightBillItem;
 import com.leo.erp.logistics.bill.repository.FreightBillRepository;
-import com.leo.erp.security.permission.DataScopeContext;
 import com.leo.erp.statement.freight.domain.entity.FreightStatement;
 import com.leo.erp.statement.freight.domain.entity.FreightStatementItem;
 import com.leo.erp.statement.freight.repository.FreightStatementRepository;
@@ -74,7 +73,7 @@ public class FreightStatementSourceService {
                 .and(Specs.equalIfPresent("status", StatusConstants.AUDITED))
                 .and(Specs.betweenIfPresent("billTime", filter.startDate(), filter.endDate()))
                 .and(StatementCandidateSupport.excludeFieldValues("id", occupiedBillIds));
-        return freightBillRepository.findAll(DataScopeContext.apply(spec), query.toPageable("id"))
+        return freightBillRepository.findAll(spec, query.toPageable("id"))
                 .map(this::toCandidateResponse);
     }
 
@@ -190,7 +189,6 @@ public class FreightStatementSourceService {
         }
         List<FreightBill> bills = new ArrayList<>(billById.values());
         for (FreightBill bill : bills) {
-            DataScopeContext.assertCanAccess(bill);
             if (command.settlementCompanyId() != null
                     && bill.getSettlementCompanyId() != null
                     && !command.settlementCompanyId().equals(bill.getSettlementCompanyId())) {

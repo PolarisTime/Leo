@@ -50,7 +50,6 @@ public class RoleSettingService extends AbstractCrudService<RoleSetting, RoleSet
 
     private static final String ADMIN_ROLE_CODE = "ADMIN";
     private static final Set<String> ALLOWED_ROLE_TYPES = Set.of("平台角色", "系统角色", "业务角色", "财务角色");
-    private static final Set<String> ALLOWED_DATA_SCOPES = Set.of("全部数据", "全部", "本部门", "本人");
 
     private void evictCachesForRole(Long roleId) {
         List<Long> affectedUserIds = userRoleRepository
@@ -159,10 +158,6 @@ public class RoleSettingService extends AbstractCrudService<RoleSetting, RoleSet
         String nextRoleCode = normalizeRoleCode(request.roleCode());
         assertCurrentPrincipalCanManageRoleCode(entity.getRoleCode());
         assertCurrentPrincipalCanManageRoleCode(nextRoleCode);
-        assertCurrentPrincipalCanGrantDataScope(
-                normalizeAllowedValue(request.dataScope(), ALLOWED_DATA_SCOPES, "数据范围"),
-                rolePermissionRepository.findByRoleIdAndDeletedFlagFalse(entity.getId())
-        );
         if (!Objects.equals(entity.getRoleCode(), nextRoleCode)
                 && repository.existsByRoleCodeAndDeletedFlagFalse(nextRoleCode)) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "角色编码已存在");
@@ -201,7 +196,6 @@ public class RoleSettingService extends AbstractCrudService<RoleSetting, RoleSet
         entity.setRoleCode(normalizeRoleCode(request.roleCode()));
         entity.setRoleName(normalizeRequiredValue(request.roleName(), "角色名称"));
         entity.setRoleType(normalizeAllowedValue(request.roleType(), ALLOWED_ROLE_TYPES, "角色类型"));
-        entity.setDataScope(normalizeAllowedValue(request.dataScope(), ALLOWED_DATA_SCOPES, "数据范围"));
         entity.setPermissionCount(0);
         entity.setPermissionSummary(null);
         entity.setUserCount(0);
@@ -227,7 +221,6 @@ public class RoleSettingService extends AbstractCrudService<RoleSetting, RoleSet
         if (permissions == null) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "权限列表不能为空");
         }
-        String roleDataScope = normalizeAllowedValue(role.getDataScope(), ALLOWED_DATA_SCOPES, "数据范围");
         Map<String, Set<String>> currentPermissionMap = currentPrincipalPermissionUpperBound();
         Set<String> seen = new LinkedHashSet<>();
         Map<String, Set<String>> actionsByResource = new LinkedHashMap<>();
@@ -259,7 +252,6 @@ public class RoleSettingService extends AbstractCrudService<RoleSetting, RoleSet
                 resource -> "user-account".equals(resource) || "permission".equals(resource) || "role".equals(resource))) {
             actionsByResource.computeIfAbsent("access-control", k -> new LinkedHashSet<>()).add(ResourcePermissionCatalog.READ);
         }
-        assertCurrentPrincipalCanGrantDataScope(roleDataScope, actionsByResource);
         actionsByResource.forEach((resource, actions) ->
                 actions.forEach(action -> assertWithinCurrentPrincipalPermissions(currentPermissionMap, resource, action)));
         List<RolePermission> toSave = new java.util.ArrayList<>(actionsByResource.values().stream().mapToInt(Set::size).sum());
@@ -341,7 +333,6 @@ public class RoleSettingService extends AbstractCrudService<RoleSetting, RoleSet
                 entity.getRoleCode(),
                 entity.getRoleName(),
                 entity.getRoleType(),
-                entity.getDataScope(),
                 permissionCodes,
                 permissionCodes.size(),
                 buildPermissionSummary(permissions),
@@ -459,48 +450,6 @@ public class RoleSettingService extends AbstractCrudService<RoleSetting, RoleSet
         Set<String> allowedActions = currentPermissionMap.get(resource);
         if (allowedActions == null || !allowedActions.contains(action)) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "不能授予超出自身权限范围的权限");
-        }
-    }
-
-    private void assertCurrentPrincipalCanGrantDataScope(String requestedDataScope, List<RolePermission> permissions) {
-        if (permissions == null || permissions.isEmpty()) {
-            assertCurrentPrincipalCanGrantDataScope(requestedDataScope, Map.of());
-            return;
-        }
-        Map<String, Set<String>> actionsByResource = new LinkedHashMap<>();
-        for (RolePermission permission : permissions) {
-            String resource = ResourcePermissionCatalog.normalizeResource(permission.getResourceCode());
-            String action = ResourcePermissionCatalog.normalizeAction(permission.getActionCode());
-            if (ResourcePermissionCatalog.isAllowed(resource, action)) {
-                actionsByResource.computeIfAbsent(resource, key -> new LinkedHashSet<>()).add(action);
-            }
-        }
-        assertCurrentPrincipalCanGrantDataScope(requestedDataScope, actionsByResource);
-    }
-
-    private void assertCurrentPrincipalCanGrantDataScope(String requestedDataScope,
-                                                         Map<String, Set<String>> actionsByResource) {
-        SecurityPrincipal principal = currentPrincipal().orElse(null);
-        if (principal == null || currentPrincipalIsAdmin()) {
-            return;
-        }
-        String normalizedRequestedScope = ResourcePermissionCatalog.normalizeDataScope(requestedDataScope);
-        if (actionsByResource == null || actionsByResource.isEmpty()) {
-            assertDataScopeWithinCurrentPrincipal(normalizedRequestedScope, ResourcePermissionCatalog.SCOPE_SELF);
-            return;
-        }
-        for (Map.Entry<String, Set<String>> entry : actionsByResource.entrySet()) {
-            for (String action : entry.getValue()) {
-                String currentScope = permissionService.getUserDataScope(principal.id(), entry.getKey(), action);
-                assertDataScopeWithinCurrentPrincipal(normalizedRequestedScope, currentScope);
-            }
-        }
-    }
-
-    private void assertDataScopeWithinCurrentPrincipal(String requestedScope, String currentScope) {
-        String normalizedCurrentScope = ResourcePermissionCatalog.normalizeDataScope(currentScope);
-        if (!Objects.equals(ResourcePermissionCatalog.broaderDataScope(requestedScope, normalizedCurrentScope), normalizedCurrentScope)) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "不能授予超出自身数据范围的角色");
         }
     }
 

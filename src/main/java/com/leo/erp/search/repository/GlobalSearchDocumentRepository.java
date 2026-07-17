@@ -1,7 +1,6 @@
 package com.leo.erp.search.repository;
 
 import java.sql.Types;
-import java.util.ArrayList;
 import java.util.List;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
@@ -27,8 +26,8 @@ public class GlobalSearchDocumentRepository {
     public List<GlobalSearchDocument> search(String keyword,
                                              Long trackId,
                                              int limit,
-                                             List<GlobalSearchModuleAccess> moduleAccesses) {
-        if (moduleAccesses == null || moduleAccesses.isEmpty()) {
+                                             List<String> moduleKeys) {
+        if (moduleKeys == null || moduleKeys.isEmpty()) {
             return List.of();
         }
 
@@ -37,11 +36,8 @@ public class GlobalSearchDocumentRepository {
                 .addValue("trackId", trackId, Types.BIGINT)
                 .addValue("pattern", "%" + escapeLike(keyword) + "%")
                 .addValue("prefixPattern", escapeLike(keyword) + "%")
+                .addValue("moduleKeys", moduleKeys)
                 .addValue("limit", limit);
-        String accessWhereSql = buildAccessWhereSql(params, moduleAccesses);
-        if (accessWhereSql.isBlank()) {
-            return List.of();
-        }
         String matchWhereSql = trackId == null
                 ? "(primary_no ILIKE :pattern ESCAPE '!' OR search_text ILIKE :pattern ESCAPE '!')"
                 : "record_id = :trackId";
@@ -54,7 +50,7 @@ public class GlobalSearchDocumentRepository {
                        (record_id = :trackId) AS matched_by_track_id
                 FROM global_search_document
                 WHERE deleted_flag = FALSE
-                  AND (%s)
+                  AND module_key IN (:moduleKeys)
                   AND (%s)
                 ORDER BY
                     CASE
@@ -66,34 +62,9 @@ public class GlobalSearchDocumentRepository {
                     updated_at DESC NULLS LAST,
                     record_id DESC
                 LIMIT :limit
-                """.formatted(accessWhereSql, matchWhereSql);
+                """.formatted(matchWhereSql);
 
         return jdbcTemplate.query(sql, params, ROW_MAPPER);
-    }
-
-    private String buildAccessWhereSql(MapSqlParameterSource params, List<GlobalSearchModuleAccess> moduleAccesses) {
-        List<String> clauses = new ArrayList<>();
-        for (int index = 0; index < moduleAccesses.size(); index++) {
-            GlobalSearchModuleAccess access = moduleAccesses.get(index);
-            if (access.moduleKey() == null || access.moduleKey().isBlank()) {
-                continue;
-            }
-
-            String moduleParam = "moduleKey" + index;
-            params.addValue(moduleParam, access.moduleKey());
-            if (access.allDataScope()) {
-                clauses.add("module_key = :" + moduleParam);
-                continue;
-            }
-
-            if (access.ownerUserIds().isEmpty()) {
-                continue;
-            }
-            String ownersParam = "ownerUserIds" + index;
-            params.addValue(ownersParam, access.ownerUserIds());
-            clauses.add("(module_key = :" + moduleParam + " AND created_by IN (:" + ownersParam + "))");
-        }
-        return String.join(" OR ", clauses);
     }
 
     private String escapeLike(String value) {

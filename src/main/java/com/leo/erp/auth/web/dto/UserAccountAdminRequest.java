@@ -1,7 +1,6 @@
 package com.leo.erp.auth.web.dto;
 
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
@@ -15,7 +14,6 @@ public record UserAccountAdminRequest(
         Long departmentId,
         List<@NotBlank @Size(max = 128) String> roleNames,
         List<Long> roleIds,
-        @Pattern(regexp = "全部数据|全部|本部门|本人", message = "数据范围不合法") String dataScope,
         @Size(max = 500) String permissionSummary,
         @Pattern(regexp = "正常|禁用", message = "状态不合法") String status,
         @Size(max = 255) String remark

@@ -130,7 +130,6 @@ public class UserAccountAdminService {
         repository.save(entity);
         cacheService.evictLoginNameCache(entity.getLoginName());
         cacheService.evictPermissionCache(entity.getId());
-        cacheService.evictDepartmentUserCaches(entity.getDepartmentId(), entity.getDepartmentId());
         cacheService.evictAuthenticatedUser(entity.getId());
         cacheService.evictDashboard(entity.getId());
     }
@@ -201,7 +200,7 @@ public class UserAccountAdminService {
                 response.mobile(), response.departmentId(), response.departmentName(),
                 roles.stream().map(RoleSetting::getRoleName).toList(),
                 roles.stream().map(RoleSetting::getId).toList(),
-                response.dataScope(), permissionSummary,
+                permissionSummary,
                 response.lastLoginDate(), response.status(), response.remark(),
                 Boolean.TRUE.equals(entity.getTotpEnabled())
         );
@@ -209,7 +208,6 @@ public class UserAccountAdminService {
 
     private UserAccountAdminResponse saveWithRoles(UserAccount entity, UserAccountAdminRequest request) {
         String previousLoginName = entity.getLoginName();
-        Long previousDepartmentId = entity.getDepartmentId();
         boolean roleUpdateRequested = hasRolePayload(request);
         List<RoleSetting> roles = resolveRolesFromRequest(entity, request);
         if (roleUpdateRequested) {
@@ -218,7 +216,7 @@ public class UserAccountAdminService {
         assertNoRoleConflict(roles);
         UserStatus nextStatus = validationService.toStatus(request.status());
         assertNotLastActiveAdmin(entity, roles, nextStatus, false);
-        apply(entity, request, roles);
+        apply(entity, request);
         try {
             UserAccount saved = repository.save(entity);
             if (roleUpdateRequested) {
@@ -226,7 +224,6 @@ public class UserAccountAdminService {
             }
             cacheService.evictLoginNameCache(previousLoginName, saved.getLoginName());
             cacheService.evictPermissionCache(saved.getId());
-            cacheService.evictDepartmentUserCaches(previousDepartmentId, saved.getDepartmentId());
             cacheService.evictAuthenticatedUser(saved.getId());
             cacheService.evictDashboard(saved.getId());
             return toResponseWithRoles(saved);
@@ -272,12 +269,11 @@ public class UserAccountAdminService {
         return userRoleBindingService.resolveRoles(request.roleNames());
     }
 
-    private void apply(UserAccount entity, UserAccountAdminRequest request, List<RoleSetting> roles) {
+    private void apply(UserAccount entity, UserAccountAdminRequest request) {
         entity.setLoginName(validationService.normalizeLoginName(request.loginName()));
         entity.setUserName(validationService.normalizeRequiredValue(request.userName(), "用户姓名"));
         entity.setMobile(validationService.normalizeOptionalValue(request.mobile()));
         validationService.applyDepartment(entity, request.departmentId());
-        entity.setDataScope(validationService.resolveEffectiveDataScope(roles));
         entity.setPermissionSummary("");
         entity.setStatus(validationService.toStatus(request.status()));
         entity.setRemark(validationService.normalizeOptionalValue(request.remark()));

@@ -9,7 +9,6 @@ import com.leo.erp.sales.order.domain.entity.SalesOrder;
 import com.leo.erp.sales.order.repository.SalesOrderRepository;
 import com.leo.erp.sales.order.service.SalesOrderResponseAssembler;
 import com.leo.erp.sales.order.web.dto.SalesOrderResponse;
-import com.leo.erp.security.permission.DataScopeContext;
 import org.springframework.data.domain.Page;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
@@ -56,7 +55,7 @@ public class FreightBillSalesOrderCandidateService {
                     occupied.where(predicate);
                     return builder.not(builder.exists(occupied));
                 });
-        return salesOrderRepository.findAll(DataScopeContext.apply(spec), query.toPageable("id"))
+        return salesOrderRepository.findAll(spec, query.toPageable("id"))
                 .map(responseAssembler::toDetailResponse);
     }
 }
