@@ -10,10 +10,8 @@ import com.leo.erp.common.support.MasterDataReferenceGuard;
 import com.leo.erp.common.support.MasterDataReferenceGuard.ReferenceCheck;
 import com.leo.erp.common.support.RedisCacheHealthCheck;
 import com.leo.erp.common.support.RedisJsonCacheSupport;
-import com.leo.erp.common.support.PrecisionConstants;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
-import com.leo.erp.common.support.TaxRateProvider;
 import com.leo.erp.system.company.domain.entity.CompanySetting;
 import com.leo.erp.system.company.repository.CompanySettingRepository;
 import com.leo.erp.system.company.mapper.CompanySettingMapper;
@@ -23,9 +21,6 @@ import com.leo.erp.system.company.web.dto.CompanySettingResponse;
 import com.leo.erp.system.company.web.dto.CompanySettlementAccountRequest;
 import com.leo.erp.system.company.web.dto.CompanySettlementAccountResponse;
 import com.leo.erp.system.dashboard.service.DashboardSummaryService;
-import com.leo.erp.system.generalsetting.domain.entity.GeneralSetting;
-import com.leo.erp.system.generalsetting.repository.GeneralSettingRepository;
-import com.leo.erp.system.runtimeconfig.service.RuntimeConfigService;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -34,13 +29,11 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
-import org.springframework.cache.annotation.Caching;
 import org.springframework.cache.Cache;
 import org.springframework.cache.CacheManager;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -48,18 +41,14 @@ import java.util.Optional;
 import java.util.Set;
 
 @Service
-public class CompanySettingService extends AbstractCrudService<CompanySetting, CompanySettingRequest, CompanySettingResponse> implements TaxRateProvider, RedisCacheHealthCheck {
+public class CompanySettingService extends AbstractCrudService<CompanySetting, CompanySettingRequest, CompanySettingResponse> implements RedisCacheHealthCheck {
 
-    public static final String DEFAULT_TAX_RATE_SETTING_CODE = "SYS_DEFAULT_TAX_RATE";
-    public static final String CURRENT_COMPANY_CACHE_KEY = "leo:company:current";
-    public static final String CURRENT_TAX_RATE_CACHE_KEY = "leo:company:tax-rate";
-    private static final BigDecimal DEFAULT_COMPANY_TAX_RATE = new BigDecimal("0.1300");
+    public static final String CURRENT_COMPANY_CACHE_KEY = "leo:company:current:v2";
     private static final TypeReference<List<CompanySettlementAccountResponse>> SETTLEMENT_ACCOUNT_LIST_TYPE = new TypeReference<>() { };
 
     private final CompanySettingRepository companySettingRepository;
     private final CompanySettingMapper companySettingMapper;
     private final DashboardSummaryService dashboardSummaryService;
-    private final GeneralSettingRepository generalSettingRepository;
     private final ObjectMapper objectMapper;
     private final RedisJsonCacheSupport redisJsonCacheSupport;
     private final MasterDataReferenceGuard referenceGuard;
@@ -70,7 +59,6 @@ public class CompanySettingService extends AbstractCrudService<CompanySetting, C
                                  SnowflakeIdGenerator snowflakeIdGenerator,
                                  CompanySettingMapper companySettingMapper,
                                  DashboardSummaryService dashboardSummaryService,
-                                 GeneralSettingRepository generalSettingRepository,
                                  ObjectMapper objectMapper,
                                  RedisJsonCacheSupport redisJsonCacheSupport,
                                  MasterDataReferenceGuard referenceGuard) {
@@ -78,7 +66,6 @@ public class CompanySettingService extends AbstractCrudService<CompanySetting, C
         this.companySettingRepository = companySettingRepository;
         this.companySettingMapper = companySettingMapper;
         this.dashboardSummaryService = dashboardSummaryService;
-        this.generalSettingRepository = generalSettingRepository;
         this.objectMapper = objectMapper;
         this.redisJsonCacheSupport = redisJsonCacheSupport;
         this.referenceGuard = referenceGuard;
@@ -88,21 +75,19 @@ public class CompanySettingService extends AbstractCrudService<CompanySetting, C
                                  SnowflakeIdGenerator snowflakeIdGenerator,
                                  CompanySettingMapper companySettingMapper,
                                  DashboardSummaryService dashboardSummaryService,
-                                 GeneralSettingRepository generalSettingRepository,
                                  ObjectMapper objectMapper) {
         this(companySettingRepository, snowflakeIdGenerator, companySettingMapper, dashboardSummaryService,
-                generalSettingRepository, objectMapper, null, null);
+                objectMapper, null, null);
     }
 
     public CompanySettingService(CompanySettingRepository companySettingRepository,
                                  SnowflakeIdGenerator snowflakeIdGenerator,
                                  CompanySettingMapper companySettingMapper,
                                  DashboardSummaryService dashboardSummaryService,
-                                 GeneralSettingRepository generalSettingRepository,
                                  ObjectMapper objectMapper,
                                  RedisJsonCacheSupport redisJsonCacheSupport) {
         this(companySettingRepository, snowflakeIdGenerator, companySettingMapper, dashboardSummaryService,
-                generalSettingRepository, objectMapper, redisJsonCacheSupport, null);
+                objectMapper, redisJsonCacheSupport, null);
     }
 
     @Transactional(readOnly = true)
@@ -147,23 +132,11 @@ public class CompanySettingService extends AbstractCrudService<CompanySetting, C
     @Override
     @Transactional(readOnly = true)
     public CacheHealthCheckResult verifyAndRefreshCache() {
-        CacheHealthCheckResult companyResult = verifyAndRefreshSpringCache(
+        return verifyAndRefreshSpringCache(
                 cacheManager,
                 CacheConfig.CACHE_STATIC,
                 CURRENT_COMPANY_CACHE_KEY,
                 loadCurrent()
-        );
-        CacheHealthCheckResult taxRateResult = verifyAndRefreshSpringCache(
-                cacheManager,
-                CacheConfig.CACHE_STATIC,
-                CURRENT_TAX_RATE_CACHE_KEY,
-                loadCurrentTaxRate()
-        );
-        return new CacheHealthCheckResult(
-                CacheConfig.CACHE_STATIC + "::leo:company",
-                companyResult.currentSize() + taxRateResult.currentSize(),
-                companyResult.refreshedSize() + taxRateResult.refreshedSize(),
-                companyResult.refreshed() || taxRateResult.refreshed()
         );
     }
 
@@ -178,35 +151,8 @@ public class CompanySettingService extends AbstractCrudService<CompanySetting, C
                 .orElse(null);
     }
 
-    @Transactional(readOnly = true)
-    @Override
-    @Cacheable(value = CacheConfig.CACHE_STATIC, key = "'" + CURRENT_TAX_RATE_CACHE_KEY + "'",
-            unless = "#result == null")
-    public BigDecimal resolveCurrentTaxRate() {
-        return loadCurrentTaxRate();
-    }
-
-    private BigDecimal loadCurrentTaxRate() {
-        return resolveConfiguredTaxRate()
-                .or(() -> findCurrentEntity().map(CompanySetting::getTaxRate))
-                .orElse(BigDecimal.ZERO)
-                .setScale(PrecisionConstants.TAX_RATE_SCALE, PrecisionConstants.DEFAULT_ROUNDING);
-    }
-
-    private Optional<BigDecimal> resolveConfiguredTaxRate() {
-        if (generalSettingRepository == null) {
-            return Optional.empty();
-        }
-        return generalSettingRepository.findBySettingCodeAndDeletedFlagFalse(DEFAULT_TAX_RATE_SETTING_CODE)
-                .map(GeneralSetting::getSettingValue)
-                .flatMap(this::parseTaxRate);
-    }
-
     @Transactional
-    @Caching(evict = {
-            @CacheEvict(value = CacheConfig.CACHE_STATIC, key = "'" + CURRENT_COMPANY_CACHE_KEY + "'"),
-            @CacheEvict(value = CacheConfig.CACHE_STATIC, key = "'" + CURRENT_TAX_RATE_CACHE_KEY + "'")
-    })
+    @CacheEvict(value = CacheConfig.CACHE_STATIC, key = "'" + CURRENT_COMPANY_CACHE_KEY + "'")
     public CompanySettingResponse saveCurrent(CompanySettingRequest request) {
         CompanySetting entity = findCurrentEntity()
                 .orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_ERROR, "请先通过首次初始化页面创建默认结算主体"));
@@ -222,40 +168,28 @@ public class CompanySettingService extends AbstractCrudService<CompanySetting, C
 
     @Override
     @Transactional
-    @Caching(evict = {
-            @CacheEvict(value = CacheConfig.CACHE_STATIC, key = "'" + CURRENT_COMPANY_CACHE_KEY + "'"),
-            @CacheEvict(value = CacheConfig.CACHE_STATIC, key = "'" + CURRENT_TAX_RATE_CACHE_KEY + "'")
-    })
+    @CacheEvict(value = CacheConfig.CACHE_STATIC, key = "'" + CURRENT_COMPANY_CACHE_KEY + "'")
     public CompanySettingResponse create(CompanySettingRequest request) {
         return super.create(request);
     }
 
     @Override
     @Transactional
-    @Caching(evict = {
-            @CacheEvict(value = CacheConfig.CACHE_STATIC, key = "'" + CURRENT_COMPANY_CACHE_KEY + "'"),
-            @CacheEvict(value = CacheConfig.CACHE_STATIC, key = "'" + CURRENT_TAX_RATE_CACHE_KEY + "'")
-    })
+    @CacheEvict(value = CacheConfig.CACHE_STATIC, key = "'" + CURRENT_COMPANY_CACHE_KEY + "'")
     public CompanySettingResponse update(Long id, CompanySettingRequest request) {
         return super.update(id, request);
     }
 
     @Override
     @Transactional
-    @Caching(evict = {
-            @CacheEvict(value = CacheConfig.CACHE_STATIC, key = "'" + CURRENT_COMPANY_CACHE_KEY + "'"),
-            @CacheEvict(value = CacheConfig.CACHE_STATIC, key = "'" + CURRENT_TAX_RATE_CACHE_KEY + "'")
-    })
+    @CacheEvict(value = CacheConfig.CACHE_STATIC, key = "'" + CURRENT_COMPANY_CACHE_KEY + "'")
     public CompanySettingResponse updateStatus(Long id, String status) {
         return super.updateStatus(id, status);
     }
 
     @Override
     @Transactional
-    @Caching(evict = {
-            @CacheEvict(value = CacheConfig.CACHE_STATIC, key = "'" + CURRENT_COMPANY_CACHE_KEY + "'"),
-            @CacheEvict(value = CacheConfig.CACHE_STATIC, key = "'" + CURRENT_TAX_RATE_CACHE_KEY + "'")
-    })
+    @CacheEvict(value = CacheConfig.CACHE_STATIC, key = "'" + CURRENT_COMPANY_CACHE_KEY + "'")
     public void delete(Long id) {
         super.delete(id);
     }
@@ -358,20 +292,9 @@ public class CompanySettingService extends AbstractCrudService<CompanySetting, C
         entity.setTaxNo(request.taxNo());
         entity.setBankName(primaryAccount == null ? "" : primaryAccount.bankName());
         entity.setBankAccount(primaryAccount == null ? "" : primaryAccount.bankAccount());
-        if (entity.getTaxRate() == null) {
-            entity.setTaxRate(resolveCurrentTaxRateForEntity());
-        }
         entity.setSettlementAccountsJson(writeSettlementAccounts(settlementAccounts));
         entity.setStatus(request.status() != null ? request.status() : "正常");
         entity.setRemark(request.remark());
-    }
-
-    private BigDecimal resolveCurrentTaxRateForEntity() {
-        return resolveConfiguredTaxRate()
-                .or(() -> findCurrentEntity().map(CompanySetting::getTaxRate))
-                .filter(taxRate -> taxRate.compareTo(BigDecimal.ZERO) > 0)
-                .orElse(DEFAULT_COMPANY_TAX_RATE)
-                .setScale(PrecisionConstants.TAX_RATE_SCALE, PrecisionConstants.DEFAULT_ROUNDING);
     }
 
     private void validateImmutableIdentity(CompanySetting entity, CompanySettingRequest request) {
@@ -403,15 +326,7 @@ public class CompanySettingService extends AbstractCrudService<CompanySetting, C
 
     @Override
     protected CompanySettingResponse toResponse(CompanySetting entity) {
-        return companySettingMapper.toResponse(entity, resolveResponseTaxRate(entity), readSettlementAccounts(entity));
-    }
-
-    private BigDecimal resolveResponseTaxRate(CompanySetting entity) {
-        return resolveConfiguredTaxRate()
-                .or(() -> Optional.ofNullable(entity.getTaxRate()))
-                .or(() -> findCurrentEntity().map(CompanySetting::getTaxRate))
-                .orElse(BigDecimal.ZERO)
-                .setScale(PrecisionConstants.TAX_RATE_SCALE, PrecisionConstants.DEFAULT_ROUNDING);
+        return companySettingMapper.toResponse(entity, readSettlementAccounts(entity));
     }
 
     private List<CompanySettlementAccountResponse> normalizeSettlementAccounts(List<CompanySettlementAccountRequest> requestAccounts) {
@@ -486,31 +401,15 @@ public class CompanySettingService extends AbstractCrudService<CompanySetting, C
         }
     }
 
-    private Optional<BigDecimal> parseTaxRate(String rawValue) {
-        if (rawValue == null || rawValue.isBlank()) {
-            return Optional.empty();
-        }
-        try {
-            return Optional.of(new BigDecimal(rawValue.trim()).setScale(PrecisionConstants.TAX_RATE_SCALE, PrecisionConstants.DEFAULT_ROUNDING));
-        } catch (NumberFormatException ex) {
-            return Optional.empty();
-        }
-    }
-
     public void evictCache() {
         if (cacheManager != null) {
             Cache staticCache = cacheManager.getCache(CacheConfig.CACHE_STATIC);
             if (staticCache != null) {
                 staticCache.evict(CURRENT_COMPANY_CACHE_KEY);
-                staticCache.evict(CURRENT_TAX_RATE_CACHE_KEY);
             }
         }
         if (redisJsonCacheSupport != null) {
-            redisJsonCacheSupport.delete(List.of(
-                    CURRENT_COMPANY_CACHE_KEY,
-                    CURRENT_TAX_RATE_CACHE_KEY,
-                    RuntimeConfigService.RUNTIME_CONFIG_CACHE_KEY
-            ));
+            redisJsonCacheSupport.delete(CURRENT_COMPANY_CACHE_KEY);
         }
     }
 

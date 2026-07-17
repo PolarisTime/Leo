@@ -8,8 +8,6 @@ import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.Setter;
 
-import java.math.BigDecimal;
-
 @Getter
 @Setter
 @Entity
@@ -30,9 +28,6 @@ public class CompanySetting extends AbstractAuditableEntity {
 
     @Column(name = "bank_account", nullable = false, length = 64)
     private String bankAccount;
-
-    @Column(name = "tax_rate", nullable = false, precision = 6, scale = 4)
-    private BigDecimal taxRate;
 
     @Column(name = "settlement_accounts_json", nullable = false, columnDefinition = "JSONB")
     @org.hibernate.annotations.ColumnTransformer(read = "settlement_accounts_json::text", write = "?::jsonb")

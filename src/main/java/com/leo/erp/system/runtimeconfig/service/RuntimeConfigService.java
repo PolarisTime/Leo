@@ -2,7 +2,6 @@ package com.leo.erp.system.runtimeconfig.service;
 
 import com.leo.erp.common.support.RedisJsonCacheSupport;
 import com.leo.erp.common.support.RedisCacheHealthCheck;
-import com.leo.erp.system.company.service.CompanySettingService;
 import com.leo.erp.system.generalsetting.domain.entity.GeneralSetting;
 import com.leo.erp.system.generalsetting.repository.GeneralSettingRepository;
 import com.leo.erp.system.generalsetting.service.SystemSwitchService;
@@ -17,7 +16,6 @@ import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.math.BigDecimal;
 import java.time.Duration;
 import java.util.Collection;
 import java.util.Map;
@@ -33,18 +31,15 @@ public class RuntimeConfigService implements RedisCacheHealthCheck {
     public static final String WEIGHT_ONLY_PURCHASE_INBOUNDS_FEATURE = "purchase-inbound.weight-only-view";
     public static final String WEIGHT_ONLY_SALES_OUTBOUNDS_FEATURE = "sales-outbound.weight-only-view";
     public static final String SHOW_SNOWFLAKE_ID_FEATURE = "ui.show-snowflake-id";
-    public static final String RUNTIME_CONFIG_CACHE_KEY = "leo:system:runtime-config";
+    public static final String RUNTIME_CONFIG_CACHE_KEY = "leo:system:runtime-config:v2";
     private static final Duration RUNTIME_CONFIG_CACHE_TTL = Duration.ofMinutes(10);
 
     private static final int DEFAULT_PAGE_SIZE = 20;
     private static final int MIN_PAGE_SIZE = 1;
     private static final int MAX_PAGE_SIZE = 200;
-    private static final BigDecimal DEFAULT_TAX_RATE = new BigDecimal("0.13");
-
     private static final Set<String> RUNTIME_SETTING_CODES = Set.of(
             SystemSwitchService.DEFAULT_LIST_PAGE_SIZE_SETTING,
             SystemSwitchService.SHOW_SNOWFLAKE_ID_SWITCH,
-            CompanySettingService.DEFAULT_TAX_RATE_SETTING_CODE,
             SystemSwitchService.CUSTOMER_STATEMENT_RECEIPT_ZERO_FROM_SALES_ORDER_SWITCH,
             WEIGHT_ONLY_PURCHASE_INBOUNDS_SETTING,
             WEIGHT_ONLY_SALES_OUTBOUNDS_SETTING
@@ -144,10 +139,7 @@ public class RuntimeConfigService implements RedisCacheHealthCheck {
         RuntimeStatementConfig statement = new RuntimeStatementConfig(
                 enabled(settings, SystemSwitchService.CUSTOMER_STATEMENT_RECEIPT_ZERO_FROM_SALES_ORDER_SWITCH)
         );
-        return new RuntimeBusinessConfig(
-                decimal(settings, CompanySettingService.DEFAULT_TAX_RATE_SETTING_CODE, DEFAULT_TAX_RATE),
-                statement
-        );
+        return new RuntimeBusinessConfig(statement);
     }
 
     private RuntimeFeatureConfig featureConfig(Map<String, GeneralSetting> settings) {
@@ -174,19 +166,6 @@ public class RuntimeConfigService implements RedisCacheHealthCheck {
         try {
             int value = Integer.parseInt(rule.getSettingValue() == null ? "" : rule.getSettingValue().trim());
             return value >= min && value <= max ? value : fallback;
-        } catch (NumberFormatException ex) {
-            return fallback;
-        }
-    }
-
-    private BigDecimal decimal(Map<String, GeneralSetting> settings, String code, BigDecimal fallback) {
-        GeneralSetting rule = activeSetting(settings, code);
-        if (rule == null) {
-            return fallback;
-        }
-        try {
-            BigDecimal value = new BigDecimal(rule.getSettingValue() == null ? "" : rule.getSettingValue().trim());
-            return value.signum() >= 0 ? value : fallback;
         } catch (NumberFormatException ex) {
             return fallback;
         }

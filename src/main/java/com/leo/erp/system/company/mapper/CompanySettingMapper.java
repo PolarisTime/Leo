@@ -7,15 +7,12 @@ import com.leo.erp.common.mapper.StrictMapperConfig;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 
-import java.math.BigDecimal;
 import java.util.List;
 
 @Mapper(config = StrictMapperConfig.class)
 public interface CompanySettingMapper {
 
-    @Mapping(target = "taxRate", source = "taxRate")
     @Mapping(target = "settlementAccounts", source = "settlementAccounts")
     CompanySettingResponse toResponse(CompanySetting entity,
-                                      BigDecimal taxRate,
                                       List<CompanySettlementAccountResponse> settlementAccounts);
 }

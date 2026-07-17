@@ -8,7 +8,6 @@ import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.config.CacheConfig;
 import com.leo.erp.common.support.StatusConstants;
-import com.leo.erp.common.support.PrecisionConstants;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -33,9 +32,6 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.cache.annotation.CacheEvict;
-import org.springframework.cache.annotation.Caching;
-
-import java.math.BigDecimal;
 
 @Service
 public class InitialSetupService {
@@ -83,10 +79,7 @@ public class InitialSetupService {
     }
 
     @Transactional
-    @Caching(evict = {
-            @CacheEvict(value = CacheConfig.CACHE_STATIC, key = "'" + CompanySettingService.CURRENT_COMPANY_CACHE_KEY + "'"),
-            @CacheEvict(value = CacheConfig.CACHE_STATIC, key = "'" + CompanySettingService.CURRENT_TAX_RATE_CACHE_KEY + "'")
-    })
+    @CacheEvict(value = CacheConfig.CACHE_STATIC, key = "'" + CompanySettingService.CURRENT_COMPANY_CACHE_KEY + "'")
     public synchronized InitialSetupSubmitResponse initialize(InitialSetupSubmitRequest request) {
         assertOobeNotCompleted();
         boolean adminConfigured = isAdminConfigured();
@@ -238,24 +231,17 @@ public class InitialSetupService {
         String bankName = requireText(request.bankName(), "开户银行不能为空");
         String bankAccount = requireText(request.bankAccount(), "银行账号不能为空");
         String remark = trimToEmpty(request.remark());
-        BigDecimal taxRate = request.taxRate();
-        if (taxRate == null) {
-            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "税率不能为空");
-        }
-
         CompanySetting entity = new CompanySetting();
         entity.setId(snowflakeIdGenerator.nextId());
         entity.setCompanyName(companyName);
         entity.setTaxNo(taxNo);
         entity.setBankName(bankName);
         entity.setBankAccount(bankAccount);
-        entity.setTaxRate(taxRate);
         entity.setSettlementAccountsJson(buildSettlementAccountsJson(companyName, bankName, bankAccount, DEFAULT_COMPANY_STATUS, remark));
         entity.setStatus(DEFAULT_COMPANY_STATUS);
         entity.setRemark(remark.isEmpty() ? SETUP_REMARK : remark);
         try {
             companySettingRepository.saveAndFlush(entity);
-            upsertDefaultTaxRateSetting(taxRate);
             return entity.getCompanyName();
         } catch (DataIntegrityViolationException ex) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "默认结算主体已存在，请刷新页面后重试");
@@ -294,21 +280,6 @@ public class InitialSetupService {
         } catch (JsonProcessingException ex) {
             throw new IllegalStateException("首次初始化结算账户序列化失败", ex);
         }
-    }
-
-    private void upsertDefaultTaxRateSetting(BigDecimal taxRate) {
-        GeneralSetting setting = generalSettingRepository.findBySettingCodeAndDeletedFlagFalse(CompanySettingService.DEFAULT_TAX_RATE_SETTING_CODE)
-                .orElseGet(GeneralSetting::new);
-        if (setting.getId() == null) {
-            setting.setId(snowflakeIdGenerator.nextId());
-            setting.setSettingCode(CompanySettingService.DEFAULT_TAX_RATE_SETTING_CODE);
-            setting.setSettingName("默认税率");
-            setting.setSettingGroup("发票税率");
-        }
-        setting.setSettingValue(taxRate.setScale(PrecisionConstants.TAX_RATE_SCALE, PrecisionConstants.DEFAULT_ROUNDING).toPlainString());
-        setting.setStatus(StatusConstants.NORMAL);
-        setting.setRemark("用于发票默认税率与税额自动计算");
-        generalSettingRepository.save(setting);
     }
 
     private void ensureOobeCompletedSwitch() {

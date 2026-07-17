@@ -2,7 +2,6 @@ package com.leo.erp.system.generalsetting.service;
 
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.persistence.Specs;
-import com.leo.erp.system.company.service.CompanySettingService;
 import com.leo.erp.system.generalsetting.domain.entity.GeneralSetting;
 import com.leo.erp.system.generalsetting.mapper.GeneralSettingMapper;
 import com.leo.erp.system.generalsetting.repository.GeneralSettingRepository;
@@ -25,7 +24,6 @@ public class GeneralSettingQueryService {
 
     private static final int DEFAULT_SORT_ORDER = 500;
     private static final Map<String, Integer> GENERAL_SETTING_ORDER = Map.ofEntries(
-            Map.entry(CompanySettingService.DEFAULT_TAX_RATE_SETTING_CODE, 95),
             Map.entry(SystemSwitchService.DEFAULT_LIST_PAGE_SIZE_SETTING, 98),
             Map.entry("UI_WEIGHT_ONLY_PURCHASE_INBOUNDS", 100),
             Map.entry("UI_WEIGHT_ONLY_SALES_OUTBOUNDS", 110),

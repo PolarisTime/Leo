@@ -274,7 +274,6 @@ leo:
       tax-no: ${LEO_COMPANY_BOOTSTRAP_TAX_NO:}
       bank-name: ${LEO_COMPANY_BOOTSTRAP_BANK_NAME:}
       bank-account: ${LEO_COMPANY_BOOTSTRAP_BANK_ACCOUNT:}
-      tax-rate: ${LEO_COMPANY_BOOTSTRAP_TAX_RATE:0.1300}
       status: ${LEO_COMPANY_BOOTSTRAP_STATUS:正常}
       remark: ${LEO_COMPANY_BOOTSTRAP_REMARK:}
   auth:

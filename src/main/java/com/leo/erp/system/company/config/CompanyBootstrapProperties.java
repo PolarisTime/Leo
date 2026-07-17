@@ -2,8 +2,6 @@ package com.leo.erp.system.company.config;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
-import java.math.BigDecimal;
-
 @ConfigurationProperties(prefix = "leo.company.bootstrap")
 public class CompanyBootstrapProperties {
 
@@ -12,7 +10,6 @@ public class CompanyBootstrapProperties {
     private String taxNo;
     private String bankName;
     private String bankAccount;
-    private BigDecimal taxRate;
     private String status;
     private String remark;
 
@@ -54,14 +51,6 @@ public class CompanyBootstrapProperties {
 
     public void setBankAccount(String bankAccount) {
         this.bankAccount = bankAccount;
-    }
-
-    public BigDecimal getTaxRate() {
-        return taxRate;
-    }
-
-    public void setTaxRate(BigDecimal taxRate) {
-        this.taxRate = taxRate;
     }
 
     public String getStatus() {
