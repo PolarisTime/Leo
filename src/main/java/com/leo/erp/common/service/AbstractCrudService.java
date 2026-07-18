@@ -198,6 +198,16 @@ public abstract class AbstractCrudService<E extends AbstractAuditableEntity, Req
         return String.valueOf(entityId);
     }
 
+    /**
+     * 生成基础资料编码：新实体使用已分配的雪花 ID，编辑旧实体保留原编码。
+     */
+    protected final String resolveSnowflakeCode(String currentCode, Long entityId) {
+        if (currentCode != null && !currentCode.isBlank()) {
+            return currentCode.trim();
+        }
+        return resolveCreateBusinessNo(entityId);
+    }
+
     protected boolean allowViewingDeletedRecords() {
         return false;
     }

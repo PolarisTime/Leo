@@ -3,8 +3,6 @@ package com.leo.erp.master.supplier.service;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.config.CacheConfig;
-import com.leo.erp.common.error.BusinessException;
-import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.service.AbstractCrudService;
 import com.leo.erp.common.support.MasterDataReferenceGuard;
@@ -156,19 +154,6 @@ public class SupplierService extends AbstractCrudService<Supplier, SupplierReque
     }
 
     @Override
-    protected void validateCreate(SupplierRequest request) {
-        ensureSupplierCodeUnique(request.supplierCode());
-    }
-
-    @Override
-    protected void validateUpdate(Supplier entity, SupplierRequest request) {
-        if (!entity.getSupplierCode().equals(request.supplierCode())) {
-            assertSupplierCodeMutable(entity.getSupplierCode());
-            ensureSupplierCodeUnique(request.supplierCode());
-        }
-    }
-
-    @Override
     protected void beforeDelete(Supplier entity) {
         if (referenceGuard == null) {
             return;
@@ -198,7 +183,7 @@ public class SupplierService extends AbstractCrudService<Supplier, SupplierReque
 
     @Override
     protected void apply(Supplier entity, SupplierRequest request) {
-        entity.setSupplierCode(request.supplierCode());
+        entity.setSupplierCode(resolveSnowflakeCode(entity.getSupplierCode(), entity.getId()));
         entity.setSupplierName(request.supplierName());
         entity.setContactName(request.contactName());
         entity.setContactPhone(request.contactPhone());
@@ -215,46 +200,6 @@ public class SupplierService extends AbstractCrudService<Supplier, SupplierReque
     @Override
     protected SupplierResponse toResponse(Supplier entity) {
         return supplierMapper.toResponse(entity);
-    }
-
-    private void ensureSupplierCodeUnique(String supplierCode) {
-        if (supplierRepository.existsBySupplierCodeAndDeletedFlagFalse(supplierCode)) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "供应商编码已存在");
-        }
-    }
-
-    private void assertSupplierCodeMutable(String supplierCode) {
-        if (referenceGuard == null) {
-            return;
-        }
-        referenceGuard.assertNoReferences(
-                "该供应商编码",
-                "修改",
-                supplierCodeReferences(supplierCode)
-        );
-    }
-
-    private List<ReferenceCheck> supplierCodeReferences(String supplierCode) {
-        return List.of(
-                ReferenceCheck.active("st_supplier_statement", "supplier_code", supplierCode),
-                ReferenceCheck.active("po_purchase_order", "supplier_code", supplierCode),
-                ReferenceCheck.active("po_purchase_inbound", "supplier_code", supplierCode),
-                ReferenceCheck.activeWhen(
-                        "fm_payment",
-                        "counterparty_code",
-                        supplierCode,
-                        "business_type IN (?, ?)",
-                        "供应商",
-                        "供应商付款"
-                ),
-                ReferenceCheck.activeWhen(
-                        "fm_ledger_adjustment",
-                        "counterparty_code",
-                        supplierCode,
-                        "counterparty_type = ?",
-                        "供应商"
-                )
-        );
     }
 
     private List<ReferenceCheck> supplierReferences(Supplier entity) {

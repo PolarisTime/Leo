@@ -18,7 +18,6 @@ import com.leo.erp.system.department.repository.DepartmentRepository;
 import com.leo.erp.system.department.web.dto.DepartmentOptionResponse;
 import com.leo.erp.system.department.web.dto.DepartmentRequest;
 import com.leo.erp.system.department.web.dto.DepartmentResponse;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.jpa.domain.Specification;
@@ -159,13 +158,11 @@ public class DepartmentService extends AbstractCrudService<Department, Departmen
 
     @Override
     protected void validateCreate(DepartmentRequest request) {
-        ensureDepartmentCodeUnique(normalizeRequiredValue(request.departmentCode(), "部门编码"), null);
         validateParent(null, request.parentId());
     }
 
     @Override
     protected void validateUpdate(Department entity, DepartmentRequest request) {
-        ensureDepartmentCodeUnique(normalizeRequiredValue(request.departmentCode(), "部门编码"), entity.getId());
         validateParent(entity.getId(), request.parentId());
     }
 
@@ -191,7 +188,7 @@ public class DepartmentService extends AbstractCrudService<Department, Departmen
 
     @Override
     protected void apply(Department entity, DepartmentRequest request) {
-        entity.setDepartmentCode(normalizeRequiredValue(request.departmentCode(), "部门编码"));
+        entity.setDepartmentCode(resolveSnowflakeCode(entity.getDepartmentCode(), entity.getId()));
         entity.setDepartmentName(normalizeRequiredValue(request.departmentName(), "部门名称"));
         entity.setParentId(request.parentId());
         entity.setManagerName(normalizeOptionalValue(request.managerName()));
@@ -203,16 +200,9 @@ public class DepartmentService extends AbstractCrudService<Department, Departmen
 
     @Override
     protected Department saveEntity(Department entity) {
-        try {
-            Department saved = departmentRepository.save(entity);
-            syncBoundUserDepartmentName(saved);
-            return saved;
-        } catch (DataIntegrityViolationException ex) {
-            if (isDepartmentCodeConflict(ex)) {
-                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "部门编码已存在");
-            }
-            throw ex;
-        }
+        Department saved = departmentRepository.save(entity);
+        syncBoundUserDepartmentName(saved);
+        return saved;
     }
 
     @Override
@@ -269,15 +259,6 @@ public class DepartmentService extends AbstractCrudService<Department, Departmen
                 ));
     }
 
-    private void ensureDepartmentCodeUnique(String departmentCode, Long currentId) {
-        boolean duplicated = departmentRepository.findByDepartmentCodeAndDeletedFlagFalse(departmentCode)
-                .map(existing -> currentId == null || !existing.getId().equals(currentId))
-                .orElse(false);
-        if (duplicated) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "部门编码已存在");
-        }
-    }
-
     private void syncBoundUserDepartmentName(Department department) {
         if (department.isDeletedFlag()) {
             return;
@@ -290,18 +271,6 @@ public class DepartmentService extends AbstractCrudService<Department, Departmen
         if (!changedUsers.isEmpty()) {
             userAccountRepository.saveAll(changedUsers);
         }
-    }
-
-    private boolean isDepartmentCodeConflict(DataIntegrityViolationException ex) {
-        Throwable cause = ex;
-        while (cause != null) {
-            String message = cause.getMessage();
-            if (message != null && message.contains("department_code")) {
-                return true;
-            }
-            cause = cause.getCause();
-        }
-        return false;
     }
 
     private void validateParent(Long currentId, Long parentId) {

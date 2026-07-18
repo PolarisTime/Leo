@@ -1,8 +1,6 @@
 package com.leo.erp.master.warehouse.service;
 
 import com.leo.erp.common.api.PageQuery;
-import com.leo.erp.common.error.BusinessException;
-import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.service.AbstractCrudService;
 import com.leo.erp.common.support.MasterDataReferenceGuard;
@@ -76,18 +74,6 @@ public class WarehouseService extends AbstractCrudService<Warehouse, WarehouseRe
     }
 
     @Override
-    protected void validateCreate(WarehouseRequest request) {
-        ensureWarehouseCodeUnique(request.warehouseCode());
-    }
-
-    @Override
-    protected void validateUpdate(Warehouse entity, WarehouseRequest request) {
-        if (!entity.getWarehouseCode().equals(request.warehouseCode())) {
-            ensureWarehouseCodeUnique(request.warehouseCode());
-        }
-    }
-
-    @Override
     protected void beforeDelete(Warehouse entity) {
         if (warehouseReferenceGuard == null) {
             return;
@@ -117,7 +103,7 @@ public class WarehouseService extends AbstractCrudService<Warehouse, WarehouseRe
 
     @Override
     protected void apply(Warehouse entity, WarehouseRequest request) {
-        entity.setWarehouseCode(request.warehouseCode());
+        entity.setWarehouseCode(resolveSnowflakeCode(entity.getWarehouseCode(), entity.getId()));
         entity.setWarehouseName(request.warehouseName());
         entity.setWarehouseType(request.warehouseType());
         entity.setContactName(request.contactName());
@@ -137,12 +123,6 @@ public class WarehouseService extends AbstractCrudService<Warehouse, WarehouseRe
     @Override
     protected WarehouseResponse toResponse(Warehouse entity) {
         return warehouseMapper.toResponse(entity);
-    }
-
-    private void ensureWarehouseCodeUnique(String warehouseCode) {
-        if (warehouseRepository.existsByWarehouseCodeAndDeletedFlagFalse(warehouseCode)) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "仓库编码已存在");
-        }
     }
 
 }

@@ -136,15 +136,11 @@ public class MaterialService extends AbstractCrudService<Material, MaterialReque
 
     @Override
     protected void validateCreate(MaterialRequest request) {
-        ensureMaterialCodeUnique(request.materialCode());
         ensureMaterialIdentityUnique(null, importIdentity(request));
     }
 
     @Override
     protected void validateUpdate(Material entity, MaterialRequest request) {
-        if (!entity.getMaterialCode().equals(request.materialCode())) {
-            ensureMaterialCodeUnique(request.materialCode());
-        }
         ensureMaterialIdentityUnique(entity.getId(), importIdentity(request));
     }
 
@@ -273,13 +269,10 @@ public class MaterialService extends AbstractCrudService<Material, MaterialReque
                     : materialRepository.findByMaterialCode(providedMaterialCode);
             MaterialImportIdentityKey importIdentity = importIdentity(dto);
             Material skipCandidate = materialByCode.orElse(importIdentityIndex.get(importIdentity));
-            if (isExactImportMatch(skipCandidate, dto, !providedMaterialCode.isBlank(), rowNumber)) {
+            if (isExactImportMatch(skipCandidate, dto, materialByCode.isPresent(), rowNumber)) {
                 skippedCount++;
                 continue;
             }
-            String materialCode = providedMaterialCode.isBlank()
-                    ? resolveImportMaterialCode(providedMaterialCode)
-                    : providedMaterialCode;
             Material material = materialByCode
                     .orElseGet(() -> {
                         Material entity = new Material();
@@ -290,7 +283,7 @@ public class MaterialService extends AbstractCrudService<Material, MaterialReque
             MaterialImportIdentityKey previousIdentity = importIdentity(material);
             validateImportIdentity(material, importIdentity, importIdentityIndex, rowNumber);
             material.setDeletedFlag(false);
-            applyImportDTO(material, dto, materialCode, rowNumber);
+            applyImportDTO(material, dto, rowNumber);
             try {
                 materialRepository.save(material);
             } catch (DataIntegrityViolationException ex) {
@@ -314,8 +307,8 @@ public class MaterialService extends AbstractCrudService<Material, MaterialReque
         );
     }
 
-    private void applyImportDTO(Material entity, MaterialImportDTO dto, String materialCode, int rowNumber) {
-        entity.setMaterialCode(materialCode);
+    private void applyImportDTO(Material entity, MaterialImportDTO dto, int rowNumber) {
+        entity.setMaterialCode(resolveSnowflakeCode(entity.getMaterialCode(), entity.getId()));
         entity.setBrand(dto.brand());
         entity.setMaterial(dto.material());
         entity.setCategory(dto.category());
@@ -383,12 +376,10 @@ public class MaterialService extends AbstractCrudService<Material, MaterialReque
                         : materialRepository.findByMaterialCode(providedMaterialCode);
                 MaterialImportIdentityKey importIdentity = importIdentity(request);
                 Material skipCandidate = materialByCode.orElse(importIdentityIndex.get(importIdentity));
-                if (isExactImportMatch(skipCandidate, request,
-                        providedMaterialCode != null && !providedMaterialCode.isBlank())) {
+                if (isExactImportMatch(skipCandidate, request, materialByCode.isPresent())) {
                     skippedCount++;
                     continue;
                 }
-                String resolvedMaterialCode = resolveImportMaterialCode(providedMaterialCode);
                 Material material = materialByCode
                         .orElseGet(() -> {
                             Material entity = new Material();
@@ -400,7 +391,6 @@ public class MaterialService extends AbstractCrudService<Material, MaterialReque
                 validateImportIdentity(material, importIdentity, importIdentityIndex, rowNumber);
                 material.setDeletedFlag(false);
                 apply(material, request);
-                material.setMaterialCode(resolvedMaterialCode);
                 materialRepository.save(material);
                 registerImportIdentity(importIdentityIndex, previousIdentity, importIdentity, material);
                 if (exists) {
@@ -445,7 +435,7 @@ public class MaterialService extends AbstractCrudService<Material, MaterialReque
 
     @Override
     protected void apply(Material entity, MaterialRequest request) {
-        entity.setMaterialCode(request.materialCode());
+        entity.setMaterialCode(resolveSnowflakeCode(entity.getMaterialCode(), entity.getId()));
         entity.setBrand(request.brand());
         entity.setMaterial(request.material());
         entity.setCategory(request.category());
@@ -475,12 +465,6 @@ public class MaterialService extends AbstractCrudService<Material, MaterialReque
         return materialMapper.toResponse(entity);
     }
 
-    private void ensureMaterialCodeUnique(String materialCode) {
-        if (materialRepository.existsByMaterialCodeAndDeletedFlagFalse(materialCode)) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "商品编码已存在");
-        }
-    }
-
     private void ensureMaterialIdentityUnique(Long excludedId, MaterialImportIdentityKey identity) {
         List<Material> conflicts = materialRepository.findActiveIdentityConflicts(
                 identity.brand(), identity.material(), identity.spec(), identity.length(), excludedId
@@ -488,11 +472,6 @@ public class MaterialService extends AbstractCrudService<Material, MaterialReque
         if (conflicts != null && !conflicts.isEmpty()) {
             throw duplicateMaterialIdentityException(ErrorCode.BUSINESS_ERROR, conflicts.getFirst(), null);
         }
-    }
-
-    private String resolveImportMaterialCode(String rawMaterialCode) {
-        String materialCode = rawMaterialCode == null ? "" : rawMaterialCode.trim();
-        return materialCode.isBlank() ? String.valueOf(nextId()) : materialCode;
     }
 
     private boolean isExactImportMatch(Material existing,

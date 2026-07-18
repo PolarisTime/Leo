@@ -4,7 +4,6 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 
 public record CustomerRequest(
-        @NotBlank(message = "客户编码不能为空")
         String customerCode,
         @NotBlank(message = "客户名称不能为空")
         String customerName,

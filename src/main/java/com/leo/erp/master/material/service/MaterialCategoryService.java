@@ -57,23 +57,6 @@ public class MaterialCategoryService extends AbstractCrudService<MaterialCategor
     }
 
     @Override
-    protected void validateCreate(MaterialCategoryRequest request) {
-        String code = normalizeCode(request.categoryCode());
-        if (repository.findByCategoryCodeAndDeletedFlagFalse(code).isPresent()) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "类别编码已存在");
-        }
-    }
-
-    @Override
-    protected void validateUpdate(MaterialCategory entity, MaterialCategoryRequest request) {
-        String code = normalizeCode(request.categoryCode());
-        if (!entity.getCategoryCode().equals(code)
-                && repository.findByCategoryCodeAndDeletedFlagFalse(code).isPresent()) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "类别编码已存在");
-        }
-    }
-
-    @Override
     protected MaterialCategory newEntity() {
         return new MaterialCategory();
     }
@@ -95,7 +78,7 @@ public class MaterialCategoryService extends AbstractCrudService<MaterialCategor
 
     @Override
     protected void apply(MaterialCategory entity, MaterialCategoryRequest request) {
-        entity.setCategoryCode(normalizeCode(request.categoryCode()));
+        entity.setCategoryCode(resolveSnowflakeCode(entity.getCategoryCode(), entity.getId()));
         entity.setCategoryName(required(request.categoryName(), "类别名称"));
         entity.setSortOrder(request.sortOrder() == null ? 0 : request.sortOrder());
         entity.setPurchaseWeighRequired(Boolean.TRUE.equals(request.purchaseWeighRequired()));
@@ -106,11 +89,6 @@ public class MaterialCategoryService extends AbstractCrudService<MaterialCategor
     @Override
     protected MaterialCategory saveEntity(MaterialCategory entity) {
         return repository.save(entity);
-    }
-
-    private String normalizeCode(String value) {
-        String v = required(value, "类别编码");
-        return v.length() > 32 ? v.substring(0, 32) : v;
     }
 
     private String required(String value, String field) {

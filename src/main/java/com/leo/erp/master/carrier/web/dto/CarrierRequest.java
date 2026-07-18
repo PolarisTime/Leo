@@ -6,7 +6,6 @@ import jakarta.validation.constraints.NotNull;
 import java.util.List;
 
 public record CarrierRequest(
-        @NotBlank(message = "物流方编码不能为空")
         String carrierCode,
         @NotBlank(message = "物流方名称不能为空")
         String carrierName,

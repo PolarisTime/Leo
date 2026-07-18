@@ -2,8 +2,6 @@ package com.leo.erp.master.carrier.service;
 
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.config.CacheConfig;
-import com.leo.erp.common.error.BusinessException;
-import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.service.AbstractCrudService;
 import com.leo.erp.common.support.MasterDataReferenceGuard;
@@ -167,19 +165,6 @@ public class CarrierService extends AbstractCrudService<Carrier, CarrierRequest,
     }
 
     @Override
-    protected void validateCreate(CarrierRequest request) {
-        ensureCarrierCodeUnique(request.carrierCode());
-    }
-
-    @Override
-    protected void validateUpdate(Carrier entity, CarrierRequest request) {
-        if (!entity.getCarrierCode().equals(request.carrierCode())) {
-            assertCarrierCodeMutable(entity.getCarrierCode());
-            ensureCarrierCodeUnique(request.carrierCode());
-        }
-    }
-
-    @Override
     protected void beforeDelete(Carrier entity) {
         if (referenceGuard == null) {
             return;
@@ -209,7 +194,7 @@ public class CarrierService extends AbstractCrudService<Carrier, CarrierRequest,
 
     @Override
     protected void apply(Carrier entity, CarrierRequest request) {
-        entity.setCarrierCode(request.carrierCode());
+        entity.setCarrierCode(resolveSnowflakeCode(entity.getCarrierCode(), entity.getId()));
         entity.setCarrierName(request.carrierName());
         entity.setContactName(emptyToNull(request.contactName()));
         entity.setContactPhone(emptyToNull(request.contactPhone()));
@@ -237,12 +222,6 @@ public class CarrierService extends AbstractCrudService<Carrier, CarrierRequest,
         return carrierMapper.toResponse(entity);
     }
 
-    private void ensureCarrierCodeUnique(String carrierCode) {
-        if (carrierRepository.existsByCarrierCodeAndDeletedFlagFalse(carrierCode)) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "物流方编码已存在");
-        }
-    }
-
     private List<ReferenceCheck> carrierReferences(Carrier entity) {
         Long carrierId = entity.getId();
         return List.of(
@@ -259,39 +238,6 @@ public class CarrierService extends AbstractCrudService<Carrier, CarrierRequest,
                         "fm_ledger_adjustment",
                         "counterparty_id",
                         carrierId,
-                        "counterparty_type = ?",
-                        "物流商"
-                )
-        );
-    }
-
-    private void assertCarrierCodeMutable(String carrierCode) {
-        if (referenceGuard == null) {
-            return;
-        }
-        referenceGuard.assertNoReferences(
-                "该物流商编码",
-                "修改",
-                carrierCodeReferences(carrierCode)
-        );
-    }
-
-    private List<ReferenceCheck> carrierCodeReferences(String carrierCode) {
-        return List.of(
-                ReferenceCheck.active("st_freight_statement", "carrier_code", carrierCode),
-                ReferenceCheck.active("lg_freight_bill", "carrier_code", carrierCode),
-                ReferenceCheck.activeWhen(
-                        "fm_payment",
-                        "counterparty_code",
-                        carrierCode,
-                        "business_type IN (?, ?)",
-                        "物流商",
-                        "物流付款"
-                ),
-                ReferenceCheck.activeWhen(
-                        "fm_ledger_adjustment",
-                        "counterparty_code",
-                        carrierCode,
                         "counterparty_type = ?",
                         "物流商"
                 )

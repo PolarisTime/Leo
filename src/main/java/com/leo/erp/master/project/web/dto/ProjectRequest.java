@@ -4,7 +4,6 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Positive;
 
 public record ProjectRequest(
-        @NotBlank(message = "项目编码不能为空")
         String projectCode,
         @NotBlank(message = "项目名称不能为空")
         String projectName,

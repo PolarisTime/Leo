@@ -3,8 +3,6 @@ package com.leo.erp.master.customer.service;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.config.CacheConfig;
-import com.leo.erp.common.error.BusinessException;
-import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.service.AbstractCrudService;
 import com.leo.erp.common.support.MasterDataReferenceGuard;
@@ -183,18 +181,6 @@ public class CustomerService extends AbstractCrudService<Customer, CustomerReque
     }
 
     @Override
-    protected void validateCreate(CustomerRequest request) {
-        ensureCustomerCodeUnique(request.customerCode());
-    }
-
-    @Override
-    protected void validateUpdate(Customer entity, CustomerRequest request) {
-        if (!entity.getCustomerCode().equals(request.customerCode())) {
-            ensureCustomerCodeUnique(request.customerCode());
-        }
-    }
-
-    @Override
     protected void beforeDelete(Customer entity) {
         if (referenceGuard == null) {
             return;
@@ -224,7 +210,7 @@ public class CustomerService extends AbstractCrudService<Customer, CustomerReque
 
     @Override
     protected void apply(Customer entity, CustomerRequest request) {
-        entity.setCustomerCode(request.customerCode());
+        entity.setCustomerCode(resolveSnowflakeCode(entity.getCustomerCode(), entity.getId()));
         entity.setCustomerName(request.customerName());
         entity.setContactName(request.contactName());
         entity.setContactPhone(request.contactPhone());
@@ -248,12 +234,6 @@ public class CustomerService extends AbstractCrudService<Customer, CustomerReque
     @Override
     protected CustomerResponse toResponse(Customer entity) {
         return customerMapper.toResponse(entity);
-    }
-
-    private void ensureCustomerCodeUnique(String customerCode) {
-        if (customerRepository.existsByCustomerCodeAndDeletedFlagFalse(customerCode)) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "客户编码已存在");
-        }
     }
 
     private List<ReferenceCheck> customerReferences(Customer entity) {

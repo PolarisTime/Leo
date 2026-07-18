@@ -98,18 +98,6 @@ public class ProjectService extends AbstractCrudService<Project, ProjectRequest,
     }
 
     @Override
-    protected void validateCreate(ProjectRequest request) {
-        ensureProjectCodeUnique(request.projectCode());
-    }
-
-    @Override
-    protected void validateUpdate(Project entity, ProjectRequest request) {
-        if (!entity.getProjectCode().equals(request.projectCode())) {
-            ensureProjectCodeUnique(request.projectCode());
-        }
-    }
-
-    @Override
     protected ProjectRequest normalizeCreateRequest(ProjectRequest request) {
         return normalizeCustomerIdentity(request);
     }
@@ -149,7 +137,7 @@ public class ProjectService extends AbstractCrudService<Project, ProjectRequest,
 
     @Override
     protected void apply(Project entity, ProjectRequest request) {
-        entity.setProjectCode(request.projectCode());
+        entity.setProjectCode(resolveSnowflakeCode(entity.getProjectCode(), entity.getId()));
         entity.setProjectName(request.projectName());
         entity.setProjectNameAbbr(request.projectNameAbbr());
         entity.setProjectAddress(request.projectAddress());
@@ -168,12 +156,6 @@ public class ProjectService extends AbstractCrudService<Project, ProjectRequest,
     @Override
     protected ProjectResponse toResponse(Project entity) {
         return projectMapper.toResponse(entity);
-    }
-
-    private void ensureProjectCodeUnique(String projectCode) {
-        if (projectRepository.existsByProjectCodeAndDeletedFlagFalse(projectCode)) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "项目编码已存在");
-        }
     }
 
     private ProjectRequest normalizeCustomerIdentity(ProjectRequest request) {
