@@ -84,7 +84,7 @@ public class ReceiptApplyService {
         if (request.counterpartyType() != null && !"客户".equals(request.counterpartyType())) {
             throw new com.leo.erp.common.error.BusinessException(
                     com.leo.erp.common.error.ErrorCode.VALIDATION_ERROR,
-                    "客户对账收款的往来类型必须为客户"
+                    "客户收款的往来类型必须为客户"
             );
         }
         entity.setCounterpartyType("客户");
@@ -101,7 +101,9 @@ public class ReceiptApplyService {
                         request.customerCode(),
                         request.customerName(),
                         allocationResult.projectId(),
-                        request.projectName()
+                        request.projectName(),
+                        allocationResult.settlementCompanyId(),
+                        allocationResult.settlementCompanyName()
                 );
         entity.setCustomerId(partySnapshot.customerId());
         entity.setCustomerName(partySnapshot.customerName());
@@ -114,8 +116,8 @@ public class ReceiptApplyService {
         entity.setCounterpartyId(entity.getCustomerId());
         entity.setCounterpartyCode(entity.getCustomerCode());
         entity.setCounterpartyName(entity.getCustomerName());
-        entity.setSettlementCompanyId(allocationResult.settlementCompanyId());
-        entity.setSettlementCompanyName(allocationResult.settlementCompanyName());
+        entity.setSettlementCompanyId(partySnapshot.settlementCompanyId());
+        entity.setSettlementCompanyName(partySnapshot.settlementCompanyName());
         entity.setSourceStatementId(settlementSyncService.resolveLegacySourceStatementId(entity));
     }
 

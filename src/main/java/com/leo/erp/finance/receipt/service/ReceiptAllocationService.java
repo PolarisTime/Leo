@@ -38,7 +38,7 @@ public class ReceiptAllocationService {
             String nextStatus,
             LongSupplier nextIdSupplier
     ) {
-        List<ReceiptAllocationRequest> allocationRequests = normalizeAllocationRequests(request);
+        List<ReceiptAllocationRequest> allocationRequests = normalizeAllocationRequests(entity, request);
         String resolvedCustomerCode = null;
         Long resolvedCustomerId = null;
         Long resolvedProjectId = null;
@@ -101,6 +101,9 @@ public class ReceiptAllocationService {
 
     void validateExistingAllocationsForSettlement(Receipt entity, String nextStatus) {
         if (!StatusConstants.AUDITED.equals(nextStatus)) {
+            return;
+        }
+        if (entity.getItems().isEmpty()) {
             return;
         }
         ReceiptRequest request = toStatusOnlyRequest(entity);
@@ -168,11 +171,20 @@ public class ReceiptAllocationService {
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
-    List<ReceiptAllocationRequest> normalizeAllocationRequests(ReceiptRequest request) {
+    List<ReceiptAllocationRequest> normalizeAllocationRequests(Receipt entity, ReceiptRequest request) {
         if (request.items() != null && !request.items().isEmpty()) {
             return request.items();
         }
         if (request.sourceStatementId() == null) {
+            if (request.items() == null && !entity.getItems().isEmpty()) {
+                return entity.getItems().stream()
+                        .map(item -> new ReceiptAllocationRequest(
+                                item.getId(),
+                                item.getSourceStatementId(),
+                                item.getAllocatedAmount()
+                        ))
+                        .toList();
+            }
             return List.of();
         }
         return List.of(new ReceiptAllocationRequest(null, request.sourceStatementId(), request.amount()));

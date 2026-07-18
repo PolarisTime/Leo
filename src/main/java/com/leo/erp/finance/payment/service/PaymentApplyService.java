@@ -9,6 +9,8 @@ import com.leo.erp.common.support.TradeItemCalculator;
 import com.leo.erp.finance.payment.domain.entity.Payment;
 import com.leo.erp.finance.payment.domain.entity.PaymentPurposes;
 import com.leo.erp.finance.payment.web.dto.PaymentRequest;
+import com.leo.erp.master.carrier.domain.entity.Carrier;
+import com.leo.erp.master.carrier.repository.CarrierRepository;
 import com.leo.erp.master.supplier.domain.entity.Supplier;
 import com.leo.erp.master.supplier.repository.SupplierRepository;
 import com.leo.erp.system.company.domain.entity.CompanySetting;
@@ -23,22 +25,19 @@ public class PaymentApplyService {
 
     private final PaymentAllocationService paymentAllocationService;
     private final PaymentSettlementSyncService settlementSyncService;
-    private final PaymentPurchasePrepaymentService purchasePrepaymentService;
-    private SupplierRepository supplierRepository;
-    private CompanySettingRepository companySettingRepository;
+    private final SupplierRepository supplierRepository;
+    private final CarrierRepository carrierRepository;
+    private final CompanySettingRepository companySettingRepository;
 
     public PaymentApplyService(PaymentAllocationService paymentAllocationService,
                                PaymentSettlementSyncService settlementSyncService,
-                               PaymentPurchasePrepaymentService purchasePrepaymentService) {
+                               SupplierRepository supplierRepository,
+                               CarrierRepository carrierRepository,
+                               CompanySettingRepository companySettingRepository) {
         this.paymentAllocationService = paymentAllocationService;
         this.settlementSyncService = settlementSyncService;
-        this.purchasePrepaymentService = purchasePrepaymentService;
-    }
-
-    @org.springframework.beans.factory.annotation.Autowired
-    void setSupplierDependencies(SupplierRepository supplierRepository,
-                                 CompanySettingRepository companySettingRepository) {
         this.supplierRepository = supplierRepository;
+        this.carrierRepository = carrierRepository;
         this.companySettingRepository = companySettingRepository;
     }
 
@@ -68,7 +67,7 @@ public class PaymentApplyService {
             return;
         }
         if (PaymentPurposes.SUPPLIER_PAYMENT.equals(paymentPurpose)) {
-            applySupplierPayment(entity, request);
+            applyDirectPayment(entity, request);
             return;
         }
         if (PaymentAllocationService.SUPPLIER_PAYMENT_TYPE.equals(request.businessType())) {
@@ -99,15 +98,16 @@ public class PaymentApplyService {
         }
     }
 
-    private void applySupplierPayment(Payment entity, PaymentRequest request) {
-        if (!PaymentAllocationService.SUPPLIER_PAYMENT_TYPE.equals(request.businessType())) {
-            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "供应商总额付款的往来类型必须为供应商");
+    private void applyDirectPayment(Payment entity, PaymentRequest request) {
+        if (!PaymentAllocationService.SUPPLIER_PAYMENT_TYPE.equals(request.businessType())
+                && !PaymentAllocationService.FREIGHT_PAYMENT_TYPE.equals(request.businessType())) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "付款往来类型必须为供应商或物流商");
         }
         if (TradeItemCalculator.safeBigDecimal(entity.getAmount()).compareTo(BigDecimal.ZERO) <= 0) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "付款金额必须大于0");
         }
         if (request.counterpartyId() == null) {
-            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "供应商ID不能为空");
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "往来方ID不能为空");
         }
         if (request.settlementCompanyId() == null
                 || BusinessDocumentValidator.trimToNull(request.settlementCompanyName()) == null) {
@@ -115,36 +115,65 @@ public class PaymentApplyService {
         }
         if (request.sourceStatementId() != null || request.sourcePurchaseOrderId() != null
                 || request.items() != null && !request.items().isEmpty()) {
-            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "供应商总额付款不能关联采购或对账明细");
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "简单付款单不能关联采购或对账核销明细");
         }
-        if (supplierRepository == null || companySettingRepository == null) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "供应商付款身份服务不可用");
-        }
-        Supplier supplier = supplierRepository.findByIdAndDeletedFlagFalse(request.counterpartyId())
-                .orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_ERROR, "供应商不存在"));
-        BusinessDocumentValidator.requireSameText(
-                request.counterpartyName(), supplier.getSupplierName(), "供应商名称与ID不一致"
-        );
-        BusinessDocumentValidator.requireSameOptionalCode(
-                request.counterpartyCode(), supplier.getSupplierCode(), "供应商编码与ID不一致"
-        );
+        CounterpartySnapshot counterparty = resolveCounterparty(request);
         CompanySetting company = companySettingRepository
                 .findByIdAndDeletedFlagFalse(request.settlementCompanyId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_ERROR, "结算主体不存在"));
         BusinessDocumentValidator.requireSameText(
                 request.settlementCompanyName(), company.getCompanyName(), "结算主体名称与ID不一致"
         );
-        entity.setCounterpartyId(supplier.getId());
-        entity.setCounterpartyName(supplier.getSupplierName());
-        entity.setCounterpartyCode(BusinessDocumentValidator.trimToNull(supplier.getSupplierCode()));
-        entity.setSupplierCode(entity.getCounterpartyCode());
-        entity.setSupplierName(entity.getCounterpartyName());
+        entity.setBusinessType(counterparty.type());
+        entity.setCounterpartyType(counterparty.type());
+        entity.setCounterpartyId(counterparty.id());
+        entity.setCounterpartyName(counterparty.name());
+        entity.setCounterpartyCode(counterparty.code());
+        entity.setSupplierCode(PaymentAllocationService.SUPPLIER_PAYMENT_TYPE.equals(counterparty.type())
+                ? counterparty.code()
+                : null);
+        entity.setSupplierName(PaymentAllocationService.SUPPLIER_PAYMENT_TYPE.equals(counterparty.type())
+                ? counterparty.name()
+                : null);
         entity.setSettlementCompanyId(company.getId());
         entity.setSettlementCompanyName(company.getCompanyName());
         entity.setSourceStatementId(null);
         entity.setSourcePurchaseOrderId(null);
         entity.setPurchaseOrderNo(null);
         entity.getItems().clear();
+    }
+
+    private CounterpartySnapshot resolveCounterparty(PaymentRequest request) {
+        if (PaymentAllocationService.SUPPLIER_PAYMENT_TYPE.equals(request.businessType())) {
+            Supplier supplier = supplierRepository.findByIdAndDeletedFlagFalse(request.counterpartyId())
+                    .orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_ERROR, "供应商不存在"));
+            BusinessDocumentValidator.requireSameText(
+                    request.counterpartyName(), supplier.getSupplierName(), "供应商名称与ID不一致"
+            );
+            BusinessDocumentValidator.requireSameOptionalCode(
+                    request.counterpartyCode(), supplier.getSupplierCode(), "供应商编码与ID不一致"
+            );
+            return new CounterpartySnapshot(
+                    PaymentAllocationService.SUPPLIER_PAYMENT_TYPE,
+                    supplier.getId(),
+                    BusinessDocumentValidator.trimToNull(supplier.getSupplierCode()),
+                    supplier.getSupplierName()
+            );
+        }
+        Carrier carrier = carrierRepository.findByIdAndDeletedFlagFalse(request.counterpartyId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_ERROR, "物流商不存在"));
+        BusinessDocumentValidator.requireSameText(
+                request.counterpartyName(), carrier.getCarrierName(), "物流商名称与ID不一致"
+        );
+        BusinessDocumentValidator.requireSameOptionalCode(
+                request.counterpartyCode(), carrier.getCarrierCode(), "物流商编码与ID不一致"
+        );
+        return new CounterpartySnapshot(
+                PaymentAllocationService.FREIGHT_PAYMENT_TYPE,
+                carrier.getId(),
+                BusinessDocumentValidator.trimToNull(carrier.getCarrierCode()),
+                carrier.getCarrierName()
+        );
     }
 
     private void applyPurchasePrepayment(Payment entity,
@@ -192,5 +221,8 @@ public class PaymentApplyService {
         entity.setSupplierName(null);
         entity.setSettlementCompanyId(null);
         entity.setSettlementCompanyName(null);
+    }
+
+    private record CounterpartySnapshot(String type, Long id, String code, String name) {
     }
 }

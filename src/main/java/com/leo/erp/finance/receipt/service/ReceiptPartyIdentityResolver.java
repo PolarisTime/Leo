@@ -19,18 +19,15 @@ public class ReceiptPartyIdentityResolver {
 
     private final CustomerRepository customerRepository;
     private final ProjectRepository projectRepository;
-    private SupplierRepository supplierRepository;
-    private CompanySettingRepository companySettingRepository;
+    private final SupplierRepository supplierRepository;
+    private final CompanySettingRepository companySettingRepository;
 
     public ReceiptPartyIdentityResolver(CustomerRepository customerRepository,
-                                        ProjectRepository projectRepository) {
+                                        ProjectRepository projectRepository,
+                                        SupplierRepository supplierRepository,
+                                        CompanySettingRepository companySettingRepository) {
         this.customerRepository = customerRepository;
         this.projectRepository = projectRepository;
-    }
-
-    @org.springframework.beans.factory.annotation.Autowired
-    void setSupplierDependencies(SupplierRepository supplierRepository,
-                                 CompanySettingRepository companySettingRepository) {
         this.supplierRepository = supplierRepository;
         this.companySettingRepository = companySettingRepository;
     }
@@ -38,9 +35,6 @@ public class ReceiptPartyIdentityResolver {
     PartySnapshot resolve(ReceiptRequest request) {
         if (request.customerId() == null) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "客户ID不能为空");
-        }
-        if (request.projectId() == null) {
-            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "项目ID不能为空");
         }
         Customer customer = customerRepository.findByIdAndDeletedFlagFalse(request.customerId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_ERROR, "客户不存在"));
@@ -54,34 +48,25 @@ public class ReceiptPartyIdentityResolver {
                 customer.getCustomerCode(),
                 "客户编码与ID不一致"
         );
-        Project project = projectRepository.findByIdAndDeletedFlagFalse(request.projectId())
-                .orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_ERROR, "项目不存在"));
-        if (!java.util.Objects.equals(project.getCustomerId(), request.customerId())) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "项目不属于所选客户");
-        }
-        BusinessDocumentValidator.requireSameText(
-                request.projectName(),
-                project.getProjectName(),
-                "项目名称与ID不一致"
+        Project project = resolveOptionalProject(request);
+        CompanySetting company = resolveCompany(
+                request.settlementCompanyId(),
+                request.settlementCompanyName()
         );
         return new PartySnapshot(
                 customer.getId(),
                 BusinessDocumentValidator.trimToNull(customer.getCustomerCode()),
                 BusinessDocumentValidator.trimToNull(customer.getCustomerName()),
-                project.getId(),
-                BusinessDocumentValidator.trimToNull(project.getProjectName())
+                project == null ? null : project.getId(),
+                project == null ? null : BusinessDocumentValidator.trimToNull(project.getProjectName()),
+                company.getId(),
+                BusinessDocumentValidator.trimToNull(company.getCompanyName())
         );
     }
 
     SupplierPartySnapshot resolveSupplier(ReceiptRequest request) {
-        if (supplierRepository == null || companySettingRepository == null) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "供应商收款身份服务不可用");
-        }
         if (request.counterpartyId() == null) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "供应商ID不能为空");
-        }
-        if (request.settlementCompanyId() == null) {
-            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "结算主体不能为空");
         }
         Supplier supplier = supplierRepository.findByIdAndDeletedFlagFalse(request.counterpartyId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_ERROR, "供应商不存在"));
@@ -95,13 +80,9 @@ public class ReceiptPartyIdentityResolver {
                 supplier.getSupplierCode(),
                 "供应商编码与ID不一致"
         );
-        CompanySetting company = companySettingRepository
-                .findByIdAndDeletedFlagFalse(request.settlementCompanyId())
-                .orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_ERROR, "结算主体不存在"));
-        BusinessDocumentValidator.requireSameText(
-                request.settlementCompanyName(),
-                company.getCompanyName(),
-                "结算主体名称与ID不一致"
+        CompanySetting company = resolveCompany(
+                request.settlementCompanyId(),
+                request.settlementCompanyName()
         );
         return new SupplierPartySnapshot(
                 supplier.getId(),
@@ -112,12 +93,48 @@ public class ReceiptPartyIdentityResolver {
         );
     }
 
+    private Project resolveOptionalProject(ReceiptRequest request) {
+        if (request.projectId() == null) {
+            if (BusinessDocumentValidator.trimToNull(request.projectName()) != null) {
+                throw new BusinessException(ErrorCode.VALIDATION_ERROR, "未选择项目时不能填写项目名称");
+            }
+            return null;
+        }
+        Project project = projectRepository.findByIdAndDeletedFlagFalse(request.projectId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_ERROR, "项目不存在"));
+        if (!java.util.Objects.equals(project.getCustomerId(), request.customerId())) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "项目不属于所选客户");
+        }
+        BusinessDocumentValidator.requireSameText(
+                request.projectName(),
+                project.getProjectName(),
+                "项目名称与ID不一致"
+        );
+        return project;
+    }
+
+    private CompanySetting resolveCompany(Long companyId, String companyName) {
+        if (companyId == null) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "结算主体不能为空");
+        }
+        CompanySetting company = companySettingRepository.findByIdAndDeletedFlagFalse(companyId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_ERROR, "结算主体不存在"));
+        BusinessDocumentValidator.requireSameText(
+                companyName,
+                company.getCompanyName(),
+                "结算主体名称与ID不一致"
+        );
+        return company;
+    }
+
     record PartySnapshot(
             Long customerId,
             String customerCode,
             String customerName,
             Long projectId,
-            String projectName
+            String projectName,
+            Long settlementCompanyId,
+            String settlementCompanyName
     ) {
     }
 

@@ -217,7 +217,11 @@ public class PaymentService extends AbstractCrudService<Payment, PaymentRequest,
             return;
         }
         if (PaymentPurposes.isSupplierTotalPayment(entity.getPaymentPurpose())) {
-            lockSupplierLedgerMutation(entity);
+            if (PaymentAllocationService.SUPPLIER_PAYMENT_TYPE.equals(entity.getCounterpartyType())) {
+                lockSupplierLedgerMutation(entity);
+            } else if (entity.getCounterpartyId() == null || entity.getSettlementCompanyId() == null) {
+                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "物流付款缺少物流商或结算主体身份");
+            }
             return;
         }
         if (PaymentAllocationService.SUPPLIER_PAYMENT_TYPE.equals(entity.getCounterpartyType())) {

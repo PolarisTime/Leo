@@ -24,7 +24,7 @@ public final class PaymentPurposes {
     public static String normalize(String value) {
         String normalized = BusinessDocumentValidator.trimToNull(value);
         if (normalized == null) {
-            return STATEMENT_SETTLEMENT;
+            return SUPPLIER_PAYMENT;
         }
         if (!ALLOWED_VALUES.contains(normalized)) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "付款用途不合法");

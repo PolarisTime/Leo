@@ -39,7 +39,7 @@ public class PaymentAllocationService {
             String nextStatus,
             LongSupplier nextIdSupplier
     ) {
-        List<PaymentAllocationRequest> allocationRequests = normalizeAllocationRequests(request);
+        List<PaymentAllocationRequest> allocationRequests = normalizeAllocationRequests(entity, request);
         if (!supportsSettlement(request.businessType())) {
             if (PAYMENT_STATUS_SETTLED.equals(nextStatus)) {
                 throw new BusinessException(ErrorCode.BUSINESS_ERROR, "已审核状态必须关联物流商对账单核销");
@@ -170,11 +170,21 @@ public class PaymentAllocationService {
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
-    List<PaymentAllocationRequest> normalizeAllocationRequests(PaymentRequest request) {
+    List<PaymentAllocationRequest> normalizeAllocationRequests(Payment entity, PaymentRequest request) {
         if (request.items() != null && !request.items().isEmpty()) {
             return request.items();
         }
         if (request.sourceStatementId() == null) {
+            if (request.items() == null && !entity.getItems().isEmpty()) {
+                return entity.getItems().stream()
+                        .map(item -> new PaymentAllocationRequest(
+                                item.getId(),
+                                item.getSourceStatementId(),
+                                item.getSourceFreightStatementId(),
+                                item.getAllocatedAmount()
+                        ))
+                        .toList();
+            }
             return List.of();
         }
         return List.of(typedAllocationRequest(

@@ -55,6 +55,7 @@ public class ModuleCatalog {
         modules.put("receipt", "收款单");
         modules.put("payment", "付款单");
         modules.put("ledger-adjustment", "台账调整单");
+        modules.put("finance-overview", "财务概览");
         modules.put("cash-ledger", "资金流水");
         modules.put("general-setting", "通用设置");
         modules.put("company-setting", "结算主体管理");
