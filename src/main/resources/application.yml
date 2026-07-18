@@ -151,6 +151,9 @@ javers:
 
 # 业务自定义配置
 leo:
+  pagination:
+    # 业务列表和远程候选列表未显式传入分页大小时使用，范围 1 到 200
+    default-list-page-size: ${LEO_PAGINATION_DEFAULT_LIST_PAGE_SIZE:30}
   setup:
     # 首次初始化写接口凭证，必须是 32 字节 Base64URL；初始化完成后可从运行环境移除
     bootstrap-token: ${LEO_SETUP_BOOTSTRAP_TOKEN:}
@@ -223,10 +226,18 @@ leo:
         secret-key: ${LEO_ATTACHMENT_S3_SECRET_KEY:}
         # 是否使用路径风格地址
         path-style-access: ${LEO_ATTACHMENT_S3_PATH_STYLE:true}
+        # 是否使用系统数据密钥加密附件内容
+        encrypted-storage: ${LEO_ATTACHMENT_S3_ENCRYPTED_STORAGE:false}
+        # 是否禁止浏览器直传和预签名直连
+        server-proxy-only: ${LEO_ATTACHMENT_S3_SERVER_PROXY_ONLY:true}
         # 连接超时
-        connect-timeout: 10s
+        connect-timeout: ${LEO_ATTACHMENT_S3_CONNECT_TIMEOUT:10s}
         # 读取超时
-        read-timeout: 30s
+        read-timeout: ${LEO_ATTACHMENT_S3_READ_TIMEOUT:30s}
+        # 浏览器直传预签名有效期
+        presign-upload-ttl: ${LEO_ATTACHMENT_S3_PRESIGN_UPLOAD_TTL:10m}
+        # 浏览器预览预签名有效期
+        presign-preview-ttl: ${LEO_ATTACHMENT_S3_PRESIGN_PREVIEW_TTL:5m}
   database:
     # 数据库是否只读，开启后应限制写操作
     read-only: false

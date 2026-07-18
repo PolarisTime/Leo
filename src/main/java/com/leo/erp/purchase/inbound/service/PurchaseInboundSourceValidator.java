@@ -173,7 +173,10 @@ public class PurchaseInboundSourceValidator {
                                                        String headerWarehouseName,
                                                        int lineNo) {
         PurchaseOrder sourceOrder = sourceItem.getPurchaseOrder();
-        String sourceStatus = sourceOrder == null ? null : sourceOrder.getStatus();
+        if (sourceOrder == null) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行来源采购订单不存在");
+        }
+        String sourceStatus = sourceOrder.getStatus();
         BusinessDocumentValidator.requireStatusIn(
                 sourceStatus,
                 Set.of(StatusConstants.AUDITED),

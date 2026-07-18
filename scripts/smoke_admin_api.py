@@ -21,7 +21,11 @@ RETIRED_ENDPOINTS = (
     ("GET", "/upload-rules/page"),
     ("GET", "/number-rules"),
     ("GET", "/no-rules"),
+    ("GET", "/general-settings"),
     ("GET", "/general-settings/upload-rule"),
+    ("GET", "/system/oss-settings"),
+    ("POST", "/system/oss-settings/storage-test"),
+    ("POST", "/system/oss-settings/cors"),
 )
 
 
@@ -55,7 +59,6 @@ class SmokeRunner:
         self.check_health()
         self.login()
         if self.access_token:
-            self.check_general_settings()
             self.check_retired_endpoints()
             self.logout()
         return self.summary()
@@ -83,25 +86,6 @@ class SmokeRunner:
         )
         detail = payload.get("message")
         self.add("jwt-login", ok, response, detail)
-
-    def check_general_settings(self) -> None:
-        response = self.authorized_request(
-            "GET",
-            "/general-settings",
-            params={"page": 0, "size": 5},
-        )
-        payload = self.parse_json(response)
-        ok = response.status_code == 200 and payload.get("code") == 0
-        detail = payload.get("message")
-        if ok:
-            rows = self.page_rows(payload.get("data"))
-            if rows:
-                keys = set(rows[0])
-                legacy_fields = {"billName", "sampleNo"} & keys
-                ok = not legacy_fields and {"settingGroup", "settingValue"} <= keys
-                if not ok:
-                    detail = f"通用设置字段契约异常: {sorted(keys)}"
-        self.add("general-settings-contract", ok, response, detail)
 
     def check_retired_endpoints(self) -> None:
         for method, path in RETIRED_ENDPOINTS:

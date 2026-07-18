@@ -92,7 +92,10 @@ public class SalesOutboundSourceService {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行来源销售订单明细不能为空");
         }
         var sourceSalesOrder = sourceSalesOrderItem.getSalesOrder();
-        String sourceStatus = sourceSalesOrder == null ? null : sourceSalesOrder.getStatus();
+        if (sourceSalesOrder == null) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行来源销售订单不存在");
+        }
+        String sourceStatus = sourceSalesOrder.getStatus();
         BusinessDocumentValidator.requireStatusIn(
                 sourceStatus,
                 java.util.Set.of(StatusConstants.AUDITED),

@@ -3,8 +3,6 @@ package com.leo.erp.attachment.service.storage;
 import com.leo.erp.attachment.config.AttachmentProperties;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
-import com.leo.erp.system.oss.service.OssSettingService;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Component;
 import org.springframework.web.multipart.MultipartFile;
@@ -21,18 +19,9 @@ public class AttachmentStorageResolver {
 
     private final Map<String, AttachmentStorage> storageByType;
     private final AttachmentProperties properties;
-    private final OssSettingService ossSettingService;
 
     public AttachmentStorageResolver(List<AttachmentStorage> storages, AttachmentProperties properties) {
-        this(storages, properties, null);
-    }
-
-    @Autowired
-    public AttachmentStorageResolver(List<AttachmentStorage> storages,
-                                     AttachmentProperties properties,
-                                     OssSettingService ossSettingService) {
         this.properties = properties;
-        this.ossSettingService = ossSettingService;
         this.storageByType = new HashMap<>();
         for (AttachmentStorage storage : storages) {
             this.storageByType.put(storage.type(), storage);
@@ -73,9 +62,7 @@ public class AttachmentStorageResolver {
     }
 
     private AttachmentStorage getConfiguredStorage() {
-        String configuredType = normalizedType(ossSettingService == null
-                ? properties.getStorage().getType()
-                : ossSettingService.resolveRuntimeSetting().storageType());
+        String configuredType = normalizedType(properties.getStorage().getType());
         AttachmentStorage storage = storageByType.get(configuredType);
         if (storage == null) {
             throw new BusinessException(ErrorCode.INTERNAL_ERROR, "未配置可用的附件存储后端: " + configuredType);

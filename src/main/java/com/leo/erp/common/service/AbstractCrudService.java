@@ -7,7 +7,6 @@ import com.leo.erp.common.persistence.AbstractAuditableEntity;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
@@ -22,7 +21,6 @@ public abstract class AbstractCrudService<E extends AbstractAuditableEntity, Req
     private static final CrudVisibilityPolicy VISIBILITY_POLICY = new CrudVisibilityPolicy();
 
     private final SnowflakeIdGenerator idGenerator;
-    private CrudRuntimeSettings crudRuntimeSettings;
     private final CrudStatusGuard statusGuard = new CrudStatusGuard();
 
     protected AbstractCrudService(SnowflakeIdGenerator idGenerator) {
@@ -30,11 +28,6 @@ public abstract class AbstractCrudService<E extends AbstractAuditableEntity, Req
             throw new IllegalArgumentException("SnowflakeIdGenerator must not be null");
         }
         this.idGenerator = idGenerator;
-    }
-
-    @Autowired(required = false)
-    protected void setCrudRuntimeSettings(CrudRuntimeSettings crudRuntimeSettings) {
-        this.crudRuntimeSettings = crudRuntimeSettings;
     }
 
     private Logger logger() {
@@ -122,14 +115,14 @@ public abstract class AbstractCrudService<E extends AbstractAuditableEntity, Req
     }
 
     protected final Page<E> pageEntities(PageQuery query, Specification<E> specification, JpaSpecificationExecutor<E> repository) {
-        Specification<E> effectiveSpec = applyListVisibilityPolicy(applyDeletedVisibilityPolicy(specification));
+        Specification<E> effectiveSpec = applyDeletedVisibilityPolicy(specification);
         return repository.findAll(effectiveSpec, query.toPageable("id"));
     }
 
     protected final List<Res> search(String keyword, String[] searchFields, int maxSize,
                                       Specification<E> baseSpec, JpaSpecificationExecutor<E> repository) {
         Specification<E> spec = combineSpecifications(
-                applyListVisibilityPolicy(applyDeletedVisibilityPolicy(baseSpec)),
+                applyDeletedVisibilityPolicy(baseSpec),
                 com.leo.erp.common.persistence.Specs.keywordLike(keyword, searchFields)
         );
         return repository.findAll(spec, org.springframework.data.domain.PageRequest.of(0, maxSize))
@@ -219,10 +212,6 @@ public abstract class AbstractCrudService<E extends AbstractAuditableEntity, Req
 
     private void assertDeleteAllowedByStatus(E entity) {
         statusGuard.assertDeleteAllowed(entity);
-    }
-
-    private Specification<E> applyListVisibilityPolicy(Specification<E> specification) {
-        return VISIBILITY_POLICY.applyListVisibility(specification, crudRuntimeSettings);
     }
 
     protected final Specification<E> applyDeletedVisibilityPolicy(Specification<E> specification) {

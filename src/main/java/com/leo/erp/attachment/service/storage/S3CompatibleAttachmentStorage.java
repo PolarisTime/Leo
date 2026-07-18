@@ -3,8 +3,6 @@ package com.leo.erp.attachment.service.storage;
 import com.leo.erp.attachment.config.AttachmentProperties;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
-import com.leo.erp.system.oss.service.OssSettingService;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.InputStreamResource;
 import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Component;
@@ -46,28 +44,17 @@ public class S3CompatibleAttachmentStorage implements DirectUploadAttachmentStor
     private final AttachmentProperties properties;
     private final S3ClientProvider clientProvider;
     private final S3PathParser pathParser;
-    private final OssSettingService ossSettingService;
     private final AttachmentContentCryptor contentCryptor;
 
-    @Autowired
     public S3CompatibleAttachmentStorage(
             AttachmentProperties properties,
             S3ClientProvider clientProvider,
             S3PathParser pathParser,
-            OssSettingService ossSettingService,
             AttachmentContentCryptor contentCryptor) {
         this.properties = properties;
         this.clientProvider = clientProvider;
         this.pathParser = pathParser;
-        this.ossSettingService = ossSettingService;
         this.contentCryptor = contentCryptor;
-    }
-
-    public S3CompatibleAttachmentStorage(
-            AttachmentProperties properties,
-            S3ClientProvider clientProvider,
-            S3PathParser pathParser) {
-        this(properties, clientProvider, pathParser, null, null);
     }
 
     @Override
@@ -259,9 +246,7 @@ public class S3CompatibleAttachmentStorage implements DirectUploadAttachmentStor
     }
 
     private AttachmentProperties.S3 requireS3Config() {
-        AttachmentProperties.S3 s3 = ossSettingService == null
-                ? properties.getStorage().getS3()
-                : ossSettingService.resolveRuntimeSetting().s3();
+        AttachmentProperties.S3 s3 = properties.getStorage().getS3();
         if (pathParser.isBlank(s3.getEndpoint()) || pathParser.isBlank(s3.getBucket())
                 || pathParser.isBlank(s3.getRegion()) || pathParser.isBlank(s3.getAccessKey())
                 || pathParser.isBlank(s3.getSecretKey())) {

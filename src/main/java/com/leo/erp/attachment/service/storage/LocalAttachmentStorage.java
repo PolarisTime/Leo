@@ -3,8 +3,6 @@ package com.leo.erp.attachment.service.storage;
 import com.leo.erp.attachment.config.AttachmentProperties;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
-import com.leo.erp.system.oss.service.OssSettingService;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Component;
@@ -23,23 +21,11 @@ public class LocalAttachmentStorage implements AttachmentStorage {
     private static final String PREFIX = "local:";
 
     private final AttachmentProperties properties;
-    private final OssSettingService ossSettingService;
     private final AttachmentContentCryptor contentCryptor;
 
-    public LocalAttachmentStorage(AttachmentProperties properties) {
-        this(properties, null, null);
-    }
-
-    public LocalAttachmentStorage(AttachmentProperties properties, OssSettingService ossSettingService) {
-        this(properties, ossSettingService, null);
-    }
-
-    @Autowired
     public LocalAttachmentStorage(AttachmentProperties properties,
-                                  OssSettingService ossSettingService,
                                   AttachmentContentCryptor contentCryptor) {
         this.properties = properties;
-        this.ossSettingService = ossSettingService;
         this.contentCryptor = contentCryptor;
     }
 
@@ -102,9 +88,7 @@ public class LocalAttachmentStorage implements AttachmentStorage {
 
     private Path resolveRootPath() {
         try {
-            String localPath = ossSettingService == null
-                    ? properties.getStorage().getLocal().getPath()
-                    : ossSettingService.resolveRuntimeSetting().localPath();
+            String localPath = properties.getStorage().getLocal().getPath();
             return Paths.get(localPath).toAbsolutePath().normalize();
         } catch (InvalidPathException ex) {
             throw new BusinessException(ErrorCode.INTERNAL_ERROR, "本地附件存储路径配置错误");
@@ -112,9 +96,7 @@ public class LocalAttachmentStorage implements AttachmentStorage {
     }
 
     private boolean isEncryptedStorageEnabled() {
-        return ossSettingService == null
-                ? properties.getStorage().getS3().isEncryptedStorage()
-                : ossSettingService.resolveRuntimeSetting().encryptedStorage();
+        return properties.getStorage().getS3().isEncryptedStorage();
     }
 
     private AttachmentContentCryptor requireCryptor() {

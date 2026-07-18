@@ -5,10 +5,7 @@ import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.system.setup.domain.entity.BootstrapState;
 import com.leo.erp.system.setup.repository.BootstrapStateRepository;
 import com.leo.erp.system.setup.web.dto.InitialSetupAdminSubmitRequest;
-import com.leo.erp.system.setup.web.dto.InitialSetupCompanyRequest;
 import com.leo.erp.system.setup.web.dto.InitialSetupStatusResponse;
-import com.leo.erp.system.setup.web.dto.InitialSetupSubmitRequest;
-import com.leo.erp.system.setup.web.dto.InitialSetupSubmitResponse;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -34,18 +31,8 @@ public class InitialSetupCoordinator {
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public InitialSetupSubmitResponse initialize(InitialSetupSubmitRequest request) {
-        return executeLocked(() -> initialSetupService.initialize(request));
-    }
-
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public InitialSetupSubmitResponse configureAdmin(InitialSetupAdminSubmitRequest request) {
+    public String configureAdmin(InitialSetupAdminSubmitRequest request) {
         return executeLocked(() -> initialSetupService.configureAdmin(request));
-    }
-
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public InitialSetupSubmitResponse configureCompany(InitialSetupCompanyRequest request) {
-        return executeLocked(() -> initialSetupService.configureCompany(request));
     }
 
     private <T> T executeLocked(Supplier<T> operation) {
@@ -59,7 +46,6 @@ public class InitialSetupCoordinator {
         }
 
         T result = operation.get();
-        initialSetupService.ensureOobeCompletedIfReady();
         if (!initialSetupService.isSetupRequired()) {
             LocalDateTime completedAt = LocalDateTime.now();
             state.setCompleted(true);

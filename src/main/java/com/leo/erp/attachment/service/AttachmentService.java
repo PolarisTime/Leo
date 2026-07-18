@@ -9,8 +9,6 @@ import com.leo.erp.attachment.service.storage.AttachmentStorageResolver;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
-import com.leo.erp.system.oss.service.OssSettingService;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.MediaType;
 import org.springframework.core.io.Resource;
@@ -54,17 +52,14 @@ public class AttachmentService {
     private final AttachmentStorageResolver storageResolver;
     private final AttachmentMetadataService metadataService;
     private final AttachmentDirectUploadTokenService directUploadTokenService;
-    private final OssSettingService ossSettingService;
 
-    @Autowired
     public AttachmentService(AttachmentFileRepository repository,
                              SnowflakeIdGenerator idGenerator,
                              AttachmentProperties properties,
                              AttachmentFilenameResolver filenameResolver,
                              AttachmentStorageResolver storageResolver,
                              AttachmentMetadataService metadataService,
-                             AttachmentDirectUploadTokenService directUploadTokenService,
-                             OssSettingService ossSettingService) {
+                             AttachmentDirectUploadTokenService directUploadTokenService) {
         this.repository = repository;
         this.idGenerator = idGenerator;
         this.properties = properties;
@@ -72,7 +67,6 @@ public class AttachmentService {
         this.storageResolver = storageResolver;
         this.metadataService = metadataService;
         this.directUploadTokenService = directUploadTokenService;
-        this.ossSettingService = ossSettingService;
     }
 
     public AttachmentView upload(MultipartFile file, String sourceType) throws IOException {
@@ -358,9 +352,7 @@ public class AttachmentService {
     }
 
     private String normalizedKeyPrefix() {
-        String keyPrefix = ossSettingService == null
-                ? properties.getStorage().getKeyPrefix()
-                : ossSettingService.resolveRuntimeSetting().keyPrefix();
+        String keyPrefix = properties.getStorage().getKeyPrefix();
         if (keyPrefix == null || keyPrefix.isBlank()) {
             return "";
         }
