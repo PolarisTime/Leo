@@ -38,7 +38,6 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
     private final SalesOrderRepository repository;
     private final SalesOrderResponseAssembler responseAssembler;
     private final SalesOrderApplyService salesOrderApplyService;
-    private final SalesOrderPurchaseAllocationService salesOrderPurchaseAllocationService;
     private final SalesOrderAuditedPricingService salesOrderAuditedPricingService;
     private final SalesOrderProtectedUpdatePolicy protectedUpdatePolicy;
     private final SalesOrderSaveService saveService;
@@ -52,7 +51,6 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
                              SnowflakeIdGenerator idGenerator,
                              SalesOrderResponseAssembler responseAssembler,
                              SalesOrderApplyService salesOrderApplyService,
-                             SalesOrderPurchaseAllocationService salesOrderPurchaseAllocationService,
                              SalesOrderAuditedPricingService salesOrderAuditedPricingService,
                              SalesOrderProtectedUpdatePolicy protectedUpdatePolicy,
                              SalesOrderSaveService saveService,
@@ -63,7 +61,6 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
                 idGenerator,
                 responseAssembler,
                 salesOrderApplyService,
-                salesOrderPurchaseAllocationService,
                 salesOrderAuditedPricingService,
                 protectedUpdatePolicy,
                 saveService,
@@ -77,7 +74,6 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
                              SnowflakeIdGenerator idGenerator,
                              SalesOrderResponseAssembler responseAssembler,
                              SalesOrderApplyService salesOrderApplyService,
-                             SalesOrderPurchaseAllocationService salesOrderPurchaseAllocationService,
                              SalesOrderAuditedPricingService salesOrderAuditedPricingService,
                              SalesOrderProtectedUpdatePolicy protectedUpdatePolicy,
                              SalesOrderSaveService saveService,
@@ -89,7 +85,6 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
                 idGenerator,
                 responseAssembler,
                 salesOrderApplyService,
-                salesOrderPurchaseAllocationService,
                 salesOrderAuditedPricingService,
                 protectedUpdatePolicy,
                 saveService,
@@ -105,7 +100,6 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
                              SnowflakeIdGenerator idGenerator,
                              SalesOrderResponseAssembler responseAssembler,
                              SalesOrderApplyService salesOrderApplyService,
-                             SalesOrderPurchaseAllocationService salesOrderPurchaseAllocationService,
                              SalesOrderAuditedPricingService salesOrderAuditedPricingService,
                              SalesOrderProtectedUpdatePolicy protectedUpdatePolicy,
                              SalesOrderSaveService saveService,
@@ -117,7 +111,6 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
         this.repository = repository;
         this.responseAssembler = responseAssembler;
         this.salesOrderApplyService = salesOrderApplyService;
-        this.salesOrderPurchaseAllocationService = salesOrderPurchaseAllocationService;
         this.salesOrderAuditedPricingService = salesOrderAuditedPricingService;
         this.protectedUpdatePolicy = protectedUpdatePolicy;
         this.saveService = saveService;
@@ -319,7 +312,6 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
         if (downstreamMutationGuard != null) {
             downstreamMutationGuard.assertMutable(entity, "删除");
         }
-        salesOrderPurchaseAllocationService.releaseSalesOrderItems(entity);
     }
 
     @Override

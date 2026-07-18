@@ -20,14 +20,10 @@ public class PurchaseOrderAvailabilityService {
 
     private final PurchaseInboundItemQueryService purchaseInboundItemQueryService;
     private final ItemAllocationNativeRepository itemAllocationRepo;
-    private final PurchaseOrderItemPieceWeightService purchaseOrderItemPieceWeightService;
-
     public PurchaseOrderAvailabilityService(PurchaseInboundItemQueryService purchaseInboundItemQueryService,
-                                            ItemAllocationNativeRepository itemAllocationRepo,
-                                            PurchaseOrderItemPieceWeightService purchaseOrderItemPieceWeightService) {
+                                            ItemAllocationNativeRepository itemAllocationRepo) {
         this.purchaseInboundItemQueryService = purchaseInboundItemQueryService;
         this.itemAllocationRepo = itemAllocationRepo;
-        this.purchaseOrderItemPieceWeightService = purchaseOrderItemPieceWeightService;
     }
 
     Map<Long, Integer> loadInboundAllocatedQuantityMap(PurchaseOrder order) {
@@ -52,45 +48,18 @@ public class PurchaseOrderAvailabilityService {
         return allocatedMap;
     }
 
-    Map<Long, BigDecimal> loadSalesRemainingWeightMap(PurchaseOrder order) {
-        List<Long> orderItemIds = orderItemIds(order);
-        if (orderItemIds.isEmpty()) {
-            return Map.of();
-        }
-        return purchaseOrderItemPieceWeightService.summarizeRemainingWeightByPurchaseOrderItemIds(orderItemIds);
-    }
-
-    Map<Long, BigDecimal> loadLockedSalesWeightMap(PurchaseOrder order) {
-        List<Long> orderItemIds = orderItemIds(order);
-        if (orderItemIds.isEmpty()) {
-            return Map.of();
-        }
-        return purchaseOrderItemPieceWeightService.summarizeLockedSalesWeightByPurchaseOrderItemIds(orderItemIds);
-    }
-
     Integer remainingQuantity(PurchaseOrderItem item, Map<Long, Integer> allocatedQuantityMap) {
         int allocatedQuantity = allocatedQuantityMap.getOrDefault(item.getId(), 0);
         return Math.max(0, item.getQuantity() - allocatedQuantity);
     }
 
     BigDecimal salesRemainingWeightTon(PurchaseOrderItem item,
-                                       Map<Long, Integer> allocatedQuantityMap,
-                                       Map<Long, BigDecimal> remainingWeightMap) {
-        BigDecimal remainingWeightTon = remainingWeightMap.get(item.getId());
-        if (remainingWeightTon != null) {
-            return remainingWeightTon;
-        }
+                                       Map<Long, Integer> allocatedQuantityMap) {
         int remainingQuantity = remainingQuantity(item, allocatedQuantityMap);
         if (remainingQuantity == item.getQuantity()) {
             return TradeItemCalculator.scaleWeightTon(item.getWeightTon());
         }
         return TradeItemCalculator.calculateWeightTon(remainingQuantity, item.getPieceWeightTon());
-    }
-
-    BigDecimal lockedSalesWeightTon(PurchaseOrderItem item, Map<Long, BigDecimal> lockedSalesWeightMap) {
-        return TradeItemCalculator.scaleWeightTon(
-                lockedSalesWeightMap.getOrDefault(item.getId(), BigDecimal.ZERO)
-        );
     }
 
     Map<Long, Integer> buildImportableQuantityMap(List<PurchaseOrder> orders, ImportCandidateUsage usage) {

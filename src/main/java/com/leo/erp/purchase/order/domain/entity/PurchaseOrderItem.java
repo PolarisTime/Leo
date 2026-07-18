@@ -88,6 +88,4 @@ public class PurchaseOrderItem {
     @Column(name = "actual_weight_ton", precision = 18, scale = 8)
     private BigDecimal actualWeightTon;
 
-    @Column(name = "actual_piece_weight_ton", precision = 18, scale = 8)
-    private BigDecimal actualPieceWeightTon;
 }

@@ -28,8 +28,6 @@ public record PurchaseOrderItemResponse(
         Integer piecesPerBundle,
         BigDecimal weightTon,
         BigDecimal actualWeightTon,
-        BigDecimal actualPieceWeightTon,
-        BigDecimal lockedSalesWeightTon,
         BigDecimal unitPrice,
         BigDecimal amount
 ) {
@@ -55,15 +53,13 @@ public record PurchaseOrderItemResponse(
                                      Integer piecesPerBundle,
                                      BigDecimal weightTon,
                                      BigDecimal actualWeightTon,
-                                     BigDecimal actualPieceWeightTon,
-                                     BigDecimal lockedSalesWeightTon,
                                      BigDecimal unitPrice,
                                      BigDecimal amount) {
         this(id, lineNo, null, materialCode, brand, category, material, spec, length, unit,
                 settlementCompanyId, settlementCompanyName, null, warehouseName, batchNo, null,
                 remainingQuantity, salesRemainingQuantity, salesRemainingWeightTon, quantity, quantityUnit,
-                pieceWeightTon, piecesPerBundle, weightTon, actualWeightTon, actualPieceWeightTon,
-                lockedSalesWeightTon, unitPrice, amount);
+                pieceWeightTon, piecesPerBundle, weightTon, actualWeightTon,
+                unitPrice, amount);
     }
 
     public PurchaseOrderItemResponse(Long id,
@@ -86,12 +82,11 @@ public record PurchaseOrderItemResponse(
                                      Integer piecesPerBundle,
                                      BigDecimal weightTon,
                                      BigDecimal actualWeightTon,
-                                     BigDecimal actualPieceWeightTon,
                                      BigDecimal unitPrice,
                                      BigDecimal amount) {
         this(id, lineNo, null, materialCode, brand, category, material, spec, length, unit,
                 null, null, null, warehouseName, batchNo, null, remainingQuantity, salesRemainingQuantity,
                 salesRemainingWeightTon, quantity, quantityUnit, pieceWeightTon, piecesPerBundle,
-                weightTon, actualWeightTon, actualPieceWeightTon, BigDecimal.ZERO, unitPrice, amount);
+                weightTon, actualWeightTon, unitPrice, amount);
     }
 }

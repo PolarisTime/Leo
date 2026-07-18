@@ -8,8 +8,6 @@ import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.Setter;
 
-import java.math.BigDecimal;
-
 @Getter
 @Setter
 @Entity
@@ -30,12 +28,6 @@ public class MaterialCategory extends AbstractAuditableEntity {
 
     @Column(name = "purchase_weigh_required", nullable = false)
     private Boolean purchaseWeighRequired = Boolean.FALSE;
-
-    @Column(name = "purchase_weigh_over_tolerance_percent", nullable = false, precision = 5, scale = 2)
-    private BigDecimal purchaseWeighOverTolerancePercent = new BigDecimal("5.00");
-
-    @Column(name = "purchase_weigh_under_tolerance_percent", nullable = false, precision = 5, scale = 2)
-    private BigDecimal purchaseWeighUnderTolerancePercent = new BigDecimal("5.00");
 
     @Column(name = "status", nullable = false, length = 16)
     private String status;

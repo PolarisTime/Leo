@@ -77,8 +77,7 @@ public record PurchaseOrderAuditSnapshot(
             BigDecimal weightTon,
             BigDecimal unitPrice,
             BigDecimal amount,
-            BigDecimal actualWeightTon,
-            BigDecimal actualPieceWeightTon
+            BigDecimal actualWeightTon
     ) {
         private static PurchaseOrderItemAuditSnapshot from(PurchaseOrderItem item) {
             return new PurchaseOrderItemAuditSnapshot(
@@ -102,8 +101,7 @@ public record PurchaseOrderAuditSnapshot(
                     item.getWeightTon(),
                     item.getUnitPrice(),
                     item.getAmount(),
-                    item.getActualWeightTon(),
-                    item.getActualPieceWeightTon()
+                    item.getActualWeightTon()
             );
         }
     }

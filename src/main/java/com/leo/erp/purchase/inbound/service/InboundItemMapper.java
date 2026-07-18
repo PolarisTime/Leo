@@ -112,7 +112,6 @@ public class InboundItemMapper {
         item.setWeightAdjustmentAmount(ctx.weightSettlement().weightAdjustmentAmount());
         item.setUnitPrice(source.unitPrice());
         item.setAmount(TradeItemCalculator.calculateAmount(ctx.weightSettlement().weightTon(), source.unitPrice()));
-        clearToleranceConfirmation(item);
 
         return new ItemMappingResult(
                 sourceOrderNo,
@@ -125,17 +124,6 @@ public class InboundItemMapper {
                 source.quantity(),
                 ctx.weightSettlement().calculatedWeightTon()
         );
-    }
-
-    private void clearToleranceConfirmation(PurchaseInboundItem item) {
-        item.setToleranceDirection(null);
-        item.setToleranceLimitPercent(null);
-        item.setToleranceActualPercent(null);
-        item.setToleranceReasonCode(null);
-        item.setToleranceRemark(null);
-        item.setToleranceConfirmedBy(null);
-        item.setToleranceConfirmedName(null);
-        item.setToleranceConfirmedAt(null);
     }
 
     private String resolveSourceOrderNo(PurchaseInboundItemRequest source,

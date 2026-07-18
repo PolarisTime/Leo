@@ -203,8 +203,7 @@ purchase_order_item_insert AS (
         amount,
         batch_no,
         warehouse_name,
-        actual_weight_ton,
-        actual_piece_weight_ton
+        actual_weight_ton
     )
     SELECT 900000000000000102,
            900000000000000101,
@@ -225,8 +224,7 @@ purchase_order_item_insert AS (
            purchase_amount,
            'DEV-BATCH-20260705',
            '开发测试仓库',
-           purchase_weight,
-           piece_weight_ton
+           purchase_weight
     FROM seed
     ON CONFLICT (id) DO NOTHING
 ),

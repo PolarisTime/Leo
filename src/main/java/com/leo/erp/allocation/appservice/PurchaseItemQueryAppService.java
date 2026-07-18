@@ -287,5 +287,4 @@ public interface PurchaseItemQueryAppService {
         }
     }
 
-    record PieceWeightSummary(Long purchaseOrderItemId, BigDecimal remainingWeight) {}
 }

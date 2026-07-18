@@ -39,7 +39,6 @@ public class SalesOrderApplyService {
     private final TradeItemMaterialSupport tradeItemMaterialSupport;
     private final SalesOrderSourceAllocationService sourceAllocationService;
     private final SalesOrderWeightResolver weightResolver;
-    private final SalesOrderPurchaseAllocationService purchaseAllocationService;
     private final SalesOrderItemMapper salesOrderItemMapper;
     private final CustomerRepository customerRepository;
     private final ProjectRepository projectRepository;
@@ -48,38 +47,33 @@ public class SalesOrderApplyService {
     public SalesOrderApplyService(TradeItemMaterialSupport tradeItemMaterialSupport,
                                   SalesOrderSourceAllocationService sourceAllocationService,
                                   SalesOrderWeightResolver weightResolver,
-                                  SalesOrderPurchaseAllocationService purchaseAllocationService,
                                   SalesOrderItemMapper salesOrderItemMapper) {
-        this(tradeItemMaterialSupport, sourceAllocationService, weightResolver, purchaseAllocationService,
-                salesOrderItemMapper, null);
+        this(tradeItemMaterialSupport, sourceAllocationService, weightResolver, salesOrderItemMapper, null);
     }
 
     public SalesOrderApplyService(TradeItemMaterialSupport tradeItemMaterialSupport,
                                   SalesOrderSourceAllocationService sourceAllocationService,
                                   SalesOrderWeightResolver weightResolver,
-                                  SalesOrderPurchaseAllocationService purchaseAllocationService,
                                   SalesOrderItemMapper salesOrderItemMapper,
                                   CustomerRepository customerRepository) {
-        this(tradeItemMaterialSupport, sourceAllocationService, weightResolver, purchaseAllocationService,
-                salesOrderItemMapper, customerRepository, null);
+        this(tradeItemMaterialSupport, sourceAllocationService, weightResolver, salesOrderItemMapper,
+                customerRepository, null);
     }
 
     public SalesOrderApplyService(TradeItemMaterialSupport tradeItemMaterialSupport,
                                   SalesOrderSourceAllocationService sourceAllocationService,
                                   SalesOrderWeightResolver weightResolver,
-                                  SalesOrderPurchaseAllocationService purchaseAllocationService,
                                   SalesOrderItemMapper salesOrderItemMapper,
                                   CustomerRepository customerRepository,
                                   CompanySettingService companySettingService) {
-        this(tradeItemMaterialSupport, sourceAllocationService, weightResolver, purchaseAllocationService,
-                salesOrderItemMapper, customerRepository, null, companySettingService);
+        this(tradeItemMaterialSupport, sourceAllocationService, weightResolver, salesOrderItemMapper,
+                customerRepository, null, companySettingService);
     }
 
     @Autowired
     public SalesOrderApplyService(TradeItemMaterialSupport tradeItemMaterialSupport,
                                   SalesOrderSourceAllocationService sourceAllocationService,
                                   SalesOrderWeightResolver weightResolver,
-                                  SalesOrderPurchaseAllocationService purchaseAllocationService,
                                   SalesOrderItemMapper salesOrderItemMapper,
                                   CustomerRepository customerRepository,
                                   ProjectRepository projectRepository,
@@ -87,7 +81,6 @@ public class SalesOrderApplyService {
         this.tradeItemMaterialSupport = tradeItemMaterialSupport;
         this.sourceAllocationService = sourceAllocationService;
         this.weightResolver = weightResolver;
-        this.purchaseAllocationService = purchaseAllocationService;
         this.salesOrderItemMapper = salesOrderItemMapper;
         this.customerRepository = customerRepository;
         this.projectRepository = projectRepository;
@@ -161,7 +154,6 @@ public class SalesOrderApplyService {
         BigDecimal totalAmount = BigDecimal.ZERO;
         List<SalesOrderItem> managedItems = entity.getItems();
         SalesOrderSourceContext sourceContext = sourceAllocationService.prepareContext(request, entity.getId());
-        purchaseAllocationService.releaseSalesOrderItems(entity);
         List<SalesOrderItem> items = ManagedEntityItemSupport.syncById(
                 new ArrayList<>(managedItems),
                 request.items(),

@@ -17,15 +17,11 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.util.Optional;
 import java.util.List;
 
 @Service
 public class MaterialCategoryService extends AbstractCrudService<MaterialCategory, MaterialCategoryRequest, MaterialCategoryResponse> {
-
-    private static final BigDecimal DEFAULT_PURCHASE_WEIGH_TOLERANCE_PERCENT = new BigDecimal("5.00");
 
     private final MaterialCategoryRepository repository;
     private final MaterialCategoryMapper materialCategoryMapper;
@@ -103,10 +99,6 @@ public class MaterialCategoryService extends AbstractCrudService<MaterialCategor
         entity.setCategoryName(required(request.categoryName(), "类别名称"));
         entity.setSortOrder(request.sortOrder() == null ? 0 : request.sortOrder());
         entity.setPurchaseWeighRequired(Boolean.TRUE.equals(request.purchaseWeighRequired()));
-        entity.setPurchaseWeighOverTolerancePercent(normalizeTolerancePercent(
-                request.purchaseWeighOverTolerancePercent(), "采购过磅上差百分比"));
-        entity.setPurchaseWeighUnderTolerancePercent(normalizeTolerancePercent(
-                request.purchaseWeighUnderTolerancePercent(), "采购过磅下差百分比"));
         entity.setStatus(request.status() == null || request.status().isBlank() ? "正常" : request.status().trim());
         entity.setRemark(optional(request.remark()));
     }
@@ -132,11 +124,4 @@ public class MaterialCategoryService extends AbstractCrudService<MaterialCategor
         return value == null ? null : value.trim().isEmpty() ? null : value.trim();
     }
 
-    private BigDecimal normalizeTolerancePercent(BigDecimal value, String field) {
-        BigDecimal normalized = value == null ? DEFAULT_PURCHASE_WEIGH_TOLERANCE_PERCENT : value;
-        if (normalized.compareTo(BigDecimal.ZERO) < 0 || normalized.compareTo(new BigDecimal("100")) > 0) {
-            throw new BusinessException(ErrorCode.VALIDATION_ERROR, field + "必须在0到100之间");
-        }
-        return normalized.setScale(2, RoundingMode.HALF_UP);
-    }
 }

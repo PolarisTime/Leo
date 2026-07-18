@@ -5,14 +5,12 @@ import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.support.BusinessDocumentValidator;
 import com.leo.erp.common.support.PrecisionConstants;
 import com.leo.erp.common.support.TradeItemCalculator;
-import com.leo.erp.master.material.domain.entity.MaterialCategory;
 import com.leo.erp.master.material.repository.MaterialCategoryRepository;
 import com.leo.erp.purchase.inbound.web.dto.PurchaseInboundItemRequest;
 import com.leo.erp.purchase.inbound.web.dto.PurchaseInboundRequest;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -20,9 +18,6 @@ import java.util.stream.Collectors;
 
 @Service
 public class PurchaseInboundWeightSettlementService {
-
-    private static final BigDecimal DEFAULT_PURCHASE_WEIGH_TOLERANCE_PERCENT = new BigDecimal("5.00");
-    private static final BigDecimal ONE_HUNDRED = new BigDecimal("100");
 
     private final MaterialCategoryRepository materialCategoryRepository;
 
@@ -50,9 +45,7 @@ public class PurchaseInboundWeightSettlementService {
                         categoryName -> categoryName,
                         categoryName -> new PurchaseWeighCategoryRule(
                                 categoryName,
-                                false,
-                                DEFAULT_PURCHASE_WEIGH_TOLERANCE_PERCENT,
-                                DEFAULT_PURCHASE_WEIGH_TOLERANCE_PERCENT
+                                false
                         ),
                         (left, right) -> left,
                         LinkedHashMap::new
@@ -62,9 +55,7 @@ public class PurchaseInboundWeightSettlementService {
                         normalizeCategoryName(category.getCategoryName()),
                         new PurchaseWeighCategoryRule(
                                 normalizeCategoryName(category.getCategoryName()),
-                                Boolean.TRUE.equals(category.getPurchaseWeighRequired()),
-                                normalizeTolerancePercent(category.getPurchaseWeighOverTolerancePercent()),
-                                normalizeTolerancePercent(category.getPurchaseWeighUnderTolerancePercent())
+                                Boolean.TRUE.equals(category.getPurchaseWeighRequired())
                         )
                 ));
         return ruleMap;
@@ -138,9 +129,6 @@ public class PurchaseInboundWeightSettlementService {
         }
         BigDecimal weighWeightTon = requireWeighWeightTon(source, lineNo);
         BigDecimal theoreticalWeightTon = resolveAdjustmentBaseWeightTon(source);
-        if (!allowMissingWeighWeight) {
-            validateWeighTolerance(weighWeightTon, theoreticalWeightTon, purchaseWeighCategoryRule, lineNo);
-        }
         BigDecimal weightAdjustmentTon = TradeItemCalculator
                 .scaleWeightTon(weighWeightTon.subtract(theoreticalWeightTon));
         BigDecimal weightAdjustmentAmount = TradeItemCalculator
@@ -169,9 +157,7 @@ public class PurchaseInboundWeightSettlementService {
                 normalizedCategoryName,
                 new PurchaseWeighCategoryRule(
                         normalizedCategoryName,
-                        false,
-                        DEFAULT_PURCHASE_WEIGH_TOLERANCE_PERCENT,
-                        DEFAULT_PURCHASE_WEIGH_TOLERANCE_PERCENT
+                        false
                 )
         );
     }
@@ -202,75 +188,9 @@ public class PurchaseInboundWeightSettlementService {
         return TradeItemCalculator.calculateWeightTon(source.quantity(), source.pieceWeightTon());
     }
 
-    private void validateWeighTolerance(
-            BigDecimal weighWeightTon,
-            BigDecimal theoreticalWeightTon,
-            PurchaseWeighCategoryRule rule,
-            int lineNo
-    ) {
-        ToleranceAssessment assessment = assessTolerance(
-                weighWeightTon,
-                theoreticalWeightTon,
-                rule
-        );
-        if (!assessment.overTolerance()) {
-            return;
-        }
-        throw new BusinessException(
-                ErrorCode.VALIDATION_ERROR,
-                "第" + lineNo + "行过磅重量" + assessment.direction() + "超过允许范围，当前差异"
-                        + formatPercent(assessment.actualPercent()) + "%，允许"
-                        + formatPercent(assessment.limitPercent()) + "%"
-        );
-    }
-
-    ToleranceAssessment assessTolerance(
-            BigDecimal weighWeightTon,
-            BigDecimal theoreticalWeightTon,
-            PurchaseWeighCategoryRule rule
-    ) {
-        BigDecimal normalizedTheoretical = TradeItemCalculator.scaleWeightTon(theoreticalWeightTon);
-        BigDecimal normalizedActual = TradeItemCalculator.scaleWeightTon(weighWeightTon);
-        if (normalizedTheoretical.compareTo(BigDecimal.ZERO) <= 0) {
-            return new ToleranceAssessment(false, null, BigDecimal.ZERO, BigDecimal.ZERO);
-        }
-        BigDecimal difference = normalizedActual.subtract(normalizedTheoretical);
-        BigDecimal actualPercent = difference.abs()
-                .multiply(ONE_HUNDRED)
-                .divide(normalizedTheoretical, 4, RoundingMode.HALF_UP);
-        BigDecimal limitPercent = difference.compareTo(BigDecimal.ZERO) > 0
-                ? rule.overTolerancePercent()
-                : rule.underTolerancePercent();
-        return new ToleranceAssessment(
-                actualPercent.compareTo(limitPercent) > 0,
-                difference.compareTo(BigDecimal.ZERO) > 0 ? "上差" : "下差",
-                limitPercent.setScale(4, RoundingMode.HALF_UP),
-                actualPercent
-        );
-    }
-
-    private BigDecimal normalizeTolerancePercent(BigDecimal value) {
-        BigDecimal normalized = value == null ? DEFAULT_PURCHASE_WEIGH_TOLERANCE_PERCENT : value;
-        return normalized.setScale(2, RoundingMode.HALF_UP);
-    }
-
-    private String formatPercent(BigDecimal value) {
-        return value.stripTrailingZeros().toPlainString();
-    }
-
     record PurchaseWeighCategoryRule(
             String categoryName,
-            boolean purchaseWeighRequired,
-            BigDecimal overTolerancePercent,
-            BigDecimal underTolerancePercent
-    ) {
-    }
-
-    record ToleranceAssessment(
-            boolean overTolerance,
-            String direction,
-            BigDecimal limitPercent,
-            BigDecimal actualPercent
+            boolean purchaseWeighRequired
     ) {
     }
 }

@@ -8,26 +8,21 @@ import org.springframework.stereotype.Service;
 public class SalesOrderSaveService {
 
     private final SalesOrderRepository repository;
-    private final SalesOrderPurchaseAllocationService purchaseAllocationService;
     private final SalesOrderCompletionSyncService completionSyncService;
     private final SalesOrderCompletionPolicy completionPolicy;
 
     public SalesOrderSaveService(SalesOrderRepository repository,
-                                 SalesOrderPurchaseAllocationService purchaseAllocationService,
                                  SalesOrderCompletionSyncService completionSyncService,
                                  SalesOrderCompletionPolicy completionPolicy) {
         this.repository = repository;
-        this.purchaseAllocationService = purchaseAllocationService;
         this.completionSyncService = completionSyncService;
         this.completionPolicy = completionPolicy;
     }
 
     SalesOrder save(SalesOrder entity) {
         SalesOrder saved = repository.saveAndFlush(entity);
-        purchaseAllocationService.finalizeInboundSourceAllocations(saved);
-        SalesOrder allocated = repository.save(saved);
-        syncCompletionAfterAuditedSave(allocated);
-        return allocated;
+        syncCompletionAfterAuditedSave(saved);
+        return saved;
     }
 
     SalesOrder saveStatus(SalesOrder entity) {

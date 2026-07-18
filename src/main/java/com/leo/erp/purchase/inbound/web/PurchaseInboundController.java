@@ -7,11 +7,8 @@ import com.leo.erp.common.api.PageResponse;
 import com.leo.erp.common.web.BindPageQuery;
 import com.leo.erp.common.web.dto.StatusUpdateRequest;
 import com.leo.erp.purchase.inbound.service.PurchaseInboundService;
-import com.leo.erp.purchase.inbound.service.PurchaseInboundAuditCommandService;
 import com.leo.erp.purchase.inbound.web.dto.PurchaseInboundRequest;
 import com.leo.erp.purchase.inbound.web.dto.PurchaseInboundResponse;
-import com.leo.erp.purchase.inbound.web.dto.PurchaseInboundAuditRequest;
-import com.leo.erp.purchase.inbound.web.dto.PurchaseInboundAuditResponse;
 import com.leo.erp.system.operationlog.support.DomainEventAudited;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -22,7 +19,6 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -38,14 +34,9 @@ import java.util.List;
 public class PurchaseInboundController {
 
     private final PurchaseInboundService service;
-    private final PurchaseInboundAuditCommandService auditCommandService;
 
-    public PurchaseInboundController(
-            PurchaseInboundService service,
-            PurchaseInboundAuditCommandService auditCommandService
-    ) {
+    public PurchaseInboundController(PurchaseInboundService service) {
         this.service = service;
-        this.auditCommandService = auditCommandService;
     }
 
     @GetMapping("/search")
@@ -91,16 +82,6 @@ public class PurchaseInboundController {
     @DomainEventAudited
     public ApiResponse<PurchaseInboundResponse> updateStatus(@PathVariable Long id, @Valid @RequestBody StatusUpdateRequest request) {
         return ApiResponse.success("状态更新成功", service.updateStatus(id, request.status()));
-    }
-
-    @PostMapping("/{id}/audit")
-    @Operation(summary = "审核采购入库并自动同步采购状态")
-    @DomainEventAudited
-    public ApiResponse<PurchaseInboundAuditResponse> audit(
-            @PathVariable Long id,
-            @Valid @RequestBody PurchaseInboundAuditRequest request
-    ) {
-        return ApiResponse.success("采购入库审核成功", auditCommandService.audit(id, request));
     }
 
     @DeleteMapping("/{id}")

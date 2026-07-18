@@ -68,7 +68,7 @@ public class PurchaseInboundResponseAssembler {
                 ? BigDecimal.ZERO
                 : weightSummary.getTotalWeightAdjustmentTon();
         return new PurchaseInboundResponse(
-                response.id(), response.inboundNo(), response.purchaseOrderNo(), response.importBatchId(),
+                response.id(), response.inboundNo(), response.purchaseOrderNo(),
                 response.supplierId(),
                 response.supplierCode(),
                 response.supplierName(), response.settlementCompanyId(), response.settlementCompanyName(),
@@ -93,7 +93,7 @@ public class PurchaseInboundResponseAssembler {
                 .map(i -> i.getWeightAdjustmentTon() != null ? i.getWeightAdjustmentTon() : BigDecimal.ZERO)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         return new PurchaseInboundResponse(
-                response.id(), response.inboundNo(), response.purchaseOrderNo(), response.importBatchId(),
+                response.id(), response.inboundNo(), response.purchaseOrderNo(),
                 response.supplierId(),
                 response.supplierCode(),
                 response.supplierName(), response.settlementCompanyId(), response.settlementCompanyName(),
@@ -119,15 +119,7 @@ public class PurchaseInboundResponseAssembler {
                         item.getWeightTon(), item.getWeighWeightTon(),
                         item.getWeightAdjustmentTon(),
                         item.getWeightAdjustmentAmount(),
-                        item.getUnitPrice(), item.getAmount(),
-                        item.getToleranceDirection(),
-                        item.getToleranceLimitPercent(),
-                        item.getToleranceActualPercent(),
-                        item.getToleranceReasonCode(),
-                        item.getToleranceRemark(),
-                        item.getToleranceConfirmedBy(),
-                        item.getToleranceConfirmedName(),
-                        item.getToleranceConfirmedAt()
+                        item.getUnitPrice(), item.getAmount()
                 )).toList()
         );
     }

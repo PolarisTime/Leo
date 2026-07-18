@@ -7,7 +7,6 @@ import com.leo.erp.purchase.order.web.dto.PurchaseOrderItemResponse;
 import com.leo.erp.purchase.order.web.dto.PurchaseOrderResponse;
 import org.springframework.stereotype.Service;
 
-import java.math.BigDecimal;
 import java.util.Map;
 
 @Service
@@ -25,8 +24,6 @@ public class PurchaseOrderResponseAssembler {
     PurchaseOrderResponse toDetailResponse(PurchaseOrder order) {
         Map<Long, Integer> allocatedQuantityMap = availabilityService.loadInboundAllocatedQuantityMap(order);
         Map<Long, Integer> salesAllocatedQuantityMap = availabilityService.loadSalesAllocatedQuantityMap(order);
-        Map<Long, BigDecimal> salesRemainingWeightMap = availabilityService.loadSalesRemainingWeightMap(order);
-        Map<Long, BigDecimal> lockedSalesWeightMap = availabilityService.loadLockedSalesWeightMap(order);
         PurchaseOrderResponse response = mapper.toResponse(order);
         return new PurchaseOrderResponse(
                 response.id(),
@@ -47,9 +44,7 @@ public class PurchaseOrderResponseAssembler {
                         .map(item -> toItemResponse(
                                 item,
                                 allocatedQuantityMap,
-                                salesAllocatedQuantityMap,
-                                salesRemainingWeightMap,
-                                lockedSalesWeightMap
+                                salesAllocatedQuantityMap
                         ))
                         .toList()
         );
@@ -61,9 +56,7 @@ public class PurchaseOrderResponseAssembler {
 
     private PurchaseOrderItemResponse toItemResponse(PurchaseOrderItem item,
                                                     Map<Long, Integer> allocatedQuantityMap,
-                                                    Map<Long, Integer> salesAllocatedQuantityMap,
-                                                    Map<Long, BigDecimal> salesRemainingWeightMap,
-                                                    Map<Long, BigDecimal> lockedSalesWeightMap) {
+                                                    Map<Long, Integer> salesAllocatedQuantityMap) {
         return new PurchaseOrderItemResponse(
                 item.getId(),
                 item.getLineNo(),
@@ -83,15 +76,13 @@ public class PurchaseOrderResponseAssembler {
                 item.getBatchNoNormalized(),
                 availabilityService.remainingQuantity(item, allocatedQuantityMap),
                 availabilityService.remainingQuantity(item, salesAllocatedQuantityMap),
-                availabilityService.salesRemainingWeightTon(item, salesAllocatedQuantityMap, salesRemainingWeightMap),
+                availabilityService.salesRemainingWeightTon(item, salesAllocatedQuantityMap),
                 item.getQuantity(),
                 item.getQuantityUnit(),
                 item.getPieceWeightTon(),
                 item.getPiecesPerBundle(),
                 item.getWeightTon(),
                 item.getActualWeightTon(),
-                item.getActualPieceWeightTon(),
-                availabilityService.lockedSalesWeightTon(item, lockedSalesWeightMap),
                 item.getUnitPrice(),
                 item.getAmount()
         );
