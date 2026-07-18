@@ -15,19 +15,7 @@ DEFAULT_BASE_URL = "http://127.0.0.1:11211/api"
 DEFAULT_LOGIN_NAME = "admin"
 DEFAULT_TIMEOUT = 30
 
-RETIRED_RESOURCES = {
-    "api-key",
-    "rate-limit",
-    "security-key",
-    "session",
-    "upload-rule",
-    "no-rule",
-}
-
 RETIRED_ENDPOINTS = (
-    ("GET", "/auth/api-keys"),
-    ("GET", "/auth/refresh-tokens"),
-    ("POST", "/auth/login-2fa"),
     ("GET", "/system/security-keys"),
     ("GET", "/rate-limit-rules"),
     ("GET", "/upload-rules/page"),
@@ -88,29 +76,13 @@ class SmokeRunner:
         payload = self.parse_json(response)
         data = payload.get("data") if isinstance(payload, dict) else None
         self.access_token = data.get("accessToken", "") if isinstance(data, dict) else ""
-        user = data.get("user") if isinstance(data, dict) else None
-        permissions = user.get("permissions", []) if isinstance(user, dict) else []
-        resources = {
-            item.get("resource")
-            for item in permissions
-            if isinstance(item, dict) and isinstance(item.get("resource"), str)
-        }
-        retired_resources = sorted(RETIRED_RESOURCES & resources)
         ok = (
             response.status_code == 200
             and payload.get("code") == 0
             and bool(self.access_token)
-            and not retired_resources
         )
         detail = payload.get("message")
-        if retired_resources:
-            detail = f"登录权限仍包含退役资源: {retired_resources}"
-        self.add(
-            "jwt-login-and-permissions",
-            ok,
-            response,
-            detail,
-        )
+        self.add("jwt-login", ok, response, detail)
 
     def check_general_settings(self) -> None:
         response = self.authorized_request(

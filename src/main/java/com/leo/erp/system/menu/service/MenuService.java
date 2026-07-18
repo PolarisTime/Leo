@@ -1,7 +1,7 @@
 package com.leo.erp.system.menu.service;
 
-import com.leo.erp.security.permission.PermissionService;
-import com.leo.erp.security.permission.ResourcePermissionCatalog;
+import com.leo.erp.common.support.StatusConstants;
+import com.leo.erp.system.menu.repository.MenuRepository;
 import com.leo.erp.system.menu.domain.entity.Menu;
 import com.leo.erp.system.menu.web.dto.MenuTreeResponse;
 import org.springframework.stereotype.Service;
@@ -10,37 +10,23 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
 
 @Service
 public class MenuService {
 
-    private final PermissionService permissionService;
+    private final MenuRepository menuRepository;
 
-    public MenuService(PermissionService permissionService) {
-        this.permissionService = permissionService;
+    public MenuService(MenuRepository menuRepository) {
+        this.menuRepository = menuRepository;
     }
 
-    public List<MenuTreeResponse> getMenuTree(Long userId) {
-        Set<String> visibleMenuCodes = permissionService.getVisibleMenuCodes(userId);
-        if (visibleMenuCodes.isEmpty()) {
-            return List.of();
-        }
-        Map<String, Set<String>> permissionMap = permissionService.getUserPermissionMap(userId);
-        List<Menu> menus = permissionService.getActiveMenus().stream()
-                .filter(menu -> visibleMenuCodes.contains(menu.getMenuCode()))
-                .toList();
+    public List<MenuTreeResponse> getMenuTree() {
+        List<Menu> menus = menuRepository.findByStatusAndDeletedFlagFalseOrderBySortOrder(StatusConstants.NORMAL);
 
         List<MenuTreeResponse> roots = new ArrayList<>();
         Map<String, List<MenuTreeResponse>> childrenMap = new HashMap<>();
 
         for (Menu menu : menus) {
-            Optional<String> resolvedResource = ResourcePermissionCatalog.resolveResourceByMenuCode(menu.getMenuCode());
-            String resourceCode = resolvedResource.orElse(null);
-            List<String> actions = resolvedResource
-                    .map(resource -> permissionMap.getOrDefault(resource, Set.of()).stream().toList())
-                    .orElse(List.of());
             MenuTreeResponse node = new MenuTreeResponse(
                     menu.getMenuCode(),
                     menu.getMenuName(),
@@ -49,8 +35,6 @@ public class MenuService {
                     menu.getIcon(),
                     menu.getSortOrder(),
                     menu.getMenuType(),
-                    resourceCode,
-                    actions,
                     new ArrayList<>()
             );
 

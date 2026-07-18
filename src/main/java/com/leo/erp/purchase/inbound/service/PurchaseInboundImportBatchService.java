@@ -19,7 +19,6 @@ import com.leo.erp.purchase.inbound.web.dto.PurchaseInboundSplitPreviewResponse;
 import com.leo.erp.purchase.order.domain.entity.PurchaseOrder;
 import com.leo.erp.purchase.order.domain.entity.PurchaseOrderItem;
 import com.leo.erp.purchase.order.repository.PurchaseOrderRepository;
-import com.leo.erp.security.permission.ResourceRecordAccessGuard;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -42,7 +41,6 @@ public class PurchaseInboundImportBatchService {
     private final PurchaseInboundService purchaseInboundService;
     private final SnowflakeIdGenerator idGenerator;
     private final SourceAllocationLockService sourceAllocationLockService;
-    private final ResourceRecordAccessGuard resourceRecordAccessGuard;
 
     public PurchaseInboundImportBatchService(
             PurchaseOrderRepository purchaseOrderRepository,
@@ -52,9 +50,8 @@ public class PurchaseInboundImportBatchService {
             PurchaseInboundWeightSettlementService weightSettlementService,
             PurchaseInboundService purchaseInboundService,
             SnowflakeIdGenerator idGenerator,
-            SourceAllocationLockService sourceAllocationLockService,
-            ResourceRecordAccessGuard resourceRecordAccessGuard
-    ) {
+            SourceAllocationLockService sourceAllocationLockService
+            ) {
         this.purchaseOrderRepository = purchaseOrderRepository;
         this.purchaseInboundRepository = purchaseInboundRepository;
         this.batchRepository = batchRepository;
@@ -63,14 +60,12 @@ public class PurchaseInboundImportBatchService {
         this.purchaseInboundService = purchaseInboundService;
         this.idGenerator = idGenerator;
         this.sourceAllocationLockService = sourceAllocationLockService;
-        this.resourceRecordAccessGuard = resourceRecordAccessGuard;
     }
 
     @Transactional(readOnly = true)
     public PurchaseInboundSplitPreviewResponse preview(Long sourcePurchaseOrderId) {
         PurchaseOrder order = purchaseOrderRepository.findByIdAndDeletedFlagFalse(sourcePurchaseOrderId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "来源采购订单不存在"));
-        resourceRecordAccessGuard.assertCurrentUserCanAccess("purchase-order", "read", order);
         return buildPreview(order);
     }
 
@@ -84,7 +79,6 @@ public class PurchaseInboundImportBatchService {
         }
         PurchaseOrder order = purchaseOrderRepository.findByIdAndDeletedFlagFalseForUpdate(sourcePurchaseOrderId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "来源采购订单不存在"));
-        resourceRecordAccessGuard.assertCurrentUserCanAccess("purchase-order", "read", order);
         List<Long> sourceItemIds = requireStableSourceItemIds(order);
         sourceAllocationLockService.lockTradeItemSources(sourceItemIds, List.of(), List.of());
 
@@ -130,7 +124,6 @@ public class PurchaseInboundImportBatchService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "采购入库导入批次不存在"));
         PurchaseOrder order = purchaseOrderRepository.findByIdAndDeletedFlagFalse(batch.getSourcePurchaseOrderId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "来源采购订单不存在"));
-        resourceRecordAccessGuard.assertCurrentUserCanAccess("purchase-order", "read", order);
         List<PurchaseInboundImportBatchResponse.InboundDraft> inbounds = purchaseInboundRepository
                 .findAllByImportBatchIdAndDeletedFlagFalseOrderById(batchId)
                 .stream()

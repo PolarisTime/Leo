@@ -2,7 +2,6 @@ package com.leo.erp.auth.service;
 
 import com.leo.erp.common.support.RedisJsonCacheSupport;
 import com.leo.erp.security.jwt.AuthenticatedUserCacheService;
-import com.leo.erp.security.permission.PermissionService;
 import com.leo.erp.system.dashboard.service.DashboardSummaryService;
 import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Service;
@@ -20,17 +19,14 @@ public class UserAccountCacheService {
     private final RedisJsonCacheSupport redisJsonCacheSupport;
     private final AuthenticatedUserCacheService authenticatedUserCacheService;
     private final DashboardSummaryService dashboardSummaryService;
-    private final PermissionService permissionService;
 
     public UserAccountCacheService(
             @Nullable RedisJsonCacheSupport redisJsonCacheSupport,
             @Nullable AuthenticatedUserCacheService authenticatedUserCacheService,
-            @Nullable DashboardSummaryService dashboardSummaryService,
-            PermissionService permissionService) {
+            @Nullable DashboardSummaryService dashboardSummaryService) {
         this.redisJsonCacheSupport = redisJsonCacheSupport;
         this.authenticatedUserCacheService = authenticatedUserCacheService;
         this.dashboardSummaryService = dashboardSummaryService;
-        this.permissionService = permissionService;
     }
 
     public void evictLoginNameCache(String... loginNames) {
@@ -58,10 +54,6 @@ public class UserAccountCacheService {
         if (authenticatedUserCacheService != null) {
             authenticatedUserCacheService.evict(userId);
         }
-    }
-
-    public void evictPermissionCache(Long userId) {
-        permissionService.evictCache(userId);
     }
 
     private String loginNameOwnerCacheKey(String loginName) {

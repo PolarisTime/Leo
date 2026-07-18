@@ -14,24 +14,6 @@ spring:
     # 应用名称，用于日志和监控标识
     name: leo
 
-  ai:
-    mcp:
-      server:
-        # MCP 仅作为开发辅助入口，默认关闭；需要时通过环境变量显式开启。
-        enabled: ${SPRING_AI_MCP_SERVER_ENABLED:false}
-        name: leo-erp
-        version: ${SPRING_AI_MCP_SERVER_VERSION:1.0.0}
-        protocol: ${SPRING_AI_MCP_SERVER_PROTOCOL:STREAMABLE}
-        type: ${SPRING_AI_MCP_SERVER_TYPE:SYNC}
-        instructions: "Leo ERP MCP 仅提供按当前登录用户资源动作权限过滤后的只读查询工具。"
-        capabilities:
-          tool: true
-          resource: false
-          prompt: false
-          completion: false
-        streamable-http:
-          mcp-endpoint: /mcp
-
   autoconfigure:
     exclude:
       # 不使用 Spring 默认登录页和默认内存用户
@@ -209,9 +191,6 @@ leo:
       batch-size: ${LEO_REDIS_SCAN_BATCH_SIZE:256}
       delete-batch-size: ${LEO_REDIS_DELETE_BATCH_SIZE:256}
       max-keys: ${LEO_REDIS_SCAN_MAX_KEYS:10000}
-    permission:
-      ttl: ${LEO_REDIS_PERMISSION_TTL:5m}
-      index-ttl: ${LEO_REDIS_PERMISSION_INDEX_TTL:1d}
     auth-user:
       ttl: ${LEO_REDIS_AUTH_USER_TTL:2m}
       index-ttl: ${LEO_REDIS_AUTH_USER_INDEX_TTL:1d}
@@ -290,8 +269,6 @@ leo:
       mobile: ${LEO_AUTH_BOOTSTRAP_MOBILE:}
       # 引导账号备注
       remark: ${LEO_AUTH_BOOTSTRAP_REMARK:}
-      # 引导账号绑定角色编码
-      role-code: ${LEO_AUTH_BOOTSTRAP_ROLE_CODE:}
     user:
       # 新建用户默认密码
       default-password: ${LEO_AUTH_DEFAULT_PASSWORD:}

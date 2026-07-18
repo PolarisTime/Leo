@@ -11,7 +11,6 @@ import com.leo.erp.common.api.ApiResponse;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.api.PageResponse;
 import com.leo.erp.common.web.BindPageQuery;
-import org.springframework.security.access.prepost.PreAuthorize;
 import com.leo.erp.security.support.SecurityPrincipal;
 import com.leo.erp.system.operationlog.support.OperationLoggable;
 import jakarta.validation.Valid;
@@ -43,7 +42,6 @@ public class UserAccountAdminController {
     }
 
     @GetMapping
-    @PreAuthorize("@rbac.check('user-account', 'read')")
     public ApiResponse<PageResponse<UserAccountAdminResponse>> page(
             @BindPageQuery(sortFieldKey = "user-account") PageQuery query,
             @RequestParam(required = false) String keyword,
@@ -53,7 +51,6 @@ public class UserAccountAdminController {
     }
 
     @GetMapping("/preference")
-    @PreAuthorize("isAuthenticated()")
     public ApiResponse<UserAccountPreferencesPayload> preferences(
             @AuthenticationPrincipal SecurityPrincipal principal
     ) {
@@ -61,7 +58,6 @@ public class UserAccountAdminController {
     }
 
     @PutMapping("/preference")
-    @PreAuthorize("isAuthenticated()")
     public ApiResponse<UserAccountPreferencesPayload> savePreferences(
             @AuthenticationPrincipal SecurityPrincipal principal,
             @Valid @RequestBody UserAccountPreferencesPayload request
@@ -71,13 +67,11 @@ public class UserAccountAdminController {
     }
 
     @GetMapping("/{id}")
-    @PreAuthorize("@rbac.check('user-account', 'read')")
     public ApiResponse<UserAccountAdminResponse> detail(@PathVariable @Positive Long id) {
         return ApiResponse.success(userAccountAdminService.detail(id));
     }
 
     @GetMapping("/login-name-availability")
-    @PreAuthorize("@rbac.check('user-account', 'read')")
     public ApiResponse<LoginNameAvailabilityResponse> checkLoginNameAvailability(
             @RequestParam String loginName,
             @RequestParam(required = false) @Positive Long excludeUserId
@@ -86,21 +80,18 @@ public class UserAccountAdminController {
     }
 
     @PostMapping
-    @PreAuthorize("@rbac.check('user-account', 'create')")
     @OperationLoggable(moduleName = "用户账户", actionType = "新增", businessNoFields = {"loginName"})
     public ApiResponse<UserAccountCreateResponse> create(@Valid @RequestBody UserAccountAdminRequest request) {
         return ApiResponse.success("创建成功", userAccountAdminService.create(request));
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("@rbac.check('user-account', 'update')")
     @OperationLoggable(moduleName = "用户账户", actionType = "编辑", businessNoFields = {"loginName"})
     public ApiResponse<UserAccountAdminResponse> update(@PathVariable @Positive Long id, @Valid @RequestBody UserAccountAdminRequest request) {
         return ApiResponse.success("更新成功", userAccountAdminService.update(id, request));
     }
 
     @DeleteMapping("/{id}")
-    @PreAuthorize("@rbac.check('user-account', 'delete')")
     @OperationLoggable(moduleName = "用户账户", actionType = "删除")
     public ApiResponse<Void> delete(@PathVariable @Positive Long id) {
         userAccountAdminService.delete(id);

@@ -18,7 +18,6 @@ import com.leo.erp.master.carrier.repository.CarrierRepository;
 import com.leo.erp.master.customer.repository.CustomerRepository;
 import com.leo.erp.master.project.repository.ProjectRepository;
 import com.leo.erp.master.supplier.repository.SupplierRepository;
-import com.leo.erp.security.permission.WorkflowTransitionGuard;
 import com.leo.erp.system.company.domain.entity.CompanySetting;
 import com.leo.erp.system.company.service.CompanySettingService;
 import org.springframework.data.domain.Page;
@@ -45,7 +44,6 @@ public class LedgerAdjustmentService extends AbstractCrudService<LedgerAdjustmen
     private final SupplierRepository supplierRepository;
     private final CarrierRepository carrierRepository;
     private final ProjectRepository projectRepository;
-    private final WorkflowTransitionGuard workflowTransitionGuard;
     private final CompanySettingService companySettingService;
 
     public LedgerAdjustmentService(LedgerAdjustmentRepository repository,
@@ -55,7 +53,6 @@ public class LedgerAdjustmentService extends AbstractCrudService<LedgerAdjustmen
                                    SupplierRepository supplierRepository,
                                    CarrierRepository carrierRepository,
                                    ProjectRepository projectRepository,
-                                   WorkflowTransitionGuard workflowTransitionGuard,
                                    CompanySettingService companySettingService) {
         super(idGenerator);
         this.repository = repository;
@@ -64,7 +61,6 @@ public class LedgerAdjustmentService extends AbstractCrudService<LedgerAdjustmen
         this.supplierRepository = supplierRepository;
         this.carrierRepository = carrierRepository;
         this.projectRepository = projectRepository;
-        this.workflowTransitionGuard = workflowTransitionGuard;
         this.companySettingService = companySettingService;
     }
 
@@ -223,7 +219,7 @@ public class LedgerAdjustmentService extends AbstractCrudService<LedgerAdjustmen
     }
 
     @Override
-    protected boolean allowAdminViewDeletedRecords() {
+    protected boolean allowViewingDeletedRecords() {
         return true;
     }
 
@@ -244,12 +240,6 @@ public class LedgerAdjustmentService extends AbstractCrudService<LedgerAdjustmen
                 StatusConstants.DRAFT,
                 "调整单状态",
                 StatusConstants.ALLOWED_AUDIT_STATUS
-        );
-        workflowTransitionGuard.assertAuditPermissionForProtectedValue(
-                MODULE_KEY,
-                entity.getStatus(),
-                nextStatus,
-                StatusConstants.AUDITED
         );
         BigDecimal amount = normalizeAmount(request.amount());
         ResolvedCounterparty counterparty = resolveCounterparty(

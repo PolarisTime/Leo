@@ -10,8 +10,6 @@ import com.leo.erp.attachment.web.dto.AttachmentDirectUploadPrepareRequest;
 import com.leo.erp.attachment.web.dto.AttachmentDirectUploadPrepareResponse;
 import com.leo.erp.attachment.web.dto.AttachmentUploadResponse;
 import com.leo.erp.common.api.ApiResponse;
-import com.leo.erp.security.permission.ModulePermissionGuard;
-import org.springframework.security.access.prepost.PreAuthorize;
 import com.leo.erp.security.support.SecurityPrincipal;
 import com.leo.erp.system.operationlog.support.OperationLoggable;
 import jakarta.validation.Valid;
@@ -41,63 +39,55 @@ public class AttachmentController {
 
     private final AttachmentService attachmentService;
     private final AttachmentWebService attachmentWebService;
-    private final ModulePermissionGuard modulePermissionGuard;
     private final AttachmentRecordAccessService attachmentRecordAccessService;
 
     public AttachmentController(AttachmentService attachmentService,
                                 AttachmentWebService attachmentWebService,
-                                ModulePermissionGuard modulePermissionGuard,
                                 AttachmentRecordAccessService attachmentRecordAccessService) {
         this.attachmentService = attachmentService;
         this.attachmentWebService = attachmentWebService;
-        this.modulePermissionGuard = modulePermissionGuard;
         this.attachmentRecordAccessService = attachmentRecordAccessService;
     }
 
     @PostMapping(value = "/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    @PreAuthorize("isAuthenticated()")
     @OperationLoggable(moduleName = "附件管理", actionType = "上传附件")
-    public ApiResponse<AttachmentUploadResponse> upload(@AuthenticationPrincipal SecurityPrincipal principal,
+    public ApiResponse<AttachmentUploadResponse> upload(
                                                         @RequestParam @NotBlank(message = "模块标识不能为空") String moduleKey,
                                                         @RequestParam("file") MultipartFile file,
                                                         @RequestParam(required = false) String sourceType) throws IOException {
-        String normalizedModuleKey = modulePermissionGuard.requirePermission(principal, moduleKey, "update");
+        String normalizedModuleKey = attachmentRecordAccessService.normalizeModuleKey(moduleKey);
         return ApiResponse.success("上传成功", attachmentWebService.upload(file, sourceType, normalizedModuleKey));
     }
 
     @PostMapping("/direct-upload/prepare")
-    @PreAuthorize("isAuthenticated()")
     @OperationLoggable(moduleName = "附件管理", actionType = "生成附件直传地址")
     public ApiResponse<AttachmentDirectUploadPrepareResponse> prepareDirectUpload(
             @AuthenticationPrincipal SecurityPrincipal principal,
             @RequestParam @NotBlank(message = "模块标识不能为空") String moduleKey,
             @Valid @RequestBody AttachmentDirectUploadPrepareRequest request) {
-        String normalizedModuleKey = modulePermissionGuard.requirePermission(principal, moduleKey, "update");
+        String normalizedModuleKey = attachmentRecordAccessService.normalizeModuleKey(moduleKey);
         return ApiResponse.success("直传地址生成成功",
                 attachmentWebService.prepareDirectUpload(request, normalizedModuleKey, principal.id()));
     }
 
     @PostMapping("/direct-upload/complete")
-    @PreAuthorize("isAuthenticated()")
     @OperationLoggable(moduleName = "附件管理", actionType = "完成附件直传")
     public ApiResponse<AttachmentUploadResponse> completeDirectUpload(
             @AuthenticationPrincipal SecurityPrincipal principal,
             @RequestParam @NotBlank(message = "模块标识不能为空") String moduleKey,
             @Valid @RequestBody AttachmentDirectUploadCompleteRequest request) {
-        String normalizedModuleKey = modulePermissionGuard.requirePermission(principal, moduleKey, "update");
+        String normalizedModuleKey = attachmentRecordAccessService.normalizeModuleKey(moduleKey);
         return ApiResponse.success("上传成功",
                 attachmentWebService.completeDirectUpload(request, normalizedModuleKey, principal.id()));
     }
 
     @GetMapping("/{id}/access-url")
-    @PreAuthorize("isAuthenticated()")
-    public ApiResponse<AttachmentAccessUrlResponse> accessUrl(@AuthenticationPrincipal SecurityPrincipal principal,
-                                                              @PathVariable Long id,
+    public ApiResponse<AttachmentAccessUrlResponse> accessUrl(@PathVariable Long id,
                                                               @RequestParam String moduleKey,
                                                               @RequestParam String accessKey,
                                                               @RequestParam(defaultValue = "false") boolean inline) {
-        String normalizedModuleKey = modulePermissionGuard.requirePermission(principal, moduleKey, "read");
-        attachmentRecordAccessService.assertAttachmentAccessible(principal, normalizedModuleKey, "read", id);
+        String normalizedModuleKey = attachmentRecordAccessService.normalizeModuleKey(moduleKey);
+        attachmentRecordAccessService.assertAttachmentBoundToExistingRecord(normalizedModuleKey, id);
         AttachmentService.PresignedAttachmentUrl presignedUrl =
                 attachmentService.createPresignedAccessUrl(id, accessKey, inline);
         return ApiResponse.success(new AttachmentAccessUrlResponse(
@@ -108,13 +98,11 @@ public class AttachmentController {
     }
 
     @GetMapping("/{id}/download")
-    @PreAuthorize("isAuthenticated()")
-    public ResponseEntity<Resource> download(@AuthenticationPrincipal SecurityPrincipal principal,
-                                             @PathVariable Long id,
+    public ResponseEntity<Resource> download(@PathVariable Long id,
                                              @RequestParam String moduleKey,
                                              @RequestParam String accessKey) {
-        String normalizedModuleKey = modulePermissionGuard.requirePermission(principal, moduleKey, "read");
-        attachmentRecordAccessService.assertAttachmentAccessible(principal, normalizedModuleKey, "read", id);
+        String normalizedModuleKey = attachmentRecordAccessService.normalizeModuleKey(moduleKey);
+        attachmentRecordAccessService.assertAttachmentBoundToExistingRecord(normalizedModuleKey, id);
         AttachmentService.PresignedAttachmentUrl presignedUrl =
                 attachmentService.createPresignedAccessUrl(id, accessKey, false);
         if (presignedUrl != null) {
@@ -124,13 +112,11 @@ public class AttachmentController {
     }
 
     @GetMapping("/{id}/preview")
-    @PreAuthorize("isAuthenticated()")
-    public ResponseEntity<Resource> preview(@AuthenticationPrincipal SecurityPrincipal principal,
-                                            @PathVariable Long id,
+    public ResponseEntity<Resource> preview(@PathVariable Long id,
                                             @RequestParam String moduleKey,
                                             @RequestParam String accessKey) {
-        String normalizedModuleKey = modulePermissionGuard.requirePermission(principal, moduleKey, "read");
-        attachmentRecordAccessService.assertAttachmentAccessible(principal, normalizedModuleKey, "read", id);
+        String normalizedModuleKey = attachmentRecordAccessService.normalizeModuleKey(moduleKey);
+        attachmentRecordAccessService.assertAttachmentBoundToExistingRecord(normalizedModuleKey, id);
         AttachmentService.PresignedAttachmentUrl presignedUrl =
                 attachmentService.createPresignedAccessUrl(id, accessKey, true);
         if (presignedUrl != null) {

@@ -10,8 +10,6 @@ public record MenuTreeResponse(
         String icon,
         Integer sortOrder,
         String menuType,
-        String resourceCode,
-        List<String> actions,
         List<MenuTreeResponse> children
 ) {
 }

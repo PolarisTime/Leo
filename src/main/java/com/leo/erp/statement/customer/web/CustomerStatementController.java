@@ -7,7 +7,6 @@ import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.api.PageResponse;
 import com.leo.erp.common.web.BindPageQuery;
 import com.leo.erp.common.web.dto.StatusUpdateRequest;
-import org.springframework.security.access.prepost.PreAuthorize;
 import com.leo.erp.statement.customer.service.CustomerStatementService;
 import com.leo.erp.statement.customer.web.dto.CustomerStatementCandidateResponse;
 import com.leo.erp.statement.customer.web.dto.CustomerStatementRequest;
@@ -42,7 +41,6 @@ public class CustomerStatementController {
 
     @Operation(summary = "搜索客户对账单")
     @GetMapping("/search")
-    @PreAuthorize("@rbac.check('customer-statement', 'read')")
     public ApiResponse<java.util.List<CustomerStatementResponse>> search(
             @RequestParam(required = false) String keyword,
             @RequestParam(defaultValue = "100") int limit
@@ -54,7 +52,6 @@ public class CustomerStatementController {
 
     @Operation(summary = "分页查询客户对账单")
     @GetMapping
-    @PreAuthorize("@rbac.check('customer-statement', 'read')")
     public ApiResponse<PageResponse<CustomerStatementResponse>> page(
             @BindPageQuery(sortFieldKey = "customer-statement") PageQuery query,
             @RequestParam(required = false) String keyword,
@@ -79,7 +76,6 @@ public class CustomerStatementController {
 
     @Operation(summary = "分页查询客户对账单候选销售订单")
     @GetMapping("/candidates")
-    @PreAuthorize("@rbac.check('customer-statement', 'read')")
     public ApiResponse<PageResponse<CustomerStatementCandidateResponse>> candidates(
             @BindPageQuery(sortFieldKey = "sales-order") PageQuery query,
             @RequestParam(required = false) String keyword,
@@ -104,35 +100,30 @@ public class CustomerStatementController {
 
     @Operation(summary = "查询客户对账单详情")
     @GetMapping("/{id}")
-    @PreAuthorize("@rbac.check('customer-statement', 'read')")
     public ApiResponse<CustomerStatementResponse> detail(@PathVariable Long id) {
         return ApiResponse.success(customerStatementService.detail(id));
     }
 
     @Operation(summary = "创建客户对账单")
     @PostMapping
-    @PreAuthorize("@rbac.check('customer-statement', 'create')")
     public ApiResponse<CustomerStatementResponse> create(@Valid @RequestBody CustomerStatementRequest request) {
         return ApiResponse.success("创建成功", customerStatementService.create(request));
     }
 
     @Operation(summary = "更新客户对账单")
     @PutMapping("/{id}")
-    @PreAuthorize("@rbac.check('customer-statement', 'update')")
     public ApiResponse<CustomerStatementResponse> update(@PathVariable Long id, @Valid @RequestBody CustomerStatementRequest request) {
         return ApiResponse.success("更新成功", customerStatementService.update(id, request));
     }
 
     @Operation(summary = "更新客户对账单状态")
     @PatchMapping("/{id}/status")
-    @PreAuthorize("@rbac.check('customer-statement', 'audit')")
     public ApiResponse<CustomerStatementResponse> updateStatus(@PathVariable Long id, @Valid @RequestBody StatusUpdateRequest request) {
         return ApiResponse.success("状态更新成功", customerStatementService.updateStatus(id, request.status()));
     }
 
     @Operation(summary = "删除客户对账单")
     @DeleteMapping("/{id}")
-    @PreAuthorize("@rbac.check('customer-statement', 'delete')")
     public ApiResponse<Void> delete(@PathVariable Long id) {
         customerStatementService.delete(id);
         return ApiResponse.success("删除成功");

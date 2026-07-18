@@ -51,6 +51,7 @@ mvn -q org.flywaydb:flyway-maven-plugin:11.20.3:migrate \
   -Dflyway.defaultSchema=public \
   -Dflyway.baselineOnMigrate=false \
   -Dflyway.cleanDisabled=true \
+  -Dflyway.placeholderReplacement=false \
   -Dflyway.validateOnMigrate=true
 
 "$PG_DUMP" -h "$DB_HOST" -p "$DB_PORT" -U "$DB_ADMIN_USER" -d "$TMP_DB" \

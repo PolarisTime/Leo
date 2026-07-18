@@ -5,7 +5,6 @@ import com.leo.erp.common.api.ApiResponse;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.api.PageResponse;
 import com.leo.erp.common.web.BindPageQuery;
-import org.springframework.security.access.prepost.PreAuthorize;
 import com.leo.erp.system.generalsetting.service.GeneralSettingQueryService;
 import com.leo.erp.system.generalsetting.service.GeneralSettingService;
 import com.leo.erp.system.operationlog.support.OperationLoggable;
@@ -36,7 +35,6 @@ public class GeneralSettingController {
     }
 
     @GetMapping
-    @PreAuthorize("@rbac.check('general-setting', 'read')")
     public ApiResponse<PageResponse<GeneralSettingResponse>> page(
             @BindPageQuery(sortFieldKey = "general-setting") PageQuery query,
             @RequestParam(required = false) String keyword,
@@ -46,19 +44,16 @@ public class GeneralSettingController {
     }
 
     @GetMapping("/statement-generator-rule")
-    @PreAuthorize("isAuthenticated()")
     public ApiResponse<StatementGeneratorRulesResponse> statementGeneratorRules() {
         return ApiResponse.success(generalSettingService.statementGeneratorRules());
     }
 
     @GetMapping("/{id}")
-    @PreAuthorize("@rbac.check('general-setting', 'read')")
     public ApiResponse<GeneralSettingResponse> detail(@PathVariable Long id) {
         return ApiResponse.success(generalSettingService.detail(id));
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("@rbac.check('general-setting', 'update')")
     @OperationLoggable(moduleName = "通用设置", actionType = "编辑", businessNoFields = {"settingCode"})
     public ApiResponse<GeneralSettingResponse> update(
             @PathVariable Long id,

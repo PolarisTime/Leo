@@ -3,7 +3,6 @@ package com.leo.erp.system.setup.service;
 import com.leo.erp.auth.domain.entity.UserAccount;
 import com.leo.erp.auth.domain.enums.UserStatus;
 import com.leo.erp.auth.repository.UserAccountRepository;
-import com.leo.erp.auth.service.UserRoleBindingService;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.config.CacheConfig;
@@ -20,8 +19,6 @@ import com.leo.erp.system.department.repository.DepartmentRepository;
 import com.leo.erp.system.generalsetting.domain.entity.GeneralSetting;
 import com.leo.erp.system.generalsetting.repository.GeneralSettingRepository;
 import com.leo.erp.system.generalsetting.service.SystemSwitchService;
-import com.leo.erp.system.role.domain.entity.RoleSetting;
-import com.leo.erp.system.role.repository.RoleSettingRepository;
 import com.leo.erp.system.setup.web.dto.InitialSetupAdminSubmitRequest;
 import com.leo.erp.system.setup.web.dto.InitialSetupCompanyRequest;
 import com.leo.erp.system.setup.web.dto.InitialSetupStatusResponse;
@@ -36,12 +33,9 @@ import org.springframework.cache.annotation.CacheEvict;
 @Service
 public class InitialSetupService {
 
-    private static final String ADMIN_ROLE_CODE = "ADMIN";
     private static final String DEFAULT_COMPANY_STATUS = StatusConstants.NORMAL;
     private static final String SETUP_REMARK = "网页首次初始化创建";
     private final UserAccountRepository userAccountRepository;
-    private final UserRoleBindingService userRoleBindingService;
-    private final RoleSettingRepository roleSettingRepository;
     private final CompanySettingRepository companySettingRepository;
     private final GeneralSettingRepository generalSettingRepository;
     private final DepartmentRepository departmentRepository;
@@ -50,8 +44,6 @@ public class InitialSetupService {
     private final ObjectMapper objectMapper;
 
     public InitialSetupService(UserAccountRepository userAccountRepository,
-                               UserRoleBindingService userRoleBindingService,
-                               RoleSettingRepository roleSettingRepository,
                                CompanySettingRepository companySettingRepository,
                                GeneralSettingRepository generalSettingRepository,
                                DepartmentRepository departmentRepository,
@@ -59,8 +51,6 @@ public class InitialSetupService {
                                SnowflakeIdGenerator snowflakeIdGenerator,
                                ObjectMapper objectMapper) {
         this.userAccountRepository = userAccountRepository;
-        this.userRoleBindingService = userRoleBindingService;
-        this.roleSettingRepository = roleSettingRepository;
         this.companySettingRepository = companySettingRepository;
         this.generalSettingRepository = generalSettingRepository;
         this.departmentRepository = departmentRepository;
@@ -161,13 +151,11 @@ public class InitialSetupService {
     }
 
     private boolean isAdminConfigured() {
-        return !userRoleBindingService.findUserIdsByRole(ADMIN_ROLE_CODE).isEmpty();
+        return userAccountRepository.existsByStatusAndDeletedFlagFalse(UserStatus.NORMAL);
     }
 
     private String resolveExistingAdminLoginName() {
-        return userRoleBindingService.findUserIdsByRole(ADMIN_ROLE_CODE).stream()
-                .findFirst()
-                .flatMap(userAccountRepository::findByIdAndDeletedFlagFalse)
+        return userAccountRepository.findFirstByStatusAndDeletedFlagFalseOrderByIdAsc(UserStatus.NORMAL)
                 .map(UserAccount::getLoginName)
                 .orElse("admin");
     }
@@ -193,16 +181,12 @@ public class InitialSetupService {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "管理员登录账号已存在");
         }
 
-        RoleSetting adminRole = roleSettingRepository.findByRoleCodeAndDeletedFlagFalse(ADMIN_ROLE_CODE)
-                .orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_ERROR, "未找到系统管理员角色，请先检查基础数据"));
-
         UserAccount admin = new UserAccount();
         admin.setId(snowflakeIdGenerator.nextId());
         admin.setLoginName(loginName);
         admin.setPasswordHash(passwordEncoder.encode(password));
         admin.setUserName(userName);
         admin.setMobile(mobile);
-        admin.setPermissionSummary("");
         admin.setStatus(UserStatus.NORMAL);
         admin.setRemark(SETUP_REMARK);
         Department defaultDept = departmentRepository.findByDepartmentCodeAndDeletedFlagFalse("DEPT001")
@@ -214,7 +198,6 @@ public class InitialSetupService {
 
         try {
             userAccountRepository.saveAndFlush(admin);
-            userRoleBindingService.replaceUserRoles(admin.getId(), java.util.List.of(adminRole));
             return admin.getLoginName();
         } catch (DataIntegrityViolationException ex) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "管理员登录账号已存在");

@@ -6,7 +6,6 @@ import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.api.PageResponse;
 import com.leo.erp.common.web.BindPageQuery;
 import com.leo.erp.common.web.dto.StatusUpdateRequest;
-import org.springframework.security.access.prepost.PreAuthorize;
 import com.leo.erp.system.operationlog.support.DomainEventAudited;
 import com.leo.erp.sales.outbound.service.SalesOutboundService;
 import com.leo.erp.sales.outbound.web.dto.SalesOutboundRequest;
@@ -42,7 +41,6 @@ public class SalesOutboundController {
     }
 
     @GetMapping("/search")
-    @PreAuthorize("@rbac.check('sales-outbound', 'read')")
     @Operation(summary = "搜索销售出库")
     public ApiResponse<java.util.List<SalesOutboundResponse>> search(
             @RequestParam(required = false) String keyword,
@@ -52,7 +50,6 @@ public class SalesOutboundController {
     }
 
     @GetMapping
-    @PreAuthorize("@rbac.check('sales-outbound', 'read')")
     @Operation(summary = "分页查询销售出库")
     public ApiResponse<PageResponse<SalesOutboundResponse>> page(
             @BindPageQuery(sortFieldKey = "sales-outbound") PageQuery query,
@@ -76,14 +73,12 @@ public class SalesOutboundController {
     }
 
     @GetMapping("/{id}")
-    @PreAuthorize("@rbac.check('sales-outbound', 'read')")
     @Operation(summary = "查询销售出库详情")
     public ApiResponse<SalesOutboundResponse> detail(@PathVariable Long id) {
         return ApiResponse.success(service.detail(id));
     }
 
     @PostMapping
-    @PreAuthorize("@rbac.check('sales-outbound', 'create')")
     @Operation(summary = "创建销售出库")
     @DomainEventAudited
     public ApiResponse<SalesOutboundResponse> create(@Valid @RequestBody SalesOutboundRequest request) {
@@ -91,7 +86,6 @@ public class SalesOutboundController {
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("@rbac.check('sales-outbound', 'update')")
     @Operation(summary = "更新销售出库")
     @DomainEventAudited
     public ApiResponse<SalesOutboundResponse> update(@PathVariable Long id, @Valid @RequestBody SalesOutboundRequest request) {
@@ -99,7 +93,6 @@ public class SalesOutboundController {
     }
 
     @PatchMapping("/{id}/status")
-    @PreAuthorize("@rbac.check('sales-outbound', 'audit')")
     @Operation(summary = "更新销售出库状态")
     @DomainEventAudited
     public ApiResponse<SalesOutboundResponse> updateStatus(@PathVariable Long id, @Valid @RequestBody StatusUpdateRequest request) {
@@ -107,7 +100,6 @@ public class SalesOutboundController {
     }
 
     @DeleteMapping("/{id}")
-    @PreAuthorize("@rbac.check('sales-outbound', 'delete')")
     @Operation(summary = "删除销售出库")
     @DomainEventAudited
     public ApiResponse<Void> delete(@PathVariable Long id) {

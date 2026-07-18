@@ -200,7 +200,7 @@ public class ReceiptService extends AbstractCrudService<Receipt, ReceiptRequest,
     }
 
     @Override
-    protected boolean allowAdminViewDeletedRecords() {
+    protected boolean allowViewingDeletedRecords() {
         return true;
     }
 

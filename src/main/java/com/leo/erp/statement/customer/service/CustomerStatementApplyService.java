@@ -2,7 +2,6 @@ package com.leo.erp.statement.customer.service;
 
 import com.leo.erp.common.support.BusinessStatusValidator;
 import com.leo.erp.common.support.StatusConstants;
-import com.leo.erp.security.permission.WorkflowTransitionGuard;
 import com.leo.erp.statement.customer.domain.entity.CustomerStatement;
 import com.leo.erp.statement.customer.web.dto.CustomerStatementRequest;
 import com.leo.erp.statement.service.StatementBalanceRule;
@@ -15,14 +14,11 @@ import java.util.function.LongSupplier;
 @Service
 public class CustomerStatementApplyService {
 
-    private final WorkflowTransitionGuard workflowTransitionGuard;
     private final CustomerStatementSourceService sourceService;
     private final StatementSettlementSyncService settlementSyncService;
 
-    public CustomerStatementApplyService(WorkflowTransitionGuard workflowTransitionGuard,
-                                         CustomerStatementSourceService sourceService,
+    public CustomerStatementApplyService(CustomerStatementSourceService sourceService,
                                          StatementSettlementSyncService settlementSyncService) {
-        this.workflowTransitionGuard = workflowTransitionGuard;
         this.sourceService = sourceService;
         this.settlementSyncService = settlementSyncService;
     }
@@ -33,12 +29,6 @@ public class CustomerStatementApplyService {
                 StatusConstants.PENDING_CONFIRM,
                 "客户对账单状态",
                 StatusConstants.ALLOWED_STATEMENT_STATUS
-        );
-        workflowTransitionGuard.assertAuditPermissionForProtectedValue(
-                "customer-statement",
-                entity.getStatus(),
-                nextStatus,
-                StatusConstants.CONFIRMED
         );
         entity.setStatementNo(request.statementNo());
         entity.setCustomerName(request.customerName());

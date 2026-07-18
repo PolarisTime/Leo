@@ -21,6 +21,18 @@ public interface UserAccountRepository extends JpaRepository<UserAccount, Long>,
 
     Optional<UserAccount> findByIdAndDeletedFlagFalse(Long id);
 
+    Optional<UserAccount> findFirstByStatusAndDeletedFlagFalseOrderByIdAsc(
+            com.leo.erp.auth.domain.enums.UserStatus status
+    );
+
+    boolean existsByStatusAndDeletedFlagFalse(com.leo.erp.auth.domain.enums.UserStatus status);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT u FROM UserAccount u WHERE u.status = :status AND u.deletedFlag = false ORDER BY u.id")
+    List<UserAccount> findActiveUsersForUpdate(
+            @Param("status") com.leo.erp.auth.domain.enums.UserStatus status
+    );
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT u FROM UserAccount u WHERE u.id = :id AND u.deletedFlag = false")
     Optional<UserAccount> findByIdAndDeletedFlagFalseForUpdate(@Param("id") Long id);

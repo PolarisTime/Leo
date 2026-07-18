@@ -13,7 +13,6 @@ import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.sales.outbound.domain.entity.SalesOutbound;
 import com.leo.erp.sales.outbound.domain.entity.SalesOutboundItem;
 import com.leo.erp.sales.outbound.repository.SalesOutboundRepository;
-import com.leo.erp.security.permission.WorkflowTransitionGuard;
 import com.leo.erp.system.operationlog.event.BusinessOperationEventPublisher;
 import com.leo.erp.sales.order.repository.SalesOrderRepository;
 import com.leo.erp.sales.outbound.web.dto.*;
@@ -35,7 +34,6 @@ import java.util.stream.Collectors;
 public class SalesOutboundService extends AbstractCrudService<SalesOutbound, SalesOutboundRequest, SalesOutboundResponse> {
 
     private final SalesOutboundRepository repository;
-    private final WorkflowTransitionGuard workflowTransitionGuard;
     private final SalesOutboundApplyService salesOutboundApplyService;
     private final SalesOutboundResponseAssembler responseAssembler;
     private final SalesOutboundSaveService saveService;
@@ -49,7 +47,6 @@ public class SalesOutboundService extends AbstractCrudService<SalesOutbound, Sal
     @Autowired
     public SalesOutboundService(SalesOutboundRepository repository,
                                 SnowflakeIdGenerator idGenerator,
-                                WorkflowTransitionGuard workflowTransitionGuard,
                                 SalesOutboundApplyService salesOutboundApplyService,
                                 SalesOutboundResponseAssembler responseAssembler,
                                 SalesOutboundSaveService saveService,
@@ -58,7 +55,6 @@ public class SalesOutboundService extends AbstractCrudService<SalesOutbound, Sal
                                 SalesOutboundDownstreamMutationGuard downstreamMutationGuard) {
         super(idGenerator);
         this.repository = repository;
-        this.workflowTransitionGuard = workflowTransitionGuard;
         this.salesOutboundApplyService = salesOutboundApplyService;
         this.responseAssembler = responseAssembler;
         this.saveService = saveService;
@@ -271,7 +267,7 @@ public class SalesOutboundService extends AbstractCrudService<SalesOutbound, Sal
     }
 
     @Override
-    protected boolean allowAdminViewDeletedRecords() {
+    protected boolean allowViewingDeletedRecords() {
         return true;
     }
 
@@ -288,12 +284,6 @@ public class SalesOutboundService extends AbstractCrudService<SalesOutbound, Sal
                 StatusConstants.DRAFT,
                 "销售出库状态",
                 StatusConstants.ALLOWED_SALES_OUTBOUND_STATUS
-        );
-        workflowTransitionGuard.assertAuditPermissionForProtectedValue(
-                "sales-outbound",
-                entity.getStatus(),
-                nextStatus,
-                StatusConstants.AUDITED
         );
         entity.setOutboundNo(entity.getOutboundNo() == null ? request.outboundNo() : entity.getOutboundNo());
         entity.setSalesOrderNo(request.salesOrderNo());

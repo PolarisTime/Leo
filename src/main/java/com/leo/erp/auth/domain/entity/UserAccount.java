@@ -47,9 +47,6 @@ public class UserAccount extends AbstractAuditableEntity {
     @Column(name = "department_name", length = 128)
     private String departmentName;
 
-    @Column(name = "permission_summary", length = 500)
-    private String permissionSummary;
-
     @Column(name = "last_login_date")
     private LocalDateTime lastLoginDate;
 

@@ -6,7 +6,6 @@ import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.api.PageResponse;
 import com.leo.erp.common.web.BindPageQuery;
-import org.springframework.security.access.prepost.PreAuthorize;
 import com.leo.erp.system.operationlog.service.OperationLogService;
 import com.leo.erp.system.operationlog.web.dto.OperationLogResponse;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -29,7 +28,6 @@ public class OperationLogController {
     }
 
     @GetMapping
-    @PreAuthorize("@rbac.check('operation-log', 'read')")
     public ApiResponse<PageResponse<OperationLogResponse>> page(
             @BindPageQuery(sortFieldKey = "operation-log") PageQuery query,
             @RequestParam(required = false) String keyword,

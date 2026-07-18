@@ -21,7 +21,6 @@ import com.leo.erp.logistics.bill.web.dto.FreightBillResponse;
 import com.leo.erp.master.carrier.domain.entity.Vehicle;
 import com.leo.erp.master.carrier.repository.CarrierRepository;
 import com.leo.erp.master.carrier.repository.VehicleRepository;
-import com.leo.erp.security.permission.WorkflowTransitionGuard;
 import com.leo.erp.system.company.domain.entity.CompanySetting;
 import com.leo.erp.system.company.service.CompanySettingService;
 import com.leo.erp.system.operationlog.event.BusinessOperationEventPublisher;
@@ -46,7 +45,6 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
     private final FreightBillRepository repository;
     private final FreightBillMapper mapper;
     private final FreightBillApplyService applyService;
-    private final WorkflowTransitionGuard workflowTransitionGuard;
     private final FreightBillCarrierResolver carrierResolver;
     private final CompanySettingService companySettingService;
     private final SourceAllocationLockService sourceAllocationLockService;
@@ -58,7 +56,6 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
                               SnowflakeIdGenerator idGenerator,
                               FreightBillMapper mapper,
                               FreightBillApplyService applyService,
-                              WorkflowTransitionGuard workflowTransitionGuard,
                               CarrierRepository carrierRepository,
                               CompanySettingService companySettingService,
                               SourceAllocationLockService sourceAllocationLockService,
@@ -68,7 +65,6 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
         this.repository = repository;
         this.mapper = mapper;
         this.applyService = applyService;
-        this.workflowTransitionGuard = workflowTransitionGuard;
         this.carrierResolver = new FreightBillCarrierResolver(carrierRepository);
         this.companySettingService = companySettingService;
         this.sourceAllocationLockService = sourceAllocationLockService;
@@ -98,18 +94,12 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
 
     @Transactional
     public FreightBillResponse createAndAudit(FreightBillRequest request) {
-        workflowTransitionGuard.assertAuditPermissionForProtectedValue(
-                "freight-bill", StatusConstants.DRAFT, StatusConstants.AUDITED, StatusConstants.AUDITED
-        );
         FreightBillResponse created = create(copyRequestWithStatus(request, StatusConstants.DRAFT));
         return updateStatus(created.id(), StatusConstants.AUDITED);
     }
 
     @Transactional
     public FreightBillResponse updateAndAudit(Long id, FreightBillRequest request) {
-        workflowTransitionGuard.assertAuditPermissionForProtectedValue(
-                "freight-bill", StatusConstants.DRAFT, StatusConstants.AUDITED, StatusConstants.AUDITED
-        );
         update(id, copyRequestWithStatus(request, StatusConstants.DRAFT));
         return updateStatus(id, StatusConstants.AUDITED);
     }
@@ -207,9 +197,6 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
     protected void apply(FreightBill entity, FreightBillRequest request) {
         String nextStatus = BusinessStatusValidator.normalizeWithDefault(
                 request.status(), StatusConstants.DRAFT, "物流单状态", StatusConstants.ALLOWED_FREIGHT_BILL_STATUS
-        );
-        workflowTransitionGuard.assertAuditPermissionForProtectedValue(
-                "freight-bill", entity.getStatus(), nextStatus, StatusConstants.AUDITED
         );
         FreightBillCarrierResolver.CarrierSnapshot carrier = carrierResolver.resolve(
                 request.carrierId(), request.carrierCode(), request.carrierName()
@@ -352,7 +339,7 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
     }
 
     @Override
-    protected boolean allowAdminViewDeletedRecords() {
+    protected boolean allowViewingDeletedRecords() {
         return true;
     }
 

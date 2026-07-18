@@ -16,7 +16,6 @@ import com.leo.erp.sales.order.domain.entity.SalesOrder;
 import com.leo.erp.sales.order.domain.entity.SalesOrderItem;
 import com.leo.erp.sales.order.web.dto.SalesOrderItemRequest;
 import com.leo.erp.sales.order.web.dto.SalesOrderRequest;
-import com.leo.erp.security.permission.WorkflowTransitionGuard;
 import com.leo.erp.system.company.domain.entity.CompanySetting;
 import com.leo.erp.system.company.service.CompanySettingService;
 import org.slf4j.Logger;
@@ -42,7 +41,6 @@ public class SalesOrderApplyService {
     private final SalesOrderWeightResolver weightResolver;
     private final SalesOrderPurchaseAllocationService purchaseAllocationService;
     private final SalesOrderItemMapper salesOrderItemMapper;
-    private final WorkflowTransitionGuard workflowTransitionGuard;
     private final CustomerRepository customerRepository;
     private final ProjectRepository projectRepository;
     private final CompanySettingService companySettingService;
@@ -51,10 +49,9 @@ public class SalesOrderApplyService {
                                   SalesOrderSourceAllocationService sourceAllocationService,
                                   SalesOrderWeightResolver weightResolver,
                                   SalesOrderPurchaseAllocationService purchaseAllocationService,
-                                  SalesOrderItemMapper salesOrderItemMapper,
-                                  WorkflowTransitionGuard workflowTransitionGuard) {
+                                  SalesOrderItemMapper salesOrderItemMapper) {
         this(tradeItemMaterialSupport, sourceAllocationService, weightResolver, purchaseAllocationService,
-                salesOrderItemMapper, workflowTransitionGuard, null);
+                salesOrderItemMapper, null);
     }
 
     public SalesOrderApplyService(TradeItemMaterialSupport tradeItemMaterialSupport,
@@ -62,10 +59,9 @@ public class SalesOrderApplyService {
                                   SalesOrderWeightResolver weightResolver,
                                   SalesOrderPurchaseAllocationService purchaseAllocationService,
                                   SalesOrderItemMapper salesOrderItemMapper,
-                                  WorkflowTransitionGuard workflowTransitionGuard,
                                   CustomerRepository customerRepository) {
         this(tradeItemMaterialSupport, sourceAllocationService, weightResolver, purchaseAllocationService,
-                salesOrderItemMapper, workflowTransitionGuard, customerRepository, null);
+                salesOrderItemMapper, customerRepository, null);
     }
 
     public SalesOrderApplyService(TradeItemMaterialSupport tradeItemMaterialSupport,
@@ -73,11 +69,10 @@ public class SalesOrderApplyService {
                                   SalesOrderWeightResolver weightResolver,
                                   SalesOrderPurchaseAllocationService purchaseAllocationService,
                                   SalesOrderItemMapper salesOrderItemMapper,
-                                  WorkflowTransitionGuard workflowTransitionGuard,
                                   CustomerRepository customerRepository,
                                   CompanySettingService companySettingService) {
         this(tradeItemMaterialSupport, sourceAllocationService, weightResolver, purchaseAllocationService,
-                salesOrderItemMapper, workflowTransitionGuard, customerRepository, null, companySettingService);
+                salesOrderItemMapper, customerRepository, null, companySettingService);
     }
 
     @Autowired
@@ -86,7 +81,6 @@ public class SalesOrderApplyService {
                                   SalesOrderWeightResolver weightResolver,
                                   SalesOrderPurchaseAllocationService purchaseAllocationService,
                                   SalesOrderItemMapper salesOrderItemMapper,
-                                  WorkflowTransitionGuard workflowTransitionGuard,
                                   CustomerRepository customerRepository,
                                   ProjectRepository projectRepository,
                                   CompanySettingService companySettingService) {
@@ -95,7 +89,6 @@ public class SalesOrderApplyService {
         this.weightResolver = weightResolver;
         this.purchaseAllocationService = purchaseAllocationService;
         this.salesOrderItemMapper = salesOrderItemMapper;
-        this.workflowTransitionGuard = workflowTransitionGuard;
         this.customerRepository = customerRepository;
         this.projectRepository = projectRepository;
         this.companySettingService = companySettingService;
@@ -114,14 +107,6 @@ public class SalesOrderApplyService {
                 entity.getStatus() != null ? entity.getStatus() : StatusConstants.DRAFT,
                 "销售订单状态",
                 StatusConstants.ALLOWED_SALES_ORDER_STATUS
-        );
-        workflowTransitionGuard.assertAuditPermissionForProtectedValue(
-                "sales-order",
-                entity.getStatus(),
-                nextStatus,
-                StatusConstants.AUDITED,
-                StatusConstants.DELIVERY_VERIFICATION,
-                StatusConstants.SALES_COMPLETED
         );
         applyHeader(entity, request, nextStatus, customer, project);
         applyItems(entity, request, nextIdSupplier);
@@ -145,20 +130,6 @@ public class SalesOrderApplyService {
                 entity.getProjectName()
         );
         requireProjectSnapshot(entity.getProjectId(), entity.getProjectName(), customer);
-    }
-
-    void assertCompletionPermission(SalesOrder entity) {
-        assertStatusPermission(entity, StatusConstants.SALES_COMPLETED);
-    }
-
-    void assertStatusPermission(SalesOrder entity, String nextStatus) {
-        workflowTransitionGuard.assertAuditPermissionForProtectedValue(
-                "sales-order",
-                entity.getStatus(),
-                nextStatus,
-                StatusConstants.AUDITED,
-                StatusConstants.SALES_COMPLETED
-        );
     }
 
     private void applyHeader(SalesOrder entity,

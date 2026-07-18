@@ -8,7 +8,6 @@ import com.leo.erp.master.project.service.ProjectService;
 import com.leo.erp.master.project.web.dto.ProjectOptionResponse;
 import com.leo.erp.master.project.web.dto.ProjectRequest;
 import com.leo.erp.master.project.web.dto.ProjectResponse;
-import org.springframework.security.access.prepost.PreAuthorize;
 import jakarta.validation.Valid;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -35,13 +34,11 @@ public class ProjectController {
     }
 
     @GetMapping("/options")
-    @PreAuthorize("@rbac.check('project', 'read')")
     public ApiResponse<List<ProjectOptionResponse>> options(@RequestParam Long customerId) {
         return ApiResponse.success(projectService.listActiveOptions(customerId));
     }
 
     @GetMapping
-    @PreAuthorize("@rbac.check('project', 'read')")
     public ApiResponse<PageResponse<ProjectResponse>> page(
             @BindPageQuery(sortFieldKey = "project") PageQuery query,
             @RequestParam(required = false) String keyword,
@@ -51,25 +48,21 @@ public class ProjectController {
     }
 
     @GetMapping("/{id}")
-    @PreAuthorize("@rbac.check('project', 'read')")
     public ApiResponse<ProjectResponse> detail(@PathVariable Long id) {
         return ApiResponse.success(projectService.detail(id));
     }
 
     @PostMapping
-    @PreAuthorize("@rbac.check('project', 'create')")
     public ApiResponse<ProjectResponse> create(@Valid @RequestBody ProjectRequest request) {
         return ApiResponse.success("创建成功", projectService.create(request));
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("@rbac.check('project', 'update')")
     public ApiResponse<ProjectResponse> update(@PathVariable Long id, @Valid @RequestBody ProjectRequest request) {
         return ApiResponse.success("更新成功", projectService.update(id, request));
     }
 
     @DeleteMapping("/{id}")
-    @PreAuthorize("@rbac.check('project', 'delete')")
     public ApiResponse<Void> delete(@PathVariable Long id) {
         projectService.delete(id);
         return ApiResponse.success("删除成功");

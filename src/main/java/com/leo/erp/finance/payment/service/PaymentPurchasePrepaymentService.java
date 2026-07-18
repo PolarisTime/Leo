@@ -13,7 +13,6 @@ import com.leo.erp.purchase.order.domain.entity.PurchaseOrder;
 import com.leo.erp.purchase.order.domain.entity.PurchaseOrderItem;
 import com.leo.erp.purchase.order.repository.PurchaseOrderItemRepository;
 import com.leo.erp.purchase.order.repository.PurchaseOrderRepository;
-import com.leo.erp.security.permission.ResourceRecordAccessGuard;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -24,7 +23,6 @@ import java.util.TreeSet;
 @Service
 public class PaymentPurchasePrepaymentService {
 
-    private static final String PURCHASE_ORDER_MODULE_KEY = "purchase-order";
     private static final Set<String> ALLOWED_SOURCE_STATUSES = Set.of(
             StatusConstants.AUDITED,
             StatusConstants.PURCHASE_COMPLETED
@@ -34,18 +32,15 @@ public class PaymentPurchasePrepaymentService {
     private final PurchaseOrderItemRepository purchaseOrderItemRepository;
     private final PaymentRepository paymentRepository;
     private final SourceAllocationLockService sourceAllocationLockService;
-    private final ResourceRecordAccessGuard resourceRecordAccessGuard;
 
     public PaymentPurchasePrepaymentService(PurchaseOrderRepository purchaseOrderRepository,
                                             PurchaseOrderItemRepository purchaseOrderItemRepository,
                                             PaymentRepository paymentRepository,
-                                            SourceAllocationLockService sourceAllocationLockService,
-                                            ResourceRecordAccessGuard resourceRecordAccessGuard) {
+                                            SourceAllocationLockService sourceAllocationLockService) {
         this.purchaseOrderRepository = purchaseOrderRepository;
         this.purchaseOrderItemRepository = purchaseOrderItemRepository;
         this.paymentRepository = paymentRepository;
         this.sourceAllocationLockService = sourceAllocationLockService;
-        this.resourceRecordAccessGuard = resourceRecordAccessGuard;
     }
 
     void applySourceSnapshot(Payment payment,
@@ -82,11 +77,6 @@ public class PaymentPurchasePrepaymentService {
         );
         PurchaseOrder sourceOrder = purchaseOrderRepository.findByIdAndDeletedFlagFalse(targetOrderId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "来源采购订单不存在"));
-        resourceRecordAccessGuard.assertCurrentUserCanAccess(
-                PURCHASE_ORDER_MODULE_KEY,
-                "read",
-                sourceOrder
-        );
         if (!ALLOWED_SOURCE_STATUSES.contains(sourceOrder.getStatus())) {
             throw new BusinessException(
                     ErrorCode.BUSINESS_ERROR,

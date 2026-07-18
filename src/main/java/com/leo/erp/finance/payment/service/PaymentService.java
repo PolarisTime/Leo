@@ -191,7 +191,7 @@ public class PaymentService extends AbstractCrudService<Payment, PaymentRequest,
     }
 
     @Override
-    protected boolean allowAdminViewDeletedRecords() {
+    protected boolean allowViewingDeletedRecords() {
         return true;
     }
 

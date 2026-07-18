@@ -15,6 +15,5 @@ load_workspace_env
 export LEO_RUNTIME_ENV=prod
 export SPRING_PROFILES_ACTIVE=prod
 export SPRING_DATASOURCE_DB="${LEO_PROD_DATASOURCE_DB:-prod}"
-export SPRING_AI_MCP_SERVER_ENABLED="${SPRING_AI_MCP_SERVER_ENABLED:-false}"
 
 set_backend_common_defaults

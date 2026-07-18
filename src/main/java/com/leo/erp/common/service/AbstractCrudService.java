@@ -5,7 +5,6 @@ import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.AbstractAuditableEntity;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
-import com.leo.erp.security.permission.RbacAuthorizationService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -24,7 +23,6 @@ public abstract class AbstractCrudService<E extends AbstractAuditableEntity, Req
 
     private final SnowflakeIdGenerator idGenerator;
     private CrudRuntimeSettings crudRuntimeSettings;
-    private RbacAuthorizationService rbacAuthorizationService;
     private final CrudStatusGuard statusGuard = new CrudStatusGuard();
 
     protected AbstractCrudService(SnowflakeIdGenerator idGenerator) {
@@ -37,11 +35,6 @@ public abstract class AbstractCrudService<E extends AbstractAuditableEntity, Req
     @Autowired(required = false)
     protected void setCrudRuntimeSettings(CrudRuntimeSettings crudRuntimeSettings) {
         this.crudRuntimeSettings = crudRuntimeSettings;
-    }
-
-    @Autowired(required = false)
-    protected void setRbacAuthorizationService(RbacAuthorizationService rbacAuthorizationService) {
-        this.rbacAuthorizationService = rbacAuthorizationService;
     }
 
     private Logger logger() {
@@ -212,7 +205,7 @@ public abstract class AbstractCrudService<E extends AbstractAuditableEntity, Req
         return String.valueOf(entityId);
     }
 
-    protected boolean allowAdminViewDeletedRecords() {
+    protected boolean allowViewingDeletedRecords() {
         return false;
     }
 
@@ -233,20 +226,14 @@ public abstract class AbstractCrudService<E extends AbstractAuditableEntity, Req
     }
 
     protected final Specification<E> applyDeletedVisibilityPolicy(Specification<E> specification) {
-        return VISIBILITY_POLICY.applyDeletedVisibility(specification, shouldAdminViewDeletedRecords());
+        return VISIBILITY_POLICY.applyDeletedVisibility(specification, allowViewingDeletedRecords());
     }
 
     private Optional<E> resolveDetailEntity(Long id) {
-        if (shouldAdminViewDeletedRecords()) {
+        if (allowViewingDeletedRecords()) {
             return findVisibleEntity(id);
         }
         return findActiveEntity(id);
-    }
-
-    private boolean shouldAdminViewDeletedRecords() {
-        return allowAdminViewDeletedRecords()
-                && rbacAuthorizationService != null
-                && rbacAuthorizationService.check("document", "view_deleted");
     }
 
     private Specification<E> combineSpecifications(Specification<E> left, Specification<E> right) {

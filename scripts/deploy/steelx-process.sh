@@ -26,7 +26,6 @@ if [[ -f "$ENV_FILE" ]]; then
 fi
 
 SERVER_PORT="${SERVER_PORT:-57217}"
-export SPRING_AI_MCP_SERVER_ENABLED="${SPRING_AI_MCP_SERVER_ENABLED:-false}"
 if [[ -n "${STEELX_BACKEND_JAR:-}" ]]; then
   JAR_FILE="$STEELX_BACKEND_JAR"
 elif [[ -f "$STEELX_BACKEND_ROOT/current/leo.jar" ]]; then

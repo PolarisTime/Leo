@@ -10,7 +10,6 @@ import com.leo.erp.auth.web.dto.TokenResponse;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.security.jwt.JwtTokenService;
-import com.leo.erp.security.permission.PermissionService;
 import com.leo.erp.security.support.SecurityPrincipal;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.authentication.BadCredentialsException;
@@ -28,23 +27,17 @@ public class TokenIssuanceService {
 
     private final UserAccountRepository userAccountRepository;
     private final JwtTokenService jwtTokenService;
-    private final PermissionService permissionService;
-    private final UserRoleBindingService userRoleBindingService;
     private final SessionManagementService sessionManagementService;
     private final ApplicationEventPublisher eventPublisher;
 
     public TokenIssuanceService(
             UserAccountRepository userAccountRepository,
             JwtTokenService jwtTokenService,
-            PermissionService permissionService,
-            UserRoleBindingService userRoleBindingService,
             SessionManagementService sessionManagementService,
             ApplicationEventPublisher eventPublisher
     ) {
         this.userAccountRepository = userAccountRepository;
         this.jwtTokenService = jwtTokenService;
-        this.permissionService = permissionService;
-        this.userRoleBindingService = userRoleBindingService;
         this.sessionManagementService = sessionManagementService;
         this.eventPublisher = eventPublisher;
     }
@@ -128,20 +121,14 @@ public class TokenIssuanceService {
                 loginIp,
                 userAgent
         );
-        var boundRoles = userRoleBindingService.resolveRolesForUser(user.getId());
         SecurityPrincipal principal = SecurityPrincipal.authenticated(
                 user.getId(),
                 user.getLoginName(),
-                userRoleBindingService.toGrantedAuthorities(boundRoles),
                 normalizeCredentialVersion(session.getCredentialVersion())
         );
         String accessToken = jwtTokenService.generateAccessToken(principal, sessionTokenId);
 
         userAccountRepository.save(user);
-
-        permissionService.evictCache(user.getId());
-        var permissions = permissionService.getUserPermissions(user.getId());
-        String currentRoleNames = userRoleBindingService.joinRoleNames(boundRoles);
 
         eventPublisher.publishEvent(new SessionInvalidatedEvent(user.getId(), sessionTokenId, false));
 
@@ -156,9 +143,7 @@ public class TokenIssuanceService {
                 new AuthUserResponse(
                         user.getId(),
                         user.getLoginName(),
-                        user.getUserName(),
-                        currentRoleNames,
-                        permissions
+                        user.getUserName()
                 )
         );
     }
@@ -166,18 +151,13 @@ public class TokenIssuanceService {
     private TokenResponse issueAccessTokenForSession(UserAccount user,
                                                      RefreshTokenSession session,
                                                      String rawRefreshToken) {
-        var boundRoles = userRoleBindingService.resolveRolesForUser(user.getId());
         SecurityPrincipal principal = SecurityPrincipal.authenticated(
                 user.getId(),
                 user.getLoginName(),
-                userRoleBindingService.toGrantedAuthorities(boundRoles),
                 normalizeCredentialVersion(user.getCredentialVersion())
         );
         String accessToken = jwtTokenService.generateAccessToken(principal, session.getTokenId());
 
-        permissionService.evictCache(user.getId());
-        var permissions = permissionService.getUserPermissions(user.getId());
-        String currentRoleNames = userRoleBindingService.joinRoleNames(boundRoles);
         long refreshExpiresIn = jwtTokenService.getRefreshExpirationMs() / MILLIS_PER_SECOND;
 
         return new TokenResponse(
@@ -189,9 +169,7 @@ public class TokenIssuanceService {
                 new AuthUserResponse(
                         user.getId(),
                         user.getLoginName(),
-                        user.getUserName(),
-                        currentRoleNames,
-                        permissions
+                        user.getUserName()
                 )
         );
     }

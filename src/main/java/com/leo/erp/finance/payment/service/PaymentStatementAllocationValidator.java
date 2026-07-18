@@ -7,8 +7,6 @@ import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.support.TradeItemCalculator;
 import com.leo.erp.finance.payment.repository.PaymentAllocationRepository;
 import com.leo.erp.finance.payment.web.dto.PaymentRequest;
-import com.leo.erp.security.permission.ResourcePermissionCatalog;
-import com.leo.erp.security.permission.ResourceRecordAccessGuard;
 import com.leo.erp.statement.freight.domain.entity.FreightStatement;
 import com.leo.erp.statement.freight.service.FreightStatementQueryService;
 import org.springframework.stereotype.Service;
@@ -21,14 +19,11 @@ public class PaymentStatementAllocationValidator {
 
     private final PaymentAllocationRepository paymentAllocationRepository;
     private final FreightStatementQueryService freightStatementQueryService;
-    private final ResourceRecordAccessGuard resourceRecordAccessGuard;
 
     public PaymentStatementAllocationValidator(PaymentAllocationRepository paymentAllocationRepository,
-                                               FreightStatementQueryService freightStatementQueryService,
-                                               ResourceRecordAccessGuard resourceRecordAccessGuard) {
+                                               FreightStatementQueryService freightStatementQueryService) {
         this.paymentAllocationRepository = paymentAllocationRepository;
         this.freightStatementQueryService = freightStatementQueryService;
-        this.resourceRecordAccessGuard = resourceRecordAccessGuard;
     }
 
     ValidatedStatement validate(PaymentRequest request,
@@ -54,11 +49,6 @@ public class PaymentStatementAllocationValidator {
 
     private FreightStatement requireAccessibleFreightStatement(Long statementId) {
         FreightStatement statement = freightStatementQueryService.requireActiveById(statementId);
-        resourceRecordAccessGuard.assertCurrentUserCanAccess(
-                "freight-statement",
-                ResourcePermissionCatalog.READ,
-                statement
-        );
         return statement;
     }
 

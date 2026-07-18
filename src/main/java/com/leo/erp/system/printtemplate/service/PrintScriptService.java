@@ -3,11 +3,8 @@ package com.leo.erp.system.printtemplate.service;
 import com.leo.erp.attachment.service.AttachmentRecordAccessService;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
-import com.leo.erp.security.support.SecurityPrincipal;
 import com.leo.erp.system.printtemplate.domain.entity.PrintTemplate;
 import com.leo.erp.system.printtemplate.repository.PrintTemplateRepository;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -63,7 +60,7 @@ public class PrintScriptService {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "打印模板与当前模块不匹配");
         }
         dataProvider.requireSupported(moduleKey);
-        recordAccessService.assertRecordAccessible(currentPrincipal(), moduleKey, "read", recordId);
+        recordAccessService.assertRecordExists(moduleKey, recordId);
         PrintRecordData recordData = dataProvider.loadRecord(moduleKey, recordId);
         Map<String, String> data = recordData.data();
         List<Map<String, String>> items = recordData.items();
@@ -139,7 +136,7 @@ public class PrintScriptService {
             return List.of();
         }
         for (Long recordId : recordIds) {
-            recordAccessService.assertRecordAccessible(currentPrincipal(), moduleKey, "read", recordId);
+            recordAccessService.assertRecordExists(moduleKey, recordId);
         }
         return dataProvider.listBrands(moduleKey, recordIds);
     }
@@ -150,7 +147,7 @@ public class PrintScriptService {
             return List.of();
         }
         for (Long recordId : recordIds) {
-            recordAccessService.assertRecordAccessible(currentPrincipal(), moduleKey, "read", recordId);
+            recordAccessService.assertRecordExists(moduleKey, recordId);
         }
         return dataProvider.listPrintItems(moduleKey, recordIds);
     }
@@ -241,14 +238,6 @@ public class PrintScriptService {
         return items.stream()
                 .filter(item -> selectedItemIds.contains(item.get("id")))
                 .toList();
-    }
-
-    private SecurityPrincipal currentPrincipal() {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        if (authentication != null && authentication.getPrincipal() instanceof SecurityPrincipal principal) {
-            return principal;
-        }
-        throw new BusinessException(ErrorCode.UNAUTHORIZED, "未登录");
     }
 
     private String renderTemplateHtml(PrintTemplate template, Map<String, String> data, List<Map<String, String>> items) {

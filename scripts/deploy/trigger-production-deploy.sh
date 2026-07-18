@@ -36,9 +36,9 @@ usage() {
   -h, --help              查看帮助
 
 示例:
-  bash leo/scripts/deploy/trigger-production-deploy.sh --dry-run --flyway-target 19
-  bash leo/scripts/deploy/trigger-production-deploy.sh --confirm-production --flyway-target 19 --leo-ref main --watch
-  bash leo/scripts/deploy/trigger-production-deploy.sh --confirm-production --flyway-target 19 --deploy-target ssh --leo-ref main --watch
+  bash leo/scripts/deploy/trigger-production-deploy.sh --dry-run --flyway-target 94
+  bash leo/scripts/deploy/trigger-production-deploy.sh --confirm-production --flyway-target 94 --leo-ref main --watch
+  bash leo/scripts/deploy/trigger-production-deploy.sh --confirm-production --flyway-target 94 --deploy-target ssh --leo-ref main --watch
 EOF
 }
 

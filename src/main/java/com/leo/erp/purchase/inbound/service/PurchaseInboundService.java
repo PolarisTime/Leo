@@ -16,7 +16,6 @@ import com.leo.erp.purchase.inbound.domain.entity.PurchaseInboundItem;
 import com.leo.erp.purchase.inbound.repository.PurchaseInboundItemRepository;
 import com.leo.erp.purchase.inbound.repository.PurchaseInboundRepository;
 import com.leo.erp.purchase.inbound.mapper.PurchaseInboundMapper;
-import com.leo.erp.security.permission.WorkflowTransitionGuard;
 import com.leo.erp.system.operationlog.event.BusinessOperationEventPublisher;
 import com.leo.erp.purchase.inbound.web.dto.*;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -48,7 +47,6 @@ public class PurchaseInboundService extends AbstractCrudService<
     private final PurchaseInboundDeleteService deleteService;
     private final PurchaseInboundCompletionSyncService completionSyncService;
     private final PurchaseInboundResponseAssembler responseAssembler;
-    private final WorkflowTransitionGuard workflowTransitionGuard;
     private final SourceAllocationLockService sourceAllocationLockService;
     private final PurchaseInboundSourceStatusGuard purchaseInboundSourceStatusGuard;
     private final PurchaseInboundWeightSettlementService weightSettlementService;
@@ -73,7 +71,6 @@ public class PurchaseInboundService extends AbstractCrudService<
                                   PurchaseInboundDeleteService deleteService,
                                   PurchaseInboundCompletionSyncService completionSyncService,
                                   PurchaseInboundResponseAssembler responseAssembler,
-                                  WorkflowTransitionGuard workflowTransitionGuard,
                                   SourceAllocationLockService sourceAllocationLockService,
                                   PurchaseInboundWeightSettlementService weightSettlementService,
                                   PurchaseInboundWeightWriteBackService weightWriteBackService,
@@ -85,7 +82,6 @@ public class PurchaseInboundService extends AbstractCrudService<
         this.deleteService = deleteService;
         this.completionSyncService = completionSyncService;
         this.responseAssembler = responseAssembler;
-        this.workflowTransitionGuard = workflowTransitionGuard;
         this.sourceAllocationLockService = sourceAllocationLockService;
         this.weightSettlementService = weightSettlementService;
         this.weightWriteBackService = weightWriteBackService;
@@ -156,13 +152,6 @@ public class PurchaseInboundService extends AbstractCrudService<
         if (!StatusConstants.DRAFT.equals(inbound.getStatus())) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "只有草稿采购入库单可以审核");
         }
-        workflowTransitionGuard.assertAuditPermissionForProtectedValue(
-                "purchase-inbound",
-                inbound.getStatus(),
-                StatusConstants.AUDITED,
-                StatusConstants.AUDITED,
-                StatusConstants.INBOUND_COMPLETED
-        );
         prepareStatusTransition(inbound, inbound.getStatus(), StatusConstants.AUDITED);
         applyToleranceConfirmations(inbound, confirmations == null ? List.of() : confirmations);
         inbound.setStatus(StatusConstants.AUDITED);
@@ -254,7 +243,7 @@ public class PurchaseInboundService extends AbstractCrudService<
     }
 
     @Override
-    protected boolean allowAdminViewDeletedRecords() {
+    protected boolean allowViewingDeletedRecords() {
         return true;
     }
 
@@ -287,13 +276,6 @@ public class PurchaseInboundService extends AbstractCrudService<
                 StatusConstants.ALLOWED_PURCHASE_INBOUND_STATUS
         );
         assertStatusNotChangedBySave(inbound, nextStatus);
-        workflowTransitionGuard.assertAuditPermissionForProtectedValue(
-                "purchase-inbound",
-                inbound.getStatus(),
-                nextStatus,
-                StatusConstants.AUDITED,
-                StatusConstants.INBOUND_COMPLETED
-        );
         inbound.setInboundNo(request.inboundNo());
         inbound.setPurchaseOrderNo(request.purchaseOrderNo());
         inbound.setSupplierId(request.supplierId());

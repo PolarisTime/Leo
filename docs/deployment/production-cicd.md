@@ -118,15 +118,14 @@ SPRING_DATA_REDIS_HOST=127.0.0.1
 SPRING_DATA_REDIS_PORT=6379
 SPRING_DATA_REDIS_DATABASE=3
 SPRING_DATA_REDIS_PASSWORD=change-me
-SPRING_FLYWAY_TARGET=19
+SPRING_FLYWAY_TARGET=94
 LEO_JWT_SECRET=change-me-at-least-32-chars
-TOTP_ENCRYPTION_KEY=change-me-at-least-16-chars
+LEO_DATA_ENCRYPTION_KEY=change-me-at-least-32-chars
 LEO_SETUP_BOOTSTRAP_TOKEN=<32-byte-base64url-token>
 LEO_MACHINE_ID=1
 LEO_ATTACHMENT_LOCAL_PATH=/var/lib/leo/uploads
 LEO_AUTH_REFRESH_COOKIE_SECURE=true
 LEO_AUTH_REFRESH_COOKIE_SAME_SITE=Strict
-SPRING_AI_MCP_SERVER_ENABLED=false
 ```
 
 安装 systemd 服务模板：
@@ -199,7 +198,7 @@ gh auth status
 只构建打包，不部署生产：
 
 ```bash
-bash leo/scripts/deploy/trigger-production-deploy.sh --dry-run --flyway-target 19 --watch
+bash leo/scripts/deploy/trigger-production-deploy.sh --dry-run --flyway-target 94 --watch
 ```
 
 真实生产发布：
@@ -208,7 +207,7 @@ bash leo/scripts/deploy/trigger-production-deploy.sh --dry-run --flyway-target 1
 bash leo/scripts/deploy/trigger-production-deploy.sh \
   --confirm-production \
   --deploy-target local \
-  --flyway-target 19 \
+  --flyway-target 94 \
   --leo-ref main \
   --aries-ref dev \
   --watch
@@ -237,7 +236,7 @@ bash leo/scripts/deploy/trigger-production-deploy.sh \
 
 ```bash
 PGPASSWORD="<postgres-admin-password>" \
-  bash leo/scripts/deploy/trigger-local-steelx-deploy.sh --confirm --flyway-target 19
+  bash leo/scripts/deploy/trigger-local-steelx-deploy.sh --confirm --flyway-target 94
 ```
 
 脚本会安装 `/etc/nginx/conf.d/steelx.conf`，执行 `nginx -t` 后 reload Nginx。执行用户需要 root 权限，或具备免密 sudo 执行 `install`、`nginx -t`、`nginx -s reload` 的权限。生产实例对外地址为 `https://in1ove.com`，`http://in1ove.com` 会跳转到 HTTPS。

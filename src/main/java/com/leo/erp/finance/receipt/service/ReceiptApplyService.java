@@ -7,7 +7,6 @@ import com.leo.erp.common.support.TradeItemCalculator;
 import com.leo.erp.finance.receipt.domain.entity.Receipt;
 import com.leo.erp.finance.receipt.domain.entity.ReceiptPurposes;
 import com.leo.erp.finance.receipt.web.dto.ReceiptRequest;
-import com.leo.erp.security.permission.WorkflowTransitionGuard;
 import org.springframework.stereotype.Service;
 
 import java.util.function.LongSupplier;
@@ -16,16 +15,13 @@ import java.math.BigDecimal;
 @Service
 public class ReceiptApplyService {
 
-    private final WorkflowTransitionGuard workflowTransitionGuard;
     private final ReceiptAllocationService receiptAllocationService;
     private final ReceiptSettlementSyncService settlementSyncService;
     private final ReceiptPartyIdentityResolver partyIdentityResolver;
 
-    public ReceiptApplyService(WorkflowTransitionGuard workflowTransitionGuard,
-                               ReceiptAllocationService receiptAllocationService,
+    public ReceiptApplyService(ReceiptAllocationService receiptAllocationService,
                                ReceiptSettlementSyncService settlementSyncService,
                                ReceiptPartyIdentityResolver partyIdentityResolver) {
-        this.workflowTransitionGuard = workflowTransitionGuard;
         this.receiptAllocationService = receiptAllocationService;
         this.settlementSyncService = settlementSyncService;
         this.partyIdentityResolver = partyIdentityResolver;
@@ -38,12 +34,6 @@ public class ReceiptApplyService {
                 StatusConstants.DRAFT,
                 "收款单状态",
                 StatusConstants.ALLOWED_RECEIPT_STATUS
-        );
-        workflowTransitionGuard.assertAuditPermissionForProtectedValue(
-                "receipt",
-                entity.getStatus(),
-                nextStatus,
-                StatusConstants.AUDITED
         );
         settlementSyncService.captureOriginalAllocationStatementIds(entity);
         entity.setReceiptNo(request.receiptNo());

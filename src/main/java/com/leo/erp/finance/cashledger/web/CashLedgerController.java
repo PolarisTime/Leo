@@ -6,7 +6,6 @@ import com.leo.erp.common.web.BindPageQuery;
 import com.leo.erp.common.web.dto.FileDownloadResponse;
 import com.leo.erp.finance.cashledger.service.CashLedgerService;
 import com.leo.erp.finance.cashledger.web.dto.CashLedgerPageResponse;
-import org.springframework.security.access.prepost.PreAuthorize;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -35,7 +34,6 @@ public class CashLedgerController {
     }
 
     @GetMapping
-    @PreAuthorize("@rbac.check('cash-ledger', 'read')")
     @Operation(summary = "分页查询资金流水")
     public ApiResponse<CashLedgerPageResponse> page(
             @BindPageQuery(sortFieldKey = "cash-ledger", directionParam = "sortDirection") PageQuery query,
@@ -60,7 +58,6 @@ public class CashLedgerController {
     }
 
     @GetMapping("/export")
-    @PreAuthorize("@rbac.check('cash-ledger', 'export')")
     @Operation(summary = "导出资金流水")
     public ResponseEntity<byte[]> export(
             @RequestParam Long settlementCompanyId,

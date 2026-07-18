@@ -22,7 +22,7 @@ public class MetaController {
         this.metaService = metaService;
     }
 
-    @Operation(summary = "获取错误码和权限点元数据")
+    @Operation(summary = "获取错误码和系统元数据")
     @GetMapping("/code")
     public ApiResponse<MetaCodeResponse> codes() {
         return ApiResponse.success(metaService.codes());

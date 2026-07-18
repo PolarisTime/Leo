@@ -8,7 +8,6 @@ import com.leo.erp.master.warehouse.service.WarehouseService;
 import com.leo.erp.master.warehouse.web.dto.WarehouseOptionResponse;
 import com.leo.erp.master.warehouse.web.dto.WarehouseRequest;
 import com.leo.erp.master.warehouse.web.dto.WarehouseResponse;
-import org.springframework.security.access.prepost.PreAuthorize;
 import jakarta.validation.Valid;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -35,13 +34,11 @@ public class WarehouseController {
     }
 
     @GetMapping("/options")
-    @PreAuthorize("@rbac.check('warehouse', 'read')")
     public ApiResponse<List<WarehouseOptionResponse>> options() {
         return ApiResponse.success(warehouseService.listActiveOptions());
     }
 
     @GetMapping
-    @PreAuthorize("@rbac.check('warehouse', 'read')")
     public ApiResponse<PageResponse<WarehouseResponse>> page(
             @BindPageQuery(sortFieldKey = "warehouse") PageQuery query,
             @RequestParam(required = false) String keyword,
@@ -52,25 +49,21 @@ public class WarehouseController {
     }
 
     @GetMapping("/{id}")
-    @PreAuthorize("@rbac.check('warehouse', 'read')")
     public ApiResponse<WarehouseResponse> detail(@PathVariable Long id) {
         return ApiResponse.success(warehouseService.detail(id));
     }
 
     @PostMapping
-    @PreAuthorize("@rbac.check('warehouse', 'create')")
     public ApiResponse<WarehouseResponse> create(@Valid @RequestBody WarehouseRequest request) {
         return ApiResponse.success("创建成功", warehouseService.create(request));
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("@rbac.check('warehouse', 'update')")
     public ApiResponse<WarehouseResponse> update(@PathVariable Long id, @Valid @RequestBody WarehouseRequest request) {
         return ApiResponse.success("更新成功", warehouseService.update(id, request));
     }
 
     @DeleteMapping("/{id}")
-    @PreAuthorize("@rbac.check('warehouse', 'delete')")
     public ApiResponse<Void> delete(@PathVariable Long id) {
         warehouseService.delete(id);
         return ApiResponse.success("删除成功");

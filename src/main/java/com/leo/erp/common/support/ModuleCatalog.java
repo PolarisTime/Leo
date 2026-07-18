@@ -58,10 +58,7 @@ public class ModuleCatalog {
         modules.put("cash-ledger", "资金流水");
         modules.put("general-setting", "通用设置");
         modules.put("company-setting", "结算主体管理");
-        modules.put("permission", "权限管理");
         modules.put("user-account", "用户账户");
-        modules.put("role-setting", "角色权限配置");
-        modules.put("role-action-editor", "角色权限配置");
         modules.put("print-template", "打印模板");
         modules.put("operation-log", "操作日志");
         modules.put("database", "数据库管理");

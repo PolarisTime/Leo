@@ -1,7 +1,6 @@
 package com.leo.erp.system.oss.web;
 
 import com.leo.erp.common.api.ApiResponse;
-import org.springframework.security.access.prepost.PreAuthorize;
 import com.leo.erp.system.operationlog.support.OperationLoggable;
 import com.leo.erp.system.oss.service.OssSettingService;
 import com.leo.erp.system.oss.web.dto.OssCorsConfigureRequest;
@@ -29,27 +28,23 @@ public class OssSettingController {
     }
 
     @GetMapping
-    @PreAuthorize("@rbac.check('general-setting', 'read')")
     public ApiResponse<OssSettingResponse> current() {
         return ApiResponse.success(ossSettingService.current());
     }
 
     @PutMapping
-    @PreAuthorize("@rbac.check('general-setting', 'update')")
     @OperationLoggable(moduleName = "OSS 设置", actionType = "保存")
     public ApiResponse<OssSettingResponse> save(@Valid @RequestBody OssSettingRequest request) {
         return ApiResponse.success("保存成功", ossSettingService.save(request));
     }
 
     @PostMapping("/storage-test")
-    @PreAuthorize("@rbac.check('general-setting', 'update')")
     @OperationLoggable(moduleName = "OSS 设置", actionType = "测试存储")
     public ApiResponse<OssOperationResult> testStorage(@Valid @RequestBody OssSettingRequest request) {
         return ApiResponse.success("测试完成", ossSettingService.testStorage(request));
     }
 
     @PostMapping("/cors")
-    @PreAuthorize("@rbac.check('general-setting', 'update')")
     @OperationLoggable(moduleName = "OSS 设置", actionType = "配置 CORS")
     public ApiResponse<OssOperationResult> configureCors(@Valid @RequestBody OssCorsConfigureRequest request) {
         return ApiResponse.success("配置完成", ossSettingService.configureCors(request));

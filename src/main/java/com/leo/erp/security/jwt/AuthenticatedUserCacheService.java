@@ -5,7 +5,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leo.erp.auth.domain.entity.UserAccount;
 import com.leo.erp.auth.domain.enums.UserStatus;
 import com.leo.erp.auth.repository.UserAccountRepository;
-import com.leo.erp.auth.service.UserRoleBindingService;
 import com.leo.erp.common.config.RedisTuningProperties;
 import com.leo.erp.security.support.SecurityPrincipal;
 import lombok.extern.slf4j.Slf4j;
@@ -15,12 +14,10 @@ import org.springframework.data.redis.connection.RedisConnection;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.core.ScanOptions;
 import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.security.core.GrantedAuthority;
 import org.springframework.stereotype.Service;
 
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -34,19 +31,16 @@ public class AuthenticatedUserCacheService {
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
     private final UserAccountRepository userAccountRepository;
-    private final UserRoleBindingService userRoleBindingService;
     private final RedisTuningProperties redisTuningProperties;
 
     @Autowired
     public AuthenticatedUserCacheService(StringRedisTemplate redisTemplate,
                                          ObjectMapper objectMapper,
                                          UserAccountRepository userAccountRepository,
-                                         UserRoleBindingService userRoleBindingService,
                                          RedisTuningProperties redisTuningProperties) {
         this.redisTemplate = redisTemplate;
         this.objectMapper = objectMapper;
         this.userAccountRepository = userAccountRepository;
-        this.userRoleBindingService = userRoleBindingService;
         this.redisTuningProperties = redisTuningProperties;
     }
 
@@ -185,17 +179,9 @@ public class AuthenticatedUserCacheService {
     }
 
     private CachedAuthenticatedUser toSnapshot(UserAccount user) {
-        Collection<? extends GrantedAuthority> authorities = userRoleBindingService.toGrantedAuthorities(
-                userRoleBindingService.resolveRolesForUser(user.getId())
-        );
-        List<String> authorityValues = authorities.stream()
-                .map(GrantedAuthority::getAuthority)
-                .distinct()
-                .toList();
         return new CachedAuthenticatedUser(
                 user.getId(),
                 user.getLoginName(),
-                authorityValues,
                 normalizeCredentialVersion(user.getCredentialVersion())
         );
     }
@@ -237,7 +223,6 @@ public class AuthenticatedUserCacheService {
     private record CachedAuthenticatedUser(
             Long userId,
             String loginName,
-            List<String> authorities,
             long credentialVersion
     ) {
 
@@ -245,9 +230,6 @@ public class AuthenticatedUserCacheService {
             return SecurityPrincipal.authenticated(
                     userId,
                     loginName,
-                    authorities.stream()
-                            .map(org.springframework.security.core.authority.SimpleGrantedAuthority::new)
-                            .toList(),
                     credentialVersion
             );
         }

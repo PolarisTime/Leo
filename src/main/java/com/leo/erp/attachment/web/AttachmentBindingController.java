@@ -8,14 +8,10 @@ import com.leo.erp.attachment.web.dto.AttachmentBindingResponse;
 import com.leo.erp.common.api.ApiResponse;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
-import com.leo.erp.security.permission.ModulePermissionGuard;
-import org.springframework.security.access.prepost.PreAuthorize;
-import com.leo.erp.security.support.SecurityPrincipal;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -34,37 +30,32 @@ import java.util.List;
 public class AttachmentBindingController {
 
     private final AttachmentWebService attachmentWebService;
-    private final ModulePermissionGuard modulePermissionGuard;
     private final AttachmentRecordAccessService attachmentRecordAccessService;
 
     public AttachmentBindingController(AttachmentWebService attachmentWebService,
-                                       ModulePermissionGuard modulePermissionGuard,
                                        AttachmentRecordAccessService attachmentRecordAccessService) {
         this.attachmentWebService = attachmentWebService;
-        this.modulePermissionGuard = modulePermissionGuard;
         this.attachmentRecordAccessService = attachmentRecordAccessService;
     }
 
     @GetMapping
-    @PreAuthorize("isAuthenticated()")
-    public ApiResponse<AttachmentBindingResponse> detail(@AuthenticationPrincipal SecurityPrincipal principal,
+    public ApiResponse<AttachmentBindingResponse> detail(
                                                          @RequestParam @NotBlank @Size(max = 64) String moduleKey,
                                                          @RequestParam @Positive Long recordId) {
-        String normalizedModuleKey = modulePermissionGuard.requirePermission(principal, moduleKey, "read");
-        attachmentRecordAccessService.assertRecordAccessible(principal, normalizedModuleKey, "read", recordId);
+        String normalizedModuleKey = attachmentRecordAccessService.normalizeModuleKey(moduleKey);
+        attachmentRecordAccessService.assertRecordExists(normalizedModuleKey, recordId);
         return ApiResponse.success(attachmentWebService.detail(normalizedModuleKey, recordId));
     }
 
     @GetMapping("/counts")
-    @PreAuthorize("isAuthenticated()")
-    public ApiResponse<AttachmentBindingCountResponse> counts(@AuthenticationPrincipal SecurityPrincipal principal,
+    public ApiResponse<AttachmentBindingCountResponse> counts(
                                                               @RequestParam @NotBlank @Size(max = 64) String moduleKey,
                                                               @RequestParam @NotBlank String recordIds) {
-        String normalizedModuleKey = modulePermissionGuard.requirePermission(principal, moduleKey, "read");
+        String normalizedModuleKey = attachmentRecordAccessService.normalizeModuleKey(moduleKey);
         List<Long> normalizedRecordIds = parseRecordIds(recordIds);
         List<Long> accessibleRecordIds = new ArrayList<>(normalizedRecordIds.size());
         for (Long recordId : normalizedRecordIds) {
-            if (canCountRecordAttachments(principal, normalizedModuleKey, recordId)) {
+            if (canCountRecordAttachments(normalizedModuleKey, recordId)) {
                 accessibleRecordIds.add(recordId);
             }
         }
@@ -72,11 +63,9 @@ public class AttachmentBindingController {
     }
 
     @PutMapping
-    @PreAuthorize("isAuthenticated()")
-    public ApiResponse<AttachmentBindingResponse> update(@AuthenticationPrincipal SecurityPrincipal principal,
-                                                         @Valid @RequestBody AttachmentBindingRequest request) {
-        String normalizedModuleKey = modulePermissionGuard.requirePermission(principal, request.moduleKey(), "update");
-        attachmentRecordAccessService.assertRecordAccessible(principal, normalizedModuleKey, "update", request.recordId());
+    public ApiResponse<AttachmentBindingResponse> update(@Valid @RequestBody AttachmentBindingRequest request) {
+        String normalizedModuleKey = attachmentRecordAccessService.normalizeModuleKey(request.moduleKey());
+        attachmentRecordAccessService.assertRecordExists(normalizedModuleKey, request.recordId());
         return ApiResponse.success(
                 "更新成功",
                 attachmentWebService.replace(normalizedModuleKey, request.recordId(), request.attachmentIds())
@@ -93,9 +82,9 @@ public class AttachmentBindingController {
                 .toList();
     }
 
-    private boolean canCountRecordAttachments(SecurityPrincipal principal, String moduleKey, Long recordId) {
+    private boolean canCountRecordAttachments(String moduleKey, Long recordId) {
         try {
-            attachmentRecordAccessService.assertRecordAccessible(principal, moduleKey, "read", recordId);
+            attachmentRecordAccessService.assertRecordExists(moduleKey, recordId);
             return true;
         } catch (BusinessException ex) {
             if (ex.getErrorCode() == ErrorCode.NOT_FOUND) {

@@ -72,13 +72,13 @@ jobs:
       SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/leo
       SPRING_DATASOURCE_USERNAME: leo
       SPRING_DATASOURCE_PASSWORD: leo_ci_password
-      SPRING_FLYWAY_TARGET: 64
+      SPRING_FLYWAY_TARGET: 94
       SPRING_DATA_REDIS_HOST: localhost
       SPRING_DATA_REDIS_PORT: 6379
       SPRING_DATA_REDIS_DATABASE: 3
       SPRING_DATA_REDIS_PASSWORD: ""
       LEO_JWT_SECRET: ci-jwt-secret-ci-jwt-secret-ci-jwt-secret
-      TOTP_ENCRYPTION_KEY: ci-totp-secret-ci-totp-secret-ci-totp
+      LEO_DATA_ENCRYPTION_KEY: ci-data-secret-ci-data-secret-ci-data
       LEO_MACHINE_ID: 1
 
     steps:
@@ -133,7 +133,7 @@ jobs:
             -e SPRING_DATA_REDIS_DATABASE="$SPRING_DATA_REDIS_DATABASE" \
             -e SPRING_DATA_REDIS_PASSWORD="$SPRING_DATA_REDIS_PASSWORD" \
             -e LEO_JWT_SECRET="$LEO_JWT_SECRET" \
-            -e TOTP_ENCRYPTION_KEY="$TOTP_ENCRYPTION_KEY" \
+            -e LEO_DATA_ENCRYPTION_KEY="$LEO_DATA_ENCRYPTION_KEY" \
             -e LEO_MACHINE_ID="$LEO_MACHINE_ID" \
             leo-backend:ci
           trap 'docker ps -a --filter name=leo-backend-smoke; docker logs leo-backend-smoke --tail 300 || true; docker rm -f leo-backend-smoke || true' EXIT

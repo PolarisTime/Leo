@@ -17,7 +17,6 @@ import com.leo.erp.purchase.order.repository.PurchaseOrderRepository;
 import com.leo.erp.purchase.order.web.dto.PurchaseOrderImportCandidateResponse;
 import com.leo.erp.purchase.order.web.dto.PurchaseOrderRequest;
 import com.leo.erp.purchase.order.web.dto.PurchaseOrderResponse;
-import com.leo.erp.security.permission.WorkflowTransitionGuard;
 import com.leo.erp.system.company.domain.entity.CompanySetting;
 import com.leo.erp.system.company.service.CompanySettingService;
 import java.util.function.Function;
@@ -47,7 +46,6 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
     private final PurchaseOrderResponseAssembler responseAssembler;
     private final PurchaseOrderSupplierResolver supplierResolver;
     private final PurchaseOrderApplyService purchaseOrderApplyService;
-    private final WorkflowTransitionGuard workflowTransitionGuard;
     private final CompanySettingService companySettingService;
     private final PaymentPurchasePrepaymentService purchasePrepaymentService;
     private final PurchaseOrderDownstreamMutationGuard downstreamMutationGuard;
@@ -60,7 +58,6 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
                                 PurchaseOrderResponseAssembler responseAssembler,
                                 PurchaseOrderSupplierResolver supplierResolver,
                                 PurchaseOrderApplyService purchaseOrderApplyService,
-                                WorkflowTransitionGuard workflowTransitionGuard,
                                 CompanySettingService companySettingService) {
         this(
                 purchaseOrderRepository,
@@ -69,7 +66,6 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
                 responseAssembler,
                 supplierResolver,
                 purchaseOrderApplyService,
-                workflowTransitionGuard,
                 companySettingService,
                 null,
                 null,
@@ -84,7 +80,6 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
                                 PurchaseOrderResponseAssembler responseAssembler,
                                 PurchaseOrderSupplierResolver supplierResolver,
                                 PurchaseOrderApplyService purchaseOrderApplyService,
-                                WorkflowTransitionGuard workflowTransitionGuard,
                                 CompanySettingService companySettingService,
                                 PaymentPurchasePrepaymentService purchasePrepaymentService) {
         this(
@@ -94,7 +89,6 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
                 responseAssembler,
                 supplierResolver,
                 purchaseOrderApplyService,
-                workflowTransitionGuard,
                 companySettingService,
                 purchasePrepaymentService,
                 null,
@@ -109,7 +103,6 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
                                 PurchaseOrderResponseAssembler responseAssembler,
                                 PurchaseOrderSupplierResolver supplierResolver,
                                 PurchaseOrderApplyService purchaseOrderApplyService,
-                                WorkflowTransitionGuard workflowTransitionGuard,
                                 CompanySettingService companySettingService,
                                 PaymentPurchasePrepaymentService purchasePrepaymentService,
                                 PurchaseOrderDownstreamMutationGuard downstreamMutationGuard,
@@ -121,7 +114,6 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
                 responseAssembler,
                 supplierResolver,
                 purchaseOrderApplyService,
-                workflowTransitionGuard,
                 companySettingService,
                 purchasePrepaymentService,
                 downstreamMutationGuard,
@@ -137,7 +129,6 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
                                 PurchaseOrderResponseAssembler responseAssembler,
                                 PurchaseOrderSupplierResolver supplierResolver,
                                 PurchaseOrderApplyService purchaseOrderApplyService,
-                                WorkflowTransitionGuard workflowTransitionGuard,
                                 CompanySettingService companySettingService,
                                 PaymentPurchasePrepaymentService purchasePrepaymentService,
                                 PurchaseOrderDownstreamMutationGuard downstreamMutationGuard,
@@ -149,7 +140,6 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
         this.responseAssembler = responseAssembler;
         this.supplierResolver = supplierResolver;
         this.purchaseOrderApplyService = purchaseOrderApplyService;
-        this.workflowTransitionGuard = workflowTransitionGuard;
         this.companySettingService = companySettingService;
         this.purchasePrepaymentService = purchasePrepaymentService;
         this.downstreamMutationGuard = downstreamMutationGuard;
@@ -362,7 +352,7 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
     }
 
     @Override
-    protected boolean allowAdminViewDeletedRecords() {
+    protected boolean allowViewingDeletedRecords() {
         return true;
     }
 
@@ -426,13 +416,6 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
                 StatusConstants.ALLOWED_PURCHASE_ORDER_STATUS
         );
         assertStatusNotChangedBySave(purchaseOrder, nextStatus);
-        workflowTransitionGuard.assertAuditPermissionForProtectedValue(
-                "purchase-order",
-                purchaseOrder.getStatus(),
-                nextStatus,
-                StatusConstants.AUDITED,
-                StatusConstants.PURCHASE_COMPLETED
-        );
         purchaseOrder.setOrderNo(request.orderNo());
         PurchaseOrderSupplierResolver.SupplierIdentity supplierIdentity =
                 supplierResolver.requireMasterSupplier(

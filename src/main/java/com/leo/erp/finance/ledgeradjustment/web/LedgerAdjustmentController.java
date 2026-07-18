@@ -9,7 +9,6 @@ import com.leo.erp.common.web.dto.StatusUpdateRequest;
 import com.leo.erp.finance.ledgeradjustment.service.LedgerAdjustmentService;
 import com.leo.erp.finance.ledgeradjustment.web.dto.LedgerAdjustmentRequest;
 import com.leo.erp.finance.ledgeradjustment.web.dto.LedgerAdjustmentResponse;
-import org.springframework.security.access.prepost.PreAuthorize;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -42,7 +41,6 @@ public class LedgerAdjustmentController {
 
     @Operation(summary = "搜索台账调整单")
     @GetMapping("/search")
-    @PreAuthorize("@rbac.check('ledger-adjustment', 'read')")
     public ApiResponse<java.util.List<LedgerAdjustmentResponse>> search(
             @RequestParam(required = false) String keyword,
             @RequestParam(defaultValue = "100") int limit
@@ -52,7 +50,6 @@ public class LedgerAdjustmentController {
 
     @Operation(summary = "分页查询台账调整单")
     @GetMapping
-    @PreAuthorize("@rbac.check('ledger-adjustment', 'read')")
     public ApiResponse<PageResponse<LedgerAdjustmentResponse>> page(
             @BindPageQuery(sortFieldKey = "ledger-adjustment") PageQuery query,
             @RequestParam(required = false) String keyword,
@@ -75,21 +72,18 @@ public class LedgerAdjustmentController {
 
     @Operation(summary = "查询台账调整单详情")
     @GetMapping("/{id}")
-    @PreAuthorize("@rbac.check('ledger-adjustment', 'read')")
     public ApiResponse<LedgerAdjustmentResponse> detail(@PathVariable Long id) {
         return ApiResponse.success(ledgerAdjustmentService.detail(id));
     }
 
     @Operation(summary = "创建台账调整单")
     @PostMapping
-    @PreAuthorize("@rbac.check('ledger-adjustment', 'create')")
     public ApiResponse<LedgerAdjustmentResponse> create(@Valid @RequestBody LedgerAdjustmentRequest request) {
         return ApiResponse.success("创建成功", ledgerAdjustmentService.create(request));
     }
 
     @Operation(summary = "更新台账调整单")
     @PutMapping("/{id}")
-    @PreAuthorize("@rbac.check('ledger-adjustment', 'update')")
     public ApiResponse<LedgerAdjustmentResponse> update(@PathVariable Long id,
                                                         @Valid @RequestBody LedgerAdjustmentRequest request) {
         return ApiResponse.success("更新成功", ledgerAdjustmentService.update(id, request));
@@ -97,7 +91,6 @@ public class LedgerAdjustmentController {
 
     @Operation(summary = "更新台账调整单状态")
     @PatchMapping("/{id}/status")
-    @PreAuthorize("@rbac.check('ledger-adjustment', 'audit')")
     public ApiResponse<LedgerAdjustmentResponse> updateStatus(@PathVariable Long id,
                                                               @Valid @RequestBody StatusUpdateRequest request) {
         return ApiResponse.success("状态更新成功", ledgerAdjustmentService.updateStatus(id, request.status()));
@@ -105,7 +98,6 @@ public class LedgerAdjustmentController {
 
     @Operation(summary = "删除台账调整单")
     @DeleteMapping("/{id}")
-    @PreAuthorize("@rbac.check('ledger-adjustment', 'delete')")
     public ApiResponse<Void> delete(@PathVariable Long id) {
         ledgerAdjustmentService.delete(id);
         return ApiResponse.success("删除成功");

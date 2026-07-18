@@ -6,7 +6,6 @@ import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.api.PageResponse;
 import com.leo.erp.common.web.BindPageQuery;
 import com.leo.erp.common.web.dto.StatusUpdateRequest;
-import org.springframework.security.access.prepost.PreAuthorize;
 import com.leo.erp.statement.freight.service.FreightStatementService;
 import com.leo.erp.statement.freight.web.dto.FreightStatementCandidateResponse;
 import com.leo.erp.statement.freight.web.dto.FreightStatementRequest;
@@ -44,7 +43,6 @@ public class FreightStatementController {
 
     @Operation(summary = "搜索物流对账单")
     @GetMapping("/search")
-    @PreAuthorize("@rbac.check('freight-statement', 'read')")
     public ApiResponse<java.util.List<FreightStatementResponse>> search(
             @RequestParam(required = false) String keyword,
             @RequestParam(defaultValue = "100") int limit
@@ -54,7 +52,6 @@ public class FreightStatementController {
 
     @Operation(summary = "分页查询物流对账单")
     @GetMapping
-    @PreAuthorize("@rbac.check('freight-statement', 'read')")
     public ApiResponse<PageResponse<FreightStatementResponse>> page(
             @BindPageQuery(sortFieldKey = "freight-statement") PageQuery query,
             @RequestParam(required = false) String keyword,
@@ -80,7 +77,6 @@ public class FreightStatementController {
 
     @Operation(summary = "分页查询物流对账单候选物流单")
     @GetMapping("/candidates")
-    @PreAuthorize("@rbac.check('freight-statement', 'read')")
     public ApiResponse<PageResponse<FreightStatementCandidateResponse>> candidates(
             @BindPageQuery(sortFieldKey = "freight-bill") PageQuery query,
             @RequestParam(required = false) String keyword,
@@ -104,14 +100,12 @@ public class FreightStatementController {
 
     @Operation(summary = "查询物流对账单详情")
     @GetMapping("/{id}")
-    @PreAuthorize("@rbac.check('freight-statement', 'read')")
     public ApiResponse<FreightStatementResponse> detail(@PathVariable Long id) {
         return ApiResponse.success(freightStatementService.responseDetail(id));
     }
 
     @Operation(summary = "创建物流对账单")
     @PostMapping
-    @PreAuthorize("@rbac.check('freight-statement', 'create')")
     @DomainEventAudited
     public ApiResponse<FreightStatementResponse> create(@Valid @RequestBody FreightStatementRequest request) {
         return ApiResponse.success(
@@ -122,7 +116,6 @@ public class FreightStatementController {
 
     @Operation(summary = "保存并审核物流对账单")
     @PostMapping("/save-and-audit")
-    @PreAuthorize("@rbac.check('freight-statement', 'create')")
     @DomainEventAudited
     public ApiResponse<FreightStatementResponse> createAndAudit(@Valid @RequestBody FreightStatementRequest request) {
         return ApiResponse.success("保存并审核成功", freightStatementService.responseCreateAndAudit(request));
@@ -130,7 +123,6 @@ public class FreightStatementController {
 
     @Operation(summary = "更新物流对账单")
     @PutMapping("/{id}")
-    @PreAuthorize("@rbac.check('freight-statement', 'update')")
     @DomainEventAudited
     public ApiResponse<FreightStatementResponse> update(@PathVariable Long id, @Valid @RequestBody FreightStatementRequest request) {
         return ApiResponse.success(
@@ -141,7 +133,6 @@ public class FreightStatementController {
 
     @Operation(summary = "保存并审核物流对账单")
     @PutMapping("/{id}/save-and-audit")
-    @PreAuthorize("@rbac.check('freight-statement', 'update')")
     @DomainEventAudited
     public ApiResponse<FreightStatementResponse> updateAndAudit(
             @PathVariable Long id,
@@ -151,7 +142,6 @@ public class FreightStatementController {
 
     @Operation(summary = "更新物流对账单状态")
     @PatchMapping("/{id}/status")
-    @PreAuthorize("@rbac.check('freight-statement', 'audit')")
     @DomainEventAudited
     public ApiResponse<FreightStatementResponse> updateStatus(@PathVariable Long id, @Valid @RequestBody StatusUpdateRequest request) {
         return ApiResponse.success("状态更新成功", freightStatementService.responseUpdateStatus(id, request.status()));
@@ -159,7 +149,6 @@ public class FreightStatementController {
 
     @Operation(summary = "删除物流对账单")
     @DeleteMapping("/{id}")
-    @PreAuthorize("@rbac.check('freight-statement', 'delete')")
     @DomainEventAudited
     public ApiResponse<Void> delete(@PathVariable Long id) {
         freightStatementService.delete(id);

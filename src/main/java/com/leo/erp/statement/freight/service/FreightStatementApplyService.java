@@ -4,7 +4,6 @@ import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.support.BusinessStatusValidator;
 import com.leo.erp.common.support.StatusConstants;
-import com.leo.erp.security.permission.WorkflowTransitionGuard;
 import com.leo.erp.statement.freight.domain.entity.FreightStatement;
 import org.springframework.stereotype.Service;
 
@@ -14,14 +13,11 @@ import java.util.function.LongSupplier;
 @Service
 public class FreightStatementApplyService {
 
-    private final WorkflowTransitionGuard workflowTransitionGuard;
     private final FreightStatementCarrierResolver carrierResolver;
     private final FreightStatementSourceService freightStatementSourceService;
 
-    public FreightStatementApplyService(WorkflowTransitionGuard workflowTransitionGuard,
-                                        FreightStatementCarrierResolver carrierResolver,
+    public FreightStatementApplyService(FreightStatementCarrierResolver carrierResolver,
                                         FreightStatementSourceService freightStatementSourceService) {
-        this.workflowTransitionGuard = workflowTransitionGuard;
         this.carrierResolver = carrierResolver;
         this.freightStatementSourceService = freightStatementSourceService;
     }
@@ -33,12 +29,6 @@ public class FreightStatementApplyService {
                 StatusConstants.DRAFT,
                 "物流对账单审核状态",
                 StatusConstants.ALLOWED_FREIGHT_STATEMENT_STATUS
-        );
-        workflowTransitionGuard.assertAuditPermissionForProtectedValue(
-                "freight-statement",
-                entity.getStatus(),
-                nextStatus,
-                StatusConstants.AUDITED
         );
         entity.setStatementNo(command.statementNo());
         entity.setStatus(nextStatus);

@@ -26,12 +26,6 @@ import java.util.List;
 @Service
 public class OperationLogService {
 
-    private static final String ROLE_ACTION_EDITOR_MODULE_NAME = "角色权限配置";
-    private static final List<String> ROLE_ACTION_EDITOR_MODULE_ALIASES = List.of(
-            ROLE_ACTION_EDITOR_MODULE_NAME,
-            "角色设置"
-    );
-
     private final OperationLogRepository repository;
     private final OperationLogMapper operationLogMapper;
     private final SnowflakeIdGenerator idGenerator;
@@ -73,11 +67,7 @@ public class OperationLogService {
                 ));
             }
             if (normalizedModuleName != null) {
-                if (ROLE_ACTION_EDITOR_MODULE_NAME.equals(normalizedModuleName)) {
-                    predicate = cb.and(predicate, root.get("moduleName").in(ROLE_ACTION_EDITOR_MODULE_ALIASES));
-                } else {
-                    predicate = cb.and(predicate, cb.equal(root.get("moduleName"), normalizedModuleName));
-                }
+                predicate = cb.and(predicate, cb.equal(root.get("moduleName"), normalizedModuleName));
             }
             if (normalizedActionType != null) {
                 predicate = cb.and(predicate, cb.equal(root.get("actionType"), normalizedActionType));

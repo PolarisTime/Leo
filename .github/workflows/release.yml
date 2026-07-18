@@ -65,7 +65,7 @@ jobs:
       SPRING_DATA_REDIS_DATABASE: 3
       SPRING_DATA_REDIS_PASSWORD: ""
       LEO_JWT_SECRET: ci-jwt-secret-ci-jwt-secret-ci-jwt-secret
-      TOTP_ENCRYPTION_KEY: ci-totp-secret-ci-totp-secret-ci-totp
+      LEO_DATA_ENCRYPTION_KEY: ci-data-secret-ci-data-secret-ci-data
       LEO_MACHINE_ID: 1
     steps:
       - name: Checkout

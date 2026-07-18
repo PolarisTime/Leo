@@ -239,7 +239,7 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         if (authentication == null || !(authentication.getPrincipal() instanceof SecurityPrincipal principal)
                 || !Objects.equals(order.getCreatedBy(), principal.id())) {
-            // 此为业务领域不变量，不属于 ABAC 属性，无需也不应迁移至 jCasbin。
+            // 创建者约束是业务领域不变量，与功能授权无关。
             throw new BusinessException(ErrorCode.FORBIDDEN, "只能编辑本人创建的销售订单");
         }
     }
@@ -305,7 +305,6 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
         if (!StatusConstants.DELIVERY_VERIFICATION.equals(currentStatus)) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "只有交付核定状态可以完成销售");
         }
-        salesOrderApplyService.assertCompletionPermission(order);
         salesOrderApplyService.validateCustomerSnapshot(order);
         order.setStatus(StatusConstants.SALES_COMPLETED);
         SalesOrder saved = saveService.saveStatus(order);
@@ -338,7 +337,6 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
                 && StatusConstants.DELIVERY_VERIFICATION.equals(nextStatus)) {
             deliveryVerificationGuard.assertMutable(entity, "反审核");
         }
-        salesOrderApplyService.assertStatusPermission(entity, nextStatus);
         if (downstreamMutationGuard != null
                 && StatusConstants.DRAFT.equals(nextStatus)
                 && !StatusConstants.DRAFT.equals(currentStatus)) {
@@ -407,7 +405,7 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
     }
 
     @Override
-    protected boolean allowAdminViewDeletedRecords() {
+    protected boolean allowViewingDeletedRecords() {
         return true;
     }
 

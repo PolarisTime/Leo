@@ -9,7 +9,6 @@ import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.service.AbstractCrudService;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
-import com.leo.erp.security.permission.WorkflowTransitionGuard;
 import com.leo.erp.statement.freight.domain.entity.FreightStatement;
 import com.leo.erp.statement.freight.domain.entity.FreightStatementItem;
 import com.leo.erp.statement.freight.mapper.FreightStatementWebMapper;
@@ -44,7 +43,6 @@ public class FreightStatementService extends AbstractCrudService<FreightStatemen
     private final FreightStatementApplyService freightStatementApplyService;
     private final SourceAllocationLockService sourceAllocationLockService;
     private final StatementSettlementMutationGuard settlementMutationGuard;
-    private final WorkflowTransitionGuard workflowTransitionGuard;
     private BusinessOperationEventPublisher businessOperationEventPublisher;
 
     @Autowired
@@ -57,8 +55,7 @@ public class FreightStatementService extends AbstractCrudService<FreightStatemen
                                    FreightStatementPageAssembler pageAssembler,
                                    FreightStatementApplyService freightStatementApplyService,
                                    SourceAllocationLockService sourceAllocationLockService,
-                                   StatementSettlementMutationGuard settlementMutationGuard,
-                                   WorkflowTransitionGuard workflowTransitionGuard) {
+                                   StatementSettlementMutationGuard settlementMutationGuard) {
         super(idGenerator);
         this.repository = repository;
         this.statementSettlementSyncService = statementSettlementSyncService;
@@ -69,7 +66,6 @@ public class FreightStatementService extends AbstractCrudService<FreightStatemen
         this.freightStatementApplyService = freightStatementApplyService;
         this.sourceAllocationLockService = sourceAllocationLockService;
         this.settlementMutationGuard = settlementMutationGuard;
-        this.workflowTransitionGuard = workflowTransitionGuard;
     }
 
     @Autowired(required = false)
@@ -147,18 +143,12 @@ public class FreightStatementService extends AbstractCrudService<FreightStatemen
 
     @Transactional
     public FreightStatementResponse responseCreateAndAudit(FreightStatementRequest request) {
-        workflowTransitionGuard.assertAuditPermissionForProtectedValue(
-                "freight-statement", StatusConstants.DRAFT, StatusConstants.AUDITED, StatusConstants.AUDITED
-        );
         FreightStatementView created = create(withStatus(freightStatementWebMapper.toCommand(request), StatusConstants.DRAFT));
         return freightStatementWebMapper.toResponse(updateStatus(created.id(), StatusConstants.AUDITED));
     }
 
     @Transactional
     public FreightStatementResponse responseUpdateAndAudit(Long id, FreightStatementRequest request) {
-        workflowTransitionGuard.assertAuditPermissionForProtectedValue(
-                "freight-statement", StatusConstants.DRAFT, StatusConstants.AUDITED, StatusConstants.AUDITED
-        );
         update(id, withStatus(freightStatementWebMapper.toCommand(request), StatusConstants.DRAFT));
         return freightStatementWebMapper.toResponse(updateStatus(id, StatusConstants.AUDITED));
     }
@@ -287,7 +277,7 @@ public class FreightStatementService extends AbstractCrudService<FreightStatemen
     }
 
     @Override
-    protected boolean allowAdminViewDeletedRecords() {
+    protected boolean allowViewingDeletedRecords() {
         return true;
     }
 

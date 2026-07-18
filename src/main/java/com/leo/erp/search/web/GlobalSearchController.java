@@ -4,7 +4,6 @@ import org.springframework.validation.annotation.Validated;
 import com.leo.erp.common.api.ApiResponse;
 import com.leo.erp.search.web.GlobalSearchResponse;
 import com.leo.erp.search.service.GlobalSearchService;
-import org.springframework.security.access.prepost.PreAuthorize;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import java.util.List;
@@ -25,9 +24,8 @@ public class GlobalSearchController {
         this.globalSearchService = globalSearchService;
     }
 
-    @Operation(summary = "聚合搜索有权限访问的业务单据")
+    @Operation(summary = "聚合搜索业务单据")
     @GetMapping
-    @PreAuthorize("isAuthenticated()")
     public ApiResponse<List<GlobalSearchResponse>> search(
             @RequestParam(required = false) String keyword,
             @RequestParam(defaultValue = "20") int limit,

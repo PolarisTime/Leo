@@ -11,7 +11,6 @@ public class RedisTuningProperties {
     private static final Duration DEFAULT_STATIC_TTL = Duration.ofDays(7);
     private static final Duration DEFAULT_HOT_TTL = Duration.ofMinutes(10);
     private static final Duration DEFAULT_OPTIONS_TTL = Duration.ofMinutes(30);
-    private static final Duration DEFAULT_PERMISSION_TTL = Duration.ofMinutes(5);
     private static final Duration DEFAULT_INDEX_TTL = Duration.ofDays(1);
     private static final Duration DEFAULT_AUTH_USER_TTL = Duration.ofMinutes(2);
     private static final Duration DEFAULT_ONLINE_TTL = Duration.ofMinutes(2);
@@ -19,7 +18,6 @@ public class RedisTuningProperties {
 
     private final Cache cache = new Cache();
     private final Scan scan = new Scan();
-    private final Permission permission = new Permission();
     private final AuthUser authUser = new AuthUser();
     private final Session session = new Session();
 
@@ -29,10 +27,6 @@ public class RedisTuningProperties {
 
     public Scan getScan() {
         return scan;
-    }
-
-    public Permission getPermission() {
-        return permission;
     }
 
     public AuthUser getAuthUser() {
@@ -63,14 +57,6 @@ public class RedisTuningProperties {
 
     public int maxScanKeys() {
         return bounded(scan.maxKeys, 100, 500000, 10000);
-    }
-
-    public Duration permissionTtl() {
-        return positiveDuration(permission.ttl, DEFAULT_PERMISSION_TTL);
-    }
-
-    public Duration permissionIndexTtl() {
-        return positiveDuration(permission.indexTtl, DEFAULT_INDEX_TTL);
     }
 
     public Duration authUserTtl() {
@@ -175,27 +161,6 @@ public class RedisTuningProperties {
 
         public void setMaxKeys(int maxKeys) {
             this.maxKeys = maxKeys;
-        }
-    }
-
-    public static class Permission {
-        private Duration ttl = DEFAULT_PERMISSION_TTL;
-        private Duration indexTtl = DEFAULT_INDEX_TTL;
-
-        public Duration getTtl() {
-            return ttl;
-        }
-
-        public void setTtl(Duration ttl) {
-            this.ttl = ttl;
-        }
-
-        public Duration getIndexTtl() {
-            return indexTtl;
-        }
-
-        public void setIndexTtl(Duration indexTtl) {
-            this.indexTtl = indexTtl;
         }
     }
 

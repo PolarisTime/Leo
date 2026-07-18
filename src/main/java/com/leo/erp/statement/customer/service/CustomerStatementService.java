@@ -9,7 +9,6 @@ import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.service.AbstractCrudService;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
-import com.leo.erp.security.permission.WorkflowTransitionGuard;
 import com.leo.erp.sales.order.domain.entity.SalesOrder;
 import com.leo.erp.sales.order.domain.entity.SalesOrderItem;
 import com.leo.erp.sales.order.service.SalesOrderItemQueryService;
@@ -38,7 +37,6 @@ public class CustomerStatementService extends AbstractCrudService<CustomerStatem
 
     private final CustomerStatementRepository repository;
     private final CustomerStatementResponseAssembler responseAssembler;
-    private final WorkflowTransitionGuard workflowTransitionGuard;
     private final CustomerStatementSourceService customerStatementSourceService;
     private final CustomerStatementApplyService applyService;
     private final SalesOrderItemQueryService salesOrderItemQueryService;
@@ -49,7 +47,6 @@ public class CustomerStatementService extends AbstractCrudService<CustomerStatem
     public CustomerStatementService(CustomerStatementRepository repository,
                                     SnowflakeIdGenerator idGenerator,
                                     CustomerStatementResponseAssembler responseAssembler,
-                                    WorkflowTransitionGuard workflowTransitionGuard,
                                     CustomerStatementSourceService customerStatementSourceService,
                                     CustomerStatementApplyService applyService,
                                     SalesOrderItemQueryService salesOrderItemQueryService,
@@ -58,7 +55,6 @@ public class CustomerStatementService extends AbstractCrudService<CustomerStatem
         super(idGenerator);
         this.repository = repository;
         this.responseAssembler = responseAssembler;
-        this.workflowTransitionGuard = workflowTransitionGuard;
         this.customerStatementSourceService = customerStatementSourceService;
         this.applyService = applyService;
         this.salesOrderItemQueryService = salesOrderItemQueryService;
@@ -189,7 +185,7 @@ public class CustomerStatementService extends AbstractCrudService<CustomerStatem
     }
 
     @Override
-    protected boolean allowAdminViewDeletedRecords() {
+    protected boolean allowViewingDeletedRecords() {
         return true;
     }
 
@@ -209,12 +205,6 @@ public class CustomerStatementService extends AbstractCrudService<CustomerStatem
                     "反确认"
             );
         }
-        workflowTransitionGuard.assertAuditPermissionForProtectedValue(
-                "customer-statement",
-                currentStatus,
-                nextStatus,
-                StatusConstants.CONFIRMED
-        );
     }
 
     @Override

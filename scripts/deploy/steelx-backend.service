@@ -30,7 +30,6 @@ Group=sakura
 WorkingDirectory=/instance/steelx
 EnvironmentFile=/instance/steelx/shared/steelx.env
 Environment=SPRING_PROFILES_ACTIVE=prod
-Environment=SPRING_AI_MCP_SERVER_ENABLED=false
 ExecStart=/usr/bin/java \
   -Xms512m -Xmx2g \
   -XX:+UseG1GC \

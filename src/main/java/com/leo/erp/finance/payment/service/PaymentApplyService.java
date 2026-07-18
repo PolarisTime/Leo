@@ -11,7 +11,6 @@ import com.leo.erp.finance.payment.domain.entity.PaymentPurposes;
 import com.leo.erp.finance.payment.web.dto.PaymentRequest;
 import com.leo.erp.master.supplier.domain.entity.Supplier;
 import com.leo.erp.master.supplier.repository.SupplierRepository;
-import com.leo.erp.security.permission.WorkflowTransitionGuard;
 import com.leo.erp.system.company.domain.entity.CompanySetting;
 import com.leo.erp.system.company.repository.CompanySettingRepository;
 import org.springframework.stereotype.Service;
@@ -22,18 +21,15 @@ import java.util.function.LongSupplier;
 @Service
 public class PaymentApplyService {
 
-    private final WorkflowTransitionGuard workflowTransitionGuard;
     private final PaymentAllocationService paymentAllocationService;
     private final PaymentSettlementSyncService settlementSyncService;
     private final PaymentPurchasePrepaymentService purchasePrepaymentService;
     private SupplierRepository supplierRepository;
     private CompanySettingRepository companySettingRepository;
 
-    public PaymentApplyService(WorkflowTransitionGuard workflowTransitionGuard,
-                               PaymentAllocationService paymentAllocationService,
+    public PaymentApplyService(PaymentAllocationService paymentAllocationService,
                                PaymentSettlementSyncService settlementSyncService,
                                PaymentPurchasePrepaymentService purchasePrepaymentService) {
-        this.workflowTransitionGuard = workflowTransitionGuard;
         this.paymentAllocationService = paymentAllocationService;
         this.settlementSyncService = settlementSyncService;
         this.purchasePrepaymentService = purchasePrepaymentService;
@@ -55,12 +51,6 @@ public class PaymentApplyService {
                 StatusConstants.ALLOWED_PAYMENT_STATUS
         );
         assertStatusNotChangedBySave(entity, nextStatus);
-        workflowTransitionGuard.assertAuditPermissionForProtectedValue(
-                "payment",
-                entity.getStatus(),
-                nextStatus,
-                StatusConstants.AUDITED
-        );
         settlementSyncService.captureOriginalAllocationState(entity);
         entity.setPaymentNo(request.paymentNo());
         entity.setBusinessType(request.businessType());

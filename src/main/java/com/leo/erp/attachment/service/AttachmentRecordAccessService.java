@@ -8,8 +8,6 @@ import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.AbstractAuditableEntity;
 import com.leo.erp.common.support.BusinessRecordEntityCatalog;
-import com.leo.erp.security.permission.PermissionService;
-import com.leo.erp.security.permission.ResourcePermissionCatalog;
 import com.leo.erp.security.support.SecurityPrincipal;
 import jakarta.persistence.EntityManager;
 import org.springframework.stereotype.Service;
@@ -21,22 +19,19 @@ import java.util.List;
 public class AttachmentRecordAccessService {
 
     private final EntityManager entityManager;
-    private final PermissionService permissionService;
     private final AttachmentBindingRepository attachmentBindingRepository;
     private final AttachmentFileRepository attachmentFileRepository;
 
     public AttachmentRecordAccessService(EntityManager entityManager,
-                                         PermissionService permissionService,
                                          AttachmentBindingRepository attachmentBindingRepository,
                                          AttachmentFileRepository attachmentFileRepository) {
         this.entityManager = entityManager;
-        this.permissionService = permissionService;
         this.attachmentBindingRepository = attachmentBindingRepository;
         this.attachmentFileRepository = attachmentFileRepository;
     }
 
     @Transactional(readOnly = true)
-    public void assertRecordAccessible(SecurityPrincipal principal, String moduleKey, String actionCode, Long recordId) {
+    public void assertRecordExists(String moduleKey, Long recordId) {
         String normalizedModuleKey = normalizeModuleKey(moduleKey);
         long normalizedRecordId = normalizeRecordId(recordId);
         if (!isBusinessModule(normalizedModuleKey)) {
@@ -46,11 +41,10 @@ public class AttachmentRecordAccessService {
         if (entity == null || entity.isDeletedFlag()) {
             throw new BusinessException(ErrorCode.NOT_FOUND, "业务记录不存在");
         }
-        assertCanAccess(principal, normalizedModuleKey, actionCode, entity);
     }
 
     @Transactional(readOnly = true)
-    public void assertAttachmentAccessible(SecurityPrincipal principal, String moduleKey, String actionCode, Long attachmentId) {
+    public void assertAttachmentBoundToExistingRecord(String moduleKey, Long attachmentId) {
         String normalizedModuleKey = normalizeModuleKey(moduleKey);
         long normalizedAttachmentId = normalizeRecordId(attachmentId);
         if (!isBusinessModule(normalizedModuleKey)) {
@@ -61,60 +55,59 @@ public class AttachmentRecordAccessService {
                         normalizedModuleKey,
                         normalizedAttachmentId
                 );
-        if (bindings.isEmpty()) {
-            throw new BusinessException(ErrorCode.FORBIDDEN, "附件未绑定到当前业务记录");
-        }
-        boolean accessible = bindings.stream()
+        boolean boundToExistingRecord = bindings.stream()
                 .map(AttachmentBinding::getRecordId)
                 .map(recordId -> loadBusinessEntity(normalizedModuleKey, recordId))
-                .filter(entity -> entity != null && !entity.isDeletedFlag())
-                .anyMatch(entity -> canAccess(principal, normalizedModuleKey, actionCode));
-        if (!accessible) {
-            throw new BusinessException(ErrorCode.FORBIDDEN, "无访问权限");
+                .anyMatch(entity -> entity != null && !entity.isDeletedFlag());
+        if (!boundToExistingRecord) {
+            throw new BusinessException(ErrorCode.NOT_FOUND, "附件未绑定到有效业务记录");
         }
     }
 
     @Transactional(readOnly = true)
-    public void assertAttachmentAccessible(SecurityPrincipal principal, String actionCode, Long attachmentId) {
+    public void assertAttachmentAccessible(SecurityPrincipal principal, Long attachmentId) {
         long normalizedAttachmentId = normalizeRecordId(attachmentId);
         List<AttachmentBinding> bindings = attachmentBindingRepository
-                .findByAttachmentIdAndDeletedFlagFalseOrderByModuleKeyAscRecordIdAscSortOrderAscIdAsc(normalizedAttachmentId);
+                .findByAttachmentIdAndDeletedFlagFalseOrderByModuleKeyAscRecordIdAscSortOrderAscIdAsc(
+                        normalizedAttachmentId
+                );
         if (bindings.isEmpty()) {
-            AttachmentFile attachment = attachmentFileRepository.findByIdAndDeletedFlagFalse(normalizedAttachmentId)
-                    .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "附件不存在或已删除"));
-            if (principal == null || !principal.id().equals(attachment.getCreatedBy())) {
-                throw new BusinessException(ErrorCode.FORBIDDEN, "无附件访问权限");
-            }
+            assertUnboundAttachmentOwner(principal, normalizedAttachmentId);
             return;
         }
-        boolean accessible = bindings.stream().anyMatch(binding -> canAccessBinding(principal, actionCode, binding));
-        if (!accessible) {
-            throw new BusinessException(ErrorCode.FORBIDDEN, "无访问权限");
+        boolean boundToExistingRecord = bindings.stream().anyMatch(this::isBoundToExistingRecord);
+        if (!boundToExistingRecord) {
+            throw new BusinessException(ErrorCode.NOT_FOUND, "附件未绑定到有效业务记录");
         }
     }
 
-    private void assertCanAccess(SecurityPrincipal principal, String moduleKey, String actionCode, AbstractAuditableEntity entity) {
-        if (!canAccess(principal, moduleKey, actionCode)) {
-            throw new BusinessException(ErrorCode.FORBIDDEN, "无访问权限");
+    public String normalizeModuleKey(String moduleKey) {
+        if (moduleKey == null || moduleKey.isBlank()) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "缺少模块标识");
+        }
+        String normalized = BusinessRecordEntityCatalog.normalizeModuleKey(moduleKey);
+        if (normalized.isBlank()) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "缺少模块标识");
+        }
+        return normalized;
+    }
+
+    private void assertUnboundAttachmentOwner(SecurityPrincipal principal, long attachmentId) {
+        AttachmentFile attachment = attachmentFileRepository.findByIdAndDeletedFlagFalse(attachmentId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "附件不存在或已删除"));
+        if (principal == null || !principal.id().equals(attachment.getCreatedBy())) {
+            // 未绑定附件的创建者约束属于数据所有权不变量，由业务层处理。
+            throw new BusinessException(ErrorCode.FORBIDDEN, "仅附件创建者可以访问未绑定附件");
         }
     }
 
-    private boolean canAccess(SecurityPrincipal principal, String moduleKey, String actionCode) {
-        if (principal == null) {
-            return false;
-        }
-        String resource = resolveResource(moduleKey);
-        String action = ResourcePermissionCatalog.normalizeAction(actionCode);
-        return permissionService.can(principal.id(), resource, action);
-    }
-
-    private boolean canAccessBinding(SecurityPrincipal principal, String actionCode, AttachmentBinding binding) {
+    private boolean isBoundToExistingRecord(AttachmentBinding binding) {
         String moduleKey = normalizeModuleKey(binding.getModuleKey());
         if (!isBusinessModule(moduleKey)) {
             return false;
         }
         AbstractAuditableEntity entity = loadBusinessEntity(moduleKey, binding.getRecordId());
-        return entity != null && !entity.isDeletedFlag() && canAccess(principal, moduleKey, actionCode);
+        return entity != null && !entity.isDeletedFlag();
     }
 
     private AbstractAuditableEntity loadBusinessEntity(String moduleKey, Long recordId) {
@@ -127,27 +120,10 @@ public class AttachmentRecordAccessService {
         return BusinessRecordEntityCatalog.hasEntity(moduleKey);
     }
 
-    private String resolveResource(String moduleKey) {
-        return ResourcePermissionCatalog.resolveResourceByMenuCode(moduleKey)
-                .orElseGet(() -> ResourcePermissionCatalog.normalizeResource(moduleKey));
-    }
-
-    private String normalizeModuleKey(String moduleKey) {
-        if (moduleKey == null || moduleKey.isBlank()) {
-            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "缺少模块标识");
-        }
-        String normalized = BusinessRecordEntityCatalog.normalizeModuleKey(moduleKey);
-        if (normalized.isBlank()) {
-            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "缺少模块标识");
-        }
-        return normalized;
-    }
-
     private long normalizeRecordId(Long recordId) {
         if (recordId == null || recordId <= 0) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "缺少业务记录标识");
         }
         return recordId;
     }
-
 }

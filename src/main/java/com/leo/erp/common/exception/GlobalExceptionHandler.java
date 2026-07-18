@@ -139,9 +139,9 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(AccessDeniedException.class)
     public ResponseEntity<ApiResponse<Void>> handleAccessDenied(AccessDeniedException ex, HttpServletRequest request) {
-        logClientException(request, ErrorCode.FORBIDDEN, "无访问权限");
+        logClientException(request, ErrorCode.FORBIDDEN, "拒绝访问");
         return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                .body(ApiResponse.failure(ErrorCode.FORBIDDEN, "无访问权限"));
+                .body(ApiResponse.failure(ErrorCode.FORBIDDEN, "拒绝访问"));
     }
 
     @ExceptionHandler(NoResourceFoundException.class)

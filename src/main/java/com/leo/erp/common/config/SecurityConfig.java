@@ -6,7 +6,6 @@ import com.leo.erp.common.idempotent.HttpIdempotencyFilter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
-import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
@@ -25,7 +24,6 @@ import org.springframework.web.filter.CorsFilter;
 import java.util.List;
 
 @Configuration
-@EnableMethodSecurity
 public class SecurityConfig {
 
     private static final String[] OPEN_API_PATHS = {
@@ -76,7 +74,7 @@ public class SecurityConfig {
                     if (surfaceAccessProperties.getDocs().isPublicAccessEnabled()) {
                         authorize.requestMatchers(OPEN_API_PATHS).permitAll();
                     } else {
-                        authorize.requestMatchers(OPEN_API_PATHS).hasRole("ADMIN");
+                        authorize.requestMatchers(OPEN_API_PATHS).authenticated();
                     }
                     authorize.requestMatchers(HttpMethod.OPTIONS, "/**").permitAll();
                     authorize.anyRequest().authenticated();

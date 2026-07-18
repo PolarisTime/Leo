@@ -7,8 +7,6 @@ import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.support.TradeItemCalculator;
 import com.leo.erp.finance.receipt.repository.ReceiptAllocationRepository;
 import com.leo.erp.finance.receipt.web.dto.ReceiptRequest;
-import com.leo.erp.security.permission.ResourcePermissionCatalog;
-import com.leo.erp.security.permission.ResourceRecordAccessGuard;
 import com.leo.erp.statement.customer.domain.entity.CustomerStatement;
 import com.leo.erp.statement.customer.service.CustomerStatementQueryService;
 import org.springframework.stereotype.Service;
@@ -21,14 +19,11 @@ public class ReceiptStatementAllocationValidator {
 
     private final ReceiptAllocationRepository receiptAllocationRepository;
     private final CustomerStatementQueryService customerStatementQueryService;
-    private final ResourceRecordAccessGuard resourceRecordAccessGuard;
 
     public ReceiptStatementAllocationValidator(ReceiptAllocationRepository receiptAllocationRepository,
-                                               CustomerStatementQueryService customerStatementQueryService,
-                                               ResourceRecordAccessGuard resourceRecordAccessGuard) {
+                                               CustomerStatementQueryService customerStatementQueryService) {
         this.receiptAllocationRepository = receiptAllocationRepository;
         this.customerStatementQueryService = customerStatementQueryService;
-        this.resourceRecordAccessGuard = resourceRecordAccessGuard;
     }
 
     CustomerStatement validate(ReceiptRequest request,
@@ -105,11 +100,6 @@ public class ReceiptStatementAllocationValidator {
 
     private CustomerStatement requireAccessibleCustomerStatement(Long statementId) {
         CustomerStatement statement = customerStatementQueryService.requireActiveById(statementId);
-        resourceRecordAccessGuard.assertCurrentUserCanAccess(
-                "customer-statement",
-                ResourcePermissionCatalog.READ,
-                statement
-        );
         return statement;
     }
 }

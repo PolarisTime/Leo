@@ -34,7 +34,6 @@ public class AuthProperties {
         private String userName;
         private String mobile;
         private String remark;
-        private String roleCode;
 
         public boolean isEnabled() {
             return enabled;
@@ -84,13 +83,6 @@ public class AuthProperties {
             this.remark = remark;
         }
 
-        public String getRoleCode() {
-            return roleCode;
-        }
-
-        public void setRoleCode(String roleCode) {
-            this.roleCode = roleCode;
-        }
     }
 
     public static class User {

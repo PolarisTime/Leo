@@ -4,7 +4,6 @@ import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.sales.order.domain.entity.SalesOrderItem;
 import com.leo.erp.sales.order.repository.SalesOrderItemRepository;
-import com.leo.erp.security.permission.ResourceRecordAccessGuard;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -16,15 +15,10 @@ import java.util.stream.Collectors;
 @Service
 public class SalesOrderItemQueryService {
 
-    private static final String PARENT_MODULE_KEY = "sales-order";
-
     private final SalesOrderItemRepository repository;
-    private final ResourceRecordAccessGuard accessGuard;
 
-    public SalesOrderItemQueryService(SalesOrderItemRepository repository,
-                                       ResourceRecordAccessGuard accessGuard) {
+    public SalesOrderItemQueryService(SalesOrderItemRepository repository) {
         this.repository = repository;
-        this.accessGuard = accessGuard;
     }
 
     @Transactional(readOnly = true)
@@ -32,13 +26,7 @@ public class SalesOrderItemQueryService {
         if (itemIds == null || itemIds.isEmpty()) {
             return List.of();
         }
-        List<SalesOrderItem> items = repository.findActiveByIdIn(itemIds);
-        for (SalesOrderItem item : items) {
-            if (item.getSalesOrder() != null) {
-                accessGuard.assertCurrentUserCanAccess(PARENT_MODULE_KEY, "read", item.getSalesOrder());
-            }
-        }
-        return items;
+        return repository.findActiveByIdIn(itemIds);
     }
 
     @Transactional(readOnly = true)
