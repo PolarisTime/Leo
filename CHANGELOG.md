@@ -1,3 +1,13 @@
+# [6.0.0](https://github.com/PolarisTime/Leo/compare/v5.1.0...v6.0.0) (2026-07-18)
+
+
+* refactor(purchase)!: 移除逐件重量与入库拆分流程 ([5d28973](https://github.com/PolarisTime/Leo/commit/5d28973aaaf147898df27f4a4e7e036bce054b7e))
+
+
+### BREAKING CHANGES
+
+* 移除逐件重量 API、数据表和采购入库拆分批次接口。
+
 # [5.1.0](https://github.com/PolarisTime/Leo/compare/v5.0.1...v5.1.0) (2026-07-18)
 
 
