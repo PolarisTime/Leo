@@ -36,11 +36,21 @@ WITH module_catalog(ordinal, module_key, module_name) AS (
 ),
 prepared_rules AS (
     SELECT
-        760000000000000000::bigint + ordinal AS id,
+        335767456976990208::bigint + ordinal AS id,
         module_key,
         'PAGE_UPLOAD_' || REGEXP_REPLACE(UPPER(module_key), '[^A-Z0-9]+', '_', 'g') AS rule_code,
         module_name || '上传命名规则' AS rule_name,
-        '{年月日时分秒}_{random8}' AS rename_pattern,
+        COALESCE(
+            (
+                SELECT legacy.rename_pattern
+                FROM public.sys_upload_rule legacy
+                WHERE legacy.rule_code = 'PAGE_UPLOAD'
+                  AND legacy.deleted_flag = FALSE
+                ORDER BY legacy.id
+                LIMIT 1
+            ),
+            '{年月日时分秒}_{random8}'
+        ) AS rename_pattern,
         '正常' AS status,
         '适用于' || module_name || '页面选择文件和剪贴板粘贴上传' AS remark
     FROM module_catalog
