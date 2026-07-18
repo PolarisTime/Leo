@@ -1,3 +1,10 @@
+# [5.1.0](https://github.com/PolarisTime/Leo/compare/v5.0.1...v5.1.0) (2026-07-18)
+
+
+### Features
+
+* **finance:** 新增财务概览并简化收付款 ([f633931](https://github.com/PolarisTime/Leo/commit/f633931ac9dce95fd094aa719d6f49b4d6da8ff2))
+
 ## [5.0.1](https://github.com/PolarisTime/Leo/compare/v5.0.0...v5.0.1) (2026-07-18)
 
 
