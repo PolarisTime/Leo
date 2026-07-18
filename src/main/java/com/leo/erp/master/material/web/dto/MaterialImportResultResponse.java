@@ -7,6 +7,7 @@ public record MaterialImportResultResponse(
         int successCount,
         int createdCount,
         int updatedCount,
+        int skippedCount,
         int failedCount,
         List<MaterialImportFailureResponse> failures
 ) {

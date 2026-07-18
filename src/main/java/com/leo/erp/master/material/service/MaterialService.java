@@ -259,6 +259,7 @@ public class MaterialService extends AbstractCrudService<Material, MaterialReque
         List<MaterialImportDTO> dtoList = excelImportService.parseAndValidate(file, MaterialImportDTO.class);
         int createdCount = 0;
         int updatedCount = 0;
+        int skippedCount = 0;
         List<Material> successRows = new ArrayList<>();
         Map<MaterialImportIdentityKey, Material> importIdentityIndex = activeImportIdentityIndex(
                 dtoList.stream().map(this::importIdentity).toList()
@@ -266,16 +267,27 @@ public class MaterialService extends AbstractCrudService<Material, MaterialReque
         for (int index = 0; index < dtoList.size(); index++) {
             MaterialImportDTO dto = dtoList.get(index);
             int rowNumber = index + 2;
-            String materialCode = resolveImportMaterialCode(dto.materialCode());
-            Material material = materialRepository.findByMaterialCode(materialCode)
+            String providedMaterialCode = dto.materialCode() == null ? "" : dto.materialCode().trim();
+            Optional<Material> materialByCode = providedMaterialCode.isBlank()
+                    ? Optional.empty()
+                    : materialRepository.findByMaterialCode(providedMaterialCode);
+            MaterialImportIdentityKey importIdentity = importIdentity(dto);
+            Material skipCandidate = materialByCode.orElse(importIdentityIndex.get(importIdentity));
+            if (isExactImportMatch(skipCandidate, dto, !providedMaterialCode.isBlank(), rowNumber)) {
+                skippedCount++;
+                continue;
+            }
+            String materialCode = providedMaterialCode.isBlank()
+                    ? resolveImportMaterialCode(providedMaterialCode)
+                    : providedMaterialCode;
+            Material material = materialByCode
                     .orElseGet(() -> {
                         Material entity = new Material();
                         entity.setId(nextId());
                         return entity;
                     });
-            boolean exists = material.getId() != null && materialRepository.existsById(material.getId());
+            boolean exists = materialByCode.isPresent();
             MaterialImportIdentityKey previousIdentity = importIdentity(material);
-            MaterialImportIdentityKey importIdentity = importIdentity(dto);
             validateImportIdentity(material, importIdentity, importIdentityIndex, rowNumber);
             material.setDeletedFlag(false);
             applyImportDTO(material, dto, materialCode, rowNumber);
@@ -295,8 +307,9 @@ public class MaterialService extends AbstractCrudService<Material, MaterialReque
         if (!successRows.isEmpty()) {
             tradeItemMaterialSupport.evictCache();
         }
+        int successCount = createdCount + updatedCount;
         return new ImportResult(
-                dtoList.size(), dtoList.size(), createdCount, updatedCount, 0,
+                dtoList.size(), successCount, createdCount, updatedCount, skippedCount, 0,
                 java.util.List.of(), new ArrayList<>(successRows)
         );
     }
@@ -348,6 +361,7 @@ public class MaterialService extends AbstractCrudService<Material, MaterialReque
         Map<String, Integer> headerIndexes = buildHeaderIndexes(rows.get(0));
         int createdCount = 0;
         int updatedCount = 0;
+        int skippedCount = 0;
         int totalRows = 0;
         List<MaterialImportFailureResponse> failures = new ArrayList<>();
         Map<MaterialImportIdentityKey, Material> importIdentityIndex = activeImportIdentityIndex(
@@ -360,21 +374,33 @@ public class MaterialService extends AbstractCrudService<Material, MaterialReque
             }
             totalRows++;
             int rowNumber = i + 1;
-            String materialCode = resolveImportMaterialCode(optionalValue(row, headerIndexes, "materialCode"));
+            String providedMaterialCode = optionalValue(row, headerIndexes, "materialCode");
+            String materialCode = providedMaterialCode == null ? "" : providedMaterialCode.trim();
             try {
                 MaterialRequest request = toMaterialRequest(row, headerIndexes, rowNumber, materialCode);
-                Material material = materialRepository.findByMaterialCode(request.materialCode())
+                Optional<Material> materialByCode = providedMaterialCode == null || providedMaterialCode.isBlank()
+                        ? Optional.empty()
+                        : materialRepository.findByMaterialCode(providedMaterialCode);
+                MaterialImportIdentityKey importIdentity = importIdentity(request);
+                Material skipCandidate = materialByCode.orElse(importIdentityIndex.get(importIdentity));
+                if (isExactImportMatch(skipCandidate, request,
+                        providedMaterialCode != null && !providedMaterialCode.isBlank())) {
+                    skippedCount++;
+                    continue;
+                }
+                String resolvedMaterialCode = resolveImportMaterialCode(providedMaterialCode);
+                Material material = materialByCode
                         .orElseGet(() -> {
                             Material entity = new Material();
                             entity.setId(nextId());
                             return entity;
                         });
-                boolean exists = material.getId() != null && materialRepository.existsById(material.getId());
+                boolean exists = materialByCode.isPresent();
                 MaterialImportIdentityKey previousIdentity = importIdentity(material);
-                MaterialImportIdentityKey importIdentity = importIdentity(request);
                 validateImportIdentity(material, importIdentity, importIdentityIndex, rowNumber);
                 material.setDeletedFlag(false);
                 apply(material, request);
+                material.setMaterialCode(resolvedMaterialCode);
                 materialRepository.save(material);
                 registerImportIdentity(importIdentityIndex, previousIdentity, importIdentity, material);
                 if (exists) {
@@ -401,6 +427,7 @@ public class MaterialService extends AbstractCrudService<Material, MaterialReque
                 successCount,
                 createdCount,
                 updatedCount,
+                skippedCount,
                 failures.size(),
                 List.copyOf(failures)
         );
@@ -466,6 +493,100 @@ public class MaterialService extends AbstractCrudService<Material, MaterialReque
     private String resolveImportMaterialCode(String rawMaterialCode) {
         String materialCode = rawMaterialCode == null ? "" : rawMaterialCode.trim();
         return materialCode.isBlank() ? String.valueOf(nextId()) : materialCode;
+    }
+
+    private boolean isExactImportMatch(Material existing,
+                                       MaterialImportDTO dto,
+                                       boolean compareCode,
+                                       int rowNumber) {
+        return existing != null
+                && !existing.isDeletedFlag()
+                && sameMaterialData(
+                existing,
+                dto.materialCode(),
+                compareCode,
+                dto.brand(),
+                dto.material(),
+                dto.category(),
+                dto.spec(),
+                dto.length(),
+                dto.unit(),
+                dto.quantityUnit(),
+                parseBigDecimalOrZero(dto.pieceWeightTon(), rowNumber, "件重(吨)"),
+                parseIntegerOrZero(dto.piecesPerBundle(), rowNumber, "每件支数"),
+                parseBigDecimalOrZero(dto.unitPrice(), rowNumber, "单价"),
+                dto.remark()
+        );
+    }
+
+    private boolean isExactImportMatch(Material existing,
+                                       MaterialRequest request,
+                                       boolean compareCode) {
+        return existing != null
+                && !existing.isDeletedFlag()
+                && sameMaterialData(
+                existing,
+                request.materialCode(),
+                compareCode,
+                request.brand(),
+                request.material(),
+                request.category(),
+                request.spec(),
+                request.length(),
+                request.unit(),
+                request.quantityUnit(),
+                request.pieceWeightTon(),
+                request.piecesPerBundle(),
+                request.unitPrice(),
+                request.remark()
+        );
+    }
+
+    private boolean sameMaterialData(Material existing,
+                                     String materialCode,
+                                     boolean compareCode,
+                                     String brand,
+                                     String material,
+                                     String category,
+                                     String spec,
+                                     String length,
+                                     String unit,
+                                     String quantityUnit,
+                                     BigDecimal pieceWeightTon,
+                                     Integer piecesPerBundle,
+                                     BigDecimal unitPrice,
+                                     String remark) {
+        return (!compareCode || sameText(existing.getMaterialCode(), materialCode))
+                && sameText(existing.getBrand(), brand)
+                && sameText(existing.getMaterial(), material)
+                && sameText(existing.getCategory(), category)
+                && sameText(existing.getSpec(), spec)
+                && sameText(existing.getLength(), length)
+                && sameText(existing.getUnit(), unit)
+                && sameText(existing.getQuantityUnit(),
+                TradeItemCalculator.normalizeQuantityUnit(normalizeText(quantityUnit)))
+                && sameDecimal(existing.getPieceWeightTon(), pieceWeightTon)
+                && sameInteger(existing.getPiecesPerBundle(), piecesPerBundle)
+                && sameDecimal(existing.getUnitPrice(), unitPrice)
+                && sameText(existing.getRemark(), remark);
+    }
+
+    private boolean sameText(String first, String second) {
+        return normalizeText(first).equals(normalizeText(second));
+    }
+
+    private String normalizeText(String value) {
+        return value == null ? "" : value.trim();
+    }
+
+    private boolean sameDecimal(BigDecimal first, BigDecimal second) {
+        BigDecimal left = first == null ? BigDecimal.ZERO : first;
+        BigDecimal right = second == null ? BigDecimal.ZERO : second;
+        return left.compareTo(right) == 0;
+    }
+
+    private boolean sameInteger(Integer first, Integer second) {
+        return (first == null ? 0 : first) == (second == null ? 0 : second);
     }
 
     private Map<MaterialImportIdentityKey, Material> activeImportIdentityIndex(

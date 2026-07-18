@@ -8,11 +8,12 @@ public record ImportResult(
         int successCount,
         int createdCount,
         int updatedCount,
+        int skippedCount,
         int failCount,
         List<ImportErrorDetail> errors,
         List<Object> successRows
 ) {
     public ImportResult() {
-        this(0, 0, 0, 0, 0, new ArrayList<>(), new ArrayList<>());
+        this(0, 0, 0, 0, 0, 0, new ArrayList<>(), new ArrayList<>());
     }
 }

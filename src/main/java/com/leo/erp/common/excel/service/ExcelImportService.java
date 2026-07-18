@@ -139,7 +139,7 @@ public class ExcelImportService {
         }
 
         ImportResult result = new ImportResult(
-                totalRows, successRows.size(), 0, 0, errors.size(),
+                totalRows, successRows.size(), 0, 0, 0, errors.size(),
                 errors, new ArrayList<>(successRows)
         );
 
