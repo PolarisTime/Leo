@@ -1,3 +1,10 @@
+## [5.0.1](https://github.com/PolarisTime/Leo/compare/v5.0.0...v5.0.1) (2026-07-18)
+
+
+### Bug Fixes
+
+* **database:** 恢复已执行的 V76 迁移脚本 ([16c7ec9](https://github.com/PolarisTime/Leo/commit/16c7ec9b664e0604766a95948d4fced69048cb12))
+
 # [5.0.0](https://github.com/PolarisTime/Leo/compare/v4.0.1...v5.0.0) (2026-07-18)
 
 
