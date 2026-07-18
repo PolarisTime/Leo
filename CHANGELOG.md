@@ -1,3 +1,42 @@
+# [5.0.0](https://github.com/PolarisTime/Leo/compare/v4.0.1...v5.0.0) (2026-07-18)
+
+
+* refactor(api)!: 移除页面及附件水印能力 ([a42007a](https://github.com/PolarisTime/Leo/commit/a42007a816e684b842d7716c1438c3b865cc8a02))
+* refactor(batch)!: 固定启用批号管理 ([2dfbdd7](https://github.com/PolarisTime/Leo/commit/2dfbdd75a9af59960eea8fc63421478c10498056))
+* refactor(report)!: 移除报表模块 ([63c6a06](https://github.com/PolarisTime/Leo/commit/63c6a065c54cd303b1dbac140384a6915187189b))
+* refactor(security)!: 全量切换纯 RBAC 并移除安全设置 ([dce6702](https://github.com/PolarisTime/Leo/commit/dce67021e0acf1bf6b7b4a77fa45e1dee9dc1413))
+* refactor(security)!: 移除 RBAC 与 MCP 授权体系 ([49c71e5](https://github.com/PolarisTime/Leo/commit/49c71e5920d95606f88f5a8c9fcbb1a927f343da))
+* refactor(security)!: 移除通用数据范围权限模型 ([569258b](https://github.com/PolarisTime/Leo/commit/569258b9f941c91545085e1952af0e4477fe893a))
+* refactor(settings)!: 移除动态设置与公司初始化引导 ([7f65fa0](https://github.com/PolarisTime/Leo/commit/7f65fa03cac1f0c262135ba300391132b25fa2a4))
+* refactor(settings)!: 移除默认税率 ([9a993e5](https://github.com/PolarisTime/Leo/commit/9a993e577e4f96a4c9d4471ee6c30a868b450111))
+* refactor(system)!: 移除数据库备份与监控能力 ([075dc8b](https://github.com/PolarisTime/Leo/commit/075dc8b5eb0fd22be41181f0e45adf326bf6d74f))
+
+
+### Bug Fixes
+
+* **access-control:** 统一权限管理接口与授权边界 ([e74de70](https://github.com/PolarisTime/Leo/commit/e74de70899c479306f66611951b4e0624d58840b))
+* **material:** 跳过一致商品并继续导入 ([867e15d](https://github.com/PolarisTime/Leo/commit/867e15db223650f19a474d8731471795f8f14252))
+
+
+### Features
+
+* **logistics:** 重构物流单与物流对账状态机 ([297d09f](https://github.com/PolarisTime/Leo/commit/297d09f09ab8666f23d07a72ca3ea5ad55ac98eb))
+* **observability:** 完成审计与日志分区治理 ([7966b7a](https://github.com/PolarisTime/Leo/commit/7966b7aac96463507da55666757273f5ab754ad8))
+* **observability:** 重构业务审计与日志基础设施 ([9066f55](https://github.com/PolarisTime/Leo/commit/9066f5583026e2a3224273cd438038439d1fa772))
+
+
+### BREAKING CHANGES
+
+* 删除系统设置、OSS 设置及 OOBE 公司初始化接口，旧前端和外部调用方需停止使用相关端点。
+* 全量移除 jCasbin、角色权限、MCP 及安全中心，系统仅保留 JWT 身份认证。
+* 商品 API 不再包含 batchNoEnabled，采购订单明细 batchNo 改为必填。
+* 移除 inventory-report 与 io-report 后端接口、权限资源、菜单及打印模板。
+* 公司设置、首次初始化和运行时配置不再包含 taxRate/defaultTaxRate 字段。
+* 移除旧安全中心、API Key、动态编号及限流配置接口。
+* 客户端运行时配置接口不再返回 ui.watermark 字段。
+* 用户与角色接口不再提供 dataScope/dataScopes 字段，V84 删除 sys_role.data_scope 和 sys_user.data_scope，旧版后端无法直接回滚。
+* 移除数据库管理相关后端接口、CLI 与定时备份配置。
+
 ## [4.0.1](https://github.com/PolarisTime/Leo/compare/v4.0.0...v4.0.1) (2026-07-15)
 
 
