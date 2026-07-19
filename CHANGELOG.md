@@ -1,3 +1,25 @@
+# [7.0.0](https://github.com/PolarisTime/Leo/compare/v6.0.0...v7.0.0) (2026-07-19)
+
+
+* feat(master)!: 基础资料编码统一使用雪花ID ([1fd59ff](https://github.com/PolarisTime/Leo/commit/1fd59ffa81b95be4e09ee7ead4f5dc4a558efdd1))
+* refactor(master)!: 统一基础资料编码并移除部门管理 ([8ecf942](https://github.com/PolarisTime/Leo/commit/8ecf9421c6a864620a18e7b1169aac0640279f75))
+
+
+### Bug Fixes
+
+* **purchase:** 恢复采购入库新建保存接口 ([ea99f74](https://github.com/PolarisTime/Leo/commit/ea99f744424dfe63968f4ece18be51d2648aba18))
+
+
+### Features
+
+* **deploy:** 支持后端应用与依赖分离部署 ([53239d4](https://github.com/PolarisTime/Leo/commit/53239d477777c0c395b778b371877d3ab8c1ba9d))
+
+
+### BREAKING CHANGES
+
+* 基础资料创建必须提交后端签发且未过期的编码；部门管理 API、用户部门字段及数据库结构已移除。
+* 基础资料新建和导入不再接受手工编码。
+
 # [6.0.0](https://github.com/PolarisTime/Leo/compare/v5.1.0...v6.0.0) (2026-07-18)
 
 
