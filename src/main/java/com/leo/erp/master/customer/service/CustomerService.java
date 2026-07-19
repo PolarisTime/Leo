@@ -11,6 +11,7 @@ import com.leo.erp.common.support.RedisCacheHealthCheck;
 import com.leo.erp.common.support.RedisJsonCacheSupport;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
+import com.leo.erp.master.code.service.MasterDataCodeIssuanceService;
 import com.leo.erp.master.customer.domain.entity.Customer;
 import com.leo.erp.master.customer.repository.CustomerRepository;
 import com.leo.erp.master.customer.mapper.CustomerMapper;
@@ -36,6 +37,7 @@ import java.util.Optional;
 public class CustomerService extends AbstractCrudService<Customer, CustomerRequest, CustomerResponse> implements RedisCacheHealthCheck {
 
     private static final String CUSTOMER_CACHE_KEY = "leo:customer:all";
+    private static final String CODE_MODULE_KEY = "customer";
     private static final Duration CUSTOMER_CACHE_TTL = Duration.ofMinutes(30);
     private static final TypeReference<List<CustomerOptionResponse>> CUSTOMER_OPTION_LIST_TYPE = new TypeReference<>() { };
 
@@ -44,6 +46,7 @@ public class CustomerService extends AbstractCrudService<Customer, CustomerReque
     private final RedisJsonCacheSupport redisJsonCacheSupport;
     private final MasterDataReferenceGuard referenceGuard;
     private final CompanySettingService companySettingService;
+    private final MasterDataCodeIssuanceService codeIssuanceService;
     private CacheManager cacheManager;
 
     @Autowired
@@ -52,34 +55,15 @@ public class CustomerService extends AbstractCrudService<Customer, CustomerReque
                            CustomerMapper customerMapper,
                            RedisJsonCacheSupport redisJsonCacheSupport,
                            MasterDataReferenceGuard referenceGuard,
-                           CompanySettingService companySettingService) {
+                           CompanySettingService companySettingService,
+                           MasterDataCodeIssuanceService codeIssuanceService) {
         super(snowflakeIdGenerator);
         this.customerRepository = customerRepository;
         this.customerMapper = customerMapper;
         this.redisJsonCacheSupport = redisJsonCacheSupport;
         this.referenceGuard = referenceGuard;
         this.companySettingService = companySettingService;
-    }
-
-    public CustomerService(CustomerRepository customerRepository,
-                           SnowflakeIdGenerator snowflakeIdGenerator,
-                           CustomerMapper customerMapper) {
-        this(customerRepository, snowflakeIdGenerator, customerMapper, null, null, null);
-    }
-
-    public CustomerService(CustomerRepository customerRepository,
-                           SnowflakeIdGenerator snowflakeIdGenerator,
-                           CustomerMapper customerMapper,
-                           RedisJsonCacheSupport redisJsonCacheSupport) {
-        this(customerRepository, snowflakeIdGenerator, customerMapper, redisJsonCacheSupport, null, null);
-    }
-
-    public CustomerService(CustomerRepository customerRepository,
-                           SnowflakeIdGenerator snowflakeIdGenerator,
-                           CustomerMapper customerMapper,
-                           RedisJsonCacheSupport redisJsonCacheSupport,
-                           MasterDataReferenceGuard referenceGuard) {
-        this(customerRepository, snowflakeIdGenerator, customerMapper, redisJsonCacheSupport, referenceGuard, null);
+        this.codeIssuanceService = codeIssuanceService;
     }
 
     @Override
@@ -209,8 +193,17 @@ public class CustomerService extends AbstractCrudService<Customer, CustomerReque
     }
 
     @Override
+    protected void validateCreate(CustomerRequest request) {
+        codeIssuanceService.validate(CODE_MODULE_KEY, request.customerCode());
+    }
+
+    @Override
     protected void apply(Customer entity, CustomerRequest request) {
-        entity.setCustomerCode(resolveSnowflakeCode(entity.getCustomerCode(), entity.getId()));
+        entity.setCustomerCode(codeIssuanceService.resolve(
+                CODE_MODULE_KEY,
+                entity.getCustomerCode(),
+                request.customerCode()
+        ));
         entity.setCustomerName(request.customerName());
         entity.setContactName(request.contactName());
         entity.setContactPhone(request.contactPhone());
@@ -229,6 +222,13 @@ public class CustomerService extends AbstractCrudService<Customer, CustomerReque
     @Override
     protected Customer saveEntity(Customer entity) {
         return customerRepository.save(entity);
+    }
+
+    @Override
+    protected Customer saveCreatedEntity(Customer entity, CustomerRequest request) {
+        Customer saved = saveEntity(entity);
+        codeIssuanceService.consume(CODE_MODULE_KEY, saved.getCustomerCode());
+        return saved;
     }
 
     @Override

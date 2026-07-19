@@ -21,7 +21,6 @@ public final class PageSortFieldCatalog {
             Map.entry("receipt", Set.of("id", "receiptNo", "customerName", "projectName", "receiptDate", "payType", "amount", "status", "operatorName")),
             Map.entry("payment", Set.of("id", "paymentNo", "businessType", "counterpartyCode", "counterpartyName", "paymentDate", "payType", "amount", "status", "operatorName")),
             Map.entry("ledger-adjustment", Set.of("id", "adjustmentNo", "direction", "counterpartyType", "counterpartyCode", "counterpartyName", "projectName", "adjustmentDate", "amount", "adjustmentType", "effect", "status", "operatorName")),
-            Map.entry("department", Set.of("id", "departmentCode", "departmentName", "parentId", "managerName", "contactPhone", "sortOrder", "status")),
             Map.entry("user-account", Set.of("id", "loginName", "userName", "mobile", "lastLoginDate", "status")),
             Map.entry("general-setting", Set.of(
                     "id", "settingCode", "settingName", "settingGroup", "settingValue", "status"

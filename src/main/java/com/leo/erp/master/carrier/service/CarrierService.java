@@ -9,6 +9,7 @@ import com.leo.erp.common.support.MasterDataReferenceGuard.ReferenceCheck;
 import com.leo.erp.common.support.RedisCacheHealthCheck;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
+import com.leo.erp.master.code.service.MasterDataCodeIssuanceService;
 import com.leo.erp.master.carrier.domain.entity.Carrier;
 import com.leo.erp.master.carrier.repository.CarrierRepository;
 import com.leo.erp.master.carrier.repository.VehicleRepository;
@@ -35,6 +36,7 @@ import java.util.Optional;
 public class CarrierService extends AbstractCrudService<Carrier, CarrierRequest, CarrierResponse> implements RedisCacheHealthCheck {
 
     private static final String CARRIER_CACHE_KEY = "leo:carrier:all";
+    private static final String CODE_MODULE_KEY = "carrier";
 
     private final CarrierRepository carrierRepository;
     private final VehicleRepository vehicleRepository;
@@ -42,6 +44,7 @@ public class CarrierService extends AbstractCrudService<Carrier, CarrierRequest,
     private final MasterDataReferenceGuard referenceGuard;
     private final CompanySettingService companySettingService;
     private final CarrierVehicleSynchronizer vehicleSynchronizer;
+    private final MasterDataCodeIssuanceService codeIssuanceService;
     private CacheManager cacheManager;
 
     @Autowired
@@ -49,9 +52,9 @@ public class CarrierService extends AbstractCrudService<Carrier, CarrierRequest,
                           VehicleRepository vehicleRepository,
                           SnowflakeIdGenerator snowflakeIdGenerator,
                           CarrierMapper carrierMapper,
-                          com.leo.erp.common.support.RedisJsonCacheSupport redisJsonCacheSupport,
                           MasterDataReferenceGuard referenceGuard,
-                          CompanySettingService companySettingService) {
+                          CompanySettingService companySettingService,
+                          MasterDataCodeIssuanceService codeIssuanceService) {
         super(snowflakeIdGenerator);
         this.carrierRepository = carrierRepository;
         this.vehicleRepository = vehicleRepository;
@@ -59,31 +62,7 @@ public class CarrierService extends AbstractCrudService<Carrier, CarrierRequest,
         this.referenceGuard = referenceGuard;
         this.companySettingService = companySettingService;
         this.vehicleSynchronizer = new CarrierVehicleSynchronizer(this::nextId, referenceGuard);
-    }
-
-    public CarrierService(CarrierRepository carrierRepository,
-                          VehicleRepository vehicleRepository,
-                          SnowflakeIdGenerator snowflakeIdGenerator,
-                          CarrierMapper carrierMapper) {
-        this(carrierRepository, vehicleRepository, snowflakeIdGenerator, carrierMapper, null, null, null);
-    }
-
-    public CarrierService(CarrierRepository carrierRepository,
-                          VehicleRepository vehicleRepository,
-                          SnowflakeIdGenerator snowflakeIdGenerator,
-                          CarrierMapper carrierMapper,
-                          com.leo.erp.common.support.RedisJsonCacheSupport redisJsonCacheSupport) {
-        this(carrierRepository, vehicleRepository, snowflakeIdGenerator, carrierMapper, redisJsonCacheSupport, null, null);
-    }
-
-    public CarrierService(CarrierRepository carrierRepository,
-                          VehicleRepository vehicleRepository,
-                          SnowflakeIdGenerator snowflakeIdGenerator,
-                          CarrierMapper carrierMapper,
-                          com.leo.erp.common.support.RedisJsonCacheSupport redisJsonCacheSupport,
-                          MasterDataReferenceGuard referenceGuard) {
-        this(carrierRepository, vehicleRepository, snowflakeIdGenerator, carrierMapper, redisJsonCacheSupport,
-                referenceGuard, null);
+        this.codeIssuanceService = codeIssuanceService;
     }
 
     @Override
@@ -193,8 +172,17 @@ public class CarrierService extends AbstractCrudService<Carrier, CarrierRequest,
     }
 
     @Override
+    protected void validateCreate(CarrierRequest request) {
+        codeIssuanceService.validate(CODE_MODULE_KEY, request.carrierCode());
+    }
+
+    @Override
     protected void apply(Carrier entity, CarrierRequest request) {
-        entity.setCarrierCode(resolveSnowflakeCode(entity.getCarrierCode(), entity.getId()));
+        entity.setCarrierCode(codeIssuanceService.resolve(
+                CODE_MODULE_KEY,
+                entity.getCarrierCode(),
+                request.carrierCode()
+        ));
         entity.setCarrierName(request.carrierName());
         entity.setContactName(emptyToNull(request.contactName()));
         entity.setContactPhone(emptyToNull(request.contactPhone()));
@@ -215,6 +203,13 @@ public class CarrierService extends AbstractCrudService<Carrier, CarrierRequest,
     @Override
     protected Carrier saveEntity(Carrier entity) {
         return carrierRepository.save(entity);
+    }
+
+    @Override
+    protected Carrier saveCreatedEntity(Carrier entity, CarrierRequest request) {
+        Carrier saved = saveEntity(entity);
+        codeIssuanceService.consume(CODE_MODULE_KEY, saved.getCarrierCode());
+        return saved;
     }
 
     @Override

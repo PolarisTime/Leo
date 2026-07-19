@@ -14,6 +14,7 @@ import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.TradeItemMaterialSupport;
 import com.leo.erp.common.support.TradeItemCalculator;
 import com.leo.erp.common.web.dto.FileDownloadResponse;
+import com.leo.erp.master.code.service.MasterDataCodeIssuanceService;
 import com.leo.erp.master.material.domain.entity.Material;
 import com.leo.erp.master.material.repository.MaterialRepository;
 import com.leo.erp.master.material.mapper.MaterialMapper;
@@ -65,6 +66,7 @@ public class MaterialService extends AbstractCrudService<Material, MaterialReque
             .setRecordSeparator("\r\n")
             .build();
     private static final String MATERIAL_IDENTITY_UNIQUE_INDEX = "uk_md_material_identity_active";
+    private static final String CODE_MODULE_KEY = "material";
 
     private final MaterialRepository materialRepository;
     private final MaterialMapper materialMapper;
@@ -73,6 +75,7 @@ public class MaterialService extends AbstractCrudService<Material, MaterialReque
     private final ExcelImportService excelImportService;
     private final ExcelTemplateService excelTemplateService;
     private final MaterialReferenceGuard materialReferenceGuard;
+    private final MasterDataCodeIssuanceService codeIssuanceService;
 
     @Autowired
     public MaterialService(MaterialRepository materialRepository,
@@ -82,7 +85,8 @@ public class MaterialService extends AbstractCrudService<Material, MaterialReque
                            ExcelExportService excelExportService,
                            ExcelImportService excelImportService,
                            ExcelTemplateService excelTemplateService,
-                           MaterialReferenceGuard materialReferenceGuard) {
+                           MaterialReferenceGuard materialReferenceGuard,
+                           MasterDataCodeIssuanceService codeIssuanceService) {
         super(snowflakeIdGenerator);
         this.materialRepository = materialRepository;
         this.materialMapper = materialMapper;
@@ -91,6 +95,7 @@ public class MaterialService extends AbstractCrudService<Material, MaterialReque
         this.excelImportService = excelImportService;
         this.excelTemplateService = excelTemplateService;
         this.materialReferenceGuard = materialReferenceGuard;
+        this.codeIssuanceService = codeIssuanceService;
     }
 
     private static final String[] MATERIAL_SEARCH_FIELDS = {
@@ -136,6 +141,7 @@ public class MaterialService extends AbstractCrudService<Material, MaterialReque
 
     @Override
     protected void validateCreate(MaterialRequest request) {
+        codeIssuanceService.validate(CODE_MODULE_KEY, request.materialCode());
         ensureMaterialIdentityUnique(null, importIdentity(request));
     }
 
@@ -390,6 +396,7 @@ public class MaterialService extends AbstractCrudService<Material, MaterialReque
                 MaterialImportIdentityKey previousIdentity = importIdentity(material);
                 validateImportIdentity(material, importIdentity, importIdentityIndex, rowNumber);
                 material.setDeletedFlag(false);
+                material.setMaterialCode(resolveSnowflakeCode(material.getMaterialCode(), material.getId()));
                 apply(material, request);
                 materialRepository.save(material);
                 registerImportIdentity(importIdentityIndex, previousIdentity, importIdentity, material);
@@ -435,7 +442,11 @@ public class MaterialService extends AbstractCrudService<Material, MaterialReque
 
     @Override
     protected void apply(Material entity, MaterialRequest request) {
-        entity.setMaterialCode(resolveSnowflakeCode(entity.getMaterialCode(), entity.getId()));
+        entity.setMaterialCode(codeIssuanceService.resolve(
+                CODE_MODULE_KEY,
+                entity.getMaterialCode(),
+                request.materialCode()
+        ));
         entity.setBrand(request.brand());
         entity.setMaterial(request.material());
         entity.setCategory(request.category());
@@ -458,6 +469,13 @@ public class MaterialService extends AbstractCrudService<Material, MaterialReque
         } catch (DataIntegrityViolationException ex) {
             throw mapMaterialIdentityViolation(ex, ErrorCode.BUSINESS_ERROR, null);
         }
+    }
+
+    @Override
+    protected Material saveCreatedEntity(Material entity, MaterialRequest request) {
+        Material saved = saveEntity(entity);
+        codeIssuanceService.consume(CODE_MODULE_KEY, saved.getMaterialCode());
+        return saved;
     }
 
     @Override

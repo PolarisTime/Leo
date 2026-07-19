@@ -44,7 +44,6 @@ public class ModuleCatalog {
         modules.put("project", "项目");
         modules.put("carrier", "物流商");
         modules.put("warehouse", "仓库");
-        modules.put("department", "部门");
         modules.put("purchase-order", "采购订单");
         modules.put("purchase-inbound", "采购入库");
         modules.put("sales-order", "销售订单");

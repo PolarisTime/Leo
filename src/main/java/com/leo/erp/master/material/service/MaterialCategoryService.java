@@ -6,6 +6,7 @@ import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.service.AbstractCrudService;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
+import com.leo.erp.master.code.service.MasterDataCodeIssuanceService;
 import com.leo.erp.master.material.domain.entity.MaterialCategory;
 import com.leo.erp.master.material.mapper.MaterialCategoryMapper;
 import com.leo.erp.master.material.repository.MaterialCategoryRepository;
@@ -23,15 +24,20 @@ import java.util.List;
 @Service
 public class MaterialCategoryService extends AbstractCrudService<MaterialCategory, MaterialCategoryRequest, MaterialCategoryResponse> {
 
+    private static final String CODE_MODULE_KEY = "material-categories";
+
     private final MaterialCategoryRepository repository;
     private final MaterialCategoryMapper materialCategoryMapper;
+    private final MasterDataCodeIssuanceService codeIssuanceService;
 
     public MaterialCategoryService(MaterialCategoryRepository repository,
                                    SnowflakeIdGenerator idGenerator,
-                                   MaterialCategoryMapper materialCategoryMapper) {
+                                   MaterialCategoryMapper materialCategoryMapper,
+                                   MasterDataCodeIssuanceService codeIssuanceService) {
         super(idGenerator);
         this.repository = repository;
         this.materialCategoryMapper = materialCategoryMapper;
+        this.codeIssuanceService = codeIssuanceService;
     }
 
     @Transactional(readOnly = true)
@@ -77,8 +83,17 @@ public class MaterialCategoryService extends AbstractCrudService<MaterialCategor
     }
 
     @Override
+    protected void validateCreate(MaterialCategoryRequest request) {
+        codeIssuanceService.validate(CODE_MODULE_KEY, request.categoryCode());
+    }
+
+    @Override
     protected void apply(MaterialCategory entity, MaterialCategoryRequest request) {
-        entity.setCategoryCode(resolveSnowflakeCode(entity.getCategoryCode(), entity.getId()));
+        entity.setCategoryCode(codeIssuanceService.resolve(
+                CODE_MODULE_KEY,
+                entity.getCategoryCode(),
+                request.categoryCode()
+        ));
         entity.setCategoryName(required(request.categoryName(), "类别名称"));
         entity.setSortOrder(request.sortOrder() == null ? 0 : request.sortOrder());
         entity.setPurchaseWeighRequired(Boolean.TRUE.equals(request.purchaseWeighRequired()));
@@ -89,6 +104,13 @@ public class MaterialCategoryService extends AbstractCrudService<MaterialCategor
     @Override
     protected MaterialCategory saveEntity(MaterialCategory entity) {
         return repository.save(entity);
+    }
+
+    @Override
+    protected MaterialCategory saveCreatedEntity(MaterialCategory entity, MaterialCategoryRequest request) {
+        MaterialCategory saved = saveEntity(entity);
+        codeIssuanceService.consume(CODE_MODULE_KEY, saved.getCategoryCode());
+        return saved;
     }
 
     private String required(String value, String field) {

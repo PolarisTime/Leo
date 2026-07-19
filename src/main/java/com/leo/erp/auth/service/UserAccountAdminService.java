@@ -48,7 +48,7 @@ public class UserAccountAdminService {
     @Transactional(readOnly = true)
     public Page<UserAccountAdminResponse> page(PageQuery query, String keyword, String status) {
         Specification<UserAccount> spec = Specs.<UserAccount>notDeleted()
-                .and(Specs.keywordLike(keyword, "loginName", "userName", "mobile", "departmentName"));
+                .and(Specs.keywordLike(keyword, "loginName", "userName", "mobile"));
         if (status != null && !status.isBlank()) {
             spec = spec.and((root, criteriaQuery, criteriaBuilder) ->
                     criteriaBuilder.equal(root.get("status"), validationService.toStatus(status)));
@@ -123,7 +123,6 @@ public class UserAccountAdminService {
         entity.setLoginName(validationService.normalizeLoginName(request.loginName()));
         entity.setUserName(validationService.normalizeRequiredValue(request.userName(), "用户姓名"));
         entity.setMobile(validationService.normalizeOptionalValue(request.mobile()));
-        validationService.applyDepartment(entity, request.departmentId());
         entity.setStatus(nextStatus);
         entity.setRemark(validationService.normalizeOptionalValue(request.remark()));
     }

@@ -8,6 +8,7 @@ import jakarta.validation.constraints.NotNull;
 import java.math.BigDecimal;
 
 public record MaterialRequest(
+        @NotBlank(message = "商品编码不能为空")
         String materialCode,
         @NotBlank(message = "品牌不能为空")
         String brand,

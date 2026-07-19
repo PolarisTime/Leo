@@ -9,8 +9,6 @@ public record UserAccountAdminResponse(
         String loginName,
         String userName,
         @JsonSerialize(using = PhoneMaskSerializer.class) String mobile,
-        Long departmentId,
-        String departmentName,
         LocalDateTime lastLoginDate,
         String status,
         String remark

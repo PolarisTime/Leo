@@ -11,6 +11,7 @@ import com.leo.erp.common.support.RedisCacheHealthCheck;
 import com.leo.erp.common.support.RedisJsonCacheSupport;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
+import com.leo.erp.master.code.service.MasterDataCodeIssuanceService;
 import com.leo.erp.master.supplier.domain.entity.Supplier;
 import com.leo.erp.master.supplier.repository.SupplierRepository;
 import com.leo.erp.master.supplier.mapper.SupplierMapper;
@@ -34,6 +35,7 @@ import java.util.Optional;
 public class SupplierService extends AbstractCrudService<Supplier, SupplierRequest, SupplierResponse> implements RedisCacheHealthCheck {
 
     private static final String SUPPLIER_CACHE_KEY = "leo:supplier:all";
+    private static final String CODE_MODULE_KEY = "supplier";
     private static final Duration SUPPLIER_CACHE_TTL = Duration.ofMinutes(30);
     private static final TypeReference<List<SupplierOptionResponse>> SUPPLIER_OPTION_LIST_TYPE = new TypeReference<>() { };
 
@@ -41,6 +43,7 @@ public class SupplierService extends AbstractCrudService<Supplier, SupplierReque
     private final SupplierMapper supplierMapper;
     private final RedisJsonCacheSupport redisJsonCacheSupport;
     private final MasterDataReferenceGuard referenceGuard;
+    private final MasterDataCodeIssuanceService codeIssuanceService;
     private CacheManager cacheManager;
 
     @Autowired
@@ -48,25 +51,14 @@ public class SupplierService extends AbstractCrudService<Supplier, SupplierReque
                            SnowflakeIdGenerator snowflakeIdGenerator,
                            SupplierMapper supplierMapper,
                            RedisJsonCacheSupport redisJsonCacheSupport,
-                           MasterDataReferenceGuard referenceGuard) {
+                           MasterDataReferenceGuard referenceGuard,
+                           MasterDataCodeIssuanceService codeIssuanceService) {
         super(snowflakeIdGenerator);
         this.supplierRepository = supplierRepository;
         this.supplierMapper = supplierMapper;
         this.redisJsonCacheSupport = redisJsonCacheSupport;
         this.referenceGuard = referenceGuard;
-    }
-
-    public SupplierService(SupplierRepository supplierRepository,
-                           SnowflakeIdGenerator snowflakeIdGenerator,
-                           SupplierMapper supplierMapper) {
-        this(supplierRepository, snowflakeIdGenerator, supplierMapper, null, null);
-    }
-
-    public SupplierService(SupplierRepository supplierRepository,
-                           SnowflakeIdGenerator snowflakeIdGenerator,
-                           SupplierMapper supplierMapper,
-                           RedisJsonCacheSupport redisJsonCacheSupport) {
-        this(supplierRepository, snowflakeIdGenerator, supplierMapper, redisJsonCacheSupport, null);
+        this.codeIssuanceService = codeIssuanceService;
     }
 
     @Override
@@ -182,8 +174,17 @@ public class SupplierService extends AbstractCrudService<Supplier, SupplierReque
     }
 
     @Override
+    protected void validateCreate(SupplierRequest request) {
+        codeIssuanceService.validate(CODE_MODULE_KEY, request.supplierCode());
+    }
+
+    @Override
     protected void apply(Supplier entity, SupplierRequest request) {
-        entity.setSupplierCode(resolveSnowflakeCode(entity.getSupplierCode(), entity.getId()));
+        entity.setSupplierCode(codeIssuanceService.resolve(
+                CODE_MODULE_KEY,
+                entity.getSupplierCode(),
+                request.supplierCode()
+        ));
         entity.setSupplierName(request.supplierName());
         entity.setContactName(request.contactName());
         entity.setContactPhone(request.contactPhone());
@@ -195,6 +196,13 @@ public class SupplierService extends AbstractCrudService<Supplier, SupplierReque
     @Override
     protected Supplier saveEntity(Supplier entity) {
         return supplierRepository.save(entity);
+    }
+
+    @Override
+    protected Supplier saveCreatedEntity(Supplier entity, SupplierRequest request) {
+        Supplier saved = saveEntity(entity);
+        codeIssuanceService.consume(CODE_MODULE_KEY, saved.getSupplierCode());
+        return saved;
     }
 
     @Override

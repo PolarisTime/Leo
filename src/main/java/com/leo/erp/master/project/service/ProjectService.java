@@ -9,6 +9,7 @@ import com.leo.erp.common.support.MasterDataReferenceGuard;
 import com.leo.erp.common.support.MasterDataReferenceGuard.ReferenceCheck;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
+import com.leo.erp.master.code.service.MasterDataCodeIssuanceService;
 import com.leo.erp.master.customer.domain.entity.Customer;
 import com.leo.erp.master.customer.repository.CustomerRepository;
 import com.leo.erp.master.project.domain.entity.Project;
@@ -32,36 +33,27 @@ import java.util.Optional;
 public class ProjectService extends AbstractCrudService<Project, ProjectRequest, ProjectResponse> {
 
     private static final Logger log = LoggerFactory.getLogger(ProjectService.class);
+    private static final String CODE_MODULE_KEY = "project";
 
     private final ProjectRepository projectRepository;
     private final ProjectMapper projectMapper;
     private final MasterDataReferenceGuard referenceGuard;
     private final CustomerRepository customerRepository;
+    private final MasterDataCodeIssuanceService codeIssuanceService;
 
     @Autowired
     public ProjectService(SnowflakeIdGenerator snowflakeIdGenerator,
                           ProjectRepository projectRepository,
                           ProjectMapper projectMapper,
                           MasterDataReferenceGuard referenceGuard,
-                          CustomerRepository customerRepository) {
+                          CustomerRepository customerRepository,
+                          MasterDataCodeIssuanceService codeIssuanceService) {
         super(snowflakeIdGenerator);
         this.projectRepository = projectRepository;
         this.projectMapper = projectMapper;
         this.referenceGuard = referenceGuard;
         this.customerRepository = customerRepository;
-    }
-
-    public ProjectService(SnowflakeIdGenerator snowflakeIdGenerator,
-                          ProjectRepository projectRepository,
-                          ProjectMapper projectMapper,
-                          MasterDataReferenceGuard referenceGuard) {
-        this(snowflakeIdGenerator, projectRepository, projectMapper, referenceGuard, null);
-    }
-
-    public ProjectService(SnowflakeIdGenerator snowflakeIdGenerator,
-                          ProjectRepository projectRepository,
-                          ProjectMapper projectMapper) {
-        this(snowflakeIdGenerator, projectRepository, projectMapper, null, null);
+        this.codeIssuanceService = codeIssuanceService;
     }
 
     @Transactional(readOnly = true)
@@ -136,8 +128,17 @@ public class ProjectService extends AbstractCrudService<Project, ProjectRequest,
     }
 
     @Override
+    protected void validateCreate(ProjectRequest request) {
+        codeIssuanceService.validate(CODE_MODULE_KEY, request.projectCode());
+    }
+
+    @Override
     protected void apply(Project entity, ProjectRequest request) {
-        entity.setProjectCode(resolveSnowflakeCode(entity.getProjectCode(), entity.getId()));
+        entity.setProjectCode(codeIssuanceService.resolve(
+                CODE_MODULE_KEY,
+                entity.getProjectCode(),
+                request.projectCode()
+        ));
         entity.setProjectName(request.projectName());
         entity.setProjectNameAbbr(request.projectNameAbbr());
         entity.setProjectAddress(request.projectAddress());
@@ -151,6 +152,13 @@ public class ProjectService extends AbstractCrudService<Project, ProjectRequest,
     @Override
     protected Project saveEntity(Project entity) {
         return projectRepository.save(entity);
+    }
+
+    @Override
+    protected Project saveCreatedEntity(Project entity, ProjectRequest request) {
+        Project saved = saveEntity(entity);
+        codeIssuanceService.consume(CODE_MODULE_KEY, saved.getProjectCode());
+        return saved;
     }
 
     @Override

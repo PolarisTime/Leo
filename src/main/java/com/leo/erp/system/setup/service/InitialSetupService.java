@@ -7,8 +7,6 @@ import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
-import com.leo.erp.system.department.domain.entity.Department;
-import com.leo.erp.system.department.repository.DepartmentRepository;
 import com.leo.erp.system.generalsetting.domain.entity.GeneralSetting;
 import com.leo.erp.system.generalsetting.repository.GeneralSettingRepository;
 import com.leo.erp.system.setup.web.dto.InitialSetupAdminSubmitRequest;
@@ -26,18 +24,15 @@ public class InitialSetupService {
     private static final String OOBE_COMPLETED_SETTING = "SYS_OOBE_COMPLETED";
     private final UserAccountRepository userAccountRepository;
     private final GeneralSettingRepository generalSettingRepository;
-    private final DepartmentRepository departmentRepository;
     private final PasswordEncoder passwordEncoder;
     private final SnowflakeIdGenerator snowflakeIdGenerator;
 
     public InitialSetupService(UserAccountRepository userAccountRepository,
                                GeneralSettingRepository generalSettingRepository,
-                               DepartmentRepository departmentRepository,
                                PasswordEncoder passwordEncoder,
                                SnowflakeIdGenerator snowflakeIdGenerator) {
         this.userAccountRepository = userAccountRepository;
         this.generalSettingRepository = generalSettingRepository;
-        this.departmentRepository = departmentRepository;
         this.passwordEncoder = passwordEncoder;
         this.snowflakeIdGenerator = snowflakeIdGenerator;
     }
@@ -113,12 +108,6 @@ public class InitialSetupService {
         admin.setMobile(mobile);
         admin.setStatus(UserStatus.NORMAL);
         admin.setRemark(SETUP_REMARK);
-        Department defaultDept = departmentRepository.findByDepartmentCodeAndDeletedFlagFalse("DEPT001")
-                .orElse(null);
-        if (defaultDept != null) {
-            admin.setDepartmentId(defaultDept.getId());
-            admin.setDepartmentName(defaultDept.getDepartmentName());
-        }
 
         try {
             userAccountRepository.saveAndFlush(admin);

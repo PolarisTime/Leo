@@ -6,8 +6,6 @@ import com.leo.erp.auth.repository.UserAccountRepository;
 import com.leo.erp.auth.web.dto.LoginNameAvailabilityResponse;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
-import com.leo.erp.system.department.domain.entity.Department;
-import com.leo.erp.system.department.repository.DepartmentRepository;
 import org.springframework.stereotype.Service;
 
 import java.security.SecureRandom;
@@ -28,12 +26,8 @@ public class UserAccountValidationService {
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
     private final UserAccountRepository repository;
-    private final DepartmentRepository departmentRepository;
-    public UserAccountValidationService(
-            UserAccountRepository repository,
-            DepartmentRepository departmentRepository) {
+    public UserAccountValidationService(UserAccountRepository repository) {
         this.repository = repository;
-        this.departmentRepository = departmentRepository;
     }
 
     public String normalizeLoginName(String loginName) {
@@ -100,22 +94,6 @@ public class UserAccountValidationService {
             return UserStatus.DISABLED;
         }
         throw new BusinessException(ErrorCode.VALIDATION_ERROR, "用户状态不合法");
-    }
-
-    public void applyDepartment(UserAccount entity, Long departmentId) {
-        if (departmentId == null) {
-            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "请选择所属部门");
-        }
-        if (departmentRepository == null) {
-            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "部门不存在");
-        }
-        Department department = departmentRepository.findByIdAndDeletedFlagFalse(departmentId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.VALIDATION_ERROR, "部门不存在"));
-        if (!"正常".equals(department.getStatus())) {
-            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "部门已禁用");
-        }
-        entity.setDepartmentId(department.getId());
-        entity.setDepartmentName(department.getDepartmentName());
     }
 
     public String normalizeRequiredValue(String value, String fieldName) {

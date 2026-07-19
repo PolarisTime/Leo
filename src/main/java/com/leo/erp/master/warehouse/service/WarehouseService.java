@@ -7,6 +7,7 @@ import com.leo.erp.common.support.MasterDataReferenceGuard;
 import com.leo.erp.common.support.WarehouseSelectionSupport;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
+import com.leo.erp.master.code.service.MasterDataCodeIssuanceService;
 import com.leo.erp.master.warehouse.domain.entity.Warehouse;
 import com.leo.erp.master.warehouse.repository.WarehouseRepository;
 import com.leo.erp.master.warehouse.mapper.WarehouseMapper;
@@ -23,35 +24,27 @@ import java.util.Optional;
 @Service
 public class WarehouseService extends AbstractCrudService<Warehouse, WarehouseRequest, WarehouseResponse> {
 
+    private static final String CODE_MODULE_KEY = "warehouse";
+
     private final WarehouseRepository warehouseRepository;
     private final WarehouseMapper warehouseMapper;
     private final WarehouseSelectionSupport warehouseSelectionSupport;
     private final WarehouseReferenceGuard warehouseReferenceGuard;
+    private final MasterDataCodeIssuanceService codeIssuanceService;
 
     @Autowired
     public WarehouseService(WarehouseRepository warehouseRepository,
                             SnowflakeIdGenerator snowflakeIdGenerator,
                             WarehouseMapper warehouseMapper,
                             WarehouseSelectionSupport warehouseSelectionSupport,
-                            MasterDataReferenceGuard referenceGuard) {
+                            MasterDataReferenceGuard referenceGuard,
+                            MasterDataCodeIssuanceService codeIssuanceService) {
         super(snowflakeIdGenerator);
         this.warehouseRepository = warehouseRepository;
         this.warehouseMapper = warehouseMapper;
         this.warehouseSelectionSupport = warehouseSelectionSupport;
         this.warehouseReferenceGuard = referenceGuard == null ? null : new WarehouseReferenceGuard(referenceGuard);
-    }
-
-    public WarehouseService(WarehouseRepository warehouseRepository,
-                            SnowflakeIdGenerator snowflakeIdGenerator,
-                            WarehouseMapper warehouseMapper,
-                            WarehouseSelectionSupport warehouseSelectionSupport) {
-        this(
-                warehouseRepository,
-                snowflakeIdGenerator,
-                warehouseMapper,
-                warehouseSelectionSupport,
-                (MasterDataReferenceGuard) null
-        );
+        this.codeIssuanceService = codeIssuanceService;
     }
 
     @org.springframework.transaction.annotation.Transactional(readOnly = true)
@@ -102,8 +95,17 @@ public class WarehouseService extends AbstractCrudService<Warehouse, WarehouseRe
     }
 
     @Override
+    protected void validateCreate(WarehouseRequest request) {
+        codeIssuanceService.validate(CODE_MODULE_KEY, request.warehouseCode());
+    }
+
+    @Override
     protected void apply(Warehouse entity, WarehouseRequest request) {
-        entity.setWarehouseCode(resolveSnowflakeCode(entity.getWarehouseCode(), entity.getId()));
+        entity.setWarehouseCode(codeIssuanceService.resolve(
+                CODE_MODULE_KEY,
+                entity.getWarehouseCode(),
+                request.warehouseCode()
+        ));
         entity.setWarehouseName(request.warehouseName());
         entity.setWarehouseType(request.warehouseType());
         entity.setContactName(request.contactName());
@@ -117,6 +119,13 @@ public class WarehouseService extends AbstractCrudService<Warehouse, WarehouseRe
     protected Warehouse saveEntity(Warehouse entity) {
         Warehouse saved = warehouseRepository.save(entity);
         warehouseSelectionSupport.evictCache();
+        return saved;
+    }
+
+    @Override
+    protected Warehouse saveCreatedEntity(Warehouse entity, WarehouseRequest request) {
+        Warehouse saved = saveEntity(entity);
+        codeIssuanceService.consume(CODE_MODULE_KEY, saved.getWarehouseCode());
         return saved;
     }
 
