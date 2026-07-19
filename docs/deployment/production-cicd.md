@@ -8,9 +8,11 @@
 开发机脚本
   -> GitHub Actions workflow_dispatch
   -> 构建后端 JAR 与前端 dist
-  -> 打包 release archive
+  -> 拆分应用 JAR 与运行时依赖 bundle
+  -> 分别打包应用归档与依赖归档
   -> 校验 SHA256
-  -> 本机 self-hosted runner 下载 release archive
+  -> 本机 self-hosted runner 下载应用归档
+  -> 依赖 bundle 缓存未命中时才下载依赖归档
   -> 获取 /instance/steelx/backend 生产发布锁
   -> 执行本机 pre-deploy hook
   -> 重启 steelx 后端进程
@@ -245,6 +247,19 @@ PGPASSWORD="<postgres-admin-password>" \
 
 完成首次初始化后，后续自动化发布走 GitHub Actions `deploy_target=local`。本机 runner 直接下载 release archive 并调用 `scripts/deploy/install-production-release.sh` 发布到 `/instance/steelx/backend`，不会重新写数据库。
 
+后端制品采用“应用 JAR + 外置依赖 bundle”结构：
+
+```text
+/instance/steelx/backend/
+  dependencies/<dependency-bundle-id>/lib/*.jar
+  releases/<release-id>/leo.jar
+  releases/<release-id>/lib -> ../../dependencies/<dependency-bundle-id>/lib
+  current -> releases/<release-id>
+  previous -> releases/<release-id>
+```
+
+`dependency-bundle-id` 是按文件名排序后的依赖 JAR SHA-256 清单摘要。普通业务代码发布只下载约 2 MiB 的应用归档；只有 Maven 运行时依赖实际变化、缓存缺失或校验失败时，runner 才下载并安装约 132 MiB 的依赖归档。安装脚本会逐文件校验依赖内容，损坏的同 ID 目录会先隔离再替换。`steelx-process.sh` 对新 release 使用外置 classpath，对历史 fat JAR release 保留 `java -jar` 兼容，因此可以跨两种格式回滚。
+
 从旧后端根目录切换到独立后端目录时，首次自动化发布会创建 `/instance/steelx/backend/releases`、`/instance/steelx/backend/current` 和 `/instance/steelx/backend/previous`。如果新目录还没有 `current`，脚本会识别旧的 `/instance/steelx/current` 软链，并把它作为 `/instance/steelx/backend/previous`，用于首次发布失败回滚或手动回滚。脚本不会移动、重命名或删除旧的 `/instance/steelx/current` 与 `/instance/steelx/releases` 内容；旧目录清理必须在新目录稳定运行并确认不再需要回滚后手动执行。
 
 本机 runner 会在 release 安装成功后调用 `scripts/deploy/install-steelx-nginx-config.sh` 安装 SteelX Nginx 配置。该脚本会生成 `/instance/steelx/shared/nginx-steelx.conf`，备份并覆盖 `/etc/nginx/conf.d/steelx.conf`，执行 `nginx -t` 后 reload Nginx；如校验或 reload 失败，会尝试恢复上一版配置。SteelX 上传请求体临时目录固定在 `/instance/steelx/frontend/nginx-client-body`，不放入 `/instance/steelx/frontend/current`。
@@ -269,6 +284,8 @@ jq . /instance/steelx/backend/current/manifest.json
 - `leoRef` / `ariesRef`：触发部署时选择的后端和前端 ref。
 - `deployTarget`：必须为 `local`。
 - `flywayTarget`：必须等于本次批准的生产迁移阶段上限。
+- `applicationSha256`：本次薄应用 JAR 的 SHA-256。
+- `dependencyBundleId`：当前 release 绑定的运行时依赖 bundle ID。
 - `dryRun`：必须为 `false`。
 
 2. 使用 manifest 中的 `runId` 查询 GitHub Actions：
@@ -329,6 +346,7 @@ bash leo/scripts/deploy/trigger-production-rollback.sh \
 
 - 后端当前版本：`/instance/steelx/backend/current`
 - 后端上个版本：`/instance/steelx/backend/previous`
+- 后端共享依赖：`/instance/steelx/backend/dependencies/<dependency-bundle-id>`
 - 前端当前版本：`/instance/steelx/frontend/current`
 
-如果后端重启后健康检查失败，脚本会恢复旧的后端软链、重启 systemd 服务，并恢复旧的前端软链。
+如果后端重启后健康检查失败，脚本会恢复旧的后端软链并重启服务。新格式 release 回滚前会确认外置依赖链接完整；旧 fat JAR release 不需要依赖 bundle，可直接回滚启动。

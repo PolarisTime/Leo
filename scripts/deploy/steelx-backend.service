@@ -15,8 +15,7 @@
 # 之后部署脚本会用 `systemctl restart steelx-backend`，并保留原有的健康检查 + 失败自动回滚逻辑。
 # 注意：runner 用户需能免密执行 `systemctl restart steelx-backend`（配置 sudoers 或 polkit）。
 #
-# 注意：ExecStart 的 java 路径与端口需与 /instance/steelx/shared/steelx.env 保持一致；
-#       若 JDK 不在 /usr/bin/java，请改为实际路径（which java）。
+# 注意：steelx-process.sh 会按 release 格式自动选择外置 classpath 或旧 fat JAR 启动方式。
 
 [Unit]
 Description=SteelX Leo backend (Spring Boot)
@@ -30,15 +29,8 @@ Group=sakura
 WorkingDirectory=/instance/steelx
 EnvironmentFile=/instance/steelx/shared/steelx.env
 Environment=SPRING_PROFILES_ACTIVE=prod
-ExecStart=/usr/bin/java \
-  -Xms512m -Xmx2g \
-  -XX:+UseG1GC \
-  -XX:MaxGCPauseMillis=200 \
-  -XX:+HeapDumpOnOutOfMemoryError \
-  -XX:HeapDumpPath=/instance/steelx/shared/heapdump.hprof \
-  -Dserver.port=57217 \
-  -Dspring.profiles.active=prod \
-  -jar /instance/steelx/backend/current/leo.jar
+Environment=STEELX_ROOT=/instance/steelx
+ExecStart=/usr/bin/bash /instance/steelx/shared/steelx-process.sh run
 SuccessExitStatus=143
 Restart=on-failure
 RestartSec=5

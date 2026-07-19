@@ -10,7 +10,7 @@ BACKEND_PID_FILE="$STEELX_ROOT/run/backend.pid"
 BACKEND_LOG_FILE="$STEELX_ROOT/logs/backend.log"
 
 usage() {
-  echo "用法: STEELX_ROOT=/instance/steelx bash steelx-process.sh {start|stop|status}" >&2
+  echo "用法: STEELX_ROOT=/instance/steelx bash steelx-process.sh {run|start|stop|status}" >&2
 }
 
 if [[ -z "$ACTION" ]]; then
@@ -35,9 +35,50 @@ elif [[ -f "$STEELX_BACKEND_ROOT/current/backend/leo.jar" ]]; then
 else
   JAR_FILE="$STEELX_ROOT/current/backend/leo.jar"
 fi
+BACKEND_DIR="$(dirname "$JAR_FILE")"
+LIB_DIR="${STEELX_BACKEND_LIB:-$BACKEND_DIR/lib}"
+DEPENDENCY_MARKER="$BACKEND_DIR/dependency-bundle.id"
+JAVA_MAIN_CLASS="${STEELX_BACKEND_MAIN_CLASS:-com.leo.erp.LeoApplication}"
+JAVA_COMMAND=()
+JAVA_LAUNCH_MODE=""
 
 find_pid_by_port() {
   ss -ltnpH "( sport = :$SERVER_PORT )" 2>/dev/null | sed -n 's/.*pid=\([0-9]\+\).*/\1/p' | head -1
+}
+
+build_java_command() {
+  if [[ ! -f "$JAR_FILE" ]]; then
+    echo "JAR 不存在: $JAR_FILE" >&2
+    return 1
+  fi
+
+  JAVA_COMMAND=(
+    java
+    -Xms512m -Xmx2g
+    -XX:+UseG1GC
+    -XX:MaxGCPauseMillis=200
+    -XX:+HeapDumpOnOutOfMemoryError
+    -XX:HeapDumpPath="$STEELX_ROOT/shared/heapdump.hprof"
+    -Dserver.port="$SERVER_PORT"
+    -Dspring.profiles.active=prod
+  )
+
+  if [[ -f "$DEPENDENCY_MARKER" ]]; then
+    if [[ ! -d "$LIB_DIR" ]]; then
+      echo "外置依赖目录不存在: $LIB_DIR" >&2
+      return 1
+    fi
+    JAVA_COMMAND+=(-cp "$JAR_FILE:$LIB_DIR/*" "$JAVA_MAIN_CLASS")
+    JAVA_LAUNCH_MODE="external-classpath"
+  else
+    JAVA_COMMAND+=(-jar "$JAR_FILE")
+    JAVA_LAUNCH_MODE="spring-boot-fat-jar"
+  fi
+}
+
+run_backend() {
+  build_java_command
+  exec env -u RUNNER_TRACKING_ID "${JAVA_COMMAND[@]}"
 }
 
 start_backend() {
@@ -52,21 +93,10 @@ start_backend() {
     echo "后端端口 $SERVER_PORT 已被占用 PID=$port_pid" >&2
     exit 1
   fi
-  if [[ ! -f "$JAR_FILE" ]]; then
-    echo "JAR 不存在: $JAR_FILE" >&2
-    exit 1
-  fi
+  build_java_command
   {
-    printf '\n===== %s starting %s =====\n' "$(date -Is)" "$JAR_FILE"
-    env -u RUNNER_TRACKING_ID setsid java \
-      -Xms512m -Xmx2g \
-      -XX:+UseG1GC \
-      -XX:MaxGCPauseMillis=200 \
-      -XX:+HeapDumpOnOutOfMemoryError \
-      -XX:HeapDumpPath="$STEELX_ROOT/shared/heapdump.hprof" \
-      -Dserver.port="$SERVER_PORT" \
-      -Dspring.profiles.active=prod \
-      -jar "$JAR_FILE"
+    printf '\n===== %s starting %s mode=%s =====\n' "$(date -Is)" "$JAR_FILE" "$JAVA_LAUNCH_MODE"
+    env -u RUNNER_TRACKING_ID setsid "${JAVA_COMMAND[@]}"
   } >> "$BACKEND_LOG_FILE" 2>&1 &
   echo "$!" > "$BACKEND_PID_FILE"
   echo "steelx 后端启动 PID=$(cat "$BACKEND_PID_FILE")"
@@ -112,6 +142,7 @@ status_backend() {
 }
 
 case "$ACTION" in
+  run) run_backend ;;
   start) start_backend ;;
   stop) stop_backend ;;
   status) status_backend ;;

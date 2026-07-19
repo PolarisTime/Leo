@@ -263,6 +263,9 @@ bash "$SCRIPT_DIR/build-local-release.sh" "${build_args[@]}"
 
 archive="$LEO_DIR/target/steelx-release/steelx-$LEO_VERSION.tar.gz"
 sha_file="$archive.sha256"
+dependency_bundle_id="$(<"$LEO_DIR/target/steelx-release/dependency-bundle.id")"
+dependency_archive="$LEO_DIR/target/steelx-release/steelx-$LEO_VERSION-dependencies-$dependency_bundle_id.tar.gz"
+dependency_sha_file="$dependency_archive.sha256"
 
 cp "$SCRIPT_DIR/steelx-process.sh" "$STEELX_ROOT/shared/steelx-process.sh"
 chmod +x "$STEELX_ROOT/shared/steelx-process.sh"
@@ -273,6 +276,9 @@ stop_command="STEELX_ROOT=$STEELX_ROOT bash $STEELX_ROOT/shared/steelx-process.s
 bash "$SCRIPT_DIR/install-production-release.sh" \
   --archive "$archive" \
   --sha256-file "$sha_file" \
+  --dependency-bundle-id "$dependency_bundle_id" \
+  --dependency-archive "$dependency_archive" \
+  --dependency-sha256-file "$dependency_sha_file" \
   --release-root "$STEELX_ROOT/backend" \
   --shared-dir "$STEELX_ROOT/shared" \
   --backend-service "steelx-local" \

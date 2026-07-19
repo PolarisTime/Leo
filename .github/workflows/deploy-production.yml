@@ -135,7 +135,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: leo-backend-jar
-          path: target/*.jar
+          path: |
+            target/*.jar
+            target/*.jar.original
           if-no-files-found: error
 
   package:
@@ -143,6 +145,9 @@ jobs:
     needs:
       - backend
     runs-on: ubuntu-latest
+    outputs:
+      dependency_bundle_id: ${{ steps.release.outputs.dependency_bundle_id }}
+      dependency_archive_name: ${{ steps.release.outputs.dependency_archive_name }}
     defaults:
       run:
         shell: bash
@@ -152,6 +157,12 @@ jobs:
         with:
           ref: ${{ inputs.leo_ref || github.ref_name }}
 
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
       - name: Download backend artifact
         uses: actions/download-artifact@v4
         with:
@@ -159,6 +170,7 @@ jobs:
           path: release-input/backend
 
       - name: Create production release archive
+        id: release
         run: |
           set -euo pipefail
           leo_sha="$(git rev-parse HEAD)"
@@ -167,13 +179,21 @@ jobs:
           else
             release_id="leo-${GITHUB_RUN_NUMBER}-${leo_sha::12}"
           fi
-          mkdir -p release/deploy
-          backend_jar="$(find release-input/backend -maxdepth 1 -type f -name '*.jar' | head -1)"
-          if [[ -z "$backend_jar" ]]; then
-            echo "Backend jar artifact not found" >&2
+          executable_jar="$(find release-input/backend -maxdepth 1 -type f -name '*.jar' | head -1)"
+          application_jar="$(find release-input/backend -maxdepth 1 -type f -name '*.jar.original' | head -1)"
+          if [[ -z "$executable_jar" || -z "$application_jar" ]]; then
+            echo "Backend executable or application jar artifact not found" >&2
             exit 1
           fi
-          cp "$backend_jar" release/leo.jar
+          bash scripts/deploy/prepare-backend-release.sh \
+            --executable-jar "$executable_jar" \
+            --application-jar "$application_jar" \
+            --output-dir release-input/prepared
+          dependency_bundle_id="$(<release-input/prepared/dependency/dependency-bundle.id)"
+          application_sha256="$(awk '{print $1}' release-input/prepared/application/application.sha256)"
+          mkdir -p release/deploy
+          cp release-input/prepared/application/leo.jar release/leo.jar
+          cp release-input/prepared/dependency/dependency-bundle.id release/dependency-bundle.id
           cp scripts/deploy/install-production-release.sh release/deploy/
           cp scripts/deploy/steelx-process.sh release/deploy/
           jq -n \
@@ -184,6 +204,8 @@ jobs:
             --arg runNumber "$GITHUB_RUN_NUMBER" \
             --arg deployTarget "${{ inputs.deploy_target || 'local' }}" \
             --arg flywayTarget "$FLYWAY_TARGET" \
+            --arg applicationSha256 "$application_sha256" \
+            --arg dependencyBundleId "$dependency_bundle_id" \
             --argjson dryRun "${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || false }}" \
             --arg releaseNote "${{ inputs.release_note || '' }}" \
             '{
@@ -194,24 +216,35 @@ jobs:
               runNumber: $runNumber,
               deployTarget: $deployTarget,
               flywayTarget: $flywayTarget,
+              applicationSha256: $applicationSha256,
+              dependencyBundleId: $dependencyBundleId,
               dryRun: $dryRun,
               releaseNote: $releaseNote
             }' > release/manifest.json
-          archive_name="${release_id}.tar.gz"
-          tar -C release -czf "$archive_name" .
-          sha256sum "$archive_name" > "${archive_name}.sha256"
-          cp "$archive_name" leo-production-release.tar.gz
+          tar -C release -czf leo-production-release.tar.gz .
           sha256sum leo-production-release.tar.gz > leo-production-release.tar.gz.sha256
+          dependency_archive_name="leo-dependencies-${dependency_bundle_id}.tar.gz"
+          tar -C release-input/prepared/dependency -czf "$dependency_archive_name" .
+          sha256sum "$dependency_archive_name" > "${dependency_archive_name}.sha256"
+          echo "dependency_bundle_id=$dependency_bundle_id" >> "$GITHUB_OUTPUT"
+          echo "dependency_archive_name=$dependency_archive_name" >> "$GITHUB_OUTPUT"
 
       - name: Upload release archive
         uses: actions/upload-artifact@v4
         with:
           name: leo-production-release
           path: |
-            leo-*.tar.gz
-            leo-*.tar.gz.sha256
             leo-production-release.tar.gz
             leo-production-release.tar.gz.sha256
+          if-no-files-found: error
+
+      - name: Upload dependency bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: leo-dependencies-${{ steps.release.outputs.dependency_bundle_id }}
+          path: |
+            ${{ steps.release.outputs.dependency_archive_name }}
+            ${{ steps.release.outputs.dependency_archive_name }}.sha256
           if-no-files-found: error
 
   dry-run:
@@ -240,6 +273,8 @@ jobs:
       run:
         shell: bash
     env:
+      DEPENDENCY_BUNDLE_ID: ${{ needs.package.outputs.dependency_bundle_id }}
+      DEPENDENCY_ARCHIVE_NAME: ${{ needs.package.outputs.dependency_archive_name }}
       PROD_RELEASE_ROOT: ${{ vars.PROD_RELEASE_ROOT || '/instance/steelx/backend' }}
       PROD_SHARED_DIR: ${{ vars.PROD_SHARED_DIR || '/instance/steelx/shared' }}
       PROD_BACKEND_SERVICE: ${{ vars.PROD_BACKEND_SERVICE || 'steelx-local' }}
@@ -257,6 +292,31 @@ jobs:
         with:
           name: leo-production-release
           path: production-release
+
+      - name: Check local dependency bundle
+        id: dependency-cache
+        run: |
+          set -euo pipefail
+          : "${DEPENDENCY_BUNDLE_ID:?Missing dependency bundle ID}"
+          bundle_dir="$PROD_RELEASE_ROOT/dependencies/$DEPENDENCY_BUNDLE_ID"
+          if [[ -f "$bundle_dir/dependency-bundle.id" \
+            && -f "$bundle_dir/dependency-bundle.sha256" \
+            && -d "$bundle_dir/lib" \
+            && "$(tr -d '\r\n' < "$bundle_dir/dependency-bundle.id")" == "$DEPENDENCY_BUNDLE_ID" ]] \
+            && (cd "$bundle_dir" && sha256sum --quiet -c dependency-bundle.sha256); then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+            echo "Dependency bundle cache hit: $DEPENDENCY_BUNDLE_ID"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "Dependency bundle cache miss: $DEPENDENCY_BUNDLE_ID"
+          fi
+
+      - name: Download dependency bundle
+        if: ${{ steps.dependency-cache.outputs.present != 'true' }}
+        uses: actions/download-artifact@v4
+        with:
+          name: leo-dependencies-${{ needs.package.outputs.dependency_bundle_id }}
+          path: production-dependency
 
       - name: Extract deploy scripts
         run: |
@@ -306,9 +366,18 @@ jobs:
       - name: Install release on local production
         run: |
           set -euo pipefail
+          dependency_args=(--dependency-bundle-id "$DEPENDENCY_BUNDLE_ID")
+          dependency_archive="production-dependency/$DEPENDENCY_ARCHIVE_NAME"
+          if [[ -f "$dependency_archive" ]]; then
+            dependency_args+=(
+              --dependency-archive "$dependency_archive"
+              --dependency-sha256-file "$dependency_archive.sha256"
+            )
+          fi
           bash production-release/extracted/deploy/install-production-release.sh \
             --archive production-release/leo-production-release.tar.gz \
             --sha256-file production-release/leo-production-release.tar.gz.sha256 \
+            "${dependency_args[@]}" \
             --release-root "$PROD_RELEASE_ROOT" \
             --shared-dir "$PROD_SHARED_DIR" \
             --backend-service "$PROD_BACKEND_SERVICE" \
@@ -330,6 +399,8 @@ jobs:
       run:
         shell: bash
     env:
+      DEPENDENCY_BUNDLE_ID: ${{ needs.package.outputs.dependency_bundle_id }}
+      DEPENDENCY_ARCHIVE_NAME: ${{ needs.package.outputs.dependency_archive_name }}
       PROD_SSH_HOST: ${{ secrets.PROD_SSH_HOST }}
       PROD_SSH_PORT: ${{ secrets.PROD_SSH_PORT || '22' }}
       PROD_SSH_USER: ${{ secrets.PROD_SSH_USER }}
@@ -417,6 +488,42 @@ jobs:
           echo "Verified production Flyway target: $expected_flyway_target"
           REMOTE
 
+      - name: Check SSH dependency bundle
+        id: dependency-cache
+        run: |
+          set -euo pipefail
+          : "${DEPENDENCY_BUNDLE_ID:?Missing dependency bundle ID}"
+          quote() { printf '%q' "$1"; }
+          remote_command="sudo bash -s -- $(quote "$PROD_RELEASE_ROOT") $(quote "$DEPENDENCY_BUNDLE_ID")"
+          if ssh -i "$HOME/.ssh/leo-production" \
+            -p "$PROD_SSH_PORT" \
+            "${PROD_SSH_USER}@${PROD_SSH_HOST}" \
+            "$remote_command" <<'REMOTE'
+          set -euo pipefail
+          release_root="$1"
+          dependency_bundle_id="$2"
+          bundle_dir="$release_root/dependencies/$dependency_bundle_id"
+          [[ -f "$bundle_dir/dependency-bundle.id" ]]
+          [[ -f "$bundle_dir/dependency-bundle.sha256" ]]
+          [[ -d "$bundle_dir/lib" ]]
+          [[ "$(tr -d '\r\n' < "$bundle_dir/dependency-bundle.id")" == "$dependency_bundle_id" ]]
+          (cd "$bundle_dir" && sha256sum --quiet -c dependency-bundle.sha256)
+          REMOTE
+          then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+            echo "Dependency bundle cache hit: $DEPENDENCY_BUNDLE_ID"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "Dependency bundle cache miss: $DEPENDENCY_BUNDLE_ID"
+          fi
+
+      - name: Download dependency bundle
+        if: ${{ steps.dependency-cache.outputs.present != 'true' }}
+        uses: actions/download-artifact@v4
+        with:
+          name: leo-dependencies-${{ needs.package.outputs.dependency_bundle_id }}
+          path: production-dependency
+
       - name: Upload release archive
         run: |
           set -euo pipefail
@@ -425,15 +532,26 @@ jobs:
             -p "$PROD_SSH_PORT" \
             "${PROD_SSH_USER}@${PROD_SSH_HOST}" \
             "mkdir -p '$remote_dir'"
+          upload_files=(
+            production-release/leo-production-release.tar.gz
+            production-release/leo-production-release.tar.gz.sha256
+            production-release/extracted/deploy/steelx-process.sh
+          )
+          dependency_archive="production-dependency/$DEPENDENCY_ARCHIVE_NAME"
+          if [[ -f "$dependency_archive" ]]; then
+            upload_files+=("$dependency_archive" "$dependency_archive.sha256")
+          fi
           scp -i "$HOME/.ssh/leo-production" \
             -P "$PROD_SSH_PORT" \
-            production-release/leo-production-release.tar.gz \
-            production-release/leo-production-release.tar.gz.sha256 \
-            production-release/extracted/deploy/steelx-process.sh \
+            "${upload_files[@]}" \
             "${PROD_SSH_USER}@${PROD_SSH_HOST}:${remote_dir}/"
           echo "REMOTE_DEPLOY_DIR=${remote_dir}" >> "$GITHUB_ENV"
           echo "REMOTE_ARCHIVE=${remote_dir}/leo-production-release.tar.gz" >> "$GITHUB_ENV"
           echo "REMOTE_SHA256=${remote_dir}/leo-production-release.tar.gz.sha256" >> "$GITHUB_ENV"
+          if [[ -f "$dependency_archive" ]]; then
+            echo "REMOTE_DEPENDENCY_ARCHIVE=${remote_dir}/${DEPENDENCY_ARCHIVE_NAME}" >> "$GITHUB_ENV"
+            echo "REMOTE_DEPENDENCY_SHA256=${remote_dir}/${DEPENDENCY_ARCHIVE_NAME}.sha256" >> "$GITHUB_ENV"
+          fi
 
       - name: Install release on production
         run: |
@@ -447,6 +565,11 @@ jobs:
           remote_command="sudo bash -s --"
           remote_command+=" --archive $(quote "$REMOTE_ARCHIVE")"
           remote_command+=" --sha256-file $(quote "$REMOTE_SHA256")"
+          remote_command+=" --dependency-bundle-id $(quote "$DEPENDENCY_BUNDLE_ID")"
+          if [[ -n "${REMOTE_DEPENDENCY_ARCHIVE:-}" ]]; then
+            remote_command+=" --dependency-archive $(quote "$REMOTE_DEPENDENCY_ARCHIVE")"
+            remote_command+=" --dependency-sha256-file $(quote "$REMOTE_DEPENDENCY_SHA256")"
+          fi
           remote_command+=" --release-root $(quote "$PROD_RELEASE_ROOT")"
           remote_command+=" --shared-dir $(quote "$PROD_SHARED_DIR")"
           remote_command+=" --backend-service $(quote "$PROD_BACKEND_SERVICE")"

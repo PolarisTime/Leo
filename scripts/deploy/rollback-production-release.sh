@@ -51,6 +51,13 @@ require_command flock
 if [[ -z "$START_COMMAND" ]]; then
   require_command systemctl
 fi
+if [[ "$RELEASE_ROOT" == "/" ]]; then
+  echo "拒绝使用根目录作为 release root" >&2
+  exit 1
+fi
+
+mkdir -p "$RELEASE_ROOT"
+RELEASE_ROOT="$(cd "$RELEASE_ROOT" && pwd -P)"
 
 releases_dir="$RELEASE_ROOT/releases"
 current_link="$RELEASE_ROOT/current"
@@ -59,7 +66,17 @@ shared_dir="${SHARED_DIR:-$RELEASE_ROOT/shared}"
 
 release_has_backend_jar() {
   local candidate_dir="$1"
-  [[ -f "$candidate_dir/leo.jar" || -f "$candidate_dir/backend/leo.jar" ]]
+  local backend_dir="$candidate_dir"
+  if [[ ! -f "$backend_dir/leo.jar" && -f "$candidate_dir/backend/leo.jar" ]]; then
+    backend_dir="$candidate_dir/backend"
+  fi
+  if [[ ! -f "$backend_dir/leo.jar" ]]; then
+    return 1
+  fi
+  if [[ -f "$backend_dir/dependency-bundle.id" && ! -d "$backend_dir/lib" ]]; then
+    return 1
+  fi
+  return 0
 }
 
 lock_file="$RELEASE_ROOT/deploy.lock"
