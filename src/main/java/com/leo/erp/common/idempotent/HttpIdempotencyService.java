@@ -1,5 +1,6 @@
 package com.leo.erp.common.idempotent;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -7,6 +8,7 @@ import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
+import java.util.Base64;
 import java.util.List;
 
 @Slf4j
@@ -28,6 +30,10 @@ public class HttpIdempotencyService {
             end
             if current == ARGV[2] then
                 return 'DUPLICATE_COMPLETED'
+            end
+            local completed_with_response = ARGV[2] .. ':'
+            if string.sub(current, 1, string.len(completed_with_response)) == completed_with_response then
+                return 'DUPLICATE_COMPLETED:' .. string.sub(current, string.len(completed_with_response) + 1)
             end
             if string.sub(current, 1, string.len(ARGV[4])) == ARGV[4]
                 or string.sub(current, 1, string.len(ARGV[5])) == ARGV[5] then
@@ -59,16 +65,20 @@ public class HttpIdempotencyService {
             """,
             Long.class
     );
+    private static final String DUPLICATE_COMPLETED_WITH_RESPONSE_PREFIX = "DUPLICATE_COMPLETED:";
 
     private final StringRedisTemplate redisTemplate;
+    private final ObjectMapper objectMapper;
 
-    public HttpIdempotencyService(@Nullable StringRedisTemplate redisTemplate) {
+    public HttpIdempotencyService(@Nullable StringRedisTemplate redisTemplate, ObjectMapper objectMapper) {
         this.redisTemplate = redisTemplate;
+        this.objectMapper = objectMapper;
     }
 
     public Decision start(String scopedKey, String fingerprint, Duration ttl) {
         if (redisTemplate == null) {
-            return Decision.acquired();
+            log.error("HTTP idempotency Redis template is unavailable: key={}", scopedKey);
+            return Decision.unavailable();
         }
 
         String redisKey = redisKey(scopedKey);
@@ -84,37 +94,50 @@ public class HttpIdempotencyService {
                     PENDING_PREFIX,
                     COMPLETED_PREFIX
             );
-            return switch (status == null ? "" : status) {
+            String resolvedStatus = status == null ? "" : status;
+            if (resolvedStatus.startsWith(DUPLICATE_COMPLETED_WITH_RESPONSE_PREFIX)) {
+                return decodeCompletedResponse(
+                        scopedKey,
+                        resolvedStatus.substring(DUPLICATE_COMPLETED_WITH_RESPONSE_PREFIX.length())
+                );
+            }
+            return switch (resolvedStatus) {
                 case "ACQUIRED" -> Decision.acquired();
                 case "DUPLICATE_PENDING" -> Decision.duplicatePending();
                 case "DUPLICATE_COMPLETED" -> Decision.duplicateCompleted();
                 case "PARAMETER_MISMATCH" -> Decision.parameterMismatch();
-                default -> Decision.duplicatePending();
+                default -> Decision.unavailable();
             };
         } catch (RuntimeException ex) {
-            log.warn(
-                    "HTTP idempotency Redis unavailable, request will continue: key={}, reason={}",
+            log.error(
+                    "HTTP idempotency Redis unavailable, request is rejected: key={}, reason={}",
                     scopedKey,
                     ex.getMessage()
             );
-            return Decision.acquired();
+            return Decision.unavailable();
         }
     }
 
-    public void markCompleted(String scopedKey, String fingerprint, Duration ttl) {
+    public boolean markCompleted(String scopedKey,
+                                 String fingerprint,
+                                 Duration ttl,
+                                 CachedResponse response) {
         if (redisTemplate == null) {
-            return;
+            return false;
         }
         try {
-            redisTemplate.execute(
+            String encodedResponse = Base64.getEncoder().encodeToString(objectMapper.writeValueAsBytes(response));
+            Long updated = redisTemplate.execute(
                     MARK_COMPLETED_SCRIPT,
                     List.of(redisKey(scopedKey)),
                     PENDING_PREFIX + fingerprint,
-                    COMPLETED_PREFIX + fingerprint,
+                    COMPLETED_PREFIX + fingerprint + ":" + encodedResponse,
                     ttlMillis(ttl)
             );
-        } catch (RuntimeException ex) {
+            return updated != null && updated == 1L;
+        } catch (Exception ex) {
             log.warn("Failed to mark HTTP idempotency key completed: key={}, reason={}", scopedKey, ex.getMessage());
+            return false;
         }
     }
 
@@ -141,22 +164,54 @@ public class HttpIdempotencyService {
         return String.valueOf(Math.max(1L, ttl.toMillis()));
     }
 
-    public record Decision(Status status) {
+    private Decision decodeCompletedResponse(String scopedKey, String encodedResponse) {
+        try {
+            byte[] json = Base64.getDecoder().decode(encodedResponse);
+            return Decision.duplicateCompleted(objectMapper.readValue(json, CachedResponse.class));
+        } catch (Exception ex) {
+            log.error("Failed to decode cached HTTP idempotency response: key={}, reason={}", scopedKey, ex.getMessage());
+            return Decision.unavailable();
+        }
+    }
+
+    public record CachedResponse(
+            int status,
+            String contentType,
+            String bodyBase64
+    ) {
+        public CachedResponse {
+            bodyBase64 = bodyBase64 == null ? "" : bodyBase64;
+        }
+
+        public byte[] body() {
+            return Base64.getDecoder().decode(bodyBase64);
+        }
+    }
+
+    public record Decision(Status status, CachedResponse response) {
 
         static Decision acquired() {
-            return new Decision(Status.ACQUIRED);
+            return new Decision(Status.ACQUIRED, null);
         }
 
         static Decision duplicatePending() {
-            return new Decision(Status.DUPLICATE_PENDING);
+            return new Decision(Status.DUPLICATE_PENDING, null);
         }
 
         static Decision duplicateCompleted() {
-            return new Decision(Status.DUPLICATE_COMPLETED);
+            return duplicateCompleted(null);
+        }
+
+        static Decision duplicateCompleted(CachedResponse response) {
+            return new Decision(Status.DUPLICATE_COMPLETED, response);
         }
 
         static Decision parameterMismatch() {
-            return new Decision(Status.PARAMETER_MISMATCH);
+            return new Decision(Status.PARAMETER_MISMATCH, null);
+        }
+
+        static Decision unavailable() {
+            return new Decision(Status.UNAVAILABLE, null);
         }
     }
 
@@ -164,6 +219,7 @@ public class HttpIdempotencyService {
         ACQUIRED,
         DUPLICATE_PENDING,
         DUPLICATE_COMPLETED,
-        PARAMETER_MISMATCH
+        PARAMETER_MISMATCH,
+        UNAVAILABLE
     }
 }

@@ -90,7 +90,7 @@ PROD_START_COMMAND=STEELX_ROOT=/instance/steelx bash /instance/steelx/shared/ste
 PROD_STOP_COMMAND=STEELX_ROOT=/instance/steelx bash /instance/steelx/shared/steelx-process.sh stop
 ```
 
-生产机必须已存在 `/instance/steelx/shared/steelx-process.sh` 与 `/instance/steelx/shared/steelx.env`。首次迁移到 GitHub 部署前，先用本地 steelx 部署脚本完成目录、数据库、密钥、Nginx 和进程脚本初始化。
+生产机必须已存在 `/instance/steelx/shared/steelx.env`。`steelx-process.sh` 随 release 打包，并由后端安装脚本写入 shared 目录；首次迁移到 GitHub 部署前，先用本地 steelx 部署脚本完成目录、数据库、密钥和 Nginx 初始化。
 
 ## 生产机准备
 
@@ -120,7 +120,7 @@ SPRING_DATA_REDIS_HOST=127.0.0.1
 SPRING_DATA_REDIS_PORT=6379
 SPRING_DATA_REDIS_DATABASE=3
 SPRING_DATA_REDIS_PASSWORD=change-me
-SPRING_FLYWAY_TARGET=94
+SPRING_FLYWAY_TARGET=REPLACE_WITH_APPROVED_VERSION
 LEO_JWT_SECRET=change-me-at-least-32-chars
 LEO_DATA_ENCRYPTION_KEY=change-me-at-least-32-chars
 LEO_SETUP_BOOTSTRAP_TOKEN=<32-byte-base64url-token>
@@ -137,6 +137,8 @@ sudo cp deploy/systemd/leo-backend.service /etc/systemd/system/leo-backend.servi
 sudo systemctl daemon-reload
 sudo systemctl enable leo-backend
 ```
+
+后端安装脚本会在切换 `current` 前把 release 内的 `deploy/steelx-process.sh` 安装到 `/opt/leo/shared/steelx-process.sh`。systemd unit 统一调用该脚本的 `run` 模式；脚本根据 `dependency-bundle.id` 自动选择“应用 JAR + 外置 `lib`”classpath，并继续兼容历史 fat JAR 回滚。
 
 安装 Nginx 配置模板：
 
@@ -200,16 +202,18 @@ gh auth status
 只构建打包，不部署生产：
 
 ```bash
-bash leo/scripts/deploy/trigger-production-deploy.sh --dry-run --flyway-target 94 --watch
+APPROVED_FLYWAY_VERSION=REPLACE_WITH_APPROVED_VERSION
+bash leo/scripts/deploy/trigger-production-deploy.sh --dry-run --flyway-target "$APPROVED_FLYWAY_VERSION" --watch
 ```
 
 真实生产发布：
 
 ```bash
+APPROVED_FLYWAY_VERSION=REPLACE_WITH_APPROVED_VERSION
 bash leo/scripts/deploy/trigger-production-deploy.sh \
   --confirm-production \
   --deploy-target local \
-  --flyway-target 94 \
+  --flyway-target "$APPROVED_FLYWAY_VERSION" \
   --leo-ref main \
   --aries-ref dev \
   --watch
@@ -237,8 +241,9 @@ bash leo/scripts/deploy/trigger-production-deploy.sh \
 执行入口：
 
 ```bash
+APPROVED_FLYWAY_VERSION=REPLACE_WITH_APPROVED_VERSION
 PGPASSWORD="<postgres-admin-password>" \
-  bash leo/scripts/deploy/trigger-local-steelx-deploy.sh --confirm --flyway-target 94
+  bash leo/scripts/deploy/trigger-local-steelx-deploy.sh --confirm --flyway-target "$APPROVED_FLYWAY_VERSION"
 ```
 
 脚本会安装 `/etc/nginx/conf.d/steelx.conf`，执行 `nginx -t` 后 reload Nginx。执行用户需要 root 权限，或具备免密 sudo 执行 `install`、`nginx -t`、`nginx -s reload` 的权限。生产实例对外地址为 `https://in1ove.com`，`http://in1ove.com` 会跳转到 HTTPS。

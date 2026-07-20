@@ -7,11 +7,13 @@ import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.service.AbstractCrudService;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
+import com.leo.erp.common.support.BusinessDocumentValidator;
 import com.leo.erp.common.support.BusinessStatusValidator;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.finance.payment.service.PaymentPurchasePrepaymentService;
 import com.leo.erp.purchase.order.audit.PurchaseOrderAuditPublisher;
 import com.leo.erp.purchase.order.domain.entity.PurchaseOrder;
+import com.leo.erp.purchase.order.repository.PurchaseOrderInboundCandidateQueryRepository;
 import com.leo.erp.purchase.order.repository.PurchaseOrderRepository;
 import com.leo.erp.purchase.order.web.dto.PurchaseOrderImportCandidateResponse;
 import com.leo.erp.purchase.order.web.dto.PurchaseOrderRequest;
@@ -29,10 +31,16 @@ import org.springframework.beans.factory.annotation.Autowired;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
 public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, PurchaseOrderRequest, PurchaseOrderResponse> {
+
+    private static final Set<String> PREPAYMENT_SOURCE_STATUSES = Set.of(
+            StatusConstants.AUDITED,
+            StatusConstants.PURCHASE_COMPLETED
+    );
 
     private final PurchaseOrderRepository purchaseOrderRepository;
     private final PurchaseOrderAvailabilityService availabilityService;
@@ -43,70 +51,7 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
     private final PaymentPurchasePrepaymentService purchasePrepaymentService;
     private final PurchaseOrderDownstreamMutationGuard downstreamMutationGuard;
     private final PurchaseOrderAuditPublisher purchaseOrderAuditPublisher;
-
-    public PurchaseOrderService(PurchaseOrderRepository purchaseOrderRepository,
-                                SnowflakeIdGenerator snowflakeIdGenerator,
-                                PurchaseOrderAvailabilityService availabilityService,
-                                PurchaseOrderResponseAssembler responseAssembler,
-                                PurchaseOrderSupplierResolver supplierResolver,
-                                PurchaseOrderApplyService purchaseOrderApplyService,
-                                CompanySettingService companySettingService) {
-        this(
-                purchaseOrderRepository,
-                snowflakeIdGenerator,
-                availabilityService,
-                responseAssembler,
-                supplierResolver,
-                purchaseOrderApplyService,
-                companySettingService,
-                null,
-                null
-        );
-    }
-
-    public PurchaseOrderService(PurchaseOrderRepository purchaseOrderRepository,
-                                SnowflakeIdGenerator snowflakeIdGenerator,
-                                PurchaseOrderAvailabilityService availabilityService,
-                                PurchaseOrderResponseAssembler responseAssembler,
-                                PurchaseOrderSupplierResolver supplierResolver,
-                                PurchaseOrderApplyService purchaseOrderApplyService,
-                                CompanySettingService companySettingService,
-                                PaymentPurchasePrepaymentService purchasePrepaymentService) {
-        this(
-                purchaseOrderRepository,
-                snowflakeIdGenerator,
-                availabilityService,
-                responseAssembler,
-                supplierResolver,
-                purchaseOrderApplyService,
-                companySettingService,
-                purchasePrepaymentService,
-                null
-        );
-    }
-
-    public PurchaseOrderService(PurchaseOrderRepository purchaseOrderRepository,
-                                SnowflakeIdGenerator snowflakeIdGenerator,
-                                PurchaseOrderAvailabilityService availabilityService,
-                                PurchaseOrderResponseAssembler responseAssembler,
-                                PurchaseOrderSupplierResolver supplierResolver,
-                                PurchaseOrderApplyService purchaseOrderApplyService,
-                                CompanySettingService companySettingService,
-                                PaymentPurchasePrepaymentService purchasePrepaymentService,
-                                PurchaseOrderDownstreamMutationGuard downstreamMutationGuard) {
-        this(
-                purchaseOrderRepository,
-                snowflakeIdGenerator,
-                availabilityService,
-                responseAssembler,
-                supplierResolver,
-                purchaseOrderApplyService,
-                companySettingService,
-                purchasePrepaymentService,
-                downstreamMutationGuard,
-                null
-        );
-    }
+    private final PurchaseOrderInboundCandidateQueryRepository inboundCandidateQueryRepository;
 
     @Autowired
     public PurchaseOrderService(PurchaseOrderRepository purchaseOrderRepository,
@@ -118,7 +63,8 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
                                 CompanySettingService companySettingService,
                                 PaymentPurchasePrepaymentService purchasePrepaymentService,
                                 PurchaseOrderDownstreamMutationGuard downstreamMutationGuard,
-                                PurchaseOrderAuditPublisher purchaseOrderAuditPublisher) {
+                                PurchaseOrderAuditPublisher purchaseOrderAuditPublisher,
+                                PurchaseOrderInboundCandidateQueryRepository inboundCandidateQueryRepository) {
         super(snowflakeIdGenerator);
         this.purchaseOrderRepository = purchaseOrderRepository;
         this.availabilityService = availabilityService;
@@ -129,6 +75,7 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
         this.purchasePrepaymentService = purchasePrepaymentService;
         this.downstreamMutationGuard = downstreamMutationGuard;
         this.purchaseOrderAuditPublisher = purchaseOrderAuditPublisher;
+        this.inboundCandidateQueryRepository = inboundCandidateQueryRepository;
     }
 
     private static final String[] PURCHASE_ORDER_SEARCH_FIELDS = {"orderNo", "supplierName"};
@@ -151,47 +98,48 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
                 null, purchaseOrderRepository);
     }
 
-    @Transactional(readOnly = true)
+    @Transactional(readOnly = true, isolation = org.springframework.transaction.annotation.Isolation.REPEATABLE_READ)
     public Page<PurchaseOrderImportCandidateResponse> inboundImportCandidates(PageQuery query, PageFilter filter) {
-        Specification<PurchaseOrder> spec = Specs.<PurchaseOrder>notDeleted()
-                .and(Specs.keywordLike(filter.keyword(), PURCHASE_ORDER_SEARCH_FIELDS))
-                .and(Specs.equalIfPresent("supplierName", filter.name()))
-                .and(Specs.equalValueIfPresent("supplierId", filter.supplierId()))
-                .and(Specs.equalValueIfPresent("settlementCompanyId", filter.settlementCompanyId()))
-                .and(Specs.equalIfPresent("status", filter.status()))
-                .and(Specs.dateTimeBetweenDatesIfPresent("orderDate", filter.startDate(), filter.endDate()))
-                .and(Specs.equalIfPresent("status", StatusConstants.AUDITED));
-        List<PurchaseOrder> orders = new java.util.ArrayList<>();
-        int pageIndex = 0;
-        Page<PurchaseOrder> orderPage;
-        do {
-            orderPage = pageEntities(
-                    PageQuery.of(pageIndex, 200, query.sortBy(), query.direction()),
-                    spec,
-                    purchaseOrderRepository
-            );
-            orders.addAll(orderPage.getContent());
-            pageIndex++;
-        } while (orderPage.hasNext());
+        Page<Long> candidateIds = inboundCandidateQueryRepository.pageIds(query, filter);
+        List<PurchaseOrder> orders = candidateIds.isEmpty()
+                ? List.of()
+                : purchaseOrderRepository.findByIdInAndDeletedFlagFalse(candidateIds.getContent());
+        Map<Long, PurchaseOrder> orderById = orders.stream()
+                .collect(Collectors.toMap(PurchaseOrder::getId, Function.identity()));
+        List<PurchaseOrder> orderedOrders = candidateIds.getContent().stream()
+                .map(orderById::get)
+                .filter(java.util.Objects::nonNull)
+                .toList();
         Map<Long, Integer> importableQuantityMap =
                 availabilityService.buildInboundImportableQuantityMap(
-                        orders,
+                        orderedOrders,
                         filter.currentRecordId()
                 );
-        List<PurchaseOrderImportCandidateResponse> candidates = orders.stream()
+        List<PurchaseOrderImportCandidateResponse> candidates = orderedOrders.stream()
                 .map(order -> toImportCandidateResponse(
                         order,
                         importableQuantityMap.getOrDefault(order.getId(), 0)
                 ))
                 .filter(candidate -> candidate.importableQuantity() > 0)
                 .toList();
-        int start = Math.min(query.page() * query.size(), candidates.size());
-        int end = Math.min(start + query.size(), candidates.size());
         return new PageImpl<>(
-                candidates.subList(start, end),
-                query.toPageable("id"),
-                candidates.size()
+                candidates,
+                candidateIds.getPageable(),
+                candidateIds.getTotalElements()
         );
+    }
+
+    @Transactional(readOnly = true)
+    public Page<PurchaseOrderImportCandidateResponse> prepaymentCandidates(PageQuery query, PageFilter filter) {
+        Specification<PurchaseOrder> spec = Specs.<PurchaseOrder>notDeleted()
+                .and(Specs.keywordLike(filter.keyword(), PURCHASE_ORDER_SEARCH_FIELDS))
+                .and(Specs.equalIfPresent("supplierName", filter.name()))
+                .and(Specs.equalValueIfPresent("supplierId", filter.supplierId()))
+                .and(Specs.equalValueIfPresent("settlementCompanyId", filter.settlementCompanyId()))
+                .and(prepaymentSourceStatus(filter.status()))
+                .and(Specs.dateTimeBetweenDatesIfPresent("orderDate", filter.startDate(), filter.endDate()));
+        return pageEntities(query, spec, purchaseOrderRepository)
+                .map(order -> toImportCandidateResponse(order, null));
     }
 
     @Override
@@ -215,6 +163,19 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
                 order.getStatus(),
                 importableQuantity
         );
+    }
+
+    private Specification<PurchaseOrder> prepaymentSourceStatus(String status) {
+        return (root, query, criteriaBuilder) -> {
+            String requestedStatus = BusinessDocumentValidator.trimToNull(status);
+            if (requestedStatus == null) {
+                return root.get("status").in(PREPAYMENT_SOURCE_STATUSES);
+            }
+            if (!PREPAYMENT_SOURCE_STATUSES.contains(requestedStatus)) {
+                return criteriaBuilder.disjunction();
+            }
+            return criteriaBuilder.equal(root.get("status"), requestedStatus);
+        };
     }
 
     @Override

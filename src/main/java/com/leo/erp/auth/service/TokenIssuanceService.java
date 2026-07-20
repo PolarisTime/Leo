@@ -103,7 +103,7 @@ public class TokenIssuanceService {
         if (refreshToken == null || refreshToken.isBlank()) {
             return;
         }
-        sessionManagementService.findActiveSession(refreshToken).ifPresent(this::revokeSession);
+        sessionManagementService.findActiveSessionForLogout(refreshToken).ifPresent(this::revokeSession);
     }
 
     void revokeSession(RefreshTokenSession session) {

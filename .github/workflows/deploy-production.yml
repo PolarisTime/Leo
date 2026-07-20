@@ -28,7 +28,6 @@ on:
       flyway_target:
         description: "Highest Flyway version allowed in production"
         required: true
-        default: "19"
         type: string
       release_note:
         description: "Optional release note"
@@ -325,7 +324,6 @@ jobs:
           (cd production-release && sha256sum -c leo-production-release.tar.gz.sha256)
           tar -xzf production-release/leo-production-release.tar.gz -C production-release/extracted
           chmod 0755 production-release/extracted/deploy/install-production-release.sh
-          chmod 0755 production-release/extracted/deploy/steelx-process.sh
 
       - name: Verify local production Flyway target
         run: |
@@ -360,8 +358,6 @@ jobs:
             exit 1
           fi
           echo "Verified production Flyway target: $expected_flyway_target"
-          mkdir -p "$PROD_RELEASE_ROOT"
-          install -m 0755 production-release/extracted/deploy/steelx-process.sh "$PROD_SHARED_DIR/steelx-process.sh"
 
       - name: Install release on local production
         run: |
@@ -535,7 +531,6 @@ jobs:
           upload_files=(
             production-release/leo-production-release.tar.gz
             production-release/leo-production-release.tar.gz.sha256
-            production-release/extracted/deploy/steelx-process.sh
           )
           dependency_archive="production-dependency/$DEPENDENCY_ARCHIVE_NAME"
           if [[ -f "$dependency_archive" ]]; then
@@ -557,11 +552,6 @@ jobs:
         run: |
           set -euo pipefail
           quote() { printf '%q' "$1"; }
-          remote_process_install="sudo mkdir -p $(quote "$PROD_SHARED_DIR") && sudo install -m 0755 $(quote "$REMOTE_DEPLOY_DIR/steelx-process.sh") $(quote "$PROD_SHARED_DIR/steelx-process.sh")"
-          ssh -i "$HOME/.ssh/leo-production" \
-            -p "$PROD_SSH_PORT" \
-            "${PROD_SSH_USER}@${PROD_SSH_HOST}" \
-            "$remote_process_install"
           remote_command="sudo bash -s --"
           remote_command+=" --archive $(quote "$REMOTE_ARCHIVE")"
           remote_command+=" --sha256-file $(quote "$REMOTE_SHA256")"

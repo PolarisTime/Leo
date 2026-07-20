@@ -45,12 +45,27 @@ public class FreightBillController {
     public ApiResponse<PageResponse<SalesOrderResponse>> salesOrderCandidates(
             @BindPageQuery(sortFieldKey = "sales-order") PageQuery query,
             @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) Long customerId,
+            @RequestParam(required = false) String customerName,
+            @RequestParam(required = false) Long projectId,
+            @RequestParam(required = false) String projectName,
+            @RequestParam(required = false) Long settlementCompanyId,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate,
             @RequestParam(required = false) Long currentRecordId
     ) {
         return ApiResponse.success(PageResponse.from(candidateService.page(
                 query,
-                PageFilter.of(keyword, null, null, null, null, null)
-                        .withIdentity(null, null, null, null, currentRecordId)
+                PageFilter.of(
+                                keyword,
+                                customerName,
+                                projectName,
+                                settlementCompanyId,
+                                null,
+                                startDate,
+                                endDate
+                        )
+                        .withIdentity(customerId, projectId, null, null, currentRecordId)
         )));
     }
 

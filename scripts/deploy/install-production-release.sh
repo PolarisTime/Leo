@@ -63,6 +63,7 @@ require_command() {
 
 require_command curl
 require_command flock
+require_command install
 require_command sha256sum
 require_command tar
 
@@ -343,6 +344,12 @@ if [[ ! -f "$release_dir/leo.jar" ]]; then
   exit 1
 fi
 
+process_script="$release_dir/deploy/steelx-process.sh"
+if [[ ! -f "$process_script" ]]; then
+  echo "发布包缺少 deploy/steelx-process.sh" >&2
+  exit 1
+fi
+
 if [[ -f "$release_dir/dependency-bundle.id" ]]; then
   packaged_dependency_bundle_id="$(tr -d '\r\n' < "$release_dir/dependency-bundle.id")"
   if [[ ! "$packaged_dependency_bundle_id" =~ ^[0-9a-f]{64}$ ]]; then
@@ -366,6 +373,8 @@ elif [[ -n "$DEPENDENCY_BUNDLE_ID" ]]; then
 fi
 
 run_hook "pre-deploy.sh"
+
+install -m 0755 "$process_script" "$shared_dir/steelx-process.sh"
 
 if [[ -n "$old_backend_target" ]]; then
   ln -sfn "$old_backend_target" "$previous_link"

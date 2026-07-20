@@ -267,9 +267,6 @@ dependency_bundle_id="$(<"$LEO_DIR/target/steelx-release/dependency-bundle.id")"
 dependency_archive="$LEO_DIR/target/steelx-release/steelx-$LEO_VERSION-dependencies-$dependency_bundle_id.tar.gz"
 dependency_sha_file="$dependency_archive.sha256"
 
-cp "$SCRIPT_DIR/steelx-process.sh" "$STEELX_ROOT/shared/steelx-process.sh"
-chmod +x "$STEELX_ROOT/shared/steelx-process.sh"
-
 start_command="STEELX_ROOT=$STEELX_ROOT bash $STEELX_ROOT/shared/steelx-process.sh start"
 stop_command="STEELX_ROOT=$STEELX_ROOT bash $STEELX_ROOT/shared/steelx-process.sh stop"
 

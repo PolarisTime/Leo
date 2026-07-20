@@ -51,7 +51,7 @@ public class PurchaseOrderController {
     }
 
     @Operation(summary = "分页查询采购入库来源候选")
-    @GetMapping("/inbound-import-candidates")
+    @GetMapping({"/inbound-import-candidates", "/import-candidates"})
     public ApiResponse<PageResponse<PurchaseOrderImportCandidateResponse>> inboundImportCandidates(
             @BindPageQuery(sortFieldKey = "purchase-order") PageQuery query,
             @RequestParam(required = false) String keyword,
@@ -61,13 +61,41 @@ public class PurchaseOrderController {
             @RequestParam(required = false) String status,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate,
-            @RequestParam(required = false) Long currentRecordId
+            @RequestParam(required = false) Long currentRecordId,
+            @RequestParam(required = false) String usage
     ) {
+        if (usage != null && !"purchase-inbound".equalsIgnoreCase(usage.trim())) {
+            throw new com.leo.erp.common.error.BusinessException(
+                    com.leo.erp.common.error.ErrorCode.VALIDATION_ERROR,
+                    "usage 不支持当前导入场景"
+            );
+        }
         return ApiResponse.success(PageResponse.from(
                 purchaseOrderService.inboundImportCandidates(
                         query,
                         PageFilter.of(keyword, supplierName, settlementCompanyId, status, startDate, endDate)
                                 .withIdentity(null, null, supplierId, null, currentRecordId)
+                )
+        ));
+    }
+
+    @Operation(summary = "分页查询采购预付款来源候选")
+    @GetMapping("/prepayment-candidates")
+    public ApiResponse<PageResponse<PurchaseOrderImportCandidateResponse>> prepaymentCandidates(
+            @BindPageQuery(sortFieldKey = "purchase-order") PageQuery query,
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) Long supplierId,
+            @RequestParam(required = false) String supplierName,
+            @RequestParam(required = false) Long settlementCompanyId,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate
+    ) {
+        return ApiResponse.success(PageResponse.from(
+                purchaseOrderService.prepaymentCandidates(
+                        query,
+                        PageFilter.of(keyword, supplierName, settlementCompanyId, status, startDate, endDate)
+                                .withIdentity(null, null, supplierId, null, null)
                 )
         ));
     }

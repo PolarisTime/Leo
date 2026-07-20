@@ -72,7 +72,6 @@ jobs:
       SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/leo
       SPRING_DATASOURCE_USERNAME: leo
       SPRING_DATASOURCE_PASSWORD: leo_ci_password
-      SPRING_FLYWAY_TARGET: 94
       SPRING_DATA_REDIS_HOST: localhost
       SPRING_DATA_REDIS_PORT: 6379
       SPRING_DATA_REDIS_DATABASE: 3
@@ -120,6 +119,10 @@ jobs:
 
       - name: Smoke test backend image
         run: |
+          latest_migration="$(find src/main/resources/db/migration -maxdepth 1 -type f -name 'V*.sql' -printf '%f\n' | sort -V | tail -1)"
+          flyway_target="${latest_migration#V}"
+          flyway_target="${flyway_target%%__*}"
+          bash scripts/deploy/verify-flyway-target.sh . "$flyway_target"
           docker run -d --name leo-backend-smoke \
             --network host \
             -e SPRING_PROFILES_ACTIVE=prod \
@@ -127,7 +130,7 @@ jobs:
             -e SPRING_DATASOURCE_USERNAME="$SPRING_DATASOURCE_USERNAME" \
             -e SPRING_DATASOURCE_PASSWORD="$SPRING_DATASOURCE_PASSWORD" \
             -e SPRING_FLYWAY_ENABLED=false \
-            -e SPRING_FLYWAY_TARGET="$SPRING_FLYWAY_TARGET" \
+            -e SPRING_FLYWAY_TARGET="$flyway_target" \
             -e SPRING_DATA_REDIS_HOST=localhost \
             -e SPRING_DATA_REDIS_PORT="$SPRING_DATA_REDIS_PORT" \
             -e SPRING_DATA_REDIS_DATABASE="$SPRING_DATA_REDIS_DATABASE" \

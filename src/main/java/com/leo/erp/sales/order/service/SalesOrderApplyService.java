@@ -153,7 +153,11 @@ public class SalesOrderApplyService {
         BigDecimal totalWeight = BigDecimal.ZERO;
         BigDecimal totalAmount = BigDecimal.ZERO;
         List<SalesOrderItem> managedItems = entity.getItems();
-        SalesOrderSourceContext sourceContext = sourceAllocationService.prepareContext(request, entity.getId());
+        SalesOrderSourceContext sourceContext = sourceAllocationService.prepareContext(
+                request,
+                entity.getId(),
+                List.copyOf(managedItems)
+        );
         List<SalesOrderItem> items = ManagedEntityItemSupport.syncById(
                 new ArrayList<>(managedItems),
                 request.items(),
@@ -177,8 +181,8 @@ public class SalesOrderApplyService {
         managedItems.clear();
         managedItems.addAll(items);
         managedItems.sort(Comparator.comparing(SalesOrderItem::getLineNo));
-        entity.setPurchaseInboundNo(sourceContext.resolvePurchaseInboundNo(request.purchaseInboundNo()));
-        entity.setPurchaseOrderNo(sourceContext.resolvePurchaseOrderNo(request.purchaseOrderNo()));
+        entity.setPurchaseInboundNo(sourceContext.resolvePurchaseInboundNo());
+        entity.setPurchaseOrderNo(sourceContext.resolvePurchaseOrderNo());
         entity.setTotalWeight(totalWeight);
         entity.setTotalAmount(totalAmount);
     }
@@ -212,7 +216,7 @@ public class SalesOrderApplyService {
                 pieceWeightTon
         );
         item.setMaterialId(sourceMaterialId == null ? material.materialId() : sourceMaterialId);
-        applyPurchaseSettlementCompany(item, sourceInboundItem);
+        applyPurchaseSettlementCompany(item, source, sourceInboundItem);
         BigDecimal amount = TradeItemCalculator.calculateAmount(weightTon, source.unitPrice());
         item.setAmount(amount);
         sourceAllocationService.recordAllocation(source, weightTon, sourceContext);
@@ -368,11 +372,15 @@ public class SalesOrderApplyService {
 
     private void applyPurchaseSettlementCompany(
             SalesOrderItem item,
+            SalesOrderItemRequest request,
             com.leo.erp.allocation.appservice.PurchaseItemQueryAppService.SourceInboundItemRecord sourceInboundItem
     ) {
         if (sourceInboundItem != null) {
             item.setSettlementCompanyId(sourceInboundItem.settlementCompanyId());
             item.setSettlementCompanyName(sourceInboundItem.settlementCompanyName());
+            return;
+        }
+        if (request.sourcePurchaseOrderItemId() != null) {
             return;
         }
         item.setSettlementCompanyId(null);

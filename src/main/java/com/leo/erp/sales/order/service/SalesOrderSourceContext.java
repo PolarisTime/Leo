@@ -1,6 +1,7 @@
 package com.leo.erp.sales.order.service;
 
 import com.leo.erp.allocation.appservice.PurchaseItemQueryAppService.SourceInboundItemRecord;
+import com.leo.erp.sales.order.domain.entity.SalesOrderItem;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -10,14 +11,16 @@ record SalesOrderSourceContext(
         Map<Long, SourceInboundItemRecord> sourceInboundItemMap,
         Map<Long, SalesOrderSourceAllocation> inboundAllocatedMap,
         Map<Long, SalesOrderSourceAllocation> requestInboundAllocatedMap,
+        Map<Long, SalesOrderItem> legacyPurchaseSourceItemMap,
+        Map<Long, String> legacyPurchaseOrderNoByItemId,
         LinkedHashSet<String> sourceInboundNos,
         LinkedHashSet<String> sourcePurchaseOrderNos
 ) {
-    String resolvePurchaseInboundNo(String fallback) {
-        return sourceInboundNos.isEmpty() ? fallback : String.join(", ", sourceInboundNos);
+    String resolvePurchaseInboundNo() {
+        return sourceInboundNos.isEmpty() ? null : String.join(", ", sourceInboundNos);
     }
 
-    String resolvePurchaseOrderNo(String fallback) {
-        return sourcePurchaseOrderNos.isEmpty() ? fallback : String.join(", ", sourcePurchaseOrderNos);
+    String resolvePurchaseOrderNo() {
+        return sourcePurchaseOrderNos.isEmpty() ? null : String.join(", ", sourcePurchaseOrderNos);
     }
 }

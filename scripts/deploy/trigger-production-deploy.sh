@@ -36,9 +36,10 @@ usage() {
   -h, --help              查看帮助
 
 示例:
-  bash leo/scripts/deploy/trigger-production-deploy.sh --dry-run --flyway-target 94
-  bash leo/scripts/deploy/trigger-production-deploy.sh --confirm-production --flyway-target 94 --leo-ref main --watch
-  bash leo/scripts/deploy/trigger-production-deploy.sh --confirm-production --flyway-target 94 --deploy-target ssh --leo-ref main --watch
+  APPROVED_FLYWAY_VERSION=REPLACE_WITH_APPROVED_VERSION
+  bash leo/scripts/deploy/trigger-production-deploy.sh --dry-run --flyway-target "$APPROVED_FLYWAY_VERSION"
+  bash leo/scripts/deploy/trigger-production-deploy.sh --confirm-production --flyway-target "$APPROVED_FLYWAY_VERSION" --leo-ref main --watch
+  bash leo/scripts/deploy/trigger-production-deploy.sh --confirm-production --flyway-target "$APPROVED_FLYWAY_VERSION" --deploy-target ssh --leo-ref main --watch
 EOF
 }
 

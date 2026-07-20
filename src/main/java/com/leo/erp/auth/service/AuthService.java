@@ -34,7 +34,7 @@ public class AuthService {
         if (refreshToken == null || refreshToken.isBlank()) {
             return;
         }
-        sessionManagementService.findActiveSession(refreshToken).ifPresent(session -> {
+        sessionManagementService.findActiveSessionForLogout(refreshToken).ifPresent(session -> {
             UserAccount user = sessionManagementService.findUserById(session.getUserId());
             tokenIssuanceService.revokeSession(session);
             loginService.recordAuthenticationLog("退出登录", user, user == null ? null : user.getLoginName(), ctx, "成功", "退出成功");

@@ -38,6 +38,13 @@ public class PurchaseItemQueryAppServiceImpl implements PurchaseItemQueryAppServ
                 .toList();
     }
 
+    @Override
+    public List<SourcePurchaseOrderItemRecord> findPurchaseOrderItemSnapshotsByIds(Collection<Long> ids) {
+        return orderItemQueryService.findSnapshotsByIdIn(ids).stream()
+                .map(this::toRecord)
+                .toList();
+    }
+
     private SourceInboundItemRecord toRecord(PurchaseInboundItem item, String purchaseOrderStatus) {
         var inbound = item.getPurchaseInbound();
         return new SourceInboundItemRecord(

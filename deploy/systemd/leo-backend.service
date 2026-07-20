@@ -12,7 +12,9 @@ Environment=SERVER_PORT=11211
 EnvironmentFile=/opt/leo/shared/leo.env
 Environment=SPRING_PROFILES_ACTIVE=prod
 Environment=LEO_TRUSTED_PROXIES=127.0.0.1
-ExecStart=/usr/bin/java -Xms512m -Xmx2g -XX:+UseG1GC -XX:MaxGCPauseMillis=200 -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/opt/leo/shared/heapdump.hprof -Dserver.port=${SERVER_PORT} -Dspring.profiles.active=prod -jar /opt/leo/current/backend/leo.jar
+Environment=STEELX_ROOT=/opt/leo
+Environment=STEELX_BACKEND_ROOT=/opt/leo
+ExecStart=/usr/bin/bash /opt/leo/shared/steelx-process.sh run
 Restart=on-failure
 RestartSec=5
 SuccessExitStatus=143

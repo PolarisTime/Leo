@@ -54,6 +54,7 @@ public class PurchaseInboundController {
     public ApiResponse<PageResponse<PurchaseInboundResponse>> page(
             @BindPageQuery(sortFieldKey = "purchase-inbound") PageQuery query,
             @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) Long supplierId,
             @RequestParam(required = false) String supplierName,
             @RequestParam(required = false) Long settlementCompanyId,
             @RequestParam(required = false) String status,
@@ -61,7 +62,11 @@ public class PurchaseInboundController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate
     ) {
         return ApiResponse.success(PageResponse.from(
-                service.page(query, PageFilter.of(keyword, supplierName, settlementCompanyId, status, startDate, endDate))
+                service.page(
+                        query,
+                        PageFilter.of(keyword, supplierName, settlementCompanyId, status, startDate, endDate)
+                                .withIdentity(null, null, supplierId, null, null)
+                )
         ));
     }
 

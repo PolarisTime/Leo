@@ -8,6 +8,7 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.security.core.Authentication;
@@ -15,12 +16,14 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StreamUtils;
 import org.springframework.web.filter.OncePerRequestFilter;
+import org.springframework.web.util.ContentCachingResponseWrapper;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
+import java.util.Base64;
 import java.util.HexFormat;
 import java.util.Set;
 
@@ -68,7 +71,9 @@ public class HttpIdempotencyFilter extends OncePerRequestFilter {
         } else if (status == HttpIdempotencyService.Status.DUPLICATE_PENDING) {
             writeFailure(request, response, "请勿重复提交，请等待当前请求处理完成");
         } else if (status == HttpIdempotencyService.Status.DUPLICATE_COMPLETED) {
-            writeSuccess(response);
+            replayCompletedResponse(response, decision.response());
+        } else if (status == HttpIdempotencyService.Status.UNAVAILABLE) {
+            writeUnavailable(response);
         } else {
             writeFailure(request, response, "幂等键已用于不同请求，请重新生成幂等键后再提交");
         }
@@ -94,15 +99,28 @@ public class HttpIdempotencyFilter extends OncePerRequestFilter {
                                  FilterChain filterChain,
                                  String scopedKey,
                                  String fingerprint) throws ServletException, IOException {
+        ContentCachingResponseWrapper responseWrapper = new ContentCachingResponseWrapper(response);
         try {
-            filterChain.doFilter(request, response);
-            if (response.getStatus() >= 200 && response.getStatus() < 400) {
-                idempotencyService.markCompleted(scopedKey, fingerprint, DEFAULT_TTL);
-            } else {
+            filterChain.doFilter(request, responseWrapper);
+            if (responseWrapper.getStatus() >= 200 && responseWrapper.getStatus() < 400) {
+                boolean completed = idempotencyService.markCompleted(
+                        scopedKey,
+                        fingerprint,
+                        DEFAULT_TTL,
+                        cachedResponse(responseWrapper)
+                );
+                if (!completed) {
+                    logger.error("Failed to persist completed HTTP idempotency response: key=" + scopedKey);
+                }
+            } else if (responseWrapper.getStatus() >= 400 && responseWrapper.getStatus() < 500) {
                 idempotencyService.release(scopedKey, fingerprint);
+            } else {
+                logger.error("HTTP idempotency pending key retained after server error: key=" + scopedKey
+                        + ", status=" + responseWrapper.getStatus());
             }
+            responseWrapper.copyBodyToResponse();
         } catch (ServletException | IOException | RuntimeException ex) {
-            idempotencyService.release(scopedKey, fingerprint);
+            logger.error("HTTP idempotency pending key retained after request failure: key=" + scopedKey, ex);
             throw ex;
         }
     }
@@ -120,11 +138,35 @@ public class HttpIdempotencyFilter extends OncePerRequestFilter {
         objectMapper.writeValue(response.getOutputStream(), body);
     }
 
-    private void writeSuccess(HttpServletResponse response) throws IOException {
-        response.setStatus(HttpServletResponse.SC_OK);
+    private void writeUnavailable(HttpServletResponse response) throws IOException {
+        response.setStatus(HttpStatus.SERVICE_UNAVAILABLE.value());
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
         response.setCharacterEncoding(StandardCharsets.UTF_8.name());
-        objectMapper.writeValue(response.getOutputStream(), ApiResponse.success("请求已处理"));
+        objectMapper.writeValue(
+                response.getOutputStream(),
+                ApiResponse.failure(ErrorCode.INTERNAL_ERROR, "幂等服务暂不可用，请稍后重试")
+        );
+    }
+
+    private HttpIdempotencyService.CachedResponse cachedResponse(ContentCachingResponseWrapper response) {
+        return new HttpIdempotencyService.CachedResponse(
+                response.getStatus(),
+                response.getHeader(HttpHeaders.CONTENT_TYPE),
+                Base64.getEncoder().encodeToString(response.getContentAsByteArray())
+        );
+    }
+
+    private void replayCompletedResponse(HttpServletResponse response,
+                                         HttpIdempotencyService.CachedResponse cachedResponse) throws IOException {
+        if (cachedResponse == null) {
+            writeUnavailable(response);
+            return;
+        }
+        response.setStatus(cachedResponse.status());
+        if (cachedResponse.contentType() != null) {
+            response.setHeader(HttpHeaders.CONTENT_TYPE, cachedResponse.contentType());
+        }
+        response.getOutputStream().write(cachedResponse.body());
     }
 
     private String scopedKey(HttpServletRequest request, String idempotencyKey) {

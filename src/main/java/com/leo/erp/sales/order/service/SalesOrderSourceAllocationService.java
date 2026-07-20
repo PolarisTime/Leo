@@ -2,11 +2,13 @@ package com.leo.erp.sales.order.service;
 
 import com.leo.erp.allocation.appservice.PurchaseItemQueryAppService;
 import com.leo.erp.allocation.appservice.PurchaseItemQueryAppService.SourceInboundItemRecord;
+import com.leo.erp.allocation.appservice.PurchaseItemQueryAppService.SourcePurchaseOrderItemRecord;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.support.BusinessDocumentValidator;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.support.TradeItemCalculator;
+import com.leo.erp.sales.order.domain.entity.SalesOrderItem;
 import com.leo.erp.sales.order.repository.SalesOrderItemRepository;
 import com.leo.erp.sales.order.web.dto.SalesOrderItemRequest;
 import com.leo.erp.sales.order.web.dto.SalesOrderRequest;
@@ -14,6 +16,7 @@ import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -31,14 +34,20 @@ public class SalesOrderSourceAllocationService {
         this.salesOrderItemRepository = salesOrderItemRepository;
     }
 
-    SalesOrderSourceContext prepareContext(SalesOrderRequest request, Long currentOrderId) {
-        validateSourceShape(request);
+    SalesOrderSourceContext prepareContext(SalesOrderRequest request,
+                                           Long currentOrderId,
+                                           List<SalesOrderItem> existingItems) {
+        Map<Long, SalesOrderItem> legacyPurchaseSourceItemMap = legacyPurchaseSourceItemMap(existingItems);
+        validateSourceShape(request, legacyPurchaseSourceItemMap);
         List<Long> sourceInboundItemIds = extractSourceInboundItemIds(request);
+        Map<Long, String> legacyPurchaseOrderNoByItemId = loadLegacyPurchaseOrderNos(request);
         return new SalesOrderSourceContext(
                 sourceInboundItemIds,
                 loadSourceInboundItemMap(sourceInboundItemIds),
                 loadInboundAllocatedMap(sourceInboundItemIds, currentOrderId),
                 new HashMap<>(),
+                legacyPurchaseSourceItemMap,
+                legacyPurchaseOrderNoByItemId,
                 new LinkedHashSet<>(),
                 new LinkedHashSet<>()
         );
@@ -47,10 +56,18 @@ public class SalesOrderSourceAllocationService {
     SourceInboundItemRecord resolveSourceInbound(SalesOrderItemRequest source, SalesOrderSourceContext context) {
         SourceInboundItemRecord sourceInboundItem = source.sourceInboundItemId() == null ? null
                 : context.sourceInboundItemMap().get(source.sourceInboundItemId());
-        if (sourceInboundItem != null && sourceInboundItem.inboundNo() != null) {
-            context.sourceInboundNos().add(sourceInboundItem.inboundNo());
+        if (sourceInboundItem != null) {
+            if (sourceInboundItem.inboundNo() != null) {
+                context.sourceInboundNos().add(sourceInboundItem.inboundNo());
+            }
             if (sourceInboundItem.purchaseOrderNo() != null) {
                 context.sourcePurchaseOrderNos().add(sourceInboundItem.purchaseOrderNo());
+            }
+        } else if (source.sourcePurchaseOrderItemId() != null) {
+            String purchaseOrderNo = context.legacyPurchaseOrderNoByItemId()
+                    .get(source.sourcePurchaseOrderItemId());
+            if (purchaseOrderNo != null) {
+                context.sourcePurchaseOrderNos().add(purchaseOrderNo);
             }
         }
         return sourceInboundItem;
@@ -64,7 +81,8 @@ public class SalesOrderSourceAllocationService {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行来源采购入库明细和来源采购订单明细不能同时填写");
         }
         if (sourcePurchaseOrderItemId != null) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "采购订单直连来源已停用，销售订单只能导入已完成采购的入库明细");
+            validateLegacyPurchaseSourceLine(source, lineNo, context);
+            return;
         }
 
         Long sourceInboundItemId = source.sourceInboundItemId();
@@ -97,8 +115,10 @@ public class SalesOrderSourceAllocationService {
         validateAvailableQuantity(source.quantity(), sourceInboundItem.quantity(), allocatedQuantity, requestedQuantity, lineNo);
     }
 
-    private void validateSourceShape(SalesOrderRequest request) {
+    private void validateSourceShape(SalesOrderRequest request,
+                                     Map<Long, SalesOrderItem> legacyPurchaseSourceItemMap) {
         Set<Long> inboundSourceIds = new LinkedHashSet<>();
+        Set<Long> purchaseOrderSourceIds = new LinkedHashSet<>();
         for (int index = 0; index < request.items().size(); index++) {
             SalesOrderItemRequest item = request.items().get(index);
             boolean inboundSource = item.sourceInboundItemId() != null;
@@ -109,8 +129,26 @@ public class SalesOrderSourceAllocationService {
                         "第" + (index + 1) + "行必须且只能选择一个采购来源明细"
                 );
             }
-            if (!inboundSource) {
-                throw new BusinessException(ErrorCode.BUSINESS_ERROR, "采购订单直连来源已停用，销售订单只能导入已完成采购的入库明细");
+            SalesOrderItem existingLegacyItem = item.id() == null
+                    ? null
+                    : legacyPurchaseSourceItemMap.get(item.id());
+            if (existingLegacyItem != null
+                    && !java.util.Objects.equals(
+                    existingLegacyItem.getSourcePurchaseOrderItemId(),
+                    item.sourcePurchaseOrderItemId()
+            )) {
+                throw new BusinessException(
+                        ErrorCode.BUSINESS_ERROR,
+                        "采购订单直连来源已停用，历史来源明细不允许切换来源"
+                );
+            }
+            if (purchaseOrderSource) {
+                if (existingLegacyItem == null) {
+                    throw new BusinessException(
+                            ErrorCode.BUSINESS_ERROR,
+                            "采购订单直连来源已停用，仅允许原样保存历史来源明细"
+                    );
+                }
             }
             if (inboundSource && !inboundSourceIds.add(item.sourceInboundItemId())) {
                 throw new BusinessException(
@@ -118,6 +156,84 @@ public class SalesOrderSourceAllocationService {
                         "第" + (index + 1) + "行重复导入同一采购入库明细"
                 );
             }
+            if (purchaseOrderSource && !purchaseOrderSourceIds.add(item.sourcePurchaseOrderItemId())) {
+                throw new BusinessException(
+                        ErrorCode.BUSINESS_ERROR,
+                        "第" + (index + 1) + "行重复使用同一历史采购订单明细"
+                );
+            }
+        }
+    }
+
+    private Map<Long, SalesOrderItem> legacyPurchaseSourceItemMap(List<SalesOrderItem> existingItems) {
+        if (existingItems == null || existingItems.isEmpty()) {
+            return Map.of();
+        }
+        return existingItems.stream()
+                .filter(item -> item.getId() != null && item.getSourcePurchaseOrderItemId() != null)
+                .collect(java.util.stream.Collectors.toUnmodifiableMap(SalesOrderItem::getId, item -> item));
+    }
+
+    private Map<Long, String> loadLegacyPurchaseOrderNos(SalesOrderRequest request) {
+        List<Long> sourceItemIds = request.items().stream()
+                .map(SalesOrderItemRequest::sourcePurchaseOrderItemId)
+                .filter(java.util.Objects::nonNull)
+                .distinct()
+                .toList();
+        if (sourceItemIds.isEmpty()) {
+            return Map.of();
+        }
+        Map<Long, SourcePurchaseOrderItemRecord> sourceItemById = purchaseItemQueryAppService
+                .findPurchaseOrderItemSnapshotsByIds(sourceItemIds)
+                .stream()
+                .collect(java.util.stream.Collectors.toMap(SourcePurchaseOrderItemRecord::id, item -> item));
+        Map<Long, String> resolvedOrderNos = new LinkedHashMap<>();
+        for (Long sourceItemId : sourceItemIds) {
+            SourcePurchaseOrderItemRecord sourceItem = sourceItemById.get(sourceItemId);
+            String orderNo = sourceItem == null ? null : sourceItem.orderNo();
+            if (orderNo == null || orderNo.isBlank()) {
+                throw new BusinessException(
+                        ErrorCode.BUSINESS_ERROR,
+                        "历史来源采购订单明细不存在，无法保存销售订单"
+                );
+            }
+            resolvedOrderNos.put(sourceItemId, orderNo);
+        }
+        return Map.copyOf(resolvedOrderNos);
+    }
+
+    private void validateLegacyPurchaseSourceLine(SalesOrderItemRequest request,
+                                                  int lineNo,
+                                                  SalesOrderSourceContext context) {
+        SalesOrderItem existing = request.id() == null
+                ? null
+                : context.legacyPurchaseSourceItemMap().get(request.id());
+        if (existing == null
+                || !java.util.Objects.equals(
+                existing.getSourcePurchaseOrderItemId(),
+                request.sourcePurchaseOrderItemId()
+        )) {
+            throw new BusinessException(
+                    ErrorCode.BUSINESS_ERROR,
+                    "第" + lineNo + "行采购订单直连来源已停用，仅允许原样保存历史来源明细"
+            );
+        }
+        assertSameId(request.materialId(), existing.getMaterialId(), lineNo, "历史来源明细", "商品ID");
+        assertSameText(request.materialCode(), existing.getMaterialCode(), lineNo, "历史来源明细", "物料编码");
+        assertSameText(request.brand(), existing.getBrand(), lineNo, "历史来源明细", "品牌");
+        assertSameText(request.category(), existing.getCategory(), lineNo, "历史来源明细", "品类");
+        assertSameText(request.material(), existing.getMaterial(), lineNo, "历史来源明细", "材质");
+        assertSameText(request.spec(), existing.getSpec(), lineNo, "历史来源明细", "规格");
+        assertSameOptionalText(request.length(), existing.getLength(), lineNo, "历史来源明细", "长度");
+        assertSameText(request.unit(), existing.getUnit(), lineNo, "历史来源明细", "单位");
+        assertSameOptionalQuantityUnit(request.quantityUnit(), existing.getQuantityUnit(), lineNo, "历史来源明细");
+        assertSameOptionalDecimal(request.pieceWeightTon(), existing.getPieceWeightTon(), lineNo, "历史来源明细", "件重");
+        assertSameOptionalInteger(request.piecesPerBundle(), existing.getPiecesPerBundle(), lineNo, "历史来源明细", "每捆支数");
+        assertSameId(request.warehouseId(), existing.getWarehouseId(), lineNo, "历史来源明细", "仓库ID");
+        assertSameText(request.warehouseName(), existing.getWarehouseName(), lineNo, "历史来源明细", "仓库");
+        assertSameText(request.batchNo(), existing.getBatchNo(), lineNo, "历史来源明细", "批号");
+        if (!java.util.Objects.equals(request.quantity(), existing.getQuantity())) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "第" + lineNo + "行历史来源明细数量不允许修改");
         }
     }
 

@@ -28,6 +28,14 @@ public class PurchaseOrderItemQueryService {
     }
 
     @Transactional(readOnly = true)
+    public List<PurchaseOrderItem> findSnapshotsByIdIn(Collection<Long> itemIds) {
+        if (itemIds == null || itemIds.isEmpty()) {
+            return List.of();
+        }
+        return repository.findSnapshotsByIdIn(itemIds);
+    }
+
+    @Transactional(readOnly = true)
     public PurchaseOrderItem requireActiveById(Long id) {
         return findActiveByIdIn(List.of(id)).stream()
                 .findFirst()

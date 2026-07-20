@@ -3,7 +3,6 @@ package com.leo.erp.allocation.appservice;
 import java.math.BigDecimal;
 import java.util.Collection;
 import java.util.List;
-import java.util.Map;
 
 /**
  * Application Service：销售模块查询采购明细的抽象接口。
@@ -16,6 +15,9 @@ public interface PurchaseItemQueryAppService {
 
     /** 查询采购订单明细源数据 */
     List<SourcePurchaseOrderItemRecord> findSourcePurchaseOrderItemsByIds(Collection<Long> ids);
+
+    /** 查询历史采购订单明细快照，包含已软删除父单，仅供既有来源关系追溯 */
+    List<SourcePurchaseOrderItemRecord> findPurchaseOrderItemSnapshotsByIds(Collection<Long> ids);
 
     record SourceInboundItemRecord(
             Long id,

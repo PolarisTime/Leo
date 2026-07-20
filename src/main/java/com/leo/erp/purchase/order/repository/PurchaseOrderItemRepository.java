@@ -20,6 +20,14 @@ public interface PurchaseOrderItemRepository extends JpaRepository<PurchaseOrder
     List<PurchaseOrderItem> findActiveByIdIn(@Param("itemIds") Collection<Long> itemIds);
 
     @Query("""
+            select item
+            from PurchaseOrderItem item
+            join fetch item.purchaseOrder
+            where item.id in :itemIds
+            """)
+    List<PurchaseOrderItem> findSnapshotsByIdIn(@Param("itemIds") Collection<Long> itemIds);
+
+    @Query("""
             select item.id
             from PurchaseOrderItem item
             join item.purchaseOrder purchaseOrder

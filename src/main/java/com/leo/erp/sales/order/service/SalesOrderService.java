@@ -11,7 +11,7 @@ import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.sales.order.domain.entity.SalesOrder;
 import com.leo.erp.sales.order.domain.entity.SalesOrderItem;
-import com.leo.erp.sales.order.repository.SalesOrderItemRepository;
+import com.leo.erp.sales.order.repository.SalesOrderOutboundCandidateQueryRepository;
 import com.leo.erp.sales.order.repository.SalesOrderRepository;
 import com.leo.erp.sales.order.web.dto.SalesOrderItemRequest;
 import com.leo.erp.sales.order.web.dto.SalesOrderRequest;
@@ -41,59 +41,11 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
     private final SalesOrderAuditedPricingService salesOrderAuditedPricingService;
     private final SalesOrderProtectedUpdatePolicy protectedUpdatePolicy;
     private final SalesOrderSaveService saveService;
-    private final SalesOrderItemRepository salesOrderItemRepository;
     private final SourceAllocationLockService sourceAllocationLockService;
     private final SalesOrderDeliveryVerificationGuard deliveryVerificationGuard;
     private final SalesOrderDownstreamMutationGuard downstreamMutationGuard;
+    private final SalesOrderOutboundCandidateQueryRepository outboundCandidateQueryRepository;
     private BusinessOperationEventPublisher businessOperationEventPublisher;
-
-    public SalesOrderService(SalesOrderRepository repository,
-                             SnowflakeIdGenerator idGenerator,
-                             SalesOrderResponseAssembler responseAssembler,
-                             SalesOrderApplyService salesOrderApplyService,
-                             SalesOrderAuditedPricingService salesOrderAuditedPricingService,
-                             SalesOrderProtectedUpdatePolicy protectedUpdatePolicy,
-                             SalesOrderSaveService saveService,
-                             SalesOrderItemRepository salesOrderItemRepository,
-                             SourceAllocationLockService sourceAllocationLockService) {
-        this(
-                repository,
-                idGenerator,
-                responseAssembler,
-                salesOrderApplyService,
-                salesOrderAuditedPricingService,
-                protectedUpdatePolicy,
-                saveService,
-                salesOrderItemRepository,
-                sourceAllocationLockService,
-                null
-        );
-    }
-
-    public SalesOrderService(SalesOrderRepository repository,
-                             SnowflakeIdGenerator idGenerator,
-                             SalesOrderResponseAssembler responseAssembler,
-                             SalesOrderApplyService salesOrderApplyService,
-                             SalesOrderAuditedPricingService salesOrderAuditedPricingService,
-                             SalesOrderProtectedUpdatePolicy protectedUpdatePolicy,
-                             SalesOrderSaveService saveService,
-                             SalesOrderItemRepository salesOrderItemRepository,
-                             SourceAllocationLockService sourceAllocationLockService,
-                             SalesOrderDeliveryVerificationGuard deliveryVerificationGuard) {
-        this(
-                repository,
-                idGenerator,
-                responseAssembler,
-                salesOrderApplyService,
-                salesOrderAuditedPricingService,
-                protectedUpdatePolicy,
-                saveService,
-                salesOrderItemRepository,
-                sourceAllocationLockService,
-                deliveryVerificationGuard,
-                null
-        );
-    }
 
     @Autowired
     public SalesOrderService(SalesOrderRepository repository,
@@ -103,10 +55,10 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
                              SalesOrderAuditedPricingService salesOrderAuditedPricingService,
                              SalesOrderProtectedUpdatePolicy protectedUpdatePolicy,
                              SalesOrderSaveService saveService,
-                             SalesOrderItemRepository salesOrderItemRepository,
                              SourceAllocationLockService sourceAllocationLockService,
                              SalesOrderDeliveryVerificationGuard deliveryVerificationGuard,
-                             SalesOrderDownstreamMutationGuard downstreamMutationGuard) {
+                             SalesOrderDownstreamMutationGuard downstreamMutationGuard,
+                             SalesOrderOutboundCandidateQueryRepository outboundCandidateQueryRepository) {
         super(idGenerator);
         this.repository = repository;
         this.responseAssembler = responseAssembler;
@@ -114,10 +66,10 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
         this.salesOrderAuditedPricingService = salesOrderAuditedPricingService;
         this.protectedUpdatePolicy = protectedUpdatePolicy;
         this.saveService = saveService;
-        this.salesOrderItemRepository = salesOrderItemRepository;
         this.sourceAllocationLockService = sourceAllocationLockService;
         this.deliveryVerificationGuard = deliveryVerificationGuard;
         this.downstreamMutationGuard = downstreamMutationGuard;
+        this.outboundCandidateQueryRepository = outboundCandidateQueryRepository;
     }
 
     @Autowired(required = false)
@@ -138,63 +90,24 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
         return page(query, spec, repository);
     }
 
-    @Transactional(readOnly = true)
+    @Transactional(readOnly = true, isolation = org.springframework.transaction.annotation.Isolation.REPEATABLE_READ)
     public Page<SalesOrderResponse> outboundImportCandidates(PageQuery query, PageFilter filter) {
-        Specification<SalesOrder> spec = Specs.<SalesOrder>keywordLike(filter.keyword(), SALES_ORDER_SEARCH_FIELDS)
-                .and(Specs.equalIfPresent("customerName", filter.name()))
-                .and(Specs.equalIfPresent("projectName", filter.projectName()))
-                .and(Specs.equalValueIfPresent("customerId", filter.customerId()))
-                .and(Specs.equalValueIfPresent("projectId", filter.projectId()))
-                .and(Specs.equalValueIfPresent("settlementCompanyId", filter.settlementCompanyId()))
-                .and(Specs.equalIfPresent("status", StatusConstants.AUDITED))
-                .and(Specs.betweenIfPresent("deliveryDate", filter.startDate(), filter.endDate()));
-        List<SalesOrder> orders = new java.util.ArrayList<>();
-        int pageIndex = 0;
-        Page<SalesOrder> orderPage;
-        do {
-            orderPage = pageEntities(
-                    PageQuery.of(pageIndex, 200, query.sortBy(), query.direction()),
-                    spec,
-                    repository
-            );
-            orders.addAll(orderPage.getContent());
-            pageIndex++;
-        } while (orderPage.hasNext());
-
-        java.util.Set<Long> occupiedItemIds = occupiedItemIds(orders, filter.currentRecordId());
-        List<SalesOrderResponse> candidates = orders.stream()
-                .filter(order -> StatusConstants.AUDITED.equals(order.getStatus()))
-                .filter(order -> order.getItems().stream()
-                        .map(SalesOrderItem::getId)
-                        .allMatch(itemId -> itemId != null && !occupiedItemIds.contains(itemId)))
-                .map(order -> responseAssembler.toDetailResponse(
-                        order,
-                        item -> item.getId() != null && !occupiedItemIds.contains(item.getId())
-                ))
+        Page<Long> candidateIds = outboundCandidateQueryRepository.pageIds(query, filter);
+        List<SalesOrder> orders = candidateIds.isEmpty()
+                ? List.of()
+                : repository.findByIdInAndDeletedFlagFalse(candidateIds.getContent());
+        java.util.Map<Long, SalesOrder> orderById = orders.stream()
+                .collect(java.util.stream.Collectors.toMap(SalesOrder::getId, order -> order));
+        List<SalesOrderResponse> candidates = candidateIds.getContent().stream()
+                .map(orderById::get)
+                .filter(Objects::nonNull)
+                .map(responseAssembler::toDetailResponse)
                 .toList();
-        int start = Math.min(query.page() * query.size(), candidates.size());
-        int end = Math.min(start + query.size(), candidates.size());
         return new PageImpl<>(
-                candidates.subList(start, end),
-                query.toPageable("id"),
-                candidates.size()
+                candidates,
+                candidateIds.getPageable(),
+                candidateIds.getTotalElements()
         );
-    }
-
-    private java.util.Set<Long> occupiedItemIds(List<SalesOrder> orders, Long currentOutboundId) {
-        List<Long> itemIds = orders.stream()
-                .flatMap(order -> order.getItems().stream())
-                .map(SalesOrderItem::getId)
-                .filter(java.util.Objects::nonNull)
-                .distinct()
-                .toList();
-        if (itemIds.isEmpty()) {
-            return java.util.Set.of();
-        }
-        return new java.util.HashSet<>(salesOrderItemRepository.findOccupiedSourceSalesOrderItemIds(
-                itemIds,
-                currentOutboundId
-        ));
     }
 
     private static final String[] SALES_ORDER_SEARCH_FIELDS = {"orderNo", "purchaseOrderNo", "customerName", "projectName"};
@@ -263,8 +176,8 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
         assertOrdinaryUpdateKeepsStatus(entity.getStatus(), request.status());
         return new SalesOrderRequest(
                 entity.getOrderNo(),
-                request.purchaseInboundNo(),
-                request.purchaseOrderNo(),
+                hasLegacyPurchaseSource(entity) ? entity.getPurchaseInboundNo() : request.purchaseInboundNo(),
+                hasLegacyPurchaseSource(entity) ? entity.getPurchaseOrderNo() : request.purchaseOrderNo(),
                 request.customerCode(),
                 request.customerId(),
                 request.customerName(),
@@ -278,6 +191,11 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
                 request.remark(),
                 request.items()
         );
+    }
+
+    private boolean hasLegacyPurchaseSource(SalesOrder entity) {
+        return entity.getItems().stream()
+                .anyMatch(item -> item.getSourcePurchaseOrderItemId() != null);
     }
 
     private void assertOrdinaryUpdateKeepsStatus(String currentStatus, String requestedStatus) {

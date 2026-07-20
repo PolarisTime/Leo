@@ -8,12 +8,12 @@
 #   sudo systemctl daemon-reload
 #   sudo systemctl enable --now steelx-backend
 #
-# 切换部署改用 systemd（在 GitHub 仓库 Variables 配置即可，无需改 workflow 代码）：
+# 切换部署改用 systemd（在 GitHub 仓库 Variables 配置）：
 #   PROD_BACKEND_SERVICE = steelx-backend
-#   PROD_START_COMMAND   = (留空)   # 留空后 install/rollback-production-release.sh 走 systemctl restart 分支
-#   PROD_STOP_COMMAND    = (留空)
-# 之后部署脚本会用 `systemctl restart steelx-backend`，并保留原有的健康检查 + 失败自动回滚逻辑。
-# 注意：runner 用户需能免密执行 `systemctl restart steelx-backend`（配置 sudoers 或 polkit）。
+#   PROD_START_COMMAND   = systemctl start steelx-backend
+#   PROD_STOP_COMMAND    = systemctl stop steelx-backend
+# 之后部署脚本会通过 systemd 切换服务，并保留原有的健康检查 + 失败自动回滚逻辑。
+# 注意：runner 用户需能免密执行上述 systemctl 命令（配置 sudoers 或 polkit）。
 #
 # 注意：steelx-process.sh 会按 release 格式自动选择外置 classpath 或旧 fat JAR 启动方式。
 

@@ -134,6 +134,11 @@ public class SessionManagementService {
                 .filter(session -> !session.isRevoked());
     }
 
+    public Optional<RefreshTokenSession> findActiveSessionForLogout(String refreshToken) {
+        return findActiveSession(refreshToken)
+                .or(() -> findPreviousTokenSession(refreshToken));
+    }
+
     public boolean isPreviousTokenInGraceWindow(RefreshTokenSession session) {
         LocalDateTime validUntil = session.getPreviousTokenValidUntil();
         return validUntil != null && !validUntil.isBefore(LocalDateTime.now());

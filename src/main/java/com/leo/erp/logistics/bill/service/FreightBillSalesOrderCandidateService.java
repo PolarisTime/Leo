@@ -38,6 +38,12 @@ public class FreightBillSalesOrderCandidateService {
     public Page<SalesOrderResponse> page(PageQuery query, PageFilter filter) {
         Specification<SalesOrder> spec = Specs.<SalesOrder>notDeleted()
                 .and(Specs.keywordLike(filter.keyword(), "orderNo", "customerName", "projectName"))
+                .and(Specs.equalIfPresent("customerName", filter.name()))
+                .and(Specs.equalIfPresent("projectName", filter.projectName()))
+                .and(Specs.equalValueIfPresent("customerId", filter.customerId()))
+                .and(Specs.equalValueIfPresent("projectId", filter.projectId()))
+                .and(Specs.equalValueIfPresent("settlementCompanyId", filter.settlementCompanyId()))
+                .and(Specs.betweenIfPresent("deliveryDate", filter.startDate(), filter.endDate()))
                 .and((root, ignored, builder) -> root.get("status").in(ALLOWED_STATUS))
                 .and((root, ignored, builder) -> builder.isNotEmpty(root.get("items")))
                 .and((root, criteriaQuery, builder) -> {

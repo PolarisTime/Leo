@@ -55,6 +55,12 @@ public class SalesOrderDownstreamMutationGuard {
         if (order == null || order.getId() == null) {
             return;
         }
+        sourceAllocationLockService.lockDocumentSources(
+                List.of(),
+                List.of(order.getId()),
+                List.of(),
+                List.of()
+        );
         List<FreightBillSourceOrder> relations = freightSourceRepository.findActiveBySourceOrderId(order.getId());
         if (relations.isEmpty()) {
             return;
