@@ -7,7 +7,6 @@ import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.service.AbstractCrudService;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
-import com.leo.erp.common.support.BusinessDocumentValidator;
 import com.leo.erp.common.support.BusinessStatusValidator;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.finance.payment.service.PaymentPurchasePrepaymentService;
@@ -30,16 +29,10 @@ import org.springframework.beans.factory.annotation.Autowired;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
 public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, PurchaseOrderRequest, PurchaseOrderResponse> {
-
-    private static final Set<String> PREPAYMENT_SOURCE_STATUSES = Set.of(
-            StatusConstants.AUDITED,
-            StatusConstants.PURCHASE_COMPLETED
-    );
 
     private final PurchaseOrderRepository purchaseOrderRepository;
     private final PurchaseOrderAvailabilityService availabilityService;
@@ -159,44 +152,15 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
     }
 
     @Transactional(readOnly = true)
-    public Page<PurchaseOrderImportCandidateResponse> importCandidates(PageQuery query, PageFilter filter, String usage) {
-        PurchaseOrderAvailabilityService.ImportCandidateUsage candidateUsage =
-                PurchaseOrderAvailabilityService.ImportCandidateUsage.from(usage);
+    public Page<PurchaseOrderImportCandidateResponse> inboundImportCandidates(PageQuery query, PageFilter filter) {
         Specification<PurchaseOrder> spec = Specs.<PurchaseOrder>notDeleted()
                 .and(Specs.keywordLike(filter.keyword(), PURCHASE_ORDER_SEARCH_FIELDS))
                 .and(Specs.equalIfPresent("supplierName", filter.name()))
                 .and(Specs.equalValueIfPresent("supplierId", filter.supplierId()))
                 .and(Specs.equalValueIfPresent("settlementCompanyId", filter.settlementCompanyId()))
                 .and(Specs.equalIfPresent("status", filter.status()))
-                .and(Specs.dateTimeBetweenDatesIfPresent("orderDate", filter.startDate(), filter.endDate()));
-        return importableCandidates(query, spec, candidateUsage, filter.currentRecordId());
-    }
-
-    @Transactional(readOnly = true)
-    public Page<PurchaseOrderImportCandidateResponse> prepaymentCandidates(PageQuery query, PageFilter filter) {
-        Specification<PurchaseOrder> spec = Specs.<PurchaseOrder>notDeleted()
-                .and(Specs.keywordLike(filter.keyword(), PURCHASE_ORDER_SEARCH_FIELDS))
-                .and(Specs.equalIfPresent("supplierName", filter.name()))
-                .and(Specs.equalValueIfPresent("supplierId", filter.supplierId()))
-                .and(Specs.equalValueIfPresent("settlementCompanyId", filter.settlementCompanyId()))
-                .and(prepaymentSourceStatus(filter.status()))
-                .and(Specs.dateTimeBetweenDatesIfPresent("orderDate", filter.startDate(), filter.endDate()));
-        return pageEntities(query, spec, purchaseOrderRepository)
-                .map(order -> toImportCandidateResponse(order, null));
-    }
-
-    private Page<PurchaseOrderImportCandidateResponse> importableCandidates(
-            PageQuery query,
-            Specification<PurchaseOrder> baseSpec,
-            PurchaseOrderAvailabilityService.ImportCandidateUsage usage,
-            Long currentRecordId
-    ) {
-        Set<String> allowedStatuses = usage == PurchaseOrderAvailabilityService.ImportCandidateUsage.SALES_ORDER
-                ? StatusConstants.SALES_ORDER_SOURCE_PURCHASE_ORDER_STATUS
-                : Set.of(StatusConstants.AUDITED);
-        Specification<PurchaseOrder> spec = baseSpec.and(
-                (root, criteriaQuery, criteriaBuilder) -> root.get("status").in(allowedStatuses)
-        );
+                .and(Specs.dateTimeBetweenDatesIfPresent("orderDate", filter.startDate(), filter.endDate()))
+                .and(Specs.equalIfPresent("status", StatusConstants.AUDITED));
         List<PurchaseOrder> orders = new java.util.ArrayList<>();
         int pageIndex = 0;
         Page<PurchaseOrder> orderPage;
@@ -210,13 +174,11 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
             pageIndex++;
         } while (orderPage.hasNext());
         Map<Long, Integer> importableQuantityMap =
-                availabilityService.buildImportableQuantityMap(
+                availabilityService.buildInboundImportableQuantityMap(
                         orders,
-                        usage,
-                        currentRecordId
+                        filter.currentRecordId()
                 );
         List<PurchaseOrderImportCandidateResponse> candidates = orders.stream()
-                .filter(order -> allowedStatuses.contains(order.getStatus()))
                 .map(order -> toImportCandidateResponse(
                         order,
                         importableQuantityMap.getOrDefault(order.getId(), 0)
@@ -253,19 +215,6 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
                 order.getStatus(),
                 importableQuantity
         );
-    }
-
-    private Specification<PurchaseOrder> prepaymentSourceStatus(String status) {
-        return (root, query, criteriaBuilder) -> {
-            String requestedStatus = BusinessDocumentValidator.trimToNull(status);
-            if (requestedStatus == null) {
-                return root.get("status").in(PREPAYMENT_SOURCE_STATUSES);
-            }
-            if (!PREPAYMENT_SOURCE_STATUSES.contains(requestedStatus)) {
-                return criteriaBuilder.disjunction();
-            }
-            return criteriaBuilder.equal(root.get("status"), requestedStatus);
-        };
     }
 
     @Override

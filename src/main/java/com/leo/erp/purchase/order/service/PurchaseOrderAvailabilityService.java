@@ -1,8 +1,6 @@
 package com.leo.erp.purchase.order.service;
 
 import com.leo.erp.allocation.repository.ItemAllocationNativeRepository;
-import com.leo.erp.common.error.BusinessException;
-import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.support.TradeItemCalculator;
 import com.leo.erp.purchase.inbound.service.PurchaseInboundItemQueryService;
 import com.leo.erp.purchase.order.domain.entity.PurchaseOrder;
@@ -62,13 +60,8 @@ public class PurchaseOrderAvailabilityService {
         return TradeItemCalculator.calculateWeightTon(remainingQuantity, item.getPieceWeightTon());
     }
 
-    Map<Long, Integer> buildImportableQuantityMap(List<PurchaseOrder> orders, ImportCandidateUsage usage) {
-        return buildImportableQuantityMap(orders, usage, null);
-    }
-
-    Map<Long, Integer> buildImportableQuantityMap(
+    Map<Long, Integer> buildInboundImportableQuantityMap(
             List<PurchaseOrder> orders,
-            ImportCandidateUsage usage,
             Long currentRecordId
     ) {
         if (orders == null || orders.isEmpty()) {
@@ -86,30 +79,20 @@ public class PurchaseOrderAvailabilityService {
             return orders.stream().collect(Collectors.toMap(PurchaseOrder::getId, order -> 0));
         }
 
-        Map<Long, Integer> allocatedQuantityMap = switch (usage) {
-            case PURCHASE_INBOUND -> toIntegerQuantityMap(
-                    currentRecordId == null
-                            ? purchaseInboundItemQueryService
+        Map<Long, Integer> allocatedQuantityMap = toIntegerQuantityMap(
+                currentRecordId == null
+                        ? purchaseInboundItemQueryService
                             .summarizeAllocatedQuantityBySourcePurchaseOrderItemIds(itemIds)
-                            : purchaseInboundItemQueryService
+                        : purchaseInboundItemQueryService
                             .summarizeAllocatedQuantityBySourcePurchaseOrderItemIdsExcludingInbound(
                                     itemIds,
                                     currentRecordId
                             )
-            );
-            case SALES_ORDER -> toIntegerQuantityMap(
-                    itemAllocationRepo.summarizeSalesByPurchaseOrderItems(itemIds, currentRecordId)
-                            .stream().collect(Collectors.toMap(
-                                    ItemAllocationNativeRepository.AllocationProjection::getSourceItemId,
-                                    p -> p.getTotalQuantity()
-                            ))
-            );
-        };
+        );
 
         Map<Long, Integer> result = new HashMap<>();
         for (PurchaseOrder order : orders) {
-            boolean hasInboundAllocation = usage == ImportCandidateUsage.PURCHASE_INBOUND
-                    && order.getItems().stream().anyMatch(
+            boolean hasInboundAllocation = order.getItems().stream().anyMatch(
                     item -> allocatedQuantityMap.getOrDefault(item.getId(), 0) > 0
             );
             int importableQuantity = hasInboundAllocation
@@ -138,23 +121,4 @@ public class PurchaseOrderAvailabilityService {
         return target;
     }
 
-    enum ImportCandidateUsage {
-        PURCHASE_INBOUND("purchase-inbound"),
-        SALES_ORDER("sales-order");
-
-        private final String value;
-
-        ImportCandidateUsage(String value) {
-            this.value = value;
-        }
-
-        static ImportCandidateUsage from(String value) {
-            for (ImportCandidateUsage usage : values()) {
-                if (usage.value.equalsIgnoreCase(value == null ? "" : value.trim())) {
-                    return usage;
-                }
-            }
-            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "usage 不支持当前导入场景");
-        }
-    }
 }

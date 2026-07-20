@@ -50,9 +50,9 @@ public class PurchaseOrderController {
         return ApiResponse.success(purchaseOrderService.search(keyword != null ? keyword : "", Math.min(limit, 500)));
     }
 
-    @Operation(summary = "分页查询采购订单导入候选")
-    @GetMapping("/import-candidates")
-    public ApiResponse<PageResponse<PurchaseOrderImportCandidateResponse>> importCandidates(
+    @Operation(summary = "分页查询采购入库来源候选")
+    @GetMapping("/inbound-import-candidates")
+    public ApiResponse<PageResponse<PurchaseOrderImportCandidateResponse>> inboundImportCandidates(
             @BindPageQuery(sortFieldKey = "purchase-order") PageQuery query,
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) Long supplierId,
@@ -61,36 +61,13 @@ public class PurchaseOrderController {
             @RequestParam(required = false) String status,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate,
-            @RequestParam(required = false) Long currentRecordId,
-            @RequestParam String usage
+            @RequestParam(required = false) Long currentRecordId
     ) {
         return ApiResponse.success(PageResponse.from(
-                purchaseOrderService.importCandidates(
+                purchaseOrderService.inboundImportCandidates(
                         query,
                         PageFilter.of(keyword, supplierName, settlementCompanyId, status, startDate, endDate)
-                                .withIdentity(null, null, supplierId, null, currentRecordId),
-                        usage
-                )
-        ));
-    }
-
-    @Operation(summary = "分页查询采购预付款来源候选")
-    @GetMapping("/prepayment-candidates")
-    public ApiResponse<PageResponse<PurchaseOrderImportCandidateResponse>> prepaymentCandidates(
-            @BindPageQuery(sortFieldKey = "purchase-order") PageQuery query,
-            @RequestParam(required = false) String keyword,
-            @RequestParam(required = false) Long supplierId,
-            @RequestParam(required = false) String supplierName,
-            @RequestParam(required = false) Long settlementCompanyId,
-            @RequestParam(required = false) String status,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate
-    ) {
-        return ApiResponse.success(PageResponse.from(
-                purchaseOrderService.prepaymentCandidates(
-                        query,
-                        PageFilter.of(keyword, supplierName, settlementCompanyId, status, startDate, endDate)
-                                .withIdentity(null, null, supplierId, null, null)
+                                .withIdentity(null, null, supplierId, null, currentRecordId)
                 )
         ));
     }
