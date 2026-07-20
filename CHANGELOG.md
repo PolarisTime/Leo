@@ -1,3 +1,10 @@
+## [8.0.3](https://github.com/PolarisTime/Leo/compare/v8.0.2...v8.0.3) (2026-07-20)
+
+
+### Bug Fixes
+
+* **document:** 默认隐藏已删除单据 ([424aa80](https://github.com/PolarisTime/Leo/commit/424aa80f8c6c656a7c5dbbb6bd326994d339cf60))
+
 ## [8.0.2](https://github.com/PolarisTime/Leo/compare/v8.0.1...v8.0.2) (2026-07-20)
 
 
