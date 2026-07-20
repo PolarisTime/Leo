@@ -86,7 +86,7 @@ public class FreightStatementService extends AbstractCrudService<FreightStatemen
                 .and(Specs.equalIfPresent("carrierCode", carrierCode))
                 .and(Specs.equalIfPresent("carrierName", filter.name()))
                 .and(Specs.equalValueIfPresent("settlementCompanyId", filter.settlementCompanyId()))
-                .and(Specs.equalIfPresent("status", filter.status()))
+                .and(Specs.documentStatus(filter.status()))
                 .and(Specs.betweenIfPresent("endDate", filter.startDate(), filter.endDate()))
         );
         Page<FreightStatement> entityPage = repository.findAll(spec, query.toPageable("id"));

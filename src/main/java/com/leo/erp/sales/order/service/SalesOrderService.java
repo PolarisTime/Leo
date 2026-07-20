@@ -85,7 +85,7 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
                 .and(Specs.equalValueIfPresent("customerId", filter.customerId()))
                 .and(Specs.equalValueIfPresent("projectId", filter.projectId()))
                 .and(Specs.equalValueIfPresent("settlementCompanyId", filter.settlementCompanyId()))
-                .and(Specs.equalIfPresent("status", filter.status()))
+                .and(Specs.documentStatus(filter.status()))
                 .and(Specs.betweenIfPresent("deliveryDate", filter.startDate(), filter.endDate()));
         return page(query, spec, repository);
     }

@@ -87,7 +87,7 @@ public class FreightBillService extends AbstractCrudService<FreightBill, Freight
                 .and(Specs.equalIfPresent("carrierCode", carrierCode))
                 .and(Specs.equalIfPresent("carrierName", filter.name()))
                 .and(Specs.equalValueIfPresent("settlementCompanyId", filter.settlementCompanyId()))
-                .and(Specs.equalIfPresent("status", filter.status()))
+                .and(Specs.documentStatus(filter.status()))
                 .and(Specs.betweenIfPresent("billTime", filter.startDate(), filter.endDate()));
         return super.page(query, spec, repository);
     }

@@ -76,7 +76,7 @@ public class ReceiptService extends AbstractCrudService<Receipt, ReceiptRequest,
                 .and(Specs.equalIfPresent("customerName", filter.name()))
                 .and(Specs.equalIfPresent("counterpartyType", filter.businessType()))
                 .and(Specs.equalValueIfPresent("settlementCompanyId", filter.settlementCompanyId()))
-                .and(Specs.equalIfPresent("status", filter.status()))
+                .and(Specs.documentStatus(filter.status()))
                 .and(Specs.betweenIfPresent("receiptDate", filter.startDate(), filter.endDate()));
         return page(query, spec, receiptRepository);
     }

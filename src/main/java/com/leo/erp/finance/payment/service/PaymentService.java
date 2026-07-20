@@ -68,7 +68,7 @@ public class PaymentService extends AbstractCrudService<Payment, PaymentRequest,
     public Page<PaymentResponse> page(PageQuery query, PageFilter filter) {
         Specification<Payment> spec = Specs.<Payment>keywordLike(filter.keyword(), "paymentNo", "businessType", "counterpartyName")
                 .and(Specs.equalIfPresent("businessType", filter.businessType()))
-                .and(Specs.equalIfPresent("status", filter.status()))
+                .and(Specs.documentStatus(filter.status()))
                 .and(Specs.betweenIfPresent("paymentDate", filter.startDate(), filter.endDate()));
         return page(query, spec, paymentRepository);
     }

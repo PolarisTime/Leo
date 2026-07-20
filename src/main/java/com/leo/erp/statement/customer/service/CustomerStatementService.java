@@ -69,7 +69,7 @@ public class CustomerStatementService extends AbstractCrudService<CustomerStatem
                 .and(Specs.equalValueIfPresent("projectId", filter.projectId()))
                 .and(Specs.equalIfPresent("customerName", filter.name()))
                 .and(Specs.equalValueIfPresent("settlementCompanyId", filter.settlementCompanyId()))
-                .and(Specs.equalIfPresent("status", filter.status()))
+                .and(Specs.documentStatus(filter.status()))
                 .and(Specs.betweenIfPresent("endDate", filter.startDate(), filter.endDate()));
         return page(query, spec, repository);
     }

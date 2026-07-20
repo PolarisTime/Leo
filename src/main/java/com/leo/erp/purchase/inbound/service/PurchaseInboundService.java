@@ -81,7 +81,7 @@ public class PurchaseInboundService extends AbstractCrudService<
                 .and(Specs.equalIfPresent("supplierName", filter.name()))
                 .and(Specs.equalValueIfPresent("supplierId", filter.supplierId()))
                 .and(Specs.equalValueIfPresent("settlementCompanyId", filter.settlementCompanyId()))
-                .and(Specs.equalIfPresent("status", filter.status()))
+                .and(Specs.documentStatus(filter.status()))
                 .and(Specs.betweenIfPresent(
                         "inboundDate", filter.startDate(), filter.endDate()
                 ));

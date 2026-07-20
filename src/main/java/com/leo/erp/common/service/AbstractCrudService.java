@@ -122,7 +122,7 @@ public abstract class AbstractCrudService<E extends AbstractAuditableEntity, Req
     protected final List<Res> search(String keyword, String[] searchFields, int maxSize,
                                       Specification<E> baseSpec, JpaSpecificationExecutor<E> repository) {
         Specification<E> spec = combineSpecifications(
-                applyDeletedVisibilityPolicy(baseSpec),
+                VISIBILITY_POLICY.applyDeletedVisibility(baseSpec, false),
                 com.leo.erp.common.persistence.Specs.keywordLike(keyword, searchFields)
         );
         return repository.findAll(spec, org.springframework.data.domain.PageRequest.of(0, maxSize))

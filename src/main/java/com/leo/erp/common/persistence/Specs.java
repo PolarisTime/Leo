@@ -7,6 +7,8 @@ import java.time.LocalDate;
 
 public final class Specs {
 
+    private static final String DELETED_DOCUMENT_STATUS = "已删除";
+
     private Specs() {}
 
     public static <T> Specification<T> notDeleted() {
@@ -40,6 +42,24 @@ public final class Specs {
                 return cb.conjunction();
             }
             return cb.equal(root.get(field), value);
+        };
+    }
+
+    /**
+     * 单据列表将“已删除”作为删除标记筛选值展示，业务状态字段仍保留删除前的真实状态。
+     */
+    public static <T> Specification<T> documentStatus(String selectedStatus) {
+        return (root, q, cb) -> {
+            String normalizedStatus = selectedStatus == null ? "" : selectedStatus.trim();
+            if (DELETED_DOCUMENT_STATUS.equals(normalizedStatus)) {
+                return cb.isTrue(root.get("deletedFlag"));
+            }
+
+            Predicate activeOnly = cb.isFalse(root.get("deletedFlag"));
+            if (normalizedStatus.isEmpty()) {
+                return activeOnly;
+            }
+            return cb.and(activeOnly, cb.equal(root.get("status"), normalizedStatus));
         };
     }
 

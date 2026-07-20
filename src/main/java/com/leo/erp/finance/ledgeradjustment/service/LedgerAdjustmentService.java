@@ -81,7 +81,7 @@ public class LedgerAdjustmentService extends AbstractCrudService<LedgerAdjustmen
                 .and(Specs.equalIfPresent("direction", direction))
                 .and(Specs.equalIfPresent("counterpartyType", counterpartyType))
                 .and(Specs.equalValueIfPresent("settlementCompanyId", filter.settlementCompanyId()))
-                .and(Specs.equalIfPresent("status", filter.status()))
+                .and(Specs.documentStatus(filter.status()))
                 .and(Specs.betweenIfPresent("adjustmentDate", filter.startDate(), filter.endDate()));
         return page(query, spec, repository);
     }
