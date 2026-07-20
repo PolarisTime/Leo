@@ -1,3 +1,13 @@
+# [8.0.0](https://github.com/PolarisTime/Leo/compare/v7.0.0...v8.0.0) (2026-07-20)
+
+
+* refactor(purchase)!: 收敛采购入库候选接口 ([084e5a5](https://github.com/PolarisTime/Leo/commit/084e5a5d720dfe3bbd78110b85f10bf35e7c1cd3))
+
+
+### BREAKING CHANGES
+
+* 采购订单候选接口由 /purchase-orders/import-candidates 改为 /purchase-orders/inbound-import-candidates，并移除 usage 参数及 /purchase-orders/prepayment-candidates。
+
 # [7.0.0](https://github.com/PolarisTime/Leo/compare/v6.0.0...v7.0.0) (2026-07-19)
 
 
