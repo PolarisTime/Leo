@@ -1,3 +1,10 @@
+## [8.0.1](https://github.com/PolarisTime/Leo/compare/v8.0.0...v8.0.1) (2026-07-20)
+
+
+### Bug Fixes
+
+* **sales:** 支持多仓库销售出库保存 ([e1bd30d](https://github.com/PolarisTime/Leo/commit/e1bd30d41b8270d7b4c6e88989d376ff58715cb4))
+
 # [8.0.0](https://github.com/PolarisTime/Leo/compare/v7.0.0...v8.0.0) (2026-07-20)
 
 
