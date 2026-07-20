@@ -1,3 +1,10 @@
+## [8.0.2](https://github.com/PolarisTime/Leo/compare/v8.0.1...v8.0.2) (2026-07-20)
+
+
+### Bug Fixes
+
+* **backend:** 修复订单链路并收紧部署配置 ([71f87f4](https://github.com/PolarisTime/Leo/commit/71f87f4086d5b4254c4d07653d9b649ff91986ae))
+
 ## [8.0.1](https://github.com/PolarisTime/Leo/compare/v8.0.0...v8.0.1) (2026-07-20)
 
 
