@@ -1,3 +1,10 @@
+## [8.0.4](https://github.com/PolarisTime/Leo/compare/v8.0.3...v8.0.4) (2026-07-21)
+
+
+### Bug Fixes
+
+* **purchase:** 移除采购入库混合结算阻断 ([b88d2dd](https://github.com/PolarisTime/Leo/commit/b88d2dd2b5e640e54b3b9d4d9d567f8c666f2cc1))
+
 ## [8.0.3](https://github.com/PolarisTime/Leo/compare/v8.0.2...v8.0.3) (2026-07-20)
 
 
