@@ -57,7 +57,6 @@ public class PurchaseInboundApplyService {
         String firstLineWarehouseName = null;
         Long firstLineWarehouseId = null;
         LinkedHashSet<Long> warehouseIds = new LinkedHashSet<>();
-        Boolean weighGroup = null;
         List<PurchaseInboundItem> managedItems = inbound.getItems();
         List<PurchaseInboundItem> items = ManagedEntityItemSupport.syncById(
                 new ArrayList<>(managedItems),
@@ -91,14 +90,6 @@ public class PurchaseInboundApplyService {
                     source, lineNo, purchaseWeighCategoryRules,
                     lineSettlementMode,
                     com.leo.erp.common.support.StatusConstants.DRAFT.equals(inbound.getStatus()));
-            boolean currentLineWeigh = "过磅".equals(lineSettlementMode.trim());
-            if (weighGroup != null && weighGroup != currentLineWeigh) {
-                throw new com.leo.erp.common.error.BusinessException(
-                        com.leo.erp.common.error.ErrorCode.BUSINESS_ERROR,
-                        "采购入库单不能混合过磅商品和理算商品，请拆分后分别保存"
-                );
-            }
-            weighGroup = currentLineWeigh;
 
             InboundItemMapper.ItemMappingResult result = inboundItemMapper.applyItemFields(
                     inbound, source, item, lineNo, material.materialCode(), material,
@@ -219,10 +210,6 @@ public class PurchaseInboundApplyService {
     }
 
     private String resolveHeaderSettlementMode(String requestSettlementMode, List<PurchaseInboundItem> items) {
-        String normalized = trimToNull(requestSettlementMode);
-        if (normalized != null) {
-            return normalized;
-        }
         List<String> lineSettlementModes = items.stream()
                 .map(PurchaseInboundItem::getSettlementMode)
                 .map(this::trimToNull)
@@ -230,7 +217,8 @@ public class PurchaseInboundApplyService {
                 .distinct()
                 .toList();
         if (lineSettlementModes.isEmpty()) {
-            return "理算";
+            String normalized = trimToNull(requestSettlementMode);
+            return normalized == null ? "理算" : normalized;
         }
         return lineSettlementModes.size() == 1 ? lineSettlementModes.get(0) : "混合";
     }
