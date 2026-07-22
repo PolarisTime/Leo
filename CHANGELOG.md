@@ -1,3 +1,10 @@
+## [8.0.6](https://github.com/PolarisTime/Leo/compare/v8.0.5...v8.0.6) (2026-07-22)
+
+
+### Bug Fixes
+
+* **workflow:** 增加单据保存并审核原子接口 ([9c93c52](https://github.com/PolarisTime/Leo/commit/9c93c527d67ec9ec229d4cc3cb8dd05f19a424ab))
+
 ## [8.0.5](https://github.com/PolarisTime/Leo/compare/v8.0.4...v8.0.5) (2026-07-22)
 
 
