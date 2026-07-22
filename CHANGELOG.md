@@ -1,3 +1,10 @@
+# [8.2.0](https://github.com/PolarisTime/Leo/compare/v8.1.0...v8.2.0) (2026-07-22)
+
+
+### Features
+
+* **purchase:** 新增采购仓库历史推荐接口 ([bb4560a](https://github.com/PolarisTime/Leo/commit/bb4560ac6a853224ee293caf868a90e881dcc49d))
+
 # [8.1.0](https://github.com/PolarisTime/Leo/compare/v8.0.6...v8.1.0) (2026-07-22)
 
 
