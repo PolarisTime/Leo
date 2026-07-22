@@ -268,11 +268,12 @@
       },
       {
         "type": "dataLookup",
-        "sourceField": "orderNo",
+        "sourceField": "id",
         "targetField": "vehiclePlate",
+        "argumentType": "long",
         "result": "list",
         "join": ", ",
-        "sql": "SELECT DISTINCT fb.vehicle_plate FROM so_sales_outbound ob JOIN lg_freight_bill_item fbi ON fbi.source_no = ob.outbound_no JOIN lg_freight_bill fb ON fb.id = fbi.bill_id WHERE ob.sales_order_no = ? AND fb.vehicle_plate IS NOT NULL"
+        "sql": "WITH target_order AS (SELECT ?::bigint AS id), relation_plates AS (SELECT DISTINCT btrim(fb.vehicle_plate) AS vehicle_plate FROM target_order target JOIN lg_freight_bill_source_order relation ON relation.source_sales_order_id = target.id JOIN lg_freight_bill fb ON fb.id = relation.freight_bill_id WHERE relation.active_flag = TRUE AND relation.deleted_flag = FALSE AND fb.deleted_flag = FALSE AND NULLIF(btrim(fb.vehicle_plate), '') IS NOT NULL), legacy_plates AS (SELECT DISTINCT btrim(fb.vehicle_plate) AS vehicle_plate FROM target_order target JOIN so_sales_order_item order_item ON order_item.order_id = target.id JOIN so_sales_outbound_item outbound_item ON outbound_item.source_sales_order_item_id = order_item.id JOIN lg_freight_bill_item freight_item ON freight_item.source_sales_outbound_item_id = outbound_item.id JOIN lg_freight_bill fb ON fb.id = freight_item.bill_id WHERE fb.deleted_flag = FALSE AND NULLIF(btrim(fb.vehicle_plate), '') IS NOT NULL) SELECT vehicle_plate FROM relation_plates UNION SELECT vehicle_plate FROM legacy_plates WHERE NOT EXISTS (SELECT 1 FROM relation_plates) ORDER BY vehicle_plate"
       }
     ],
     "sales-outbound": [
@@ -300,11 +301,12 @@
       },
       {
         "type": "dataLookup",
-        "sourceField": "outboundNo",
+        "sourceField": "id",
         "targetField": "vehiclePlate",
+        "argumentType": "long",
         "result": "list",
         "join": ", ",
-        "sql": "SELECT DISTINCT fb.vehicle_plate FROM lg_freight_bill_item fbi JOIN lg_freight_bill fb ON fb.id = fbi.bill_id WHERE fbi.source_no = ? AND fb.vehicle_plate IS NOT NULL"
+        "sql": "WITH target_outbound AS (SELECT ?::bigint AS id), exact_plates AS (SELECT DISTINCT btrim(fb.vehicle_plate) AS vehicle_plate FROM target_outbound target JOIN so_sales_outbound_item outbound_item ON outbound_item.outbound_id = target.id JOIN lg_freight_bill_item freight_item ON freight_item.source_sales_outbound_item_id = outbound_item.id JOIN lg_freight_bill fb ON fb.id = freight_item.bill_id WHERE fb.deleted_flag = FALSE AND NULLIF(btrim(fb.vehicle_plate), '') IS NOT NULL), relation_plates AS (SELECT DISTINCT btrim(fb.vehicle_plate) AS vehicle_plate FROM target_outbound target JOIN so_sales_outbound_item outbound_item ON outbound_item.outbound_id = target.id JOIN so_sales_order_item order_item ON order_item.id = outbound_item.source_sales_order_item_id JOIN lg_freight_bill_source_order relation ON relation.source_sales_order_id = order_item.order_id JOIN lg_freight_bill fb ON fb.id = relation.freight_bill_id WHERE relation.active_flag = TRUE AND relation.deleted_flag = FALSE AND fb.deleted_flag = FALSE AND NULLIF(btrim(fb.vehicle_plate), '') IS NOT NULL) SELECT vehicle_plate FROM exact_plates UNION SELECT vehicle_plate FROM relation_plates WHERE NOT EXISTS (SELECT 1 FROM exact_plates) ORDER BY vehicle_plate"
       }
     ],
     "freight-bill": [
