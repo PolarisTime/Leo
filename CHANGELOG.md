@@ -1,3 +1,10 @@
+## [8.0.5](https://github.com/PolarisTime/Leo/compare/v8.0.4...v8.0.5) (2026-07-22)
+
+
+### Bug Fixes
+
+* **print:** 修复 A4 PDF 车号关联 ([1630519](https://github.com/PolarisTime/Leo/commit/16305197eb86b217fd5b3231798967969ad78088))
+
 ## [8.0.4](https://github.com/PolarisTime/Leo/compare/v8.0.3...v8.0.4) (2026-07-21)
 
 
