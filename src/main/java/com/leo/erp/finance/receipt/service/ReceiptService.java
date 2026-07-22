@@ -91,6 +91,18 @@ public class ReceiptService extends AbstractCrudService<Receipt, ReceiptRequest,
         return search(keyword, RECEIPT_SEARCH_FIELDS, maxSize, null, receiptRepository);
     }
 
+    @Transactional
+    public ReceiptResponse createAndAudit(ReceiptRequest request) {
+        ReceiptResponse created = create(withStatus(request, StatusConstants.DRAFT));
+        return updateStatus(created.id(), StatusConstants.AUDITED);
+    }
+
+    @Transactional
+    public ReceiptResponse updateAndAudit(Long id, ReceiptRequest request) {
+        update(id, withStatus(request, StatusConstants.DRAFT));
+        return updateStatus(id, StatusConstants.AUDITED);
+    }
+
     @Override
     @Transactional
     public ReceiptResponse updateStatus(Long id, String status) {
@@ -141,6 +153,32 @@ public class ReceiptService extends AbstractCrudService<Receipt, ReceiptRequest,
                 request.payType(),
                 request.amount(),
                 request.status(),
+                request.operatorName(),
+                request.remark(),
+                request.items()
+        );
+    }
+
+    private ReceiptRequest withStatus(ReceiptRequest request, String status) {
+        return new ReceiptRequest(
+                request.receiptNo(),
+                request.counterpartyType(),
+                request.counterpartyId(),
+                request.counterpartyCode(),
+                request.counterpartyName(),
+                request.receiptPurpose(),
+                request.customerId(),
+                request.customerCode(),
+                request.customerName(),
+                request.projectId(),
+                request.projectName(),
+                request.settlementCompanyId(),
+                request.settlementCompanyName(),
+                request.sourceCustomerStatementId(),
+                request.receiptDate(),
+                request.payType(),
+                request.amount(),
+                status,
                 request.operatorName(),
                 request.remark(),
                 request.items()

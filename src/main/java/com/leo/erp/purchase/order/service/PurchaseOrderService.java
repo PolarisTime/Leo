@@ -98,6 +98,18 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
                 null, purchaseOrderRepository);
     }
 
+    @Transactional
+    public PurchaseOrderResponse createAndAudit(PurchaseOrderRequest request) {
+        PurchaseOrderResponse created = create(withStatus(request, StatusConstants.DRAFT));
+        return updateStatus(created.id(), StatusConstants.AUDITED);
+    }
+
+    @Transactional
+    public PurchaseOrderResponse updateAndAudit(Long id, PurchaseOrderRequest request) {
+        update(id, withStatus(request, StatusConstants.DRAFT));
+        return updateStatus(id, StatusConstants.AUDITED);
+    }
+
     @Transactional(readOnly = true, isolation = org.springframework.transaction.annotation.Isolation.REPEATABLE_READ)
     public Page<PurchaseOrderImportCandidateResponse> inboundImportCandidates(PageQuery query, PageFilter filter) {
         Page<Long> candidateIds = inboundCandidateQueryRepository.pageIds(query, filter);
@@ -204,6 +216,21 @@ public class PurchaseOrderService extends AbstractCrudService<PurchaseOrder, Pur
                 request.buyerName(),
                 request.settlementCompanyId(),
                 request.status(),
+                request.remark(),
+                request.items()
+        );
+    }
+
+    private PurchaseOrderRequest withStatus(PurchaseOrderRequest request, String status) {
+        return new PurchaseOrderRequest(
+                request.orderNo(),
+                request.supplierId(),
+                request.supplierCode(),
+                request.supplierName(),
+                request.orderDate(),
+                request.buyerName(),
+                request.settlementCompanyId(),
+                status,
                 request.remark(),
                 request.items()
         );

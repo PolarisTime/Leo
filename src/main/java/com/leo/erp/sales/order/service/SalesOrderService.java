@@ -117,6 +117,24 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
         return search(keyword, SALES_ORDER_SEARCH_FIELDS, maxSize, null, repository);
     }
 
+    @Transactional
+    public SalesOrderResponse createAndAudit(SalesOrderRequest request) {
+        SalesOrderResponse created = create(withStatus(request, StatusConstants.DRAFT));
+        return updateStatus(created.id(), StatusConstants.AUDITED);
+    }
+
+    @Transactional
+    public SalesOrderResponse updateAndAudit(Long id, SalesOrderRequest request) {
+        update(id, withStatus(request, StatusConstants.DRAFT));
+        return updateStatus(id, StatusConstants.AUDITED);
+    }
+
+    @Transactional
+    public SalesOrderResponse updateAndComplete(Long id, SalesOrderRequest request) {
+        update(id, withStatus(request, StatusConstants.DELIVERY_VERIFICATION));
+        return completeSalesOrder(id);
+    }
+
     @Override
     protected SalesOrderResponse toDetailResponse(SalesOrder entity) {
         return responseAssembler.toDetailResponse(entity);
@@ -166,6 +184,26 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
                 request.deliveryDate(),
                 request.salesName(),
                 request.status(),
+                request.remark(),
+                request.items()
+        );
+    }
+
+    private SalesOrderRequest withStatus(SalesOrderRequest request, String status) {
+        return new SalesOrderRequest(
+                request.orderNo(),
+                request.purchaseInboundNo(),
+                request.purchaseOrderNo(),
+                request.customerCode(),
+                request.customerId(),
+                request.customerName(),
+                request.projectId(),
+                request.projectName(),
+                request.settlementCompanyId(),
+                request.settlementCompanyName(),
+                request.deliveryDate(),
+                request.salesName(),
+                status,
                 request.remark(),
                 request.items()
         );

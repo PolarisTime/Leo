@@ -9,6 +9,7 @@ import com.leo.erp.common.web.dto.StatusUpdateRequest;
 import com.leo.erp.finance.receipt.service.ReceiptService;
 import com.leo.erp.finance.receipt.web.dto.ReceiptRequest;
 import com.leo.erp.finance.receipt.web.dto.ReceiptResponse;
+import com.leo.erp.system.operationlog.support.OperationLoggable;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -81,10 +82,31 @@ public class ReceiptController {
         return ApiResponse.success("创建成功", receiptService.create(request));
     }
 
+    @Operation(summary = "保存并审核收款单")
+    @PostMapping("/save-and-audit")
+    @OperationLoggable(moduleName = "收款单", actionType = "保存并审核", businessNoFields = {"receiptNo"})
+    public ApiResponse<ReceiptResponse> createAndAudit(@Valid @RequestBody ReceiptRequest request) {
+        return ApiResponse.success("保存并审核成功", receiptService.createAndAudit(request));
+    }
+
     @Operation(summary = "更新收款单")
     @PutMapping("/{id}")
     public ApiResponse<ReceiptResponse> update(@PathVariable Long id, @Valid @RequestBody ReceiptRequest request) {
         return ApiResponse.success("更新成功", receiptService.update(id, request));
+    }
+
+    @Operation(summary = "保存并审核收款单")
+    @PutMapping("/{id}/save-and-audit")
+    @OperationLoggable(
+            moduleName = "收款单",
+            actionType = "保存并审核",
+            businessNoFields = {"receiptNo"},
+            recordIdField = "id"
+    )
+    public ApiResponse<ReceiptResponse> updateAndAudit(
+            @PathVariable Long id,
+            @Valid @RequestBody ReceiptRequest request) {
+        return ApiResponse.success("保存并审核成功", receiptService.updateAndAudit(id, request));
     }
 
     @Operation(summary = "更新收款单状态")

@@ -11,6 +11,7 @@ import com.leo.erp.statement.customer.service.CustomerStatementService;
 import com.leo.erp.statement.customer.web.dto.CustomerStatementCandidateResponse;
 import com.leo.erp.statement.customer.web.dto.CustomerStatementRequest;
 import com.leo.erp.statement.customer.web.dto.CustomerStatementResponse;
+import com.leo.erp.system.operationlog.support.OperationLoggable;
 import jakarta.validation.Valid;
 import java.time.LocalDate;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -110,10 +111,32 @@ public class CustomerStatementController {
         return ApiResponse.success("创建成功", customerStatementService.create(request));
     }
 
+    @Operation(summary = "保存并确认客户对账单")
+    @PostMapping("/save-and-audit")
+    @OperationLoggable(moduleName = "客户对账单", actionType = "保存并确认", businessNoFields = {"statementNo"})
+    public ApiResponse<CustomerStatementResponse> createAndConfirm(
+            @Valid @RequestBody CustomerStatementRequest request) {
+        return ApiResponse.success("保存并确认成功", customerStatementService.createAndConfirm(request));
+    }
+
     @Operation(summary = "更新客户对账单")
     @PutMapping("/{id}")
     public ApiResponse<CustomerStatementResponse> update(@PathVariable Long id, @Valid @RequestBody CustomerStatementRequest request) {
         return ApiResponse.success("更新成功", customerStatementService.update(id, request));
+    }
+
+    @Operation(summary = "保存并确认客户对账单")
+    @PutMapping("/{id}/save-and-audit")
+    @OperationLoggable(
+            moduleName = "客户对账单",
+            actionType = "保存并确认",
+            businessNoFields = {"statementNo"},
+            recordIdField = "id"
+    )
+    public ApiResponse<CustomerStatementResponse> updateAndConfirm(
+            @PathVariable Long id,
+            @Valid @RequestBody CustomerStatementRequest request) {
+        return ApiResponse.success("保存并确认成功", customerStatementService.updateAndConfirm(id, request));
     }
 
     @Operation(summary = "更新客户对账单状态")

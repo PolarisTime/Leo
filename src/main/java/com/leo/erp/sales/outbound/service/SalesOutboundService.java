@@ -98,6 +98,18 @@ public class SalesOutboundService extends AbstractCrudService<SalesOutbound, Sal
         return search(keyword, OUTBOUND_SEARCH_FIELDS, maxSize, null, repository);
     }
 
+    @Transactional
+    public SalesOutboundResponse createAndAudit(SalesOutboundRequest request) {
+        SalesOutboundResponse created = create(withStatus(request, StatusConstants.DRAFT));
+        return updateStatus(created.id(), StatusConstants.AUDITED);
+    }
+
+    @Transactional
+    public SalesOutboundResponse updateAndAudit(Long id, SalesOutboundRequest request) {
+        update(id, withStatus(request, StatusConstants.DRAFT));
+        return updateStatus(id, StatusConstants.AUDITED);
+    }
+
     @Override
     protected SalesOutboundResponse toDetailResponse(SalesOutbound entity) {
         return responseAssembler.toDetailResponse(entity);
@@ -137,6 +149,23 @@ public class SalesOutboundService extends AbstractCrudService<SalesOutbound, Sal
                 request.warehouseName(),
                 request.outboundDate(),
                 request.status(),
+                request.remark(),
+                request.items()
+        );
+    }
+
+    private SalesOutboundRequest withStatus(SalesOutboundRequest request, String status) {
+        return new SalesOutboundRequest(
+                request.outboundNo(),
+                request.salesOrderNo(),
+                request.customerId(),
+                request.customerName(),
+                request.projectId(),
+                request.projectName(),
+                request.warehouseId(),
+                request.warehouseName(),
+                request.outboundDate(),
+                status,
                 request.remark(),
                 request.items()
         );

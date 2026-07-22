@@ -171,11 +171,36 @@ public class SalesOrderController {
         return ApiResponse.success("创建成功", service.create(request));
     }
 
+    @Operation(summary = "保存并审核销售订单")
+    @PostMapping("/save-and-audit")
+    @DomainEventAudited
+    public ApiResponse<SalesOrderResponse> createAndAudit(@Valid @RequestBody SalesOrderRequest request) {
+        return ApiResponse.success("保存并审核成功", service.createAndAudit(request));
+    }
+
     @Operation(summary = "更新销售订单")
     @PutMapping("/{id}")
     @DomainEventAudited
     public ApiResponse<SalesOrderResponse> update(@PathVariable Long id, @Valid @RequestBody SalesOrderRequest request) {
         return ApiResponse.success("更新成功", service.update(id, request));
+    }
+
+    @Operation(summary = "保存并审核销售订单")
+    @PutMapping("/{id}/save-and-audit")
+    @DomainEventAudited
+    public ApiResponse<SalesOrderResponse> updateAndAudit(
+            @PathVariable Long id,
+            @Valid @RequestBody SalesOrderRequest request) {
+        return ApiResponse.success("保存并审核成功", service.updateAndAudit(id, request));
+    }
+
+    @Operation(summary = "保存并确认销售订单交付核定")
+    @PutMapping("/{id}/save-and-complete")
+    @DomainEventAudited
+    public ApiResponse<SalesOrderResponse> updateAndComplete(
+            @PathVariable Long id,
+            @Valid @RequestBody SalesOrderRequest request) {
+        return ApiResponse.success("保存并确认核定成功", service.updateAndComplete(id, request));
     }
 
     @Operation(summary = "更新销售订单状态")

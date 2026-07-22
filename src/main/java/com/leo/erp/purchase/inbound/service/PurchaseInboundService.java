@@ -106,6 +106,18 @@ public class PurchaseInboundService extends AbstractCrudService<
                 .toList();
     }
 
+    @Transactional
+    public PurchaseInboundResponse createAndAudit(PurchaseInboundRequest request) {
+        PurchaseInboundResponse created = create(withStatus(request, StatusConstants.DRAFT));
+        return updateStatus(created.id(), StatusConstants.AUDITED);
+    }
+
+    @Transactional
+    public PurchaseInboundResponse updateAndAudit(Long id, PurchaseInboundRequest request) {
+        update(id, withStatus(request, StatusConstants.DRAFT));
+        return updateStatus(id, StatusConstants.AUDITED);
+    }
+
     @Override
     protected PurchaseInboundResponse toDetailResponse(PurchaseInbound inbound) {
         return responseAssembler.toDetailResponse(inbound);
@@ -142,6 +154,23 @@ public class PurchaseInboundService extends AbstractCrudService<
                 request.inboundDate(),
                 request.settlementMode(),
                 request.status(),
+                request.remark(),
+                request.items()
+        );
+    }
+
+    private PurchaseInboundRequest withStatus(PurchaseInboundRequest request, String status) {
+        return new PurchaseInboundRequest(
+                request.inboundNo(),
+                request.purchaseOrderNo(),
+                request.supplierId(),
+                request.supplierCode(),
+                request.supplierName(),
+                request.warehouseId(),
+                request.warehouseName(),
+                request.inboundDate(),
+                request.settlementMode(),
+                status,
                 request.remark(),
                 request.items()
         );

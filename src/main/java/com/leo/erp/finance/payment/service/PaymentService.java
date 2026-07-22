@@ -83,6 +83,18 @@ public class PaymentService extends AbstractCrudService<Payment, PaymentRequest,
         return search(keyword, PAYMENT_SEARCH_FIELDS, maxSize, null, paymentRepository);
     }
 
+    @Transactional
+    public PaymentResponse createAndAudit(PaymentRequest request) {
+        PaymentResponse created = create(withStatus(request, StatusConstants.DRAFT));
+        return updateStatus(created.id(), StatusConstants.AUDITED);
+    }
+
+    @Transactional
+    public PaymentResponse updateAndAudit(Long id, PaymentRequest request) {
+        update(id, withStatus(request, StatusConstants.DRAFT));
+        return updateStatus(id, StatusConstants.AUDITED);
+    }
+
     @Override
     @Transactional
     public PaymentResponse updateStatus(Long id, String status) {
@@ -133,6 +145,31 @@ public class PaymentService extends AbstractCrudService<Payment, PaymentRequest,
                 request.payType(),
                 request.amount(),
                 request.status(),
+                request.operatorName(),
+                request.remark(),
+                request.items()
+        );
+    }
+
+    private PaymentRequest withStatus(PaymentRequest request, String status) {
+        return new PaymentRequest(
+                request.paymentNo(),
+                request.counterpartyType(),
+                request.counterpartyId(),
+                request.paymentPurpose(),
+                request.counterpartyCode(),
+                request.counterpartyName(),
+                request.sourceStatementId(),
+                request.sourcePurchaseOrderId(),
+                request.purchaseOrderNo(),
+                request.supplierCode(),
+                request.supplierName(),
+                request.settlementCompanyId(),
+                request.settlementCompanyName(),
+                request.paymentDate(),
+                request.payType(),
+                request.amount(),
+                status,
                 request.operatorName(),
                 request.remark(),
                 request.items()

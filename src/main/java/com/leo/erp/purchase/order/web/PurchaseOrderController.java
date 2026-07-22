@@ -134,11 +134,27 @@ public class PurchaseOrderController {
         return ApiResponse.success("创建成功", purchaseOrderService.create(request));
     }
 
+    @Operation(summary = "保存并审核采购订单")
+    @PostMapping("/save-and-audit")
+    @DomainEventAudited
+    public ApiResponse<PurchaseOrderResponse> createAndAudit(@Valid @RequestBody PurchaseOrderRequest request) {
+        return ApiResponse.success("保存并审核成功", purchaseOrderService.createAndAudit(request));
+    }
+
     @Operation(summary = "更新采购订单")
     @PutMapping("/{id}")
     @DomainEventAudited
     public ApiResponse<PurchaseOrderResponse> update(@PathVariable Long id, @Valid @RequestBody PurchaseOrderRequest request) {
         return ApiResponse.success("更新成功", purchaseOrderService.update(id, request));
+    }
+
+    @Operation(summary = "保存并审核采购订单")
+    @PutMapping("/{id}/save-and-audit")
+    @DomainEventAudited
+    public ApiResponse<PurchaseOrderResponse> updateAndAudit(
+            @PathVariable Long id,
+            @Valid @RequestBody PurchaseOrderRequest request) {
+        return ApiResponse.success("保存并审核成功", purchaseOrderService.updateAndAudit(id, request));
     }
 
     @Operation(summary = "更新采购订单状态")

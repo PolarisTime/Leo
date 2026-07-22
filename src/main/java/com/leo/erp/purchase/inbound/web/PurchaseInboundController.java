@@ -83,11 +83,27 @@ public class PurchaseInboundController {
         return ApiResponse.success("创建成功", service.create(request));
     }
 
+    @PostMapping("/save-and-audit")
+    @Operation(summary = "保存并审核采购入库")
+    @DomainEventAudited
+    public ApiResponse<PurchaseInboundResponse> createAndAudit(@Valid @RequestBody PurchaseInboundRequest request) {
+        return ApiResponse.success("保存并审核成功", service.createAndAudit(request));
+    }
+
     @PutMapping("/{id}")
     @Operation(summary = "更新采购入库")
     @DomainEventAudited
     public ApiResponse<PurchaseInboundResponse> update(@PathVariable Long id, @Valid @RequestBody PurchaseInboundRequest request) {
         return ApiResponse.success("更新成功", service.update(id, request));
+    }
+
+    @PutMapping("/{id}/save-and-audit")
+    @Operation(summary = "保存并审核采购入库")
+    @DomainEventAudited
+    public ApiResponse<PurchaseInboundResponse> updateAndAudit(
+            @PathVariable Long id,
+            @Valid @RequestBody PurchaseInboundRequest request) {
+        return ApiResponse.success("保存并审核成功", service.updateAndAudit(id, request));
     }
 
     @PatchMapping("/{id}/status")

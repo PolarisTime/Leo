@@ -90,6 +90,18 @@ public class CustomerStatementService extends AbstractCrudService<CustomerStatem
         return customerStatementSourceService.candidatePage(query, filter);
     }
 
+    @Transactional
+    public CustomerStatementResponse createAndConfirm(CustomerStatementRequest request) {
+        CustomerStatementResponse created = create(withStatus(request, StatusConstants.PENDING_CONFIRM));
+        return updateStatus(created.id(), StatusConstants.CONFIRMED);
+    }
+
+    @Transactional
+    public CustomerStatementResponse updateAndConfirm(Long id, CustomerStatementRequest request) {
+        update(id, withStatus(request, StatusConstants.PENDING_CONFIRM));
+        return updateStatus(id, StatusConstants.CONFIRMED);
+    }
+
     @Override
     protected CustomerStatementResponse toDetailResponse(CustomerStatement entity) {
         return responseAssembler.toDetailResponse(entity);
@@ -131,6 +143,27 @@ public class CustomerStatementService extends AbstractCrudService<CustomerStatem
                 request.receiptAmount(),
                 request.closingAmount(),
                 request.status(),
+                request.remark(),
+                request.items(),
+                request.customerId()
+        );
+    }
+
+    private CustomerStatementRequest withStatus(CustomerStatementRequest request, String status) {
+        return new CustomerStatementRequest(
+                request.statementNo(),
+                request.customerCode(),
+                request.customerName(),
+                request.projectId(),
+                request.projectName(),
+                request.settlementCompanyId(),
+                request.settlementCompanyName(),
+                request.startDate(),
+                request.endDate(),
+                request.salesAmount(),
+                request.receiptAmount(),
+                request.closingAmount(),
+                status,
                 request.remark(),
                 request.items(),
                 request.customerId()
