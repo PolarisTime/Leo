@@ -10,6 +10,7 @@ import com.leo.erp.sales.order.service.print.SalesOrderPrintDocument;
 import com.leo.erp.sales.order.service.print.SalesOrderPrintDocumentFactory;
 import com.leo.erp.sales.order.service.print.SalesOrderPrintLine;
 import com.leo.erp.sales.order.service.print.SalesOrderPrintPage;
+import com.leo.erp.system.printtemplate.service.PrintExportFilenameService;
 import com.leo.erp.system.printtemplate.service.PrintXlsxExportLayout;
 import com.leo.erp.system.printtemplate.service.PrintXlsxExportLayoutProvider;
 import org.apache.poi.ss.usermodel.Cell;
@@ -48,15 +49,18 @@ public class SalesOrderPrintExportService {
     private final SalesOrderRepository salesOrderRepository;
     private final SalesOrderPrintDocumentFactory printDocumentFactory;
     private final PrintXlsxExportLayoutProvider layoutProvider;
+    private final PrintExportFilenameService filenameService;
 
     public SalesOrderPrintExportService(
             SalesOrderRepository salesOrderRepository,
             SalesOrderPrintDocumentFactory printDocumentFactory,
-            PrintXlsxExportLayoutProvider layoutProvider
-            ) {
+            PrintXlsxExportLayoutProvider layoutProvider,
+            PrintExportFilenameService filenameService
+    ) {
         this.salesOrderRepository = salesOrderRepository;
         this.printDocumentFactory = printDocumentFactory;
         this.layoutProvider = layoutProvider;
+        this.filenameService = filenameService;
     }
 
     @Transactional(readOnly = true)
@@ -92,7 +96,14 @@ public class SalesOrderPrintExportService {
 
             workbook.write(output);
             return new FileDownloadResponse(
-                    safeFilename(document.orderNo()) + layout.filenameSuffix(),
+                    filenameService.forOrder(
+                            document.orderNo(),
+                            document.deliveryDate(),
+                            order.getProjectId(),
+                            document.projectName(),
+                            document.settlementCompanyName(),
+                            "xlsx"
+                    ),
                     XLSX_MEDIA_TYPE,
                     output.toByteArray(),
                     document.orderNo(),
@@ -366,13 +377,4 @@ public class SalesOrderPrintExportService {
         return value < 10 ? "0" + value : String.valueOf(value);
     }
 
-    private String safeFilename(String raw) {
-        String value = raw == null || raw.isBlank() ? "销售订单" : raw.trim();
-        StringBuilder builder = new StringBuilder(value.length());
-        for (int i = 0; i < value.length(); i += 1) {
-            char ch = value.charAt(i);
-            builder.append("\\/:*?\"<>|".indexOf(ch) >= 0 ? '_' : ch);
-        }
-        return builder.toString();
-    }
 }

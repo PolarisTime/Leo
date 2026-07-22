@@ -6,7 +6,6 @@ public record PrintXlsxExportLayout(
         String moduleKey,
         String templateResource,
         String sheetName,
-        String filenameSuffix,
         int rowsPerPage,
         int detailStartRow,
         int detailEndColumn,

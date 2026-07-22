@@ -27,7 +27,6 @@ public class PrintXlsxExportLayoutProvider {
                 moduleKey,
                 requiredText(config, "templateResource"),
                 runtimeProperties.text(config, "sheetName", ""),
-                runtimeProperties.text(config, "filenameSuffix", ".xlsx"),
                 Math.max(1, runtimeProperties.integer(config, "rowsPerPage", 1)),
                 runtimeProperties.integer(detail, "startRow", 0),
                 runtimeProperties.integer(detail, "endColumn", 0),

@@ -5,6 +5,7 @@ import com.leo.erp.system.setup.web.InitialSetupTokenFilter;
 import com.leo.erp.common.idempotent.HttpIdempotencyFilter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -93,7 +94,7 @@ public class SecurityConfig {
         configuration.setAllowedOrigins(normalizeList(cors.getAllowedOrigins()));
         configuration.setAllowedMethods(normalizeList(cors.getAllowedMethods()));
         configuration.setAllowedHeaders(normalizeList(cors.getAllowedHeaders()));
-        configuration.setExposedHeaders(List.of(TraceIdFilter.TRACE_ID_HEADER));
+        configuration.setExposedHeaders(List.of(TraceIdFilter.TRACE_ID_HEADER, HttpHeaders.CONTENT_DISPOSITION));
         configuration.setAllowCredentials(cors.isAllowCredentials());
         configuration.setMaxAge(cors.getMaxAgeSeconds());
 

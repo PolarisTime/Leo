@@ -348,7 +348,6 @@
     "sales-order": {
       "templateResource": "print-forms/sales-order-print-v1.xlsx",
       "sheetName": "销售订单",
-      "filenameSuffix": "-套打.xlsx",
       "rowsPerPage": 7,
       "header": [
         {"field": "remark", "cell": "A1"},
