@@ -8,11 +8,15 @@ import com.leo.erp.common.api.PageResponse;
 import com.leo.erp.common.web.BindPageQuery;
 import com.leo.erp.common.web.dto.StatusUpdateRequest;
 import com.leo.erp.purchase.order.service.PurchaseOrderService;
+import com.leo.erp.purchase.order.service.PurchaseOrderWarehouseRecommendationService;
 import com.leo.erp.purchase.order.web.dto.PurchaseOrderImportCandidateResponse;
 import com.leo.erp.purchase.order.web.dto.PurchaseOrderRequest;
 import com.leo.erp.purchase.order.web.dto.PurchaseOrderResponse;
+import com.leo.erp.purchase.order.web.dto.PurchaseOrderWarehouseRecommendationResponse;
 import com.leo.erp.system.operationlog.support.DomainEventAudited;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Positive;
+import jakarta.validation.constraints.Size;
 import java.time.LocalDate;
 import java.util.List;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -36,9 +40,14 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 public class PurchaseOrderController {
 
     private final PurchaseOrderService purchaseOrderService;
+    private final PurchaseOrderWarehouseRecommendationService warehouseRecommendationService;
 
-    public PurchaseOrderController(PurchaseOrderService purchaseOrderService) {
+    public PurchaseOrderController(
+            PurchaseOrderService purchaseOrderService,
+            PurchaseOrderWarehouseRecommendationService warehouseRecommendationService
+    ) {
         this.purchaseOrderService = purchaseOrderService;
+        this.warehouseRecommendationService = warehouseRecommendationService;
     }
 
     @Operation(summary = "搜索采购订单")
@@ -119,6 +128,17 @@ public class PurchaseOrderController {
                                 .withIdentity(null, null, supplierId, null, null)
                 )
         ));
+    }
+
+    @Operation(summary = "按供应商和商品推荐采购仓库")
+    @GetMapping("/warehouse-recommendations")
+    public ApiResponse<List<PurchaseOrderWarehouseRecommendationResponse>> warehouseRecommendations(
+            @RequestParam @Positive Long supplierId,
+            @RequestParam @Size(min = 1, max = 200) List<@Positive Long> materialIds
+    ) {
+        return ApiResponse.success(warehouseRecommendationService.recommend(supplierId, materialIds).stream()
+                .map(PurchaseOrderWarehouseRecommendationResponse::from)
+                .toList());
     }
 
     @Operation(summary = "查询采购订单详情")
