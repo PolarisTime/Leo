@@ -1,3 +1,10 @@
+# [8.1.0](https://github.com/PolarisTime/Leo/compare/v8.0.6...v8.1.0) (2026-07-22)
+
+
+### Features
+
+* **print:** 统一打印导出文件命名 ([3623214](https://github.com/PolarisTime/Leo/commit/362321498dfd53340c4defeaa12c10462e8eb055))
+
 ## [8.0.6](https://github.com/PolarisTime/Leo/compare/v8.0.5...v8.0.6) (2026-07-22)
 
 
