@@ -154,11 +154,15 @@ public class CompanySettingService extends AbstractCrudService<CompanySetting, C
     @Transactional
     @CacheEvict(value = CacheConfig.CACHE_STATIC, key = "'" + CURRENT_COMPANY_CACHE_KEY + "'")
     public CompanySettingResponse saveCurrent(CompanySettingRequest request) {
-        CompanySetting entity = findCurrentEntity()
-                .orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_ERROR, "请先通过首次初始化页面创建默认结算主体"));
+        Optional<CompanySetting> currentEntity = findCurrentEntity();
+        if (currentEntity.isEmpty()) {
+            CompanySettingResponse created = create(request);
+            evictCache();
+            return created;
+        }
 
-        validateImmutableIdentity(entity, request);
-
+        CompanySetting entity = currentEntity.get();
+        validateUpdate(entity, request);
         apply(entity, request);
         CompanySetting saved = companySettingRepository.save(entity);
         evictCache();
@@ -295,15 +299,6 @@ public class CompanySettingService extends AbstractCrudService<CompanySetting, C
         entity.setSettlementAccountsJson(writeSettlementAccounts(settlementAccounts));
         entity.setStatus(request.status() != null ? request.status() : "正常");
         entity.setRemark(request.remark());
-    }
-
-    private void validateImmutableIdentity(CompanySetting entity, CompanySettingRequest request) {
-        if (entity.getCompanyName() != null && !entity.getCompanyName().equals(request.companyName())) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "公司名称由首次初始化写入，不允许修改");
-        }
-        if (entity.getTaxNo() != null && !entity.getTaxNo().equals(request.taxNo())) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "税号由首次初始化写入，不允许修改");
-        }
     }
 
     private Optional<CompanySetting> findCurrentEntity() {

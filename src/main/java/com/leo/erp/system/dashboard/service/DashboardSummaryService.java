@@ -13,16 +13,12 @@ import com.leo.erp.master.supplier.repository.SupplierRepository;
 import com.leo.erp.system.company.domain.entity.CompanySetting;
 import com.leo.erp.system.company.repository.CompanySettingRepository;
 import com.leo.erp.system.dashboard.web.dto.DashboardSummaryResponse;
-import com.leo.erp.system.menu.domain.entity.Menu;
-import com.leo.erp.system.menu.repository.MenuRepository;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.util.StringUtils;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
-import java.util.List;
 
 @Service
 public class DashboardSummaryService {
@@ -32,7 +28,6 @@ public class DashboardSummaryService {
 
     private final UserAccountRepository userAccountRepository;
     private final CompanySettingRepository companySettingRepository;
-    private final MenuRepository menuRepository;
     private final RefreshTokenSessionRepository refreshTokenSessionRepository;
     private final MaterialRepository materialRepository;
     private final SupplierRepository supplierRepository;
@@ -42,7 +37,6 @@ public class DashboardSummaryService {
 
     public DashboardSummaryService(UserAccountRepository userAccountRepository,
                                    CompanySettingRepository companySettingRepository,
-                                   MenuRepository menuRepository,
                                    RefreshTokenSessionRepository refreshTokenSessionRepository,
                                    MaterialRepository materialRepository,
                                    SupplierRepository supplierRepository,
@@ -51,7 +45,6 @@ public class DashboardSummaryService {
                                    @Value("${spring.application.name:leo}") String appName) {
         this.userAccountRepository = userAccountRepository;
         this.companySettingRepository = companySettingRepository;
-        this.menuRepository = menuRepository;
         this.refreshTokenSessionRepository = refreshTokenSessionRepository;
         this.materialRepository = materialRepository;
         this.supplierRepository = supplierRepository;
@@ -86,12 +79,6 @@ public class DashboardSummaryService {
         UserAccount user = userAccountRepository.findByIdAndDeletedFlagFalse(userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "用户不存在"));
         LocalDateTime now = LocalDateTime.now();
-        List<Menu> visibleMenus = menuRepository
-                .findByStatusAndDeletedFlagFalseOrderBySortOrder(StatusConstants.NORMAL);
-        long moduleCount = visibleMenus.stream()
-                .filter(menu -> "菜单".equals(menu.getMenuType()))
-                .filter(menu -> StringUtils.hasText(menu.getRoutePath()))
-                .count();
         long activeSessionCount = refreshTokenSessionRepository
                 .countByUserIdAndDeletedFlagFalseAndRevokedAtIsNullAndExpiresAtAfter(userId, now);
 
@@ -100,8 +87,6 @@ public class DashboardSummaryService {
                 resolveCompanyName(),
                 user.getUserName(),
                 user.getLoginName(),
-                visibleMenus.size(),
-                moduleCount,
                 activeSessionCount,
                 user.getLastLoginDate(),
                 now,

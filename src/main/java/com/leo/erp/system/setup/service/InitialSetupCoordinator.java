@@ -4,7 +4,7 @@ import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.system.setup.domain.entity.BootstrapState;
 import com.leo.erp.system.setup.repository.BootstrapStateRepository;
-import com.leo.erp.system.setup.web.dto.InitialSetupAdminSubmitRequest;
+import com.leo.erp.system.setup.web.dto.InitialSetupAccountSubmitRequest;
 import com.leo.erp.system.setup.web.dto.InitialSetupStatusResponse;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
@@ -31,17 +31,17 @@ public class InitialSetupCoordinator {
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public String configureAdmin(InitialSetupAdminSubmitRequest request) {
-        return executeLocked(() -> initialSetupService.configureAdmin(request));
+    public String configureAccount(InitialSetupAccountSubmitRequest request) {
+        return executeLocked(() -> initialSetupService.configureAccount(request));
     }
 
     private <T> T executeLocked(Supplier<T> operation) {
         BootstrapState state = bootstrapStateRepository.findSingletonForUpdate()
                 .orElseThrow(() -> new BusinessException(
                         ErrorCode.INTERNAL_ERROR,
-                        "系统初始化状态不可用，请联系系统管理员"
+                        "系统初始化状态不可用，请检查部署配置"
                 ));
-        if (state.isCompleted() || !initialSetupService.isSetupRequired()) {
+        if (!initialSetupService.isSetupRequired()) {
             throw new BusinessException(ErrorCode.FORBIDDEN, "系统已完成初始化，该接口已禁用");
         }
 

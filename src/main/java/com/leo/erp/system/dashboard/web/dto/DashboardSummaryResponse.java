@@ -7,8 +7,6 @@ public record DashboardSummaryResponse(
         String companyName,
         String userName,
         String loginName,
-        long visibleMenuCount,
-        long moduleCount,
         long activeSessionCount,
         LocalDateTime lastLoginAt,
         LocalDateTime serverTime,

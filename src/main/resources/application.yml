@@ -256,33 +256,7 @@ leo:
       # 每天 02:05 导出附件恢复清单到附件存储的隔离前缀
       enabled: ${LEO_MAINTENANCE_ATTACHMENT_MANIFEST_EXPORT_ENABLED:true}
       cron: ${LEO_MAINTENANCE_ATTACHMENT_MANIFEST_EXPORT_CRON:0 5 2 * * *}
-  company:
-    bootstrap:
-      # 兼容旧配置；启动期灌库已废弃，首次初始化请使用网页 OOBE (/api/setup)
-      enabled: ${LEO_COMPANY_BOOTSTRAP_ENABLED:false}
-      company-name: ${LEO_COMPANY_BOOTSTRAP_COMPANY_NAME:}
-      tax-no: ${LEO_COMPANY_BOOTSTRAP_TAX_NO:}
-      bank-name: ${LEO_COMPANY_BOOTSTRAP_BANK_NAME:}
-      bank-account: ${LEO_COMPANY_BOOTSTRAP_BANK_ACCOUNT:}
-      status: ${LEO_COMPANY_BOOTSTRAP_STATUS:正常}
-      remark: ${LEO_COMPANY_BOOTSTRAP_REMARK:}
   auth:
-    bootstrap:
-      # 兼容旧配置；启动期管理员创建已废弃，首次初始化请使用网页 OOBE (/api/setup)
-      enabled: ${LEO_AUTH_BOOTSTRAP_ENABLED:false}
-      # 引导账号登录名
-      login-name: ${LEO_AUTH_BOOTSTRAP_LOGIN_NAME:}
-      # 引导账号密码
-      password: ${LEO_AUTH_BOOTSTRAP_PASSWORD:}
-      # 引导账号用户姓名
-      user-name: ${LEO_AUTH_BOOTSTRAP_USER_NAME:}
-      # 引导账号手机号
-      mobile: ${LEO_AUTH_BOOTSTRAP_MOBILE:}
-      # 引导账号备注
-      remark: ${LEO_AUTH_BOOTSTRAP_REMARK:}
-    user:
-      # 新建用户默认密码
-      default-password: ${LEO_AUTH_DEFAULT_PASSWORD:}
     login-protection:
       # 是否启用登录失败次数保护
       enabled: ${LEO_AUTH_LOGIN_PROTECTION_ENABLED:true}
@@ -315,7 +289,7 @@ leo:
       # 是否允许匿名访问健康检查页；生产环境建议关闭，仅保留登录后访问
       public-access-enabled: ${LEO_HEALTH_PAGE_PUBLIC_ACCESS_ENABLED:false}
     docs:
-      # 是否允许匿名访问 OpenAPI / Swagger 文档；默认仅管理员可访问
+      # 是否允许匿名访问 OpenAPI / Swagger 文档；默认仅登录账号可访问
       public-access-enabled: ${LEO_DOCS_PUBLIC_ACCESS_ENABLED:false}
   security:
     web:

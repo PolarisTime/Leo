@@ -3,7 +3,7 @@ package com.leo.erp.system.setup.web;
 import com.leo.erp.common.api.ApiResponse;
 import com.leo.erp.common.web.PublicAccess;
 import com.leo.erp.system.setup.service.InitialSetupCoordinator;
-import com.leo.erp.system.setup.web.dto.InitialSetupAdminSubmitRequest;
+import com.leo.erp.system.setup.web.dto.InitialSetupAccountSubmitRequest;
 import com.leo.erp.system.setup.web.dto.InitialSetupStatusResponse;
 import jakarta.validation.Valid;
 import org.springframework.validation.annotation.Validated;
@@ -30,9 +30,9 @@ public class InitialSetupController {
         return ApiResponse.success("获取初始化状态成功", initialSetupCoordinator.status());
     }
 
-    @PostMapping("/admin")
-    public ApiResponse<String> configureAdmin(
-            @Valid @RequestBody InitialSetupAdminSubmitRequest request) {
-        return ApiResponse.success("系统首次初始化完成", initialSetupCoordinator.configureAdmin(request));
+    @PostMapping("/account")
+    public ApiResponse<String> configureAccount(
+            @Valid @RequestBody InitialSetupAccountSubmitRequest request) {
+        return ApiResponse.success("系统首次初始化完成", initialSetupCoordinator.configureAccount(request));
     }
 }

@@ -36,7 +36,7 @@ Leo 是钢材贸易 ERP 的后端服务，负责身份认证、业务单据、�
 
 1. 准备根目录 `.env.local`，供 `scripts/env/dev.sh` 自动加载。
 
-2. 如需初始化数据库和应用账号：
+2. 如需初始化数据库：
 
 ```bash
 bash scripts/init-database.sh
@@ -71,7 +71,7 @@ Swagger UI：
 
 - `http://localhost:11211/api/health`
 
-首次初始化页面由前端提供：
+唯一账号初始化页面由前端提供：
 
 - `http://localhost:3100/setup`
 

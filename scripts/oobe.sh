@@ -69,4 +69,4 @@ printf '  FRONTEND_ENV=%s\n' "$ARIES_DIR/.env.local"
 
 echo "[oobe] 完成。启动命令：bash leo/scripts/dev.sh start"
 echo "[oobe] 停止命令：bash leo/scripts/dev.sh stop"
-echo "[oobe] 首次启动后，请在浏览器打开前端地址并进入 /setup 页面完成管理员账号和公司主体初始化。"
+echo "[oobe] 首次启动后，请在浏览器打开前端地址并进入 /setup 页面创建唯一账号。"

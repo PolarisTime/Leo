@@ -85,7 +85,7 @@ public class LoginService {
                                  String resultStatus,
                                  String remark) {
         operationLogService.record(new OperationLogCommand(
-                "认证授权",
+                "身份认证",
                 actionType,
                 loginName,
                 ctx.requestMethod() == null || ctx.requestMethod().isBlank() ? "POST" : ctx.requestMethod(),

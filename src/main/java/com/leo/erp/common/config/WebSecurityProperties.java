@@ -28,7 +28,7 @@ public class WebSecurityProperties {
         private List<String> allowedMethods = new ArrayList<>(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         private List<String> allowedHeaders = new ArrayList<>(List.of(
                 "Authorization", "Content-Type", "X-Setup-Token",
-                "X-Machine-Subject-Id", "X-Idempotency-Key", "Idempotency-Key",
+                "X-Idempotency-Key", "Idempotency-Key",
                 "X-Requested-With", "Accept", "Origin"
         ));
         private boolean allowCredentials = true;

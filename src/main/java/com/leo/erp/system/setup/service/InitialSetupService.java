@@ -6,10 +6,7 @@ import com.leo.erp.auth.repository.UserAccountRepository;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
-import com.leo.erp.common.support.StatusConstants;
-import com.leo.erp.system.generalsetting.domain.entity.GeneralSetting;
-import com.leo.erp.system.generalsetting.repository.GeneralSettingRepository;
-import com.leo.erp.system.setup.web.dto.InitialSetupAdminSubmitRequest;
+import com.leo.erp.system.setup.web.dto.InitialSetupAccountSubmitRequest;
 import com.leo.erp.system.setup.web.dto.InitialSetupStatusResponse;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -19,20 +16,16 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class InitialSetupService {
 
-    private static final int MIN_ADMIN_PASSWORD_LENGTH = 8;
+    private static final int MIN_ACCOUNT_PASSWORD_LENGTH = 8;
     private static final String SETUP_REMARK = "网页首次初始化创建";
-    private static final String OOBE_COMPLETED_SETTING = "SYS_OOBE_COMPLETED";
     private final UserAccountRepository userAccountRepository;
-    private final GeneralSettingRepository generalSettingRepository;
     private final PasswordEncoder passwordEncoder;
     private final SnowflakeIdGenerator snowflakeIdGenerator;
 
     public InitialSetupService(UserAccountRepository userAccountRepository,
-                               GeneralSettingRepository generalSettingRepository,
                                PasswordEncoder passwordEncoder,
                                SnowflakeIdGenerator snowflakeIdGenerator) {
         this.userAccountRepository = userAccountRepository;
-        this.generalSettingRepository = generalSettingRepository;
         this.passwordEncoder = passwordEncoder;
         this.snowflakeIdGenerator = snowflakeIdGenerator;
     }
@@ -41,79 +34,68 @@ public class InitialSetupService {
     public InitialSetupStatusResponse status() {
         return new InitialSetupStatusResponse(
                 isSetupRequired(),
-                isAdminConfigured()
+                isAccountConfigured()
         );
     }
 
     @Transactional
-    public synchronized String configureAdmin(InitialSetupAdminSubmitRequest request) {
-        assertOobeNotCompleted();
-        if (isAdminConfigured()) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "管理员账号已完成初始化");
+    public synchronized String configureAccount(InitialSetupAccountSubmitRequest request) {
+        assertSetupRequired();
+        if (isAccountConfigured()) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "账号已完成初始化");
         }
-        String loginName = createAdmin(request);
-        ensureOobeCompletedSwitch();
-        return loginName;
+        return createAccount(request);
     }
 
     public boolean isSetupRequired() {
-        if (isOobeCompleted()) {
-            return false;
-        }
-        return !isAdminConfigured();
+        return !isAccountConfigured();
     }
 
-    private boolean isOobeCompleted() {
-        return generalSettingRepository.findBySettingCodeAndDeletedFlagFalse(OOBE_COMPLETED_SETTING)
-                .map(setting -> StatusConstants.NORMAL.equals(setting.getStatus()))
-                .orElse(false);
-    }
-
-    private void assertOobeNotCompleted() {
+    private void assertSetupRequired() {
         if (!isSetupRequired()) {
             throw new BusinessException(ErrorCode.FORBIDDEN, "系统已完成初始化，该接口已禁用");
         }
     }
 
-    private boolean isAdminConfigured() {
-        return userAccountRepository.existsByStatusAndDeletedFlagFalse(UserStatus.NORMAL);
+    private boolean isAccountConfigured() {
+        return userAccountRepository.existsByDeletedFlagFalse();
     }
 
-    private String createAdmin(InitialSetupAdminSubmitRequest request) {
+    private String createAccount(InitialSetupAccountSubmitRequest request) {
         if (request == null) {
-            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "请填写管理员账号信息");
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "请填写账号信息");
         }
 
-        if (request.admin() == null) {
-            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "请填写管理员账号信息");
+        if (request.account() == null) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "请填写账号信息");
         }
 
-        String loginName = requireText(request.admin().loginName(), "管理员登录账号不能为空");
-        String password = requireText(request.admin().password(), "管理员密码不能为空");
-        String userName = requireText(request.admin().userName(), "管理员姓名不能为空");
-        String mobile = trimToEmpty(request.admin().mobile());
-        if (password.length() < MIN_ADMIN_PASSWORD_LENGTH) {
-            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "管理员密码至少8位");
+        String loginName = requireText(request.account().loginName(), "登录账号不能为空");
+        String password = requireText(request.account().password(), "密码不能为空");
+        String userName = requireText(request.account().userName(), "姓名不能为空");
+        String mobile = trimToEmpty(request.account().mobile());
+        if (password.length() < MIN_ACCOUNT_PASSWORD_LENGTH) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "密码至少8位");
         }
 
         if (userAccountRepository.existsByLoginNameAndDeletedFlagFalse(loginName)) {
-            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "管理员登录账号已存在");
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "登录账号已存在");
         }
 
-        UserAccount admin = new UserAccount();
-        admin.setId(snowflakeIdGenerator.nextId());
-        admin.setLoginName(loginName);
-        admin.setPasswordHash(passwordEncoder.encode(password));
-        admin.setUserName(userName);
-        admin.setMobile(mobile);
-        admin.setStatus(UserStatus.NORMAL);
-        admin.setRemark(SETUP_REMARK);
+        UserAccount account = new UserAccount();
+        account.setId(snowflakeIdGenerator.nextId());
+        account.setLoginName(loginName);
+        account.setPasswordHash(passwordEncoder.encode(password));
+        account.setUserName(userName);
+        account.setMobile(mobile);
+        account.setStatus(UserStatus.NORMAL);
+        account.setRemark(SETUP_REMARK);
 
         try {
-            userAccountRepository.saveAndFlush(admin);
-            return admin.getLoginName();
+            userAccountRepository.saveAndFlush(account);
+            return account.getLoginName();
         } catch (DataIntegrityViolationException ex) {
-            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "管理员登录账号已存在");
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "登录账号已存在");
         }
     }
 
@@ -127,20 +109,5 @@ public class InitialSetupService {
 
     private String trimToEmpty(String value) {
         return value == null ? "" : value.trim();
-    }
-
-    private void ensureOobeCompletedSwitch() {
-        GeneralSetting setting = generalSettingRepository.findBySettingCodeAndDeletedFlagFalse(OOBE_COMPLETED_SETTING)
-                .orElseGet(GeneralSetting::new);
-        if (setting.getId() == null) {
-            setting.setId(snowflakeIdGenerator.nextId());
-            setting.setSettingCode(OOBE_COMPLETED_SETTING);
-            setting.setSettingName("OOBE已完成");
-            setting.setSettingGroup("系统初始化");
-        }
-        setting.setSettingValue("COMPLETED");
-        setting.setStatus(StatusConstants.NORMAL);
-        setting.setRemark("首次初始化完成后自动创建，禁止重复执行 OOBE 流程");
-        generalSettingRepository.save(setting);
     }
 }

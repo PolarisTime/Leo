@@ -144,5 +144,5 @@ cat <<EOF
 [leo-db]      $LEO_DIR/scripts/dev.sh start
 [leo-db]   2. Open the Aries setup page or login page:
 [leo-db]      http://localhost:3100/setup
-[leo-db] OOBE creates the first admin account and company profile; this script intentionally does not seed them.
+[leo-db] The first account is created from the /setup page; this script intentionally does not seed application accounts.
 EOF
