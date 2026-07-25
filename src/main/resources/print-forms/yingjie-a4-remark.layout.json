@@ -18,7 +18,7 @@
   "fields": {
     "customerName": {"source": "customerName", "left": 106, "top": 68, "width": 264, "height": 20, "fontSize": 12},
     "billNo": {"source": ["outboundNo", "orderNo", "billNo"], "left": 456, "top": 68, "width": 102, "height": 20, "fontSize": 12},
-    "projectName": {"source": "projectName", "left": 106, "top": 96, "width": 264, "height": 28, "fontSize": 12, "multiline": true, "vertical": "middle", "lineHeight": 1.0, "verticalPadding": 1},
+    "projectName": {"source": "projectName", "left": 106, "top": 96, "width": 264, "height": 28, "fontSize": 12, "minimumFontSize": 8, "maxLines": 2, "multiline": true, "vertical": "middle", "lineHeight": 1.0, "verticalPadding": 1},
     "billDate": {"source": ["deliveryDate", "outboundDate", "orderDate"], "format": "chineseDate", "left": 456, "top": 100, "width": 102, "height": 20, "fontSize": 12},
     "projectAddress": {"source": "projectAddress", "left": 106, "top": 132, "width": 264, "height": 20, "fontSize": 12, "multiline": true},
     "vehiclePlate": {"source": "vehiclePlate", "left": 456, "top": 132, "width": 102, "height": 20, "fontSize": 12}
