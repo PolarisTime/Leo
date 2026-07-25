@@ -3,7 +3,6 @@ package com.leo.erp.common.support;
 import org.springframework.stereotype.Component;
 
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
@@ -14,10 +13,6 @@ public class ModuleCatalog {
     private static final Map<String, String> MODULE_ALIAS_MAP = Map.of(
             "material-categories", "material-category"
     );
-
-    public List<String> orderedModuleKeys() {
-        return List.copyOf(MODULE_NAME_MAP.keySet());
-    }
 
     public String resolveModuleName(String moduleKey) {
         String normalizedModuleKey = normalizeModuleKey(moduleKey);
@@ -59,12 +54,10 @@ public class ModuleCatalog {
         modules.put("ledger-adjustment", "台账调整单");
         modules.put("finance-overview", "财务概览");
         modules.put("cash-ledger", "资金流水");
-        modules.put("general-setting", "通用设置");
         modules.put("company-setting", "结算主体管理");
         modules.put("account", "个人账号");
         modules.put("print-template", "打印模板");
         modules.put("operation-log", "操作日志");
-        modules.put("database", "数据库管理");
         return modules;
     }
 }

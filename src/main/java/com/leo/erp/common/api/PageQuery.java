@@ -18,7 +18,6 @@ public record PageQuery(
 ) {
 
     private static final int DEFAULT_PAGE = 0;
-    private static final int DEFAULT_SIZE = 20;
     private static final int MAX_SIZE = 200;
 
     public Pageable toPageable(String defaultSortBy) {
@@ -27,13 +26,9 @@ public record PageQuery(
         return PageRequest.of(page, size, Sort.by(sortDirection, property));
     }
 
-    public static PageQuery of(Integer page, Integer size, String sortBy, String direction) {
-        return of(page, size, sortBy, direction, null);
-    }
-
-    public static PageQuery of(Integer page, Integer size, String sortBy, String direction, Set<String> allowedSortFields) {
+    public static PageQuery of(Integer page, int size, String sortBy, String direction, Set<String> allowedSortFields) {
         int resolvedPage = page == null ? DEFAULT_PAGE : page;
-        int resolvedSize = size == null ? DEFAULT_SIZE : size;
+        int resolvedSize = size;
         if (resolvedPage < 0) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "page 不能小于0");
         }

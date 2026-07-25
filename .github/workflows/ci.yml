@@ -34,7 +34,7 @@ jobs:
           cache-dependency-path: pom.xml
 
       - name: Static analysis
-        run: mvn -B -ntp -DskipTests checkstyle:check spotbugs:spotbugs
+        run: mvn -B -ntp -DskipTests checkstyle:check spotbugs:check
 
   package:
     name: Package & Smoke

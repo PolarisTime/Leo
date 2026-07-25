@@ -103,7 +103,7 @@ jobs:
         run: npm ci
 
       - name: Static analysis
-        run: mvn -B -ntp -DskipTests checkstyle:check spotbugs:spotbugs
+        run: mvn -B -ntp -DskipTests checkstyle:check spotbugs:check
 
       - name: Verify Flyway migrations
         run: |

@@ -1,6 +1,6 @@
 # Leo ERP Backend
 
-Leo 是钢材贸易 ERP 的后端服务，负责身份认证、业务单据、对账结算、附件、系统设置、全局搜索和审计能力。
+Leo 是钢材贸易 ERP 的后端服务，负责身份认证、业务单据、对账结算、附件、全局搜索和审计能力。
 
 ## 技术栈
 
@@ -18,11 +18,10 @@ Leo 是钢材贸易 ERP 的后端服务，负责身份认证、业务单据、�
 
 - 采购：采购订单、采购入库
 - 销售：销售订单、销售出库
-- 合同：采购合同、销售合同
 - 物流：物流单、物流对账单
-- 对账：客户、供应商对账单
-- 财务：收款单、付款单、收票单、开票单、应收应付
-- 系统：通用设置、附件与操作审计
+- 对账：客户对账单
+- 财务：收款单、付款单、台账调整、资金流水与财务概览
+- 系统：账号、结算主体、打印模板、附件与操作审计
 - 聚合全局搜索：跨多类业务单据的统一检索
 
 ## 环境要求
@@ -59,7 +58,8 @@ bash leo/scripts/dev.sh start
 
 ```bash
 mvn -q -DskipTests compile
-mvn test
+mvn -B -ntp -DskipTests checkstyle:check
+mvn -B -ntp -DskipTests spotbugs:check
 mvn -DskipTests package
 ```
 
@@ -128,13 +128,12 @@ CI/CD 详细配置、生产机 systemd/Nginx 模板和回滚策略见 `docs/depl
 GitHub Actions 当前会执行以下步骤：
 
 ```bash
-mvn -B -ntp -DskipTests checkstyle:check spotbugs:spotbugs
-mvn -B -ntp test
+mvn -B -ntp -DskipTests checkstyle:check spotbugs:check
 mvn -B -ntp -DskipTests package
 docker build -t leo-backend:ci .
 ```
 
-CI 中还会拉起 PostgreSQL 和 Redis 服务，并做镜像启动冒烟检查。
+CI 中还会构建镜像，并执行不依赖活动测试目录的容器启动冒烟检查。
 
 ## 安全说明
 

@@ -2,7 +2,6 @@ package com.leo.erp.sales.order.repository;
 
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.api.PageResponse;
-import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.sales.order.web.dto.SalesOrderSourceCandidateItemResponse;
 import com.leo.erp.sales.order.web.dto.SalesOrderSourceCandidateResponse;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;

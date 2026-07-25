@@ -2,7 +2,6 @@ package com.leo.erp.search.web;
 
 import org.springframework.validation.annotation.Validated;
 import com.leo.erp.common.api.ApiResponse;
-import com.leo.erp.search.web.GlobalSearchResponse;
 import com.leo.erp.search.service.GlobalSearchService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
