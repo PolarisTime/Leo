@@ -1,3 +1,10 @@
+## [8.2.3](https://github.com/PolarisTime/Leo/compare/v8.2.2...v8.2.3) (2026-07-25)
+
+
+### Bug Fixes
+
+* **print:** 支持A4项目名称两行自动缩放 ([0006eb0](https://github.com/PolarisTime/Leo/commit/0006eb0c879bce5530fa24c14d06292f00a72394))
+
 ## [8.2.2](https://github.com/PolarisTime/Leo/compare/v8.2.1...v8.2.2) (2026-07-25)
 
 
