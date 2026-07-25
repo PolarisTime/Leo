@@ -1,3 +1,10 @@
+## [8.2.1](https://github.com/PolarisTime/Leo/compare/v8.2.0...v8.2.1) (2026-07-25)
+
+
+### Bug Fixes
+
+* **logistics:** 允许保存未建档车辆车牌 ([ccdce9a](https://github.com/PolarisTime/Leo/commit/ccdce9a0a56b9ac53092845defb0c61dc808d66b))
+
 # [8.2.0](https://github.com/PolarisTime/Leo/compare/v8.1.0...v8.2.0) (2026-07-22)
 
 
