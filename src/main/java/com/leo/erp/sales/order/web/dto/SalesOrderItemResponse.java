@@ -1,11 +1,14 @@
 package com.leo.erp.sales.order.web.dto;
 
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
+import com.fasterxml.jackson.databind.ser.std.ToStringSerializer;
+
 import java.math.BigDecimal;
 
 public record SalesOrderItemResponse(
-        Long id,
+        @JsonSerialize(using = ToStringSerializer.class) Long id,
         Integer lineNo,
-        Long materialId,
+        @JsonSerialize(using = ToStringSerializer.class) Long materialId,
         String materialCode,
         String brand,
         String category,
@@ -13,11 +16,11 @@ public record SalesOrderItemResponse(
         String spec,
         String length,
         String unit,
-        Long sourceInboundItemId,
-        Long sourcePurchaseOrderItemId,
-        Long settlementCompanyId,
+        @JsonSerialize(using = ToStringSerializer.class) Long sourceInboundItemId,
+        @JsonSerialize(using = ToStringSerializer.class) Long sourcePurchaseOrderItemId,
+        @JsonSerialize(using = ToStringSerializer.class) Long settlementCompanyId,
         String settlementCompanyName,
-        Long warehouseId,
+        @JsonSerialize(using = ToStringSerializer.class) Long warehouseId,
         String warehouseName,
         String batchNo,
         String batchNoNormalized,

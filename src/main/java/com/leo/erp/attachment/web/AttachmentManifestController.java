@@ -1,7 +1,7 @@
 package com.leo.erp.attachment.web;
 
-import com.leo.erp.attachment.service.AttachmentManifestExportResult;
-import com.leo.erp.attachment.service.AttachmentManifestExportService;
+import com.leo.erp.attachment.api.AttachmentManifestExporter;
+import com.leo.erp.attachment.api.AttachmentManifestExportResult;
 import com.leo.erp.common.api.ApiResponse;
 import com.leo.erp.system.operationlog.support.OperationLoggable;
 import org.springframework.validation.annotation.Validated;
@@ -14,9 +14,9 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/attachments/manifests")
 public class AttachmentManifestController {
 
-    private final AttachmentManifestExportService exportService;
+    private final AttachmentManifestExporter exportService;
 
-    public AttachmentManifestController(AttachmentManifestExportService exportService) {
+    public AttachmentManifestController(AttachmentManifestExporter exportService) {
         this.exportService = exportService;
     }
 

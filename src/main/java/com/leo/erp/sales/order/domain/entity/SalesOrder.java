@@ -23,6 +23,9 @@ public class SalesOrder extends AbstractAuditableEntity {
     @Column(name = "version", nullable = false)
     private Long version;
 
+    @Column(name = "owner_user_id")
+    private Long ownerUserId;
+
     @Column(name = "order_no", nullable = false, unique = true, length = 64)
     private String orderNo;
 

@@ -1,6 +1,6 @@
 package com.leo.erp.attachment.mapper;
 
-import com.leo.erp.attachment.service.AttachmentView;
+import com.leo.erp.attachment.api.AttachmentView;
 import com.leo.erp.attachment.service.AttachmentService;
 import com.leo.erp.attachment.web.dto.AttachmentBindingResponse;
 import com.leo.erp.attachment.web.dto.AttachmentDirectUploadPrepareResponse;

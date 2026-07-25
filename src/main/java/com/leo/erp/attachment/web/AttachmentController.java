@@ -52,11 +52,13 @@ public class AttachmentController {
     @PostMapping(value = "/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @OperationLoggable(moduleName = "附件管理", actionType = "上传附件")
     public ApiResponse<AttachmentUploadResponse> upload(
-                                                        @RequestParam @NotBlank(message = "模块标识不能为空") String moduleKey,
-                                                        @RequestParam("file") MultipartFile file,
-                                                        @RequestParam(required = false) String sourceType) throws IOException {
+            @AuthenticationPrincipal SecurityPrincipal principal,
+            @RequestParam @NotBlank(message = "模块标识不能为空") String moduleKey,
+            @RequestParam("file") MultipartFile file,
+            @RequestParam(required = false) String sourceType) throws IOException {
         String normalizedModuleKey = attachmentRecordAccessService.normalizeModuleKey(moduleKey);
-        return ApiResponse.success("上传成功", attachmentWebService.upload(file, sourceType, normalizedModuleKey));
+        return ApiResponse.success("上传成功",
+                attachmentWebService.upload(file, sourceType, normalizedModuleKey, principal.id()));
     }
 
     @PostMapping("/direct-upload/prepare")
@@ -82,12 +84,13 @@ public class AttachmentController {
     }
 
     @GetMapping("/{id}/access-url")
-    public ApiResponse<AttachmentAccessUrlResponse> accessUrl(@PathVariable Long id,
+    public ApiResponse<AttachmentAccessUrlResponse> accessUrl(@AuthenticationPrincipal SecurityPrincipal principal,
+                                                              @PathVariable Long id,
                                                               @RequestParam String moduleKey,
                                                               @RequestParam String accessKey,
                                                               @RequestParam(defaultValue = "false") boolean inline) {
         String normalizedModuleKey = attachmentRecordAccessService.normalizeModuleKey(moduleKey);
-        attachmentRecordAccessService.assertAttachmentBoundToExistingRecord(normalizedModuleKey, id);
+        attachmentRecordAccessService.assertAttachmentAccessible(principal, normalizedModuleKey, id);
         AttachmentService.PresignedAttachmentUrl presignedUrl =
                 attachmentService.createPresignedAccessUrl(id, accessKey, inline);
         return ApiResponse.success(new AttachmentAccessUrlResponse(
@@ -98,11 +101,12 @@ public class AttachmentController {
     }
 
     @GetMapping("/{id}/download")
-    public ResponseEntity<Resource> download(@PathVariable Long id,
+    public ResponseEntity<Resource> download(@AuthenticationPrincipal SecurityPrincipal principal,
+                                             @PathVariable Long id,
                                              @RequestParam String moduleKey,
                                              @RequestParam String accessKey) {
         String normalizedModuleKey = attachmentRecordAccessService.normalizeModuleKey(moduleKey);
-        attachmentRecordAccessService.assertAttachmentBoundToExistingRecord(normalizedModuleKey, id);
+        attachmentRecordAccessService.assertAttachmentAccessible(principal, normalizedModuleKey, id);
         AttachmentService.PresignedAttachmentUrl presignedUrl =
                 attachmentService.createPresignedAccessUrl(id, accessKey, false);
         if (presignedUrl != null) {
@@ -112,11 +116,12 @@ public class AttachmentController {
     }
 
     @GetMapping("/{id}/preview")
-    public ResponseEntity<Resource> preview(@PathVariable Long id,
+    public ResponseEntity<Resource> preview(@AuthenticationPrincipal SecurityPrincipal principal,
+                                            @PathVariable Long id,
                                             @RequestParam String moduleKey,
                                             @RequestParam String accessKey) {
         String normalizedModuleKey = attachmentRecordAccessService.normalizeModuleKey(moduleKey);
-        attachmentRecordAccessService.assertAttachmentBoundToExistingRecord(normalizedModuleKey, id);
+        attachmentRecordAccessService.assertAttachmentAccessible(principal, normalizedModuleKey, id);
         AttachmentService.PresignedAttachmentUrl presignedUrl =
                 attachmentService.createPresignedAccessUrl(id, accessKey, true);
         if (presignedUrl != null) {

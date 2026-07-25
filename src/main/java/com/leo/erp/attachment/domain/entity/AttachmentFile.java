@@ -17,6 +17,9 @@ public class AttachmentFile extends AbstractAuditableEntity {
     @Id
     private Long id;
 
+    @Column(name = "owner_user_id")
+    private Long ownerUserId;
+
     @Column(name = "file_name", nullable = false, length = 255)
     private String fileName;
 

@@ -1,6 +1,6 @@
 package com.leo.erp.system.printtemplate.service;
 
-import com.leo.erp.attachment.service.AttachmentRecordAccessService;
+import com.leo.erp.attachment.api.AttachmentRecordAccess;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.system.printtemplate.domain.entity.PrintTemplate;
@@ -23,7 +23,7 @@ public class PrintScriptService {
     private final PrintRecordEnricher recordEnricher;
     private final PrintRecordLayoutPreparer layoutPreparer;
     private final PrintLayoutLodopRenderer layoutLodopRenderer;
-    private final AttachmentRecordAccessService recordAccessService;
+    private final AttachmentRecordAccess recordAccessService;
     private final PrintRuntimeProperties runtimeProperties;
 
     public PrintScriptService(
@@ -32,7 +32,7 @@ public class PrintScriptService {
             PrintRecordEnricher recordEnricher,
             PrintRecordLayoutPreparer layoutPreparer,
             PrintLayoutLodopRenderer layoutLodopRenderer,
-            AttachmentRecordAccessService recordAccessService,
+            AttachmentRecordAccess recordAccessService,
             PrintRuntimeProperties runtimeProperties
     ) {
         this.templateRepository = templateRepository;

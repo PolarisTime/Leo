@@ -1,10 +1,13 @@
 package com.leo.erp.master.material.repository;
 
-import com.leo.erp.master.material.domain.entity.Material;
+import com.leo.erp.attachment.api.RecordExistencePort;
 import com.leo.erp.common.support.MaterialCatalog;
 import com.leo.erp.common.support.TradeMaterialSnapshot;
+import com.leo.erp.master.material.domain.entity.Material;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -12,7 +15,29 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
-public interface MaterialRepository extends JpaRepository<Material, Long>, JpaSpecificationExecutor<Material>, MaterialCatalog {
+public interface MaterialRepository extends JpaRepository<Material, Long>, JpaSpecificationExecutor<Material>,
+        MaterialCatalog, RecordExistencePort {
+
+    @Override
+    default String moduleKey() {
+        return "material";
+    }
+
+    @Override
+    default boolean existsActive(Long recordId) {
+        return existsByIdAndDeletedFlagFalse(recordId);
+    }
+
+    @Override
+    default boolean lockActive(Long recordId) {
+        return findActiveForAttachmentBinding(recordId).isPresent();
+    }
+
+    @Lock(LockModeType.PESSIMISTIC_READ)
+    @Query("select material from Material material where material.id = :id and material.deletedFlag = false")
+    Optional<Material> findActiveForAttachmentBinding(@Param("id") Long id);
+
+    boolean existsByIdAndDeletedFlagFalse(Long id);
 
     boolean existsByMaterialCodeAndDeletedFlagFalse(String materialCode);
 

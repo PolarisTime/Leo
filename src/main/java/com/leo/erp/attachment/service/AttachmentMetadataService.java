@@ -21,6 +21,7 @@ public class AttachmentMetadataService {
 
     @Transactional
     public AttachmentFile saveUploadedFileMetadata(long attachmentId,
+                                                   Long ownerUserId,
                                                    String storedFileName,
                                                    String originalFileName,
                                                    String contentType,
@@ -29,6 +30,7 @@ public class AttachmentMetadataService {
                                                    String storagePath) {
         AttachmentFile entity = new AttachmentFile();
         entity.setId(attachmentId);
+        entity.setOwnerUserId(ownerUserId);
         entity.setFileName(storedFileName);
         entity.setOriginalFileName(originalFileName);
         entity.setFileExtension(filenameResolver.parseFilenameParts(storedFileName, contentType).extension());

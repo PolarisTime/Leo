@@ -1,5 +1,6 @@
 package com.leo.erp.finance.payment.repository;
 
+import com.leo.erp.attachment.api.RecordExistencePort;
 import com.leo.erp.finance.payment.domain.entity.Payment;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.EntityGraph;
@@ -12,7 +13,29 @@ import org.springframework.data.repository.query.Param;
 import java.math.BigDecimal;
 import java.util.Optional;
 
-public interface PaymentRepository extends JpaRepository<Payment, Long>, JpaSpecificationExecutor<Payment> {
+public interface PaymentRepository extends JpaRepository<Payment, Long>, JpaSpecificationExecutor<Payment>,
+        RecordExistencePort {
+
+    @Override
+    default String moduleKey() {
+        return "payment";
+    }
+
+    @Override
+    default boolean existsActive(Long recordId) {
+        return existsByIdAndDeletedFlagFalse(recordId);
+    }
+
+    @Override
+    default boolean lockActive(Long recordId) {
+        return findActiveForAttachmentBinding(recordId).isPresent();
+    }
+
+    @Lock(LockModeType.PESSIMISTIC_READ)
+    @Query("select payment from Payment payment where payment.id = :id and payment.deletedFlag = false")
+    Optional<Payment> findActiveForAttachmentBinding(@Param("id") Long id);
+
+    boolean existsByIdAndDeletedFlagFalse(Long id);
 
     boolean existsByPaymentNoAndDeletedFlagFalse(String paymentNo);
 

@@ -1,7 +1,7 @@
 package com.leo.erp.statement.freight.service;
 
-import com.leo.erp.attachment.service.AttachmentBindingService;
-import com.leo.erp.attachment.service.AttachmentView;
+import com.leo.erp.attachment.api.AttachmentQuery;
+import com.leo.erp.attachment.api.AttachmentView;
 import com.leo.erp.statement.freight.domain.entity.FreightStatement;
 import com.leo.erp.statement.freight.domain.entity.FreightStatementItem;
 import org.springframework.stereotype.Service;
@@ -16,10 +16,10 @@ public class FreightStatementViewAssembler {
 
     private static final String MODULE_KEY = "freight-statement";
 
-    private final AttachmentBindingService attachmentBindingService;
+    private final AttachmentQuery attachmentQuery;
 
-    public FreightStatementViewAssembler(AttachmentBindingService attachmentBindingService) {
-        this.attachmentBindingService = attachmentBindingService;
+    public FreightStatementViewAssembler(AttachmentQuery attachmentQuery) {
+        this.attachmentQuery = attachmentQuery;
     }
 
     FreightStatementView toDetailView(FreightStatement entity) {
@@ -89,7 +89,7 @@ public class FreightStatementViewAssembler {
         }
         List<Long> statementIds = statements.stream().map(FreightStatement::getId).toList();
         Map<Long, List<AttachmentView>> boundAttachments =
-                attachmentBindingService.listByRecordIds(MODULE_KEY, statementIds);
+                attachmentQuery.listByRecordIds(MODULE_KEY, statementIds);
         Map<Long, List<AttachmentView>> result = new LinkedHashMap<>(boundAttachments);
         for (FreightStatement statement : statements) {
             result.putIfAbsent(statement.getId(), List.of());
@@ -98,7 +98,7 @@ public class FreightStatementViewAssembler {
     }
 
     private List<AttachmentView> resolveAttachments(FreightStatement entity) {
-        return attachmentBindingService.list(MODULE_KEY, entity.getId());
+        return attachmentQuery.list(MODULE_KEY, entity.getId());
     }
 
     private String joinAttachmentNames(List<AttachmentView> attachments) {

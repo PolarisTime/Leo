@@ -2,6 +2,8 @@ package com.leo.erp.attachment.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.leo.erp.attachment.api.AttachmentManifestExporter;
+import com.leo.erp.attachment.api.AttachmentManifestExportResult;
 import com.leo.erp.attachment.domain.entity.AttachmentBinding;
 import com.leo.erp.attachment.domain.entity.AttachmentFile;
 import com.leo.erp.attachment.repository.AttachmentBindingRepository;
@@ -28,12 +30,14 @@ import java.util.Map;
 import java.util.zip.GZIPOutputStream;
 
 @Service
-public class AttachmentManifestExportService {
+public class AttachmentManifestExportService implements AttachmentManifestExporter {
 
-    private static final int MANIFEST_VERSION = 1;
+    private static final int MANIFEST_VERSION = 2;
     private static final String CONTENT_TYPE_GZIP = "application/gzip";
-    private static final DateTimeFormatter PATH_DATE = DateTimeFormatter.ofPattern("yyyy/MM/dd").withZone(ZoneOffset.UTC);
-    private static final DateTimeFormatter FILE_TIMESTAMP = DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmss'Z'").withZone(ZoneOffset.UTC);
+    private static final DateTimeFormatter PATH_DATE = DateTimeFormatter.ofPattern("yyyy/MM/dd")
+            .withZone(ZoneOffset.UTC);
+    private static final DateTimeFormatter FILE_TIMESTAMP = DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmss'Z'")
+            .withZone(ZoneOffset.UTC);
 
     private final AttachmentFileRepository attachmentFileRepository;
     private final AttachmentBindingRepository attachmentBindingRepository;
@@ -62,6 +66,7 @@ public class AttachmentManifestExportService {
     }
 
     @Transactional(readOnly = true)
+    @Override
     public AttachmentManifestExportResult exportDaily() {
         Instant exportedAt = clock.instant();
         List<AttachmentFile> attachments = attachmentFileRepository.findAllByOrderByIdAsc();
@@ -117,6 +122,7 @@ public class AttachmentManifestExportService {
         node.put("fileExtension", attachment.getFileExtension());
         node.put("sourceType", attachment.getSourceType());
         node.put("accessKeyHash", sha256Hex(attachment.getAccessKey()));
+        node.put("ownerUserId", stringValue(attachment.getOwnerUserId()));
         node.put("createdBy", stringValue(attachment.getCreatedBy()));
         node.put("createdName", attachment.getCreatedName());
         node.put("createdAt", stringValue(attachment.getCreatedAt()));

@@ -4,6 +4,7 @@ import org.springframework.stereotype.Component;
 
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 @Component
@@ -31,7 +32,9 @@ public class ModuleCatalog {
         if (moduleKey == null) {
             return null;
         }
-        String normalized = moduleKey.trim();
+        String normalized = moduleKey.trim()
+                .replaceFirst("^/+", "")
+                .toLowerCase(Locale.ROOT);
         return MODULE_ALIAS_MAP.getOrDefault(normalized, normalized);
     }
 

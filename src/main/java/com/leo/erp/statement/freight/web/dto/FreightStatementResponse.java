@@ -1,6 +1,5 @@
 package com.leo.erp.statement.freight.web.dto;
 
-import com.leo.erp.attachment.web.dto.AttachmentResponse;
 import com.leo.erp.logistics.bill.web.dto.FreightBillItemResponse;
 
 import java.math.BigDecimal;
@@ -23,7 +22,7 @@ public record FreightStatementResponse(
         String status,
         boolean deletedFlag,
         String attachment,
-        List<AttachmentResponse> attachments,
+        List<FreightStatementAttachmentResponse> attachments,
         String remark,
         List<FreightBillItemResponse> items,
         Long carrierId

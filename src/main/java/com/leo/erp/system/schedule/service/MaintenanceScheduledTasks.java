@@ -1,6 +1,6 @@
 package com.leo.erp.system.schedule.service;
 
-import com.leo.erp.attachment.service.AttachmentManifestExportService;
+import com.leo.erp.attachment.api.AttachmentManifestExporter;
 import com.leo.erp.system.schedule.config.MaintenanceScheduleProperties;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -14,16 +14,16 @@ public class MaintenanceScheduledTasks {
 
     private final MaintenanceScheduleProperties properties;
     private final RedisCacheHealthCheckService redisCacheHealthCheckService;
-    private final AttachmentManifestExportService attachmentManifestExportService;
+    private final AttachmentManifestExporter attachmentManifestExporter;
     private final AtomicBoolean redisCacheHealthCheckRunning = new AtomicBoolean(false);
     private final AtomicBoolean attachmentManifestExportRunning = new AtomicBoolean(false);
 
     public MaintenanceScheduledTasks(MaintenanceScheduleProperties properties,
                                      RedisCacheHealthCheckService redisCacheHealthCheckService,
-                                     AttachmentManifestExportService attachmentManifestExportService) {
+                                     AttachmentManifestExporter attachmentManifestExporter) {
         this.properties = properties;
         this.redisCacheHealthCheckService = redisCacheHealthCheckService;
-        this.attachmentManifestExportService = attachmentManifestExportService;
+        this.attachmentManifestExporter = attachmentManifestExporter;
     }
 
     @Scheduled(cron = "${leo.maintenance.redis-cache-health-check.cron:0 */5 * * * *}", zone = "${leo.maintenance.zone:Asia/Shanghai}")
@@ -54,7 +54,7 @@ public class MaintenanceScheduledTasks {
             return;
         }
         try {
-            attachmentManifestExportService.exportDaily();
+            attachmentManifestExporter.exportDaily();
         } catch (Exception ex) {
             log.error("附件恢复清单导出失败", ex);
         } finally {

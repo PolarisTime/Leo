@@ -153,19 +153,29 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
 
     @Override
     protected void validateUpdate(SalesOrder entity, SalesOrderRequest request) {
-        assertCreatedByCurrentUser(entity);
+        assertOwnedByCurrentUser(entity);
         if (!entity.getOrderNo().equals(request.orderNo()) && repository.existsByOrderNoAndDeletedFlagFalse(request.orderNo())) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "销售订单号已存在");
         }
     }
 
-    private void assertCreatedByCurrentUser(SalesOrder order) {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        if (authentication == null || !(authentication.getPrincipal() instanceof SecurityPrincipal principal)
-                || !Objects.equals(order.getCreatedBy(), principal.id())) {
-            // 创建者约束是业务领域不变量，与功能授权无关。
-            throw new BusinessException(ErrorCode.FORBIDDEN, "只能编辑本人创建的销售订单");
+    private void assertOwnedByCurrentUser(SalesOrder order) {
+        Long currentUserId = requireCurrentUserId();
+        Long ownerUserId = order.getOwnerUserId() == null ? order.getCreatedBy() : order.getOwnerUserId();
+        if (!Objects.equals(ownerUserId, currentUserId)) {
+            // 业务所有权是领域不变量，与创建审计和功能授权无关。
+            throw new BusinessException(ErrorCode.FORBIDDEN, "只能编辑本人负责的销售订单");
         }
+    }
+
+    private Long requireCurrentUserId() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || !authentication.isAuthenticated()
+                || !(authentication.getPrincipal() instanceof SecurityPrincipal principal)
+                || principal.id() == null) {
+            throw new BusinessException(ErrorCode.FORBIDDEN, "无法识别当前登录账号");
+        }
+        return principal.id();
     }
 
     @Override
@@ -247,6 +257,7 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
     public SalesOrderResponse completeSalesOrder(Long id) {
         SalesOrder order = repository.findForUpdateByIdAndDeletedFlagFalse(id)
                 .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, notFoundMessage()));
+        assertOwnedByCurrentUser(order);
         String currentStatus = normalizeStatus(order.getStatus());
         if (StatusConstants.SALES_COMPLETED.equals(currentStatus)) {
             return toDetailResponse(order);
@@ -264,6 +275,7 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
 
     @Override
     protected void beforeDelete(SalesOrder entity) {
+        assertOwnedByCurrentUser(entity);
         lockPurchaseSources(entity, null);
         if (downstreamMutationGuard != null) {
             downstreamMutationGuard.assertMutable(entity, "删除");
@@ -277,6 +289,7 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
 
     @Override
     protected void beforeStatusUpdate(SalesOrder entity, String currentStatus, String nextStatus) {
+        assertOwnedByCurrentUser(entity);
         lockPurchaseSources(entity, null);
         if (StatusConstants.SALES_COMPLETED.equals(nextStatus)) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "完成销售必须通过专用完成操作执行");
@@ -329,7 +342,9 @@ public class SalesOrderService extends AbstractCrudService<SalesOrder, SalesOrde
 
     @Override
     protected SalesOrder newEntity() {
-        return new SalesOrder();
+        SalesOrder order = new SalesOrder();
+        order.setOwnerUserId(requireCurrentUserId());
+        return order;
     }
 
     @Override

@@ -1,6 +1,6 @@
 package com.leo.erp.statement.freight.service;
 
-import com.leo.erp.attachment.service.AttachmentView;
+import com.leo.erp.attachment.api.AttachmentView;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;

@@ -1,20 +1,23 @@
 package com.leo.erp.sales.order.web.dto;
 
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
+import com.fasterxml.jackson.databind.ser.std.ToStringSerializer;
+
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 
 public record SalesOrderResponse(
-        Long id,
+        @JsonSerialize(using = ToStringSerializer.class) Long id,
         String orderNo,
         String purchaseInboundNo,
         String purchaseOrderNo,
         String customerCode,
-        Long customerId,
+        @JsonSerialize(using = ToStringSerializer.class) Long customerId,
         String customerName,
-        Long projectId,
+        @JsonSerialize(using = ToStringSerializer.class) Long projectId,
         String projectName,
-        Long settlementCompanyId,
+        @JsonSerialize(using = ToStringSerializer.class) Long settlementCompanyId,
         String settlementCompanyName,
         LocalDate deliveryDate,
         String salesName,

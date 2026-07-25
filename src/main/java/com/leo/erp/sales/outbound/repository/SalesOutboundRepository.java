@@ -1,9 +1,12 @@
 package com.leo.erp.sales.outbound.repository;
 
+import com.leo.erp.attachment.api.RecordExistencePort;
 import com.leo.erp.sales.outbound.domain.entity.SalesOutbound;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -11,7 +14,29 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
-public interface SalesOutboundRepository extends JpaRepository<SalesOutbound, Long>, JpaSpecificationExecutor<SalesOutbound> {
+public interface SalesOutboundRepository extends JpaRepository<SalesOutbound, Long>, JpaSpecificationExecutor<SalesOutbound>,
+        RecordExistencePort {
+
+    @Override
+    default String moduleKey() {
+        return "sales-outbound";
+    }
+
+    @Override
+    default boolean existsActive(Long recordId) {
+        return existsByIdAndDeletedFlagFalse(recordId);
+    }
+
+    @Override
+    default boolean lockActive(Long recordId) {
+        return findActiveForAttachmentBinding(recordId).isPresent();
+    }
+
+    @Lock(LockModeType.PESSIMISTIC_READ)
+    @Query("select outbound from SalesOutbound outbound where outbound.id = :id and outbound.deletedFlag = false")
+    Optional<SalesOutbound> findActiveForAttachmentBinding(@Param("id") Long id);
+
+    boolean existsByIdAndDeletedFlagFalse(Long id);
 
     boolean existsByOutboundNoAndDeletedFlagFalse(String outboundNo);
 

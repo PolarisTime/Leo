@@ -1,5 +1,6 @@
 package com.leo.erp.sales.order.repository;
 
+import com.leo.erp.attachment.api.RecordExistencePort;
 import com.leo.erp.sales.order.domain.entity.SalesOrder;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -14,7 +15,29 @@ import java.util.Optional;
 
 import jakarta.persistence.LockModeType;
 
-public interface SalesOrderRepository extends JpaRepository<SalesOrder, Long>, JpaSpecificationExecutor<SalesOrder> {
+public interface SalesOrderRepository extends JpaRepository<SalesOrder, Long>, JpaSpecificationExecutor<SalesOrder>,
+        RecordExistencePort {
+
+    @Override
+    default String moduleKey() {
+        return "sales-order";
+    }
+
+    @Override
+    default boolean existsActive(Long recordId) {
+        return existsByIdAndDeletedFlagFalse(recordId);
+    }
+
+    @Override
+    default boolean lockActive(Long recordId) {
+        return findActiveForAttachmentBinding(recordId).isPresent();
+    }
+
+    @Lock(LockModeType.PESSIMISTIC_READ)
+    @Query("select salesOrder from SalesOrder salesOrder where salesOrder.id = :id and salesOrder.deletedFlag = false")
+    Optional<SalesOrder> findActiveForAttachmentBinding(@Param("id") Long id);
+
+    boolean existsByIdAndDeletedFlagFalse(Long id);
 
     boolean existsByOrderNoAndDeletedFlagFalse(String orderNo);
 

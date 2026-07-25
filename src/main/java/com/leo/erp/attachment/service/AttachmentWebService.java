@@ -1,5 +1,6 @@
 package com.leo.erp.attachment.service;
 
+import com.leo.erp.attachment.api.AttachmentView;
 import com.leo.erp.attachment.mapper.AttachmentWebMapper;
 import com.leo.erp.attachment.web.dto.AttachmentBindingResponse;
 import com.leo.erp.attachment.web.dto.AttachmentBindingCountResponse;
@@ -29,8 +30,10 @@ public class AttachmentWebService {
         this.attachmentWebMapper = attachmentWebMapper;
     }
 
-    public AttachmentUploadResponse upload(MultipartFile file, String sourceType, String moduleKey) throws IOException {
-        return attachmentWebMapper.toUploadResponse(attachmentService.upload(file, sourceType, moduleKey));
+    public AttachmentUploadResponse upload(
+            MultipartFile file, String sourceType, String moduleKey, Long ownerUserId) throws IOException {
+        return attachmentWebMapper.toUploadResponse(
+                attachmentService.upload(file, sourceType, moduleKey, ownerUserId));
     }
 
     public AttachmentDirectUploadPrepareResponse prepareDirectUpload(
@@ -50,7 +53,12 @@ public class AttachmentWebService {
     public AttachmentUploadResponse completeDirectUpload(
             AttachmentDirectUploadCompleteRequest request, String moduleKey, Long ownerUserId) {
         return attachmentWebMapper.toUploadResponse(
-                attachmentService.completeDirectUpload(request.attachmentId(), request.token(), moduleKey, ownerUserId));
+                attachmentService.completeDirectUpload(
+                        request.attachmentId(),
+                        request.token(),
+                        moduleKey,
+                        ownerUserId
+                ));
     }
 
     public AttachmentBindingResponse detail(String moduleKey, Long recordId) {

@@ -1,5 +1,6 @@
 package com.leo.erp.purchase.order.repository;
 
+import com.leo.erp.attachment.api.RecordExistencePort;
 import com.leo.erp.purchase.order.domain.entity.PurchaseOrder;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.domain.Sort;
@@ -15,7 +16,30 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
-public interface PurchaseOrderRepository extends JpaRepository<PurchaseOrder, Long>, JpaSpecificationExecutor<PurchaseOrder> {
+public interface PurchaseOrderRepository extends JpaRepository<PurchaseOrder, Long>, JpaSpecificationExecutor<PurchaseOrder>,
+        RecordExistencePort {
+
+    @Override
+    default String moduleKey() {
+        return "purchase-order";
+    }
+
+    @Override
+    default boolean existsActive(Long recordId) {
+        return existsByIdAndDeletedFlagFalse(recordId);
+    }
+
+    @Override
+    default boolean lockActive(Long recordId) {
+        return findActiveForAttachmentBinding(recordId).isPresent();
+    }
+
+    @Lock(LockModeType.PESSIMISTIC_READ)
+    @Query("select purchaseOrder from PurchaseOrder purchaseOrder "
+            + "where purchaseOrder.id = :id and purchaseOrder.deletedFlag = false")
+    Optional<PurchaseOrder> findActiveForAttachmentBinding(@Param("id") Long id);
+
+    boolean existsByIdAndDeletedFlagFalse(Long id);
 
     boolean existsByOrderNoAndDeletedFlagFalse(String orderNo);
 

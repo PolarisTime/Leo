@@ -1,5 +1,6 @@
 package com.leo.erp.attachment.service;
 
+import com.leo.erp.attachment.api.AttachmentView;
 import com.leo.erp.attachment.config.AttachmentProperties;
 import com.leo.erp.attachment.domain.entity.AttachmentFile;
 import com.leo.erp.attachment.repository.AttachmentFileRepository;
@@ -69,17 +70,19 @@ public class AttachmentService {
         this.directUploadTokenService = directUploadTokenService;
     }
 
-    public AttachmentView upload(MultipartFile file, String sourceType) throws IOException {
-        return upload(file, sourceType, null);
-    }
-
-    public AttachmentView upload(MultipartFile file, String sourceType, String moduleKey) throws IOException {
+    public AttachmentView upload(
+            MultipartFile file, String sourceType, String moduleKey, Long ownerUserId) throws IOException {
         validateUpload(file);
+        Long normalizedOwnerUserId = normalizeOwnerUserId(ownerUserId);
 
         String normalizedSourceType = normalizeSourceType(sourceType);
         String originalFileName = normalizeOriginalFileName(file, normalizedSourceType);
         long attachmentId = idGenerator.nextId();
-        String storedFileName = filenameResolver.buildStoredFileName(attachmentId, originalFileName, file.getContentType());
+        String storedFileName = filenameResolver.buildStoredFileName(
+                attachmentId,
+                originalFileName,
+                file.getContentType()
+        );
 
         // Store file outside the DB transaction to avoid holding connections during I/O
         String storagePath = storageResolver.store(buildObjectKey(attachmentId, storedFileName), file);
@@ -87,6 +90,7 @@ public class AttachmentService {
         try {
             saved = metadataService.saveUploadedFileMetadata(
                     attachmentId,
+                    normalizedOwnerUserId,
                     storedFileName,
                     originalFileName,
                     file.getContentType(),
@@ -164,14 +168,25 @@ public class AttachmentService {
         );
     }
 
-    public AttachmentView completeDirectUpload(Long attachmentId, String token, String moduleKey, Long ownerUserId) {
+    public AttachmentView completeDirectUpload(
+            Long attachmentId,
+            String token,
+            String moduleKey,
+            Long ownerUserId
+    ) {
         Long normalizedOwnerUserId = normalizeOwnerUserId(ownerUserId);
-        DirectUploadTokenPayload payload = directUploadTokenService.verify(token, attachmentId, moduleKey, normalizedOwnerUserId);
+        DirectUploadTokenPayload payload = directUploadTokenService.verify(
+                token,
+                attachmentId,
+                moduleKey,
+                normalizedOwnerUserId
+        );
         storageResolver.verifyDirectUpload(payload.storagePath(), payload.fileSize(), payload.sha256Hex());
         AttachmentFile saved;
         try {
             saved = metadataService.saveUploadedFileMetadata(
                     payload.attachmentId(),
+                    payload.ownerUserId(),
                     payload.storedFileName(),
                     payload.originalFileName(),
                     payload.contentType(),
@@ -333,8 +348,8 @@ public class AttachmentService {
     }
 
     private Long normalizeOwnerUserId(Long ownerUserId) {
-        if (ownerUserId == null) {
-            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "直传用户无效");
+        if (ownerUserId == null || ownerUserId <= 0) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "附件所有者无效");
         }
         return ownerUserId;
     }
