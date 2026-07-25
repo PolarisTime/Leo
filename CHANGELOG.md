@@ -1,3 +1,10 @@
+## [8.2.2](https://github.com/PolarisTime/Leo/compare/v8.2.1...v8.2.2) (2026-07-25)
+
+
+### Bug Fixes
+
+* **master:** 修复客户项目选项 ID 精度丢失 ([d852920](https://github.com/PolarisTime/Leo/commit/d852920492cdb44abf3dfe0bc51d85c355492c85))
+
 ## [8.2.1](https://github.com/PolarisTime/Leo/compare/v8.2.0...v8.2.1) (2026-07-25)
 
 
