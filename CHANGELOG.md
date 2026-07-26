@@ -1,3 +1,10 @@
+## [8.3.1](https://github.com/PolarisTime/Leo/compare/v8.3.0...v8.3.1) (2026-07-26)
+
+
+### Bug Fixes
+
+* **api:** 修复筛选参数冲突与术语数据 ([efdc0e2](https://github.com/PolarisTime/Leo/commit/efdc0e2c275e1ad0fabfe640e98044d274753157))
+
 # [8.3.0](https://github.com/PolarisTime/Leo/compare/v8.2.3...v8.3.0) (2026-07-26)
 
 
