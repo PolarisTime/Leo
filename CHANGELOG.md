@@ -1,3 +1,11 @@
+# [8.3.0](https://github.com/PolarisTime/Leo/compare/v8.2.3...v8.3.0) (2026-07-26)
+
+
+### Features
+
+* **api:** 增加物流对账汇总并收敛模块边界 ([6aa8c9d](https://github.com/PolarisTime/Leo/commit/6aa8c9de3c725ca49bffecbaaf7a97776645e743))
+* **statement:** 恢复对账能力并收敛后端模块边界 ([006d5eb](https://github.com/PolarisTime/Leo/commit/006d5eb8ef8e05bde962e845e845f601a7f41c5f))
+
 ## [8.2.3](https://github.com/PolarisTime/Leo/compare/v8.2.2...v8.2.3) (2026-07-25)
 
 
