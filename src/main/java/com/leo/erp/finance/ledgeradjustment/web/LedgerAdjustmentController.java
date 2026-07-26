@@ -51,7 +51,7 @@ public class LedgerAdjustmentController {
     @Operation(summary = "分页查询台账调整单")
     @GetMapping
     public ApiResponse<PageResponse<LedgerAdjustmentResponse>> page(
-            @BindPageQuery(sortFieldKey = "ledger-adjustment") PageQuery query,
+            @BindPageQuery(sortFieldKey = "ledger-adjustment", directionParam = "sortDirection") PageQuery query,
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) String direction,
             @RequestParam(required = false) String counterpartyType,

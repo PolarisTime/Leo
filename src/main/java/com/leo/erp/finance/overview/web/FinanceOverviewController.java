@@ -31,7 +31,7 @@ public class FinanceOverviewController {
     @GetMapping
     @Operation(summary = "查询应收应付概览")
     public ApiResponse<FinanceOverviewResponse> overview(
-            @BindPageQuery(sortFieldKey = "finance-overview") PageQuery query,
+            @BindPageQuery(sortFieldKey = "finance-overview", directionParam = "sortDirection") PageQuery query,
             @RequestParam Long settlementCompanyId,
             @RequestParam(required = false)
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate asOfDate,
