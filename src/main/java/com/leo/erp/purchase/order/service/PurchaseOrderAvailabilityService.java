@@ -1,6 +1,6 @@
 package com.leo.erp.purchase.order.service;
 
-import com.leo.erp.allocation.repository.ItemAllocationNativeRepository;
+import com.leo.erp.allocation.api.ItemAllocationQuery;
 import com.leo.erp.common.support.TradeItemCalculator;
 import com.leo.erp.purchase.inbound.service.PurchaseInboundItemQueryService;
 import com.leo.erp.purchase.order.domain.entity.PurchaseOrder;
@@ -17,11 +17,11 @@ import java.util.stream.Collectors;
 public class PurchaseOrderAvailabilityService {
 
     private final PurchaseInboundItemQueryService purchaseInboundItemQueryService;
-    private final ItemAllocationNativeRepository itemAllocationRepo;
+    private final ItemAllocationQuery itemAllocationQuery;
     public PurchaseOrderAvailabilityService(PurchaseInboundItemQueryService purchaseInboundItemQueryService,
-                                            ItemAllocationNativeRepository itemAllocationRepo) {
+                                            ItemAllocationQuery itemAllocationQuery) {
         this.purchaseInboundItemQueryService = purchaseInboundItemQueryService;
-        this.itemAllocationRepo = itemAllocationRepo;
+        this.itemAllocationQuery = itemAllocationQuery;
     }
 
     Map<Long, Integer> loadInboundAllocatedQuantityMap(PurchaseOrder order) {
@@ -41,8 +41,11 @@ public class PurchaseOrderAvailabilityService {
             return Map.of();
         }
         Map<Long, Integer> allocatedMap = new HashMap<>();
-        itemAllocationRepo.summarizeSalesByPurchaseOrderItems(orderItemIds, null)
-                .forEach(p -> allocatedMap.put(p.getSourceItemId(), Math.toIntExact(p.getTotalQuantity())));
+        itemAllocationQuery.summarizeSalesByPurchaseOrderItemIds(orderItemIds)
+                .forEach(summary -> allocatedMap.put(
+                        summary.sourceItemId(),
+                        Math.toIntExact(summary.totalQuantity())
+                ));
         return allocatedMap;
     }
 

@@ -1,5 +1,6 @@
 package com.leo.erp.auth.service;
 
+import com.leo.erp.auth.api.UserAccountChangedEvent;
 import com.leo.erp.auth.domain.entity.UserAccount;
 import com.leo.erp.auth.repository.UserAccountRepository;
 import com.leo.erp.auth.web.dto.CurrentAccountResponse;

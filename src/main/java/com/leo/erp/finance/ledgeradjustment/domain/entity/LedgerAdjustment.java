@@ -1,6 +1,7 @@
 package com.leo.erp.finance.ledgeradjustment.domain.entity;
 
 import com.leo.erp.common.persistence.AbstractAuditableEntity;
+import com.leo.erp.common.persistence.StatusAwareEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
@@ -16,7 +17,7 @@ import java.time.LocalDate;
 @Setter
 @Entity
 @Table(name = "fm_ledger_adjustment")
-public class LedgerAdjustment extends AbstractAuditableEntity {
+public class LedgerAdjustment extends AbstractAuditableEntity implements StatusAwareEntity {
 
     @Id
     private Long id;

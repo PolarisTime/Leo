@@ -5,6 +5,7 @@ import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.AbstractAuditableEntity;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
+import com.leo.erp.common.support.StatusTransition;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
@@ -23,7 +24,7 @@ public abstract class AbstractCrudService<E extends AbstractAuditableEntity, Req
     private final CrudStatusGuard<E> statusGuard;
 
     protected AbstractCrudService(SnowflakeIdGenerator idGenerator) {
-        this(idGenerator, CrudStatusGuard.reflective());
+        this(idGenerator, CrudStatusGuard.withoutStatus());
     }
 
     protected AbstractCrudService(SnowflakeIdGenerator idGenerator, CrudStatusGuard<E> statusGuard) {
@@ -191,7 +192,7 @@ public abstract class AbstractCrudService<E extends AbstractAuditableEntity, Req
         return false;
     }
 
-    protected Set<String> allowedStatusTransitions() {
+    protected Set<StatusTransition> allowedStatusTransitions() {
         return Set.of();
     }
 

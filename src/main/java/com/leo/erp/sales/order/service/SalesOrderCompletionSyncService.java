@@ -97,7 +97,7 @@ public class SalesOrderCompletionSyncService {
             int expected = item.getQuantity() != null ? item.getQuantity() : 0;
             int actual = outboundQtyByItemId.getOrDefault(item.getId(), 0);
 
-            return actual == expected;
+            return expected >= 1 && actual == expected;
         });
     }
 

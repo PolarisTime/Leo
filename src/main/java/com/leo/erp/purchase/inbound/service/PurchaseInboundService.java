@@ -10,6 +10,7 @@ import com.leo.erp.common.service.AbstractStatusCrudService;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.BusinessStatusValidator;
 import com.leo.erp.common.support.StatusConstants;
+import com.leo.erp.common.support.StatusTransition;
 import com.leo.erp.purchase.inbound.domain.entity.PurchaseInbound;
 import com.leo.erp.purchase.inbound.domain.entity.PurchaseInboundItem;
 import com.leo.erp.purchase.inbound.repository.PurchaseInboundItemRepository;
@@ -224,7 +225,7 @@ public class PurchaseInboundService extends AbstractStatusCrudService<
     }
 
     @Override
-    protected java.util.Set<String> allowedStatusTransitions() {
+    protected java.util.Set<StatusTransition> allowedStatusTransitions() {
         return StatusConstants.PURCHASE_INBOUND_TRANSITIONS;
     }
 

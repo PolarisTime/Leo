@@ -1,6 +1,6 @@
 package com.leo.erp.purchase.inbound.service;
 
-import com.leo.erp.allocation.repository.ItemAllocationNativeRepository;
+import com.leo.erp.allocation.api.ItemAllocationQuery;
 import com.leo.erp.common.support.TradeItemCalculator;
 import com.leo.erp.purchase.inbound.domain.entity.PurchaseInbound;
 import com.leo.erp.purchase.inbound.domain.entity.PurchaseInboundItem;
@@ -21,14 +21,14 @@ public class PurchaseInboundResponseAssembler {
 
     private final PurchaseInboundMapper purchaseInboundMapper;
     private final PurchaseInboundItemRepository purchaseInboundItemRepository;
-    private final ItemAllocationNativeRepository itemAllocationRepo;
+    private final ItemAllocationQuery itemAllocationQuery;
 
     public PurchaseInboundResponseAssembler(PurchaseInboundMapper purchaseInboundMapper,
                                             PurchaseInboundItemRepository purchaseInboundItemRepository,
-                                            ItemAllocationNativeRepository itemAllocationRepo) {
+                                            ItemAllocationQuery itemAllocationQuery) {
         this.purchaseInboundMapper = purchaseInboundMapper;
         this.purchaseInboundItemRepository = purchaseInboundItemRepository;
-        this.itemAllocationRepo = itemAllocationRepo;
+        this.itemAllocationQuery = itemAllocationQuery;
     }
 
     Map<Long, PurchaseInboundItemRepository.InboundWeightSummary> loadInboundWeightSummaryMap(List<PurchaseInbound> inbounds) {
@@ -133,8 +133,11 @@ public class PurchaseInboundResponseAssembler {
             return Map.of();
         }
         Map<Long, Integer> allocatedMap = new HashMap<>();
-        itemAllocationRepo.summarizeSalesByInboundItems(inboundItemIds, null)
-                .forEach(p -> allocatedMap.put(p.getSourceItemId(), Math.toIntExact(p.getTotalQuantity())));
+        itemAllocationQuery.summarizeSalesByInboundItemIds(inboundItemIds)
+                .forEach(summary -> allocatedMap.put(
+                        summary.sourceItemId(),
+                        Math.toIntExact(summary.totalQuantity())
+                ));
         return allocatedMap;
     }
 

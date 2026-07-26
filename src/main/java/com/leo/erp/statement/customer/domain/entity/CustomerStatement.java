@@ -1,6 +1,7 @@
 package com.leo.erp.statement.customer.domain.entity;
 
 import com.leo.erp.common.persistence.AbstractAuditableEntity;
+import com.leo.erp.common.persistence.StatusAwareEntity;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -20,7 +21,7 @@ import java.util.List;
 @Setter
 @Entity
 @Table(name = "st_customer_statement")
-public class CustomerStatement extends AbstractAuditableEntity {
+public class CustomerStatement extends AbstractAuditableEntity implements StatusAwareEntity {
 
     @Id
     private Long id;

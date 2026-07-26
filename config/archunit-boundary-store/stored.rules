@@ -1,0 +1,5 @@
+#
+#Sun Jul 26 20:35:24 CST 2026
+entity\ status\ must\ only\ be\ written\ by\ ApplyService,\ CompletionSyncService\ or\ CrudStatusGuard\ classes=525fb6ef-10db-4153-aadb-7fc25a9971bf
+top-level\ module\ dependency\ edges\ must\ not\ participate\ in\ cycles=2c7ea9fa-4727-455c-9b32-c317a66eed2a
+top-level\ modules\ must\ not\ depend\ on\ repository,\ domain.entity\ or\ web.dto\ internals\ of\ other\ top-level\ modules=6100a3ca-7a4c-4f80-a896-acf74de82801

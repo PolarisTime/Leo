@@ -1,12 +1,12 @@
-package com.leo.erp.allocation.appservice;
+package com.leo.erp.purchase.api;
 
 import java.math.BigDecimal;
 import java.util.Collection;
 import java.util.List;
 
 /**
- * Application Service：销售模块查询采购明细的抽象接口。
- * 实现类由 purchase 模块提供，打破 sales→purchase 直接依赖。
+ * 采购来源明细公开查询接口。
+ * 实现由 purchase 模块提供，调用方无需接触采购实体或 Repository。
  */
 public interface PurchaseItemQueryAppService {
 
@@ -246,8 +246,8 @@ public interface PurchaseItemQueryAppService {
                 String warehouseName,
                 String batchNo
         ) {
-            this(id, quantity, weightTon, null, orderNo, orderStatus, brand, material, spec, materialCode, category, unit,
-                    warehouseName, batchNo, null, null, null, null, null);
+            this(id, quantity, weightTon, null, orderNo, orderStatus, brand, material, spec, materialCode,
+                    category, unit, warehouseName, batchNo, null, null, null, null, null);
         }
 
         public SourcePurchaseOrderItemRecord(

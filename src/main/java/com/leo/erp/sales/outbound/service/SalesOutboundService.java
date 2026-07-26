@@ -10,11 +10,13 @@ import com.leo.erp.common.service.AbstractStatusCrudService;
 import com.leo.erp.common.support.BusinessStatusValidator;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
+import com.leo.erp.common.support.StatusTransition;
 import com.leo.erp.sales.outbound.domain.entity.SalesOutbound;
 import com.leo.erp.sales.outbound.domain.entity.SalesOutboundItem;
 import com.leo.erp.sales.outbound.repository.SalesOutboundRepository;
 import com.leo.erp.system.operationlog.event.BusinessOperationEventPublisher;
 import com.leo.erp.sales.order.repository.SalesOrderRepository;
+import com.leo.erp.sales.order.service.SalesOrderDownstreamMutationGuard;
 import com.leo.erp.sales.outbound.web.dto.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
@@ -45,6 +47,7 @@ public class SalesOutboundService extends AbstractStatusCrudService<
     private final SalesOutboundDownstreamMutationGuard downstreamMutationGuard;
     private SalesOutboundCoverageValidator coverageValidator;
     private SalesOrderRepository salesOrderRepository;
+    private SalesOrderDownstreamMutationGuard salesOrderDownstreamMutationGuard;
     private final BusinessOperationEventPublisher businessOperationEventPublisher;
 
     @Autowired
@@ -76,6 +79,11 @@ public class SalesOutboundService extends AbstractStatusCrudService<
     @Autowired
     void setSalesOrderRepository(SalesOrderRepository salesOrderRepository) {
         this.salesOrderRepository = salesOrderRepository;
+    }
+
+    @Autowired
+    void setSalesOrderDownstreamMutationGuard(SalesOrderDownstreamMutationGuard salesOrderDownstreamMutationGuard) {
+        this.salesOrderDownstreamMutationGuard = salesOrderDownstreamMutationGuard;
     }
 
     @Transactional(readOnly = true)
@@ -302,7 +310,7 @@ public class SalesOutboundService extends AbstractStatusCrudService<
     }
 
     @Override
-    protected java.util.Set<String> allowedStatusTransitions() {
+    protected java.util.Set<StatusTransition> allowedStatusTransitions() {
         return StatusConstants.SALES_OUTBOUND_TRANSITIONS;
     }
 
@@ -413,6 +421,9 @@ public class SalesOutboundService extends AbstractStatusCrudService<
                         ErrorCode.BUSINESS_ERROR,
                         "来源销售订单当前状态不是已审核，不能删除销售出库"
                 );
+            }
+            if (salesOrderDownstreamMutationGuard != null) {
+                salesOrderDownstreamMutationGuard.assertNoFreightReference(order, "删除销售出库");
             }
             order.setStatus(StatusConstants.DRAFT);
             salesOrderRepository.save(order);

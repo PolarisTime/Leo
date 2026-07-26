@@ -9,6 +9,7 @@ import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.service.AbstractStatusCrudService;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
+import com.leo.erp.common.support.StatusTransition;
 import com.leo.erp.sales.order.domain.entity.SalesOrder;
 import com.leo.erp.sales.order.domain.entity.SalesOrderItem;
 import com.leo.erp.sales.order.repository.SalesOrderOutboundCandidateQueryRepository;
@@ -304,7 +305,19 @@ public class SalesOrderService extends AbstractStatusCrudService<SalesOrder, Sal
             downstreamMutationGuard.assertMutable(entity, "反审核");
         }
         if (StatusConstants.AUDITED.equals(nextStatus)) {
+            assertAuditableLineQuantities(entity);
             salesOrderApplyService.validateCustomerSnapshot(entity);
+        }
+    }
+
+    private void assertAuditableLineQuantities(SalesOrder entity) {
+        for (SalesOrderItem item : entity.getItems()) {
+            if (item.getQuantity() == null || item.getQuantity() < 1) {
+                throw new BusinessException(
+                        ErrorCode.BUSINESS_ERROR,
+                        "第" + item.getLineNo() + "行数量必须至少为1个数量单位"
+                );
+            }
         }
     }
 
@@ -373,7 +386,7 @@ public class SalesOrderService extends AbstractStatusCrudService<SalesOrder, Sal
     }
 
     @Override
-    protected java.util.Set<String> allowedStatusTransitions() {
+    protected java.util.Set<StatusTransition> allowedStatusTransitions() {
         return StatusConstants.SALES_ORDER_TRANSITIONS;
     }
 

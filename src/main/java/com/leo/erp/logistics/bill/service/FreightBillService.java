@@ -11,6 +11,7 @@ import com.leo.erp.common.support.BusinessDocumentValidator;
 import com.leo.erp.common.support.BusinessStatusValidator;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
+import com.leo.erp.common.support.StatusTransition;
 import com.leo.erp.logistics.bill.domain.entity.FreightBill;
 import com.leo.erp.logistics.bill.domain.entity.FreightBillItem;
 import com.leo.erp.logistics.bill.mapper.FreightBillMapper;
@@ -18,9 +19,8 @@ import com.leo.erp.logistics.bill.repository.FreightBillRepository;
 import com.leo.erp.logistics.bill.web.dto.FreightBillItemResponse;
 import com.leo.erp.logistics.bill.web.dto.FreightBillRequest;
 import com.leo.erp.logistics.bill.web.dto.FreightBillResponse;
-import com.leo.erp.master.carrier.domain.entity.Vehicle;
-import com.leo.erp.master.carrier.repository.CarrierRepository;
-import com.leo.erp.master.carrier.repository.VehicleRepository;
+import com.leo.erp.master.api.CarrierQuery;
+import com.leo.erp.master.api.VehicleQuery;
 import com.leo.erp.system.company.domain.entity.CompanySetting;
 import com.leo.erp.system.company.service.CompanySettingService;
 import com.leo.erp.system.operationlog.event.BusinessOperationEventPublisher;
@@ -48,28 +48,28 @@ public class FreightBillService extends AbstractStatusCrudService<FreightBill, F
     private final CompanySettingService companySettingService;
     private final SourceAllocationLockService sourceAllocationLockService;
     private final FreightBillDownstreamMutationGuard downstreamMutationGuard;
-    private final VehicleRepository vehicleRepository;
+    private final VehicleQuery vehicleQuery;
     private final BusinessOperationEventPublisher businessOperationEventPublisher;
 
     public FreightBillService(FreightBillRepository repository,
                               SnowflakeIdGenerator idGenerator,
                               FreightBillMapper mapper,
                               FreightBillApplyService applyService,
-                              CarrierRepository carrierRepository,
+                              CarrierQuery carrierQuery,
                               CompanySettingService companySettingService,
                               SourceAllocationLockService sourceAllocationLockService,
                               FreightBillDownstreamMutationGuard downstreamMutationGuard,
-                              VehicleRepository vehicleRepository,
+                              VehicleQuery vehicleQuery,
                               BusinessOperationEventPublisher businessOperationEventPublisher) {
         super(idGenerator);
         this.repository = repository;
         this.mapper = mapper;
         this.applyService = applyService;
-        this.carrierResolver = new FreightBillCarrierResolver(carrierRepository);
+        this.carrierResolver = new FreightBillCarrierResolver(carrierQuery);
         this.companySettingService = companySettingService;
         this.sourceAllocationLockService = sourceAllocationLockService;
         this.downstreamMutationGuard = downstreamMutationGuard;
-        this.vehicleRepository = vehicleRepository;
+        this.vehicleQuery = vehicleQuery;
         this.businessOperationEventPublisher = businessOperationEventPublisher;
     }
 
@@ -185,7 +185,7 @@ public class FreightBillService extends AbstractStatusCrudService<FreightBill, F
     }
 
     @Override
-    protected java.util.Set<String> allowedStatusTransitions() {
+    protected java.util.Set<StatusTransition> allowedStatusTransitions() {
         return StatusConstants.FREIGHT_BILL_AUDIT_TRANSITIONS;
     }
 
@@ -264,13 +264,14 @@ public class FreightBillService extends AbstractStatusCrudService<FreightBill, F
         if (requestedId == null && requestedPlate == null) {
             return VehicleSnapshot.EMPTY;
         }
-        Vehicle vehicle;
+        VehicleQuery.VehicleSnapshot vehicle;
         if (requestedId != null) {
-            vehicle = vehicleRepository.findById(requestedId).orElseThrow(() -> business("车辆不存在"));
+            vehicle = vehicleQuery.findById(requestedId).orElseThrow(() -> business("车辆不存在"));
         } else {
-            List<Vehicle> candidates = vehicleRepository.findByCarrierIdOrderBySortOrderAsc(carrier.id()).stream()
+            List<VehicleQuery.VehicleSnapshot> candidates = vehicleQuery
+                    .findByCarrierIdOrderBySortOrder(carrier.id()).stream()
                     .filter(candidate -> Objects.equals(requestedPlate,
-                            BusinessDocumentValidator.trimToNull(candidate.getPlate())))
+                            BusinessDocumentValidator.trimToNull(candidate.plate())))
                     .toList();
             if (candidates.isEmpty()) {
                 return new VehicleSnapshot(null, VehiclePlateValidator.normalizeAndValidate(requestedPlate));
@@ -280,17 +281,17 @@ public class FreightBillService extends AbstractStatusCrudService<FreightBill, F
             }
             vehicle = candidates.get(0);
             log.warn("identity_fallback module=freight-bill field=vehicleId reason=vehicle-plate resolvedId={}",
-                    vehicle.getId());
+                    vehicle.id());
         }
-        Long vehicleCarrierId = vehicle.getCarrier() == null ? null : vehicle.getCarrier().getId();
+        Long vehicleCarrierId = vehicle.carrierId();
         if (carrier.id() != null && !Objects.equals(carrier.id(), vehicleCarrierId)) {
             throw business("车辆不属于所选物流商");
         }
-        String plate = BusinessDocumentValidator.trimToNull(vehicle.getPlate());
+        String plate = BusinessDocumentValidator.trimToNull(vehicle.plate());
         if (requestedPlate != null && !Objects.equals(requestedPlate, plate)) {
             throw business("车辆ID与车牌号不一致");
         }
-        return new VehicleSnapshot(vehicle.getId(), plate);
+        return new VehicleSnapshot(vehicle.id(), plate);
     }
 
     private void applySettlementCompany(FreightBill entity,

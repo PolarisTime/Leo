@@ -8,7 +8,7 @@ import com.leo.erp.common.support.BusinessDocumentValidator;
 import com.leo.erp.common.support.ManagedEntityItemSupport;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.support.TradeItemCalculator;
-import com.leo.erp.master.customer.repository.CustomerRepository;
+import com.leo.erp.master.api.CustomerQuery;
 import com.leo.erp.sales.api.SalesOrderStatementSourceQuery;
 import com.leo.erp.sales.api.SalesOrderStatementSourceQuery.AuditedOutboundActualSnapshot;
 import com.leo.erp.sales.api.SalesOrderStatementSourceQuery.CandidateCriteria;
@@ -39,14 +39,14 @@ public class CustomerStatementSourceService {
 
     private final CustomerStatementRepository repository;
     private final SalesOrderStatementSourceQuery sourceQuery;
-    private final CustomerRepository customerRepository;
+    private final CustomerQuery customerQuery;
 
     public CustomerStatementSourceService(CustomerStatementRepository repository,
                                           SalesOrderStatementSourceQuery sourceQuery,
-                                          CustomerRepository customerRepository) {
+                                          CustomerQuery customerQuery) {
         this.repository = repository;
         this.sourceQuery = sourceQuery;
-        this.customerRepository = customerRepository;
+        this.customerQuery = customerQuery;
     }
 
     Page<CustomerStatementCandidateResponse> candidatePage(PageQuery query, PageFilter filter) {
@@ -294,7 +294,7 @@ public class CustomerStatementSourceService {
         for (SourceSalesOrderItem item : sourceSalesOrderItemMap.values()) {
             resolvedCode = mergeCustomerCode(resolvedCode, trimToNull(item.order().customerCode()));
         }
-        if (resolvedCode != null || customerRepository == null) {
+        if (resolvedCode != null || customerQuery == null) {
             return resolvedCode;
         }
         String normalizedCustomerName = trimToNull(customerName);
@@ -302,11 +302,11 @@ public class CustomerStatementSourceService {
         if (normalizedCustomerName == null || normalizedProjectName == null) {
             return null;
         }
-        return customerRepository.findFirstByCustomerNameAndProjectNameAndDeletedFlagFalseOrderByCustomerCodeAsc(
+        return customerQuery.findFirstActiveByNameAndProjectNameOrderByCode(
                         normalizedCustomerName,
                         normalizedProjectName
                 )
-                .map(com.leo.erp.master.customer.domain.entity.Customer::getCustomerCode)
+                .map(CustomerQuery.CustomerSnapshot::code)
                 .orElse(null);
     }
 

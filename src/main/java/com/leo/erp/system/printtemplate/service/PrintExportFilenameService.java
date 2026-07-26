@@ -1,7 +1,6 @@
 package com.leo.erp.system.printtemplate.service;
 
-import com.leo.erp.master.project.domain.entity.Project;
-import com.leo.erp.master.project.repository.ProjectRepository;
+import com.leo.erp.master.api.ProjectQuery;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
@@ -23,14 +22,14 @@ public class PrintExportFilenameService {
     private static final int DAY_INDEX = 2;
     private static final int CONTROL_CHARACTER_LIMIT = 32;
 
-    private final ProjectRepository projectRepository;
+    private final ProjectQuery projectQuery;
     private final PrintRuntimeProperties runtimeProperties;
 
     public PrintExportFilenameService(
-            ProjectRepository projectRepository,
+            ProjectQuery projectQuery,
             PrintRuntimeProperties runtimeProperties
     ) {
-        this.projectRepository = projectRepository;
+        this.projectQuery = projectQuery;
         this.runtimeProperties = runtimeProperties;
     }
 
@@ -104,8 +103,8 @@ public class PrintExportFilenameService {
         if (projectId == null) {
             return normalize(projectName);
         }
-        return projectRepository.findByIdAndDeletedFlagFalse(projectId)
-                .map(Project::getProjectNameAbbr)
+        return projectQuery.findActiveById(projectId)
+                .map(ProjectQuery.ProjectSnapshot::abbreviatedName)
                 .map(this::normalize)
                 .filter(value -> !value.isBlank())
                 .orElseGet(() -> normalize(projectName));

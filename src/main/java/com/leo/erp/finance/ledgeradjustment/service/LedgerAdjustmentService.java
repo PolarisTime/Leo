@@ -5,19 +5,20 @@ import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
-import com.leo.erp.common.service.AbstractCrudService;
+import com.leo.erp.common.service.AbstractStatusCrudService;
 import com.leo.erp.common.support.BusinessStatusValidator;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
+import com.leo.erp.common.support.StatusTransition;
 import com.leo.erp.finance.ledgeradjustment.domain.entity.LedgerAdjustment;
 import com.leo.erp.finance.ledgeradjustment.mapper.LedgerAdjustmentMapper;
 import com.leo.erp.finance.ledgeradjustment.repository.LedgerAdjustmentRepository;
 import com.leo.erp.finance.ledgeradjustment.web.dto.LedgerAdjustmentRequest;
 import com.leo.erp.finance.ledgeradjustment.web.dto.LedgerAdjustmentResponse;
-import com.leo.erp.master.carrier.repository.CarrierRepository;
-import com.leo.erp.master.customer.repository.CustomerRepository;
-import com.leo.erp.master.project.repository.ProjectRepository;
-import com.leo.erp.master.supplier.repository.SupplierRepository;
+import com.leo.erp.master.api.CarrierQuery;
+import com.leo.erp.master.api.CustomerQuery;
+import com.leo.erp.master.api.ProjectQuery;
+import com.leo.erp.master.api.SupplierQuery;
 import com.leo.erp.system.company.domain.entity.CompanySetting;
 import com.leo.erp.system.company.service.CompanySettingService;
 import org.springframework.data.domain.Page;
@@ -30,7 +31,8 @@ import java.util.Optional;
 import java.util.Set;
 
 @Service
-public class LedgerAdjustmentService extends AbstractCrudService<LedgerAdjustment, LedgerAdjustmentRequest, LedgerAdjustmentResponse> {
+public class LedgerAdjustmentService extends AbstractStatusCrudService<
+        LedgerAdjustment, LedgerAdjustmentRequest, LedgerAdjustmentResponse> {
 
     private static final String MODULE_KEY = "ledger-adjustment";
     private static final Set<String> ALLOWED_DIRECTIONS = Set.of("应收", "应付");
@@ -40,27 +42,27 @@ public class LedgerAdjustmentService extends AbstractCrudService<LedgerAdjustmen
 
     private final LedgerAdjustmentRepository repository;
     private final LedgerAdjustmentMapper mapper;
-    private final CustomerRepository customerRepository;
-    private final SupplierRepository supplierRepository;
-    private final CarrierRepository carrierRepository;
-    private final ProjectRepository projectRepository;
+    private final CustomerQuery customerQuery;
+    private final SupplierQuery supplierQuery;
+    private final CarrierQuery carrierQuery;
+    private final ProjectQuery projectQuery;
     private final CompanySettingService companySettingService;
 
     public LedgerAdjustmentService(LedgerAdjustmentRepository repository,
                                    LedgerAdjustmentMapper mapper,
                                    SnowflakeIdGenerator idGenerator,
-                                   CustomerRepository customerRepository,
-                                   SupplierRepository supplierRepository,
-                                   CarrierRepository carrierRepository,
-                                   ProjectRepository projectRepository,
+                                   CustomerQuery customerQuery,
+                                   SupplierQuery supplierQuery,
+                                   CarrierQuery carrierQuery,
+                                   ProjectQuery projectQuery,
                                    CompanySettingService companySettingService) {
         super(idGenerator);
         this.repository = repository;
         this.mapper = mapper;
-        this.customerRepository = customerRepository;
-        this.supplierRepository = supplierRepository;
-        this.carrierRepository = carrierRepository;
-        this.projectRepository = projectRepository;
+        this.customerQuery = customerQuery;
+        this.supplierQuery = supplierQuery;
+        this.carrierQuery = carrierQuery;
+        this.projectQuery = projectQuery;
         this.companySettingService = companySettingService;
     }
 
@@ -224,7 +226,7 @@ public class LedgerAdjustmentService extends AbstractCrudService<LedgerAdjustmen
     }
 
     @Override
-    protected Set<String> allowedStatusTransitions() {
+    protected Set<StatusTransition> allowedStatusTransitions() {
         return StatusConstants.DRAFT_AUDIT_TRANSITIONS;
     }
 
@@ -241,6 +243,7 @@ public class LedgerAdjustmentService extends AbstractCrudService<LedgerAdjustmen
                 "调整单状态",
                 StatusConstants.ALLOWED_AUDIT_STATUS
         );
+        assertStatusNotChangedBySave(entity, nextStatus);
         BigDecimal amount = normalizeAmount(request.amount());
         ResolvedCounterparty counterparty = resolveCounterparty(
                 counterpartyType,
@@ -275,6 +278,25 @@ public class LedgerAdjustmentService extends AbstractCrudService<LedgerAdjustmen
         entity.setStatus(nextStatus);
         entity.setOperatorName(trimRequired(request.operatorName(), "经办人"));
         entity.setRemark(trimToNull(request.remark()));
+    }
+
+    private void assertStatusNotChangedBySave(LedgerAdjustment entity, String requestedStatus) {
+        String currentStatus = entity.getStatus();
+        if (currentStatus == null) {
+            if (!StatusConstants.DRAFT.equals(requestedStatus)) {
+                throw new BusinessException(
+                        ErrorCode.BUSINESS_ERROR,
+                        "新建台账调整单只能保存为草稿，审核请使用审核命令"
+                );
+            }
+            return;
+        }
+        if (!currentStatus.equals(requestedStatus)) {
+            throw new BusinessException(
+                    ErrorCode.BUSINESS_ERROR,
+                    "普通保存不能修改台账调整单状态，请使用审核或反审核命令"
+            );
+        }
     }
 
     @Override
@@ -325,30 +347,30 @@ public class LedgerAdjustmentService extends AbstractCrudService<LedgerAdjustmen
         }
         String normalizedCode = trimRequired(counterpartyCode, "往来单位编码");
         if ("客户".equals(counterpartyType)) {
-            return customerRepository.findByCustomerCodeAndDeletedFlagFalse(normalizedCode)
+            return customerQuery.findActiveByCode(normalizedCode)
                     .map(customer -> resolvedCounterparty(
-                            customer.getId(),
-                            customer.getCustomerCode(),
-                            customer.getCustomerName(),
+                            customer.id(),
+                            customer.code(),
+                            customer.name(),
                             "客户"
                     ))
                     .orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_ERROR, "客户不存在"));
         }
         if ("供应商".equals(counterpartyType)) {
-            return supplierRepository.findBySupplierCodeAndDeletedFlagFalse(normalizedCode)
+            return supplierQuery.findActiveByCode(normalizedCode)
                     .map(supplier -> resolvedCounterparty(
-                            supplier.getId(),
-                            supplier.getSupplierCode(),
-                            supplier.getSupplierName(),
+                            supplier.id(),
+                            supplier.code(),
+                            supplier.name(),
                             "供应商"
                     ))
                     .orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_ERROR, "供应商不存在"));
         }
-        return carrierRepository.findByCarrierCodeAndDeletedFlagFalse(normalizedCode)
+        return carrierQuery.findActiveByCode(normalizedCode)
                 .map(carrier -> resolvedCounterparty(
-                        carrier.getId(),
-                        carrier.getCarrierCode(),
-                        carrier.getCarrierName(),
+                        carrier.id(),
+                        carrier.code(),
+                        carrier.name(),
                         "物流商"
                 ))
                 .orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_ERROR, "物流商不存在"));
@@ -360,19 +382,19 @@ public class LedgerAdjustmentService extends AbstractCrudService<LedgerAdjustmen
                                                          String counterpartyName) {
         ResolvedCounterparty resolved;
         if ("客户".equals(counterpartyType)) {
-            resolved = customerRepository.findByIdAndDeletedFlagFalse(counterpartyId)
+            resolved = customerQuery.findActiveById(counterpartyId)
                     .map(customer -> resolvedCounterparty(
-                            customer.getId(), customer.getCustomerCode(), customer.getCustomerName(), "客户"))
+                            customer.id(), customer.code(), customer.name(), "客户"))
                     .orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_ERROR, "客户不存在"));
         } else if ("供应商".equals(counterpartyType)) {
-            resolved = supplierRepository.findByIdAndDeletedFlagFalse(counterpartyId)
+            resolved = supplierQuery.findActiveById(counterpartyId)
                     .map(supplier -> resolvedCounterparty(
-                            supplier.getId(), supplier.getSupplierCode(), supplier.getSupplierName(), "供应商"))
+                            supplier.id(), supplier.code(), supplier.name(), "供应商"))
                     .orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_ERROR, "供应商不存在"));
         } else {
-            resolved = carrierRepository.findByIdAndDeletedFlagFalse(counterpartyId)
+            resolved = carrierQuery.findActiveById(counterpartyId)
                     .map(carrier -> resolvedCounterparty(
-                            carrier.getId(), carrier.getCarrierCode(), carrier.getCarrierName(), "物流商"))
+                            carrier.id(), carrier.code(), carrier.name(), "物流商"))
                     .orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_ERROR, "物流商不存在"));
         }
         requireSnapshotMatches(counterpartyCode, resolved.code(), counterpartyType + "编码与ID不一致");
@@ -404,13 +426,13 @@ public class LedgerAdjustmentService extends AbstractCrudService<LedgerAdjustmen
             }
             return new ResolvedProject(null, null);
         }
-        return projectRepository.findByIdAndDeletedFlagFalse(projectId)
+        return projectQuery.findActiveById(projectId)
                 .map(project -> {
-                    if (!java.util.Objects.equals(project.getCustomerId(), counterpartyId)) {
+                    if (!java.util.Objects.equals(project.customerId(), counterpartyId)) {
                         throw new BusinessException(ErrorCode.BUSINESS_ERROR, "项目不属于所选客户");
                     }
-                    requireSnapshotMatches(projectName, project.getProjectName(), "项目名称与ID不一致");
-                    return new ResolvedProject(project.getId(), project.getProjectName());
+                    requireSnapshotMatches(projectName, project.name(), "项目名称与ID不一致");
+                    return new ResolvedProject(project.id(), project.name());
                 })
                 .orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_ERROR, "项目不存在"));
     }

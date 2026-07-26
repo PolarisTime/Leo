@@ -3,12 +3,14 @@ package com.leo.erp.master.carrier.web.dto;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 import java.util.List;
 
 public record CarrierRequest(
         @NotBlank(message = "物流商编码不能为空")
         String carrierCode,
         @NotBlank(message = "物流方名称不能为空")
+        @Size(max = 128, message = "物流方名称不能超过128个字符")
         String carrierName,
         String contactName,
         String contactPhone,

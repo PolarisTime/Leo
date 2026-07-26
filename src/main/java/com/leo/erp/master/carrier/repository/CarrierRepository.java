@@ -38,6 +38,23 @@ public interface CarrierRepository extends JpaRepository<Carrier, Long>, JpaSpec
 
     boolean existsByCarrierCodeAndDeletedFlagFalse(String carrierCode);
 
+    @Query("""
+            SELECT COUNT(carrier)
+            FROM Carrier carrier
+            WHERE carrier.deletedFlag = false
+              AND LOWER(carrier.carrierName) = LOWER(:carrierName)
+            """)
+    long countActiveByCarrierName(@Param("carrierName") String carrierName);
+
+    @Query("""
+            SELECT COUNT(carrier)
+            FROM Carrier carrier
+            WHERE carrier.deletedFlag = false
+              AND carrier.id <> :id
+              AND LOWER(carrier.carrierName) = LOWER(:carrierName)
+            """)
+    long countOtherActiveByCarrierName(@Param("carrierName") String carrierName, @Param("id") Long id);
+
     Optional<Carrier> findByCarrierCodeAndDeletedFlagFalse(String carrierCode);
 
     List<Carrier> findByDeletedFlagFalseOrderByCarrierCodeAsc();

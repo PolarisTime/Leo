@@ -1,6 +1,7 @@
 package com.leo.erp.finance.receipt.domain.entity;
 
 import com.leo.erp.common.persistence.AbstractAuditableEntity;
+import com.leo.erp.common.persistence.StatusAwareEntity;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -23,7 +24,7 @@ import java.util.Set;
 @Setter
 @Entity
 @Table(name = "fm_receipt")
-public class Receipt extends AbstractAuditableEntity {
+public class Receipt extends AbstractAuditableEntity implements StatusAwareEntity {
 
     @Id
     private Long id;

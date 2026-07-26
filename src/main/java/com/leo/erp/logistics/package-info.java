@@ -1,4 +1,4 @@
 @org.springframework.modulith.ApplicationModule(
-        allowedDependencies = {"attachment::api", "sales::api"}
+        allowedDependencies = {"attachment::api", "master::api", "sales::api"}
 )
 package com.leo.erp.logistics;

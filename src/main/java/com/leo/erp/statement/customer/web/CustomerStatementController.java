@@ -11,6 +11,7 @@ import com.leo.erp.statement.customer.service.CustomerStatementService;
 import com.leo.erp.statement.customer.web.dto.CustomerStatementCandidateResponse;
 import com.leo.erp.statement.customer.web.dto.CustomerStatementRequest;
 import com.leo.erp.statement.customer.web.dto.CustomerStatementResponse;
+import com.leo.erp.statement.customer.web.dto.CustomerStatementSummaryResponse;
 import com.leo.erp.system.operationlog.support.OperationLoggable;
 import jakarta.validation.Valid;
 import java.time.LocalDate;
@@ -72,6 +73,26 @@ public class CustomerStatementController {
                                         periodStart, periodEnd)
                                 .withIdentity(customerId, projectId, null, null, null)
                 )
+        ));
+    }
+
+    @Operation(summary = "汇总客户对账单")
+    @GetMapping("/summary")
+    public ApiResponse<CustomerStatementSummaryResponse> summary(
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) Long customerId,
+            @RequestParam(required = false) String customerName,
+            @RequestParam(required = false) Long projectId,
+            @RequestParam(required = false) String projectName,
+            @RequestParam(required = false) Long settlementCompanyId,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate periodStart,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate periodEnd
+    ) {
+        return ApiResponse.success(customerStatementService.summary(
+                PageFilter.of(keyword, customerName, projectName, settlementCompanyId, status,
+                                periodStart, periodEnd)
+                        .withIdentity(customerId, projectId, null, null, null)
         ));
     }
 

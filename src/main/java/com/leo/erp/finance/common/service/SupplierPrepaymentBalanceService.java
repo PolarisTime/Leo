@@ -5,6 +5,8 @@ import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.finance.receipt.domain.entity.Receipt;
 import com.leo.erp.finance.receipt.domain.entity.ReceiptPurposes;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -13,6 +15,8 @@ import java.math.BigDecimal;
 
 @Service
 public class SupplierPrepaymentBalanceService {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(SupplierPrepaymentBalanceService.class);
 
     private final NamedParameterJdbcTemplate jdbcTemplate;
     private final SupplierLedgerLockService supplierLedgerLockService;
@@ -38,8 +42,9 @@ public class SupplierPrepaymentBalanceService {
         MapSqlParameterSource params = new MapSqlParameterSource()
                 .addValue("settlementCompanyId", receipt.getSettlementCompanyId())
                 .addValue("supplierId", receipt.getCounterpartyId());
+        // fm_cash_reversal 自 V67 起禁止写入，此处保留读取是为了让退役前的历史冲销行继续参与余额口径
         BigDecimal prepaidBalance = jdbcTemplate.queryForObject("""
-                SELECT GREATEST(
+                SELECT
                     COALESCE((
                         SELECT SUM(payment.amount)
                         FROM fm_payment payment
@@ -90,11 +95,18 @@ public class SupplierPrepaymentBalanceService {
                           AND reversal.original_receipt_id IS NOT NULL
                           AND reversal.settlement_company_id = :settlementCompanyId
                           AND reversal.counterparty_id = :supplierId
-                    ), 0),
-                    0
-                )
+                    ), 0)
                 """, params, BigDecimal.class);
-        BigDecimal available = prepaidBalance == null ? BigDecimal.ZERO : prepaidBalance;
+        BigDecimal rawBalance = prepaidBalance == null ? BigDecimal.ZERO : prepaidBalance;
+        if (rawBalance.signum() < 0) {
+            LOGGER.warn(
+                    "供应商预付款余额为负，可能存在透支：settlementCompanyId={}, supplierId={}, balance={}",
+                    receipt.getSettlementCompanyId(),
+                    receipt.getCounterpartyId(),
+                    rawBalance
+            );
+        }
+        BigDecimal available = rawBalance.max(BigDecimal.ZERO);
         if (receipt.getAmount().compareTo(available) > 0) {
             throw new BusinessException(
                     ErrorCode.BUSINESS_ERROR,

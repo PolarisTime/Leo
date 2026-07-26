@@ -4,21 +4,17 @@ import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.StatusAwareEntity;
 import com.leo.erp.common.support.StatusConstants;
+import com.leo.erp.common.support.StatusTransition;
 
-import java.lang.reflect.Method;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.BiConsumer;
 import java.util.function.Function;
 
-public class CrudStatusGuard<E> {
+public final class CrudStatusGuard<E> {
 
     private final Function<E, Optional<String>> statusReader;
     private final BiConsumer<E, String> statusWriter;
-
-    public CrudStatusGuard() {
-        this(CrudStatusGuard::resolveStatusReflectively, CrudStatusGuard::writeStatusReflectively);
-    }
 
     private CrudStatusGuard(Function<E, Optional<String>> statusReader,
                             BiConsumer<E, String> statusWriter) {
@@ -26,8 +22,13 @@ public class CrudStatusGuard<E> {
         this.statusWriter = statusWriter;
     }
 
-    public static <E> CrudStatusGuard<E> reflective() {
-        return new CrudStatusGuard<>();
+    public static <E> CrudStatusGuard<E> withoutStatus() {
+        return new CrudStatusGuard<>(
+                entity -> Optional.empty(),
+                (entity, status) -> {
+                    throw new BusinessException(ErrorCode.BUSINESS_ERROR, "当前模块不支持状态变更");
+                }
+        );
     }
 
     public static <E extends StatusAwareEntity> CrudStatusGuard<E> forStatusAwareEntities() {
@@ -41,23 +42,11 @@ public class CrudStatusGuard<E> {
         return statusReader.apply(entity);
     }
 
-    private static Optional<String> resolveStatusReflectively(Object entity) {
-        try {
-            Method getter = entity.getClass().getMethod("getStatus");
-            Object value = getter.invoke(entity);
-            return normalizeStatus(value);
-        } catch (NoSuchMethodException ignored) {
-            return Optional.empty();
-        } catch (ReflectiveOperationException ex) {
-            throw new IllegalStateException("读取单据状态失败", ex);
-        }
-    }
-
-    private static Optional<String> normalizeStatus(Object value) {
+    private static Optional<String> normalizeStatus(String value) {
         if (value == null) {
             return Optional.empty();
         }
-        String status = String.valueOf(value).trim();
+        String status = value.trim();
         return status.isBlank() ? Optional.empty() : Optional.of(status);
     }
 
@@ -92,7 +81,7 @@ public class CrudStatusGuard<E> {
 
     public void assertRequestStatusTransitionAllowed(E entity,
                                                     Optional<String> currentStatus,
-                                                    Set<String> allowedTransitions) {
+                                                    Set<StatusTransition> allowedTransitions) {
         if (allowedTransitions.isEmpty()) {
             return;
         }
@@ -114,12 +103,15 @@ public class CrudStatusGuard<E> {
         });
     }
 
-    public void validateStatusTransition(Set<String> allowedTransitions, String currentStatus, String nextStatus) {
+    public void validateStatusTransition(Set<StatusTransition> allowedTransitions,
+                                         String currentStatus,
+                                         String nextStatus) {
         if (allowedTransitions.isEmpty()) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "当前模块不支持状态变更");
         }
-        String transition = currentStatus + "->" + nextStatus;
-        if (!allowedTransitions.contains(transition)) {
+        boolean invalidStatus = currentStatus == null || currentStatus.isBlank()
+                || nextStatus == null || nextStatus.isBlank();
+        if (invalidStatus || !allowedTransitions.contains(StatusTransition.of(currentStatus, nextStatus))) {
             throw new BusinessException(
                     ErrorCode.BUSINESS_ERROR,
                     "当前单据状态不能从「" + currentStatus + "」变更为「" + nextStatus + "」"
@@ -129,16 +121,5 @@ public class CrudStatusGuard<E> {
 
     public void writeStatus(E entity, String status) {
         statusWriter.accept(entity, status);
-    }
-
-    private static void writeStatusReflectively(Object entity, String status) {
-        try {
-            Method setter = entity.getClass().getMethod("setStatus", String.class);
-            setter.invoke(entity, status);
-        } catch (NoSuchMethodException ex) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "当前模块不支持状态变更");
-        } catch (ReflectiveOperationException ex) {
-            throw new IllegalStateException("写入单据状态失败", ex);
-        }
     }
 }

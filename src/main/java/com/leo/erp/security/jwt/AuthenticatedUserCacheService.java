@@ -2,9 +2,7 @@ package com.leo.erp.security.jwt;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.leo.erp.auth.domain.entity.UserAccount;
-import com.leo.erp.auth.domain.enums.UserStatus;
-import com.leo.erp.auth.repository.UserAccountRepository;
+import com.leo.erp.auth.api.AuthenticationAccountQuery;
 import com.leo.erp.common.config.RedisTuningProperties;
 import com.leo.erp.security.support.SecurityPrincipal;
 import lombok.extern.slf4j.Slf4j;
@@ -30,17 +28,17 @@ public class AuthenticatedUserCacheService {
 
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
-    private final UserAccountRepository userAccountRepository;
+    private final AuthenticationAccountQuery authenticationAccountQuery;
     private final RedisTuningProperties redisTuningProperties;
 
     @Autowired
     public AuthenticatedUserCacheService(StringRedisTemplate redisTemplate,
                                          ObjectMapper objectMapper,
-                                         UserAccountRepository userAccountRepository,
+                                         AuthenticationAccountQuery authenticationAccountQuery,
                                          RedisTuningProperties redisTuningProperties) {
         this.redisTemplate = redisTemplate;
         this.objectMapper = objectMapper;
-        this.userAccountRepository = userAccountRepository;
+        this.authenticationAccountQuery = authenticationAccountQuery;
         this.redisTuningProperties = redisTuningProperties;
     }
 
@@ -56,9 +54,7 @@ public class AuthenticatedUserCacheService {
         if (userId == null) {
             return Optional.empty();
         }
-        return userAccountRepository.findCredentialVersion(userId, UserStatus.NORMAL)
-                .map(UserAccountRepository.CredentialVersionProjection::getCredentialVersion)
-                .map(this::normalizeCredentialVersion);
+        return authenticationAccountQuery.findActiveCredentialVersion(userId);
     }
 
     private Optional<SecurityPrincipal> getActivePrincipal(Long userId, Long expectedCredentialVersion) {
@@ -167,8 +163,7 @@ public class AuthenticatedUserCacheService {
             String cacheKey,
             Long expectedCredentialVersion
     ) {
-        return userAccountRepository.findByIdAndDeletedFlagFalse(userId)
-                .filter(user -> user.getStatus() == UserStatus.NORMAL)
+        return authenticationAccountQuery.findActiveById(userId)
                 .map(this::toSnapshot)
                 .filter(snapshot -> expectedCredentialVersion == null
                         || snapshot.credentialVersion() == expectedCredentialVersion)
@@ -178,20 +173,18 @@ public class AuthenticatedUserCacheService {
                 });
     }
 
-    private CachedAuthenticatedUser toSnapshot(UserAccount user) {
+    private CachedAuthenticatedUser toSnapshot(
+            AuthenticationAccountQuery.AuthenticatedAccountSnapshot account
+    ) {
         return new CachedAuthenticatedUser(
-                user.getId(),
-                user.getLoginName(),
-                normalizeCredentialVersion(user.getCredentialVersion())
+                account.userId(),
+                account.loginName(),
+                account.credentialVersion()
         );
     }
 
     private boolean credentialVersionMatches(SecurityPrincipal principal, Long expectedCredentialVersion) {
         return expectedCredentialVersion == null || principal.credentialVersion() == expectedCredentialVersion;
-    }
-
-    private long normalizeCredentialVersion(Long credentialVersion) {
-        return credentialVersion == null ? 0L : credentialVersion;
     }
 
     private void writeSnapshot(String cacheKey, CachedAuthenticatedUser snapshot) {

@@ -6,9 +6,10 @@ import com.leo.erp.common.concurrency.SourceAllocationLockService;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
-import com.leo.erp.common.service.AbstractCrudService;
+import com.leo.erp.common.service.AbstractStatusCrudService;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
+import com.leo.erp.common.support.StatusTransition;
 import com.leo.erp.finance.receipt.domain.entity.Receipt;
 import com.leo.erp.finance.receipt.domain.entity.ReceiptPurposes;
 import com.leo.erp.finance.receipt.domain.entity.ReceiptAllocation;
@@ -29,7 +30,7 @@ import java.util.Optional;
 import java.util.TreeSet;
 
 @Service
-public class ReceiptService extends AbstractCrudService<Receipt, ReceiptRequest, ReceiptResponse> {
+public class ReceiptService extends AbstractStatusCrudService<Receipt, ReceiptRequest, ReceiptResponse> {
 
     private final ReceiptRepository receiptRepository;
     private final ReceiptMapper receiptMapper;
@@ -240,8 +241,8 @@ public class ReceiptService extends AbstractCrudService<Receipt, ReceiptRequest,
     }
 
     @Override
-    protected java.util.Set<String> allowedStatusTransitions() {
-        return java.util.Set.of(StatusConstants.DRAFT + "->" + StatusConstants.AUDITED);
+    protected java.util.Set<StatusTransition> allowedStatusTransitions() {
+        return StatusConstants.DRAFT_TO_AUDITED_TRANSITIONS;
     }
 
     @Override
@@ -265,6 +266,9 @@ public class ReceiptService extends AbstractCrudService<Receipt, ReceiptRequest,
     protected void beforeDelete(Receipt entity) {
         if (StatusConstants.AUDITED.equals(entity.getStatus())) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "已审核收款单禁止删除");
+        }
+        if (StatusConstants.LEGACY_RECEIVED.equals(entity.getStatus())) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "历史已收款单据仅供查询，不允许删除");
         }
         lockAllocationStatements(entity, null);
     }
@@ -320,7 +324,6 @@ public class ReceiptService extends AbstractCrudService<Receipt, ReceiptRequest,
         }
         sourceAllocationLockService.lockStatementSources(
                 List.copyOf(customerStatementIds),
-                List.of(),
                 List.of()
         );
     }

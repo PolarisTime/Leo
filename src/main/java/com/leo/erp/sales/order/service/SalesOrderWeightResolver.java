@@ -1,8 +1,8 @@
 package com.leo.erp.sales.order.service;
 
-import com.leo.erp.allocation.appservice.PurchaseItemQueryAppService.SourceInboundItemRecord;
 import com.leo.erp.common.support.PrecisionConstants;
 import com.leo.erp.common.support.TradeItemCalculator;
+import com.leo.erp.purchase.api.PurchaseItemQueryAppService.SourceInboundItemRecord;
 import com.leo.erp.sales.order.web.dto.SalesOrderItemRequest;
 import org.springframework.stereotype.Service;
 

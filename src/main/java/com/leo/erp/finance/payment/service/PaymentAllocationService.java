@@ -245,7 +245,6 @@ public class PaymentAllocationService {
 
     private void applyTypedSource(PaymentAllocation item, String businessType, Long sourceStatementId) {
         item.setSourceStatementId(sourceStatementId);
-        item.setSourceSupplierStatementId(null);
         item.setSourceFreightStatementId(sourceStatementId);
     }
 

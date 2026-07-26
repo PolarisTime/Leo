@@ -31,9 +31,6 @@ public class PaymentAllocation {
     @Column(name = "source_statement_id", nullable = false)
     private Long sourceStatementId;
 
-    @Column(name = "source_supplier_statement_id")
-    private Long sourceSupplierStatementId;
-
     @Column(name = "source_freight_statement_id")
     private Long sourceFreightStatementId;
 

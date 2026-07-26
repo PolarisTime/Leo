@@ -2,6 +2,8 @@ package com.leo.erp.master.carrier.service;
 
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.config.CacheConfig;
+import com.leo.erp.common.error.BusinessException;
+import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
 import com.leo.erp.common.service.AbstractCrudService;
 import com.leo.erp.common.support.MasterDataReferenceGuard;
@@ -20,12 +22,14 @@ import com.leo.erp.master.carrier.web.dto.CarrierResponse;
 import com.leo.erp.master.carrier.web.dto.VehicleOptionResponse;
 import com.leo.erp.system.company.domain.entity.CompanySetting;
 import com.leo.erp.system.company.service.CompanySettingService;
+import org.hibernate.exception.ConstraintViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.cache.CacheManager;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -37,6 +41,8 @@ public class CarrierService extends AbstractCrudService<Carrier, CarrierRequest,
 
     private static final String CARRIER_CACHE_KEY = "leo:carrier:all";
     private static final String CODE_MODULE_KEY = "carrier";
+    private static final String CARRIER_NAME_UNIQUE_INDEX = "uk_md_carrier_carrier_name_active";
+    private static final int MAX_CARRIER_NAME_LENGTH = 128;
 
     private final CarrierRepository carrierRepository;
     private final VehicleRepository vehicleRepository;
@@ -174,6 +180,30 @@ public class CarrierService extends AbstractCrudService<Carrier, CarrierRequest,
     @Override
     protected void validateCreate(CarrierRequest request) {
         codeIssuanceService.validate(CODE_MODULE_KEY, request.carrierCode());
+        String carrierName = normalizedCarrierName(request);
+        if (carrierRepository.countActiveByCarrierName(carrierName) > 0) {
+            throw duplicateCarrierName(carrierName);
+        }
+    }
+
+    @Override
+    protected void validateUpdate(Carrier entity, CarrierRequest request) {
+        String carrierName = normalizedCarrierName(request);
+        if (carrierRepository.countOtherActiveByCarrierName(carrierName, entity.getId()) > 0) {
+            throw duplicateCarrierName(carrierName);
+        }
+    }
+
+    /** 名称边界空白按 String.trim() 的 U+0000-U+0020 规则清理，并在未删除数据内唯一。 */
+    private String normalizedCarrierName(CarrierRequest request) {
+        String carrierName = request.carrierName() == null ? "" : request.carrierName().trim();
+        if (carrierName.isEmpty()) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "物流方名称不能为空");
+        }
+        if (carrierName.length() > MAX_CARRIER_NAME_LENGTH) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "物流方名称不能超过128个字符");
+        }
+        return carrierName;
     }
 
     @Override
@@ -183,7 +213,7 @@ public class CarrierService extends AbstractCrudService<Carrier, CarrierRequest,
                 entity.getCarrierCode(),
                 request.carrierCode()
         ));
-        entity.setCarrierName(request.carrierName());
+        entity.setCarrierName(normalizedCarrierName(request));
         entity.setContactName(emptyToNull(request.contactName()));
         entity.setContactPhone(emptyToNull(request.contactPhone()));
         entity.setVehicleType(emptyToNull(request.vehicleType()));
@@ -202,7 +232,14 @@ public class CarrierService extends AbstractCrudService<Carrier, CarrierRequest,
 
     @Override
     protected Carrier saveEntity(Carrier entity) {
-        return carrierRepository.save(entity);
+        try {
+            return carrierRepository.saveAndFlush(entity);
+        } catch (DataIntegrityViolationException exception) {
+            if (isCarrierNameUniqueViolation(exception)) {
+                throw duplicateCarrierName(entity.getCarrierName());
+            }
+            throw exception;
+        }
     }
 
     @Override
@@ -259,6 +296,25 @@ public class CarrierService extends AbstractCrudService<Carrier, CarrierRequest,
     }
 
     private record SettlementCompanySnapshot(Long id, String name) {
+    }
+
+    private BusinessException duplicateCarrierName(String carrierName) {
+        return new BusinessException(ErrorCode.BUSINESS_ERROR, "物流商名称已存在：" + carrierName);
+    }
+
+    private boolean isCarrierNameUniqueViolation(Throwable exception) {
+        Throwable current = exception;
+        while (current != null) {
+            if (current instanceof ConstraintViolationException violation
+                    && CARRIER_NAME_UNIQUE_INDEX.equals(violation.getConstraintName())) {
+                return true;
+            }
+            if (current.getMessage() != null && current.getMessage().contains(CARRIER_NAME_UNIQUE_INDEX)) {
+                return true;
+            }
+            current = current.getCause();
+        }
+        return false;
     }
 
 }

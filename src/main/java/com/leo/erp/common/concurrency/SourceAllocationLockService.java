@@ -45,7 +45,6 @@ public class SourceAllocationLockService {
     private static final String LOCK_SALES_OUTBOUNDS_SQL = lockDocumentSql("so_sales_outbound");
     private static final String LOCK_FREIGHT_BILLS_SQL = lockDocumentSql("lg_freight_bill");
     private static final String LOCK_CUSTOMER_STATEMENTS_SQL = lockDocumentSql("st_customer_statement");
-    private static final String LOCK_SUPPLIER_STATEMENTS_SQL = lockDocumentSql("st_supplier_statement");
     private static final String LOCK_FREIGHT_STATEMENTS_SQL = lockDocumentSql("st_freight_statement");
 
     private final NamedParameterJdbcTemplate jdbcTemplate;
@@ -76,10 +75,8 @@ public class SourceAllocationLockService {
 
     @Transactional(propagation = Propagation.MANDATORY)
     public void lockStatementSources(Collection<Long> customerStatementIds,
-                                     Collection<Long> supplierStatementIds,
                                      Collection<Long> freightStatementIds) {
         lockRows(LOCK_CUSTOMER_STATEMENTS_SQL, customerStatementIds, "客户对账单");
-        lockRows(LOCK_SUPPLIER_STATEMENTS_SQL, supplierStatementIds, "供应商对账单");
         lockRows(LOCK_FREIGHT_STATEMENTS_SQL, freightStatementIds, "物流对账单");
     }
 

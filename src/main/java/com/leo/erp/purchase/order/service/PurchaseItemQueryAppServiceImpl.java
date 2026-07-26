@@ -1,6 +1,6 @@
 package com.leo.erp.purchase.order.service;
 
-import com.leo.erp.allocation.appservice.PurchaseItemQueryAppService;
+import com.leo.erp.purchase.api.PurchaseItemQueryAppService;
 import com.leo.erp.purchase.inbound.domain.entity.PurchaseInboundItem;
 import com.leo.erp.purchase.inbound.service.PurchaseInboundItemQueryService;
 import com.leo.erp.purchase.order.domain.entity.PurchaseOrderItem;

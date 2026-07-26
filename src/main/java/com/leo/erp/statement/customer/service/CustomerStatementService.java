@@ -6,18 +6,22 @@ import com.leo.erp.common.concurrency.SourceAllocationLockService;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
-import com.leo.erp.common.service.AbstractCrudService;
+import com.leo.erp.common.service.AbstractStatusCrudService;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
+import com.leo.erp.common.support.StatusTransition;
 import com.leo.erp.sales.api.SalesOrderLogisticsSourceQuery;
 import com.leo.erp.sales.api.SalesOrderSourceSnapshot;
 import com.leo.erp.statement.customer.domain.entity.CustomerStatement;
 import com.leo.erp.statement.customer.domain.entity.CustomerStatementItem;
 import com.leo.erp.statement.customer.repository.CustomerStatementRepository;
+import com.leo.erp.statement.customer.repository.CustomerStatementSummaryAggregate;
+import com.leo.erp.statement.customer.repository.CustomerStatementSummaryQueryRepository;
 import com.leo.erp.statement.customer.web.dto.CustomerStatementCandidateResponse;
 import com.leo.erp.statement.customer.web.dto.CustomerStatementItemRequest;
 import com.leo.erp.statement.customer.web.dto.CustomerStatementRequest;
 import com.leo.erp.statement.customer.web.dto.CustomerStatementResponse;
+import com.leo.erp.statement.customer.web.dto.CustomerStatementSummaryResponse;
 import com.leo.erp.statement.service.StatementSettlementMutationGuard;
 import org.springframework.data.domain.Page;
 import org.springframework.data.jpa.domain.Specification;
@@ -32,9 +36,11 @@ import java.util.Set;
 import java.util.TreeSet;
 
 @Service
-public class CustomerStatementService extends AbstractCrudService<CustomerStatement, CustomerStatementRequest, CustomerStatementResponse> {
+public class CustomerStatementService extends AbstractStatusCrudService<
+        CustomerStatement, CustomerStatementRequest, CustomerStatementResponse> {
 
     private final CustomerStatementRepository repository;
+    private final CustomerStatementSummaryQueryRepository summaryQueryRepository;
     private final CustomerStatementResponseAssembler responseAssembler;
     private final CustomerStatementSourceService customerStatementSourceService;
     private final CustomerStatementApplyService applyService;
@@ -45,6 +51,7 @@ public class CustomerStatementService extends AbstractCrudService<CustomerStatem
     @Autowired
     public CustomerStatementService(CustomerStatementRepository repository,
                                     SnowflakeIdGenerator idGenerator,
+                                    CustomerStatementSummaryQueryRepository summaryQueryRepository,
                                     CustomerStatementResponseAssembler responseAssembler,
                                     CustomerStatementSourceService customerStatementSourceService,
                                     CustomerStatementApplyService applyService,
@@ -53,6 +60,7 @@ public class CustomerStatementService extends AbstractCrudService<CustomerStatem
                                     StatementSettlementMutationGuard settlementMutationGuard) {
         super(idGenerator);
         this.repository = repository;
+        this.summaryQueryRepository = summaryQueryRepository;
         this.responseAssembler = responseAssembler;
         this.customerStatementSourceService = customerStatementSourceService;
         this.applyService = applyService;
@@ -63,14 +71,30 @@ public class CustomerStatementService extends AbstractCrudService<CustomerStatem
 
     @Transactional(readOnly = true)
     public Page<CustomerStatementResponse> page(PageQuery query, PageFilter filter) {
-        Specification<CustomerStatement> spec = Specs.<CustomerStatement>keywordLike(filter.keyword(), "statementNo", "customerName", "projectName")
+        return page(query, pageSpecification(filter), repository);
+    }
+
+    @Transactional(readOnly = true)
+    public CustomerStatementSummaryResponse summary(PageFilter filter) {
+        CustomerStatementSummaryAggregate aggregate = summaryQueryRepository.summarize(
+                applyDeletedVisibilityPolicy(pageSpecification(filter))
+        );
+        return new CustomerStatementSummaryResponse(
+                aggregate.documentCount(),
+                aggregate.salesAmount(),
+                aggregate.receiptAmount(),
+                aggregate.closingAmount()
+        );
+    }
+
+    private Specification<CustomerStatement> pageSpecification(PageFilter filter) {
+        return Specs.<CustomerStatement>keywordLike(filter.keyword(), "statementNo", "customerName", "projectName")
                 .and(Specs.equalValueIfPresent("customerId", filter.customerId()))
                 .and(Specs.equalValueIfPresent("projectId", filter.projectId()))
                 .and(Specs.equalIfPresent("customerName", filter.name()))
                 .and(Specs.equalValueIfPresent("settlementCompanyId", filter.settlementCompanyId()))
                 .and(Specs.documentStatus(filter.status()))
                 .and(Specs.betweenIfPresent("endDate", filter.startDate(), filter.endDate()));
-        return page(query, spec, repository);
     }
 
     private static final String[] CUSTOMER_STATEMENT_SEARCH_FIELDS = {
@@ -222,7 +246,7 @@ public class CustomerStatementService extends AbstractCrudService<CustomerStatem
     }
 
     @Override
-    protected Set<String> allowedStatusTransitions() {
+    protected Set<StatusTransition> allowedStatusTransitions() {
         return StatusConstants.STATEMENT_CONFIRM_TRANSITIONS;
     }
 

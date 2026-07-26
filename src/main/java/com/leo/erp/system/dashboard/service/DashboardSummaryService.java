@@ -1,15 +1,12 @@
 package com.leo.erp.system.dashboard.service;
 
-import com.leo.erp.auth.domain.entity.UserAccount;
-import com.leo.erp.auth.repository.RefreshTokenSessionRepository;
-import com.leo.erp.auth.repository.UserAccountRepository;
+import com.leo.erp.auth.api.AccountQuery;
+import com.leo.erp.auth.api.SessionStatisticsQuery;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.support.RedisJsonCacheSupport;
 import com.leo.erp.common.support.StatusConstants;
-import com.leo.erp.master.customer.repository.CustomerRepository;
-import com.leo.erp.master.material.repository.MaterialRepository;
-import com.leo.erp.master.supplier.repository.SupplierRepository;
+import com.leo.erp.master.api.MasterDataStatisticsQuery;
 import com.leo.erp.system.company.domain.entity.CompanySetting;
 import com.leo.erp.system.company.repository.CompanySettingRepository;
 import com.leo.erp.system.dashboard.web.dto.DashboardSummaryResponse;
@@ -26,29 +23,23 @@ public class DashboardSummaryService {
     private static final String DASHBOARD_CACHE_PREFIX = "leo:dashboard:";
     private static final Duration DASHBOARD_CACHE_TTL = Duration.ofMinutes(10);
 
-    private final UserAccountRepository userAccountRepository;
+    private final AccountQuery accountQuery;
     private final CompanySettingRepository companySettingRepository;
-    private final RefreshTokenSessionRepository refreshTokenSessionRepository;
-    private final MaterialRepository materialRepository;
-    private final SupplierRepository supplierRepository;
-    private final CustomerRepository customerRepository;
+    private final SessionStatisticsQuery sessionStatisticsQuery;
+    private final MasterDataStatisticsQuery masterDataStatisticsQuery;
     private final RedisJsonCacheSupport redisJsonCacheSupport;
     private final String appName;
 
-    public DashboardSummaryService(UserAccountRepository userAccountRepository,
+    public DashboardSummaryService(AccountQuery accountQuery,
                                    CompanySettingRepository companySettingRepository,
-                                   RefreshTokenSessionRepository refreshTokenSessionRepository,
-                                   MaterialRepository materialRepository,
-                                   SupplierRepository supplierRepository,
-                                   CustomerRepository customerRepository,
+                                   SessionStatisticsQuery sessionStatisticsQuery,
+                                   MasterDataStatisticsQuery masterDataStatisticsQuery,
                                    RedisJsonCacheSupport redisJsonCacheSupport,
                                    @Value("${spring.application.name:leo}") String appName) {
-        this.userAccountRepository = userAccountRepository;
+        this.accountQuery = accountQuery;
         this.companySettingRepository = companySettingRepository;
-        this.refreshTokenSessionRepository = refreshTokenSessionRepository;
-        this.materialRepository = materialRepository;
-        this.supplierRepository = supplierRepository;
-        this.customerRepository = customerRepository;
+        this.sessionStatisticsQuery = sessionStatisticsQuery;
+        this.masterDataStatisticsQuery = masterDataStatisticsQuery;
         this.redisJsonCacheSupport = redisJsonCacheSupport;
         this.appName = appName;
     }
@@ -76,23 +67,23 @@ public class DashboardSummaryService {
     }
 
     private DashboardSummaryResponse buildSummary(Long userId) {
-        UserAccount user = userAccountRepository.findByIdAndDeletedFlagFalse(userId)
+        AccountQuery.AccountSnapshot account = accountQuery.findById(userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "用户不存在"));
         LocalDateTime now = LocalDateTime.now();
-        long activeSessionCount = refreshTokenSessionRepository
-                .countByUserIdAndDeletedFlagFalseAndRevokedAtIsNullAndExpiresAtAfter(userId, now);
+        long activeSessionCount = sessionStatisticsQuery.countActiveSessions(userId, now);
 
+        MasterDataStatisticsQuery.MasterDataStatistics statistics = masterDataStatisticsQuery.countActiveRecords();
         return new DashboardSummaryResponse(
                 appName,
                 resolveCompanyName(),
-                user.getUserName(),
-                user.getLoginName(),
+                account.userName(),
+                account.loginName(),
                 activeSessionCount,
-                user.getLastLoginDate(),
+                account.lastLoginAt(),
                 now,
-                materialRepository.countByDeletedFlagFalse(),
-                supplierRepository.countByDeletedFlagFalse(),
-                customerRepository.countByDeletedFlagFalse()
+                statistics.materialCount(),
+                statistics.supplierCount(),
+                statistics.customerCount()
         );
     }
 

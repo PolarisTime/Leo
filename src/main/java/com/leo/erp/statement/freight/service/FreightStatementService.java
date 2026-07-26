@@ -6,9 +6,10 @@ import com.leo.erp.common.concurrency.SourceAllocationLockService;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
-import com.leo.erp.common.service.AbstractCrudService;
+import com.leo.erp.common.service.AbstractStatusCrudService;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
+import com.leo.erp.common.support.StatusTransition;
 import com.leo.erp.statement.freight.domain.entity.FreightStatement;
 import com.leo.erp.statement.freight.domain.entity.FreightStatementItem;
 import com.leo.erp.statement.freight.mapper.FreightStatementWebMapper;
@@ -35,7 +36,8 @@ import java.util.Set;
 import java.util.TreeSet;
 
 @Service
-public class FreightStatementService extends AbstractCrudService<FreightStatement, FreightStatementCommand, FreightStatementView> {
+public class FreightStatementService extends AbstractStatusCrudService<
+        FreightStatement, FreightStatementCommand, FreightStatementView> {
 
     private final FreightStatementRepository repository;
     private final FreightStatementSummaryQueryRepository summaryQueryRepository;
@@ -303,11 +305,8 @@ public class FreightStatementService extends AbstractCrudService<FreightStatemen
     }
 
     @Override
-    protected java.util.Set<String> allowedStatusTransitions() {
-        return java.util.Set.of(
-                StatusConstants.DRAFT + "->" + StatusConstants.AUDITED,
-                StatusConstants.AUDITED + "->" + StatusConstants.DRAFT
-        );
+    protected Set<StatusTransition> allowedStatusTransitions() {
+        return StatusConstants.DRAFT_AUDIT_TRANSITIONS;
     }
 
     @Override

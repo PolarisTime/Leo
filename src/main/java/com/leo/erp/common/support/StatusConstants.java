@@ -82,47 +82,49 @@ public final class StatusConstants {
             ARCHIVED
     );
     public static final Set<String> SETTLEABLE_CUSTOMER_STATEMENT_STATUS = Set.of(CONFIRMED);
-    public static final Set<String> SETTLEABLE_SUPPLIER_STATEMENT_STATUS = Set.of(CONFIRMED);
     public static final Set<String> SETTLEABLE_FREIGHT_STATEMENT_STATUS = Set.of(AUDITED);
 
-    public static final Set<String> DRAFT_AUDIT_TRANSITIONS = Set.of(
-            DRAFT + "->" + AUDITED,
-            AUDITED + "->" + DRAFT
+    public static final Set<StatusTransition> DRAFT_AUDIT_TRANSITIONS = Set.of(
+            StatusTransition.of(DRAFT, AUDITED),
+            StatusTransition.of(AUDITED, DRAFT)
     );
-    public static final Set<String> PURCHASE_ORDER_TRANSITIONS = Set.of(
-            DRAFT + "->" + AUDITED,
-            AUDITED + "->" + DRAFT,
-            PURCHASE_COMPLETED + "->" + AUDITED
+    public static final Set<StatusTransition> DRAFT_TO_AUDITED_TRANSITIONS = Set.of(
+            StatusTransition.of(DRAFT, AUDITED)
     );
-    public static final Set<String> PURCHASE_INBOUND_TRANSITIONS = Set.of(
-            DRAFT + "->" + AUDITED,
-            AUDITED + "->" + DRAFT,
-            INBOUND_COMPLETED + "->" + DRAFT
+    public static final Set<StatusTransition> PURCHASE_ORDER_TRANSITIONS = Set.of(
+            StatusTransition.of(DRAFT, AUDITED),
+            StatusTransition.of(AUDITED, DRAFT),
+            StatusTransition.of(PURCHASE_COMPLETED, AUDITED)
     );
-    public static final Set<String> SALES_OUTBOUND_TRANSITIONS = Set.of(
-            DRAFT + "->" + AUDITED,
-            AUDITED + "->" + DRAFT
+    public static final Set<StatusTransition> PURCHASE_INBOUND_TRANSITIONS = Set.of(
+            StatusTransition.of(DRAFT, AUDITED),
+            StatusTransition.of(AUDITED, DRAFT),
+            StatusTransition.of(INBOUND_COMPLETED, DRAFT)
     );
-    public static final Set<String> SALES_ORDER_TRANSITIONS = Set.of(
-            DRAFT + "->" + AUDITED,
-            AUDITED + "->" + DRAFT,
-            DELIVERY_VERIFICATION + "->" + SALES_COMPLETED,
-            SALES_COMPLETED + "->" + DELIVERY_VERIFICATION
+    public static final Set<StatusTransition> SALES_OUTBOUND_TRANSITIONS = Set.of(
+            StatusTransition.of(DRAFT, AUDITED),
+            StatusTransition.of(AUDITED, DRAFT)
     );
-    public static final Set<String> CONTRACT_TRANSITIONS = Set.of(
-            DRAFT + "->" + EXECUTING,
-            EXECUTING + "->" + DRAFT,
-            EXECUTING + "->" + SIGNED,
-            SIGNED + "->" + EXECUTING,
-            SIGNED + "->" + ARCHIVED
+    public static final Set<StatusTransition> SALES_ORDER_TRANSITIONS = Set.of(
+            StatusTransition.of(DRAFT, AUDITED),
+            StatusTransition.of(AUDITED, DRAFT),
+            StatusTransition.of(DELIVERY_VERIFICATION, SALES_COMPLETED),
+            StatusTransition.of(SALES_COMPLETED, DELIVERY_VERIFICATION)
     );
-    public static final Set<String> STATEMENT_CONFIRM_TRANSITIONS = Set.of(
-            PENDING_CONFIRM + "->" + CONFIRMED,
-            CONFIRMED + "->" + PENDING_CONFIRM
+    public static final Set<StatusTransition> CONTRACT_TRANSITIONS = Set.of(
+            StatusTransition.of(DRAFT, EXECUTING),
+            StatusTransition.of(EXECUTING, DRAFT),
+            StatusTransition.of(EXECUTING, SIGNED),
+            StatusTransition.of(SIGNED, EXECUTING),
+            StatusTransition.of(SIGNED, ARCHIVED)
     );
-    public static final Set<String> FREIGHT_BILL_AUDIT_TRANSITIONS = Set.of(
-            DRAFT + "->" + AUDITED,
-            AUDITED + "->" + DRAFT
+    public static final Set<StatusTransition> STATEMENT_CONFIRM_TRANSITIONS = Set.of(
+            StatusTransition.of(PENDING_CONFIRM, CONFIRMED),
+            StatusTransition.of(CONFIRMED, PENDING_CONFIRM)
+    );
+    public static final Set<StatusTransition> FREIGHT_BILL_AUDIT_TRANSITIONS = Set.of(
+            StatusTransition.of(DRAFT, AUDITED),
+            StatusTransition.of(AUDITED, DRAFT)
     );
 
     public static String normalizeActiveStatus(String value, String fieldName) {

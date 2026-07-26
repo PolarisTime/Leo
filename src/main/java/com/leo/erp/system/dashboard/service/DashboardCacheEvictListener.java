@@ -1,7 +1,7 @@
 package com.leo.erp.system.dashboard.service;
 
-import com.leo.erp.auth.service.SessionInvalidatedEvent;
-import com.leo.erp.auth.service.UserAccountChangedEvent;
+import com.leo.erp.auth.api.SessionInvalidatedEvent;
+import com.leo.erp.auth.api.UserAccountChangedEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.event.TransactionPhase;

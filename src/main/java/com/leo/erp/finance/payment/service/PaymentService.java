@@ -6,9 +6,10 @@ import com.leo.erp.common.concurrency.SourceAllocationLockService;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.persistence.Specs;
-import com.leo.erp.common.service.AbstractCrudService;
+import com.leo.erp.common.service.AbstractStatusCrudService;
 import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.StatusConstants;
+import com.leo.erp.common.support.StatusTransition;
 import com.leo.erp.finance.common.service.SupplierLedgerLockService;
 import com.leo.erp.finance.payment.domain.entity.Payment;
 import com.leo.erp.finance.payment.domain.entity.PaymentPurposes;
@@ -27,7 +28,7 @@ import java.util.Optional;
 import java.util.TreeSet;
 
 @Service
-public class PaymentService extends AbstractCrudService<Payment, PaymentRequest, PaymentResponse> {
+public class PaymentService extends AbstractStatusCrudService<Payment, PaymentRequest, PaymentResponse> {
 
     private final PaymentRepository paymentRepository;
     private final PaymentMapper paymentMapper;
@@ -230,8 +231,8 @@ public class PaymentService extends AbstractCrudService<Payment, PaymentRequest,
     }
 
     @Override
-    protected java.util.Set<String> allowedStatusTransitions() {
-        return java.util.Set.of(StatusConstants.DRAFT + "->" + StatusConstants.AUDITED);
+    protected java.util.Set<StatusTransition> allowedStatusTransitions() {
+        return StatusConstants.DRAFT_TO_AUDITED_TRANSITIONS;
     }
 
     @Override
@@ -240,16 +241,6 @@ public class PaymentService extends AbstractCrudService<Payment, PaymentRequest,
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "已审核付款单禁止反审核");
         }
         assertLegacySupplierPaymentReadOnly(entity, "审核");
-        if (PaymentPurposes.isPurchasePrepayment(entity.getPaymentPurpose())) {
-            purchasePrepaymentService.applySourceSnapshot(
-                    entity,
-                    entity.getSourcePurchaseOrderId(),
-                    entity.getAmount(),
-                    nextStatus
-            );
-            lockSupplierLedgerMutation(entity);
-            return;
-        }
         if (PaymentPurposes.isSupplierTotalPayment(entity.getPaymentPurpose())) {
             if (PaymentAllocationService.SUPPLIER_PAYMENT_TYPE.equals(entity.getCounterpartyType())) {
                 lockSupplierLedgerMutation(entity);
@@ -270,6 +261,9 @@ public class PaymentService extends AbstractCrudService<Payment, PaymentRequest,
     protected void beforeDelete(Payment entity) {
         if (StatusConstants.AUDITED.equals(entity.getStatus())) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "已审核付款单禁止删除");
+        }
+        if (StatusConstants.LEGACY_PAID.equals(entity.getStatus())) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "历史已付款单据仅供查询，不允许删除");
         }
         assertLegacySupplierPaymentReadOnly(entity, "删除");
         if (PaymentPurposes.isPurchasePrepayment(entity.getPaymentPurpose())) {
@@ -334,7 +328,6 @@ public class PaymentService extends AbstractCrudService<Payment, PaymentRequest,
             freightStatementIds.addAll(requestedAllocationStatementIds(request));
         }
         sourceAllocationLockService.lockStatementSources(
-                List.of(),
                 List.of(),
                 List.copyOf(freightStatementIds)
         );

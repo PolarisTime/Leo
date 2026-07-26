@@ -4,12 +4,9 @@ import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.support.BusinessDocumentValidator;
 import com.leo.erp.finance.receipt.web.dto.ReceiptRequest;
-import com.leo.erp.master.customer.domain.entity.Customer;
-import com.leo.erp.master.customer.repository.CustomerRepository;
-import com.leo.erp.master.project.domain.entity.Project;
-import com.leo.erp.master.project.repository.ProjectRepository;
-import com.leo.erp.master.supplier.domain.entity.Supplier;
-import com.leo.erp.master.supplier.repository.SupplierRepository;
+import com.leo.erp.master.api.CustomerQuery;
+import com.leo.erp.master.api.ProjectQuery;
+import com.leo.erp.master.api.SupplierQuery;
 import com.leo.erp.system.company.domain.entity.CompanySetting;
 import com.leo.erp.system.company.repository.CompanySettingRepository;
 import org.springframework.stereotype.Service;
@@ -17,18 +14,18 @@ import org.springframework.stereotype.Service;
 @Service
 public class ReceiptPartyIdentityResolver {
 
-    private final CustomerRepository customerRepository;
-    private final ProjectRepository projectRepository;
-    private final SupplierRepository supplierRepository;
+    private final CustomerQuery customerQuery;
+    private final ProjectQuery projectQuery;
+    private final SupplierQuery supplierQuery;
     private final CompanySettingRepository companySettingRepository;
 
-    public ReceiptPartyIdentityResolver(CustomerRepository customerRepository,
-                                        ProjectRepository projectRepository,
-                                        SupplierRepository supplierRepository,
+    public ReceiptPartyIdentityResolver(CustomerQuery customerQuery,
+                                        ProjectQuery projectQuery,
+                                        SupplierQuery supplierQuery,
                                         CompanySettingRepository companySettingRepository) {
-        this.customerRepository = customerRepository;
-        this.projectRepository = projectRepository;
-        this.supplierRepository = supplierRepository;
+        this.customerQuery = customerQuery;
+        this.projectQuery = projectQuery;
+        this.supplierQuery = supplierQuery;
         this.companySettingRepository = companySettingRepository;
     }
 
@@ -36,29 +33,29 @@ public class ReceiptPartyIdentityResolver {
         if (request.customerId() == null) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "客户ID不能为空");
         }
-        Customer customer = customerRepository.findByIdAndDeletedFlagFalse(request.customerId())
+        CustomerQuery.CustomerSnapshot customer = customerQuery.findActiveById(request.customerId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_ERROR, "客户不存在"));
         BusinessDocumentValidator.requireSameText(
                 request.customerName(),
-                customer.getCustomerName(),
+                customer.name(),
                 "客户名称与ID不一致"
         );
         BusinessDocumentValidator.requireSameOptionalCode(
                 request.customerCode(),
-                customer.getCustomerCode(),
+                customer.code(),
                 "客户编码与ID不一致"
         );
-        Project project = resolveOptionalProject(request);
+        ProjectQuery.ProjectSnapshot project = resolveOptionalProject(request);
         CompanySetting company = resolveCompany(
                 request.settlementCompanyId(),
                 request.settlementCompanyName()
         );
         return new PartySnapshot(
-                customer.getId(),
-                BusinessDocumentValidator.trimToNull(customer.getCustomerCode()),
-                BusinessDocumentValidator.trimToNull(customer.getCustomerName()),
-                project == null ? null : project.getId(),
-                project == null ? null : BusinessDocumentValidator.trimToNull(project.getProjectName()),
+                customer.id(),
+                BusinessDocumentValidator.trimToNull(customer.code()),
+                BusinessDocumentValidator.trimToNull(customer.name()),
+                project == null ? null : project.id(),
+                project == null ? null : BusinessDocumentValidator.trimToNull(project.name()),
                 company.getId(),
                 BusinessDocumentValidator.trimToNull(company.getCompanyName())
         );
@@ -68,16 +65,16 @@ public class ReceiptPartyIdentityResolver {
         if (request.counterpartyId() == null) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "供应商ID不能为空");
         }
-        Supplier supplier = supplierRepository.findByIdAndDeletedFlagFalse(request.counterpartyId())
+        SupplierQuery.SupplierSnapshot supplier = supplierQuery.findActiveById(request.counterpartyId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_ERROR, "供应商不存在"));
         BusinessDocumentValidator.requireSameText(
                 request.counterpartyName(),
-                supplier.getSupplierName(),
+                supplier.name(),
                 "供应商名称与ID不一致"
         );
         BusinessDocumentValidator.requireSameOptionalCode(
                 request.counterpartyCode(),
-                supplier.getSupplierCode(),
+                supplier.code(),
                 "供应商编码与ID不一致"
         );
         CompanySetting company = resolveCompany(
@@ -85,29 +82,29 @@ public class ReceiptPartyIdentityResolver {
                 request.settlementCompanyName()
         );
         return new SupplierPartySnapshot(
-                supplier.getId(),
-                BusinessDocumentValidator.trimToNull(supplier.getSupplierCode()),
-                BusinessDocumentValidator.trimToNull(supplier.getSupplierName()),
+                supplier.id(),
+                BusinessDocumentValidator.trimToNull(supplier.code()),
+                BusinessDocumentValidator.trimToNull(supplier.name()),
                 company.getId(),
                 BusinessDocumentValidator.trimToNull(company.getCompanyName())
         );
     }
 
-    private Project resolveOptionalProject(ReceiptRequest request) {
+    private ProjectQuery.ProjectSnapshot resolveOptionalProject(ReceiptRequest request) {
         if (request.projectId() == null) {
             if (BusinessDocumentValidator.trimToNull(request.projectName()) != null) {
                 throw new BusinessException(ErrorCode.VALIDATION_ERROR, "未选择项目时不能填写项目名称");
             }
             return null;
         }
-        Project project = projectRepository.findByIdAndDeletedFlagFalse(request.projectId())
+        ProjectQuery.ProjectSnapshot project = projectQuery.findActiveById(request.projectId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_ERROR, "项目不存在"));
-        if (!java.util.Objects.equals(project.getCustomerId(), request.customerId())) {
+        if (!java.util.Objects.equals(project.customerId(), request.customerId())) {
             throw new BusinessException(ErrorCode.BUSINESS_ERROR, "项目不属于所选客户");
         }
         BusinessDocumentValidator.requireSameText(
                 request.projectName(),
-                project.getProjectName(),
+                project.name(),
                 "项目名称与ID不一致"
         );
         return project;

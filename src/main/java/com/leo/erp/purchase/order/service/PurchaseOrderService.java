@@ -10,6 +10,7 @@ import com.leo.erp.common.support.SnowflakeIdGenerator;
 import com.leo.erp.common.support.BusinessDocumentValidator;
 import com.leo.erp.common.support.BusinessStatusValidator;
 import com.leo.erp.common.support.StatusConstants;
+import com.leo.erp.common.support.StatusTransition;
 import com.leo.erp.purchase.api.PurchaseOrderPrepaymentReferenceGuard;
 import com.leo.erp.purchase.order.audit.PurchaseOrderAuditPublisher;
 import com.leo.erp.purchase.order.domain.entity.PurchaseOrder;
@@ -286,7 +287,7 @@ public class PurchaseOrderService extends AbstractStatusCrudService<
     }
 
     @Override
-    protected java.util.Set<String> allowedStatusTransitions() {
+    protected java.util.Set<StatusTransition> allowedStatusTransitions() {
         return StatusConstants.PURCHASE_ORDER_TRANSITIONS;
     }
 

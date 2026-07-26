@@ -9,10 +9,8 @@ import com.leo.erp.common.support.TradeItemCalculator;
 import com.leo.erp.finance.payment.domain.entity.Payment;
 import com.leo.erp.finance.payment.domain.entity.PaymentPurposes;
 import com.leo.erp.finance.payment.web.dto.PaymentRequest;
-import com.leo.erp.master.carrier.domain.entity.Carrier;
-import com.leo.erp.master.carrier.repository.CarrierRepository;
-import com.leo.erp.master.supplier.domain.entity.Supplier;
-import com.leo.erp.master.supplier.repository.SupplierRepository;
+import com.leo.erp.master.api.CarrierQuery;
+import com.leo.erp.master.api.SupplierQuery;
 import com.leo.erp.system.company.domain.entity.CompanySetting;
 import com.leo.erp.system.company.repository.CompanySettingRepository;
 import org.springframework.stereotype.Service;
@@ -25,19 +23,19 @@ public class PaymentApplyService {
 
     private final PaymentAllocationService paymentAllocationService;
     private final PaymentSettlementSyncService settlementSyncService;
-    private final SupplierRepository supplierRepository;
-    private final CarrierRepository carrierRepository;
+    private final SupplierQuery supplierQuery;
+    private final CarrierQuery carrierQuery;
     private final CompanySettingRepository companySettingRepository;
 
     public PaymentApplyService(PaymentAllocationService paymentAllocationService,
                                PaymentSettlementSyncService settlementSyncService,
-                               SupplierRepository supplierRepository,
-                               CarrierRepository carrierRepository,
+                               SupplierQuery supplierQuery,
+                               CarrierQuery carrierQuery,
                                CompanySettingRepository companySettingRepository) {
         this.paymentAllocationService = paymentAllocationService;
         this.settlementSyncService = settlementSyncService;
-        this.supplierRepository = supplierRepository;
-        this.carrierRepository = carrierRepository;
+        this.supplierQuery = supplierQuery;
+        this.carrierQuery = carrierQuery;
         this.companySettingRepository = companySettingRepository;
     }
 
@@ -145,34 +143,34 @@ public class PaymentApplyService {
 
     private CounterpartySnapshot resolveCounterparty(PaymentRequest request) {
         if (PaymentAllocationService.SUPPLIER_PAYMENT_TYPE.equals(request.businessType())) {
-            Supplier supplier = supplierRepository.findByIdAndDeletedFlagFalse(request.counterpartyId())
+            SupplierQuery.SupplierSnapshot supplier = supplierQuery.findActiveById(request.counterpartyId())
                     .orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_ERROR, "供应商不存在"));
             BusinessDocumentValidator.requireSameText(
-                    request.counterpartyName(), supplier.getSupplierName(), "供应商名称与ID不一致"
+                    request.counterpartyName(), supplier.name(), "供应商名称与ID不一致"
             );
             BusinessDocumentValidator.requireSameOptionalCode(
-                    request.counterpartyCode(), supplier.getSupplierCode(), "供应商编码与ID不一致"
+                    request.counterpartyCode(), supplier.code(), "供应商编码与ID不一致"
             );
             return new CounterpartySnapshot(
                     PaymentAllocationService.SUPPLIER_PAYMENT_TYPE,
-                    supplier.getId(),
-                    BusinessDocumentValidator.trimToNull(supplier.getSupplierCode()),
-                    supplier.getSupplierName()
+                    supplier.id(),
+                    BusinessDocumentValidator.trimToNull(supplier.code()),
+                    supplier.name()
             );
         }
-        Carrier carrier = carrierRepository.findByIdAndDeletedFlagFalse(request.counterpartyId())
+        CarrierQuery.CarrierSnapshot carrier = carrierQuery.findActiveById(request.counterpartyId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.BUSINESS_ERROR, "物流商不存在"));
         BusinessDocumentValidator.requireSameText(
-                request.counterpartyName(), carrier.getCarrierName(), "物流商名称与ID不一致"
+                request.counterpartyName(), carrier.name(), "物流商名称与ID不一致"
         );
         BusinessDocumentValidator.requireSameOptionalCode(
-                request.counterpartyCode(), carrier.getCarrierCode(), "物流商编码与ID不一致"
+                request.counterpartyCode(), carrier.code(), "物流商编码与ID不一致"
         );
         return new CounterpartySnapshot(
                 PaymentAllocationService.FREIGHT_PAYMENT_TYPE,
-                carrier.getId(),
-                BusinessDocumentValidator.trimToNull(carrier.getCarrierCode()),
-                carrier.getCarrierName()
+                carrier.id(),
+                BusinessDocumentValidator.trimToNull(carrier.code()),
+                carrier.name()
         );
     }
 

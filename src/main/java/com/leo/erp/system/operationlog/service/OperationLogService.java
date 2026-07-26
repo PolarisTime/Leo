@@ -1,7 +1,6 @@
 package com.leo.erp.system.operationlog.service;
 
-import com.leo.erp.auth.domain.entity.UserAccount;
-import com.leo.erp.auth.repository.UserAccountRepository;
+import com.leo.erp.auth.api.AccountQuery;
 import com.leo.erp.common.api.PageFilter;
 import com.leo.erp.common.api.PageQuery;
 import com.leo.erp.common.error.BusinessException;
@@ -29,16 +28,16 @@ public class OperationLogService {
     private final OperationLogRepository repository;
     private final OperationLogMapper operationLogMapper;
     private final SnowflakeIdGenerator idGenerator;
-    private final UserAccountRepository userAccountRepository;
+    private final AccountQuery accountQuery;
 
     public OperationLogService(OperationLogRepository repository,
                                OperationLogMapper operationLogMapper,
                                SnowflakeIdGenerator idGenerator,
-                               UserAccountRepository userAccountRepository) {
+                               AccountQuery accountQuery) {
         this.repository = repository;
         this.operationLogMapper = operationLogMapper;
         this.idGenerator = idGenerator;
-        this.userAccountRepository = userAccountRepository;
+        this.accountQuery = accountQuery;
     }
 
     @Transactional(readOnly = true)
@@ -140,10 +139,10 @@ public class OperationLogService {
             return new OperatorSnapshot(0L, "system", "system");
         }
 
-        UserAccount user = userAccountRepository.findByIdAndDeletedFlagFalse(principal.id()).orElse(null);
-        String operatorName = user == null || user.getUserName() == null || user.getUserName().isBlank()
+        AccountQuery.AccountSnapshot account = accountQuery.findById(principal.id()).orElse(null);
+        String operatorName = account == null || account.userName() == null || account.userName().isBlank()
                 ? principal.username()
-                : user.getUserName();
+                : account.userName();
         return new OperatorSnapshot(principal.id(), operatorName, principal.username());
     }
 

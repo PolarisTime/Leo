@@ -1,6 +1,6 @@
 package com.leo.erp.sales.order.service;
 
-import com.leo.erp.allocation.appservice.PurchaseItemQueryAppService.SourceInboundItemRecord;
+import com.leo.erp.purchase.api.PurchaseItemQueryAppService.SourceInboundItemRecord;
 import com.leo.erp.sales.order.domain.entity.SalesOrderItem;
 import java.util.LinkedHashSet;
 import java.util.List;

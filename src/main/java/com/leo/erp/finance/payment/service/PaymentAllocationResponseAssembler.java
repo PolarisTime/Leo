@@ -26,14 +26,10 @@ public class PaymentAllocationResponseAssembler {
 
     private PaymentAllocationResponse toResponse(String businessType, PaymentAllocation item) {
         if (PaymentAllocationService.SUPPLIER_PAYMENT_TYPE.equals(businessType)) {
-            Long statementId = item.getSourceSupplierStatementId() == null
-                    ? item.getSourceStatementId()
-                    : item.getSourceSupplierStatementId();
             return new PaymentAllocationResponse(
                     item.getId(),
                     item.getLineNo(),
-                    statementId,
-                    statementId,
+                    item.getSourceStatementId(),
                     null,
                     null,
                     BigDecimal.ZERO,
@@ -48,7 +44,6 @@ public class PaymentAllocationResponseAssembler {
                 item.getId(),
                 item.getLineNo(),
                 statementId,
-                null,
                 statementId,
                 statement == null ? null : statement.statementNo(),
                 statement == null ? BigDecimal.ZERO : statement.unpaidAmount(),

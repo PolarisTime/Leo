@@ -5,7 +5,7 @@ import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.support.BusinessDocumentValidator;
 import com.leo.erp.common.support.PrecisionConstants;
 import com.leo.erp.common.support.TradeItemCalculator;
-import com.leo.erp.master.material.repository.MaterialCategoryRepository;
+import com.leo.erp.master.api.MaterialCategoryQuery;
 import com.leo.erp.purchase.inbound.web.dto.PurchaseInboundItemRequest;
 import com.leo.erp.purchase.inbound.web.dto.PurchaseInboundRequest;
 import org.springframework.stereotype.Service;
@@ -19,10 +19,10 @@ import java.util.stream.Collectors;
 @Service
 public class PurchaseInboundWeightSettlementService {
 
-    private final MaterialCategoryRepository materialCategoryRepository;
+    private final MaterialCategoryQuery materialCategoryQuery;
 
-    public PurchaseInboundWeightSettlementService(MaterialCategoryRepository materialCategoryRepository) {
-        this.materialCategoryRepository = materialCategoryRepository;
+    public PurchaseInboundWeightSettlementService(MaterialCategoryQuery materialCategoryQuery) {
+        this.materialCategoryQuery = materialCategoryQuery;
     }
 
     Map<String, PurchaseWeighCategoryRule> loadPurchaseWeighCategoryRules(PurchaseInboundRequest request) {
@@ -50,12 +50,12 @@ public class PurchaseInboundWeightSettlementService {
                         (left, right) -> left,
                         LinkedHashMap::new
                 ));
-        materialCategoryRepository.findByCategoryNameInAndDeletedFlagFalse(categoryNames)
+        materialCategoryQuery.findActiveByNames(categoryNames)
                 .forEach(category -> ruleMap.put(
-                        normalizeCategoryName(category.getCategoryName()),
+                        normalizeCategoryName(category.name()),
                         new PurchaseWeighCategoryRule(
-                                normalizeCategoryName(category.getCategoryName()),
-                                Boolean.TRUE.equals(category.getPurchaseWeighRequired())
+                                normalizeCategoryName(category.name()),
+                                category.purchaseWeighRequired()
                         )
                 ));
         return ruleMap;

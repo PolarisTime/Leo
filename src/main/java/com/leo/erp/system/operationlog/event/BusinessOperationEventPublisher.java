@@ -1,7 +1,6 @@
 package com.leo.erp.system.operationlog.event;
 
-import com.leo.erp.auth.domain.entity.UserAccount;
-import com.leo.erp.auth.repository.UserAccountRepository;
+import com.leo.erp.auth.api.AccountQuery;
 import com.leo.erp.security.support.SecurityPrincipal;
 import org.slf4j.MDC;
 import org.springframework.context.ApplicationEventPublisher;
@@ -18,12 +17,12 @@ public class BusinessOperationEventPublisher {
     private static final int EVENT_VERSION = 1;
 
     private final ApplicationEventPublisher eventPublisher;
-    private final UserAccountRepository userAccountRepository;
+    private final AccountQuery accountQuery;
 
     public BusinessOperationEventPublisher(ApplicationEventPublisher eventPublisher,
-                                           UserAccountRepository userAccountRepository) {
+                                           AccountQuery accountQuery) {
         this.eventPublisher = eventPublisher;
-        this.userAccountRepository = userAccountRepository;
+        this.accountQuery = accountQuery;
     }
 
     public BusinessOperationEvent publish(String eventType,
@@ -63,10 +62,10 @@ public class BusinessOperationEventPublisher {
             return new OperatorSnapshot(0L, "system", "system", "SYSTEM");
         }
 
-        UserAccount account = userAccountRepository.findByIdAndDeletedFlagFalse(principal.id()).orElse(null);
-        String operatorName = account == null || account.getUserName() == null || account.getUserName().isBlank()
+        AccountQuery.AccountSnapshot account = accountQuery.findById(principal.id()).orElse(null);
+        String operatorName = account == null || account.userName() == null || account.userName().isBlank()
                 ? principal.username()
-                : account.getUserName();
+                : account.userName();
         return new OperatorSnapshot(principal.id(), operatorName, principal.username(), "WEB");
     }
 

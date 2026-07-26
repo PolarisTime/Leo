@@ -1,13 +1,13 @@
 package com.leo.erp.sales.order.service;
 
-import com.leo.erp.allocation.appservice.PurchaseItemQueryAppService;
-import com.leo.erp.allocation.appservice.PurchaseItemQueryAppService.SourceInboundItemRecord;
-import com.leo.erp.allocation.appservice.PurchaseItemQueryAppService.SourcePurchaseOrderItemRecord;
 import com.leo.erp.common.error.BusinessException;
 import com.leo.erp.common.error.ErrorCode;
 import com.leo.erp.common.support.BusinessDocumentValidator;
 import com.leo.erp.common.support.StatusConstants;
 import com.leo.erp.common.support.TradeItemCalculator;
+import com.leo.erp.purchase.api.PurchaseItemQueryAppService;
+import com.leo.erp.purchase.api.PurchaseItemQueryAppService.SourceInboundItemRecord;
+import com.leo.erp.purchase.api.PurchaseItemQueryAppService.SourcePurchaseOrderItemRecord;
 import com.leo.erp.sales.order.domain.entity.SalesOrderItem;
 import com.leo.erp.sales.order.repository.SalesOrderItemRepository;
 import com.leo.erp.sales.order.web.dto.SalesOrderItemRequest;
