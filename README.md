@@ -123,17 +123,17 @@ CI/CD 详细配置、生产机 systemd/Nginx 模板和回滚策略见 `docs/depl
 - `LEO_JWT_SECRET`
 - `LEO_DATA_ENCRYPTION_KEY`
 - `LEO_MACHINE_ID`
+
 ## CI 校验
 
-GitHub Actions 当前会执行以下步骤：
+GitHub Actions 当前会依次执行：
 
-```bash
-mvn -B -ntp -DskipTests checkstyle:check spotbugs:check
-mvn -B -ntp -DskipTests package
-docker build -t leo-backend:ci .
-```
+- 使用 Checkstyle 与 SpotBugs 完成静态分析。
+- 启动 PostgreSQL 与 Redis 服务，并执行 `flyway:migrate`、`flyway:validate` 校验迁移链路。
+- 使用 `-DskipTests` 构建后端 JAR。
+- 构建后端镜像，启动容器并通过 `/api/health` 完成冒烟检查。
 
-CI 中还会构建镜像，并执行不依赖活动测试目录的容器启动冒烟检查。
+CI 不运行活动测试套件，详细命令以 `.github/workflows/ci.yml` 为准。
 
 ## 安全说明
 
